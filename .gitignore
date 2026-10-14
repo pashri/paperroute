@@ -1,0 +1,10 @@
+.*/
+!.github/
+
+.DS_Store
+__pycache__/
+*.pyc
+
+data/
+tools/mockups/boards/*.html
+!tools/mockups/boards/*.template.html

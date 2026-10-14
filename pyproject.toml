@@ -1,0 +1,9 @@
+[project]
+name = "paperroute"
+version = "0.1.0"
+description = "Two-knob e-paper tracker for Sydney public transport"
+requires-python = ">=3.13"
+dependencies = []
+
+[dependency-groups]
+mockups = ["duckdb", "osmium", "shapely", "pillow", "gtfs-realtime-bindings"]

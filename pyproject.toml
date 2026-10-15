@@ -6,4 +6,14 @@ requires-python = ">=3.13"
 dependencies = []
 
 [dependency-groups]
-mockups = ["duckdb", "osmium", "shapely", "pillow", "gtfs-realtime-bindings"]
+mockups = [
+    "duckdb",
+    "osmium",
+    "shapely",
+    "pillow",
+    "gtfs-realtime-bindings",
+    "skia-python>=144.0.post2",
+    "numpy>=2.5.4",
+    "fonttools>=4.67.0",
+    "pycairo>=1.29.2",
+]

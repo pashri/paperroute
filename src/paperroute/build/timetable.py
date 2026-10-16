@@ -33,6 +33,8 @@ CREATE TABLE stop_times (trip_id TEXT NOT NULL, seq INTEGER NOT NULL,
   PRIMARY KEY (trip_id, seq)) WITHOUT ROWID;
 CREATE TABLE trip_aliases (alias_id TEXT NOT NULL, trip_id TEXT NOT NULL,
   PRIMARY KEY (alias_id, trip_id)) WITHOUT ROWID;
+CREATE TABLE trip_skip (trip_id TEXT NOT NULL, date TEXT NOT NULL,
+  PRIMARY KEY (trip_id, date)) WITHOUT ROWID;
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
 INDEXES: Final[str] = """

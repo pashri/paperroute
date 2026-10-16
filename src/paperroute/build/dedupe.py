@@ -45,8 +45,10 @@ GROUP BY b.trip_id;
 APPLY: Final[str] = """
 BEGIN;
 INSERT INTO trip_aliases (alias_id, trip_id)
-  SELECT DISTINCT dup_id, keep_id FROM pair
-  WHERE dup_id IN (SELECT dup_id FROM match WHERE covered = runs);
+  SELECT DISTINCT dup_id, keep_id FROM pair;
+INSERT INTO trip_skip (trip_id, date)
+  SELECT dup_id, date FROM pair
+  WHERE dup_id IN (SELECT dup_id FROM match WHERE covered < runs);
 UPDATE trips SET agency_id = (
   SELECT MIN(b.agency_id) FROM trip_aliases a
   JOIN trip_key b ON b.trip_id = a.alias_id
@@ -78,19 +80,24 @@ def merge_rail(*, conn: sqlite3.Connection) -> MergeReport:
     """
     Drop bundle rail and metro trips duplicated by a preferred feed.
 
-    A bundle rail trip (route type 2, 106 or 401) is a duplicate when, on
-    every date it runs, a non-bundle trip has the same first and last calling
-    station and a first calling departure within a minute. Line names are
-    not compared: NSW TrainLink's XPTs are lines 31-36 and 621-644 in the
-    bundle but NRC, NRW, STH and WST in the Sydney Trains feed, and their
-    times can differ by a second. On each date the nearest departure wins,
-    then the same line name. Rows where the train passes without stopping
-    (no pickup and no drop-off) are ignored.
+    A bundle rail trip (route type 2, 106 or 401) is a duplicate on a date
+    when a non-bundle trip running that date has the same first and last
+    calling station and a first calling departure within a minute. Line
+    names are not compared: NSW TrainLink's XPTs are lines 31-36 and 621-644
+    in the bundle but NRC, NRW, STH and WST in the Sydney Trains feed, and
+    their times can differ by a second. On each date the nearest departure
+    wins, then the same line name. Rows where the train passes without
+    stopping (no pickup and no drop-off) are ignored.
 
-    The bundle ID becomes an alias of every trip that covers it, so realtime
-    notes using it still find the trip, and the kept trip takes the bundle
-    copy's agency as its agency of record: an XPT kept from the Sydney Trains
-    feed stays Regional and is matched in the nswtrains feed.
+    A trip duplicated on every date it runs is dropped. One duplicated on
+    only some dates is kept, and each covered date goes into trip_skip so
+    the trip is not listed on that date.
+
+    The bundle ID becomes an alias of every trip that covers it on any
+    date, so realtime notes using it still find the trip, and the kept trip
+    takes the bundle copy's agency as its agency of record: an XPT kept from
+    the Sydney Trains feed stays Regional and is matched in the nswtrains
+    feed.
 
     The changes are applied in one transaction and committed before
     returning.

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.build.dedupe import merge_rail
+from paperroute.build.dedupe import MergeReport, merge_rail
 from paperroute.build.timetable import Source
 from tests.build.feeds import (
     DAILY,
@@ -301,3 +301,31 @@ def test_merge_drops_regional_copy_under_another_line_name(
         )
         assert agency.fetchall() == [('711',)]
     assert trip_ids(db=db) == {'NT31-feed'}
+
+
+def test_merge_skips_partial_duplicate_on_covered_dates(
+    tmp_path: Path,
+) -> None:
+    """A partly covered bundle trip is skipped only where it's covered."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=START,
+        days=2,
+        sources=regional_sources(tmp_path=tmp_path),
+    )
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute(
+            "DELETE FROM services WHERE service_id = 'sydneytrains:s-daily' "
+            "AND date = '2026-10-17'"
+        )
+        report = merge_rail(conn=conn)
+        skips = conn.execute('SELECT trip_id, date FROM trip_skip')
+        assert skips.fetchall() == [('NT31-bundle', '2026-10-16')]
+        aliases = conn.execute('SELECT alias_id, trip_id FROM trip_aliases')
+        assert aliases.fetchall() == [('NT31-bundle', 'NT31-feed')]
+        agency = conn.execute(
+            "SELECT agency_id FROM trips WHERE trip_id = 'NT31-feed'"
+        )
+        assert agency.fetchall() == [('711',)]
+    assert report == MergeReport(dropped=0, partial=1)
+    assert trip_ids(db=db) == {'NT31-bundle', 'NT31-feed'}

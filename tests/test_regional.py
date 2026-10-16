@@ -17,6 +17,7 @@ from paperroute.core.realtime import RealtimeSnapshot
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
 DAY_START = datetime(2026, 10, 16, tzinfo=SYDNEY)
+CASINO: Final[str] = '24701'
 CALLS: Final[str] = """
   (SELECT stop_id FROM stop_times WHERE trip_id = t.trip_id AND pickup <> 1
      ORDER BY seq LIMIT 1),
@@ -35,14 +36,16 @@ ORDER BY t.trip_id
 """
 
 
-def build(*, tmp_path: Path) -> Path:
+def build(*, tmp_path: Path, days: int = 1) -> Path:
     """
-    Build the real slice, Sydney Trains feed first, for one day.
+    Build the real slice, Sydney Trains feed first, from 2026-10-16.
 
     Parameters
     ----------
     tmp_path : Path
         Working directory.
+    days : int
+        Window length.
 
     Returns
     -------
@@ -55,7 +58,7 @@ def build(*, tmp_path: Path) -> Path:
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
         ],
-        window=Window(start=date(2026, 10, 16), days=1),
+        window=Window(start=date(2026, 10, 16), days=days),
         out=db,
     )
     return db
@@ -138,3 +141,24 @@ def test_xpt_appears_once_and_goes_live(tmp_path: Path) -> None:
     assert all(len(group) == 1 for group in groups)
     assert all(g[0].departure.mode is Mode.REGIONAL for g in groups)
     assert any(group[0].live for group in groups)
+
+
+def test_central_to_casino_xpt_listed_once(tmp_path: Path) -> None:
+    """Real slice, three days: each Casino XPT shows once a day."""
+    repo = SqliteTimetableRepository(path=build(tmp_path=tmp_path, days=3))
+    try:
+        days = [
+            repo.departures(
+                pin=Pin(origin='200060', destination=CASINO),
+                start=DAY_START + timedelta(days=n),
+                end=DAY_START + timedelta(days=n + 1),
+            )
+            for n in range(3)
+        ]
+    finally:
+        repo.close()
+    assert all(days)
+    for found in days:
+        times = [d.departs for d in found]
+        assert len(times) == len(set(times))
+    assert all(d.mode is Mode.REGIONAL for d in days[0])

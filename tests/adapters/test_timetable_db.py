@@ -170,6 +170,39 @@ def test_departures_kept_xpt_stays_regional(tmp_path: Path) -> None:
     ]
 
 
+def test_departures_partial_xpt_listed_once_per_day(
+    tmp_path: Path,
+) -> None:
+    """A partly covered bundle XPT shows only on the dates it's uncovered."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 16),
+        days=2,
+        sources=regional_sources(tmp_path=tmp_path),
+    )
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute(
+            "DELETE FROM services WHERE service_id = 'sydneytrains:s-daily' "
+            "AND date = '2026-10-17'"
+        )
+        conn.commit()
+        merge_rail(conn=conn)
+    pin = Pin(origin='200060', destination='215020')
+    with closing(SqliteTimetableRepository(path=db)) as repo:
+        found = [
+            repo.departures(
+                pin=pin,
+                start=at(hour=7, minute=0, day=day),
+                end=at(hour=8, minute=0, day=day),
+            )
+            for day in (16, 17)
+        ]
+    assert [[(d.trip_id, d.mode) for d in day] for day in found] == [
+        [('NT31-feed', Mode.REGIONAL)],
+        [('NT31-bundle', Mode.REGIONAL)],
+    ]
+
+
 def test_departures_before_daylight_saving_jump(tmp_path: Path) -> None:
     """A 00:30 trip on the change day leaves at 23:30 the night before."""
     archive = write_feed(path=tmp_path / 'dst.zip', files={

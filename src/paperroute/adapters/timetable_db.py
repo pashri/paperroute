@@ -32,6 +32,8 @@ WHERE o.stop_id IN (SELECT stop_id FROM stops
   AND d.stop_id IN (SELECT stop_id FROM stops
                     WHERE stop_id = :dest OR parent_station = :dest)
   AND o.dep BETWEEN :lo AND :hi AND o.pickup <> 1 AND d.dropoff <> 1
+  AND NOT EXISTS (SELECT 1 FROM trip_skip k
+                  WHERE k.trip_id = t.trip_id AND k.date = :day)
 GROUP BY o.trip_id, o.seq
 """
 

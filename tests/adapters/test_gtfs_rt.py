@@ -1,6 +1,6 @@
 """Tests for GTFS-realtime parsing."""
 
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pytest
@@ -108,6 +108,19 @@ def test_parse_raises_when_nothing_decodes() -> None:
 def test_parse_empty_body_is_empty_snapshot() -> None:
     """An empty body is a valid feed with no trips."""
     assert not parse_trip_updates(data=b'', fetched_at=NOW).trips
+
+
+def test_parse_reads_start_date() -> None:
+    """The run's service date comes from the trip descriptor."""
+    data = feed(trips=[RtTrip(trip_id='a', start_date='20261016')])
+    trips = parse_trip_updates(data=data, fetched_at=NOW).trips
+    assert trips['a'].start_date == date(2026, 10, 16)
+
+
+def test_parse_raises_when_header_missing() -> None:
+    """A body that decodes but lacks the required header is not a feed."""
+    with pytest.raises(FeedError):
+        parse_trip_updates(data=b'\x08\x01', fetched_at=NOW)
 
 
 def test_parse_real_nswtrains_slice() -> None:

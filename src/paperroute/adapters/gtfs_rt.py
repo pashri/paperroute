@@ -111,7 +111,7 @@ def entity_blobs(*, data: bytes) -> Iterator[bytes]:
             if key >> 3 == ENTITY_FIELD and payload is not None:
                 yield payload
     except IndexError:
-        logger.warning('feed ended early at byte %d', at)
+        logger.warning('stopped reading feed at byte %d', at)
 
 
 def event_value(
@@ -302,12 +302,17 @@ def feed_entities(*, data: bytes) -> list[Any]:
     Raises
     ------
     FeedError
-        When a non-empty body yields no entity at all.
+        When a non-empty body yields no entity at all, or decodes whole
+        but has no header.
     """
     try:
-        return list(gtfs_realtime_pb2.FeedMessage.FromString(data).entity)
+        message = gtfs_realtime_pb2.FeedMessage.FromString(data)
     except DecodeError:
         logger.warning('feed did not decode whole; reading entity by entity')
+    else:
+        if data and not message.HasField('header'):
+            raise FeedError('feed body has no header')
+        return list(message.entity)
     entities = list(decoded_entities(data=data))
     if not entities and data:
         raise FeedError('feed body did not decode')

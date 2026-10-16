@@ -3,6 +3,7 @@
 from collections.abc import AsyncIterator
 from http import HTTPStatus
 
+import aiohttp
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
@@ -70,3 +71,16 @@ async def test_fetch_raises_feed_error_on_429(server: TestServer) -> None:
         assert 'wrong' not in str(caught.value)
     finally:
         await client.close()
+
+
+async def test_close_leaves_injected_session_open(server: TestServer) -> None:
+    """A session passed in stays open; the caller closes it."""
+    async with aiohttp.ClientSession() as session:
+        client = AiohttpFeedsClient(
+            api_key='secret',
+            session=session,
+            base_url=str(server.make_url('/')),
+        )
+        await client.fetch(feed='v1/gtfs/realtime/buses')
+        await client.close()
+        assert not session.closed

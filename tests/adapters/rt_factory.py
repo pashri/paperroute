@@ -1,12 +1,17 @@
 """Build real GTFS-realtime protobuf bytes for tests."""
 
 from dataclasses import dataclass
+from typing import Final
 
 from google.transit import gtfs_realtime_pb2
 
-STOP_REL = gtfs_realtime_pb2.TripUpdate.StopTimeUpdate.ScheduleRelationship
-NO_DATA = STOP_REL.NO_DATA
-CANCELED = gtfs_realtime_pb2.TripDescriptor.ScheduleRelationship.CANCELED
+STOP_REL: Final = (
+    gtfs_realtime_pb2.TripUpdate.StopTimeUpdate.ScheduleRelationship
+)
+NO_DATA: Final = STOP_REL.NO_DATA
+CANCELED: Final = (
+    gtfs_realtime_pb2.TripDescriptor.ScheduleRelationship.CANCELED
+)
 
 
 @dataclass(frozen=True)
@@ -29,6 +34,7 @@ class RtTrip:
     trip_id: str
     cancelled: bool = False
     stops: tuple[RtStop, ...] = ()
+    start_date: str | None = None
 
 
 def add_stop(*, update: gtfs_realtime_pb2.TripUpdate, stop: RtStop) -> None:
@@ -79,6 +85,8 @@ def feed(*, trips: list[RtTrip], timestamp: int = 1792093000) -> bytes:
     for trip in trips:
         update = message.entity.add(id=trip.trip_id).trip_update
         update.trip.trip_id = trip.trip_id
+        if trip.start_date is not None:
+            update.trip.start_date = trip.start_date
         if trip.cancelled:
             update.trip.schedule_relationship = CANCELED
         for stop in trip.stops:

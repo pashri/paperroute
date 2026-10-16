@@ -38,6 +38,7 @@ class AiohttpFeedsClient:
     ) -> None:
         self.api_key = api_key
         self.session = session
+        self.owns_session = session is None
         self.base_url = base_url
         self.timeout = aiohttp.ClientTimeout(total=timeout_s)
 
@@ -60,16 +61,14 @@ class AiohttpFeedsClient:
         FeedError
             On a non-200 status, a timeout or a connection error.
         """
-        self.session = self.session or aiohttp.ClientSession(
-            timeout=self.timeout
-        )
+        self.session = self.session or aiohttp.ClientSession()
         headers = {
             'Authorization': f'apikey {self.api_key}',
             'Accept': 'application/x-google-protobuf',
         }
         try:
             async with self.session.get(
-                self.base_url + feed, headers=headers
+                self.base_url + feed, headers=headers, timeout=self.timeout
             ) as response:
                 if response.status != HTTPStatus.OK:
                     raise FeedError(f'{feed}: HTTP {response.status}')
@@ -78,6 +77,7 @@ class AiohttpFeedsClient:
             raise FeedError(f'{feed}: {type(error).__name__}') from error
 
     async def close(self) -> None:
-        """Close the HTTP session."""
-        if self.session:
+        """Close the HTTP session, unless it was passed in."""
+        if self.session and self.owns_session:
             await self.session.close()
+            self.session = None

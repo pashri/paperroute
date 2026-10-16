@@ -70,44 +70,93 @@ class SqliteTimetableRepository:
         connection: sqlite3.Connection | None = None,
     ) -> None:
         self.lock = threading.Lock()
-        self.path = None if connection else path or DEFAULT_PATH
+        location = path or DEFAULT_PATH
+        self.path = None if connection else location
         self.identity: tuple[int, int] | None = None
         if connection:
             self.conn = connection
         else:
-            self.conn = self.open()
+            self.conn, self.identity = self.open(path=location)
 
-    def open(self) -> sqlite3.Connection:
+    def open(
+        self, *, path: Path
+    ) -> tuple[sqlite3.Connection, tuple[int, int] | None]:
         """
-        Open the timetable file read-only and record its identity.
+        Open the timetable file read-only.
+
+        The file is identified before it is opened, so a replacement landing
+        in between shows up as a change on the next check.
+
+        Parameters
+        ----------
+        path : Path
+            Timetable file.
 
         Returns
         -------
-        sqlite3.Connection
-            New connection, usable from any thread.
+        tuple[sqlite3.Connection, tuple[int, int] | None]
+            New connection, usable from any thread, and the file's
+            (st_dev, st_ino).
         """
-        path = self.path or DEFAULT_PATH
+        identity = file_identity(path=path)
         conn = sqlite3.connect(
             f'file:{path}?mode=ro',
             uri=True,
             check_same_thread=False,
         )
-        self.identity = file_identity(path=path)
-        return conn
+        return conn, identity
+
+    def open_checked(
+        self, *, path: Path
+    ) -> tuple[sqlite3.Connection, tuple[int, int] | None] | None:
+        """
+        Open the file and check it reads like a timetable.
+
+        Parameters
+        ----------
+        path : Path
+            Timetable file.
+
+        Returns
+        -------
+        tuple[sqlite3.Connection, tuple[int, int] | None] | None
+            The connection and file identity, or None (after logging a
+            warning) when the file can't be used.
+        """
+        conn = None
+        try:
+            conn, identity = self.open(path=path)
+            conn.execute('SELECT 1 FROM stops LIMIT 1').fetchall()
+        except (sqlite3.Error, OSError):
+            logger.warning('timetable replacement unusable', exc_info=True)
+            if conn is not None:
+                conn.close()
+            return None
+        return conn, identity
 
     def reopen_if_replaced(self) -> None:
         """
         Swap in a new connection when the file has been replaced.
 
-        Does nothing for an injected connection or a missing file. The
-        caller must hold the lock.
+        Does nothing for an injected connection or a missing file. A
+        replacement that can't be read is refused and the old connection
+        kept, to be checked again on the next query. The caller must hold
+        the lock.
         """
         if self.path is None:
             return
-        current = file_identity(path=self.path)
+        try:
+            current = file_identity(path=self.path)
+        except OSError:
+            logger.warning('timetable stat failed', exc_info=True)
+            return
         if current is None or current == self.identity:
             return
-        old, self.conn = self.conn, self.open()
+        opened = self.open_checked(path=self.path)
+        if opened is None:
+            return
+        old = self.conn
+        self.conn, self.identity = opened
         with closing(old):
             logger.info('timetable reopened')
 

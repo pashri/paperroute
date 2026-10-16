@@ -1,5 +1,6 @@
 """Tests for the SQLite timetable repository."""
 
+import logging
 import os
 import sqlite3
 import threading
@@ -349,13 +350,35 @@ def replace_with(*, live: Path, trip: str) -> None:
     os.replace(staged, live)
 
 
-def test_departures_reopens_after_file_replaced(tmp_path: Path) -> None:
+def test_departures_reopens_after_file_replaced(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """A rebuilt timetable moved over the file is seen by the next query."""
     live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
     with closing(SqliteTimetableRepository(path=live)) as repo:
         assert trip_ids(repo=repo) == ['A-0810']
         replace_with(live=live, trip='B-0810')
-        assert trip_ids(repo=repo) == ['B-0810']
+        with caplog.at_level(logging.INFO):
+            assert trip_ids(repo=repo) == ['B-0810']
+    assert [
+        (record.levelno, record.getMessage()) for record in caplog.records
+    ] == [(logging.INFO, 'timetable reopened')]
+
+
+def test_departures_keeps_old_data_when_replacement_is_junk(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A replacement that isn't a timetable is refused with a warning."""
+    live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
+    with closing(SqliteTimetableRepository(path=live)) as repo:
+        junk = live.with_name('timetable.new')
+        junk.write_bytes(b'not a database' * 100)
+        os.replace(junk, live)
+        with caplog.at_level(logging.INFO):
+            assert trip_ids(repo=repo) == ['A-0810']
+            assert trip_ids(repo=repo) == ['A-0810']
+    levels = {record.levelno for record in caplog.records}
+    assert levels == {logging.WARNING}
 
 
 def test_stop_name_reopens_after_file_replaced(tmp_path: Path) -> None:
@@ -395,7 +418,7 @@ def test_departures_threads_survive_replacement(tmp_path: Path) -> None:
         try:
             while not stop.is_set():
                 seen.update(trip_ids(repo=repo))
-        except sqlite3.Error as error:  # pragma: no cover
+        except Exception as error:  # pylint: disable=broad-exception-caught
             errors.append(error)
 
     with closing(SqliteTimetableRepository(path=live)) as repo:

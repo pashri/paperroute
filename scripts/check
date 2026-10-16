@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$(dirname "$0")/.."
+files=$(git ls-files --cached --others --exclude-standard 'src/*.py' 'scripts/*.py')
+uv run isort --check-only --diff src tests scripts
+# shellcheck disable=SC2086
+uv run pylint $files
+uv run mypy
+# shellcheck disable=SC2086
+uv run numpydoc lint $files
+uv run pytest --cov --cov-report=term-missing

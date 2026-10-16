@@ -1,0 +1,11 @@
+name: check
+on: [push]
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv python install 3.14
+      - run: uv sync --frozen
+      - run: scripts/check

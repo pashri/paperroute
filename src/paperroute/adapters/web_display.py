@@ -23,6 +23,7 @@ logger = logging.getLogger(__name__)
 
 PING_S: Final[float] = 15  # seconds of quiet before an SSE comment
 ACTIONS: Final[dict[str, int]] = {'left': -1, 'right': 1}
+HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
 
 Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 
@@ -90,6 +91,29 @@ def _is_local(*, remote: str | None) -> bool:
     return address.is_private or address.is_loopback
 
 
+def _known_host(*, request: web.Request) -> bool:
+    """
+    Check the Host header names this device.
+
+    Parameters
+    ----------
+    request : web.Request
+        The incoming request.
+
+    Returns
+    -------
+    bool
+        True for `paperroute.local`, `localhost` or an IP address
+        literal (IPv6 in brackets), with or without a port.
+    """
+    try:
+        hostname = urlsplit(f'//{request.host}').hostname
+        ipaddress.ip_address(hostname or '')
+    except ValueError:
+        return hostname in HOSTNAMES
+    return True
+
+
 def _cross_site(*, request: web.Request) -> bool:
     """
     Check whether a POST names a different origin from its own host.
@@ -146,7 +170,7 @@ async def _fields(*, request: web.Request) -> dict[str, str]:
     if request.content_type == 'application/json':
         try:
             body = await request.json()
-        except json.JSONDecodeError:
+        except (json.JSONDecodeError, UnicodeDecodeError):
             return {}
     else:
         body = await request.post()
@@ -171,6 +195,8 @@ class WebDisplay:
 
     Attributes
     ----------
+    boot : str
+        Hex start time of this server, so a restart changes event data.
     version : int
         Number of frames shown; 0 before the first.
     changed : asyncio.Event
@@ -188,6 +214,8 @@ class WebDisplay:
         self._post: Callable[[Event], None] = lambda event: None
         self._png: bytes | None = None
         self._started = time.monotonic()
+        self._closing = False
+        self.boot = f'{time.time_ns():x}'
         self.version = 0
         self.changed = asyncio.Event()
 
@@ -226,6 +254,7 @@ class WebDisplay:
             The routes, behind the local-network check.
         """
         app = web.Application(middlewares=[self._guard])
+        app.on_shutdown.append(self._close)
         app.add_routes([
             web.get('/', self._page),
             web.get('/live.css', self._css),
@@ -236,6 +265,19 @@ class WebDisplay:
             web.get('/status', self._status_json),
         ])
         return app
+
+    async def _close(self, app: web.Application) -> None:
+        """
+        Release the open event streams so shutdown does not wait.
+
+        Parameters
+        ----------
+        app : web.Application
+            The application being shut down.
+        """
+        del app
+        self._closing = True
+        self.changed.set()
 
     @web.middleware
     async def _guard(
@@ -257,6 +299,8 @@ class WebDisplay:
             A 403 response, or the handler's response.
         """
         if not _is_local(remote=self._remote_of(request)):
+            return web.Response(status=HTTPStatus.FORBIDDEN)
+        if not _known_host(request=request):
             return web.Response(status=HTTPStatus.FORBIDDEN)
         if request.method == 'POST' and _cross_site(request=request):
             return web.Response(status=HTTPStatus.FORBIDDEN)
@@ -374,6 +418,8 @@ class WebDisplay:
                 except TimeoutError:
                     await response.write(b': ping\n\n')
                     continue
+                if self._closing:
+                    break
                 waiting = self.changed
                 await self._send_version(response=response)
         except ConnectionResetError:
@@ -389,7 +435,7 @@ class WebDisplay:
         response : web.StreamResponse
             The open event stream.
         """
-        message = f'event: frame\ndata: {self.version}\n\n'
+        message = f'event: frame\ndata: {self.boot}-{self.version}\n\n'
         await response.write(message.encode())
 
     async def _knob(self, request: web.Request) -> web.Response:
@@ -433,8 +479,8 @@ class WebDisplay:
         del request
         extra = self._status() if self._status else {}
         return web.json_response({
+            **extra,
             'version': self.version,
             'uptime_s': time.monotonic() - self._started,
             'max_rss_mb': max_rss_mb(),
-            **extra,
         })

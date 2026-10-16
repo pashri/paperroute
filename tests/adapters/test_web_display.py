@@ -1,6 +1,7 @@
 """Tests for the web display."""
 
 import asyncio
+import time
 from collections.abc import AsyncIterator
 from http import HTTPStatus
 from importlib.resources import files
@@ -21,6 +22,7 @@ ROUTES = [
     ('GET', '/live.css'),
     ('GET', '/live.js'),
     ('GET', '/frame.png'),
+    ('GET', '/events'),
     ('GET', '/status'),
     ('POST', '/knob'),
 ]
@@ -95,7 +97,7 @@ async def test_events_sends_current_frame_version_on_connect(
     response = await client.get('/events')
     assert response.content_type == 'text/event-stream'
     assert response.headers['Cache-Control'] == 'no-store'
-    assert await _read_event(response=response) == ('frame', '1')
+    assert await _read_event(response=response) == ('frame', f'{display.boot}-1')
 
 
 async def test_events_pushes_new_versions(
@@ -104,11 +106,11 @@ async def test_events_pushes_new_versions(
     """Each new frame is pushed to an open stream."""
     display.show(frame=FRAME)
     response = await client.get('/events')
-    assert await _read_event(response=response) == ('frame', '1')
+    assert await _read_event(response=response) == ('frame', f'{display.boot}-1')
     display.show(frame=FRAME)
-    assert await _read_event(response=response) == ('frame', '2')
+    assert await _read_event(response=response) == ('frame', f'{display.boot}-2')
     display.show(frame=FRAME)
-    assert await _read_event(response=response) == ('frame', '3')
+    assert await _read_event(response=response) == ('frame', f'{display.boot}-3')
 
 
 async def test_events_pings_when_idle(
@@ -166,7 +168,13 @@ async def test_knob_post_rejects_bad_json(client: Client) -> None:
 
 
 @pytest.mark.parametrize(('method', 'path'), ROUTES)
-@pytest.mark.parametrize('remote', ['8.8.8.8', None, 'not-an-ip'])
+@pytest.mark.parametrize('remote', [
+    '8.8.8.8',
+    None,
+    'not-an-ip',
+    '::ffff:8.8.8.8',
+    '2001:4860::8888',
+])
 async def test_public_address_is_refused_on_every_route(
     method: str, path: str, remote: str | None
 ) -> None:
@@ -180,7 +188,13 @@ async def test_public_address_is_refused_on_every_route(
         await client.close()
 
 
-@pytest.mark.parametrize('remote', ['192.168.0.19', '127.0.0.1'])
+@pytest.mark.parametrize('remote', [
+    '192.168.0.19',
+    '127.0.0.1',
+    '::1',
+    'fe80::1',
+    'fd00::1',
+])
 async def test_private_address_is_allowed(remote: str) -> None:
     """Private and loopback peers are served."""
     display = WebDisplay(remote_of=lambda request: remote)
@@ -249,3 +263,80 @@ def test_page_assets_are_packaged() -> None:
     assert 'live.css' in html
     assert 'live.js' in html
 
+
+async def test_event_data_carries_a_boot_id(
+    display: WebDisplay, client: Client
+) -> None:
+    """The boot id is hex, so a restart changes the image URL."""
+    display.show(frame=FRAME)
+    response = await client.get('/events')
+    _, data = await _read_event(response=response)
+    boot, version = data.split('-')
+    assert int(boot, 16) >= 0
+    assert boot == display.boot
+    assert version == '1'
+
+
+@pytest.mark.parametrize('host', [
+    'paperroute.local',
+    'paperroute.local:80',
+    'localhost',
+    '192.168.0.94',
+    '192.168.0.94:8080',
+    '[fe80::1]',
+    '[fe80::1]:8080',
+])
+async def test_known_host_header_is_allowed(
+    client: Client, host: str
+) -> None:
+    """Names the device answers to are served."""
+    response = await client.get('/status', headers={'Host': host})
+    assert response.status == HTTPStatus.OK
+
+
+@pytest.mark.parametrize('host', ['evil.example', 'evil.example:80'])
+async def test_unknown_host_header_is_refused(
+    client: Client, host: str
+) -> None:
+    """A rebound DNS name from a private peer is refused."""
+    response = await client.get('/status', headers={'Host': host})
+    assert response.status == HTTPStatus.FORBIDDEN
+
+
+async def test_knob_post_rejects_invalid_utf8_json(
+    client: Client,
+) -> None:
+    """A JSON body that is not valid UTF-8 is a 400, not a 500."""
+    response = await client.post(
+        '/knob',
+        data=b'{"knob": "\xff"}',
+        headers={'Content-Type': 'application/json'},
+    )
+    assert response.status == HTTPStatus.BAD_REQUEST
+
+
+async def test_status_built_in_keys_win() -> None:
+    """Extras cannot overwrite the built-in status keys."""
+    display = WebDisplay(status=lambda: {'version': 99, 'uptime_s': 'x'})
+    client = await _client(display=display)
+    try:
+        body = await (await client.get('/status')).json()
+    finally:
+        await client.close()
+    assert body['version'] == 0
+    assert isinstance(body['uptime_s'], float)
+
+
+async def test_shutdown_closes_open_event_streams(
+    display: WebDisplay,
+) -> None:
+    """An open stream does not hold up server shutdown."""
+    client = await _client(display=display)
+    response = await client.get('/events')
+    display.show(frame=FRAME)
+    await _read_event(response=response)
+    started = time.monotonic()
+    await client.server.close()
+    elapsed = time.monotonic() - started
+    await client.close()
+    assert elapsed < 1

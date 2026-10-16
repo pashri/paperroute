@@ -7,22 +7,36 @@ const KEYS = {
   k: ['bottom', 'press'],
   l: ['bottom', 'right'],
 };
+const EDITABLE = 'input, textarea, select, [contenteditable]';
 const STATUS_MS = 10000;
 
 const frame = document.querySelector('#frame');
 const statusLine = document.querySelector('#status');
 
 /**
- * Send a knob action to the device.
+ * Show a short message on the status line.
+ * @param {string} message The text to show.
+ * @returns {void}
+ */
+function showError(message) {
+  statusLine.textContent = message;
+}
+
+/**
+ * Send a knob action to the device, reporting any failure.
  * @param {string} knob `top` or `bottom`.
  * @param {string} action `left`, `right` or `press`.
- * @returns {Promise<Response>} The server's reply.
+ * @returns {Promise<void>}
  */
 function sendKnob(knob, action) {
   const body = new FormData();
   body.set('knob', knob);
   body.set('action', action);
-  return fetch('/knob', { method: 'POST', body });
+  return fetch('/knob', { method: 'POST', body })
+    .then((reply) => {
+      if (!reply.ok) showError(`Knob refused (${reply.status})`);
+    })
+    .catch(() => showError('Knob not sent: network error'));
 }
 
 /**
@@ -31,7 +45,7 @@ function sendKnob(knob, action) {
  * @param {number} digits Decimal places.
  * @returns {string} The number, or a dash when absent.
  */
-function show(value, digits) {
+function formatNumber(value, digits) {
   return typeof value === 'number' ? value.toFixed(digits) : '-';
 }
 
@@ -43,9 +57,9 @@ function show(value, digits) {
 function renderStatus(status) {
   const parse = status.feeds?.['v1/gtfs/realtime/buses']?.parse_ms;
   statusLine.textContent =
-    `Frame age ${show(status.frame_age_s, 0)} s, ` +
-    `render ${show(status.last_render_ms, 0)} ms, ` +
-    `bus parse ${show(parse, 0)} ms`;
+    `Frame age ${formatNumber(status.frame_age_s, 0)} s, ` +
+    `render ${formatNumber(status.last_render_ms, 0)} ms, ` +
+    `bus parse ${formatNumber(parse, 0)} ms`;
 }
 
 /**
@@ -62,11 +76,12 @@ async function refreshStatus() {
 }
 
 /**
- * Press the knob for a key, ignoring other keys.
+ * Press the knob for a key, ignoring repeats, typing and other keys.
  * @param {KeyboardEvent} event The key event.
  * @returns {void}
  */
 function onKey(event) {
+  if (event.repeat || event.target.closest(EDITABLE)) return;
   const target = KEYS[event.key.toLowerCase()];
   if (target && !event.metaKey && !event.ctrlKey && !event.altKey) {
     sendKnob(...target);

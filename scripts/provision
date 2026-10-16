@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Usage: scripts/provision HOST [--reboot]
-# Copies deploy/ to the Pi and runs provision-device there as root. sudo
-# asks for pashri's password once.
+# Copies deploy/ to the login user's home on the Pi and runs
+# provision-device there as root. sudo asks for the password once.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-STAGING=/tmp/paperroute-provision
+STAGING=.paperroute-provision
 
 usage() {
     printf 'usage: scripts/provision HOST [--reboot]\n' >&2
@@ -21,8 +21,10 @@ if [[ $# -eq 2 ]]; then
 fi
 [[ $host =~ ^[A-Za-z0-9][A-Za-z0-9._@-]*$ ]] || usage
 
+# STAGING is relative to the remote home; $HOME expands on the Pi.
 rsync -a --delete deploy/ "$host:$STAGING/"
-ssh -t -- "$host" sudo bash "$STAGING/bin/provision-device" "$STAGING"
+ssh -t -- "$host" \
+    "sudo bash \"\$HOME/$STAGING/bin/provision-device\" \"\$HOME/$STAGING\""
 if [[ $reboot == yes ]]; then
     ssh -t -- "$host" sudo systemctl reboot
 fi

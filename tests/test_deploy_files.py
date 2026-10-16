@@ -1,6 +1,7 @@
 """Tests for the device files and the provision and deploy scripts."""
 
 import configparser
+import getpass
 import os
 import re
 import shutil
@@ -30,7 +31,7 @@ SHELL_SCRIPTS: Final[tuple[Path, ...]] = (
 SUDOERS_RULE: Final[str] = (
     'pashri ALL=(root) NOPASSWD: '
     '/usr/local/sbin/paperroute-install-release, '
-    '/usr/local/sbin/paperroute-install-files'
+    '/usr/local/sbin/paperroute-install-files ""'
 )
 BAD_SHAS: Final[tuple[str, ...]] = (
     '',
@@ -41,13 +42,26 @@ BAD_SHAS: Final[tuple[str, ...]] = (
     '../abc1234',
 )
 SHA: Final[str] = 'abc1234'
+KMS_OFF: Final[str] = 's/^dtoverlay=vc4-kms-v3d/#&/'
+ROOT_SAFE_ENVIRONMENT: Final[frozenset[str]] = frozenset(
+    {'PAPERROUTE_API_KEY_FILE'}
+)
+LED_PATTERNS: Final[dict[str, dict[str, str]]] = {
+    'boot': {'trigger': 'timer', 'delay_on': '100', 'delay_off': '100'},
+    'rebuild': {
+        'trigger': 'timer',
+        'delay_on': '1000',
+        'delay_off': '1000',
+    },
+    'on': {'trigger': 'default-on'},
+}
 PYTHON: Final[str] = '/opt/paperroute/current/.venv/bin/python'
 APP_SERVICE: Final[dict[str, str]] = {
     'Type': 'notify',
     'NotifyAccess': 'main',
     'User': 'paperroute',
     'Group': 'paperroute',
-    'EnvironmentFile': '/var/lib/paperroute/m2a.env',
+    'EnvironmentFile': '/etc/paperroute/m2a.env',
     'Environment': (
         'PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets'
     ),
@@ -73,13 +87,11 @@ TIMETABLE_SERVICE: Final[dict[str, str]] = {
     'Type': 'oneshot',
     'User': 'paperroute',
     'Group': 'paperroute',
-    'Environment': (
-        'PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets'
-        ' TMPDIR=/var/lib/paperroute/work'
-    ),
+    'Environment': 'PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets',
     'ExecStartPre': '+/usr/local/bin/paperroute-led rebuild',
     'ExecStart': (
-        f'{PYTHON} -m paperroute.build refresh'
+        '/usr/bin/env TMPDIR=/var/lib/paperroute/work'
+        f' {PYTHON} -m paperroute.build refresh'
         ' --data-dir /var/lib/paperroute'
         ' --error-log /var/lib/paperroute/log/errors.jsonl'
     ),
@@ -199,7 +211,7 @@ def read_unit(name: str) -> dict[str, dict[str, str]]:
 
 def run_script(
     name: str,
-    *args: str,
+    args: tuple[str, ...],
     env: dict[str, str],
 ) -> subprocess.CompletedProcess[str]:
     """
@@ -209,7 +221,7 @@ def run_script(
     ----------
     name : str
         The script's file name.
-    *args : str
+    args : tuple[str, ...]
         Its arguments.
     env : dict[str, str]
         The environment to run it in.
@@ -249,7 +261,7 @@ def snapshot(root: Path) -> dict[str, str]:
             f'link:{os.readlink(path)}'
             if path.is_symlink()
             else 'dir' if path.is_dir()
-            else path.read_text() if path.is_file()
+            else path.read_text(encoding='utf-8') if path.is_file()
             else 'other'
         )
         for path in root.rglob('*')
@@ -289,6 +301,114 @@ def kms_off() -> str:
     )
     assert found is not None
     return found.group(1)
+
+
+def script_value(path: Path, name: str) -> str:
+    """
+    Take a variable's value from a script's top-level assignment.
+
+    Parameters
+    ----------
+    path : Path
+        The script.
+    name : str
+        The variable.
+
+    Returns
+    -------
+    str
+        The text after ``NAME=``.
+    """
+    found = re.search(
+        pattern=rf'^{name}=(.*)$',
+        string=script_text(path=path),
+        flags=re.MULTILINE,
+    )
+    assert found is not None
+    return found.group(1)
+
+
+def environment_names(unit: dict[str, dict[str, str]]) -> set[str]:
+    """
+    List the variables a unit's ``Environment=`` sets for every command.
+
+    Parameters
+    ----------
+    unit : dict[str, dict[str, str]]
+        The parsed unit.
+
+    Returns
+    -------
+    set[str]
+        The variable names.
+    """
+    assignments = unit['Service'].get('Environment', '').split()
+    return {assignment.split('=')[0] for assignment in assignments}
+
+
+def led_dir(tmp_path: Path) -> Path:
+    """
+    Make files standing in for the ACT LED's sysfs attributes.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Pytest's temporary directory.
+
+    Returns
+    -------
+    Path
+        The directory holding ``trigger``, ``delay_on``, ``delay_off``
+        and ``brightness``, each empty.
+    """
+    led = tmp_path / 'ACT'
+    led.mkdir()
+    for name in ('trigger', 'delay_on', 'delay_off', 'brightness'):
+        (led / name).write_text('', encoding='utf-8')
+    return led
+
+
+def led_state(led: Path) -> dict[str, str]:
+    """
+    Read back the LED attribute files that were written.
+
+    Parameters
+    ----------
+    led : Path
+        The stand-in directory.
+
+    Returns
+    -------
+    dict[str, str]
+        Each non-empty attribute's value, without the newline.
+    """
+    return {
+        path.name: path.read_text(encoding='utf-8').strip()
+        for path in sorted(led.iterdir())
+        if path.read_text(encoding='utf-8')
+    }
+
+
+def user_env(**extra: str) -> dict[str, str]:
+    """
+    Copy this process's environment without ``SUDO_USER``.
+
+    Parameters
+    ----------
+    **extra : str
+        Variables to add.
+
+    Returns
+    -------
+    dict[str, str]
+        The environment.
+    """
+    env = {
+        key: value
+        for key, value in os.environ.items()
+        if key != 'SUDO_USER'
+    }
+    return env | extra
 
 
 def edit_config(config: Path) -> None:
@@ -362,15 +482,10 @@ def fixture_sandbox(tmp_path: Path) -> Sandbox:
     releases = tmp_path / 'releases'
     stage.mkdir()
     releases.mkdir()
-    env = {
-        key: value
-        for key, value in os.environ.items()
-        if key != 'SUDO_USER'
-    }
-    env |= {
-        'PAPERROUTE_STAGE': str(stage),
-        'PAPERROUTE_RELEASES': str(releases),
-    }
+    env = user_env(
+        PAPERROUTE_STAGE=str(stage),
+        PAPERROUTE_RELEASES=str(releases),
+    )
     return Sandbox(root=tmp_path, stage=stage, releases=releases, env=env)
 
 
@@ -390,8 +505,11 @@ def stage_tree(stage: Path) -> Path:
     """
     tree = stage / SHA / 'src'
     tree.mkdir(parents=True)
-    (tree / 'module.py').write_text('x = 1\n')
-    (stage / SHA / 'pyproject.toml').write_text('[project]\n')
+    (tree / 'module.py').write_text('x = 1\n', encoding='utf-8')
+    (stage / SHA / 'pyproject.toml').write_text(
+        '[project]\n',
+        encoding='utf-8',
+    )
     return stage / SHA
 
 
@@ -432,7 +550,9 @@ def test_timetable_unit_logs_errors_and_uses_work_tmp() -> None:
     assert service['ExecStart'].endswith(
         '--error-log /var/lib/paperroute/log/errors.jsonl'
     )
-    assert 'TMPDIR=/var/lib/paperroute/work' in service['Environment']
+    assert service['ExecStart'].startswith(
+        '/usr/bin/env TMPDIR=/var/lib/paperroute/work '
+    )
     assert (service['Nice'], service['OOMScoreAdjust']) == ('19', '500')
 
 
@@ -467,7 +587,11 @@ def test_install_release_rejects_bad_sha(
     """A malformed sha exits 2 before anything is touched."""
     stage_tree(stage=sandbox.stage)
     before = snapshot(root=sandbox.root)
-    result = run_script('install-release', value, env=sandbox.env)
+    result = run_script(
+        name='install-release',
+        args=(value,),
+        env=sandbox.env,
+    )
     assert (result.returncode, result.stderr) == (
         2,
         'install-release: the sha must be 7 to 12 lowercase hex digits\n',
@@ -482,7 +606,11 @@ def test_install_files_rejects_any_argument(
 ) -> None:
     """install-files takes no arguments at all."""
     before = snapshot(root=sandbox.root)
-    result = run_script('install-files', value, env=sandbox.env)
+    result = run_script(
+        name='install-files',
+        args=(value,),
+        env=sandbox.env,
+    )
     assert (result.returncode, result.stderr) == (
         2,
         'install-files: takes no arguments\n',
@@ -494,7 +622,11 @@ def test_install_release_rejects_extra_arguments(sandbox: Sandbox) -> None:
     """install-release takes exactly one argument."""
     stage_tree(stage=sandbox.stage)
     before = snapshot(root=sandbox.root)
-    result = run_script('install-release', SHA, SHA, env=sandbox.env)
+    result = run_script(
+        name='install-release',
+        args=(SHA, SHA),
+        env=sandbox.env,
+    )
     assert result.returncode == 2
     assert result.stderr == 'install-release: usage: install-release SHA\n'
     assert snapshot(root=sandbox.root) == before
@@ -505,7 +637,11 @@ def test_install_release_rejects_symlinked_stage(sandbox: Sandbox) -> None:
     elsewhere = stage_tree(stage=sandbox.root / 'elsewhere')
     (sandbox.stage / SHA).symlink_to(elsewhere)
     before = snapshot(root=sandbox.root)
-    result = run_script('install-release', SHA, env=sandbox.env)
+    result = run_script(
+        name='install-release',
+        args=(SHA,),
+        env=sandbox.env,
+    )
     assert result.returncode == 2
     assert result.stderr == (
         'install-release: the staged tree is not a real directory\n'
@@ -516,7 +652,11 @@ def test_install_release_rejects_symlinked_stage(sandbox: Sandbox) -> None:
 def test_install_release_rejects_missing_stage(sandbox: Sandbox) -> None:
     """A sha with nothing staged exits 2."""
     before = snapshot(root=sandbox.root)
-    result = run_script('install-release', SHA, env=sandbox.env)
+    result = run_script(
+        name='install-release',
+        args=(SHA,),
+        env=sandbox.env,
+    )
     assert result.returncode == 2
     assert result.stderr == (
         'install-release: the staged tree is not a real directory\n'
@@ -536,7 +676,11 @@ def test_install_release_rejects_odd_entries(
     else:
         os.mkfifo(tree / 'src' / 'pipe')
     before = snapshot(root=sandbox.root)
-    result = run_script('install-release', SHA, env=sandbox.env)
+    result = run_script(
+        name='install-release',
+        args=(SHA,),
+        env=sandbox.env,
+    )
     assert result.returncode == 2
     assert result.stderr == (
         'install-release: the staged tree may hold only regular files'
@@ -550,7 +694,11 @@ def test_install_release_rejects_wrong_owner(sandbox: Sandbox) -> None:
     stage_tree(stage=sandbox.stage)
     before = snapshot(root=sandbox.root)
     env = sandbox.env | {'SUDO_USER': 'nobody'}
-    result = run_script('install-release', SHA, env=env)
+    result = run_script(
+        name='install-release',
+        args=(SHA,),
+        env=env,
+    )
     assert result.returncode == 2
     assert result.stderr == (
         'install-release: the staged tree is not owned by nobody\n'
@@ -563,7 +711,11 @@ def test_install_release_rejects_unknown_owner(sandbox: Sandbox) -> None:
     stage_tree(stage=sandbox.stage)
     before = snapshot(root=sandbox.root)
     env = sandbox.env | {'SUDO_USER': 'no-such-user-paperroute'}
-    result = run_script('install-release', SHA, env=env)
+    result = run_script(
+        name='install-release',
+        args=(SHA,),
+        env=env,
+    )
     assert result.returncode == 2
     assert result.stderr == 'install-release: unknown user\n'
     assert snapshot(root=sandbox.root) == before
@@ -573,7 +725,11 @@ def test_install_release_valid_stage_needs_root(sandbox: Sandbox) -> None:
     """A valid stage passes every check, then stops for want of root."""
     stage_tree(stage=sandbox.stage)
     before = snapshot(root=sandbox.root)
-    result = run_script('install-release', SHA, env=sandbox.env)
+    result = run_script(
+        name='install-release',
+        args=(SHA,),
+        env=sandbox.env,
+    )
     assert result.returncode == 2
     assert result.stderr == (
         'install-release: checks passed; installing needs root\n'
@@ -607,6 +763,11 @@ def test_kms_off_comments_out_overlay_once() -> None:
     lines = text.splitlines()
     assert lines.count('#dtoverlay=vc4-kms-v3d') == 1
     assert 'dtoverlay=vc4-kms-v3d' not in lines
+
+
+def test_kms_off_is_the_planned_expression() -> None:
+    """provision-device uses exactly the planned sed expression."""
+    assert kms_off() == KMS_OFF
 
 
 def test_edit_config_is_idempotent(tmp_path: Path) -> None:
@@ -667,3 +828,195 @@ def test_shell_script_never_names_the_key(path: Path) -> None:
     text = script_text(path=path)
     assert 'tfnsw_api_key' not in text
     assert 'secrets' not in text
+
+
+def test_root_exec_lines_get_no_service_writable_environment() -> None:
+    """Units with root + lines read env only from /etc, and set no TMPDIR."""
+    for name in UNITS:
+        unit = read_unit(name=name)
+        service = unit.get('Service', {})
+        if not any(key in service for key in ROOT_EXEC_KEYS):
+            continue
+        assert environment_names(unit=unit) <= ROOT_SAFE_ENVIRONMENT
+        assert service.get('EnvironmentFile', '/etc/').startswith('/etc/')
+
+
+def test_install_release_constants() -> None:
+    """Three releases are kept, and the app gets 90 s to come up."""
+    script = BIN / 'install-release'
+    assert script_value(path=script, name='KEEP') == '3'
+    assert script_value(path=script, name='HEALTH_WAIT') == '90'
+    assert script_value(path=script, name='LOCK') == (
+        '/run/paperroute-install.lock'
+    )
+
+
+def test_uv_installer_is_pinned() -> None:
+    """provision-device fetches a versioned installer and checks its hash."""
+    script = BIN / 'provision-device'
+    assert script_value(path=script, name='UV_VERSION') == '0.12.1'
+    assert script_value(path=script, name='UV_INSTALLER_URL') == (
+        '"https://astral.sh/uv/$UV_VERSION/install.sh"'
+    )
+    digest = script_value(path=script, name='UV_INSTALLER_SHA256')
+    assert re.fullmatch(pattern='[0-9a-f]{64}', string=digest)
+    assert '| env UV_UNMANAGED_INSTALL' not in script_text(path=script)
+
+
+def test_provision_writes_root_owned_pin() -> None:
+    """The pin file is root's, under /etc, and never overwritten."""
+    script = BIN / 'provision-device'
+    assert script_value(path=script, name='PIN_DIR') == '/etc/paperroute'
+    assert script_value(path=script, name='PIN_FILE') == '$PIN_DIR/m2a.env'
+    assert 'if [[ ! -e $PIN_FILE ]]; then' in script_text(path=script)
+    assert 'm2a.env' not in script_text(path=BIN / 'install-release')
+
+
+@pytest.mark.parametrize('mode', sorted(LED_PATTERNS))
+def test_led_sets_pattern(tmp_path: Path, mode: str) -> None:
+    """Each mode writes its trigger, then its delays when it blinks."""
+    led = led_dir(tmp_path=tmp_path)
+    result = run_script(
+        name='paperroute-led',
+        args=(mode,),
+        env=user_env(PAPERROUTE_LED_DIR=str(led)),
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    assert led_state(led=led) == LED_PATTERNS[mode]
+
+
+def test_led_restore_without_app_blinks_boot(tmp_path: Path) -> None:
+    """With the app not active, restore goes back to the boot blink."""
+    led = led_dir(tmp_path=tmp_path)
+    result = run_script(
+        name='paperroute-led',
+        args=('restore',),
+        env=user_env(PAPERROUTE_LED_DIR=str(led)),
+    )
+    assert result.returncode == 0
+    assert led_state(led=led) == LED_PATTERNS['boot']
+
+
+@pytest.mark.parametrize(
+    'args',
+    ((), ('',), ('blink',), ('BOOT',), ('boot', 'on'), ('on;id',)),
+)
+def test_led_rejects_bad_arguments(
+    tmp_path: Path,
+    args: tuple[str, ...],
+) -> None:
+    """Anything but one known mode exits 2 and writes nothing."""
+    led = led_dir(tmp_path=tmp_path)
+    result = run_script(
+        name='paperroute-led',
+        args=args,
+        env=user_env(PAPERROUTE_LED_DIR=str(led)),
+    )
+    assert (result.returncode, result.stderr) == (
+        2,
+        'usage: paperroute-led boot|rebuild|restore|on\n',
+    )
+    assert led_state(led=led) == {}
+
+
+def test_led_without_led_exits_quietly(tmp_path: Path) -> None:
+    """With no ACT directory the script does nothing and exits 0."""
+    result = run_script(
+        name='paperroute-led',
+        args=('boot',),
+        env=user_env(PAPERROUTE_LED_DIR=str(tmp_path / 'missing')),
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    assert not (tmp_path / 'missing').exists()
+
+
+def test_led_ignores_override_as_root() -> None:
+    """The test override applies only when the caller isn't root."""
+    text = script_text(path=BIN / 'paperroute-led')
+    assert 'if [[ $EUID -ne 0 ]]; then\n    LED=${PAPERROUTE_LED_DIR' in text
+
+
+def copy_deploy(tmp_path: Path) -> Path:
+    """
+    Copy deploy/ the way scripts/provision stages it.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Pytest's temporary directory.
+
+    Returns
+    -------
+    Path
+        The copy.
+    """
+    copy = tmp_path / 'paperroute-provision'
+    shutil.copytree(src=DEPLOY, dst=copy)
+    return copy
+
+
+def run_provision(
+    copy: Path,
+    sudo_user: str | None,
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run provision-device over a staged copy as the current user.
+
+    Parameters
+    ----------
+    copy : Path
+        The staged deploy/ copy.
+    sudo_user : str | None
+        The ``SUDO_USER`` to claim, or None to leave it unset.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The exit status and output.
+    """
+    extra = {} if sudo_user is None else {'SUDO_USER': sudo_user}
+    return subprocess.run(
+        args=['bash', str(copy / 'bin' / 'provision-device'), str(copy)],
+        env=user_env(**extra),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+
+@pytest.mark.parametrize(
+    ('sudo_user', 'reason'),
+    (
+        (None, 'run it through sudo'),
+        ('nobody', 'DIR is not owned by nobody'),
+        ('no-such-user-paperroute', 'unknown user'),
+        (getpass.getuser(), 'checks passed; provisioning needs root'),
+    ),
+)
+def test_provision_checks_the_staged_owner(
+    tmp_path: Path,
+    sudo_user: str | None,
+    reason: str,
+) -> None:
+    """Staged files must belong to the sudo caller before root runs them."""
+    copy = copy_deploy(tmp_path=tmp_path)
+    before = snapshot(root=tmp_path)
+    result = run_provision(copy=copy, sudo_user=sudo_user)
+    assert (result.returncode, result.stderr) == (
+        2,
+        f'provision-device: {reason}\n',
+    )
+    assert snapshot(root=tmp_path) == before
+
+
+def test_provision_rejects_odd_entries(tmp_path: Path) -> None:
+    """A staged copy holding a symlink exits 2 before anything runs."""
+    copy = copy_deploy(tmp_path=tmp_path)
+    (copy / 'conf' / 'link').symlink_to('/etc/passwd')
+    result = run_provision(copy=copy, sudo_user=getpass.getuser())
+    assert (result.returncode, result.stderr) == (
+        2,
+        'provision-device: DIR may hold only regular files and'
+        ' directories\n',
+    )

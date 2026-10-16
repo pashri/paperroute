@@ -4,6 +4,10 @@ set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
 LED=/sys/class/leds/ACT
+# Tests point it at a temp directory; root always uses the real LED.
+if [[ $EUID -ne 0 ]]; then
+    LED=${PAPERROUTE_LED_DIR:-$LED}
+fi
 
 usage() {
     printf 'usage: paperroute-led boot|rebuild|restore|on\n' >&2

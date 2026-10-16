@@ -9,7 +9,7 @@ Type=notify
 NotifyAccess=main
 User=paperroute
 Group=paperroute
-EnvironmentFile=/var/lib/paperroute/m2a.env
+EnvironmentFile=/etc/paperroute/m2a.env
 Environment=PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets
 ExecStart=/opt/paperroute/current/.venv/bin/python -m paperroute run --display web --timetable /var/lib/paperroute/timetable.db --error-log /var/lib/paperroute/log/errors.jsonl
 # + runs it as root: the paperroute user can't write delay_on or delay_off

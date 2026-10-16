@@ -7,10 +7,11 @@ Wants=network-online.target
 Type=oneshot
 User=paperroute
 Group=paperroute
-# TMPDIR keeps SQLite and Python temp files off the RAM-backed /tmp
-Environment=PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets TMPDIR=/var/lib/paperroute/work
+Environment=PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets
 ExecStartPre=+/usr/local/bin/paperroute-led rebuild
-ExecStart=/opt/paperroute/current/.venv/bin/python -m paperroute.build refresh --data-dir /var/lib/paperroute --error-log /var/lib/paperroute/log/errors.jsonl
+# TMPDIR keeps temp files off the RAM-backed /tmp; set here, not unit-wide,
+# so the root + lines never get a directory the service user can write
+ExecStart=/usr/bin/env TMPDIR=/var/lib/paperroute/work /opt/paperroute/current/.venv/bin/python -m paperroute.build refresh --data-dir /var/lib/paperroute --error-log /var/lib/paperroute/log/errors.jsonl
 # Runs only after a successful refresh, so the first one starts the app
 ExecStartPost=+/usr/bin/systemctl start --no-block paperroute
 ExecStopPost=+/usr/local/bin/paperroute-led restore

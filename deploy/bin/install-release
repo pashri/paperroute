@@ -13,7 +13,7 @@ R=/opt/paperroute/releases
 OPT=/opt/paperroute
 CURRENT=$OPT/current
 DATA=/var/lib/paperroute
-ENV_FILE=$DATA/m2a.env
+LOCK=/run/paperroute-install.lock
 KEEP=3
 HEALTH_WAIT=90
 SHA_RE='^[0-9a-f]{7,12}$'
@@ -62,6 +62,7 @@ build() {
 
 # Moves the tree out of the owner's reach before making it root's.
 take_over() {
+    local bad
     INCOMING=$(mktemp -d "$R/.incoming.XXXXXX")
     mv -T -- "$TREE" "$INCOMING/tree"
     if [[ ! -d $INCOMING/tree || -L $INCOMING/tree ]]; then
@@ -70,22 +71,17 @@ take_over() {
     fi
     chown -hR root:root "$INCOMING/tree"
     chmod -R go-w,ug-s "$INCOMING/tree"
+    bad=$(find "$INCOMING/tree" \( ! -user root -o ! -group root \) \
+        -print -quit) || bad=unreadable
+    if [[ -n $bad ]]; then
+        printf 'install-release: %s %s\n' 'the release tree holds entries' \
+            'not owned by root after the take-over; aborting' >&2
+        exit 1
+    fi
     rm -rf -- "${R:?}/$SHA"
     mv -T -- "$INCOMING/tree" "$R/$SHA"
     rm -rf -- "$INCOMING"
     INCOMING=
-}
-
-# Renames into place, so a planted symlink is replaced, not followed.
-write_env() {
-    local tmp
-    if [[ -e $ENV_FILE || -L $ENV_FILE ]]; then
-        return 0
-    fi
-    tmp=$(mktemp /var/lib/.paperroute-m2a.env.XXXXXX)
-    printf 'PAPERROUTE_FROM=2145615\nPAPERROUTE_TO=215020\n' >"$tmp"
-    chmod 0644 "$tmp"
-    mv -T -- "$tmp" "$ENV_FILE"
 }
 
 switch_to() {
@@ -149,6 +145,11 @@ if [[ $EUID -ne 0 ]]; then
     R=${PAPERROUTE_RELEASES:-$R}
 fi
 validate
+exec 9>"$LOCK"
+if ! flock -n 9; then
+    printf 'install-release: another install is running\n' >&2
+    exit 1
+fi
 trap cleanup EXIT
 
 build
@@ -156,7 +157,6 @@ if [[ $(readlink -- "$CURRENT" || true) == "$R/$SHA" ]]; then
     runuser -u "$OWNER" -- rm -rf -- "$TREE"
 else
     take_over
-    write_env
 fi
 prev=$(readlink -- "$CURRENT" || true)
 switch_to "$R/$SHA"

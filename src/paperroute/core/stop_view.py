@@ -221,8 +221,8 @@ def in_view(
     """
     Keep departures leaving by now plus HORIZON, in live order.
 
-    Running services are stable-sorted by live departure time. A cancelled
-    service keeps its place in the order given.
+    The list is stable-sorted by live departure time, except that a
+    cancelled service sorts by its timetabled departure time.
 
     Parameters
     ----------
@@ -242,13 +242,25 @@ def in_view(
         for item in not_departed(departures=departures, now=now)
         if item.departs.timestamp() <= limit
     ]
-    running = iter(
-        sorted(
-            (item for item in kept if not item.cancelled),
-            key=lambda item: item.departs.timestamp(),
-        )
-    )
-    return [item if item.cancelled else next(running) for item in kept]
+    return sorted(kept, key=lambda item: order_time(item=item))
+
+
+def order_time(*, item: LiveDeparture) -> float:
+    """
+    When a departure sorts in the list: live time, or timetabled if cancelled.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure.
+
+    Returns
+    -------
+    float
+        POSIX timestamp.
+    """
+    moment = item.departure.departs if item.cancelled else item.departs
+    return moment.timestamp()
 
 
 def empty_text(*, destination: str, loaded: bool) -> str:

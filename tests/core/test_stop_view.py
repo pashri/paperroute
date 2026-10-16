@@ -419,3 +419,19 @@ def test_view_stops_at_the_horizon() -> None:
     )
     assert hero(result=result).leaves_at == '8:10'
     assert [row.leaves_at for row in result.rows] == ['11:00']
+
+
+def test_view_cancelled_placed_by_timetabled_time() -> None:
+    """A cancelled 8:04 sits between live 8:03 and 8:06 wherever it was."""
+    result = view(
+        departures=(
+            live(minutes=1, late=5),
+            live(minutes=3),
+            live(minutes=4, cancelled=True),
+        )
+    )
+    assert hero(result=result).leaves_at == '8:03'
+    assert [(row.leaves_at, row.pill) for row in result.rows] == [
+        ('8:04', Pill.CANCELLED),
+        ('8:06', None),
+    ]

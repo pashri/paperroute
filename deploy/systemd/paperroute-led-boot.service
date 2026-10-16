@@ -1,0 +1,10 @@
+[Unit]
+DefaultDependencies=no
+Before=sysinit.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/paperroute-led boot
+
+[Install]
+WantedBy=sysinit.target

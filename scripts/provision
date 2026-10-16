@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Usage: scripts/provision HOST [--reboot]
+# Copies deploy/ to the Pi and runs provision-device there as root. sudo
+# asks for pashri's password once.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+STAGING=/tmp/paperroute-provision
+
+usage() {
+    printf 'usage: scripts/provision HOST [--reboot]\n' >&2
+    exit 2
+}
+
+[[ $# -eq 1 || $# -eq 2 ]] || usage
+host=$1
+reboot=no
+if [[ $# -eq 2 ]]; then
+    [[ $2 == --reboot ]] || usage
+    reboot=yes
+fi
+[[ $host =~ ^[A-Za-z0-9][A-Za-z0-9._@-]*$ ]] || usage
+
+rsync -a --delete deploy/ "$host:$STAGING/"
+ssh -t -- "$host" sudo bash "$STAGING/bin/provision-device" "$STAGING"
+if [[ $reboot == yes ]]; then
+    ssh -t -- "$host" sudo systemctl reboot
+fi

@@ -1,0 +1,174 @@
+#!/bin/bash
+# Installed as /usr/local/sbin/paperroute-install-release (root).
+# Usage: paperroute-install-release SHA
+# Builds the staged release as its owner, takes it over as root, switches
+# current to it, and rolls back if the app doesn't come up.
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+umask 022
+
+STAGE=/var/cache/paperroute-stage
+R=/opt/paperroute/releases
+OPT=/opt/paperroute
+CURRENT=$OPT/current
+DATA=/var/lib/paperroute
+ENV_FILE=$DATA/m2a.env
+KEEP=3
+HEALTH_WAIT=90
+SHA_RE='^[0-9a-f]{7,12}$'
+INCOMING=
+prev=
+
+fail() {
+    printf 'install-release: %s\n' "$1" >&2
+    exit 2
+}
+
+cleanup() {
+    if [[ -n $INCOMING ]]; then
+        rm -rf -- "$INCOMING"
+    fi
+}
+
+# Checks the staged tree; sets TREE and OWNER.
+validate() {
+    local uid bad
+    TREE=$STAGE/$SHA
+    if [[ ! -d $TREE || -L $TREE ]]; then
+        fail 'the staged tree is not a real directory'
+    fi
+    OWNER=${SUDO_USER:-$(id -un)}
+    uid=$(id -u -- "$OWNER" 2>/dev/null) || fail 'unknown user'
+    bad=$(find "$TREE" ! -user "$uid" -print -quit) \
+        || fail 'cannot read the staged tree'
+    [[ -z $bad ]] || fail "the staged tree is not owned by $OWNER"
+    bad=$(find "$TREE" ! -type f ! -type d -print -quit) \
+        || fail 'cannot read the staged tree'
+    if [[ -n $bad ]]; then
+        fail 'the staged tree may hold only regular files and directories'
+    fi
+    [[ $EUID -eq 0 ]] || fail 'checks passed; installing needs root'
+    [[ $uid -ne 0 ]] || fail 'refusing to build the release as root'
+}
+
+# Runs the project's build backend, so never as root.
+build() {
+    runuser -u "$OWNER" -- env \
+        UV_PYTHON_INSTALL_DIR="$OPT/python" UV_PYTHON_DOWNLOADS=never \
+        uv sync --frozen --no-dev --no-editable --compile-bytecode \
+        --project "$TREE"
+}
+
+# Moves the tree out of the owner's reach before making it root's.
+take_over() {
+    INCOMING=$(mktemp -d "$R/.incoming.XXXXXX")
+    mv -T -- "$TREE" "$INCOMING/tree"
+    if [[ ! -d $INCOMING/tree || -L $INCOMING/tree ]]; then
+        printf 'install-release: the staged tree changed\n' >&2
+        exit 1
+    fi
+    chown -hR root:root "$INCOMING/tree"
+    chmod -R go-w,ug-s "$INCOMING/tree"
+    rm -rf -- "${R:?}/$SHA"
+    mv -T -- "$INCOMING/tree" "$R/$SHA"
+    rm -rf -- "$INCOMING"
+    INCOMING=
+}
+
+# Renames into place, so a planted symlink is replaced, not followed.
+write_env() {
+    local tmp
+    if [[ -e $ENV_FILE || -L $ENV_FILE ]]; then
+        return 0
+    fi
+    tmp=$(mktemp /var/lib/.paperroute-m2a.env.XXXXXX)
+    printf 'PAPERROUTE_FROM=2145615\nPAPERROUTE_TO=215020\n' >"$tmp"
+    chmod 0644 "$tmp"
+    mv -T -- "$tmp" "$ENV_FILE"
+}
+
+switch_to() {
+    ln -sfn -- "$1" "$CURRENT.new"
+    mv -T -- "$CURRENT.new" "$CURRENT"
+}
+
+healthy() {
+    local deadline=$((SECONDS + HEALTH_WAIT))
+    while ((SECONDS < deadline)); do
+        if systemctl is-active --quiet paperroute \
+            && curl -sf -o /dev/null --max-time 2 http://127.0.0.1/status
+        then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+roll_back() {
+    printf 'install-release: %s did not come up; rolling back\n' "$SHA" >&2
+    if [[ -n $prev ]]; then
+        switch_to "$prev"
+        systemctl restart paperroute || true
+    else
+        systemctl stop paperroute || true
+        rm -f -- "$CURRENT"
+    fi
+    journalctl -u paperroute -n 50 --no-pager || true
+    exit 1
+}
+
+# Keeps current, prev and the newest releases, up to KEEP in all.
+prune() {
+    local kept=" $SHA " count=1 name prev_name=${prev##*/}
+    if [[ -n $prev_name && $prev_name != "$SHA" ]]; then
+        kept+="$prev_name "
+        count=2
+    fi
+    while IFS= read -r name; do
+        [[ $name =~ $SHA_RE ]] || continue
+        case $kept in *" $name "*) continue ;; esac
+        if ((count < KEEP)); then
+            kept+="$name "
+            count=$((count + 1))
+        else
+            rm -rf -- "${R:?}/$name"
+        fi
+    done < <(
+        find "$R" -mindepth 1 -maxdepth 1 -type d -printf '%T@ %f\n' \
+            | sort -rn | cut -d ' ' -f 2
+    )
+}
+
+[[ $# -eq 1 ]] || fail 'usage: install-release SHA'
+[[ $1 =~ $SHA_RE ]] || fail 'the sha must be 7 to 12 lowercase hex digits'
+SHA=$1
+if [[ $EUID -ne 0 ]]; then
+    STAGE=${PAPERROUTE_STAGE:-$STAGE}
+    R=${PAPERROUTE_RELEASES:-$R}
+fi
+validate
+trap cleanup EXIT
+
+build
+if [[ $(readlink -- "$CURRENT" || true) == "$R/$SHA" ]]; then
+    runuser -u "$OWNER" -- rm -rf -- "$TREE"
+else
+    take_over
+    write_env
+fi
+prev=$(readlink -- "$CURRENT" || true)
+switch_to "$R/$SHA"
+
+if [[ ! -e $DATA/timetable.db ]]; then
+    printf 'No timetable yet: the first refresh will start the app\n'
+    printf '(systemctl start paperroute-timetable).\n'
+    prune
+    exit 0
+fi
+if ! systemctl restart paperroute || ! healthy; then
+    roll_back
+fi
+prune
+printf 'install-release: %s is live\n' "$SHA"

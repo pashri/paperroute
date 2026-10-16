@@ -1,0 +1,42 @@
+#!/bin/bash
+# Usage: paperroute-led boot|rebuild|restore|on
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+LED=/sys/class/leds/ACT
+
+usage() {
+    printf 'usage: paperroute-led boot|rebuild|restore|on\n' >&2
+    exit 2
+}
+
+# The delay files appear only once the trigger is timer.
+set_led() {
+    printf '%s\n' "$1" >"$LED/trigger"
+    if [[ $# -eq 3 ]]; then
+        printf '%s\n' "$2" >"$LED/delay_on"
+        printf '%s\n' "$3" >"$LED/delay_off"
+    fi
+}
+
+[[ $# -eq 1 ]] || usage
+mode=$1
+case $mode in
+    boot | rebuild | restore | on) ;;
+    *) usage ;;
+esac
+[[ -d $LED ]] || exit 0
+
+if [[ $mode == restore ]]; then
+    if systemctl is-active --quiet paperroute; then
+        mode=on
+    else
+        mode=boot
+    fi
+fi
+
+case $mode in
+    boot) set_led timer 100 100 ;;
+    rebuild) set_led timer 1000 1000 ;;
+    on) set_led default-on ;;
+esac

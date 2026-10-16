@@ -1,0 +1,52 @@
+#!/bin/bash
+# Installed as /usr/local/sbin/paperroute-install-files (root, no arguments).
+# Installs the device files from provision's root-owned copy, never from a
+# release. Idempotent.
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+umask 022
+
+SRC=/usr/local/share/paperroute/deploy
+SSHD_DROP_IN=/etc/ssh/sshd_config.d/10-paperroute.conf
+
+fail() {
+    printf 'install-files: %s\n' "$1" >&2
+    exit 2
+}
+
+[[ $# -eq 0 ]] || fail 'takes no arguments'
+[[ $EUID -eq 0 ]] || fail 'must run as root'
+[[ -d $SRC && ! -L $SRC ]] || fail "$SRC is missing; run scripts/provision"
+bad=$(
+    find "$SRC" \( ! -user root -o -perm /022 -o \( ! -type f ! -type d \) \) \
+        -print -quit
+) || fail "cannot check $SRC"
+[[ -z $bad ]] || fail "$SRC must hold only root-owned files and directories"
+
+install -m 0644 -o root -g root "$SRC"/systemd/* /etc/systemd/system/
+install -m 0755 -o root -g root "$SRC/bin/paperroute-led" \
+    /usr/local/bin/paperroute-led
+
+install -m 0644 -o root -g root "$SRC/udev/99-paperroute-led.rules" \
+    /etc/udev/rules.d/99-paperroute-led.rules
+udevadm control --reload
+udevadm trigger --action=add --subsystem-match=leds
+
+install -d -m 0755 -o root -g root /etc/systemd/journald.conf.d
+install -m 0644 -o root -g root "$SRC/conf/journald.conf" \
+    /etc/systemd/journald.conf.d/paperroute.conf
+systemctl restart systemd-journald
+
+install -d -m 0755 -o root -g root /etc/ssh/sshd_config.d
+install -m 0644 -o root -g root "$SRC/conf/sshd.conf" "$SSHD_DROP_IN"
+if ! sshd -t; then
+    rm -f "$SSHD_DROP_IN"
+    printf 'install-files: sshd -t failed; drop-in removed\n' >&2
+    exit 1
+fi
+systemctl reload ssh
+
+systemctl daemon-reload
+systemctl enable paperroute-led-boot paperroute paperroute-timetable.timer
+systemctl start paperroute-timetable.timer

@@ -1,0 +1,135 @@
+#!/bin/bash
+# Usage: provision-device DIR   (root, on the Pi; DIR is the copied deploy/)
+# One-time device setup. Idempotent: run it again after changing any file
+# under deploy/.
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+umask 022
+
+UV_VERSION=0.12.1
+KMS_OFF='s/^dtoverlay=vc4-kms-v3d/#&/'
+CONFIG=/boot/firmware/config.txt
+SHARE=/usr/local/share/paperroute
+PYTHON_DIR=/opt/paperroute/python
+SUDOERS=/etc/sudoers.d/paperroute-deploy
+SUDOERS_NEW=/etc/sudoers.d/.paperroute-deploy.new
+
+fail() {
+    printf 'provision-device: %s\n' "$1" >&2
+    exit 2
+}
+
+# Comments out the KMS overlay and adds the lines under a trailing [all].
+edit_config() {
+    local file=$1 tmp line last
+    tmp=$(mktemp "$file.XXXXXX")
+    sed "$KMS_OFF" "$file" >"$tmp"
+    if [[ -s $tmp && -n $(tail -c 1 "$tmp") ]]; then
+        printf '\n' >>"$tmp"
+    fi
+    last=$(grep -E '^\[' "$tmp" | tail -n 1 || true)
+    if [[ $last != '[all]' ]]; then
+        printf '\n[all]\n' >>"$tmp"
+    fi
+    for line in gpu_mem=16 dtparam=act_led_trigger=timer dtparam=spi=on; do
+        if ! awk -v want="$line" '/^\[/ { found = 0 } $0 == want { found = 1 }
+            END { exit !found }' "$tmp"; then
+            printf '%s\n' "$line" >>"$tmp"
+        fi
+    done
+    if cmp -s "$tmp" "$file"; then
+        rm -f -- "$tmp"
+    else
+        mv -f -- "$tmp" "$file"
+    fi
+}
+
+# Refuses a symlink, which install -d would follow when setting the owner.
+make_dir() {
+    local owner=$1 mode=$2 dir=$3
+    [[ ! -L $dir ]] || fail "$dir is a symlink"
+    install -d -o "$owner" -g "$owner" -m "$mode" "$dir"
+}
+
+copy_deploy() {
+    rm -rf -- "$SHARE/deploy.new"
+    cp -R -- "$DIR" "$SHARE/deploy.new"
+    chown -R root:root "$SHARE/deploy.new"
+    find "$SHARE/deploy.new" -type d -exec chmod 0755 {} +
+    find "$SHARE/deploy.new" -type f -exec chmod 0644 {} +
+    chmod 0755 "$SHARE/deploy.new"/bin/*
+    rm -rf -- "$SHARE/deploy"
+    mv -T -- "$SHARE/deploy.new" "$SHARE/deploy"
+}
+
+install_sudoers() {
+    install -m 0440 -o root -g root \
+        "$SHARE/deploy/sudoers/paperroute-deploy" "$SUDOERS_NEW"
+    if ! visudo -cf "$SUDOERS_NEW"; then
+        rm -f -- "$SUDOERS_NEW"
+        printf 'provision-device: sudoers check failed\n' >&2
+        exit 1
+    fi
+    mv -T -- "$SUDOERS_NEW" "$SUDOERS"
+}
+
+[[ $# -eq 1 ]] || fail 'usage: provision-device DIR'
+[[ $EUID -eq 0 ]] || fail 'must run as root'
+DIR=$1
+[[ -d $DIR && ! -L $DIR ]] || fail 'DIR is not a directory'
+for need in bin/install-files bin/install-release bin/paperroute-led \
+    sudoers/paperroute-deploy; do
+    [[ -f $DIR/$need ]] || fail "DIR has no $need"
+done
+bad=$(find "$DIR" ! -type f ! -type d -print -quit) || fail 'cannot read DIR'
+[[ -z $bad ]] || fail 'DIR may hold only regular files and directories'
+
+apt-get update
+apt-get install -y rsync curl sqlite3 avahi-daemon libegl1 libgl1
+
+timedatectl set-timezone UTC
+systemctl enable systemd-time-wait-sync
+
+if ! id paperroute >/dev/null 2>&1; then
+    useradd --system --user-group --home-dir /var/lib/paperroute \
+        --no-create-home --shell /usr/sbin/nologin paperroute
+fi
+
+make_dir root 0755 /opt/paperroute
+make_dir root 0755 /opt/paperroute/releases
+make_dir root 0755 "$PYTHON_DIR"
+make_dir paperroute 0750 /var/lib/paperroute
+make_dir paperroute 0750 /var/lib/paperroute/sources
+make_dir paperroute 0750 /var/lib/paperroute/work
+make_dir paperroute 0750 /var/lib/paperroute/log
+make_dir pashri 0700 /var/cache/paperroute-stage
+
+case $(uv --version 2>/dev/null || true) in
+    "uv $UV_VERSION" | "uv $UV_VERSION "*) ;;
+    *)
+        curl -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" \
+            | env UV_UNMANAGED_INSTALL=/usr/local/bin sh
+        ;;
+esac
+
+env UV_PYTHON_INSTALL_DIR="$PYTHON_DIR" uv python install 3.14
+if ! grep -qxF "UV_PYTHON_INSTALL_DIR=$PYTHON_DIR" /etc/environment; then
+    printf 'UV_PYTHON_INSTALL_DIR=%s\n' "$PYTHON_DIR" >>/etc/environment
+fi
+
+edit_config "$CONFIG"
+rpi-usb-gadget on
+
+make_dir root 0755 "$SHARE"
+copy_deploy
+
+make_dir root 0755 /usr/local/sbin
+install -m 0755 -o root -g root "$SHARE/deploy/bin/install-release" \
+    /usr/local/sbin/paperroute-install-release
+install -m 0755 -o root -g root "$SHARE/deploy/bin/install-files" \
+    /usr/local/sbin/paperroute-install-files
+/usr/local/sbin/paperroute-install-files
+
+install_sudoers
+printf 'Provisioned: reboot to apply config.txt\n'

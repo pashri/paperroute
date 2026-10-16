@@ -1,0 +1,1 @@
+ACTION=="add", SUBSYSTEM=="leds", KERNEL=="ACT", RUN+="/bin/chgrp paperroute /sys%p/trigger /sys%p/brightness", RUN+="/bin/chmod g+w /sys%p/trigger /sys%p/brightness"

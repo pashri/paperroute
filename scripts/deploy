@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# Usage: scripts/deploy HOST
+# Checks the tree, stages the tracked files of HEAD on the Pi and installs
+# them with the passwordless install script. Never prompts.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+STAGE=/var/cache/paperroute-stage
+INSTALL=/usr/local/sbin/paperroute-install-release
+
+usage() {
+    printf 'usage: scripts/deploy HOST\n' >&2
+    exit 2
+}
+
+[[ $# -eq 1 ]] || usage
+host=$1
+[[ $host =~ ^[A-Za-z0-9][A-Za-z0-9._@-]*$ ]] || usage
+
+scripts/check
+if [[ -n $(git status --porcelain) ]]; then
+    printf 'deploy: commit or stash your changes first\n' >&2
+    exit 1
+fi
+sha=$(git rev-parse --short HEAD)
+[[ $sha =~ ^[0-9a-f]{7,12}$ ]] || {
+    printf 'deploy: unexpected sha\n' >&2
+    exit 1
+}
+
+if ! ssh -- "$host" sudo -n -l "$INSTALL" >/dev/null 2>&1; then
+    printf 'deploy: run scripts/provision first\n' >&2
+    exit 1
+fi
+ssh -- "$host" rm -rf "$STAGE/$sha"
+git ls-files -z src pyproject.toml uv.lock README.md \
+    | rsync -a --from0 --files-from=- ./ "$host:$STAGE/$sha/"
+status=0
+ssh -- "$host" sudo -n "$INSTALL" "$sha" || status=$?
+exit "$status"

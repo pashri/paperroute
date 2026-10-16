@@ -1,0 +1,25 @@
+[Unit]
+Description=paperroute timetable refresh
+After=network-online.target time-sync.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=paperroute
+Group=paperroute
+# TMPDIR keeps SQLite and Python temp files off the RAM-backed /tmp
+Environment=PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets TMPDIR=/var/lib/paperroute/work
+ExecStartPre=+/usr/local/bin/paperroute-led rebuild
+ExecStart=/opt/paperroute/current/.venv/bin/python -m paperroute.build refresh --data-dir /var/lib/paperroute --error-log /var/lib/paperroute/log/errors.jsonl
+# Runs only after a successful refresh, so the first one starts the app
+ExecStartPost=+/usr/bin/systemctl start --no-block paperroute
+ExecStopPost=+/usr/local/bin/paperroute-led restore
+Nice=19
+IOSchedulingClass=idle
+OOMScoreAdjust=500
+TimeoutStartSec=3h
+NoNewPrivileges=yes
+ProtectSystem=strict
+ReadWritePaths=/var/lib/paperroute
+ProtectHome=yes
+PrivateTmp=yes

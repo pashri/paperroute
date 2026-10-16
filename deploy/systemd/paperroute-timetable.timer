@@ -1,0 +1,7 @@
+[Timer]
+OnCalendar=*-*-* 03:30:00 Australia/Sydney
+Persistent=true
+RandomizedDelaySec=0
+
+[Install]
+WantedBy=timers.target

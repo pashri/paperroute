@@ -214,7 +214,7 @@ def current_view(*, state: State) -> StopView:
 
 
 def rendered(
-    state: State, effects: tuple[Effect, ...] = ()
+    *, state: State, effects: tuple[Effect, ...] = ()
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Add a Render effect when the view changed.
@@ -285,7 +285,9 @@ def poll_due(*, state: State, now: datetime) -> bool:
     return since >= POLL_EVERY.total_seconds()
 
 
-def on_tick(state: State, event: Tick) -> tuple[State, tuple[Effect, ...]]:
+def on_tick(
+    *, state: State, event: Tick
+) -> tuple[State, tuple[Effect, ...]]:
     """
     Advance time: reload, poll and redraw as needed.
 
@@ -310,11 +312,11 @@ def on_tick(state: State, event: Tick) -> tuple[State, tuple[Effect, ...]]:
     if poll_due(state=state, now=event.now):
         effects.extend(FetchFeed(feed=feed) for feed in state.feeds)
         state = replace(state, last_fetch=event.now)
-    return rendered(state, tuple(effects))
+    return rendered(state=state, effects=tuple(effects))
 
 
 def on_loaded(
-    state: State, event: DeparturesLoaded
+    *, state: State, event: DeparturesLoaded
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Store departures and the feeds their modes need.
@@ -341,7 +343,7 @@ def on_loaded(
         )
     )
     return rendered(
-        replace(
+        state=replace(
             state,
             departures=event.departures,
             loaded_until=event.until,
@@ -370,20 +372,22 @@ def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
     result: tuple[State, tuple[Effect, ...]] = (state, ())
     match event:
         case Tick():
-            result = on_tick(state, event)
+            result = on_tick(state=state, event=event)
         case DeparturesLoaded():
-            result = on_loaded(state, event)
+            result = on_loaded(state=state, event=event)
         case DeparturesFailed():
-            result = rendered(replace(state, loading=False))
+            result = rendered(state=replace(state, loading=False))
         case FeedFetched(feed=feed, snapshot=snapshot):
             result = rendered(
-                replace(state, snapshots={**state.snapshots, feed: snapshot})
+                state=replace(
+                    state, snapshots={**state.snapshots, feed: snapshot}
+                )
             )
         case FeedFailed():
-            result = rendered(state)
+            result = rendered(state=state)
         case KnobTurned(knob=Knob.BOTTOM, steps=steps):
             result = rendered(
-                replace(state, scroll=max(0, state.scroll + steps))
+                state=replace(state, scroll=max(0, state.scroll + steps))
             )
         case QuitRequested():
             result = replace(state, running=False), (Stop(),)

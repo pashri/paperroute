@@ -6,11 +6,13 @@ from datetime import datetime, timedelta
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.core.model import SYDNEY, Mode, Pin
+from paperroute.core.model import SYDNEY, Mode, Pin, shifted
 from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.state import (
+    POLL_EVERY,
     DeparturesFailed,
     DeparturesLoaded,
+    Effect,
     Event,
     FeedFailed,
     FeedFetched,
@@ -27,16 +29,21 @@ from paperroute.core.state import (
     initial_state,
     step,
 )
-from paperroute.core.stop_view import VISIBLE_ROWS
+from paperroute.core.stop_view import HORIZON, VISIBLE_ROWS
 from tests.core.factories import START, departure
 
 PIN = Pin(origin='2145615', destination='215020')
 BUSES = 'v1/gtfs/realtime/buses'
 
 
-def fresh() -> State:
+def fresh(*, now: datetime = START) -> State:
     """
-    The state at START.
+    A state with nothing loaded.
+
+    Parameters
+    ----------
+    now : datetime
+        Start time.
 
     Returns
     -------
@@ -44,7 +51,7 @@ def fresh() -> State:
         Initial state.
     """
     return initial_state(
-        pin=PIN, origin='Hollis St', destination='Parramatta', now=START
+        pin=PIN, origin='Hollis St', destination='Parramatta', now=now
     )
 
 
@@ -177,6 +184,60 @@ def test_reload_before_horizon_runs_out() -> None:
     assert any(isinstance(effect, LoadDepartures) for effect in effects)
 
 
+def test_scroll_is_clamped_and_recorded() -> None:
+    """Over-scrolling stores the clamped offset; turning back moves rows."""
+    state = loaded(state=fresh(), count=20)
+    state, _ = step(state, KnobTurned(knob=Knob.BOTTOM, steps=50))
+    assert state.last_view is not None
+    assert state.scroll == state.last_view.scroll
+    assert state.scroll < 50
+    clamped_rows = state.last_view.rows
+    state, effects = step(state, KnobTurned(knob=Knob.BOTTOM, steps=-1))
+    assert state.last_view is not None
+    assert state.scroll == state.last_view.scroll
+    renders = [e for e in effects if isinstance(e, Render)]
+    assert [r.view.rows for r in renders] != [clamped_rows]
+    assert len(renders) == 1
+
+
+def test_second_tick_does_not_load_again() -> None:
+    """While a load is in flight, later ticks don't ask for another."""
+    state, first = step(fresh(), Tick(now=START))
+    assert any(isinstance(effect, LoadDepartures) for effect in first)
+    _, second = step(state, Tick(now=START + timedelta(seconds=1)))
+    assert not any(isinstance(effect, LoadDepartures) for effect in second)
+
+
+def test_mixed_modes_fetch_each_needed_feed_once() -> None:
+    """Each mode's feed is fetched once; a ferry adds none."""
+    modes = [Mode.BUS, Mode.TRAIN, Mode.REGIONAL, Mode.FERRY]
+    deps = tuple(
+        departure(departs=START + timedelta(minutes=3 * (i + 1)), mode=mode)
+        for i, mode in enumerate(modes)
+    )
+    event = DeparturesLoaded(
+        departures=deps, until=START + timedelta(hours=3)
+    )
+    state, _ = step(fresh(), event)
+    _, effects = step(state, Tick(now=START))
+    fetched = [e.feed for e in effects if isinstance(e, FetchFeed)]
+    assert sorted(fetched) == [
+        'v1/gtfs/realtime/buses',
+        'v1/gtfs/realtime/nswtrains',
+        'v2/gtfs/realtime/sydneytrains',
+    ]
+
+
+def test_load_end_is_horizon_real_seconds_on_fall_back_night() -> None:
+    """The load window ends three real hours on, across the repeated hour."""
+    now = datetime(2026, 4, 5, 1, 30, tzinfo=SYDNEY)
+    _, effects = step(fresh(now=now), Tick(now=now))
+    loads = [e for e in effects if isinstance(e, LoadDepartures)]
+    assert len(loads) == 1
+    gap = loads[0].end.timestamp() - now.timestamp()
+    assert gap == HORIZON.total_seconds()
+
+
 def test_quit_stops() -> None:
     """Quitting stops the loop."""
     state, effects = step(fresh(), QuitRequested())
@@ -184,8 +245,12 @@ def test_quit_stops() -> None:
     assert effects == (Stop(),)
 
 
+FALL_BACK_EVE = datetime(2026, 4, 5, 1, 30, tzinfo=SYDNEY)
+MODES = [Mode.BUS, Mode.TRAIN, Mode.REGIONAL, Mode.FERRY]
+
+
 @st.composite
-def event_lists(draw: st.DrawFn) -> list[Event]:
+def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
     """
     Random but time-ordered event sequences.
 
@@ -193,17 +258,19 @@ def event_lists(draw: st.DrawFn) -> list[Event]:
     ----------
     draw : st.DrawFn
         Hypothesis draw function.
+    start : datetime
+        Time of the first event.
 
     Returns
     -------
     list[Event]
         Events.
     """
-    now, events = START, list[Event]()
+    now, events = start, list[Event]()
     kinds = ['tick', 'turn', 'press', 'fail', 'ok', 'load', 'unreadable']
     for kind in draw(st.lists(st.sampled_from(kinds), max_size=40)):
         if kind == 'tick':
-            now += timedelta(seconds=draw(st.integers(0, 900)))
+            now = shifted(moment=now, seconds=draw(st.integers(0, 900)))
             events.append(Tick(now=now))
         elif kind == 'turn':
             knob = draw(st.sampled_from(list(Knob)))
@@ -221,21 +288,63 @@ def event_lists(draw: st.DrawFn) -> list[Event]:
         else:
             count = draw(st.integers(0, 25))
             deps = tuple(
-                departure(departs=now + timedelta(minutes=2 * i))
+                departure(
+                    departs=shifted(moment=now, seconds=120 * i),
+                    mode=draw(st.sampled_from(MODES)),
+                )
                 for i in range(count)
             )
-            until = now + timedelta(hours=3)
+            until = shifted(moment=now, seconds=3 * 3600)
             events.append(DeparturesLoaded(departures=deps, until=until))
     return events
 
 
-@given(event_lists())
-def test_step_invariants(events: list[Event]) -> None:
-    """No event sequence crashes; scroll and rendered rows stay in bounds."""
-    state = fresh()
+def check_effects(
+    *, before: State, after: State, event: Event, effects: tuple[Effect, ...]
+) -> None:
+    """
+    Assert what must hold after any single step.
+
+    Parameters
+    ----------
+    before : State
+        State before the event.
+    after : State
+        State after the event.
+    event : Event
+        The event applied.
+    effects : tuple[Effect, ...]
+        Effects returned.
+    """
+    assert after.scroll >= 0
+    if after.last_view is not None:
+        assert after.scroll == after.last_view.scroll
+    for effect in effects:
+        if isinstance(effect, Render):
+            assert len(effect.view.rows) <= VISIBLE_ROWS
+            assert effect.view != before.last_view
+        if isinstance(effect, LoadDepartures):
+            assert not before.loading
+        if isinstance(effect, FetchFeed):
+            assert effect.feed in after.feeds
+            assert isinstance(event, Tick)
+            if before.last_fetch is not None:
+                gap = event.now.timestamp() - before.last_fetch.timestamp()
+                assert gap >= POLL_EVERY.total_seconds()
+
+
+@given(
+    st.sampled_from([START, FALL_BACK_EVE]).flatmap(
+        lambda start: st.tuples(st.just(start), event_lists(start))
+    )
+)
+def test_step_invariants(case: tuple[datetime, list[Event]]) -> None:
+    """No event sequence breaks the reducer's invariants."""
+    start, events = case
+    state = fresh(now=start)
     for event in events:
-        state, effects = step(state, event)
-        assert state.scroll >= 0
-        for effect in effects:
-            if isinstance(effect, Render):
-                assert len(effect.view.rows) <= VISIBLE_ROWS
+        before = state
+        state, effects = step(before, event)
+        check_effects(
+            before=before, after=state, event=event, effects=effects
+        )

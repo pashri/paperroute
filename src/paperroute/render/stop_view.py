@@ -49,9 +49,9 @@ def arrow(canvas: Canvas, *, x: float, y: float, grey: int) -> float:
     return 22.0
 
 
-def header(canvas: Canvas, *, view: StopView) -> None:
+def header_tabs(canvas: Canvas, *, view: StopView) -> float:
     """
-    Draw the black header: From, arrow, Destination, tabs, clock.
+    Draw the clock and the tabs on the right of the header.
 
     Parameters
     ----------
@@ -59,8 +59,12 @@ def header(canvas: Canvas, *, view: StopView) -> None:
         Target.
     view : StopView
         View.
+
+    Returns
+    -------
+    float
+        Left edge of the tabs.
     """
-    canvas.rect(box=(0, 0, WIDTH, HEADER), grey=INK)
     clock = Face(weight=800, px=22)
     right = WIDTH - 12 - canvas.text(
         at=(WIDTH - 12, 20), text=view.clock, face=clock, grey=PAPER,
@@ -73,6 +77,22 @@ def header(canvas: Canvas, *, view: StopView) -> None:
         canvas.text(
             at=(right + 5, 25), text=tab, face=Face(weight=700, px=12),
             grey=INK if tab == 'Stop' else PAPER)
+    return right
+
+
+def header_titles(canvas: Canvas, *, view: StopView, right: float) -> None:
+    """
+    Draw the origin, an arrow and the destination in the header.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    view : StopView
+        View.
+    right : float
+        Left edge of the tabs, which the titles must not reach.
+    """
     title = Face(weight=700, px=18)
     half = (right - 60) / 2
     origin = canvas.fit(text=view.origin, face=title, width=half)
@@ -81,6 +101,22 @@ def header(canvas: Canvas, *, view: StopView) -> None:
     x += arrow(canvas, x=x, y=20, grey=PAPER)
     destination = canvas.fit(text=view.destination, face=title, width=half)
     canvas.text(at=(x, 27), text=destination, face=title, grey=PAPER)
+
+
+def header(canvas: Canvas, *, view: StopView) -> None:
+    """
+    Draw the black header: From, arrow, Destination, tabs, clock.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    view : StopView
+        View.
+    """
+    canvas.rect(box=(0, 0, WIDTH, HEADER), grey=INK)
+    right = header_tabs(canvas, view=view)
+    header_titles(canvas, view=view, right=right)
 
 
 def banner(canvas: Canvas, *, text: str) -> None:
@@ -126,6 +162,7 @@ def badge(canvas: Canvas, *, x: float, y: float, route: str,
         Badge width.
     """
     face = Face(weight=800, px=px)
+    route = canvas.fit(text=route, face=face, width=px * 4)
     width = max(canvas.length(text=route, face=face) + 12, px * 2.4)
     canvas.rect(box=(x, y - px * 0.65, x + width, y + px * 0.65), grey=INK)
     canvas.text(
@@ -134,9 +171,9 @@ def badge(canvas: Canvas, *, x: float, y: float, route: str,
     return width
 
 
-def hero(canvas: Canvas, *, row: Row, top: int) -> None:
+def hero_headline(canvas: Canvas, *, row: Row, top: int) -> None:
     """
-    Draw the next service large on the left.
+    Draw the vehicle label, route badge and destination of the hero.
 
     Parameters
     ----------
@@ -157,6 +194,21 @@ def hero(canvas: Canvas, *, row: Row, top: int) -> None:
         text=row.destination, face=dest, width=SPLIT - 50 - width)
     canvas.text(
         at=(30 + width, top + 57), text=fitted, face=dest, grey=INK)
+
+
+def hero_countdown(canvas: Canvas, *, row: Row, top: int) -> None:
+    """
+    Draw the big countdown or clock time of the hero.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Next service.
+    top : int
+        Top of the panel.
+    """
     big = Face(weight=800, px=104 if row.live else 76)
     shown = row.countdown if row.live else row.leaves_at
     used = canvas.text(at=(18, top + 158), text=shown, face=big, grey=INK)
@@ -164,16 +216,50 @@ def hero(canvas: Canvas, *, row: Row, top: int) -> None:
         canvas.text(
             at=(26 + used, top + 158), text='min',
             face=Face(weight=800, px=28), grey=INK)
+
+
+def hero_footer(canvas: Canvas, *, row: Row, top: int) -> None:
+    """
+    Draw the rule, arrival time and ride line of the hero.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Next service.
+    top : int
+        Top of the panel.
+    """
     canvas.rect(box=(18, top + 184, 418, top + 186), grey=INK)
     canvas.text(
         at=(18, top + 216), text=f'arrives {row.arrives_at}',
         face=Face(weight=700, px=24), grey=INK)
     bay = BAY.get(row.mode, 'platform')
     where = f'{DOT}{bay} {row.platform}' if row.platform else ''
+    ride = Face(weight=400, px=15)
+    text = f'{row.ride_minutes} min on the {VEHICLE[row.mode]}{where}'
     canvas.text(
-        at=(18, top + 240),
-        text=f'{row.ride_minutes} min on the {unit}{where}',
-        face=Face(weight=400, px=15), grey=INK)
+        at=(18, top + 240), text=canvas.fit(text=text, face=ride, width=400),
+        face=ride, grey=INK)
+
+
+def hero(canvas: Canvas, *, row: Row, top: int) -> None:
+    """
+    Draw the next service large on the left.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Next service.
+    top : int
+        Top of the panel.
+    """
+    hero_headline(canvas, row=row, top=top)
+    hero_countdown(canvas, row=row, top=top)
+    hero_footer(canvas, row=row, top=top)
 
 
 def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
@@ -235,12 +321,14 @@ def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
         banner(canvas, text=view.banner)
         top += BANNER
     if view.empty:
+        face = Face(weight=700, px=22)
+        message = canvas.fit(text=view.empty, face=face, width=WIDTH - 64)
         canvas.text(
-            at=(WIDTH / 2, 250), text=view.empty,
-            face=Face(weight=700, px=22), grey=INK, anchor='mm')
+            at=(WIDTH / 2, 250), text=message, face=face, grey=INK,
+            anchor='mm')
     if view.hero:
         hero(canvas, row=view.hero, top=top)
-        canvas.rect(box=(SPLIT, top, SPLIT + 3, 480), grey=INK)
+        canvas.rect(box=(SPLIT, top, SPLIT + 3, HEIGHT), grey=INK)
         canvas.text(
             at=(640, top + 22), text='LEAVES', face=Face(weight=700, px=11),
             grey=INK, anchor='rs')

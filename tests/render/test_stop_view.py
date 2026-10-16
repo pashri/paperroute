@@ -85,11 +85,22 @@ def test_rows_never_run_off_the_bottom() -> None:
 
 
 def test_ferry_hero_says_ferry() -> None:
-    """The hero names the vehicle by mode, not always bus or train."""
-    ferry = replace(BASE, hero=replace(row(), mode=Mode.FERRY, platform='2'))
+    """The hero names the vehicle and stop part by mode alone."""
+    ferry = replace(BASE, hero=replace(row(), mode=Mode.FERRY))
     bus = draw_stop_view(view=BASE)
     drawn = draw_stop_view(view=ferry)
-    assert (drawn[40:300, 0:438] != bus[40:300, 0:438]).any()
+    assert (drawn[40:70, 0:438] != bus[40:70, 0:438]).any()
+    assert (drawn[265:290, 0:438] != bus[265:290, 0:438]).any()
+
+
+def test_long_empty_message_stays_on_screen() -> None:
+    """A very long empty message is cut to fit and leaves the edges clear."""
+    message = 'No direct services from here to anywhere ' * 4
+    view = replace(BASE, hero=None, rows=(), empty=message)
+    frame = draw_stop_view(view=view)
+    assert frame[200:300, 0:32].min() == 255
+    assert frame[200:300, 768:800].min() == 255
+    assert frame[200:300, 32:768].min() == 0
 
 
 def test_all_cancelled_view_draws_rows_only() -> None:

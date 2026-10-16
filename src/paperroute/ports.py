@@ -97,3 +97,38 @@ class Clock(Protocol):
         datetime
             Aware datetime.
         """
+
+
+class Observer(Protocol):
+    """Receives timing events from the running app."""
+
+    def frame_drawn(self, *, render_ms: float) -> None:
+        """
+        Record that a frame was rendered.
+
+        Parameters
+        ----------
+        render_ms : float
+            Time taken to render, in milliseconds.
+        """
+
+    def feed_parsed(
+        self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
+    ) -> None:
+        """
+        Record that a realtime feed was fetched and parsed.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+        fetch_ms : float
+            Download time in milliseconds.
+        parse_ms : float
+            Parse time in milliseconds.
+        trips : int
+            Number of trip updates found.
+        """
+
+    def ticked(self) -> None:
+        """Record that the app loop ran once."""

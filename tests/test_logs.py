@@ -1,23 +1,98 @@
 """Tests for JSON-lines logging."""
 
+import io
 import json
 import logging
+from collections.abc import Iterator
+from pathlib import Path
 
-from paperroute.logs import JsonFormatter
+import pytest
+
+from paperroute.logs import configure_logging
 
 
-def test_json_formatter_writes_one_object() -> None:
-    """Records become one JSON object with level, logger and message."""
-    record = logging.LogRecord(
-        'paperroute.app',
-        logging.WARNING,
-        __file__,
-        1,
-        'feed %s failed',
-        ('buses',),
-        None,
-    )
-    line = json.loads(JsonFormatter().format(record))
-    assert line['level'] == 'WARNING'
-    assert line['logger'] == 'paperroute.app'
-    assert line['msg'] == 'feed buses failed'
+@pytest.fixture(autouse=True)
+def _restore_root_logger() -> Iterator[None]:
+    """Put the root logger back after each test."""
+    root = logging.getLogger()
+    handlers, level = list(root.handlers), root.level
+    yield
+    for handler in list(root.handlers):
+        if handler not in handlers:
+            handler.close()
+    root.handlers[:] = handlers
+    root.setLevel(level)
+
+
+def _configure(
+    monkeypatch: pytest.MonkeyPatch, *, error_file: Path | None = None
+) -> io.StringIO:
+    """
+    Configure logging with stderr pointed at a StringIO.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        Fixture used to swap stderr.
+    error_file : Path | None
+        Passed to `configure_logging`.
+
+    Returns
+    -------
+    io.StringIO
+        What the stderr handler writes to.
+    """
+    stream = io.StringIO()
+    monkeypatch.setattr('sys.stderr', stream)
+    configure_logging(error_file=error_file)
+    return stream
+
+
+def test_logs_include_extra_fields(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Extra fields appear in the JSON line."""
+    stream = _configure(monkeypatch)
+    logging.getLogger('paperroute.t').info('x', extra={'render_ms': 1.5})
+    line = json.loads(stream.getvalue().splitlines()[-1])
+    assert line['msg'] == 'x'
+    assert line['level'] == 'INFO'
+    assert line['logger'] == 'paperroute.t'
+    assert line['render_ms'] == 1.5
+    assert 'time' in line
+
+
+def test_logs_put_tracebacks_under_exc_info(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Exceptions are rendered under exc_info."""
+    stream = _configure(monkeypatch)
+    try:
+        raise ValueError('boom')
+    except ValueError:
+        logging.getLogger('paperroute.t').exception('failed')
+    line = json.loads(stream.getvalue().splitlines()[-1])
+    assert 'ValueError' in line['exc_info']
+
+
+def test_error_file_gets_warnings_only(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """The error file holds WARNING and above as JSON lines."""
+    path = tmp_path / 'sub' / 'errors.jsonl'
+    _configure(monkeypatch, error_file=path)
+    logger = logging.getLogger('paperroute.t')
+    logger.info('quiet')
+    logger.warning('loud')
+    lines = [json.loads(line) for line in path.read_text().splitlines()]
+    assert [line['msg'] for line in lines] == ['loud']
+
+
+def test_error_file_rotates(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """About 1.2 MB of warnings rolls the file over."""
+    path = tmp_path / 'errors.jsonl'
+    _configure(monkeypatch, error_file=path)
+    logger = logging.getLogger('paperroute.t')
+    for _ in range(1200):
+        logger.warning('x' * 1000)
+    assert path.with_name('errors.jsonl.1').exists()

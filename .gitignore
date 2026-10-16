@@ -8,3 +8,6 @@ __pycache__/
 data/
 tools/mockups/boards/*.html
 !tools/mockups/boards/*.template.html
+
+.coverage
+htmlcov/

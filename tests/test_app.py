@@ -311,6 +311,203 @@ def test_ports_default_observer_is_silent() -> None:
     assert isinstance(ports.observer, NullObserver)
 
 
+@dataclass
+class RaisingObserver:
+    """An observer whose every method raises."""
+
+    def frame_drawn(self, *, render_ms: float) -> None:
+        """
+        Fail.
+
+        Parameters
+        ----------
+        render_ms : float
+            Ignored.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        raise RuntimeError(f'frame {render_ms}')
+
+    def feed_parsed(
+        self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
+    ) -> None:
+        """
+        Fail.
+
+        Parameters
+        ----------
+        feed : str
+            Ignored.
+        fetch_ms : float
+            Ignored.
+        parse_ms : float
+            Ignored.
+        trips : int
+            Ignored.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        raise RuntimeError(f'feed {feed} {fetch_ms} {parse_ms} {trips}')
+
+    def ticked(self) -> None:
+        """
+        Fail.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        raise RuntimeError('tick')
+
+
+@dataclass
+class CallRecorder:
+    """An observer that counts feed_parsed calls."""
+
+    feeds: int = 0
+
+    def frame_drawn(self, *, render_ms: float) -> None:
+        """
+        Ignore a frame.
+
+        Parameters
+        ----------
+        render_ms : float
+            Ignored.
+        """
+
+    def feed_parsed(
+        self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
+    ) -> None:
+        """
+        Count a parsed feed.
+
+        Parameters
+        ----------
+        feed : str
+            Ignored.
+        fetch_ms : float
+            Ignored.
+        parse_ms : float
+            Ignored.
+        trips : int
+            Ignored.
+        """
+        self.feeds += 1
+
+    def ticked(self) -> None:
+        """Ignore a tick."""
+
+
+def _build_db(tmp_path: Path) -> Path:
+    """
+    Build the real-slice timetable database.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Directory to build in.
+
+    Returns
+    -------
+    Path
+        Database path.
+    """
+    db = tmp_path / 'timetable.db'
+    build_timetable(
+        sources=[
+            Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
+            Source(name='bundle', archive=REAL / 'bundle.zip'),
+        ],
+        window=Window(start=date(2026, 10, 16), days=1),
+        out=db,
+    )
+    return db
+
+
+async def test_run_survives_a_raising_observer(tmp_path: Path) -> None:
+    """Observer errors do not stop frames, snapshots or ticks."""
+    display = FrameRecorder()
+    timetable = SqliteTimetableRepository(path=_build_db(tmp_path))
+    ports = Ports(
+        timetable=timetable,
+        feeds=FileFeedsClient(directory=REAL),
+        display=display,
+        clock=FixedClock(at=AT),
+        observer=RaisingObserver(),
+    )
+    try:
+        state = await run(
+            ports=ports, pin=PIN, tick_every=0.01, max_events=60
+        )
+    finally:
+        timetable.close()
+    assert state.running
+    assert display.frames
+    assert 'v2/gtfs/realtime/sydneytrains' in state.snapshots
+
+
+async def test_run_logs_frame_and_feed_timings_at_info(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The INFO records carry the fields the journal reader needs."""
+    timetable = SqliteTimetableRepository(path=_build_db(tmp_path))
+    ports = Ports(
+        timetable=timetable,
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+    )
+    with caplog.at_level(logging.INFO):
+        try:
+            await run(ports=ports, pin=PIN, tick_every=0.01, max_events=60)
+        finally:
+            timetable.close()
+    frames = [r for r in caplog.records if r.message == 'frame drawn']
+    feeds = [r for r in caplog.records if r.message == 'feed parsed']
+    assert frames
+    assert feeds
+    assert all(r.levelno == logging.INFO for r in frames + feeds)
+    assert all(r.__dict__['render_ms'] >= 0 for r in frames)
+    for record in feeds:
+        assert record.__dict__['feed']
+        assert record.__dict__['fetch_ms'] >= 0
+        assert record.__dict__['parse_ms'] >= 0
+        assert record.__dict__['trips'] > 0
+
+
+async def test_fetch_failure_does_not_report_a_parsed_feed(
+    tmp_path: Path,
+) -> None:
+    """A feed that fails to fetch never reaches feed_parsed."""
+    observer = CallRecorder()
+    ports = Ports(
+        timetable=BrokenTimetable(),
+        feeds=FileFeedsClient(directory=tmp_path),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+        observer=observer,
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    await perform(
+        ports=ports,
+        effect=FetchFeed(feed='v2/gtfs/realtime/sydneytrains'),
+        queue=queue,
+        tasks=tasks,
+    )
+    await asyncio.gather(*tasks)
+    assert isinstance(queue.get_nowait(), FeedFailed)
+    assert observer.feeds == 0
+
+
 async def test_run_survives_unexpected_load_error(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

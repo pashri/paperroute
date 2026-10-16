@@ -6,7 +6,7 @@ import logging
 import sqlite3
 import time
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Final
 
 from paperroute.adapters.gtfs_rt import parse_trip_updates
@@ -29,7 +29,7 @@ from paperroute.core.state import (
     step,
 )
 from paperroute.core.stop_view import StopView
-from paperroute.observers import NullObserver
+from paperroute.observers import NullObserver, ObserverGroup
 from paperroute.ports import (
     Clock,
     Display,
@@ -41,6 +41,8 @@ from paperroute.render.stop_view import draw_stop_view
 
 logger = logging.getLogger(__name__)
 
+MS_PER_SECOND: Final[float] = 1000.0
+
 
 @dataclass(frozen=True)
 class Ports:
@@ -51,9 +53,6 @@ class Ports:
     display: Display
     clock: Clock
     observer: Observer = field(default_factory=NullObserver)
-
-
-MS_PER_SECOND: Final[float] = 1000.0
 
 
 async def timed_async[T](*, call: Awaitable[T]) -> tuple[T, float]:
@@ -313,6 +312,7 @@ async def run(
     Run the app until quit, or until max_events events have been handled.
 
     Background tasks are cancelled and awaited before this returns.
+    Observer errors are logged and never stop the loop.
     Worker threads started by to_thread are not cancelled; asyncio.run
     waits for them when it exits.
 
@@ -336,6 +336,9 @@ async def run(
     State
         Final state.
     """
+    ports = replace(
+        ports, observer=ObserverGroup(observers=[ports.observer])
+    )
     queue: asyncio.Queue[Event] = asyncio.Queue()
     if post_hook:
         post_hook(queue.put_nowait)

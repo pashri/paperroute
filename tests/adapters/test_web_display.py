@@ -262,6 +262,7 @@ def test_page_assets_are_packaged() -> None:
     assert (web_dir / 'live.js').is_file()
     assert 'live.css' in html
     assert 'live.js' in html
+    assert 'role="status"' not in html
 
 
 async def test_event_data_carries_a_boot_id(

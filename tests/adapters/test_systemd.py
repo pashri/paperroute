@@ -109,3 +109,21 @@ def test_notifier_warns_once_per_outage(
         notifier.ticked()
         notifier.ticked()
     assert len(caplog.records) == 1
+
+
+def test_notifier_does_not_block_when_the_queue_is_full(
+    sock_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A full notify queue is one quiet warning, not a stalled send."""
+    path = sock_dir / 'n.sock'
+    notifier = SystemdNotifier(socket_path=str(path))
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as server:
+        server.bind(str(path))
+        server.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 1024)
+        with caplog.at_level(logging.WARNING):
+            for _ in range(100_000):
+                notifier.ticked()
+                if caplog.records:
+                    break
+    assert len(caplog.records) == 1
+    assert 'systemd notify failed' in caplog.text

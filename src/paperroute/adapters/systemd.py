@@ -59,6 +59,7 @@ class SystemdNotifier:
         """
         Send one datagram.
 
+        The send never blocks: a full socket queue counts as a failure.
         A failure is logged once per outage, not on every attempt.
 
         Parameters
@@ -76,6 +77,7 @@ class SystemdNotifier:
         address = notify_address(path=self.socket_path)
         try:
             with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+                sock.setblocking(False)
                 sock.sendto(message, address)
         except OSError as error:
             if not self._failing:

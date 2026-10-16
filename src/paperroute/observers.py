@@ -6,12 +6,14 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
+from typing import Final
 
 from paperroute.ports import Observer
 
 logger = logging.getLogger(__name__)
 
-BYTES_PER_MB = 1024 * 1024
+BYTES_PER_KB: Final[int] = 1024
+BYTES_PER_MB: Final[int] = BYTES_PER_KB * BYTES_PER_KB
 
 
 @dataclass(frozen=True)
@@ -264,5 +266,5 @@ def max_rss_mb() -> float:
     """
     peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     if sys.platform == 'linux':
-        return peak / 1024
+        return peak / BYTES_PER_KB
     return peak / BYTES_PER_MB

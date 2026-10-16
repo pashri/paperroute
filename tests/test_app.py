@@ -13,7 +13,7 @@ from numpy.typing import NDArray
 
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.app import Ports, perform, run
+from paperroute.app import Ports, perform, run, ticker
 from paperroute.build.timetable import Source, Window, build_timetable
 from paperroute.core.model import SYDNEY, Departure, Pin
 from paperroute.core.state import Event, FeedFailed, FetchFeed
@@ -369,9 +369,10 @@ class RaisingObserver:
 
 @dataclass
 class CallRecorder:
-    """An observer that counts feed_parsed calls."""
+    """An observer that counts feed_parsed and ticked calls."""
 
     feeds: int = 0
+    ticks: int = 0
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """
@@ -403,7 +404,8 @@ class CallRecorder:
         self.feeds += 1
 
     def ticked(self) -> None:
-        """Ignore a tick."""
+        """Count a tick."""
+        self.ticks += 1
 
 
 def _build_db(tmp_path: Path) -> Path:
@@ -560,3 +562,45 @@ async def test_run_draws_when_every_feed_fails(
     assert display.frames
     assert 'v2/gtfs/realtime/sydneytrains' not in state.snapshots
     assert any('feed failed' in r.getMessage() for r in caplog.records)
+
+
+async def test_a_queued_tick_that_is_never_handled_sends_no_watchdog(
+) -> None:
+    """The watchdog follows handled ticks, not queued ones."""
+    observer = CallRecorder()
+    ports = Ports(
+        timetable=BrokenTimetable(),
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+        observer=observer,
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    task = asyncio.create_task(
+        ticker(ports=ports, queue=queue, every=60.0, pump=None)
+    )
+    await asyncio.sleep(0.1)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    assert queue.qsize() == 1
+    assert observer.ticks == 0
+
+
+async def test_run_sends_a_watchdog_for_each_handled_tick(
+    tmp_path: Path,
+) -> None:
+    """Every Tick the main loop handles reaches the observer."""
+    observer = CallRecorder()
+    timetable = SqliteTimetableRepository(path=_build_db(tmp_path))
+    ports = Ports(
+        timetable=timetable,
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+        observer=observer,
+    )
+    try:
+        await run(ports=ports, pin=PIN, tick_every=0.01, max_events=20)
+    finally:
+        timetable.close()
+    assert observer.ticks >= 1

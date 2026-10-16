@@ -291,7 +291,6 @@ async def ticker(
     while True:
         if elapsed >= every:
             await queue.put(Tick(now=ports.clock.now()))
-            ports.observer.ticked()
             elapsed = 0.0
         if pump:
             pump()
@@ -358,7 +357,10 @@ async def run(
     handled = 0
     try:
         while state.running and (max_events is None or handled < max_events):
-            state, effects = step(state, await queue.get())
+            event = await queue.get()
+            if isinstance(event, Tick):
+                ports.observer.ticked()
+            state, effects = step(state, event)
             handled += 1
             for effect in effects:
                 await perform(

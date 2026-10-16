@@ -1,6 +1,8 @@
 """Tests for the SQLite timetable repository."""
 
+import os
 import sqlite3
+import threading
 from collections.abc import Iterator
 from contextlib import closing
 from datetime import UTC, date, datetime
@@ -8,7 +10,10 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
+from paperroute.adapters.timetable_db import (
+    SqliteTimetableRepository,
+    file_identity,
+)
 from paperroute.build.dedupe import merge_rail
 from paperroute.build.timetable import Source
 from paperroute.core.model import SYDNEY, Mode, Pin
@@ -249,3 +254,159 @@ def test_departures_accepts_utc_times(
         end=at(hour=9, minute=0).astimezone(UTC),
     )
     assert [d.trip_id for d in found] == ['bus-0803']
+
+
+def single_trip_db(*, directory: Path, trip: str) -> Path:
+    """
+    Build a timetable with one Parramatta to Central trip.
+
+    Parameters
+    ----------
+    directory : Path
+        Empty directory for the feed and database.
+    trip : str
+        Trip ID.
+
+    Returns
+    -------
+    Path
+        The database file.
+    """
+    directory.mkdir()
+    feed = write_feed(
+        path=directory / 'feed.zip',
+        files={
+            'stops.txt': STATIONS,
+            'routes.txt': [
+                {
+                    'route_id': 'r1',
+                    'agency_id': 'NSWTrains',
+                    'route_short_name': 'T1',
+                    'route_type': '2',
+                }
+            ],
+            'calendar.txt': [{'service_id': 'daily', **DAILY}],
+            'trips.txt': [
+                {
+                    'route_id': 'r1',
+                    'service_id': 'daily',
+                    'trip_id': trip,
+                    'trip_headsign': 'Central',
+                }
+            ],
+            'stop_times.txt': stop_times(
+                trip=trip,
+                times=[('2150411', '08:10:00'), ('2000321', '08:50:00')],
+            ),
+        },
+    )
+    return build_db(
+        tmp_path=directory,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[Source(name='sydneytrains', archive=feed)],
+    )
+
+
+def trip_ids(*, repo: SqliteTimetableRepository) -> list[str]:
+    """
+    Trip IDs found for Parramatta to Central on the morning of the 16th.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Repository to query.
+
+    Returns
+    -------
+    list[str]
+        Trip IDs.
+    """
+    return [
+        d.trip_id
+        for d in repo.departures(
+            pin=PARRA_TO_CENTRAL,
+            start=at(hour=8, minute=0),
+            end=at(hour=9, minute=0),
+        )
+    ]
+
+
+def replace_with(*, live: Path, trip: str) -> None:
+    """
+    Build a timetable with one trip and move it over the live file.
+
+    Parameters
+    ----------
+    live : Path
+        File to replace.
+    trip : str
+        Trip ID in the new timetable.
+    """
+    built = single_trip_db(directory=live.parent / f'new-{trip}', trip=trip)
+    staged = live.with_name('timetable.new')
+    built.replace(staged)
+    os.replace(staged, live)
+
+
+def test_departures_reopens_after_file_replaced(tmp_path: Path) -> None:
+    """A rebuilt timetable moved over the file is seen by the next query."""
+    live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
+    with closing(SqliteTimetableRepository(path=live)) as repo:
+        assert trip_ids(repo=repo) == ['A-0810']
+        replace_with(live=live, trip='B-0810')
+        assert trip_ids(repo=repo) == ['B-0810']
+
+
+def test_stop_name_reopens_after_file_replaced(tmp_path: Path) -> None:
+    """stop_name() also reopens a replaced file."""
+    live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
+    with closing(SqliteTimetableRepository(path=live)) as repo:
+        replace_with(live=live, trip='B-0810')
+        assert repo.stop_name(stop_id='215020') == 'Parramatta Station'
+        assert repo.identity == file_identity(path=live)
+
+
+def test_missing_file_keeps_old_connection(tmp_path: Path) -> None:
+    """With the file deleted, queries still answer from the open file."""
+    live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
+    with closing(SqliteTimetableRepository(path=live)) as repo:
+        live.unlink()
+        assert trip_ids(repo=repo) == ['A-0810']
+
+
+def test_injected_connection_never_reopens(tmp_path: Path) -> None:
+    """A repository given a connection ignores the file on disk."""
+    live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
+    conn = sqlite3.connect(f'file:{live}?mode=ro', uri=True)
+    with closing(SqliteTimetableRepository(connection=conn)) as repo:
+        replace_with(live=live, trip='B-0810')
+        assert trip_ids(repo=repo) == ['A-0810']
+
+
+def test_departures_threads_survive_replacement(tmp_path: Path) -> None:
+    """Two querying threads see no error while the file is replaced."""
+    live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
+    errors: list[BaseException] = []
+    seen: set[str] = set()
+    stop = threading.Event()
+
+    def loop() -> None:
+        try:
+            while not stop.is_set():
+                seen.update(trip_ids(repo=repo))
+        except sqlite3.Error as error:  # pragma: no cover
+            errors.append(error)
+
+    with closing(SqliteTimetableRepository(path=live)) as repo:
+        threads = [threading.Thread(target=loop) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for index in range(5):
+            replace_with(live=live, trip=f'B{index}-0810')
+        stop.set()
+        for thread in threads:
+            thread.join()
+        assert trip_ids(repo=repo) == ['B4-0810']
+    assert not errors
+    assert seen

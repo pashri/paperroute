@@ -1,5 +1,6 @@
 """Tests for the TfNSW HTTP feed client, against a real local server."""
 
+import asyncio
 from collections.abc import AsyncIterator
 from http import HTTPStatus
 
@@ -84,3 +85,42 @@ async def test_close_leaves_injected_session_open(server: TestServer) -> None:
         await client.fetch(feed='v1/gtfs/realtime/buses')
         await client.close()
         assert not session.closed
+
+
+async def slow_handler(request: web.Request) -> web.Response:
+    """
+    Answer after the client's timeout has passed.
+
+    Parameters
+    ----------
+    request : web.Request
+        Incoming request.
+
+    Returns
+    -------
+    web.Response
+        Response, which the client never sees.
+    """
+    await asyncio.sleep(1)
+    return web.Response(body=request.path.encode())
+
+
+async def test_fetch_raises_feed_error_on_timeout() -> None:
+    """A slow server gives FeedError naming TimeoutError, not the key."""
+    app = web.Application()
+    app.router.add_get('/v1/gtfs/realtime/buses', slow_handler)
+    server = TestServer(app)
+    await server.start_server()
+    client = AiohttpFeedsClient(
+        api_key='secret',
+        base_url=str(server.make_url('/')),
+        timeout_s=0.05,
+    )
+    try:
+        with pytest.raises(FeedError) as caught:
+            await client.fetch(feed='v1/gtfs/realtime/buses')
+        assert 'TimeoutError' in str(caught.value)
+        assert 'secret' not in str(caught.value)
+    finally:
+        await client.close()
+        await server.close()

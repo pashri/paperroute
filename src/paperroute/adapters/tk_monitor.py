@@ -53,6 +53,7 @@ class TkMonitor:
         self.post: Callable[[Event], None] | None = None
         self.root = tkinter.Tk()
         self.root.title('paperroute')
+        self.root.protocol('WM_DELETE_WINDOW', self.on_close)
         self.label = tkinter.Label(
             self.root, width=WIDTH, height=HEIGHT, bd=0,
         )
@@ -97,10 +98,18 @@ class TkMonitor:
         if event is not None and self.post is not None:
             self.post(event)
 
+    def on_close(self) -> None:
+        """Post QuitRequested when the window's close button is pressed."""
+        if self.post is not None:
+            self.post(QuitRequested())
+
     def pump(self) -> None:
         """Process pending window events."""
         self.root.update()
 
     def close(self) -> None:
-        """Close the window."""
-        self.root.destroy()
+        """Close the window; does nothing if it is already gone."""
+        try:
+            self.root.destroy()
+        except tkinter.TclError:
+            pass

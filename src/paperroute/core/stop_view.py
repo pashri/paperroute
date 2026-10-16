@@ -189,6 +189,53 @@ def banner(
     return None
 
 
+def not_departed(
+    *, departures: Sequence[LiveDeparture], now: datetime
+) -> list[LiveDeparture]:
+    """
+    Drop departures that left more than a minute ago, by live time.
+
+    Parameters
+    ----------
+    departures : Sequence[LiveDeparture]
+        Departures in order.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    list[LiveDeparture]
+        The rest, in order.
+    """
+    cutoff = shifted(moment=now, seconds=-59)
+    return [
+        item
+        for item in departures
+        if item.departs.timestamp() >= cutoff.timestamp()
+    ]
+
+
+def empty_text(*, destination: str, loaded: bool) -> str:
+    """
+    Say why the list is empty.
+
+    Parameters
+    ----------
+    destination : str
+        Destination name.
+    loaded : bool
+        Whether the timetable has been read yet.
+
+    Returns
+    -------
+    str
+        Message.
+    """
+    if not loaded:
+        return 'Loading timetable'
+    return f'No direct services to {destination} in {HORIZON_TEXT}'
+
+
 def build_stop_view(
     *,
     origin: str,
@@ -198,6 +245,7 @@ def build_stop_view(
     scroll: int,
     live_since: datetime | None,
     has_feed: bool,
+    loaded: bool = True,
 ) -> StopView:
     """
     Build the Stop view from resolved departures.
@@ -218,6 +266,9 @@ def build_stop_view(
         Fetch time of the oldest needed snapshot, or None when one is missing.
     has_feed : bool
         Whether a live feed exists.
+    loaded : bool
+        Whether the timetable has been read yet; if not, an empty view
+        says it is loading rather than that nothing runs.
 
     Returns
     -------
@@ -225,12 +276,7 @@ def build_stop_view(
         View-model, with scroll clamped to the rows that fit under any
         banner.
     """
-    cutoff = shifted(moment=now, seconds=-59)
-    upcoming = [
-        item
-        for item in departures
-        if item.departs.timestamp() >= cutoff.timestamp()
-    ]
+    upcoming = not_departed(departures=departures, now=now)
     rows = [
         to_row(item=item, now=now, pill=pill)
         for item, pill in zip(upcoming, pills(items=upcoming), strict=True)
@@ -250,8 +296,8 @@ def build_stop_view(
         hero=None if lead is None else rows[lead],
         rows=tuple(rest[offset : offset + shown]),
         banner=text,
-        empty=None
-        if rows
-        else f'No direct services to {destination} in {HORIZON_TEXT}',
+        empty=None if rows else empty_text(
+            destination=destination, loaded=loaded
+        ),
         scroll=offset,
     )

@@ -243,6 +243,21 @@ def test_view_empty_message() -> None:
     )
 
 
+def test_view_empty_says_loading_before_the_timetable_loads() -> None:
+    """Before the first load the empty message says it is loading."""
+    result = build_stop_view(
+        origin='Hollis St',
+        destination='Parramatta Station',
+        departures=(),
+        now=START,
+        scroll=0,
+        live_since=START,
+        has_feed=True,
+        loaded=False,
+    )
+    assert result.empty == 'Loading timetable'
+
+
 def test_view_empty_is_none_with_departures() -> None:
     """The empty message only appears when there is nothing to show."""
     assert view(departures=(live(minutes=5),)).empty is None

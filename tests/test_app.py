@@ -1,5 +1,6 @@
 """End-to-end test of the app loop with real data and a fake display."""
 
+import asyncio
 import logging
 import sqlite3
 from dataclasses import dataclass, field
@@ -12,9 +13,10 @@ from numpy.typing import NDArray
 
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.app import Ports, run
+from paperroute.app import Ports, perform, run
 from paperroute.build.timetable import Source, Window, build_timetable
 from paperroute.core.model import SYDNEY, Departure, Pin
+from paperroute.core.state import Event, FeedFailed, FetchFeed
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
@@ -139,6 +141,86 @@ class CrashingTimetable(BrokenTimetable):
         """
         self.calls += 1
         raise RuntimeError('boom')
+
+
+@dataclass
+class CrashingFeeds:
+    """A feeds client that fails with an unexpected error."""
+
+    async def fetch(self, *, feed: str) -> bytes:
+        """
+        Fail.
+
+        Parameters
+        ----------
+        feed : str
+            Ignored.
+
+        Returns
+        -------
+        bytes
+            Never returns.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        raise RuntimeError(f'boom {feed}')
+
+    async def close(self) -> None:
+        """Do nothing."""
+
+
+async def test_fetch_crash_posts_feed_failed_and_logs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An unexpected fetch error is logged and posted as FeedFailed."""
+    ports = Ports(
+        timetable=BrokenTimetable(),
+        feeds=CrashingFeeds(),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    with caplog.at_level(logging.ERROR):
+        await perform(
+            ports=ports,
+            effect=FetchFeed(feed='v1/gtfs/realtime/buses'),
+            queue=queue,
+            tasks=tasks,
+        )
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.sleep(0)
+    posted = queue.get_nowait()
+    assert isinstance(posted, FeedFailed)
+    assert posted.reason == 'unexpected error'
+    assert any(r.exc_info for r in caplog.records)
+
+
+async def test_run_quits_when_the_ticker_crashes(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A pump that raises ends the run and logs the error."""
+
+    def pump() -> None:
+        raise RuntimeError('window gone')
+
+    ports = Ports(
+        timetable=BrokenTimetable(),
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+    )
+    with caplog.at_level(logging.ERROR):
+        async with asyncio.timeout(5):
+            state = await run(
+                ports=ports, pin=PIN, tick_every=0.01, pump=pump
+            )
+    assert not state.running
+    errors = [r.exc_info[1] for r in caplog.records if r.exc_info]
+    assert any(str(error) == 'window gone' for error in errors)
 
 
 async def test_run_retries_after_a_failed_load() -> None:

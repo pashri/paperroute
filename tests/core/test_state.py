@@ -1,15 +1,17 @@
 """Tests for the reducer."""
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.core.model import SYDNEY, Mode, Pin, shifted
-from paperroute.core.realtime import RealtimeSnapshot
+from paperroute.core.model import SYDNEY, Departure, Mode, Pin, shifted
+from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 from paperroute.core.state import (
+    LOOKBACK,
     POLL_EVERY,
+    RELOAD_BEFORE,
     DeparturesFailed,
     DeparturesLoaded,
     Effect,
@@ -80,16 +82,17 @@ def loaded(
         for i in range(count)
     )
     event = DeparturesLoaded(
-        departures=deps, until=START + timedelta(hours=3)
+        departures=deps, until=START + HORIZON + RELOAD_BEFORE
     )
     return step(state, event)[0]
 
 
 def test_first_tick_loads_departures() -> None:
-    """The first tick asks for three hours of departures."""
+    """The first tick loads from an hour back to the horizon plus 30 min."""
     _, effects = step(fresh(), Tick(now=START))
-    end = START + timedelta(hours=3)
-    assert LoadDepartures(pin=PIN, start=START, end=end) in effects
+    start = START - LOOKBACK
+    end = START + HORIZON + RELOAD_BEFORE
+    assert LoadDepartures(pin=PIN, start=start, end=end) in effects
 
 
 def test_loaded_departures_render_and_choose_feeds() -> None:
@@ -177,10 +180,13 @@ def test_bottom_turn_scrolls_and_top_does_not() -> None:
 
 
 def test_reload_before_horizon_runs_out() -> None:
-    """Departures reload when less than 30 minutes remain loaded."""
+    """Departures reload once less than the horizon remains loaded."""
     state = loaded(state=fresh())
-    now = START + timedelta(hours=2, minutes=45)
-    _, effects = step(state, Tick(now=now))
+    soon = START + RELOAD_BEFORE - timedelta(minutes=1)
+    _, early = step(state, Tick(now=soon))
+    assert not any(isinstance(e, LoadDepartures) for e in early)
+    later = START + RELOAD_BEFORE + timedelta(minutes=1)
+    _, effects = step(state, Tick(now=later))
     assert any(isinstance(effect, LoadDepartures) for effect in effects)
 
 
@@ -216,7 +222,7 @@ def test_mixed_modes_fetch_each_needed_feed_once() -> None:
         for i, mode in enumerate(modes)
     )
     event = DeparturesLoaded(
-        departures=deps, until=START + timedelta(hours=3)
+        departures=deps, until=START + HORIZON + RELOAD_BEFORE
     )
     state, _ = step(fresh(), event)
     _, effects = step(state, Tick(now=START))
@@ -228,14 +234,16 @@ def test_mixed_modes_fetch_each_needed_feed_once() -> None:
     ]
 
 
-def test_load_end_is_horizon_real_seconds_on_fall_back_night() -> None:
-    """The load window ends three real hours on, across the repeated hour."""
+def test_load_window_is_real_seconds_on_fall_back_night() -> None:
+    """The load window is measured in real seconds across the repeated hour."""
     now = datetime(2026, 4, 5, 1, 30, tzinfo=SYDNEY)
     _, effects = step(fresh(now=now), Tick(now=now))
     loads = [e for e in effects if isinstance(e, LoadDepartures)]
     assert len(loads) == 1
     gap = loads[0].end.timestamp() - now.timestamp()
-    assert gap == HORIZON.total_seconds()
+    assert gap == (HORIZON + RELOAD_BEFORE).total_seconds()
+    back = now.timestamp() - loads[0].start.timestamp()
+    assert back == LOOKBACK.total_seconds()
 
 
 def test_quit_stops() -> None:
@@ -294,7 +302,7 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
                 )
                 for i in range(count)
             )
-            until = shifted(moment=now, seconds=3 * 3600)
+            until = shifted(moment=now, seconds=3 * 3600 + 1800)
             events.append(DeparturesLoaded(departures=deps, until=until))
     return events
 
@@ -348,3 +356,114 @@ def test_step_invariants(case: tuple[datetime, list[Event]]) -> None:
         check_effects(
             before=before, after=state, event=event, effects=effects
         )
+
+
+@dataclass
+class WindowedTimetable:
+    """A timetable that answers a load with what falls in its window."""
+
+    departures: tuple[Departure, ...]
+
+    def load(self, *, effect: LoadDepartures) -> DeparturesLoaded:
+        """
+        Answer a load request.
+
+        Parameters
+        ----------
+        effect : LoadDepartures
+            The request.
+
+        Returns
+        -------
+        DeparturesLoaded
+            Departures from start to end, as the repository returns them.
+        """
+        found = tuple(
+            dep
+            for dep in self.departures
+            if effect.start.timestamp()
+            <= dep.departs.timestamp()
+            < effect.end.timestamp()
+        )
+        return DeparturesLoaded(departures=found, until=effect.end)
+
+
+def run_tick(
+    *, state: State, timetable: WindowedTimetable, now: datetime
+) -> State:
+    """
+    Tick, then answer any load request at once.
+
+    Parameters
+    ----------
+    state : State
+        State before.
+    timetable : WindowedTimetable
+        Where loads are answered.
+    now : datetime
+        Tick time.
+
+    Returns
+    -------
+    State
+        State after the tick and the load.
+    """
+    state, effects = step(state, Tick(now=now))
+    for effect in effects:
+        if isinstance(effect, LoadDepartures):
+            state, _ = step(state, timetable.load(effect=effect))
+    return state
+
+
+def test_empty_never_shows_while_a_departure_is_within_horizon() -> None:
+    """Across many load cycles the list always reaches a full horizon."""
+    only = departure(departs=START + timedelta(hours=5, minutes=30))
+    timetable = WindowedTimetable(departures=(only,))
+    state = fresh()
+    for minute in range(0, 6 * 60 + 1):
+        now = START + timedelta(minutes=minute)
+        state = run_tick(state=state, timetable=timetable, now=now)
+        assert state.last_view is not None
+        in_reach = only.departs <= now + HORIZON
+        if in_reach and only.departs >= now:
+            assert state.last_view.empty is None, now
+
+
+def test_late_service_timetabled_before_now_appears_after_load() -> None:
+    """A service timetabled 2 min ago but 6 min late is still listed."""
+    late = departure(departs=START - timedelta(minutes=2))
+    timetable = WindowedTimetable(departures=(late,))
+    trip = TripRealtime(
+        trip_id=late.trip_id,
+        cancelled=False,
+        updates=(
+            StopUpdate(
+                sequence=late.origin_seq,
+                stop_id=None,
+                arrival_delay=None,
+                departure_delay=360,
+                arrival_time=None,
+                departure_time=None,
+            ),
+        ),
+        start_date=None,
+    )
+    state = run_tick(state=fresh(), timetable=timetable, now=START)
+    snapshot = RealtimeSnapshot(fetched_at=START, trips={late.trip_id: trip})
+    state, _ = step(state, FeedFetched(feed=BUSES, snapshot=snapshot))
+    assert state.last_view is not None
+    assert state.last_view.hero is not None
+    assert state.last_view.hero.leaves_at == '8:04'
+
+
+def test_view_says_loading_before_the_first_load() -> None:
+    """Until departures have loaded, the empty text says so."""
+    state, _ = step(fresh(), Tick(now=START))
+    assert state.last_view is not None
+    assert state.last_view.empty == 'Loading timetable'
+    loaded_state, _ = step(
+        state, DeparturesLoaded(departures=(), until=START + HORIZON)
+    )
+    assert loaded_state.last_view is not None
+    assert loaded_state.last_view.empty is not None
+    assert 'No direct services' in loaded_state.last_view.empty

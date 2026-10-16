@@ -105,9 +105,17 @@ def test_parse_raises_when_nothing_decodes() -> None:
         parse_trip_updates(data=b'<html>rate limited</html>', fetched_at=NOW)
 
 
-def test_parse_empty_body_is_empty_snapshot() -> None:
-    """An empty body is a valid feed with no trips."""
-    assert not parse_trip_updates(data=b'', fetched_at=NOW).trips
+def test_parse_empty_body_is_a_feed_error() -> None:
+    """An empty 200 body is a failed fetch, not an empty feed."""
+    with pytest.raises(FeedError):
+        parse_trip_updates(data=b'', fetched_at=NOW)
+
+
+def test_parse_malformed_start_date_becomes_none() -> None:
+    """A bad start_date is ignored rather than raised when trips convert."""
+    data = feed(trips=[RtTrip(trip_id='a', start_date='garbage')])
+    trip = parse_trip_updates(data=data, fetched_at=NOW).trips['a']
+    assert trip.start_date is None
 
 
 def test_parse_reads_start_date() -> None:

@@ -19,6 +19,7 @@ from paperroute.core.state import (
     FeedFetched,
     FetchFeed,
     LoadDepartures,
+    QuitRequested,
     Render,
     State,
     Tick,
@@ -175,6 +176,27 @@ def finished(
         queue.put_nowait(failed)
 
 
+def ticker_finished(
+    task: asyncio.Task[None], *, queue: asyncio.Queue[Event]
+) -> None:
+    """
+    If the ticker crashed, log it and post QuitRequested.
+
+    Parameters
+    ----------
+    task : asyncio.Task[None]
+        The finished ticker task.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    """
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is not None:
+        logger.error('ticker crashed', exc_info=error)
+        queue.put_nowait(QuitRequested())
+
+
 async def ticker(
     *,
     ports: Ports,
@@ -255,6 +277,9 @@ async def run(
     tasks: set[asyncio.Task[None]] = set()
     clock = asyncio.create_task(
         ticker(ports=ports, queue=queue, every=tick_every, pump=pump)
+    )
+    clock.add_done_callback(
+        functools.partial(ticker_finished, queue=queue)
     )
     handled = 0
     try:

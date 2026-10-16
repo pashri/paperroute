@@ -1,13 +1,26 @@
 """Command line for building the timetable."""
 
 import argparse
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
-from zoneinfo import ZoneInfo
 
 from paperroute.build.timetable import Source, Window, build_timetable
+from paperroute.core.model import SYDNEY
 
-SYDNEY = ZoneInfo('Australia/Sydney')
+
+def yesterday() -> date:
+    """
+    The Sydney date before today.
+
+    Starting a day early keeps the previous service day's 24:00-28:59
+    trips when the build runs in the small hours.
+
+    Returns
+    -------
+    date
+        Yesterday in Sydney.
+    """
+    return datetime.now(SYDNEY).date() - timedelta(days=1)
 
 
 def parse_args() -> argparse.Namespace:
@@ -27,7 +40,7 @@ def parse_args() -> argparse.Namespace:
     gtfs.add_argument('--metro', type=Path)
     gtfs.add_argument('--out', type=Path, required=True)
     gtfs.add_argument('--start', type=date.fromisoformat,
-                      default=datetime.now(SYDNEY).date())
+                      default=yesterday())
     gtfs.add_argument('--days', type=int, default=14)
     return parser.parse_args()
 

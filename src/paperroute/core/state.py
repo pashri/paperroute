@@ -14,6 +14,7 @@ from paperroute.core.stop_view import HORIZON, StopView, build_stop_view
 
 POLL_EVERY: Final[timedelta] = timedelta(seconds=30)
 RELOAD_BEFORE: Final[timedelta] = timedelta(minutes=30)
+LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 
 
 class Knob(StrEnum):
@@ -210,6 +211,7 @@ def current_view(*, state: State) -> StopView:
         scroll=state.scroll,
         live_since=since,
         has_feed=bool(state.feeds) or not state.departures,
+        loaded=state.loaded_until is not None,
     )
 
 
@@ -240,7 +242,7 @@ def rendered(
 
 def reload_due(*, state: State, now: datetime) -> bool:
     """
-    Say whether the loaded departures are missing or about to run out.
+    Say whether the loaded departures are missing or reach under HORIZON.
 
     Parameters
     ----------
@@ -252,12 +254,12 @@ def reload_due(*, state: State, now: datetime) -> bool:
     Returns
     -------
     bool
-        True when less than RELOAD_BEFORE of real time remains loaded.
+        True when less than HORIZON of real time remains loaded.
     """
     if state.loaded_until is None:
         return True
     left = state.loaded_until.timestamp() - now.timestamp()
-    return left < RELOAD_BEFORE.total_seconds()
+    return left < HORIZON.total_seconds()
 
 
 def poll_due(*, state: State, now: datetime) -> bool:
@@ -306,8 +308,12 @@ def on_tick(
     state = replace(state, now=event.now)
     effects: list[Effect] = []
     if reload_due(state=state, now=event.now) and not state.loading:
-        end = shifted(moment=event.now, seconds=int(HORIZON.total_seconds()))
-        effects.append(LoadDepartures(pin=state.pin, start=event.now, end=end))
+        reach = HORIZON + RELOAD_BEFORE
+        start = shifted(
+            moment=event.now, seconds=-int(LOOKBACK.total_seconds())
+        )
+        end = shifted(moment=event.now, seconds=int(reach.total_seconds()))
+        effects.append(LoadDepartures(pin=state.pin, start=start, end=end))
         state = replace(state, loading=True)
     if poll_due(state=state, now=event.now):
         effects.extend(FetchFeed(feed=feed) for feed in state.feeds)

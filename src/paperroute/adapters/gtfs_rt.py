@@ -166,6 +166,27 @@ def stop_update(
     )
 
 
+def parse_start_date(*, text: str) -> date | None:
+    """
+    Read a trip's start date, or None when it is missing or malformed.
+
+    Parameters
+    ----------
+    text : str
+        Date as written in the feed, for example '20261016'.
+
+    Returns
+    -------
+    date | None
+        The date.
+    """
+    try:
+        return date.fromisoformat(text) if text else None
+    except ValueError:
+        logger.warning('ignored malformed start_date %r', text)
+        return None
+
+
 def to_trip(*, update: gtfs_realtime_pb2.TripUpdate) -> TripRealtime:
     """
     Convert one TripUpdate, dropping stop updates marked NO_DATA.
@@ -180,7 +201,6 @@ def to_trip(*, update: gtfs_realtime_pb2.TripUpdate) -> TripRealtime:
     TripRealtime
         Plain data.
     """
-    start = update.trip.start_date
     return TripRealtime(
         trip_id=update.trip.trip_id,
         cancelled=update.trip.schedule_relationship == CANCELED,
@@ -189,7 +209,7 @@ def to_trip(*, update: gtfs_realtime_pb2.TripUpdate) -> TripRealtime:
             for stop in update.stop_time_update
             if stop.schedule_relationship != NO_DATA
         ),
-        start_date=date.fromisoformat(start) if start else None,
+        start_date=parse_start_date(text=update.trip.start_date),
     )
 
 
@@ -302,19 +322,21 @@ def feed_entities(*, data: bytes) -> list[Any]:
     Raises
     ------
     FeedError
-        When a non-empty body yields no entity at all, or decodes whole
+        When the body is empty, yields no entity at all, or decodes whole
         but has no header.
     """
+    if not data:
+        raise FeedError('feed body is empty')
     try:
         message = gtfs_realtime_pb2.FeedMessage.FromString(data)
     except DecodeError:
         logger.warning('feed did not decode whole; reading entity by entity')
     else:
-        if data and not message.HasField('header'):
+        if not message.HasField('header'):
             raise FeedError('feed body has no header')
         return list(message.entity)
     entities = list(decoded_entities(data=data))
-    if not entities and data:
+    if not entities:
         raise FeedError('feed body did not decode')
     return entities
 
@@ -340,7 +362,7 @@ def parse_trip_updates(
     Raises
     ------
     FeedError
-        When a non-empty body yields no entity at all.
+        When the body is empty or yields no entity at all.
     """
     updates = {
         entity.trip_update.trip.trip_id: entity.trip_update

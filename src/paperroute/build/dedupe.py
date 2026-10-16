@@ -43,6 +43,7 @@ FROM pair JOIN trip_key b ON b.trip_id = pair.dup_id
 GROUP BY b.trip_id;
 """
 APPLY: Final[str] = """
+BEGIN;
 INSERT INTO trip_aliases (alias_id, trip_id)
   SELECT DISTINCT dup_id, keep_id FROM pair
   WHERE dup_id IN (SELECT dup_id FROM match WHERE covered = runs);
@@ -55,6 +56,7 @@ DELETE FROM stop_times WHERE trip_id IN
   (SELECT dup_id FROM match WHERE covered = runs);
 DELETE FROM trips WHERE trip_id IN
   (SELECT dup_id FROM match WHERE covered = runs);
+COMMIT;
 """
 CLEANUP: Final[str] = """
 DROP TABLE candidate;
@@ -90,7 +92,8 @@ def merge_rail(*, conn: sqlite3.Connection) -> MergeReport:
     copy's agency as its agency of record: an XPT kept from the Sydney Trains
     feed stays Regional and is matched in the nswtrains feed.
 
-    Changes are committed before returning.
+    The changes are applied in one transaction and committed before
+    returning.
 
     Parameters
     ----------
@@ -106,6 +109,10 @@ def merge_rail(*, conn: sqlite3.Connection) -> MergeReport:
     dropped, partial = conn.execute(
         'SELECT SUM(covered = runs), SUM(covered < runs) FROM match'
     ).fetchone()
-    conn.executescript(APPLY + CLEANUP)
-    conn.commit()
+    try:
+        conn.executescript(APPLY)
+    except sqlite3.Error:
+        conn.rollback()
+        raise
+    conn.executescript(CLEANUP)
     return MergeReport(dropped=int(dropped or 0), partial=int(partial or 0))

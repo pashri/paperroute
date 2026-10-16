@@ -5,6 +5,8 @@ from contextlib import closing
 from datetime import date
 from pathlib import Path
 
+import pytest
+
 from paperroute.build.dedupe import merge_rail
 from paperroute.build.timetable import Source
 from tests.build.feeds import (
@@ -25,7 +27,7 @@ TRAINS_ROUTE = [
 ]
 
 
-def merged(tmp_path: Path) -> tuple[Path, int]:
+def merged(*, tmp_path: Path) -> tuple[Path, int]:
     """
     Build Sydney Trains then bundle rail and bus, then merge.
 
@@ -125,7 +127,7 @@ def rail_db(*, tmp_path: Path, trains: Path) -> Path:
 
 def test_merge_drops_duplicate_and_aliases_it(tmp_path: Path) -> None:
     """The bundle's copy of a Sydney Trains run is dropped and aliased."""
-    db, dropped = merged(tmp_path)
+    db, dropped = merged(tmp_path=tmp_path)
     assert dropped == 1
     assert 'B-0835' not in trip_ids(db=db)
     with closing(sqlite3.connect(db)) as conn:
@@ -140,19 +142,45 @@ def test_merge_drops_duplicate_and_aliases_it(tmp_path: Path) -> None:
 
 
 def test_merge_commits_its_changes(tmp_path: Path) -> None:
-    """The merge is visible to a second connection once it returns."""
+    """A second connection sees the merge while the first is still open."""
     db = rail_db(
         tmp_path=tmp_path, trains=sydneytrains_feed(path=tmp_path / 's.zip')
     )
     with closing(sqlite3.connect(db)) as conn:
         merge_rail(conn=conn)
-        assert not conn.in_transaction
-    assert 'B-0835' not in trip_ids(db=db)
+        with closing(sqlite3.connect(db)) as other:
+            alias = other.execute(
+                "SELECT trip_id FROM trip_aliases WHERE alias_id = 'B-0835'"
+            )
+            assert alias.fetchall() == [('S-0835',)]
+            gone = other.execute(
+                "SELECT COUNT(*) FROM trips WHERE trip_id = 'B-0835'"
+            )
+            assert gone.fetchone() == (0,)
+
+
+def test_merge_rolls_back_when_a_step_fails(tmp_path: Path) -> None:
+    """A failure midway leaves the timetable as it was."""
+    db = rail_db(
+        tmp_path=tmp_path, trains=sydneytrains_feed(path=tmp_path / 's.zip')
+    )
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute(
+            'CREATE TRIGGER stop_delete BEFORE DELETE ON trips '
+            "BEGIN SELECT RAISE(ABORT, 'no'); END"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            merge_rail(conn=conn)
+        times = conn.execute(
+            "SELECT COUNT(*) FROM stop_times WHERE trip_id = 'B-0835'"
+        )
+        assert times.fetchone() != (0,)
+        assert conn.execute('SELECT * FROM trip_aliases').fetchall() == []
 
 
 def test_merge_keeps_unmatched_rail_and_buses(tmp_path: Path) -> None:
     """Bundle rail with no duplicate, and non-rail trips, stay."""
-    db, _ = merged(tmp_path)
+    db, _ = merged(tmp_path=tmp_path)
     kept = {'B-0900', 'B-NB', 'bus-0803', 'S-0835', 'S-0848'}
     assert kept <= trip_ids(db=db)
 

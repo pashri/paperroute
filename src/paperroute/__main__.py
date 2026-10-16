@@ -44,6 +44,25 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
+def sydney(*, moment: datetime) -> datetime:
+    """
+    Give a datetime Sydney time: naive ones are taken to be Sydney already.
+
+    Parameters
+    ----------
+    moment : datetime
+        Naive or aware time.
+
+    Returns
+    -------
+    datetime
+        Aware Sydney datetime.
+    """
+    if moment.tzinfo is None:
+        return moment.replace(tzinfo=SYDNEY)
+    return moment.astimezone(SYDNEY)
+
+
 def feeds_client(*, choice: str) -> FeedsClient:
     """
     Make the live client (key from PAPERROUTE_API_KEY_FILE) or a replay one.
@@ -63,7 +82,8 @@ def feeds_client(*, choice: str) -> FeedsClient:
     key_file = os.getenv('PAPERROUTE_API_KEY_FILE')
     if not key_file:
         sys.exit(
-            'Set PAPERROUTE_API_KEY_FILE to the file holding the TfNSW API key.'
+            'Set PAPERROUTE_API_KEY_FILE to the file holding the '
+            'TfNSW API key.'
         )
     key = Path(key_file).expanduser().read_text(encoding='utf-8').strip()
     return AiohttpFeedsClient(api_key=key)
@@ -99,21 +119,21 @@ def main() -> None:
     configure_logging()
     feeds = feeds_client(choice=args.feeds)
     clock = (
-        ReplayClock(start=args.at.replace(tzinfo=SYDNEY))
-        if args.at
-        else SystemClock()
+        ReplayClock(start=sydney(moment=args.at)) if args.at else SystemClock()
     )
-    timetable = SqliteTimetableRepository(path=args.timetable)
     monitor = TkMonitor()
-    ports = Ports(
-        timetable=timetable, feeds=feeds, display=monitor, clock=clock
-    )
-    pin = Pin(origin=args.origin, destination=args.destination)
     try:
-        asyncio.run(show(ports=ports, pin=pin, monitor=monitor))
+        timetable = SqliteTimetableRepository(path=args.timetable)
+        try:
+            ports = Ports(
+                timetable=timetable, feeds=feeds, display=monitor, clock=clock
+            )
+            pin = Pin(origin=args.origin, destination=args.destination)
+            asyncio.run(show(ports=ports, pin=pin, monitor=monitor))
+        finally:
+            timetable.close()
     finally:
         monitor.close()
-        timetable.close()
 
 
 if __name__ == '__main__':

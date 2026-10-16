@@ -117,5 +117,6 @@ def active_dates(*, archive: Path, start: date,
         day = date.fromisoformat(row['date'])
         if day in window:
             change = result.setdefault(row['service_id'], set())
-            (change.add if row['exception_type'] == '1' else change.discard)(day)
+            added = row['exception_type'] == '1'
+            (change.add if added else change.discard)(day)
     return {key: frozenset(value) for key, value in result.items() if value}

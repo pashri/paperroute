@@ -73,6 +73,9 @@ src_paths = ["src", "tests"]
 py-version = "3.14"
 extension-pkg-allow-list = ["skia"]
 
+[tool.pylint.format]
+max-line-length = 79
+
 [tool.pylint.typecheck]
 generated-members = ["gtfs_realtime_pb2.*"]
 

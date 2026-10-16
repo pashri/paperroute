@@ -1,6 +1,7 @@
 """Wire the ports to the reducer through one event queue."""
 
 import asyncio
+import functools
 import logging
 import sqlite3
 from collections.abc import Callable
@@ -66,7 +67,9 @@ async def load(
         logger.exception('reading departures failed')
         await queue.put(DeparturesFailed())
         return
-    await queue.put(DeparturesLoaded(departures=tuple(found), until=effect.end))
+    await queue.put(
+        DeparturesLoaded(departures=tuple(found), until=effect.end)
+    )
 
 
 async def fetch(
@@ -123,8 +126,12 @@ async def perform(
     match effect:
         case LoadDepartures():
             work = load(ports=ports, effect=effect, queue=queue)
-        case FetchFeed():
+            failed: Event = DeparturesFailed()
+        case FetchFeed(feed=feed):
             work = fetch(ports=ports, effect=effect, queue=queue)
+            failed = FeedFailed(
+                feed=feed, at=ports.clock.now(), reason='unexpected error'
+            )
         case Render(view=view):
             frame = await asyncio.to_thread(draw_stop_view, view=view)
             ports.display.show(frame=frame)
@@ -133,7 +140,39 @@ async def perform(
             return
     task = asyncio.create_task(work)
     tasks.add(task)
-    task.add_done_callback(tasks.discard)
+    task.add_done_callback(
+        functools.partial(finished, tasks=tasks, queue=queue, failed=failed)
+    )
+
+
+def finished(
+    task: asyncio.Task[None],
+    *,
+    tasks: set[asyncio.Task[None]],
+    queue: asyncio.Queue[Event],
+    failed: Event,
+) -> None:
+    """
+    Forget a finished task; if it crashed, log it and post its failure.
+
+    Parameters
+    ----------
+    task : asyncio.Task[None]
+        The finished task.
+    tasks : set[asyncio.Task[None]]
+        Background tasks kept alive until done.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    failed : Event
+        Event that lets the app recover from this task crashing.
+    """
+    tasks.discard(task)
+    if task.cancelled():
+        return
+    error = task.exception()
+    if error is not None:
+        logger.error('background task crashed', exc_info=error)
+        queue.put_nowait(failed)
 
 
 async def ticker(
@@ -181,6 +220,8 @@ async def run(
     Run the app until quit, or until max_events events have been handled.
 
     Background tasks are cancelled and awaited before this returns.
+    Worker threads started by to_thread are not cancelled; asyncio.run
+    waits for them when it exits.
 
     Parameters
     ----------
@@ -232,6 +273,9 @@ async def run(
 async def stop(*, tasks: set[asyncio.Task[None]]) -> None:
     """
     Cancel background tasks and wait until they have finished.
+
+    Worker threads started by to_thread are not cancelled; asyncio.run
+    joins them when it exits.
 
     Parameters
     ----------

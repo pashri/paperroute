@@ -8,8 +8,10 @@ from typing import Final
 
 from fontTools.ttLib import TTFont
 
-WOFF: Final[str] = ('https://cdn.jsdelivr.net/npm/@fontsource/overpass@5/files/'
-                    'overpass-latin-{weight}-normal.woff')
+WOFF: Final[str] = (
+    'https://cdn.jsdelivr.net/npm/@fontsource/overpass@5/files/'
+    'overpass-latin-{weight}-normal.woff'
+)
 LICENCE: Final[str] = ('https://raw.githubusercontent.com/google/fonts/main/'
                        'ofl/overpass/OFL.txt')
 WEIGHTS: Final[tuple[int, ...]] = (400, 700, 800)

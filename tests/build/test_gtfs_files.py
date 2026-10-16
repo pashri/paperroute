@@ -31,7 +31,9 @@ def test_parse_time_rejects_bad_values(value: str) -> None:
 
 def test_read_rows_missing_member_is_empty(tmp_path: Path) -> None:
     """A member that isn't in the zip yields nothing."""
-    feed = write_feed(path=tmp_path / 'f.zip', files={'stops.txt': [{'stop_id': '1'}]})
+    feed = write_feed(
+        path=tmp_path / 'f.zip', files={'stops.txt': [{'stop_id': '1'}]}
+    )
     assert not list(read_rows(archive=feed, member='calendar_dates.txt'))
 
 
@@ -39,7 +41,8 @@ def test_read_rows_strips_bom(tmp_path: Path) -> None:
     """A UTF-8 byte order mark doesn't leak into the first header."""
     feed = tmp_path / 'f.zip'
     write_feed(path=feed, files={'stops.txt': [{'\ufeffstop_id': '1'}]})
-    assert next(read_rows(archive=feed, member='stops.txt')) == {'stop_id': '1'}
+    row = next(read_rows(archive=feed, member='stops.txt'))
+    assert row == {'stop_id': '1'}
 
 
 def test_active_dates_weekdays_and_exceptions(tmp_path: Path) -> None:

@@ -1,11 +1,13 @@
 """End-to-end test of the app loop with real data and a fake display."""
 
+import logging
 import sqlite3
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 
 import numpy as np
+import pytest
 from numpy.typing import NDArray
 
 from paperroute.adapters.feed_files import FileFeedsClient
@@ -106,6 +108,39 @@ class BrokenTimetable:
         raise sqlite3.DatabaseError('file is not a database')
 
 
+@dataclass
+class CrashingTimetable(BrokenTimetable):
+    """A timetable whose departures query raises an unexpected error."""
+
+    def departures(
+        self, *, pin: Pin, start: datetime, end: datetime
+    ) -> list[Departure]:
+        """
+        Fail with an error the app does not expect.
+
+        Parameters
+        ----------
+        pin : Pin
+            Ignored.
+        start : datetime
+            Ignored.
+        end : datetime
+            Ignored.
+
+        Returns
+        -------
+        list[Departure]
+            Never returns.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        self.calls += 1
+        raise RuntimeError('boom')
+
+
 async def test_run_retries_after_a_failed_load() -> None:
     """A failed departures read is retried on a later tick, not abandoned."""
     timetable = BrokenTimetable()
@@ -148,3 +183,57 @@ async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
     assert display.frames
     assert state.departures
     assert 'v2/gtfs/realtime/sydneytrains' in state.snapshots
+
+
+async def test_run_survives_unexpected_load_error(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A crashing load is logged and retried; the loop keeps running."""
+    timetable = CrashingTimetable()
+    ports = Ports(
+        timetable=timetable,
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+    )
+    with caplog.at_level(logging.ERROR):
+        state = await run(ports=ports, pin=PIN, tick_every=0.01, max_events=20)
+    assert state.running
+    assert timetable.calls >= 2
+    errors = [r.exc_info[1] for r in caplog.records if r.exc_info]
+    assert any(str(error) == 'boom' for error in errors)
+
+
+async def test_run_draws_when_every_feed_fails(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Missing recordings are logged as failed feeds; frames still draw."""
+    db = tmp_path / 'timetable.db'
+    build_timetable(
+        sources=[
+            Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
+            Source(name='bundle', archive=REAL / 'bundle.zip'),
+        ],
+        window=Window(start=date(2026, 10, 16), days=1),
+        out=db,
+    )
+    empty = tmp_path / 'empty'
+    empty.mkdir()
+    display = FrameRecorder()
+    timetable = SqliteTimetableRepository(path=db)
+    ports = Ports(
+        timetable=timetable,
+        feeds=FileFeedsClient(directory=empty),
+        display=display,
+        clock=FixedClock(at=AT),
+    )
+    try:
+        with caplog.at_level(logging.WARNING):
+            state = await run(
+                ports=ports, pin=PIN, tick_every=0.01, max_events=60
+            )
+    finally:
+        timetable.close()
+    assert display.frames
+    assert 'v2/gtfs/realtime/sydneytrains' not in state.snapshots
+    assert any('feed failed' in r.getMessage() for r in caplog.records)

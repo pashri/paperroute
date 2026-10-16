@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Final
 
 from paperroute.core.live import STALE_AFTER, LiveDeparture
-from paperroute.core.model import Mode
+from paperroute.core.model import SYDNEY, Mode, shifted
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
@@ -67,7 +67,8 @@ def clock_text(*, moment: datetime) -> str:
     str
         For example '8:05'.
     """
-    return f'{moment.hour}:{moment.minute:02d}'
+    local = moment.astimezone(SYDNEY)
+    return f'{local.hour}:{local.minute:02d}'
 
 
 def countdown(*, departs: datetime, now: datetime) -> str:
@@ -111,7 +112,7 @@ def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
         Row.
     """
     dep = item.departure
-    ride = item.arrives - item.departs
+    ride_s = item.arrives.timestamp() - item.departs.timestamp()
     return Row(
         route=dep.route,
         mode=dep.mode,
@@ -120,7 +121,7 @@ def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
         countdown=countdown(departs=item.departs, now=now),
         leaves_at=clock_text(moment=item.departs),
         arrives_at=clock_text(moment=item.arrives),
-        ride_minutes=int(ride.total_seconds() // 60),
+        ride_minutes=int(ride_s // 60),
         live=item.live,
         pill=pill,
     )
@@ -149,7 +150,10 @@ def pills(*, items: Sequence[LiveDeparture]) -> list[Pill | None]:
         if item.cancelled:
             result.append(Pill.CANCELLED)
             continue
-        faster = ahead and item.arrives < ahead.arrives
+        faster = (
+            ahead is not None
+            and item.arrives.timestamp() < ahead.arrives.timestamp()
+        )
         result.append(Pill.FASTER if faster else None)
         ahead = item
     return result
@@ -179,7 +183,8 @@ def banner(
         return f'Timetable times{DOT}no live feed for this service'
     if live_since is None:
         return f'Timetable times{DOT}no live data yet'
-    if now - live_since > STALE_AFTER:
+    age = now.timestamp() - live_since.timestamp()
+    if age > STALE_AFTER.total_seconds():
         return f'No live data since {clock_text(moment=live_since)}'
     return None
 
@@ -220,8 +225,12 @@ def build_stop_view(
         View-model, with scroll clamped to the rows that fit under any
         banner.
     """
-    cutoff = now - timedelta(seconds=59)
-    upcoming = [item for item in departures if item.departs >= cutoff]
+    cutoff = shifted(moment=now, seconds=-59)
+    upcoming = [
+        item
+        for item in departures
+        if item.departs.timestamp() >= cutoff.timestamp()
+    ]
     rows = [
         to_row(item=item, now=now, pill=pill)
         for item, pill in zip(upcoming, pills(items=upcoming), strict=True)

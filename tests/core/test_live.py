@@ -1,9 +1,10 @@
 """Tests for applying live data to departures."""
 
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from paperroute.core.live import resolve
+from paperroute.core.model import SYDNEY
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 from tests.core.factories import START, departure
 
@@ -229,3 +230,69 @@ def test_resolve_alias_matches_by_stop_id() -> None:
         now=START,
     )
     assert live.departs == DEP.departs + timedelta(seconds=90)
+
+
+def test_resolve_carries_arrival_delay_when_no_departure_delay() -> None:
+    """An earlier stop with only an arrival delay still carries forward."""
+    updates = (update(seq=2, arr=120), update(seq=20))
+    live = resolve(
+        departure=DEP, snapshot=snapshot(updates=updates), now=START
+    )
+    assert live.live
+    assert live.departs == DEP.departs + timedelta(seconds=120)
+    assert live.arrives == DEP.arrives + timedelta(seconds=120)
+
+
+def test_resolve_update_without_timing_is_not_live() -> None:
+    """A note at our stop with no delay or time leaves the departure alone."""
+    live = resolve(
+        departure=DEP,
+        snapshot=snapshot(updates=(update(seq=5), update(seq=20))),
+        now=START,
+    )
+    assert (live.departs, live.live) == (DEP.departs, False)
+
+
+def test_resolve_delay_adds_real_seconds_over_fall_back() -> None:
+    """On the night clocks go back, 5 minutes of delay is 5 real minutes."""
+    before = datetime(2026, 4, 5, 2, 58, tzinfo=SYDNEY)
+    dep = departure(departs=before, ride=10, trip_id='t')
+    now = before - timedelta(minutes=30)
+    live = resolve(
+        departure=dep,
+        snapshot=RealtimeSnapshot(
+            fetched_at=now,
+            trips={
+                't': TripRealtime(
+                    trip_id='t',
+                    cancelled=False,
+                    updates=(update(seq=5, dep=300, arr=300),),
+                    start_date=None,
+                )
+            },
+        ),
+        now=now,
+    )
+    assert live.departs.timestamp() - before.timestamp() == 300
+    assert live.arrives.timestamp() - dep.arrives.timestamp() == 300
+    assert live.departs.tzinfo is SYDNEY
+    assert (live.departs.hour, live.departs.minute) == (2, 3)
+
+
+def test_resolve_snapshot_age_counts_real_seconds() -> None:
+    """A snapshot fetched before the clocks go back is older than it reads."""
+    fetched = datetime(2026, 4, 5, 2, 59, tzinfo=SYDNEY)
+    now = datetime(2026, 4, 5, 2, 3, fold=1, tzinfo=SYDNEY)
+    dep = departure(departs=now + timedelta(minutes=5), trip_id='t')
+    trip = TripRealtime(
+        trip_id='t',
+        cancelled=False,
+        updates=(update(seq=5, dep=60),),
+        start_date=None,
+    )
+    live = resolve(
+        departure=dep,
+        snapshot=RealtimeSnapshot(fetched_at=fetched, trips={'t': trip}),
+        now=now,
+    )
+    assert not live.live

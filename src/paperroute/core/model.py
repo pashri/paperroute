@@ -132,6 +132,30 @@ def service_time(*, day: date, seconds: int) -> datetime:
     return (epoch + timedelta(seconds=seconds)).astimezone(SYDNEY)
 
 
+def shifted(*, moment: datetime, seconds: int) -> datetime:
+    """
+    Move a moment by real seconds and give the result in Sydney time.
+
+    The sum is done in UTC because Python adds to an aware datetime on the
+    wall clock, which is wrong across a daylight-saving change.
+
+    Parameters
+    ----------
+    moment : datetime
+        Aware time.
+    seconds : int
+        Real seconds to add (negative to subtract).
+
+    Returns
+    -------
+    datetime
+        Aware Sydney datetime.
+    """
+    return (moment.astimezone(UTC) + timedelta(seconds=seconds)).astimezone(
+        SYDNEY
+    )
+
+
 def service_seconds(*, day: date, moment: datetime) -> int:
     """
     Count the seconds from a service day's epoch to a moment.

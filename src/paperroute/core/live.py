@@ -5,7 +5,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.core.model import Departure
+from paperroute.core.model import Departure, shifted
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 
 STALE_AFTER: Final[timedelta] = timedelta(minutes=2)
@@ -129,6 +129,26 @@ def delay_at(
     return last.arrival_delay
 
 
+def stale(*, snapshot: RealtimeSnapshot, now: datetime) -> bool:
+    """
+    Say whether a snapshot is too old to use.
+
+    Parameters
+    ----------
+    snapshot : RealtimeSnapshot
+        Snapshot.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    bool
+        True when it was fetched more than STALE_AFTER of real time ago.
+    """
+    age = now.timestamp() - snapshot.fetched_at.timestamp()
+    return age > STALE_AFTER.total_seconds()
+
+
 def resolve(
     *,
     departure: Departure,
@@ -163,7 +183,7 @@ def resolve(
         live=False,
         cancelled=False,
     )
-    if snapshot is None or now - snapshot.fetched_at > STALE_AFTER:
+    if snapshot is None or stale(snapshot=snapshot, now=now):
         return scheduled
     trip = trip_for(departure=departure, snapshot=snapshot)
     if trip is None or trip.start_date not in (None, departure.service_day):
@@ -185,11 +205,12 @@ def resolve(
         scheduled=departure.arrives,
         arrival=True,
     )
-    reach_delay = reach if reach is not None else leave or 0
+    leave_s = leave or 0
+    reach_s = reach if reach is not None else leave_s
     return LiveDeparture(
         departure=departure,
-        departs=departure.departs + timedelta(seconds=leave or 0),
-        arrives=departure.arrives + timedelta(seconds=reach_delay),
+        departs=shifted(moment=departure.departs, seconds=leave_s),
+        arrives=shifted(moment=departure.arrives, seconds=reach_s),
         live=leave is not None or reach is not None,
         cancelled=trip.cancelled,
     )

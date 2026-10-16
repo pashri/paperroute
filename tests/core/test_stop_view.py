@@ -1,8 +1,9 @@
 """Tests for the Stop view view-model."""
 
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 
 from paperroute.core.live import LiveDeparture
+from paperroute.core.model import SYDNEY
 from paperroute.core.stop_view import (
     HORIZON,
     ROWS_UNDER_BANNER,
@@ -250,3 +251,94 @@ def test_view_empty_is_none_with_departures() -> None:
 def test_horizon_is_three_hours() -> None:
     """The horizon the empty message quotes is three hours."""
     assert HORIZON == timedelta(hours=3)
+
+
+def test_clock_text_converts_to_sydney() -> None:
+    """A UTC moment reads as Sydney wall-clock time."""
+    moment = datetime(2026, 10, 15, 21, 5, tzinfo=UTC)
+    assert clock_text(moment=moment) == '8:05'
+
+
+def fall_back(*, minutes: int, ride: int) -> LiveDeparture:
+    """
+    A departure leaving some real minutes after 02:00 AEDT on fall-back night.
+
+    Parameters
+    ----------
+    minutes : int
+        Real minutes after 02:00 AEDT.
+    ride : int
+        Real ride minutes.
+
+    Returns
+    -------
+    LiveDeparture
+        Departure.
+    """
+    start = datetime(2026, 4, 5, 2, 0, tzinfo=SYDNEY).astimezone(UTC)
+    moment = start + timedelta(minutes=minutes)
+    arrives = moment + timedelta(minutes=ride)
+    dep = departure(departs=moment.astimezone(SYDNEY), ride=ride)
+    return LiveDeparture(
+        departure=dep,
+        departs=moment.astimezone(SYDNEY),
+        arrives=arrives.astimezone(SYDNEY),
+        live=True,
+        cancelled=False,
+    )
+
+
+def fall_back_view(
+    *, departures: tuple[LiveDeparture, ...], now: datetime
+) -> StopView:
+    """
+    Build a view on fall-back night.
+
+    Parameters
+    ----------
+    departures : tuple[LiveDeparture, ...]
+        Departures.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    StopView
+        View.
+    """
+    return build_stop_view(
+        origin='A',
+        destination='B',
+        departures=departures,
+        now=now,
+        scroll=0,
+        live_since=now,
+        has_feed=True,
+    )
+
+
+def test_view_ride_minutes_over_fall_back() -> None:
+    """A ride spanning the clocks going back counts real minutes."""
+    now = datetime(2026, 4, 5, 1, 50, tzinfo=SYDNEY)
+    result = fall_back_view(
+        departures=(fall_back(minutes=0, ride=90),), now=now
+    )
+    assert hero(result=result).ride_minutes == 90
+
+
+def test_view_drops_departure_gone_after_fall_back() -> None:
+    """A departure 5 real minutes ago is gone even if its clock reads later."""
+    gone = fall_back(minutes=58, ride=10)
+    now = datetime(2026, 4, 5, 2, 3, fold=1, tzinfo=SYDNEY)
+    result = fall_back_view(departures=(gone,), now=now)
+    assert result.hero is None
+    assert result.empty is not None
+
+
+def test_view_faster_compares_real_arrival_order() -> None:
+    """FASTER uses real time when arrivals straddle the clocks going back."""
+    slow = fall_back(minutes=30, ride=50)
+    quick = fall_back(minutes=40, ride=10)
+    now = datetime(2026, 4, 5, 1, 50, tzinfo=SYDNEY)
+    result = fall_back_view(departures=(slow, quick), now=now)
+    assert [row.pill for row in result.rows] == [Pill.FASTER]

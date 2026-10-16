@@ -1,0 +1,72 @@
+"""Tests for the TfNSW HTTP feed client, against a real local server."""
+
+from collections.abc import AsyncIterator
+from http import HTTPStatus
+
+import pytest
+from aiohttp import web
+from aiohttp.test_utils import TestServer
+
+from paperroute.adapters.tfnsw import AiohttpFeedsClient, FeedError
+
+
+async def feed_handler(request: web.Request) -> web.Response:
+    """
+    Serve bytes, or 429 when the key is wrong.
+
+    Parameters
+    ----------
+    request : web.Request
+        Incoming request.
+
+    Returns
+    -------
+    web.Response
+        Response.
+    """
+    if request.headers.get('Authorization') != 'apikey secret':
+        return web.Response(status=HTTPStatus.TOO_MANY_REQUESTS)
+    return web.Response(body=b'payload')
+
+
+@pytest.fixture(name='server')
+async def _server() -> AsyncIterator[TestServer]:
+    """
+    Run a local feed server.
+
+    Yields
+    ------
+    TestServer
+        Running server.
+    """
+    app = web.Application()
+    app.router.add_get('/v1/gtfs/realtime/buses', feed_handler)
+    server = TestServer(app)
+    await server.start_server()
+    yield server
+    await server.close()
+
+
+async def test_fetch_sends_key_and_returns_body(server: TestServer) -> None:
+    """The client sends the apikey header and returns the body."""
+    client = AiohttpFeedsClient(
+        api_key='secret', base_url=str(server.make_url('/'))
+    )
+    try:
+        assert await client.fetch(feed='v1/gtfs/realtime/buses') == b'payload'
+    finally:
+        await client.close()
+
+
+async def test_fetch_raises_feed_error_on_429(server: TestServer) -> None:
+    """Non-200 answers raise FeedError without the key in the message."""
+    client = AiohttpFeedsClient(
+        api_key='wrong', base_url=str(server.make_url('/'))
+    )
+    try:
+        with pytest.raises(FeedError) as caught:
+            await client.fetch(feed='v1/gtfs/realtime/buses')
+        assert '429' in str(caught.value)
+        assert 'wrong' not in str(caught.value)
+    finally:
+        await client.close()

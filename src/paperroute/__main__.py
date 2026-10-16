@@ -485,11 +485,15 @@ def main() -> None:
     """Run the Stop view for one pin in a window or in browsers."""
     args = parse_args()
     configure_logging(error_file=args.error_log)
-    feeds = feeds_client(choice=args.feeds)
-    if args.display == 'web':
-        web_main(args=args, feeds=feeds)
-    else:
-        tk_main(args=args, feeds=feeds)
+    try:
+        feeds = feeds_client(choice=args.feeds)
+        if args.display == 'web':
+            web_main(args=args, feeds=feeds)
+        else:
+            tk_main(args=args, feeds=feeds)
+    except Exception:
+        logger.exception('paperroute crashed')
+        raise
 
 
 if __name__ == '__main__':

@@ -2,10 +2,12 @@
 
 import argparse
 import asyncio
+import json
 import logging
 import signal
 import socket
 import sys
+from collections.abc import Iterator
 from datetime import date, datetime
 from http import HTTPStatus
 from pathlib import Path
@@ -13,7 +15,7 @@ from pathlib import Path
 import aiohttp
 import pytest
 
-from paperroute.__main__ import parse_args, serve_web, web_main
+from paperroute.__main__ import main, parse_args, serve_web, web_main
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
@@ -202,3 +204,42 @@ def test_web_main_logs_a_bind_failure(
             web_main(args=args, feeds=FileFeedsClient(directory=REAL))
     assert info.value.code == 1
     assert f'cannot serve on 127.0.0.1:{args.port}' in caplog.text
+
+
+@pytest.fixture(name='restored_logging')
+def _restored_logging() -> Iterator[None]:
+    """Put the root logger back after a test that configures it."""
+    root = logging.getLogger()
+    handlers, level = list(root.handlers), root.level
+    yield
+    for handler in list(root.handlers):
+        if handler not in handlers:
+            handler.close()
+    root.handlers[:] = handlers
+    root.setLevel(level)
+
+
+@pytest.mark.usefixtures('restored_logging')
+def test_main_logs_a_startup_crash_to_the_error_log(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A missing key file reaches errors.jsonl, then still propagates."""
+    key_file = tmp_path / 'no-such-key'
+    error_log = tmp_path / 'log' / 'errors.jsonl'
+    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(key_file))
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'paperroute', 'run', '--timetable', str(tmp_path / 'x.db'),
+            '--from', 'a', '--to', 'b', '--feeds', 'live',
+            '--error-log', str(error_log),
+        ],
+    )
+    with pytest.raises(FileNotFoundError):
+        main()
+    lines = error_log.read_text(encoding='utf-8').splitlines()
+    assert len(lines) == 1
+    record = json.loads(lines[0])
+    assert record['level'] == 'ERROR'
+    assert 'FileNotFoundError' in record['exc_info']

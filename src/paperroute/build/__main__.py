@@ -125,11 +125,10 @@ def run_refresh(*, args: argparse.Namespace) -> int:
         Exit status: 0 on success, 1 if busy or failed.
     """
     configure_logging(error_file=args.error_log)
-    api_key = api_key_from_env()
     try:
         report = refresh(
             data_dir=args.data_dir,
-            api_key=api_key,
+            api_key=api_key_from_env(),
             days=args.days,
             force=args.force,
         )

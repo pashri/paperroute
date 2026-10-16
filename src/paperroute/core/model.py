@@ -23,6 +23,15 @@ class Mode(StrEnum):
     OTHER = 'other'
 
 
+EXACT_MODES: Final[dict[int, Mode]] = {
+    2: Mode.TRAIN,
+    106: Mode.TRAIN,
+    401: Mode.METRO,
+    4: Mode.FERRY,
+    900: Mode.LIGHT_RAIL,
+}
+
+
 def mode_for(*, route_type: int, agency_id: str | None) -> Mode:
     """
     Find the mode of a route from its GTFS type and agency.
@@ -44,10 +53,8 @@ def mode_for(*, route_type: int, agency_id: str | None) -> Mode:
     """
     if agency_id in REGIONAL_AGENCIES:
         return Mode.REGIONAL
-    exact = {2: Mode.TRAIN, 106: Mode.TRAIN, 401: Mode.METRO,
-             4: Mode.FERRY, 900: Mode.LIGHT_RAIL}
-    if route_type in exact:
-        return exact[route_type]
+    if route_type in EXACT_MODES:
+        return EXACT_MODES[route_type]
     if 700 <= route_type < 800:
         return Mode.BUS
     return Mode.COACH if 200 <= route_type < 300 else Mode.OTHER

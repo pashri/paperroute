@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.core.model import (
+    SYDNEY,
     Departure,
     Pin,
     mode_for,
@@ -44,7 +45,8 @@ class SqliteTimetableRepository:
     path : Path | None
         Timetable file; defaults to the device location.
     connection : sqlite3.Connection | None
-        An open connection to use instead of opening path.
+        An open connection to use instead of opening path. close() closes
+        it too.
     """
 
     def __init__(
@@ -108,7 +110,9 @@ class SqliteTimetableRepository:
         list[Departure]
             In departure order.
         """
-        days = {start.date() - timedelta(days=1), start.date(), end.date()}
+        first = start.astimezone(SYDNEY).date()
+        last = end.astimezone(SYDNEY).date()
+        days = {first - timedelta(days=1), first, last}
         found = [
             departure
             for day in sorted(days)
@@ -177,7 +181,7 @@ def to_departure(*, row: tuple[object, ...], day: date) -> Departure:
      dseq, dstop, dep, arr, aliases) = row
     return Departure(
         trip_id=str(trip),
-        aliases=tuple(str(aliases).split()) if aliases else (),
+        aliases=tuple(sorted(str(aliases).split())) if aliases else (),
         route=str(route),
         mode=mode_for(
             route_type=int(str(route_type)),

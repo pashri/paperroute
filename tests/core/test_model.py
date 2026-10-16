@@ -59,3 +59,9 @@ def test_service_seconds_inverts_service_time() -> None:
     """Seconds since the epoch round-trip through a Sydney time."""
     moment = service_time(day=date(2026, 10, 4), seconds=90600)
     assert service_seconds(day=date(2026, 10, 4), moment=moment) == 90600
+
+
+def test_service_time_before_daylight_saving_start() -> None:
+    """A GTFS 01:00:00 on the change day is before the clocks jump."""
+    one = service_time(day=date(2026, 10, 4), seconds=3600)
+    assert one.astimezone(UTC) == datetime(2026, 10, 3, 14, tzinfo=UTC)

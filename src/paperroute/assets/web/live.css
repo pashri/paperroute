@@ -1,0 +1,107 @@
+:root {
+  color-scheme: light dark;
+  --page-bg: #f4f4f2;
+  --page-fg: #1b1b1b;
+  --muted: #5c5c5c;
+  --button-bg: #ffffff;
+  --button-border: #8a8a8a;
+  --focus: #0a58ca;
+  --font: system-ui, sans-serif;
+  --gap: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page-bg: #151515;
+    --page-fg: #e8e8e8;
+    --muted: #a0a0a0;
+    --button-bg: #262626;
+    --button-border: #6a6a6a;
+    --focus: #6ea8fe;
+  }
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+  max-width: 52rem;
+  margin: 0 auto;
+  padding: var(--gap);
+  background: var(--page-bg);
+  color: var(--page-fg);
+  font-family: var(--font);
+}
+
+main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gap);
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h2 {
+  font-size: 1rem;
+}
+
+.frame {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  image-rendering: pixelated;
+  background: #ffffff;
+  border: 1px solid var(--button-border);
+}
+
+.knobs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gap);
+}
+
+.knob {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+button {
+  min-width: 4.5rem;
+  min-height: 2.75rem;
+  padding: 0 0.75rem;
+  border: 1px solid var(--button-border);
+  border-radius: 0.375rem;
+  background: var(--button-bg);
+  color: inherit;
+  font: inherit;
+}
+
+button:active {
+  transform: translateY(1px);
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.hint,
+#status {
+  margin: 0;
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  button:active {
+    transform: none;
+  }
+}

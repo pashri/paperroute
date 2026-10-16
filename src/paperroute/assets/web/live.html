@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>paperroute</title>
+  <link rel="stylesheet" href="/live.css">
+  <script type="module" src="/live.js"></script>
+</head>
+<body>
+  <header>
+    <h1>paperroute</h1>
+  </header>
+  <main>
+    <img id="frame" class="frame" src="/frame.png" width="800" height="480"
+         alt="Device screen">
+    <div class="knobs">
+      <section class="knob" aria-labelledby="top-knob">
+        <h2 id="top-knob">Top knob</h2>
+        <div class="buttons">
+          <button type="button" data-knob="top" data-action="left"
+                  aria-label="Top knob, turn left">&#x27F2; Left</button>
+          <button type="button" data-knob="top" data-action="press"
+                  aria-label="Top knob, press">Press</button>
+          <button type="button" data-knob="top" data-action="right"
+                  aria-label="Top knob, turn right">Right &#x27F3;</button>
+        </div>
+      </section>
+      <section class="knob" aria-labelledby="bottom-knob">
+        <h2 id="bottom-knob">Bottom knob</h2>
+        <div class="buttons">
+          <button type="button" data-knob="bottom" data-action="left"
+                  aria-label="Bottom knob, turn left">&#x27F2; Left</button>
+          <button type="button" data-knob="bottom" data-action="press"
+                  aria-label="Bottom knob, press">Press</button>
+          <button type="button" data-knob="bottom" data-action="right"
+                  aria-label="Bottom knob, turn right">Right &#x27F3;</button>
+        </div>
+      </section>
+    </div>
+    <p class="hint">
+      Keys: <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> for the top knob,
+      <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> for the bottom knob.
+    </p>
+  </main>
+  <footer>
+    <p id="status" role="status">Status: -</p>
+  </footer>
+</body>
+</html>

@@ -1069,3 +1069,17 @@ def test_install_release_closes_lock_for_owner() -> None:
     found = commands(path=BIN / 'install-release', word='runuser')
     assert len(found) == 2
     assert all(command.endswith(' 9>&-') for command in found)
+
+
+def test_install_release_builds_with_copied_files() -> None:
+    """uv copies files, so the release shares no inode with the cache."""
+    found = commands(path=BIN / 'install-release', word='uv sync')
+    assert len(found) == 1
+    assert ' UV_LINK_MODE=copy ' in found[0]
+
+
+def test_install_release_hint_starts_the_refresh_without_blocking() -> None:
+    """The first-refresh hint doesn't hold the terminal for the build."""
+    text = script_text(path=BIN / 'install-release')
+    assert 'sudo systemctl start --no-block paperroute-timetable' in text
+    assert 'journalctl -fu paperroute-timetable' in text

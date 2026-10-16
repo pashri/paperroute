@@ -283,4 +283,5 @@ def load_source(*, conn: sqlite3.Connection, source: Source,
     insert_many(conn=conn,
                 sql='INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, ?, ?)',
                 rows=stop_time_rows(archive=source.archive, trips=trips))
+    conn.commit()
     return len(trips)

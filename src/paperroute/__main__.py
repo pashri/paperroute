@@ -77,6 +77,25 @@ def add_display_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument('--error-log', type=Path)
 
 
+def add_source_arguments(parser: argparse.ArgumentParser) -> None:
+    """
+    Add --feeds and --at.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        Parser to add to.
+    """
+    parser.add_argument(
+        '--feeds', default='live', help="'live' or a recordings directory"
+    )
+    parser.add_argument(
+        '--at',
+        type=datetime.fromisoformat,
+        help='replay from this Sydney time',
+    )
+
+
 def require_pin(*, args: argparse.Namespace) -> None:
     """
     Exit with a message if the origin or destination is missing.
@@ -90,6 +109,10 @@ def require_pin(*, args: argparse.Namespace) -> None:
         sys.exit(
             'give --from and --to, or set PAPERROUTE_FROM and PAPERROUTE_TO'
         )
+
+
+class BindError(Exception):
+    """The web server could not listen on its address."""
 
 
 def parse_args() -> argparse.Namespace:
@@ -107,14 +130,7 @@ def parse_args() -> argparse.Namespace:
     runner.add_argument('--timetable', type=Path, required=True)
     add_pin_arguments(runner)
     add_display_arguments(runner)
-    runner.add_argument(
-        '--feeds', default='live', help="'live' or a recordings directory"
-    )
-    runner.add_argument(
-        '--at',
-        type=datetime.fromisoformat,
-        help='replay from this Sydney time',
-    )
+    add_source_arguments(runner)
     args = parser.parse_args()
     require_pin(args=args)
     return args
@@ -270,6 +286,31 @@ def bind_web(
     install_stop_signals(loop=loop, post=post)
 
 
+async def listen(*, runner: web.AppRunner, host: str, port: int) -> None:
+    """
+    Start listening, logging the address if it can't be used.
+
+    Parameters
+    ----------
+    runner : web.AppRunner
+        Set-up runner.
+    host : str
+        Address to listen on.
+    port : int
+        Port to listen on.
+
+    Raises
+    ------
+    BindError
+        If the address can't be bound.
+    """
+    try:
+        await web.TCPSite(runner, host, port).start()
+    except OSError as error:
+        logger.exception('cannot serve on %s:%s', host, port)
+        raise BindError(f'cannot serve on {host}:{port}') from error
+
+
 async def serve_web(
     *,
     ports: Ports,
@@ -307,7 +348,7 @@ async def serve_web(
     runner = web.AppRunner(display.app(), shutdown_timeout=1.0)
     try:
         await runner.setup()
-        await web.TCPSite(runner, host, port).start()
+        await listen(runner=runner, host=host, port=port)
         await run(
             ports=ports,
             pin=pin,
@@ -384,7 +425,7 @@ def serve_or_exit(
     *, args: argparse.Namespace, ports: Ports, display: WebDisplay
 ) -> None:
     """
-    Serve the display; log the error and exit 1 if the port can't be used.
+    Serve the display; exit 1 if the port can't be used.
 
     Parameters
     ----------
@@ -405,8 +446,7 @@ def serve_or_exit(
                 port=args.port,
             )
         )
-    except OSError:
-        logger.exception('cannot serve on %s:%s', args.host, args.port)
+    except BindError:
         sys.exit(1)
 
 

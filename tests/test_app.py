@@ -17,6 +17,8 @@ from paperroute.app import Ports, perform, run
 from paperroute.build.timetable import Source, Window, build_timetable
 from paperroute.core.model import SYDNEY, Departure, Pin
 from paperroute.core.state import Event, FeedFailed, FetchFeed
+from paperroute.observers import NullObserver, Timings
+from paperroute.ports import Observer
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
@@ -265,6 +267,48 @@ async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
     assert display.frames
     assert state.departures
     assert 'v2/gtfs/realtime/sydneytrains' in state.snapshots
+
+
+async def test_run_reports_frames_feeds_and_ticks(tmp_path: Path) -> None:
+    """A Timings observer sees frames, the parsed train feed and ticks."""
+    db = tmp_path / 'timetable.db'
+    build_timetable(
+        sources=[
+            Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
+            Source(name='bundle', archive=REAL / 'bundle.zip'),
+        ],
+        window=Window(start=date(2026, 10, 16), days=1),
+        out=db,
+    )
+    timings = Timings()
+    observer: Observer = timings
+    timetable = SqliteTimetableRepository(path=db)
+    ports = Ports(
+        timetable=timetable,
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+        observer=observer,
+    )
+    try:
+        await run(ports=ports, pin=PIN, tick_every=0.01, max_events=60)
+    finally:
+        timetable.close()
+    assert timings.frames >= 1
+    assert 'v2/gtfs/realtime/sydneytrains' in timings.feeds
+    assert timings.feeds['v2/gtfs/realtime/sydneytrains'].trips > 0
+    assert timings.last_tick_monotonic is not None
+
+
+def test_ports_default_observer_is_silent() -> None:
+    """Ports built without an observer get one that ignores events."""
+    ports = Ports(
+        timetable=BrokenTimetable(),
+        feeds=CrashingFeeds(),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+    )
+    assert isinstance(ports.observer, NullObserver)
 
 
 async def test_run_survives_unexpected_load_error(

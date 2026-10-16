@@ -4,8 +4,10 @@ import asyncio
 import functools
 import logging
 import sqlite3
-from collections.abc import Callable
-from dataclasses import dataclass
+import time
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass, field
+from typing import Final
 
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.tfnsw import FeedError
@@ -26,7 +28,15 @@ from paperroute.core.state import (
     initial_state,
     step,
 )
-from paperroute.ports import Clock, Display, FeedsClient, TimetableRepository
+from paperroute.core.stop_view import StopView
+from paperroute.observers import NullObserver
+from paperroute.ports import (
+    Clock,
+    Display,
+    FeedsClient,
+    Observer,
+    TimetableRepository,
+)
 from paperroute.render.stop_view import draw_stop_view
 
 logger = logging.getLogger(__name__)
@@ -40,6 +50,29 @@ class Ports:
     feeds: FeedsClient
     display: Display
     clock: Clock
+    observer: Observer = field(default_factory=NullObserver)
+
+
+MS_PER_SECOND: Final[float] = 1000.0
+
+
+async def timed_async[T](*, call: Awaitable[T]) -> tuple[T, float]:
+    """
+    Await a call and measure how long it took.
+
+    Parameters
+    ----------
+    call : Awaitable[T]
+        Awaitable to run.
+
+    Returns
+    -------
+    tuple[T, float]
+        The result and the elapsed milliseconds.
+    """
+    started = time.perf_counter()
+    result = await call
+    return result, (time.perf_counter() - started) * MS_PER_SECOND
 
 
 async def load(
@@ -89,9 +122,13 @@ async def fetch(
         Event queue.
     """
     try:
-        data = await ports.feeds.fetch(feed=effect.feed)
-        snapshot = await asyncio.to_thread(
-            parse_trip_updates, data=data, fetched_at=ports.clock.now()
+        data, fetch_ms = await timed_async(
+            call=ports.feeds.fetch(feed=effect.feed)
+        )
+        snapshot, parse_ms = await timed_async(
+            call=asyncio.to_thread(
+                parse_trip_updates, data=data, fetched_at=ports.clock.now()
+            )
         )
     except FeedError as error:
         logger.warning('feed failed: %s', error)
@@ -100,7 +137,41 @@ async def fetch(
         )
         await queue.put(failed)
         return
+    logger.info(
+        'feed parsed',
+        extra={
+            'feed': effect.feed,
+            'fetch_ms': fetch_ms,
+            'parse_ms': parse_ms,
+            'trips': len(snapshot.trips),
+        },
+    )
+    ports.observer.feed_parsed(
+        feed=effect.feed,
+        fetch_ms=fetch_ms,
+        parse_ms=parse_ms,
+        trips=len(snapshot.trips),
+    )
     await queue.put(FeedFetched(feed=effect.feed, snapshot=snapshot))
+
+
+async def render(*, ports: Ports, view: StopView) -> None:
+    """
+    Draw the Stop view, show it and report how long drawing took.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters.
+    view : StopView
+        View to draw.
+    """
+    frame, render_ms = await timed_async(
+        call=asyncio.to_thread(draw_stop_view, view=view)
+    )
+    ports.display.show(frame=frame)
+    logger.info('frame drawn', extra={'render_ms': render_ms})
+    ports.observer.frame_drawn(render_ms=render_ms)
 
 
 async def perform(
@@ -134,8 +205,7 @@ async def perform(
                 feed=feed, at=ports.clock.now(), reason='unexpected error'
             )
         case Render(view=view):
-            frame = await asyncio.to_thread(draw_stop_view, view=view)
-            ports.display.show(frame=frame)
+            await render(ports=ports, view=view)
             return
         case _:
             return
@@ -222,6 +292,7 @@ async def ticker(
     while True:
         if elapsed >= every:
             await queue.put(Tick(now=ports.clock.now()))
+            ports.observer.ticked()
             elapsed = 0.0
         if pump:
             pump()

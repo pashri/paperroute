@@ -1,12 +1,14 @@
 """Tests for the nightly timetable refresh."""
 
 import fcntl
+import hashlib
 import json
+import os
 import sqlite3
 import zipfile
 from collections.abc import Iterator
 from contextlib import closing
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Final
 
@@ -21,7 +23,8 @@ from tests.build.feeds import bus_feed
 REAL: Final[Path] = Path(__file__).parent.parent / 'fixtures' / 'real'
 KEY: Final[str] = 'secret-key-0123456789'
 METRO: Final[str] = '/v2/gtfs/schedule/metro'
-DAYS: Final[int] = 2
+DAYS: Final[int] = 9
+START: Final[date] = date(2026, 10, 16)
 
 
 def metro_zip(*, tmp_path: Path, comment: bytes = b'') -> bytes:
@@ -95,7 +98,7 @@ def _data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(
         refresh_module,
         'yesterday',
-        lambda: date(2026, 10, 16),
+        lambda: START,
     )
     path = tmp_path / 'data'
     path.mkdir()
@@ -305,3 +308,100 @@ def test_integrity_failure_keeps_old(
     with pytest.raises(TimetableCheckError):
         run(server=server, data_dir=data_dir)
     assert snapshot(data_dir=data_dir) == before
+
+
+def test_truncated_stored_zip_is_downloaded_again(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """A stored zip that no longer matches its digest is replaced."""
+    run(server=server, data_dir=data_dir)
+    stored = data_dir / 'sources' / 'metro.zip'
+    stored.write_bytes(stored.read_bytes()[:100])
+    server.state.hits.clear()
+    report = run(server=server, data_dir=data_dir)
+    assert server.state.hits['GET'] == 1
+    assert report.downloaded == ('metro',)
+    assert report.changed == ('metro',)
+    assert report.rebuilt
+    assert stored.read_bytes() == server.state.files[METRO].body
+
+
+def test_window_running_out_rebuilds_from_stored_zips(
+    server: FeedServer,
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Fewer than a week left in the window rebuilds with no download."""
+    run(server=server, data_dir=data_dir)
+    later = START + timedelta(days=DAYS - 4)
+    monkeypatch.setattr(refresh_module, 'yesterday', lambda: later)
+    server.state.hits.clear()
+    report = run(server=server, data_dir=data_dir)
+    assert server.state.hits == {'HEAD': 3}
+    assert report.rebuilt
+    with closing(sqlite3.connect(data_dir / 'timetable.db')) as conn:
+        (start,) = conn.execute(
+            "SELECT value FROM meta WHERE key = 'window_start'",
+        ).fetchone()
+    assert start == later.isoformat()
+
+
+def test_crash_before_states_saved_rebuilds_next_run(
+    server: FeedServer,
+    data_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Dying after the swap but before the save heals on the next run."""
+    run(server=server, data_dir=data_dir)
+    server.state.files[METRO] = Served(
+        body=metro_zip(tmp_path=tmp_path, comment=b'v2'),
+        etag='"2"',
+    )
+
+    def crash(**_: object) -> None:
+        raise OSError('power cut')
+
+    with monkeypatch.context() as patch:
+        patch.setattr(refresh_module, 'save_states', crash)
+        with pytest.raises(OSError, match='power cut'):
+            run(server=server, data_dir=data_dir)
+    report = run(server=server, data_dir=data_dir)
+    assert report.rebuilt
+    states = json.loads(
+        (data_dir / 'sources' / 'sources.json').read_text(encoding='utf-8'),
+    )
+    for name, state in states.items():
+        zip_bytes = (data_dir / 'sources' / f'{name}.zip').read_bytes()
+        assert state['sha256'] == hashlib.sha256(zip_bytes).hexdigest()
+    assert states['metro']['etag'] == '"2"'
+
+
+def test_swap_fsyncs_sources_directory(
+    server: FeedServer,
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The renames into sources/ are flushed before the states are saved."""
+    synced: list[int] = []
+    real_fsync = os.fsync
+
+    def fsync(fd: int) -> None:
+        synced.append(os.fstat(fd).st_ino)
+        real_fsync(fd)
+
+    monkeypatch.setattr(os, 'fsync', fsync)
+    run(server=server, data_dir=data_dir)
+    assert (data_dir / 'sources').stat().st_ino in synced
+
+
+def test_work_is_emptied_after_a_run(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """A downloaded but unchanged zip doesn't stay in work/."""
+    run(server=server, data_dir=data_dir)
+    server.state.files[METRO].etag = '"2"'
+    run(server=server, data_dir=data_dir)
+    assert not list((data_dir / 'work').iterdir())

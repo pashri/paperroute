@@ -1,6 +1,7 @@
 """Tests for fetching and recording the timetable sources."""
 
 import hashlib
+import os
 import traceback
 from collections.abc import Iterator
 from http import HTTPStatus
@@ -148,6 +149,32 @@ def test_download_streams_and_hashes(
     )
     assert digest == hashlib.sha256(body).hexdigest()
     assert out.read_bytes() == body
+
+
+def test_download_fsyncs_zip(
+    server: FeedServer,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The zip is on disk, not just in the page cache, when it returns."""
+    synced: list[int] = []
+    real_fsync = os.fsync
+
+    def fsync(fd: int) -> None:
+        synced.append(os.fstat(fd).st_ino)
+        real_fsync(fd)
+
+    monkeypatch.setattr(os, 'fsync', fsync)
+    server.state.files['/' + SPEC.path] = Served(body=b'zip')
+    out = tmp_path / 'metro.zip'
+    download(
+        base_url=server.base_url,
+        spec=SPEC,
+        api_key=KEY,
+        out=out,
+        timeout_s=5,
+    )
+    assert out.stat().st_ino in synced
 
 
 def test_download_error_hides_key(server: FeedServer, tmp_path: Path) -> None:

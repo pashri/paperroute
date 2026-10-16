@@ -8,6 +8,7 @@ import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import dataclass, replace
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Final
 
@@ -17,6 +18,8 @@ from paperroute.build.sources import (
     SourceSpec,
     SourceState,
     download,
+    file_sha256,
+    fsync_dir,
     head,
     load_states,
     needs_download,
@@ -32,6 +35,7 @@ from paperroute.observers import max_rss_mb
 
 MIN_TRIPS: Final[int] = 1000
 TIMEOUT_S: Final[float] = 60
+MIN_DAYS_LEFT: Final[int] = 7
 
 
 @dataclass(frozen=True)
@@ -202,10 +206,10 @@ def head_all(*, base_url: str, api_key: str) -> dict[str, SourceState]:
     }
 
 
-def stored_sha(*, layout: Layout, name: str,
+def intact_sha(*, layout: Layout, name: str,
                stored: dict[str, SourceState]) -> str | None:
     """
-    The stored SHA-256 of a source, if its zip is still on disk.
+    The stored SHA-256 of a source, if its zip on disk still matches it.
 
     Parameters
     ----------
@@ -219,11 +223,14 @@ def stored_sha(*, layout: Layout, name: str,
     Returns
     -------
     str | None
-        The digest, or None when there's no state or no zip.
+        The digest, or None when there's no state, no zip, or the zip's
+        bytes no longer hash to the stored digest.
     """
-    if not (layout.sources / f'{name}.zip').exists() or name not in stored:
+    path = layout.sources / f'{name}.zip'
+    expected = stored[name].sha256 if name in stored else None
+    if expected is None or not path.exists():
         return None
-    return stored[name].sha256
+    return expected if file_sha256(path=path) == expected else None
 
 
 def fetch_source(
@@ -234,6 +241,7 @@ def fetch_source(
     api_key: str,
     fresh: SourceState,
     stored: SourceState | None,
+    intact: str | None,
 ) -> tuple[SourceState, bool]:
     """
     Download one source into the scratch directory if its headers changed.
@@ -252,6 +260,8 @@ def fetch_source(
         Validators from a new HEAD.
     stored : SourceState | None
         State saved after the last download.
+    intact : str | None
+        Digest of the stored zip if it is intact, else None.
 
     Returns
     -------
@@ -262,9 +272,9 @@ def fetch_source(
     if not needs_download(
         stored=stored,
         fresh=fresh,
-        zip_exists=(layout.sources / f'{spec.name}.zip').exists(),
+        zip_exists=intact is not None,
     ):
-        return replace(fresh, sha256=stored.sha256 if stored else None), False
+        return replace(fresh, sha256=intact), False
     progress(phase=f'download {spec.name}')
     digest = download(
         base_url=base_url,
@@ -287,7 +297,7 @@ def download_changed(
     Download the sources whose headers changed into the scratch directory.
 
     A source counts as changed when its new digest differs from the
-    stored one, or its stored zip is missing.
+    stored one, or its stored zip is missing or no longer matches.
 
     Parameters
     ----------
@@ -306,6 +316,10 @@ def download_changed(
         New states, and which sources were downloaded and which changed.
     """
     stored = load_states(path=layout.states)
+    intact = {
+        spec.name: intact_sha(layout=layout, name=spec.name, stored=stored)
+        for spec in SOURCES
+    }
     results = {
         spec.name: fetch_source(
             layout=layout,
@@ -314,6 +328,7 @@ def download_changed(
             api_key=api_key,
             fresh=fresh[spec.name],
             stored=stored.get(spec.name),
+            intact=intact[spec.name],
         )
         for spec in SOURCES
     }
@@ -324,8 +339,7 @@ def download_changed(
         changed=tuple(
             name
             for name in downloaded
-            if results[name][0].sha256
-            != stored_sha(layout=layout, name=name, stored=stored)
+            if results[name][0].sha256 != intact[name]
         ),
     )
 
@@ -411,9 +425,40 @@ def swap_in(*, layout: Layout, built: Path, fetched: Fetched) -> None:
     """
     progress(phase='swap')
     os.replace(built, layout.timetable)
+    fsync_dir(path=layout.data_dir)
     for name in fetched.changed:
         os.replace(layout.work / f'{name}.zip', layout.sources / f'{name}.zip')
+    fsync_dir(path=layout.sources)
     save_states(path=layout.states, states=fetched.states)
+
+
+def days_left(*, path: Path) -> int:
+    """
+    Count the days from today in Sydney to the end of a timetable window.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file.
+
+    Returns
+    -------
+    int
+        Days left, or 0 when the file or its window can't be read.
+    """
+    try:
+        with closing(
+            sqlite3.connect(f'file:{path}?mode=ro', uri=True),
+        ) as conn:
+            meta = dict(conn.execute('SELECT key, value FROM meta'))
+    except sqlite3.Error:
+        return 0
+    if 'window_start' not in meta or 'window_days' not in meta:
+        return 0
+    end = date.fromisoformat(meta['window_start']) + timedelta(
+        days=int(meta['window_days']),
+    )
+    return (end - yesterday()).days - 1
 
 
 def update(*, layout: Layout, fetched: Fetched, days: int,
@@ -435,9 +480,12 @@ def update(*, layout: Layout, fetched: Fetched, days: int,
     Returns
     -------
     bool
-        Whether the timetable was rebuilt.
+        Whether the timetable was rebuilt. It is rebuilt when a source
+        changed, when forced, or when there is no timetable or fewer than
+        MIN_DAYS_LEFT days remain in its window.
     """
-    if not (fetched.changed or force or not layout.timetable.exists()):
+    stale = days_left(path=layout.timetable) < MIN_DAYS_LEFT
+    if not (fetched.changed or force or stale):
         save_states(path=layout.states, states=fetched.states)
         return False
     built = build_and_check(layout=layout, changed=fetched.changed, days=days)
@@ -482,14 +530,17 @@ def refresh(
     with refresh_lock(path=data_dir / 'refresh.lock'):
         clear_work(work=layout.work)
         layout.sources.mkdir(exist_ok=True)
-        fetched = download_changed(
-            layout=layout,
-            base_url=base_url,
-            api_key=api_key,
-            fresh=head_all(base_url=base_url, api_key=api_key),
-        )
-        rebuilt = update(layout=layout, fetched=fetched, days=days,
-                         force=force)
+        try:
+            fetched = download_changed(
+                layout=layout,
+                base_url=base_url,
+                api_key=api_key,
+                fresh=head_all(base_url=base_url, api_key=api_key),
+            )
+            rebuilt = update(layout=layout, fetched=fetched, days=days,
+                             force=force)
+        finally:
+            clear_work(work=layout.work)
     return RefreshReport(
         downloaded=fetched.downloaded,
         changed=fetched.changed,

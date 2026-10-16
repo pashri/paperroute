@@ -55,7 +55,24 @@ class FeedServer(ThreadingHTTPServer):
 class FeedHandler(BaseHTTPRequestHandler):
     """Serve FeedState files, redirects and failures."""
 
-    server: FeedServer
+    @property
+    def feeds(self) -> FeedServer:
+        """
+        The server this handler belongs to.
+
+        Returns
+        -------
+        FeedServer
+            The server, with its FeedState.
+
+        Raises
+        ------
+        TypeError
+            If the handler was mounted on another kind of server.
+        """
+        if not isinstance(self.server, FeedServer):
+            raise TypeError(f'not a FeedServer: {type(self.server)}')
+        return self.server
 
     def log_message(  # pylint: disable=arguments-differ
         self,
@@ -90,7 +107,7 @@ class FeedHandler(BaseHTTPRequestHandler):
         send_body : bool
             Whether to write the body.
         """
-        state = self.server.state
+        state = self.feeds.state
         state.hits[self.command] += 1
         state.auth_seen[self.path] = self.headers.get('Authorization')
         if state.status is not None:
@@ -102,7 +119,7 @@ class FeedHandler(BaseHTTPRequestHandler):
 
     def redirect(self) -> None:
         """Send a redirect to the same port on a different host name."""
-        port = self.server.server_address[1]
+        port = self.feeds.server_address[1]
         self.send_response(HTTPStatus.FOUND)
         self.send_header('Location', f'http://localhost:{port}{TARGET}')
         self.send_header('Content-Length', '0')
@@ -128,7 +145,7 @@ class FeedHandler(BaseHTTPRequestHandler):
         self.end_headers()
         if not send_body:
             return
-        if self.path in self.server.state.fail_midway:
+        if self.path in self.feeds.state.fail_midway:
             self.wfile.write(served.body[:len(served.body) // 2])
             self.close_connection = True
             return

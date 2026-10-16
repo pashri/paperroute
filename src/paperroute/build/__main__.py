@@ -139,6 +139,10 @@ def run_refresh(*, args: argparse.Namespace) -> int:
     except REFRESH_ERRORS:
         logger.exception('refresh failed')
         return 1
+    # Last resort at the process edge, so any crash reaches errors.jsonl.
+    except Exception:  # pylint: disable=broad-exception-caught
+        logger.exception('refresh failed unexpectedly')
+        return 1
     print(json.dumps(asdict(report)))
     return 0
 

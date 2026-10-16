@@ -228,9 +228,48 @@ def stream_to(*, response: http.client.HTTPResponse, out: Path) -> str:
         for chunk in iter(partial(response.read, CHUNK_BYTES), b''):
             digest.update(chunk)
             file.write(chunk)
+        file.flush()
+        os.fsync(file.fileno())
     if response.length:
         raise http.client.IncompleteRead(partial=b'', expected=response.length)
     return digest.hexdigest()
+
+
+def file_sha256(*, path: Path) -> str:
+    """
+    Hash a file in chunks.
+
+    Parameters
+    ----------
+    path : Path
+        File to read.
+
+    Returns
+    -------
+    str
+        SHA-256 hex digest.
+    """
+    digest = hashlib.sha256()
+    with path.open('rb') as file:
+        for chunk in iter(partial(file.read, CHUNK_BYTES), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def fsync_dir(*, path: Path) -> None:
+    """
+    Flush a directory's entries, so renames into it survive a power cut.
+
+    Parameters
+    ----------
+    path : Path
+        Directory.
+    """
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
 
 
 def download(

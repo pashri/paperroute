@@ -58,7 +58,11 @@ make_dir() {
 
 # Inside a service-owned directory, so made as the service user, not root.
 make_service_dir() {
-    runuser -u paperroute -- install -d -m 0750 "$1"
+    if ! setsid -w runuser -u paperroute -- install -d -m 0750 "$1" \
+        </dev/null >/dev/null 2>&1; then
+        printf 'provision-device: paperroute could not create %s\n' "$1" >&2
+        exit 1
+    fi
 }
 
 install_uv() {

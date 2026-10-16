@@ -57,7 +57,7 @@ build() {
     runuser -u "$OWNER" -- env \
         UV_PYTHON_INSTALL_DIR="$OPT/python" UV_PYTHON_DOWNLOADS=never \
         uv sync --frozen --no-dev --no-editable --compile-bytecode \
-        --project "$TREE"
+        --project "$TREE" 9>&-
 }
 
 # Moves the tree out of the owner's reach before making it root's.
@@ -154,7 +154,7 @@ trap cleanup EXIT
 
 build
 if [[ $(readlink -- "$CURRENT" || true) == "$R/$SHA" ]]; then
-    runuser -u "$OWNER" -- rm -rf -- "$TREE"
+    runuser -u "$OWNER" -- rm -rf -- "$TREE" 9>&-
 else
     take_over
 fi

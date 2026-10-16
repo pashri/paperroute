@@ -82,6 +82,7 @@ APP_SERVICE: Final[dict[str, str]] = {
     'ReadWritePaths': '/var/lib/paperroute',
     'ProtectHome': 'yes',
     'PrivateTmp': 'yes',
+    'SystemCallFilter': '~@debug',
 }
 TIMETABLE_SERVICE: Final[dict[str, str]] = {
     'Type': 'oneshot',
@@ -106,6 +107,7 @@ TIMETABLE_SERVICE: Final[dict[str, str]] = {
     'ReadWritePaths': '/var/lib/paperroute',
     'ProtectHome': 'yes',
     'PrivateTmp': 'yes',
+    'SystemCallFilter': '~@debug',
 }
 UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
     'paperroute.service': {
@@ -326,6 +328,31 @@ def script_value(path: Path, name: str) -> str:
     )
     assert found is not None
     return found.group(1)
+
+
+def commands(path: Path, word: str) -> list[str]:
+    """
+    Find a script's commands that use a word, with continuations joined.
+
+    Parameters
+    ----------
+    path : Path
+        The script.
+    word : str
+        The word to look for, such as a program name.
+
+    Returns
+    -------
+    list[str]
+        Each matching command on one line.
+    """
+    joined = script_text(path=path).replace('\\\n', ' ')
+    return [
+        ' '.join(line.split())
+        for line in joined.splitlines()
+        if re.search(pattern=rf'\b{word}\b', string=line)
+        and not line.lstrip().startswith('#')
+    ]
 
 
 def environment_names(unit: dict[str, dict[str, str]]) -> set[str]:
@@ -1020,3 +1047,25 @@ def test_provision_rejects_odd_entries(tmp_path: Path) -> None:
         'provision-device: DIR may hold only regular files and'
         ' directories\n',
     )
+
+
+def test_service_units_block_debug_syscalls() -> None:
+    """Both paperroute services refuse ptrace and the other debug calls."""
+    for name in ('paperroute.service', 'paperroute-timetable.service'):
+        service = read_unit(name=name)['Service']
+        assert service['SystemCallFilter'] == '~@debug'
+
+
+def test_provision_runs_service_user_detached() -> None:
+    """runuser in provision gets no terminal, so it can't inject input."""
+    assert commands(path=BIN / 'provision-device', word='runuser') == [
+        'if ! setsid -w runuser -u paperroute -- install -d -m 0750 "$1"'
+        ' </dev/null >/dev/null 2>&1; then',
+    ]
+
+
+def test_install_release_closes_lock_for_owner() -> None:
+    """The stage owner's commands never inherit the install lock's fd."""
+    found = commands(path=BIN / 'install-release', word='runuser')
+    assert len(found) == 2
+    assert all(command.endswith(' 9>&-') for command in found)

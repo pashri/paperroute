@@ -24,3 +24,4 @@ ProtectSystem=strict
 ReadWritePaths=/var/lib/paperroute
 ProtectHome=yes
 PrivateTmp=yes
+SystemCallFilter=~@debug

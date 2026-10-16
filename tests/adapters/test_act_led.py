@@ -28,3 +28,15 @@ def test_led_missing_sysfs_warns_once(
         led.frame_drawn(render_ms=1.0)
     warnings = [r for r in caplog.records if r.levelno == logging.WARNING]
     assert len(warnings) == 1
+
+
+def test_led_unwritable_trigger_warns_once(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A trigger that cannot be written logs one warning, no raise."""
+    (tmp_path / 'trigger').mkdir()
+    led = ActLed(root=tmp_path)
+    with caplog.at_level(logging.WARNING):
+        led.frame_drawn(render_ms=1.0)
+        led.frame_drawn(render_ms=1.0)
+    assert len(caplog.records) == 1

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters.systemd import SystemdNotifier
+from paperroute.adapters.systemd import SystemdNotifier, notify_address
 
 
 @pytest.fixture(name='sock_dir')
@@ -66,3 +66,46 @@ def test_notifier_logs_and_continues_when_socket_gone(
         notifier.frame_drawn(render_ms=1.0)
         notifier.ticked()
     assert any(r.levelno == logging.WARNING for r in caplog.records)
+
+
+def test_notify_address_maps_abstract_namespace() -> None:
+    """A leading '@' becomes a NUL; a filesystem path is unchanged."""
+    assert notify_address(path='@/org/x') == '\x00/org/x'
+    assert notify_address(path='/run/x') == '/run/x'
+
+
+def test_notifier_retries_ready_after_failed_send(sock_dir: Path) -> None:
+    """READY=1 is resent on the next frame if the first send failed."""
+    path = sock_dir / 'n.sock'
+    notifier = SystemdNotifier(socket_path=str(path))
+    notifier.frame_drawn(render_ms=1.0)
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as server:
+        server.bind(str(path))
+        server.settimeout(1)
+        notifier.frame_drawn(render_ms=1.0)
+        notifier.frame_drawn(render_ms=1.0)
+        assert server.recv(64) == b'READY=1'
+        server.settimeout(0.1)
+        with pytest.raises(TimeoutError):
+            server.recv(64)
+
+
+def test_notifier_warns_once_per_outage(
+    sock_dir: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Repeated failures log once; a success re-arms the warning."""
+    path = sock_dir / 'n.sock'
+    notifier = SystemdNotifier(socket_path=str(path))
+    with caplog.at_level(logging.WARNING):
+        for _ in range(3):
+            notifier.ticked()
+    assert len(caplog.records) == 1
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as server:
+        server.bind(str(path))
+        notifier.ticked()
+    path.unlink()
+    caplog.clear()
+    with caplog.at_level(logging.WARNING):
+        notifier.ticked()
+        notifier.ticked()
+    assert len(caplog.records) == 1

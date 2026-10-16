@@ -2,14 +2,12 @@
 
 import argparse
 import asyncio
-import os
-import sys
 from datetime import datetime
 from pathlib import Path
 
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.feed_files import FileFeedsClient
-from paperroute.adapters.tfnsw import AiohttpFeedsClient
+from paperroute.adapters.tfnsw import AiohttpFeedsClient, api_key_from_env
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.tk_monitor import TkMonitor
 from paperroute.app import Ports, run
@@ -79,14 +77,7 @@ def feeds_client(*, choice: str) -> FeedsClient:
     """
     if choice != 'live':
         return FileFeedsClient(directory=Path(choice))
-    key_file = os.getenv('PAPERROUTE_API_KEY_FILE')
-    if not key_file:
-        sys.exit(
-            'Set PAPERROUTE_API_KEY_FILE to the file holding the '
-            'TfNSW API key.'
-        )
-    key = Path(key_file).expanduser().read_text(encoding='utf-8').strip()
-    return AiohttpFeedsClient(api_key=key)
+    return AiohttpFeedsClient(api_key=api_key_from_env())
 
 
 async def show(*, ports: Ports, pin: Pin, monitor: TkMonitor) -> None:

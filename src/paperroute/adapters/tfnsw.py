@@ -1,6 +1,9 @@
 """Fetch GTFS-realtime feeds from the TfNSW Open Data API."""
 
+import os
+import sys
 from http import HTTPStatus
+from pathlib import Path
 from typing import Final
 
 import aiohttp
@@ -10,6 +13,26 @@ BASE_URL: Final[str] = 'https://api.transport.nsw.gov.au/'
 
 class FeedError(Exception):
     """A feed couldn't be fetched."""
+
+
+def api_key_from_env() -> str:
+    """
+    Read the TfNSW key from the file named by PAPERROUTE_API_KEY_FILE.
+
+    Exits with a message when the variable is unset.
+
+    Returns
+    -------
+    str
+        The key.
+    """
+    key_file = os.getenv('PAPERROUTE_API_KEY_FILE')
+    if not key_file:
+        sys.exit(
+            'Set PAPERROUTE_API_KEY_FILE to the file holding the '
+            'TfNSW API key.'
+        )
+    return Path(key_file).expanduser().read_text(encoding='utf-8').strip()
 
 
 class AiohttpFeedsClient:

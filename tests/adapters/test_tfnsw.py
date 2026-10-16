@@ -3,13 +3,18 @@
 import asyncio
 from collections.abc import AsyncIterator
 from http import HTTPStatus
+from pathlib import Path
 
 import aiohttp
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from paperroute.adapters.tfnsw import AiohttpFeedsClient, FeedError
+from paperroute.adapters.tfnsw import (
+    AiohttpFeedsClient,
+    FeedError,
+    api_key_from_env,
+)
 
 
 async def feed_handler(request: web.Request) -> web.Response:
@@ -124,3 +129,23 @@ async def test_fetch_raises_feed_error_on_timeout() -> None:
     finally:
         await client.close()
         await server.close()
+
+
+def test_api_key_from_env_reads_named_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The key is the named file's text without surrounding whitespace."""
+    key_file = tmp_path / 'secrets'
+    key_file.write_text('test-key\n', encoding='utf-8')
+    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(key_file))
+    assert api_key_from_env() == 'test-key'
+
+
+def test_api_key_from_env_exits_when_unset(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With no key file named, the process exits with a message."""
+    monkeypatch.delenv('PAPERROUTE_API_KEY_FILE', raising=False)
+    with pytest.raises(SystemExit, match='PAPERROUTE_API_KEY_FILE'):
+        api_key_from_env()

@@ -1,0 +1,307 @@
+"""Tests for the nightly timetable refresh."""
+
+import fcntl
+import json
+import sqlite3
+import zipfile
+from collections.abc import Iterator
+from contextlib import closing
+from datetime import date
+from pathlib import Path
+from typing import Final
+
+import pytest
+
+from paperroute.build import refresh as refresh_module
+from paperroute.build.refresh import RefreshBusy, TimetableCheckError, refresh
+from paperroute.build.sources import SOURCES, SourceError
+from tests.build.feed_server import FeedServer, Served, feed_server
+from tests.build.feeds import bus_feed
+
+REAL: Final[Path] = Path(__file__).parent.parent / 'fixtures' / 'real'
+KEY: Final[str] = 'secret-key-0123456789'
+METRO: Final[str] = '/v2/gtfs/schedule/metro'
+DAYS: Final[int] = 2
+
+
+def metro_zip(*, tmp_path: Path, comment: bytes = b'') -> bytes:
+    """
+    A small feed standing in for Metro.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Directory for the zip.
+    comment : bytes
+        Zip comment, to change the bytes but not the contents.
+
+    Returns
+    -------
+    bytes
+        The zip file.
+    """
+    path = bus_feed(path=tmp_path / 'metro-src.zip')
+    with zipfile.ZipFile(path, 'a') as archive:
+        archive.comment = comment
+    return path.read_bytes()
+
+
+@pytest.fixture(name='server')
+def _server(tmp_path: Path) -> Iterator[FeedServer]:
+    """
+    A feed server holding all three sources.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Directory for the Metro zip.
+
+    Yields
+    ------
+    FeedServer
+        Server, closed after the test.
+    """
+    bodies = {
+        'sydneytrains': (REAL / 'sydneytrains.zip').read_bytes(),
+        'metro': metro_zip(tmp_path=tmp_path),
+        'bundle': (REAL / 'bundle.zip').read_bytes(),
+    }
+    with feed_server() as server:
+        for spec in SOURCES:
+            server.state.files['/' + spec.path] = Served(
+                body=bodies[spec.name],
+            )
+        yield server
+
+
+@pytest.fixture(name='data_dir')
+def _data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """
+    An empty data directory, a fixed window start and a low trip floor.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Test directory.
+    monkeypatch : pytest.MonkeyPatch
+        Patcher.
+
+    Returns
+    -------
+    Path
+        The data directory.
+    """
+    monkeypatch.setattr(refresh_module, 'MIN_TRIPS', 1)
+    monkeypatch.setattr(
+        refresh_module,
+        'yesterday',
+        lambda: date(2026, 10, 16),
+    )
+    path = tmp_path / 'data'
+    path.mkdir()
+    return path
+
+
+def run(
+    *,
+    server: FeedServer,
+    data_dir: Path,
+    force: bool = False,
+) -> refresh_module.RefreshReport:
+    """
+    Refresh a two-day timetable against the test server.
+
+    Parameters
+    ----------
+    server : FeedServer
+        Feed server.
+    data_dir : Path
+        Data directory.
+    force : bool
+        Rebuild even when nothing changed.
+
+    Returns
+    -------
+    refresh_module.RefreshReport
+        The refresh's report.
+    """
+    return refresh(
+        data_dir=data_dir,
+        api_key=KEY,
+        base_url=server.base_url,
+        days=DAYS,
+        force=force,
+    )
+
+
+def snapshot(*, data_dir: Path) -> dict[str, bytes]:
+    """
+    The bytes of the timetable, the stored zips and the states.
+
+    Parameters
+    ----------
+    data_dir : Path
+        Data directory.
+
+    Returns
+    -------
+    dict[str, bytes]
+        Relative path to contents.
+    """
+    files = [data_dir / 'timetable.db', *(data_dir / 'sources').iterdir()]
+    return {
+        str(path.relative_to(data_dir)): path.read_bytes()
+        for path in files
+    }
+
+
+def test_refresh_refuses_concurrent_run(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """A held lock stops a second refresh before any request."""
+    with (data_dir / 'refresh.lock').open('w') as held:
+        fcntl.flock(held, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        with pytest.raises(RefreshBusy):
+            run(server=server, data_dir=data_dir)
+    assert not server.state.hits
+
+
+def test_first_refresh_downloads_all_and_builds(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """With nothing stored, every source is fetched and built."""
+    report = run(server=server, data_dir=data_dir)
+    assert report.rebuilt
+    assert report.downloaded == ('sydneytrains', 'metro', 'bundle')
+    assert report.changed == ('sydneytrains', 'metro', 'bundle')
+    assert report.max_rss_mb > 0
+    with closing(sqlite3.connect(data_dir / 'timetable.db')) as conn:
+        (trips,) = conn.execute('SELECT count(*) FROM trips').fetchone()
+    assert trips > 0
+    states = json.loads(
+        (data_dir / 'sources' / 'sources.json').read_text(encoding='utf-8'),
+    )
+    assert set(states) == {'sydneytrains', 'metro', 'bundle'}
+    assert all(state['sha256'] for state in states.values())
+    assert {path.name for path in (data_dir / 'sources').iterdir()} == {
+        'sources.json',
+        'sydneytrains.zip',
+        'metro.zip',
+        'bundle.zip',
+    }
+
+
+def test_unchanged_headers_skip_download(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """A second run with the same headers only sends HEADs."""
+    run(server=server, data_dir=data_dir)
+    server.state.hits.clear()
+    report = run(server=server, data_dir=data_dir)
+    assert server.state.hits == {'HEAD': 3}
+    assert not report.rebuilt
+    assert report.downloaded == ()
+
+
+def test_new_etag_same_bytes_skips_rebuild(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """A new ETag over the same bytes is downloaded but not rebuilt."""
+    run(server=server, data_dir=data_dir)
+    server.state.files[METRO].etag = '"2"'
+    server.state.hits.clear()
+    report = run(server=server, data_dir=data_dir)
+    assert server.state.hits['GET'] == 1
+    assert report.downloaded == ('metro',)
+    assert report.changed == ()
+    assert not report.rebuilt
+    states = json.loads(
+        (data_dir / 'sources' / 'sources.json').read_text(encoding='utf-8'),
+    )
+    assert states['metro']['etag'] == '"2"'
+
+
+def test_changed_bytes_rebuild(
+    server: FeedServer,
+    data_dir: Path,
+    tmp_path: Path,
+) -> None:
+    """New bytes rebuild and swap in a new timetable file."""
+    run(server=server, data_dir=data_dir)
+    before = (data_dir / 'timetable.db').stat().st_ino
+    server.state.files[METRO] = Served(
+        body=metro_zip(tmp_path=tmp_path, comment=b'v2'),
+        etag='"2"',
+    )
+    report = run(server=server, data_dir=data_dir)
+    assert report.changed == ('metro',)
+    assert report.rebuilt
+    assert (data_dir / 'timetable.db').stat().st_ino != before
+    assert (data_dir / 'sources' / 'metro.zip').read_bytes() == (
+        server.state.files[METRO].body
+    )
+
+
+def test_force_rebuilds_without_changes(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """force rebuilds from the stored zips when nothing changed."""
+    run(server=server, data_dir=data_dir)
+    report = run(server=server, data_dir=data_dir, force=True)
+    assert report.rebuilt
+    assert report.changed == ()
+
+
+def test_refresh_keeps_old_timetable_when_download_fails(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """A download cut short leaves the timetable and states alone."""
+    run(server=server, data_dir=data_dir)
+    before_ino = (data_dir / 'timetable.db').stat().st_ino
+    before = snapshot(data_dir=data_dir)
+    server.state.files[METRO].etag = '"2"'
+    server.state.fail_midway.add(METRO)
+    with pytest.raises(SourceError, match='metro'):
+        run(server=server, data_dir=data_dir)
+    assert (data_dir / 'timetable.db').stat().st_ino == before_ino
+    assert snapshot(data_dir=data_dir) == before
+
+
+def test_refresh_clears_stale_scratch(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """Leftovers from a killed run are removed before work starts."""
+    work = data_dir / 'work'
+    work.mkdir()
+    (work / 'junk.zip').write_bytes(b'junk')
+    (work / 'timetable.db').write_bytes(b'SQLite format 3\x00half')
+    (work / 'stale').mkdir()
+    run(server=server, data_dir=data_dir)
+    assert work.is_dir()
+    assert not list(work.iterdir())
+
+
+def test_integrity_failure_keeps_old(
+    server: FeedServer,
+    data_dir: Path,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A timetable below the trip floor is never swapped in."""
+    run(server=server, data_dir=data_dir)
+    before = snapshot(data_dir=data_dir)
+    server.state.files[METRO] = Served(
+        body=metro_zip(tmp_path=tmp_path, comment=b'v2'),
+        etag='"2"',
+    )
+    monkeypatch.setattr(refresh_module, 'MIN_TRIPS', 10**9)
+    with pytest.raises(TimetableCheckError):
+        run(server=server, data_dir=data_dir)
+    assert snapshot(data_dir=data_dir) == before

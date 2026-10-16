@@ -6,13 +6,14 @@ import sqlite3
 from collections.abc import Iterable, Iterator
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from itertools import batched
 from pathlib import Path
 from typing import Final
 
 from paperroute.build.dedupe import MergeReport, merge_rail
 from paperroute.build.gtfs_files import active_dates, parse_time, read_rows
+from paperroute.core.model import SYDNEY
 
 BATCH: Final[int] = 10_000
 PLATFORM: Final[re.Pattern[str]] = re.compile(r'(?:Platform|Stand)\s+(\w+)$')
@@ -345,3 +346,18 @@ def build_timetable(*, sources: list[Source], window: Window,
         conn.commit()
     os.replace(scratch, out)
     return report
+
+
+def yesterday() -> date:
+    """
+    The Sydney date before today.
+
+    Starting a day early keeps the previous service day's 24:00-28:59
+    trips when the build runs in the small hours.
+
+    Returns
+    -------
+    date
+        Yesterday in Sydney.
+    """
+    return datetime.now(SYDNEY).date() - timedelta(days=1)

@@ -215,6 +215,42 @@ def not_departed(
     ]
 
 
+def in_view(
+    *, departures: Sequence[LiveDeparture], now: datetime
+) -> list[LiveDeparture]:
+    """
+    Keep departures leaving by now plus HORIZON, in live order.
+
+    Running services are stable-sorted by live departure time. A cancelled
+    service keeps its place in the order given.
+
+    Parameters
+    ----------
+    departures : Sequence[LiveDeparture]
+        Departures in timetable order.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    list[LiveDeparture]
+        Departures to show, in order.
+    """
+    limit = (now + HORIZON).timestamp()
+    kept = [
+        item
+        for item in not_departed(departures=departures, now=now)
+        if item.departs.timestamp() <= limit
+    ]
+    running = iter(
+        sorted(
+            (item for item in kept if not item.cancelled),
+            key=lambda item: item.departs.timestamp(),
+        )
+    )
+    return [item if item.cancelled else next(running) for item in kept]
+
+
 def empty_text(*, destination: str, loaded: bool) -> str:
     """
     Say why the list is empty.
@@ -257,7 +293,7 @@ def build_stop_view(
     destination : str
         Destination name.
     departures : Sequence[LiveDeparture]
-        Departures in order.
+        Departures in timetable order.
     now : datetime
         Current time.
     scroll : int
@@ -276,7 +312,7 @@ def build_stop_view(
         View-model, with scroll clamped to the rows that fit under any
         banner.
     """
-    upcoming = not_departed(departures=departures, now=now)
+    upcoming = in_view(departures=departures, now=now)
     rows = [
         to_row(item=item, now=now, pill=pill)
         for item, pill in zip(upcoming, pills(items=upcoming), strict=True)

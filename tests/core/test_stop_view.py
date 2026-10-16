@@ -23,6 +23,7 @@ def live(
     ride: int = 30,
     cancelled: bool = False,
     is_live: bool = True,
+    late: int = 0,
 ) -> LiveDeparture:
     """
     A resolved departure leaving some minutes after START.
@@ -37,6 +38,8 @@ def live(
         Cancelled flag.
     is_live : bool
         Live flag.
+    late : int
+        Minutes the live times run behind the timetable.
 
     Returns
     -------
@@ -44,10 +47,11 @@ def live(
         Departure.
     """
     dep = departure(departs=START + timedelta(minutes=minutes), ride=ride)
+    delay = timedelta(minutes=late)
     return LiveDeparture(
         departure=dep,
-        departs=dep.departs,
-        arrives=dep.arrives,
+        departs=dep.departs + delay,
+        arrives=dep.arrives + delay,
         live=is_live,
         cancelled=cancelled,
     )
@@ -357,3 +361,61 @@ def test_view_faster_compares_real_arrival_order() -> None:
     now = datetime(2026, 4, 5, 1, 50, tzinfo=SYDNEY)
     result = fall_back_view(departures=(slow, quick), now=now)
     assert [row.pill for row in result.rows] == [Pill.FASTER]
+
+
+def test_view_lists_in_live_order() -> None:
+    """A late bus leaving after an on-time one moves behind it."""
+    result = view(
+        departures=(
+            live(minutes=2, late=10),
+            live(minutes=5),
+            live(minutes=8),
+        )
+    )
+    assert hero(result=result).countdown == '5'
+    assert [row.countdown for row in result.rows] == ['8', '12']
+
+
+def test_view_faster_judged_in_live_order() -> None:
+    """FASTER compares a service with the one leaving just ahead of it live."""
+    result = view(
+        departures=(
+            live(minutes=2, ride=40, late=10),
+            live(minutes=5, ride=50),
+        )
+    )
+    assert hero(result=result).countdown == '5'
+    assert hero(result=result).pill is None
+    assert [(row.countdown, row.pill) for row in result.rows] == [
+        ('12', Pill.FASTER)
+    ]
+
+
+def test_view_cancelled_keeps_timetabled_place() -> None:
+    """Live order moves running services; a cancelled one stays put."""
+    result = view(
+        departures=(
+            live(minutes=2, late=10),
+            live(minutes=4, cancelled=True),
+            live(minutes=6),
+        )
+    )
+    assert hero(result=result).countdown == '6'
+    assert [(row.countdown, row.pill) for row in result.rows] == [
+        ('4', Pill.CANCELLED),
+        ('12', None),
+    ]
+
+
+def test_view_stops_at_the_horizon() -> None:
+    """Departures loaded past now plus HORIZON aren't listed."""
+    result = view(
+        departures=(
+            live(minutes=10),
+            live(minutes=180),
+            live(minutes=170, late=15),
+            live(minutes=181),
+        )
+    )
+    assert hero(result=result).leaves_at == '8:10'
+    assert [row.leaves_at for row in result.rows] == ['11:00']

@@ -108,9 +108,14 @@ def _known_host(*, request: web.Request) -> bool:
     """
     try:
         hostname = urlsplit(f'//{request.host}').hostname
+    except ValueError:
+        return False
+    if hostname in HOSTNAMES:
+        return True
+    try:
         ipaddress.ip_address(hostname or '')
     except ValueError:
-        return hostname in HOSTNAMES
+        return False
     return True
 
 

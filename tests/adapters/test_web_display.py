@@ -340,3 +340,12 @@ async def test_shutdown_closes_open_event_streams(
     elapsed = time.monotonic() - started
     await client.close()
     assert elapsed < 1
+
+
+@pytest.mark.parametrize('host', ['[', '[::1', 'a]b'])
+async def test_malformed_host_header_is_refused(
+    client: Client, host: str
+) -> None:
+    """A Host header that cannot be parsed is a 403, not a 500."""
+    response = await client.get('/status', headers={'Host': host})
+    assert response.status == HTTPStatus.FORBIDDEN

@@ -2,18 +2,35 @@
 
 import argparse
 import asyncio
+import os
+import signal
+import sys
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
+from aiohttp import web
+
+from paperroute.adapters.act_led import ActLed
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.systemd import SystemdNotifier
 from paperroute.adapters.tfnsw import AiohttpFeedsClient, api_key_from_env
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.adapters.tk_monitor import TkMonitor
+from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports, run
 from paperroute.core.model import SYDNEY, Pin
+from paperroute.core.state import Event, QuitRequested
 from paperroute.logs import configure_logging
-from paperroute.ports import FeedsClient
+from paperroute.observers import ObserverGroup, Timings
+from paperroute.ports import Clock, FeedsClient
+
+if TYPE_CHECKING:
+    from paperroute.adapters.tk_monitor import TkMonitor
+
+STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT)
 
 
 def parse_args() -> argparse.Namespace:
@@ -29,8 +46,22 @@ def parse_args() -> argparse.Namespace:
     sub = parser.add_subparsers(dest='command', required=True)
     runner = sub.add_parser('run', help='show a pin on the monitor')
     runner.add_argument('--timetable', type=Path, required=True)
-    runner.add_argument('--from', dest='origin', required=True)
-    runner.add_argument('--to', dest='destination', required=True)
+    runner.add_argument(
+        '--from',
+        dest='origin',
+        default=os.getenv('PAPERROUTE_FROM'),
+        help='origin stop id (default: $PAPERROUTE_FROM)',
+    )
+    runner.add_argument(
+        '--to',
+        dest='destination',
+        default=os.getenv('PAPERROUTE_TO'),
+        help='destination stop id (default: $PAPERROUTE_TO)',
+    )
+    runner.add_argument('--display', choices=['tk', 'web'], default='tk')
+    runner.add_argument('--host', default='0.0.0.0')
+    runner.add_argument('--port', type=int, default=80)
+    runner.add_argument('--error-log', type=Path)
     runner.add_argument(
         '--feeds', default='live', help="'live' or a recordings directory"
     )
@@ -39,7 +70,12 @@ def parse_args() -> argparse.Namespace:
         type=datetime.fromisoformat,
         help='replay from this Sydney time',
     )
-    return parser.parse_args()
+    args = parser.parse_args()
+    if not args.origin or not args.destination:
+        sys.exit(
+            'give --from and --to, or set PAPERROUTE_FROM and PAPERROUTE_TO'
+        )
+    return args
 
 
 def sydney(*, moment: datetime) -> datetime:
@@ -80,7 +116,172 @@ def feeds_client(*, choice: str) -> FeedsClient:
     return AiohttpFeedsClient(api_key=api_key_from_env())
 
 
-async def show(*, ports: Ports, pin: Pin, monitor: TkMonitor) -> None:
+def clock_for(*, args: argparse.Namespace) -> Clock:
+    """
+    Make the replay clock if --at was given, else the system clock.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Returns
+    -------
+    Clock
+        Clock.
+    """
+    if args.at:
+        return ReplayClock(start=sydney(moment=args.at))
+    return SystemClock()
+
+
+def pin_for(*, args: argparse.Namespace) -> Pin:
+    """
+    Make the pin from --from and --to.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Returns
+    -------
+    Pin
+        Pin.
+    """
+    return Pin(origin=args.origin, destination=args.destination)
+
+
+@contextmanager
+def timetable_for(
+    *, args: argparse.Namespace
+) -> Iterator[SqliteTimetableRepository]:
+    """
+    Open the timetable and close it on exit.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Yields
+    ------
+    SqliteTimetableRepository
+        The open timetable.
+    """
+    timetable = SqliteTimetableRepository(path=args.timetable)
+    try:
+        yield timetable
+    finally:
+        timetable.close()
+
+
+def install_stop_signals(
+    *, loop: asyncio.AbstractEventLoop, post: Callable[[Event], None]
+) -> None:
+    """
+    Post QuitRequested on SIGTERM and SIGINT.
+
+    Parameters
+    ----------
+    loop : asyncio.AbstractEventLoop
+        Running loop.
+    post : Callable[[Event], None]
+        Posts an event to the app.
+    """
+    for number in STOP_SIGNALS:
+        loop.add_signal_handler(number, post, QuitRequested())
+
+
+def remove_stop_signals(*, loop: asyncio.AbstractEventLoop) -> None:
+    """
+    Remove the SIGTERM and SIGINT handlers.
+
+    Parameters
+    ----------
+    loop : asyncio.AbstractEventLoop
+        Running loop.
+    """
+    for number in STOP_SIGNALS:
+        loop.remove_signal_handler(number)
+
+
+def bind_web(
+    *,
+    loop: asyncio.AbstractEventLoop,
+    display: WebDisplay,
+    post: Callable[[Event], None],
+) -> None:
+    """
+    Send browser knobs and stop signals to the app.
+
+    Parameters
+    ----------
+    loop : asyncio.AbstractEventLoop
+        Running loop.
+    display : WebDisplay
+        Display whose knob events are bound.
+    post : Callable[[Event], None]
+        Posts an event to the app.
+    """
+    display.bind(post=post)
+    install_stop_signals(loop=loop, post=post)
+
+
+async def serve_web(
+    *,
+    ports: Ports,
+    display: WebDisplay,
+    pin: Pin,
+    host: str,
+    port: int,
+    tick_every: float = 5.0,
+    max_events: int | None = None,
+) -> None:
+    """
+    Run the app and serve its display until it quits.
+
+    Worker threads are joined by asyncio.run when it exits, so the
+    caller closes the timetable after that.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters; the display must be the given web display.
+    display : WebDisplay
+        Web display.
+    pin : Pin
+        Pin to show.
+    host : str
+        Address to listen on.
+    port : int
+        Port to listen on.
+    tick_every : float
+        Seconds between ticks.
+    max_events : int | None
+        Stop after this many events (tests).
+    """
+    loop = asyncio.get_running_loop()
+    runner = web.AppRunner(display.app(), shutdown_timeout=1.0)
+    try:
+        await runner.setup()
+        await web.TCPSite(runner, host, port).start()
+        await run(
+            ports=ports,
+            pin=pin,
+            tick_every=tick_every,
+            post_hook=lambda post: bind_web(
+                loop=loop, display=display, post=post
+            ),
+            max_events=max_events,
+        )
+    finally:
+        remove_stop_signals(loop=loop)
+        await runner.cleanup()
+        await ports.feeds.close()
+
+
+async def show(*, ports: Ports, pin: Pin, monitor: 'TkMonitor') -> None:
     """
     Run the app on the monitor, then close the feeds client.
 
@@ -104,27 +305,85 @@ async def show(*, ports: Ports, pin: Pin, monitor: TkMonitor) -> None:
         await ports.feeds.close()
 
 
-def main() -> None:
-    """Run the Stop view for one pin in a Tkinter window."""
-    args = parse_args()
-    configure_logging()
-    feeds = feeds_client(choice=args.feeds)
-    clock = (
-        ReplayClock(start=sydney(moment=args.at)) if args.at else SystemClock()
+def tk_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
+    """
+    Run the Stop view for one pin in a Tkinter window.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+    feeds : FeedsClient
+        Feeds client.
+    """
+    from paperroute.adapters.tk_monitor import (  # pylint: disable=C0415
+        TkMonitor,
     )
+
     monitor = TkMonitor()
     try:
-        timetable = SqliteTimetableRepository(path=args.timetable)
-        try:
+        with timetable_for(args=args) as timetable:
             ports = Ports(
-                timetable=timetable, feeds=feeds, display=monitor, clock=clock
+                timetable=timetable,
+                feeds=feeds,
+                display=monitor,
+                clock=clock_for(args=args),
             )
-            pin = Pin(origin=args.origin, destination=args.destination)
-            asyncio.run(show(ports=ports, pin=pin, monitor=monitor))
-        finally:
-            timetable.close()
+            asyncio.run(
+                show(ports=ports, pin=pin_for(args=args), monitor=monitor)
+            )
     finally:
         monitor.close()
+
+
+def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
+    """
+    Serve the Stop view for one pin to browsers.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+    feeds : FeedsClient
+        Feeds client.
+    """
+    timings = Timings()
+    display = WebDisplay(status=timings.snapshot)
+    observer = ObserverGroup(
+        observers=[
+            timings,
+            SystemdNotifier.from_environment(),
+            ActLed(),
+        ]
+    )
+    with timetable_for(args=args) as timetable:
+        ports = Ports(
+            timetable=timetable,
+            feeds=feeds,
+            display=display,
+            clock=clock_for(args=args),
+            observer=observer,
+        )
+        asyncio.run(
+            serve_web(
+                ports=ports,
+                display=display,
+                pin=pin_for(args=args),
+                host=args.host,
+                port=args.port,
+            )
+        )
+
+
+def main() -> None:
+    """Run the Stop view for one pin in a window or in browsers."""
+    args = parse_args()
+    configure_logging(error_file=args.error_log)
+    feeds = feeds_client(choice=args.feeds)
+    if args.display == 'web':
+        web_main(args=args, feeds=feeds)
+    else:
+        tk_main(args=args, feeds=feeds)
 
 
 if __name__ == '__main__':

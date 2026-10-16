@@ -1,14 +1,17 @@
 """Stream GTFS sources into a SQLite timetable."""
 
+import os
 import re
 import sqlite3
 from collections.abc import Iterable, Iterator
+from contextlib import closing
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime, timezone
 from itertools import batched
 from pathlib import Path
 from typing import Final
 
+from paperroute.build.dedupe import MergeReport, merge_rail
 from paperroute.build.gtfs_files import active_dates, parse_time, read_rows
 
 BATCH: Final[int] = 10_000
@@ -285,3 +288,58 @@ def load_source(*, conn: sqlite3.Connection, source: Source,
                 rows=stop_time_rows(archive=source.archive, trips=trips))
     conn.commit()
     return len(trips)
+
+
+def write_meta(*, conn: sqlite3.Connection, window: Window) -> None:
+    """
+    Record the window and build time.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable being built.
+    window : Window
+        Dates covered.
+    """
+    conn.executemany('INSERT INTO meta VALUES (?, ?)', [
+        ('window_start', window.start.isoformat()),
+        ('window_days', str(window.days)),
+        ('built_at', datetime.now(timezone.utc).isoformat())])
+
+
+def build_timetable(*, sources: list[Source], window: Window,
+                    out: Path) -> MergeReport:
+    """
+    Build a timetable file from sources, replacing out only on success.
+
+    Load preferred feeds (Sydney Trains, Metro) before the bundle so that a
+    trip ID in both keeps the preferred copy.
+
+    Parameters
+    ----------
+    sources : list[Source]
+        Feeds in load order.
+    window : Window
+        Dates to cover.
+    out : Path
+        Timetable file to write.
+
+    Returns
+    -------
+    MergeReport
+        Result of merging rail duplicates.
+    """
+    scratch = out.with_suffix('.new')
+    scratch.unlink(missing_ok=True)
+    with closing(sqlite3.connect(scratch)) as conn:
+        create_schema(conn=conn)
+        for source in sources:
+            print(f'progress load {source.name}', flush=True)
+            load_source(conn=conn, source=source, window=window)
+        print('progress merge', flush=True)
+        report = merge_rail(conn=conn)
+        create_indexes(conn=conn)
+        write_meta(conn=conn, window=window)
+        conn.commit()
+    os.replace(scratch, out)
+    return report

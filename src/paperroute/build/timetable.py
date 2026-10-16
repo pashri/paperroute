@@ -1,0 +1,286 @@
+"""Stream GTFS sources into a SQLite timetable."""
+
+import re
+import sqlite3
+from collections.abc import Iterable, Iterator
+from dataclasses import dataclass
+from datetime import date
+from itertools import batched
+from pathlib import Path
+from typing import Final
+
+from paperroute.build.gtfs_files import active_dates, parse_time, read_rows
+
+BATCH: Final[int] = 10_000
+PLATFORM: Final[re.Pattern[str]] = re.compile(r'(?:Platform|Stand)\s+(\w+)$')
+SCHEMA: Final[str] = """
+CREATE TABLE stops (stop_id TEXT PRIMARY KEY, name TEXT NOT NULL,
+  parent_station TEXT, lat REAL, lon REAL, platform TEXT NOT NULL);
+CREATE TABLE routes (route_id TEXT PRIMARY KEY, short_name TEXT NOT NULL,
+  long_name TEXT NOT NULL, type INTEGER NOT NULL, color TEXT, text_color TEXT,
+  agency_id TEXT, source TEXT NOT NULL);
+CREATE TABLE services (service_id TEXT NOT NULL, date TEXT NOT NULL,
+  PRIMARY KEY (service_id, date)) WITHOUT ROWID;
+CREATE TABLE trips (trip_id TEXT PRIMARY KEY, route_id TEXT NOT NULL,
+  service_id TEXT NOT NULL, headsign TEXT NOT NULL, direction_id INTEGER,
+  block_id TEXT, agency_id TEXT, source TEXT NOT NULL);
+CREATE TABLE stop_times (trip_id TEXT NOT NULL, seq INTEGER NOT NULL,
+  stop_id TEXT NOT NULL, arr INTEGER NOT NULL, dep INTEGER NOT NULL,
+  pickup INTEGER NOT NULL, dropoff INTEGER NOT NULL,
+  PRIMARY KEY (trip_id, seq)) WITHOUT ROWID;
+CREATE TABLE trip_aliases (alias_id TEXT NOT NULL, trip_id TEXT NOT NULL,
+  PRIMARY KEY (alias_id, trip_id)) WITHOUT ROWID;
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+"""
+INDEXES: Final[str] = """
+CREATE INDEX stop_times_stop ON stop_times (stop_id, dep);
+CREATE INDEX stops_parent ON stops (parent_station);
+CREATE INDEX aliases_trip ON trip_aliases (trip_id);
+"""
+
+
+@dataclass(frozen=True)
+class Window:
+    """The run of dates a timetable covers."""
+
+    start: date
+    days: int
+
+
+@dataclass(frozen=True)
+class Source:
+    """One GTFS zip and the name its IDs are namespaced under."""
+
+    name: str
+    archive: Path
+
+
+def create_schema(*, conn: sqlite3.Connection) -> None:
+    """
+    Create the timetable tables.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Empty database.
+    """
+    conn.executescript(SCHEMA)
+
+
+def create_indexes(*, conn: sqlite3.Connection) -> None:
+    """
+    Create lookup indexes after loading.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Loaded database.
+    """
+    conn.executescript(INDEXES)
+
+
+def platform_of(*, row: dict[str, str]) -> str:
+    """
+    Find a stop's platform or stand code.
+
+    Parameters
+    ----------
+    row : dict[str, str]
+        A stops.txt record.
+
+    Returns
+    -------
+    str
+        The platform_code, else the code at the end of the name, else ''.
+    """
+    if row.get('platform_code'):
+        return row['platform_code']
+    found = PLATFORM.search(row.get('stop_name', ''))
+    return found.group(1) if found else ''
+
+
+def insert_many(*, conn: sqlite3.Connection, sql: str,
+                rows: Iterable[tuple[object, ...]]) -> None:
+    """
+    Insert rows in fixed-size batches.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Target database.
+    sql : str
+        INSERT statement.
+    rows : Iterable[tuple[object, ...]]
+        Values.
+    """
+    for chunk in batched(rows, BATCH):
+        conn.executemany(sql, chunk)
+
+
+def stop_rows(*, archive: Path) -> Iterator[tuple[object, ...]]:
+    """
+    Turn stops into table rows.
+
+    Parameters
+    ----------
+    archive : Path
+        GTFS zip.
+
+    Yields
+    ------
+    tuple[object, ...]
+        stops row values.
+    """
+    for row in read_rows(archive=archive, member='stops.txt'):
+        yield (row['stop_id'], row.get('stop_name', ''),
+               row.get('parent_station') or None,
+               float(row['stop_lat']) if row.get('stop_lat') else None,
+               float(row['stop_lon']) if row.get('stop_lon') else None,
+               platform_of(row=row))
+
+
+def route_rows(*, source: Source) -> Iterator[tuple[object, ...]]:
+    """
+    Turn routes into namespaced table rows.
+
+    Parameters
+    ----------
+    source : Source
+        Feed.
+
+    Yields
+    ------
+    tuple[object, ...]
+        routes row values.
+    """
+    for row in read_rows(archive=source.archive, member='routes.txt'):
+        yield (f'{source.name}:{row["route_id"]}',
+               row.get('route_short_name', ''),
+               row.get('route_long_name', ''), int(row['route_type']),
+               row.get('route_color') or None,
+               row.get('route_text_color') or None,
+               row.get('agency_id') or None, source.name)
+
+
+def load_services(*, conn: sqlite3.Connection, source: Source,
+                  window: Window) -> set[str]:
+    """
+    Store each service's active dates and return the active raw IDs.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Target database.
+    source : Source
+        Feed.
+    window : Window
+        Dates of interest.
+
+    Returns
+    -------
+    set[str]
+        Raw service IDs active at least once in the window.
+    """
+    dates = active_dates(archive=source.archive, start=window.start,
+                         days=window.days)
+    insert_many(conn=conn, sql='INSERT INTO services VALUES (?, ?)',
+                rows=((f'{source.name}:{sid}', day.isoformat())
+                      for sid, days in dates.items()
+                      for day in sorted(days)))
+    return set(dates)
+
+
+def load_trips(*, conn: sqlite3.Connection, source: Source,
+               services: set[str]) -> set[str]:
+    """
+    Insert active trips not already present and return those inserted.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Target database.
+    source : Source
+        Feed.
+    services : set[str]
+        Raw service IDs active in the window.
+
+    Returns
+    -------
+    set[str]
+        Trip IDs inserted from this source.
+    """
+    existing = {row[0] for row in conn.execute('SELECT trip_id FROM trips')}
+    rows = [(row['trip_id'], f'{source.name}:{row["route_id"]}',
+             f'{source.name}:{row["service_id"]}',
+             row.get('trip_headsign', ''),
+             int(row['direction_id']) if row.get('direction_id') else None,
+             row.get('block_id') or None, None, source.name)
+            for row in read_rows(archive=source.archive, member='trips.txt')
+            if row['service_id'] in services
+            and row['trip_id'] not in existing]
+    insert_many(conn=conn,
+                sql='INSERT INTO trips VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                rows=rows)
+    return {row[0] for row in rows}
+
+
+def stop_time_rows(*, archive: Path,
+                   trips: set[str]) -> Iterator[tuple[object, ...]]:
+    """
+    Stop times of the given trips as table rows.
+
+    Parameters
+    ----------
+    archive : Path
+        GTFS zip.
+    trips : set[str]
+        Trips to keep.
+
+    Yields
+    ------
+    tuple[object, ...]
+        stop_times row values.
+    """
+    for row in read_rows(archive=archive, member='stop_times.txt'):
+        if row['trip_id'] in trips:
+            yield (row['trip_id'], int(row['stop_sequence']), row['stop_id'],
+                   parse_time(row['arrival_time'] or row['departure_time']),
+                   parse_time(row['departure_time'] or row['arrival_time']),
+                   int(row.get('pickup_type') or 0),
+                   int(row.get('drop_off_type') or 0))
+
+
+def load_source(*, conn: sqlite3.Connection, source: Source,
+                window: Window) -> int:
+    """
+    Load one feed's stops, routes, active services, trips and stop times.
+
+    Stops already present (from an earlier source) are kept as they are.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Database with the schema.
+    source : Source
+        Feed.
+    window : Window
+        Dates of interest.
+
+    Returns
+    -------
+    int
+        Number of trips inserted.
+    """
+    insert_many(conn=conn,
+                sql='INSERT OR IGNORE INTO stops VALUES (?, ?, ?, ?, ?, ?)',
+                rows=stop_rows(archive=source.archive))
+    insert_many(
+        conn=conn,
+        sql='INSERT OR IGNORE INTO routes VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        rows=route_rows(source=source))
+    services = load_services(conn=conn, source=source, window=window)
+    trips = load_trips(conn=conn, source=source, services=services)
+    insert_many(conn=conn,
+                sql='INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, ?, ?)',
+                rows=stop_time_rows(archive=source.archive, trips=trips))
+    return len(trips)

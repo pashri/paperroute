@@ -2,6 +2,7 @@
 
 import argparse
 import asyncio
+import logging
 import os
 import signal
 import sys
@@ -9,7 +10,7 @@ from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Final
 
 from aiohttp import web
 
@@ -30,7 +31,65 @@ from paperroute.ports import Clock, FeedsClient
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor
 
-STOP_SIGNALS = (signal.SIGTERM, signal.SIGINT)
+logger = logging.getLogger(__name__)
+
+STOP_SIGNALS: Final[tuple[signal.Signals, ...]] = (
+    signal.SIGTERM,
+    signal.SIGINT,
+)
+
+
+def add_pin_arguments(parser: argparse.ArgumentParser) -> None:
+    """
+    Add --from and --to, defaulting to the environment.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        Parser to add to.
+    """
+    parser.add_argument(
+        '--from',
+        dest='origin',
+        default=os.getenv('PAPERROUTE_FROM'),
+        help='origin stop id (default: $PAPERROUTE_FROM)',
+    )
+    parser.add_argument(
+        '--to',
+        dest='destination',
+        default=os.getenv('PAPERROUTE_TO'),
+        help='destination stop id (default: $PAPERROUTE_TO)',
+    )
+
+
+def add_display_arguments(parser: argparse.ArgumentParser) -> None:
+    """
+    Add the display choice and the web server options.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        Parser to add to.
+    """
+    parser.add_argument('--display', choices=['tk', 'web'], default='tk')
+    parser.add_argument('--host', default='0.0.0.0')
+    parser.add_argument('--port', type=int, default=80)
+    parser.add_argument('--error-log', type=Path)
+
+
+def require_pin(*, args: argparse.Namespace) -> None:
+    """
+    Exit with a message if the origin or destination is missing.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+    """
+    if not args.origin or not args.destination:
+        sys.exit(
+            'give --from and --to, or set PAPERROUTE_FROM and PAPERROUTE_TO'
+        )
 
 
 def parse_args() -> argparse.Namespace:
@@ -46,22 +105,8 @@ def parse_args() -> argparse.Namespace:
     sub = parser.add_subparsers(dest='command', required=True)
     runner = sub.add_parser('run', help='show a pin on the monitor')
     runner.add_argument('--timetable', type=Path, required=True)
-    runner.add_argument(
-        '--from',
-        dest='origin',
-        default=os.getenv('PAPERROUTE_FROM'),
-        help='origin stop id (default: $PAPERROUTE_FROM)',
-    )
-    runner.add_argument(
-        '--to',
-        dest='destination',
-        default=os.getenv('PAPERROUTE_TO'),
-        help='destination stop id (default: $PAPERROUTE_TO)',
-    )
-    runner.add_argument('--display', choices=['tk', 'web'], default='tk')
-    runner.add_argument('--host', default='0.0.0.0')
-    runner.add_argument('--port', type=int, default=80)
-    runner.add_argument('--error-log', type=Path)
+    add_pin_arguments(runner)
+    add_display_arguments(runner)
     runner.add_argument(
         '--feeds', default='live', help="'live' or a recordings directory"
     )
@@ -71,10 +116,7 @@ def parse_args() -> argparse.Namespace:
         help='replay from this Sydney time',
     )
     args = parser.parse_args()
-    if not args.origin or not args.destination:
-        sys.exit(
-            'give --from and --to, or set PAPERROUTE_FROM and PAPERROUTE_TO'
-        )
+    require_pin(args=args)
     return args
 
 
@@ -277,8 +319,10 @@ async def serve_web(
         )
     finally:
         remove_stop_signals(loop=loop)
-        await runner.cleanup()
-        await ports.feeds.close()
+        try:
+            await runner.cleanup()
+        finally:
+            await ports.feeds.close()
 
 
 async def show(*, ports: Ports, pin: Pin, monitor: 'TkMonitor') -> None:
@@ -336,6 +380,36 @@ def tk_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
         monitor.close()
 
 
+def serve_or_exit(
+    *, args: argparse.Namespace, ports: Ports, display: WebDisplay
+) -> None:
+    """
+    Serve the display; log the error and exit 1 if the port can't be used.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+    ports : Ports
+        Adapters.
+    display : WebDisplay
+        Web display.
+    """
+    try:
+        asyncio.run(
+            serve_web(
+                ports=ports,
+                display=display,
+                pin=pin_for(args=args),
+                host=args.host,
+                port=args.port,
+            )
+        )
+    except OSError:
+        logger.exception('cannot serve on %s:%s', args.host, args.port)
+        sys.exit(1)
+
+
 def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
     """
     Serve the Stop view for one pin to browsers.
@@ -364,15 +438,7 @@ def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
             clock=clock_for(args=args),
             observer=observer,
         )
-        asyncio.run(
-            serve_web(
-                ports=ports,
-                display=display,
-                pin=pin_for(args=args),
-                host=args.host,
-                port=args.port,
-            )
-        )
+        serve_or_exit(args=args, ports=ports, display=display)
 
 
 def main() -> None:

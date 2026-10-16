@@ -1,6 +1,8 @@
 """Tests for the command line and the web serving loop."""
 
+import argparse
 import asyncio
+import logging
 import signal
 import socket
 import sys
@@ -11,7 +13,7 @@ from pathlib import Path
 import aiohttp
 import pytest
 
-from paperroute.__main__ import parse_args, serve_web
+from paperroute.__main__ import parse_args, serve_web, web_main
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
@@ -95,17 +97,22 @@ def free_port() -> int:
         return int(sock.getsockname()[1])
 
 
-async def wait_for_frame(*, port: int) -> None:
+async def wait_for_frame(*, port: int, server: asyncio.Task[None]) -> None:
     """
-    Poll /frame.png until it answers 200.
+    Poll /frame.png until it answers 200, or raise if the server ended.
 
     Parameters
     ----------
     port : int
         Port to poll on 127.0.0.1.
+    server : asyncio.Task[None]
+        The serving task; its error is raised if it finishes early.
     """
     async with aiohttp.ClientSession() as session:
         while True:
+            if server.done():
+                server.result()
+                raise AssertionError('server stopped before serving')
             try:
                 async with session.get(
                     f'http://127.0.0.1:{port}/frame.png'
@@ -117,17 +124,29 @@ async def wait_for_frame(*, port: int) -> None:
             await asyncio.sleep(0.05)
 
 
-async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
-    """The app serves a frame over HTTP and returns cleanly."""
-    db = tmp_path / 'timetable.db'
+def build_db(*, path: Path) -> None:
+    """
+    Build the real-slice timetable database.
+
+    Parameters
+    ----------
+    path : Path
+        Database file to create.
+    """
     build_timetable(
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
         ],
         window=Window(start=date(2026, 10, 16), days=1),
-        out=db,
+        out=path,
     )
+
+
+async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
+    """The app serves a frame over HTTP and returns cleanly."""
+    db = tmp_path / 'timetable.db'
+    build_db(path=db)
     timings = Timings()
     display = WebDisplay(status=timings.snapshot)
     timetable = SqliteTimetableRepository(path=db)
@@ -151,10 +170,35 @@ async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
     )
     try:
         async with asyncio.timeout(30):
-            await wait_for_frame(port=port)
+            await wait_for_frame(port=port, server=server)
             signal.raise_signal(signal.SIGTERM)
             await server
+        assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
     finally:
         server.cancel()
         await asyncio.gather(server, return_exceptions=True)
         timetable.close()
+
+
+def test_web_main_logs_a_bind_failure(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A port that is taken is logged with its address and exits 1."""
+    args = argparse.Namespace(
+        timetable=tmp_path / 'timetable.db',
+        origin=PIN.origin,
+        destination=PIN.destination,
+        at=AT,
+        host='127.0.0.1',
+        port=0,
+    )
+    build_db(path=args.timetable)
+    with socket.socket() as held:
+        held.bind(('127.0.0.1', 0))
+        held.listen()
+        args.port = held.getsockname()[1]
+        with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as info:
+            web_main(args=args, feeds=FileFeedsClient(directory=REAL))
+    assert info.value.code == 1
+    assert f'cannot serve on 127.0.0.1:{args.port}' in caplog.text

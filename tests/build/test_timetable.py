@@ -5,12 +5,8 @@ from contextlib import closing
 from datetime import date
 from pathlib import Path
 
-from paperroute.build.timetable import (
-    SCHEMA_VERSION,
-    Source,
-    Window,
-    build_timetable,
-)
+from paperroute.build.gtfs_files import Source
+from paperroute.build.timetable import SCHEMA_VERSION, Window, build_timetable
 from tests.build.feeds import (
     DAILY,
     build_db,
@@ -19,6 +15,7 @@ from tests.build.feeds import (
     shape_rows,
     shaped_bus_feed,
     sydneytrains_feed,
+    sydneytrains_files,
 )
 from tests.helpers import write_feed
 
@@ -195,20 +192,37 @@ def test_trip_rows_carry_namespaced_shape_id(tmp_path: Path) -> None:
         ('bundle:S1',)]
 
 
-def test_unused_shapes_are_dropped(tmp_path: Path) -> None:
-    """A shape used only by a merged-away rail trip is deleted."""
+def shaped_rail(*, tmp_path: Path) -> Source:
+    """
+    The bundle rail feed with B-0835 on shape RB-0835 and B-0900 on RB-0900.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Directory for the zip.
+
+    Returns
+    -------
+    Source
+        The feed, named 'bundle'.
+    """
     files = bundle_rail_files()
     points = [(151.0, -33.8), (151.01, -33.81)]
-    rail = write_feed(path=tmp_path / 'r.zip', files={
-        **files,
-        'trips.txt': [{**row, 'shape_id': f'R{row["trip_id"]}'}
-                      for row in files['trips.txt']],
-        'shapes.txt': [*shape_rows(shape_id='RB-0835', points=points),
-                       *shape_rows(shape_id='RB-0900', points=points)]})
+    return Source(name='bundle', archive=write_feed(
+        path=tmp_path / 'r.zip', files={
+            **files,
+            'trips.txt': [{**row, 'shape_id': f'R{row["trip_id"]}'}
+                          for row in files['trips.txt']],
+            'shapes.txt': [*shape_rows(shape_id='RB-0835', points=points),
+                           *shape_rows(shape_id='RB-0900', points=points)]}))
+
+
+def test_unused_shapes_are_dropped(tmp_path: Path) -> None:
+    """A shape used only by a merged-away rail trip is deleted."""
     db = built(tmp_path=tmp_path, sources=[
         Source(name='sydneytrains',
                archive=sydneytrains_feed(path=tmp_path / 's.zip')),
-        Source(name='bundle', archive=rail)])
+        shaped_rail(tmp_path=tmp_path)])
     assert query(db=db, sql='SELECT shape_id FROM shapes') == [
         ('bundle:RB-0900',)]
 
@@ -228,3 +242,40 @@ def test_meta_records_schema_version(tmp_path: Path) -> None:
                             "WHERE key = 'schema_version'") == [
         (SCHEMA_VERSION,)]
     assert SCHEMA_VERSION == '2'
+
+
+def test_partly_merged_trip_keeps_its_shape(tmp_path: Path) -> None:
+    """A bundle trip skipped on only some dates keeps its shape."""
+    files = sydneytrains_files()
+    trains = write_feed(path=tmp_path / 's.zip', files={
+        **files,
+        'calendar.txt': [{'service_id': 's-daily', **DAILY,
+                          'start_date': '20261016',
+                          'end_date': '20261016'}]})
+    db = built(tmp_path=tmp_path, sources=[
+        Source(name='sydneytrains', archive=trains),
+        shaped_rail(tmp_path=tmp_path)])
+    assert query(db=db, sql='SELECT trip_id, date FROM trip_skip') == [
+        ('B-0835', '2026-10-16')]
+    assert query(db=db, sql='SELECT shape_id FROM shapes '
+                            'ORDER BY shape_id') == [
+        ('bundle:RB-0835',), ('bundle:RB-0900',)]
+
+
+def test_shared_shape_takes_the_lowest_route_type(tmp_path: Path) -> None:
+    """A shape used by a bus and a train is stored as train, either way."""
+    feed = write_feed(path=tmp_path / 'm.zip', files={
+        'stops.txt': [],
+        'routes.txt': [{'route_id': 'bus', 'route_type': '700'},
+                       {'route_id': 'train', 'route_type': '2'}],
+        'calendar.txt': [{'service_id': 'd', **DAILY}],
+        'trips.txt': [{'route_id': route, 'service_id': 'd',
+                       'trip_id': route, 'shape_id': 'S1'}
+                      for route in ('bus', 'train')],
+        'stop_times.txt': [],
+        'shapes.txt': shape_rows(shape_id='S1',
+                                 points=[(151.0, -33.8), (151.01, -33.81)])})
+    db = built(tmp_path=tmp_path,
+               sources=[Source(name='bundle', archive=feed)])
+    assert query(db=db, sql='SELECT shape_id, mode FROM shapes') == [
+        ('bundle:S1', 'train')]

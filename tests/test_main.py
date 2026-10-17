@@ -21,7 +21,8 @@ from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
-from paperroute.build.timetable import Source, Window, build_timetable
+from paperroute.build.gtfs_files import Source
+from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.model import SYDNEY, Pin
 from paperroute.observers import Timings
 

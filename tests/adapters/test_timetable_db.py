@@ -17,7 +17,7 @@ from paperroute.adapters.timetable_db import (
     SqliteTimetableRepository,
 )
 from paperroute.build.dedupe import merge_rail
-from paperroute.build.timetable import Source
+from paperroute.build.gtfs_files import Source
 from paperroute.core.geo import to_metres
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
 from tests.build.feeds import (

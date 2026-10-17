@@ -12,14 +12,10 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.adapters.tfnsw import api_key_from_env
+from paperroute.build.gtfs_files import Source
 from paperroute.build.refresh import RefreshBusy, TimetableCheckError, refresh
 from paperroute.build.sources import SourceError
-from paperroute.build.timetable import (
-    Source,
-    Window,
-    build_timetable,
-    yesterday,
-)
+from paperroute.build.timetable import Window, build_timetable, yesterday
 from paperroute.logs import configure_logging
 
 logger = logging.getLogger(__name__)

@@ -5,7 +5,8 @@ from contextlib import closing
 from datetime import date
 from pathlib import Path
 
-from paperroute.build.timetable import Source, Window, build_timetable
+from paperroute.build.gtfs_files import Source
+from paperroute.build.timetable import Window, build_timetable
 from tests.build.feeds import bundle_rail_feed, bus_feed, sydneytrains_feed
 
 REAL = Path(__file__).parent.parent / 'fixtures' / 'real'

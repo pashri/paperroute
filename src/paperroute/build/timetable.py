@@ -12,7 +12,12 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.build.dedupe import MergeReport, merge_rail
-from paperroute.build.gtfs_files import active_dates, parse_time, read_rows
+from paperroute.build.gtfs_files import (
+    Source,
+    active_dates,
+    parse_time,
+    read_rows,
+)
 from paperroute.build.shapes import load_shapes
 from paperroute.core.model import SYDNEY, Mode, mode_for
 
@@ -47,6 +52,7 @@ SHAPE_MODES: Final[str] = """
 SELECT DISTINCT t.shape_id, r.type, COALESCE(t.agency_id, r.agency_id)
 FROM trips t JOIN routes r ON r.route_id = t.route_id
 WHERE t.source = :name AND t.shape_id IS NOT NULL
+ORDER BY t.shape_id, r.type, COALESCE(t.agency_id, r.agency_id)
 """
 DROP_UNUSED_SHAPES: Final[str] = """
 DELETE FROM shapes WHERE shape_id NOT IN
@@ -65,14 +71,6 @@ class Window:
 
     start: date
     days: int
-
-
-@dataclass(frozen=True)
-class Source:
-    """One GTFS zip and the name its IDs are namespaced under."""
-
-    name: str
-    archive: Path
 
 
 def create_schema(*, conn: sqlite3.Connection) -> None:
@@ -262,7 +260,7 @@ def shape_modes(*, conn: sqlite3.Connection,
     -------
     dict[str, Mode]
         Raw shape ID to mode. A shape used by trips of several modes takes
-        the first one read.
+        the one with the lowest route type, then the lowest agency.
     """
     prefix = len(f'{source.name}:')
     modes: dict[str, Mode] = {}

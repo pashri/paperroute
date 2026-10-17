@@ -8,7 +8,8 @@ from typing import Final
 
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.build.timetable import Source, Window, build_timetable
+from paperroute.build.gtfs_files import Source
+from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolve
 from paperroute.core.model import SYDNEY, Mode, Pin

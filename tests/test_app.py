@@ -15,7 +15,8 @@ from numpy.typing import NDArray
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app import Ports, perform, run, ticker
-from paperroute.build.timetable import Source, Window, build_timetable
+from paperroute.build.gtfs_files import Source
+from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import TripPattern

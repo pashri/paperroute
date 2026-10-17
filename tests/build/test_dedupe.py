@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from paperroute.build.dedupe import MergeReport, merge_rail
-from paperroute.build.timetable import Source
+from paperroute.build.gtfs_files import Source
 from tests.build.feeds import (
     DAILY,
     STATIONS,

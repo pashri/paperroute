@@ -13,6 +13,7 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.adapters.tfnsw import BASE_URL
+from paperroute.build.gtfs_files import Source
 from paperroute.build.sources import (
     SOURCES,
     SourceSpec,
@@ -27,7 +28,6 @@ from paperroute.build.sources import (
 )
 from paperroute.build.timetable import (
     SCHEMA_VERSION,
-    Source,
     Window,
     build_timetable,
     yesterday,
@@ -456,21 +456,20 @@ def read_meta(*, path: Path) -> dict[str, str]:
         return {}
 
 
-def days_left(*, path: Path) -> int:
+def days_left(*, meta: dict[str, str]) -> int:
     """
     Count the days from today in Sydney to the end of a timetable window.
 
     Parameters
     ----------
-    path : Path
-        Timetable file.
+    meta : dict[str, str]
+        The timetable's meta, from read_meta.
 
     Returns
     -------
     int
-        Days left, or 0 when the file or its window can't be read.
+        Days left, or 0 when the meta has no window.
     """
-    meta = read_meta(path=path)
     if 'window_start' not in meta or 'window_days' not in meta:
         return 0
     end = date.fromisoformat(meta['window_start']) + timedelta(
@@ -503,10 +502,10 @@ def update(*, layout: Layout, fetched: Fetched, days: int,
         MIN_DAYS_LEFT days remain in its window, or when it was built with
         another SCHEMA_VERSION.
     """
+    meta = read_meta(path=layout.timetable)
     stale = (
-        days_left(path=layout.timetable) < MIN_DAYS_LEFT
-        or read_meta(path=layout.timetable).get('schema_version')
-        != SCHEMA_VERSION
+        days_left(meta=meta) < MIN_DAYS_LEFT
+        or meta.get('schema_version') != SCHEMA_VERSION
     )
     if not (fetched.changed or force or stale):
         save_states(path=layout.states, states=fetched.states)

@@ -4,6 +4,7 @@ import csv
 import io
 import zipfile
 from collections.abc import Iterator
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Final
@@ -11,6 +12,14 @@ from typing import Final
 DAY_NAMES: Final[tuple[str, ...]] = (
     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
     'sunday')
+
+
+@dataclass(frozen=True)
+class Source:
+    """One GTFS zip and the name its IDs are namespaced under."""
+
+    name: str
+    archive: Path
 
 
 def read_rows(*, archive: Path, member: str) -> Iterator[dict[str, str]]:

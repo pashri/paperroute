@@ -6,8 +6,8 @@ from datetime import date
 from pathlib import Path
 from typing import Final
 
+from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import (
-    Source,
     Window,
     create_indexes,
     create_schema,
@@ -176,22 +176,17 @@ def bundle_rail_feed(*, path: Path) -> Path:
     return write_feed(path=path, files=bundle_rail_files())
 
 
-def sydneytrains_feed(*, path: Path) -> Path:
+def sydneytrains_files() -> dict[str, list[dict[str, str]]]:
     """
     Sydney Trains feed: 'S-0835' (same run as the bundle's 'B-0835') and
     'S-0848' with no pickup at Parramatta.
 
-    Parameters
-    ----------
-    path : Path
-        Zip to write.
-
     Returns
     -------
-    Path
-        The zip.
+    dict[str, list[dict[str, str]]]
+        Member name to rows.
     """
-    return write_feed(path=path, files={
+    return {
         'stops.txt': STATIONS,
         'routes.txt': [{'route_id': 'sT1', 'agency_id': 'SydneyTrains',
                         'route_short_name': 'T1',
@@ -211,7 +206,24 @@ def sydneytrains_feed(*, path: Path) -> Path:
                                               ('2000321', '09:13:00')],
                         pickup_first='1'),
         ],
-    })
+    }
+
+
+def sydneytrains_feed(*, path: Path) -> Path:
+    """
+    Write the Sydney Trains feed of sydneytrains_files.
+
+    Parameters
+    ----------
+    path : Path
+        Zip to write.
+
+    Returns
+    -------
+    Path
+        The zip.
+    """
+    return write_feed(path=path, files=sydneytrains_files())
 
 
 def build_db(*, tmp_path: Path, sources: list[Source], start: date,

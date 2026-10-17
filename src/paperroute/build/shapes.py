@@ -3,25 +3,26 @@
 import csv
 import io
 import logging
+import math
 import sqlite3
 import zipfile
 from collections.abc import Collection, Iterator, Mapping
+from dataclasses import dataclass
 from itertools import batched, groupby
 from operator import itemgetter
 from pathlib import Path
-from typing import TYPE_CHECKING, Final
+from typing import Final
 
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute.build.gtfs_files import Source
 from paperroute.core.geo import DECIMETRES, make_shape, pack_shape, to_metres
 from paperroute.core.model import Mode
 
-if TYPE_CHECKING:
-    from paperroute.build.timetable import Source
-
 SIMPLIFY_M: Final[float] = 1.5
 SHAPES_BATCH: Final[int] = 500
+SMALL_RANGE: Final[int] = 16
 MEMBER: Final[str] = 'shapes.txt'
 COLUMNS: Final[tuple[str, ...]] = (
     'shape_id',
@@ -33,6 +34,7 @@ COLUMNS: Final[tuple[str, ...]] = (
 logger = logging.getLogger(__name__)
 
 Run = list[tuple[int, float, float]]
+ShapeRow = tuple[str, str, float, float, float, float, bytes]
 
 
 def shape_groups(
@@ -58,7 +60,7 @@ def shape_groups(
             return
         with feed.open(MEMBER) as raw:
             reader = csv.reader(io.TextIOWrapper(raw, encoding='utf-8-sig'))
-            header = [name.lstrip('\ufeff') for name in next(reader, [])]
+            header = next(reader, [])
             pick = itemgetter(*(header.index(name) for name in COLUMNS[1:]))
             for shape_id, rows in groupby(
                 filter(None, reader),
@@ -71,6 +73,7 @@ def shape_runs(
     *,
     archive: Path,
     wanted: Collection[str],
+    split: set[str] | None = None,
 ) -> Iterator[tuple[str, Run]]:
     """
     Stream the points of wanted shapes, one shape at a time.
@@ -85,20 +88,24 @@ def shape_runs(
         GTFS zip; a missing shapes.txt yields nothing.
     wanted : Collection[str]
         Raw shape IDs to read.
+    split : set[str] | None
+        Filled with the wanted IDs whose rows come in more than one run.
+        Only the first run of such a shape is yielded, so it is incomplete.
 
     Yields
     ------
     tuple[str, Run]
         A shape ID and its (sequence, lon, lat) points sorted by sequence.
-        A shape whose rows come back after another shape's is read only
-        from its first run.
     """
+    split = set() if split is None else split
     done: set[str] = set()
     for shape_id, rows in shape_groups(archive=archive):
         if shape_id not in wanted:
             continue
         if shape_id in done:
-            logger.warning('shape %s not contiguous', shape_id)
+            if shape_id not in split:
+                logger.warning('shape %s not contiguous', shape_id)
+                split.add(shape_id)
             continue
         done.add(shape_id)
         yield shape_id, sorted(
@@ -106,42 +113,115 @@ def shape_runs(
         )
 
 
-def farthest(
+@dataclass(frozen=True)
+class Line:
+    """A line's coordinates as arrays and as plain lists."""
+
+    xs: NDArray[np.float64]
+    ys: NDArray[np.float64]
+    x_list: list[float]
+    y_list: list[float]
+
+
+def segment_gap(
     *,
-    points: NDArray[np.float64],
-    first: int,
-    last: int,
-) -> tuple[int, float]:
+    dx: float,
+    dy: float,
+    cx: float,
+    cy: float,
+) -> float:
     """
-    Find the point between two others farthest from the chord joining them.
+    Distance from a point to a segment that starts at the origin.
 
     Parameters
     ----------
-    points : NDArray[np.float64]
-        Points as rows of x and y.
+    dx : float
+        Point x, relative to the segment's start.
+    dy : float
+        Point y, relative to the segment's start.
+    cx : float
+        Segment end x, relative to its start.
+    cy : float
+        Segment end y, relative to its start.
+
+    Returns
+    -------
+    float
+        The distance; to the start when the segment has no length.
+    """
+    length = cx * cx + cy * cy
+    along = min(max((dx * cx + dy * cy) / length, 0.0), 1.0) if length else 0.0
+    ex = dx - along * cx
+    ey = dy - along * cy
+    return math.sqrt(ex * ex + ey * ey)
+
+
+def farthest_small(*, line: Line, first: int, last: int) -> tuple[int, float]:
+    """
+    Find the point farthest from a chord, in plain Python.
+
+    Parameters
+    ----------
+    line : Line
+        Points.
     first : int
         Index of the chord's start.
     last : int
-        Index of the chord's end, after first.
+        Index of the chord's end, at least two after first.
 
     Returns
     -------
     tuple[int, float]
         Index of the farthest point strictly between first and last, and
-        its distance from the chord segment; (first, 0.0) when none.
+        its distance from the chord segment.
     """
-    if last - first < 2:
-        return first, 0.0
-    start = points[first]
-    chord = points[last] - start
-    offsets = points[first + 1:last] - start
-    length = float(chord @ chord)
+    sx, sy = line.x_list[first], line.y_list[first]
+    cx, cy = line.x_list[last] - sx, line.y_list[last] - sy
+    gaps = [
+        segment_gap(dx=x - sx, dy=y - sy, cx=cx, cy=cy)
+        for x, y in zip(
+            line.x_list[first + 1:last],
+            line.y_list[first + 1:last],
+            strict=True,
+        )
+    ]
+    index = max(range(len(gaps)), key=gaps.__getitem__)
+    return first + 1 + index, gaps[index]
+
+
+def farthest_large(*, line: Line, first: int, last: int) -> tuple[int, float]:
+    """
+    Find the point farthest from a chord, with numpy.
+
+    It does the same arithmetic as farthest_small, so both give the same
+    answer to the last bit.
+
+    Parameters
+    ----------
+    line : Line
+        Points.
+    first : int
+        Index of the chord's start.
+    last : int
+        Index of the chord's end, at least two after first.
+
+    Returns
+    -------
+    tuple[int, float]
+        Index of the farthest point strictly between first and last, and
+        its distance from the chord segment.
+    """
+    sx, sy = line.x_list[first], line.y_list[first]
+    cx, cy = line.x_list[last] - sx, line.y_list[last] - sy
+    dx = line.xs[first + 1:last] - sx
+    dy = line.ys[first + 1:last] - sy
+    length = cx * cx + cy * cy
     along = (
-        np.clip(offsets @ chord / length, 0.0, 1.0)
+        np.clip((dx * cx + dy * cy) / length, 0.0, 1.0)
         if length
-        else np.zeros(len(offsets))
+        else np.zeros_like(dx)
     )
-    gaps = np.linalg.norm(offsets - np.outer(along, chord), axis=1)
+    gaps = np.sqrt((dx - along * cx) ** 2 + (dy - along * cy) ** 2)
     index = int(np.argmax(gaps))
     return first + 1 + index, float(gaps[index])
 
@@ -150,9 +230,14 @@ def simplify(
     *,
     points: NDArray[np.float64],
     tolerance: float,
+    small_range: int = SMALL_RANGE,
 ) -> NDArray[np.float64]:
     """
     Simplify a line with Douglas-Peucker, keeping both ends.
+
+    Distances are to the chord as a segment, so a point beyond either end
+    of the chord, as on a route that doubles back, is measured from that
+    end.
 
     Parameters
     ----------
@@ -160,30 +245,36 @@ def simplify(
         Points as rows of x and y.
     tolerance : float
         Furthest a dropped point may lie from the simplified line.
+    small_range : int
+        Ranges of this many points or fewer are searched in plain Python,
+        which is faster than numpy for a handful of points.
 
     Returns
     -------
     NDArray[np.float64]
         The kept points, in order.
     """
+    xs, ys = points[:, 0], points[:, 1]
+    line = Line(xs=xs, ys=ys, x_list=xs.tolist(), y_list=ys.tolist())
     keep = np.zeros(len(points), dtype=bool)
     keep[[0, -1]] = True
-    stack = [(0, len(points) - 1)]
+    stack = [(0, len(points) - 1)] if len(points) > 2 else []
     while stack:
         first, last = stack.pop()
-        index, gap = farthest(points=points, first=first, last=last)
+        search = (
+            farthest_small if last - first < small_range else farthest_large
+        )
+        index, gap = search(line=line, first=first, last=last)
         if gap > tolerance:
             keep[index] = True
-            stack.extend(((first, index), (index, last)))
+            stack.extend(
+                span for span in ((first, index), (index, last))
+                if span[1] - span[0] > 1
+            )
     return points[keep]
 
 
-def shape_record(
-    *,
-    shape_id: str,
-    mode: Mode,
-    run: Run,
-) -> tuple[object, ...]:
+def shape_record(*, shape_id: str, mode: Mode, run: Run) -> ShapeRow:
     """
     Turn one shape's points into a shapes row.
 
@@ -198,9 +289,9 @@ def shape_record(
 
     Returns
     -------
-    tuple[object, ...]
-        Values of a shapes row. The bounds are widened to whole decimetres so
-        they hold the rounded points of the blob.
+    ShapeRow
+        Values of a shapes row. The bounds are widened to whole decimetres
+        so they hold the rounded points of the blob.
     """
     kept = simplify(
         points=np.array(
@@ -219,6 +310,36 @@ def shape_record(
             float(high[0]), float(high[1]), pack_shape(shape=shape))
 
 
+def insert_shapes(
+    *,
+    conn: sqlite3.Connection,
+    records: Iterator[ShapeRow],
+) -> int:
+    """
+    Insert shapes rows in batches.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Database with the schema.
+    records : Iterator[ShapeRow]
+        Rows to insert.
+
+    Returns
+    -------
+    int
+        Number of rows inserted.
+    """
+    count = 0
+    for chunk in batched(records, SHAPES_BATCH):
+        conn.executemany(
+            'INSERT INTO shapes VALUES (?, ?, ?, ?, ?, ?, ?)',
+            chunk,
+        )
+        count += len(chunk)
+    return count
+
+
 def load_shapes(
     *,
     conn: sqlite3.Connection,
@@ -227,6 +348,8 @@ def load_shapes(
 ) -> int:
     """
     Store the simplified shapes one feed's trips use.
+
+    A shape whose rows are not all together in shapes.txt is not stored.
 
     Parameters
     ----------
@@ -242,7 +365,8 @@ def load_shapes(
     int
         Number of shapes stored.
     """
-    records = (
+    split: set[str] = set()
+    count = insert_shapes(conn=conn, records=(
         shape_record(
             shape_id=f'{source.name}:{shape_id}',
             mode=modes[shape_id],
@@ -251,13 +375,11 @@ def load_shapes(
         for shape_id, run in shape_runs(
             archive=source.archive,
             wanted=modes.keys(),
+            split=split,
         )
+    ))
+    conn.executemany(
+        'DELETE FROM shapes WHERE shape_id = ?',
+        [(f'{source.name}:{shape_id}',) for shape_id in sorted(split)],
     )
-    count = 0
-    for chunk in batched(records, SHAPES_BATCH):
-        conn.executemany(
-            'INSERT INTO shapes VALUES (?, ?, ?, ?, ?, ?, ?)',
-            chunk,
-        )
-        count += len(chunk)
-    return count
+    return count - len(split)

@@ -1,8 +1,10 @@
 """Tests for the tile codec and the plan B dithering."""
 
+import zlib
 from typing import Final
 
 import numpy as np
+import pytest
 from numpy.typing import NDArray
 
 from paperroute.render.tile_codec import (
@@ -17,6 +19,10 @@ from paperroute.render.tile_codec import (
 
 SIZE: Final[int] = 256
 SMALL: Final[int] = 16
+TINY: Final[int] = 4
+WIDE: Final[int] = 64
+SEEDS: Final[range] = range(5)
+PACKED: Final[int] = 0b00011011
 FIELD: Final[int] = 64
 DARK: Final[int] = 85
 BLANK_LIMIT: Final[int] = 100
@@ -77,6 +83,36 @@ def test_diffuse_matches_reference_loop() -> None:
     """The wavefront gives exactly the serial result."""
     grey = _levels(size=SMALL, seed=2)
     assert np.array_equal(diffuse(grey=grey), _reference(grey=grey))
+
+
+@pytest.mark.parametrize("seed", SEEDS)
+def test_diffuse_matches_reference_on_wide_grids(seed: int) -> None:
+    """Level grids and full-range grids match the serial pass."""
+    rng = np.random.default_rng(seed)
+    full = rng.integers(0, 256, size=(WIDE, WIDE)).astype(np.uint8)
+    for grey in (_levels(size=WIDE, seed=seed), full):
+        assert np.array_equal(diffuse(grey=grey), _reference(grey=grey))
+
+
+def test_unpack_grey_reads_high_bits_first() -> None:
+    """Byte 0x1B holds the levels 0, 1, 2, 3 from the high bits down."""
+    blob = zlib.compress(bytes([PACKED]))
+    assert unpack_grey(blob=blob, size=2).tolist() == [[0, 85], [170, 255]]
+
+
+def test_pack_grey_writes_high_bits_first() -> None:
+    """The levels 0, 85, 170, 255 pack to byte 0x1B."""
+    grey = np.array([[0, 85], [170, 255]], dtype=np.uint8)
+    assert zlib.decompress(pack_grey(grey=grey)) == bytes([PACKED])
+
+
+def test_unpack_rejects_wrong_size() -> None:
+    """A blob of the wrong length raises a ValueError."""
+    blob = pack_grey(grey=_levels(size=TINY, seed=1))
+    with pytest.raises(ValueError, match="expected"):
+        unpack_grey(blob=blob, size=SIZE)
+    with pytest.raises(ValueError, match="expected"):
+        unpack_bits(blob=pack_bits(paper=np.ones((TINY, TINY), bool)))
 
 
 def test_diffuse_keeps_black_and_white() -> None:

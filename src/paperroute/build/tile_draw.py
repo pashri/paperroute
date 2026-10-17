@@ -24,7 +24,13 @@ from paperroute.build.map_style import (
 )
 from paperroute.build.tile_store import PlacedLabel
 from paperroute.core.geo import MetreBox
-from paperroute.core.tiles import GRID_ORIGIN, TILE, LabelKind, from_pixels
+from paperroute.core.tiles import (
+    GRID_ORIGIN,
+    LABEL_REACH,
+    TILE,
+    LabelKind,
+    from_pixels,
+)
 from paperroute.render.canvas import INK, PAPER, Canvas, Point
 from paperroute.render.tile_codec import (
     diffuse,
@@ -34,7 +40,6 @@ from paperroute.render.tile_codec import (
 )
 
 GEOMETRY_MARGIN: Final[int] = 16  # pixels of geometry kept past the edge
-LABEL_REACH: Final[int] = TILE  # pixels searched past the edge for labels
 SMALLEST_AREA: Final[int] = 3  # pixels; smaller bounds are not filled
 HALO: Final[int] = 2
 SQUARE_HALF: Final[tuple[int, int]] = (5, 3)  # rank 0, other ranks

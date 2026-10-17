@@ -17,6 +17,7 @@ from paperroute.core.map_view import (
     screen_point,
 )
 from paperroute.core.tiles import (
+    LABEL_REACH,
     TILE,
     ZOOMS,
     StreetLabel,
@@ -39,7 +40,6 @@ ROUTE_STYLE: Final[dict[int, tuple[int, int | None]]] = {
 }
 BEAD_DASH: Final[tuple[float, float]] = (2.0, 7.0)
 HALO: Final[int] = 2
-LABEL_REACH: Final[int] = TILE  # pixels a baked label may reach past
 MATCH_POINTS: Final[int] = 9
 MATCH_NEEDED: Final[int] = 6
 MATCH_REACH: Final[float] = 5.0  # pixels

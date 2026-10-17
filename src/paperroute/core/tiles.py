@@ -8,6 +8,7 @@ from typing import Final
 from paperroute.core.geo import Point, to_metres
 
 TILE: Final[int] = 256
+LABEL_REACH: Final[int] = TILE  # pixels a baked label may reach past
 ZOOMS: Final[tuple[int, ...]] = (3, 5, 8, 14, 45)
 CITY: Final[int] = 45
 OPAL_BBOX: Final[tuple[float, float, float, float]] = (

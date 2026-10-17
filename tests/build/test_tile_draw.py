@@ -19,7 +19,6 @@ from paperroute.build.map_style import (
     SUBURB_FACE,
 )
 from paperroute.build.tile_draw import (
-    LABEL_REACH,
     Window,
     big_enough,
     draw_window,
@@ -28,6 +27,7 @@ from paperroute.build.tile_draw import (
 from paperroute.build.tile_store import PlacedLabel
 from paperroute.core.geo import MetreBox, to_metres
 from paperroute.core.tiles import (
+    LABEL_REACH,
     TILE,
     LabelKind,
     from_pixels,

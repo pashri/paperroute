@@ -102,7 +102,10 @@ def test_rotated_text_is_taller_than_wide() -> None:
         at=(100, 100), text='Parramatta', face=Face(weight=700, px=18),
         grey=INK, angle=90)
     height, width = _ink_box(canvas.grey())
+    rows, cols = np.nonzero(canvas.grey() == INK)
     assert height > width
+    assert 60 < int(cols.mean()) < 140
+    assert 100 <= int(rows.min()) < 130
 
 
 def test_dashed_line_leaves_gaps() -> None:
@@ -137,11 +140,12 @@ def test_rings_even_odd_leaves_hole() -> None:
 def test_image_blits_grey_levels() -> None:
     """A grey block reads back at its level."""
     canvas = Canvas()
-    block = np.full((4, 4), 85, dtype=np.uint8)
-    canvas.image(grey=block, at=(10, 10))
+    block = np.full((4, 6), 85, dtype=np.uint8)
+    canvas.image(grey=block, at=(10, 30))
     grey = canvas.grey()
-    assert grey[10:14, 10:14].tolist() == block.tolist()
-    assert int(grey[14, 14]) == PAPER
+    assert grey[30:34, 10:16].tolist() == block.tolist()
+    assert int(grey[34, 16]) == PAPER
+    assert int(grey[10, 30]) == PAPER
 
 
 def test_dots_draws_every_point() -> None:
@@ -152,6 +156,16 @@ def test_dots_draws_every_point() -> None:
     grey = canvas.grey()
     assert all(int(grey[20, int(x)]) == INK for x, _ in points)
     assert int(grey[20, 30]) == PAPER
+
+
+def test_dots_are_round() -> None:
+    """A big dot is ink at its edge midpoints and paper at its corners."""
+    canvas = Canvas()
+    canvas.dots(points=[(50.0, 50.0)], diameter=21, grey=INK)
+    grey = canvas.grey()
+    assert int(grey[50, 41]) == INK
+    assert int(grey[41, 50]) == INK
+    assert int(grey[40, 40]) == PAPER
 
 
 def test_clipped_keeps_outside_untouched() -> None:

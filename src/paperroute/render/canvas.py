@@ -95,7 +95,7 @@ def text_width(*, text: str, face: Face) -> float:
     return float(font(face).measureText(text))
 
 
-def anchor_offset(*, face: Face, text: str, anchor: str) -> Point:
+def anchor_offset(*, face: Face, width: float, anchor: str) -> Point:
     """
     Offset from an anchor to the text baseline origin.
 
@@ -103,8 +103,8 @@ def anchor_offset(*, face: Face, text: str, anchor: str) -> Point:
     ----------
     face : Face
         Font.
-    text : str
-        Text.
+    width : float
+        Advance width of the text.
     anchor : str
         Two-letter anchor.
 
@@ -113,7 +113,6 @@ def anchor_offset(*, face: Face, text: str, anchor: str) -> Point:
     Point
         Horizontal and vertical offset to add to the anchor.
     """
-    width = text_width(text=text, face=face)
     metrics = font(face).getMetrics()
     dx = {'l': 0.0, 'm': -width / 2, 'r': -width}[anchor[0]]
     ascent, descent = -metrics.fAscent, metrics.fDescent
@@ -243,14 +242,15 @@ class Canvas:
             Advance width in pixels.
         """
         loaded = font(face)
-        dx, dy = anchor_offset(face=face, text=text, anchor=anchor)
+        width = text_width(text=text, face=face)
+        dx, dy = anchor_offset(face=face, width=width, anchor=anchor)
         with self.rotated(at=at, angle=angle):
             x, y = (dx, dy) if angle else (at[0] + dx, at[1] + dy)
-            self.halo(text=text, at=(x, y), font_=loaded, halo=halo)
+            self.stroke_halo(text=text, at=(x, y), font_=loaded, halo=halo)
             self.canvas.drawString(text, x, y, loaded, paint(grey=grey))
-        return text_width(text=text, face=face)
+        return width
 
-    def halo(self, *, text: str, at: Point, font_: skia.Font,
+    def stroke_halo(self, *, text: str, at: Point, font_: skia.Font,
              halo: int) -> None:
         """
         Stroke text in paper so the glyphs stand out from what is below.

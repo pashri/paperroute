@@ -2,7 +2,8 @@
 # Installed as /usr/local/sbin/paperroute-install-tiles (root, no arguments).
 # Installs the staged map tiles atomically when their size or mtime differ
 # from the last install. Root reads the stage only as its owner and touches
-# the data directory only as the service user.
+# the data directory only as the service user. Their output never reaches the
+# caller's terminal: root reports their failures itself.
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C
@@ -19,35 +20,45 @@ fail() {
     exit 2
 }
 
+abort() {
+    printf 'install-tiles: %s\n' "$1" >&2
+    exit 1
+}
+
 as_owner() {
     if [[ $EUID -eq 0 ]]; then
-        setsid -w runuser -u "$OWNER" -- "$@" 9>&-
+        setsid -w runuser -u "$OWNER" -- "$@" 2>/dev/null 9>&-
     else
-        "$@"
+        "$@" 2>/dev/null
     fi
 }
 
 as_service() {
     if [[ $EUID -eq 0 ]]; then
-        setsid -w runuser -u paperroute -- "$@" 9>&-
+        setsid -w runuser -u paperroute -- "$@" 2>/dev/null 9>&-
     else
-        "$@"
+        "$@" 2>/dev/null
     fi
 }
 
 cleanup() {
     if [[ -n $tmp ]]; then
-        as_service rm -f -- "$tmp"
+        if ! as_service rm -f -- "$tmp" >/dev/null; then
+            printf 'install-tiles: could not remove the temporary file\n' >&2
+        fi
     fi
 }
 
-# Checks the staged file; sets OWNER.
+# Checks the staged file and its directory; sets OWNER.
 validate() {
-    local uid found
+    local uid found dir=${STAGED%/*}
     OWNER=${SUDO_USER:-$(id -un)}
     uid=$(id -u -- "$OWNER" 2>/dev/null) || fail 'unknown user'
     if [[ $EUID -eq 0 && $uid -eq 0 ]]; then
         fail 'refusing to read the stage as root'
+    fi
+    if [[ ! -d $dir || -L $dir ]]; then
+        fail 'the stage tiles directory is not a real directory'
     fi
     if [[ ! -f $STAGED || -L $STAGED ]]; then
         fail 'the staged tiles are not a regular file'
@@ -70,9 +81,10 @@ STAMP=$DATA/tiles.stamp
 validate
 
 stamp=$(as_owner stat -c '%s %Y' -- "$STAGED" 2>/dev/null \
-    || as_owner stat -f '%z %m' -- "$STAGED")
+    || as_owner stat -f '%z %m' -- "$STAGED") \
+    || fail 'cannot read the staged tiles'
 old=$(as_service cat -- "$STAMP" 2>/dev/null || true)
-if as_service test -e "$DEST" && [[ $old == "$stamp" ]]; then
+if as_service test -e "$DEST" >/dev/null && [[ $old == "$stamp" ]]; then
     printf 'tiles unchanged\n'
     exit 0
 fi
@@ -85,15 +97,25 @@ if ! flock -n 9; then
 fi
 trap cleanup EXIT
 
-tmp=$(as_service mktemp "$DATA/tiles.db.XXXXXX")
-as_owner cat -- "$STAGED" | as_service sh -c 'cat >"$1"' sh "$tmp"
-as_service chmod 0640 "$tmp"
-check=$(as_service sqlite3 -readonly "$tmp" 'PRAGMA quick_check') || check=
-if [[ $check != ok ]]; then
-    printf 'install-tiles: the staged tiles failed the integrity check\n' >&2
-    exit 1
+tmp=$(as_service mktemp "$DATA/tiles.db.XXXXXX") \
+    || abort 'could not create a temporary file'
+suffix=${tmp##*.}
+if [[ ! $suffix =~ ^[A-Za-z0-9]{6}$ || $tmp != "$DATA/tiles.db.$suffix" ]]
+then
+    abort 'unexpected temporary file name'
 fi
-as_service mv -f -- "$tmp" "$DEST"
+as_owner cat -- "$STAGED" | as_service sh -c 'cat >"$1"' sh "$tmp" >/dev/null \
+    || abort 'could not copy the staged tiles'
+as_service chmod 0640 -- "$tmp" >/dev/null \
+    || abort 'could not set the mode of the new tiles'
+check=$(as_service sqlite3 -readonly -- "$tmp" 'PRAGMA quick_check') \
+    || check=
+if [[ $check != ok ]]; then
+    abort 'the staged tiles failed the integrity check'
+fi
+as_service mv -T -f -- "$tmp" "$DEST" >/dev/null \
+    || abort 'could not replace the tiles; is tiles.db a directory?'
 tmp=
-printf '%s\n' "$stamp" | as_service sh -c 'cat >"$1"' sh "$STAMP"
+printf '%s\n' "$stamp" | as_service sh -c 'cat >"$1"' sh "$STAMP" >/dev/null \
+    || abort 'could not write the stamp'
 printf 'tiles installed\n'

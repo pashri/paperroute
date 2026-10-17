@@ -1096,19 +1096,31 @@ TILES_ROOT_MESSAGE: Final[str] = (
 TILES_NOT_A_FILE: Final[str] = (
     'install-tiles: the staged tiles are not a regular file\n'
 )
-DATA_PATH: Final[re.Pattern[str]] = re.compile(
-    pattern=r'\$\{?(?:DEST|STAMP|tmp)\b'
+TILES_DIR_NOT_REAL: Final[str] = (
+    'install-tiles: the stage tiles directory is not a real directory\n'
 )
+DATA_PATH: Final[re.Pattern[str]] = re.compile(
+    pattern=r'\$\{?(?:DATA|DEST|STAMP|tmp)\b'
+)
+TMP_PATH: Final[re.Pattern[str]] = re.compile(pattern=r'\$\{?tmp\b')
 STAGED_PATH: Final[re.Pattern[str]] = re.compile(pattern=r'\$\{?STAGED\b')
 LEADING_WORDS: Final[re.Pattern[str]] = re.compile(
     pattern=r'^(?:(?:if|then|while|!)\s+)+'
 )
-SERVICE_HEADS: Final[tuple[str, ...]] = ('as_service ', '[[ ')
+SERVICE_HEADS: Final[tuple[str, ...]] = (
+    'as_service ',
+    '[[ ',
+    'DATA=${PAPERROUTE_DATA:-$DATA}',
+    'DEST=$DATA/tiles.db',
+    'STAMP=$DATA/tiles.stamp',
+    'suffix=${tmp##*.}',
+)
 OWNER_HEADS: Final[tuple[str, ...]] = (
     'as_owner ',
     '[[ ',
     'find "$STAGED" -maxdepth 0 -user ',
     'STAGED=${PAPERROUTE_TILES_STAGE:-',
+    'local uid found dir=${STAGED%/*}',
 )
 
 
@@ -1183,14 +1195,15 @@ def command_heads(line: str, pattern: re.Pattern[str]) -> list[str]:
     Returns
     -------
     list[str]
-        For each match inside a ``[[ ... ]]`` test, ``'[[ '``. For any
-        other, the line from the start of its simple command (after any
-        pipe, list operator, ``;`` or ``$(``, and without a leading
-        ``if``, ``then``, ``while`` or ``!``) to the end.
+        For each match inside a ``[[ ... ]]`` test that runs no ``$(...)``,
+        ``'[[ '``. For any other, the line from the start of its simple
+        command (after any pipe, list operator, ``;`` or ``$(``, and
+        without a leading ``if``, ``then``, ``while`` or ``!``) to the end.
     """
     tests = [
         found.span()
         for found in re.finditer(pattern=r'\[\[ .*? \]\]', string=line)
+        if '$(' not in found.group(0)
     ]
     return [
         '[[ '
@@ -1259,6 +1272,19 @@ def test_install_tiles_rejects_a_symlinked_stage(tiles: TilesSandbox) -> None:
     before = snapshot(root=tiles.root)
     result = run_tiles(tiles=tiles)
     assert (result.returncode, result.stderr) == (2, TILES_NOT_A_FILE)
+    assert snapshot(root=tiles.root) == before
+
+
+def test_install_tiles_rejects_a_symlinked_stage_directory(
+    tiles: TilesSandbox,
+) -> None:
+    """A stage tiles directory that is a symlink exits 2 before it is read."""
+    linked = tiles.root / 'linked'
+    linked.symlink_to(tiles.staged.parent)
+    env = tiles.env | {'PAPERROUTE_TILES_STAGE': str(linked / 'tiles.db')}
+    before = snapshot(root=tiles.root)
+    result = run_script(name='install-tiles', args=(), env=env)
+    assert (result.returncode, result.stderr) == (2, TILES_DIR_NOT_REAL)
     assert snapshot(root=tiles.root) == before
 
 
@@ -1362,7 +1388,10 @@ def test_install_tiles_touches_data_only_as_the_service_user() -> None:
     """Root never opens a data path, and reads the stage only as its owner."""
     data_heads = [
         head
-        for line in commands(path=TILES_SCRIPT, word='(?:DEST|STAMP|tmp)')
+        for line in commands(
+            path=TILES_SCRIPT,
+            word='(?:DATA|DEST|STAMP|tmp)',
+        )
         for head in command_heads(line=line, pattern=DATA_PATH)
     ]
     owner_heads = [
@@ -1387,10 +1416,36 @@ def test_install_tiles_touches_data_only_as_the_service_user() -> None:
 def test_install_tiles_runs_users_detached_without_the_lock() -> None:
     """Every runuser has no terminal, no stdin and no lock fd."""
     assert commands(path=TILES_SCRIPT, word='runuser') == [
-        'setsid -w runuser -u "$OWNER" -- "$@" 9>&-',
-        'setsid -w runuser -u paperroute -- "$@" 9>&-',
+        'setsid -w runuser -u "$OWNER" -- "$@" 2>/dev/null 9>&-',
+        'setsid -w runuser -u paperroute -- "$@" 2>/dev/null 9>&-',
     ]
     assert '\nexec </dev/null\n' in script_text(path=TILES_SCRIPT)
+
+
+def test_install_tiles_keeps_user_output_off_the_terminal() -> None:
+    """Every owner or service command's stdout is captured or discarded."""
+    found = [
+        line
+        for line in commands(path=TILES_SCRIPT, word='as_(?:owner|service)')
+        if not re.fullmatch(pattern=r'as_\w+\(\) \{', string=line)
+    ]
+    assert len(found) >= 10
+    assert all('$(' in line or '>/dev/null' in line for line in found)
+
+
+def test_install_tiles_ends_options_before_the_temp_file() -> None:
+    """The service-chosen temp path always follows ``--`` or ``sh -c``."""
+    prefixes = [
+        head.split('$tmp')[0]
+        for line in commands(path=TILES_SCRIPT, word='tmp')
+        for head in command_heads(line=line, pattern=TMP_PATH)
+        if head.startswith('as_service ')
+    ]
+    assert len(prefixes) >= 5
+    assert all(
+        ' -- ' in prefix or prefix.startswith('as_service sh -c ')
+        for prefix in prefixes
+    )
 
 
 def test_install_tiles_locks_cleans_up_and_renames() -> None:
@@ -1398,8 +1453,25 @@ def test_install_tiles_locks_cleans_up_and_renames() -> None:
     text = script_text(path=TILES_SCRIPT)
     assert 'exec 9>"$LOCK"\nif ! flock -n 9; then\n' in text
     assert 'trap cleanup EXIT\n' in text
-    assert '        as_service rm -f -- "$tmp"\n' in text
-    assert 'as_service mv -f -- "$tmp" "$DEST"\n' in text
+    assert '        if ! as_service rm -f -- "$tmp" >/dev/null; then\n' in text
+
+
+def test_install_tiles_fails_loudly_on_a_directory_at_dest() -> None:
+    """mv -T refuses to move the tiles into a directory, and that aborts."""
+    text = script_text(path=TILES_SCRIPT)
+    rename = (
+        'as_service mv -T -f -- "$tmp" "$DEST" >/dev/null \\\n'
+        "    || abort 'could not replace the tiles; is tiles.db a directory?'"
+    )
+    abort = (
+        "abort() {\n    printf 'install-tiles: %s\\n' \"$1\" >&2\n"
+        '    exit 1\n}\n'
+    )
+    assert text.startswith('#!/bin/bash\n')
+    assert '\nset -euo pipefail\n' in text
+    assert abort in text
+    assert rename in text
+    assert text.index(rename) < text.index("printf 'tiles installed")
 
 
 def test_install_tiles_stamps_portably() -> None:
@@ -1407,7 +1479,8 @@ def test_install_tiles_stamps_portably() -> None:
     found = commands(path=TILES_SCRIPT, word='stat')
     assert found == [
         "stamp=$(as_owner stat -c '%s %Y' -- \"$STAGED\" 2>/dev/null"
-        " || as_owner stat -f '%z %m' -- \"$STAGED\")",
+        " || as_owner stat -f '%z %m' -- \"$STAGED\")"
+        " || fail 'cannot read the staged tiles'",
     ]
 
 

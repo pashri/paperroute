@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, Marker
+from paperroute.core.map_view import Marker
 from paperroute.core.tiles import CITY
 from paperroute.render.canvas import (
     INK,
@@ -497,6 +497,7 @@ def draw_markers(
     markers: Sequence[Marker],
     mpp: int,
     origin: Point,
+    stop: Point | None,
 ) -> None:
     """
     Draw vehicles: dots at city zoom, else placed badges.
@@ -513,20 +514,28 @@ def draw_markers(
         Metres per pixel.
     origin : Point
         The map's top left on the canvas.
+    stop : Point | None
+        Where the From stop is drawn, in map pixels; badges keep clear of
+        it. None when no stop is drawn.
     """
     if mpp == CITY:
         draw_dots(canvas, markers=markers, origin=origin)
         return
-    middle = (MAP_WIDTH / 2, MAP_HEIGHT / 2)
-    stop = (
-        middle[0] - STOP_HALF,
-        middle[1] - STOP_HALF,
-        middle[0] + STOP_HALF,
-        middle[1] + STOP_HALF,
+    reserved = (
+        []
+        if stop is None
+        else [
+            (
+                stop[0] - STOP_HALF,
+                stop[1] - STOP_HALF,
+                stop[0] + STOP_HALF,
+                stop[1] + STOP_HALF,
+            ),
+        ]
     )
     placed = place(
         markers=sorted(markers, key=lambda marker: not marker.pinned),
-        reserved=[stop],
+        reserved=reserved,
     )
     draw_leaders(canvas, placed=placed, origin=origin)
     for item in sorted(placed, key=lambda item: item.marker.pinned):

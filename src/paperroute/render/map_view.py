@@ -165,18 +165,23 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
         View-model.
     """
     centre = view.base.centre
+    stop = (
+        None
+        if centre is None
+        else screen_point(centre=centre, mpp=view.base.mpp, point=centre)
+    )
     with canvas.clipped(box=MAP_BOX):
         draw_markers(
             canvas,
             markers=view.markers,
             mpp=view.base.mpp,
             origin=(0, HEADER),
+            stop=stop,
         )
         if view.empty:
             draw_empty(canvas, text=view.empty)
-        if centre is not None:
-            x, y = screen_point(centre=centre, mpp=view.base.mpp, point=centre)
-            draw_stop(canvas, at=(x, y + HEADER))
+        if stop is not None:
+            draw_stop(canvas, at=(stop[0], stop[1] + HEADER))
 
 
 def row_time(canvas: Canvas, *, row: Row, y: int) -> None:

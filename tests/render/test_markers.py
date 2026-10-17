@@ -35,6 +35,7 @@ from paperroute.render.markers import (
 
 BADGE_ZOOM = 8
 SPOT: Point = (100.0, 100.0)
+MIDDLE: Point = (MAP_WIDTH / 2, MAP_HEIGHT / 2)
 
 
 class CountingCanvas(Canvas):
@@ -158,7 +159,13 @@ def drawn(
     """
     canvas = Canvas()
     canvas.rect(box=(0, 0, WIDTH, HEIGHT), grey=ground)
-    draw_markers(canvas, markers=markers, mpp=mpp, origin=origin)
+    draw_markers(
+        canvas,
+        markers=markers,
+        mpp=mpp,
+        origin=origin,
+        stop=MIDDLE,
+    )
     return canvas.grey()
 
 
@@ -249,6 +256,7 @@ def test_city_zoom_draws_dots() -> None:
         markers=[marker(), marker(at=(200.0, 100.0), live=False)],
         mpp=CITY,
         origin=(0.0, 0.0),
+        stop=MIDDLE,
     )
     grey = canvas.grey()
     assert int(grey[100, 100]) == INK
@@ -445,7 +453,13 @@ def test_leaders_are_two_strokes_and_one_dot_batch() -> None:
     """Each leader is a 3 px paper line under 1.5 px ink; one dot call."""
     canvas = CountingCanvas()
     markers = [marker(), replace(marker(), route='T1')] * 2
-    draw_markers(canvas, markers=markers, mpp=BADGE_ZOOM, origin=(0, 0))
+    draw_markers(
+        canvas,
+        markers=markers,
+        mpp=BADGE_ZOOM,
+        origin=(0, 0),
+        stop=MIDDLE,
+    )
     moved = sum(
         item.centre != SPOT for item in place(markers=markers, reserved=[])
     )
@@ -460,7 +474,34 @@ def test_stop_box_is_14_px_each_side(y: float, slides: bool) -> None:
     """A badge must clear the stop's 28 px box by its 4 px growth."""
     canvas = CountingCanvas()
     below = marker(at=(MAP_WIDTH / 2, y))
-    draw_markers(canvas, markers=[below], mpp=BADGE_ZOOM, origin=(0, 0))
+    draw_markers(
+        canvas,
+        markers=[below],
+        mpp=BADGE_ZOOM,
+        origin=(0, 0),
+        stop=MIDDLE,
+    )
+    assert bool(canvas.lines) is slides
+
+
+@pytest.mark.parametrize(
+    ('stop', 'slides'),
+    [((MAP_WIDTH / 2, MAP_HEIGHT / 2 + 1), True), (None, False)],
+)
+def test_stop_box_sits_where_the_stop_is_drawn(
+    stop: Point | None,
+    slides: bool,
+) -> None:
+    """The reserved box follows the given stop point, or is absent."""
+    canvas = CountingCanvas()
+    below = marker(at=(MAP_WIDTH / 2, 248.5))
+    draw_markers(
+        canvas,
+        markers=[below],
+        mpp=BADGE_ZOOM,
+        origin=(0, 0),
+        stop=stop,
+    )
     assert bool(canvas.lines) is slides
 
 

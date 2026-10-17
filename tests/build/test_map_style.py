@@ -8,8 +8,6 @@ from paperroute.build.map_style import (
     DARK,
     LIGHT,
     PLACE_KINDS,
-    RESERVE_PX,
-    RESERVE_ZOOMS,
     RIVER_STYLE,
     ROAD_LAYERS,
     ROAD_WIDTHS,
@@ -79,14 +77,12 @@ def test_road_style_rejects_unknown_zoom() -> None:
 
 
 def test_label_zones_match_the_spec() -> None:
-    """Label zooms, place kinds and reserve rules are the chosen ones."""
+    """Label zooms and place kinds are the chosen ones."""
     assert STREET_ZOOMS == {3, 5, 8, 14}
     assert SUBURB_ZOOMS == {8, 14, 45}
     assert STATION_ZOOMS == {3, 5, 8, 14, 45}
     assert CITY_PLACES == {'suburb', 'town'}
     assert PLACE_KINDS == {'suburb', 'town', 'locality', 'village'}
-    assert RESERVE_ZOOMS == {3, 5, 8}
-    assert RESERVE_PX == 24
     assert STREET_REPEAT_PX == 384
 
 

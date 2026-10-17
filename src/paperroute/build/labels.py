@@ -14,8 +14,6 @@ from paperroute.build.geometry import Line, merge_lines
 from paperroute.build.map_style import (
     CITY_PLACES,
     PLACE_KINDS,
-    RESERVE_PX,
-    RESERVE_ZOOMS,
     ROAD_LAYERS,
     STATION_FACE,
     STATION_ZOOMS,
@@ -837,35 +835,10 @@ def street_labels(
                 yield label
 
 
-def reserve_stops(
-    *,
-    index: LabelIndex,
-    stops: Sequence[Point],
-    mpp: int,
-) -> None:
-    """
-    Keep labels off a square around every stop.
-
-    Parameters
-    ----------
-    index : LabelIndex
-        Taken boxes.
-    stops : Sequence[Point]
-        Stops in metres.
-    mpp : int
-        Metres per pixel.
-    """
-    half = RESERVE_PX / 2
-    for stop in stops:
-        x, y = to_pixels(point=stop, mpp=mpp)
-        index.reserve(box=(x - half, y - half, x + half, y + half))
-
-
 def place_labels(
     *,
     store: FeatureStore,
     tiles: Mapping[int, set[tuple[int, int]]],
-    stops: Sequence[Point],
     index: LabelIndex,
 ) -> Iterator[PlacedLabel]:
     """
@@ -882,8 +855,6 @@ def place_labels(
         The features.
     tiles : Mapping[int, set[tuple[int, int]]]
         Tiles to build, keyed by metres per pixel.
-    stops : Sequence[Point]
-        Stops in metres. Labels keep off them at ``RESERVE_ZOOMS``.
     index : LabelIndex
         Scratch index, emptied for each zoom.
 
@@ -894,8 +865,6 @@ def place_labels(
     """
     for mpp, wanted in tiles.items():
         index.reset()
-        if mpp in RESERVE_ZOOMS:
-            reserve_stops(index=index, stops=stops, mpp=mpp)
         zoom_blocks = [
             Block(mpp=mpp, col=col, row=row)
             for col, row in blocks(tiles=wanted)

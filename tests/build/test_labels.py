@@ -138,7 +138,6 @@ def place(
     *,
     store: FeatureStore,
     zooms: Sequence[int],
-    stops: Sequence[Point] = (),
 ) -> list[PlacedLabel]:
     """
     Place labels around the anchor.
@@ -149,8 +148,6 @@ def place(
         The features.
     zooms : Sequence[int]
         Zooms to place.
-    stops : Sequence[Point]
-        Stops in metres.
 
     Returns
     -------
@@ -163,32 +160,42 @@ def place(
         tiles[mpp] = around(box=(x - 3072, y - 1024, x + 3072, y + 1024))
     index = LabelIndex(conn=store.conn)
     return list(
-        place_labels(store=store, tiles=tiles, stops=stops, index=index),
+        place_labels(store=store, tiles=tiles, index=index),
     )
 
 
-def overlaps(*, first: Box, second: Box) -> bool:
+def add_blocker(*, store: FeatureStore) -> None:
     """
-    Say whether two boxes overlap.
+    Add a station whose small label sits on the anchor.
 
     Parameters
     ----------
-    first : Box
-        Left, top, right and bottom.
-    second : Box
-        Left, top, right and bottom.
+    store : FeatureStore
+        Target store.
+    """
+    add_place(
+        store=store,
+        kind='station',
+        name='Q',
+        point=from_pixels(pixel=(MIDDLE, MIDDLE + 15), mpp=3),
+    )
+
+
+def street_xs(*, labels: Sequence[PlacedLabel]) -> list[float]:
+    """
+    List the street labels' centre x values.
+
+    Parameters
+    ----------
+    labels : Sequence[PlacedLabel]
+        Placed labels.
 
     Returns
     -------
-    bool
-        True when they share area.
+    list[float]
+        Centre x of each street label, in order.
     """
-    return (
-        first[0] < second[2]
-        and second[0] < first[2]
-        and first[1] < second[3]
-        and second[1] < first[3]
-    )
+    return [label.x for label in labels if label.kind == LabelKind.STREET]
 
 
 def test_fit_street_rejects_a_curve() -> None:
@@ -307,29 +314,6 @@ def test_long_street_is_named_repeatedly(store: FeatureStore) -> None:
     assert {label.width for label in labels} == {width}
 
 
-def test_label_never_sits_on_a_stop(store: FeatureStore) -> None:
-    """No label at 3 m/px covers a stop's 24 px box."""
-    add_street(
-        store=store,
-        pixels=[(MIDDLE - 192, MIDDLE), (MIDDLE + 900, MIDDLE)],
-        mpp=3,
-    )
-    labels = place(store=store, zooms=[3], stops=[ANCHOR])
-    stop = (MIDDLE - 12, MIDDLE - 12, MIDDLE + 12, MIDDLE + 12)
-    assert labels
-    assert not any(
-        overlaps(first=label_box(label=label), second=stop)
-        for label in labels
-    )
-
-
-def test_stops_are_not_reserved_at_city_zoom(store: FeatureStore) -> None:
-    """At 45 m/px a town sitting on a stop is still named."""
-    add_place(store=store, kind='town', name='Parramatta')
-    labels = place(store=store, zooms=[45], stops=[ANCHOR])
-    assert [label.name for label in labels] == ['P A R R A M A T T A']
-
-
 def test_suburbs_only_from_8(store: FeatureStore) -> None:
     """A suburb is named at 8, 14 and 45 m/px only, in spaced capitals."""
     add_place(store=store, kind='suburb', name='Constitution Hill')
@@ -408,7 +392,7 @@ def test_street_labels_stay_in_their_block(store: FeatureStore) -> None:
     tiles = {3: around(box=(EDGE, EDGE, EDGE + 2048, EDGE + 2048))}
     index = LabelIndex(conn=store.conn)
     labels = list(
-        place_labels(store=store, tiles=tiles, stops=(), index=index),
+        place_labels(store=store, tiles=tiles, index=index),
     )
     assert len(labels) >= 4
     assert all(EDGE <= label.x < EDGE + 2048 for label in labels)
@@ -427,7 +411,7 @@ def test_label_belongs_to_the_block_holding_its_centre(
     tiles = {8: around(box=(EDGE, EDGE, EDGE + 2048, EDGE + 2048))}
     index = LabelIndex(conn=store.conn)
     labels = list(
-        place_labels(store=store, tiles=tiles, stops=(), index=index),
+        place_labels(store=store, tiles=tiles, index=index),
     )
     assert [(label.kind, label.y) for label in labels] == [
         (LabelKind.STATION, EDGE + 2048 - 5),
@@ -465,26 +449,28 @@ def test_250_px_street_gets_one_label(store: FeatureStore) -> None:
 
 
 def test_short_street_falls_back_to_a_quarter(store: FeatureStore) -> None:
-    """When the middle is on a stop, a quarter point takes the label."""
+    """When the middle is taken, a quarter point takes the label."""
     add_street(
         store=store,
         pixels=[(MIDDLE - 90, MIDDLE), (MIDDLE + 90, MIDDLE)],
         mpp=3,
         name='Elm St',
     )
-    labels = place(store=store, zooms=[3], stops=[ANCHOR])
-    assert [label.x for label in labels] == [MIDDLE - 45]
+    add_blocker(store=store)
+    labels = place(store=store, zooms=[3])
+    assert street_xs(labels=labels) == [MIDDLE - 45]
 
 
 def test_offsets_rescue_a_blocked_centre(store: FeatureStore) -> None:
-    """A stop on the only centre pushes the label 64 px along."""
+    """A label on the only centre pushes the street name 64 px along."""
     add_street(
         store=store,
         pixels=[(MIDDLE - 192, MIDDLE), (MIDDLE + 108, MIDDLE)],
         mpp=3,
     )
-    labels = place(store=store, zooms=[3], stops=[ANCHOR])
-    assert [label.x for label in labels] == [MIDDLE + 64]
+    add_blocker(store=store)
+    labels = place(store=store, zooms=[3])
+    assert street_xs(labels=labels) == [MIDDLE + 64]
 
 
 def test_different_streets_close_together_are_both_named(
@@ -586,7 +572,7 @@ def test_street_pieces_reach_past_the_block(store: FeatureStore) -> None:
     tiles = {3: around(box=(EDGE, EDGE, EDGE + 2048, EDGE + 2048))}
     index = LabelIndex(conn=store.conn)
     labels = list(
-        place_labels(store=store, tiles=tiles, stops=(), index=index),
+        place_labels(store=store, tiles=tiles, index=index),
     )
     assert [label.x for label in labels] == [EDGE + 56, EDGE + 376]
 

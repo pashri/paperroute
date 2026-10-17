@@ -2,7 +2,7 @@
 
 import math
 import time
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping
 from concurrent.futures import ProcessPoolExecutor
 from contextlib import ExitStack
 from dataclasses import dataclass
@@ -21,7 +21,7 @@ from paperroute.build.tile_set import (
     tile_set,
 )
 from paperroute.build.tile_store import TileWriter
-from paperroute.core.geo import MetreBox, Point, to_metres
+from paperroute.core.geo import MetreBox, to_metres
 from paperroute.core.tiles import OPAL_BBOX, ZOOMS
 from paperroute.observers import BYTES_PER_MB, max_rss_mb
 
@@ -215,7 +215,7 @@ def block_jobs(
     ]
 
 
-def wanted_tiles(*, config: TileBuildConfig) -> tuple[list[Point], Tiles]:
+def wanted_tiles(*, config: TileBuildConfig) -> Tiles:
     """
     Find the stops in the box and the tiles around them.
 
@@ -226,8 +226,8 @@ def wanted_tiles(*, config: TileBuildConfig) -> tuple[list[Point], Tiles]:
 
     Returns
     -------
-    tuple[list[Point], Tiles]
-        Stops in metres, and the tiles at each zoom.
+    Tiles
+        The tiles at each zoom.
 
     Raises
     ------
@@ -238,9 +238,7 @@ def wanted_tiles(*, config: TileBuildConfig) -> tuple[list[Point], Tiles]:
     stops = stop_points(timetable=config.timetable, bbox=config.bbox)
     if not stops:
         raise ValueError(f'no stops in the bbox {config.bbox}')
-    return stops, {
-        mpp: tile_set(stops=stops, mpp=mpp) for mpp in config.zooms
-    }
+    return {mpp: tile_set(stops=stops, mpp=mpp) for mpp in config.zooms}
 
 
 def metre_box(*, bbox: tuple[float, float, float, float]) -> MetreBox:
@@ -305,7 +303,6 @@ def add_labels(
     *,
     store: FeatureStore,
     tiles: Tiles,
-    stops: Sequence[Point],
 ) -> int:
     """
     Place the labels at each zoom and commit them to the store.
@@ -316,8 +313,6 @@ def add_labels(
         The store holding the features.
     tiles : Tiles
         Tiles at each zoom.
-    stops : Sequence[Point]
-        Stops in metres.
 
     Returns
     -------
@@ -332,7 +327,6 @@ def add_labels(
             place_labels(
                 store=store,
                 tiles={mpp: wanted},
-                stops=stops,
                 index=index,
             ),
         )
@@ -532,9 +526,9 @@ def build_in(
     tuple[int, int]
         Tiles and labels written.
     """
-    stops, tiles = wanted_tiles(config=config)
+    tiles = wanted_tiles(config=config)
     read_features(config=config, store=store, tiles=tiles)
-    labels = add_labels(store=store, tiles=tiles, stops=stops)
+    labels = add_labels(store=store, tiles=tiles)
     with TileWriter(out=config.out) as writer:
         count = write_tiles(
             writer=writer,

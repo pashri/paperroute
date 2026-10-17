@@ -8,6 +8,8 @@ from typing import Final
 import pytest
 
 from paperroute.adapters.tiles_db import SqliteTileRepository
+from paperroute.build.features import to_placed
+from paperroute.build.labels import label_box
 from paperroute.build.tile_store import TILE_FORMAT
 from paperroute.build.tiles import TileBuildConfig, TileReport, build_tiles
 from paperroute.core.geo import to_metres
@@ -106,6 +108,32 @@ def test_build_tiles_end_to_end(inputs: Path, serial: TileReport) -> None:
     finally:
         repo.close()
     assert tile is not None
+
+
+@pytest.mark.parametrize('mpp', [3, 5, 8])
+def test_street_is_named_through_a_stop(
+    inputs: Path,
+    serial: TileReport,
+    mpp: int,
+) -> None:
+    """No space is kept clear around a stop: a street name runs under it."""
+    assert serial.labels
+    rows = read_rows(
+        path=inputs / 'tiles-1.db',
+        sql='SELECT zoom, kind, name, rank, x, y, angle, width, ax, ay,'
+        " bx, by FROM labels WHERE name = 'Hollis Street'",
+    )
+    _, lon, lat = STOPS[0]
+    x, y = to_pixels(point=to_metres(lon=lon, lat=lat), mpp=mpp)
+    boxes = [
+        label_box(label=to_placed(row=row))
+        for row in rows
+        if row[0] == mpp
+    ]
+    assert any(
+        left <= x <= right and top <= y <= bottom
+        for left, top, right, bottom in boxes
+    )
 
 
 def test_build_tiles_cleans_its_work_files(inputs: Path) -> None:

@@ -47,8 +47,6 @@ CITY_PLACES: Final[frozenset[str]] = frozenset({'suburb', 'town'})
 PLACE_KINDS: Final[frozenset[str]] = frozenset(
     {'suburb', 'town', 'locality', 'village'}
 )
-RESERVE_ZOOMS: Final[frozenset[int]] = frozenset({3, 5, 8})
-RESERVE_PX: Final[int] = 24
 STREET_REPEAT_PX: Final[int] = 384
 
 STREET_FACE: Final[Face] = Face(weight=700, px=12)

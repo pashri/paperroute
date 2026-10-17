@@ -11,6 +11,7 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.build.features import FeatureStore, load_features
+from paperroute.build.labels import TEXT_MARGIN
 from paperroute.build.map_style import (
     DARK,
     LIGHT,
@@ -49,7 +50,7 @@ from tests.build.osm_factory import TINY_BBOX, write_tiny_osm
 FRAME_HALF: Final[float] = 800.0  # metres
 SEAM_MPP: Final[int] = 3
 SEAM_ANGLE: Final[float] = 20.0  # degrees
-DIAGONAL_SLACK: Final[int] = 12  # pixels a smoothed slope may round apart
+DIAGONAL_SLACK: Final[int] = 12  # pixels per sloping road crossing a seam
 NAME_STYLES: Final[dict[LabelKind, tuple[Face, int]]] = {
     LabelKind.STATION: (STATION_FACE, INK),
     LabelKind.SUBURB: (SUBURB_FACE, DARK),
@@ -256,16 +257,37 @@ def stitched(
     return tiles, draw_window(store=store, window=whole)
 
 
+def edges(*, grey: NDArray[np.uint8]) -> NDArray[np.bool_]:
+    """
+    Find the pixels whose 3 by 3 neighbourhood is not one level.
+
+    Parameters
+    ----------
+    grey : NDArray[np.uint8]
+        Grey levels.
+
+    Returns
+    -------
+    NDArray[np.bool_]
+        True where a pixel sits on an edge.
+    """
+    padded = np.pad(grey, 1, mode='edge')
+    around = np.lib.stride_tricks.sliding_window_view(padded, (3, 3))
+    return np.asarray(around.max(axis=(2, 3)) != around.min(axis=(2, 3)))
+
+
 def assert_nearly_seamless(
     *,
     tiles: NDArray[np.uint8],
     whole: NDArray[np.uint8],
+    slack: int,
 ) -> None:
     """
     Check stitched tiles match the whole window but for a few edge pixels.
 
     Smoothed sloping edges are cut at each canvas's border, so a pixel
-    whose shade sits on a level boundary can round either way.
+    whose shade sits on a level boundary can round either way. Each
+    such pixel must be one level apart and lie on an edge.
 
     Parameters
     ----------
@@ -273,10 +295,13 @@ def assert_nearly_seamless(
         The stitched tiles.
     whole : NDArray[np.uint8]
         The whole window.
+    slack : int
+        Most pixels allowed to differ.
     """
     gap = np.abs(tiles.astype(np.int16) - whole.astype(np.int16))
     assert int(gap.max()) <= GREYS[1]
-    assert np.count_nonzero(gap) <= DIAGONAL_SLACK
+    assert not (gap.astype(bool) & ~edges(grey=whole)).any()
+    assert np.count_nonzero(gap) <= slack
 
 
 def add_pixel_line(
@@ -466,7 +491,7 @@ def street_label(
     PlacedLabel
         The label, as wide as its text plus the margin.
     """
-    width = text_width(text=name, face=STREET_FACE) + 6
+    width = text_width(text=name, face=STREET_FACE) + TEXT_MARGIN
     turn = math.radians(angle)
     reach = (math.cos(turn) * width / 2, math.sin(turn) * width / 2)
     return PlacedLabel(
@@ -501,7 +526,7 @@ def test_label_crossing_a_tile_edge_is_seamless(
     empty.add_labels(labels=[label])
     tiles, whole = stitched(store=empty, mpp=SEAM_MPP)
     assert (whole[:, TILE - TILE // 4 : TILE + TILE // 4] == DARK).any()
-    assert_nearly_seamless(tiles=tiles, whole=whole)
+    assert_nearly_seamless(tiles=tiles, whole=whole, slack=1)
 
 
 def test_turned_label_crossing_a_tile_edge_is_exact(
@@ -532,7 +557,43 @@ def test_sloping_road_crossing_a_tile_edge_is_nearly_seamless(
     )
     tiles, whole = stitched(store=empty, mpp=SEAM_MPP)
     assert (whole[:, TILE - 2 : TILE + 2] == INK).any()
-    assert_nearly_seamless(tiles=tiles, whole=whole)
+    assert_nearly_seamless(tiles=tiles, whole=whole, slack=DIAGONAL_SLACK)
+
+
+def test_seven_sloping_roads_crossing_a_tile_edge_are_nearly_seamless(
+    empty: FeatureStore,
+) -> None:
+    left, _, _ = seam_windows(mpp=SEAM_MPP)
+    x, y = float(left.left + TILE), float(left.top)
+    roads = (
+        ('road_minor', 5.0),
+        ('road_tertiary', 17.0),
+        ('road_secondary', 29.0),
+        ('road_primary', 41.0),
+        ('road_trunk', 57.0),
+        ('road_motorway', 69.0),
+        ('river', 81.0),
+    )
+    for step, (layer, angle) in enumerate(roads):
+        turn = math.radians(angle)
+        reach = (150 * math.cos(turn), 150 * math.sin(turn))
+        middle = y + 20.3 + 32 * step
+        add_pixel_line(
+            store=empty,
+            layer=layer,
+            pixels=[
+                (x - reach[0], middle - reach[1]),
+                (x + reach[0], middle + reach[1]),
+            ],
+            mpp=SEAM_MPP,
+        )
+    tiles, whole = stitched(store=empty, mpp=SEAM_MPP)
+    assert (whole[:, TILE - 2 : TILE + 2] == INK).sum() >= len(roads)
+    assert_nearly_seamless(
+        tiles=tiles,
+        whole=whole,
+        slack=len(roads) * DIAGONAL_SLACK,
+    )
 
 
 def test_roads_beside_a_tile_edge_are_seamless(
@@ -656,20 +717,28 @@ def test_smoothed_names_stay_inside_their_width(
     labels = [
         street_label(name=name, centre=(x + 128, y + row), angle=0.0)
         for name, row in (
-            ('Church Street', 40),
-            ('Fits ' * 18, 128),
+            ('Church Street', 30),
+            ('Jaguar Way', 70),
+            ('jjj', 110),
+            ('Fits ' * 18, 150),
             ('Great Western Highway Service Road', 200),
         )
     ]
+    add_pixel_area(
+        store=empty,
+        layer='water',
+        box=(x - 10, y - 10, x + 300, y + 300),
+        mpp=SEAM_MPP,
+    )
     empty.add_labels(labels=labels)
     tile = draw_window(store=empty, window=window)
     for label in labels:
         middle = round(label.y) - window.top
-        rows = slice(middle - 12, middle + 12)
-        drawn = np.nonzero((tile[rows] != PAPER).any(axis=0))[0]
+        rows = slice(middle - 10, middle + 10)
+        drawn = np.nonzero((tile[rows] != DARK).any(axis=0))[0]
         half = label.width / 2 + HALO
-        assert drawn.min() >= math.floor(128 - half)
-        assert drawn.max() < math.ceil(128 + half)
+        assert drawn.min() >= 128 - half
+        assert drawn.max() + 1 <= 128 + half
 
 
 def point_label(

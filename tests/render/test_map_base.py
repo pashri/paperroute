@@ -4,6 +4,7 @@ import math
 import re
 from collections.abc import Sequence
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +12,10 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
+from paperroute.build.features import FeatureStore
 from paperroute.build.map_style import DARK, LIGHT, STREET_FACE, SUPERSAMPLE
+from paperroute.build.tile_draw import Window as DrawWindow
+from paperroute.build.tile_draw import draw_window
 from paperroute.build.tile_store import PlacedLabel, TileWriter
 from paperroute.core.geo import Point, to_metres
 from paperroute.core.map_view import (
@@ -31,6 +35,7 @@ from paperroute.core.tiles import (
 )
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.map_base import (
+    HALO,
     compose_tiles,
     draw_map_base,
     name_region,
@@ -493,7 +498,7 @@ def smooth_name(
     offset: tuple[int, int],
 ) -> NDArray[np.uint8]:
     """
-    Draw a street name the way the tiles bake it, over map pixels.
+    Redraw a street name over a copy of map pixels.
 
     Parameters
     ----------
@@ -509,28 +514,60 @@ def smooth_name(
     NDArray[np.uint8]
         The pixels of the name's region.
     """
-    rows, cols = name_region(label=label, offset=offset)
-    patch = under[rows, cols]
-    canvas = Canvas(
-        width=patch.shape[1],
-        height=patch.shape[0],
-        scale=SUPERSAMPLE,
-        smooth=True,
-    )
-    canvas.image(grey=patch, at=(0.0, 0.0))
-    canvas.text(
-        at=(
-            label.x - offset[0] - cols.start,
-            label.y - offset[1] - rows.start,
-        ),
-        text=label.name,
-        face=STREET_FACE,
-        grey=DARK,
-        anchor='mm',
-        halo=2,
-        angle=label.angle,
-    )
-    return quantise4(grey=canvas.grey())
+    grey = under.copy()
+    redraw_name(grey=grey, label=label, offset=offset)
+    return grey[name_region(label=label, offset=offset)]
+
+
+def test_redrawn_name_matches_the_baked_name(tmp_path: Path) -> None:
+    """A name redrawn over paper equals the same label baked in a tile."""
+    label = street(name='Church Street', x=1203.3, y=2140.6, angle=11.0)
+    store = FeatureStore(path=tmp_path / 'features.db')
+    with closing(store.conn):
+        store.add_labels(labels=[label])
+        baked = draw_window(
+            store=store,
+            window=DrawWindow(
+                mpp=MPP,
+                left=OFFSET[0],
+                top=OFFSET[1],
+                width=TILE,
+                height=TILE,
+            ),
+        )
+    redrawn = np.full((TILE, TILE), PAPER, dtype=np.uint8)
+    redraw_name(grey=redrawn, label=label, offset=OFFSET)
+    assert (baked == LIGHT).any()
+    np.testing.assert_array_equal(redrawn, baked)
+
+
+@pytest.mark.parametrize('angle', [0.0, 17.0, 45.0, 90.0])
+@pytest.mark.parametrize(
+    'name',
+    ['Church Street', 'Jaguar Way', 'Great Western Highway Service Road'],
+)
+def test_name_region_holds_the_whole_smoothed_name(
+    name: str,
+    angle: float,
+) -> None:
+    """Every pixel a 4x name and its halo shade lies inside its region."""
+    for shift in (0.0, 0.3, 0.6):
+        label = street(name=name, x=300.0 + shift, y=300.7 - shift)
+        label = replace(label, angle=angle)
+        canvas = Canvas(width=600, height=600, scale=SUPERSAMPLE, smooth=True)
+        canvas.rect(box=(0, 0, 600, 600), grey=LIGHT)
+        canvas.text(
+            at=(label.x, label.y),
+            text=name,
+            face=STREET_FACE,
+            grey=DARK,
+            anchor='mm',
+            halo=HALO,
+            angle=angle,
+        )
+        shaded = canvas.grey() != LIGHT
+        shaded[name_region(label=label, offset=(0, 0))] = False
+        assert not shaded.any()
 
 
 @pytest.mark.parametrize('angle', [0.0, 3.0])

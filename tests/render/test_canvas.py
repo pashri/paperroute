@@ -3,6 +3,7 @@
 from typing import Final
 
 import numpy as np
+import skia
 from numpy.typing import NDArray
 
 from paperroute.render.canvas import (
@@ -13,6 +14,7 @@ from paperroute.render.canvas import (
     Canvas,
     Face,
     encode_png,
+    font,
 )
 
 LIGHT: Final[int] = 170
@@ -216,3 +218,53 @@ def test_scaled_image_keeps_its_pixels() -> None:
     canvas = Canvas(width=6, height=4, scale=4, smooth=True)
     canvas.image(grey=block, at=(0, 0))
     np.testing.assert_array_equal(canvas.grey(), block)
+
+
+def test_smooth_font_has_anti_aliased_edges() -> None:
+    """A smooth font is anti-aliased; the default one stays aliased."""
+    face = Face(weight=700, px=12)
+    assert font(face, smooth=True).getEdging() == (
+        skia.Font.Edging.kAntiAlias
+    )
+    assert font(face).getEdging() == skia.Font.Edging.kAlias
+
+
+def drawn_at_4x(*, smooth: bool, ground: int, grey: int) -> NDArray[np.uint8]:
+    """
+    Draw a halo'd name on a 4x canvas over a level ground.
+
+    Parameters
+    ----------
+    smooth : bool
+        Anti-alias the canvas.
+    ground : int
+        Level under the name.
+    grey : int
+        Text level.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The canvas, averaged back down.
+    """
+    canvas = Canvas(width=120, height=40, scale=4, smooth=smooth)
+    canvas.rect(box=(0, 0, 120, 40), grey=ground)
+    canvas.text(
+        at=(60, 20), text='Parramatta', face=Face(weight=700, px=12),
+        grey=grey, anchor='mm', halo=2, angle=7.0)
+    return canvas.grey()
+
+
+def test_smooth_text_differs_from_aliased_text() -> None:
+    """Smooth glyphs shade differently from aliased glyphs at 4x."""
+    smooth = drawn_at_4x(smooth=True, ground=PAPER, grey=INK)
+    aliased = drawn_at_4x(smooth=False, ground=PAPER, grey=INK)
+    assert not np.array_equal(smooth, aliased)
+
+
+def test_smooth_halo_differs_from_aliased_halo() -> None:
+    """With paper text on ink, the halo's outer edge is smoothed."""
+    smooth = drawn_at_4x(smooth=True, ground=INK, grey=PAPER)
+    aliased = drawn_at_4x(smooth=False, ground=INK, grey=PAPER)
+    assert (smooth == PAPER).any()
+    assert not np.array_equal(smooth, aliased)

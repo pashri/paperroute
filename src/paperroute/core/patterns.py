@@ -1,10 +1,10 @@
 """A trip's stops and running dates, for placing vehicles on the map."""
 
-from dataclasses import dataclass
-from datetime import date
+from dataclasses import dataclass, replace
+from datetime import date, datetime
 
-from paperroute.core.geo import Point
-from paperroute.core.model import Mode
+from paperroute.core.geo import Point, Shape, point_along, stop_distances
+from paperroute.core.model import Mode, service_seconds
 
 
 @dataclass(frozen=True)
@@ -55,3 +55,150 @@ class TripPattern:
     stops: tuple[PatternStop, ...]
     days: tuple[date, ...]
     along: tuple[float, ...] | None = None
+
+
+def measure(*, pattern: TripPattern, shape: Shape | None) -> TripPattern:
+    """
+    Place a trip's stops along its shape.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+    shape : Shape | None
+        The trip's shape, or None when it has none.
+
+    Returns
+    -------
+    TripPattern
+        The trip with `along` set, or unchanged when there is no shape or
+        a stop has no point.
+    """
+    points = [stop.point for stop in pattern.stops]
+    if shape is None or None in points:
+        return pattern
+    return replace(
+        pattern,
+        along=stop_distances(
+            shape=shape,
+            stops=[point for point in points if point is not None],
+        ),
+    )
+
+
+def between(
+    *,
+    pattern: TripPattern,
+    shape: Shape | None,
+    index: int,
+    fraction: float,
+) -> Point | None:
+    """
+    Find the point a fraction of the way from one stop to the next.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+    shape : Shape | None
+        The trip's shape.
+    index : int
+        The stop the trip last left.
+    fraction : float
+        Share of the hop already run, from 0 to 1.
+
+    Returns
+    -------
+    Point | None
+        A point along the shape when the stops are measured on it, else on
+        the straight line between the stops, or None when either stop has
+        no point.
+    """
+    if shape is not None and pattern.along is not None:
+        start, end = pattern.along[index : index + 2]
+        return point_along(
+            shape=shape,
+            distance=start + (end - start) * fraction,
+        )
+    first, second = pattern.stops[index].point, pattern.stops[index + 1].point
+    if first is None or second is None:
+        return None
+    return (
+        first[0] + (second[0] - first[0]) * fraction,
+        first[1] + (second[1] - first[1]) * fraction,
+    )
+
+
+def point_at(
+    *,
+    pattern: TripPattern,
+    shape: Shape | None,
+    seconds: int,
+) -> Point | None:
+    """
+    Find where a running trip is at a time on its service day.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+    shape : Shape | None
+        The trip's shape.
+    seconds : int
+        Seconds into the service day, between the first departure and the
+        last arrival.
+
+    Returns
+    -------
+    Point | None
+        The timetable position, or None when the stops lack points.
+    """
+    for index, stop in enumerate(pattern.stops[:-1]):
+        if stop.arrives <= seconds <= stop.departs:
+            return stop.point
+        after = pattern.stops[index + 1]
+        if seconds < after.arrives:
+            return between(
+                pattern=pattern,
+                shape=shape,
+                index=index,
+                fraction=(seconds - stop.departs)
+                / (after.arrives - stop.departs),
+            )
+    return pattern.stops[-1].point
+
+
+def timetable_point(
+    *,
+    pattern: TripPattern,
+    shape: Shape | None,
+    now: datetime,
+) -> Point | None:
+    """
+    Find where the timetable puts a trip now.
+
+    The first running date in `pattern.days` wins, so a trip timed past
+    24:00 is found on the previous service day.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+    shape : Shape | None
+        The trip's shape, or None when it has none.
+    now : datetime
+        Aware time.
+
+    Returns
+    -------
+    Point | None
+        The position, or None when the trip isn't running or its stops
+        lack points.
+    """
+    if not pattern.stops:
+        return None
+    for day in pattern.days:
+        seconds = service_seconds(day=day, moment=now)
+        if pattern.stops[0].departs <= seconds <= pattern.stops[-1].arrives:
+            return point_at(pattern=pattern, shape=shape, seconds=seconds)
+    return None

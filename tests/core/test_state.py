@@ -54,8 +54,8 @@ from paperroute.core.state import (
     step,
 )
 from paperroute.core.stop_view import HORIZON, VISIBLE_ROWS, StopView
-from paperroute.core.tiles import ZOOMS
-from tests.core.factories import START, departure, snapshot, vehicle
+from paperroute.core.tiles import CITY, ZOOMS
+from tests.core.factories import START, departure, pattern, snapshot, vehicle
 
 PIN = Pin(origin='2145615', destination='215020')
 BUSES = 'v1/gtfs/realtime/buses'
@@ -1020,3 +1020,122 @@ def test_view_says_loading_before_the_first_load() -> None:
     assert loaded_state.last_view is not None
     assert loaded_state.last_view.empty is not None
     assert 'No direct services' in loaded_state.last_view.empty
+
+
+def city_map(*, count: int = 1) -> State:
+    """
+    Show the Map at city zoom with shaped pin departures.
+
+    Parameters
+    ----------
+    count : int
+        Pin departures, each with its own shape.
+
+    Returns
+    -------
+    State
+        The state on the Map at 45 m/px.
+    """
+    state = loaded(state=fresh(centre=CENTRE), count=count, shaped=True)
+    state, _ = step(state, PRESS)
+    state, _ = turned(state=state, steps=-len(ZOOMS))
+    assert ZOOMS[state.map.zoom] == CITY
+    return state
+
+
+def stale_bus(*, trip_id: str, landed: datetime) -> PositionsFetched:
+    """
+    Land a bus download holding one vehicle unheard for ten minutes.
+
+    Parameters
+    ----------
+    trip_id : str
+        The vehicle's trip.
+    landed : datetime
+        When the download landed.
+
+    Returns
+    -------
+    PositionsFetched
+        The download, with the vehicle at the map centre.
+    """
+    bus = vehicle(
+        timestamp=int((landed - timedelta(minutes=10)).timestamp()),
+        trip_id=trip_id,
+        point=CENTRE,
+    )
+    return PositionsFetched(
+        feed=BUS_POSITIONS,
+        snapshot=snapshot(fetched_at=landed, vehicles=(bus,)),
+    )
+
+
+def stale_pattern_loaded(*, trip_id: str, shape_id: str) -> PatternsLoaded:
+    """
+    Load one stale trip's pattern with its own shape.
+
+    Parameters
+    ----------
+    trip_id : str
+        The trip.
+    shape_id : str
+        Its shape.
+
+    Returns
+    -------
+    PatternsLoaded
+        The pattern and its shape.
+    """
+    line = make_shape(shape_id=shape_id, points=[CENTRE, (0.0, 0.0)])
+    return PatternsLoaded(
+        trip_ids=frozenset({trip_id}),
+        patterns={trip_id: pattern(trip_id=trip_id, shape_id=shape_id)},
+        shapes={shape_id: line},
+    )
+
+
+def test_shapes_of_dropped_patterns_are_dropped() -> None:
+    """A stale trip's shape goes with its pattern; the pin's shape stays."""
+    state = city_map()
+    pin_line = make_shape(shape_id='b:0', points=[CENTRE, (0.0, 0.0)])
+    state, _ = step(state, ShapesLoaded(shapes={'b:0': pin_line}))
+    state, _ = step(state, stale_bus(trip_id='gone', landed=START))
+    state, _ = step(
+        state,
+        stale_pattern_loaded(trip_id='gone', shape_id='s:gone'),
+    )
+    assert set(state.map.shapes) == {'b:0', 's:gone'}
+    state, _ = step(state, stale_bus(trip_id='other', landed=START))
+    assert 'gone' not in state.map.patterns
+    assert set(state.map.shapes) == {'b:0'}
+
+
+def test_shapes_stay_bounded_at_city_zoom() -> None:
+    """Stale trips coming and going never pile up shapes."""
+    state = city_map()
+    for index in range(20):
+        landed = START + timedelta(seconds=index)
+        trip_id = f'stale-{index}'
+        state, effects = step(state, stale_bus(trip_id=trip_id, landed=landed))
+        [load] = effects_of(effects=effects, kind=LoadPatterns)
+        assert trip_id in load.trip_ids
+        state, _ = step(
+            state,
+            stale_pattern_loaded(trip_id=trip_id, shape_id=f's:{index}'),
+        )
+        assert set(state.map.shapes) <= {'b:0', f's:{index}'}
+
+
+def test_unneeded_pin_shapes_can_be_asked_for_again() -> None:
+    """A pin shape dropped with its departure is requested when it returns."""
+    state = city_map(count=2)
+    lines = {
+        shape_id: make_shape(shape_id=shape_id, points=[CENTRE, (0.0, 0.0)])
+        for shape_id in ('b:0', 'b:1')
+    }
+    state, _ = step(state, ShapesLoaded(shapes=lines))
+    state = loaded(state=state, count=1, shaped=True)
+    assert set(state.map.shapes) == {'b:0'}
+    assert state.map.requested_shapes == {'b:0'}
+    state = loaded(state=state, count=2, shaped=True)
+    assert state.map.requested_shapes == {'b:0', 'b:1'}

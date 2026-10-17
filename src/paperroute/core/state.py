@@ -448,13 +448,55 @@ def request_patterns(
     return replace(state, map=map_state), (load,)
 
 
+def pruned(*, state: State, wanted: frozenset[str]) -> State:
+    """
+    Drop the patterns and shapes the Map no longer needs.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    wanted : frozenset[str]
+        Trip IDs whose patterns the Map needs.
+
+    Returns
+    -------
+    State
+        State keeping only the wanted patterns, and the shapes of those
+        patterns and of the departures. Shape requests are trimmed to
+        match, so a dropped shape can be asked for again.
+    """
+    patterns = {
+        trip_id: pattern
+        for trip_id, pattern in state.map.patterns.items()
+        if trip_id in wanted
+    }
+    kept = {
+        pattern.shape_id
+        for pattern in patterns.values()
+        if pattern is not None and pattern.shape_id
+    } | {dep.shape_id for dep in state.departures if dep.shape_id}
+    map_state = replace(
+        state.map,
+        patterns=patterns,
+        shapes={
+            shape_id: shape
+            for shape_id, shape in state.map.shapes.items()
+            if shape_id in kept
+        },
+        requested_shapes=state.map.requested_shapes & kept,
+    )
+    return replace(state, map=map_state)
+
+
 def map_effects(
     *, state: State, stop_view: StopView
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Ask for the map data the Map view needs, when it is shown.
 
-    Patterns the Map no longer needs are dropped, so memory stays bounded.
+    Patterns and shapes the Map no longer needs are dropped, so memory
+    stays bounded.
 
     Parameters
     ----------
@@ -474,12 +516,7 @@ def map_effects(
     wanted = needed_patterns(
         inputs=map_inputs(state=state, stop_view=stop_view),
     )
-    patterns = {
-        trip_id: pattern
-        for trip_id, pattern in state.map.patterns.items()
-        if trip_id in wanted
-    }
-    state = replace(state, map=replace(state.map, patterns=patterns))
+    state = pruned(state=state, wanted=wanted)
     state, modes = request_modes(state=state)
     state, shapes = request_shapes(state=state)
     state, fetches = request_positions(state=state)

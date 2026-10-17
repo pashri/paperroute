@@ -168,7 +168,7 @@ class ReadOnlyDatabase:
             conn.execute(self.probe).fetchall()
         except (sqlite3.Error, OSError):
             logger.warning(
-                '%s replacement unusable',
+                '%s file unusable',
                 self.label,
                 exc_info=True,
             )

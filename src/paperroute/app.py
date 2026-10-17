@@ -81,6 +81,8 @@ class MapRenderer:
     """
     Draw Map view frames, keeping the last map base for the next frame.
 
+    A tiles file that fails a read is drawn as no tiles at all.
+
     Parameters
     ----------
     tiles : TileRepository
@@ -99,6 +101,7 @@ class MapRenderer:
         self.variant = variant
         self.key: tuple[MapBase, str | None] | None = None
         self.base: NDArray[np.uint8] | None = None
+        self.unusable: set[str | None] = set()
 
     def frame(self, *, view: MapView) -> NDArray[np.uint8]:
         """
@@ -114,13 +117,57 @@ class MapRenderer:
         NDArray[np.uint8]
             480 by 800 pixels.
         """
-        key = (view.base, self.tiles.version())
+        key = (view.base, self.version())
         if self.base is None or key != self.key:
-            self.base = draw_map_base(
-                base=view.base, tiles=self.tiles, variant=self.variant
-            )
+            self.base = self.drawn_base(base=view.base, version=key[1])
             self.key = key
         return draw_map_view(view=view, base=self.base)
+
+    def version(self) -> str | None:
+        """
+        Say which tiles build is installed.
+
+        Returns
+        -------
+        str | None
+            The build time, or None when there is none or it can't be read.
+        """
+        try:
+            return self.tiles.version()
+        except sqlite3.Error:
+            return None
+
+    def drawn_base(
+        self, *, base: MapBase, version: str | None
+    ) -> NDArray[np.uint8]:
+        """
+        Draw the map base, without tiles when the tiles can't be read.
+
+        A read error is logged once for each tiles build.
+
+        Parameters
+        ----------
+        base : MapBase
+            The base map key.
+        version : str | None
+            The tiles build drawn from.
+
+        Returns
+        -------
+        NDArray[np.uint8]
+            The map base; it says "Map not installed" after a read error.
+        """
+        try:
+            return draw_map_base(
+                base=base, tiles=self.tiles, variant=self.variant
+            )
+        except sqlite3.Error:
+            if version not in self.unusable:
+                logger.warning('tiles file unusable', exc_info=True)
+                self.unusable.add(version)
+        return draw_map_base(
+            base=base, tiles=NullTiles(), variant=self.variant
+        )
 
 
 async def timed_async[T](*, call: Awaitable[T]) -> tuple[T, float]:

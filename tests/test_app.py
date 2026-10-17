@@ -4,6 +4,7 @@ import asyncio
 import logging
 import sqlite3
 from collections.abc import Callable, Collection
+from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -13,7 +14,7 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.adapters.feed_files import FileFeedsClient
-from paperroute.adapters.tiles_db import SqliteTileRepository
+from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app import (
     MapRenderer,
@@ -36,6 +37,7 @@ from paperroute.core.messages import (
     FetchFeed,
     Knob,
     KnobPressed,
+    KnobTurned,
     LoadPatterns,
     MapData,
     MapDataFailed,
@@ -1243,3 +1245,135 @@ def test_loaded_patterns_measures_found_trips_and_nones_the_rest() -> None:
     assert found is not None
     assert found.along == pytest.approx((0.0, 100.0))
     assert set(loaded.shapes) == {'s1'}
+
+
+def tableless_tiles(*, out: Path) -> SqliteTileRepository:
+    """
+    Write a tiles file that has a meta table but no tiles, and open it.
+
+    Parameters
+    ----------
+    out : Path
+        Destination file.
+
+    Returns
+    -------
+    SqliteTileRepository
+        The opened file; it passes the open check.
+    """
+    with closing(sqlite3.connect(out)) as conn, conn:
+        conn.execute('CREATE TABLE meta (key TEXT, value TEXT)')
+        conn.execute("INSERT INTO meta VALUES ('built_at', 'broken')")
+    return SqliteTileRepository(path=out)
+
+
+@dataclass
+class EmptyPlacedTimetable(PlacedTimetable):
+    """A placed timetable with no departures."""
+
+    def departures(
+        self, *, pin: Pin, start: datetime, end: datetime
+    ) -> list[Departure]:
+        """
+        Find nothing.
+
+        Parameters
+        ----------
+        pin : Pin
+            Ignored.
+        start : datetime
+            Ignored.
+        end : datetime
+            Ignored.
+
+        Returns
+        -------
+        list[Departure]
+            Nothing.
+        """
+        return []
+
+
+@dataclass
+class ZoomingDisplay(PressingDisplay):
+    """A display that shows the Map, then zooms in on the next frames."""
+
+    def show(self, *, frame: NDArray[np.uint8]) -> None:
+        """
+        Keep a frame; press the bottom knob, then turn it twice.
+
+        Parameters
+        ----------
+        frame : NDArray[np.uint8]
+            Frame.
+        """
+        if self.post is not None and 1 <= len(self.frames) <= 2:
+            self.post(KnobTurned(knob=Knob.BOTTOM, steps=-1))
+        super().show(frame=frame)
+
+
+def test_tiles_read_error_draws_map_not_installed(tmp_path: Path) -> None:
+    """A tiles file that fails a read draws as if no tiles were there."""
+    view = map_view()
+    with closing(tableless_tiles(out=tmp_path / 'tiles.db')) as tiles:
+        broken = MapRenderer(tiles=tiles).frame(view=view)
+    missing = MapRenderer(tiles=NullTiles()).frame(view=view)
+    assert np.array_equal(broken, missing)
+
+
+async def test_run_survives_a_tiles_read_error(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Map frames keep coming, with one warning, when tile reads fail."""
+    display = ZoomingDisplay()
+    tiles = tableless_tiles(out=tmp_path / 'tiles.db')
+    ports = Ports(
+        timetable=EmptyPlacedTimetable(),
+        feeds=FileFeedsClient(directory=REAL),
+        display=display,
+        clock=FixedClock(at=AT),
+        tiles=tiles,
+    )
+    with caplog.at_level(logging.WARNING), closing(tiles):
+        state = await run(
+            ports=ports,
+            pin=MAP_PIN,
+            tick_every=0.01,
+            post_hook=display.hook,
+            max_events=30,
+        )
+    assert state.running
+    assert state.map.zoom != 2
+    assert len(display.frames) >= 4
+    unusable = [r for r in caplog.records if r.message == 'tiles file unusable']
+    assert len(unusable) == 1
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+@dataclass
+class VersionlessTiles(CountingTiles):
+    """Tiles whose build can't be read."""
+
+    def version(self) -> str | None:
+        """
+        Fail like a damaged database file.
+
+        Returns
+        -------
+        str | None
+            Never returns.
+
+        Raises
+        ------
+        sqlite3.Error
+            Always.
+        """
+        raise sqlite3.Error('file is not a database')
+
+
+def test_tiles_version_error_draws_map_not_installed() -> None:
+    """A tiles build that can't be read draws as if no tiles were there."""
+    view = map_view()
+    broken = MapRenderer(tiles=VersionlessTiles()).frame(view=view)
+    missing = MapRenderer(tiles=NullTiles()).frame(view=view)
+    assert np.array_equal(broken, missing)

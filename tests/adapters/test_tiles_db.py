@@ -1,10 +1,12 @@
 """Tests for the tile repository."""
 
+import logging
 import sqlite3
 from contextlib import closing
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.build.tile_store import PlacedLabel, TileWriter
@@ -219,11 +221,17 @@ def garbage(*, out: Path) -> None:
     scratch.replace(out)
 
 
-def test_unreadable_file_answers_empty_then_opens(tmp_path: Path) -> None:
+def test_unreadable_file_answers_empty_then_opens(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
     """A file that fails the check reads as missing until replaced."""
     out = tmp_path / 'tiles.db'
     garbage(out=out)
-    with closing(SqliteTileRepository(path=out)) as repo:
+    with (
+        caplog.at_level(logging.WARNING),
+        closing(SqliteTileRepository(path=out)) as repo,
+    ):
+        assert [r.message for r in caplog.records] == ['tiles file unusable']
         assert repo.version() is None
         assert repo.street_labels(zoom=14, box=(0, 0, 1, 1)) == []
         assert repo.tile(

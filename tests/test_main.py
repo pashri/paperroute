@@ -15,15 +15,23 @@ from pathlib import Path
 import aiohttp
 import pytest
 
-from paperroute.__main__ import main, parse_args, serve_web, web_main
+from paperroute.__main__ import (
+    main,
+    parse_args,
+    serve_web,
+    tiles_for,
+    web_main,
+)
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.tiles_db import NullTiles
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.model import SYDNEY, Pin
+from paperroute.core.tiles import TileVariant
 from paperroute.observers import Timings
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
@@ -84,6 +92,34 @@ def test_defaults_are_tk_on_port_80(monkeypatch: pytest.MonkeyPatch) -> None:
     args = parse_args()
     assert (args.display, args.host, args.port) == ('tk', '0.0.0.0', 80)
     assert args.error_log is None
+
+
+def test_tiles_arguments_parse(monkeypatch: pytest.MonkeyPatch) -> None:
+    """--tiles is an optional path and --tiles-variant defaults to grey."""
+    base = [
+        'paperroute', 'run', '--timetable', 'x.db', '--from', 'a', '--to', 'b',
+    ]
+    monkeypatch.setattr(sys, 'argv', base)
+    args = parse_args()
+    assert (args.tiles, args.tiles_variant) == (None, TileVariant.GREY)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [*base, '--tiles', 't.db', '--tiles-variant', 'bits'],
+    )
+    args = parse_args()
+    assert (args.tiles, args.tiles_variant) == (
+        Path('t.db'),
+        TileVariant.BITS,
+    )
+
+
+def test_tiles_for_tolerates_a_missing_file(tmp_path: Path) -> None:
+    """A missing tiles file opens as an empty build; no file gives none."""
+    with tiles_for(args=argparse.Namespace(tiles=tmp_path / 'no.db')) as tiles:
+        assert tiles.version() is None
+    with tiles_for(args=argparse.Namespace(tiles=None)) as tiles:
+        assert isinstance(tiles, NullTiles)
 
 
 def free_port() -> int:
@@ -195,6 +231,8 @@ def test_web_main_logs_a_bind_failure(
         at=AT,
         host='127.0.0.1',
         port=0,
+        tiles=None,
+        tiles_variant=TileVariant.GREY,
     )
     build_db(path=args.timetable)
     with socket.socket() as held:

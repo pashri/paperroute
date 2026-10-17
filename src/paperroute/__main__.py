@@ -19,14 +19,16 @@ from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.systemd import SystemdNotifier
 from paperroute.adapters.tfnsw import AiohttpFeedsClient, api_key_from_env
+from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports, run
 from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin
+from paperroute.core.tiles import TileVariant
 from paperroute.logs import configure_logging
 from paperroute.observers import ObserverGroup, Timings
-from paperroute.ports import Clock, FeedsClient
+from paperroute.ports import Clock, FeedsClient, TileRepository
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor
@@ -96,6 +98,26 @@ def add_source_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_tiles_arguments(parser: argparse.ArgumentParser) -> None:
+    """
+    Add --tiles and --tiles-variant.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        Parser to add to.
+    """
+    parser.add_argument(
+        '--tiles', type=Path, help='map tiles file; it may not exist yet'
+    )
+    parser.add_argument(
+        '--tiles-variant',
+        type=TileVariant,
+        choices=list(TileVariant),
+        default=TileVariant.GREY,
+    )
+
+
 def require_pin(*, args: argparse.Namespace) -> None:
     """
     Exit with a message if the origin or destination is missing.
@@ -131,6 +153,7 @@ def parse_args() -> argparse.Namespace:
     add_pin_arguments(runner)
     add_display_arguments(runner)
     add_source_arguments(runner)
+    add_tiles_arguments(runner)
     args = parser.parse_args()
     require_pin(args=args)
     return args
@@ -234,6 +257,31 @@ def timetable_for(
         timetable.close()
 
 
+@contextmanager
+def tiles_for(*, args: argparse.Namespace) -> Iterator[TileRepository]:
+    """
+    Open the tiles file given, if any, and close it on exit.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Yields
+    ------
+    TileRepository
+        The tiles file, which may be missing, or no tiles without --tiles.
+    """
+    if args.tiles is None:
+        yield NullTiles()
+        return
+    tiles = SqliteTileRepository(path=args.tiles)
+    try:
+        yield tiles
+    finally:
+        tiles.close()
+
+
 def install_stop_signals(
     *, loop: asyncio.AbstractEventLoop, post: Callable[[Event], None]
 ) -> None:
@@ -320,6 +368,7 @@ async def serve_web(
     port: int,
     tick_every: float = 5.0,
     max_events: int | None = None,
+    tiles_variant: TileVariant = TileVariant.GREY,
 ) -> None:
     """
     Run the app and serve its display until it quits.
@@ -343,6 +392,8 @@ async def serve_web(
         Seconds between ticks.
     max_events : int | None
         Stop after this many events (tests).
+    tiles_variant : TileVariant
+        Which tile rendering the Map draws.
     """
     loop = asyncio.get_running_loop()
     runner = web.AppRunner(display.app(), shutdown_timeout=1.0)
@@ -357,6 +408,7 @@ async def serve_web(
                 loop=loop, display=display, post=post
             ),
             max_events=max_events,
+            tiles_variant=tiles_variant,
         )
     finally:
         remove_stop_signals(loop=loop)
@@ -366,7 +418,13 @@ async def serve_web(
             await ports.feeds.close()
 
 
-async def show(*, ports: Ports, pin: Pin, monitor: 'TkMonitor') -> None:
+async def show(
+    *,
+    ports: Ports,
+    pin: Pin,
+    monitor: 'TkMonitor',
+    tiles_variant: TileVariant = TileVariant.GREY,
+) -> None:
     """
     Run the app on the monitor, then close the feeds client.
 
@@ -378,6 +436,8 @@ async def show(*, ports: Ports, pin: Pin, monitor: 'TkMonitor') -> None:
         Pin to show.
     monitor : TkMonitor
         Window that pumps events and posts key presses.
+    tiles_variant : TileVariant
+        Which tile rendering the Map draws.
     """
     try:
         await run(
@@ -385,6 +445,7 @@ async def show(*, ports: Ports, pin: Pin, monitor: 'TkMonitor') -> None:
             pin=pin,
             pump=monitor.pump,
             post_hook=lambda post: monitor.bind(post=post),
+            tiles_variant=tiles_variant,
         )
     finally:
         await ports.feeds.close()
@@ -407,15 +468,24 @@ def tk_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
 
     monitor = TkMonitor()
     try:
-        with timetable_for(args=args) as timetable:
+        with (
+            timetable_for(args=args) as timetable,
+            tiles_for(args=args) as tiles,
+        ):
             ports = Ports(
                 timetable=timetable,
                 feeds=feeds,
                 display=monitor,
                 clock=clock_for(args=args),
+                tiles=tiles,
             )
             asyncio.run(
-                show(ports=ports, pin=pin_for(args=args), monitor=monitor)
+                show(
+                    ports=ports,
+                    pin=pin_for(args=args),
+                    monitor=monitor,
+                    tiles_variant=args.tiles_variant,
+                )
             )
     finally:
         monitor.close()
@@ -444,6 +514,7 @@ def serve_or_exit(
                 pin=pin_for(args=args),
                 host=args.host,
                 port=args.port,
+                tiles_variant=args.tiles_variant,
             )
         )
     except BindError:
@@ -470,13 +541,17 @@ def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
             ActLed(),
         ]
     )
-    with timetable_for(args=args) as timetable:
+    with (
+        timetable_for(args=args) as timetable,
+        tiles_for(args=args) as tiles,
+    ):
         ports = Ports(
             timetable=timetable,
             feeds=feeds,
             display=display,
             clock=clock_for(args=args),
             observer=observer,
+            tiles=tiles,
         )
         serve_or_exit(args=args, ports=ports, display=display)
 

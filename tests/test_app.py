@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import sqlite3
-from collections.abc import Collection
+from collections.abc import Callable, Collection
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -13,16 +13,39 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.tiles_db import SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.app import Ports, perform, run, ticker
+from paperroute.app import MapRenderer, Ports, perform, run, ticker
 from paperroute.build.gtfs_files import Source
+from paperroute.build.map_style import LIGHT
+from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.geo import MetreBox, Shape
-from paperroute.core.messages import Event, FeedFailed, FetchFeed
+from paperroute.core.feeds import FeedKind
+from paperroute.core.geo import MetreBox, Point, Shape, to_metres
+from paperroute.core.map_view import MapBase, MapView, Marker
+from paperroute.core.messages import (
+    Event,
+    FeedFailed,
+    FetchFeed,
+    Knob,
+    KnobPressed,
+    LoadPatterns,
+    MapData,
+    MapDataFailed,
+    PositionsFetched,
+)
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import TripPattern
+from paperroute.core.tiles import (
+    TILE,
+    StreetLabel,
+    TileVariant,
+    tile_of,
+    to_pixels,
+)
 from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
+from paperroute.render.tile_codec import pack_bits, pack_grey
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
@@ -280,6 +303,7 @@ async def test_fetch_crash_posts_feed_failed_and_logs(
             effect=FetchFeed(feed='v1/gtfs/realtime/buses'),
             queue=queue,
             tasks=tasks,
+            maps=MapRenderer(tiles=ports.tiles),
         )
         await asyncio.gather(*tasks, return_exceptions=True)
         await asyncio.sleep(0)
@@ -592,6 +616,7 @@ async def test_fetch_failure_does_not_report_a_parsed_feed(
         effect=FetchFeed(feed='v2/gtfs/realtime/sydneytrains'),
         queue=queue,
         tasks=tasks,
+        maps=MapRenderer(tiles=ports.tiles),
     )
     await asyncio.gather(*tasks)
     assert isinstance(queue.get_nowait(), FeedFailed)
@@ -692,3 +717,353 @@ async def test_run_sends_a_watchdog_for_each_handled_tick(
     finally:
         timetable.close()
     assert observer.ticks >= 1
+
+
+MAP_PIN = Pin(origin='2145615', destination='215020')
+MAP_MPP = 8
+BUS_POSITIONS = 'v1/gtfs/vehiclepos/buses'
+STOP_POINT: Point = to_metres(lon=151.0036, lat=-33.8170)
+
+
+@dataclass
+class RecordingFeeds:
+    """Replayed feeds that remember which feeds were fetched."""
+
+    directory: Path
+    fetched: list[str] = field(default_factory=list)
+
+    async def fetch(self, *, feed: str) -> bytes:
+        """
+        Note the feed and read its recording.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+
+        Returns
+        -------
+        bytes
+            Recorded body.
+        """
+        self.fetched.append(feed)
+        return await FileFeedsClient(directory=self.directory).fetch(
+            feed=feed
+        )
+
+    async def close(self) -> None:
+        """Release nothing."""
+
+
+@dataclass
+class PressingDisplay(FrameRecorder):
+    """A display that presses the bottom knob when it first shows."""
+
+    post: Callable[[Event], None] | None = None
+
+    def show(self, *, frame: NDArray[np.uint8]) -> None:
+        """
+        Keep a frame; after the first, press the bottom knob.
+
+        Parameters
+        ----------
+        frame : NDArray[np.uint8]
+            Frame.
+        """
+        if not self.frames and self.post is not None:
+            self.post(KnobPressed(knob=Knob.BOTTOM))
+        super().show(frame=frame)
+
+    def hook(self, post: Callable[[Event], None]) -> None:
+        """
+        Keep the function that posts events.
+
+        Parameters
+        ----------
+        post : Callable[[Event], None]
+            Posts an event to the app.
+        """
+        self.post = post
+
+
+def light_tiles(*, out: Path, point: Point) -> SqliteTileRepository:
+    """
+    Write a tiles file with one LIGHT tile under a point and open it.
+
+    Parameters
+    ----------
+    out : Path
+        Destination file.
+    point : Point
+        Point in metres.
+
+    Returns
+    -------
+    SqliteTileRepository
+        The opened file.
+    """
+    col, row = tile_of(pixel=to_pixels(point=point, mpp=MAP_MPP))
+    grey = np.full((TILE, TILE), LIGHT, dtype=np.uint8)
+    with TileWriter(out=out) as writer:
+        writer.add_tile(
+            zoom=MAP_MPP,
+            col=col,
+            row=row,
+            grey=pack_grey(grey=grey),
+            bits=pack_bits(paper=grey >= 128),
+        )
+        writer.finish(meta={})
+    return SqliteTileRepository(path=out)
+
+
+async def test_run_draws_map_after_bottom_press(tmp_path: Path) -> None:
+    """A bottom press shows the Map over the tiles and polls positions."""
+    timetable = SqliteTimetableRepository(path=_build_db(tmp_path))
+    place = timetable.stop(stop_id=MAP_PIN.origin)
+    assert place.point is not None
+    tiles = light_tiles(out=tmp_path / 'tiles.db', point=place.point)
+    display = PressingDisplay()
+    feeds = RecordingFeeds(directory=REAL)
+    ports = Ports(
+        timetable=timetable,
+        feeds=feeds,
+        display=display,
+        clock=FixedClock(at=AT),
+        tiles=tiles,
+    )
+    try:
+        await run(
+            ports=ports,
+            pin=MAP_PIN,
+            tick_every=0.01,
+            post_hook=display.hook,
+            max_events=80,
+        )
+    finally:
+        timetable.close()
+        tiles.close()
+    assert LIGHT in display.frames[-1]
+    assert BUS_POSITIONS in feeds.fetched
+
+
+@dataclass
+class CountingTiles:
+    """A tile repository that serves paper tiles and counts reads."""
+
+    built: str = 'v1'
+    reads: int = 0
+
+    def tile(
+        self, *, zoom: int, col: int, row: int, variant: TileVariant
+    ) -> NDArray[np.uint8] | None:
+        """
+        Count a read and give a LIGHT tile.
+
+        Parameters
+        ----------
+        zoom : int
+            Ignored.
+        col : int
+            Ignored.
+        row : int
+            Ignored.
+        variant : TileVariant
+            Ignored.
+
+        Returns
+        -------
+        NDArray[np.uint8] | None
+            A LIGHT tile.
+        """
+        self.reads += 1
+        return np.full((TILE, TILE), LIGHT, dtype=np.uint8)
+
+    def street_labels(
+        self, *, zoom: int, box: tuple[float, float, float, float]
+    ) -> list[StreetLabel]:
+        """
+        Know no labels.
+
+        Parameters
+        ----------
+        zoom : int
+            Ignored.
+        box : tuple[float, float, float, float]
+            Ignored.
+
+        Returns
+        -------
+        list[StreetLabel]
+            Nothing.
+        """
+        return []
+
+    def version(self) -> str | None:
+        """
+        Say which build this is.
+
+        Returns
+        -------
+        str | None
+            The build name.
+        """
+        return self.built
+
+
+def map_view(*, markers: tuple[Marker, ...] = ()) -> MapView:
+    """
+    Make a Map view at the 606 stop's area.
+
+    Parameters
+    ----------
+    markers : tuple[Marker, ...]
+        Vehicles drawn.
+
+    Returns
+    -------
+    MapView
+        The view.
+    """
+    return MapView(
+        origin='Here',
+        destination='There',
+        clock='6:25',
+        base=MapBase(centre=STOP_POINT, mpp=MAP_MPP, route=()),
+        zoom=2,
+        markers=markers,
+        sidebar=(),
+        banner=None,
+        empty=None,
+    )
+
+
+def test_map_base_is_cached_between_overlay_frames() -> None:
+    """A second frame with the same base reads no more tiles."""
+    tiles = CountingTiles()
+    maps = MapRenderer(tiles=tiles)
+    maps.frame(view=map_view())
+    once = tiles.reads
+    bus = Marker(
+        route='606', x=200.0, y=200.0, bearing=90.0, live=True, pinned=True
+    )
+    maps.frame(view=map_view(markers=(bus,)))
+    assert once > 0
+    assert tiles.reads == once
+
+
+def test_tiles_replaced_rebuilds_base() -> None:
+    """A new tiles build composes the base again."""
+    tiles = CountingTiles()
+    maps = MapRenderer(tiles=tiles)
+    maps.frame(view=map_view())
+    once = tiles.reads
+    tiles.built = 'v2'
+    maps.frame(view=map_view())
+    assert tiles.reads == 2 * once
+
+
+class RelabellingTimetable(SqliteTimetableRepository):
+    """The real timetable, with the 606 bus's trip renamed 606X."""
+
+    def route_labels(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Label trip 2706990 '606X' when asked for it.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trip IDs.
+
+        Returns
+        -------
+        dict[str, str]
+            '606X' for trip 2706990 when asked; nothing else.
+        """
+        return {'2706990': '606X'} if '2706990' in trip_ids else {}
+
+
+async def test_positions_are_labelled_from_the_timetable(
+    tmp_path: Path,
+) -> None:
+    """Vehicles take the route label the timetable gives their trip."""
+    timetable = RelabellingTimetable(path=_build_db(tmp_path))
+    ports = Ports(
+        timetable=timetable,
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    try:
+        await perform(
+            ports=ports,
+            effect=FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS),
+            queue=queue,
+            tasks=tasks,
+            maps=MapRenderer(tiles=ports.tiles),
+        )
+        await asyncio.gather(*tasks)
+    finally:
+        timetable.close()
+    posted = queue.get_nowait()
+    assert isinstance(posted, PositionsFetched)
+    labels = {
+        vehicle.trip_id: vehicle.label
+        for vehicle in posted.snapshot.vehicles
+    }
+    assert labels['2706990'] == '606X'
+
+
+@dataclass
+class PatternlessTimetable(BrokenTimetable):
+    """A timetable whose patterns query fails."""
+
+    def patterns(
+        self, *, trip_ids: Collection[str], around: date
+    ) -> dict[str, TripPattern]:
+        """
+        Fail like a damaged database file.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Ignored.
+        around : date
+            Ignored.
+
+        Returns
+        -------
+        dict[str, TripPattern]
+            Never returns.
+
+        Raises
+        ------
+        sqlite3.Error
+            Always.
+        """
+        raise sqlite3.Error('file is not a database')
+
+
+async def test_map_data_failure_posts_event() -> None:
+    """A failed patterns read posts MapDataFailed for that request."""
+    ports = Ports(
+        timetable=PatternlessTimetable(),
+        feeds=CrashingFeeds(),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+    )
+    request = LoadPatterns(trip_ids=frozenset({'t1'}), day=AT.date())
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    await perform(
+        ports=ports,
+        effect=request,
+        queue=queue,
+        tasks=tasks,
+        maps=MapRenderer(tiles=ports.tiles),
+    )
+    await asyncio.gather(*tasks)
+    posted = queue.get_nowait()
+    assert posted == MapDataFailed(request=request)
+    assert posted.kind == MapData.PATTERNS

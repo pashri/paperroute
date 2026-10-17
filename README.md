@@ -25,10 +25,34 @@ the interface boards.
       --sydneytrains data/raw/st/sydneytrains.zip --metro data/raw/st/metro_v2.zip \
       --out data/timetable.db
     PAPERROUTE_API_KEY_FILE=~/tfnsw_api_key \
-      uv run python -m paperroute run --timetable data/timetable.db --from 215020 --to 200060
+      uv run python -m paperroute run --timetable data/timetable.db --from 215020 --to 200060 \
+      --tiles data/tiles.db
 
-Keys: A/D/S top knob, J/L/K bottom knob, Q quits. Replay recorded feeds with
+Keys: A/D/S top knob, J/L/K bottom knob, Q quits. K switches between Stop
+and Map, and J and L zoom on the Map. Replay recorded feeds with
 `--feeds tests/fixtures/real --at 2026-10-16T06:25`.
+
+## Map tiles
+
+Download Geofabrik's New South Wales `.osm.pbf` into `data/raw/nsw.osm.pbf`,
+then build the tiles on the Mac:
+
+    uv run python -m paperroute.build tiles --osm data/raw/nsw.osm.pbf \
+      --timetable data/timetable.db --out data/tiles.db
+
+This builds the whole Opal area. It takes about 7 minutes on an
+Apple-silicon Mac, needs about 2 GB of RAM and makes about 145 MB. Add
+`--bbox` to build a smaller area for trying things out. Without
+`data/tiles.db` the Map shows "Map not installed".
+
+`scripts/deploy` copies `data/tiles.db` to the Pi only when it has changed.
+The first upload takes a few minutes, and later deploys print "tiles
+unchanged". The Pi needs about 3 times the tiles file's size free while
+deploy installs it.
+
+On the Map, press the bottom knob to switch between Stop and Map, and turn
+it to zoom. Hollow badges are timetable positions. A small "4m" tab means
+the bus was last heard 4 minutes ago.
 
 ## Install on the device
 
@@ -53,7 +77,9 @@ Insert the card in the Pi and power it through PWR IN. The Zero 2 W has no
 power LED, and the green ACT LED stays dark until the OS boots.
 
 A VPN on your Mac can hide `paperroute.local`. If it does, use the Pi's IP
-address in its place.
+address in its place. If the Pi's USB data cable is plugged into the Mac,
+`paperroute.local` may point at the USB link: use the Pi's IP address or
+unplug the data cable.
 
 ### Install
 
@@ -71,13 +97,23 @@ address in its place.
 
        scripts/deploy <user>@paperroute.local
 
-4. Build the timetable. This takes about 17 minutes on a Zero 2 W, and the
+4. Build the timetable. This takes about 40 minutes on a Zero 2 W, and the
    app starts by itself when it finishes.
 
        ssh -t <user>@paperroute.local 'sudo systemctl start --no-block paperroute-timetable'
        ssh <user>@paperroute.local journalctl -fu paperroute-timetable
 
 5. Open `http://paperroute.local`, or the Pi's IP address.
+
+### Upgrade from the previous install
+
+Run `scripts/provision <user>@paperroute.local` once more, without
+`--reboot`, then run `scripts/deploy <user>@paperroute.local` straight
+after. The app stops between the two steps.
+
+The timetable then rebuilds itself to add route shapes. This takes about 40
+minutes on a Zero 2 W. Start it with the `systemctl start` command from
+step 4; the map shows no route line until it finishes.
 
 ### Green LED
 

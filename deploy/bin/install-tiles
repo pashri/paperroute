@@ -108,7 +108,7 @@ as_owner cat -- "$STAGED" | as_service sh -c 'cat >"$1"' sh "$tmp" >/dev/null \
     || abort 'could not copy the staged tiles'
 as_service chmod 0640 -- "$tmp" >/dev/null \
     || abort 'could not set the mode of the new tiles'
-check=$(as_service sqlite3 -readonly -- "$tmp" 'PRAGMA quick_check') \
+check=$(as_service sqlite3 -readonly "$tmp" 'PRAGMA quick_check') \
     || check=
 if [[ $check != ok ]]; then
     abort 'the staged tiles failed the integrity check'

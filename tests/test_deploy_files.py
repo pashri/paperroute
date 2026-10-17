@@ -1434,7 +1434,12 @@ def test_install_tiles_keeps_user_output_off_the_terminal() -> None:
 
 
 def test_install_tiles_ends_options_before_the_temp_file() -> None:
-    """The service-chosen temp path always follows ``--`` or ``sh -c``."""
+    """
+    The service-chosen temp path follows ``--`` or ``sh -c``.
+
+    sqlite3 takes the path without ``--``; the script has already checked
+    that it is an absolute path under the data directory.
+    """
     prefixes = [
         head.split('$tmp')[0]
         for line in commands(path=TILES_SCRIPT, word='tmp')
@@ -1442,8 +1447,11 @@ def test_install_tiles_ends_options_before_the_temp_file() -> None:
         if head.startswith('as_service ')
     ]
     assert len(prefixes) >= 5
+    assert 'as_service sqlite3 -readonly "' in prefixes
     assert all(
-        ' -- ' in prefix or prefix.startswith('as_service sh -c ')
+        ' -- ' in prefix
+        or prefix.startswith('as_service sh -c ')
+        or prefix == 'as_service sqlite3 -readonly "'
         for prefix in prefixes
     )
 

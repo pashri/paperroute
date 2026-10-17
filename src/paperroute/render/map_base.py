@@ -586,7 +586,7 @@ def draw_scale(canvas: Canvas, *, mpp: int) -> None:
 
 def draw_notes(canvas: Canvas, *, installed: bool) -> None:
     """
-    Draw the OSM credit, and a note below the stop when there is no map.
+    Draw the OSM credit, or a note below the stop when there is no map.
 
     Parameters
     ----------
@@ -595,23 +595,24 @@ def draw_notes(canvas: Canvas, *, installed: bool) -> None:
     installed : bool
         False when there is no tiles file.
     """
-    canvas.text(
-        at=(MAP_WIDTH - EDGE, MAP_HEIGHT - EDGE),
-        text=CREDIT,
-        face=CREDIT_FACE,
-        grey=DARK,
-        anchor='rs',
-        halo=HALO,
-    )
-    if not installed:
+    if installed:
         canvas.text(
-            at=(MAP_WIDTH / 2, MAP_HEIGHT / 2 + NOT_INSTALLED_DROP),
-            text=NOT_INSTALLED,
-            face=NOT_INSTALLED_FACE,
-            grey=INK,
-            anchor='mm',
+            at=(MAP_WIDTH - EDGE, MAP_HEIGHT - EDGE),
+            text=CREDIT,
+            face=CREDIT_FACE,
+            grey=DARK,
+            anchor='rs',
             halo=HALO,
         )
+        return
+    canvas.text(
+        at=(MAP_WIDTH / 2, MAP_HEIGHT / 2 + NOT_INSTALLED_DROP),
+        text=NOT_INSTALLED,
+        face=NOT_INSTALLED_FACE,
+        grey=INK,
+        anchor='mm',
+        halo=HALO,
+    )
 
 
 def name_region(*, label: StreetLabel, offset: Window) -> Region:

@@ -563,6 +563,7 @@ def test_no_tiles_says_map_not_installed(tmp_path: Path) -> None:
     stop = (slice(middle - 14, middle + 14), slice(240, 280))
     assert np.array_equal(missing[stop], installed[stop])
     rows = np.flatnonzero(np.any(missing != installed, axis=1))
+    rows = rows[rows < MAP_HEIGHT - 24]
     assert rows.min() >= middle + 14
     assert rows.max() <= middle + 44
     note = missing[rows.min() : rows.max() + 1]
@@ -584,6 +585,17 @@ def test_scale_bar_and_credit_are_drawn(tmp_path: Path) -> None:
     assert np.all(np.any(bar == INK, axis=0))
     credit = grey[MAP_HEIGHT - 20 :, MAP_WIDTH - 120 :]
     assert np.count_nonzero(credit == DARK) > 0
+
+
+def test_no_tiles_hides_the_credit() -> None:
+    """Without a tiles file there is no OpenStreetMap credit."""
+    grey = draw_map_base(
+        base=base(),
+        tiles=NullTiles(),
+        variant=TileVariant.GREY,
+    )
+    credit = grey[MAP_HEIGHT - 20 :, MAP_WIDTH - 120 :]
+    assert np.all(credit == PAPER)
 
 
 @pytest.mark.parametrize(

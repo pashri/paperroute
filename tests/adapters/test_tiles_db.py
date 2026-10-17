@@ -203,3 +203,41 @@ def test_injected_connection_is_used_and_never_reopens(
         got = repo.tile(zoom=14, col=3, row=4, variant=TileVariant.GREY)
     assert got is not None
     assert np.array_equal(got, grey)
+
+
+def garbage(*, out: Path) -> None:
+    """
+    Put a file that is not a database at a path, as a new file.
+
+    Parameters
+    ----------
+    out : Path
+        Destination file.
+    """
+    scratch = out.with_suffix('.tmp')
+    scratch.write_bytes(b'not a database ' * 100)
+    scratch.replace(out)
+
+
+def test_unreadable_file_answers_empty_then_opens(tmp_path: Path) -> None:
+    """A file that fails the check reads as missing until replaced."""
+    out = tmp_path / 'tiles.db'
+    garbage(out=out)
+    with closing(SqliteTileRepository(path=out)) as repo:
+        assert repo.version() is None
+        assert repo.street_labels(zoom=14, box=(0, 0, 1, 1)) == []
+        assert repo.tile(
+            zoom=14, col=3, row=4, variant=TileVariant.GREY
+        ) is None
+        build(out=out)
+        assert repo.version() is not None
+
+
+def test_unreadable_replacement_keeps_the_old_file(tmp_path: Path) -> None:
+    """A good file replaced by garbage keeps answering from the old one."""
+    out = tmp_path / 'tiles.db'
+    build(out=out)
+    with closing(SqliteTileRepository(path=out)) as repo:
+        first = repo.version()
+        garbage(out=out)
+        assert repo.version() == first

@@ -6,8 +6,10 @@ import json
 import logging
 import signal
 import socket
+import sqlite3
 import sys
 from collections.abc import Iterator
+from contextlib import closing
 from datetime import date, datetime
 from http import HTTPStatus
 from pathlib import Path
@@ -15,16 +17,18 @@ from pathlib import Path
 import aiohttp
 import pytest
 
+import paperroute.__main__ as cli
 from paperroute.__main__ import (
     main,
     parse_args,
+    serve_or_exit,
     serve_web,
     tiles_for,
     web_main,
 )
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
-from paperroute.adapters.tiles_db import NullTiles
+from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
@@ -117,6 +121,7 @@ def test_tiles_arguments_parse(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_tiles_for_tolerates_a_missing_file(tmp_path: Path) -> None:
     """A missing tiles file opens as an empty build; no file gives none."""
     with tiles_for(args=argparse.Namespace(tiles=tmp_path / 'no.db')) as tiles:
+        assert isinstance(tiles, SqliteTileRepository)
         assert tiles.version() is None
     with tiles_for(args=argparse.Namespace(tiles=None)) as tiles:
         assert isinstance(tiles, NullTiles)
@@ -282,3 +287,63 @@ def test_main_logs_a_startup_crash_to_the_error_log(
     record = json.loads(lines[0])
     assert record['level'] == 'ERROR'
     assert 'FileNotFoundError' in record['exc_info']
+
+
+async def test_serve_web_passes_the_tiles_variant_to_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """serve_web runs the app with the tiles variant it was given."""
+    seen: list[TileVariant] = []
+
+    async def fake_run(**kwargs: object) -> None:
+        seen.append(kwargs['tiles_variant'])  # type: ignore[arg-type]
+
+    monkeypatch.setattr(cli, 'run', fake_run)
+    display = WebDisplay(status=Timings().snapshot)
+    memory = SqliteTimetableRepository(connection=sqlite3.connect(':memory:'))
+    with closing(memory) as timetable:
+        ports = Ports(
+            timetable=timetable,
+            feeds=FileFeedsClient(directory=REAL),
+            display=display,
+            clock=ReplayClock(start=AT),
+        )
+        await serve_web(
+            ports=ports,
+            display=display,
+            pin=PIN,
+            host='127.0.0.1',
+            port=free_port(),
+            tiles_variant=TileVariant.BITS,
+        )
+    assert seen == [TileVariant.BITS]
+
+
+def test_serve_or_exit_passes_the_tiles_variant(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """--tiles-variant reaches serve_web."""
+    seen: list[TileVariant] = []
+
+    async def fake_serve_web(**kwargs: object) -> None:
+        seen.append(kwargs['tiles_variant'])  # type: ignore[arg-type]
+
+    monkeypatch.setattr(cli, 'serve_web', fake_serve_web)
+    display = WebDisplay(status=Timings().snapshot)
+    args = argparse.Namespace(
+        origin=PIN.origin,
+        destination=PIN.destination,
+        host='127.0.0.1',
+        port=0,
+        tiles_variant=TileVariant.BITS,
+    )
+    memory = SqliteTimetableRepository(connection=sqlite3.connect(':memory:'))
+    with closing(memory) as timetable:
+        ports = Ports(
+            timetable=timetable,
+            feeds=FileFeedsClient(directory=REAL),
+            display=display,
+            clock=ReplayClock(start=AT),
+        )
+        serve_or_exit(args=args, ports=ports, display=display)
+    assert seen == [TileVariant.BITS]

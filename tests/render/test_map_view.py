@@ -20,18 +20,35 @@ from paperroute.core.map_view import (
     screen_point,
 )
 from paperroute.core.model import Mode
-from paperroute.core.stop_view import Pill, Row
+from paperroute.core.stop_view import Pill, Row, empty_text
 from paperroute.core.tiles import CITY, TILE, TileVariant, tile_of, to_pixels
-from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH, Canvas, Face
+from paperroute.render.canvas import (
+    HEIGHT,
+    INK,
+    PAPER,
+    WIDTH,
+    Canvas,
+    Face,
+    text_width,
+)
 from paperroute.render.chrome import BANNER, HEADER, header
 from paperroute.render.map_base import draw_map_base
-from paperroute.render.map_view import SIDEBAR_LEFT, draw_map_view, snap
+from paperroute.render.map_view import (
+    EMPTY_MARGIN,
+    SIDEBAR_LEFT,
+    draw_map_view,
+    empty_lines,
+    snap,
+)
 from paperroute.render.tile_codec import GREYS, pack_bits, pack_grey
 
 MPP = 8
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
 ROW_TOPS = (110, 182, 254, 326, 398)
 EMPTY = 'No more services today'
+LONG_EMPTY = empty_text(
+    destination='Sydney Olympic Park Wharf, Parramatta River', loaded=True
+)
 
 
 def row(
@@ -408,3 +425,49 @@ def test_base_is_not_mutated() -> None:
     )
     draw_map_view(view=view, base=base)
     assert np.array_equal(base, kept)
+
+
+def test_long_empty_text_wraps_to_two_whole_lines() -> None:
+    """A long empty text splits into two lines that fit, never cut."""
+    lines, face = empty_lines(text=LONG_EMPTY)
+    assert len(lines) == 2
+    assert ' '.join(lines) == LONG_EMPTY
+    assert all(
+        text_width(text=line, face=face) <= MAP_WIDTH - 2 * EMPTY_MARGIN
+        for line in lines
+    )
+
+
+def test_long_empty_text_draws_a_second_line_inside_the_map() -> None:
+    """The second line is drawn below the first and inside the map."""
+    middle = HEADER + MAP_HEIGHT // 2
+    second = (slice(middle + 72, middle + 96), slice(0, SIDEBAR_LEFT))
+    short = draw_map_view(view=replace(VIEW, empty=EMPTY), base=paper())
+    long = draw_map_view(view=replace(VIEW, empty=LONG_EMPTY), base=paper())
+    assert not np.any(short[second] == INK)
+    assert np.any(long[second] == INK)
+    ink = np.flatnonzero(np.any(long[HEADER:, :SIDEBAR_LEFT] == INK, axis=0))
+    assert ink.min() >= EMPTY_MARGIN - 4
+    assert ink.max() <= MAP_WIDTH - EMPTY_MARGIN + 4
+
+
+def test_empty_text_is_drawn_over_markers() -> None:
+    """A badge under the empty text does not hide it."""
+    x, y = stop_pixel()
+    bus = live(at=(x - 120.0, y - HEADER + 52.0))
+    view = replace(VIEW, markers=(bus,))
+    badge = draw_map_view(view=view, base=paper())
+    both = draw_map_view(view=replace(view, empty=EMPTY), base=paper())
+    under = badge == INK
+    under[:HEADER] = False
+    under[:, SIDEBAR_LEFT:] = False
+    assert np.any(under)
+    assert np.any(both[under] == PAPER)
+
+
+def test_empty_text_too_long_for_two_lines_uses_the_smallest_face() -> None:
+    """Text that never fits two lines is wrapped whole at the smallest."""
+    text = ' '.join(['Parramatta'] * 30)
+    lines, face = empty_lines(text=text)
+    assert face == Face(weight=700, px=15)
+    assert ' '.join(lines) == text

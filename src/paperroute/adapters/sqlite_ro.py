@@ -49,8 +49,9 @@ class ReadOnlyDatabase:
     label : str
         Name used in log messages.
     allow_missing : bool
-        When true, a missing file is not an error: fetch() returns no rows
-        until the file appears, then opens it.
+        When true, a missing file, or one the probe fails on, is not an
+        error: fetch() returns no rows until a usable file appears, then
+        opens it.
 
     Notes
     -----
@@ -78,8 +79,31 @@ class ReadOnlyDatabase:
         self.refused: Identity | None = None
         self.closed = False
         if connection is None and path is not None:
-            if file_identity(path=path) or not allow_missing:
+            if allow_missing:
+                self.open_optional(path=path)
+            else:
                 self.conn, self.file_id = self.open(path=path)
+
+    def open_optional(self, *, path: Path) -> None:
+        """
+        Open a file that may be missing or unusable, as if it were absent.
+
+        An unusable file is refused until it is replaced, as a bad
+        replacement would be.
+
+        Parameters
+        ----------
+        path : Path
+            Database file.
+        """
+        current = file_identity(path=path)
+        if current is None:
+            return
+        opened = self.open_checked(path=path)
+        if opened is None:
+            self.refused = current
+            return
+        self.conn, self.file_id = opened
 
     @property
     def identity(self) -> Identity | None:

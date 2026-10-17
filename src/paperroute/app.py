@@ -245,6 +245,9 @@ async def fetch(
     """
     Fetch and parse a feed, posting success or failure.
 
+    A failed download, a bad body or a failed route labels read all post
+    FeedFailed for the feed.
+
     Parameters
     ----------
     ports : Ports
@@ -267,7 +270,7 @@ async def fetch(
                 fetched_at=ports.clock.now(),
             )
         )
-    except FeedError as error:
+    except (FeedError, sqlite3.Error) as error:
         logger.warning('feed failed: %s', error)
         failed = FeedFailed(
             feed=effect.feed, at=ports.clock.now(), reason=str(error)

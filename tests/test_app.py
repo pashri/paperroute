@@ -15,13 +15,20 @@ from numpy.typing import NDArray
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.tiles_db import SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.app import MapRenderer, Ports, perform, run, ticker
+from paperroute.app import (
+    MapRenderer,
+    Ports,
+    loaded_patterns,
+    perform,
+    run,
+    ticker,
+)
 from paperroute.build.gtfs_files import Source
 from paperroute.build.map_style import LIGHT
 from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.feeds import FeedKind
-from paperroute.core.geo import MetreBox, Point, Shape, to_metres
+from paperroute.core.geo import MetreBox, Point, Shape, make_shape, to_metres
 from paperroute.core.map_view import MapBase, MapView, Marker
 from paperroute.core.messages import (
     Event,
@@ -35,7 +42,7 @@ from paperroute.core.messages import (
     PositionsFetched,
 )
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
-from paperroute.core.patterns import TripPattern
+from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.tiles import (
     TILE,
     StreetLabel,
@@ -852,6 +859,7 @@ class CountingTiles:
 
     built: str = 'v1'
     reads: int = 0
+    variants: set[TileVariant] = field(default_factory=set)
 
     def tile(
         self, *, zoom: int, col: int, row: int, variant: TileVariant
@@ -868,7 +876,7 @@ class CountingTiles:
         row : int
             Ignored.
         variant : TileVariant
-            Ignored.
+            Recorded.
 
         Returns
         -------
@@ -876,6 +884,7 @@ class CountingTiles:
             A LIGHT tile.
         """
         self.reads += 1
+        self.variants.add(variant)
         return np.full((TILE, TILE), LIGHT, dtype=np.uint8)
 
     def street_labels(
@@ -1067,3 +1076,170 @@ async def test_map_data_failure_posts_event() -> None:
     posted = queue.get_nowait()
     assert posted == MapDataFailed(request=request)
     assert posted.kind == MapData.PATTERNS
+
+
+@dataclass
+class PlacedTimetable(BrokenTimetable):
+    """A failing timetable whose stops all sit at the test point."""
+
+    def stop(self, *, stop_id: str) -> StopPlace:
+        """
+        Place any stop at the test point.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop ID.
+
+        Returns
+        -------
+        StopPlace
+            The stop, named after its ID.
+        """
+        return StopPlace(stop_id=stop_id, name=stop_id, point=STOP_POINT)
+
+
+async def test_run_draws_the_map_in_the_variant_asked_for() -> None:
+    """The tiles variant given to run is the one the Map reads."""
+    tiles = CountingTiles()
+    display = PressingDisplay()
+    ports = Ports(
+        timetable=PlacedTimetable(),
+        feeds=FileFeedsClient(directory=REAL),
+        display=display,
+        clock=FixedClock(at=AT),
+        tiles=tiles,
+    )
+    await run(
+        ports=ports,
+        pin=MAP_PIN,
+        tick_every=0.01,
+        post_hook=display.hook,
+        max_events=10,
+        tiles_variant=TileVariant.BITS,
+    )
+    assert tiles.reads > 0
+    assert tiles.variants == {TileVariant.BITS}
+
+
+@dataclass
+class LabelFailingTimetable(BrokenTimetable):
+    """A timetable whose route labels query fails."""
+
+    def route_labels(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Fail like a damaged database file.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Ignored.
+
+        Returns
+        -------
+        dict[str, str]
+            Never returns.
+
+        Raises
+        ------
+        sqlite3.Error
+            Always.
+        """
+        raise sqlite3.Error('file is not a database')
+
+
+async def test_label_failure_posts_feed_failed_for_that_feed(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A labels read error fails that positions feed without a crash."""
+    ports = Ports(
+        timetable=LabelFailingTimetable(),
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    with caplog.at_level(logging.WARNING):
+        await perform(
+            ports=ports,
+            effect=FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS),
+            queue=queue,
+            tasks=tasks,
+            maps=MapRenderer(tiles=ports.tiles),
+        )
+        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.sleep(0)
+    posted = queue.get_nowait()
+    assert isinstance(posted, FeedFailed)
+    assert posted.feed == BUS_POSITIONS
+    assert posted.reason != 'unexpected error'
+    assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+
+@dataclass
+class PatternedTimetable(BrokenTimetable):
+    """A timetable that knows one trip, t1, on shape s1."""
+
+    def patterns(
+        self, *, trip_ids: Collection[str], around: date
+    ) -> dict[str, TripPattern]:
+        """
+        Know trip t1.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trip IDs.
+        around : date
+            Service date.
+
+        Returns
+        -------
+        dict[str, TripPattern]
+            t1 when asked for.
+        """
+        trip = TripPattern(
+            trip_id='t1',
+            route='606',
+            mode=Mode.BUS,
+            shape_id='s1',
+            stops=(
+                PatternStop(arrives=0, departs=0, point=(0.0, 0.0)),
+                PatternStop(arrives=60, departs=60, point=(100.0, 0.0)),
+            ),
+            days=(around,),
+        )
+        return {'t1': trip} if 't1' in trip_ids else {}
+
+    def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
+        """
+        Know shape s1.
+
+        Parameters
+        ----------
+        shape_ids : Collection[str]
+            Shape IDs.
+
+        Returns
+        -------
+        dict[str, Shape]
+            s1 when asked for.
+        """
+        shape = make_shape(shape_id='s1', points=[(0.0, 0.0), (100.0, 0.0)])
+        return {'s1': shape} if 's1' in shape_ids else {}
+
+
+def test_loaded_patterns_measures_found_trips_and_nones_the_rest() -> None:
+    """Found trips are placed on their shapes; unknown ones are None."""
+    loaded = loaded_patterns(
+        timetable=PatternedTimetable(),
+        effect=LoadPatterns(trip_ids=frozenset({'t1', 't2'}), day=AT.date()),
+    )
+    assert loaded.trip_ids == {'t1', 't2'}
+    assert set(loaded.patterns) == {'t1', 't2'}
+    assert loaded.patterns['t2'] is None
+    found = loaded.patterns['t1']
+    assert found is not None
+    assert found.along == pytest.approx((0.0, 100.0))
+    assert set(loaded.shapes) == {'s1'}

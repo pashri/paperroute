@@ -12,7 +12,15 @@ from paperroute.core.map_view import (
     screen_point,
 )
 from paperroute.core.stop_view import Pill, Row
-from paperroute.render.canvas import HEIGHT, INK, PAPER, Box, Canvas, Face
+from paperroute.render.canvas import (
+    HEIGHT,
+    INK,
+    PAPER,
+    Box,
+    Canvas,
+    Face,
+    text_width,
+)
 from paperroute.render.chrome import (
     BANNER,
     FASTER,
@@ -34,6 +42,13 @@ SIDEBAR_TEXT: Final[int] = 538
 SIDEBAR_RIGHT: Final[int] = 784
 MAP_BOX: Final[Box] = (0, HEADER, SIDEBAR_LEFT, HEIGHT)
 EMPTY_FACE: Final[Face] = Face(weight=700, px=22)
+EMPTY_FACES: Final[tuple[Face, ...]] = (
+    EMPTY_FACE,
+    Face(weight=700, px=18),
+    Face(weight=700, px=15),
+)
+EMPTY_LINES: Final[int] = 2
+EMPTY_LEADING: Final[int] = 4  # pixels between the empty text's lines
 EMPTY_MARGIN: Final[int] = 32  # pixels each side of the empty text
 EMPTY_DROP: Final[float] = NOT_INSTALLED_DROP + 26.0  # below the centre
 DESTINATION_FACE: Final[Face] = Face(weight=700, px=16)
@@ -58,12 +73,88 @@ FASTER_BOTTOM: Final[int] = 32  # below the badge centre
 FASTER_PX: Final[int] = 11
 
 
+def wrap(*, text: str, face: Face, width: float) -> tuple[str, ...]:
+    """
+    Break text into lines at spaces, filling each line greedily.
+
+    Parameters
+    ----------
+    text : str
+        Text.
+    face : Face
+        Font.
+    width : float
+        Available width in pixels.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Lines; a single word wider than the width gets a line of its own.
+    """
+    lines: list[str] = []
+    for word in text.split():
+        joined = f'{lines[-1]} {word}' if lines else word
+        if lines and text_width(text=joined, face=face) <= width:
+            lines[-1] = joined
+        else:
+            lines.append(word)
+    return tuple(lines)
+
+
+def empty_lines(*, text: str) -> tuple[tuple[str, ...], Face]:
+    """
+    Fit the empty text into at most two lines across the map.
+
+    Parameters
+    ----------
+    text : str
+        Empty text.
+
+    Returns
+    -------
+    tuple[tuple[str, ...], Face]
+        The lines and the face, the largest of `EMPTY_FACES` that fits;
+        the smallest face's lines when none does.
+    """
+    width = MAP_WIDTH - 2 * EMPTY_MARGIN
+    for face in EMPTY_FACES:
+        lines = wrap(text=text, face=face, width=width)
+        fits = all(text_width(text=line, face=face) <= width for line in lines)
+        if len(lines) <= EMPTY_LINES and fits:
+            return lines, face
+    return lines, face
+
+
+def draw_empty(canvas: Canvas, *, text: str) -> None:
+    """
+    Draw the empty text below the stop, one line under another.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    text : str
+        Empty text.
+    """
+    lines, face = empty_lines(text=text)
+    top = HEADER + MAP_HEIGHT / 2 + EMPTY_DROP
+    for index, line in enumerate(lines):
+        canvas.text(
+            at=(MAP_WIDTH / 2, top + index * (face.px + EMPTY_LEADING)),
+            text=line,
+            face=face,
+            grey=INK,
+            anchor='mm',
+            halo=HALO,
+        )
+
+
 def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
     """
-    Draw the empty text, the markers and the From stop over the map.
+    Draw the markers, the empty text and the From stop over the map.
 
     The empty text sits below the stop, under the "Map not installed"
-    note. The stop is drawn again after the markers so no badge buries
+    note, and over the markers. The stop is drawn last so nothing buries
     it.
 
     Parameters
@@ -73,19 +164,6 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
     view : MapView
         View-model.
     """
-    if view.empty:
-        canvas.text(
-            at=(MAP_WIDTH / 2, HEADER + MAP_HEIGHT / 2 + EMPTY_DROP),
-            text=canvas.fit(
-                text=view.empty,
-                face=EMPTY_FACE,
-                width=MAP_WIDTH - 2 * EMPTY_MARGIN,
-            ),
-            face=EMPTY_FACE,
-            grey=INK,
-            anchor='mm',
-            halo=HALO,
-        )
     centre = view.base.centre
     with canvas.clipped(box=MAP_BOX):
         draw_markers(
@@ -94,6 +172,8 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
             mpp=view.base.mpp,
             origin=(0, HEADER),
         )
+        if view.empty:
+            draw_empty(canvas, text=view.empty)
         if centre is not None:
             x, y = screen_point(centre=centre, mpp=view.base.mpp, point=centre)
             draw_stop(canvas, at=(x, y + HEADER))

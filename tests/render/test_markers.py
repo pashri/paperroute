@@ -20,6 +20,8 @@ from paperroute.render.canvas import (
 )
 from paperroute.render.markers import (
     AGE_FACE,
+    BADGE_FACE,
+    OFFSETS,
     TAB_ZOOMS,
     age_text,
     badge_half,
@@ -36,14 +38,20 @@ SPOT: Point = (100.0, 100.0)
 
 
 class CountingCanvas(Canvas):
-    """A canvas that records each batched dots call."""
+    """A canvas that records its batched dots calls and its lines."""
 
     def __init__(self) -> None:
         super().__init__()
         self.calls: list[tuple[int, float, int]] = []
+        self.lines: list[tuple[tuple[Point, ...], float, int]] = []
 
-    def dots(self, *, points: Sequence[Point], diameter: float,
-             grey: int) -> None:
+    def dots(
+        self,
+        *,
+        points: Sequence[Point],
+        diameter: float,
+        grey: int,
+    ) -> None:
         """
         Record the call, then draw.
 
@@ -58,6 +66,31 @@ class CountingCanvas(Canvas):
         """
         self.calls.append((len(points), diameter, grey))
         super().dots(points=points, diameter=diameter, grey=grey)
+
+    def line(
+        self,
+        *,
+        points: Sequence[Point],
+        width: float,
+        grey: int,
+        dash: tuple[float, float] | None = None,
+    ) -> None:
+        """
+        Record the line, then draw.
+
+        Parameters
+        ----------
+        points : Sequence[Point]
+            Vertices.
+        width : float
+            Stroke width.
+        grey : int
+            Stroke level.
+        dash : tuple[float, float] | None
+            Dash and gap lengths; None strokes solid.
+        """
+        self.lines.append((tuple(points), width, grey))
+        super().line(points=points, width=width, grey=grey, dash=dash)
 
 
 def marker(
@@ -97,9 +130,15 @@ def marker(
     )
 
 
-def drawn(*, markers: list[Marker], mpp: int = BADGE_ZOOM) -> np.ndarray:
+def drawn(
+    *,
+    markers: list[Marker],
+    mpp: int = BADGE_ZOOM,
+    origin: Point = (0.0, 0.0),
+    ground: int = PAPER,
+) -> np.ndarray:
     """
-    Draw markers with the map at the canvas's top left.
+    Draw markers over a plain ground.
 
     Parameters
     ----------
@@ -107,6 +146,10 @@ def drawn(*, markers: list[Marker], mpp: int = BADGE_ZOOM) -> np.ndarray:
         Markers.
     mpp : int
         Metres per pixel.
+    origin : Point
+        The map's top left on the canvas.
+    ground : int
+        Grey filled before drawing.
 
     Returns
     -------
@@ -114,8 +157,26 @@ def drawn(*, markers: list[Marker], mpp: int = BADGE_ZOOM) -> np.ndarray:
         Grey pixels.
     """
     canvas = Canvas()
-    draw_markers(canvas, markers=markers, mpp=mpp, origin=(0.0, 0.0))
+    canvas.rect(box=(0, 0, WIDTH, HEIGHT), grey=ground)
+    draw_markers(canvas, markers=markers, mpp=mpp, origin=origin)
     return canvas.grey()
+
+
+def first_column(*, edge: float) -> int:
+    """
+    Find the first pixel column an aliased fill from an edge covers.
+
+    Parameters
+    ----------
+    edge : float
+        Left edge in pixels.
+
+    Returns
+    -------
+    int
+        Column whose centre is at or right of the edge.
+    """
+    return math.ceil(edge - 0.5)
 
 
 def test_wedge_snaps_to_eight_directions() -> None:
@@ -219,7 +280,9 @@ def test_stale_vehicle_has_age_tab(mpp: int) -> None:
     """A stale badge hangs an inverted tab of the right size."""
     grey = drawn(markers=[marker(live=False, age=240.0)], mpp=mpp)
     half_width = text_width(text='4m', face=AGE_FACE) / 2 + 3
-    assert int(grey[110, 100]) == INK
+    tab_edge = first_column(edge=100 - half_width)
+    assert int(grey[115, tab_edge]) == INK
+    assert int(grey[115, tab_edge - 2]) == PAPER
     inside = grey[111:120, math.ceil(100 - half_width) + 1:100]
     assert (inside == PAPER).any()
     left, top, right, bottom = tab_box(centre=SPOT, age=240.0)
@@ -249,6 +312,7 @@ def test_live_vehicle_has_no_tab() -> None:
 @pytest.mark.parametrize(
     ('seconds', 'text'),
     [
+        (120, '2m'),
         (121, '2m'),
         (240, '4m'),
         (3_599, '59m'),
@@ -283,3 +347,124 @@ def test_tab_counts_as_part_of_the_badge_for_placement() -> None:
         100.0,
         72.0,
     )
+
+
+def test_pinned_badge_is_placed_first() -> None:
+    """A pinned badge keeps its spot even when listed after another."""
+    other = replace(marker(), route='T1', pinned=False)
+    grey = drawn(markers=[other, marker()])
+    edge = first_column(edge=100 - badge_half(route='606')[0])
+    assert int(grey[100, edge + 1]) == INK
+
+
+def test_pinned_badge_is_drawn_last() -> None:
+    """Badges stuck on a pinned badge's spot are drawn under it."""
+    pinned = marker(live=False)
+    others = [replace(marker(), pinned=False)] * 12
+    placed = place(markers=[pinned, *others], reserved=[])
+    assert sum(item.centre == SPOT for item in placed) > 1
+    grey = drawn(markers=[*others, pinned])
+    left = first_column(edge=100 - badge_half(route='606')[0])
+    assert int(grey[93, left + 3]) == PAPER
+
+
+@pytest.mark.parametrize(('gap', 'slides'), [(23.5, True), (24.5, False)])
+def test_badges_keep_12_px_apart_sideways(gap: float, slides: bool) -> None:
+    """Side by side, badges need a 24 px gap: 12 px grown on each."""
+    width = 2 * badge_half(route='606')[0]
+    beside = marker(at=(100.0 + width + gap, 100.0))
+    placed = place(markers=[marker(), beside], reserved=[])
+    assert (placed[1].centre != (beside.x, beside.y)) is slides
+
+
+@pytest.mark.parametrize(('gap', 'slides'), [(7.5, True), (8.5, False)])
+def test_badges_keep_4_px_apart_vertically(gap: float, slides: bool) -> None:
+    """Stacked, badges need an 8 px gap: 4 px grown on each."""
+    below = marker(at=(100.0, 120.0 + gap))
+    placed = place(markers=[marker(), below], reserved=[])
+    assert (placed[1].centre != (below.x, below.y)) is slides
+
+
+def test_origin_moves_badges_and_leaders() -> None:
+    """Badges and leaders are drawn offset by the map's origin."""
+    markers = [marker(), replace(marker(), route='T1')]
+    grey = drawn(markers=markers, origin=(30.0, 50.0))
+    edge = first_column(edge=130 - badge_half(route='606')[0]) + 1
+    assert int(grey[150, edge]) == INK
+    assert int(grey[100, edge - 30]) == PAPER
+    assert int(grey[136, 130]) == INK
+    assert int(grey[86, 100]) == PAPER
+
+
+def test_stuck_badge_stays_put_without_claiming_its_box() -> None:
+    """A badge with no free spot stays put and blocks nothing later."""
+    points = [(100.0 + dx, 100.0 + dy) for dx, dy in OFFSETS]
+    reserved = [(x, y, x, y) for x, y in points]
+    below = marker(at=(100.0, 114.0))
+    placed = place(markers=[marker(), below], reserved=reserved)
+    assert placed[0].centre == SPOT
+    assert placed[1].centre == (100.0, 114.0)
+
+
+@pytest.mark.parametrize(
+    ('walls', 'centre'),
+    [((100.0,), (140.0, 100.0)), ((100.0, 140.0), (60.0, 100.0))],
+)
+def test_badges_slide_40_px_sideways(
+    walls: tuple[float, ...],
+    centre: Point,
+) -> None:
+    """Blocked above and below, a badge slides 40 px right, then left."""
+    reserved = [(x - 1, 0.0, x + 1, 300.0) for x in walls]
+    placed = place(markers=[marker()], reserved=reserved)
+    assert placed[0].centre == centre
+
+
+@pytest.mark.parametrize('live', [True, False])
+def test_badges_have_a_paper_outline(live: bool) -> None:
+    """Each badge has a 1 px paper outline; hollow ones a 2 px border."""
+    grey = drawn(markers=[marker(live=live)], ground=INK)
+    left = 100 - badge_half(route='606')[0]
+    outline = first_column(edge=left - 1)
+    assert outline < first_column(edge=left)
+    assert int(grey[100, outline]) == PAPER
+    assert int(grey[100, outline - 1]) == INK
+    inner = first_column(edge=left + 2)
+    expected = (INK, INK) if live else (INK, PAPER)
+    assert (int(grey[100, inner - 1]), int(grey[100, inner])) == expected
+
+
+def test_live_marker_age_takes_no_tab_space() -> None:
+    """A live marker never draws a tab, so its age adds no room."""
+    live = marker(age=240.0)
+    assert marker_box(marker=live, centre=SPOT) == marker_box(
+        marker=marker(), centre=SPOT)
+
+
+def test_leaders_are_two_strokes_and_one_dot_batch() -> None:
+    """Each leader is a 3 px paper line under 1.5 px ink; one dot call."""
+    canvas = CountingCanvas()
+    markers = [marker(), replace(marker(), route='T1')] * 2
+    draw_markers(canvas, markers=markers, mpp=BADGE_ZOOM, origin=(0, 0))
+    moved = sum(
+        item.centre != SPOT for item in place(markers=markers, reserved=[])
+    )
+    assert moved > 1
+    strokes = [(width, grey) for _, width, grey in canvas.lines]
+    assert strokes == [(3, PAPER), (1.5, INK)] * moved
+    assert canvas.calls == [(moved, 3.5, INK)]
+
+
+@pytest.mark.parametrize(('y', 'slides'), [(247.0, True), (248.0, False)])
+def test_stop_box_is_14_px_each_side(y: float, slides: bool) -> None:
+    """A badge must clear the stop's 28 px box by its 4 px growth."""
+    canvas = CountingCanvas()
+    below = marker(at=(MAP_WIDTH / 2, y))
+    draw_markers(canvas, markers=[below], mpp=BADGE_ZOOM, origin=(0, 0))
+    assert bool(canvas.lines) is slides
+
+
+def test_badge_half_pads_the_route() -> None:
+    """A badge is the route's width plus 5 px a side, and 20 px tall."""
+    width = text_width(text='606', face=BADGE_FACE)
+    assert badge_half(route='606') == (width / 2 + 5, 10)

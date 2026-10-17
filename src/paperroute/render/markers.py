@@ -221,6 +221,8 @@ def marker_box(*, marker: Marker, centre: Point) -> Box:
     """
     Give the box a marker's badge and any age tab cover.
 
+    Only a hollow badge hangs a tab, so a live marker's age adds no room.
+
     Parameters
     ----------
     marker : Marker
@@ -234,7 +236,7 @@ def marker_box(*, marker: Marker, centre: Point) -> Box:
         Left, top, right, bottom, before any growing.
     """
     box = badge_box(route=marker.route, centre=centre)
-    if marker.age is None:
+    if marker.live or marker.age is None:
         return box
     return union(first=box, second=tab_box(centre=centre, age=marker.age))
 

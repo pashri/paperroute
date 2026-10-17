@@ -11,6 +11,7 @@ from typing import Final
 
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.tfnsw import FeedError
+from paperroute.core.feeds import FeedKind
 from paperroute.core.model import Pin
 from paperroute.core.state import (
     DeparturesFailed,
@@ -198,12 +199,12 @@ async def perform(
         case LoadDepartures():
             work = load(ports=ports, effect=effect, queue=queue)
             failed: Event = DeparturesFailed()
-        case FetchFeed(feed=feed):
+        case FetchFeed(feed=feed, kind=FeedKind.TRIPS):
             work = fetch(ports=ports, effect=effect, queue=queue)
             failed = FeedFailed(
                 feed=feed, at=ports.clock.now(), reason='unexpected error'
             )
-        case Render(view=view):
+        case Render(view=StopView() as view):
             await render(ports=ports, view=view)
             return
         case _:

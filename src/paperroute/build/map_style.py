@@ -7,6 +7,7 @@ from paperroute.render.canvas import INK, PAPER, Face
 
 DARK: Final[int] = 85
 LIGHT: Final[int] = 170
+SUPERSAMPLE: Final[int] = 4  # sub-pixels per map pixel along each side
 
 ROAD_LAYERS: Final[tuple[str, ...]] = (
     'road_minor',

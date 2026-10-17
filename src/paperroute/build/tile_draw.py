@@ -18,6 +18,7 @@ from paperroute.build.map_style import (
     STATION_FACE,
     STREET_FACE,
     SUBURB_FACE,
+    SUPERSAMPLE,
     TRANSIT_LAYERS,
     road_style,
     transit_style,
@@ -356,7 +357,8 @@ def fits_reach(*, label: PlacedLabel) -> bool:
     A tile only finds labels centred within ``LABEL_REACH`` of it, so a
     label whose text and halo reach further would be cut at a tile edge.
     Such labels are drawn nowhere. With the street face that takes a
-    name of about 80 characters.
+    name of about 80 characters. A label's width includes a few pixels
+    of margin, which covers the extra pixel a smoothed edge can shade.
 
     Parameters
     ----------
@@ -408,6 +410,10 @@ def draw_window(*, store: FeatureStore, window: Window) -> NDArray[np.uint8]:
     """
     Draw a window of the map in the four grey levels.
 
+    Everything is drawn smoothly at ``SUPERSAMPLE`` times the size, then
+    each block of sub-pixels is averaged to one pixel and snapped to the
+    nearest level.
+
     Parameters
     ----------
     store : FeatureStore
@@ -420,7 +426,12 @@ def draw_window(*, store: FeatureStore, window: Window) -> NDArray[np.uint8]:
     NDArray[np.uint8]
         Height by width pixels, each 0, 85, 170 or 255.
     """
-    canvas = Canvas(width=window.width, height=window.height)
+    canvas = Canvas(
+        width=window.width,
+        height=window.height,
+        scale=SUPERSAMPLE,
+        smooth=True,
+    )
     draw_areas(canvas=canvas, store=store, window=window)
     draw_lines(canvas=canvas, store=store, window=window)
     draw_labels(canvas=canvas, store=store, window=window)

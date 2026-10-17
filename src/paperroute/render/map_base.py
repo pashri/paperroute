@@ -7,7 +7,7 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.build.map_style import DARK, STREET_FACE
+from paperroute.build.map_style import DARK, STREET_FACE, SUPERSAMPLE
 from paperroute.core.geo import Point
 from paperroute.core.map_view import (
     MAP_HEIGHT,
@@ -25,7 +25,7 @@ from paperroute.core.tiles import (
     tiles_covering,
 )
 from paperroute.ports import TileRepository
-from paperroute.render.canvas import INK, PAPER, Canvas, Face
+from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.tile_codec import THRESHOLD, diffuse, quantise4
 
 Window = tuple[int, int]
@@ -398,17 +398,60 @@ def draw_route_names(
         for label in labels
         if on_route(label=label, routes=routes, offset=offset)
     ]
-    for label in kept:
-        canvas.text(
-            at=(label.x - offset[0], label.y - offset[1]),
-            text=label.name,
-            face=STREET_FACE,
-            grey=DARK,
-            anchor='mm',
-            halo=HALO,
-            angle=label.angle,
-        )
+    if kept:
+        grey = canvas.grey()
+        for label in kept:
+            redraw_name(grey=grey, label=label, offset=offset)
+        canvas.image(grey=grey, at=(0.0, 0.0))
     return kept
+
+
+def redraw_name(
+    *,
+    grey: NDArray[np.uint8],
+    label: StreetLabel,
+    offset: Window,
+) -> None:
+    """
+    Draw a street name and its halo over map pixels, as the tiles do.
+
+    The name's region is drawn smoothly at ``SUPERSAMPLE`` times the
+    size over the pixels already there, then averaged back down and
+    snapped to the four levels.
+
+    Parameters
+    ----------
+    grey : NDArray[np.uint8]
+        The map's pixels, changed in place.
+    label : StreetLabel
+        The label, in global pixels.
+    offset : Window
+        The map window's top-left corner in global pixels.
+    """
+    rows, cols = name_region(label=label, offset=offset)
+    patch = grey[rows, cols]
+    if not patch.size:
+        return
+    canvas = Canvas(
+        width=patch.shape[1],
+        height=patch.shape[0],
+        scale=SUPERSAMPLE,
+        smooth=True,
+    )
+    canvas.image(grey=patch, at=(0.0, 0.0))
+    canvas.text(
+        at=(
+            label.x - offset[0] - cols.start,
+            label.y - offset[1] - rows.start,
+        ),
+        text=label.name,
+        face=STREET_FACE,
+        grey=DARK,
+        anchor='mm',
+        halo=HALO,
+        angle=label.angle,
+    )
+    grey[rows, cols] = quantise4(grey=canvas.grey())
 
 
 def label_query(*, window: Window) -> tuple[float, float, float, float]:
@@ -631,7 +674,8 @@ def name_region(*, label: StreetLabel, offset: Window) -> Region:
     Region
         Row and column slices, clipped to the map.
     """
-    half = math.hypot(label.width / 2, STREET_FACE.px) + HALO
+    width = text_width(text=label.name, face=STREET_FACE)
+    half = math.hypot(width / 2, STREET_FACE.px) + HALO
     x, y = label.x - offset[0], label.y - offset[1]
     return (
         slice(max(0, math.floor(y - half)), max(0, math.ceil(y + half))),

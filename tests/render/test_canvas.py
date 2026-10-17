@@ -178,3 +178,41 @@ def test_clipped_keeps_outside_untouched() -> None:
     assert int(grey[75, 75]) == PAPER
     canvas.rect(box=(60, 60, 70, 70), grey=INK)
     assert int(canvas.grey()[65, 65]) == INK
+
+
+def test_scaled_canvas_reads_back_at_its_own_size() -> None:
+    """A canvas drawn at 4x reads back at the size it was asked for."""
+    canvas = Canvas(width=10, height=6, scale=4)
+    canvas.rect(box=(2, 1, 5, 3), grey=INK)
+    grey = canvas.grey()
+    assert grey.shape == (6, 10)
+    assert grey.dtype == np.uint8
+    assert (grey[1:3, 2:5] == INK).all()
+    assert int(np.count_nonzero(grey == INK)) == 6
+
+
+def test_scaled_canvas_averages_each_block() -> None:
+    """A half-covered pixel reads back as the mean of its sub-pixels."""
+    canvas = Canvas(width=8, height=4, scale=4, smooth=True)
+    canvas.rect(box=(0, 0, 2.5, 4), grey=INK)
+    canvas.rect(box=(4, 0, 4.25, 4), grey=INK)
+    row = canvas.grey()[0].tolist()
+    assert row == [INK, INK, 128, PAPER, 191, PAPER, PAPER, PAPER]
+
+
+def test_smooth_text_has_grey_edges() -> None:
+    """Smooth text leaves greys between ink and paper."""
+    canvas = Canvas(width=120, height=40, scale=4, smooth=True)
+    canvas.text(
+        at=(10, 30), text='Parramatta', face=Face(weight=700, px=18),
+        grey=INK)
+    levels = set(np.unique(canvas.grey()).tolist())
+    assert {INK, PAPER} < levels
+
+
+def test_scaled_image_keeps_its_pixels() -> None:
+    """A blit onto a scaled canvas reads back unchanged."""
+    block = np.arange(24, dtype=np.uint8).reshape(4, 6) * 10
+    canvas = Canvas(width=6, height=4, scale=4, smooth=True)
+    canvas.image(grey=block, at=(0, 0))
+    np.testing.assert_array_equal(canvas.grey(), block)

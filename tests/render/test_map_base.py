@@ -11,7 +11,7 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
-from paperroute.build.map_style import DARK, LIGHT
+from paperroute.build.map_style import DARK, LIGHT, STREET_FACE, SUPERSAMPLE
 from paperroute.build.tile_store import PlacedLabel, TileWriter
 from paperroute.core.geo import Point, to_metres
 from paperroute.core.map_view import (
@@ -29,15 +29,22 @@ from paperroute.core.tiles import (
     tiles_covering,
     to_pixels,
 )
-from paperroute.render.canvas import INK, PAPER, Face, text_width
+from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.map_base import (
     compose_tiles,
     draw_map_base,
+    name_region,
     on_route,
+    redraw_name,
     scale_text,
     window_of,
 )
-from paperroute.render.tile_codec import pack_bits, pack_grey
+from paperroute.render.tile_codec import (
+    diffuse,
+    pack_bits,
+    pack_grey,
+    quantise4,
+)
 
 MPP = 8
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
@@ -479,6 +486,80 @@ def test_names_over_the_line_are_redrawn(tmp_path: Path) -> None:
     assert set(np.unique(plain[box]).tolist()) == {INK, PAPER}
 
 
+def smooth_name(
+    *,
+    under: NDArray[np.uint8],
+    label: PlacedLabel,
+    offset: tuple[int, int],
+) -> NDArray[np.uint8]:
+    """
+    Draw a street name the way the tiles bake it, over map pixels.
+
+    Parameters
+    ----------
+    under : NDArray[np.uint8]
+        The map without the name.
+    label : PlacedLabel
+        The label, in global pixels.
+    offset : tuple[int, int]
+        The map's top-left corner in global pixels.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The pixels of the name's region.
+    """
+    rows, cols = name_region(label=label, offset=offset)
+    patch = under[rows, cols]
+    canvas = Canvas(
+        width=patch.shape[1],
+        height=patch.shape[0],
+        scale=SUPERSAMPLE,
+        smooth=True,
+    )
+    canvas.image(grey=patch, at=(0.0, 0.0))
+    canvas.text(
+        at=(
+            label.x - offset[0] - cols.start,
+            label.y - offset[1] - rows.start,
+        ),
+        text=label.name,
+        face=STREET_FACE,
+        grey=DARK,
+        anchor='mm',
+        halo=2,
+        angle=label.angle,
+    )
+    return quantise4(grey=canvas.grey())
+
+
+@pytest.mark.parametrize('angle', [0.0, 3.0])
+def test_redrawn_names_are_smoothed_like_baked_ones(
+    tmp_path: Path,
+    angle: float,
+) -> None:
+    """A redrawn name is drawn at 4x, averaged and snapped to 4 levels."""
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    label = street(
+        name='Church Street',
+        x=gx + LABEL_SHIFT + 0.3,
+        y=gy + 0.6,
+        angle=angle,
+    )
+    named = draw_with(out=tmp_path / 'named.db', labels=[label])
+    plain = draw_with(out=tmp_path / 'plain.db', labels=[])
+    offset = window_of(base=base())
+    region = name_region(label=label, offset=offset)
+    np.testing.assert_array_equal(
+        named[region],
+        smooth_name(under=plain, label=label, offset=offset),
+    )
+    assert np.count_nonzero(named[region] == LIGHT) > 0
+    outside = np.ones(named.shape, dtype=bool)
+    outside[region] = False
+    np.testing.assert_array_equal(named[outside], plain[outside])
+
+
 def test_crossing_names_are_not_redrawn(tmp_path: Path) -> None:
     """A street crossing the route is left under the line."""
     gx, gy = to_pixels(point=CENTRE, mpp=MPP)
@@ -793,6 +874,36 @@ def test_bits_names_over_the_line_are_dithered(tmp_path: Path) -> None:
         np.count_nonzero(text)
     )
     assert 0.05 <= share <= 0.5
+
+
+def test_bits_names_dither_the_four_level_name(tmp_path: Path) -> None:
+    """In BITS a redrawn name is the dithered copy of its grey name."""
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    label = street(name='Church Street', x=gx + LABEL_SHIFT, y=gy)
+    drawn = {}
+    for variant in TileVariant:
+        with closing(
+            build(out=tmp_path / f'{variant}.db', labels=[label]),
+        ) as tiles:
+            drawn[variant] = draw_map_base(
+                base=base(route=across(half=5000.0)),
+                tiles=tiles,
+                variant=variant,
+            )
+    region = name_region(label=label, offset=window_of(base=base()))
+    paper = diffuse(grey=drawn[TileVariant.GREY][region])
+    np.testing.assert_array_equal(
+        drawn[TileVariant.BITS][region],
+        np.where(paper, PAPER, INK),
+    )
+
+
+def test_redraw_name_off_the_map_changes_nothing() -> None:
+    """A name wholly above the map leaves every pixel alone."""
+    grey = np.full((MAP_HEIGHT, MAP_WIDTH), LIGHT, dtype=np.uint8)
+    label = street(name='Church Street', x=1100.0, y=1900.0)
+    redraw_name(grey=grey, label=label, offset=OFFSET)
+    assert (grey == LIGHT).all()
 
 
 def test_credit_has_a_2_px_paper_halo(tmp_path: Path) -> None:

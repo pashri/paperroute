@@ -21,6 +21,7 @@ from paperroute.core.map_view import (
     MapView,
     build_map_view,
     needed_patterns,
+    pin_trips,
 )
 from paperroute.core.messages import (
     DeparturesFailed,
@@ -489,6 +490,30 @@ def pruned(*, state: State, wanted: frozenset[str]) -> State:
     return replace(state, map=map_state)
 
 
+def awaiting_fetch(*, state: State) -> frozenset[str]:
+    """
+    List the trips seen in positions feeds with a newer fetch in flight.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    frozenset[str]
+        Trip IDs of the vehicles in each stored download that is older
+        than its feed's latest fetch, apart from the pin's trips.
+    """
+    fetched_at = state.map.fetched_at
+    return frozenset(
+        vehicle.trip_id
+        for feed, snapshot in state.map.positions.items()
+        if fetched_at.get(feed, snapshot.fetched_at) > snapshot.fetched_at
+        for vehicle in snapshot.vehicles
+    ) - pin_trips(departures=state.departures)
+
+
 def map_effects(
     *, state: State, stop_view: StopView
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -496,7 +521,8 @@ def map_effects(
     Ask for the map data the Map view needs, when it is shown.
 
     Patterns and shapes the Map no longer needs are dropped, so memory
-    stays bounded.
+    stays bounded. Stale vehicles' patterns wait while their feed has a
+    newer fetch in flight.
 
     Parameters
     ----------
@@ -520,7 +546,10 @@ def map_effects(
     state, modes = request_modes(state=state)
     state, shapes = request_shapes(state=state)
     state, fetches = request_positions(state=state)
-    state, loads = request_patterns(state=state, wanted=wanted)
+    state, loads = request_patterns(
+        state=state,
+        wanted=wanted - awaiting_fetch(state=state),
+    )
     return state, (*modes, *shapes, *fetches, *loads)
 
 

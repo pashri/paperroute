@@ -1139,3 +1139,65 @@ def test_unneeded_pin_shapes_can_be_asked_for_again() -> None:
     assert state.map.requested_shapes == {'b:0'}
     state = loaded(state=state, count=2, shaped=True)
     assert state.map.requested_shapes == {'b:0', 'b:1'}
+
+
+def test_stale_patterns_wait_for_the_fetch_in_flight() -> None:
+    """Old positions on return to the Map ask for no stale patterns."""
+    state = city_map()
+    bus = vehicle(timestamp=int(START.timestamp()), point=CENTRE)
+    event = PositionsFetched(
+        feed=BUS_POSITIONS,
+        snapshot=snapshot(fetched_at=START, vehicles=(bus,)),
+    )
+    state, _ = step(state, event)
+    state, _ = step(state, PRESS)
+    later = START + timedelta(minutes=5)
+    state, _ = step(state, Tick(now=later))
+    state, effects = step(state, PRESS)
+    fetch = FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS)
+    assert fetch in effects
+    assert not any(
+        't1' in load.trip_ids
+        for load in effects_of(effects=effects, kind=LoadPatterns)
+    )
+    state, _ = step(state, Tick(now=later + timedelta(seconds=5)))
+    assert 't1' not in state.map.pending_patterns
+    landed = replace(
+        event,
+        snapshot=snapshot(fetched_at=later, vehicles=(bus,)),
+    )
+    _, effects = step(state, landed)
+    [load] = effects_of(effects=effects, kind=LoadPatterns)
+    assert 't1' in load.trip_ids
+
+
+def test_pin_patterns_do_not_wait_for_the_fetch_in_flight() -> None:
+    """A pin trip whose vehicle went stale is asked for at once."""
+    state = city_map()
+    [pin] = state.departures
+    state, _ = step(
+        state,
+        PatternsLoaded(
+            trip_ids=frozenset({pin.trip_id}),
+            patterns={pin.trip_id: pattern(trip_id=pin.trip_id)},
+            shapes={},
+        ),
+    )
+    bus = vehicle(
+        timestamp=int(START.timestamp()),
+        trip_id=pin.trip_id,
+        point=CENTRE,
+    )
+    state, _ = step(
+        state,
+        PositionsFetched(
+            feed=BUS_POSITIONS,
+            snapshot=snapshot(fetched_at=START, vehicles=(bus,)),
+        ),
+    )
+    assert pin.trip_id not in state.map.patterns
+    state, _ = step(state, PRESS)
+    state, _ = step(state, Tick(now=START + timedelta(minutes=5)))
+    _, effects = step(state, PRESS)
+    [load] = effects_of(effects=effects, kind=LoadPatterns)
+    assert pin.trip_id in load.trip_ids

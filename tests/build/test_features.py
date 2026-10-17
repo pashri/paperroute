@@ -1,5 +1,6 @@
 """Tests for the scratch map feature store."""
 
+import sqlite3
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -7,16 +8,20 @@ import numpy as np
 import pytest
 
 from paperroute.build.features import (
+    SEA_CELL,
     FeatureStore,
+    chop,
     load_features,
     pack_rings,
     unpack_rings,
 )
+from paperroute.build.geometry import sea_rings
 from paperroute.build.osm_source import OsmArea, OsmLine, OsmPlace
 from paperroute.build.tile_store import PlacedLabel
 from paperroute.core.geo import MetreBox, to_metres
 from paperroute.core.tiles import LabelKind
 from tests.build.osm_factory import TINY_BBOX, write_tiny_osm
+from tests.build.rings import inside
 
 
 def around(*, lon: float, lat: float, half: float) -> MetreBox:
@@ -125,6 +130,8 @@ def test_readonly_store_reads_the_same(store: FeatureStore) -> None:
     reader = FeatureStore(path=path, readonly=True)
     box = around(lon=151.0, lat=-33.8, half=20.0)
     assert len(reader.lines_in(box=box)) == len(store.lines_in(box=box))
+    with pytest.raises(sqlite3.OperationalError, match='readonly'):
+        reader.conn.execute('DELETE FROM lines')
     reader.conn.close()
 
 
@@ -133,22 +140,47 @@ def test_labels_round_trip(tmp_path: Path) -> None:
     store = FeatureStore(path=tmp_path / 'features.db')
     label = PlacedLabel(
         name='Church St',
-        x=100.0,
-        y=200.0,
+        x=500.0,
+        y=100.0,
         angle=12.5,
         width=40.0,
-        start=(80.0, 196.0),
-        end=(120.0, 204.0),
+        start=(480.0, 96.0),
+        end=(520.0, 104.0),
         zoom=3,
         kind=LabelKind.STREET,
         rank=0,
     )
     store.add_labels(labels=[label])
-    assert store.labels_in(zoom=3, box=(90.0, 190.0, 110.0, 210.0)) == [
+    assert store.labels_in(zoom=3, box=(495.0, 95.0, 505.0, 105.0)) == [
         label,
     ]
-    assert not store.labels_in(zoom=5, box=(90.0, 190.0, 110.0, 210.0))
+    assert not store.labels_in(zoom=5, box=(495.0, 95.0, 505.0, 105.0))
     assert not store.labels_in(zoom=3, box=(0.0, 0.0, 50.0, 50.0))
+    store.conn.close()
+
+
+def test_labels_in_box_is_left_top_right_bottom(tmp_path: Path) -> None:
+    """The pixel box reads left, top, right, bottom, not swapped axes."""
+    store = FeatureStore(path=tmp_path / 'features.db')
+    store.add_labels(
+        labels=[
+            PlacedLabel(
+                name='Station St',
+                x=500.0,
+                y=100.0,
+                angle=0.0,
+                width=40.0,
+                start=(500.0, 100.0),
+                end=(500.0, 100.0),
+                zoom=8,
+                kind=LabelKind.STATION,
+                rank=1,
+            ),
+        ],
+    )
+    hits = store.labels_in(zoom=8, box=(495.0, 95.0, 505.0, 105.0))
+    assert [item.name for item in hits] == ['Station St']
+    assert not store.labels_in(zoom=8, box=(95.0, 495.0, 105.0, 505.0))
     store.conn.close()
 
 
@@ -186,3 +218,19 @@ def test_pack_rings_round_trips() -> None:
     assert [ring.tolist() for ring in unpacked] == [
         ring.tolist() for ring in rings
     ]
+
+
+def test_chop_fills_each_sea_point_exactly_once() -> None:
+    """Across about three squares a side, sea points are filled once."""
+    half = 1.5 * SEA_CELL
+    coast = np.array([[0.0, -2 * half], [0.0, 2 * half]])
+    frame = (-half, -half, half, half)
+    rings = sea_rings(coast=[coast], frame=frame)
+    pieces = list(chop(rings=rings, frame=frame))
+    assert len(pieces) > 3
+    steps = np.arange(-half + 500.0, half, 1000.0)
+    for x in steps:
+        for y in steps:
+            point = (float(x), float(y))
+            filled = sum(inside(rings=piece, point=point) for piece in pieces)
+            assert filled == inside(rings=rings, point=point) == (x > 0)

@@ -1,11 +1,10 @@
 """Tests for reading map features from an OSM file."""
 
+import logging
 from collections.abc import Mapping
 from pathlib import Path
 
-import osmium
 import pytest
-from osmium.osm.mutable import Node
 
 from paperroute.build.osm_source import (
     OsmArea,
@@ -17,7 +16,12 @@ from paperroute.build.osm_source import (
     place_kind,
     read_osm,
 )
-from tests.build.osm_factory import TIMESTAMP, TINY_BBOX, write_tiny_osm
+from tests.build.osm_factory import (
+    TIMESTAMP,
+    TINY_BBOX,
+    write_bare_osm,
+    write_tiny_osm,
+)
 
 
 @pytest.fixture(name='tiny_osm', scope='module')
@@ -167,6 +171,19 @@ def test_closed_park_way_becomes_area(
     assert ring.min(axis=0).tolist() == [150.996, -33.796]
 
 
+def test_read_osm_logs_skipped_objects(
+    tiny_osm: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Broken ways and the self-crossing park are counted in the log."""
+    with caplog.at_level(logging.INFO, logger='paperroute.build.osm_source'):
+        list(read_osm(path=tiny_osm, bbox=TINY_BBOX, index='flex_mem'))
+    assert [record.getMessage() for record in caplog.records] == [
+        'skipped 2 ways without a usable line',
+        'skipped 1 areas that failed to assemble',
+    ]
+
+
 def test_header_timestamp_reads_replication_time(tiny_osm: Path) -> None:
     """The header's replication timestamp is returned as written."""
     assert header_timestamp(path=tiny_osm) == TIMESTAMP
@@ -175,6 +192,5 @@ def test_header_timestamp_reads_replication_time(tiny_osm: Path) -> None:
 def test_header_timestamp_is_empty_when_missing(tmp_path: Path) -> None:
     """A file without a replication timestamp gives an empty string."""
     path = tmp_path / 'bare.osm.pbf'
-    with osmium.SimpleWriter(path) as writer:
-        writer.add_node(Node(id=1, location=(151.0, -33.8)))
+    write_bare_osm(path=path)
     assert not header_timestamp(path=path)

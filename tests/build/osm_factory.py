@@ -50,6 +50,7 @@ WAYS: Final[tuple[WayRow, ...]] = (
     (108, (1, 999), {'highway': 'primary', 'name': 'Broken Road'}),
     (109, (2,), {'highway': 'primary', 'name': 'Stub Road'}),
     (110, (3, 4, 6, 5, 3), {'leisure': 'playground'}),
+    (111, (9, 11, 10, 12, 9), {'leisure': 'park', 'name': 'Bowtie Park'}),
 )
 PLACES: Final[tuple[NodeRow, ...]] = (
     (201, (151.000, -33.797), {'place': 'suburb', 'name': 'Constitution Hill'}),
@@ -63,8 +64,8 @@ def write_tiny_osm(*, path: Path) -> None:
     Write a small OSM file with roads, rail, a park, coast and places.
 
     It also holds a street outside ``TINY_BBOX``, a yard rail line, a
-    nameless suburb, a playground, a bus route and two ways that cannot
-    become lines.
+    nameless suburb, a playground, a bus route, two ways that cannot
+    become lines and a self-crossing park that cannot become an area.
 
     Parameters
     ----------
@@ -83,3 +84,16 @@ def write_tiny_osm(*, path: Path) -> None:
         writer.add_relation(
             Relation(id=301, members=[('w', 101, '')], tags={'route': 'bus'}),
         )
+
+
+def write_bare_osm(*, path: Path) -> None:
+    """
+    Write a one-node OSM file with no replication timestamp.
+
+    Parameters
+    ----------
+    path : Path
+        Destination ``.osm.pbf`` file; replaced if present.
+    """
+    with osmium.SimpleWriter(path, overwrite=True) as writer:
+        writer.add_node(Node(id=1, location=(151.0, -33.8)))

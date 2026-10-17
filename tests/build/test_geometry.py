@@ -4,12 +4,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.build.geometry import (
-    Ring,
     clip_lines,
     clip_rings,
     merge_lines,
     sea_rings,
 )
+from tests.build.rings import inside
 
 
 def line(*points: tuple[float, float]) -> NDArray[np.float64]:
@@ -27,31 +27,6 @@ def line(*points: tuple[float, float]) -> NDArray[np.float64]:
         The array.
     """
     return np.array(points, dtype=np.float64)
-
-
-def inside(*, rings: list[Ring], point: tuple[float, float]) -> bool:
-    """
-    Test a point against rings with the even-odd rule.
-
-    Parameters
-    ----------
-    rings : list[Ring]
-        Closed rings.
-    point : tuple[float, float]
-        The point.
-
-    Returns
-    -------
-    bool
-        True when an odd number of rings hold the point.
-    """
-    px, py = point
-    crossings = 0
-    for ring in rings:
-        for (x0, y0), (x1, y1) in zip(ring[:-1], ring[1:], strict=True):
-            if (y0 > py) != (y1 > py):
-                crossings += px < x0 + (py - y0) * (x1 - x0) / (y1 - y0)
-    return crossings % 2 == 1
 
 
 def test_sea_is_right_of_the_coastline() -> None:

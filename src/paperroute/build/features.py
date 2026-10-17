@@ -30,7 +30,7 @@ CREATE TABLE places (id INTEGER PRIMARY KEY, kind TEXT NOT NULL,
   name TEXT NOT NULL, rank INTEGER NOT NULL, x REAL NOT NULL,
   y REAL NOT NULL);
 CREATE INDEX places_x ON places (x);
-CREATE INDEX labels_place ON labels (zoom, x);
+CREATE INDEX labels_zoom_x ON labels (zoom, x);
 """
 SELECT_LINES: Final[str] = """
 SELECT lines.layer, lines.name, lines.points FROM lines

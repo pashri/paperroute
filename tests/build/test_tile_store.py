@@ -3,17 +3,32 @@
 import sqlite3
 from contextlib import closing
 from pathlib import Path
+from typing import Final
 
 import numpy as np
 import pytest
 
 from paperroute.build.tile_store import (
     TILE_FORMAT,
+    TILES_SCHEMA,
     PlacedLabel,
     TileWriter,
 )
 from paperroute.core.tiles import TILE, LabelKind
 from paperroute.render.tile_codec import pack_bits, pack_grey
+
+TILES_SCHEMA_TEXT: Final[str] = """
+CREATE TABLE tiles (zoom INTEGER NOT NULL, col INTEGER NOT NULL,
+  row INTEGER NOT NULL, grey BLOB NOT NULL, bits BLOB NOT NULL,
+  PRIMARY KEY (zoom, col, row));
+CREATE TABLE labels (id INTEGER PRIMARY KEY, zoom INTEGER NOT NULL,
+  kind TEXT NOT NULL, name TEXT NOT NULL, rank INTEGER NOT NULL,
+  x REAL NOT NULL, y REAL NOT NULL, angle REAL NOT NULL,
+  width REAL NOT NULL, ax REAL NOT NULL, ay REAL NOT NULL,
+  bx REAL NOT NULL, by REAL NOT NULL);
+CREATE INDEX labels_place ON labels (zoom, kind, x);
+CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+"""
 
 
 def write_tile(*, out: Path, meta: dict[str, str] | None = None) -> None:
@@ -101,3 +116,8 @@ def test_writer_meta_has_format_and_built_at(tmp_path: Path) -> None:
     assert '.' in meta['built_at']
     assert mode == 'delete'
     assert rank == 2
+
+
+def test_tiles_schema_text_is_unchanged() -> None:
+    """The tiles schema keeps its exact text."""
+    assert TILES_SCHEMA == TILES_SCHEMA_TEXT

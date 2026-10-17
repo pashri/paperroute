@@ -1,5 +1,6 @@
 """Map features read from an OpenStreetMap PBF file."""
 
+import logging
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
 from pathlib import Path
@@ -10,6 +11,8 @@ import osmium
 from osmium.osm.types import OSMEntity
 
 from paperroute.build.geometry import Line, Ring, wkb_lines, wkb_rings
+
+logger = logging.getLogger(__name__)
 
 ROAD_CLASSES: Final[Mapping[str, str]] = {
     'motorway': 'motorway',
@@ -47,6 +50,23 @@ FILTER_KEYS: Final[tuple[str, ...]] = (
     'place',
     'amenity',
 )
+
+
+@dataclass
+class Skips:
+    """
+    Counts of drawable objects dropped because osmium could not build them.
+
+    Attributes
+    ----------
+    ways : int
+        Ways with a missing node location or fewer than two points.
+    areas : int
+        Areas that failed to assemble.
+    """
+
+    ways: int = 0
+    areas: int = 0
 
 
 @dataclass(frozen=True)
@@ -223,6 +243,7 @@ def way_line(
     *,
     way: osmium.osm.Way,
     factory: osmium.geom.WKBFactory,
+    skips: Skips,
 ) -> OsmLine | None:
     """
     Read a way as a line.
@@ -233,6 +254,8 @@ def way_line(
         The way, with node locations.
     factory : osmium.geom.WKBFactory
         Geometry factory.
+    skips : Skips
+        Counts that a dropped way adds to.
 
     Returns
     -------
@@ -247,6 +270,7 @@ def way_line(
     try:
         wkb = bytes.fromhex(factory.create_linestring(way))
     except (osmium.InvalidLocationError, RuntimeError):
+        skips.ways += 1
         return None
     (lonlat,) = wkb_lines(wkb=wkb)
     return OsmLine(layer=layer, name=tags.get('name', ''), lonlat=lonlat)
@@ -256,6 +280,7 @@ def area_rings(
     *,
     area: osmium.osm.Area,
     factory: osmium.geom.WKBFactory,
+    skips: Skips,
 ) -> OsmArea | None:
     """
     Read an area as rings.
@@ -266,6 +291,8 @@ def area_rings(
         The assembled area.
     factory : osmium.geom.WKBFactory
         Geometry factory.
+    skips : Skips
+        Counts that a failed area adds to.
 
     Returns
     -------
@@ -278,6 +305,7 @@ def area_rings(
     try:
         wkb = bytes.fromhex(factory.create_multipolygon(area))
     except (osmium.InvalidLocationError, RuntimeError):
+        skips.areas += 1
         return None
     rings = wkb_rings(wkb=wkb)
     return OsmArea(layer=layer, rings=tuple(rings)) if rings else None
@@ -287,6 +315,7 @@ def to_feature(
     *,
     entity: OSMEntity,
     factory: osmium.geom.WKBFactory,
+    skips: Skips,
 ) -> OsmLine | OsmArea | OsmPlace | None:
     """
     Read one OSM object as a feature.
@@ -297,6 +326,8 @@ def to_feature(
         A node, way, relation, area or changeset.
     factory : osmium.geom.WKBFactory
         Geometry factory.
+    skips : Skips
+        Counts of objects osmium could not build.
 
     Returns
     -------
@@ -306,9 +337,9 @@ def to_feature(
     if isinstance(entity, osmium.osm.Node):
         return node_place(node=entity)
     if isinstance(entity, osmium.osm.Way):
-        return way_line(way=entity, factory=factory)
+        return way_line(way=entity, factory=factory, skips=skips)
     if isinstance(entity, osmium.osm.Area):
-        return area_rings(area=entity, factory=factory)
+        return area_rings(area=entity, factory=factory, skips=skips)
     return None
 
 
@@ -370,7 +401,8 @@ def read_osm(
     Yields
     ------
     OsmLine | OsmArea | OsmPlace
-        Each feature, in file order.
+        Each feature, in file order. Once the file is read, the counts of
+        dropped ways and areas are logged.
     """
     processor = (
         osmium.FileProcessor(path)
@@ -379,10 +411,13 @@ def read_osm(
         .with_filter(osmium.filter.KeyFilter(*FILTER_KEYS))
     )
     factory = osmium.geom.WKBFactory()
+    skips = Skips()
     for entity in processor:
-        feature = to_feature(entity=entity, factory=factory)
+        feature = to_feature(entity=entity, factory=factory, skips=skips)
         if feature is not None and overlaps(feature=feature, bbox=bbox):
             yield feature
+    logger.info('skipped %d ways without a usable line', skips.ways)
+    logger.info('skipped %d areas that failed to assemble', skips.areas)
 
 
 def header_timestamp(*, path: Path) -> str:

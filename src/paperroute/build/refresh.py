@@ -26,6 +26,7 @@ from paperroute.build.sources import (
     save_states,
 )
 from paperroute.build.timetable import (
+    SCHEMA_VERSION,
     Source,
     Window,
     build_timetable,
@@ -432,6 +433,29 @@ def swap_in(*, layout: Layout, built: Path, fetched: Fetched) -> None:
     save_states(path=layout.states, states=fetched.states)
 
 
+def read_meta(*, path: Path) -> dict[str, str]:
+    """
+    Read a timetable's meta table.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file.
+
+    Returns
+    -------
+    dict[str, str]
+        Meta keys and values, or {} when the file can't be read.
+    """
+    try:
+        with closing(
+            sqlite3.connect(f'file:{path}?mode=ro', uri=True),
+        ) as conn:
+            return dict(conn.execute('SELECT key, value FROM meta'))
+    except sqlite3.Error:
+        return {}
+
+
 def days_left(*, path: Path) -> int:
     """
     Count the days from today in Sydney to the end of a timetable window.
@@ -446,13 +470,7 @@ def days_left(*, path: Path) -> int:
     int
         Days left, or 0 when the file or its window can't be read.
     """
-    try:
-        with closing(
-            sqlite3.connect(f'file:{path}?mode=ro', uri=True),
-        ) as conn:
-            meta = dict(conn.execute('SELECT key, value FROM meta'))
-    except sqlite3.Error:
-        return 0
+    meta = read_meta(path=path)
     if 'window_start' not in meta or 'window_days' not in meta:
         return 0
     end = date.fromisoformat(meta['window_start']) + timedelta(
@@ -481,10 +499,15 @@ def update(*, layout: Layout, fetched: Fetched, days: int,
     -------
     bool
         Whether the timetable was rebuilt. It is rebuilt when a source
-        changed, when forced, or when there is no timetable or fewer than
-        MIN_DAYS_LEFT days remain in its window.
+        changed, when forced, when there is no timetable or fewer than
+        MIN_DAYS_LEFT days remain in its window, or when it was built with
+        another SCHEMA_VERSION.
     """
-    stale = days_left(path=layout.timetable) < MIN_DAYS_LEFT
+    stale = (
+        days_left(path=layout.timetable) < MIN_DAYS_LEFT
+        or read_meta(path=layout.timetable).get('schema_version')
+        != SCHEMA_VERSION
+    )
     if not (fetched.changed or force or stale):
         save_states(path=layout.states, states=fetched.states)
         return False

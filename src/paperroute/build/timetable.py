@@ -13,9 +13,11 @@ from typing import Final
 
 from paperroute.build.dedupe import MergeReport, merge_rail
 from paperroute.build.gtfs_files import active_dates, parse_time, read_rows
-from paperroute.core.model import SYDNEY
+from paperroute.build.shapes import load_shapes
+from paperroute.core.model import SYDNEY, Mode, mode_for
 
 BATCH: Final[int] = 10_000
+SCHEMA_VERSION: Final[str] = '2'
 PLATFORM: Final[re.Pattern[str]] = re.compile(r'(?:Platform|Stand)\s+(\w+)$')
 SCHEMA: Final[str] = """
 CREATE TABLE stops (stop_id TEXT PRIMARY KEY, name TEXT NOT NULL,
@@ -27,7 +29,7 @@ CREATE TABLE services (service_id TEXT NOT NULL, date TEXT NOT NULL,
   PRIMARY KEY (service_id, date)) WITHOUT ROWID;
 CREATE TABLE trips (trip_id TEXT PRIMARY KEY, route_id TEXT NOT NULL,
   service_id TEXT NOT NULL, headsign TEXT NOT NULL, direction_id INTEGER,
-  block_id TEXT, agency_id TEXT, source TEXT NOT NULL);
+  block_id TEXT, agency_id TEXT, source TEXT NOT NULL, shape_id TEXT);
 CREATE TABLE stop_times (trip_id TEXT NOT NULL, seq INTEGER NOT NULL,
   stop_id TEXT NOT NULL, arr INTEGER NOT NULL, dep INTEGER NOT NULL,
   pickup INTEGER NOT NULL, dropoff INTEGER NOT NULL,
@@ -36,7 +38,19 @@ CREATE TABLE trip_aliases (alias_id TEXT NOT NULL, trip_id TEXT NOT NULL,
   PRIMARY KEY (alias_id, trip_id)) WITHOUT ROWID;
 CREATE TABLE trip_skip (trip_id TEXT NOT NULL, date TEXT NOT NULL,
   PRIMARY KEY (trip_id, date)) WITHOUT ROWID;
+CREATE TABLE shapes (shape_id TEXT PRIMARY KEY, mode TEXT NOT NULL,
+  west REAL NOT NULL, south REAL NOT NULL, east REAL NOT NULL,
+  north REAL NOT NULL, points BLOB NOT NULL);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+"""
+SHAPE_MODES: Final[str] = """
+SELECT DISTINCT t.shape_id, r.type, COALESCE(t.agency_id, r.agency_id)
+FROM trips t JOIN routes r ON r.route_id = t.route_id
+WHERE t.source = :name AND t.shape_id IS NOT NULL
+"""
+DROP_UNUSED_SHAPES: Final[str] = """
+DELETE FROM shapes WHERE shape_id NOT IN
+  (SELECT shape_id FROM trips WHERE shape_id IS NOT NULL)
 """
 INDEXES: Final[str] = """
 CREATE INDEX stop_times_stop ON stop_times (stop_id, dep);
@@ -220,14 +234,43 @@ def load_trips(*, conn: sqlite3.Connection, source: Source,
              f'{source.name}:{row["service_id"]}',
              row.get('trip_headsign', ''),
              int(row['direction_id']) if row.get('direction_id') else None,
-             row.get('block_id') or None, None, source.name)
+             row.get('block_id') or None, None, source.name,
+             f'{source.name}:{row["shape_id"]}' if row.get('shape_id')
+             else None)
             for row in read_rows(archive=source.archive, member='trips.txt')
             if row['service_id'] in services
             and row['trip_id'] not in existing]
     insert_many(conn=conn,
-                sql='INSERT INTO trips VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                sql='INSERT INTO trips VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 rows=rows)
     return {row[0] for row in rows}
+
+
+def shape_modes(*, conn: sqlite3.Connection,
+                source: Source) -> dict[str, Mode]:
+    """
+    Map the raw shape IDs of one feed's stored trips to their modes.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Database holding the feed's trips and routes.
+    source : Source
+        Feed.
+
+    Returns
+    -------
+    dict[str, Mode]
+        Raw shape ID to mode. A shape used by trips of several modes takes
+        the first one read.
+    """
+    prefix = len(f'{source.name}:')
+    modes: dict[str, Mode] = {}
+    for shape_id, route_type, agency_id in conn.execute(
+            SHAPE_MODES, {'name': source.name}):
+        modes.setdefault(shape_id[prefix:], mode_for(
+            route_type=route_type, agency_id=agency_id))
+    return modes
 
 
 def stop_time_rows(*, archive: Path,
@@ -259,7 +302,7 @@ def stop_time_rows(*, archive: Path,
 def load_source(*, conn: sqlite3.Connection, source: Source,
                 window: Window) -> int:
     """
-    Load one feed's stops, routes, active services, trips and stop times.
+    Load one feed's stops, routes, services, trips, stop times and shapes.
 
     Stops already present (from an earlier source) are kept as they are.
 
@@ -289,13 +332,15 @@ def load_source(*, conn: sqlite3.Connection, source: Source,
     insert_many(conn=conn,
                 sql='INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, ?, ?)',
                 rows=stop_time_rows(archive=source.archive, trips=trips))
+    load_shapes(conn=conn, source=source,
+                modes=shape_modes(conn=conn, source=source))
     conn.commit()
     return len(trips)
 
 
 def write_meta(*, conn: sqlite3.Connection, window: Window) -> None:
     """
-    Record the window and build time.
+    Record the window, schema version and build time.
 
     Parameters
     ----------
@@ -307,6 +352,7 @@ def write_meta(*, conn: sqlite3.Connection, window: Window) -> None:
     conn.executemany('INSERT INTO meta VALUES (?, ?)', [
         ('window_start', window.start.isoformat()),
         ('window_days', str(window.days)),
+        ('schema_version', SCHEMA_VERSION),
         ('built_at', datetime.now(timezone.utc).isoformat())])
 
 
@@ -341,6 +387,7 @@ def build_timetable(*, sources: list[Source], window: Window,
             load_source(conn=conn, source=source, window=window)
         print('progress merge', flush=True)
         report = merge_rail(conn=conn)
+        conn.execute(DROP_UNUSED_SHAPES)
         create_indexes(conn=conn)
         write_meta(conn=conn, window=window)
         conn.commit()

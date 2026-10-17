@@ -405,3 +405,26 @@ def test_work_is_emptied_after_a_run(
     server.state.files[METRO].etag = '"2"'
     run(server=server, data_dir=data_dir)
     assert not list((data_dir / 'work').iterdir())
+
+
+def test_refresh_rebuilds_when_schema_version_differs(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """A timetable from older code is rebuilt with no source changed."""
+    run(server=server, data_dir=data_dir)
+    with closing(sqlite3.connect(data_dir / 'timetable.db')) as conn:
+        conn.execute(
+            "UPDATE meta SET value = '1' WHERE key = 'schema_version'",
+        )
+        conn.commit()
+    server.state.hits.clear()
+    report = run(server=server, data_dir=data_dir)
+    assert server.state.hits == {'HEAD': 3}
+    assert report.changed == ()
+    assert report.rebuilt
+
+
+def test_read_meta_of_missing_file_is_empty(tmp_path: Path) -> None:
+    """An unreadable timetable has no meta."""
+    assert not refresh_module.read_meta(path=tmp_path / 'missing.db')

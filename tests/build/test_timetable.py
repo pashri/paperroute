@@ -5,11 +5,19 @@ from contextlib import closing
 from datetime import date
 from pathlib import Path
 
-from paperroute.build.timetable import Source
+from paperroute.build.timetable import (
+    SCHEMA_VERSION,
+    Source,
+    Window,
+    build_timetable,
+)
 from tests.build.feeds import (
     DAILY,
     build_db,
+    bundle_rail_files,
     bus_feed,
+    shape_rows,
+    shaped_bus_feed,
     sydneytrains_feed,
 )
 from tests.helpers import write_feed
@@ -153,3 +161,70 @@ def test_load_stores_pickup_type(tmp_path: Path) -> None:
     assert query(db=db, sql="SELECT pickup FROM stop_times "
                             "WHERE trip_id = 'S-0848' AND seq = 1") == [
         (1,)]
+
+
+def built(*, tmp_path: Path, sources: list[Source]) -> Path:
+    """
+    Build a two-day timetable file, merging rail.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Directory for the file.
+    sources : list[Source]
+        Feeds in load order.
+
+    Returns
+    -------
+    Path
+        The timetable file.
+    """
+    out = tmp_path / 'timetable.db'
+    build_timetable(sources=sources,
+                    window=Window(start=date(2026, 10, 16), days=2), out=out)
+    return out
+
+
+def test_trip_rows_carry_namespaced_shape_id(tmp_path: Path) -> None:
+    """A trip's shape ID is prefixed with the source name."""
+    feed = shaped_bus_feed(path=tmp_path / 'b.zip',
+                           points=[(151.0, -33.8), (151.01, -33.81)])
+    db = built(tmp_path=tmp_path,
+               sources=[Source(name='bundle', archive=feed)])
+    assert query(db=db, sql='SELECT DISTINCT shape_id FROM trips') == [
+        ('bundle:S1',)]
+
+
+def test_unused_shapes_are_dropped(tmp_path: Path) -> None:
+    """A shape used only by a merged-away rail trip is deleted."""
+    files = bundle_rail_files()
+    points = [(151.0, -33.8), (151.01, -33.81)]
+    rail = write_feed(path=tmp_path / 'r.zip', files={
+        **files,
+        'trips.txt': [{**row, 'shape_id': f'R{row["trip_id"]}'}
+                      for row in files['trips.txt']],
+        'shapes.txt': [*shape_rows(shape_id='RB-0835', points=points),
+                       *shape_rows(shape_id='RB-0900', points=points)]})
+    db = built(tmp_path=tmp_path, sources=[
+        Source(name='sydneytrains',
+               archive=sydneytrains_feed(path=tmp_path / 's.zip')),
+        Source(name='bundle', archive=rail)])
+    assert query(db=db, sql='SELECT shape_id FROM shapes') == [
+        ('bundle:RB-0900',)]
+
+
+def test_feed_without_shapes_builds(tmp_path: Path) -> None:
+    """No shapes.txt and no shape_id column leave NULL IDs, no shapes."""
+    db = built(tmp_path=tmp_path, sources=bundle_bus(tmp_path=tmp_path))
+    assert query(db=db, sql='SELECT DISTINCT shape_id FROM trips') == [
+        (None,)]
+    assert query(db=db, sql='SELECT COUNT(*) FROM shapes') == [(0,)]
+
+
+def test_meta_records_schema_version(tmp_path: Path) -> None:
+    """The build writes the code's schema version to meta."""
+    db = built(tmp_path=tmp_path, sources=bundle_bus(tmp_path=tmp_path))
+    assert query(db=db, sql="SELECT value FROM meta "
+                            "WHERE key = 'schema_version'") == [
+        (SCHEMA_VERSION,)]
+    assert SCHEMA_VERSION == '2'

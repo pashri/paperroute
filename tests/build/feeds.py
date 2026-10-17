@@ -61,19 +61,14 @@ def stop_times(*, trip: str, times: list[tuple[str, str]],
             for index, (stop, at) in enumerate(times)]
 
 
-def bus_feed(*, path: Path) -> Path:
+def bus_files() -> dict[str, list[dict[str, str]]]:
     """
     Bundle-like feed: the 606 Hollis St to Parramatta, one late trip.
 
-    Parameters
-    ----------
-    path : Path
-        Zip to write.
-
     Returns
     -------
-    Path
-        The zip.
+    dict[str, list[dict[str, str]]]
+        Member name to rows.
     """
     stops = [*STATIONS,
              {'stop_id': 'G2145615',
@@ -88,7 +83,7 @@ def bus_feed(*, path: Path) -> Path:
               'stop_name': 'Parramatta Station, Stand B4',
               'location_type': '0', 'parent_station': '215020',
               'stop_lat': '-33.8176', 'stop_lon': '151.0049'}]
-    return write_feed(path=path, files={
+    return {
         'stops.txt': stops,
         'routes.txt': [{'route_id': 'r606', 'agency_id': '2436',
                         'route_short_name': '606',
@@ -110,13 +105,12 @@ def bus_feed(*, path: Path) -> Path:
             *stop_times(trip='bus-2510', times=[('2145615', '25:10:00'),
                                                 ('2150109', '25:40:00')]),
         ],
-    })
+    }
 
 
-def bundle_rail_feed(*, path: Path) -> Path:
+def bus_feed(*, path: Path) -> Path:
     """
-    Bundle-like rail: T1 'B-0835' duplicates the Sydney Trains feed's
-    'S-0835'; 'B-0900' has no duplicate; 'B-NB' runs north (Central first).
+    Write the bus feed of bus_files.
 
     Parameters
     ----------
@@ -128,7 +122,20 @@ def bundle_rail_feed(*, path: Path) -> Path:
     Path
         The zip.
     """
-    return write_feed(path=path, files={
+    return write_feed(path=path, files=bus_files())
+
+
+def bundle_rail_files() -> dict[str, list[dict[str, str]]]:
+    """
+    Bundle-like rail: T1 'B-0835' duplicates the Sydney Trains feed's
+    'S-0835'; 'B-0900' has no duplicate; 'B-NB' runs north (Central first).
+
+    Returns
+    -------
+    dict[str, list[dict[str, str]]]
+        Member name to rows.
+    """
+    return {
         'stops.txt': STATIONS,
         'routes.txt': [{'route_id': 'bT1', 'agency_id': 'x0001',
                         'route_short_name': 'T1',
@@ -149,7 +156,24 @@ def bundle_rail_feed(*, path: Path) -> Path:
             *stop_times(trip='B-NB', times=[('2000321', '08:10:00'),
                                             ('2150411', '08:37:00')]),
         ],
-    })
+    }
+
+
+def bundle_rail_feed(*, path: Path) -> Path:
+    """
+    Write the rail feed of bundle_rail_files.
+
+    Parameters
+    ----------
+    path : Path
+        Zip to write.
+
+    Returns
+    -------
+    Path
+        The zip.
+    """
+    return write_feed(path=path, files=bundle_rail_files())
 
 
 def sydneytrains_feed(*, path: Path) -> Path:
@@ -260,3 +284,51 @@ def regional_sources(*, tmp_path: Path) -> list[Source]:
             ('2000321', '07:15:00'), ('2150411', '07:40:30')])})
     return [Source(name='sydneytrains', archive=feed),
             Source(name='bundle', archive=bundle)]
+
+
+def shape_rows(*, shape_id: str,
+               points: list[tuple[float, float]]) -> list[dict[str, str]]:
+    """
+    Build shapes.txt rows for one shape.
+
+    Parameters
+    ----------
+    shape_id : str
+        Shape ID.
+    points : list[tuple[float, float]]
+        (lon, lat) in order.
+
+    Returns
+    -------
+    list[dict[str, str]]
+        Rows, numbered from 1.
+    """
+    return [{'shape_id': shape_id, 'shape_pt_lat': str(lat),
+             'shape_pt_lon': str(lon), 'shape_pt_sequence': str(index + 1)}
+            for index, (lon, lat) in enumerate(points)]
+
+
+def shaped_bus_feed(*, path: Path,
+                    points: list[tuple[float, float]]) -> Path:
+    """
+    Write the bus feed with both trips on shape 'S1', plus an unused 'S9'.
+
+    Parameters
+    ----------
+    path : Path
+        Zip to write.
+    points : list[tuple[float, float]]
+        (lon, lat) of S1.
+
+    Returns
+    -------
+    Path
+        The zip.
+    """
+    files = bus_files()
+    return write_feed(path=path, files={
+        **files,
+        'trips.txt': [{**row, 'shape_id': 'S1'}
+                      for row in files['trips.txt']],
+        'shapes.txt': [*shape_rows(shape_id='S1', points=points),
+                       *shape_rows(shape_id='S9', points=points)]})

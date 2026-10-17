@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import sqlite3
+from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
@@ -15,7 +16,9 @@ from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app import Ports, perform, run, ticker
 from paperroute.build.timetable import Source, Window, build_timetable
-from paperroute.core.model import SYDNEY, Departure, Pin
+from paperroute.core.geo import MetreBox, Shape
+from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
+from paperroute.core.patterns import TripPattern
 from paperroute.core.state import Event, FeedFailed, FetchFeed
 from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
@@ -82,6 +85,90 @@ class BrokenTimetable:
             The ID.
         """
         return stop_id
+
+    def stop(self, *, stop_id: str) -> StopPlace:
+        """
+        Place any stop with no position, named after its ID.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop ID.
+
+        Returns
+        -------
+        StopPlace
+            The stop, without a point.
+        """
+        return StopPlace(stop_id=stop_id, name=stop_id, point=None)
+
+    def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
+        """
+        Know no shapes.
+
+        Parameters
+        ----------
+        shape_ids : Collection[str]
+            Ignored.
+
+        Returns
+        -------
+        dict[str, Shape]
+            Nothing.
+        """
+        return {}
+
+    def patterns(
+        self, *, trip_ids: Collection[str], around: date
+    ) -> dict[str, TripPattern]:
+        """
+        Know no trips.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Ignored.
+        around : date
+            Ignored.
+
+        Returns
+        -------
+        dict[str, TripPattern]
+            Nothing.
+        """
+        return {}
+
+    def route_labels(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Know no routes.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Ignored.
+
+        Returns
+        -------
+        dict[str, str]
+            Nothing.
+        """
+        return {}
+
+    def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
+        """
+        Know no shapes.
+
+        Parameters
+        ----------
+        box : MetreBox
+            Ignored.
+
+        Returns
+        -------
+        frozenset[Mode]
+            Nothing.
+        """
+        return frozenset()
 
     def departures(
         self, *, pin: Pin, start: datetime, end: datetime

@@ -15,7 +15,8 @@ from paperroute.adapters.sqlite_ro import file_identity
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.dedupe import merge_rail
 from paperroute.build.timetable import Source
-from paperroute.core.model import SYDNEY, Mode, Pin
+from paperroute.core.geo import to_metres
+from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
 from tests.build.feeds import (
     DAILY,
     STATIONS,
@@ -23,6 +24,7 @@ from tests.build.feeds import (
     bundle_rail_feed,
     bus_feed,
     regional_sources,
+    shaped_bus_feed,
     stop_times,
     sydneytrains_feed,
 )
@@ -431,3 +433,295 @@ def test_departures_threads_survive_replacement(tmp_path: Path) -> None:
         assert trip_ids(repo=repo) == ['B4-0810']
     assert not errors
     assert seen
+
+
+REAL = Path(__file__).parent.parent / 'fixtures' / 'real'
+HOLLIS = '2145615'
+AROUND = date(2026, 10, 16)
+
+
+@pytest.fixture(name='slice_repo', scope='module')
+def _slice_repo(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[SqliteTimetableRepository]:
+    """
+    A repository over the real GTFS slice, with shapes.
+
+    Parameters
+    ----------
+    tmp_path_factory : pytest.TempPathFactory
+        Makes the working directory.
+
+    Yields
+    ------
+    SqliteTimetableRepository
+        Repository, closed after the tests.
+    """
+    db = build_db(
+        tmp_path=tmp_path_factory.mktemp('slice'),
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[
+            Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
+            Source(name='bundle', archive=REAL / 'bundle.zip'),
+        ],
+    )
+    with closing(sqlite3.connect(db)) as conn:
+        merge_rail(conn=conn)
+    with closing(SqliteTimetableRepository(path=db)) as repo:
+        yield repo
+
+
+def make_dir(*, path: Path) -> Path:
+    """
+    Create a directory.
+
+    Parameters
+    ----------
+    path : Path
+        Directory to create.
+
+    Returns
+    -------
+    Path
+        The same path.
+    """
+    path.mkdir()
+    return path
+
+
+def slice_departures(
+    *, repo: SqliteTimetableRepository
+) -> list[Departure]:
+    """
+    The 606 departures from Hollis St to Parramatta on the 16th.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Repository to query.
+
+    Returns
+    -------
+    list[Departure]
+        Departures, earliest first.
+    """
+    return repo.departures(
+        pin=HOLLIS_TO_PARRA,
+        start=at(hour=0, minute=0),
+        end=at(hour=23, minute=59),
+    )
+
+
+def test_stop_has_projected_point(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """A stop's point is its stored lon and lat in metres."""
+    found = slice_repo.stop(stop_id=HOLLIS)
+    row = slice_repo.fetch(
+        sql='SELECT lon, lat FROM stops WHERE stop_id = ?',
+        params=(HOLLIS,),
+    )[0]
+    assert found.stop_id == HOLLIS
+    assert found.name == slice_repo.stop_name(stop_id=HOLLIS)
+    lon, lat = (float(str(value)) for value in row)
+    assert found.point == to_metres(lon=lon, lat=lat)
+    with pytest.raises(KeyError):
+        slice_repo.stop(stop_id='nope')
+
+
+def test_stop_without_coordinates_has_no_point(tmp_path: Path) -> None:
+    """A stop with no lat or lon has no point."""
+    bare = {
+        'stop_id': 'X1',
+        'stop_name': 'Nowhere',
+        'location_type': '0',
+        'parent_station': '',
+        'stop_lat': '',
+        'stop_lon': '',
+    }
+    archive = write_feed(
+        path=tmp_path / 'bare.zip',
+        files={
+            'stops.txt': [bare],
+            'routes.txt': [],
+            'calendar.txt': [],
+            'trips.txt': [],
+            'stop_times.txt': [],
+        },
+    )
+    db = build_db(
+        tmp_path=tmp_path,
+        start=AROUND,
+        days=1,
+        sources=[Source(name='bundle', archive=archive)],
+    )
+    with closing(SqliteTimetableRepository(path=db)) as repo:
+        assert repo.stop(stop_id='X1') == StopPlace(
+            stop_id='X1', name='Nowhere', point=None
+        )
+
+
+def test_departures_carry_shape_id(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """Every 606 departure names a namespaced shape."""
+    found = slice_departures(repo=slice_repo)
+    assert found
+    assert {d.route for d in found} == {'606'}
+    assert all(
+        d.shape_id and d.shape_id.startswith('bundle:') for d in found
+    )
+
+
+def test_shapes_returns_requested_only(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """Only the asked-for shapes come back; unknown IDs are absent."""
+    ids = {d.shape_id for d in slice_departures(repo=slice_repo)}
+    first = sorted(str(i) for i in ids)[0]
+    found = slice_repo.shapes(shape_ids=[first, 'bundle:nope'])
+    assert list(found) == [first]
+    assert found[first].shape_id == first
+    assert len(found[first].points) >= 2
+    assert slice_repo.shapes(shape_ids=[]) == {}
+
+
+def test_patterns_resolve_alias_and_days(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """An aliased trip is keyed by the alias, with ordered stops."""
+    alias = str(
+        slice_repo.fetch(
+            sql="""
+            SELECT a.alias_id FROM trip_aliases a
+            JOIN trips t ON t.trip_id = a.trip_id
+            JOIN services sv ON sv.service_id = t.service_id
+            WHERE sv.date = '2026-10-16' ORDER BY a.alias_id
+            """,
+            params=(),
+        )[0][0]
+    )
+    found = slice_repo.patterns(trip_ids=[alias], around=AROUND)
+    pattern = found[alias]
+    assert pattern.trip_id == alias
+    assert pattern.route == 'T1'
+    assert pattern.mode == Mode.TRAIN
+    times = [stop.arrives for stop in pattern.stops]
+    assert times == sorted(times)
+    assert len(times) > 2
+    assert pattern.days
+    assert set(pattern.days) <= {date(2026, 10, 15), AROUND}
+    assert all(stop.point is not None for stop in pattern.stops)
+
+
+def test_unknown_trip_pattern_is_absent(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """A trip the timetable doesn't know has no pattern."""
+    assert slice_repo.patterns(trip_ids=['nope'], around=AROUND) == {}
+
+
+def test_route_labels_by_trip_and_alias(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """Trips and aliases both map to their route's short name."""
+    trip = slice_departures(repo=slice_repo)[0].trip_id
+    alias = str(
+        slice_repo.fetch(
+            sql='SELECT alias_id FROM trip_aliases ORDER BY alias_id',
+            params=(),
+        )[0][0]
+    )
+    labels = slice_repo.route_labels(trip_ids=[trip, alias, 'nope'])
+    assert labels == {trip: '606', alias: 'T1'}
+
+
+def test_route_labels_cache_is_bounded(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """A cache past its limit is cleared before it takes more."""
+    slice_repo.route_labels(trip_ids=['a1'])
+    slice_repo.labels.update({f'x{i}': '1' for i in range(20_001)})
+    trip = slice_departures(repo=slice_repo)[0].trip_id
+    assert slice_repo.route_labels(trip_ids=[trip]) == {trip: '606'}
+    assert len(slice_repo.labels) <= 2
+
+
+def test_modes_near_finds_bus_at_the_606_stop(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """A box around the 606 stop holds buses; a distant one holds none."""
+    x, y = slice_repo.stop(stop_id=HOLLIS).point or (0.0, 0.0)
+    box = (x - 2000.0, y - 2000.0, x + 2000.0, y + 2000.0)
+    assert Mode.BUS in slice_repo.modes_near(box=box)
+    sx, sy = to_metres(lon=150.0, lat=-34.9)
+    far = (sx - 2000.0, sy - 2000.0, sx + 2000.0, sy + 2000.0)
+    assert Mode.BUS not in slice_repo.modes_near(box=far)
+
+
+def test_old_schema_timetable_still_answers(tmp_path: Path) -> None:
+    """A timetable without shapes answers departures and empty maps."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[
+            Source(
+                name='bundle',
+                archive=bus_feed(path=tmp_path / 'b.zip'),
+            )
+        ],
+    )
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute('ALTER TABLE trips DROP COLUMN shape_id')
+        conn.execute('DROP TABLE shapes')
+        conn.commit()
+    with closing(SqliteTimetableRepository(path=db)) as repo:
+        found = repo.departures(
+            pin=HOLLIS_TO_PARRA,
+            start=at(hour=8, minute=0),
+            end=at(hour=9, minute=0),
+        )
+        assert [d.shape_id for d in found] == [None]
+        assert repo.shapes(shape_ids=['bundle:x']) == {}
+        assert repo.modes_near(box=(-1e6, -1e6, 1e6, 1e6)) == frozenset()
+        pattern = repo.patterns(trip_ids=['bus-0803'], around=AROUND)
+        assert pattern['bus-0803'].shape_id is None
+
+
+def test_old_schema_checked_after_reopen(tmp_path: Path) -> None:
+    """Shapes are read from a replacement file with the new schema."""
+    old = build_db(
+        tmp_path=make_dir(path=tmp_path / 'old'),
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[
+            Source(
+                name='bundle',
+                archive=bus_feed(path=tmp_path / 'b.zip'),
+            )
+        ],
+    )
+    with closing(sqlite3.connect(old)) as conn:
+        conn.execute('ALTER TABLE trips DROP COLUMN shape_id')
+        conn.execute('DROP TABLE shapes')
+        conn.commit()
+    new = build_db(
+        tmp_path=make_dir(path=tmp_path / 'new'),
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[
+            Source(
+                name='bundle',
+                archive=shaped_bus_feed(
+                    path=tmp_path / 's.zip',
+                    points=[(150.98, -33.78), (151.0, -33.82)],
+                ),
+            )
+        ],
+    )
+    with closing(SqliteTimetableRepository(path=old)) as repo:
+        assert repo.shapes(shape_ids=['bundle:S1']) == {}
+        os.replace(new, old)
+        assert list(repo.shapes(shape_ids=['bundle:S1'])) == ['bundle:S1']

@@ -155,6 +155,56 @@ def write_feed_slice(*, source: Path, out: Path, trips: set[str]) -> None:
     print(f'{out.name}: {len(kept.entity)} entities')
 
 
+def add_shapes(*, source: Path, fixture: Path) -> int:
+    """
+    Append the shapes a fixture's trips name to the fixture zip.
+
+    Parameters
+    ----------
+    source : Path
+        Full GTFS zip holding shapes.txt, which is streamed.
+    fixture : Path
+        Existing slice zip; its other members are left as they are.
+
+    Returns
+    -------
+    int
+        Shape points written.
+
+    Raises
+    ------
+    ValueError
+        When the fixture already has a shapes.txt or its trips.txt has no
+        shape_id column.
+    """
+    with zipfile.ZipFile(fixture) as archive:
+        if 'shapes.txt' in archive.namelist():
+            raise ValueError(f'{fixture.name} already has shapes.txt')
+    wanted = {t.get('shape_id', '')
+              for t in read_rows(archive=fixture, member='trips.txt')}
+    if not any(wanted) and not any(
+            'shape_id' in t
+            for t in read_rows(archive=fixture, member='trips.txt')):
+        raise ValueError(f'{fixture.name} trips.txt has no shape_id')
+    wanted.discard('')
+    rows = (r for r in read_rows(archive=source, member='shapes.txt')
+            if r['shape_id'] in wanted)
+    first = next(rows)
+    count = 1
+    with zipfile.ZipFile(fixture, 'a', zipfile.ZIP_DEFLATED) as archive:
+        with archive.open('shapes.txt', 'w') as raw:
+            text = io.TextIOWrapper(raw, encoding='utf-8', newline='')
+            writer = csv.DictWriter(text, fieldnames=list(first))
+            writer.writeheader()
+            writer.writerow(first)
+            for row in rows:
+                writer.writerow(row)
+                count += 1
+            text.flush()
+            text.detach()
+    return count
+
+
 def main() -> None:
     """Slice data/raw and data/rt (argv[1] repo root) into the fixtures."""
     root = Path(sys.argv[1])

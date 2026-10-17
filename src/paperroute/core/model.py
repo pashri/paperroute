@@ -6,6 +6,8 @@ from enum import StrEnum
 from typing import Final
 from zoneinfo import ZoneInfo
 
+from paperroute.core.geo import Point
+
 SYDNEY: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 REGIONAL_AGENCIES: Final[frozenset[str]] = frozenset({'711'})
 
@@ -85,6 +87,16 @@ class Departure:
     departs: datetime
     arrives: datetime
     service_day: date
+    shape_id: str | None = None
+
+
+@dataclass(frozen=True)
+class StopPlace:
+    """A stop or station with its position."""
+
+    stop_id: str
+    name: str
+    point: Point | None
 
 
 def service_epoch(*, day: date) -> datetime:

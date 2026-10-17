@@ -1,12 +1,15 @@
 """Interfaces the core and app depend on; adapters implement them."""
 
-from datetime import datetime
+from collections.abc import Collection
+from datetime import date, datetime
 from typing import Protocol
 
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.model import Departure, Pin
+from paperroute.core.geo import MetreBox, Shape
+from paperroute.core.model import Departure, Mode, Pin, StopPlace
+from paperroute.core.patterns import TripPattern
 from paperroute.core.tiles import StreetLabel, TileVariant
 
 
@@ -26,6 +29,90 @@ class TimetableRepository(Protocol):
         -------
         str
             Name.
+        """
+
+    def stop(self, *, stop_id: str) -> StopPlace:
+        """
+        A stop or station with its position.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop or station ID.
+
+        Returns
+        -------
+        StopPlace
+            Name and point; the point is None without coordinates.
+
+        Raises
+        ------
+        KeyError
+            When the stop isn't in the timetable.
+        """
+
+    def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
+        """
+        Route shapes by ID.
+
+        Parameters
+        ----------
+        shape_ids : Collection[str]
+            Namespaced shape IDs.
+
+        Returns
+        -------
+        dict[str, Shape]
+            The shapes found; unknown IDs are absent.
+        """
+
+    def patterns(
+        self, *, trip_ids: Collection[str], around: date
+    ) -> dict[str, TripPattern]:
+        """
+        Stops, shape and running dates of trips.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trip IDs or aliases.
+        around : date
+            Service date; the day before is included as well.
+
+        Returns
+        -------
+        dict[str, TripPattern]
+            Patterns by requested ID; unknown trips are absent.
+        """
+
+    def route_labels(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Route short names by trip or alias.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trip IDs or aliases.
+
+        Returns
+        -------
+        dict[str, str]
+            Short name by ID; unknown IDs are absent.
+        """
+
+    def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
+        """
+        List the modes of the shapes that overlap an area.
+
+        Parameters
+        ----------
+        box : MetreBox
+            West, south, east and north in metres.
+
+        Returns
+        -------
+        frozenset[Mode]
+            The modes found.
         """
 
     def departures(

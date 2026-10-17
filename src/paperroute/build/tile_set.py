@@ -126,15 +126,23 @@ def coverage_lonlat(*, box: MetreBox) -> tuple[float, float, float, float]:
     -------
     tuple[float, float, float, float]
         West, south, east and north in degrees, inside ``OPAL_BBOX``.
+
+    Raises
+    ------
+    ValueError
+        If the box lies wholly outside the Opal area.
     """
     west, south = to_lonlat(point=(box[0], box[1]))
     east, north = to_lonlat(point=(box[2], box[3]))
-    return (
+    clipped = (
         max(west, OPAL_BBOX[0]),
         max(south, OPAL_BBOX[1]),
         min(east, OPAL_BBOX[2]),
         min(north, OPAL_BBOX[3]),
     )
+    if clipped[0] >= clipped[2] or clipped[1] >= clipped[3]:
+        raise ValueError('the tiles lie outside the Opal area')
+    return clipped
 
 
 def blocks(*, tiles: set[tuple[int, int]]) -> list[tuple[int, int]]:

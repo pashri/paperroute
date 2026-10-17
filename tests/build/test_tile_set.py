@@ -3,6 +3,8 @@
 import sqlite3
 from pathlib import Path
 
+import pytest
+
 from paperroute.build.timetable import SCHEMA
 from paperroute.build.tile_set import (
     blocks,
@@ -97,6 +99,14 @@ def test_coverage_lonlat_keeps_a_small_box() -> None:
         *to_lonlat(point=(west, south)),
         *to_lonlat(point=(east, north)),
     )
+
+
+def test_coverage_lonlat_refuses_a_box_outside_opal() -> None:
+    """A box wholly outside the Opal area has nothing to build."""
+    west, south = to_metres(lon=153.0, lat=-31.0)
+    east, north = to_metres(lon=154.0, lat=-30.0)
+    with pytest.raises(ValueError, match='outside the Opal area'):
+        coverage_lonlat(box=(west, south, east, north))
 
 
 def test_blocks_are_sorted_and_unique() -> None:

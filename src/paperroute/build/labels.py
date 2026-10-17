@@ -2,11 +2,12 @@
 
 import math
 import sqlite3
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
 import numpy as np
+from numpy.typing import NDArray
 
 from paperroute.build.features import FeatureStore
 from paperroute.build.geometry import Line, merge_lines
@@ -50,6 +51,7 @@ POINT_REACH: Final[int] = 32  # pixels searched past a block for places
 STREET_REACH: Final[int] = 256  # pixels searched past a block for streets
 STREET_FIRST: Final[int] = STREET_REPEAT_PX // 2
 STREET_OFFSETS: Final[tuple[int, ...]] = (0, 64, -64, 128, -128)
+FALLBACK_SHARES: Final[tuple[float, ...]] = (0.5, 0.25, 0.75)
 SAME_NAME_PX: Final[int] = 300
 POINT_FACES: Final[Mapping[LabelKind, Face]] = {
     LabelKind.STATION: STATION_FACE,
@@ -147,7 +149,8 @@ class LabelIndex:
         -------
         bool
             True when an accepted label of the name has its centre within
-            ``SAME_NAME_PX`` either way.
+            ``SAME_NAME_PX`` either way. The test is a square, so on the
+            diagonals it refuses centres up to about 424 px apart.
         """
         reach = SAME_NAME_PX
         hit = self.conn.execute(
@@ -234,7 +237,66 @@ class Block:
         return (west, south, east, north)
 
 
-def cumulative(*, line: Line) -> np.ndarray:
+@dataclass(frozen=True, eq=False)
+class Street:
+    """
+    A merged street piece in global pixels, measured once.
+
+    Attributes
+    ----------
+    name : str
+        Street name.
+    line : Line
+        Vertices in global pixels.
+    lengths : NDArray[np.float64]
+        Distance along the line at each vertex.
+    width : float
+        Text width with its margin.
+    """
+
+    name: str
+    line: Line
+    lengths: NDArray[np.float64]
+    width: float
+
+    @property
+    def length(self) -> float:
+        """
+        Give the piece's length.
+
+        Returns
+        -------
+        float
+            Length in pixels.
+        """
+        return float(self.lengths[-1])
+
+    @classmethod
+    def measure(cls, *, name: str, line: Line) -> Street:
+        """
+        Measure a piece and its name.
+
+        Parameters
+        ----------
+        name : str
+            Street name.
+        line : Line
+            Vertices in global pixels.
+
+        Returns
+        -------
+        Street
+            The measured piece.
+        """
+        return cls(
+            name=name,
+            line=line,
+            lengths=cumulative(line=line),
+            width=text_width(text=name, face=STREET_FACE) + TEXT_MARGIN,
+        )
+
+
+def cumulative(*, line: Line) -> NDArray[np.float64]:
     """
     Measure distance along a line at each vertex.
 
@@ -245,7 +307,7 @@ def cumulative(*, line: Line) -> np.ndarray:
 
     Returns
     -------
-    np.ndarray
+    NDArray[np.float64]
         Distance from the first vertex, starting at 0.
     """
     steps = np.hypot(*np.diff(line, axis=0).T)
@@ -255,7 +317,7 @@ def cumulative(*, line: Line) -> np.ndarray:
 def interpolate(
     *,
     line: Line,
-    lengths: np.ndarray,
+    lengths: NDArray[np.float64],
     distance: float,
 ) -> tuple[float, float]:
     """
@@ -265,7 +327,7 @@ def interpolate(
     ----------
     line : Line
         Vertices.
-    lengths : np.ndarray
+    lengths : NDArray[np.float64]
         Distance along the line at each vertex.
     distance : float
         Distance from the first vertex.
@@ -371,6 +433,7 @@ def fit_street(
     width: float,
     along: float,
     zoom: int,
+    lengths: NDArray[np.float64] | None = None,
 ) -> PlacedLabel | None:
     """
     Fit a street name centred at a distance along a line.
@@ -387,6 +450,8 @@ def fit_street(
         Distance of the text centre along the line.
     zoom : int
         Metres per pixel.
+    lengths : NDArray[np.float64] | None
+        The line's `cumulative` lengths, if already measured.
 
     Returns
     -------
@@ -394,7 +459,8 @@ def fit_street(
         The label, or None when the text runs off the line or the
         stretch under it is not straight enough.
     """
-    lengths = cumulative(line=line)
+    if lengths is None:
+        lengths = cumulative(line=line)
     first, last = along - width / 2, along + width / 2
     if first < 0 or last > lengths[-1]:
         return None
@@ -512,7 +578,7 @@ def place_names(
     block: Block,
 ) -> Iterator[PlacedLabel]:
     """
-    Name the block's suburbs and towns in spaced capitals.
+    Name the block's suburbs and towns in spaced capitals, by rank.
 
     Parameters
     ----------
@@ -531,11 +597,12 @@ def place_names(
     if block.mpp not in SUBURB_ZOOMS:
         return
     kinds = CITY_PLACES if block.mpp == CITY else PLACE_KINDS
-    for kind, name, rank, point in store.places_in(
-        box=block.metres(grow=POINT_REACH),
-    ):
-        if kind not in kinds:
-            continue
+    places = [
+        place
+        for place in store.places_in(box=block.metres(grow=POINT_REACH))
+        if place[0] in kinds
+    ]
+    for kind, name, rank, point in sorted(places, key=lambda p: p[2]):
         label = point_label(
             index=index,
             block=block,
@@ -603,11 +670,7 @@ def named_lines(
     return streets
 
 
-def street_pieces(
-    *,
-    store: FeatureStore,
-    block: Block,
-) -> list[tuple[str, Line]]:
+def street_pieces(*, store: FeatureStore, block: Block) -> list[Street]:
     """
     Merge the named streets near a block, most important first.
 
@@ -620,30 +683,100 @@ def street_pieces(
 
     Returns
     -------
-    list[tuple[str, Line]]
-        Name and merged piece, by highest road class, then longest.
+    list[Street]
+        Merged pieces, by highest road class, then longest.
     """
     ranked = [
-        (rank, float(cumulative(line=piece)[-1]), name, piece)
+        (rank, Street.measure(name=name, line=piece))
         for name, (rank, lines) in named_lines(
             store=store,
             block=block,
         ).items()
         for piece in merge_lines(lines=lines)
     ]
-    ranked.sort(key=lambda item: (-item[0], -item[1]))
-    return [(name, piece) for _, _, name, piece in ranked]
+    ranked.sort(key=lambda item: (-item[0], -item[1].length))
+    return [street for _, street in ranked]
 
 
-def first_fit(
+def street_fits(
+    *,
+    street: Street,
+    block: Block,
+    along: Iterable[float],
+) -> list[PlacedLabel]:
+    """
+    Fit a street's name at each of several distances along it.
+
+    Parameters
+    ----------
+    street : Street
+        The merged piece.
+    block : Block
+        The block being placed.
+    along : Iterable[float]
+        Distances of the text centre, in the order to try them.
+
+    Returns
+    -------
+    list[PlacedLabel]
+        The fits that lie on a straight enough stretch, in order.
+    """
+    fits = (
+        fit_street(
+            line=street.line,
+            name=street.name,
+            width=street.width,
+            along=distance,
+            zoom=block.mpp,
+            lengths=street.lengths,
+        )
+        for distance in along
+    )
+    return [fit for fit in fits if fit is not None]
+
+
+def fit_groups(*, street: Street, block: Block) -> list[list[PlacedLabel]]:
+    """
+    List the fits to try along a street, one group per label.
+
+    Parameters
+    ----------
+    street : Street
+        The merged piece.
+    block : Block
+        The block being placed.
+
+    Returns
+    -------
+    list[list[PlacedLabel]]
+        For each centre at ``STREET_FIRST`` plus whole steps of
+        ``STREET_REPEAT_PX``, its fits at ``STREET_OFFSETS``. A street
+        with no fit at any of those gets one group instead: its middle,
+        then its quarter points.
+    """
+    centres = range(STREET_FIRST, math.ceil(street.length), STREET_REPEAT_PX)
+    groups = [
+        street_fits(
+            street=street,
+            block=block,
+            along=[centre + offset for offset in STREET_OFFSETS],
+        )
+        for centre in centres
+    ]
+    if any(groups):
+        return groups
+    along = [street.length * share for share in FALLBACK_SHARES]
+    return [street_fits(street=street, block=block, along=along)]
+
+
+def accept(
     *,
     index: LabelIndex,
     block: Block,
-    street: tuple[str, Line, float],
-    centre: float,
+    fits: Sequence[PlacedLabel],
 ) -> PlacedLabel | None:
     """
-    Try a street name around one centre, keeping the first free fit.
+    Keep the first fit that belongs to the block and is free.
 
     Parameters
     ----------
@@ -651,29 +784,20 @@ def first_fit(
         Taken boxes and named streets.
     block : Block
         The block being placed.
-    street : tuple[str, Line, float]
-        Name, merged piece in global pixels and text width.
-    centre : float
-        Distance along the piece to try first.
+    fits : Sequence[PlacedLabel]
+        Fits in the order to try them.
 
     Returns
     -------
     PlacedLabel | None
-        The accepted label, or None.
+        The accepted label, or None. A fit is refused when its centre is
+        outside the block, a label of the same name is near, or its box
+        is taken.
     """
-    name, piece, width = street
-    for offset in STREET_OFFSETS:
-        fit = fit_street(
-            line=piece,
-            name=name,
-            width=width,
-            along=centre + offset,
-            zoom=block.mpp,
-        )
+    for fit in fits:
         if (
-            fit is not None
-            and block.holds(x=fit.x, y=fit.y)
-            and not index.near(name=name, x=fit.x, y=fit.y)
+            block.holds(x=fit.x, y=fit.y)
+            and not index.near(name=fit.name, x=fit.x, y=fit.y)
             and index.claim(box=label_box(label=fit))
         ):
             index.remember(label=fit)
@@ -706,16 +830,9 @@ def street_labels(
     """
     if block.mpp not in STREET_ZOOMS:
         return
-    for name, piece in street_pieces(store=store, block=block):
-        width = text_width(text=name, face=STREET_FACE) + TEXT_MARGIN
-        length = float(cumulative(line=piece)[-1])
-        for centre in range(STREET_FIRST, math.ceil(length), STREET_REPEAT_PX):
-            label = first_fit(
-                index=index,
-                block=block,
-                street=(name, piece, width),
-                centre=centre,
-            )
+    for street in street_pieces(store=store, block=block):
+        for fits in fit_groups(street=street, block=block):
+            label = accept(index=index, block=block, fits=fits)
             if label is not None:
                 yield label
 
@@ -754,8 +871,10 @@ def place_labels(
     """
     Place every label once per zoom, block by block.
 
-    Within a block, stations go first, then places, then streets. A
-    label belongs to the block holding its centre.
+    Each zoom takes three passes over its blocks: every station first,
+    then every place, then every street, so a label never loses to a
+    lesser one placed earlier from a neighbouring block. A label belongs
+    to the block holding its centre.
 
     Parameters
     ----------
@@ -777,8 +896,10 @@ def place_labels(
         index.reset()
         if mpp in RESERVE_ZOOMS:
             reserve_stops(index=index, stops=stops, mpp=mpp)
-        for col, row in blocks(tiles=wanted):
-            block = Block(mpp=mpp, col=col, row=row)
-            yield from station_labels(store=store, index=index, block=block)
-            yield from place_names(store=store, index=index, block=block)
-            yield from street_labels(store=store, index=index, block=block)
+        zoom_blocks = [
+            Block(mpp=mpp, col=col, row=row)
+            for col, row in blocks(tiles=wanted)
+        ]
+        for placer in (station_labels, place_names, street_labels):
+            for block in zoom_blocks:
+                yield from placer(store=store, index=index, block=block)

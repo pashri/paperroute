@@ -9,6 +9,7 @@ import numpy as np
 import pytest
 
 from paperroute.build.features import FeatureStore
+from paperroute.build.map_style import STATION_FACE, STREET_FACE
 from paperroute.build.labels import (
     LabelIndex,
     fit_street,
@@ -18,7 +19,9 @@ from paperroute.build.labels import (
 from paperroute.build.osm_source import OsmPlace
 from paperroute.build.tile_store import PlacedLabel
 from paperroute.core.geo import Point, to_lonlat
+from paperroute.render.canvas import text_width
 from paperroute.core.tiles import (
+    ZOOMS,
     LabelKind,
     from_pixels,
     tiles_covering,
@@ -28,7 +31,6 @@ from paperroute.core.tiles import (
 EDGE = 20480.0  # a block boundary at every zoom
 MIDDLE = EDGE + 1024.0
 ANCHOR = from_pixels(pixel=(MIDDLE, MIDDLE), mpp=3)
-ZOOMS = (3, 5, 8, 14, 45)
 
 Box = tuple[float, float, float, float]
 
@@ -59,9 +61,10 @@ def add_street(
     pixels: Sequence[tuple[float, float]],
     mpp: int,
     name: str = 'Long Street',
+    layer: str = 'road_primary',
 ) -> None:
     """
-    Add a primary road drawn in a zoom's global pixels.
+    Add a road drawn in a zoom's global pixels.
 
     Parameters
     ----------
@@ -73,17 +76,26 @@ def add_street(
         Zoom the pixels are in.
     name : str
         Street name.
+    layer : str
+        Road layer.
     """
     store.add_line(
-        layer='road_primary',
+        layer=layer,
         name=name,
         points=np.array([from_pixels(pixel=p, mpp=mpp) for p in pixels]),
     )
 
 
-def add_place(*, store: FeatureStore, kind: str, name: str) -> None:
+def add_place(
+    *,
+    store: FeatureStore,
+    kind: str,
+    name: str,
+    rank: int = 0,
+    point: Point = ANCHOR,
+) -> None:
     """
-    Add a place at the anchor.
+    Add a place, by default at the anchor.
 
     Parameters
     ----------
@@ -93,10 +105,14 @@ def add_place(*, store: FeatureStore, kind: str, name: str) -> None:
         Place kind, or ``station``.
     name : str
         The name.
+    rank : int
+        Place rank.
+    point : Point
+        Position in metres.
     """
-    lon, lat = to_lonlat(point=ANCHOR)
+    lon, lat = to_lonlat(point=point)
     store.add(
-        feature=OsmPlace(kind=kind, name=name, rank=0, lon=lon, lat=lat),
+        feature=OsmPlace(kind=kind, name=name, rank=rank, lon=lon, lat=lat),
     )
 
 
@@ -248,6 +264,32 @@ def test_claim_refuses_overlap_and_accepts_apart(
     assert index.claim(box=(5, 5, 15, 15))
 
 
+def test_claim_accepts_a_box_that_only_touches(store: FeatureStore) -> None:
+    """Boxes sharing an edge do not overlap."""
+    index = LabelIndex(conn=store.conn)
+    assert index.claim(box=(0, 0, 10, 10))
+    assert index.claim(box=(10, 0, 20, 10))
+    assert index.claim(box=(0, 10, 10, 20))
+
+
+def test_reset_forgets_street_names(store: FeatureStore) -> None:
+    """After a reset, a name is no longer near anything."""
+    index = LabelIndex(conn=store.conn)
+    label = fit_street(
+        line=np.array([(0.0, 0.0), (200.0, 0.0)]),
+        name='Old Road',
+        width=60,
+        along=100,
+        zoom=3,
+    )
+    assert label is not None
+    index.remember(label=label)
+    assert index.near(name='Old Road', x=150, y=0)
+    assert not index.near(name='New Road', x=150, y=0)
+    index.reset()
+    assert not index.near(name='Old Road', x=150, y=0)
+
+
 def test_long_street_is_named_repeatedly(store: FeatureStore) -> None:
     """A straight 3,000 px street at 3 m/px is named again and again."""
     add_street(
@@ -258,6 +300,11 @@ def test_long_street_is_named_repeatedly(store: FeatureStore) -> None:
     labels = place(store=store, zooms=[3])
     assert len(labels) >= 6
     assert {label.name for label in labels} == {'Long Street'}
+    assert sorted(label.x for label in labels) == [
+        EDGE - 1000 + 192 + 384 * k for k in range(len(labels))
+    ]
+    width = text_width(text='Long Street', face=STREET_FACE) + 6
+    assert {label.width for label in labels} == {width}
 
 
 def test_label_never_sits_on_a_stop(store: FeatureStore) -> None:
@@ -385,3 +432,194 @@ def test_label_belongs_to_the_block_holding_its_centre(
     assert [(label.kind, label.y) for label in labels] == [
         (LabelKind.STATION, EDGE + 2048 - 5),
     ]
+
+
+def test_station_width_has_the_margin(store: FeatureStore) -> None:
+    """A station label's width is its text plus the margin."""
+    add_place(store=store, kind='station', name='Westmead')
+    labels = place(store=store, zooms=[8])
+    width = text_width(text='Westmead', face=STATION_FACE) + 6
+    assert [label.width for label in labels] == [width]
+
+
+def test_short_street_is_named_at_its_middle(store: FeatureStore) -> None:
+    """A street too short for the 192 px step gets one label mid-way."""
+    add_street(
+        store=store,
+        pixels=[(MIDDLE - 75, MIDDLE), (MIDDLE + 75, MIDDLE)],
+        mpp=3,
+        name='Elm St',
+    )
+    labels = place(store=store, zooms=[3])
+    assert [(label.x, label.y) for label in labels] == [(MIDDLE, MIDDLE)]
+
+
+def test_250_px_street_gets_one_label(store: FeatureStore) -> None:
+    """A 250 px street at 3 m/px is named exactly once."""
+    add_street(
+        store=store,
+        pixels=[(MIDDLE - 125, MIDDLE), (MIDDLE + 125, MIDDLE)],
+        mpp=3,
+    )
+    assert len(place(store=store, zooms=[3])) == 1
+
+
+def test_short_street_falls_back_to_a_quarter(store: FeatureStore) -> None:
+    """When the middle is on a stop, a quarter point takes the label."""
+    add_street(
+        store=store,
+        pixels=[(MIDDLE - 90, MIDDLE), (MIDDLE + 90, MIDDLE)],
+        mpp=3,
+        name='Elm St',
+    )
+    labels = place(store=store, zooms=[3], stops=[ANCHOR])
+    assert [label.x for label in labels] == [MIDDLE - 45]
+
+
+def test_offsets_rescue_a_blocked_centre(store: FeatureStore) -> None:
+    """A stop on the only centre pushes the label 64 px along."""
+    add_street(
+        store=store,
+        pixels=[(MIDDLE - 192, MIDDLE), (MIDDLE + 108, MIDDLE)],
+        mpp=3,
+    )
+    labels = place(store=store, zooms=[3], stops=[ANCHOR])
+    assert [label.x for label in labels] == [MIDDLE + 64]
+
+
+def test_different_streets_close_together_are_both_named(
+    store: FeatureStore,
+) -> None:
+    """The same-name refusal does not stop another street nearby."""
+    for name, y in (('A Street', MIDDLE), ('B Street', MIDDLE + 100)):
+        add_street(
+            store=store,
+            pixels=[(MIDDLE - 192, y), (MIDDLE + 108, y)],
+            mpp=3,
+            name=name,
+        )
+    labels = place(store=store, zooms=[3])
+    assert sorted(label.name for label in labels) == ['A Street', 'B Street']
+
+
+@pytest.mark.parametrize(
+    ('loser', 'winner'),
+    [
+        (('road_minor', 384), ('road_primary', 384)),
+        (('road_primary', 384), ('road_primary', 640)),
+    ],
+)
+def test_more_important_street_wins_a_crossing(
+    store: FeatureStore,
+    loser: tuple[str, int],
+    winner: tuple[str, int],
+) -> None:
+    """At a crossing, the higher class, then the longer street, wins."""
+    layer, length = loser
+    add_street(
+        store=store,
+        pixels=[(MIDDLE - 192, MIDDLE), (MIDDLE - 192 + length, MIDDLE)],
+        mpp=3,
+        name='Loser Lane',
+        layer=layer,
+    )
+    layer, length = winner
+    add_street(
+        store=store,
+        pixels=[(MIDDLE, MIDDLE - 192), (MIDDLE, MIDDLE - 192 + length)],
+        mpp=3,
+        name='Winner Way',
+        layer=layer,
+    )
+    labels = place(store=store, zooms=[3])
+    at_crossing = [
+        label.name
+        for label in labels
+        if (label.x, label.y) == (MIDDLE, MIDDLE)
+    ]
+    assert at_crossing == ['Winner Way']
+
+
+def test_street_class_is_its_highest_part(store: FeatureStore) -> None:
+    """A street partly primary ranks as primary, whatever comes last."""
+    add_street(
+        store=store,
+        pixels=[(MIDDLE - 192, MIDDLE), (MIDDLE + 100, MIDDLE)],
+        mpp=3,
+        name='Mixed Road',
+    )
+    add_street(
+        store=store,
+        pixels=[(MIDDLE + 100, MIDDLE), (MIDDLE + 192, MIDDLE)],
+        mpp=3,
+        name='Mixed Road',
+        layer='road_minor',
+    )
+    add_street(
+        store=store,
+        pixels=[(MIDDLE, MIDDLE - 192), (MIDDLE, MIDDLE + 192)],
+        mpp=3,
+        name='Cross Road',
+        layer='road_tertiary',
+    )
+    labels = place(store=store, zooms=[3])
+    at_crossing = [
+        label.name
+        for label in labels
+        if (label.x, label.y) == (MIDDLE, MIDDLE)
+    ]
+    assert at_crossing == ['Mixed Road']
+
+
+def test_street_pieces_reach_past_the_block(store: FeatureStore) -> None:
+    """Ways just outside the block join the piece the block steps along."""
+    add_street(
+        store=store,
+        pixels=[(EDGE - 200, MIDDLE), (EDGE - 10, MIDDLE)],
+        mpp=3,
+    )
+    add_street(
+        store=store,
+        pixels=[(EDGE - 10, MIDDLE), (EDGE + 600, MIDDLE)],
+        mpp=3,
+    )
+    tiles = {3: around(box=(EDGE, EDGE, EDGE + 2048, EDGE + 2048))}
+    index = LabelIndex(conn=store.conn)
+    labels = list(
+        place_labels(store=store, tiles=tiles, stops=(), index=index),
+    )
+    assert [label.x for label in labels] == [EDGE + 56, EDGE + 376]
+
+
+def test_station_keeps_its_label_across_a_block_edge(
+    store: FeatureStore,
+) -> None:
+    """A station just past a block edge beats a street from the block before.
+
+    The street's label centre is in the left block and the station's in
+    the right one; their boxes overlap across the edge.
+    """
+    add_street(
+        store=store,
+        pixels=[(EDGE - 232, MIDDLE), (EDGE + 68, MIDDLE)],
+        mpp=3,
+    )
+    add_place(
+        store=store,
+        kind='station',
+        name='Westmead',
+        point=from_pixels(pixel=(EDGE + 20, MIDDLE + 15), mpp=3),
+    )
+    labels = place(store=store, zooms=[3])
+    assert sorted((label.kind, label.x) for label in labels) == [
+        (LabelKind.STATION, EDGE + 20),
+        (LabelKind.STREET, EDGE - 104),
+    ]
+
+
+def test_places_go_by_rank(store: FeatureStore) -> None:
+    """Of two places at one spot, the lower rank is named."""
+    add_place(store=store, kind='suburb', name='Minor', rank=1)
+    add_place(store=store, kind='suburb', name='Major', rank=0)
+    labels = place(store=store, zooms=[8])
+    assert [label.name for label in labels] == ['M A J O R']

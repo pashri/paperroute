@@ -24,6 +24,15 @@ ROAD_WIDTHS: Final[dict[str, tuple[int, ...]]] = {
     'road_trunk': (8, 7, 5, 4, 2),
     'road_motorway': (9, 8, 6, 4, 3),
 }
+TRANSIT_LAYERS: Final[tuple[str, ...]] = (
+    'rail_tunnel',
+    'subway_tunnel',
+    'light_rail_tunnel',
+    'ferry',
+    'light_rail',
+    'subway',
+    'rail',
+)
 AREA_GREYS: Final[dict[str, int]] = {
     'park': LIGHT,
     'water': DARK,

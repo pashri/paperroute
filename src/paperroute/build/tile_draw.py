@@ -18,6 +18,7 @@ from paperroute.build.map_style import (
     STATION_FACE,
     STREET_FACE,
     SUBURB_FACE,
+    TRANSIT_LAYERS,
     road_style,
     transit_style,
 )
@@ -262,7 +263,7 @@ def draw_roads(
 
 def draw_lines(*, canvas: Canvas, store: FeatureStore, window: Window) -> None:
     """
-    Stroke rivers, then roads by class, then transit.
+    Stroke rivers, then roads by class, then transit in a fixed order.
 
     Transit is drawn from whole lines, not clipped ones, so a dashed
     line's dashes start at the same place in every tile.
@@ -278,12 +279,12 @@ def draw_lines(*, canvas: Canvas, store: FeatureStore, window: Window) -> None:
     """
     layers = by_layer(store=store, box=window.metres(grow=GEOMETRY_MARGIN))
     draw_roads(canvas=canvas, window=window, layers=layers)
-    for layer, lines in layers.items():
+    for layer in TRANSIT_LAYERS:
         for stroke in transit_style(layer=layer, mpp=window.mpp):
             stroke_all(
                 canvas=canvas,
                 window=window,
-                lines=lines,
+                lines=layers.get(layer, []),
                 stroke=stroke,
             )
 
@@ -343,6 +344,28 @@ def draw_name(*, canvas: Canvas, label: PlacedLabel, at: Point) -> None:
     )
 
 
+def fits_reach(*, label: PlacedLabel) -> bool:
+    """
+    Decide whether a label is narrow enough to draw in every tile it meets.
+
+    A tile only finds labels centred within ``LABEL_REACH`` of it, so a
+    label whose text and halo reach further would be cut at a tile edge.
+    Such labels are drawn nowhere. With the street face that takes a
+    name of about 80 characters.
+
+    Parameters
+    ----------
+    label : PlacedLabel
+        The label.
+
+    Returns
+    -------
+    bool
+        True when half the label's width plus its halo is within reach.
+    """
+    return label.width / 2 + HALO <= LABEL_REACH
+
+
 def draw_labels(
     *,
     canvas: Canvas,
@@ -365,6 +388,7 @@ def draw_labels(
         zoom=window.mpp,
         box=window.pixels(grow=LABEL_REACH),
     )
+    labels = [label for label in labels if fits_reach(label=label)]
     at = (float(window.left), float(window.top))
     for label in labels:
         if label.kind == LabelKind.STATION:

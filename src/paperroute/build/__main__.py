@@ -16,7 +16,6 @@ from paperroute.adapters.tfnsw import api_key_from_env
 from paperroute.build.gtfs_files import Source
 from paperroute.build.refresh import RefreshBusy, TimetableCheckError, refresh
 from paperroute.build.sources import SourceError
-from paperroute.build.tiles import TileBuildConfig, build_tiles
 from paperroute.build.timetable import Window, build_timetable, yesterday
 from paperroute.core.tiles import OPAL_BBOX, ZOOMS
 from paperroute.logs import configure_logging
@@ -231,6 +230,12 @@ def run_tiles(*, args: argparse.Namespace) -> int:
     int
         Exit status: 0 on success, 1 if the build failed.
     """
+    # Imported here so the refresh never loads osmium or shapely.
+    from paperroute.build.tiles import (  # pylint: disable=C0415
+        TileBuildConfig,
+        build_tiles,
+    )
+
     configure_logging()
     config = TileBuildConfig(
         osm=args.osm,

@@ -1,6 +1,7 @@
 """Facts about the drawn map base (no golden images)."""
 
 import math
+import re
 from collections.abc import Sequence
 from contextlib import closing
 from pathlib import Path
@@ -25,9 +26,10 @@ from paperroute.core.tiles import (
     StreetLabel,
     TileVariant,
     tile_of,
+    tiles_covering,
     to_pixels,
 )
-from paperroute.render.canvas import INK, PAPER
+from paperroute.render.canvas import INK, PAPER, Face, text_width
 from paperroute.render.map_base import (
     compose_tiles,
     draw_map_base,
@@ -177,9 +179,14 @@ def stop_tile() -> tuple[int, int]:
     return tile_of(pixel=to_pixels(point=CENTRE, mpp=MPP))
 
 
-def centre_row() -> int:
+def centre_row(*, mpp: int = MPP) -> int:
     """
     Find the map row the stop and an east-west route lie on.
+
+    Parameters
+    ----------
+    mpp : int
+        Metres per pixel.
 
     Returns
     -------
@@ -187,8 +194,25 @@ def centre_row() -> int:
         Map pixel row.
     """
     return math.floor(
-        screen_point(centre=CENTRE, mpp=MPP, point=CENTRE)[1],
+        screen_point(centre=CENTRE, mpp=mpp, point=CENTRE)[1],
     )
+
+
+def pattern(*, values: NDArray[np.uint8]) -> str:
+    """
+    Spell a run of pixels as ink and paper.
+
+    Parameters
+    ----------
+    values : NDArray[np.uint8]
+        Pixels in a row or column.
+
+    Returns
+    -------
+    str
+        ``#`` for ink and ``.`` for anything else.
+    """
+    return ''.join('#' if value == INK else '.' for value in values)
 
 
 def test_window_of_matches_screen_point() -> None:
@@ -263,6 +287,23 @@ def test_stop_marker_sits_on_the_map_centre(tmp_path: Path) -> None:
     assert grey[y + 9, x] == INK
     assert grey[y, x + 6] == PAPER
     assert grey[y, x + 11] == PAPER
+
+
+def test_stop_marker_is_drawn_over_the_route(tmp_path: Path) -> None:
+    """Across the stop: route, paper disc, 3 px ring, paper, 8 px dot."""
+    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
+        grey = draw_map_base(
+            base=base(route=across(half=5000.0)),
+            tiles=tiles,
+            variant=TileVariant.GREY,
+        )
+    x, y = MAP_WIDTH // 2, centre_row()
+    assert pattern(values=grey[y, x - 14 : x + 13]) == (
+        '#...###...########....###.#'
+    )
+    assert pattern(values=grey[y - 14 : y + 15, x]) == (
+        '....###...########....###....'
+    )
 
 
 def test_route_line_is_ink_through_the_centre(tmp_path: Path) -> None:
@@ -506,7 +547,7 @@ def test_window_of_needs_a_centre() -> None:
 
 
 def test_no_tiles_says_map_not_installed(tmp_path: Path) -> None:
-    """Without a tiles file, text is drawn either side of the stop."""
+    """Without a tiles file, a bold note sits below the intact stop."""
     missing = draw_map_base(
         base=base(),
         tiles=NullTiles(),
@@ -519,9 +560,16 @@ def test_no_tiles_says_map_not_installed(tmp_path: Path) -> None:
             variant=TileVariant.GREY,
         )
     middle = MAP_HEIGHT // 2
-    band = (slice(middle - 12, middle + 12), slice(150, 240))
-    assert np.count_nonzero(missing[band] == INK) > 0
-    assert np.count_nonzero(installed[band] == INK) == 0
+    stop = (slice(middle - 14, middle + 14), slice(240, 280))
+    assert np.array_equal(missing[stop], installed[stop])
+    rows = np.flatnonzero(np.any(missing != installed, axis=1))
+    assert rows.min() >= middle + 14
+    assert rows.max() <= middle + 44
+    note = missing[rows.min() : rows.max() + 1]
+    ink = np.flatnonzero(np.any(note == INK, axis=0))
+    width = text_width(text='Map not installed', face=Face(weight=700, px=16))
+    assert abs((ink.max() - ink.min() + 1) - width) <= 3
+    assert abs((ink.max() + ink.min() + 1) / 2 - MAP_WIDTH / 2) <= 2
 
 
 def test_scale_bar_and_credit_are_drawn(tmp_path: Path) -> None:
@@ -544,7 +592,7 @@ def test_scale_bar_and_credit_are_drawn(tmp_path: Path) -> None:
         (3, '200 m · zoom 1 of 5'),
         (5, '500 m · zoom 2 of 5'),
         (8, '1 km · zoom 3 of 5'),
-        (14, '1 km · zoom 4 of 5'),
+        (14, '2 km · zoom 4 of 5'),
         (45, '5 km · zoom 5 of 5'),
     ],
 )
@@ -552,5 +600,228 @@ def test_scale_text_names_the_largest_fitting_step(
     mpp: int,
     text: str,
 ) -> None:
-    """The bar is the largest step within 140 px, then the zoom."""
+    """The bar is the largest step within 143 px, then the zoom."""
     assert scale_text(mpp=mpp) == text
+
+
+@pytest.mark.parametrize(
+    ('mpp', 'outer', 'bead'),
+    [(3, 7, 3), (5, 7, 3), (8, 7, 3), (14, 5, 1), (45, 3, 0)],
+)
+def test_route_style_at_every_zoom(
+    tmp_path: Path,
+    mpp: int,
+    outer: int,
+    bead: int,
+) -> None:
+    """The stroke is ``outer`` rows deep, with beads ``bead`` rows deep."""
+    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
+        grey = draw_map_base(
+            base=base(route=across(half=50_000.0), mpp=mpp),
+            tiles=tiles,
+            variant=TileVariant.GREY,
+        )
+    row = centre_row(mpp=mpp)
+    band = grey[row - 8 : row + 9, 20:240]
+    stroke = band[np.any(band == INK, axis=1)]
+    assert len(stroke) == outer
+    assert int(np.max(np.sum(stroke == PAPER, axis=0))) == bead
+
+
+def test_beads_are_2_px_dashes_7_px_apart(tmp_path: Path) -> None:
+    """Along the stroke's middle, paper runs of 2 alternate with ink 7."""
+    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
+        grey = draw_map_base(
+            base=base(route=across(half=5000.0)),
+            tiles=tiles,
+            variant=TileVariant.GREY,
+        )
+    middle = pattern(values=grey[centre_row(), 20:240])
+    runs = re.findall(r'#+|\.+', middle)
+    inner = runs[1:-1]
+    assert {len(run) for run in inner if run[0] == '.'} == {2}
+    assert {len(run) for run in inner if run[0] == '#'} == {7}
+
+
+def horizontal(
+    *,
+    first: float,
+    y: float = 2100.0,
+    angle: float = 0.0,
+) -> StreetLabel:
+    """
+    Make a 200 px east-west stretch in global pixels.
+
+    Parameters
+    ----------
+    first : float
+        Global x of the stretch's west end.
+    y : float
+        Global y of the stretch.
+    angle : float
+        The label's angle.
+
+    Returns
+    -------
+    StreetLabel
+        The label; its nine points are 25 px apart.
+    """
+    return StreetLabel(
+        name='Hammers Road',
+        x=first + 100.0,
+        y=y,
+        angle=angle,
+        width=80.0,
+        start=(first, y),
+        end=(first + 200.0, y),
+    )
+
+
+def test_on_route_needs_six_of_nine_points() -> None:
+    """Six points on the route match; five do not."""
+    six = horizontal(first=1270.0)
+    five = horizontal(first=1295.0)
+    assert on_route(label=six, routes=ROUTE, offset=OFFSET)
+    assert not on_route(label=five, routes=ROUTE, offset=OFFSET)
+
+
+def test_on_route_reach_is_5_px() -> None:
+    """A stretch 5 px beside the route matches; 5.5 px does not."""
+    near = horizontal(first=1050.0, y=2105.0)
+    far = horizontal(first=1050.0, y=2105.5)
+    assert on_route(label=near, routes=ROUTE, offset=OFFSET)
+    assert not on_route(label=far, routes=ROUTE, offset=OFFSET)
+
+
+def test_on_route_turn_is_25_degrees() -> None:
+    """An angle 25 degrees off matches; 26 degrees does not."""
+    within = horizontal(first=1050.0, angle=25.0)
+    beyond = horizontal(first=1050.0, angle=-26.0)
+    assert on_route(label=within, routes=ROUTE, offset=OFFSET)
+    assert not on_route(label=beyond, routes=ROUTE, offset=OFFSET)
+
+
+def test_on_route_uses_the_nearest_segment_direction() -> None:
+    """On a bent route each point is judged by its own segment."""
+    bent = [
+        np.array(
+            [[0.0, 300.0], [0.0, 100.0], [400.0, 100.0], [400.0, 400.0]],
+            dtype=np.float64,
+        ),
+    ]
+    along = horizontal(first=1050.0)
+    down = StreetLabel(
+        name='Briens Road',
+        x=1400.0,
+        y=2250.0,
+        angle=90.0,
+        width=80.0,
+        start=(1400.0, 2150.0),
+        end=(1400.0, 2350.0),
+    )
+    assert on_route(label=along, routes=bent, offset=OFFSET)
+    assert on_route(label=down, routes=bent, offset=OFFSET)
+
+
+def test_on_route_keeps_a_label_straddling_a_turn() -> None:
+    """Two thirds along the route before it turns is 6 of 9: redrawn."""
+    turning = [
+        np.array(
+            [[0.0, 100.0], [400.0, 100.0], [400.0, 400.0]],
+            dtype=np.float64,
+        ),
+    ]
+    label = horizontal(first=1270.0)
+    assert on_route(label=label, routes=turning, offset=OFFSET)
+
+
+def test_names_reaching_in_from_above_are_redrawn(tmp_path: Path) -> None:
+    """A long upright name centred 60 px above the map still shows."""
+    gx, _ = to_pixels(point=CENTRE, mpp=MPP)
+    _, top = window_of(base=base())
+    x = CENTRE[0] + 40 * MPP
+    upright = ((x, CENTRE[1] + 5000.0), (x, CENTRE[1] - 5000.0))
+    label = street(
+        name='Great Western Highway Service Road',
+        x=gx + 40,
+        y=top - 60.0,
+        angle=90.0,
+    )
+    drawn = []
+    for out, labels in (('named.db', [label]), ('plain.db', [])):
+        with closing(build(out=tmp_path / out, labels=labels)) as tiles:
+            drawn.append(
+                draw_map_base(
+                    base=base(route=(upright,)),
+                    tiles=tiles,
+                    variant=TileVariant.GREY,
+                ),
+            )
+    named, plain = drawn
+    assert np.count_nonzero(named[:40] == DARK) > 0
+    assert np.count_nonzero(plain[:40] == DARK) == 0
+
+
+def test_bits_names_over_the_line_are_dithered(tmp_path: Path) -> None:
+    """In BITS a redrawn name is dithered like a baked one, not solid."""
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    label = street(name='Church Street', x=gx + LABEL_SHIFT, y=gy)
+    drawn = {}
+    for variant in TileVariant:
+        with closing(
+            build(out=tmp_path / f'{variant}.db', labels=[label]),
+        ) as tiles:
+            drawn[variant] = draw_map_base(
+                base=base(route=across(half=5000.0)),
+                tiles=tiles,
+                variant=variant,
+            )
+    text = drawn[TileVariant.GREY] == DARK
+    share = np.count_nonzero(drawn[TileVariant.BITS][text] == PAPER) / (
+        np.count_nonzero(text)
+    )
+    assert 0.05 <= share <= 0.5
+
+
+def test_credit_has_a_2_px_paper_halo(tmp_path: Path) -> None:
+    """Over ink tiles, the credit's paper reaches 2 px past its text."""
+    left, top = window_of(base=base())
+    ink = np.full((TILE, TILE), INK, dtype=np.uint8)
+    covering = tiles_covering(
+        left=left,
+        top=top,
+        right=left + MAP_WIDTH,
+        bottom=top + MAP_HEIGHT,
+    )
+    tiles = build(
+        out=tmp_path / 'tiles.db',
+        tiles={tile: ink for tile in covering},
+    )
+    with closing(tiles):
+        grey = draw_map_base(
+            base=base(),
+            tiles=tiles,
+            variant=TileVariant.GREY,
+        )
+    credit = grey[MAP_HEIGHT - 24 :, MAP_WIDTH - 120 :]
+    text = np.argwhere(credit == DARK)
+    paper = np.argwhere(credit == PAPER)
+    reach = np.min(
+        np.linalg.norm(paper[:, None, :] - text[None, :, :], axis=2),
+        axis=1,
+    )
+    assert 2.5 < float(np.max(reach)) < 3.0
+
+
+def test_scale_bar_is_2_km_at_14_m_per_px(tmp_path: Path) -> None:
+    """At 14 m/px the 2 km bar is 143 px long."""
+    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
+        grey = draw_map_base(
+            base=base(mpp=14),
+            tiles=tiles,
+            variant=TileVariant.GREY,
+        )
+    bar = grey[MAP_HEIGHT - 12 : MAP_HEIGHT - 9]
+    ink = np.flatnonzero(np.all(bar == INK, axis=0))
+    assert ink.min() == 14
+    assert 14 + 142 <= ink.max() + 1 <= 14 + 143

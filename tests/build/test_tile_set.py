@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.build.timetable import SCHEMA
 from paperroute.build.tile_set import (
     blocks,
     coverage,
@@ -13,6 +12,7 @@ from paperroute.build.tile_set import (
     stop_points,
     tile_set,
 )
+from paperroute.build.timetable import SCHEMA
 from paperroute.core.geo import to_lonlat, to_metres
 from paperroute.core.tiles import GRID_ORIGIN, OPAL_BBOX, TILE, to_pixels
 

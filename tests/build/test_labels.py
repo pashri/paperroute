@@ -9,17 +9,16 @@ import numpy as np
 import pytest
 
 from paperroute.build.features import FeatureStore
-from paperroute.build.map_style import STATION_FACE, STREET_FACE
 from paperroute.build.labels import (
     LabelIndex,
     fit_street,
     label_box,
     place_labels,
 )
+from paperroute.build.map_style import STATION_FACE, STREET_FACE
 from paperroute.build.osm_source import OsmPlace
 from paperroute.build.tile_store import PlacedLabel
 from paperroute.core.geo import Point, to_lonlat
-from paperroute.render.canvas import text_width
 from paperroute.core.tiles import (
     ZOOMS,
     LabelKind,
@@ -27,6 +26,7 @@ from paperroute.core.tiles import (
     tiles_covering,
     to_pixels,
 )
+from paperroute.render.canvas import text_width
 
 EDGE = 20480.0  # a block boundary at every zoom
 MIDDLE = EDGE + 1024.0

@@ -11,11 +11,7 @@ from numpy.typing import NDArray
 
 from paperroute.build.geometry import Line, Ring, clip_rings, sea_rings
 from paperroute.build.osm_source import OsmArea, OsmLine, OsmPlace, read_osm
-from paperroute.build.tile_store import (
-    INSERT_LABEL,
-    LABELS_TABLE,
-    PlacedLabel,
-)
+from paperroute.build.tile_store import INSERT_LABEL, LABELS_TABLE, PlacedLabel
 from paperroute.core.geo import MetreBox, Point, to_metres
 from paperroute.core.tiles import LabelKind
 

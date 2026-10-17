@@ -1,5 +1,6 @@
 """Tests for the tile repository."""
 
+import sqlite3
 from contextlib import closing
 from pathlib import Path
 
@@ -187,3 +188,18 @@ def test_null_tiles_is_empty() -> None:
     ) is None
     assert tiles.street_labels(zoom=14, box=(0, 0, 1, 1)) == []
     assert tiles.version() is None
+
+
+def test_injected_connection_is_used_and_never_reopens(
+    tmp_path: Path,
+) -> None:
+    """A repository given a connection reads it and ignores the path."""
+    out = tmp_path / 'tiles.db'
+    grey = build(out=out)
+    conn = sqlite3.connect(f'file:{out}?mode=ro', uri=True)
+    with closing(SqliteTileRepository(connection=conn)) as repo:
+        assert repo.db.identity is None
+        build(out=out, level=85)
+        got = repo.tile(zoom=14, col=3, row=4, variant=TileVariant.GREY)
+    assert got is not None
+    assert np.array_equal(got, grey)

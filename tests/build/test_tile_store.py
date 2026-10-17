@@ -48,6 +48,7 @@ def write_tile(*, out: Path, meta: dict[str, str] | None = None) -> None:
                     width=40.0,
                     start=(0.0, 0.0),
                     end=(3.0, 4.0),
+                    rank=2,
                 )
             ]
         )
@@ -93,8 +94,10 @@ def test_writer_meta_has_format_and_built_at(tmp_path: Path) -> None:
     with closing(sqlite3.connect(out)) as conn:
         meta = dict(conn.execute('SELECT key, value FROM meta'))
         mode = conn.execute('PRAGMA journal_mode').fetchone()[0]
+        rank = conn.execute('SELECT rank FROM labels').fetchone()[0]
     assert meta['format'] == TILE_FORMAT
     assert meta['source'] == 'osm'
     assert 'T' in meta['built_at']
     assert '.' in meta['built_at']
     assert mode == 'delete'
+    assert rank == 2

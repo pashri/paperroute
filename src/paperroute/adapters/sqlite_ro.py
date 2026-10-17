@@ -6,6 +6,7 @@ import sqlite3
 import threading
 from contextlib import closing
 from pathlib import Path
+from urllib.parse import quote
 
 logger = logging.getLogger(__name__)
 Identity = tuple[int, int]
@@ -45,11 +46,11 @@ class ReadOnlyDatabase:
         it too. A database given a connection never reopens.
     probe : str
         Query that must run on a replacement file before it is accepted.
+    label : str
+        Name used in log messages.
     allow_missing : bool
         When true, a missing file is not an error: fetch() returns no rows
         until the file appears, then opens it.
-    label : str
-        Name used in log messages.
 
     Notes
     -----
@@ -65,8 +66,8 @@ class ReadOnlyDatabase:
         path: Path | None,
         connection: sqlite3.Connection | None,
         probe: str,
+        label: str,
         allow_missing: bool = False,
-        label: str = 'timetable',
     ) -> None:
         self.lock = threading.Lock()
         self.path = None if connection else path
@@ -74,6 +75,8 @@ class ReadOnlyDatabase:
         self.label = label
         self.conn: sqlite3.Connection | None = connection
         self.file_id: Identity | None = None
+        self.refused: Identity | None = None
+        self.closed = False
         if connection is None and path is not None:
             if file_identity(path=path) or not allow_missing:
                 self.conn, self.file_id = self.open(path=path)
@@ -112,7 +115,7 @@ class ReadOnlyDatabase:
         """
         identity = file_identity(path=path)
         conn = sqlite3.connect(
-            f'file:{path}?mode=ro',
+            f'file:{quote(str(path))}?mode=ro',
             uri=True,
             check_same_thread=False,
         )
@@ -156,8 +159,8 @@ class ReadOnlyDatabase:
 
         Does nothing for an injected connection or a missing file. A
         replacement that can't be read is refused and the old connection
-        kept, to be checked again on the next query. The caller must hold
-        the lock.
+        kept. A refused file is not tried or logged again until it is
+        replaced by another. The caller must hold the lock.
         """
         if self.path is None:
             return
@@ -166,12 +169,13 @@ class ReadOnlyDatabase:
         except OSError:
             logger.warning('%s stat failed', self.label, exc_info=True)
             return
-        if current is None:
+        if current is None or current == self.refused:
             return
         if current == self.file_id and self.conn is not None:
             return
         opened = self.open_checked(path=self.path)
         if opened is None:
+            self.refused = current
             return
         old = self.conn
         self.conn, self.file_id = opened
@@ -196,8 +200,15 @@ class ReadOnlyDatabase:
         -------
         list[tuple[object, ...]]
             All rows; none while a missing file is still missing.
+
+        Raises
+        ------
+        sqlite3.ProgrammingError
+            When the database has been closed.
         """
         with self.lock:
+            if self.closed:
+                raise sqlite3.ProgrammingError('database is closed')
             self.reopen_if_replaced()
             if self.conn is None:
                 return []
@@ -206,5 +217,7 @@ class ReadOnlyDatabase:
     def close(self) -> None:
         """Close the database connection."""
         with self.lock:
+            self.closed = True
             if self.conn is not None:
                 self.conn.close()
+                self.conn = None

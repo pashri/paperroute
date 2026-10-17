@@ -69,6 +69,7 @@ class SqliteTimetableRepository:
             path=path or DEFAULT_PATH,
             connection=connection,
             probe='SELECT 1 FROM stops LIMIT 1',
+            label='timetable',
         )
 
     @property

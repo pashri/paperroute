@@ -446,11 +446,7 @@ def to_vehicle(*, vehicle: Any, header_time: int) -> VehiclePosition:
             lon=vehicle.position.longitude, lat=vehicle.position.latitude
         ),
         bearing=vehicle_bearing(position=vehicle.position),
-        timestamp=(
-            int(vehicle.timestamp)
-            if vehicle.HasField('timestamp')
-            else header_time
-        ),
+        timestamp=int(vehicle.timestamp) or header_time,
         start_date=parse_start_date(text=vehicle.trip.start_date),
     )
 

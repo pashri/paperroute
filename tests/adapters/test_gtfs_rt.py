@@ -149,7 +149,7 @@ def vehicle_feed(
     Parameters
     ----------
     vehicles : list[dict[str, Any]]
-        Keys: lat, lon, bearing, speed, timestamp (all optional; no lat
+        Keys: lat, bearing, speed, timestamp, start_date (all optional; no lat
         leaves the position unset).
     timestamp : int
         Header timestamp.
@@ -166,6 +166,8 @@ def vehicle_feed(
         body = message.entity.add(id=str(index)).vehicle
         body.trip.trip_id = f't{index}'
         body.trip.route_id = 'x_12'
+        if 'start_date' in spec:
+            body.trip.start_date = spec['start_date']
         if 'lat' in spec:
             body.position.latitude = spec['lat']
             body.position.longitude = 151.0
@@ -204,6 +206,32 @@ def test_bearing_zero_without_speed_is_none() -> None:
     assert snapshot.vehicles[0].bearing is None
 
 
+def test_bearing_unset_with_speed_is_none() -> None:
+    """A speed alone gives no heading."""
+    data = vehicle_feed(vehicles=[{'lat': -33.8, 'speed': 5.0}])
+    snapshot = parse_positions(data=data, fetched_at=NOW)
+    assert snapshot.vehicles[0].bearing is None
+
+
+def test_start_date_is_read() -> None:
+    """The trip's start date comes through."""
+    data = vehicle_feed(
+        vehicles=[{'lat': -33.8, 'start_date': '20261016'}, {'lat': -33.8}]
+    )
+    snapshot = parse_positions(data=data, fetched_at=NOW)
+    assert snapshot.vehicles[0].start_date == date(2026, 10, 16)
+    assert snapshot.vehicles[1].start_date is None
+
+
+def test_zero_vehicle_timestamp_uses_header_time() -> None:
+    """A vehicle timestamp of 0 counts as unset."""
+    data = vehicle_feed(
+        vehicles=[{'lat': -33.8, 'timestamp': 0}], timestamp=1000
+    )
+    snapshot = parse_positions(data=data, fetched_at=NOW)
+    assert snapshot.vehicles[0].timestamp == 1000
+
+
 def test_bearing_zero_with_speed_is_north() -> None:
     """A bearing of 0 with a speed is north."""
     data = vehicle_feed(
@@ -236,3 +264,4 @@ def test_entity_fallback_uses_fetch_time_as_header() -> None:
     snapshot = parse_positions(data=data[:-3], fetched_at=NOW)
     assert snapshot.header_time == int(NOW.timestamp())
     assert len(snapshot.vehicles) == 1
+    assert snapshot.vehicles[0].timestamp == int(NOW.timestamp())

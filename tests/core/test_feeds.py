@@ -24,7 +24,19 @@ def test_position_feeds_for_modes() -> None:
         'v2/gtfs/vehiclepos/sydneytrains',
     )
     assert position_feeds(modes=[Mode.COACH]) == ()
-    assert len(position_feeds(modes=[Mode.LIGHT_RAIL])) == 4
+    assert position_feeds(modes=[Mode.LIGHT_RAIL]) == (
+        'v1/gtfs/vehiclepos/lightrail/cbdandsoutheast',
+        'v1/gtfs/vehiclepos/lightrail/newcastle',
+        'v1/gtfs/vehiclepos/lightrail/parramatta',
+        'v2/gtfs/vehiclepos/lightrail/innerwest',
+    )
+    assert position_feeds(
+        modes=[Mode.METRO, Mode.REGIONAL, Mode.FERRY]
+    ) == (
+        'v1/gtfs/vehiclepos/ferries/sydneyferries',
+        'v1/gtfs/vehiclepos/nswtrains',
+        'v2/gtfs/vehiclepos/metro',
+    )
 
 
 def test_feed_kind() -> None:

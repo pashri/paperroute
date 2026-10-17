@@ -44,6 +44,7 @@ def test_fallback_label() -> None:
     assert fallback_label(route_id='_461X') == '461X'
     assert fallback_label(route_id='') == '?'
     assert fallback_label(route_id='a_ABCDEFG') == 'ABCD'
+    assert fallback_label(route_id='a_b_c') == 'c'
 
 
 def test_with_labels_replaces_known_trips_only() -> None:

@@ -5,7 +5,7 @@ import logging
 import sqlite3
 from collections.abc import Callable, Collection
 from contextlib import closing
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
 
@@ -1377,3 +1377,55 @@ def test_tiles_version_error_draws_map_not_installed() -> None:
     broken = MapRenderer(tiles=VersionlessTiles()).frame(view=view)
     missing = MapRenderer(tiles=NullTiles()).frame(view=view)
     assert np.array_equal(broken, missing)
+
+
+def corrupt_tiles(*, out: Path, blob: bytes | None) -> SqliteTileRepository:
+    """
+    Write a tiles file whose tile under the test point is corrupt.
+
+    Parameters
+    ----------
+    out : Path
+        Destination file.
+    blob : bytes | None
+        The stored tile, or None for NULL.
+
+    Returns
+    -------
+    SqliteTileRepository
+        The opened file; it passes the open check.
+    """
+    col, row = tile_of(pixel=to_pixels(point=STOP_POINT, mpp=MAP_MPP))
+    with closing(sqlite3.connect(out)) as conn, conn:
+        conn.execute('CREATE TABLE meta (key TEXT, value TEXT)')
+        conn.execute("INSERT INTO meta VALUES ('built_at', 'corrupt')")
+        conn.execute(
+            'CREATE TABLE tiles (zoom INTEGER, col INTEGER, row INTEGER,'
+            ' grey BLOB, bits BLOB)'
+        )
+        conn.execute(
+            'INSERT INTO tiles VALUES (?, ?, ?, ?, ?)',
+            (MAP_MPP, col, row, blob, blob),
+        )
+    return SqliteTileRepository(path=out)
+
+
+@pytest.mark.parametrize(
+    'blob',
+    [pack_grey(grey=np.full((TILE, TILE), LIGHT, dtype=np.uint8))[:10], None],
+    ids=['truncated', 'null'],
+)
+def test_corrupt_tile_draws_map_not_installed_and_warns_once(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, blob: bytes | None
+) -> None:
+    """A tile that can't be decoded draws as no tiles, warning once."""
+    tiles = corrupt_tiles(out=tmp_path / 'tiles.db', blob=blob)
+    maps = MapRenderer(tiles=tiles)
+    with caplog.at_level(logging.WARNING), closing(tiles):
+        first = maps.frame(view=map_view())
+        moved = MapBase(centre=STOP_POINT, mpp=MAP_MPP, route=((STOP_POINT,),))
+        maps.frame(view=replace(map_view(), base=moved))
+    missing = MapRenderer(tiles=NullTiles()).frame(view=map_view())
+    assert np.array_equal(first, missing)
+    unusable = [r for r in caplog.records if r.message == 'tiles file unusable']
+    assert len(unusable) == 1

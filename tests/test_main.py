@@ -8,16 +8,19 @@ import signal
 import socket
 import sqlite3
 import sys
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import closing
+from dataclasses import dataclass
 from datetime import date, datetime
 from http import HTTPStatus
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 import aiohttp
 import pytest
 
 import paperroute.__main__ as cli
+import paperroute.adapters.tk_monitor as tk_monitor
 from paperroute.__main__ import (
     main,
     parse_args,
@@ -34,9 +37,13 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.core.messages import Event
 from paperroute.core.model import SYDNEY, Pin
 from paperroute.core.tiles import TileVariant
 from paperroute.observers import Timings
+
+if TYPE_CHECKING:
+    from paperroute.adapters.tk_monitor import TkMonitor
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
@@ -346,4 +353,82 @@ def test_serve_or_exit_passes_the_tiles_variant(
             clock=ReplayClock(start=AT),
         )
         serve_or_exit(args=args, ports=ports, display=display)
+    assert seen == [TileVariant.BITS]
+
+
+@dataclass
+class FakeMonitor:
+    """A stand-in for the Tk window that never opens one."""
+
+    closed: bool = False
+
+    def pump(self) -> None:
+        """Process no window events."""
+
+    def bind(self, *, post: Callable[[Event], None]) -> None:
+        """
+        Ignore the event poster.
+
+        Parameters
+        ----------
+        post : Callable[[Event], None]
+            Ignored.
+        """
+
+    def close(self) -> None:
+        """Note that the window was closed."""
+        self.closed = True
+
+
+def test_tk_main_passes_the_tiles_variant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--tiles-variant reaches show on the Tk path."""
+    seen: list[TileVariant] = []
+    monitor = FakeMonitor()
+
+    async def fake_show(**kwargs: object) -> None:
+        seen.append(kwargs['tiles_variant'])  # type: ignore[arg-type]
+
+    monkeypatch.setattr(tk_monitor, 'TkMonitor', lambda: monitor)
+    monkeypatch.setattr(cli, 'show', fake_show)
+    timetable = tmp_path / 'timetable.db'
+    timetable.touch()
+    args = argparse.Namespace(
+        timetable=timetable,
+        origin=PIN.origin,
+        destination=PIN.destination,
+        at=AT,
+        tiles=None,
+        tiles_variant=TileVariant.BITS,
+    )
+    cli.tk_main(args=args, feeds=FileFeedsClient(directory=REAL))
+    assert seen == [TileVariant.BITS]
+    assert monitor.closed
+
+
+async def test_show_passes_the_tiles_variant_to_run(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """show runs the app with the tiles variant it was given."""
+    seen: list[TileVariant] = []
+
+    async def fake_run(**kwargs: object) -> None:
+        seen.append(kwargs['tiles_variant'])  # type: ignore[arg-type]
+
+    monkeypatch.setattr(cli, 'run', fake_run)
+    memory = SqliteTimetableRepository(connection=sqlite3.connect(':memory:'))
+    with closing(memory) as timetable:
+        ports = Ports(
+            timetable=timetable,
+            feeds=FileFeedsClient(directory=REAL),
+            display=WebDisplay(status=Timings().snapshot),
+            clock=ReplayClock(start=AT),
+        )
+        await cli.show(
+            ports=ports,
+            pin=PIN,
+            monitor=cast('TkMonitor', FakeMonitor()),
+            tiles_variant=TileVariant.BITS,
+        )
     assert seen == [TileVariant.BITS]

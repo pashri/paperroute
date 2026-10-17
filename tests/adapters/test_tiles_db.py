@@ -249,3 +249,46 @@ def test_unreadable_replacement_keeps_the_old_file(tmp_path: Path) -> None:
         first = repo.version()
         garbage(out=out)
         assert repo.version() == first
+
+
+def raw_tiles(*, out: Path, blob: bytes | None) -> None:
+    """
+    Write a tiles file whose one tile, at zoom 14, column 3, row 4, holds
+    a given BLOB in both variants.
+
+    Parameters
+    ----------
+    out : Path
+        Destination file.
+    blob : bytes | None
+        The stored tile, or None for NULL.
+    """
+    with closing(sqlite3.connect(out)) as conn, conn:
+        conn.execute('CREATE TABLE meta (key TEXT, value TEXT)')
+        conn.execute("INSERT INTO meta VALUES ('built_at', 'corrupt')")
+        conn.execute(
+            'CREATE TABLE tiles (zoom INTEGER, col INTEGER, row INTEGER,'
+            ' grey BLOB, bits BLOB)'
+        )
+        conn.execute(
+            'INSERT INTO tiles VALUES (14, 3, 4, ?, ?)', (blob, blob)
+        )
+
+
+@pytest.mark.parametrize(
+    'blob',
+    [pack_grey(grey=grey_tile(level=170))[:10], None],
+    ids=['truncated', 'null'],
+)
+@pytest.mark.parametrize('variant', list(TileVariant))
+def test_corrupt_tile_is_a_database_error(
+    tmp_path: Path, blob: bytes | None, variant: TileVariant
+) -> None:
+    """A tile that can't be decoded reads as a database error."""
+    out = tmp_path / 'tiles.db'
+    raw_tiles(out=out, blob=blob)
+    with (
+        closing(SqliteTileRepository(path=out)) as repo,
+        pytest.raises(sqlite3.DatabaseError, match='tile 14/3/4'),
+    ):
+        repo.tile(zoom=14, col=3, row=4, variant=variant)

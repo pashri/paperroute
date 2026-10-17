@@ -1,6 +1,7 @@
 """Tile repository over the built tiles file."""
 
 import sqlite3
+import zlib
 from pathlib import Path
 from typing import Final
 
@@ -67,6 +68,11 @@ class SqliteTileRepository:
         -------
         NDArray[np.uint8] | None
             The tile's pixels, or None when it isn't stored.
+
+        Raises
+        ------
+        sqlite3.DatabaseError
+            When the stored tile can't be decoded.
         """
         column = 'grey' if variant == TileVariant.GREY else 'bits'
         rows = self.db.fetch(
@@ -78,10 +84,11 @@ class SqliteTileRepository:
         )
         if not rows:
             return None
-        blob = bytes(rows[0][0])  # type: ignore[call-overload]
-        if variant == TileVariant.GREY:
-            return unpack_grey(blob=blob)
-        return unpack_bits(blob=blob)
+        try:
+            return decode(value=rows[0][0], variant=variant)
+        except (TypeError, ValueError, zlib.error) as error:
+            message = f'tile {zoom}/{col}/{row} is corrupt: {error}'
+            raise sqlite3.DatabaseError(message) from error
 
     def street_labels(
         self, *, zoom: int, box: tuple[float, float, float, float]
@@ -135,6 +142,37 @@ class SqliteTileRepository:
     def close(self) -> None:
         """Close the database connection."""
         self.db.close()
+
+
+def decode(*, value: object, variant: TileVariant) -> NDArray[np.uint8]:
+    """
+    Unpack a stored tile.
+
+    Parameters
+    ----------
+    value : object
+        The stored BLOB.
+    variant : TileVariant
+        Which rendering it is.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The tile's pixels.
+
+    Raises
+    ------
+    TypeError
+        When the value is not bytes, such as NULL.
+    ValueError
+        When the tile holds the wrong number of pixels.
+    zlib.error
+        When the tile is not a whole zlib stream.
+    """
+    blob = bytes(value)  # type: ignore[call-overload]
+    if variant == TileVariant.GREY:
+        return unpack_grey(blob=blob)
+    return unpack_bits(blob=blob)
 
 
 def to_label(*, row: tuple[object, ...]) -> StreetLabel:

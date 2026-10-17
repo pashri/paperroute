@@ -1,0 +1,224 @@
+"""Tile repository over the built tiles file."""
+
+import sqlite3
+from pathlib import Path
+from typing import Final
+
+import numpy as np
+from numpy.typing import NDArray
+
+from paperroute.adapters.sqlite_ro import ReadOnlyDatabase
+from paperroute.core.tiles import LabelKind, StreetLabel, TileVariant
+from paperroute.render.tile_codec import unpack_bits, unpack_grey
+
+DEFAULT_TILES: Final[Path] = Path('/var/lib/paperroute/tiles.db')
+GROW_X: Final[float] = 200.0
+GROW_Y: Final[float] = 30.0
+STREETS: Final[str] = """
+SELECT name, x, y, angle, width, ax, ay, bx, by FROM labels
+WHERE zoom = ? AND kind = ? AND x BETWEEN ? AND ? AND y BETWEEN ? AND ?
+"""
+
+
+class SqliteTileRepository:
+    """
+    Read-only access to the tiles file.
+
+    Parameters
+    ----------
+    path : Path | None
+        Tiles file; defaults to the device location. It may not exist yet.
+    connection : sqlite3.Connection | None
+        An open connection to use instead of opening path.
+    """
+
+    def __init__(
+        self,
+        *,
+        path: Path | None = None,
+        connection: sqlite3.Connection | None = None,
+    ) -> None:
+        self.db = ReadOnlyDatabase(
+            path=path or DEFAULT_TILES,
+            connection=connection,
+            probe='SELECT 1 FROM meta LIMIT 1',
+            allow_missing=True,
+            label='tiles',
+        )
+
+    def tile(
+        self, *, zoom: int, col: int, row: int, variant: TileVariant
+    ) -> NDArray[np.uint8] | None:
+        """
+        Read one tile.
+
+        Parameters
+        ----------
+        zoom : int
+            Zoom.
+        col : int
+            Tile column.
+        row : int
+            Tile row.
+        variant : TileVariant
+            Which rendering to read.
+
+        Returns
+        -------
+        NDArray[np.uint8] | None
+            The tile's pixels, or None when it isn't stored.
+        """
+        column = 'grey' if variant == TileVariant.GREY else 'bits'
+        rows = self.db.fetch(
+            sql=(
+                f'SELECT {column} FROM tiles'
+                ' WHERE zoom = ? AND col = ? AND row = ?'
+            ),
+            params=(zoom, col, row),
+        )
+        if not rows:
+            return None
+        blob = bytes(rows[0][0])  # type: ignore[call-overload]
+        if variant == TileVariant.GREY:
+            return unpack_grey(blob=blob)
+        return unpack_bits(blob=blob)
+
+    def street_labels(
+        self, *, zoom: int, box: tuple[float, float, float, float]
+    ) -> list[StreetLabel]:
+        """
+        Find street labels near a pixel box.
+
+        Parameters
+        ----------
+        zoom : int
+            Zoom.
+        box : tuple[float, float, float, float]
+            Left, top, right and bottom in global pixels. Labels anchored
+            up to 200 px beyond the sides and 30 px beyond the top and
+            bottom are returned.
+
+        Returns
+        -------
+        list[StreetLabel]
+            Matching street labels.
+        """
+        left, top, right, bottom = box
+        rows = self.db.fetch(
+            sql=STREETS,
+            params=(
+                zoom,
+                str(LabelKind.STREET),
+                left - GROW_X,
+                right + GROW_X,
+                top - GROW_Y,
+                bottom + GROW_Y,
+            ),
+        )
+        return [to_label(row=row) for row in rows]
+
+    def version(self) -> str | None:
+        """
+        Say which build the file is.
+
+        Returns
+        -------
+        str | None
+            The build time, or None when there is no file.
+        """
+        rows = self.db.fetch(
+            sql='SELECT value FROM meta WHERE key = ?',
+            params=('built_at',),
+        )
+        return str(rows[0][0]) if rows else None
+
+    def close(self) -> None:
+        """Close the database connection."""
+        self.db.close()
+
+
+def to_label(*, row: tuple[object, ...]) -> StreetLabel:
+    """
+    Turn a STREETS row into a StreetLabel.
+
+    Parameters
+    ----------
+    row : tuple[object, ...]
+        STREETS row.
+
+    Returns
+    -------
+    StreetLabel
+        The label.
+    """
+    name, x, y, angle, width, ax, ay, bx, by = row
+    return StreetLabel(
+        name=str(name),
+        x=float(str(x)),
+        y=float(str(y)),
+        angle=float(str(angle)),
+        width=float(str(width)),
+        start=(float(str(ax)), float(str(ay))),
+        end=(float(str(bx)), float(str(by))),
+    )
+
+
+class NullTiles:
+    """A tile repository with nothing in it."""
+
+    # pylint: disable=unused-argument
+
+    def tile(
+        self, *, zoom: int, col: int, row: int, variant: TileVariant
+    ) -> NDArray[np.uint8] | None:
+        """
+        Read one tile.
+
+        Parameters
+        ----------
+        zoom : int
+            Zoom.
+        col : int
+            Tile column.
+        row : int
+            Tile row.
+        variant : TileVariant
+            Which rendering to read.
+
+        Returns
+        -------
+        NDArray[np.uint8] | None
+            Always None.
+        """
+        return None
+
+    def street_labels(
+        self, *, zoom: int, box: tuple[float, float, float, float]
+    ) -> list[StreetLabel]:
+        """
+        Find street labels near a pixel box.
+
+        Parameters
+        ----------
+        zoom : int
+            Zoom.
+        box : tuple[float, float, float, float]
+            Left, top, right and bottom in global pixels.
+
+        Returns
+        -------
+        list[StreetLabel]
+            Always empty.
+        """
+        return []
+
+    def version(self) -> str | None:
+        """
+        Say which build the file is.
+
+        Returns
+        -------
+        str | None
+            Always None.
+        """
+        return None

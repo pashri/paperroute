@@ -11,10 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters.timetable_db import (
-    SqliteTimetableRepository,
-    file_identity,
-)
+from paperroute.adapters.sqlite_ro import file_identity
+from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.dedupe import merge_rail
 from paperroute.build.timetable import Source
 from paperroute.core.model import SYDNEY, Mode, Pin

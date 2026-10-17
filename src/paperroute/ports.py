@@ -7,6 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.core.model import Departure, Pin
+from paperroute.core.tiles import StreetLabel, TileVariant
 
 
 class TimetableRepository(Protocol):
@@ -46,6 +47,62 @@ class TimetableRepository(Protocol):
         -------
         list[Departure]
             In departure order.
+        """
+
+
+class TileRepository(Protocol):
+    """Read access to the built map tiles."""
+
+    def tile(
+        self, *, zoom: int, col: int, row: int, variant: TileVariant
+    ) -> NDArray[np.uint8] | None:
+        """
+        Read one tile.
+
+        Parameters
+        ----------
+        zoom : int
+            Zoom.
+        col : int
+            Tile column.
+        row : int
+            Tile row.
+        variant : TileVariant
+            Which rendering to read.
+
+        Returns
+        -------
+        NDArray[np.uint8] | None
+            The tile's pixels, or None when it isn't stored.
+        """
+
+    def street_labels(
+        self, *, zoom: int, box: tuple[float, float, float, float]
+    ) -> list[StreetLabel]:
+        """
+        Find street labels near a pixel box.
+
+        Parameters
+        ----------
+        zoom : int
+            Zoom.
+        box : tuple[float, float, float, float]
+            Left, top, right and bottom in global pixels.
+
+        Returns
+        -------
+        list[StreetLabel]
+            Matching street labels.
+        """
+
+    def version(self) -> str | None:
+        """
+        Say which build the file is.
+
+        Returns
+        -------
+        str | None
+            The build time, or None when there is no file.
         """
 
 

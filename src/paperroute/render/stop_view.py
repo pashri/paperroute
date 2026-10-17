@@ -70,7 +70,7 @@ def hero_countdown(canvas: Canvas, *, row: Row, top: int) -> None:
         Top of the panel.
     """
     big = Face(weight=800, px=104 if row.live else 76)
-    shown = row.countdown if row.live else row.leaves_at
+    shown = leaves(row=row)
     used = canvas.text(at=(18, top + 158), text=shown, face=big, grey=INK)
     if row.live and shown != 'now' and ':' not in shown:
         canvas.text(

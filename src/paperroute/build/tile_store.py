@@ -12,18 +12,25 @@ from typing import Final, Self
 from paperroute.core.tiles import LabelKind, StreetLabel
 
 TILE_FORMAT: Final[str] = 'z2'
-TILES_SCHEMA: Final[str] = """
-CREATE TABLE tiles (zoom INTEGER NOT NULL, col INTEGER NOT NULL,
-  row INTEGER NOT NULL, grey BLOB NOT NULL, bits BLOB NOT NULL,
-  PRIMARY KEY (zoom, col, row));
+LABELS_TABLE: Final[str] = """
 CREATE TABLE labels (id INTEGER PRIMARY KEY, zoom INTEGER NOT NULL,
   kind TEXT NOT NULL, name TEXT NOT NULL, rank INTEGER NOT NULL,
   x REAL NOT NULL, y REAL NOT NULL, angle REAL NOT NULL,
   width REAL NOT NULL, ax REAL NOT NULL, ay REAL NOT NULL,
   bx REAL NOT NULL, by REAL NOT NULL);
+"""
+TILES_SCHEMA: Final[str] = (
+    """
+CREATE TABLE tiles (zoom INTEGER NOT NULL, col INTEGER NOT NULL,
+  row INTEGER NOT NULL, grey BLOB NOT NULL, bits BLOB NOT NULL,
+  PRIMARY KEY (zoom, col, row));
+"""
+    + LABELS_TABLE
+    + """
 CREATE INDEX labels_place ON labels (zoom, kind, x);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
+)
 INSERT_LABEL: Final[str] = (
     'INSERT INTO labels (zoom, kind, name, rank, x, y, angle, width,'
     ' ax, ay, bx, by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'

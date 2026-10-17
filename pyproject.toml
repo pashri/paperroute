@@ -32,10 +32,9 @@ dev = [
     "pytest-asyncio>=0.25",
     "pytest-cov>=6.0",
 ]
+tiles = ["osmium>=4.3", "shapely>=2.2"]
 mockups = [
     "duckdb",
-    "osmium",
-    "shapely",
     "pillow",
     "gtfs-realtime-bindings",
     "skia-python>=144.0.post2",
@@ -46,6 +45,7 @@ mockups = [
 
 [tool.uv]
 python-preference = "only-managed"
+default-groups = ["dev", "tiles"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -64,6 +64,10 @@ files = ["src", "tests"]
 module = ["skia", "google.transit.*", "google.protobuf.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["shapely.*"]
+ignore_missing_imports = true
+
 [tool.isort]
 multi_line_output = 3
 include_trailing_comma = true
@@ -73,7 +77,7 @@ src_paths = ["src", "tests"]
 
 [tool.pylint.main]
 py-version = "3.14"
-extension-pkg-allow-list = ["skia"]
+extension-pkg-allow-list = ["skia", "osmium"]
 
 [tool.pylint.format]
 max-line-length = 79

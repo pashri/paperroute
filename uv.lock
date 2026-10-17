@@ -1093,11 +1093,13 @@ mockups = [
     { name = "fonttools" },
     { name = "gtfs-realtime-bindings" },
     { name = "numpy" },
-    { name = "osmium" },
     { name = "pillow" },
     { name = "pycairo" },
-    { name = "shapely" },
     { name = "skia-python" },
+]
+tiles = [
+    { name = "osmium" },
+    { name = "shapely" },
 ]
 
 [package.metadata]
@@ -1126,11 +1128,13 @@ mockups = [
     { name = "fonttools", specifier = ">=4.67.0" },
     { name = "gtfs-realtime-bindings" },
     { name = "numpy", specifier = ">=2.5.4" },
-    { name = "osmium" },
     { name = "pillow" },
     { name = "pycairo", specifier = ">=1.29.2" },
-    { name = "shapely" },
     { name = "skia-python", specifier = ">=144.0.post2" },
+]
+tiles = [
+    { name = "osmium", specifier = ">=4.3" },
+    { name = "shapely", specifier = ">=2.2" },
 ]
 
 [[package]]

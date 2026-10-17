@@ -1,2 +1,2 @@
-# Lets pashri run the two paperroute install scripts without a password.
-pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-install-release, /usr/local/sbin/paperroute-install-files ""
+# Lets pashri run the three paperroute install scripts without a password.
+pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-install-release, /usr/local/sbin/paperroute-install-files "", /usr/local/sbin/paperroute-install-tiles ""

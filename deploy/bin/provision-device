@@ -115,8 +115,8 @@ install_sudoers() {
 [[ $# -eq 1 ]] || fail 'usage: provision-device DIR'
 DIR=$1
 [[ -d $DIR && ! -L $DIR ]] || fail 'DIR is not a directory'
-for need in bin/install-files bin/install-release bin/paperroute-led \
-    sudoers/paperroute-deploy; do
+for need in bin/install-files bin/install-release bin/install-tiles \
+    bin/paperroute-led sudoers/paperroute-deploy; do
     [[ -f $DIR/$need ]] || fail "DIR has no $need"
 done
 [[ -n ${SUDO_USER:-} ]] || fail 'run it through sudo'
@@ -166,6 +166,8 @@ install -m 0755 -o root -g root "$SHARE/deploy/bin/install-release" \
     /usr/local/sbin/paperroute-install-release
 install -m 0755 -o root -g root "$SHARE/deploy/bin/install-files" \
     /usr/local/sbin/paperroute-install-files
+install -m 0755 -o root -g root "$SHARE/deploy/bin/install-tiles" \
+    /usr/local/sbin/paperroute-install-tiles
 /usr/local/sbin/paperroute-install-files
 
 install_sudoers

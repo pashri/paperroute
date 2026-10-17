@@ -1,0 +1,99 @@
+#!/bin/bash
+# Installed as /usr/local/sbin/paperroute-install-tiles (root, no arguments).
+# Installs the staged map tiles atomically when their size or mtime differ
+# from the last install. Root reads the stage only as its owner and touches
+# the data directory only as the service user.
+set -euo pipefail
+export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export LC_ALL=C
+umask 022
+
+STAGED=/var/cache/paperroute-stage/tiles/tiles.db
+DATA=/var/lib/paperroute
+LOCK=/run/paperroute-install.lock
+OWNER=
+tmp=
+
+fail() {
+    printf 'install-tiles: %s\n' "$1" >&2
+    exit 2
+}
+
+as_owner() {
+    if [[ $EUID -eq 0 ]]; then
+        setsid -w runuser -u "$OWNER" -- "$@" 9>&-
+    else
+        "$@"
+    fi
+}
+
+as_service() {
+    if [[ $EUID -eq 0 ]]; then
+        setsid -w runuser -u paperroute -- "$@" 9>&-
+    else
+        "$@"
+    fi
+}
+
+cleanup() {
+    if [[ -n $tmp ]]; then
+        as_service rm -f -- "$tmp"
+    fi
+}
+
+# Checks the staged file; sets OWNER.
+validate() {
+    local uid found
+    OWNER=${SUDO_USER:-$(id -un)}
+    uid=$(id -u -- "$OWNER" 2>/dev/null) || fail 'unknown user'
+    if [[ $EUID -eq 0 && $uid -eq 0 ]]; then
+        fail 'refusing to read the stage as root'
+    fi
+    if [[ ! -f $STAGED || -L $STAGED ]]; then
+        fail 'the staged tiles are not a regular file'
+    fi
+    found=$(find "$STAGED" -maxdepth 0 -user "$uid") \
+        || fail 'cannot read the staged tiles'
+    if [[ $found != "$STAGED" ]]; then
+        fail "the staged tiles are not owned by $OWNER"
+    fi
+}
+
+[[ $# -eq 0 ]] || fail 'takes no arguments'
+exec </dev/null
+if [[ $EUID -ne 0 ]]; then
+    STAGED=${PAPERROUTE_TILES_STAGE:-$STAGED}
+    DATA=${PAPERROUTE_DATA:-$DATA}
+fi
+DEST=$DATA/tiles.db
+STAMP=$DATA/tiles.stamp
+validate
+
+stamp=$(as_owner stat -c '%s %Y' -- "$STAGED" 2>/dev/null \
+    || as_owner stat -f '%z %m' -- "$STAGED")
+old=$(as_service cat -- "$STAMP" 2>/dev/null || true)
+if as_service test -e "$DEST" && [[ $old == "$stamp" ]]; then
+    printf 'tiles unchanged\n'
+    exit 0
+fi
+[[ $EUID -eq 0 ]] || fail 'checks passed; installing needs root'
+
+exec 9>"$LOCK"
+if ! flock -n 9; then
+    printf 'install-tiles: another install is running\n' >&2
+    exit 1
+fi
+trap cleanup EXIT
+
+tmp=$(as_service mktemp "$DATA/tiles.db.XXXXXX")
+as_owner cat -- "$STAGED" | as_service sh -c 'cat >"$1"' sh "$tmp"
+as_service chmod 0640 "$tmp"
+check=$(as_service sqlite3 -readonly "$tmp" 'PRAGMA quick_check') || check=
+if [[ $check != ok ]]; then
+    printf 'install-tiles: the staged tiles failed the integrity check\n' >&2
+    exit 1
+fi
+as_service mv -f -- "$tmp" "$DEST"
+tmp=
+printf '%s\n' "$stamp" | as_service sh -c 'cat >"$1"' sh "$STAMP"
+printf 'tiles installed\n'

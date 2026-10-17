@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Usage: scripts/deploy HOST
 # Checks the tree, stages the tracked files of HEAD on the Pi and installs
-# them with the passwordless install script. Never prompts.
+# them with the passwordless install scripts, the map tiles first when
+# data/tiles.db exists. Never prompts.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 STAGE=/var/cache/paperroute-stage
 INSTALL=/usr/local/sbin/paperroute-install-release
+TILES=/usr/local/sbin/paperroute-install-tiles
 
 usage() {
     printf 'usage: scripts/deploy HOST\n' >&2
@@ -35,6 +37,15 @@ fi
 ssh -- "$host" rm -rf "$STAGE/$sha"
 git ls-files -z src pyproject.toml uv.lock README.md \
     | rsync -a --from0 --files-from=- ./ "$host:$STAGE/$sha/"
+if [[ -f data/tiles.db ]]; then
+    if ! ssh -- "$host" sudo -n -l "$TILES" >/dev/null 2>&1; then
+        printf 'deploy: run scripts/provision first (tiles)\n' >&2
+        exit 1
+    fi
+    ssh -- "$host" mkdir -p "$STAGE/tiles"
+    rsync -a --partial data/tiles.db "$host:$STAGE/tiles/tiles.db"
+    ssh -- "$host" sudo -n "$TILES" || exit
+fi
 status=0
 ssh -- "$host" sudo -n "$INSTALL" "$sha" || status=$?
 exit "$status"

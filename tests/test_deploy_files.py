@@ -20,6 +20,7 @@ CONFIG_TXT: Final[Path] = Path(__file__).parent / 'fixtures' / 'config.txt'
 BIN_SCRIPTS: Final[tuple[str, ...]] = (
     'install-files',
     'install-release',
+    'install-tiles',
     'paperroute-led',
     'provision-device',
 )
@@ -31,7 +32,8 @@ SHELL_SCRIPTS: Final[tuple[Path, ...]] = (
 SUDOERS_RULE: Final[str] = (
     'pashri ALL=(root) NOPASSWD: '
     '/usr/local/sbin/paperroute-install-release, '
-    '/usr/local/sbin/paperroute-install-files ""'
+    '/usr/local/sbin/paperroute-install-files "", '
+    '/usr/local/sbin/paperroute-install-tiles ""'
 )
 BAD_SHAS: Final[tuple[str, ...]] = (
     '',
@@ -68,6 +70,7 @@ APP_SERVICE: Final[dict[str, str]] = {
     'ExecStart': (
         f'{PYTHON} -m paperroute run --display web'
         ' --timetable /var/lib/paperroute/timetable.db'
+        ' --tiles /var/lib/paperroute/tiles.db'
         ' --error-log /var/lib/paperroute/log/errors.jsonl'
     ),
     'ExecStopPost': '+/usr/local/bin/paperroute-led boot',
@@ -583,8 +586,8 @@ def test_timetable_unit_logs_errors_and_uses_work_tmp() -> None:
     assert (service['Nice'], service['OOMScoreAdjust']) == ('19', '500')
 
 
-def test_sudoers_allows_exactly_the_two_scripts(tmp_path: Path) -> None:
-    """The sudoers file holds one rule for the two root scripts."""
+def test_sudoers_allows_exactly_the_three_scripts(tmp_path: Path) -> None:
+    """The sudoers file holds one rule for the three root scripts."""
     path = DEPLOY / 'sudoers' / 'paperroute-deploy'
     rules = [
         line
@@ -831,7 +834,7 @@ def test_edit_config_appends_all_section(tmp_path: Path) -> None:
 
 
 def test_bin_holds_the_planned_scripts() -> None:
-    """deploy/bin holds the four scripts and nothing else."""
+    """deploy/bin holds the five scripts and nothing else."""
     assert sorted(path.name for path in BIN.iterdir()) == list(BIN_SCRIPTS)
 
 
@@ -1083,3 +1086,360 @@ def test_install_release_hint_starts_the_refresh_without_blocking() -> None:
     text = script_text(path=BIN / 'install-release')
     assert 'sudo systemctl start --no-block paperroute-timetable' in text
     assert 'journalctl -fu paperroute-timetable' in text
+
+
+TILES_SCRIPT: Final[Path] = BIN / 'install-tiles'
+DEPLOY_SCRIPT: Final[Path] = ROOT / 'scripts' / 'deploy'
+TILES_ROOT_MESSAGE: Final[str] = (
+    'install-tiles: checks passed; installing needs root\n'
+)
+TILES_NOT_A_FILE: Final[str] = (
+    'install-tiles: the staged tiles are not a regular file\n'
+)
+DATA_PATH: Final[re.Pattern[str]] = re.compile(
+    pattern=r'\$\{?(?:DEST|STAMP|tmp)\b'
+)
+STAGED_PATH: Final[re.Pattern[str]] = re.compile(pattern=r'\$\{?STAGED\b')
+LEADING_WORDS: Final[re.Pattern[str]] = re.compile(
+    pattern=r'^(?:(?:if|then|while|!)\s+)+'
+)
+SERVICE_HEADS: Final[tuple[str, ...]] = ('as_service ', '[[ ')
+OWNER_HEADS: Final[tuple[str, ...]] = (
+    'as_owner ',
+    '[[ ',
+    'find "$STAGED" -maxdepth 0 -user ',
+    'STAGED=${PAPERROUTE_TILES_STAGE:-',
+)
+
+
+@dataclass(frozen=True)
+class TilesSandbox:
+    """A staged tiles file and a data directory that override the real ones."""
+
+    root: Path
+    staged: Path
+    data: Path
+    env: dict[str, str]
+
+
+@pytest.fixture(name='tiles')
+def fixture_tiles(tmp_path: Path) -> TilesSandbox:
+    """
+    Stage a tiles file and make an empty data directory.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Pytest's temporary directory.
+
+    Returns
+    -------
+    TilesSandbox
+        The paths and an environment that points install-tiles at them.
+    """
+    if os.geteuid() == 0:
+        pytest.fail('run the install script tests as a normal user')
+    staged = tmp_path / 'stage' / 'tiles.db'
+    staged.parent.mkdir()
+    staged.write_text('new tiles\n', encoding='utf-8')
+    data = tmp_path / 'data'
+    data.mkdir()
+    env = user_env(
+        PAPERROUTE_TILES_STAGE=str(staged),
+        PAPERROUTE_DATA=str(data),
+    )
+    return TilesSandbox(root=tmp_path, staged=staged, data=data, env=env)
+
+
+def stamp_of(path: Path) -> str:
+    """
+    Describe a file by its size and whole-second mtime.
+
+    Parameters
+    ----------
+    path : Path
+        The file.
+
+    Returns
+    -------
+    str
+        ``'<size> <mtime>'``, as install-tiles writes its stamp.
+    """
+    status = path.stat()
+    return f'{status.st_size} {int(status.st_mtime)}'
+
+
+def command_heads(line: str, pattern: re.Pattern[str]) -> list[str]:
+    """
+    Find the simple command that uses each match of a pattern in a line.
+
+    Parameters
+    ----------
+    line : str
+        One command line, with continuations joined.
+    pattern : re.Pattern[str]
+        What to look for, such as a variable reference.
+
+    Returns
+    -------
+    list[str]
+        For each match inside a ``[[ ... ]]`` test, ``'[[ '``. For any
+        other, the line from the start of its simple command (after any
+        pipe, list operator, ``;`` or ``$(``, and without a leading
+        ``if``, ``then``, ``while`` or ``!``) to the end.
+    """
+    tests = [
+        found.span()
+        for found in re.finditer(pattern=r'\[\[ .*? \]\]', string=line)
+    ]
+    return [
+        '[[ '
+        if any(start < found.start() < end for start, end in tests)
+        else LEADING_WORDS.sub(
+            repl='',
+            string=re.split(
+                pattern=r'\|\||&&|[|;(]',
+                string=line[:found.start()],
+            )[-1].lstrip(),
+        ) + line[found.start():]
+        for found in pattern.finditer(line)
+    ]
+
+
+def run_tiles(
+    tiles: TilesSandbox,
+    args: tuple[str, ...] = (),
+    sudo_user: str | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run install-tiles in the sandbox as the current user.
+
+    Parameters
+    ----------
+    tiles : TilesSandbox
+        The sandbox.
+    args : tuple[str, ...]
+        The arguments.
+    sudo_user : str | None
+        The ``SUDO_USER`` to claim, or None to leave it unset.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The exit status and output.
+    """
+    extra = {} if sudo_user is None else {'SUDO_USER': sudo_user}
+    return run_script(
+        name='install-tiles',
+        args=args,
+        env=tiles.env | extra,
+    )
+
+
+@pytest.mark.parametrize('value', ('', 'x', '--help', SHA))
+def test_install_tiles_rejects_any_argument(
+    tiles: TilesSandbox,
+    value: str,
+) -> None:
+    """install-tiles takes no arguments at all."""
+    before = snapshot(root=tiles.root)
+    result = run_tiles(tiles=tiles, args=(value,))
+    assert (result.returncode, result.stderr) == (
+        2,
+        'install-tiles: takes no arguments\n',
+    )
+    assert snapshot(root=tiles.root) == before
+
+
+def test_install_tiles_rejects_a_symlinked_stage(tiles: TilesSandbox) -> None:
+    """A staged file that is a symlink exits 2 and writes nothing."""
+    elsewhere = tiles.root / 'elsewhere.db'
+    tiles.staged.rename(elsewhere)
+    tiles.staged.symlink_to(elsewhere)
+    before = snapshot(root=tiles.root)
+    result = run_tiles(tiles=tiles)
+    assert (result.returncode, result.stderr) == (2, TILES_NOT_A_FILE)
+    assert snapshot(root=tiles.root) == before
+
+
+def test_install_tiles_rejects_a_missing_stage(tiles: TilesSandbox) -> None:
+    """With nothing staged the script exits 2 and writes nothing."""
+    tiles.staged.unlink()
+    before = snapshot(root=tiles.root)
+    result = run_tiles(tiles=tiles)
+    assert (result.returncode, result.stderr) == (2, TILES_NOT_A_FILE)
+    assert snapshot(root=tiles.root) == before
+
+
+@pytest.mark.parametrize(
+    ('sudo_user', 'reason'),
+    (
+        ('nobody', 'the staged tiles are not owned by nobody'),
+        ('no-such-user-paperroute', 'unknown user'),
+    ),
+)
+def test_install_tiles_checks_the_stage_owner(
+    tiles: TilesSandbox,
+    sudo_user: str,
+    reason: str,
+) -> None:
+    """The staged file must belong to the sudo caller."""
+    before = snapshot(root=tiles.root)
+    result = run_tiles(tiles=tiles, sudo_user=sudo_user)
+    assert (result.returncode, result.stderr) == (
+        2,
+        f'install-tiles: {reason}\n',
+    )
+    assert snapshot(root=tiles.root) == before
+
+
+def test_install_tiles_skips_when_stamp_matches(tiles: TilesSandbox) -> None:
+    """Tiles already installed from this staged file are left alone."""
+    (tiles.data / 'tiles.db').write_text('old tiles\n', encoding='utf-8')
+    (tiles.data / 'tiles.stamp').write_text(
+        f'{stamp_of(path=tiles.staged)}\n',
+        encoding='utf-8',
+    )
+    before = snapshot(root=tiles.root)
+    result = run_tiles(tiles=tiles)
+    assert (result.returncode, result.stdout, result.stderr) == (
+        0,
+        'tiles unchanged\n',
+        '',
+    )
+    assert snapshot(root=tiles.root) == before
+
+
+@pytest.mark.parametrize(
+    ('dest', 'stamp'),
+    ((True, '0 0'), (False, 'staged'), (True, None), (False, None)),
+)
+def test_install_tiles_needs_root_when_changed(
+    tiles: TilesSandbox,
+    dest: bool,
+    stamp: str | None,
+) -> None:
+    """A changed or never-installed file passes the checks, then needs root."""
+    if dest:
+        (tiles.data / 'tiles.db').write_text('old tiles\n', encoding='utf-8')
+    if stamp is not None:
+        (tiles.data / 'tiles.stamp').write_text(
+            stamp.replace('staged', stamp_of(path=tiles.staged)),
+            encoding='utf-8',
+        )
+    before = snapshot(root=tiles.root)
+    result = run_tiles(tiles=tiles)
+    assert (result.returncode, result.stderr) == (2, TILES_ROOT_MESSAGE)
+    assert snapshot(root=tiles.root) == before
+
+
+def test_install_tiles_ignores_overrides_as_root() -> None:
+    """The test overrides apply only when the caller isn't root."""
+    assert (
+        'if [[ $EUID -ne 0 ]]; then\n'
+        '    STAGED=${PAPERROUTE_TILES_STAGE:-$STAGED}\n'
+        '    DATA=${PAPERROUTE_DATA:-$DATA}\n'
+        'fi\n'
+        'DEST=$DATA/tiles.db\n'
+        'STAMP=$DATA/tiles.stamp\n'
+    ) in script_text(path=TILES_SCRIPT)
+
+
+def test_install_tiles_constants() -> None:
+    """The real paths, and the lock install-release takes."""
+    values = {
+        name: script_value(path=TILES_SCRIPT, name=name)
+        for name in ('STAGED', 'DATA', 'LOCK')
+    }
+    assert values == {
+        'STAGED': '/var/cache/paperroute-stage/tiles/tiles.db',
+        'DATA': '/var/lib/paperroute',
+        'LOCK': script_value(path=BIN / 'install-release', name='LOCK'),
+    }
+
+
+def test_install_tiles_touches_data_only_as_the_service_user() -> None:
+    """Root never opens a data path, and reads the stage only as its owner."""
+    data_heads = [
+        head
+        for line in commands(path=TILES_SCRIPT, word='(?:DEST|STAMP|tmp)')
+        for head in command_heads(line=line, pattern=DATA_PATH)
+    ]
+    owner_heads = [
+        head
+        for line in commands(path=TILES_SCRIPT, word='STAGED')
+        for head in command_heads(line=line, pattern=STAGED_PATH)
+    ]
+    assert len(data_heads) >= 8
+    assert all(head.startswith(SERVICE_HEADS) for head in data_heads)
+    assert any(head.startswith('as_owner cat ') for head in owner_heads)
+    assert all(head.startswith(OWNER_HEADS) for head in owner_heads)
+    assert not any(
+        re.search(pattern=r'(?:^|[;&|(]) *install ', string=line)
+        for line in commands(path=TILES_SCRIPT, word='install')
+    )
+    assert [
+        'as_service sqlite3 ' in line
+        for line in commands(path=TILES_SCRIPT, word='sqlite3')
+    ] == [True]
+
+
+def test_install_tiles_runs_users_detached_without_the_lock() -> None:
+    """Every runuser has no terminal, no stdin and no lock fd."""
+    assert commands(path=TILES_SCRIPT, word='runuser') == [
+        'setsid -w runuser -u "$OWNER" -- "$@" 9>&-',
+        'setsid -w runuser -u paperroute -- "$@" 9>&-',
+    ]
+    assert '\nexec </dev/null\n' in script_text(path=TILES_SCRIPT)
+
+
+def test_install_tiles_locks_cleans_up_and_renames() -> None:
+    """The install holds the lock, removes its temp file, and renames."""
+    text = script_text(path=TILES_SCRIPT)
+    assert 'exec 9>"$LOCK"\nif ! flock -n 9; then\n' in text
+    assert 'trap cleanup EXIT\n' in text
+    assert '        as_service rm -f -- "$tmp"\n' in text
+    assert 'as_service mv -f -- "$tmp" "$DEST"\n' in text
+
+
+def test_install_tiles_stamps_portably() -> None:
+    """The stamp is size and mtime, from GNU stat or the BSD fallback."""
+    found = commands(path=TILES_SCRIPT, word='stat')
+    assert found == [
+        "stamp=$(as_owner stat -c '%s %Y' -- \"$STAGED\" 2>/dev/null"
+        " || as_owner stat -f '%z %m' -- \"$STAGED\")",
+    ]
+
+
+def test_provision_installs_install_tiles() -> None:
+    """provision needs the script and installs it next to the other two."""
+    assert commands(path=BIN / 'provision-device', word='install-tiles') == [
+        'for need in bin/install-files bin/install-release'
+        ' bin/install-tiles bin/paperroute-led sudoers/paperroute-deploy;'
+        ' do',
+        'install -m 0755 -o root -g root "$SHARE/deploy/bin/install-tiles"'
+        ' /usr/local/sbin/paperroute-install-tiles',
+    ]
+
+
+def test_deploy_installs_tiles_before_the_release() -> None:
+    """A failed tiles install stops the deploy before install-release."""
+    text = script_text(path=DEPLOY_SCRIPT)
+    assert commands(path=DEPLOY_SCRIPT, word='TILES') == [
+        'TILES=/usr/local/sbin/paperroute-install-tiles',
+        'if ! ssh -- "$host" sudo -n -l "$TILES" >/dev/null 2>&1; then',
+        'ssh -- "$host" sudo -n "$TILES" || exit',
+    ]
+    order = [
+        text.index(part)
+        for part in (
+            '| rsync -a --from0',
+            'if [[ -f data/tiles.db ]]; then',
+            "printf 'deploy: run scripts/provision first (tiles)\\n' >&2",
+            'ssh -- "$host" mkdir -p "$STAGE/tiles"',
+            'rsync -a --partial data/tiles.db "$host:$STAGE/tiles/tiles.db"',
+            'sudo -n "$TILES" || exit',
+            'sudo -n "$INSTALL" "$sha"',
+        )
+    ]
+    assert order == sorted(order)

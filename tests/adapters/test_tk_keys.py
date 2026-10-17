@@ -3,7 +3,7 @@
 import pytest
 
 from paperroute.adapters.tk_monitor import key_event
-from paperroute.core.state import (
+from paperroute.core.messages import (
     Event,
     Knob,
     KnobPressed,

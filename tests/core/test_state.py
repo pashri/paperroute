@@ -2,7 +2,7 @@
 
 from collections import Counter
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from typing import Final
 
 from hypothesis import given
@@ -12,13 +12,7 @@ from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import Point, make_shape
 from paperroute.core.map_state import area_box
 from paperroute.core.map_view import DEFAULT_ZOOM, SIDEBAR_ROWS, MapView
-from paperroute.core.model import SYDNEY, Departure, Mode, Pin, shifted
-from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
-from paperroute.core.state import (
-    LIVE_VIEWS,
-    LOOKBACK,
-    POLL_EVERY,
-    RELOAD_BEFORE,
+from paperroute.core.messages import (
     DeparturesFailed,
     DeparturesLoaded,
     Effect,
@@ -29,21 +23,32 @@ from paperroute.core.state import (
     Knob,
     KnobPressed,
     KnobTurned,
-    LiveView,
     LoadDepartures,
     LoadModes,
     LoadPatterns,
     LoadShapes,
     MapDataFailed,
+    MapRequest,
     ModesLoaded,
     PatternsLoaded,
     PositionsFetched,
     QuitRequested,
     Render,
     ShapesLoaded,
-    State,
     Stop,
     Tick,
+)
+from paperroute.core.model import SYDNEY, Departure, Mode, Pin, shifted
+from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
+from paperroute.core.state import (
+    FEED_IDLE,
+    LIVE_VIEWS,
+    LOOKBACK,
+    POLL_EVERY,
+    RELOAD_BEFORE,
+    RETRY_AFTER,
+    LiveView,
+    State,
     initial_state,
     needed_feeds,
     step,
@@ -294,7 +299,6 @@ def test_quit_stops() -> None:
     assert effects == (Stop(),)
 
 
-
 def effects_of[T](
     *, effects: tuple[Effect, ...], kind: type[T]
 ) -> list[T]:
@@ -435,6 +439,7 @@ def test_stop_view_never_polls_positions() -> None:
         state, effects = step(state, Tick(now=now))
         fetched = effects_of(effects=effects, kind=FetchFeed)
         assert fetched == [FetchFeed(feed=BUSES)]
+    assert needed_feeds(state=state) == (BUSES,)
 
 
 def test_map_polls_positions_for_a_ferry_pin() -> None:
@@ -442,7 +447,7 @@ def test_map_polls_positions_for_a_ferry_pin() -> None:
     state, _ = step(loaded(state=fresh(), mode=Mode.FERRY), PRESS)
     assert state.feeds == ()
     fetch = FetchFeed(feed=FERRY_POSITIONS, kind=FeedKind.POSITIONS)
-    for seconds in (0, 30, 60):
+    for seconds in (30, 60, 90):
         now = START + timedelta(seconds=seconds)
         state, effects = step(state, Tick(now=now))
         assert effects_of(effects=effects, kind=FetchFeed) == [fetch]
@@ -487,7 +492,7 @@ def test_patterns_requested_once() -> None:
     patterns = dict.fromkeys((*trips, 'gone'))
     state, effects = step(
         state,
-        PatternsLoaded(patterns=patterns, shapes={}),
+        PatternsLoaded(trip_ids=trips, patterns=patterns, shapes={}),
     )
     assert not effects_of(effects=effects, kind=LoadPatterns)
     assert set(state.map.patterns) == trips
@@ -496,18 +501,133 @@ def test_patterns_requested_once() -> None:
     assert not effects_of(effects=effects, kind=LoadPatterns)
 
 
-def test_map_data_failure_retries_on_next_tick() -> None:
-    """After a failure each kind of map data is asked for again."""
+def test_map_data_failure_retries_after_backoff() -> None:
+    """A failed load is asked for again 30 s later, not before."""
     state = loaded(state=fresh(centre=CENTRE), shaped=True)
-    state, _ = step(state, PRESS)
-    assert step(state, MapDataFailed(kind='tiles')) == (state, ())
-    for kind in ('modes', 'shapes', 'patterns'):
-        state, effects = step(state, MapDataFailed(kind=kind))
-        assert not effects_of(effects=effects, kind=LoadModes)
-    state, effects = step(state, Tick(now=START + timedelta(seconds=5)))
+    state, effects = step(state, PRESS)
+    requests: list[MapRequest] = [
+        *effects_of(effects=effects, kind=LoadModes),
+        *effects_of(effects=effects, kind=LoadShapes),
+        *effects_of(effects=effects, kind=LoadPatterns),
+    ]
+    assert len(requests) == 3
+    for request in requests:
+        state, failed = step(state, MapDataFailed(request=request))
+        assert failed == ()
+    state, effects = step(state, Tick(now=START + timedelta(seconds=29)))
+    assert not effects_of(effects=effects, kind=LoadModes)
+    assert not effects_of(effects=effects, kind=LoadShapes)
+    assert not effects_of(effects=effects, kind=LoadPatterns)
+    state, effects = step(state, Tick(now=START + RETRY_AFTER))
     assert len(effects_of(effects=effects, kind=LoadModes)) == 1
     assert len(effects_of(effects=effects, kind=LoadShapes)) == 1
     assert len(effects_of(effects=effects, kind=LoadPatterns)) == 1
+
+
+def test_map_data_failure_clears_only_its_request() -> None:
+    """A failed zoom is retried; another zoom still pending is not."""
+    state, _ = step(fresh(centre=CENTRE), PRESS)
+    state, effects = turned(state=state, steps=1)
+    [five] = effects_of(effects=effects, kind=LoadModes)
+    state, _ = step(state, MapDataFailed(request=five))
+    assert state.map.pending_modes == {8}
+    _, effects = step(state, Tick(now=START + RETRY_AFTER))
+    assert effects_of(effects=effects, kind=LoadModes) == [five]
+
+
+def test_unknown_trips_do_not_stay_pending() -> None:
+    """Trips the timetable doesn't know are stored as None, not re-asked."""
+    state, effects = step(loaded(state=fresh(centre=CENTRE)), PRESS)
+    [load] = effects_of(effects=effects, kind=LoadPatterns)
+    event = PatternsLoaded(trip_ids=load.trip_ids, patterns={}, shapes={})
+    state, _ = step(state, event)
+    assert not state.map.pending_patterns
+    assert state.map.patterns == dict.fromkeys(load.trip_ids)
+    _, effects = step(state, Tick(now=START + timedelta(minutes=5)))
+    assert not effects_of(effects=effects, kind=LoadPatterns)
+
+
+def test_load_patterns_day_is_the_sydney_date() -> None:
+    """At 01:30 in Sydney the UTC date is a day behind; Sydney's is used."""
+    now = datetime(2026, 10, 16, 14, 30, tzinfo=UTC)
+    state = loaded(state=fresh(now=now, centre=CENTRE))
+    _, effects = step(state, PRESS)
+    [load] = effects_of(effects=effects, kind=LoadPatterns)
+    assert load.day == date(2026, 10, 17)
+
+
+def test_map_sidebar_starts_at_the_next_departure() -> None:
+    """Scrolling the Stop view doesn't shift the Map's sidebar."""
+    state = loaded(state=fresh(), count=20)
+    assert isinstance(state.last_view, StopView)
+    assert state.last_view.hero is not None
+    unscrolled = (state.last_view.hero, *state.last_view.rows)
+    state, _ = turned(state=state, steps=4)
+    state, _ = step(state, PRESS)
+    assert isinstance(state.last_view, MapView)
+    assert state.last_view.sidebar == unscrolled[:SIDEBAR_ROWS]
+    assert state.scroll == 4
+
+
+def test_positions_are_not_fetched_twice_within_a_poll() -> None:
+    """The first fetch on entering the Map starts that feed's 30 s clock."""
+    state, effects = step(loaded(state=fresh(), mode=Mode.FERRY), PRESS)
+    fetch = FetchFeed(feed=FERRY_POSITIONS, kind=FeedKind.POSITIONS)
+    assert effects_of(effects=effects, kind=FetchFeed) == [fetch]
+    _, effects = step(state, Tick(now=START + timedelta(seconds=1)))
+    assert not effects_of(effects=effects, kind=FetchFeed)
+    state, _ = step(loaded(state=fresh()), Tick(now=START))
+    state, _ = step(state, Tick(now=START + timedelta(seconds=29)))
+    state, _ = step(state, PRESS)
+    _, effects = step(state, Tick(now=START + POLL_EVERY))
+    assert effects_of(effects=effects, kind=FetchFeed) == [
+        FetchFeed(feed=BUSES),
+    ]
+
+
+def test_returning_to_the_map_fetches_at_once() -> None:
+    """Coming back to the Map after 30 s fetches positions straight away."""
+    state, _ = step(loaded(state=fresh()), Tick(now=START))
+    state, _ = step(state, PRESS)
+    state, _ = step(state, Tick(now=START + timedelta(seconds=29)))
+    state, _ = step(state, PRESS)
+    state, _ = step(state, Tick(now=START + timedelta(seconds=151)))
+    _, effects = step(state, PRESS)
+    fetch = FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS)
+    assert effects_of(effects=effects, kind=FetchFeed) == [fetch]
+
+
+def test_map_draws_only_the_feeds_it_polls() -> None:
+    """A stored download from a feed the Map doesn't poll isn't drawn."""
+    state, _ = step(loaded(state=fresh(centre=CENTRE)), PRESS)
+    boat = vehicle(timestamp=int(START.timestamp()), point=CENTRE)
+    positions = snapshot(fetched_at=START, vehicles=(boat,))
+    event = PositionsFetched(feed=FERRY_POSITIONS, snapshot=positions)
+    state, _ = step(state, event)
+    assert isinstance(state.last_view, MapView)
+    assert state.last_view.markers == ()
+
+
+def test_departures_loaded_on_the_map_request_shapes() -> None:
+    """New departures on the Map ask for their shapes at once."""
+    state, _ = step(fresh(centre=CENTRE), PRESS)
+    state = loaded(state=state, count=1, shaped=True)
+    assert state.map.requested_shapes == {'b:0'}
+
+
+def test_idle_position_feeds_are_dropped_after_ten_minutes() -> None:
+    """A feed not fetched for 10 min loses its stored positions."""
+    state, _ = step(loaded(state=fresh(centre=CENTRE)), PRESS)
+    positions = snapshot(fetched_at=START, vehicles=())
+    event = PositionsFetched(feed=BUS_POSITIONS, snapshot=positions)
+    state, _ = step(state, event)
+    state, _ = step(state, PRESS)
+    almost = START + FEED_IDLE - timedelta(seconds=1)
+    state, _ = step(state, Tick(now=almost))
+    assert BUS_POSITIONS in state.map.positions
+    state, _ = step(state, Tick(now=START + FEED_IDLE))
+    assert not state.map.positions
+    assert not state.map.fetched_at
 
 
 def test_loaded_shapes_and_positions_are_drawn() -> None:
@@ -533,6 +653,50 @@ MODES = [Mode.BUS, Mode.TRAIN, Mode.REGIONAL, Mode.FERRY]
 
 
 @st.composite
+def map_events(draw: st.DrawFn, now: datetime) -> Event:
+    """
+    A random map data event.
+
+    Parameters
+    ----------
+    draw : st.DrawFn
+        Hypothesis draw function.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    Event
+        Shapes, patterns, modes, positions or a failure.
+    """
+    trips = frozenset(draw(st.sets(st.sampled_from(['trip-0800', 'x']))))
+    mpp = draw(st.sampled_from(ZOOMS))
+    line = make_shape(shape_id='b:1', points=[CENTRE, (0.0, 0.0)])
+    bus = vehicle(timestamp=int(now.timestamp()), point=CENTRE)
+    requests: list[MapRequest] = [
+        LoadShapes(shape_ids=frozenset({'b:1', 'b:2'})),
+        LoadPatterns(trip_ids=trips, day=now.date()),
+        LoadModes(mpp=mpp, box=area_box(centre=CENTRE, mpp=mpp)),
+    ]
+    request = draw(st.sampled_from(requests))
+    feed = draw(st.sampled_from([BUS_POSITIONS, FERRY_POSITIONS]))
+    options: list[Event] = [
+        ShapesLoaded(shapes={'b:1': line}),
+        PatternsLoaded(trip_ids=trips, patterns={}, shapes={}),
+        ModesLoaded(
+            mpp=mpp,
+            modes=frozenset(draw(st.sets(st.sampled_from(MODES)))),
+        ),
+        PositionsFetched(
+            feed=feed,
+            snapshot=snapshot(fetched_at=now, vehicles=(bus,)),
+        ),
+        MapDataFailed(request=request),
+    ]
+    return draw(st.sampled_from(options))
+
+
+@st.composite
 def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
     """
     Random but time-ordered event sequences.
@@ -550,7 +714,16 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
         Events.
     """
     now, events = start, list[Event]()
-    kinds = ['tick', 'turn', 'press', 'fail', 'ok', 'load', 'unreadable']
+    kinds = [
+        'tick',
+        'turn',
+        'press',
+        'fail',
+        'ok',
+        'load',
+        'unreadable',
+        'map',
+    ]
     for kind in draw(st.lists(st.sampled_from(kinds), max_size=40)):
         if kind == 'tick':
             now = shifted(moment=now, seconds=draw(st.integers(0, 900)))
@@ -568,12 +741,17 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
         elif kind == 'ok':
             snap = RealtimeSnapshot(fetched_at=now, trips={})
             events.append(FeedFetched(feed=BUSES, snapshot=snap))
+        elif kind == 'map':
+            events.append(draw(map_events(now=now)))
         else:
             count = draw(st.integers(0, 25))
             deps = tuple(
-                departure(
-                    departs=shifted(moment=now, seconds=120 * i),
-                    mode=draw(st.sampled_from(MODES)),
+                replace(
+                    departure(
+                        departs=shifted(moment=now, seconds=120 * i),
+                        mode=draw(st.sampled_from(MODES)),
+                    ),
+                    shape_id=draw(st.sampled_from([None, 'b:1', 'b:2'])),
                 )
                 for i in range(count)
             )
@@ -604,6 +782,7 @@ def check_effects(
     assert after.view in LIVE_VIEWS
     if isinstance(after.last_view, StopView):
         assert after.scroll == after.last_view.scroll
+    check_map_requests(before=before, after=after, effects=effects)
     for effect in effects:
         if isinstance(effect, Render):
             check_render(view=effect.view)
@@ -612,6 +791,37 @@ def check_effects(
             assert not before.loading
         if isinstance(effect, FetchFeed):
             check_fetch(before=before, after=after, event=event, effect=effect)
+
+
+def check_map_requests(
+    *, before: State, after: State, effects: tuple[Effect, ...]
+) -> None:
+    """
+    Assert map data is asked for only on the Map, and modes once per zoom.
+
+    Parameters
+    ----------
+    before : State
+        State before the event.
+    after : State
+        State after the event.
+    effects : tuple[Effect, ...]
+        Effects returned.
+    """
+    requests = [
+        effect
+        for effect in effects
+        if isinstance(effect, (LoadShapes, LoadPatterns, LoadModes))
+        or (
+            isinstance(effect, FetchFeed)
+            and effect.kind is FeedKind.POSITIONS
+        )
+    ]
+    if after.view is LiveView.STOP:
+        assert not requests
+    known = before.map.area_modes.keys() | before.map.pending_modes
+    for load in effects_of(effects=effects, kind=LoadModes):
+        assert load.mpp not in known
 
 
 def check_render(*, view: StopView | MapView) -> None:
@@ -657,7 +867,7 @@ def check_fetch(
     *, before: State, after: State, event: Event, effect: FetchFeed
 ) -> None:
     """
-    Assert a fetch is needed and either due or the feed's first.
+    Assert a fetch is needed and due on its own clock.
 
     Parameters
     ----------
@@ -675,10 +885,10 @@ def check_fetch(
         assert polled(before=before, event=event)
         return
     assert effect.feed in needed_feeds(state=after)
-    assert (
-        polled(before=before, event=event)
-        or effect.feed not in before.map.requested_feeds
-    )
+    last = before.map.fetched_at.get(effect.feed)
+    if last is not None:
+        gap = after.now.timestamp() - last.timestamp()
+        assert gap >= POLL_EVERY.total_seconds()
 
 
 @given(

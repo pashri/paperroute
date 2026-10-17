@@ -15,7 +15,7 @@ import numpy as np
 from aiohttp import web
 from numpy.typing import NDArray
 
-from paperroute.core.state import Event, Knob, KnobPressed, KnobTurned
+from paperroute.core.messages import Event, Knob, KnobPressed, KnobTurned
 from paperroute.observers import max_rss_mb
 from paperroute.render.canvas import encode_png
 

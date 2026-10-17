@@ -13,7 +13,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters import web_display
 from paperroute.adapters.web_display import WebDisplay, knob_event
-from paperroute.core.state import Event, Knob, KnobPressed, KnobTurned
+from paperroute.core.messages import Event, Knob, KnobPressed, KnobTurned
 
 Client = TestClient[web.Request, web.Application]
 FRAME = np.full((480, 800), 255, dtype=np.uint8)

@@ -22,8 +22,8 @@ from paperroute.adapters.tfnsw import AiohttpFeedsClient, api_key_from_env
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports, run
+from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin
-from paperroute.core.state import Event, QuitRequested
 from paperroute.logs import configure_logging
 from paperroute.observers import ObserverGroup, Timings
 from paperroute.ports import Clock, FeedsClient

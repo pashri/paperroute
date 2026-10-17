@@ -20,7 +20,8 @@ def test_map_state_defaults_are_empty() -> None:
     assert not state.area_modes
     assert not state.pending_modes
     assert not state.positions
-    assert not state.requested_feeds
+    assert not state.fetched_at
+    assert not state.failed_at
 
 
 def test_area_box_is_the_map_grown_by_ten_percent() -> None:

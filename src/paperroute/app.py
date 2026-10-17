@@ -12,8 +12,7 @@ from typing import Final
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.tfnsw import FeedError
 from paperroute.core.feeds import FeedKind
-from paperroute.core.model import Pin
-from paperroute.core.state import (
+from paperroute.core.messages import (
     DeparturesFailed,
     DeparturesLoaded,
     Effect,
@@ -24,11 +23,10 @@ from paperroute.core.state import (
     LoadDepartures,
     QuitRequested,
     Render,
-    State,
     Tick,
-    initial_state,
-    step,
 )
+from paperroute.core.model import Pin
+from paperroute.core.state import State, initial_state, step
 from paperroute.core.stop_view import StopView
 from paperroute.observers import NullObserver, ObserverGroup
 from paperroute.ports import (
@@ -208,6 +206,7 @@ async def perform(
             await render(ports=ports, view=view)
             return
         case _:
+            logger.debug('effect not handled: %s', type(effect).__name__)
             return
     task = asyncio.create_task(work)
     tasks.add(task)

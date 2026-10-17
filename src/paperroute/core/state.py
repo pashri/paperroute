@@ -2,23 +2,54 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Final
 
-from paperroute.core.feeds import FeedKind, feed_for, feed_kind, position_feeds
-from paperroute.core.geo import MetreBox, Point, Shape
+from paperroute.core.feeds import FeedKind, feed_for, position_feeds
+from paperroute.core.geo import Point
 from paperroute.core.live import resolve
-from paperroute.core.map_state import MapState, area_box, zoomed
+from paperroute.core.map_state import (
+    MapState,
+    area_box,
+    failed,
+    with_patterns,
+    zoomed,
+)
 from paperroute.core.map_view import (
     MapInputs,
     MapView,
     build_map_view,
     needed_patterns,
 )
-from paperroute.core.model import SYDNEY, Departure, Mode, Pin, shifted
-from paperroute.core.patterns import TripPattern
-from paperroute.core.positions import PositionsSnapshot
+from paperroute.core.messages import (
+    DeparturesFailed,
+    DeparturesLoaded,
+    Effect,
+    Event,
+    FeedFailed,
+    FeedFetched,
+    FetchFeed,
+    Knob,
+    KnobPressed,
+    KnobTurned,
+    LoadDepartures,
+    LoadModes,
+    LoadPatterns,
+    LoadShapes,
+    MapData,
+    MapDataFailed,
+    MapEvent,
+    ModesLoaded,
+    PatternsLoaded,
+    PositionsFetched,
+    QuitRequested,
+    Render,
+    ShapesLoaded,
+    Stop,
+    Tick,
+)
+from paperroute.core.model import SYDNEY, Departure, Pin, shifted
 from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.stop_view import HORIZON, StopView, build_stop_view
 from paperroute.core.tiles import ZOOMS
@@ -26,13 +57,8 @@ from paperroute.core.tiles import ZOOMS
 POLL_EVERY: Final[timedelta] = timedelta(seconds=30)
 RELOAD_BEFORE: Final[timedelta] = timedelta(minutes=30)
 LOOKBACK: Final[timedelta] = timedelta(minutes=60)
-
-
-class Knob(StrEnum):
-    """The two knobs."""
-
-    TOP = 'top'
-    BOTTOM = 'bottom'
+RETRY_AFTER: Final[timedelta] = timedelta(seconds=30)
+FEED_IDLE: Final[timedelta] = timedelta(minutes=10)
 
 
 class LiveView(StrEnum):
@@ -43,184 +69,6 @@ class LiveView(StrEnum):
 
 
 LIVE_VIEWS: Final[tuple[LiveView, ...]] = (LiveView.STOP, LiveView.MAP)
-
-
-@dataclass(frozen=True)
-class Tick:
-    """Time passed."""
-
-    now: datetime
-
-
-@dataclass(frozen=True)
-class DeparturesLoaded:
-    """Departures arrived from the timetable."""
-
-    departures: tuple[Departure, ...]
-    until: datetime
-
-
-@dataclass(frozen=True)
-class DeparturesFailed:
-    """The timetable couldn't be read; the next tick tries again."""
-
-
-@dataclass(frozen=True)
-class FeedFetched:
-    """A realtime feed was downloaded and parsed."""
-
-    feed: str
-    snapshot: RealtimeSnapshot
-
-
-@dataclass(frozen=True)
-class FeedFailed:
-    """A realtime fetch failed."""
-
-    feed: str
-    at: datetime
-    reason: str
-
-
-@dataclass(frozen=True)
-class KnobTurned:
-    """A knob turned by some detents (negative is anticlockwise)."""
-
-    knob: Knob
-    steps: int
-
-
-@dataclass(frozen=True)
-class KnobPressed:
-    """A knob was pressed."""
-
-    knob: Knob
-
-
-@dataclass(frozen=True)
-class QuitRequested:
-    """The user asked to quit (development monitor only)."""
-
-
-@dataclass(frozen=True)
-class ShapesLoaded:
-    """Shapes arrived from the timetable."""
-
-    shapes: Mapping[str, Shape]
-
-
-@dataclass(frozen=True)
-class PatternsLoaded:
-    """Trip patterns and their shapes arrived from the timetable."""
-
-    patterns: Mapping[str, TripPattern | None]
-    shapes: Mapping[str, Shape]
-
-
-@dataclass(frozen=True)
-class ModesLoaded:
-    """The modes in the map area at one zoom arrived from the timetable."""
-
-    mpp: int
-    modes: frozenset[Mode]
-
-
-@dataclass(frozen=True)
-class PositionsFetched:
-    """A positions feed was downloaded and parsed."""
-
-    feed: str
-    snapshot: PositionsSnapshot
-
-
-@dataclass(frozen=True)
-class MapDataFailed:
-    """Map data couldn't be read; kind is 'shapes', 'patterns' or 'modes'."""
-
-    kind: str
-
-
-MapEvent = (
-    ShapesLoaded
-    | PatternsLoaded
-    | ModesLoaded
-    | PositionsFetched
-    | MapDataFailed
-)
-Event = (
-    Tick
-    | DeparturesLoaded
-    | DeparturesFailed
-    | FeedFetched
-    | FeedFailed
-    | KnobTurned
-    | KnobPressed
-    | QuitRequested
-    | MapEvent
-)
-
-
-@dataclass(frozen=True)
-class LoadDepartures:
-    """Ask the timetable for departures."""
-
-    pin: Pin
-    start: datetime
-    end: datetime
-
-
-@dataclass(frozen=True)
-class FetchFeed:
-    """Download a realtime feed."""
-
-    feed: str
-    kind: FeedKind = FeedKind.TRIPS
-
-
-@dataclass(frozen=True)
-class LoadShapes:
-    """Ask the timetable for shapes."""
-
-    shape_ids: frozenset[str]
-
-
-@dataclass(frozen=True)
-class LoadPatterns:
-    """Ask the timetable for trip patterns around a day."""
-
-    trip_ids: frozenset[str]
-    day: date
-
-
-@dataclass(frozen=True)
-class LoadModes:
-    """Ask the timetable for the modes in an area."""
-
-    mpp: int
-    box: MetreBox
-
-
-@dataclass(frozen=True)
-class Render:
-    """Draw a view."""
-
-    view: StopView | MapView
-
-
-@dataclass(frozen=True)
-class Stop:
-    """Stop the app."""
-
-
-Effect = (
-    LoadDepartures
-    | FetchFeed
-    | LoadShapes
-    | LoadPatterns
-    | LoadModes
-    | Render
-    | Stop
-)
 
 
 @dataclass(frozen=True)
@@ -402,9 +250,9 @@ def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     )
 
 
-def current_view(*, state: State) -> StopView | MapView:
+def live_stop_view(*, state: State) -> StopView:
     """
-    Build the view for the current state.
+    Build the Stop view the current Live view shows or summarises.
 
     Parameters
     ----------
@@ -413,15 +261,84 @@ def current_view(*, state: State) -> StopView | MapView:
 
     Returns
     -------
+    StopView
+        The scrolled Stop view on the Stop view; unscrolled on the Map,
+        whose sidebar always starts at the next departure.
+    """
+    if state.view is LiveView.MAP:
+        state = replace(state, scroll=0)
+    return stop_view_of(state=state)
+
+
+def current_view(
+    *, state: State, stop_view: StopView
+) -> StopView | MapView:
+    """
+    Build the view for the current state.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    stop_view : StopView
+        The state's Stop view, from `live_stop_view`.
+
+    Returns
+    -------
     StopView | MapView
         The Live view shown.
     """
-    stop_view = stop_view_of(state=state)
     if state.view is LiveView.MAP:
         return build_map_view(
             inputs=map_inputs(state=state, stop_view=stop_view),
         )
     return stop_view
+
+
+def elapsed(*, since: datetime | None, now: datetime, span: timedelta) -> bool:
+    """
+    Say whether a span of real time has passed since a moment.
+
+    Parameters
+    ----------
+    since : datetime | None
+        The moment, or None for never.
+    now : datetime
+        Current time.
+    span : timedelta
+        Span of real time.
+
+    Returns
+    -------
+    bool
+        True when `since` is None or at least `span` ago.
+    """
+    if since is None:
+        return True
+    return now.timestamp() - since.timestamp() >= span.total_seconds()
+
+
+def may_load(*, state: State, kind: MapData) -> bool:
+    """
+    Say whether a kind of map data may be asked for again.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    kind : MapData
+        Kind of map data.
+
+    Returns
+    -------
+    bool
+        False for `RETRY_AFTER` after that kind last failed.
+    """
+    return elapsed(
+        since=state.map.failed_at.get(kind),
+        now=state.now,
+        span=RETRY_AFTER,
+    )
 
 
 def request_modes(*, state: State) -> tuple[State, tuple[Effect, ...]]:
@@ -437,12 +354,15 @@ def request_modes(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     -------
     tuple[State, tuple[Effect, ...]]
         State with the zoom pending, and a LoadModes; unchanged with no
-        centre or when the zoom's modes are loaded or pending.
+        centre, when the zoom's modes are loaded or pending, or while a
+        failure backs off.
     """
     map_state = state.map
     mpp = ZOOMS[map_state.zoom]
     known = map_state.area_modes.keys() | map_state.pending_modes
     if map_state.centre is None or mpp in known:
+        return state, ()
+    if not may_load(state=state, kind=MapData.MODES):
         return state, ()
     pending = replace(map_state, pending_modes=map_state.pending_modes | {mpp})
     load = LoadModes(mpp=mpp, box=area_box(centre=map_state.centre, mpp=mpp))
@@ -461,12 +381,13 @@ def request_shapes(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the shapes requested, and a LoadShapes when any are new.
+        State with the shapes requested, and a LoadShapes when any are new
+        and no failure is backing off.
     """
     asked = state.map.requested_shapes
     wanted = {dep.shape_id for dep in state.departures if dep.shape_id}
     new = frozenset(wanted) - asked
-    if not new:
+    if not new or not may_load(state=state, kind=MapData.SHAPES):
         return state, ()
     map_state = replace(state.map, requested_shapes=asked | new)
     return replace(state, map=map_state), (LoadShapes(shape_ids=new),)
@@ -474,7 +395,7 @@ def request_shapes(*, state: State) -> tuple[State, tuple[Effect, ...]]:
 
 def request_positions(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
-    Fetch the positions feeds the Map needs and never fetched.
+    Fetch the positions feeds the Map needs and hasn't fetched lately.
 
     Parameters
     ----------
@@ -484,35 +405,24 @@ def request_positions(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the feeds requested, and a FetchFeed for each.
+        State with the fetch times recorded, and a FetchFeed for each feed
+        never fetched or last fetched `POLL_EVERY` or more ago.
     """
-    asked = state.map.requested_feeds
-    new = [feed for feed in map_feeds(state=state) if feed not in asked]
-    map_state = replace(state.map, requested_feeds=asked | frozenset(new))
-    fetches = (FetchFeed(feed=feed, kind=FeedKind.POSITIONS) for feed in new)
+    fetched_at = state.map.fetched_at
+    due = [
+        feed
+        for feed in map_feeds(state=state)
+        if elapsed(since=fetched_at.get(feed), now=state.now, span=POLL_EVERY)
+    ]
+    fetched_at = {**fetched_at, **dict.fromkeys(due, state.now)}
+    fetches = (FetchFeed(feed=feed, kind=FeedKind.POSITIONS) for feed in due)
+    map_state = replace(state.map, fetched_at=fetched_at)
     return replace(state, map=map_state), tuple(fetches)
 
 
-def wanted_patterns(*, state: State) -> frozenset[str]:
-    """
-    List the trips whose patterns the Map needs now.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    frozenset[str]
-        Trip IDs, from `needed_patterns`.
-    """
-    return needed_patterns(
-        inputs=map_inputs(state=state, stop_view=stop_view_of(state=state)),
-    )
-
-
-def request_patterns(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+def request_patterns(
+    *, state: State, wanted: frozenset[str]
+) -> tuple[State, tuple[Effect, ...]]:
     """
     Ask for the trip patterns needed and neither loaded nor pending.
 
@@ -520,31 +430,38 @@ def request_patterns(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     ----------
     state : State
         State.
+    wanted : frozenset[str]
+        Trip IDs the Map needs, from `needed_patterns`.
 
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
         State with the trips pending, and a LoadPatterns for today in
-        Sydney when any are new.
+        Sydney when any are new and no failure is backing off.
     """
     pending = state.map.pending_patterns
-    loaded = frozenset(state.map.patterns)
-    new = wanted_patterns(state=state) - loaded - pending
-    if not new:
+    new = wanted - frozenset(state.map.patterns) - pending
+    if not new or not may_load(state=state, kind=MapData.PATTERNS):
         return state, ()
     map_state = replace(state.map, pending_patterns=pending | new)
     load = LoadPatterns(trip_ids=new, day=state.now.astimezone(SYDNEY).date())
     return replace(state, map=map_state), (load,)
 
 
-def map_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+def map_effects(
+    *, state: State, stop_view: StopView
+) -> tuple[State, tuple[Effect, ...]]:
     """
     Ask for the map data the Map view needs, when it is shown.
+
+    Patterns the Map no longer needs are dropped, so memory stays bounded.
 
     Parameters
     ----------
     state : State
         State.
+    stop_view : StopView
+        The state's Stop view, from `live_stop_view`.
 
     Returns
     -------
@@ -554,18 +471,59 @@ def map_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
     if state.view is not LiveView.MAP:
         return state, ()
+    wanted = needed_patterns(
+        inputs=map_inputs(state=state, stop_view=stop_view),
+    )
+    patterns = {
+        trip_id: pattern
+        for trip_id, pattern in state.map.patterns.items()
+        if trip_id in wanted
+    }
+    state = replace(state, map=replace(state.map, patterns=patterns))
     state, modes = request_modes(state=state)
     state, shapes = request_shapes(state=state)
     state, fetches = request_positions(state=state)
-    state, patterns = request_patterns(state=state)
-    return state, (*modes, *shapes, *fetches, *patterns)
+    state, loads = request_patterns(state=state, wanted=wanted)
+    return state, (*modes, *shapes, *fetches, *loads)
 
 
 def rendered(
-    *, state: State, effects: tuple[Effect, ...] = ()
+    *,
+    state: State,
+    stop_view: StopView,
+    effects: tuple[Effect, ...] = (),
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Add a Render effect when the view changed.
+
+    Parameters
+    ----------
+    state : State
+        State after the event.
+    stop_view : StopView
+        The state's Stop view, from `live_stop_view`.
+    effects : tuple[Effect, ...]
+        Effects so far.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with the view recorded, the scroll too for a Stop view,
+        and effects.
+    """
+    view = current_view(state=state, stop_view=stop_view)
+    if isinstance(view, StopView):
+        state = replace(state, scroll=view.scroll)
+    if view == state.last_view:
+        return state, effects
+    return replace(state, last_view=view), (*effects, Render(view=view))
+
+
+def settled(
+    *, state: State, effects: tuple[Effect, ...] = ()
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Ask for the map data needed and redraw, building the Stop view once.
 
     Parameters
     ----------
@@ -577,15 +535,15 @@ def rendered(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the view recorded, the scroll too for a Stop view,
-        and effects.
+        New state and effects.
     """
-    view = current_view(state=state)
-    if isinstance(view, StopView):
-        state = replace(state, scroll=view.scroll)
-    if view == state.last_view:
-        return state, effects
-    return replace(state, last_view=view), (*effects, Render(view=view))
+    stop_view = live_stop_view(state=state)
+    state, requests = map_effects(state=state, stop_view=stop_view)
+    return rendered(
+        state=state,
+        stop_view=stop_view,
+        effects=(*effects, *requests),
+    )
 
 
 def reload_due(*, state: State, now: datetime) -> bool:
@@ -612,7 +570,9 @@ def reload_due(*, state: State, now: datetime) -> bool:
 
 def poll_due(*, state: State, now: datetime) -> bool:
     """
-    Say whether the feeds should be fetched again.
+    Say whether the trip-updates feeds should be fetched again.
+
+    Positions feeds keep their own clocks in `MapState.fetched_at`.
 
     Parameters
     ----------
@@ -624,15 +584,14 @@ def poll_due(*, state: State, now: datetime) -> bool:
     Returns
     -------
     bool
-        True when the Live view needs feeds and POLL_EVERY of real time
-        has passed since the last fetch.
+        True when there are feeds and POLL_EVERY of real time has passed
+        since the last fetch.
     """
-    if not needed_feeds(state=state):
-        return False
-    if state.last_fetch is None:
-        return True
-    since = now.timestamp() - state.last_fetch.timestamp()
-    return since >= POLL_EVERY.total_seconds()
+    return bool(state.feeds) and elapsed(
+        since=state.last_fetch,
+        now=now,
+        span=POLL_EVERY,
+    )
 
 
 def reload_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
@@ -661,7 +620,7 @@ def reload_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
 
 def poll_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
-    Fetch every feed the Live view needs when a poll is due.
+    Fetch the trip-updates feeds when a poll is due.
 
     Parameters
     ----------
@@ -671,26 +630,41 @@ def poll_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the fetch time and requested positions feeds recorded,
-        and a FetchFeed for each feed; unchanged when no poll is due.
+        State with the fetch time recorded, and a FetchFeed for each feed;
+        unchanged when no poll is due.
     """
     if not poll_due(state=state, now=state.now):
         return state, ()
-    feeds = needed_feeds(state=state)
-    fetches = tuple(
-        FetchFeed(feed=feed, kind=feed_kind(feed=feed)) for feed in feeds
-    )
-    requested = state.map.requested_feeds | {
-        fetch.feed for fetch in fetches if fetch.kind is FeedKind.POSITIONS
+    fetches = tuple(FetchFeed(feed=feed) for feed in state.feeds)
+    return replace(state, last_fetch=state.now), fetches
+
+
+def idle_dropped(*, state: State) -> State:
+    """
+    Forget positions feeds not fetched for `FEED_IDLE`.
+
+    Parameters
+    ----------
+    state : State
+        State at the tick's time.
+
+    Returns
+    -------
+    State
+        State without those feeds' positions or fetch times.
+    """
+    kept = {
+        feed: at
+        for feed, at in state.map.fetched_at.items()
+        if not elapsed(since=at, now=state.now, span=FEED_IDLE)
     }
-    return (
-        replace(
-            state,
-            last_fetch=state.now,
-            map=replace(state.map, requested_feeds=requested),
-        ),
-        fetches,
-    )
+    positions = {
+        feed: snapshot
+        for feed, snapshot in state.map.positions.items()
+        if feed in kept
+    }
+    map_state = replace(state.map, fetched_at=kept, positions=positions)
+    return replace(state, map=map_state)
 
 
 def on_tick(
@@ -711,11 +685,10 @@ def on_tick(
     tuple[State, tuple[Effect, ...]]
         New state and effects.
     """
-    state = replace(state, now=event.now)
+    state = idle_dropped(state=replace(state, now=event.now))
     state, loads = reload_effects(state=state)
     state, fetches = poll_effects(state=state)
-    state, requests = map_effects(state=state)
-    return rendered(state=state, effects=(*loads, *fetches, *requests))
+    return settled(state=state, effects=(*loads, *fetches))
 
 
 def on_loaded(
@@ -745,7 +718,7 @@ def on_loaded(
             }
         )
     )
-    state, effects = map_effects(
+    return settled(
         state=replace(
             state,
             departures=event.departures,
@@ -754,7 +727,6 @@ def on_loaded(
             feeds=feeds,
         )
     )
-    return rendered(state=state, effects=effects)
 
 
 def on_feed(
@@ -782,7 +754,7 @@ def on_feed(
             state = replace(
                 state, snapshots={**state.snapshots, feed: snapshot}
             )
-    return rendered(state=state)
+    return settled(state=state)
 
 
 def switched(*, state: State) -> State:
@@ -834,73 +806,7 @@ def on_knob(
             state = replace(state, scroll=max(0, state.scroll + steps))
         case _:
             return state, ()
-    state, effects = map_effects(state=state)
-    return rendered(state=state, effects=effects)
-
-
-def with_patterns(*, state: State, event: PatternsLoaded) -> MapState:
-    """
-    Store loaded patterns and their shapes, and clear them from pending.
-
-    Only the patterns the Map still needs are kept.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    event : PatternsLoaded
-        Loaded patterns.
-
-    Returns
-    -------
-    MapState
-        The new Map state.
-    """
-    map_state = state.map
-    wanted = wanted_patterns(state=state)
-    merged = {**map_state.patterns, **event.patterns}
-    return replace(
-        map_state,
-        shapes={**map_state.shapes, **event.shapes},
-        patterns={
-            trip_id: pattern
-            for trip_id, pattern in merged.items()
-            if trip_id in wanted
-        },
-        pending_patterns=map_state.pending_patterns
-        - frozenset(event.patterns),
-    )
-
-
-def failed(*, map_state: MapState, kind: str) -> MapState:
-    """
-    Forget a failed map data request, so the next tick asks again.
-
-    Parameters
-    ----------
-    map_state : MapState
-        The Map state.
-    kind : str
-        'shapes', 'patterns' or 'modes'.
-
-    Returns
-    -------
-    MapState
-        The Map state with that kind's pending or requested set cleared;
-        loaded shapes stay requested.
-    """
-    match kind:
-        case 'shapes':
-            loaded = frozenset(map_state.shapes)
-            return replace(
-                map_state,
-                requested_shapes=loaded & map_state.requested_shapes,
-            )
-        case 'patterns':
-            return replace(map_state, pending_patterns=frozenset())
-        case 'modes':
-            return replace(map_state, pending_modes=frozenset())
-    return map_state
+    return settled(state=state)
 
 
 def on_map_event(
@@ -919,7 +825,7 @@ def on_map_event(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        New state and effects; a failure only clears its pending requests.
+        New state and effects; a failure only records itself.
     """
     map_state = state.map
     match event:
@@ -929,7 +835,7 @@ def on_map_event(
                 shapes={**map_state.shapes, **shapes},
             )
         case PatternsLoaded():
-            map_state = with_patterns(state=state, event=event)
+            map_state = with_patterns(map_state=map_state, event=event)
         case ModesLoaded(mpp=mpp, modes=modes):
             map_state = replace(
                 map_state,
@@ -941,11 +847,10 @@ def on_map_event(
                 map_state,
                 positions={**map_state.positions, feed: snapshot},
             )
-        case MapDataFailed(kind=kind):
-            map_state = failed(map_state=map_state, kind=kind)
+        case MapDataFailed():
+            map_state = failed(map_state=map_state, event=event, now=state.now)
             return replace(state, map=map_state), ()
-    state, effects = map_effects(state=replace(state, map=map_state))
-    return rendered(state=state, effects=effects)
+    return settled(state=replace(state, map=map_state))
 
 
 def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:

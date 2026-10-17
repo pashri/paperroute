@@ -8,7 +8,7 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.state import (
+from paperroute.core.messages import (
     Event,
     Knob,
     KnobPressed,

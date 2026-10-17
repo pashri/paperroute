@@ -18,9 +18,9 @@ from paperroute.app import Ports, perform, run, ticker
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.geo import MetreBox, Shape
+from paperroute.core.messages import Event, FeedFailed, FetchFeed
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import TripPattern
-from paperroute.core.state import Event, FeedFailed, FetchFeed
 from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
 

@@ -1,6 +1,7 @@
 """A small typed drawing surface over Skia, with no anti-aliasing."""
 
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cache
 from importlib.resources import files
@@ -75,6 +76,51 @@ def paint(*, grey: int, stroke: float = 0) -> skia.Paint:
     return result
 
 
+def text_width(*, text: str, face: Face) -> float:
+    """
+    Measure text.
+
+    Parameters
+    ----------
+    text : str
+        Text.
+    face : Face
+        Font.
+
+    Returns
+    -------
+    float
+        Advance width in pixels.
+    """
+    return float(font(face).measureText(text))
+
+
+def anchor_offset(*, face: Face, text: str, anchor: str) -> Point:
+    """
+    Offset from an anchor to the text baseline origin.
+
+    Parameters
+    ----------
+    face : Face
+        Font.
+    text : str
+        Text.
+    anchor : str
+        Two-letter anchor.
+
+    Returns
+    -------
+    Point
+        Horizontal and vertical offset to add to the anchor.
+    """
+    width = text_width(text=text, face=face)
+    metrics = font(face).getMetrics()
+    dx = {'l': 0.0, 'm': -width / 2, 'r': -width}[anchor[0]]
+    ascent, descent = -metrics.fAscent, metrics.fDescent
+    dy = {'a': ascent, 'm': (ascent - descent) / 2, 's': 0.0}[anchor[1]]
+    return dx, dy
+
+
 def path(*, points: Sequence[Point], close: bool) -> skia.Path:
     """
     Build a path through points.
@@ -130,8 +176,8 @@ class Canvas:
         """
         self.canvas.drawRect(skia.Rect(*box), paint(grey=grey))
 
-    def line(self, *, points: Sequence[Point], width: float,
-             grey: int) -> None:
+    def line(self, *, points: Sequence[Point], width: float, grey: int,
+             dash: tuple[float, float] | None = None) -> None:
         """
         Stroke a polyline.
 
@@ -143,9 +189,13 @@ class Canvas:
             Stroke width.
         grey : int
             Stroke level.
+        dash : tuple[float, float] | None
+            Dash and gap lengths; None strokes solid.
         """
-        self.canvas.drawPath(path(points=points, close=False),
-                             paint(grey=grey, stroke=width))
+        stroke = paint(grey=grey, stroke=width)
+        if dash:
+            stroke.setPathEffect(skia.DashPathEffect.Make(list(dash), 0))
+        self.canvas.drawPath(path(points=points, close=False), stroke)
 
     def polygon(self, *, points: Sequence[Point], grey: int) -> None:
         """
@@ -162,7 +212,8 @@ class Canvas:
                              paint(grey=grey))
 
     def text(self, *, at: Point, text: str, face: Face, grey: int,
-             anchor: str = 'ls') -> float:
+             anchor: str = 'ls', halo: int = 0,
+             angle: float = 0.0) -> float:
         """
         Draw text at an anchor and return its advance width.
 
@@ -181,6 +232,10 @@ class Canvas:
             Text level.
         anchor : str
             Two-letter anchor.
+        halo : int
+            Width of the paper outline around the glyphs; 0 for none.
+        angle : float
+            Rotation about the anchor in degrees, clockwise on screen.
 
         Returns
         -------
@@ -188,14 +243,152 @@ class Canvas:
             Advance width in pixels.
         """
         loaded = font(face)
-        width = float(loaded.measureText(text))
-        metrics = loaded.getMetrics()
-        dx = {'l': 0.0, 'm': -width / 2, 'r': -width}[anchor[0]]
-        ascent, descent = -metrics.fAscent, metrics.fDescent
-        dy = {'a': ascent, 'm': (ascent - descent) / 2, 's': 0.0}[anchor[1]]
-        self.canvas.drawString(text, at[0] + dx, at[1] + dy, loaded,
-                               paint(grey=grey))
-        return width
+        dx, dy = anchor_offset(face=face, text=text, anchor=anchor)
+        with self.rotated(at=at, angle=angle):
+            x, y = (dx, dy) if angle else (at[0] + dx, at[1] + dy)
+            self.halo(text=text, at=(x, y), font_=loaded, halo=halo)
+            self.canvas.drawString(text, x, y, loaded, paint(grey=grey))
+        return text_width(text=text, face=face)
+
+    def halo(self, *, text: str, at: Point, font_: skia.Font,
+             halo: int) -> None:
+        """
+        Stroke text in paper so the glyphs stand out from what is below.
+
+        Parameters
+        ----------
+        text : str
+            Text to outline.
+        at : Point
+            Baseline origin.
+        font_ : skia.Font
+            Font.
+        halo : int
+            Outline width on each side; 0 draws nothing.
+        """
+        if halo:
+            outline = paint(grey=PAPER, stroke=2 * halo)
+            self.canvas.drawString(text, at[0], at[1], font_, outline)
+
+    @contextmanager
+    def rotated(self, *, at: Point, angle: float) -> Iterator[None]:
+        """
+        Rotate drawing clockwise about a point.
+
+        Parameters
+        ----------
+        at : Point
+            Pivot.
+        angle : float
+            Degrees clockwise on screen; 0 changes nothing.
+
+        Yields
+        ------
+        None
+            Drawing inside the block is rotated.
+        """
+        self.canvas.save()
+        if angle:
+            self.canvas.translate(*at)
+            self.canvas.rotate(angle)
+        try:
+            yield
+        finally:
+            self.canvas.restore()
+
+    @contextmanager
+    def clipped(self, *, box: Box) -> Iterator[None]:
+        """
+        Restrict drawing to a box.
+
+        Parameters
+        ----------
+        box : Box
+            Left, top, right, bottom.
+
+        Yields
+        ------
+        None
+            Drawing inside the block is clipped.
+        """
+        self.canvas.save()
+        self.canvas.clipRect(skia.Rect(*box))
+        try:
+            yield
+        finally:
+            self.canvas.restore()
+
+    def ellipse(self, *, box: Box, grey: int, stroke: float = 0) -> None:
+        """
+        Draw an ellipse inside a box.
+
+        Parameters
+        ----------
+        box : Box
+            Left, top, right, bottom.
+        grey : int
+            Level.
+        stroke : float
+            Outline width; 0 fills.
+        """
+        self.canvas.drawOval(
+            skia.Rect(*box), paint(grey=grey, stroke=stroke))
+
+    def rings(self, *, rings: Sequence[Sequence[Point]], grey: int) -> None:
+        """
+        Fill closed rings with the even-odd rule, so holes stay empty.
+
+        Parameters
+        ----------
+        rings : Sequence[Sequence[Point]]
+            Closed outlines.
+        grey : int
+            Fill level.
+        """
+        combined = skia.Path()
+        combined.setFillType(skia.PathFillType.kEvenOdd)
+        for ring in rings:
+            combined.addPath(path(points=ring, close=True))
+        self.canvas.drawPath(combined, paint(grey=grey))
+
+    def image(self, *, grey: NDArray[np.uint8], at: Point) -> None:
+        """
+        Blit grey pixels with their top left corner at a point.
+
+        Parameters
+        ----------
+        grey : NDArray[np.uint8]
+            Height by width grey levels.
+        at : Point
+            Top left corner.
+        """
+        picture = skia.Image.fromarray(
+            np.ascontiguousarray(grey),
+            colorType=skia.ColorType.kGray_8_ColorType,
+        )
+        self.canvas.drawImage(picture, at[0], at[1])
+
+    def dots(self, *, points: Sequence[Point], diameter: float,
+             grey: int) -> None:
+        """
+        Draw round dots in one call.
+
+        Parameters
+        ----------
+        points : Sequence[Point]
+            Dot centres.
+        diameter : float
+            Dot width in pixels.
+        grey : int
+            Level.
+        """
+        brush = paint(grey=grey, stroke=diameter)
+        brush.setStrokeCap(skia.Paint.kRound_Cap)
+        self.canvas.drawPoints(
+            skia.Canvas.kPoints_PointMode,
+            [skia.Point(x, y) for x, y in points],
+            brush,
+        )
 
     def length(self, *, text: str, face: Face) -> float:
         """
@@ -213,7 +406,7 @@ class Canvas:
         float
             Advance width in pixels.
         """
-        return float(font(face).measureText(text))
+        return text_width(text=text, face=face)
 
     def fit(self, *, text: str, face: Face, width: float) -> str:
         """

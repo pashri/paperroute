@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, Marker
-from paperroute.core.tiles import CITY
+from paperroute.core.tiles import CITY, ZOOMS
 from paperroute.render.canvas import (
     HEIGHT,
     INK,
@@ -22,7 +22,6 @@ from paperroute.render.markers import (
     AGE_FACE,
     BADGE_FACE,
     OFFSETS,
-    TAB_ZOOMS,
     age_text,
     badge_half,
     draw_markers,
@@ -283,7 +282,10 @@ def test_marker_on_the_stop_slides_away() -> None:
     assert int(grey[int(stop[1]), edge]) == PAPER
 
 
-@pytest.mark.parametrize('mpp', TAB_ZOOMS)
+@pytest.mark.parametrize(
+    'mpp',
+    [zoom for zoom in ZOOMS if zoom != CITY],
+)
 def test_stale_vehicle_has_age_tab(mpp: int) -> None:
     """A stale badge hangs an inverted tab of the right size."""
     grey = drawn(markers=[marker(live=False, age=240.0)], mpp=mpp)

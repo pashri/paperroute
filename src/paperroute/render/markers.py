@@ -19,7 +19,6 @@ from paperroute.render.canvas import (
 
 BADGE_FACE: Final[Face] = Face(weight=800, px=14)
 AGE_FACE: Final[Face] = Face(weight=800, px=10)
-TAB_ZOOMS: Final[tuple[int, ...]] = (3, 5, 8, 14)
 OFFSETS: Final[tuple[tuple[int, int], ...]] = (
     (0, 0),
     (0, -28),

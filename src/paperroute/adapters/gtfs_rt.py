@@ -9,6 +9,12 @@ from google.protobuf.message import DecodeError
 from google.transit import gtfs_realtime_pb2
 
 from paperroute.adapters.tfnsw import FeedError
+from paperroute.core.geo import to_metres
+from paperroute.core.positions import (
+    PositionsSnapshot,
+    VehiclePosition,
+    fallback_label,
+)
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 
 logger = logging.getLogger(__name__)
@@ -305,7 +311,7 @@ def decoded_entities(*, data: bytes) -> Iterator[Any]:
             logger.warning('skipped an undecodable entity')
 
 
-def feed_entities(*, data: bytes) -> list[Any]:
+def decode_feed(*, data: bytes) -> tuple[list[Any], int | None]:
     """
     Decode every entity: whole message first, entity by entity if that fails.
 
@@ -316,8 +322,9 @@ def feed_entities(*, data: bytes) -> list[Any]:
 
     Returns
     -------
-    list[Any]
-        The gtfs_realtime_pb2.FeedEntity messages.
+    tuple[list[Any], int | None]
+        The gtfs_realtime_pb2.FeedEntity messages and the header timestamp.
+        The timestamp is None when reading entity by entity.
 
     Raises
     ------
@@ -334,11 +341,28 @@ def feed_entities(*, data: bytes) -> list[Any]:
     else:
         if not message.HasField('header'):
             raise FeedError('feed body has no header')
-        return list(message.entity)
+        return list(message.entity), int(message.header.timestamp)
     entities = list(decoded_entities(data=data))
     if not entities:
         raise FeedError('feed body did not decode')
-    return entities
+    return entities, None
+
+
+def feed_entities(*, data: bytes) -> list[Any]:
+    """
+    Decode every entity of a feed.
+
+    Parameters
+    ----------
+    data : bytes
+        Serialised FeedMessage.
+
+    Returns
+    -------
+    list[Any]
+        The gtfs_realtime_pb2.FeedEntity messages.
+    """
+    return decode_feed(data=data)[0]
 
 
 def parse_trip_updates(
@@ -371,4 +395,99 @@ def parse_trip_updates(
     }
     return RealtimeSnapshot(
         fetched_at=fetched_at, trips=TripIndex(updates=updates)
+    )
+
+
+def vehicle_bearing(*, position: Any) -> float | None:
+    """
+    Read a vehicle's heading, or None when it is not a real one.
+
+    A bearing of 0 with no speed is how some feeds write "unknown".
+
+    Parameters
+    ----------
+    position : Any
+        A gtfs_realtime_pb2.Position.
+
+    Returns
+    -------
+    float | None
+        Degrees clockwise from north, or None.
+    """
+    if not position.HasField('bearing'):
+        return None
+    if position.bearing == 0 and not position.HasField('speed'):
+        return None
+    return float(position.bearing)
+
+
+def to_vehicle(*, vehicle: Any, header_time: int) -> VehiclePosition:
+    """
+    Convert one VehiclePosition message.
+
+    Parameters
+    ----------
+    vehicle : Any
+        A gtfs_realtime_pb2.VehiclePosition with a position.
+    header_time : int
+        Timestamp used when the vehicle has none.
+
+    Returns
+    -------
+    VehiclePosition
+        Plain data.
+    """
+    route_id = vehicle.trip.route_id
+    return VehiclePosition(
+        trip_id=vehicle.trip.trip_id,
+        route_id=route_id,
+        label=fallback_label(route_id=route_id),
+        point=to_metres(
+            lon=vehicle.position.longitude, lat=vehicle.position.latitude
+        ),
+        bearing=vehicle_bearing(position=vehicle.position),
+        timestamp=(
+            int(vehicle.timestamp)
+            if vehicle.HasField('timestamp')
+            else header_time
+        ),
+        start_date=parse_start_date(text=vehicle.trip.start_date),
+    )
+
+
+def parse_positions(
+    *, data: bytes, fetched_at: datetime
+) -> PositionsSnapshot:
+    """
+    Read every positioned vehicle in a vehicle-positions feed.
+
+    Parameters
+    ----------
+    data : bytes
+        Serialised FeedMessage.
+    fetched_at : datetime
+        When it was downloaded.
+
+    Returns
+    -------
+    PositionsSnapshot
+        Vehicles with a position; the header time is the feed's, or the
+        fetch time when the feed has none.
+
+    Raises
+    ------
+    FeedError
+        When the body is empty or yields no entity at all.
+    """
+    entities, stamp = decode_feed(data=data)
+    header_time = stamp or int(fetched_at.timestamp())
+    return PositionsSnapshot(
+        fetched_at=fetched_at,
+        header_time=header_time,
+        vehicles=tuple(
+            to_vehicle(vehicle=entity.vehicle, header_time=header_time)
+            for entity in entities
+            if entity.HasField('vehicle')
+            and entity.vehicle.HasField('position')
+        ),
     )

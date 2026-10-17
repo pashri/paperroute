@@ -1,6 +1,6 @@
 """Tests for feed selection by mode."""
 
-from paperroute.core.feeds import feed_for
+from paperroute.core.feeds import FeedKind, feed_for, feed_kind, position_feeds
 from paperroute.core.model import Mode
 
 
@@ -15,3 +15,19 @@ def test_feed_for_live_modes() -> None:
 def test_feed_for_other_modes_is_none() -> None:
     """Ferries and the rest are timetable-only in M1."""
     assert feed_for(mode=Mode.FERRY) is None
+
+
+def test_position_feeds_for_modes() -> None:
+    """Position feeds are sorted and unique; COACH has none."""
+    assert position_feeds(modes=[Mode.TRAIN, Mode.BUS, Mode.BUS]) == (
+        'v1/gtfs/vehiclepos/buses',
+        'v2/gtfs/vehiclepos/sydneytrains',
+    )
+    assert position_feeds(modes=[Mode.COACH]) == ()
+    assert len(position_feeds(modes=[Mode.LIGHT_RAIL])) == 4
+
+
+def test_feed_kind() -> None:
+    """Only paths with /vehiclepos/ are position feeds."""
+    assert feed_kind(feed='v1/gtfs/vehiclepos/buses') == FeedKind.POSITIONS
+    assert feed_kind(feed='v1/gtfs/realtime/buses') == FeedKind.TRIPS

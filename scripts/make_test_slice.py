@@ -2,8 +2,11 @@
 
 import csv
 import io
+import os
+import shutil
 import sys
 import zipfile
+from collections.abc import Collection
 from pathlib import Path
 from typing import Final
 
@@ -155,16 +158,48 @@ def write_feed_slice(*, source: Path, out: Path, trips: set[str]) -> None:
     print(f'{out.name}: {len(kept.entity)} entities')
 
 
-def add_shapes(*, source: Path, fixture: Path) -> int:
+def named_shapes(*, fixture: Path) -> set[str]:
     """
-    Append the shapes a fixture's trips name to the fixture zip.
+    List the shape IDs a fixture's trips name.
+
+    Parameters
+    ----------
+    fixture : Path
+        Slice zip.
+
+    Returns
+    -------
+    set[str]
+        Shape IDs.
+
+    Raises
+    ------
+    ValueError
+        When trips.txt has no shape_id column or no trip names a shape.
+    """
+    named: set[str] = set()
+    for trip in read_rows(archive=fixture, member='trips.txt'):
+        if 'shape_id' not in trip:
+            raise ValueError(f'{fixture.name} trips.txt has no shape_id')
+        named.add(trip['shape_id'])
+    named.discard('')
+    if not named:
+        raise ValueError(f'{fixture.name} trips name no shapes')
+    return named
+
+
+def append_shapes(*, source: Path, target: Path, wanted: set[str]) -> int:
+    """
+    Stream the wanted shapes from a source zip into a zip's shapes.txt.
 
     Parameters
     ----------
     source : Path
-        Full GTFS zip holding shapes.txt, which is streamed.
-    fixture : Path
-        Existing slice zip; its other members are left as they are.
+        Full GTFS zip holding shapes.txt.
+    target : Path
+        Zip to append to.
+    wanted : set[str]
+        Shape IDs to copy.
 
     Returns
     -------
@@ -174,35 +209,102 @@ def add_shapes(*, source: Path, fixture: Path) -> int:
     Raises
     ------
     ValueError
-        When the fixture already has a shapes.txt or its trips.txt has no
-        shape_id column.
+        When the source holds none of the wanted shapes.
     """
-    with zipfile.ZipFile(fixture) as archive:
-        if 'shapes.txt' in archive.namelist():
-            raise ValueError(f'{fixture.name} already has shapes.txt')
-    wanted = {t.get('shape_id', '')
-              for t in read_rows(archive=fixture, member='trips.txt')}
-    if not any(wanted) and not any(
-            'shape_id' in t
-            for t in read_rows(archive=fixture, member='trips.txt')):
-        raise ValueError(f'{fixture.name} trips.txt has no shape_id')
-    wanted.discard('')
-    rows = (r for r in read_rows(archive=source, member='shapes.txt')
-            if r['shape_id'] in wanted)
-    first = next(rows)
-    count = 1
-    with zipfile.ZipFile(fixture, 'a', zipfile.ZIP_DEFLATED) as archive:
+    count = 0
+    writer: csv.DictWriter[str] | None = None
+    with zipfile.ZipFile(target, 'a', zipfile.ZIP_DEFLATED) as archive:
         with archive.open('shapes.txt', 'w') as raw:
             text = io.TextIOWrapper(raw, encoding='utf-8', newline='')
-            writer = csv.DictWriter(text, fieldnames=list(first))
-            writer.writeheader()
-            writer.writerow(first)
-            for row in rows:
+            for row in read_rows(archive=source, member='shapes.txt'):
+                if row['shape_id'] not in wanted:
+                    continue
+                if writer is None:
+                    writer = csv.DictWriter(text, fieldnames=list(row))
+                    writer.writeheader()
                 writer.writerow(row)
                 count += 1
             text.flush()
             text.detach()
+    if not count:
+        raise ValueError(f'{source.name} holds none of the shapes')
     return count
+
+
+def add_shapes(*, source: Path, fixture: Path,
+               shape_ids: Collection[str] | None = None) -> int:
+    """
+    Append the shapes a fixture's trips name to the fixture zip.
+
+    The fixture is rewritten through a copy, so a failure leaves it as it
+    was.
+
+    Parameters
+    ----------
+    source : Path
+        Full GTFS zip holding shapes.txt, which is streamed.
+    fixture : Path
+        Existing slice zip; its other members are left as they are.
+    shape_ids : Collection[str] | None
+        When given, only these of the named shapes are copied.
+
+    Returns
+    -------
+    int
+        Shape points written.
+
+    Raises
+    ------
+    ValueError
+        When the fixture already has a shapes.txt, its trips name no
+        shapes, or the source holds none of them.
+    """
+    with zipfile.ZipFile(fixture) as archive:
+        if 'shapes.txt' in archive.namelist():
+            raise ValueError(f'{fixture.name} already has shapes.txt')
+    wanted = named_shapes(fixture=fixture)
+    if shape_ids is not None:
+        wanted &= set(shape_ids)
+    staged = fixture.with_name(f'{fixture.name}.new')
+    shutil.copyfile(fixture, staged)
+    try:
+        count = append_shapes(source=source, target=staged, wanted=wanted)
+        os.replace(staged, fixture)
+    finally:
+        staged.unlink(missing_ok=True)
+    return count
+
+
+def sample_shapes(*, archive: Path) -> set[str]:
+    """
+    Pick the shapes the bundle fixture keeps.
+
+    Parameters
+    ----------
+    archive : Path
+        Bundle slice zip.
+
+    Returns
+    -------
+    set[str]
+        Every 606 shape, and the first T1 and regional shape by ID.
+    """
+    routes = {r['route_id']: (r['route_short_name'], r.get('agency_id', ''))
+              for r in read_rows(archive=archive, member='routes.txt')}
+    kept: set[str] = set()
+    first: dict[str, str] = {}
+    for trip in read_rows(archive=archive, member='trips.txt'):
+        name, agency = routes[trip['route_id']]
+        shape = trip.get('shape_id', '')
+        if not shape:
+            continue
+        if name in BUS_ROUTES:
+            kept.add(shape)
+            continue
+        key = RAIL_ROUTE if name == RAIL_ROUTE else agency
+        if name == RAIL_ROUTE or agency == REGIONAL_AGENCY:
+            first[key] = min(shape, first.get(key, shape))
+    return kept | set(first.values())
 
 
 def main() -> None:
@@ -220,6 +322,12 @@ def main() -> None:
                 trips=bundle_trips | regional)
     write_slice(source=trains, out=out / 'sydneytrains.zip',
                 trips=train_trips)
+    add_shapes(source=bundle, fixture=out / 'bundle.zip',
+               shape_ids=sample_shapes(archive=out / 'bundle.zip'))
+    add_shapes(source=trains, fixture=out / 'sydneytrains.zip')
+    for name in ('v1_gtfs_vehiclepos_buses.pb',
+                 'v2_gtfs_vehiclepos_sydneytrains.pb'):
+        shutil.copyfile(root / 'data/rt' / name, out / name)
     write_feed_slice(source=root / 'data/rt/v1_gtfs_realtime_buses.pb',
                      out=out / 'v1_gtfs_realtime_buses.pb',
                      trips=bundle_trips)

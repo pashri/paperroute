@@ -12,7 +12,10 @@ from pathlib import Path
 import pytest
 
 from paperroute.adapters.sqlite_ro import file_identity
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
+from paperroute.adapters.timetable_db import (
+    LABEL_LIMIT,
+    SqliteTimetableRepository,
+)
 from paperroute.build.dedupe import merge_rail
 from paperroute.build.timetable import Source
 from paperroute.core.geo import to_metres
@@ -638,26 +641,177 @@ def test_route_labels_by_trip_and_alias(
 
 
 def test_route_labels_cache_is_bounded(
-    slice_repo: SqliteTimetableRepository,
+    repo: SqliteTimetableRepository,
 ) -> None:
     """A cache past its limit is cleared before it takes more."""
-    slice_repo.route_labels(trip_ids=['a1'])
-    slice_repo.labels.update({f'x{i}': '1' for i in range(20_001)})
-    trip = slice_departures(repo=slice_repo)[0].trip_id
-    assert slice_repo.route_labels(trip_ids=[trip]) == {trip: '606'}
-    assert len(slice_repo.labels) <= 2
+    unknown = [f'x{i}' for i in range(LABEL_LIMIT + 1)]
+    assert repo.route_labels(trip_ids=unknown) == {}
+    assert len(repo.labels) == LABEL_LIMIT + 1
+    assert repo.route_labels(trip_ids=['bus-0803']) == {'bus-0803': '606'}
+    assert len(repo.labels) == 1
+
+
+def record_queries(
+    *, repo: SqliteTimetableRepository, monkeypatch: pytest.MonkeyPatch
+) -> list[int]:
+    """
+    Record the parameter count of every parameterised query a repo runs.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Repository to watch.
+    monkeypatch : pytest.MonkeyPatch
+        Restores the repository afterwards.
+
+    Returns
+    -------
+    list[int]
+        Filled as queries run.
+    """
+    seen: list[int] = []
+    original = repo.fetch
+
+    def fetch(
+        *, sql: str, params: tuple[object, ...] | dict[str, object]
+    ) -> list[tuple[object, ...]]:
+        if params:
+            seen.append(len(params))
+        return original(sql=sql, params=params)
+
+    monkeypatch.setattr(repo, 'fetch', fetch)
+    return seen
+
+
+def test_route_labels_query_in_chunks_of_500(
+    repo: SqliteTimetableRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """1200 IDs take three chunks per lookup, by trip and by alias."""
+    seen = record_queries(repo=repo, monkeypatch=monkeypatch)
+    repo.route_labels(trip_ids=[f't{i}' for i in range(1200)])
+    assert sorted(seen) == [200, 200, 500, 500, 500, 500]
+
+
+def test_route_labels_remember_unknown_ids(
+    repo: SqliteTimetableRepository, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An unknown ID is asked about once, not on every poll."""
+    seen = record_queries(repo=repo, monkeypatch=monkeypatch)
+    assert repo.route_labels(trip_ids=['nope', 'bus-0803']) == {
+        'bus-0803': '606'
+    }
+    first = len(seen)
+    assert repo.route_labels(trip_ids=['nope', 'bus-0803']) == {
+        'bus-0803': '606'
+    }
+    assert first > 0
+    assert len(seen) == first
+
+
+def test_route_labels_reset_when_file_replaced(tmp_path: Path) -> None:
+    """A label cached from the old file is not served from the new one."""
+    live = build_db(
+        tmp_path=make_dir(path=tmp_path / 'a'),
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[
+            Source(
+                name='bundle',
+                archive=bus_feed(path=tmp_path / 'b.zip'),
+            )
+        ],
+    )
+    with closing(SqliteTimetableRepository(path=live)) as repo:
+        assert repo.route_labels(trip_ids=['bus-0803']) == {
+            'bus-0803': '606'
+        }
+        replace_with(live=live, trip='B-0810')
+        assert repo.route_labels(trip_ids=['bus-0803']) == {}
+        assert repo.route_labels(trip_ids=['B-0810']) == {'B-0810': 'T1'}
+
+
+def test_patterns_days_cover_the_day_before(
+    repo: SqliteTimetableRepository,
+) -> None:
+    """Dates are the asked-for day and the day before, where they run."""
+    def days(*, day: int) -> tuple[date, ...]:
+        found = repo.patterns(
+            trip_ids=['bus-0803'], around=date(2026, 10, day)
+        )
+        return found['bus-0803'].days
+
+    assert days(day=16) == (date(2026, 10, 15), date(2026, 10, 16))
+    assert days(day=18) == (date(2026, 10, 17),)
+    assert days(day=20) == ()
+
+
+def test_patterns_days_leave_out_skipped_dates(
+    repo: SqliteTimetableRepository,
+) -> None:
+    """A date the trip is skipped on is not one of its days."""
+    assert repo.db.path is not None
+    with closing(sqlite3.connect(repo.db.path)) as conn:
+        conn.execute(
+            "INSERT INTO trip_skip VALUES ('bus-0803', '2026-10-16')"
+        )
+        conn.commit()
+    found = repo.patterns(trip_ids=['bus-0803'], around=AROUND)
+    assert found['bus-0803'].days == (date(2026, 10, 15),)
+
+
+def test_patterns_partial_bundle_trip_shares_the_feed_days(
+    tmp_path: Path,
+) -> None:
+    """A bundle ID covers the dates its feed twin runs as well as its own."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 16),
+        days=2,
+        sources=regional_sources(tmp_path=tmp_path),
+    )
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute(
+            "DELETE FROM services WHERE service_id = 'sydneytrains:s-daily' "
+            "AND date = '2026-10-17'"
+        )
+        conn.commit()
+        merge_rail(conn=conn)
+    day = date(2026, 10, 17)
+    with closing(SqliteTimetableRepository(path=db)) as repo:
+        found = repo.patterns(
+            trip_ids=['NT31-bundle', 'NT31-feed'], around=day
+        )
+    assert found['NT31-bundle'].days == (AROUND, day)
+    assert found['NT31-feed'].days == (AROUND,)
+    assert found['NT31-bundle'].stops[-1].departs == 7 * 3600 + 40 * 60 + 30
+    assert found['NT31-feed'].stops[-1].departs == 7 * 3600 + 40 * 60
+
+
+def test_patterns_alias_runs_whenever_any_of_its_trips_do(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """An alias of two trips takes the days of both, not just the first."""
+    alias = 'NP43.947.121026.124.P.2.91437177'
+    first = date(2026, 10, 16)
+    second = date(2026, 10, 17)
+    assert first in slice_repo.patterns(trip_ids=[alias], around=first)[
+        alias
+    ].days
+    found = slice_repo.patterns(trip_ids=[alias], around=second)[alias]
+    assert found.days == (first, second)
+    assert found.stops
 
 
 def test_modes_near_finds_bus_at_the_606_stop(
     slice_repo: SqliteTimetableRepository,
 ) -> None:
-    """A box around the 606 stop holds buses; a distant one holds none."""
+    """A box around the 606 stop holds buses; one offshore holds nothing."""
     x, y = slice_repo.stop(stop_id=HOLLIS).point or (0.0, 0.0)
     box = (x - 2000.0, y - 2000.0, x + 2000.0, y + 2000.0)
     assert Mode.BUS in slice_repo.modes_near(box=box)
-    sx, sy = to_metres(lon=150.0, lat=-34.9)
+    sx, sy = to_metres(lon=155.0, lat=-33.0)
     far = (sx - 2000.0, sy - 2000.0, sx + 2000.0, sy + 2000.0)
-    assert Mode.BUS not in slice_repo.modes_near(box=far)
+    assert slice_repo.modes_near(box=far) == frozenset()
 
 
 def test_old_schema_timetable_still_answers(tmp_path: Path) -> None:

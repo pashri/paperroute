@@ -7,7 +7,11 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.adapters.sqlite_ro import Identity, ReadOnlyDatabase
+from paperroute.adapters.sqlite_ro import (
+    Identity,
+    ReadOnlyDatabase,
+    file_identity,
+)
 from paperroute.core.geo import MetreBox, Point, Shape, to_metres, unpack_shape
 from paperroute.core.model import (
     SYDNEY,
@@ -214,23 +218,29 @@ class SqliteTimetableRepository:
         """
         Say whether the file has shapes, after following any replacement.
 
+        The answer is kept while the file is unchanged on disk. When it
+        may have changed, a query first lets the database reopen it, and
+        the answer is worked out again for the file then open.
+
         Returns
         -------
         tuple[bool, bool]
             Whether trips has a shape_id column and whether the shapes
             table exists. Both are false for a file built before shapes.
         """
+        path = self.db.path
+        known = self.schema
+        if known is not None and (
+            path is None or file_identity(path=path) == known[0]
+        ):
+            return known[1], known[2]
         self.fetch(sql='SELECT 1', params=())
-        current = self.identity
-        if self.schema is None or self.schema[0] != current:
+        if known is None or known[0] != self.identity:
             rows = self.fetch(sql=SCHEMA_CHECK, params=())
             found = rows[0] if rows else (0, 0)
-            self.schema = (
-                self.identity,
-                bool(found[0]),
-                bool(found[1]),
-            )
-        return self.schema[1], self.schema[2]
+            known = (self.identity, bool(found[0]), bool(found[1]))
+            self.schema = known
+        return known[1], known[2]
 
     def shape_column(self) -> str:
         """
@@ -331,9 +341,12 @@ class SqliteTimetableRepository:
 
     def resolve_trips(
         self, *, trip_ids: Collection[str]
-    ) -> dict[str, tuple[object, ...]]:
+    ) -> dict[str, list[tuple[object, ...]]]:
         """
-        Look up trips by ID, falling back to aliases.
+        Look up the trips behind requested IDs.
+
+        A requested ID can be a trip, an alias of other trips, or both,
+        when a bundle trip was only partly replaced by a feed trip.
 
         Parameters
         ----------
@@ -342,18 +355,16 @@ class SqliteTimetableRepository:
 
         Returns
         -------
-        dict[str, tuple[object, ...]]
-            Requested ID to (requested ID, trip ID, route, route type,
-            agency, shape ID).
+        dict[str, list[tuple[object, ...]]]
+            Requested ID to its candidate rows (requested ID, trip ID,
+            route, route type, agency, shape ID). The trip with that ID
+            comes first, then aliased trips in trip ID order.
         """
         shape = self.shape_column()
-        found = {
-            str(row[0]): row
-            for row in self.fetch_in(sql=BY_TRIP, ids=trip_ids, shape=shape)
-        }
-        missing = set(trip_ids) - found.keys()
-        for row in self.fetch_in(sql=BY_ALIAS, ids=missing, shape=shape):
-            found.setdefault(str(row[0]), row)
+        found: dict[str, list[tuple[object, ...]]] = {}
+        for sql in (BY_TRIP, BY_ALIAS):
+            for row in self.fetch_in(sql=sql, ids=trip_ids, shape=shape):
+                found.setdefault(str(row[0]), []).append(row)
         return found
 
     def patterns(
@@ -361,6 +372,10 @@ class SqliteTimetableRepository:
     ) -> dict[str, TripPattern]:
         """
         Stops, shape and running dates of trips.
+
+        An alias can stand for several trips. Its dates are all the dates
+        any of them runs, and its stops and shape come from the first one
+        that runs on those dates.
 
         Parameters
         ----------
@@ -375,22 +390,17 @@ class SqliteTimetableRepository:
             Patterns by requested ID; unknown trips are absent.
         """
         found = self.resolve_trips(trip_ids=trip_ids)
-        real = {str(row[1]) for row in found.values()}
+        real = {str(row[1]) for rows in found.values() for row in rows}
         days = self.running_days(trip_ids=real, around=around)
         calls = self.call_stops(trip_ids=real)
         return {
-            requested: TripPattern(
-                trip_id=requested,
-                route=str(row[2]),
-                mode=mode_for(
-                    route_type=int(str(row[3])),
-                    agency_id=str(row[4]) if row[4] else None,
-                ),
-                shape_id=str(row[5]) if row[5] else None,
-                stops=tuple(calls.get(str(row[1]), ())),
-                days=tuple(days.get(str(row[1]), ())),
+            requested: pattern_of(
+                requested=requested,
+                rows=rows,
+                days=days,
+                calls=calls,
             )
-            for requested, row in found.items()
+            for requested, rows in found.items()
         }
 
     def running_days(
@@ -457,8 +467,9 @@ class SqliteTimetableRepository:
         """
         Route short names by trip or alias.
 
-        Answers are kept until the file is replaced or the cache outgrows
-        its limit, so repeat lookups don't query.
+        Answers, including that an ID is unknown, are kept until the file
+        is replaced or the cache outgrows its limit, so repeat lookups
+        don't query.
 
         Parameters
         ----------
@@ -474,11 +485,18 @@ class SqliteTimetableRepository:
         if self.identity != self.labels_id:
             self.labels.clear()
             self.labels_id = self.identity
-        result = {t: self.labels[t] for t in trip_ids if t in self.labels}
-        found = self.look_up_labels(trip_ids=set(trip_ids) - result.keys())
+        result: dict[str, str] = {}
+        missing: set[str] = set()
+        for trip in trip_ids:
+            label = self.labels.get(trip)
+            if label is None:
+                missing.add(trip)
+            elif label:
+                result[trip] = label
+        found = self.look_up_labels(trip_ids=missing)
         if len(self.labels) > LABEL_LIMIT:
             self.labels.clear()
-        self.labels.update(found)
+        self.labels.update({trip: found.get(trip, '') for trip in missing})
         return result | found
 
     def look_up_labels(
@@ -646,6 +664,48 @@ def to_departure(*, row: tuple[object, ...], day: date) -> Departure:
         arrives=service_time(day=day, seconds=int(str(arr))),
         service_day=day,
         shape_id=str(row[13]) if row[13] else None,
+    )
+
+
+def pattern_of(
+    *,
+    requested: str,
+    rows: list[tuple[object, ...]],
+    days: dict[str, list[date]],
+    calls: dict[str, list[PatternStop]],
+) -> TripPattern:
+    """
+    Build the pattern of a requested ID from its candidate trips.
+
+    Parameters
+    ----------
+    requested : str
+        The requested trip ID or alias.
+    rows : list[tuple[object, ...]]
+        Candidate trip rows, preferred first.
+    days : dict[str, list[date]]
+        Running dates by trip ID.
+    calls : dict[str, list[PatternStop]]
+        Stops by trip ID.
+
+    Returns
+    -------
+    TripPattern
+        The pattern; its dates are the union over all candidates, and the
+        rest comes from the first candidate that runs on any of them.
+    """
+    running = sorted({d for row in rows for d in days.get(str(row[1]), ())})
+    row = next((r for r in rows if days.get(str(r[1]))), rows[0])
+    return TripPattern(
+        trip_id=requested,
+        route=str(row[2]),
+        mode=mode_for(
+            route_type=int(str(row[3])),
+            agency_id=str(row[4]) if row[4] else None,
+        ),
+        shape_id=str(row[5]) if row[5] else None,
+        stops=tuple(calls.get(str(row[1]), ())),
+        days=tuple(running),
     )
 
 

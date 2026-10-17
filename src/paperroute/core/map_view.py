@@ -62,8 +62,8 @@ class Marker:
     pinned : bool
         True when the route is one of the pin's.
     age : float | None
-        Seconds since a stale vehicle was last heard; None for a fresh
-        vehicle or a trip that never reported.
+        Seconds since a stale vehicle was last heard, floored to whole
+        minutes; None for a fresh vehicle or a trip that never reported.
     """
 
     route: str
@@ -584,14 +584,15 @@ def stale_marker(
     Returns
     -------
     Marker | None
-        A hollow marker carrying the age, or None when the trip is unknown
-        or not running.
+        A hollow marker carrying the age floored to whole minutes, so the
+        view only changes when the shown age does, or None when the trip
+        is unknown or not running.
     """
     return timetable_marker(
         pattern=inputs.patterns.get(vehicle.trip_id),
         inputs=inputs,
         centre=centre,
-        age=age,
+        age=age // 60 * 60,
         pinned=pinned,
     )
 

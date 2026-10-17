@@ -227,13 +227,26 @@ def test_vehicle_over_two_minutes_old_moves_to_timetable_position() -> None:
 
 
 def test_stale_marker_carries_age() -> None:
-    """The stale marker's age is taken at now, not floored to 30 s."""
+    """The stale marker's age is taken at now, floored to whole minutes."""
     bus = vehicle(timestamp=int(FETCHED.timestamp()) - 100)
     view = build_map_view(
         inputs=inputs(vehicles=(bus,), fetched_at=FETCHED),
     )
     (marker,) = view.markers
-    assert marker.age == 130.0
+    assert marker.age == 120.0
+
+
+def test_stale_marker_holds_still_within_a_minute() -> None:
+    """Two ticks in the same minute and timetable step give one view."""
+    bus = vehicle(timestamp=int(FETCHED.timestamp()) - 150)
+    first, second = (
+        build_map_view(
+            inputs=inputs(vehicles=(bus,), fetched_at=FETCHED, now=now),
+        )
+        for now in (NOW, NOW + timedelta(seconds=15))
+    )
+    assert first.markers[0].age == 180.0
+    assert first == second
 
 
 def test_live_marker_has_no_age() -> None:

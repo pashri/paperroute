@@ -1,11 +1,14 @@
 """Header, banner and route badge shared by every view."""
 
-from typing import Final
+import math
+from typing import Final, Protocol
 
-from paperroute.render.canvas import INK, PAPER, WIDTH, Canvas, Face
+from paperroute.core.stop_view import Row
+from paperroute.render.canvas import INK, PAPER, WIDTH, Box, Canvas, Face
 
 HEADER: Final[int] = 40
 BANNER: Final[int] = 34
+FASTER: Final[str] = 'FASTER'
 TABS: Final[tuple[str, ...]] = ('Stop', 'Map', 'Strip', 'Strip + map')
 
 
@@ -122,6 +125,44 @@ def header(canvas: Canvas, *, origin: str, destination: str, clock: str,
     )
 
 
+class Titled(Protocol):
+    """A view with the texts the header shows."""
+
+    @property
+    def origin(self) -> str:
+        """The From stop's name."""
+
+    @property
+    def destination(self) -> str:
+        """The destination's name."""
+
+    @property
+    def clock(self) -> str:
+        """The clock text."""
+
+
+def view_header(canvas: Canvas, *, view: Titled, active: str) -> None:
+    """
+    Draw the header for a view.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    view : Titled
+        The view whose origin, destination and clock are shown.
+    active : str
+        Name of the highlighted tab.
+    """
+    header(
+        canvas,
+        origin=view.origin,
+        destination=view.destination,
+        clock=view.clock,
+        active=active,
+    )
+
+
 def banner(canvas: Canvas, *, text: str) -> None:
     """
     Draw the bordered banner under the header.
@@ -172,3 +213,62 @@ def badge(canvas: Canvas, *, x: float, y: float, route: str,
         at=(x + width / 2, y + 1), text=route, face=face, grey=PAPER,
         anchor='mm')
     return width
+
+
+def pill(canvas: Canvas, *, box: Box, text: str, px: int) -> None:
+    """
+    Draw an ink block with bold paper text centred in it.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    box : Box
+        Left, top, right, bottom.
+    text : str
+        Pill text.
+    px : int
+        Text size.
+    """
+    canvas.rect(box=box, grey=INK)
+    canvas.text(
+        at=((box[0] + box[2]) / 2, math.ceil((box[1] + box[3]) / 2)),
+        text=text,
+        face=Face(weight=700, px=px),
+        grey=PAPER,
+        anchor='mm',
+    )
+
+
+def leaves(*, row: Row) -> str:
+    """
+    Say when a departure leaves.
+
+    Parameters
+    ----------
+    row : Row
+        Departure.
+
+    Returns
+    -------
+    str
+        The countdown when live, else the timetabled clock time.
+    """
+    return row.countdown if row.live else row.leaves_at
+
+
+def cancelled(*, row: Row) -> str:
+    """
+    Label a cancelled departure.
+
+    Parameters
+    ----------
+    row : Row
+        Departure.
+
+    Returns
+    -------
+    str
+        The timetabled time, then CANCELLED.
+    """
+    return f'{row.leaves_at}  CANCELLED'

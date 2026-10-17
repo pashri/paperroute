@@ -11,10 +11,20 @@ from paperroute.core.map_view import (
     MapView,
     screen_point,
 )
-from paperroute.core.stop_view import Row
+from paperroute.core.stop_view import Pill, Row
 from paperroute.render.canvas import HEIGHT, INK, PAPER, Box, Canvas, Face
-from paperroute.render.chrome import HEADER, badge, banner, header
-from paperroute.render.map_base import HALO, draw_stop
+from paperroute.render.chrome import (
+    BANNER,
+    FASTER,
+    HEADER,
+    badge,
+    banner,
+    cancelled,
+    leaves,
+    pill,
+    view_header,
+)
+from paperroute.render.map_base import HALO, NOT_INSTALLED_DROP, draw_stop
 from paperroute.render.markers import draw_markers
 from paperroute.render.tile_codec import THRESHOLD, quantise4
 
@@ -25,6 +35,7 @@ SIDEBAR_RIGHT: Final[int] = 784
 MAP_BOX: Final[Box] = (0, HEADER, SIDEBAR_LEFT, HEIGHT)
 EMPTY_FACE: Final[Face] = Face(weight=700, px=22)
 EMPTY_MARGIN: Final[int] = 32  # pixels each side of the empty text
+EMPTY_DROP: Final[float] = NOT_INSTALLED_DROP + 26.0  # below the centre
 DESTINATION_FACE: Final[Face] = Face(weight=700, px=16)
 DESTINATION_Y: Final[int] = 70
 DESTINATION_WIDTH: Final[int] = 250
@@ -38,13 +49,22 @@ ARRIVES_DROP: Final[int] = 26  # baseline below the badge centre
 ROW_RULE_DROP: Final[int] = 40  # below the badge centre
 ROW_RULE_LEFT: Final[int] = 534
 ROW_RULE_RIGHT: Final[int] = 788
+CANCELLED_LEFT: Final[int] = 630
+CANCELLED_HALF: Final[int] = 13  # pixels above and below the badge centre
+CANCELLED_PX: Final[int] = 15
+FASTER_LEFT: Final[int] = 710
+FASTER_TOP: Final[int] = 17  # below the badge centre
+FASTER_BOTTOM: Final[int] = 32  # below the badge centre
+FASTER_PX: Final[int] = 11
 
 
 def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
     """
     Draw the empty text, the markers and the From stop over the map.
 
-    The stop is drawn again after the markers so no badge buries it.
+    The empty text sits below the stop, under the "Map not installed"
+    note. The stop is drawn again after the markers so no badge buries
+    it.
 
     Parameters
     ----------
@@ -55,7 +75,7 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
     """
     if view.empty:
         canvas.text(
-            at=(MAP_WIDTH / 2, HEADER + MAP_HEIGHT / 2),
+            at=(MAP_WIDTH / 2, HEADER + MAP_HEIGHT / 2 + EMPTY_DROP),
             text=canvas.fit(
                 text=view.empty,
                 face=EMPTY_FACE,
@@ -79,6 +99,41 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
             draw_stop(canvas, at=(x, y + HEADER))
 
 
+def row_time(canvas: Canvas, *, row: Row, y: int) -> None:
+    """
+    Draw when a sidebar departure leaves, or a block if it is cancelled.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure.
+    y : int
+        The badge's vertical centre.
+    """
+    if row.pill is Pill.CANCELLED:
+        pill(
+            canvas,
+            box=(
+                CANCELLED_LEFT,
+                y - CANCELLED_HALF,
+                SIDEBAR_RIGHT,
+                y + CANCELLED_HALF,
+            ),
+            text=cancelled(row=row),
+            px=CANCELLED_PX,
+        )
+        return
+    canvas.text(
+        at=(SIDEBAR_RIGHT, y + COUNTDOWN_DROP),
+        text=leaves(row=row),
+        face=COUNTDOWN_FACE,
+        grey=INK,
+        anchor='rs',
+    )
+
+
 def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
     """
     Draw one sidebar departure.
@@ -93,19 +148,25 @@ def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
         The badge's vertical centre.
     """
     badge(canvas, x=SIDEBAR_TEXT, y=y, route=row.route, px=BADGE_PX)
-    canvas.text(
-        at=(SIDEBAR_RIGHT, y + COUNTDOWN_DROP),
-        text=row.countdown,
-        face=COUNTDOWN_FACE,
-        grey=INK,
-        anchor='rs',
-    )
+    row_time(canvas, row=row, y=y)
     canvas.text(
         at=(SIDEBAR_TEXT, y + ARRIVES_DROP),
         text=f'arr {row.arrives_at}',
         face=ARRIVES_FACE,
         grey=INK,
     )
+    if row.pill is Pill.FASTER:
+        pill(
+            canvas,
+            box=(
+                FASTER_LEFT,
+                y + FASTER_TOP,
+                SIDEBAR_RIGHT,
+                y + FASTER_BOTTOM,
+            ),
+            text=FASTER,
+            px=FASTER_PX,
+        )
     canvas.rect(
         box=(
             ROW_RULE_LEFT,
@@ -121,6 +182,8 @@ def draw_sidebar(canvas: Canvas, *, view: MapView) -> None:
     """
     Draw the rule, the destination and the next departures.
 
+    With a banner showing, everything but the rule moves down below it.
+
     Parameters
     ----------
     canvas : Canvas
@@ -132,10 +195,11 @@ def draw_sidebar(canvas: Canvas, *, view: MapView) -> None:
         box=(SIDEBAR_LEFT, HEADER, SIDEBAR_LEFT + RULE_WIDTH, HEIGHT),
         grey=INK,
     )
+    drop = BANNER if view.banner else 0
     canvas.text(
-        at=(SIDEBAR_TEXT, DESTINATION_Y),
+        at=(SIDEBAR_TEXT, DESTINATION_Y + drop),
         text=canvas.fit(
-            text=view.destination,
+            text=f'to {view.destination}',
             face=DESTINATION_FACE,
             width=DESTINATION_WIDTH,
         ),
@@ -143,7 +207,7 @@ def draw_sidebar(canvas: Canvas, *, view: MapView) -> None:
         grey=INK,
     )
     for index, row in enumerate(view.sidebar):
-        sidebar_row(canvas, row=row, y=ROWS_TOP + index * ROW_STEP)
+        sidebar_row(canvas, row=row, y=ROWS_TOP + drop + index * ROW_STEP)
 
 
 def snap(*, grey: NDArray[np.uint8]) -> NDArray[np.uint8]:
@@ -188,13 +252,7 @@ def draw_map_view(
     canvas = Canvas()
     canvas.image(grey=base, at=(0, HEADER))
     draw_overlay(canvas, view=view)
-    header(
-        canvas,
-        active='Map',
-        clock=view.clock,
-        origin=view.origin,
-        destination=view.destination,
-    )
+    view_header(canvas, view=view, active='Map')
     draw_sidebar(canvas, view=view)
     if view.banner:
         banner(canvas, text=view.banner)

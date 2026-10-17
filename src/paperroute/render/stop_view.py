@@ -7,8 +7,18 @@ from numpy.typing import NDArray
 
 from paperroute.core.model import Mode
 from paperroute.core.stop_view import DOT, Pill, Row, StopView
-from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH, Canvas, Face
-from paperroute.render.chrome import BANNER, HEADER, badge, banner, header
+from paperroute.render.canvas import HEIGHT, INK, WIDTH, Canvas, Face
+from paperroute.render.chrome import (
+    BANNER,
+    FASTER,
+    HEADER,
+    badge,
+    banner,
+    cancelled,
+    leaves,
+    pill,
+    view_header,
+)
 
 SPLIT: Final[int] = 438
 ROW_H: Final[int] = 50
@@ -130,23 +140,21 @@ def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
     fitted = canvas.fit(text=row.destination, face=small, width=140)
     canvas.text(at=(456, y + 42), text=fitted, face=small, grey=INK)
     if row.pill is Pill.CANCELLED:
-        canvas.rect(box=(600, y + 10, 786, y + 38), grey=INK)
-        canvas.text(
-            at=(693, y + 24), text=f'{row.leaves_at}  CANCELLED',
-            face=Face(weight=700, px=15), grey=PAPER, anchor='mm')
+        pill(
+            canvas,
+            box=(600, y + 10, 786, y + 38),
+            text=cancelled(row=row),
+            px=15,
+        )
     else:
-        shown = row.countdown if row.live else row.leaves_at
         canvas.text(
-            at=(640, y + 30), text=shown, face=Face(weight=800, px=28),
-            grey=INK, anchor='rs')
+            at=(640, y + 30), text=leaves(row=row),
+            face=Face(weight=800, px=28), grey=INK, anchor='rs')
         canvas.text(
             at=(786, y + 24), text=row.arrives_at,
             face=Face(weight=800, px=20), grey=INK, anchor='rs')
     if row.pill is Pill.FASTER:
-        canvas.rect(box=(712, y + 30, 786, y + 45), grey=INK)
-        canvas.text(
-            at=(749, y + 38), text='FASTER', face=Face(weight=700, px=11),
-            grey=PAPER, anchor='mm')
+        pill(canvas, box=(712, y + 30, 786, y + 45), text=FASTER, px=11)
     canvas.rect(box=(452, y + 49, 786, y + 50), grey=INK)
 
 
@@ -165,13 +173,7 @@ def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
         480 by 800 pixels, 0 or 255.
     """
     canvas = Canvas()
-    header(
-        canvas,
-        origin=view.origin,
-        destination=view.destination,
-        clock=view.clock,
-        active='Stop',
-    )
+    view_header(canvas, view=view, active='Stop')
     top = HEADER
     if view.banner:
         banner(canvas, text=view.banner)

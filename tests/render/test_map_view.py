@@ -20,20 +20,27 @@ from paperroute.core.map_view import (
     screen_point,
 )
 from paperroute.core.model import Mode
-from paperroute.core.stop_view import Row
+from paperroute.core.stop_view import Pill, Row
 from paperroute.core.tiles import CITY, TILE, TileVariant, tile_of, to_pixels
-from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH, Canvas
-from paperroute.render.chrome import HEADER, header
+from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH, Canvas, Face
+from paperroute.render.chrome import BANNER, HEADER, header
 from paperroute.render.map_base import draw_map_base
-from paperroute.render.map_view import SIDEBAR_LEFT, draw_map_view
+from paperroute.render.map_view import SIDEBAR_LEFT, draw_map_view, snap
 from paperroute.render.tile_codec import GREYS, pack_bits, pack_grey
 
 MPP = 8
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
 ROW_TOPS = (110, 182, 254, 326, 398)
+EMPTY = 'No more services today'
 
 
-def row(*, route: str = '606') -> Row:
+def row(
+    *,
+    route: str = '606',
+    pill: Pill | None = None,
+    live: bool = True,
+    countdown: str = '9',
+) -> Row:
     """
     Make a sidebar row.
 
@@ -41,23 +48,29 @@ def row(*, route: str = '606') -> Row:
     ----------
     route : str
         Route label.
+    pill : Pill | None
+        Marker.
+    live : bool
+        True for a realtime row.
+    countdown : str
+        Countdown text.
 
     Returns
     -------
     Row
-        A live bus row.
+        A bus row leaving at 8:09.
     """
     return Row(
         route=route,
         mode=Mode.BUS,
         platform='',
         destination='Parramatta',
-        countdown='9',
+        countdown=countdown,
         leaves_at='8:09',
         arrives_at='8:45',
         ride_minutes=36,
-        live=True,
-        pill=None,
+        live=live,
+        pill=pill,
     )
 
 
@@ -125,6 +138,23 @@ def stop_pixel() -> tuple[int, int]:
     return math.floor(x), math.floor(y + HEADER)
 
 
+def threshold(*, canvas: Canvas) -> NDArray[np.uint8]:
+    """
+    Snap a reference canvas to ink and paper.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        The drawn reference.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        Its pixels as ink or paper.
+    """
+    return np.where(canvas.grey() < 128, INK, PAPER).astype(np.uint8)
+
+
 def test_map_frame_is_800_by_480_with_four_levels() -> None:
     """The map keeps four greys; everything else is ink or paper."""
     base = np.repeat(
@@ -149,7 +179,7 @@ def test_header_marks_the_map_tab() -> None:
         clock=VIEW.clock,
         active='Map',
     )
-    expected = np.where(canvas.grey() < 128, INK, PAPER)
+    expected = threshold(canvas=canvas)
     frame = draw_map_view(view=VIEW, base=paper())
     assert np.array_equal(frame[:HEADER], expected[:HEADER])
 
@@ -171,6 +201,63 @@ def test_sidebar_draws_each_row() -> None:
         assert not np.any(frame[top - 14 : top + 13, 785:800] == INK)
         assert np.any(frame[top + 15 : top + 27, 538:600] == INK)
         assert np.all(frame[top + 40, 534:788] == INK)
+
+
+def test_destination_reads_to_the_destination() -> None:
+    """The sidebar opens with "to" and the destination, fitted."""
+    canvas = Canvas()
+    face = Face(weight=700, px=16)
+    canvas.text(
+        at=(538, 70),
+        text=canvas.fit(text='to Parramatta Station', face=face, width=250),
+        face=face,
+        grey=INK,
+    )
+    expected = threshold(canvas=canvas)
+    frame = draw_map_view(view=VIEW, base=paper())
+    assert np.array_equal(frame[HEADER:90, 524:], expected[HEADER:90, 524:])
+
+
+def test_cancelled_row_shows_a_block() -> None:
+    """A cancelled row has an ink block where the countdown goes."""
+    view = replace(VIEW, sidebar=(row(pill=Pill.CANCELLED),))
+    frame = draw_map_view(view=view, base=paper())
+    top = ROW_TOPS[0]
+    assert frame[top - 12 : top + 12, 640:784].mean() < 128
+    assert frame[top - 12 : top + 12, 785:800].min() == PAPER
+
+
+def test_faster_row_has_a_pill() -> None:
+    """A faster row has an ink pill right of its arrival time."""
+    view = replace(VIEW, sidebar=(row(pill=Pill.FASTER),))
+    frame = draw_map_view(view=view, base=paper())
+    top = ROW_TOPS[0]
+    assert frame[top + 17 : top + 32, 712:784].mean() < 128
+    plain = draw_map_view(view=VIEW, base=paper())
+    assert plain[top + 17 : top + 32, 712:784].min() == PAPER
+
+
+def test_scheduled_row_shows_its_clock_time() -> None:
+    """A row that isn't live shows when it leaves, not a countdown."""
+    scheduled = replace(VIEW, sidebar=(row(live=False),))
+    clock = replace(VIEW, sidebar=(row(countdown='8:09'),))
+    assert np.array_equal(
+        draw_map_view(view=scheduled, base=paper()),
+        draw_map_view(view=clock, base=paper()),
+    )
+
+
+def test_sidebar_moves_below_the_banner() -> None:
+    """With a banner the sidebar's content starts below it."""
+    plain = draw_map_view(view=VIEW, base=paper())
+    view = replace(VIEW, banner='Showing timetable only')
+    frame = draw_map_view(view=view, base=paper())
+    below = slice(SIDEBAR_LEFT + 3, WIDTH)
+    assert np.array_equal(
+        frame[HEADER + BANNER :, below],
+        plain[HEADER : HEIGHT - BANNER, below],
+    )
+    assert not np.any(plain[HEIGHT - BANNER :, below] == INK)
 
 
 def test_sidebar_stops_after_its_rows() -> None:
@@ -197,7 +284,9 @@ def test_banner_is_drawn_over_the_map() -> None:
     dark = np.full((MAP_HEIGHT, MAP_WIDTH), INK, dtype=np.uint8)
     view = replace(VIEW, banner='Showing timetable only')
     assert draw_map_view(view=VIEW, base=dark)[HEADER + 6, 400] == INK
-    assert draw_map_view(view=view, base=dark)[HEADER + 6, 400] == PAPER
+    frame = draw_map_view(view=view, base=dark)
+    assert frame[HEADER + 6, 400] == PAPER
+    assert frame[HEADER + 6, SIDEBAR_LEFT + 1] == PAPER
 
 
 def test_stop_marker_is_drawn_over_badges() -> None:
@@ -214,18 +303,62 @@ def test_stop_marker_is_drawn_over_badges() -> None:
     assert frame[sy, sx - 11] == PAPER
 
 
+def empty_band(*, frame: NDArray[np.uint8]) -> NDArray[np.uint8]:
+    """
+    Cut out the rows below the stop where the empty text goes.
+
+    Parameters
+    ----------
+    frame : NDArray[np.uint8]
+        A Map frame.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The map's rows from 40 to 70 px below its centre.
+    """
+    middle = HEADER + MAP_HEIGHT // 2
+    return frame[middle + 40 : middle + 70, :SIDEBAR_LEFT]
+
+
+def test_empty_text_sits_below_the_stop() -> None:
+    """The empty text is clear of the stop marker, which stays whole."""
+    frame = draw_map_view(view=replace(VIEW, empty=EMPTY), base=paper())
+    assert np.any(empty_band(frame=frame) == INK)
+    sx, sy = stop_pixel()
+    assert np.all(frame[sy - 20 : sy + 20, 60 : sx - 16] == PAPER)
+    assert np.all(frame[sy - 20 : sy + 20, sx + 16 : 460] == PAPER)
+    assert frame[sy, sx] == INK
+    assert frame[sy, sx + 6] == PAPER
+    assert frame[sy, sx + 9] == INK
+
+
+def test_empty_text_has_a_halo() -> None:
+    """Over a dark map the empty text is ringed with paper."""
+    dark = np.full((MAP_HEIGHT, MAP_WIDTH), INK, dtype=np.uint8)
+    frame = draw_map_view(view=replace(VIEW, empty=EMPTY), base=dark)
+    assert np.any(empty_band(frame=frame) == PAPER)
+
+
 def test_no_location_says_so_without_a_stop() -> None:
-    """With no centre the empty text sits mid-map and no stop is drawn."""
+    """With no centre the empty text shows and no stop is drawn."""
     view = replace(
         VIEW,
         base=MapBase(centre=None, mpp=MPP, route=()),
         empty='No location for this stop',
     )
     frame = draw_map_view(view=view, base=paper())
-    middle = HEADER + MAP_HEIGHT // 2
-    assert np.any(frame[middle - 10 : middle + 10, 100:420] == INK)
+    assert np.any(empty_band(frame=frame) == INK)
     plain = draw_map_view(view=replace(view, empty=None), base=paper())
     assert np.all(plain[HEADER:, :SIDEBAR_LEFT] == PAPER)
+
+
+def test_snap_thresholds_outside_the_map() -> None:
+    """Grey outside the map becomes ink or paper; inside, a level."""
+    out = snap(grey=np.full((HEIGHT, WIDTH), 100, dtype=np.uint8))
+    assert np.all(out[:HEADER] == INK)
+    assert np.all(out[:, SIDEBAR_LEFT:] == INK)
+    assert np.all(out[HEADER:, :SIDEBAR_LEFT] == GREYS[1])
 
 
 def test_markers_and_tiles_share_one_transform(tmp_path: Path) -> None:

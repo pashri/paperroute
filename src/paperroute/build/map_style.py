@@ -2,14 +2,11 @@
 
 from typing import Final
 
-from paperroute.render.canvas import Face
+from paperroute.core.tiles import CITY, ZOOMS
+from paperroute.render.canvas import INK, PAPER, Face
 
-INK: Final[int] = 0
 DARK: Final[int] = 85
 LIGHT: Final[int] = 170
-PAPER: Final[int] = 255
-CITY_MPP: Final[int] = 45
-ZOOMS: Final[tuple[int, ...]] = (3, 5, 8, 14, 45)
 
 ROAD_LAYERS: Final[tuple[str, ...]] = (
     'road_minor',
@@ -48,12 +45,6 @@ STREET_REPEAT_PX: Final[int] = 384
 STREET_FACE: Final[Face] = Face(weight=700, px=12)
 SUBURB_FACE: Final[Face] = Face(weight=700, px=13)
 STATION_FACE: Final[Face] = Face(weight=800, px=14)
-STREET_GREY: Final[int] = DARK
-SUBURB_GREY: Final[int] = DARK
-STATION_GREY: Final[int] = INK
-HALO_PX: Final[int] = 2
-STATION_SQUARE_MAIN: Final[int] = 5
-STATION_SQUARE_MINOR: Final[int] = 3
 
 Stroke = tuple[float, int, tuple[float, float] | None]
 
@@ -73,9 +64,16 @@ def road_style(*, layer: str, mpp: int) -> tuple[int, int]:
     -------
     tuple[int, int]
         Stroke width (0 hides the road) and grey level.
+
+    Raises
+    ------
+    ValueError
+        If ``mpp`` is not one of the zoom steps.
     """
+    if mpp not in ZOOMS:
+        raise ValueError(f'unsupported zoom: {mpp} m/px')
     width = ROAD_WIDTHS[layer][ZOOMS.index(mpp)]
-    if mpp == CITY_MPP:
+    if mpp == CITY:
         grey = DARK if layer in ('road_trunk', 'road_motorway') else LIGHT
     elif layer == 'road_minor':
         grey = LIGHT if mpp >= 14 else DARK
@@ -108,12 +106,12 @@ def transit_style(*, layer: str, mpp: int) -> list[Stroke]:
     if layer == 'ferry':
         return [(1, INK, (4, 3))]
     if layer in ('rail', 'subway'):
-        if mpp == CITY_MPP:
+        if mpp == CITY:
             return [(2, DARK, None)]
         width = 5 if mpp <= 5 else 4 if mpp == 8 else 3
         return [(width, INK, None), (width - 2, PAPER, (6, 6))]
     if layer == 'light_rail':
-        return [(2 if mpp < CITY_MPP else 1, INK, None)]
+        return [(2 if mpp < CITY else 1, INK, None)]
     return []
 
 

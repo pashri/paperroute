@@ -3,18 +3,29 @@
 import pytest
 
 from paperroute.build.map_style import (
+    AREA_GREYS,
+    CITY_PLACES,
     DARK,
-    INK,
     LIGHT,
-    PAPER,
+    PLACE_KINDS,
+    RESERVE_PX,
+    RESERVE_ZOOMS,
+    RIVER_STYLE,
     ROAD_LAYERS,
     ROAD_WIDTHS,
+    STATION_FACE,
+    STATION_ZOOMS,
+    STREET_FACE,
+    STREET_REPEAT_PX,
+    STREET_ZOOMS,
+    SUBURB_FACE,
+    SUBURB_ZOOMS,
     named_roads,
     road_style,
     transit_style,
 )
-
-ZOOMS = (3, 5, 8, 14, 45)
+from paperroute.core.tiles import ZOOMS
+from paperroute.render.canvas import INK, PAPER, Face
 
 
 def test_minor_roads_hide_at_city_zoom() -> None:
@@ -35,6 +46,14 @@ def test_city_zoom_is_grey() -> None:
     greys = {road_style(layer=layer, mpp=45)[1] for layer in ROAD_LAYERS}
     assert INK not in greys
     assert greys == {DARK, LIGHT}
+    assert [road_style(layer=layer, mpp=45) for layer in ROAD_LAYERS] == [
+        (0, LIGHT),
+        (1, LIGHT),
+        (1, LIGHT),
+        (2, LIGHT),
+        (2, DARK),
+        (3, DARK),
+    ]
 
 
 def test_minor_road_is_light_at_14() -> None:
@@ -42,6 +61,42 @@ def test_minor_road_is_light_at_14() -> None:
     assert road_style(layer='road_minor', mpp=14) == (1, LIGHT)
     assert road_style(layer='road_minor', mpp=8) == (1, DARK)
     assert ROAD_WIDTHS['road_primary'] == (7, 6, 5, 3, 2)
+    assert road_style(layer='road_tertiary', mpp=14) == (1, DARK)
+    assert road_style(layer='road_tertiary', mpp=8) == (2, INK)
+
+
+@pytest.mark.parametrize('mpp', ZOOMS)
+def test_road_widths_do_not_decrease_with_class(mpp: int) -> None:
+    """Each road class is at least as wide as the one below it."""
+    widths = [road_style(layer=layer, mpp=mpp)[0] for layer in ROAD_LAYERS]
+    assert widths == sorted(widths)
+
+
+def test_road_style_rejects_unknown_zoom() -> None:
+    """A zoom that is not a step raises a ValueError naming it."""
+    with pytest.raises(ValueError, match='unsupported zoom: 7'):
+        road_style(layer='road_minor', mpp=7)
+
+
+def test_label_zones_match_the_spec() -> None:
+    """Label zooms, place kinds and reserve rules are the chosen ones."""
+    assert STREET_ZOOMS == {3, 5, 8, 14}
+    assert SUBURB_ZOOMS == {8, 14, 45}
+    assert STATION_ZOOMS == {3, 5, 8, 14, 45}
+    assert CITY_PLACES == {'suburb', 'town'}
+    assert PLACE_KINDS == {'suburb', 'town', 'locality', 'village'}
+    assert RESERVE_ZOOMS == {3, 5, 8}
+    assert RESERVE_PX == 24
+    assert STREET_REPEAT_PX == 384
+
+
+def test_faces_and_areas_match_the_spec() -> None:
+    """Faces, area greys and the river stroke are the chosen ones."""
+    assert STREET_FACE == Face(weight=700, px=12)
+    assert SUBURB_FACE == Face(weight=700, px=13)
+    assert STATION_FACE == Face(weight=800, px=14)
+    assert AREA_GREYS == {'park': LIGHT, 'water': DARK, 'sea': DARK}
+    assert RIVER_STYLE == (2, DARK)
 
 
 def test_named_roads_by_zoom() -> None:
@@ -70,5 +125,6 @@ def test_transit_style_other_layers() -> None:
     assert transit_style(layer='light_rail', mpp=45) == [(1, INK, None)]
     assert transit_style(layer='light_rail', mpp=14) == [(2, INK, None)]
     assert transit_style(layer='rail', mpp=3)[0][0] == 5
+    assert transit_style(layer='rail', mpp=5)[0][0] == 5
     assert transit_style(layer='rail', mpp=14)[0][0] == 3
     assert transit_style(layer='other', mpp=14) == []

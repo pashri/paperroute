@@ -22,6 +22,7 @@ DIAGONAL = (
     ),
 )
 HALFWAY = START + timedelta(minutes=5)
+QUARTER = START + timedelta(minutes=2, seconds=30)
 
 
 def test_measure_sets_stop_distances_along_the_shape() -> None:
@@ -108,7 +109,7 @@ def test_timetable_point_after_midnight_uses_previous_service_day() -> None:
     point = timetable_point(
         pattern=pattern(
             stops=stops,
-            days=(now.date() - timedelta(days=1), now.date()),
+            days=(now.date(), now.date() - timedelta(days=1)),
         ),
         shape=None,
         now=now,
@@ -157,3 +158,54 @@ def test_timetable_point_without_stops_is_none() -> None:
         now=HALFWAY,
     )
     assert point is None
+
+
+def test_timetable_point_quarter_hop_runs_forwards_on_the_chord() -> None:
+    """A quarter of the hop in time is a quarter of the way from the start."""
+    point = timetable_point(
+        pattern=pattern(stops=DIAGONAL),
+        shape=None,
+        now=QUARTER,
+    )
+    assert point == pytest.approx((250.0, 250.0))
+
+
+def test_timetable_point_quarter_hop_runs_forwards_on_the_shape() -> None:
+    """A quarter of the hop in time is a quarter of the way along the shape."""
+    measured = measure(
+        pattern=pattern(shape_id='L', stops=DIAGONAL),
+        shape=CORNER,
+    )
+    point = timetable_point(pattern=measured, shape=CORNER, now=QUARTER)
+    assert point == pytest.approx((500.0, 0.0))
+
+
+def test_timetable_point_hop_after_a_dwell_counts_from_departure() -> None:
+    """A dwell starts on arrival, and the next hop runs from departure."""
+    stops = (
+        DIAGONAL[0],
+        PatternStop(
+            arrives=EIGHT + 240,
+            departs=EIGHT + 420,
+            point=(300.0, 700.0),
+        ),
+        DIAGONAL[1],
+    )
+    trip = pattern(stops=stops)
+    arriving = START + timedelta(minutes=4)
+    later = START + timedelta(minutes=8, seconds=30)
+    assert timetable_point(pattern=trip, shape=None, now=arriving) == (
+        300.0,
+        700.0,
+    )
+    assert timetable_point(
+        pattern=trip,
+        shape=None,
+        now=later,
+    ) == pytest.approx((650.0, 850.0))
+
+
+def test_timetable_point_at_the_first_departure_is_the_first_stop() -> None:
+    """At the first departure time the trip is at the first stop."""
+    point = timetable_point(pattern=pattern(), shape=None, now=START)
+    assert point == (0.0, 0.0)

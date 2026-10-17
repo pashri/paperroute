@@ -294,6 +294,8 @@ def pinned_routes(*, departures: Sequence[Departure]) -> frozenset[str]:
     """
     Collect the pin's route short names.
 
+    A nearby route with the same short name is styled as pinned too.
+
     Parameters
     ----------
     departures : Sequence[Departure]
@@ -331,9 +333,9 @@ def route_lines(
     shape_ids = dict.fromkeys(
         departure.shape_id
         for departure in departures
-        if departure.shape_id in shapes
+        if departure.shape_id is not None and departure.shape_id in shapes
     )
-    return tuple(shapes[shape_id].points for shape_id in shape_ids if shape_id)
+    return tuple(shapes[shape_id].points for shape_id in shape_ids)
 
 
 def shape_of(
@@ -371,16 +373,22 @@ def heard(*, inputs: MapInputs) -> tuple[tuple[VehiclePosition, float], ...]:
     Returns
     -------
     tuple[tuple[VehiclePosition, float], ...]
-        Each vehicle and the seconds since it reported.
+        Each vehicle and the seconds since it reported. Of several vehicles
+        on one trip only the most recently heard is kept; vehicles with no
+        trip ID are all kept.
     """
-    return tuple(
-        (
-            vehicle,
-            position_age(vehicle=vehicle, snapshot=snapshot, now=inputs.now),
-        )
-        for snapshot in inputs.positions.values()
-        for vehicle in snapshot.vehicles
-    )
+    best: dict[tuple[str, int], tuple[VehiclePosition, float]] = {}
+    for feed, snapshot in inputs.positions.items():
+        for index, vehicle in enumerate(snapshot.vehicles):
+            key = (vehicle.trip_id, -1) if vehicle.trip_id else (feed, index)
+            age = position_age(
+                vehicle=vehicle,
+                snapshot=snapshot,
+                now=inputs.now,
+            )
+            if key not in best or age < best[key][1]:
+                best[key] = (vehicle, age)
+    return tuple(best.values())
 
 
 def is_fresh(*, age: float) -> bool:
@@ -462,6 +470,7 @@ def live_marker(
     vehicle: VehiclePosition,
     inputs: MapInputs,
     centre: Point,
+    pinned: frozenset[str],
 ) -> Marker:
     """
     Mark a fresh vehicle where it reported.
@@ -474,6 +483,8 @@ def live_marker(
         The map's inputs.
     centre : Point
         The map centre in metres.
+    pinned : frozenset[str]
+        The pin's route short names.
 
     Returns
     -------
@@ -491,7 +502,7 @@ def live_marker(
         y=y,
         bearing=vehicle.bearing,
         live=True,
-        pinned=vehicle.label in pinned_routes(departures=inputs.departures),
+        pinned=vehicle.label in pinned,
     )
 
 
@@ -501,6 +512,7 @@ def timetable_marker(
     inputs: MapInputs,
     centre: Point,
     age: float | None,
+    pinned: frozenset[str],
 ) -> Marker | None:
     """
     Mark a trip at its timetable position.
@@ -515,6 +527,8 @@ def timetable_marker(
         The map centre in metres.
     age : float | None
         Seconds since the trip's vehicle reported, or None if it never did.
+    pinned : frozenset[str]
+        The pin's route short names.
 
     Returns
     -------
@@ -538,7 +552,7 @@ def timetable_marker(
         y=y,
         bearing=None,
         live=False,
-        pinned=pattern.route in pinned_routes(departures=inputs.departures),
+        pinned=pattern.route in pinned,
         age=age,
     )
 
@@ -549,6 +563,7 @@ def stale_marker(
     age: float,
     inputs: MapInputs,
     centre: Point,
+    pinned: frozenset[str],
 ) -> Marker | None:
     """
     Mark a stale vehicle at its trip's timetable position.
@@ -563,6 +578,8 @@ def stale_marker(
         The map's inputs.
     centre : Point
         The map centre in metres.
+    pinned : frozenset[str]
+        The pin's route short names.
 
     Returns
     -------
@@ -575,6 +592,7 @@ def stale_marker(
         inputs=inputs,
         centre=centre,
         age=age,
+        pinned=pinned,
     )
 
 
@@ -582,6 +600,7 @@ def vehicle_markers(
     *,
     inputs: MapInputs,
     centre: Point,
+    pinned: frozenset[str],
 ) -> tuple[tuple[str, Marker], ...]:
     """
     Mark every reported vehicle that can be drawn.
@@ -592,6 +611,8 @@ def vehicle_markers(
         The map's inputs.
     centre : Point
         The map centre in metres.
+    pinned : frozenset[str]
+        The pin's route short names.
 
     Returns
     -------
@@ -601,13 +622,19 @@ def vehicle_markers(
     marked = (
         (
             vehicle.trip_id,
-            live_marker(vehicle=vehicle, inputs=inputs, centre=centre)
+            live_marker(
+                vehicle=vehicle,
+                inputs=inputs,
+                centre=centre,
+                pinned=pinned,
+            )
             if is_fresh(age=age)
             else stale_marker(
                 vehicle=vehicle,
                 age=age,
                 inputs=inputs,
                 centre=centre,
+                pinned=pinned,
             ),
         )
         for vehicle, age in heard(inputs=inputs)
@@ -622,6 +649,7 @@ def pin_markers(
     inputs: MapInputs,
     centre: Point,
     covered: frozenset[str],
+    pinned: frozenset[str],
 ) -> tuple[Marker, ...]:
     """
     Mark the pin's running trips that no vehicle stands for.
@@ -634,6 +662,8 @@ def pin_markers(
         The map centre in metres.
     covered : frozenset[str]
         Trip IDs that already have a marker.
+    pinned : frozenset[str]
+        The pin's route short names.
 
     Returns
     -------
@@ -646,6 +676,7 @@ def pin_markers(
             inputs=inputs,
             centre=centre,
             age=None,
+            pinned=pinned,
         )
         for departure in uncovered_pins(
             departures=inputs.departures,
@@ -672,11 +703,13 @@ def markers_for(*, inputs: MapInputs, centre: Point) -> tuple[Marker, ...]:
         The visible markers, pinned routes first, then by distance from
         the centre.
     """
-    drawn = vehicle_markers(inputs=inputs, centre=centre)
+    pinned = pinned_routes(departures=inputs.departures)
+    drawn = vehicle_markers(inputs=inputs, centre=centre, pinned=pinned)
     pins = pin_markers(
         inputs=inputs,
         centre=centre,
         covered=frozenset(trip for trip, _ in drawn),
+        pinned=pinned,
     )
     middle = screen_point(centre=centre, mpp=ZOOMS[inputs.zoom], point=centre)
     shown = [

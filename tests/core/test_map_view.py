@@ -441,7 +441,7 @@ def test_needed_patterns_lists_pin_and_nearby_stale_trips() -> None:
     stale_far = vehicle(
         timestamp=heard(age=300),
         trip_id='far',
-        point=(3 * width, 0.0),
+        point=(1.6 * width, 0.0),
     )
     fresh = vehicle(timestamp=heard(age=0), trip_id='live')
     covered = replace(pin(), trip_id='live')
@@ -470,3 +470,21 @@ def test_pin_trips_and_routes_include_aliases_and_short_names() -> None:
         {'t1', 't1-alias', 't2'},
     )
     assert pinned_routes(departures=departures) == frozenset({'606', 'M52'})
+
+
+def test_two_vehicles_on_one_trip_give_the_freshest_marker() -> None:
+    """Only the most recently heard vehicle on a trip is drawn."""
+    stale = vehicle(timestamp=heard(age=300), point=(500.0, 0.0))
+    fresh = vehicle(timestamp=heard(age=5), point=(100.0, 0.0))
+    for vehicles in ((stale, fresh), (fresh, stale)):
+        (marker,) = build_map_view(inputs=inputs(vehicles=vehicles)).markers
+        assert marker.live
+        assert (marker.x, marker.y) == pytest.approx(at(point=(100.0, 0.0)))
+
+
+def test_vehicles_without_a_trip_are_each_drawn() -> None:
+    """Fresh vehicles with no trip ID are not merged."""
+    first = vehicle(timestamp=heard(age=0), trip_id='', point=(0.0, 0.0))
+    second = vehicle(timestamp=heard(age=0), trip_id='', point=(80.0, 0.0))
+    view = build_map_view(inputs=inputs(vehicles=(first, second)))
+    assert len(view.markers) == 2

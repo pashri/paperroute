@@ -76,10 +76,11 @@ class LoadModes:
 
 @dataclass(frozen=True)
 class LoadStrip:
-    """Build the reach of a strip from its From, in a worker."""
+    """Build a strip's reach in a worker, tagged with the timetable version."""
 
     key: StripKey
     origin: StopPlace
+    timetable: str | None = None
 
 
 @dataclass(frozen=True)
@@ -292,10 +293,13 @@ class StripLoaded:
         The strip asked for.
     reach : Reach | None
         The reach, or None when the timetable has no run tables.
+    timetable : str | None
+        The timetable version it was built from.
     """
 
     key: StripKey
     reach: Reach | None
+    timetable: str | None = None
 
 
 @dataclass(frozen=True)
@@ -303,6 +307,7 @@ class StripFailed:
     """A strip's reach couldn't be built; a later tick tries again."""
 
     key: StripKey
+    timetable: str | None = None
 
 
 MapEvent = (

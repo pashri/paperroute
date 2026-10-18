@@ -13,6 +13,8 @@ from paperroute.core.messages import (
     LoadModes,
     MapDataFailed,
     ModesLoaded,
+    StripFailed,
+    StripLoaded,
 )
 from paperroute.core.model import (
     Departure,
@@ -305,6 +307,7 @@ def is_stale(*, state: State, event: Event) -> bool:
     -------
     bool
         True for departures loaded or failed for another place or another
+        timetable version, for a reach built or failed from another
         timetable version, and for area modes loaded or failed for another
         map area.
     """
@@ -316,6 +319,11 @@ def is_stale(*, state: State, event: Event) -> bool:
             return timetable != state.saving.timetable or not same_place(
                 first=pin, second=shown(state=state)
             )
+        case (
+            StripLoaded(timetable=timetable)
+            | StripFailed(timetable=timetable)
+        ):
+            return timetable != state.saving.timetable
         case (
             ModesLoaded(mpp=mpp, box=box)
             | MapDataFailed(request=LoadModes(mpp=mpp, box=box))

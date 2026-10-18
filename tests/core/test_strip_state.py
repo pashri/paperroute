@@ -288,15 +288,42 @@ def test_strip_on_old_timetable_says_update() -> None:
 
 
 def test_new_timetable_clears_the_reaches() -> None:
-    """A new timetable version builds the reach again."""
+    """A new timetable version builds the reach again at once."""
     state, _ = on_view(view=LiveView.STRIP)
     state, _ = step(state, StripLoaded(key=KEY, reach=None))
-    state, _ = step(state, TimetableSeen(version='v2'))
+    state, effects = step(state, TimetableSeen(version='v2'))
     assert not state.strip.reaches
-    _, effects = step(state, Tick(now=START + timedelta(seconds=1)))
     assert kinds(effects=effects, kind=LoadStrip) == [
-        LoadStrip(key=KEY, origin=PIN.origin),
+        LoadStrip(key=KEY, origin=PIN.origin, timetable='v2'),
     ]
+    [render] = kinds(effects=effects, kind=Render)
+    assert isinstance(render.view, StripView)
+    assert render.view.empty == LOADING
+
+
+def test_reach_from_the_old_timetable_is_dropped() -> None:
+    """A reach built before a timetable swap is never stored."""
+    state, _ = on_view(view=LiveView.STRIP)
+    state, _ = step(state, TimetableSeen(version='v2'))
+    state, effects = step(state, StripLoaded(key=KEY, reach=long_reach()))
+    assert not effects
+    assert not state.strip.reaches
+    assert KEY in state.strip.pending
+    state, effects = step(state, StripFailed(key=KEY))
+    assert (effects, state.strip.failed_at) == ((), None)
+    assert KEY in state.strip.pending
+    state, _ = step(
+        state, StripLoaded(key=KEY, reach=long_reach(), timetable='v2'),
+    )
+    assert state.strip.reaches == {KEY: long_reach()}
+
+
+def test_stale_strip_failure_is_ignored() -> None:
+    """A failure for a key neither pending nor in use starts no backoff."""
+    state, _ = on_view(view=LiveView.STRIP)
+    other = replace(KEY, station='elsewhere')
+    after, effects = step(state, StripFailed(key=other))
+    assert (after, effects) == (state, ())
 
 
 def test_stale_strip_result_is_ignored() -> None:
@@ -320,6 +347,16 @@ def test_strip_map_zooms_on_bottom_turn() -> None:
     assert render.view.map.zoom == DEFAULT_ZOOM + 1
     assert render.view.map.base.width == 480
     assert render.view.pane.rows[2].name == 'C'
+
+
+def test_strip_rests_at_zero_with_from_at_the_top() -> None:
+    """A From on the top row keeps the resting scroll at 0."""
+    state, _ = on_view(view=LiveView.STRIP)
+    state, _ = step(state, StripLoaded(key=KEY, reach=long_reach(origin=0)))
+    assert state.strip.scroll == 0
+    state, _ = step(state, turn(steps=-3))
+    assert state.strip.scroll == 0
+    assert first_name(state=state) == 'C'
 
 
 def first_name(*, state: State) -> str:
@@ -393,9 +430,12 @@ def test_flip_resets_the_strip_scroll() -> None:
 
 
 def test_strip_polls_positions_for_departure_modes() -> None:
-    """The Strip polls its departures' positions feeds, never area modes."""
-    _, effects = on_view(view=LiveView.STRIP)
-    assert FetchFeed(feed=TRAIN_POSITIONS, kind=FeedKind.POSITIONS) in effects
+    """The Strip polls only its own kind's positions, never area modes."""
+    bus = departure(departs=START + timedelta(minutes=2), trip_id='bus')
+    _, effects = on_view(view=LiveView.STRIP, departures=(bus, *trains()))
+    fetches = kinds(effects=effects, kind=FetchFeed)
+    assert FetchFeed(feed=TRAIN_POSITIONS, kind=FeedKind.POSITIONS) in fetches
+    assert all(fetch.feed != BUS_POSITIONS for fetch in fetches)
     assert not kinds(effects=effects, kind=LoadModes)
     assert not kinds(effects=effects, kind=LoadShapes)
 
@@ -478,23 +518,29 @@ def test_map_still_caps_a_whole_stop() -> None:
 
 def test_strip_trips_do_not_wait_for_the_fetch_in_flight() -> None:
     """A strip trip seen in an old download is asked for at once."""
-    bus = departure(departs=START + timedelta(minutes=2), trip_id='bus')
-    state, _ = on_view(view=LiveView.STRIP, departures=(bus,))
+    early = departure(
+        departs=START + timedelta(minutes=1),
+        mode=Mode.TRAIN,
+        trip_id='early',
+        kind=RouteKind.TRAIN,
+    )
+    state, _ = on_view(view=LiveView.STRIP, departures=(early,))
     seen = vehicle(timestamp=int(START.timestamp()), trip_id='train-0')
     state, _ = step(
         state,
         PositionsFetched(
-            feed=BUS_POSITIONS,
+            feed=TRAIN_POSITIONS,
             snapshot=snapshot(fetched_at=START, vehicles=(seen,)),
         ),
     )
     state, effects = step(state, Tick(now=START + RETRY_AFTER))
-    assert FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS) in effects
+    fetch = FetchFeed(feed=TRAIN_POSITIONS, kind=FeedKind.POSITIONS)
+    assert fetch in effects
     _, effects = step(
         state,
         DeparturesLoaded(
             pin=PIN,
-            departures=(bus, *trains()),
+            departures=(early, *trains()),
             until=START + HORIZON,
         ),
     )

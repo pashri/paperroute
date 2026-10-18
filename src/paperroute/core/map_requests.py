@@ -70,9 +70,12 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
     tuple[str, ...]
         On a map, the feeds for the modes in the map area at the current
         zoom, or for the departures' modes when none are known there; on
-        the Strip, the departures' modes.
+        the Strip, the modes of the strip's own departures.
     """
-    modes = frozenset(departure.mode for departure in state.board.departures)
+    departures = state.board.departures
+    if state.view is LiveView.STRIP:
+        departures = strip_window(state=state)
+    modes = frozenset(departure.mode for departure in departures)
     if state.view in MAP_VIEWS:
         modes = state.map.area_modes.get(ZOOMS[state.map.zoom]) or modes
     return position_feeds(modes=modes)

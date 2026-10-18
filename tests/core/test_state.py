@@ -914,7 +914,7 @@ def strip_events(draw: st.DrawFn) -> Event:
     -------
     Event
         A StripLoaded with no reach, a short or a long one, or a
-        StripFailed.
+        StripFailed, from any timetable version.
     """
     pin = draw(st.sampled_from(POOL))
     key = draw(
@@ -928,9 +928,10 @@ def strip_events(draw: st.DrawFn) -> Event:
             [None, reach_through(origin=pin.origin.stop_id, side=side)]
         )
     )
+    timetable = draw(st.sampled_from(VERSIONS))
     options: list[Event] = [
-        StripLoaded(key=key, reach=reach),
-        StripFailed(key=key),
+        StripLoaded(key=key, reach=reach, timetable=timetable),
+        StripFailed(key=key, timetable=timetable),
     ]
     return draw(st.sampled_from(options))
 
@@ -1049,15 +1050,45 @@ def check_effects(
             check_render(state=after, view=effect.view)
             assert effect.view != before.last_view
         if isinstance(effect, LoadStrip):
-            assert after.view in STRIP_VIEWS
-            assert effect.key not in before.strip.pending
-            assert effect.key not in before.strip.reaches
+            check_strip_load(
+                before=before, after=after, event=event, effect=effect
+            )
         if isinstance(effect, LoadDepartures):
             assert not before.board.loading or not same_place(
                 first=shown(state=before), second=effect.pin
             )
         if isinstance(effect, FetchFeed):
             check_fetch(before=before, after=after, event=event, effect=effect)
+
+
+def check_strip_load(
+    *, before: State, after: State, event: Event, effect: LoadStrip
+) -> None:
+    """
+    Assert a reach is asked for on a strip view, from the timetable in
+    use, and never while pending or built, unless the timetable just
+    changed and forgot them.
+
+    Parameters
+    ----------
+    before : State
+        State before the event.
+    after : State
+        State after the event.
+    event : Event
+        The event applied.
+    effect : LoadStrip
+        The request.
+    """
+    assert after.view in STRIP_VIEWS
+    assert effect.timetable == after.saving.timetable
+    swapped = (
+        isinstance(event, TimetableSeen)
+        and event.version != before.saving.timetable
+    )
+    if not swapped:
+        assert effect.key not in before.strip.pending
+        assert effect.key not in before.strip.reaches
 
 
 def check_map_requests(

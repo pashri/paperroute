@@ -119,7 +119,9 @@ def request_strips(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     if state.view not in STRIP_VIEWS or key in asked or backing_off:
         return state, ()
     strip = replace(strip, pending=strip.pending | {key})
-    load = LoadStrip(key=key, origin=pin.origin)
+    load = LoadStrip(
+        key=key, origin=pin.origin, timetable=state.saving.timetable
+    )
     return replace(state, strip=strip), (load,)
 
 
@@ -162,8 +164,12 @@ def strip_failed(*, state: State, event: StripFailed) -> State:
     Returns
     -------
     State
-        State with the key no longer pending and the failure time set.
+        State with the key no longer pending and the failure time set;
+        unchanged for a key neither pending nor in use.
     """
+    stale = event.key not in state.strip.pending | keys_in_use(state=state)
+    if stale:
+        return state
     strip = replace(
         state.strip,
         pending=state.strip.pending - {event.key},
@@ -202,13 +208,15 @@ def scroll_range(*, reach: Reach | None) -> tuple[int, int]:
     Returns
     -------
     tuple[int, int]
-        The lowest and highest scroll; both 0 with no reach.
+        The lowest and highest scroll; both 0 with no reach. The range
+        always holds 0, the resting scroll, even when the From sits so
+        near the top that a few scrolls down move nothing.
     """
     if reach is None:
         return 0, 0
     origin = origin_of(reach=reach)
     shift = 0 if origin is None else origin - PANE_FROM_ROW
-    low = -shift
+    low = min(0, -shift)
     return low, max(low, len(reach.rows) - STRIP_ROWS - shift)
 
 

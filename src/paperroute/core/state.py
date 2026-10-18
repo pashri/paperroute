@@ -688,8 +688,9 @@ def on_timetable(
     tuple[State, tuple[Effect, ...]]
         State with the version recorded, the departures due to reload
         (a load in flight is forgotten, its reply now stale) and no
-        reaches built or pending, and a MatchPlaces when there is a
-        timetable; unchanged for the version already seen.
+        reaches built or pending, redrawn with the new reach asked for,
+        and a MatchPlaces when there is a timetable; unchanged for the
+        version already seen.
     """
     if event.version == state.saving.timetable:
         return state, ()
@@ -700,8 +701,9 @@ def on_timetable(
         strip=replace(state.strip, reaches={}, pending=frozenset()),
     )
     if event.version is None:
-        return state, ()
-    return state, (MatchPlaces(places=stops_to_match(state=state)),)
+        return settled(state=state)
+    rematch = MatchPlaces(places=stops_to_match(state=state))
+    return settled(state=state, effects=(rematch,))
 
 
 def on_matched(

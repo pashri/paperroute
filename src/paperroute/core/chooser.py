@@ -6,7 +6,6 @@ from typing import Final
 
 from paperroute.core.model import Departure, Pin, RouteKind, StopPlace
 from paperroute.core.reach import Reach, RowKind, StripKey
-from paperroute.core.stop_view import DOT
 from paperroute.core.strip_view import origin_of
 
 
@@ -156,28 +155,10 @@ class StripRequest:
 
 ChooserRequest = ColumnRequest | LineRequest | StripRequest
 
-ROW_HEIGHTS: Final[dict[Level, int]] = {
-    Level.KIND: 56,
-    Level.GROUP: 31,
-    Level.ROUTE: 40,
-    Level.LINE: 31,
-    Level.TOWARDS: 45,
-}
-CHOOSER_TOP: Final[int] = 40
-CHOOSER_BOTTOM: Final[int] = 480
-COLUMN_MARGIN: Final[int] = 2
-SHOWN_COLUMNS: Final[int] = 3
 COLLAPSIBLE: Final[frozenset[Level]] = frozenset(
     {Level.GROUP, Level.ROUTE, Level.LINE},
 )
 NAMED_BY_BADGE: Final[frozenset[Level]] = frozenset({Level.ROUTE, Level.LINE})
-TITLES: Final[dict[Stage, str]] = {
-    Stage.LISTS: 'Choose a route',
-    Stage.FROM: 'Choose a stop',
-    Stage.TO: 'Choose a destination',
-}
-LOADING_LISTS: Final[str] = 'Loading…'
-NEEDS_UPDATE: Final[str] = 'Routes need a timetable update'
 
 
 @dataclass(frozen=True)
@@ -232,58 +213,6 @@ class ChooserState:
     prefer: RouteKind | None = None
     failed: bool = False
     departures: tuple[Departure, ...] = ()
-
-
-@dataclass(frozen=True)
-class ColumnView:
-    """
-    One chooser column as drawn.
-
-    Attributes
-    ----------
-    level : Level
-        What it lists.
-    items : tuple[Choice, ...]
-        The rows that fit, from ``first``.
-    selected : int
-        Cursor's index within ``items``.
-    focused : bool
-        Whether the knob moves this column.
-    first : int
-        Index of the first visible row.
-    total : int
-        Rows in the whole column.
-    """
-
-    level: Level
-    items: tuple[Choice, ...]
-    selected: int
-    focused: bool
-    first: int
-    total: int
-
-
-@dataclass(frozen=True)
-class ChooserView:
-    """
-    What the chooser screen shows.
-
-    Attributes
-    ----------
-    title : str
-        What is being chosen.
-    trail : str
-        The choices made so far.
-    columns : tuple[ColumnView, ...]
-        Up to three columns, ending with the focus's preview.
-    empty : str | None
-        Text shown in place of the columns, or None.
-    """
-
-    title: str
-    trail: str
-    columns: tuple[ColumnView, ...]
-    empty: str | None
 
 
 def clamped(*, value: int, count: int) -> int:
@@ -382,7 +311,7 @@ def opens_line(*, chooser: ChooserState) -> bool:
     Parameters
     ----------
     chooser : ChooserState
-        Chooser with at least one column.
+        Chooser with at least one column, the focus not empty.
 
     Returns
     -------
@@ -393,6 +322,25 @@ def opens_line(*, chooser: ChooserState) -> bool:
         chooser.columns[chooser.focus].level is Level.TOWARDS
         and chosen(chooser=chooser, index=chooser.focus).level is None
     )
+
+
+def is_empty(*, chooser: ChooserState, index: int) -> bool:
+    """
+    Say whether a column has no rows.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser.
+    index : int
+        Column index.
+
+    Returns
+    -------
+    bool
+        True for an empty column, which is never focused.
+    """
+    return not chooser.columns[index].items
 
 
 def previewed(
@@ -409,8 +357,8 @@ def previewed(
     Returns
     -------
     tuple[ChooserState, ChooserRequest | None]
-        The chooser and its column request; no request for a towards row,
-        whose next stage loads on the press.
+        The chooser and its column request; no request for an empty
+        column, or for a towards row, whose next stage loads on the press.
     """
     end = chooser.focus + 1
     trimmed = replace(
@@ -420,7 +368,9 @@ def previewed(
         waiting=None,
         failed=False,
     )
-    if opens_line(chooser=trimmed):
+    if is_empty(chooser=trimmed, index=chooser.focus) or opens_line(
+        chooser=trimmed,
+    ):
         return trimmed, None
     path = path_to(chooser=trimmed, index=chooser.focus)
     return replace(trimmed, waiting=path), ColumnRequest(path=path)
@@ -460,15 +410,17 @@ def first_cursor(*, column: Column, prefer: RouteKind | None) -> int:
     Returns
     -------
     int
-        The preferred kind's row in the KIND column, else 0.
+        The preferred kind's row in the KIND column (Train's for a
+        replacement bus place), else 0.
     """
     if column.level is not Level.KIND:
         return 0
+    wanted = RouteKind.TRAIN if prefer is RouteKind.REPLACEMENT else prefer
     return next(
         (
             index
             for index, choice in enumerate(column.items)
-            if choice.key == prefer
+            if choice.key == wanted
         ),
         0,
     )
@@ -592,6 +544,33 @@ def turned_lists(
     return previewed(chooser=replace(chooser, cursors=cursors))
 
 
+def to_row(*, chooser: ChooserState, reach: Reach, origin: int) -> int:
+    """
+    Find the TO cursor's strip row.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser in the TO stage.
+    reach : Reach
+        Its strip.
+    origin : int
+        The strip's From row.
+
+    Returns
+    -------
+    int
+        The cursor's row; the From row when the cursor is off the strip
+        or on an approach row.
+    """
+    target = origin + chooser.to_cursor
+    on_strip = (
+        0 <= target < len(reach.rows)
+        and reach.rows[target].kind is not RowKind.APPROACH
+    )
+    return target if on_strip else origin
+
+
 def turned_to(
     *, chooser: ChooserState, steps: int, reach: Reach | None,
 ) -> ChooserState:
@@ -620,8 +599,7 @@ def turned_to(
         for index, row in enumerate(reach.rows)
         if row.kind is not RowKind.APPROACH
     ]
-    target = origin + chooser.to_cursor
-    at = rows.index(target if target in rows else origin)
+    at = rows.index(to_row(chooser=chooser, reach=reach, origin=origin))
     row = rows[clamped(value=at + steps, count=len(rows))]
     return replace(chooser, to_cursor=row - origin)
 
@@ -673,9 +651,10 @@ def pressed_lists(
     Returns
     -------
     tuple[ChooserState, ChooserRequest | None]
-        The chooser and its request; unchanged until the preview loads.
+        The chooser and its request; unchanged until the preview loads,
+        and when the focus or the preview is empty.
     """
-    if not chooser.columns:
+    if not chooser.columns or is_empty(chooser=chooser, index=chooser.focus):
         return chooser, None
     if opens_line(chooser=chooser):
         towards = chosen(chooser=chooser, index=chooser.focus)
@@ -684,7 +663,7 @@ def pressed_lists(
             LineRequest(towards=int(towards.key)),
         )
     preview = preview_of(chooser=chooser)
-    if preview is None:
+    if preview is None or is_empty(chooser=chooser, index=preview):
         return chooser, None
     return previewed(chooser=replace(chooser, focus=preview))
 
@@ -741,7 +720,7 @@ def pressed_to(
     origin = None if reach is None else origin_of(reach=reach)
     if reach is None or origin is None:
         return chooser, None
-    row = reach.rows[origin + chooser.to_cursor]
+    row = reach.rows[to_row(chooser=chooser, reach=reach, origin=origin)]
     destination = None if row.kind is RowKind.ORIGIN else row.place
     return chooser, chosen_pin(chooser=chooser, destination=destination)
 
@@ -873,128 +852,4 @@ def chosen_pin(
         destination=destination,
         kind=RouteKind.REPLACEMENT if replaced else RouteKind(path[0][1]),
         routes=tuple(badges[-1:]),
-    )
-
-
-def step_label(*, chooser: ChooserState, index: int) -> str:
-    """
-    Name a chosen step for the trail.
-
-    Parameters
-    ----------
-    chooser : ChooserState
-        Chooser.
-    index : int
-        Column index.
-
-    Returns
-    -------
-    str
-        A route's or line's number, else the choice's label.
-    """
-    choice = chosen(chooser=chooser, index=index)
-    if chooser.columns[index].level in NAMED_BY_BADGE and choice.badge:
-        return choice.badge
-    return choice.label
-
-
-def column_view(
-    *, column: Column, cursor: int, focused: bool,
-) -> ColumnView:
-    """
-    Window a column so its cursor stays clear of the edges.
-
-    Parameters
-    ----------
-    column : Column
-        Column.
-    cursor : int
-        Its cursor.
-    focused : bool
-        Whether the knob moves it.
-
-    Returns
-    -------
-    ColumnView
-        The rows that fit, the cursor at least ``COLUMN_MARGIN`` rows from
-        the bottom edge, and from the top edge once scrolled.
-    """
-    fits = (CHOOSER_BOTTOM - CHOOSER_TOP) // ROW_HEIGHTS[column.level]
-    total = len(column.items)
-    first = max(0, min(cursor + COLUMN_MARGIN + 1 - fits, total - fits))
-    return ColumnView(
-        level=column.level,
-        items=column.items[first:first + fits],
-        selected=cursor - first,
-        focused=focused,
-        first=first,
-        total=total,
-    )
-
-
-def column_views(*, chooser: ChooserState) -> tuple[ColumnView, ...]:
-    """
-    The last three drawn columns up to the focus's preview.
-
-    Parameters
-    ----------
-    chooser : ChooserState
-        Chooser.
-
-    Returns
-    -------
-    tuple[ColumnView, ...]
-        Columns left to right.
-    """
-    preview = preview_of(chooser=chooser)
-    last = chooser.focus if preview is None else preview
-    shown = [
-        index
-        for index, column in enumerate(chooser.columns[:last + 1])
-        if not column.collapsed
-    ][-SHOWN_COLUMNS:]
-    return tuple(
-        column_view(
-            column=chooser.columns[index],
-            cursor=chooser.cursors[index],
-            focused=index == chooser.focus,
-        )
-        for index in shown
-    )
-
-
-def build_chooser_view(*, chooser: ChooserState) -> ChooserView:
-    """
-    Build what the chooser screen shows.
-
-    Parameters
-    ----------
-    chooser : ChooserState
-        Chooser.
-
-    Returns
-    -------
-    ChooserView
-        Title, trail of choices made, columns and any empty text: the
-        timetable-update text after a failed load, the loading text before
-        the first column.
-    """
-    chosen_count = (
-        chooser.focus if chooser.stage is Stage.LISTS else chooser.focus + 1
-    )
-    trail = DOT.join(
-        step_label(chooser=chooser, index=index)
-        for index in range(min(chosen_count, len(chooser.columns)))
-    )
-    return ChooserView(
-        title=TITLES[chooser.stage],
-        trail=trail,
-        columns=column_views(chooser=chooser),
-        empty=(
-            NEEDS_UPDATE
-            if chooser.failed
-            else LOADING_LISTS
-            if chooser.waiting is not None and not chooser.columns
-            else None
-        ),
     )

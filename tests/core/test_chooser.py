@@ -1,14 +1,11 @@
-"""Tests for the route chooser's state and view-model."""
+"""Tests for the route chooser's state."""
 
-from typing import Final
+from dataclasses import replace
 
 import pytest
 
 from paperroute.core.chooser import (
     Choice,
-    ChooserPath,
-    ChooserRequest,
-    ChooserState,
     Column,
     ColumnRequest,
     Level,
@@ -16,7 +13,6 @@ from paperroute.core.chooser import (
     Stage,
     StripRequest,
     backed,
-    build_chooser_view,
     chosen_pin,
     opened,
     path_to,
@@ -25,204 +21,27 @@ from paperroute.core.chooser import (
     with_column,
     with_line,
 )
-from paperroute.core.model import Pin, RouteKind, StopPlace
-from paperroute.core.reach import Reach, ReachRow, RowKind, StripKey
+from paperroute.core.chooser_view import build_chooser_view
+from paperroute.core.model import Pin, RouteKind
+from paperroute.core.reach import StripKey
+from tests.core.chooser_steps import (
+    BUS_606,
+    GROUPS,
+    KINDS,
+    LINE,
+    METRO_LINES,
+    REACH,
+    T1_BUSES,
+    T1_TOWARDS,
+    TOWARDS,
+    TRAIN_LINES,
+    at_from,
+    at_to,
+    at_towards,
+    fed,
+    opened_at_kind,
+)
 from tests.core.factories import place
-
-KINDS: Final[Column] = Column(
-    level=Level.KIND,
-    items=(
-        Choice(key='bus', label='Bus', badge='B'),
-        Choice(key='train', label='Train', badge='T'),
-        Choice(key='metro', label='Metro', badge='M'),
-    ),
-)
-GROUPS: Final[Column] = Column(
-    level=Level.GROUP,
-    items=(
-        Choice(key='1-99', label='1-99'),
-        Choice(key='600s', label='600s'),
-    ),
-)
-ROUTES: Final[Column] = Column(
-    level=Level.ROUTE,
-    items=(
-        Choice(key='r606', label='Parramatta to Hawkesbury', badge='606'),
-        Choice(key='r609', label='Parramatta to Castle Hill', badge='609'),
-    ),
-)
-TOWARDS: Final[Column] = Column(
-    level=Level.TOWARDS,
-    items=(
-        Choice(key='11', label='Parramatta', detail='40'),
-        Choice(key='12', label='Hawkesbury', detail='38'),
-    ),
-)
-METRO_LINES: Final[Column] = Column(
-    level=Level.LINE,
-    items=(Choice(key='m1', label='North West & Bankstown', badge='M1'),),
-)
-TRAIN_LINES: Final[Column] = Column(
-    level=Level.LINE,
-    items=(
-        Choice(key='t1', label='North Shore & Western', badge='T1'),
-        Choice(key='t2', label='Leppington & Inner West', badge='T2'),
-    ),
-)
-T1_TOWARDS: Final[Column] = Column(
-    level=Level.TOWARDS,
-    items=(
-        Choice(key='21', label='Emu Plains', detail='90'),
-        Choice(
-            key='replacements', label='Replacement buses',
-            detail='2 routes', level=Level.REPLACEMENTS,
-        ),
-    ),
-)
-T1_BUSES: Final[Column] = Column(
-    level=Level.ROUTE,
-    items=(
-        Choice(key='b1', label='Strathfield to Parramatta', badge='T1X'),
-        Choice(key='b2', label='Penrith to Emu Plains', badge='T1Y'),
-    ),
-)
-LINE: Final[tuple[StopPlace, ...]] = (
-    place('S1', name='Parramatta'),
-    place('S2', name='Northmead'),
-    place('S3', name='Baulkham Hills'),
-)
-BUS_606: Final[ChooserPath] = (
-    (Level.KIND, 'bus'),
-    (Level.GROUP, '600s'),
-    (Level.ROUTE, 'r606'),
-)
-
-
-def row(stop_id: str, kind: RowKind) -> ReachRow:
-    """
-    A strip row with no indent.
-
-    Parameters
-    ----------
-    stop_id : str
-        Station ID.
-    kind : RowKind
-        What the row shows.
-
-    Returns
-    -------
-    ReachRow
-        The row.
-    """
-    return ReachRow(
-        place=place(stop_id), kind=kind, depth=0, above=False, parent=None,
-    )
-
-
-REACH: Final[Reach] = Reach(
-    rows=(
-        row('A1', RowKind.APPROACH),
-        row('S2', RowKind.ORIGIN),
-        row('S3', RowKind.MAIN),
-        row('S4', RowKind.MAIN),
-    ),
-    stations=2,
-    station_of={},
-)
-
-
-def fed(
-    chooser: ChooserState,
-    request: ChooserRequest | Pin | None,
-    column: Column | None,
-) -> tuple[ChooserState, ChooserRequest | Pin | None]:
-    """
-    Answer a column request.
-
-    Parameters
-    ----------
-    chooser : ChooserState
-        Chooser waiting for a column.
-    request : ChooserRequest | Pin | None
-        Its request; must be a ColumnRequest.
-    column : Column | None
-        The answer.
-
-    Returns
-    -------
-    tuple[ChooserState, ChooserRequest | Pin | None]
-        The chooser and its next request.
-    """
-    assert isinstance(request, ColumnRequest)
-    return with_column(chooser=chooser, path=request.path, column=column)
-
-
-def opened_at_kind(kind: RouteKind | None = None) -> ChooserState:
-    """
-    Open the chooser and load the KIND column.
-
-    Parameters
-    ----------
-    kind : RouteKind | None
-        Shown place's kind.
-
-    Returns
-    -------
-    ChooserState
-        The chooser, waiting for the KIND cursor's preview.
-    """
-    chooser, request = opened(shown=Pin(origin=place('X'), kind=kind))
-    chooser, _ = fed(chooser, request, KINDS)
-    return chooser
-
-
-def at_towards() -> ChooserState:
-    """
-    Walk Bus, 600s, 606 to the focused TOWARDS column.
-
-    Returns
-    -------
-    ChooserState
-        The chooser focused on 606's TOWARDS column.
-    """
-    chooser = opened_at_kind()
-    chooser, request = fed(chooser, ColumnRequest(path=BUS_606[:1]), GROUPS)
-    chooser, request = pressed(chooser=chooser, reach=None)
-    chooser, request = fed(chooser, request, None)  # 1-99 fails
-    chooser, request = turned(chooser=chooser, steps=1, reach=None)
-    chooser, request = fed(chooser, request, ROUTES)
-    chooser, request = pressed(chooser=chooser, reach=None)
-    chooser, request = fed(chooser, request, TOWARDS)
-    chooser, request = pressed(chooser=chooser, reach=None)
-    assert request is None
-    return chooser
-
-
-def at_from() -> ChooserState:
-    """
-    Press 606's first towards row and load its line.
-
-    Returns
-    -------
-    ChooserState
-        The chooser in the FROM stage, cursor on the first station.
-    """
-    chooser, _ = pressed(chooser=at_towards(), reach=None)
-    return with_line(chooser=chooser, towards=11, line=LINE)
-
-
-def at_to() -> ChooserState:
-    """
-    Pick Northmead as the From.
-
-    Returns
-    -------
-    ChooserState
-        The chooser in the TO stage, cursor on the From.
-    """
-    chooser, _ = turned(chooser=at_from(), steps=1, reach=None)
-    chooser, _ = pressed(chooser=chooser, reach=None)
-    return chooser
 
 
 def test_opened_asks_for_kind_column() -> None:
@@ -300,6 +119,10 @@ def test_single_line_column_collapses() -> None:
     chooser, request = pressed(chooser=chooser, reach=None)
     assert chooser.focus == 2
     assert request is None
+    assert build_chooser_view(chooser=chooser).trail == 'Metro · M1'
+    chooser, _ = pressed(chooser=chooser, reach=None)
+    view = build_chooser_view(chooser=chooser)
+    assert view.trail == 'Metro · M1 · Parramatta'
 
 
 def test_towards_press_asks_for_line() -> None:
@@ -366,12 +189,11 @@ def test_back_walks_stages_then_closes() -> None:
     assert chooser.stage is Stage.LISTS
     assert chooser.line == ()
     assert chooser.focus == 3
-    focuses = []
+    steps = []
     while chooser is not None:
-        focuses.append(chooser.focus)
-        assert len(chooser.columns) == chooser.focus + 2 or chooser.focus == 3
+        steps.append((chooser.focus, len(chooser.columns)))
         chooser = backed(chooser=chooser)
-    assert focuses == [3, 2, 1, 0]
+    assert steps == [(3, 4), (2, 4), (1, 3), (0, 2)]
 
 
 def test_replacement_route_commits_replacement_kind() -> None:
@@ -399,54 +221,6 @@ def test_replacement_route_commits_replacement_kind() -> None:
     ))
 
 
-def test_view_shows_last_three_columns_with_preview() -> None:
-    chooser = opened_at_kind()
-    chooser, _ = fed(chooser, ColumnRequest(path=BUS_606[:1]), GROUPS)
-    chooser, _ = pressed(chooser=chooser, reach=None)
-    chooser, _ = turned(chooser=chooser, steps=1, reach=None)
-    many = Column(level=Level.ROUTE, items=tuple(
-        Choice(key=f'r{number}', label='Somewhere', badge=str(number))
-        for number in range(600, 630)
-    ))
-    chooser, _ = fed(chooser, ColumnRequest(path=BUS_606[:2]), many)
-    chooser, _ = pressed(chooser=chooser, reach=None)
-    chooser, request = turned(chooser=chooser, steps=20, reach=None)
-    chooser, _ = fed(chooser, request, TOWARDS)
-    view = build_chooser_view(chooser=chooser)
-    assert [column.level for column in view.columns] == [
-        Level.GROUP, Level.ROUTE, Level.TOWARDS,
-    ]
-    assert [column.focused for column in view.columns] == [
-        False, True, False,
-    ]
-    routes = view.columns[1]
-    assert (routes.first, routes.total, len(routes.items)) == (12, 30, 11)
-    assert routes.items[routes.selected].badge == '620'
-    assert routes.selected == 8
-    assert view.columns[0].items[view.columns[0].selected].label == '600s'
-
-
-def test_trail_and_titles() -> None:
-    lists = at_towards()
-    view = build_chooser_view(chooser=lists)
-    assert (view.title, view.trail) == ('Choose a route', 'Bus · 600s · 606')
-    assert view.empty is None
-    choosing_from, _ = pressed(chooser=lists, reach=None)
-    view = build_chooser_view(chooser=choosing_from)
-    assert view.title == 'Choose a stop'
-    assert view.trail == 'Bus · 600s · 606 · Parramatta'
-    assert build_chooser_view(chooser=at_to()).title == 'Choose a destination'
-
-
-def test_empty_text_while_loading_and_failed() -> None:
-    chooser, request = opened(shown=Pin(origin=place('X')))
-    assert build_chooser_view(chooser=chooser).empty == 'Loading…'
-    chooser, _ = fed(chooser, request, None)
-    view = build_chooser_view(chooser=chooser)
-    assert view.empty == 'Routes need a timetable update'
-    assert chooser.waiting is None
-
-
 def test_path_to_uses_choice_level() -> None:
     chooser = opened_at_kind(kind=RouteKind.TRAIN)
     train = ((Level.KIND, 'train'),)
@@ -458,3 +232,35 @@ def test_path_to_uses_choice_level() -> None:
     assert path_to(chooser=chooser, index=2)[-1] == (
         Level.REPLACEMENTS, 'replacements',
     )
+
+
+def test_empty_column_is_never_focused() -> None:
+    chooser, _ = opened(shown=Pin(origin=place('X')))
+    empty = Column(level=Level.KIND, items=())
+    chooser, request = with_column(chooser=chooser, path=(), column=empty)
+    assert request is None
+    assert chooser.columns == (empty,)
+    assert pressed(chooser=chooser, reach=None) == (chooser, None)
+    assert turned(chooser=chooser, steps=1, reach=None) == (chooser, None)
+    chooser, preview = fed(
+        opened_at_kind(), ColumnRequest(path=BUS_606[:1]),
+        Column(level=Level.GROUP, items=()),
+    )
+    assert preview is None
+    assert pressed(chooser=chooser, reach=None) == (chooser, None)
+
+
+def test_replacement_place_starts_on_train() -> None:
+    chooser = opened_at_kind(kind=RouteKind.REPLACEMENT)
+    assert chooser.cursors == (1,)
+
+
+def test_to_press_off_the_strip_commits_no_destination() -> None:
+    chooser, _ = turned(chooser=at_to(), steps=2, reach=REACH)
+    shrunk = replace(REACH, rows=REACH.rows[:3])
+    _, pin = pressed(chooser=chooser, reach=shrunk)
+    assert isinstance(pin, Pin)
+    assert pin.destination is None
+    _, pin = pressed(chooser=replace(chooser, to_cursor=-1), reach=REACH)
+    assert isinstance(pin, Pin)
+    assert pin.destination is None

@@ -20,8 +20,8 @@ from paperroute.build.gtfs_files import (
     parse_time,
     read_rows,
 )
+from paperroute.build.handoff import Handoff, HandoffRecord, hand_over
 from paperroute.build.shapes import load_shapes
-from paperroute.build.swap import Handoff, HandoffRecord, hand_over
 from paperroute.core.model import SYDNEY, Mode, mode_for
 from paperroute.rss import current_rss_mb, max_rss_mb
 

@@ -1,5 +1,6 @@
 """Tests for building the run tables in a child process."""
 
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -13,6 +14,7 @@ import pytest
 from paperroute.build import extras, timetable
 from paperroute.build.extras import build_extras
 from paperroute.build.gtfs_files import Source
+from paperroute.build.handoff import HandoffRecord, write_handoff
 from paperroute.build.timetable import Window, build_timetable
 from tests.build.network_feed import network_feed
 
@@ -25,9 +27,15 @@ IMPORTS_ONLY: Final[str] = (
 )
 CHILD_RUN: Final[str] = (
     'import runpy, sys\n'
-    "sys.argv = ['extras', sys.argv[1]]\n"
-    "runpy.run_module('paperroute.build.extras', run_name='__main__')\n"
-    "assert not {'numpy', 'aiohttp'} & set(sys.modules)\n"
+    "sys.argv = ['extras', *sys.argv[1:]]\n"
+    'try:\n'
+    "    runpy.run_module('paperroute.build.extras', run_name='__main__')\n"
+    'except SystemExit as stop:\n'
+    '    assert stop.code == 0, stop.code\n'
+    'else:\n'
+    "    raise AssertionError('extras did not exit')\n"
+    "loaded = {'numpy', 'aiohttp'} & set(sys.modules)\n"
+    'assert not loaded, loaded\n'
 )
 
 
@@ -136,9 +144,22 @@ def test_extras_never_import_numpy(
     assert imported.returncode == 0, imported.stderr
     monkeypatch.setattr(timetable, 'build_extras', skip_extras)
     db = network_build(folder=tmp_path)
-    child = subprocess.run(
-        [sys.executable, '-c', CHILD_RUN, str(db)],
-        check=False, capture_output=True, text=True,
+    handed = tmp_path / 'handed'
+    handed.mkdir()
+    record = HandoffRecord(
+        scratch=handed / 'timetable.new', out=handed / 'timetable.db',
+        dropped=0, partial=0, peak_mb=1.0, tail=None,
     )
-    assert child.returncode == 0, child.stderr
+    shutil.copy(db, record.scratch)
+    write_handoff(path=handed / 'handoff.json', record=record)
+    for argv in (
+        [str(db)],
+        [str(record.scratch), str(handed / 'handoff.json')],
+    ):
+        child = subprocess.run(
+            [sys.executable, '-c', CHILD_RUN, *argv],
+            check=False, capture_output=True, text=True,
+        )
+        assert child.returncode == 0, child.stderr
     assert RUN_TABLES <= tables_of(db=db)
+    assert RUN_TABLES <= tables_of(db=record.out)

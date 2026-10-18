@@ -18,10 +18,11 @@ from typing import Final
 
 import pytest
 
-from paperroute.build import extras, swap, timetable
+from paperroute.build import extras
+from paperroute.build import handoff as handoff_module
+from paperroute.build import swap, timetable
 from paperroute.build.gtfs_files import Source
-from paperroute.build.sources import SourceState
-from paperroute.build.swap import (
+from paperroute.build.handoff import (
     Fetched,
     HandoffError,
     HandoffRecord,
@@ -29,6 +30,7 @@ from paperroute.build.swap import (
     read_handoff,
     write_handoff,
 )
+from paperroute.build.sources import SourceState
 from paperroute.build.timetable import Window, build_timetable
 from tests.build.network_feed import network_feed
 
@@ -43,7 +45,7 @@ LOCK_AND_EXEC: Final[str] = (
     'import sys\n'
     'from pathlib import Path\n'
     'from paperroute.build.refresh import refresh_lock\n'
-    'from paperroute.build.swap import exec_python\n'
+    'from paperroute.build.handoff import exec_python\n'
     'lock = Path(sys.argv[1])\n'
     'with refresh_lock(path=lock) as fd:\n'
     '    exec_python(\n'
@@ -210,7 +212,7 @@ def test_handoff_refuses_paths_outside_work(
     for each in bad:
         with pytest.raises(HandoffError):
             write_handoff(path=path, record=each)
-    raw = swap.record_json(record=bad[0])
+    raw = handoff_module.record_json(record=bad[0])
     path.write_text(json.dumps(raw), encoding='utf-8')
     with pytest.raises(HandoffError):
         read_handoff(path=path)
@@ -219,7 +221,9 @@ def test_handoff_refuses_paths_outside_work(
 def test_handoff_refuses_malformed_files(data_dir: Path) -> None:
     """A file that is not a well-typed record is refused."""
     path = data_dir / 'work' / 'handoff.json'
-    raw = swap.record_json(record=refresh_record(data_dir=data_dir, lock_fd=7))
+    raw = handoff_module.record_json(
+        record=refresh_record(data_dir=data_dir, lock_fd=7),
+    )
     tail = raw['tail']
     assert isinstance(tail, dict)
     malformed: list[object] = [
@@ -320,6 +324,8 @@ def test_plain_build_hand_over_replaces_out(
     write_handoff(path=handoff, record=record)
     with pytest.raises(HandoffError):
         extras.main(argv=[str(tmp_path / 'other.new'), str(handoff)])
+    assert not handoff.exists()
+    write_handoff(path=handoff, record=record)
     assert extras.main(argv=[str(record.scratch), str(handoff)]) == 0
     assert not handoff.exists() and not record.scratch.exists()
     with closing(sqlite3.connect(out)) as conn:
@@ -359,3 +365,66 @@ def test_guarded_logs_unexpected_errors_and_passes_some_through(
     assert caplog.records[-1].message == 'refresh failed unexpectedly'
     with pytest.raises(ZeroDivisionError):
         swap.guarded(step=broken, passthrough=(ZeroDivisionError,))
+
+
+@pytest.mark.usefixtures('restored_logging')
+def test_unreadable_handoff_is_logged(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A missing or malformed handoff exits 1 with a logged error."""
+    handoff = tmp_path / 'handoff.json'
+    handoff.write_text('[]', encoding='utf-8')
+    for path in (tmp_path / 'missing.json', handoff):
+        assert extras.main(argv=[str(tmp_path / 'x.new'), str(path)]) == 1
+    assert capsys.readouterr().err.count('handoff unreadable') == 2
+
+
+@pytest.mark.usefixtures('restored_logging')
+def test_wrong_scratch_is_logged_and_work_cleared(
+    data_dir: Path, lock_fd: int,
+) -> None:
+    """A refresh handoff for another scratch file fails like any step."""
+    record = refresh_record(data_dir=data_dir, lock_fd=lock_fd)
+    record.scratch.write_bytes(b'scratch')
+    handoff = data_dir / 'work' / 'handoff.json'
+    write_handoff(path=handoff, record=record)
+    other = str(data_dir / 'work' / 'other.new')
+    assert extras.main(argv=[other, str(handoff)]) == 1
+    assert not list((data_dir / 'work').iterdir())
+    assert (data_dir / 'timetable.db').read_bytes() == b'old timetable'
+    assert 'HandoffError' in (data_dir / 'log' / 'errors.jsonl').read_text(
+        encoding='utf-8',
+    )
+
+
+@pytest.mark.usefixtures('restored_logging')
+def test_unchecked_lock_fd_is_left_open(
+    data_dir: Path, loaded: Path,
+) -> None:
+    """A lock fd that turns out to be another file is never closed."""
+    with (data_dir / 'unrelated').open('w') as unrelated:
+        record = refresh_record(data_dir=data_dir, lock_fd=unrelated.fileno())
+        shutil.copy(loaded, record.scratch)
+        handoff = data_dir / 'work' / 'handoff.json'
+        write_handoff(path=handoff, record=record)
+        assert extras.main(argv=[str(record.scratch), str(handoff)]) == 1
+        os.fstat(unrelated.fileno())
+
+
+def test_handoff_refuses_bools_and_bad_state_values(data_dir: Path) -> None:
+    """A bool is not a count, and state values are strings or null."""
+    path = data_dir / 'work' / 'handoff.json'
+    raw = handoff_module.record_json(
+        record=refresh_record(data_dir=data_dir, lock_fd=7),
+    )
+    tail = raw['tail']
+    assert isinstance(tail, dict)
+    state = {'etag': 1, 'last_modified': None, 'sha256': None}
+    for broken in (
+        {**raw, 'dropped': True},
+        {**raw, 'tail': {**tail, 'states': {'metro': state}}},
+        {**raw, 'tail': {**tail, 'states': {'metro': {**state, 'x': 1}}}},
+    ):
+        path.write_text(json.dumps(broken), encoding='utf-8')
+        with pytest.raises(HandoffError):
+            read_handoff(path=path)

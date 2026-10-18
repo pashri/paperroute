@@ -13,8 +13,9 @@ from typing import Final
 
 from paperroute.adapters.tfnsw import api_key_from_env
 from paperroute.build.gtfs_files import Source
+from paperroute.build.handoff import Handoff
 from paperroute.build.refresh import RefreshBusy, refresh
-from paperroute.build.swap import Handoff, guarded
+from paperroute.build.swap import guarded
 from paperroute.build.timetable import Window, build_timetable, yesterday
 from paperroute.core.tiles import OPAL_BBOX, ZOOMS
 from paperroute.logs import configure_logging

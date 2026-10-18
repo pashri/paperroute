@@ -9,7 +9,7 @@ from contextlib import closing
 from pathlib import Path
 
 from paperroute.build.runs import RUN_SCHEMA, load_runs
-from paperroute.build.swap import HandoffError, complete, read_handoff
+from paperroute.build.swap import land
 from paperroute.rss import peak_rss_mb
 
 
@@ -85,22 +85,14 @@ def main(*, argv: Sequence[str]) -> int:
     -------
     int
         Exit status.
-
-    Raises
-    ------
-    HandoffError
-        When the handoff names another scratch file.
     """
     scratch = Path(argv[0])
     if len(argv) == 1:
         run_extras(path=scratch)
         return 0
-    path = Path(argv[1])
-    record = read_handoff(path=path)
-    if record.scratch != scratch:
-        raise HandoffError(f'handoff is for {record.scratch}, not {scratch}')
-    return complete(
-        record=record, path=path, build=lambda: run_extras(path=scratch),
+    return land(
+        scratch=scratch, path=Path(argv[1]),
+        build=lambda path: run_extras(path=path),
     )
 
 

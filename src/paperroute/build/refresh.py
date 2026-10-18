@@ -12,6 +12,13 @@ from typing import Final
 
 from paperroute.adapters.tfnsw import BASE_URL
 from paperroute.build.gtfs_files import Source
+from paperroute.build.handoff import (
+    HANDOFF_NAME,
+    Fetched,
+    Handoff,
+    RefreshTail,
+)
+from paperroute.build.layout import Layout
 from paperroute.build.sources import (
     SOURCES,
     SourceSpec,
@@ -24,12 +31,7 @@ from paperroute.build.sources import (
     save_states,
 )
 from paperroute.build.swap import (
-    HANDOFF_NAME,
-    Fetched,
-    Handoff,
-    Layout,
     RefreshReport,
-    RefreshTail,
     check_timetable,
     clear_work,
     progress,

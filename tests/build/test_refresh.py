@@ -14,6 +14,7 @@ from typing import Final
 
 import pytest
 
+from paperroute.build import handoff as handoff_module
 from paperroute.build import refresh as refresh_module
 from paperroute.build import swap
 from paperroute.build.refresh import RefreshBusy, refresh
@@ -445,7 +446,7 @@ def test_refresh_hands_over_after_the_load(
     seen: dict[str, object] = {}
 
     def execv(path: str, argv: list[str]) -> None:
-        record = swap.read_handoff(path=Path(argv[-1]))
+        record = handoff_module.read_handoff(path=Path(argv[-1]))
         assert record.tail is not None
         seen.update(
             path=path, argv=argv, record=record,
@@ -467,7 +468,7 @@ def test_refresh_hands_over_after_the_load(
     ]
     assert seen['inheritable'] is True
     record = seen['record']
-    assert isinstance(record, swap.HandoffRecord)
+    assert isinstance(record, handoff_module.HandoffRecord)
     assert record.tail is not None
     assert record.tail.fetched.changed == ('sydneytrains', 'metro', 'bundle')
     assert record.out == work / 'timetable.db'

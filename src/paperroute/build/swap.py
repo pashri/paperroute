@@ -6,37 +6,33 @@ import logging
 import os
 import shutil
 import sqlite3
-import sys
 import time
 import zipfile
-from collections.abc import Callable, Sequence
-from contextlib import closing, suppress
+from collections.abc import Callable
+from contextlib import closing
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Final, NoReturn
+from typing import Final
 
-from paperroute.build.sources import (
-    SourceError,
-    SourceState,
-    fsync_dir,
-    save_states,
+from paperroute.build.handoff import (
+    Fetched,
+    HandoffError,
+    HandoffRecord,
+    RefreshTail,
+    read_handoff,
 )
+from paperroute.build.layout import Layout
+from paperroute.build.sources import SourceError, fsync_dir, save_states
 from paperroute.logs import configure_logging
 from paperroute.rss import max_rss_mb
 
 logger = logging.getLogger(__name__)
 
 MIN_TRIPS: Final[int] = 1000
-HANDOFF_NAME: Final[str] = 'handoff.json'
-EXTRAS_MODULE: Final[str] = 'paperroute.build.extras'
 
 
 class TimetableCheckError(Exception):
     """A newly built timetable failed its integrity check."""
-
-
-class HandoffError(ValueError):
-    """A handoff file is malformed or names a path outside its work dir."""
 
 
 class LockLostError(OSError):
@@ -63,145 +59,6 @@ class RefreshReport:
     rebuilt: bool
     seconds: float
     max_rss_mb: float
-
-
-@dataclass(frozen=True)
-class Fetched:
-    """The outcome of checking and downloading every source."""
-
-    states: dict[str, SourceState]
-    downloaded: tuple[str, ...]
-    changed: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class Layout:
-    """Paths under the data directory."""
-
-    data_dir: Path
-
-    @property
-    def work(self) -> Path:
-        """
-        Build scratch directory.
-
-        Returns
-        -------
-        Path
-            The work directory under data_dir.
-        """
-        return self.data_dir / 'work'
-
-    @property
-    def sources(self) -> Path:
-        """
-        Directory of the last good zips and their states.
-
-        Returns
-        -------
-        Path
-            The sources directory under data_dir.
-        """
-        return self.data_dir / 'sources'
-
-    @property
-    def states(self) -> Path:
-        """
-        Stored source states.
-
-        Returns
-        -------
-        Path
-            The sources.json file in the sources directory.
-        """
-        return self.sources / 'sources.json'
-
-    @property
-    def timetable(self) -> Path:
-        """
-        Live timetable.
-
-        Returns
-        -------
-        Path
-            The timetable.db file under data_dir.
-        """
-        return self.data_dir / 'timetable.db'
-
-    @property
-    def lock(self) -> Path:
-        """
-        Lock file held for the whole refresh.
-
-        Returns
-        -------
-        Path
-            The refresh.lock file under data_dir.
-        """
-        return self.data_dir / 'refresh.lock'
-
-
-@dataclass(frozen=True)
-class RefreshTail:
-    """
-    What a refresh still has to do once its timetable is built.
-
-    Attributes
-    ----------
-    data_dir : Path
-        Holds timetable.db, sources/ and work/.
-    fetched : Fetched
-        Downloads to store at the swap.
-    started : float
-        ``time.monotonic()`` when the refresh began.
-    error_log : Path | None
-        The errors.jsonl file, inside data_dir.
-    lock_fd : int
-        Descriptor holding the refresh lock.
-    """
-
-    data_dir: Path
-    fetched: Fetched
-    started: float
-    error_log: Path | None
-    lock_fd: int
-
-
-@dataclass(frozen=True)
-class Handoff:
-    """Where a build writes its handoff file, and the refresh tail if any."""
-
-    path: Path
-    tail: RefreshTail | None = None
-
-
-@dataclass(frozen=True)
-class HandoffRecord:
-    """
-    Everything the extras program needs once the build execs into it.
-
-    Attributes
-    ----------
-    scratch : Path
-        Loaded timetable without its run tables.
-    out : Path
-        Where the finished timetable goes.
-    dropped : int
-        Rail trips the merge dropped.
-    partial : int
-        Rail trips the merge dropped on some dates.
-    peak_mb : float
-        Peak memory of the load, before the exec.
-    tail : RefreshTail | None
-        The refresh to finish; None for a plain build.
-    """
-
-    scratch: Path
-    out: Path
-    dropped: int
-    partial: int
-    peak_mb: float
-    tail: RefreshTail | None
 
 
 def progress(*, phase: str) -> None:
@@ -282,338 +139,6 @@ def swap_in(*, layout: Layout, built: Path, fetched: Fetched) -> None:
     save_states(path=layout.states, states=fetched.states)
 
 
-def tail_json(*, tail: RefreshTail) -> dict[str, object]:
-    """
-    Turn a refresh tail into JSON values.
-
-    Parameters
-    ----------
-    tail : RefreshTail
-        Tail.
-
-    Returns
-    -------
-    dict[str, object]
-        Its fields, paths as strings.
-    """
-    return {
-        'data_dir': str(tail.data_dir),
-        'states': {
-            name: asdict(state)
-            for name, state in tail.fetched.states.items()
-        },
-        'downloaded': list(tail.fetched.downloaded),
-        'changed': list(tail.fetched.changed),
-        'started': tail.started,
-        'error_log': None if tail.error_log is None else str(tail.error_log),
-        'lock_fd': tail.lock_fd,
-    }
-
-
-def field_of[T](*, raw: dict[str, object], key: str, kind: type[T]) -> T:
-    """
-    Read one field of a handoff file, checking its type.
-
-    Parameters
-    ----------
-    raw : dict[str, object]
-        Parsed JSON object.
-    key : str
-        Field name.
-    kind : type[T]
-        Expected type.
-
-    Returns
-    -------
-    T
-        The value.
-
-    Raises
-    ------
-    HandoffError
-        When the field is missing or of another type.
-    """
-    value = raw.get(key)
-    if not isinstance(value, kind):
-        raise HandoffError(f'handoff field {key} is not a {kind.__name__}')
-    return value
-
-
-def names_of(*, raw: dict[str, object], key: str) -> tuple[str, ...]:
-    """
-    Read a list of source names from a handoff file.
-
-    Parameters
-    ----------
-    raw : dict[str, object]
-        Parsed JSON object.
-    key : str
-        Field name.
-
-    Returns
-    -------
-    tuple[str, ...]
-        The names.
-    """
-    return tuple(
-        field_of(raw={'name': name}, key='name', kind=str)
-        for name in field_of(raw=raw, key=key, kind=list)
-    )
-
-
-def states_of(*, raw: dict[str, object]) -> dict[str, SourceState]:
-    """
-    Read the source states from a handoff file.
-
-    Parameters
-    ----------
-    raw : dict[str, object]
-        Parsed tail object.
-
-    Returns
-    -------
-    dict[str, SourceState]
-        States by source name.
-
-    Raises
-    ------
-    HandoffError
-        When a state has the wrong fields.
-    """
-    states = field_of(raw=raw, key='states', kind=dict)
-    try:
-        return {
-            str(name): SourceState(**fields)
-            for name, fields in states.items()
-        }
-    except TypeError as error:
-        raise HandoffError(f'bad source state: {error}') from error
-
-
-def tail_of(*, raw: dict[str, object]) -> RefreshTail:
-    """
-    Read a refresh tail back from JSON values.
-
-    Parameters
-    ----------
-    raw : dict[str, object]
-        Values from tail_json.
-
-    Returns
-    -------
-    RefreshTail
-        The tail.
-    """
-    error_log = raw.get('error_log')
-    return RefreshTail(
-        data_dir=Path(field_of(raw=raw, key='data_dir', kind=str)),
-        fetched=Fetched(
-            states=states_of(raw=raw),
-            downloaded=names_of(raw=raw, key='downloaded'),
-            changed=names_of(raw=raw, key='changed'),
-        ),
-        started=field_of(raw=raw, key='started', kind=float),
-        error_log=(
-            None
-            if error_log is None
-            else Path(field_of(raw=raw, key='error_log', kind=str))
-        ),
-        lock_fd=field_of(raw=raw, key='lock_fd', kind=int),
-    )
-
-
-def record_json(*, record: HandoffRecord) -> dict[str, object]:
-    """
-    Turn a handoff record into JSON values.
-
-    Parameters
-    ----------
-    record : HandoffRecord
-        Record.
-
-    Returns
-    -------
-    dict[str, object]
-        Its fields, paths as strings.
-    """
-    return {
-        'scratch': str(record.scratch),
-        'out': str(record.out),
-        'dropped': record.dropped,
-        'partial': record.partial,
-        'peak_mb': record.peak_mb,
-        'tail': None if record.tail is None else tail_json(tail=record.tail),
-    }
-
-
-def record_of(*, raw: dict[str, object]) -> HandoffRecord:
-    """
-    Read a handoff record back from JSON values.
-
-    Parameters
-    ----------
-    raw : dict[str, object]
-        Values from record_json.
-
-    Returns
-    -------
-    HandoffRecord
-        The record.
-    """
-    tail = raw.get('tail')
-    return HandoffRecord(
-        scratch=Path(field_of(raw=raw, key='scratch', kind=str)),
-        out=Path(field_of(raw=raw, key='out', kind=str)),
-        dropped=field_of(raw=raw, key='dropped', kind=int),
-        partial=field_of(raw=raw, key='partial', kind=int),
-        peak_mb=field_of(raw=raw, key='peak_mb', kind=float),
-        tail=(
-            None
-            if tail is None
-            else tail_of(raw=field_of(raw=raw, key='tail', kind=dict))
-        ),
-    )
-
-
-def inside(*, path: Path, folder: Path) -> bool:
-    """
-    Tell whether a path resolves to somewhere inside a folder.
-
-    Parameters
-    ----------
-    path : Path
-        Path to test.
-    folder : Path
-        Folder, already resolved.
-
-    Returns
-    -------
-    bool
-        True when path is within folder.
-    """
-    return path.resolve().is_relative_to(folder)
-
-
-def check_record(*, record: HandoffRecord, path: Path) -> None:
-    """
-    Check every path in a record lies inside the handoff file's work dir.
-
-    For a refresh, that work dir must be the data dir's work/ and the
-    error log must be inside the data dir.
-
-    Parameters
-    ----------
-    record : HandoffRecord
-        Record to check.
-    path : Path
-        Handoff file; its folder is the work dir.
-
-    Raises
-    ------
-    HandoffError
-        When a path lies elsewhere.
-    """
-    work = path.parent.resolve()
-    if not all(
-        inside(path=place, folder=work)
-        for place in (record.scratch, record.out)
-    ):
-        raise HandoffError(f'handoff paths must be inside {work}')
-    tail = record.tail
-    if tail is None:
-        return
-    if Layout(data_dir=tail.data_dir).work.resolve() != work:
-        raise HandoffError(f'handoff data dir does not own {work}')
-    if tail.error_log is not None and not inside(
-        path=tail.error_log, folder=tail.data_dir.resolve(),
-    ):
-        raise HandoffError('handoff error log must be inside the data dir')
-
-
-def write_handoff(*, path: Path, record: HandoffRecord) -> None:
-    """
-    Check a record and write it as the handoff file.
-
-    Parameters
-    ----------
-    path : Path
-        Handoff file to write.
-    record : HandoffRecord
-        What the extras program needs.
-    """
-    check_record(record=record, path=path)
-    path.write_text(
-        json.dumps(record_json(record=record), indent=2),
-        encoding='utf-8',
-    )
-
-
-def read_handoff(*, path: Path) -> HandoffRecord:
-    """
-    Read and check a handoff file.
-
-    Parameters
-    ----------
-    path : Path
-        Handoff file.
-
-    Returns
-    -------
-    HandoffRecord
-        The record, every path inside the file's work dir.
-
-    Raises
-    ------
-    HandoffError
-        When the file is not a JSON object or fails check_record.
-    """
-    raw = json.loads(path.read_text(encoding='utf-8'))
-    if not isinstance(raw, dict):
-        raise HandoffError('handoff file is not a JSON object')
-    record = record_of(raw=raw)
-    check_record(record=record, path=path)
-    return record
-
-
-def exec_python(*, args: Sequence[str], keep: Sequence[int]) -> NoReturn:
-    """
-    Replace this process with a new Python, keeping some descriptors open.
-
-    The pid, stdout and stderr stay the same. Python opens files
-    close-on-exec, so any descriptor to survive must be listed in keep.
-
-    Parameters
-    ----------
-    args : Sequence[str]
-        Arguments after the interpreter, such as ``['-m', module]``.
-    keep : Sequence[int]
-        Descriptors to keep open across the exec.
-    """
-    for descriptor in keep:
-        os.set_inheritable(descriptor, True)
-    sys.stdout.flush()
-    sys.stderr.flush()
-    os.execv(sys.executable, [sys.executable, *args])
-
-
-def hand_over(*, handoff: Handoff, record: HandoffRecord) -> NoReturn:
-    """
-    Write the handoff file and exec into the extras program.
-
-    Parameters
-    ----------
-    handoff : Handoff
-        Where to write the file.
-    record : HandoffRecord
-        What the extras program needs.
-    """
-    write_handoff(path=handoff.path, record=record)
-    exec_python(
-        args=['-m', EXTRAS_MODULE, str(record.scratch), str(handoff.path)],
-        keep=() if record.tail is None else (record.tail.lock_fd,),
-    )
-
-
 def holds_lock(*, fd: int, path: Path) -> bool:
     """
     Tell whether a descriptor is open on a lock file that is locked.
@@ -673,8 +198,29 @@ def guarded[T](
     return None
 
 
+def check_scratch(*, record: HandoffRecord, scratch: Path) -> None:
+    """
+    Check the handoff is for the scratch file the exec was given.
+
+    Parameters
+    ----------
+    record : HandoffRecord
+        The handoff.
+    scratch : Path
+        Scratch file from the command line.
+
+    Raises
+    ------
+    HandoffError
+        When they differ.
+    """
+    if record.scratch != scratch:
+        raise HandoffError(f'handoff is for {record.scratch}, not {scratch}')
+
+
 def finish_refresh(
-    *, record: HandoffRecord, tail: RefreshTail, build: Callable[[], None],
+    *, record: HandoffRecord, tail: RefreshTail, scratch: Path,
+    held: bool, build: Callable[[Path], None],
 ) -> RefreshReport:
     """
     Build the run tables, then check and swap in a handed-over timetable.
@@ -685,8 +231,12 @@ def finish_refresh(
         The handoff.
     tail : RefreshTail
         Its refresh tail.
-    build : Callable[[], None]
-        Adds the run tables to record.scratch.
+    scratch : Path
+        Scratch file from the command line.
+    held : bool
+        Whether the refresh lock survived the exec.
+    build : Callable[[Path], None]
+        Adds the run tables to a scratch file.
 
     Returns
     -------
@@ -698,13 +248,14 @@ def finish_refresh(
     LockLostError
         When the refresh lock did not survive the exec.
     """
-    layout = Layout(data_dir=tail.data_dir)
-    if not holds_lock(fd=tail.lock_fd, path=layout.lock):
+    if not held:
         raise LockLostError(f'refresh lock not held on fd {tail.lock_fd}')
-    build()
+    check_scratch(record=record, scratch=scratch)
+    build(record.scratch)
     os.replace(record.scratch, record.out)
     check_timetable(path=record.out)
-    swap_in(layout=layout, built=record.out, fetched=tail.fetched)
+    swap_in(layout=Layout(data_dir=tail.data_dir), built=record.out,
+            fetched=tail.fetched)
     return RefreshReport(
         downloaded=tail.fetched.downloaded,
         changed=tail.fetched.changed,
@@ -715,13 +266,16 @@ def finish_refresh(
 
 
 def complete_refresh(
-    *, record: HandoffRecord, tail: RefreshTail, build: Callable[[], None],
+    *, record: HandoffRecord, tail: RefreshTail, scratch: Path,
+    build: Callable[[Path], None],
 ) -> int:
     """
     Finish a handed-over refresh and print its report, logging failures.
 
-    Work is cleared and the lock released whatever happens, so a failure
-    leaves the old timetable, sources and states in place.
+    Work is cleared whatever happens, so a failure leaves the old
+    timetable, sources and states in place. The lock descriptor is closed
+    only when it was checked to be the lock: otherwise its number may
+    belong to another file.
 
     Parameters
     ----------
@@ -729,22 +283,27 @@ def complete_refresh(
         The handoff.
     tail : RefreshTail
         Its refresh tail.
-    build : Callable[[], None]
-        Adds the run tables to record.scratch.
+    scratch : Path
+        Scratch file from the command line.
+    build : Callable[[Path], None]
+        Adds the run tables to a scratch file.
 
     Returns
     -------
     int
         Exit status: 0 on success, 1 on failure.
     """
+    layout = Layout(data_dir=tail.data_dir)
+    held = holds_lock(fd=tail.lock_fd, path=layout.lock)
     configure_logging(error_file=tail.error_log)
     try:
         report = guarded(step=lambda: finish_refresh(
-            record=record, tail=tail, build=build,
+            record=record, tail=tail, scratch=scratch, held=held,
+            build=build,
         ))
     finally:
-        clear_work(work=Layout(data_dir=tail.data_dir).work)
-        with suppress(OSError):
+        clear_work(work=layout.work)
+        if held:
             os.close(tail.lock_fd)
     if report is None:
         return 1
@@ -752,30 +311,32 @@ def complete_refresh(
     return 0
 
 
-def complete(
-    *, record: HandoffRecord, path: Path, build: Callable[[], None],
+def complete_build(
+    *, record: HandoffRecord, path: Path, scratch: Path,
+    build: Callable[[Path], None],
 ) -> int:
     """
-    Finish the build or refresh a handoff file describes.
+    Finish a handed-over plain build and print the merge line.
 
     Parameters
     ----------
     record : HandoffRecord
-        The handoff.
+        The handoff, with no refresh tail.
     path : Path
-        Handoff file, removed once a plain build is done.
-    build : Callable[[], None]
-        Adds the run tables to record.scratch.
+        Handoff file, removed whatever happens.
+    scratch : Path
+        Scratch file from the command line.
+    build : Callable[[Path], None]
+        Adds the run tables to a scratch file.
 
     Returns
     -------
     int
         Exit status.
     """
-    if record.tail is not None:
-        return complete_refresh(record=record, tail=record.tail, build=build)
     try:
-        build()
+        check_scratch(record=record, scratch=scratch)
+        build(record.scratch)
         os.replace(record.scratch, record.out)
     finally:
         path.unlink(missing_ok=True)
@@ -784,3 +345,42 @@ def complete(
         flush=True,
     )
     return 0
+
+
+def land(
+    *, scratch: Path, path: Path, build: Callable[[Path], None],
+) -> int:
+    """
+    Read a handoff file and finish the build or refresh it describes.
+
+    An unreadable file is logged to stderr only: with no valid record
+    there is no trusted error log or work dir, and the next refresh clears
+    work/ when it starts.
+
+    Parameters
+    ----------
+    scratch : Path
+        Scratch file from the command line.
+    path : Path
+        Handoff file.
+    build : Callable[[Path], None]
+        Adds the run tables to a scratch file.
+
+    Returns
+    -------
+    int
+        Exit status.
+    """
+    try:
+        record = read_handoff(path=path)
+    except (OSError, ValueError):
+        configure_logging()
+        logger.exception('handoff unreadable')
+        return 1
+    if record.tail is not None:
+        return complete_refresh(
+            record=record, tail=record.tail, scratch=scratch, build=build,
+        )
+    return complete_build(
+        record=record, path=path, scratch=scratch, build=build,
+    )

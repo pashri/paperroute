@@ -36,6 +36,7 @@ from paperroute.core.tiles import (
 )
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.map_base import (
+    EDGE,
     HALO,
     compose_tiles,
     draw_map_base,
@@ -724,8 +725,9 @@ def test_credit_sits_at_the_narrow_edge(tmp_path: Path) -> None:
             tiles=tiles,
             variant=TileVariant.GREY,
         )
-    credit = grey[MAP_HEIGHT - 20 :, STRIP_MAP_WIDTH - 120 :]
-    assert np.count_nonzero(credit == DARK) > 0
+    credit = grey[MAP_HEIGHT - 20 :, : STRIP_MAP_WIDTH + 40]
+    right = np.flatnonzero(np.any(credit == DARK, axis=0)).max() + 1
+    assert abs(right - (STRIP_MAP_WIDTH - EDGE)) <= 3
 
 
 def test_stop_sits_on_the_narrow_centre() -> None:
@@ -736,6 +738,20 @@ def test_stop_sits_on_the_narrow_centre() -> None:
         variant=TileVariant.GREY,
     )
     assert grey[centre_row(), STRIP_MAP_WIDTH // 2] == INK
+
+
+def test_not_installed_note_is_centred_at_the_narrow_width() -> None:
+    """At 480 px the 'Map not installed' note is centred at x 240."""
+    narrow = replace(base(), width=STRIP_MAP_WIDTH)
+    missing = draw_map_base(
+        base=narrow,
+        tiles=NullTiles(),
+        variant=TileVariant.GREY,
+    )
+    middle = MAP_HEIGHT // 2
+    note = missing[middle + 14 : middle + 44]
+    ink = np.flatnonzero(np.any(note == INK, axis=0))
+    assert abs((ink.max() + ink.min() + 1) / 2 - STRIP_MAP_WIDTH / 2) <= 2
 
 
 def test_no_tiles_hides_the_credit() -> None:

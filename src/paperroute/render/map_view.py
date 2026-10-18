@@ -99,7 +99,11 @@ def wrap(*, text: str, face: Face, width: float) -> tuple[str, ...]:
     return tuple(lines)
 
 
-def empty_lines(*, text: str) -> tuple[tuple[str, ...], Face]:
+def empty_lines(
+    *,
+    text: str,
+    width: int = MAP_WIDTH,
+) -> tuple[tuple[str, ...], Face]:
     """
     Fit the empty text into at most two lines across the map.
 
@@ -107,6 +111,8 @@ def empty_lines(*, text: str) -> tuple[tuple[str, ...], Face]:
     ----------
     text : str
         Empty text.
+    width : int
+        Map width in pixels.
 
     Returns
     -------
@@ -114,16 +120,16 @@ def empty_lines(*, text: str) -> tuple[tuple[str, ...], Face]:
         The lines and the face, the largest of `EMPTY_FACES` that fits;
         the smallest face's lines when none does.
     """
-    width = MAP_WIDTH - 2 * EMPTY_MARGIN
+    room = width - 2 * EMPTY_MARGIN
     for face in EMPTY_FACES:
-        lines = wrap(text=text, face=face, width=width)
-        fits = all(text_width(text=line, face=face) <= width for line in lines)
+        lines = wrap(text=text, face=face, width=room)
+        fits = all(text_width(text=line, face=face) <= room for line in lines)
         if len(lines) <= EMPTY_LINES and fits:
             return lines, face
     return lines, face
 
 
-def draw_empty(canvas: Canvas, *, text: str) -> None:
+def draw_empty(canvas: Canvas, *, text: str, width: int) -> None:
     """
     Draw the empty text below the stop, one line under another.
 
@@ -133,12 +139,14 @@ def draw_empty(canvas: Canvas, *, text: str) -> None:
         Target.
     text : str
         Empty text.
+    width : int
+        Map width in pixels.
     """
-    lines, face = empty_lines(text=text)
+    lines, face = empty_lines(text=text, width=width)
     top = HEADER + MAP_HEIGHT / 2 + EMPTY_DROP
     for index, line in enumerate(lines):
         canvas.text(
-            at=(MAP_WIDTH / 2, top + index * (face.px + EMPTY_LEADING)),
+            at=(width / 2, top + index * (face.px + EMPTY_LEADING)),
             text=line,
             face=face,
             grey=INK,
@@ -182,7 +190,7 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
             stop=stop,
         )
         if view.empty:
-            draw_empty(canvas, text=view.empty)
+            draw_empty(canvas, text=view.empty, width=view.base.width)
         if stop is not None:
             draw_stop(canvas, at=(stop[0], stop[1] + HEADER))
 
@@ -299,7 +307,11 @@ def draw_sidebar(canvas: Canvas, *, view: MapView) -> None:
         sidebar_row(canvas, row=row, y=ROWS_TOP + drop + index * ROW_STEP)
 
 
-def snap(*, grey: NDArray[np.uint8]) -> NDArray[np.uint8]:
+def snap(
+    *,
+    grey: NDArray[np.uint8],
+    width: int = SIDEBAR_LEFT,
+) -> NDArray[np.uint8]:
     """
     Keep four greys in the map and only ink and paper elsewhere.
 
@@ -307,6 +319,8 @@ def snap(*, grey: NDArray[np.uint8]) -> NDArray[np.uint8]:
     ----------
     grey : NDArray[np.uint8]
         The drawn frame.
+    width : int
+        Map width in pixels.
 
     Returns
     -------
@@ -314,7 +328,7 @@ def snap(*, grey: NDArray[np.uint8]) -> NDArray[np.uint8]:
         The finished frame.
     """
     out = np.where(grey < THRESHOLD, INK, PAPER).astype(np.uint8)
-    out[HEADER:, :SIDEBAR_LEFT] = quantise4(grey=grey[HEADER:, :SIDEBAR_LEFT])
+    out[HEADER:, :width] = quantise4(grey=grey[HEADER:, :width])
     return out
 
 
@@ -331,7 +345,7 @@ def draw_map_view(
     view : MapView
         View-model.
     base : NDArray[np.uint8]
-        The map base, ``MAP_HEIGHT`` by ``MAP_WIDTH``; never changed.
+        The map base, ``MAP_HEIGHT`` by ``view.base.width``; never changed.
 
     Returns
     -------
@@ -345,4 +359,4 @@ def draw_map_view(
     draw_sidebar(canvas, view=view)
     if view.banner:
         banner(canvas, text=view.banner)
-    return snap(grey=canvas.grey())
+    return snap(grey=canvas.grey(), width=view.base.width)

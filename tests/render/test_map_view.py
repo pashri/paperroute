@@ -305,7 +305,10 @@ def test_overlay_is_clipped_to_the_base_width() -> None:
     base = paper()[:, :STRIP_MAP_WIDTH]
     plain = draw_map_view(view=narrow, base=base)
     marked = draw_map_view(view=replace(narrow, markers=badge), base=base)
-    assert np.array_equal(plain[:, STRIP_MAP_WIDTH:], marked[:, STRIP_MAP_WIDTH:])
+    assert np.array_equal(
+        plain[:, STRIP_MAP_WIDTH:],
+        marked[:, STRIP_MAP_WIDTH:],
+    )
     wide_plain = draw_map_view(view=VIEW, base=paper())
     wide = draw_map_view(view=replace(VIEW, markers=badge), base=paper())
     assert np.any(wide_plain[:, STRIP_MAP_WIDTH:] != wide[:, STRIP_MAP_WIDTH:])
@@ -315,9 +318,37 @@ def test_narrow_stop_is_drawn_at_the_narrow_centre() -> None:
     """The stop is over the 480 px map's middle, not the 520 px one's."""
     narrow = replace(VIEW, base=replace(VIEW.base, width=STRIP_MAP_WIDTH))
     frame = draw_map_view(view=narrow, base=paper()[:, :STRIP_MAP_WIDTH])
-    row_ = HEADER + MAP_HEIGHT // 2
-    assert frame[row_, STRIP_MAP_WIDTH // 2] == INK
-    assert frame[row_, MAP_WIDTH // 2 + 8] == PAPER
+    middle = HEADER + MAP_HEIGHT // 2
+    assert frame[middle, STRIP_MAP_WIDTH // 2] == INK
+    assert frame[middle, MAP_WIDTH // 2 + 8] == PAPER
+
+
+def test_narrow_empty_text_is_centred_and_wrapped_within_the_width() -> None:
+    """On a 480 px map the empty text is centred at 240 and fits."""
+    narrow = replace(
+        VIEW,
+        base=replace(VIEW.base, width=STRIP_MAP_WIDTH),
+        empty=LONG_EMPTY,
+    )
+    frame = draw_map_view(view=narrow, base=paper()[:, :STRIP_MAP_WIDTH])
+    middle = HEADER + MAP_HEIGHT // 2
+    band = frame[middle + 40 : middle + 100, :STRIP_MAP_WIDTH]
+    ink = np.flatnonzero(np.any(band == INK, axis=0))
+    assert ink.size
+    assert ink.min() >= EMPTY_MARGIN - 4
+    assert ink.max() <= STRIP_MAP_WIDTH - EMPTY_MARGIN + 4
+    assert abs((ink.max() + ink.min() + 1) / 2 - STRIP_MAP_WIDTH / 2) <= 12
+    lines, face = empty_lines(text=LONG_EMPTY, width=STRIP_MAP_WIDTH)
+    room = STRIP_MAP_WIDTH - 2 * EMPTY_MARGIN
+    assert all(text_width(text=line, face=face) <= room for line in lines)
+
+
+def test_snap_follows_the_map_width() -> None:
+    """On a 480 px map, columns from 480 on stay ink or paper."""
+    grey = np.full((HEIGHT, WIDTH), 100, dtype=np.uint8)
+    out = snap(grey=grey, width=STRIP_MAP_WIDTH)
+    assert np.all(out[HEADER:, STRIP_MAP_WIDTH:] == INK)
+    assert np.all(out[HEADER:, :STRIP_MAP_WIDTH] == GREYS[1])
 
 
 def test_banner_is_drawn_over_the_map() -> None:

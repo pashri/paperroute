@@ -246,7 +246,10 @@ def test_build_map_view_carries_the_width_to_base_and_markers() -> None:
     assert wide.base.width == MAP_WIDTH
     assert narrow.base.width == STRIP_MAP_WIDTH
     shift = (MAP_WIDTH - STRIP_MAP_WIDTH) // 2
-    assert narrow.markers[0].x == pytest.approx(wide.markers[0].x - shift, abs=1)
+    assert narrow.markers[0].x == pytest.approx(
+        wide.markers[0].x - shift,
+        abs=1,
+    )
 
 
 def test_vehicle_over_two_minutes_old_moves_to_timetable_position() -> None:

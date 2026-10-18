@@ -7,9 +7,11 @@ from typing import Protocol
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import TripPattern
+from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.tiles import StreetLabel, TileVariant
 
 
@@ -146,6 +148,62 @@ class TimetableRepository(Protocol):
         list[Departure]
             In departure order. Without a Destination, every departure
             from the From, each running to its last stop.
+        """
+
+
+class NetworkRepository(Protocol):
+    """Read access to the route chooser catalogue and the station runs."""
+
+    def choices(self, *, path: ChooserPath) -> Column | None:
+        """
+        The chooser column that follows a path.
+
+        Parameters
+        ----------
+        path : ChooserPath
+            Steps chosen so far; () for the KIND column.
+
+        Returns
+        -------
+        Column | None
+            The next column; None for an old timetable, an unknown path
+            or a path with nothing after it.
+        """
+
+    def towards_line(self, *, towards: int) -> tuple[StopPlace, ...] | None:
+        """
+        The stations of a towards row's busiest stop sequence.
+
+        Parameters
+        ----------
+        towards : int
+            Towards ID.
+
+        Returns
+        -------
+        tuple[StopPlace, ...] | None
+            Stations in travel order with their names and points; None for
+            an old timetable or an unknown towards ID.
+        """
+
+    def reach_input(
+        self, *, key: StripKey, origin: StopPlace,
+    ) -> ReachInput | None:
+        """
+        Gather the runs through a strip's From and the places they reach.
+
+        Parameters
+        ----------
+        key : StripKey
+            The From and which runs feed the strip.
+        origin : StopPlace
+            The From place.
+
+        Returns
+        -------
+        ReachInput | None
+            The From's station, its tails, their places and stops; None
+            for an old timetable.
         """
 
 

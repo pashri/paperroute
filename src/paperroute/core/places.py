@@ -4,7 +4,16 @@ from collections.abc import Sequence
 from dataclasses import replace
 
 from paperroute.core.feeds import feed_for
-from paperroute.core.map_state import MapState
+from paperroute.core.geo import MetreBox
+from paperroute.core.map_state import MapState, area_box
+from paperroute.core.messages import (
+    DeparturesFailed,
+    DeparturesLoaded,
+    Event,
+    LoadModes,
+    MapDataFailed,
+    ModesLoaded,
+)
 from paperroute.core.model import Departure, Pin, same_place
 from paperroute.core.state_model import Board, Places, State
 
@@ -96,7 +105,7 @@ def with_place(
         State showing the place, with a board of `departures` and no load
         in flight, the Stop view at the top, only the needed feeds'
         downloads, and the map at the same zoom centred on the new From.
-        Vehicle positions and failure times are kept.
+        Only vehicle positions and their fetch times are kept.
     """
     state = replace(state, places=replace(state.places, unpinned=pin))
     feeds = feeds_of(departures=departures)
@@ -117,7 +126,6 @@ def with_place(
             centre=shown(state=state).origin.point,
             positions=old.positions,
             fetched_at=old.fetched_at,
-            failed_at=old.failed_at,
         ),
     )
 
@@ -152,7 +160,7 @@ def flipped(*, state: State, steps: int) -> State:
     return with_place(state=state, pin=None)
 
 
-def pinned(*, places: Places, pin: Pin) -> Places:
+def with_pinned(*, places: Places, pin: Pin) -> Places:
     """
     Pin the unpinned place, or select the pin it matches.
 
@@ -183,7 +191,7 @@ def pinned(*, places: Places, pin: Pin) -> Places:
     return Places(pins=pins, current=len(pins) - 1)
 
 
-def unpinned(*, places: Places) -> Places:
+def with_unpinned(*, places: Places) -> Places:
     """
     Unpin the current pin, making it the unpinned place.
 
@@ -223,6 +231,56 @@ def toggled(*, state: State) -> State:
     """
     places = state.places
     if places.unpinned is None:
-        return replace(state, places=unpinned(places=places))
+        return replace(state, places=with_unpinned(places=places))
     pin = places.unpinned
-    return replace(state, places=pinned(places=places, pin=pin))
+    return replace(state, places=with_pinned(places=places, pin=pin))
+
+
+def other_area(*, state: State, mpp: int, box: MetreBox) -> bool:
+    """
+    Say whether a map area is not the one shown at a zoom.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    mpp : int
+        Metres per pixel the area was asked for at.
+    box : MetreBox
+        The area asked for.
+
+    Returns
+    -------
+    bool
+        True when the map has no centre or its area at `mpp` differs.
+    """
+    centre = state.map.centre
+    return centre is None or box != area_box(centre=centre, mpp=mpp)
+
+
+def is_stale(*, state: State, event: Event) -> bool:
+    """
+    Say whether an event answers a request for a place no longer shown.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    event : Event
+        What happened.
+
+    Returns
+    -------
+    bool
+        True for departures loaded or failed for another place, and for
+        area modes loaded or failed for another map area.
+    """
+    match event:
+        case DeparturesLoaded(pin=pin) | DeparturesFailed(pin=pin):
+            return not same_place(first=pin, second=shown(state=state))
+        case (
+            ModesLoaded(mpp=mpp, box=box)
+            | MapDataFailed(request=LoadModes(mpp=mpp, box=box))
+        ):
+            return other_area(state=state, mpp=mpp, box=box)
+    return False

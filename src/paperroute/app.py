@@ -215,7 +215,7 @@ async def load(
         )
     except sqlite3.Error:
         logger.exception('reading departures failed')
-        await queue.put(DeparturesFailed())
+        await queue.put(DeparturesFailed(pin=effect.pin))
         return
     await queue.put(
         DeparturesLoaded(
@@ -407,7 +407,8 @@ def map_data(*, timetable: TimetableRepository, effect: MapRequest) -> Event:
         case LoadPatterns():
             return loaded_patterns(timetable=timetable, effect=effect)
         case LoadModes(mpp=mpp, box=box):
-            return ModesLoaded(mpp=mpp, modes=timetable.modes_near(box=box))
+            modes = timetable.modes_near(box=box)
+            return ModesLoaded(mpp=mpp, box=box, modes=modes)
 
 
 async def load_map(
@@ -488,7 +489,7 @@ def background(
         case LoadDepartures():
             return (
                 load(ports=ports, effect=effect, queue=queue),
-                DeparturesFailed(),
+                DeparturesFailed(pin=effect.pin),
             )
         case FetchFeed(feed=feed):
             failed = FeedFailed(

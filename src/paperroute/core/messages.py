@@ -112,7 +112,9 @@ class DeparturesLoaded:
 
 @dataclass(frozen=True)
 class DeparturesFailed:
-    """The timetable couldn't be read; the next tick tries again."""
+    """The timetable couldn't be read for a pin; a later tick tries again."""
+
+    pin: Pin
 
 
 @dataclass(frozen=True)
@@ -190,6 +192,7 @@ class ModesLoaded:
     """The modes in the map area at one zoom arrived from the timetable."""
 
     mpp: int
+    box: MetreBox
     modes: frozenset[Mode]
 
 

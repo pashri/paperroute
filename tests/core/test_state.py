@@ -5,6 +5,7 @@ from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Final
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -28,6 +29,7 @@ from paperroute.core.messages import (
     LoadModes,
     LoadPatterns,
     LoadShapes,
+    MapData,
     MapDataFailed,
     MapRequest,
     ModesLoaded,
@@ -251,7 +253,7 @@ def test_failed_load_retries_on_next_tick() -> None:
     """A failed timetable read clears the loading flag so it reloads."""
     state, _ = step(fresh(), Tick(now=START))
     assert state.board.loading
-    state, _ = step(state, DeparturesFailed())
+    state, _ = step(state, DeparturesFailed(pin=PIN))
     assert not state.board.loading
     _, effects = step(state, Tick(now=START + timedelta(seconds=5)))
     assert any(isinstance(effect, LoadDepartures) for effect in effects)
@@ -440,7 +442,9 @@ def test_zoom_is_kept_after_returning_to_stop() -> None:
 def test_modes_loaded_fetches_position_feeds_now() -> None:
     """The area's modes start their position feeds without waiting."""
     state, _ = step(fresh(centre=CENTRE), PRESS)
-    event = ModesLoaded(mpp=8, modes=frozenset({Mode.BUS}))
+    event = ModesLoaded(
+        mpp=8, box=area_box(centre=CENTRE, mpp=8), modes=frozenset({Mode.BUS})
+    )
     state, effects = step(state, event)
     fetch = FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS)
     assert effects_of(effects=effects, kind=FetchFeed) == [fetch]
@@ -488,10 +492,11 @@ def test_map_polls_positions_for_a_ferry_pin() -> None:
 def test_empty_area_modes_fall_back_to_departure_modes() -> None:
     """With no modes found in the area, the departures' modes are used."""
     state, _ = step(loaded(state=fresh(centre=CENTRE)), PRESS)
-    empty = ModesLoaded(mpp=8, modes=frozenset())
+    box = area_box(centre=CENTRE, mpp=8)
+    empty = ModesLoaded(mpp=8, box=box, modes=frozenset())
     state, _ = step(state, empty)
     assert needed_feeds(state=state) == (BUSES, BUS_POSITIONS)
-    ferry = ModesLoaded(mpp=8, modes=frozenset({Mode.FERRY}))
+    ferry = ModesLoaded(mpp=8, box=box, modes=frozenset({Mode.FERRY}))
     state, _ = step(state, ferry)
     assert needed_feeds(state=state) == (BUSES, FERRY_POSITIONS)
 
@@ -717,6 +722,7 @@ def map_events(draw: st.DrawFn, now: datetime) -> Event:
         PatternsLoaded(trip_ids=trips, patterns={}, shapes={}),
         ModesLoaded(
             mpp=mpp,
+            box=area_box(centre=CENTRE, mpp=mpp),
             modes=frozenset(draw(st.sets(st.sampled_from(MODES)))),
         ),
         PositionsFetched(
@@ -769,7 +775,7 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
         elif kind == 'fail':
             events.append(FeedFailed(feed=BUSES, at=now, reason='timeout'))
         elif kind == 'unreadable':
-            events.append(DeparturesFailed())
+            events.append(DeparturesFailed(pin=PIN))
         elif kind == 'ok':
             snap = RealtimeSnapshot(fetched_at=now, trips={})
             events.append(FeedFetched(feed=BUSES, snapshot=snap))
@@ -1438,12 +1444,33 @@ def test_hold_unpins_current_into_unpinned() -> None:
 
 
 def test_hold_with_duplicate_selects_existing_pin() -> None:
-    """Pinning a place already pinned selects that pin instead."""
+    """Pinning a place already pinned selects that pin, in place."""
     renamed = replace(PINS[2].origin, name='Renamed')
     duplicate = replace(PINS[2], origin=renamed)
-    state, _ = step(pinned(unpinned=duplicate), HOLD)
+    before = loaded(state=pinned(unpinned=duplicate))
+    state, effects = step(before, HOLD)
     assert state.places.pins == PINS
     assert (state.places.current, state.places.unpinned) == (2, None)
+    assert state.board == before.board
+    assert not effects_of(effects=effects, kind=LoadDepartures)
+
+
+def test_top_press_does_nothing() -> None:
+    """The top press waits for the chooser."""
+    state = pinned()
+    assert step(state, KnobPressed(knob=Knob.TOP)) == (state, ())
+
+
+@pytest.mark.parametrize('view', [LiveView.STRIP, LiveView.STRIP_MAP])
+def test_flip_and_hold_on_the_strip_views(view: LiveView) -> None:
+    """The top turn and the bottom hold work on both strip views."""
+    state, effects = step(pinned(view=view), top(steps=1))
+    assert (state.view, shown(state=state)) == (view, PINS[1])
+    [load] = effects_of(effects=effects, kind=LoadDepartures)
+    assert load.pin == PINS[1]
+    state, _ = step(state, HOLD)
+    assert state.places.pins == (PINS[0], PINS[2])
+    assert (state.view, state.places.unpinned) == (view, PINS[1])
 
 
 def test_top_hold_does_nothing() -> None:
@@ -1509,3 +1536,40 @@ def test_departures_for_another_place_are_dropped() -> None:
     state, _ = step(state, event)
     assert state.board.departures == ()
     assert state.board.loading
+
+
+def test_stale_departures_failure_keeps_the_new_load() -> None:
+    """A failure for the old place doesn't clear the new place's load."""
+    state, _ = step(pinned(), top(steps=1))
+    state, effects = step(state, DeparturesFailed(pin=PINS[0]))
+    assert state.board.loading
+    assert effects == ()
+
+
+def test_modes_for_the_old_area_are_dropped_after_a_flip() -> None:
+    """Modes or a modes failure for the old area land nowhere."""
+    mpp = ZOOMS[DEFAULT_ZOOM]
+    old = area_box(centre=PINS[0].origin.point or CENTRE, mpp=mpp)
+    state, effects = step(pinned(view=LiveView.MAP), top(steps=1))
+    [load] = effects_of(effects=effects, kind=LoadModes)
+    assert load.box == area_box(centre=PINS[1].origin.point or CENTRE, mpp=mpp)
+    event = ModesLoaded(mpp=mpp, box=old, modes=frozenset({Mode.FERRY}))
+    state, _ = step(state, event)
+    assert not state.map.area_modes
+    request = LoadModes(mpp=mpp, box=old)
+    state, _ = step(state, MapDataFailed(request=request))
+    assert not state.map.failed_at
+    assert state.map.pending_modes == {mpp}
+
+
+def test_flip_forgets_the_old_places_map_failures() -> None:
+    """A failure at the old place doesn't hold back the new place's map."""
+    mpp = ZOOMS[DEFAULT_ZOOM]
+    box = area_box(centre=PINS[0].origin.point or CENTRE, mpp=mpp)
+    state = pinned(view=LiveView.MAP)
+    request = LoadModes(mpp=mpp, box=box)
+    state, _ = step(state, MapDataFailed(request=request))
+    assert MapData.MODES in state.map.failed_at
+    state, effects = step(state, top(steps=1))
+    assert not state.map.failed_at
+    assert effects_of(effects=effects, kind=LoadModes)

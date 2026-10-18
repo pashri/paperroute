@@ -5,6 +5,7 @@ from datetime import timedelta
 
 from paperroute.core.geo import make_shape
 from paperroute.core.map_view import DEFAULT_ZOOM
+from paperroute.core.messages import MapData
 from paperroute.core.model import Mode, Pin
 from paperroute.core.places import (
     flipped,
@@ -75,7 +76,7 @@ def test_shown_is_the_unpinned_place_first() -> None:
 
 
 def test_with_place_resets_what_belonged_to_the_old_place() -> None:
-    """The board, scroll and map data go; zoom and positions stay."""
+    """The board, scroll, map data and failures go; zoom and positions stay."""
     state = state_with()
     bus = departure(departs=START + timedelta(minutes=3))
     state = replace(
@@ -91,6 +92,7 @@ def test_with_place_resets_what_belonged_to_the_old_place() -> None:
             shapes={'s': make_shape(shape_id='s', points=[(0, 0), (1, 1)])},
             requested_shapes=frozenset({'s'}),
             positions={'p': snapshot(fetched_at=START, vehicles=())},
+            failed_at={MapData.SHAPES: START},
         ),
     )
     after = with_place(state=state, pin=ELSEWHERE)
@@ -103,6 +105,7 @@ def test_with_place_resets_what_belonged_to_the_old_place() -> None:
     assert not after.map.shapes
     assert not after.map.requested_shapes
     assert set(after.map.positions) == {'p'}
+    assert not after.map.failed_at
 
 
 def test_with_place_keeps_given_departures_and_their_feeds() -> None:

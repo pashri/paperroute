@@ -39,7 +39,7 @@ from paperroute.core.messages import (
     Tick,
 )
 from paperroute.core.model import same_place, shifted
-from paperroute.core.places import feeds_of, shown, shown_index
+from paperroute.core.places import feeds_of, is_stale, shown, shown_index
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state_model import (
     FEED_IDLE,
@@ -428,11 +428,8 @@ def on_loaded(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        New state and effects; nothing changes when the departures are
-        for a place no longer shown.
+        New state and effects.
     """
-    if not same_place(first=event.pin, second=shown(state=state)):
-        return state, ()
     board = Board(departures=event.departures, loaded_until=event.until)
     feeds = feeds_of(departures=event.departures)
     return settled(state=replace(state, board=board, feeds=feeds))
@@ -555,6 +552,8 @@ def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
         Next state and the effects to perform.
     """
     result: tuple[State, tuple[Effect, ...]] = (state, ())
+    if is_stale(state=state, event=event):
+        return result
     match event:
         case Tick():
             result = on_tick(state=state, event=event)

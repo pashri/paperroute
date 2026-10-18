@@ -5,13 +5,15 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute.core.chooser import ChooserState
+from paperroute.core.chooser_view import ChooserView
 from paperroute.core.map_state import MapState
 from paperroute.core.map_view import MapView
-from paperroute.core.model import Departure, Pin
+from paperroute.core.model import Departure, Pin, shifted
 from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import LiveView, Saved
-from paperroute.core.stop_view import StopView
+from paperroute.core.stop_view import HORIZON, StopView
 from paperroute.core.strip_view import StripMapView, StripView
 
 POLL_EVERY: Final[timedelta] = timedelta(seconds=30)
@@ -42,6 +44,28 @@ def elapsed(*, since: datetime | None, now: datetime, span: timedelta) -> bool:
     if since is None:
         return True
     return now.timestamp() - since.timestamp() >= span.total_seconds()
+
+
+def load_window(*, now: datetime) -> tuple[datetime, datetime]:
+    """
+    Choose the span of departures to load from a stop.
+
+    Parameters
+    ----------
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    tuple[datetime, datetime]
+        From `LOOKBACK` before now to `HORIZON` and `RELOAD_BEFORE`
+        after, in real seconds.
+    """
+    ahead = HORIZON + RELOAD_BEFORE
+    return (
+        shifted(moment=now, seconds=-int(LOOKBACK.total_seconds())),
+        shifted(moment=now, seconds=int(ahead.total_seconds())),
+    )
 
 
 @dataclass(frozen=True)
@@ -148,7 +172,8 @@ class State:
         When the trip-updates feeds were last asked for.
     scroll : int
         The Stop view's scroll.
-    last_view : StopView | MapView | StripView | StripMapView | None
+    last_view : StopView | MapView | StripView | StripMapView | ChooserView
+        | None
         The view last drawn.
     running : bool
         False once the app should stop.
@@ -160,6 +185,8 @@ class State:
         What was last saved and the timetable last matched against.
     strip : StripState
         The strips' reaches and the Strip's scroll.
+    chooser : ChooserState | None
+        The route chooser, or None while it is closed.
     """
 
     now: datetime
@@ -169,9 +196,12 @@ class State:
     snapshots: Mapping[str, RealtimeSnapshot] = field(default_factory=dict)
     last_fetch: datetime | None = None
     scroll: int = 0
-    last_view: StopView | MapView | StripView | StripMapView | None = None
+    last_view: (
+        StopView | MapView | StripView | StripMapView | ChooserView | None
+    ) = None
     running: bool = True
     view: LiveView = LiveView.STOP
     map: MapState = field(default_factory=MapState)
     saving: Saving = field(default_factory=Saving)
     strip: StripState = field(default_factory=StripState)
+    chooser: ChooserState | None = None

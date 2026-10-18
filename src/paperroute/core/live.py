@@ -1,10 +1,11 @@
 """Apply live trip updates to scheduled departures."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute.core.feeds import feed_for
 from paperroute.core.model import Departure, shifted
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 
@@ -213,4 +214,69 @@ def resolve(
         arrives=shifted(moment=departure.arrives, seconds=reach_s),
         live=leave is not None or reach is not None,
         cancelled=trip.cancelled,
+    )
+
+
+def resolved(
+    *,
+    departures: Sequence[Departure],
+    snapshots: Mapping[str, RealtimeSnapshot],
+    now: datetime,
+) -> tuple[LiveDeparture, ...]:
+    """
+    Apply each departure's feed to it.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        Scheduled departures.
+    snapshots : Mapping[str, RealtimeSnapshot]
+        The latest download of each trip-updates feed.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    tuple[LiveDeparture, ...]
+        Every departure, with its feed's live times where known.
+    """
+    return tuple(
+        resolve(
+            departure=dep,
+            snapshot=snapshots.get(feed_for(mode=dep.mode) or ''),
+            now=now,
+        )
+        for dep in departures
+    )
+
+
+def live_since(
+    *,
+    snapshots: Mapping[str, RealtimeSnapshot],
+    feeds: Sequence[str],
+    now: datetime,
+) -> datetime | None:
+    """
+    Find when the oldest of some feeds was downloaded.
+
+    Parameters
+    ----------
+    snapshots : Mapping[str, RealtimeSnapshot]
+        The latest download of each trip-updates feed.
+    feeds : Sequence[str]
+        The feeds needed.
+    now : datetime
+        Current time, the answer when no feed is needed.
+
+    Returns
+    -------
+    datetime | None
+        The oldest fetch time, or None when a feed has no download yet.
+    """
+    if any(feed not in snapshots for feed in feeds):
+        return None
+    return min(
+        (snapshots[feed].fetched_at for feed in feeds),
+        key=lambda moment: moment.timestamp(),
+        default=now,
     )

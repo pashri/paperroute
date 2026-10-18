@@ -1,6 +1,7 @@
 """Tests for the reducer."""
 
 from collections import Counter
+from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, timedelta
 from typing import Final
@@ -9,11 +10,26 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from paperroute.core.chooser import (
+    ChooserPath,
+    ChooserState,
+    Column,
+    Level,
+    Stage,
+    chosen_pin,
+)
+from paperroute.core.chooser_steps import LINE_FAILED, trip_feeds
+from paperroute.core.chooser_view import LOADING_LISTS, ChooserView
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import Point, make_shape
+from paperroute.core.map_requests import shows_vehicles
 from paperroute.core.map_state import area_box
 from paperroute.core.map_view import DEFAULT_ZOOM, MAP_WIDTH, MapView
 from paperroute.core.messages import (
+    ChooserDeparturesFailed,
+    ChooserDeparturesLoaded,
+    ColumnFailed,
+    ColumnLoaded,
     DeparturesFailed,
     DeparturesLoaded,
     Effect,
@@ -25,7 +41,12 @@ from paperroute.core.messages import (
     KnobHeld,
     KnobPressed,
     KnobTurned,
+    LineFailed,
+    LineLoaded,
+    LoadChooserDepartures,
+    LoadColumn,
     LoadDepartures,
+    LoadLine,
     LoadModes,
     LoadPatterns,
     LoadShapes,
@@ -59,7 +80,13 @@ from paperroute.core.model import (
     shifted,
 )
 from paperroute.core.places import shown
-from paperroute.core.reach import Reach, ReachInput, RunTail, build_reach
+from paperroute.core.reach import (
+    Reach,
+    ReachInput,
+    RowKind,
+    RunTail,
+    build_reach,
+)
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 from paperroute.core.saved import (
     DEFAULT_SAVED,
@@ -93,19 +120,43 @@ from paperroute.core.stop_view import (
 from paperroute.core.strip_state import (
     STRIP_VIEWS,
     keys_in_use,
+    picking_to,
     scroll_range,
     shown_reach,
     strip_key,
 )
 from paperroute.core.strip_view import (
+    HINTS,
     PANE_ROWS,
     STRIP_ROWS,
     StripMapView,
     StripView,
+    origin_of,
 )
 from paperroute.core.tiles import CITY, ZOOMS
+from tests.core.chooser_steps import (
+    BUS_606,
+    CHOSEN,
+    CHOSEN_KEY,
+    DOWN,
+    GROUPS,
+    KINDS,
+    LINE,
+    METRO_LINES,
+    NEXT,
+    OPEN,
+    REACH,
+    ROUTES,
+    T1_BUSES,
+    T1_TOWARDS,
+    TO_STAGE,
+    TOWARDS,
+    TRAIN_LINES,
+)
 from tests.core.factories import (
+    EIGHT,
     START,
+    calls,
     departure,
     pattern,
     pin_at,
@@ -936,8 +987,174 @@ def strip_events(draw: st.DrawFn) -> Event:
     return draw(st.sampled_from(options))
 
 
+@dataclass(frozen=True)
+class Answer:
+    """
+    A stand-in for the reply to whatever the chooser waits for.
+
+    Attributes
+    ----------
+    outcome : int
+        0 for the expected answer, 1 for an empty one, 2 for a failure.
+    current : bool
+        Whether it comes from the timetable in use.
+    side : int
+        Stations each side of the From on a strip answered.
+    """
+
+    outcome: int
+    current: bool
+    side: int
+
+
+def column_for(*, path: ChooserPath) -> Column:
+    """
+    Answer a column request from a small catalogue.
+
+    Parameters
+    ----------
+    path : ChooserPath
+        The path asked for.
+
+    Returns
+    -------
+    Column
+        Bus, Train or Metro routes and their towards rows.
+    """
+    known = {
+        (): KINDS,
+        BUS_606[:1]: GROUPS,
+        ((Level.KIND, 'train'),): TRAIN_LINES,
+        ((Level.KIND, 'metro'),): METRO_LINES,
+    }
+    if path in known:
+        return known[path]
+    match path[-1][0]:
+        case Level.GROUP:
+            return ROUTES
+        case Level.REPLACEMENTS:
+            return T1_BUSES
+        case Level.LINE if path[0][1] == 'train':
+            return T1_TOWARDS
+    return TOWARDS
+
+
+def picked_reply(*, state: State, answer: Answer, timetable: str | None
+                 ) -> Event:
+    """
+    Answer the TO stage's strip or departures load.
+
+    Parameters
+    ----------
+    state : State
+        State with the chooser in the TO stage.
+    answer : Answer
+        The stand-in.
+    timetable : str | None
+        The version the reply comes from.
+
+    Returns
+    -------
+    Event
+        The strip, built or not, while it is pending; else departures.
+    """
+    chooser = state.chooser
+    assert chooser is not None and chooser.key is not None
+    pin = chosen_pin(chooser=chooser, destination=None)
+    if chooser.key in state.strip.pending and answer.outcome != 1:
+        reach = (
+            reach_through(origin=pin.origin.stop_id, side=answer.side)
+            if answer.outcome == 0
+            else None
+        )
+        return StripLoaded(key=chooser.key, reach=reach, timetable=timetable)
+    if answer.outcome == 2:
+        return ChooserDeparturesFailed(pin=pin, timetable=timetable)
+    return ChooserDeparturesLoaded(
+        pin=pin, departures=chooser_departures(), timetable=timetable,
+    )
+
+
+def answered(*, state: State, answer: Answer) -> Event:
+    """
+    Turn a stand-in into the reply the chooser waits for.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    answer : Answer
+        The stand-in.
+
+    Returns
+    -------
+    Event
+        A column, line, strip or departures reply; a Tick when nothing is
+        waited for.
+    """
+    chooser = state.chooser
+    timetable = state.saving.timetable if answer.current else 'old'
+    if chooser is None:
+        return Tick(now=state.now)
+    if chooser.stage is Stage.TO:
+        return picked_reply(state=state, answer=answer, timetable=timetable)
+    if chooser.stage is Stage.FROM and chooser.towards is not None:
+        towards = int(chooser.towards.key)
+        if answer.outcome == 2:
+            return LineFailed(towards=towards, timetable=timetable)
+        line = LINE if answer.outcome == 0 else None
+        return LineLoaded(towards=towards, line=line, timetable=timetable)
+    path = chooser.waiting
+    if path is None:
+        return Tick(now=state.now)
+    if answer.outcome == 2:
+        return ColumnFailed(path=path, timetable=timetable)
+    column = (
+        column_for(path=path)
+        if answer.outcome == 0
+        else Column(level=Level.ROUTE, items=())
+    )
+    return ColumnLoaded(path=path, column=column, timetable=timetable)
+
+
 @st.composite
-def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
+def chooser_events(draw: st.DrawFn) -> Event:
+    """
+    A random chooser reply, most likely for something not waited for.
+
+    Parameters
+    ----------
+    draw : st.DrawFn
+        Hypothesis draw function.
+
+    Returns
+    -------
+    Event
+        A column, line or departures reply or failure, from any
+        timetable version.
+    """
+    timetable = draw(st.sampled_from(VERSIONS))
+    path = draw(st.sampled_from([(), BUS_606[:1], BUS_606[:2], BUS_606]))
+    towards = draw(st.sampled_from([11, 12, 21]))
+    pin = draw(st.sampled_from([CHOSEN, *POOL]))
+    options: list[Event] = [
+        ColumnLoaded(path=path, column=column_for(path=path),
+                     timetable=timetable),
+        ColumnFailed(path=path, timetable=timetable),
+        LineLoaded(towards=towards, line=LINE, timetable=timetable),
+        LineFailed(towards=towards, timetable=timetable),
+        ChooserDeparturesLoaded(
+            pin=pin, departures=chooser_departures(), timetable=timetable,
+        ),
+        ChooserDeparturesFailed(pin=pin, timetable=timetable),
+    ]
+    return draw(st.sampled_from(options))
+
+
+@st.composite
+def event_lists(
+    draw: st.DrawFn, start: datetime
+) -> list[Event | Answer]:
     """
     Random but time-ordered event sequences.
 
@@ -950,10 +1167,10 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
 
     Returns
     -------
-    list[Event]
-        Events.
+    list[Event | Answer]
+        Events, and stand-ins for the replies the chooser waits for.
     """
-    now, events = start, list[Event]()
+    now, events = start, list[Event | Answer]()
     kinds = [
         'tick',
         'turn',
@@ -966,6 +1183,10 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
         'place',
         'strip',
         'quit',
+        'walk',
+        'answer',
+        'answer',
+        'chooser',
     ]
     for kind in draw(st.lists(st.sampled_from(kinds), max_size=40)):
         if kind == 'tick':
@@ -992,6 +1213,27 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
             events.append(draw(strip_events()))
         elif kind == 'quit':
             events.append(QuitRequested())
+        elif kind == 'walk':
+            ok = Answer(
+                outcome=0,
+                current=True,
+                side=draw(st.sampled_from([0, 2, 20])),
+            )
+            walk: list[Event | Answer] = [
+                OPEN, ok, ok, NEXT, ok, NEXT, ok, NEXT, ok, NEXT, ok, DOWN,
+                NEXT, ok, ok, DOWN, DOWN,
+            ]
+            events.extend(walk[:draw(st.integers(1, len(walk)))])
+        elif kind == 'answer':
+            events.append(
+                Answer(
+                    outcome=draw(st.integers(0, 2)),
+                    current=draw(st.booleans()),
+                    side=draw(st.sampled_from([0, 2, 20])),
+                )
+            )
+        elif kind == 'chooser':
+            events.append(draw(chooser_events()))
         elif kind == 'ok':
             snap = RealtimeSnapshot(fetched_at=now, trips={})
             events.append(FeedFetched(feed=BUSES, snapshot=snap))
@@ -1045,6 +1287,7 @@ def check_effects(
         assert after.scroll == after.last_view.scroll
     assert set(after.strip.reaches) <= keys_in_use(state=after)
     check_map_requests(before=before, after=after, effects=effects)
+    check_chooser(before=before, after=after, event=event, effects=effects)
     for effect in effects:
         if isinstance(effect, Render):
             check_render(state=after, view=effect.view)
@@ -1059,6 +1302,69 @@ def check_effects(
             )
         if isinstance(effect, FetchFeed):
             check_fetch(before=before, after=after, event=event, effect=effect)
+
+
+def check_chooser(
+    *, before: State, after: State, event: Event, effects: tuple[Effect, ...]
+) -> None:
+    """
+    Assert the chooser's cursors fit, nothing saved changes while it is
+    open but the committing press, and its loads are not repeated.
+
+    Parameters
+    ----------
+    before : State
+        State before the event.
+    after : State
+        State after the event.
+    event : Event
+        The event applied.
+    effects : tuple[Effect, ...]
+        Effects returned.
+    """
+    chooser = after.chooser
+    if chooser is not None:
+        check_cursors(state=after, chooser=chooser)
+    commit = event == PRESS and after.chooser is None
+    if before.chooser is not None and not commit:
+        if not isinstance(event, PlacesMatched):
+            assert saved_of(state=after) == saved_of(state=before)
+    swapped = (
+        isinstance(event, TimetableSeen)
+        and event.version != before.saving.timetable
+    )
+    waiting = None if before.chooser is None else before.chooser.waiting
+    for load in effects_of(effects=effects, kind=LoadColumn):
+        assert load.timetable == after.saving.timetable
+        assert swapped or waiting is None or load.path != waiting
+    for asked in effects_of(effects=effects, kind=LoadChooserDepartures):
+        assert chooser is not None and chooser.stage is Stage.TO
+        assert asked.pin.origin == chooser.origin
+
+
+def check_cursors(*, state: State, chooser: ChooserState) -> None:
+    """
+    Assert every chooser cursor is within what it moves over.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    chooser : ChooserState
+        Its open chooser.
+    """
+    assert len(chooser.cursors) == len(chooser.columns)
+    for cursor, column in zip(chooser.cursors, chooser.columns, strict=True):
+        assert 0 <= cursor < max(1, len(column.items))
+    assert 0 <= chooser.line_cursor < max(1, len(chooser.line))
+    if chooser.stage is not Stage.TO or chooser.key is None:
+        return
+    reach = state.strip.reaches.get(chooser.key)
+    origin = None if reach is None else origin_of(reach=reach)
+    if reach is not None and origin is not None:
+        row = origin + chooser.to_cursor
+        assert 0 <= row < len(reach.rows)
+        assert reach.rows[row].kind is not RowKind.APPROACH
 
 
 def check_strip_load(
@@ -1080,7 +1386,11 @@ def check_strip_load(
     effect : LoadStrip
         The request.
     """
-    assert after.view in STRIP_VIEWS
+    picked = picking_to(state=after)
+    if picked is None:
+        assert after.chooser is None and after.view in STRIP_VIEWS
+    else:
+        assert effect.key == picked.key
     assert effect.timetable == after.saving.timetable
     swapped = (
         isinstance(event, TimetableSeen)
@@ -1116,9 +1426,9 @@ def check_map_requests(
             and effect.kind is FeedKind.POSITIONS
         )
     ]
-    if after.view is LiveView.STOP:
+    if not shows_vehicles(state=after):
         assert not requests
-    if after.view is LiveView.STRIP:
+    if after.view is LiveView.STRIP or after.chooser is not None:
         assert all(
             isinstance(request, (LoadPatterns, FetchFeed))
             for request in requests
@@ -1133,6 +1443,11 @@ def check_map_requests(
         assert load.mpp not in known
 
 
+STAGE_TYPES: Final[dict[Stage, type]] = {
+    Stage.LISTS: ChooserView,
+    Stage.FROM: StripView,
+    Stage.TO: StripView,
+}
 VIEW_TYPES: Final[dict[LiveView, type]] = {
     LiveView.STOP: StopView,
     LiveView.MAP: MapView,
@@ -1142,20 +1457,27 @@ VIEW_TYPES: Final[dict[LiveView, type]] = {
 
 
 def check_render(
-    *, state: State, view: StopView | MapView | StripView | StripMapView
+    *,
+    state: State,
+    view: StopView | MapView | StripView | StripMapView | ChooserView,
 ) -> None:
     """
-    Assert a rendered view is the Live view shown and fits the screen,
-    and the Strip's stored scroll is within its reach.
+    Assert a rendered view is the chooser's stage or the Live view shown
+    and fits the screen, and the Strip's stored scroll is within its
+    reach.
 
     Parameters
     ----------
     state : State
         State after the event.
-    view : StopView | MapView | StripView | StripMapView
+    view : StopView | MapView | StripView | StripMapView | ChooserView
         The view drawn.
     """
-    assert type(view) is VIEW_TYPES[state.view]
+    chooser = state.chooser
+    if chooser is not None:
+        assert type(view) is STAGE_TYPES[chooser.stage]
+    else:
+        assert type(view) is VIEW_TYPES[state.view]
     match view:
         case StopView():
             assert len(view.rows) <= VISIBLE_ROWS
@@ -1212,7 +1534,7 @@ def check_fetch(
         The fetch.
     """
     if effect.kind is FeedKind.TRIPS:
-        assert effect.feed in after.feeds
+        assert effect.feed in trip_feeds(state=after)
         assert polled(before=before, event=event)
         return
     assert effect.feed in needed_feeds(state=after)
@@ -1327,13 +1649,18 @@ def start_saved(draw: st.DrawFn) -> Saved:
     st.booleans(),
 )
 def test_step_invariants(
-    case: tuple[datetime, list[Event]], saved: Saved, stored: bool
+    case: tuple[datetime, list[Event | Answer]], saved: Saved, stored: bool
 ) -> None:
     """No event sequence breaks the reducer's invariants."""
     start, events = case
     state = initial_state(saved=saved, now=start, stored=stored)
     last = state.saving.saved
-    for event in events:
+    for item in events:
+        event = (
+            answered(state=state, answer=item)
+            if isinstance(item, Answer)
+            else item
+        )
         before = state
         state, effects = step(before, event)
         check_effects(
@@ -1852,10 +2179,347 @@ def test_hold_with_duplicate_selects_existing_pin() -> None:
     assert not effects_of(effects=effects, kind=LoadDepartures)
 
 
-def test_top_press_does_nothing() -> None:
-    """The top press waits for the chooser."""
-    state = pinned()
-    assert step(state, KnobPressed(knob=Knob.TOP)) == (state, ())
+def run_events(
+    *, state: State, events: Sequence[Event],
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Apply events in turn.
+
+    Parameters
+    ----------
+    state : State
+        State before.
+    events : Sequence[Event]
+        Events.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State after, and every effect in order.
+    """
+    effects: tuple[Effect, ...] = ()
+    for event in events:
+        state, more = step(state, event)
+        effects = (*effects, *more)
+    return state, effects
+
+
+def chooser_departures() -> tuple[Departure, ...]:
+    """
+    Make 606 departures from the chooser's From, one already on its way.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        A 606 that left a minute ago and one in five minutes, both to
+        Hawkesbury.
+    """
+    return tuple(
+        departure(
+            departs=START + timedelta(minutes=minutes),
+            trip_id=f'c-{index}',
+            headsign='Hawkesbury',
+            kind=RouteKind.BUS,
+        )
+        for index, minutes in enumerate((-1, 5))
+    )
+
+
+def test_top_press_opens_chooser_and_asks_kind_column() -> None:
+    """The top press opens the chooser and asks for the KIND column."""
+    before = pinned()
+    state, effects = step(before, OPEN)
+    assert state.chooser == ChooserState(waiting=(), prefer=None)
+    assert effects_of(effects=effects, kind=LoadColumn) == [
+        LoadColumn(path=()),
+    ]
+    [render] = effects_of(effects=effects, kind=Render)
+    assert isinstance(render.view, ChooserView)
+    assert render.view.empty == LOADING_LISTS
+    assert saved_of(state=state) == saved_of(state=before)
+
+
+def test_chooser_ignores_top_turns_and_holds() -> None:
+    """While the chooser is open, the top turn and both holds do nothing."""
+    state, _ = step(pinned(), OPEN)
+    for event in (top(steps=1), HOLD, KnobHeld(knob=Knob.TOP)):
+        assert step(state, event) == (state, ())
+
+
+def test_back_from_kind_closes_without_change() -> None:
+    """Going back from the KIND column closes the chooser, nothing changed."""
+    before = pinned()
+    state, _ = run_events(
+        state=before,
+        events=[OPEN, ColumnLoaded(path=(), column=KINDS), DOWN],
+    )
+    assert state.chooser is not None
+    state, effects = step(state, OPEN)
+    assert state.chooser is None
+    assert (state.places, state.view) == (before.places, before.view)
+    [render] = effects_of(effects=effects, kind=Render)
+    assert render.view == before.last_view
+
+
+def test_from_stage_draws_the_line() -> None:
+    """The FROM stage is a strip of the towards line with no panel rows."""
+    state, _ = run_events(state=loaded(state=pinned()), events=TO_STAGE[:-2])
+    view = state.last_view
+    assert isinstance(view, StripView)
+    assert (view.picking, view.panel.rows) == ('FROM', ())
+    assert view.panel.hint == HINTS['FROM']
+    assert [row.name for row in view.rows] == [
+        'Parramatta', 'Northmead', 'Baulkham Hills',
+    ]
+    assert view.rows[0].cursor
+
+
+def test_from_stage_says_when_the_line_fails() -> None:
+    """A line that can't be read leaves a short note on the FROM stage."""
+    state, _ = run_events(state=pinned(), events=TO_STAGE[:-3])
+    state, _ = step(state, LineFailed(towards=11))
+    assert isinstance(state.last_view, StripView)
+    assert state.last_view.empty == LINE_FAILED
+
+
+def test_to_stage_asks_for_the_strip_and_departures() -> None:
+    """Pressing a From asks for its strip and its own departures."""
+    state, effects = run_events(state=pinned(), events=TO_STAGE)
+    assert state.chooser is not None
+    assert state.chooser.stage is Stage.TO
+    assert effects_of(effects=effects, kind=LoadStrip) == [
+        LoadStrip(key=CHOSEN_KEY, origin=CHOSEN.origin),
+    ]
+    [load] = effects_of(effects=effects, kind=LoadChooserDepartures)
+    assert load.pin == CHOSEN
+    assert (load.start, load.end) == (
+        START - LOOKBACK,
+        START + HORIZON + RELOAD_BEFORE,
+    )
+    assert effects_of(effects=effects, kind=LoadColumn) == [
+        LoadColumn(path=()),
+        LoadColumn(path=BUS_606[:1]),
+        LoadColumn(path=(*BUS_606[:1], (Level.GROUP, '1-99'))),
+        LoadColumn(path=BUS_606[:2]),
+        LoadColumn(path=BUS_606),
+    ]
+    assert effects_of(effects=effects, kind=LoadLine) == [
+        LoadLine(towards=11),
+    ]
+
+
+def test_to_stage_panel_shows_the_chosen_from() -> None:
+    """In the TO stage the panel and vehicles are the chooser's From's."""
+    state, _ = run_events(state=loaded(state=pinned()), events=TO_STAGE)
+    state, effects = run_events(
+        state=state,
+        events=[
+            StripLoaded(key=CHOSEN_KEY, reach=REACH),
+            ChooserDeparturesLoaded(
+                pin=CHOSEN, departures=chooser_departures(),
+            ),
+        ],
+    )
+    [load] = effects_of(effects=effects, kind=LoadPatterns)
+    assert load.trip_ids == {'c-0', 'c-1'}
+    trip = pattern(
+        trip_id='c-0',
+        stops=calls(stations=['S2', 'S3', 'S4'], start=EIGHT - 60),
+    )
+    state, _ = step(
+        state,
+        PatternsLoaded(
+            trip_ids=load.trip_ids, patterns={'c-0': trip}, shapes={},
+        ),
+    )
+    view = state.last_view
+    assert isinstance(view, StripView)
+    assert (view.picking, view.origin, view.panel.title) == (
+        'TO', 'Northmead', 'Northmead',
+    )
+    assert [row.destination for row in view.panel.rows] == ['Hawkesbury']
+    assert [row.cursor for row in view.rows] == [False, True, False, False]
+    [marker] = view.markers
+    assert marker.route == '606'
+    assert shown(state=state) == PINS[0]
+
+
+def test_stale_chooser_departures_are_ignored() -> None:
+    """Departures for a From no longer chosen are dropped."""
+    state, _ = run_events(
+        state=pinned(), events=[*TO_STAGE, OPEN, DOWN, NEXT],
+    )
+    assert state.chooser is not None
+    assert state.chooser.origin == LINE[2]
+    for event in (
+        ChooserDeparturesLoaded(pin=CHOSEN, departures=chooser_departures()),
+        ChooserDeparturesLoaded(
+            pin=replace(CHOSEN, origin=LINE[2]),
+            departures=chooser_departures(),
+            timetable='v1',
+        ),
+    ):
+        assert step(state, event) == (state, ())
+
+
+def test_commit_hands_departures_to_the_new_place() -> None:
+    """A From-only commit starts the Stop view with the chooser's board."""
+    state, _ = run_events(
+        state=pinned(view=LiveView.MAP),
+        events=[
+            *TO_STAGE,
+            StripLoaded(key=CHOSEN_KEY, reach=REACH),
+            ChooserDeparturesLoaded(
+                pin=CHOSEN, departures=chooser_departures(),
+            ),
+        ],
+    )
+    state, effects = step(state, NEXT)
+    assert state.chooser is None
+    assert state.board.departures == chooser_departures()
+    [load] = effects_of(effects=effects, kind=LoadDepartures)
+    assert load.pin == CHOSEN
+
+
+def test_commit_makes_unpinned_place_on_stop_view() -> None:
+    """A TO press makes an unpinned place and lands on the Stop view."""
+    state, _ = run_events(
+        state=pinned(view=LiveView.MAP),
+        events=[
+            *TO_STAGE,
+            StripLoaded(key=CHOSEN_KEY, reach=REACH),
+            ChooserDeparturesLoaded(
+                pin=CHOSEN, departures=chooser_departures(),
+            ),
+            DOWN,
+        ],
+    )
+    state, effects = step(state, NEXT)
+    chosen = replace(CHOSEN, destination=place('S3'))
+    assert state.chooser is None
+    assert state.places.pins == PINS
+    assert state.places.unpinned == chosen
+    assert state.view is LiveView.STOP
+    assert state.board.departures == ()
+    [load] = effects_of(effects=effects, kind=LoadDepartures)
+    assert load.pin == chosen
+    [render] = effects_of(effects=effects, kind=Render)
+    assert isinstance(render.view, StopView)
+    assert render.view.tag.text == 'not pinned'
+
+
+def test_commit_matching_pin_selects_it() -> None:
+    """Choosing a pinned place selects that pin."""
+    saved = Saved(
+        pins=(PINS[0], CHOSEN, PINS[2]),
+        current=0,
+        unpinned=None,
+        view=LiveView.STOP,
+        zoom=DEFAULT_ZOOM,
+    )
+    state = initial_state(saved=saved, now=START, stored=True)
+    state, _ = run_events(
+        state=state,
+        events=[*TO_STAGE, StripLoaded(key=CHOSEN_KEY, reach=REACH), NEXT],
+    )
+    assert state.chooser is None
+    assert state.places == replace(state.places, current=1, unpinned=None)
+    assert state.places.pins == saved.pins
+    assert isinstance(state.last_view, StopView)
+    assert state.last_view.tag.text == 'pin 2/3'
+
+
+def test_nothing_persisted_changes_until_the_commit() -> None:
+    """Walking the chooser and backing out changes nothing saved."""
+    before = pinned(view=LiveView.STRIP)
+    state, _ = run_events(
+        state=before,
+        events=[
+            *TO_STAGE,
+            StripLoaded(key=CHOSEN_KEY, reach=REACH),
+            DOWN,
+            OPEN,
+            OPEN,
+            OPEN,
+            OPEN,
+            OPEN,
+            OPEN,
+        ],
+    )
+    assert state.chooser is None
+    assert saved_of(state=state) == saved_of(state=before)
+
+
+def test_new_timetable_asks_the_chooser_again() -> None:
+    """A new timetable asks again for the line or the TO stage's loads."""
+    state, _ = run_events(state=pinned(), events=TO_STAGE[:-4])
+    _, effects = step(state, TimetableSeen(version='v1'))
+    assert not effects_of(effects=effects, kind=LoadColumn)
+    state, _ = step(state, NEXT)
+    _, effects = step(state, TimetableSeen(version='v1'))
+    assert effects_of(effects=effects, kind=LoadLine) == [
+        LoadLine(towards=11, timetable='v1'),
+    ]
+    state, _ = run_events(
+        state=state,
+        events=[
+            *TO_STAGE[-3:],
+            StripLoaded(key=CHOSEN_KEY, reach=REACH),
+            DOWN,
+        ],
+    )
+    assert state.chooser is not None
+    assert state.chooser.to_cursor == 1
+    state, effects = step(state, TimetableSeen(version='v1'))
+    assert state.chooser is not None
+    assert state.chooser.to_cursor == 0
+    assert effects_of(effects=effects, kind=LoadStrip) == [
+        LoadStrip(key=CHOSEN_KEY, origin=CHOSEN.origin, timetable='v1'),
+    ]
+    [load] = effects_of(effects=effects, kind=LoadChooserDepartures)
+    assert (load.pin, load.timetable) == (CHOSEN, 'v1')
+
+
+def test_chooser_departures_failure_leaves_them_empty() -> None:
+    """A failed departures load changes nothing."""
+    state, _ = run_events(state=pinned(), events=TO_STAGE)
+    assert step(state, ChooserDeparturesFailed(pin=CHOSEN)) == (state, ())
+
+
+def test_turning_past_the_last_row_asks_nothing() -> None:
+    """Each new KIND row asks for its preview once; the end asks nothing."""
+    state, _ = run_events(
+        state=pinned(), events=[OPEN, ColumnLoaded(path=(), column=KINDS)],
+    )
+    _, effects = run_events(state=state, events=[DOWN, DOWN, DOWN])
+    assert effects_of(effects=effects, kind=LoadColumn) == [
+        LoadColumn(path=((Level.KIND, 'train'),)),
+        LoadColumn(path=((Level.KIND, 'metro'),)),
+    ]
+
+
+@pytest.mark.parametrize('failed', [False, True])
+def test_new_timetable_closes_a_failed_chooser(failed: bool) -> None:
+    """A new timetable closes a failed chooser and asks again otherwise."""
+    state, _ = step(pinned(), OPEN)
+    if failed:
+        state, _ = step(state, ColumnFailed(path=()))
+    state, effects = step(state, TimetableSeen(version='v1'))
+    if failed:
+        assert state.chooser is None
+        assert not effects_of(effects=effects, kind=LoadColumn)
+    else:
+        assert effects_of(effects=effects, kind=LoadColumn) == [
+            LoadColumn(path=(), timetable='v1'),
+        ]
+        state, _ = step(state, ColumnLoaded(path=(), column=KINDS))
+        assert state.chooser is not None
+        assert state.chooser.waiting == ()
+        state, _ = step(
+            state, ColumnLoaded(path=(), column=KINDS, timetable='v1'),
+        )
+        assert state.chooser is not None
+        assert state.chooser.columns == (KINDS,)
 
 
 @pytest.mark.parametrize('view', [LiveView.STRIP, LiveView.STRIP_MAP])
@@ -1880,7 +2544,7 @@ def test_bottom_press_cycles_four_views() -> None:
     """Presses go Stop, Map, Strip, Strip + map and back to Stop."""
     state, _ = step(fresh(centre=CENTRE), Tick(now=START))
     views: list[LiveView] = []
-    drawn: list[type[StopView | MapView | StripView | StripMapView]] = []
+    drawn: list[type] = []
     for _ in LIVE_VIEWS:
         state, effects = step(state, PRESS)
         views.append(state.view)

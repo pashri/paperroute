@@ -40,6 +40,7 @@ from paperroute.core.strip_view import (
     StripMapView,
     StripView,
 )
+from tests.core.chooser_steps import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.factories import START, departure, place, snapshot, vehicle
 
 CENTRE: Final[Point] = (-17_000.0, 1_000.0)
@@ -546,3 +547,36 @@ def test_strip_trips_do_not_wait_for_the_fetch_in_flight() -> None:
     )
     [load] = kinds(effects=effects, kind=LoadPatterns)
     assert 'train-0' in load.trip_ids
+
+
+def test_to_stage_keeps_the_chooser_key_in_use() -> None:
+    """The chooser's strip is kept while it picks a TO, not after a back."""
+    pin = replace(PIN, kind=RouteKind.BUS)
+    state, _ = on_view(view=LiveView.STOP, pin=pin)
+    state, _ = run(state=state, events=list(TO_STAGE))
+    assert keys_in_use(state=state) == {strip_key(pin=pin), CHOSEN_KEY}
+    state, _ = step(state, StripLoaded(key=CHOSEN_KEY, reach=REACH))
+    assert state.strip.reaches == {CHOSEN_KEY: REACH}
+    state, _ = step(state, OPEN)
+    assert keys_in_use(state=state) == {strip_key(pin=pin)}
+    assert not state.strip.reaches
+
+
+def test_to_stage_reuses_reach_after_commit() -> None:
+    """The reach built for the TO stage serves the new place's Strip."""
+    state, _ = on_view(view=LiveView.STOP, pin=replace(PIN, kind=None))
+    state, effects = run(state=state, events=list(TO_STAGE))
+    assert kinds(effects=effects, kind=LoadStrip) == [
+        LoadStrip(key=CHOSEN_KEY, origin=CHOSEN.origin),
+    ]
+    state, effects = run(
+        state=state,
+        events=[
+            StripLoaded(key=CHOSEN_KEY, reach=REACH), PRESS, PRESS, PRESS,
+        ],
+    )
+    assert state.chooser is None
+    assert state.view is LiveView.STRIP
+    assert not kinds(effects=effects, kind=LoadStrip)
+    assert isinstance(state.last_view, StripView)
+    assert state.last_view.rows[1].station == 'S2'

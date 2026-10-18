@@ -16,8 +16,16 @@ from paperroute.core.chooser import (
     with_column,
     with_line,
 )
+from paperroute.core.messages import (
+    ColumnLoaded,
+    Event,
+    Knob,
+    KnobPressed,
+    KnobTurned,
+    LineLoaded,
+)
 from paperroute.core.model import Pin, RouteKind, StopPlace
-from paperroute.core.reach import Reach, ReachRow, RowKind
+from paperroute.core.reach import Reach, ReachRow, RowKind, StripKey
 from tests.core.factories import place
 
 KINDS: Final[Column] = Column(
@@ -86,6 +94,32 @@ BUS_606: Final[ChooserPath] = (
     (Level.KIND, 'bus'),
     (Level.GROUP, '600s'),
     (Level.ROUTE, 'r606'),
+)
+
+
+CHOSEN: Final[Pin] = Pin(
+    origin=LINE[1], kind=RouteKind.BUS, routes=('606',),
+)
+CHOSEN_KEY: Final[StripKey] = StripKey(
+    station='S2', kind=RouteKind.BUS, routes=('606',),
+)
+OPEN: Final[KnobPressed] = KnobPressed(knob=Knob.TOP)
+NEXT: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
+DOWN: Final[KnobTurned] = KnobTurned(knob=Knob.BOTTOM, steps=1)
+TO_STAGE: Final[tuple[Event, ...]] = (
+    OPEN,
+    ColumnLoaded(path=(), column=KINDS),
+    ColumnLoaded(path=BUS_606[:1], column=GROUPS),
+    NEXT,
+    DOWN,
+    ColumnLoaded(path=BUS_606[:2], column=ROUTES),
+    NEXT,
+    ColumnLoaded(path=BUS_606, column=TOWARDS),
+    NEXT,
+    NEXT,
+    LineLoaded(towards=11, line=LINE),
+    DOWN,
+    NEXT,
 )
 
 

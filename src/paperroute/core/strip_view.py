@@ -37,6 +37,7 @@ HINTS: Final[dict[str, str]] = {
     'FROM': f'Press: set FROM{DOT}top press: back',
 }
 PICK_FROM: Final[str] = 'FROM'
+PICK_TO: Final[str] = 'TO'
 EMPTY_STOP_VIEW: Final[StopView] = StopView(
     origin='',
     destination=None,

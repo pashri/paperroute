@@ -4,18 +4,31 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.core.feeds import feed_for
+from paperroute.core.chooser_steps import (
+    chooser_event,
+    chooser_knob,
+    chooser_retimed,
+    chooser_view,
+    trip_feeds,
+)
+from paperroute.core.chooser_view import ChooserView
 from paperroute.core.knobs import knob_moved
-from paperroute.core.live import LiveDeparture, resolve
+from paperroute.core.live import LiveDeparture, live_since, resolved
 from paperroute.core.map_requests import (
     map_effects,
     map_feeds,
     map_inputs,
     polled_positions,
+    shows_vehicles,
 )
 from paperroute.core.map_state import MapState, failed, with_patterns
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapView, build_map_view
 from paperroute.core.messages import (
+    ChooserDeparturesFailed,
+    ChooserDeparturesLoaded,
+    ChooserEvent,
+    ColumnFailed,
+    ColumnLoaded,
     DeparturesFailed,
     DeparturesLoaded,
     Effect,
@@ -23,9 +36,12 @@ from paperroute.core.messages import (
     FeedFailed,
     FeedFetched,
     FetchFeed,
+    Knob,
     KnobHeld,
     KnobPressed,
     KnobTurned,
+    LineFailed,
+    LineLoaded,
     LoadDepartures,
     MapDataFailed,
     MapEvent,
@@ -44,7 +60,7 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.model import same_place, shifted
+from paperroute.core.model import same_place
 from paperroute.core.places import (
     feeds_of,
     is_stale,
@@ -58,13 +74,12 @@ from paperroute.core.places import (
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state_model import (
     FEED_IDLE,
-    LOOKBACK,
     POLL_EVERY,
-    RELOAD_BEFORE,
     Board,
     Saving,
     State,
     elapsed,
+    load_window,
 )
 from paperroute.core.stop_view import (
     HORIZON,
@@ -162,13 +177,10 @@ def live_departures(*, state: State) -> tuple[LiveDeparture, ...]:
     tuple[LiveDeparture, ...]
         Every departure, with its feed's live times where known.
     """
-    return tuple(
-        resolve(
-            departure=dep,
-            snapshot=state.snapshots.get(feed_for(mode=dep.mode) or ''),
-            now=state.now,
-        )
-        for dep in state.board.departures
+    return resolved(
+        departures=state.board.departures,
+        snapshots=state.snapshots,
+        now=state.now,
     )
 
 
@@ -188,19 +200,6 @@ def stop_view_of(*, state: State) -> StopView:
     """
     pin = shown(state=state)
     destination = pin.destination
-    fetched = [
-        state.snapshots[feed].fetched_at if feed in state.snapshots else None
-        for feed in state.feeds
-    ]
-    since = (
-        None
-        if None in fetched
-        else min(
-            (f for f in fetched if f is not None),
-            key=lambda moment: moment.timestamp(),
-            default=state.now,
-        )
-    )
     return build_stop_view(
         inputs=StopInputs(
             origin=pin.origin.name,
@@ -208,7 +207,9 @@ def stop_view_of(*, state: State) -> StopView:
             departures=live_departures(state=state),
             now=state.now,
             scroll=state.scroll,
-            live_since=since,
+            live_since=live_since(
+                snapshots=state.snapshots, feeds=state.feeds, now=state.now,
+            ),
             has_feed=bool(state.feeds) or not state.board.departures,
             loaded=state.board.loaded_until is not None,
             missing=pin.missing,
@@ -222,7 +223,7 @@ def stop_view_of(*, state: State) -> StopView:
 
 def needed_feeds(*, state: State) -> tuple[str, ...]:
     """
-    List every feed the current Live view polls.
+    List every feed the screen polls.
 
     Parameters
     ----------
@@ -232,12 +233,13 @@ def needed_feeds(*, state: State) -> tuple[str, ...]:
     Returns
     -------
     tuple[str, ...]
-        The trip-updates feeds, then on every view but the Stop view its
-        positions feeds.
+        The trip-updates feeds, then the positions feeds of a screen that
+        draws vehicles.
     """
-    if state.view is LiveView.STOP:
-        return state.feeds
-    return (*state.feeds, *map_feeds(state=state))
+    trips = trip_feeds(state=state)
+    if not shows_vehicles(state=state):
+        return trips
+    return (*trips, *map_feeds(state=state))
 
 
 def live_stop_view(*, state: State) -> StopView:
@@ -286,7 +288,7 @@ def shown_strip(*, state: State, stop_view: StopView) -> StripInputs:
 
 def current_view(
     *, state: State, stop_view: StopView
-) -> StopView | MapView | StripView | StripMapView:
+) -> StopView | MapView | StripView | StripMapView | ChooserView:
     """
     Build the view for the current state.
 
@@ -299,9 +301,12 @@ def current_view(
 
     Returns
     -------
-    StopView | MapView | StripView | StripMapView
-        The Live view shown; the Strip + map's map at its own width.
+    StopView | MapView | StripView | StripMapView | ChooserView
+        The open chooser's screen, else the Live view shown; the Strip +
+        map's map at its own width.
     """
+    if state.chooser is not None:
+        return chooser_view(state=state, chooser=state.chooser)
     match state.view:
         case LiveView.MAP:
             inputs = map_inputs(state=state, stop_view=stop_view)
@@ -423,10 +428,10 @@ def poll_due(*, state: State, now: datetime) -> bool:
     Returns
     -------
     bool
-        True when there are feeds and POLL_EVERY of real time has passed
-        since the last fetch.
+        True when there are feeds to poll and POLL_EVERY of real time has
+        passed since the last fetch.
     """
-    return bool(state.feeds) and elapsed(
+    return bool(trip_feeds(state=state)) and elapsed(
         since=state.last_fetch,
         now=now,
         span=POLL_EVERY,
@@ -450,9 +455,7 @@ def reload_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     now = state.now
     if not reload_due(state=state, now=now) or state.board.loading:
         return state, ()
-    reach = HORIZON + RELOAD_BEFORE
-    start = shifted(moment=now, seconds=-int(LOOKBACK.total_seconds()))
-    end = shifted(moment=now, seconds=int(reach.total_seconds()))
+    start, end = load_window(now=now)
     load = LoadDepartures(
         pin=shown(state=state),
         start=start,
@@ -480,7 +483,9 @@ def poll_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
     if not poll_due(state=state, now=state.now):
         return state, ()
-    fetches = tuple(FetchFeed(feed=feed) for feed in state.feeds)
+    fetches = tuple(
+        FetchFeed(feed=feed) for feed in trip_feeds(state=state)
+    )
     return replace(state, last_fetch=state.now), fetches
 
 
@@ -628,6 +633,9 @@ def on_knob(
     """
     Apply a knob event, loading departures when the place changed.
 
+    While the chooser is open every knob event goes to it, and the top
+    press opens it.
+
     Parameters
     ----------
     state : State
@@ -640,14 +648,18 @@ def on_knob(
     tuple[State, tuple[Effect, ...]]
         New state and effects; none when the event does nothing.
     """
-    after = knob_moved(state=state, event=event)
+    effects: tuple[Effect, ...] = ()
+    if state.chooser is not None or event == KnobPressed(knob=Knob.TOP):
+        after, effects = chooser_knob(state=state, event=event)
+    else:
+        after = knob_moved(state=state, event=event)
     if after is state:
         return state, ()
-    return reloaded(before=state, after=after)
+    return reloaded(before=state, after=after, effects=effects)
 
 
 def reloaded(
-    *, before: State, after: State
+    *, before: State, after: State, effects: tuple[Effect, ...] = ()
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Load departures when the place shown changed, and redraw.
@@ -658,6 +670,8 @@ def reloaded(
         State before the event.
     after : State
         State after it, already showing the new place.
+    effects : tuple[Effect, ...]
+        Effects so far.
 
     Returns
     -------
@@ -667,7 +681,7 @@ def reloaded(
     loads: tuple[Effect, ...] = ()
     if not same_place(first=shown(state=after), second=shown(state=before)):
         after, loads = reload_effects(state=after)
-    return settled(state=after, effects=loads)
+    return settled(state=after, effects=(*effects, *loads))
 
 
 def on_timetable(
@@ -687,10 +701,10 @@ def on_timetable(
     -------
     tuple[State, tuple[Effect, ...]]
         State with the version recorded, the departures due to reload
-        (a load in flight is forgotten, its reply now stale) and no
-        reaches built or pending, redrawn with the new reach asked for,
-        and a MatchPlaces when there is a timetable; unchanged for the
-        version already seen.
+        (a load in flight is forgotten, its reply now stale), no reaches
+        built or pending and the chooser carried over, redrawn with the
+        new reach asked for, and a MatchPlaces when there is a
+        timetable; unchanged for the version already seen.
     """
     if event.version == state.saving.timetable:
         return state, ()
@@ -700,10 +714,11 @@ def on_timetable(
         saving=replace(state.saving, timetable=event.version),
         strip=replace(state.strip, reaches={}, pending=frozenset()),
     )
+    state, asks = chooser_retimed(state=state)
     if event.version is None:
-        return settled(state=state)
+        return settled(state=state, effects=asks)
     rematch = MatchPlaces(places=stops_to_match(state=state))
-    return settled(state=state, effects=(rematch,))
+    return settled(state=state, effects=(*asks, rematch))
 
 
 def on_matched(
@@ -794,6 +809,30 @@ def on_map_event(
     return settled(state=replace(state, map=map_state))
 
 
+def on_chooser_event(
+    *, state: State, event: ChooserEvent
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Apply a chooser load's result, asking for what comes next.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    event : ChooserEvent
+        A column, line or departures loaded or failed.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        New state and effects; none when nothing changed.
+    """
+    after, effects = chooser_event(state=state, event=event)
+    if after is state:
+        return state, ()
+    return settled(state=after, effects=effects)
+
+
 def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
     """
     Apply one event, noting when the saved state changed.
@@ -857,6 +896,15 @@ def dispatched(
             result = settled(state=strip_loaded(state=state, event=event))
         case StripFailed():
             result = (strip_failed(state=state, event=event), ())
+        case (
+            ColumnLoaded()
+            | ColumnFailed()
+            | LineLoaded()
+            | LineFailed()
+            | ChooserDeparturesLoaded()
+            | ChooserDeparturesFailed()
+        ):
+            result = on_chooser_event(state=state, event=event)
         case (
             ShapesLoaded()
             | PatternsLoaded()

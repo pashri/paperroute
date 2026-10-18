@@ -62,8 +62,8 @@ def knob_moved(
 
     The top knob turns between pins; the bottom knob scrolls or zooms,
     its press moves to the next Live view and its hold pins or unpins.
-    The top press opens the chooser, which is not built yet, and the top
-    hold is kept for settings.
+    The top press, which opens the chooser, is handled with the chooser's
+    knobs, and the top hold is kept for settings.
 
     Parameters
     ----------

@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import replace
 from typing import Final
 
+from paperroute.core.chooser import ChooserState, Stage
 from paperroute.core.live import LiveDeparture
 from paperroute.core.messages import (
     Effect,
@@ -11,7 +12,7 @@ from paperroute.core.messages import (
     StripFailed,
     StripLoaded,
 )
-from paperroute.core.model import Departure, Pin
+from paperroute.core.model import Departure, Pin, StopPlace
 from paperroute.core.places import shown
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.reach import Reach, StripKey
@@ -51,6 +52,46 @@ def strip_key(*, pin: Pin) -> StripKey:
     )
 
 
+def picking_to(*, state: State) -> ChooserState | None:
+    """
+    Find the chooser while it picks a Destination on a strip.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    ChooserState | None
+        The chooser in the TO stage, else None.
+    """
+    chooser = state.chooser
+    if chooser is None or chooser.stage is not Stage.TO:
+        return None
+    return chooser
+
+
+def chooser_strip(*, state: State) -> tuple[StripKey, StopPlace] | None:
+    """
+    Find the strip the chooser picks a Destination on.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[StripKey, StopPlace] | None
+        Its key and From in the TO stage, else None.
+    """
+    chooser = picking_to(state=state)
+    if chooser is None or chooser.key is None or chooser.origin is None:
+        return None
+    return chooser.key, chooser.origin
+
+
 def keys_in_use(*, state: State) -> frozenset[StripKey]:
     """
     List the strips whose reaches are kept.
@@ -64,9 +105,38 @@ def keys_in_use(*, state: State) -> frozenset[StripKey]:
     -------
     frozenset[StripKey]
         The shown place's key, on every Live view, so moving between
-        views never builds its reach again.
+        views never builds its reach again, and the chooser's in the TO
+        stage.
     """
-    return frozenset({strip_key(pin=shown(state=state))})
+    keys = {strip_key(pin=shown(state=state))}
+    picked = chooser_strip(state=state)
+    if picked is not None:
+        keys.add(picked[0])
+    return frozenset(keys)
+
+
+def strips_shown(*, state: State) -> dict[StripKey, StopPlace]:
+    """
+    List the strips on screen.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    dict[StripKey, StopPlace]
+        Each strip's From by key: the chooser's in the TO stage, else
+        the shown place's on a strip view.
+    """
+    picked = chooser_strip(state=state)
+    if picked is not None:
+        return dict([picked])
+    if state.chooser is not None or state.view not in STRIP_VIEWS:
+        return {}
+    pin = shown(state=state)
+    return {strip_key(pin=pin): pin.origin}
 
 
 def pruned_reaches(*, state: State) -> State:
@@ -94,7 +164,7 @@ def pruned_reaches(*, state: State) -> State:
 
 def request_strips(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
-    Drop reaches no longer in use and ask for the shown one on a strip.
+    Drop reaches no longer in use and ask for the strips on screen.
 
     Parameters
     ----------
@@ -104,25 +174,24 @@ def request_strips(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with only the reaches in use, and on a strip view the key
-        pending and a LoadStrip; no effect when the reach is built or
+        State with only the reaches in use, and for each strip on screen
+        its key pending and a LoadStrip; no effect for a reach built or
         pending, or for `RETRY_AFTER` after a failure.
     """
     state = pruned_reaches(state=state)
     strip = state.strip
-    pin = shown(state=state)
-    key = strip_key(pin=pin)
     asked = strip.reaches.keys() | strip.pending
-    backing_off = not elapsed(
-        since=strip.failed_at, now=state.now, span=RETRY_AFTER
-    )
-    if state.view not in STRIP_VIEWS or key in asked or backing_off:
+    if not elapsed(since=strip.failed_at, now=state.now, span=RETRY_AFTER):
         return state, ()
-    strip = replace(strip, pending=strip.pending | {key})
-    load = LoadStrip(
-        key=key, origin=pin.origin, timetable=state.saving.timetable
+    loads = tuple(
+        LoadStrip(key=key, origin=origin, timetable=state.saving.timetable)
+        for key, origin in strips_shown(state=state).items()
+        if key not in asked
     )
-    return replace(state, strip=strip), (load,)
+    strip = replace(
+        strip, pending=strip.pending | {load.key for load in loads},
+    )
+    return replace(state, strip=strip), loads
 
 
 def strip_loaded(*, state: State, event: StripLoaded) -> State:
@@ -263,6 +332,31 @@ def strip_window(*, state: State) -> tuple[Departure, ...]:
     )
 
 
+def picked_window(*, state: State) -> tuple[Departure, ...]:
+    """
+    List the departures behind the chooser's strip's trips.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        One departure per trip of the chooser's strip in its window, in
+        the TO stage; none otherwise.
+    """
+    chooser = picking_to(state=state)
+    if chooser is None or chooser.key is None:
+        return ()
+    return tuple(
+        window_departures(
+            departures=chooser.departures, key=chooser.key, now=state.now,
+        )
+    )
+
+
 def strip_patterns(*, state: State) -> frozenset[str]:
     """
     List the trips whose patterns a strip needs.
@@ -275,11 +369,13 @@ def strip_patterns(*, state: State) -> frozenset[str]:
     Returns
     -------
     frozenset[str]
-        The shown strip's trips on a strip view; none elsewhere.
+        The shown strip's trips on a strip view, and the chooser's in
+        the TO stage; none elsewhere.
     """
+    wanted = frozenset(dep.trip_id for dep in picked_window(state=state))
     if state.view not in STRIP_VIEWS:
-        return frozenset()
-    return strip_trips(
+        return wanted
+    return wanted | strip_trips(
         departures=state.board.departures,
         key=strip_key(pin=shown(state=state)),
         now=state.now,

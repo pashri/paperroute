@@ -25,7 +25,12 @@ from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import POLL_EVERY, RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
-from paperroute.core.strip_state import strip_patterns, strip_window
+from paperroute.core.strip_state import (
+    picked_window,
+    picking_to,
+    strip_patterns,
+    strip_window,
+)
 from paperroute.core.tiles import ZOOMS
 
 MAP_VIEWS: Final[frozenset[LiveView]] = frozenset(
@@ -68,15 +73,19 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
     Returns
     -------
     tuple[str, ...]
-        On a map, the feeds for the modes in the map area at the current
-        zoom, or for the departures' modes when none are known there; on
-        the Strip, the modes of the strip's own departures.
+        While the chooser picks a Destination, the modes of its strip's
+        departures. Otherwise, on a map, the feeds for the modes in the
+        map area at the current zoom, or for the departures' modes when
+        none are known there; on the Strip, the modes of the strip's own
+        departures.
     """
     departures = state.board.departures
-    if state.view is LiveView.STRIP:
+    if state.chooser is not None:
+        departures = picked_window(state=state)
+    elif state.view is LiveView.STRIP:
         departures = strip_window(state=state)
     modes = frozenset(departure.mode for departure in departures)
-    if state.view in MAP_VIEWS:
+    if state.view in MAP_VIEWS and state.chooser is None:
         modes = state.map.area_modes.get(ZOOMS[state.map.zoom]) or modes
     return position_feeds(modes=modes)
 
@@ -406,13 +415,33 @@ def area_effects(
     -------
     tuple[State, tuple[Effect, ...]]
         State with the requests recorded, and the effects; nothing on a
-        view without a map.
+        view without a map or while the chooser covers it.
     """
-    if state.view not in MAP_VIEWS:
+    if state.view not in MAP_VIEWS or state.chooser is not None:
         return state, ()
     state, modes = request_modes(state=state)
     state, shapes = request_shapes(state=state, departures=departures)
     return state, (*modes, *shapes)
+
+
+def shows_vehicles(*, state: State) -> bool:
+    """
+    Say whether the screen draws vehicles.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    bool
+        True while the chooser picks a Destination, and with the chooser
+        closed on every view but the Stop view.
+    """
+    if state.chooser is not None:
+        return picking_to(state=state) is not None
+    return state.view is not LiveView.STOP
 
 
 def map_effects(
@@ -436,9 +465,9 @@ def map_effects(
     -------
     tuple[State, tuple[Effect, ...]]
         State with the requests recorded, and the effects; nothing on the
-        Stop view.
+        Stop view, or while the chooser lists routes or picks a From.
     """
-    if state.view is LiveView.STOP:
+    if not shows_vehicles(state=state):
         return state, ()
     inputs = map_inputs(state=state, stop_view=stop_view)
     drawn = inputs.departures if state.view in MAP_VIEWS else ()

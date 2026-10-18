@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
 
+from paperroute.core.chooser import ChooserPath, Column
+from paperroute.core.chooser_view import ChooserView
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.map_view import MapView
@@ -84,10 +86,36 @@ class LoadStrip:
 
 
 @dataclass(frozen=True)
+class LoadColumn:
+    """Ask for the chooser column after a path, tagged with the timetable."""
+
+    path: ChooserPath
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class LoadLine:
+    """Ask for a towards row's stations, tagged with the timetable."""
+
+    towards: int
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class LoadChooserDepartures:
+    """Ask for the departures from the chooser's From, tagged likewise."""
+
+    pin: Pin
+    start: datetime
+    end: datetime
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
 class Render:
     """Draw a view."""
 
-    view: StopView | MapView | StripView | StripMapView
+    view: StopView | MapView | StripView | StripMapView | ChooserView
 
 
 @dataclass(frozen=True)
@@ -110,6 +138,7 @@ class MatchPlaces:
 
 
 MapRequest = LoadShapes | LoadPatterns | LoadModes
+ChooserLoad = LoadColumn | LoadLine | LoadChooserDepartures
 Effect = (
     LoadDepartures
     | FetchFeed
@@ -121,6 +150,7 @@ Effect = (
     | Stop
     | SaveState
     | MatchPlaces
+    | ChooserLoad
 )
 
 
@@ -310,6 +340,87 @@ class StripFailed:
     timetable: str | None = None
 
 
+@dataclass(frozen=True)
+class ColumnLoaded:
+    """
+    A chooser column arrived.
+
+    Attributes
+    ----------
+    path : ChooserPath
+        The path it follows.
+    column : Column | None
+        The column, or None when the timetable has no catalogue.
+    timetable : str | None
+        The timetable version it was read from.
+    """
+
+    path: ChooserPath
+    column: Column | None
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class ColumnFailed:
+    """A chooser column couldn't be read."""
+
+    path: ChooserPath
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class LineLoaded:
+    """
+    A towards row's stations arrived.
+
+    Attributes
+    ----------
+    towards : int
+        Towards ID.
+    line : tuple[StopPlace, ...] | None
+        Stations in running order, or None when there are none to read.
+    timetable : str | None
+        The timetable version they were read from.
+    """
+
+    towards: int
+    line: tuple[StopPlace, ...] | None
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class LineFailed:
+    """A towards row's stations couldn't be read."""
+
+    towards: int
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class ChooserDeparturesLoaded:
+    """Departures from the chooser's From arrived."""
+
+    pin: Pin
+    departures: tuple[Departure, ...]
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class ChooserDeparturesFailed:
+    """The departures from the chooser's From couldn't be read."""
+
+    pin: Pin
+    timetable: str | None = None
+
+
+ChooserEvent = (
+    ColumnLoaded
+    | ColumnFailed
+    | LineLoaded
+    | LineFailed
+    | ChooserDeparturesLoaded
+    | ChooserDeparturesFailed
+)
 MapEvent = (
     ShapesLoaded
     | PatternsLoaded
@@ -332,4 +443,5 @@ Event = (
     | StripLoaded
     | StripFailed
     | MapEvent
+    | ChooserEvent
 )

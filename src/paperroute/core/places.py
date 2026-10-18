@@ -7,9 +7,15 @@ from paperroute.core.feeds import feed_for
 from paperroute.core.geo import MetreBox
 from paperroute.core.map_state import MapState, area_box
 from paperroute.core.messages import (
+    ChooserDeparturesFailed,
+    ChooserDeparturesLoaded,
+    ColumnFailed,
+    ColumnLoaded,
     DeparturesFailed,
     DeparturesLoaded,
     Event,
+    LineFailed,
+    LineLoaded,
     LoadModes,
     MapDataFailed,
     ModesLoaded,
@@ -211,7 +217,30 @@ def with_pinned(*, places: Places, pin: Pin) -> Places:
         The pins with `pin` added last and selected, or with the existing
         pin for the same place selected; no unpinned place either way.
     """
-    index = next(
+    index = pin_index(places=places, pin=pin)
+    if index is not None:
+        return Places(pins=places.pins, current=index)
+    pins = (*places.pins, pin)
+    return Places(pins=pins, current=len(pins) - 1)
+
+
+def pin_index(*, places: Places, pin: Pin) -> int | None:
+    """
+    Find the pin for the same place as another.
+
+    Parameters
+    ----------
+    places : Places
+        The pins.
+    pin : Pin
+        The place.
+
+    Returns
+    -------
+    int | None
+        The index of the pin for the same place, or None.
+    """
+    return next(
         (
             index
             for index, existing in enumerate(places.pins)
@@ -219,10 +248,39 @@ def with_pinned(*, places: Places, pin: Pin) -> Places:
         ),
         None,
     )
-    if index is not None:
-        return Places(pins=places.pins, current=index)
-    pins = (*places.pins, pin)
-    return Places(pins=pins, current=len(pins) - 1)
+
+
+def committed(
+    *, state: State, pin: Pin, departures: tuple[Departure, ...] = (),
+) -> State:
+    """
+    Show a chosen place: the pin for the same place, else unpinned.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    pin : Pin
+        The chosen place.
+    departures : tuple[Departure, ...]
+        Departures already known for it.
+
+    Returns
+    -------
+    State
+        State showing the place. The place already shown keeps its
+        board and scroll.
+    """
+    index = pin_index(places=state.places, pin=pin)
+    places = (
+        replace(state.places, unpinned=pin)
+        if index is None
+        else replace(state.places, current=index, unpinned=None)
+    )
+    after = replace(state, places=places)
+    if same_place(first=shown(state=after), second=shown(state=state)):
+        return after
+    return with_place(state=after, pin=places.unpinned, departures=departures)
 
 
 def with_unpinned(*, places: Places) -> Places:
@@ -307,7 +365,7 @@ def is_stale(*, state: State, event: Event) -> bool:
     -------
     bool
         True for departures loaded or failed for another place or another
-        timetable version, for a reach built or failed from another
+        timetable version, for a reach or a chooser load from another
         timetable version, and for area modes loaded or failed for another
         map area.
     """
@@ -322,6 +380,12 @@ def is_stale(*, state: State, event: Event) -> bool:
         case (
             StripLoaded(timetable=timetable)
             | StripFailed(timetable=timetable)
+            | ColumnLoaded(timetable=timetable)
+            | ColumnFailed(timetable=timetable)
+            | LineLoaded(timetable=timetable)
+            | LineFailed(timetable=timetable)
+            | ChooserDeparturesLoaded(timetable=timetable)
+            | ChooserDeparturesFailed(timetable=timetable)
         ):
             return timetable != state.saving.timetable
         case (

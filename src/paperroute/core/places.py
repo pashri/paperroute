@@ -302,19 +302,24 @@ def is_stale(*, state: State, event: Event) -> bool:
     Returns
     -------
     bool
-        True for departures loaded or failed for another place, and for
-        area modes loaded or failed for another map area.
+        True for departures loaded or failed for another place or another
+        timetable version, and for area modes loaded or failed for another
+        map area.
     """
     match event:
-        case DeparturesLoaded(pin=pin) | DeparturesFailed(pin=pin):
-            return not same_place(first=pin, second=shown(state=state))
+        case (
+            DeparturesLoaded(pin=pin, timetable=timetable)
+            | DeparturesFailed(pin=pin, timetable=timetable)
+        ):
+            return timetable != state.saving.timetable or not same_place(
+                first=pin, second=shown(state=state)
+            )
         case (
             ModesLoaded(mpp=mpp, box=box)
             | MapDataFailed(request=LoadModes(mpp=mpp, box=box))
         ):
             return other_area(state=state, mpp=mpp, box=box)
     return False
-
 
 
 def stops_to_match(*, state: State) -> tuple[StopPlace, ...]:
@@ -381,11 +386,16 @@ def rematched(*, pin: Pin, found: Mapping[str, StopPlace | None]) -> Pin:
     -------
     Pin
         The place with its stops' new IDs, names and points; marked
-        missing, with its old stops, when either is gone; unchanged when
-        neither was looked up.
+        missing, with its old stops, when either is gone. A missing mark
+        is cleared only when every stop was looked up and found. Unchanged
+        when none of its stops was looked up.
     """
-    stops = (pin.origin, pin.destination)
-    if not any(stop is not None and stop.stop_id in found for stop in stops):
+    looked = [
+        stop.stop_id in found
+        for stop in (pin.origin, pin.destination)
+        if stop is not None
+    ]
+    if not any(looked):
         return pin
     origin = looked_up(stop=pin.origin, found=found)
     destination = (
@@ -395,7 +405,12 @@ def rematched(*, pin: Pin, found: Mapping[str, StopPlace | None]) -> Pin:
     )
     if origin is None or (pin.destination is not None and destination is None):
         return replace(pin, missing=True)
-    return replace(pin, origin=origin, destination=destination, missing=False)
+    return replace(
+        pin,
+        origin=origin,
+        destination=destination,
+        missing=pin.missing and not all(looked),
+    )
 
 
 def rematched_pins(
@@ -439,14 +454,16 @@ def matched(
 
     A stop found under its own ID takes its new name and point; one found
     under another ID moves to it; one not found marks its place missing
-    and keeps its old data. A later match clears the mark.
+    and keeps its old data. A later match of all its stops clears the
+    mark.
 
     Parameters
     ----------
     state : State
         State.
     found : Mapping[str, StopPlace | None]
-        New places by old stop ID; stops not in it are left alone.
+        New places by old stop ID; stops not in it are left alone, and a
+        pin none of whose stops is in it is untouched.
 
     Returns
     -------

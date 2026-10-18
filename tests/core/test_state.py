@@ -766,6 +766,7 @@ def map_events(draw: st.DrawFn, now: datetime) -> Event:
     return draw(st.sampled_from(options))
 
 
+VERSIONS: Final[tuple[str | None, ...]] = (None, 'v1', 'v2')
 STOP_IDS: Final[tuple[str, ...]] = (
     '2145615',
     '215020',
@@ -825,7 +826,7 @@ def place_events(draw: st.DrawFn) -> Event:
     """
     options: list[Event] = [
         KnobHeld(knob=draw(st.sampled_from(list(Knob)))),
-        TimetableSeen(version=draw(st.sampled_from([None, 'v1', 'v2']))),
+        TimetableSeen(version=draw(st.sampled_from(VERSIONS))),
         draw(found_places()),
     ]
     return draw(st.sampled_from(options))
@@ -874,7 +875,12 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
         elif kind == 'fail':
             events.append(FeedFailed(feed=BUSES, at=now, reason='timeout'))
         elif kind == 'unreadable':
-            events.append(DeparturesFailed(pin=draw(st.sampled_from(POOL))))
+            events.append(
+                DeparturesFailed(
+                    pin=draw(st.sampled_from(POOL)),
+                    timetable=draw(st.sampled_from(VERSIONS)),
+                )
+            )
         elif kind == 'place':
             events.append(draw(place_events()))
         elif kind == 'quit':
@@ -902,6 +908,7 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
                     pin=draw(st.sampled_from(POOL)),
                     departures=deps,
                     until=until,
+                    timetable=draw(st.sampled_from(VERSIONS)),
                 )
             )
     return events
@@ -1071,13 +1078,20 @@ def check_places(*, before: State, after: State, event: Event) -> None:
 
 
 def check_saves(
-    *, after: State, effects: tuple[Effect, ...], last: Saved | None
+    *,
+    before: State,
+    after: State,
+    effects: tuple[Effect, ...],
+    last: Saved | None,
 ) -> Saved | None:
     """
-    Assert every save carries the state and differs from the last one.
+    Assert every save carries the state, differs from the last one and,
+    unless quitting or nothing was stored, waits SAVE_AFTER.
 
     Parameters
     ----------
+    before : State
+        State before the event.
     after : State
         State after the event.
     effects : tuple[Effect, ...]
@@ -1090,10 +1104,16 @@ def check_saves(
     Saved | None
         What is now last saved.
     """
+    changed_at = before.saving.changed_at
     for save in effects_of(effects=effects, kind=SaveState):
         assert save.saved == saved_of(state=after)
         assert save.saved != last
         last = save.saved
+        if Stop() in effects or before.saving.saved is None:
+            continue
+        if changed_at is not None:
+            waited = after.now.timestamp() - changed_at.timestamp()
+            assert waited >= SAVE_AFTER.total_seconds()
     return last
 
 
@@ -1151,7 +1171,9 @@ def test_step_invariants(
             before=before, after=state, event=event, effects=effects
         )
         check_places(before=before, after=state, event=event)
-        last = check_saves(after=state, effects=effects, last=last)
+        last = check_saves(
+            before=before, after=state, effects=effects, last=last
+        )
 
 
 @dataclass
@@ -1182,7 +1204,10 @@ class WindowedTimetable:
             < effect.end.timestamp()
         )
         return DeparturesLoaded(
-            pin=effect.pin, departures=found, until=effect.end
+            pin=effect.pin,
+            departures=found,
+            until=effect.end,
+            timetable=effect.timetable,
         )
 
 
@@ -1916,3 +1941,25 @@ def test_no_timetable_matches_nothing() -> None:
     state, effects = step(state, TimetableSeen(version=None))
     assert effects == ()
     assert state.saving.timetable is None
+
+
+@pytest.mark.parametrize('failed', [False, True])
+def test_load_from_the_old_timetable_is_dropped(failed: bool) -> None:
+    """A reply to a load asked before a timetable swap is ignored."""
+    state, _ = step(pinned(), TimetableSeen(version='v1'))
+    state, effects = step(state, at(seconds=5))
+    [load] = effects_of(effects=effects, kind=LoadDepartures)
+    assert load.timetable == 'v1'
+    state, _ = step(state, TimetableSeen(version='v2'))
+    late = departure(departs=START + timedelta(minutes=3))
+    reply: Event = DeparturesLoaded(
+        pin=load.pin, departures=(late,), until=load.end, timetable='v1'
+    )
+    if failed:
+        reply = DeparturesFailed(pin=load.pin, timetable='v1')
+    state, _ = step(state, reply)
+    assert state.board.loaded_until is None
+    assert state.board.departures == ()
+    _, effects = step(state, at(seconds=10))
+    [load] = effects_of(effects=effects, kind=LoadDepartures)
+    assert load.timetable == 'v2'

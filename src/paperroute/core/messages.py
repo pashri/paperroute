@@ -33,11 +33,12 @@ class MapData(StrEnum):
 
 @dataclass(frozen=True)
 class LoadDepartures:
-    """Ask the timetable for departures."""
+    """Ask the timetable for departures, tagged with its version."""
 
     pin: Pin
     start: datetime
     end: datetime
+    timetable: str | None = None
 
 
 @dataclass(frozen=True)
@@ -120,11 +121,12 @@ class Tick:
 
 @dataclass(frozen=True)
 class DeparturesLoaded:
-    """Departures arrived from the timetable for a pin."""
+    """Departures arrived for a pin, from the timetable version asked."""
 
     pin: Pin
     departures: tuple[Departure, ...]
     until: datetime
+    timetable: str | None = None
 
 
 @dataclass(frozen=True)
@@ -132,6 +134,7 @@ class DeparturesFailed:
     """The timetable couldn't be read for a pin; a later tick tries again."""
 
     pin: Pin
+    timetable: str | None = None
 
 
 @dataclass(frozen=True)

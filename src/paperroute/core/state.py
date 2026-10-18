@@ -381,7 +381,12 @@ def reload_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     reach = HORIZON + RELOAD_BEFORE
     start = shifted(moment=now, seconds=-int(LOOKBACK.total_seconds()))
     end = shifted(moment=now, seconds=int(reach.total_seconds()))
-    load = LoadDepartures(pin=shown(state=state), start=start, end=end)
+    load = LoadDepartures(
+        pin=shown(state=state),
+        start=start,
+        end=end,
+        timetable=state.saving.timetable,
+    )
     board = replace(state.board, loading=True)
     return replace(state, board=board), (load,)
 
@@ -609,15 +614,16 @@ def on_timetable(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the version recorded and the departures due to reload,
-        and a MatchPlaces when there is a timetable; unchanged for the
+        State with the version recorded and the departures due to reload
+        (a load in flight is forgotten, its reply now stale), and a
+        MatchPlaces when there is a timetable; unchanged for the
         version already seen.
     """
     if event.version == state.saving.timetable:
         return state, ()
     state = replace(
         state,
-        board=replace(state.board, loaded_until=None),
+        board=replace(state.board, loaded_until=None, loading=False),
         saving=replace(state.saving, timetable=event.version),
     )
     if event.version is None:

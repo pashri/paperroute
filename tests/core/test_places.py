@@ -211,3 +211,17 @@ def test_initial_state_clamps_an_out_of_range_current() -> None:
     """A current past the last pin shows the last pin."""
     assert shown(state=state_with(current=7)) == THIRD
     assert shown(state=state_with(current=-2)) == FIRST
+
+
+def test_matched_partial_answer_keeps_missing() -> None:
+    """A missing pin stays missing until every one of its stops is found."""
+    far = place('far', name='Far')
+    pin = replace(FIRST, destination=far)
+    state = matched(state=state_with(pins=(pin,)), found={'far': None})
+    renamed = replace(FIRST.origin, name='First St')
+    state = matched(state=state, found={'first': renamed})
+    assert state.places.pins == (
+        replace(pin, origin=renamed, missing=True),
+    )
+    state = matched(state=state, found={'first': renamed, 'far': far})
+    assert not state.places.pins[0].missing

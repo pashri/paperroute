@@ -217,11 +217,16 @@ async def load(
         )
     except sqlite3.Error:
         logger.exception('reading departures failed')
-        await queue.put(DeparturesFailed(pin=effect.pin))
+        await queue.put(
+            DeparturesFailed(pin=effect.pin, timetable=effect.timetable)
+        )
         return
     await queue.put(
         DeparturesLoaded(
-            pin=effect.pin, departures=tuple(found), until=effect.end
+            pin=effect.pin,
+            departures=tuple(found),
+            until=effect.end,
+            timetable=effect.timetable,
         )
     )
 
@@ -491,7 +496,7 @@ def background(
         case LoadDepartures():
             return (
                 load(ports=ports, effect=effect, queue=queue),
-                DeparturesFailed(pin=effect.pin),
+                DeparturesFailed(pin=effect.pin, timetable=effect.timetable),
             )
         case FetchFeed(feed=feed):
             failed = FeedFailed(

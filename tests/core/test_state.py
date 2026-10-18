@@ -153,11 +153,11 @@ def test_stop_view_names_the_pins_places() -> None:
 
 
 def test_stop_view_without_a_destination_names_none() -> None:
-    """A pin with no Destination leaves the header's Destination blank."""
+    """A pin with no Destination gives the view no destination."""
     state = initial_state(pin=replace(PIN, destination=None), now=START)
     state, _ = step(state, Tick(now=START))
     assert isinstance(state.last_view, StopView)
-    assert state.last_view.destination == ''
+    assert state.last_view.destination is None
 
 
 def test_first_tick_loads_departures() -> None:
@@ -1229,3 +1229,10 @@ def test_pin_patterns_do_not_wait_for_the_fetch_in_flight() -> None:
     _, effects = step(state, PRESS)
     [load] = effects_of(effects=effects, kind=LoadPatterns)
     assert pin.trip_id in load.trip_ids
+
+
+def test_stop_view_tag_is_the_first_of_one_pin_for_now() -> None:
+    """Until pins are stored, the tag reads pin 1/1."""
+    state, _ = step(fresh(), Tick(now=START))
+    assert isinstance(state.last_view, StopView)
+    assert state.last_view.tag.text == 'pin 1/1'

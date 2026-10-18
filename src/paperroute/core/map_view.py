@@ -10,7 +10,7 @@ from paperroute.core.geo import Point, Shape
 from paperroute.core.model import Departure
 from paperroute.core.patterns import TripPattern, timetable_point
 from paperroute.core.positions import PositionsSnapshot, VehiclePosition
-from paperroute.core.stop_view import Row, StopView
+from paperroute.core.stop_view import NOT_PINNED, PinTag, Row, StopView
 from paperroute.core.tiles import ZOOMS, to_pixels
 
 MAP_WIDTH: Final[int] = 520
@@ -80,7 +80,7 @@ class MapView:
     """Everything the Map view draws."""
 
     origin: str
-    destination: str
+    destination: str | None
     clock: str
     base: MapBase
     zoom: int
@@ -88,6 +88,7 @@ class MapView:
     sidebar: tuple[Row, ...]
     banner: str | None
     empty: str | None
+    tag: PinTag = NOT_PINNED
 
 
 @dataclass(frozen=True)
@@ -767,4 +768,5 @@ def build_map_view(*, inputs: MapInputs) -> MapView:
         sidebar=(hero + stop.rows)[:SIDEBAR_ROWS],
         banner=stop.banner,
         empty=NO_LOCATION if centre is None else stop.empty,
+        tag=stop.tag,
     )

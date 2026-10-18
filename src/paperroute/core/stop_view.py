@@ -40,17 +40,90 @@ class Row:
 
 
 @dataclass(frozen=True)
+class PinTag:
+    """The header's pin tag: its text and whether it marks a pinned place."""
+
+    text: str
+    pinned: bool
+
+
+NOT_PINNED: Final[PinTag] = PinTag(text='not pinned', pinned=False)
+
+
+def pin_tag(*, index: int | None, total: int) -> PinTag:
+    """
+    Make the header tag for a place.
+
+    Parameters
+    ----------
+    index : int | None
+        Zero-based position among the pins, or None when not pinned.
+    total : int
+        How many pins there are.
+
+    Returns
+    -------
+    PinTag
+        'pin 2/3' style tag when pinned, else NOT_PINNED.
+    """
+    if index is None:
+        return NOT_PINNED
+    return PinTag(text=f'pin {index + 1}/{total}', pinned=True)
+
+
+@dataclass(frozen=True)
 class StopView:
     """Everything the Stop view draws."""
 
     origin: str
-    destination: str
+    destination: str | None
     clock: str
     hero: Row | None
     rows: tuple[Row, ...]
     banner: str | None
     empty: str | None
     scroll: int
+    tag: PinTag = NOT_PINNED
+
+
+@dataclass(frozen=True)
+class StopInputs:
+    """
+    Everything the Stop view is built from.
+
+    Attributes
+    ----------
+    origin : str
+        From name.
+    destination : str | None
+        Destination name, or None when the place has none.
+    departures : tuple[LiveDeparture, ...]
+        Departures in timetable order.
+    now : datetime
+        Current time.
+    scroll : int
+        Requested scroll offset.
+    live_since : datetime | None
+        Fetch time of the oldest needed snapshot, or None when one is
+        missing.
+    has_feed : bool
+        Whether a live feed exists.
+    loaded : bool
+        Whether the timetable has been read yet; if not, an empty view
+        says it is loading rather than that nothing runs.
+    tag : PinTag
+        The header's pin tag.
+    """
+
+    origin: str
+    destination: str | None
+    departures: tuple[LiveDeparture, ...]
+    now: datetime
+    scroll: int
+    live_since: datetime | None
+    has_feed: bool
+    loaded: bool = True
+    tag: PinTag = NOT_PINNED
 
 
 def clock_text(*, moment: datetime) -> str:
@@ -263,14 +336,14 @@ def order_time(*, item: LiveDeparture) -> float:
     return moment.timestamp()
 
 
-def empty_text(*, destination: str, loaded: bool) -> str:
+def empty_text(*, destination: str | None, loaded: bool) -> str:
     """
     Say why the list is empty.
 
     Parameters
     ----------
-    destination : str
-        Destination name.
+    destination : str | None
+        Destination name, or None when the place has none.
     loaded : bool
         Whether the timetable has been read yet.
 
@@ -281,42 +354,19 @@ def empty_text(*, destination: str, loaded: bool) -> str:
     """
     if not loaded:
         return 'Loading timetable'
+    if destination is None:
+        return f'No services in {HORIZON_TEXT}'
     return f'No direct services to {destination} in {HORIZON_TEXT}'
 
 
-def build_stop_view(
-    *,
-    origin: str,
-    destination: str,
-    departures: Sequence[LiveDeparture],
-    now: datetime,
-    scroll: int,
-    live_since: datetime | None,
-    has_feed: bool,
-    loaded: bool = True,
-) -> StopView:
+def build_stop_view(*, inputs: StopInputs) -> StopView:
     """
     Build the Stop view from resolved departures.
 
     Parameters
     ----------
-    origin : str
-        From name.
-    destination : str
-        Destination name.
-    departures : Sequence[LiveDeparture]
-        Departures in timetable order.
-    now : datetime
-        Current time.
-    scroll : int
-        Requested scroll offset.
-    live_since : datetime | None
-        Fetch time of the oldest needed snapshot, or None when one is missing.
-    has_feed : bool
-        Whether a live feed exists.
-    loaded : bool
-        Whether the timetable has been read yet; if not, an empty view
-        says it is loading rather than that nothing runs.
+    inputs : StopInputs
+        The view's inputs.
 
     Returns
     -------
@@ -324,7 +374,8 @@ def build_stop_view(
         View-model, with scroll clamped to the rows that fit under any
         banner.
     """
-    upcoming = in_view(departures=departures, now=now)
+    now = inputs.now
+    upcoming = in_view(departures=inputs.departures, now=now)
     rows = [
         to_row(item=item, now=now, pill=pill)
         for item, pill in zip(upcoming, pills(items=upcoming), strict=True)
@@ -334,18 +385,21 @@ def build_stop_view(
         None,
     )
     rest = [row for i, row in enumerate(rows) if i != lead]
-    text = banner(live_since=live_since, now=now, has_feed=has_feed)
+    text = banner(
+        live_since=inputs.live_since, now=now, has_feed=inputs.has_feed
+    )
     shown = ROWS_UNDER_BANNER if text else VISIBLE_ROWS
-    offset = max(0, min(scroll, len(rest) - shown))
+    offset = max(0, min(inputs.scroll, len(rest) - shown))
     return StopView(
-        origin=origin,
-        destination=destination,
+        origin=inputs.origin,
+        destination=inputs.destination,
         clock=clock_text(moment=now),
         hero=None if lead is None else rows[lead],
         rows=tuple(rest[offset : offset + shown]),
         banner=text,
         empty=None if rows else empty_text(
-            destination=destination, loaded=loaded
+            destination=inputs.destination, loaded=inputs.loaded
         ),
         scroll=offset,
+        tag=inputs.tag,
     )

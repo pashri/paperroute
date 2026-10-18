@@ -45,7 +45,13 @@ from paperroute.core.state_model import (
     RELOAD_BEFORE,
     State,
 )
-from paperroute.core.stop_view import HORIZON, StopView, build_stop_view
+from paperroute.core.stop_view import (
+    HORIZON,
+    StopInputs,
+    StopView,
+    build_stop_view,
+    pin_tag,
+)
 
 
 def initial_state(*, pin: Pin, now: datetime) -> State:
@@ -104,14 +110,17 @@ def stop_view_of(*, state: State) -> StopView:
         )
     )
     return build_stop_view(
-        origin=state.pin.origin.name,
-        destination='' if destination is None else destination.name,
-        departures=resolved,
-        now=state.now,
-        scroll=state.scroll,
-        live_since=since,
-        has_feed=bool(state.feeds) or not state.departures,
-        loaded=state.loaded_until is not None,
+        inputs=StopInputs(
+            origin=state.pin.origin.name,
+            destination=None if destination is None else destination.name,
+            departures=tuple(resolved),
+            now=state.now,
+            scroll=state.scroll,
+            live_since=since,
+            has_feed=bool(state.feeds) or not state.departures,
+            loaded=state.loaded_until is not None,
+            tag=pin_tag(index=0, total=1),
+        ),
     )
 
 

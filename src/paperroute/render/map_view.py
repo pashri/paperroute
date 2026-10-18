@@ -281,16 +281,17 @@ def draw_sidebar(canvas: Canvas, *, view: MapView) -> None:
         grey=INK,
     )
     drop = BANNER if view.banner else 0
-    canvas.text(
-        at=(SIDEBAR_TEXT, DESTINATION_Y + drop),
-        text=canvas.fit(
-            text=f'to {view.destination}',
+    if view.destination is not None:
+        canvas.text(
+            at=(SIDEBAR_TEXT, DESTINATION_Y + drop),
+            text=canvas.fit(
+                text=f'to {view.destination}',
+                face=DESTINATION_FACE,
+                width=DESTINATION_WIDTH,
+            ),
             face=DESTINATION_FACE,
-            width=DESTINATION_WIDTH,
-        ),
-        face=DESTINATION_FACE,
-        grey=INK,
-    )
+            grey=INK,
+        )
     for index, row in enumerate(view.sidebar):
         sidebar_row(canvas, row=row, y=ROWS_TOP + drop + index * ROW_STEP)
 

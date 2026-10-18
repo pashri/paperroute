@@ -195,6 +195,7 @@ def test_header_marks_the_map_tab() -> None:
         destination=VIEW.destination,
         clock=VIEW.clock,
         active='Map',
+        tag=VIEW.tag,
     )
     expected = threshold(canvas=canvas)
     frame = draw_map_view(view=VIEW, base=paper())

@@ -3,12 +3,13 @@
 import math
 from typing import Final, Protocol
 
-from paperroute.core.stop_view import Row
+from paperroute.core.stop_view import PinTag, Row
 from paperroute.render.canvas import INK, PAPER, WIDTH, Box, Canvas, Face
 
 HEADER: Final[int] = 40
 BANNER: Final[int] = 34
 FASTER: Final[str] = 'FASTER'
+TAG_GAP: Final[int] = 8
 TABS: Final[tuple[str, ...]] = ('Stop', 'Map', 'Strip', 'Strip + map')
 
 
@@ -71,10 +72,67 @@ def header_tabs(canvas: Canvas, *, clock: str, active: str) -> float:
     return right
 
 
-def header_titles(canvas: Canvas, *, origin: str, destination: str,
-                  right: float) -> None:
+def pin_tag(canvas: Canvas, *, right: float, tag: PinTag) -> float:
     """
-    Draw the origin, an arrow and the destination in the header.
+    Draw the pin tag 8 px left of the tabs.
+
+    A pinned tag is a paper box with ink text; an unpinned one is a
+    dashed paper outline with paper text.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    right : float
+        Left edge of the tabs.
+    tag : PinTag
+        Text and whether the place is pinned.
+
+    Returns
+    -------
+    float
+        Left edge of the tag.
+    """
+    face = Face(weight=700, px=12)
+    width = canvas.length(text=tag.text, face=face) + 10
+    left = right - TAG_GAP - width
+    if tag.pinned:
+        canvas.rect(box=(left, 11, left + width, 30), grey=PAPER)
+    else:
+        canvas.line(
+            points=[
+                (left, 11.5),
+                (left + width, 11.5),
+                (left + width, 29.5),
+                (left, 29.5),
+                (left, 11.5),
+            ],
+            width=1,
+            grey=PAPER,
+            dash=(3, 2),
+        )
+    canvas.text(
+        at=(left + 5, 25),
+        text=tag.text,
+        face=face,
+        grey=INK if tag.pinned else PAPER,
+    )
+    return left
+
+
+def header_titles(
+    canvas: Canvas,
+    *,
+    origin: str,
+    destination: str | None,
+    right: float,
+    picking: str | None = None,
+) -> None:
+    """
+    Draw the origin and, when there is one, an arrow and a second title.
+
+    The second title is 'pick <picking>' while picking, else the
+    destination. With neither, only the origin is drawn.
 
     Parameters
     ----------
@@ -82,25 +140,42 @@ def header_titles(canvas: Canvas, *, origin: str, destination: str,
         Target.
     origin : str
         Origin name.
-    destination : str
-        Destination name.
+    destination : str | None
+        Destination name, or None when the place has none.
     right : float
-        Left edge of the tabs, which the titles must not reach.
+        Left edge of the pin tag, which the titles must stay 8 px short of.
+    picking : str | None
+        What is being picked, such as 'To'.
     """
     title = Face(weight=700, px=18)
-    half = (right - 60) / 2
+    second = None if picking is None else f'pick {picking}'
+    second = destination if second is None else second
+    limit = right - TAG_GAP
+    if second is None:
+        shown = canvas.fit(text=origin, face=title, width=limit - 12)
+        canvas.text(at=(12, 27), text=shown, face=title, grey=PAPER)
+        return
+    half = (limit - 60) / 2
     shown = canvas.fit(text=origin, face=title, width=half)
     x = 12 + canvas.text(
         at=(12, 27), text=shown, face=title, grey=PAPER) + 8
     x += arrow(canvas, x=x, y=20, grey=PAPER)
-    name = canvas.fit(text=destination, face=title, width=half)
+    name = canvas.fit(text=second, face=title, width=half)
     canvas.text(at=(x, 27), text=name, face=title, grey=PAPER)
 
 
-def header(canvas: Canvas, *, origin: str, destination: str, clock: str,
-           active: str) -> None:
+def header(
+    canvas: Canvas,
+    *,
+    origin: str,
+    destination: str | None,
+    clock: str,
+    active: str,
+    tag: PinTag,
+    picking: str | None = None,
+) -> None:
     """
-    Draw the black header: From, arrow, Destination, tabs, clock.
+    Draw the black header: titles, pin tag, tabs, clock.
 
     Parameters
     ----------
@@ -108,20 +183,26 @@ def header(canvas: Canvas, *, origin: str, destination: str, clock: str,
         Target.
     origin : str
         Origin name.
-    destination : str
-        Destination name.
+    destination : str | None
+        Destination name, or None when the place has none.
     clock : str
         Clock text.
     active : str
         Name of the highlighted tab.
+    tag : PinTag
+        The pin tag.
+    picking : str | None
+        What is being picked; the title reads '<origin> -> pick <it>'.
     """
     canvas.rect(box=(0, 0, WIDTH, HEADER), grey=INK)
     right = header_tabs(canvas, clock=clock, active=active)
+    left = pin_tag(canvas, right=right, tag=tag)
     header_titles(
         canvas,
         origin=origin,
         destination=destination,
-        right=right,
+        right=left,
+        picking=picking,
     )
 
 
@@ -133,8 +214,12 @@ class Titled(Protocol):
         """The From stop's name."""
 
     @property
-    def destination(self) -> str:
-        """The destination's name."""
+    def destination(self) -> str | None:
+        """The destination's name, or None when the place has none."""
+
+    @property
+    def tag(self) -> PinTag:
+        """The pin tag."""
 
     @property
     def clock(self) -> str:
@@ -160,6 +245,7 @@ def view_header(canvas: Canvas, *, view: Titled, active: str) -> None:
         destination=view.destination,
         clock=view.clock,
         active=active,
+        tag=view.tag,
     )
 
 

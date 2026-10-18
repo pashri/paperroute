@@ -6,13 +6,16 @@ from paperroute.core.live import LiveDeparture
 from paperroute.core.model import SYDNEY
 from paperroute.core.stop_view import (
     HORIZON,
+    NOT_PINNED,
     ROWS_UNDER_BANNER,
     VISIBLE_ROWS,
     Pill,
     Row,
+    StopInputs,
     StopView,
     build_stop_view,
     clock_text,
+    pin_tag,
 )
 from tests.core.factories import START, departure
 
@@ -84,13 +87,15 @@ def view(
         View.
     """
     return build_stop_view(
-        origin='Hollis St',
-        destination='Parramatta Station',
-        departures=departures,
-        now=START,
-        scroll=scroll,
-        live_since=None if age is None else START - age,
-        has_feed=has_feed,
+        inputs=StopInputs(
+            origin='Hollis St',
+            destination='Parramatta Station',
+            departures=departures,
+            now=START,
+            scroll=scroll,
+            live_since=None if age is None else START - age,
+            has_feed=has_feed,
+        ),
     )
 
 
@@ -250,16 +255,55 @@ def test_view_empty_message() -> None:
 def test_view_empty_says_loading_before_the_timetable_loads() -> None:
     """Before the first load the empty message says it is loading."""
     result = build_stop_view(
-        origin='Hollis St',
-        destination='Parramatta Station',
-        departures=(),
-        now=START,
-        scroll=0,
-        live_since=START,
-        has_feed=True,
-        loaded=False,
+        inputs=StopInputs(
+            origin='Hollis St',
+            destination='Parramatta Station',
+            departures=(),
+            now=START,
+            scroll=0,
+            live_since=START,
+            has_feed=True,
+            loaded=False,
+        ),
     )
     assert result.empty == 'Loading timetable'
+
+
+def test_view_without_a_destination_has_none_and_a_plain_empty() -> None:
+    """No destination gives None and an empty message naming none."""
+    result = build_stop_view(
+        inputs=StopInputs(
+            origin='Hollis St',
+            destination=None,
+            departures=(),
+            now=START,
+            scroll=0,
+            live_since=START,
+            has_feed=True,
+        ),
+    )
+    assert result.destination is None
+    assert result.empty == 'No services in the next 3 hours'
+    assert 'direction' not in result.empty
+
+
+def test_view_carries_its_tag() -> None:
+    """The inputs' tag reaches the view; the default is not pinned."""
+    assert view().tag == NOT_PINNED
+    tag = pin_tag(index=0, total=2)
+    result = build_stop_view(
+        inputs=StopInputs(
+            origin='A',
+            destination='B',
+            departures=(),
+            now=START,
+            scroll=0,
+            live_since=START,
+            has_feed=True,
+            tag=tag,
+        ),
+    )
+    assert result.tag == tag
 
 
 def test_view_empty_is_none_with_departures() -> None:
@@ -326,13 +370,15 @@ def fall_back_view(
         View.
     """
     return build_stop_view(
-        origin='A',
-        destination='B',
-        departures=departures,
-        now=now,
-        scroll=0,
-        live_since=now,
-        has_feed=True,
+        inputs=StopInputs(
+            origin='A',
+            destination='B',
+            departures=departures,
+            now=now,
+            scroll=0,
+            live_since=now,
+            has_feed=True,
+        ),
     )
 
 

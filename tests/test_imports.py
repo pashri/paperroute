@@ -51,6 +51,30 @@ def test_refresh_never_imports_build_libraries(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def resolve_from(*, path: Path, node: ast.ImportFrom) -> str:
+    """
+    Give the absolute module name of a from-import.
+
+    Parameters
+    ----------
+    path : Path
+        The source file holding the import.
+    node : ast.ImportFrom
+        The import statement.
+
+    Returns
+    -------
+    str
+        The module, with any leading dots resolved against the file.
+    """
+    module = node.module or ''
+    if not node.level:
+        return module
+    package = list(path.relative_to(SRC.parent).with_suffix('').parts)
+    base = package[: len(package) - node.level]
+    return '.'.join([*base, module] if module else base)
+
+
 def imported_names(*, path: Path) -> set[str]:
     """
     List the modules a source file imports.
@@ -69,8 +93,8 @@ def imported_names(*, path: Path) -> set[str]:
     for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
         if isinstance(node, ast.Import):
             names.update(alias.name for alias in node.names)
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            names.add(node.module)
+        elif isinstance(node, ast.ImportFrom):
+            names.add(resolve_from(path=path, node=node))
     return names
 
 
@@ -87,15 +111,14 @@ def test_core_imports_only_core() -> None:
 
 
 def test_pydantic_only_in_state_file() -> None:
-    """Only the state file imports pydantic, and the refresh never loads it."""
+    """Only the state file imports pydantic."""
     offenders = [
         str(path)
         for path in sorted(SRC.rglob('*.py'))
-        if path.name != 'state_file.py'
+        if path != SRC / 'adapters' / 'state_file.py'
         and any(
             name.split('.')[0] == 'pydantic'
             for name in imported_names(path=path)
         )
     ]
     assert not offenders
-    assert "'pydantic' not in sys.modules" in REFRESH_RUN

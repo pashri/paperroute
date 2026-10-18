@@ -24,6 +24,7 @@ MIGRATIONS: Final[
     dict[int, Callable[[dict[str, object]], dict[str, object]]]
 ] = {}
 TEMP_PREFIX: Final[str] = '.state.json.'
+FILE_MODE: Final[int] = 0o644
 
 
 class StopModel(BaseModel):
@@ -249,9 +250,16 @@ def migrate(*, data: dict[str, object]) -> dict[str, object]:
     return data
 
 
-def write_atomic(*, path: Path, text: str) -> None:
+def write_atomic(
+    *,
+    path: Path,
+    text: str,
+    sync: Callable[[Path], None] | None = None,
+) -> None:
     """
     Replace a file so a reader sees the old text or the new, never a mix.
+
+    The file is readable by everyone.
 
     Parameters
     ----------
@@ -259,11 +267,15 @@ def write_atomic(*, path: Path, text: str) -> None:
         The file.
     text : str
         The new contents.
+    sync : Callable[[Path], None] | None
+        Flushes the directory after the rename; `sync_directory` when None.
+        A failure here is logged, not raised, since the new file is
+        already in place.
 
     Raises
     ------
     OSError
-        When any step fails; the temp file is removed.
+        When writing or renaming fails; the temp file is removed.
     """
     descriptor, temp_name = tempfile.mkstemp(
         prefix=TEMP_PREFIX,
@@ -271,18 +283,22 @@ def write_atomic(*, path: Path, text: str) -> None:
     )
     try:
         with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
+            os.fchmod(handle.fileno(), FILE_MODE)
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(temp_name, path)
-    except OSError:
+    except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(temp_name)
         raise
-    sync_directory(directory=path.parent)
+    try:
+        (sync or sync_directory)(path.parent)
+    except OSError:
+        logger.warning('state.json directory not synced', exc_info=True)
 
 
-def sync_directory(*, directory: Path) -> None:
+def sync_directory(directory: Path) -> None:
     """
     Flush a directory's entries to disk.
 
@@ -321,10 +337,12 @@ class JsonStateRepository:
             The saved state; `stored` is False without a usable file.
         """
         self.remove_stale_temps()
-        try:
-            text = self.path.read_text(encoding='utf-8')
-        except FileNotFoundError:
+        if not self.path.exists() and not self.path.is_symlink():
             return Loaded(saved=DEFAULT_SAVED, stored=False)
+        try:
+            if not self.path.is_file():
+                raise OSError('state.json is not a regular file')
+            text = self.path.read_text(encoding='utf-8')
         except (OSError, UnicodeDecodeError):
             return self.defaults_after_error()
         try:
@@ -332,7 +350,7 @@ class JsonStateRepository:
             if not isinstance(data, dict):
                 raise ValueError('state.json is not an object')
             model = StateModel.model_validate(migrate(data=data))
-        except ValueError:
+        except (ValueError, RecursionError):
             return self.defaults_after_error()
         return Loaded(saved=from_model(model=model), stored=True)
 

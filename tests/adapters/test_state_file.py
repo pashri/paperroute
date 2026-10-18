@@ -12,7 +12,11 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from paperroute.adapters.state_file import SCHEMA_VERSION, JsonStateRepository
+from paperroute.adapters.state_file import (
+    SCHEMA_VERSION,
+    JsonStateRepository,
+    write_atomic,
+)
 from paperroute.core.model import Pin, RouteKind, StopPlace
 from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved
 from paperroute.core.tiles import ZOOMS
@@ -146,13 +150,14 @@ def test_truncated_file_gives_defaults(
     ['not json', '[]', '{}', '{"schema_version": "1"}', '\ud800'],
 )
 def test_garbage_and_wrong_types_give_defaults(
-    path: Path, text: str
+    path: Path, text: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Unusable content gives the defaults."""
     path.write_bytes(text.encode('utf-8', errors='surrogatepass'))
     loaded = JsonStateRepository(path=path).load()
     assert loaded.saved == DEFAULT_SAVED
     assert not loaded.stored
+    assert [r.levelno for r in caplog.records] == [logging.ERROR]
 
 
 def test_wrong_field_type_gives_defaults(path: Path) -> None:
@@ -282,3 +287,63 @@ def test_load_removes_stale_temp_files(path: Path) -> None:
     JsonStateRepository(path=path).load()
     assert not stale.exists()
     assert other.exists()
+
+
+def test_failed_rename_removes_temp_file(path: Path) -> None:
+    """When the rename fails, the temp file is cleaned up."""
+    path.mkdir()
+    (path / 'inner').write_text('x')
+    with pytest.raises(OSError):
+        JsonStateRepository(path=path).save(saved=sample())
+    assert [p.name for p in path.parent.iterdir()] == ['state.json']
+
+
+def test_written_file_is_world_readable(path: Path) -> None:
+    """The file holds no secrets and is mode 0644."""
+    JsonStateRepository(path=path).save(saved=sample())
+    assert stat.S_IMODE(path.stat().st_mode) == 0o644
+
+
+def failing_sync(directory: Path) -> None:
+    """
+    Fail the way a directory fsync can.
+
+    Parameters
+    ----------
+    directory : Path
+        The directory.
+
+    Raises
+    ------
+    OSError
+        Always.
+    """
+    raise OSError(f'cannot sync {directory}')
+
+
+def test_directory_sync_failure_is_logged_not_raised(
+    path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """The rename has landed, so a sync failure only warns."""
+    write_atomic(path=path, text='{}', sync=failing_sync)
+    assert path.read_text() == '{}'
+    assert [r.levelno for r in caplog.records] == [logging.WARNING]
+
+
+def test_directory_at_path_gives_defaults(
+    path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Something that isn't a file at the path gives defaults and a log."""
+    path.mkdir()
+    loaded = JsonStateRepository(path=path).load()
+    assert loaded.saved == DEFAULT_SAVED
+    assert not loaded.stored
+    assert [r.levelno for r in caplog.records] == [logging.ERROR]
+
+
+def test_deeply_nested_json_gives_defaults(path: Path) -> None:
+    """JSON nested past the recursion limit gives defaults."""
+    path.write_text('[' * 100000)
+    loaded = JsonStateRepository(path=path).load()
+    assert loaded.saved == DEFAULT_SAVED
+    assert not loaded.stored

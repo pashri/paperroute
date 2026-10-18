@@ -8,6 +8,7 @@ from collections.abc import Callable, Sequence
 from contextlib import closing
 from pathlib import Path
 
+from paperroute.build.catalogue import CATALOGUE_SCHEMA, load_catalogue
 from paperroute.build.runs import RUN_SCHEMA, load_runs
 from paperroute.build.swap import land
 from paperroute.rss import peak_rss_mb
@@ -33,7 +34,7 @@ def timed(*, phase: str, step: Callable[[], object]) -> None:
 
 def run_extras(*, path: Path) -> None:
     """
-    Add the run tables to a built timetable and print the peak memory.
+    Add the run and chooser tables to a timetable and print the peak memory.
 
     Parameters
     ----------
@@ -43,7 +44,9 @@ def run_extras(*, path: Path) -> None:
     with closing(sqlite3.connect(path)) as conn:
         conn.execute('PRAGMA cache_size = -2000')
         conn.executescript(RUN_SCHEMA)
+        conn.executescript(CATALOGUE_SCHEMA)
         timed(phase='runs', step=lambda: load_runs(conn=conn))
+        timed(phase='catalogue', step=lambda: load_catalogue(conn=conn))
         conn.commit()
     print(f'progress extras peak {peak_rss_mb():.0f}MB', flush=True)
 

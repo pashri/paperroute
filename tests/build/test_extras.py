@@ -20,6 +20,7 @@ from tests.build.network_feed import network_feed
 
 RUN_TABLES: Final[set[str]] = {
     'runs', 'run_stops', 'trip_runs', 'trip_next', 'route_patterns',
+    'chooser_routes', 'chooser_towards',
 }
 IMPORTS_ONLY: Final[str] = (
     'import paperroute.build.extras, sys; '
@@ -110,6 +111,8 @@ def test_run_extras_prints_each_phase(
     assert lines[0] == 'progress runs'
     assert lines[1].startswith('progress runs done ')
     assert lines[1].endswith('s')
+    assert lines[2] == 'progress catalogue'
+    assert lines[3].startswith('progress catalogue done ')
     assert lines[-1].startswith('progress extras peak ')
     assert lines[-1].endswith('MB')
     assert RUN_TABLES <= tables_of(db=db)

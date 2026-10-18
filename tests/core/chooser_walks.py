@@ -1,5 +1,6 @@
 """Chooser columns, a strip and walks through the chooser for tests."""
 
+from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.core.chooser import (
@@ -24,9 +25,11 @@ from paperroute.core.messages import (
     KnobTurned,
     LineLoaded,
 )
-from paperroute.core.model import Pin, RouteKind, StopPlace
+from paperroute.core.model import Departure, Pin, RouteKind, StopPlace
 from paperroute.core.reach import Reach, ReachRow, RowKind, StripKey
-from tests.core.factories import place
+from paperroute.core.state_model import RELOAD_BEFORE
+from paperroute.core.stop_view import HORIZON
+from tests.core.factories import START, departure, place
 
 KINDS: Final[Column] = Column(
     level=Level.KIND,
@@ -103,6 +106,7 @@ CHOSEN: Final[Pin] = Pin(
 CHOSEN_KEY: Final[StripKey] = StripKey(
     station='S2', kind=RouteKind.BUS, routes=('606',),
 )
+UNTIL: Final[datetime] = START + HORIZON + RELOAD_BEFORE
 OPEN: Final[KnobPressed] = KnobPressed(knob=Knob.TOP)
 NEXT: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 DOWN: Final[KnobTurned] = KnobTurned(knob=Knob.BOTTOM, steps=1)
@@ -248,3 +252,24 @@ def at_to() -> ChooserState:
     chooser, _ = turned(chooser=at_from(), steps=1, reach=None)
     chooser, _ = pressed(chooser=chooser, reach=None)
     return chooser
+
+
+def chooser_departures() -> tuple[Departure, ...]:
+    """
+    Make 606 departures from the chooser's From, one already on its way.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        A 606 that left a minute ago and one in five minutes, both to
+        Hawkesbury.
+    """
+    return tuple(
+        departure(
+            departs=START + timedelta(minutes=minutes),
+            trip_id=f'c-{index}',
+            headsign='Hawkesbury',
+            kind=RouteKind.BUS,
+        )
+        for index, minutes in enumerate((-1, 5))
+    )

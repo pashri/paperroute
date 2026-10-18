@@ -134,6 +134,8 @@ class StripPanel:
         True when the rows are the whole-stop board.
     hint : str | None
         The knob hint while picking, else None.
+    empty : str | None
+        Why there are no departures to list, or None.
     """
 
     title: str
@@ -142,6 +144,7 @@ class StripPanel:
     rows: tuple[Row, ...]
     no_destination: bool
     hint: str | None
+    empty: str | None = None
 
 
 @dataclass(frozen=True)
@@ -775,7 +778,8 @@ def strip_panel(*, inputs: StripInputs) -> StripPanel:
     -------
     StripPanel
         The From, its Destination line, the station count and the first
-        departures: four, three under a hint, none while picking a From.
+        departures: four, three under a hint, none while picking a From;
+        the Stop view's empty text when there are none to list.
     """
     stop = inputs.stop_view
     hint = None if inputs.picking is None else HINTS.get(inputs.picking)
@@ -788,6 +792,7 @@ def strip_panel(*, inputs: StripInputs) -> StripPanel:
         rows=() if inputs.picking == PICK_FROM else stop.head_rows[:shown],
         no_destination=stop.destination is None,
         hint=hint,
+        empty=None if inputs.picking == PICK_FROM else stop.empty,
     )
 
 

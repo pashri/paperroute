@@ -24,7 +24,7 @@ from paperroute.core.chooser import (
 from paperroute.core.chooser_view import build_chooser_view
 from paperroute.core.model import Pin, RouteKind
 from paperroute.core.reach import StripKey
-from tests.core.chooser_steps import (
+from tests.core.chooser_walks import (
     BUS_606,
     GROUPS,
     KINDS,

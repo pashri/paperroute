@@ -68,6 +68,28 @@ def load_window(*, now: datetime) -> tuple[datetime, datetime]:
     )
 
 
+def runs_short(*, loaded_until: datetime | None, now: datetime) -> bool:
+    """
+    Say whether loaded departures are missing or reach under HORIZON.
+
+    Parameters
+    ----------
+    loaded_until : datetime | None
+        The end of the loaded window, or None before the first load.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    bool
+        True when less than HORIZON of real time remains loaded.
+    """
+    if loaded_until is None:
+        return True
+    left = loaded_until.timestamp() - now.timestamp()
+    return left < HORIZON.total_seconds()
+
+
 @dataclass(frozen=True)
 class Board:
     """

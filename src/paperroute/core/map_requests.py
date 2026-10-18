@@ -375,25 +375,43 @@ def held_back(
     ) - strip_patterns(state=state)
 
 
-def map_patterns(*, state: State, inputs: MapInputs) -> frozenset[str]:
+def map_shown(*, state: State) -> bool:
     """
-    List the trips whose patterns the view needs.
+    Say whether a map is on screen.
 
     Parameters
     ----------
     state : State
         State.
-    inputs : MapInputs
-        The map's inputs.
+
+    Returns
+    -------
+    bool
+        True on the Map and Strip + map while the chooser is closed.
+    """
+    return state.view in MAP_VIEWS and state.chooser is None
+
+
+def map_patterns(
+    *, state: State, inputs: MapInputs | None
+) -> frozenset[str]:
+    """
+    List the trips whose patterns the screen needs.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    inputs : MapInputs | None
+        The map's inputs, or None with no map on screen.
 
     Returns
     -------
     frozenset[str]
-        The map's needs on a map view, with the strip's trips on a strip
-        view.
+        The strips' trips, with the map's needs when a map is shown.
     """
     wanted = strip_patterns(state=state)
-    if state.view in MAP_VIEWS:
+    if inputs is not None:
         wanted |= needed_patterns(inputs=inputs)
     return wanted
 
@@ -417,7 +435,7 @@ def area_effects(
         State with the requests recorded, and the effects; nothing on a
         view without a map or while the chooser covers it.
     """
-    if state.view not in MAP_VIEWS or state.chooser is not None:
+    if not map_shown(state=state):
         return state, ()
     state, modes = request_modes(state=state)
     state, shapes = request_shapes(state=state, departures=departures)
@@ -469,8 +487,12 @@ def map_effects(
     """
     if not shows_vehicles(state=state):
         return state, ()
-    inputs = map_inputs(state=state, stop_view=stop_view)
-    drawn = inputs.departures if state.view in MAP_VIEWS else ()
+    inputs = (
+        map_inputs(state=state, stop_view=stop_view)
+        if map_shown(state=state)
+        else None
+    )
+    drawn = () if inputs is None else inputs.departures
     wanted = map_patterns(state=state, inputs=inputs)
     state = pruned(state=state, wanted=wanted, departures=drawn)
     state, area = area_effects(state=state, departures=drawn)

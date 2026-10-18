@@ -40,7 +40,7 @@ from paperroute.core.strip_view import (
     StripMapView,
     StripView,
 )
-from tests.core.chooser_steps import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
+from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.factories import START, departure, place, snapshot, vehicle
 
 CENTRE: Final[Point] = (-17_000.0, 1_000.0)

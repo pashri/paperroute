@@ -1,6 +1,7 @@
 """The route chooser: its columns, stages, knob handling and view-model."""
 
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
+from datetime import datetime
 from enum import StrEnum
 from typing import Final
 
@@ -162,6 +163,26 @@ NAMED_BY_BADGE: Final[frozenset[Level]] = frozenset({Level.ROUTE, Level.LINE})
 
 
 @dataclass(frozen=True)
+class DepartureLoad:
+    """
+    How the departures from the chooser's From stand.
+
+    Attributes
+    ----------
+    loaded_until : datetime | None
+        The end of the loaded window, or None before the first load.
+    loading : bool
+        True while a load is in flight.
+    failed : bool
+        True when the last load failed.
+    """
+
+    loaded_until: datetime | None = None
+    loading: bool = False
+    failed: bool = False
+
+
+@dataclass(frozen=True)
 class ChooserState:
     """
     Where the route chooser is.
@@ -197,6 +218,8 @@ class ChooserState:
         True when the last column or line asked for could not be loaded.
     departures : tuple[Departure, ...]
         The TO stage's departures from the From.
+    load : DepartureLoad
+        How those departures stand.
     """
 
     columns: tuple[Column, ...] = ()
@@ -213,6 +236,7 @@ class ChooserState:
     prefer: RouteKind | None = None
     failed: bool = False
     departures: tuple[Departure, ...] = ()
+    load: DepartureLoad = field(default_factory=DepartureLoad)
 
 
 def clamped(*, value: int, count: int) -> int:
@@ -810,7 +834,7 @@ def backed(*, chooser: ChooserState) -> ChooserState | None:
         case Stage.TO:
             return replace(
                 chooser, stage=Stage.FROM, origin=None, key=None,
-                to_cursor=0, departures=(),
+                to_cursor=0, departures=(), load=DepartureLoad(),
             )
 
 

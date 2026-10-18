@@ -398,10 +398,11 @@ class LineFailed:
 
 @dataclass(frozen=True)
 class ChooserDeparturesLoaded:
-    """Departures from the chooser's From arrived."""
+    """Departures from the chooser's From arrived, up to a time."""
 
     pin: Pin
     departures: tuple[Departure, ...]
+    until: datetime
     timetable: str | None = None
 
 

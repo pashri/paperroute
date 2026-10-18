@@ -9,6 +9,7 @@ from paperroute.core.chooser_steps import (
     chooser_knob,
     chooser_retimed,
     chooser_view,
+    picked_reloads,
     trip_feeds,
 )
 from paperroute.core.chooser_view import ChooserView
@@ -80,9 +81,9 @@ from paperroute.core.state_model import (
     State,
     elapsed,
     load_window,
+    runs_short,
 )
 from paperroute.core.stop_view import (
-    HORIZON,
     StopInputs,
     StopView,
     build_stop_view,
@@ -389,29 +390,6 @@ def settled(
     )
 
 
-def reload_due(*, state: State, now: datetime) -> bool:
-    """
-    Say whether the loaded departures are missing or reach under HORIZON.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    now : datetime
-        Current time.
-
-    Returns
-    -------
-    bool
-        True when less than HORIZON of real time remains loaded.
-    """
-    loaded_until = state.board.loaded_until
-    if loaded_until is None:
-        return True
-    left = loaded_until.timestamp() - now.timestamp()
-    return left < HORIZON.total_seconds()
-
-
 def poll_due(*, state: State, now: datetime) -> bool:
     """
     Say whether the trip-updates feeds should be fetched again.
@@ -453,7 +431,8 @@ def reload_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
         State marked loading, and a LoadDepartures; unchanged otherwise.
     """
     now = state.now
-    if not reload_due(state=state, now=now) or state.board.loading:
+    due = runs_short(loaded_until=state.board.loaded_until, now=now)
+    if not due or state.board.loading:
         return state, ()
     start, end = load_window(now=now)
     load = LoadDepartures(
@@ -570,9 +549,12 @@ def on_tick(
     """
     state = idle_dropped(state=replace(state, now=event.now))
     state, loads = reload_effects(state=state)
+    state, picked = picked_reloads(state=state)
     state, fetches = poll_effects(state=state)
     state, saves = saved_effects(state=state)
-    return settled(state=state, effects=(*loads, *fetches, *saves))
+    return settled(
+        state=state, effects=(*loads, *picked, *fetches, *saves),
+    )
 
 
 def on_loaded(

@@ -11,7 +11,7 @@ from paperroute.core.chooser import (
 )
 from paperroute.core.chooser_view import build_chooser_view
 from paperroute.core.model import Pin
-from tests.core.chooser_steps import (
+from tests.core.chooser_walks import (
     BUS_606,
     GROUPS,
     TOWARDS,

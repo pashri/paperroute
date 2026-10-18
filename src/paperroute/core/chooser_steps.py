@@ -7,6 +7,7 @@ from paperroute.core.chooser import (
     ChooserRequest,
     ChooserState,
     ColumnRequest,
+    DepartureLoad,
     LineRequest,
     Stage,
     StripRequest,
@@ -23,6 +24,7 @@ from paperroute.core.chooser_view import ChooserView, build_chooser_view
 from paperroute.core.live import live_since, resolved
 from paperroute.core.map_requests import polled_positions
 from paperroute.core.messages import (
+    ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
     ChooserEvent,
     ColumnFailed,
@@ -42,7 +44,7 @@ from paperroute.core.model import Departure, Pin
 from paperroute.core.places import committed, feeds_of, shown
 from paperroute.core.reach import Reach
 from paperroute.core.saved import LiveView
-from paperroute.core.state_model import State, load_window
+from paperroute.core.state_model import State, load_window, runs_short
 from paperroute.core.stop_view import (
     NOT_PINNED,
     StopInputs,
@@ -62,6 +64,7 @@ from paperroute.core.strip_view import (
 )
 
 LINE_FAILED: Final[str] = "Can't load the line"
+DEPARTURES_FAILED: Final[str] = "Can't load departures"
 
 
 def chooser_reach(*, chooser: ChooserState, state: State) -> Reach | None:
@@ -86,9 +89,9 @@ def chooser_reach(*, chooser: ChooserState, state: State) -> Reach | None:
     return state.strip.reaches.get(chooser.key)
 
 
-def departures_load(
+def picked_load(
     *, state: State, chooser: ChooserState,
-) -> tuple[Effect, ...]:
+) -> tuple[State, tuple[Effect, ...]]:
     """
     Ask for the departures from the chooser's From.
 
@@ -97,12 +100,13 @@ def departures_load(
     state : State
         State.
     chooser : ChooserState
-        Chooser with a From.
+        Its chooser, with a From.
 
     Returns
     -------
-    tuple[Effect, ...]
-        A LoadChooserDepartures over the usual window.
+    tuple[State, tuple[Effect, ...]]
+        State with the load in flight, and a LoadChooserDepartures over
+        the usual window.
     """
     start, end = load_window(now=state.now)
     load = LoadChooserDepartures(
@@ -111,14 +115,39 @@ def departures_load(
         end=end,
         timetable=state.saving.timetable,
     )
-    return (load,)
+    marked = replace(chooser, load=replace(chooser.load, loading=True))
+    return replace(state, chooser=marked), (load,)
 
 
-def request_effects(
-    *, state: State, request: ChooserRequest | None,
-) -> tuple[Effect, ...]:
+def picked_reloads(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
-    Turn a chooser request into effects.
+    Load the chooser's departures again when they run short.
+
+    Parameters
+    ----------
+    state : State
+        State at the tick's time.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with the load in flight, and a LoadChooserDepartures, in
+        the TO stage when no load is in flight and less than `HORIZON`
+        is loaded; unchanged otherwise.
+    """
+    chooser = picking_to(state=state)
+    if chooser is None or chooser.load.loading:
+        return state, ()
+    if not runs_short(loaded_until=chooser.load.loaded_until, now=state.now):
+        return state, ()
+    return picked_load(state=state, chooser=chooser)
+
+
+def asked(
+    *, state: State, request: ChooserRequest | None,
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Ask for what the chooser requests.
 
     The strip itself is asked for when the state settles.
 
@@ -131,18 +160,19 @@ def request_effects(
 
     Returns
     -------
-    tuple[Effect, ...]
-        A LoadColumn, a LoadLine, or for a strip the departures load.
+    tuple[State, tuple[Effect, ...]]
+        State, and a LoadColumn, a LoadLine, or for a strip the
+        departures load.
     """
     timetable = state.saving.timetable
     match request:
         case ColumnRequest(path=path):
-            return (LoadColumn(path=path, timetable=timetable),)
+            return state, (LoadColumn(path=path, timetable=timetable),)
         case LineRequest(towards=towards):
-            return (LoadLine(towards=towards, timetable=timetable),)
+            return state, (LoadLine(towards=towards, timetable=timetable),)
         case StripRequest() if state.chooser is not None:
-            return departures_load(state=state, chooser=state.chooser)
-    return ()
+            return picked_load(state=state, chooser=state.chooser)
+    return state, ()
 
 
 def moved(
@@ -170,8 +200,7 @@ def moved(
     """
     if chooser == state.chooser and request is None:
         return state, ()
-    state = replace(state, chooser=chooser)
-    return state, request_effects(state=state, request=request)
+    return asked(state=replace(state, chooser=chooser), request=request)
 
 
 def commit(*, state: State, chooser: ChooserState, pin: Pin) -> State:
@@ -244,8 +273,8 @@ def chooser_knob(
     """
     chooser = state.chooser
     if chooser is None:
-        first, asked = opened(shown=shown(state=state))
-        return moved(state=state, chooser=first, request=asked)
+        first, kinds = opened(shown=shown(state=state))
+        return moved(state=state, chooser=first, request=kinds)
     match event:
         case KnobPressed(knob=Knob.TOP):
             return moved(state=state, chooser=backed(chooser=chooser))
@@ -261,33 +290,63 @@ def chooser_knob(
     return state, ()
 
 
-def with_departures(
-    *, chooser: ChooserState, event: ChooserDeparturesLoaded,
-) -> ChooserState:
+def from_matches(*, chooser: ChooserState, pin: Pin) -> bool:
     """
-    Take in the departures from the chooser's From.
+    Say whether a departures load is for the chooser's From.
 
     Parameters
     ----------
     chooser : ChooserState
         Chooser.
-    event : ChooserDeparturesLoaded
-        The departures and the place they were asked for.
+    pin : Pin
+        The place the load was asked for.
+
+    Returns
+    -------
+    bool
+        True in the TO stage when the From is the place's From.
+    """
+    origin = chooser.origin
+    return (
+        chooser.stage is Stage.TO
+        and origin is not None
+        and origin.stop_id == pin.origin.stop_id
+    )
+
+
+def with_departures(
+    *,
+    chooser: ChooserState,
+    event: ChooserDeparturesLoaded | ChooserDeparturesFailed,
+) -> ChooserState:
+    """
+    Take in the departures from the chooser's From, or their failure.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser.
+    event : ChooserDeparturesLoaded | ChooserDeparturesFailed
+        The departures, or the failure, and the place they were asked
+        for.
 
     Returns
     -------
     ChooserState
-        The chooser with the departures; unchanged unless it is picking a
-        Destination from that place's From.
+        The chooser with the departures and their window, or with the
+        failure marked and any departures kept; unchanged unless it is
+        picking a Destination from that place's From.
     """
-    origin = chooser.origin
-    if (
-        chooser.stage is not Stage.TO
-        or origin is None
-        or origin.stop_id != event.pin.origin.stop_id
-    ):
+    if not from_matches(chooser=chooser, pin=event.pin):
         return chooser
-    return replace(chooser, departures=event.departures)
+    if isinstance(event, ChooserDeparturesFailed):
+        load = replace(chooser.load, loading=False, failed=True)
+        return replace(chooser, load=load)
+    return replace(
+        chooser,
+        departures=event.departures,
+        load=DepartureLoad(loaded_until=event.until),
+    )
 
 
 def replied(
@@ -307,7 +366,7 @@ def replied(
     -------
     tuple[ChooserState, ChooserRequest | None]
         The chooser and its next request; unchanged for a result it no
-        longer waits for and for a failed departures load.
+        longer waits for.
     """
     match event:
         case ColumnLoaded(path=path, column=column):
@@ -318,9 +377,7 @@ def replied(
             return with_line(chooser=chooser, towards=towards, line=line), None
         case LineFailed(towards=towards):
             return with_line(chooser=chooser, towards=towards, line=None), None
-        case ChooserDeparturesLoaded():
-            return with_departures(chooser=chooser, event=event), None
-    return chooser, None
+    return with_departures(chooser=chooser, event=event), None
 
 
 def chooser_event(
@@ -389,8 +446,8 @@ def chooser_retimed(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with a failed chooser closed and the TO cursor back on the
-        From, and the loads asked for again.
+        State with a failed chooser closed, the TO cursor back on the
+        From and its departures due again, and the loads asked for again.
     """
     chooser = state.chooser
     if chooser is None:
@@ -398,8 +455,8 @@ def chooser_retimed(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     if chooser.failed:
         return replace(state, chooser=None), ()
     request = asked_again(chooser=chooser)
-    state = replace(state, chooser=replace(chooser, to_cursor=0))
-    return state, request_effects(state=state, request=request)
+    fresh = replace(chooser, to_cursor=0, load=DepartureLoad())
+    return asked(state=replace(state, chooser=fresh), request=request)
 
 
 def trip_feeds(*, state: State) -> tuple[str, ...]:
@@ -469,11 +526,12 @@ def picked_stop_view(*, state: State, chooser: ChooserState) -> StopView:
     Returns
     -------
     StopView
-        The From's whole-stop board, with live times where known.
+        The From's whole-stop board, with live times where known, and
+        `DEPARTURES_FAILED` as its empty text when the load failed.
     """
     departures: tuple[Departure, ...] = chooser.departures
     feeds = feeds_of(departures=departures)
-    return build_stop_view(
+    board = build_stop_view(
         inputs=StopInputs(
             origin='' if chooser.origin is None else chooser.origin.name,
             destination=None,
@@ -488,9 +546,12 @@ def picked_stop_view(*, state: State, chooser: ChooserState) -> StopView:
                 snapshots=state.snapshots, feeds=feeds, now=state.now,
             ),
             has_feed=bool(feeds) or not departures,
-            loaded=bool(departures),
+            loaded=chooser.load.loaded_until is not None,
         ),
     )
+    if chooser.load.failed and board.empty is not None:
+        return replace(board, empty=DEPARTURES_FAILED)
+    return board
 
 
 def to_cursor_row(*, chooser: ChooserState, reach: Reach | None) -> int | None:

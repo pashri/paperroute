@@ -9,6 +9,9 @@ from paperroute.core.model import RouteKind, StopPlace
 from paperroute.core.reach_layout import FROM_KEY, Entry, lay_out, place_of
 
 APPROACH_ROWS: Final[int] = 2
+LINE_KINDS: Final[frozenset[RouteKind]] = frozenset(
+    {RouteKind.TRAIN, RouteKind.METRO, RouteKind.LIGHT_RAIL},
+)
 
 
 @dataclass(frozen=True)
@@ -73,6 +76,24 @@ class StripKey:
     station: str
     kind: RouteKind | None
     routes: tuple[str, ...]
+
+
+def every_route(*, key: StripKey) -> bool:
+    """
+    Say whether a strip takes every route of its kind through the From.
+
+    Parameters
+    ----------
+    key : StripKey
+        Strip kind and routes.
+
+    Returns
+    -------
+    bool
+        True with no kind, for Train, Metro and Light rail, and for
+        another kind with no routes chosen.
+    """
+    return key.kind is None or key.kind in LINE_KINDS or not key.routes
 
 
 class RowKind(StrEnum):

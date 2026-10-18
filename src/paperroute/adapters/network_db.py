@@ -28,11 +28,14 @@ from paperroute.core.model import (
     StopPlace,
     until_revisit,
 )
-from paperroute.core.reach import ReachInput, RunTail, StripKey
-
-LINE_KINDS: Final[frozenset[RouteKind]] = frozenset(
-    {RouteKind.TRAIN, RouteKind.METRO, RouteKind.LIGHT_RAIL},
+from paperroute.core.reach import (
+    LINE_KINDS,
+    ReachInput,
+    RunTail,
+    StripKey,
+    every_route,
 )
+
 NETWORK_TABLES: Final[tuple[str, ...]] = (
     'runs', 'run_stops', 'chooser_routes', 'chooser_towards',
 )
@@ -591,9 +594,7 @@ class SqliteNetworkRepository:
         rows = self.fetch(sql=RUNS_THROUGH, params={
             'station': station,
             'kind': None if key.kind is None else str(key.kind),
-            'any_route': (
-                key.kind is None or key.kind in LINE_KINDS or not key.routes
-            ),
+            'any_route': every_route(key=key),
             'routes': json.dumps(list(key.routes)),
         })
         return merged_tails(rows=rows)

@@ -1,9 +1,17 @@
 """A trip's stops and running dates, for placing vehicles on the map."""
 
+import math
 from dataclasses import dataclass, replace
 from datetime import date, datetime
+from itertools import pairwise
 
-from paperroute.core.geo import Point, Shape, point_along, stop_distances
+from paperroute.core.geo import (
+    Point,
+    Shape,
+    point_along,
+    project_onto_segment,
+    stop_distances,
+)
 from paperroute.core.model import Mode, service_seconds
 
 
@@ -132,6 +140,80 @@ def between(
     )
 
 
+def hop_at(
+    *, pattern: TripPattern, seconds: int,
+) -> tuple[int, float] | None:
+    """
+    Find the hop a trip is on at a time on its service day.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+    seconds : int
+        Seconds into the service day.
+
+    Returns
+    -------
+    tuple[int, float] | None
+        The index of the stop last left and the share of the hop run,
+        from 0 to 1: 0 while dwelling at that stop, and 1 on the last hop
+        once the trip has arrived. None before the first arrival, after
+        the last, or for a trip with fewer than two stops.
+    """
+    stops = pattern.stops
+    running = len(stops) > 1 and (
+        stops[0].arrives <= seconds <= stops[-1].arrives
+    )
+    if not running:
+        return None
+    for index, stop in enumerate(stops[:-1]):
+        if stop.arrives <= seconds <= stop.departs:
+            return index, 0.0
+        after = stops[index + 1]
+        if seconds < after.arrives:
+            run = (seconds - stop.departs) / (after.arrives - stop.departs)
+            return index, run
+    return len(stops) - 2, 1.0
+
+
+def hop_near(
+    *, pattern: TripPattern, point: Point,
+) -> tuple[int, float] | None:
+    """
+    Find the straight hop between a trip's stops nearest a point.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+    point : Point
+        A position in metres.
+
+    Returns
+    -------
+    tuple[int, float] | None
+        The index of the hop's first stop and the share of the hop at the
+        point's projection onto it; the earliest of equally near hops.
+        None when no hop has points at both ends.
+    """
+    hops = [
+        (
+            project_onto_segment(point=point, start=start, end=end),
+            index,
+            math.dist(start, end),
+        )
+        for index, (start, end) in enumerate(
+            pairwise(stop.point for stop in pattern.stops),
+        )
+        if start is not None and end is not None
+    ]
+    if not hops:
+        return None
+    (_, along), index, length = min(hops, key=lambda hop: hop[0][0])
+    return index, along / length if length else 0.0
+
+
 def point_at(
     *,
     pattern: TripPattern,
@@ -156,19 +238,15 @@ def point_at(
     Point | None
         The timetable position, or None when the stops lack points.
     """
-    for index, stop in enumerate(pattern.stops[:-1]):
-        if stop.arrives <= seconds <= stop.departs:
-            return stop.point
-        after = pattern.stops[index + 1]
-        if seconds < after.arrives:
-            return between(
-                pattern=pattern,
-                shape=shape,
-                index=index,
-                fraction=(seconds - stop.departs)
-                / (after.arrives - stop.departs),
-            )
-    return pattern.stops[-1].point
+    hop = hop_at(pattern=pattern, seconds=seconds)
+    if hop is None:
+        return pattern.stops[0].point if len(pattern.stops) == 1 else None
+    index, fraction = hop
+    if fraction in (0.0, 1.0):
+        return pattern.stops[index + int(fraction)].point
+    return between(
+        pattern=pattern, shape=shape, index=index, fraction=fraction,
+    )
 
 
 def timetable_point(

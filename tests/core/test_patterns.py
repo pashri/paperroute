@@ -6,7 +6,14 @@ import pytest
 
 from paperroute.core.geo import make_shape
 from paperroute.core.model import SYDNEY
-from paperroute.core.patterns import PatternStop, measure, timetable_point
+from paperroute.core.patterns import (
+    PatternStop,
+    hop_at,
+    hop_near,
+    measure,
+    point_at,
+    timetable_point,
+)
 from tests.core.factories import EIGHT, START, TEN_MINUTES, pattern
 
 CORNER = make_shape(
@@ -209,3 +216,88 @@ def test_timetable_point_at_the_first_departure_is_the_first_stop() -> None:
     """At the first departure time the trip is at the first stop."""
     point = timetable_point(pattern=pattern(), shape=None, now=START)
     assert point == (0.0, 0.0)
+
+
+DWELL = (
+    DIAGONAL[0],
+    PatternStop(
+        arrives=EIGHT + 240,
+        departs=EIGHT + 420,
+        point=(300.0, 700.0),
+    ),
+    DIAGONAL[1],
+)
+
+
+@pytest.mark.parametrize(
+    ('seconds', 'hop'),
+    [
+        (EIGHT, (0, 0.0)),
+        (EIGHT + 120, (0, 0.5)),
+        (EIGHT + 300, (1, 0.0)),
+        (EIGHT + 510, (1, 0.5)),
+        (EIGHT + TEN_MINUTES, (1, 1.0)),
+        (EIGHT - 1, None),
+        (EIGHT + TEN_MINUTES + 1, None),
+    ],
+)
+def test_hop_at_matches_point_at(
+    seconds: int, hop: tuple[int, float] | None,
+) -> None:
+    """The hop and fraction give the same point `point_at` finds."""
+    trip = pattern(stops=DWELL)
+    assert hop_at(pattern=trip, seconds=seconds) == (
+        None if hop is None else pytest.approx(hop)
+    )
+    if hop is not None:
+        index, fraction = hop
+        start, end = DWELL[index].point, DWELL[index + 1].point
+        assert start is not None
+        assert end is not None
+        assert point_at(
+            pattern=trip, shape=None, seconds=seconds,
+        ) == pytest.approx((
+            start[0] + (end[0] - start[0]) * fraction,
+            start[1] + (end[1] - start[1]) * fraction,
+        ))
+
+
+def test_hop_at_needs_two_stops() -> None:
+    """A trip with one call has no hop; `point_at` puts it at the stop."""
+    trip = pattern(stops=DWELL[:1])
+    assert hop_at(pattern=trip, seconds=EIGHT) is None
+    assert point_at(pattern=trip, shape=None, seconds=EIGHT) == (0.0, 0.0)
+    assert point_at(
+        pattern=pattern(stops=DWELL), shape=None, seconds=EIGHT - 1,
+    ) is None
+
+
+def test_hop_near_picks_nearest_hop() -> None:
+    """A point beside the second hop projects onto it, ties to the first."""
+    stops = (
+        PatternStop(arrives=EIGHT, departs=EIGHT, point=(0.0, 0.0)),
+        PatternStop(arrives=EIGHT, departs=EIGHT, point=(1000.0, 0.0)),
+        PatternStop(arrives=EIGHT, departs=EIGHT, point=(1000.0, 1000.0)),
+    )
+    trip = pattern(stops=stops)
+    assert hop_near(pattern=trip, point=(1010.0, 250.0)) == pytest.approx(
+        (1, 0.25),
+    )
+    assert hop_near(pattern=trip, point=(1000.0, 0.0)) == pytest.approx(
+        (0, 1.0),
+    )
+
+
+def test_hop_near_skips_hops_without_points() -> None:
+    """A hop with a pointless stop is never chosen; none at all is None."""
+    stops = (
+        PatternStop(arrives=EIGHT, departs=EIGHT, point=None),
+        PatternStop(arrives=EIGHT, departs=EIGHT, point=(0.0, 0.0)),
+        PatternStop(arrives=EIGHT, departs=EIGHT, point=(1000.0, 0.0)),
+    )
+    assert hop_near(
+        pattern=pattern(stops=stops), point=(-500.0, 0.0),
+    ) == pytest.approx((1, 0.0))
+    assert hop_near(
+        pattern=pattern(stops=stops[:2]), point=(0.0, 0.0),
+    ) is None

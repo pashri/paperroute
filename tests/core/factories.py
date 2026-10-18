@@ -1,9 +1,19 @@
 """Departures, trip patterns and vehicle positions for core tests."""
 
+from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timedelta
 
 from paperroute.core.geo import Point
-from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
+from paperroute.core.model import (
+    SYDNEY,
+    CarryOn,
+    Departure,
+    Mode,
+    Pin,
+    RouteKind,
+    StopPlace,
+    TripFacts,
+)
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.positions import PositionsSnapshot, VehiclePosition
 
@@ -66,6 +76,8 @@ def departure(
     trip_id: str | None = None,
     headsign: str = 'Parramatta Station',
     platform: str = '',
+    kind: RouteKind | None = None,
+    then: CarryOn | None = None,
 ) -> Departure:
     """
     A departure from stop sequence 5 to 20.
@@ -86,6 +98,10 @@ def departure(
         Headsign.
     platform : str
         Platform or stand.
+    kind : RouteKind | None
+        Kind of route.
+    then : CarryOn | None
+        The service the vehicle runs next.
 
     Returns
     -------
@@ -106,6 +122,44 @@ def departure(
         departs=departs,
         arrives=departs + timedelta(minutes=ride),
         service_day=departs.date(),
+        facts=TripFacts(kind=kind, then=then),
+    )
+
+
+def calls(
+    *,
+    stations: Sequence[str],
+    start: int = EIGHT,
+    step: int = 300,
+    points: Mapping[str, Point] | None = None,
+) -> tuple[PatternStop, ...]:
+    """
+    Calls at stations a fixed time apart, with no dwell.
+
+    Parameters
+    ----------
+    stations : Sequence[str]
+        Station IDs in running order.
+    start : int
+        Seconds into the service day at the first station.
+    step : int
+        Seconds between stations.
+    points : Mapping[str, Point] | None
+        Station positions in metres; a missing one is None.
+
+    Returns
+    -------
+    tuple[PatternStop, ...]
+        The calls.
+    """
+    return tuple(
+        PatternStop(
+            arrives=start + step * index,
+            departs=start + step * index,
+            point=(points or {}).get(station),
+            station=station,
+        )
+        for index, station in enumerate(stations)
     )
 
 

@@ -28,6 +28,7 @@ from paperroute.core.stop_view import (
     StopView,
     build_stop_view,
 )
+from paperroute.core.strip_vehicles import strip_trips
 from paperroute.core.strip_view import (
     LOADING,
     NEEDS_UPDATE,
@@ -40,7 +41,6 @@ from paperroute.core.strip_view import (
     build_strip_pane,
     build_strip_view,
     line_reach,
-    strip_trips,
 )
 from tests.core.factories import (
     EIGHT,
@@ -415,6 +415,15 @@ def test_band_at_the_bottom_when_scrolled_up() -> None:
     assert build_strip_view(inputs=replace(base, scroll=-9)).band is None
 
 
+def test_band_says_turn_for_one() -> None:
+    """One detent away reads in the singular."""
+    view = build_strip_view(inputs=replace(
+        inputs_of(reach=long_reach()), scroll=3,
+    ))
+    assert view.band is not None
+    assert view.band.text == 'FROM S20 · 1 turn away'
+
+
 def test_band_counts_cursor_distance_while_picking() -> None:
     """While picking, the band counts rows from the cursor to FROM."""
     view = build_strip_view(inputs=replace(
@@ -554,45 +563,6 @@ def test_whole_stop_buses_never_crowd_out_train_markers() -> None:
     panel = build_strip_view(inputs=inputs).panel
     assert panel.rows == inputs.stop_view.head_rows[:4]
     assert {row.route for row in panel.rows} == {'606'}
-
-
-def test_strip_trips_keep_every_trip_in_the_window() -> None:
-    """Every trip within the hour before and half hour after is kept."""
-    now = START + timedelta(hours=2)
-    kept = [
-        replace(
-            train(minutes=0, trip_id=f'k{i}'),
-            departs=now - timedelta(minutes=60) + timedelta(seconds=36 * i),
-        )
-        for i in range(150)
-    ]
-    dropped = [
-        replace(
-            train(minutes=0, trip_id=trip_id),
-            departs=now + timedelta(minutes=offset),
-        )
-        for trip_id, offset in (('early', -61), ('late', 31))
-    ]
-    assert strip_trips(
-        departures=[*kept, *dropped], key=TRAIN, now=now,
-    ) == {f'k{i}' for i in range(150)}
-
-
-def test_strip_trips_follow_the_routes_rule() -> None:
-    """A bus key takes its routes, or every bus route when it has none."""
-    ours = departure(departs=START, trip_id='a', kind=RouteKind.BUS)
-    theirs = departure(
-        departs=START, trip_id='b', route='609', kind=RouteKind.BUS,
-    )
-    chosen = StripKey(station='C', kind=RouteKind.BUS, routes=('606',))
-    every = StripKey(station='C', kind=RouteKind.BUS, routes=())
-    anything = StripKey(station='C', kind=None, routes=())
-    both = [ours, theirs]
-    assert strip_trips(departures=both, key=chosen, now=START) == {'a'}
-    assert strip_trips(departures=both, key=every, now=START) == {'a', 'b'}
-    assert strip_trips(departures=both, key=anything, now=START) == {
-        'a', 'b',
-    }
 
 
 def test_no_destination_panel_has_four_departures_and_no_destination_line(
@@ -746,6 +716,52 @@ def test_stale_vehicle_hollow_at_timetable_hop_with_age() -> None:
     assert not marker.live
     assert marker.bearing is None
     assert marker.age == 300
+
+
+def test_cancelled_trip_not_drawn() -> None:
+    """A cancelled trip has no badge, even with a fresh vehicle."""
+    now = START + timedelta(minutes=1)
+    inputs = east_inputs(at=(0.0, -1500.0), reported=now, now=now)
+    cancelled = replace(
+        inputs,
+        departures=tuple(
+            live(item=item.departure, cancelled=True)
+            for item in inputs.departures
+        ),
+    )
+    assert build_strip_view(inputs=cancelled).markers == ()
+
+
+def test_platform_stops_place_badges_on_their_station_rows() -> None:
+    """Pattern stops under a strip station map to its row."""
+    now = START + timedelta(minutes=1)
+    inputs = east_inputs(at=(0.0, -1500.0), reported=now, now=now)
+    reach = example_reach()
+    platforms = replace(
+        inputs,
+        reach=replace(
+            reach, station_of={**reach.station_of, 'E1_2': 'E1', 'E2_1': 'E2'},
+        ),
+        patterns={
+            'e': pattern(
+                trip_id='e',
+                route='T1',
+                stops=calls(
+                    stations=('C', 'E1_2', 'E2_1'),
+                    step=180,
+                    points={
+                        'C': POINTS['C'],
+                        'E1_2': POINTS['E1'],
+                        'E2_1': POINTS['E2'],
+                    },
+                ),
+            ),
+        },
+    )
+    rows = build_strip_view(inputs=platforms).rows
+    first, second = (row_named(rows=rows, name=key) for key in ('E1', 'E2'))
+    marker = only_marker(inputs=platforms)
+    assert marker.y == pytest.approx((first.y + second.y) / 2)
 
 
 def test_unreported_trip_hollow_without_age() -> None:

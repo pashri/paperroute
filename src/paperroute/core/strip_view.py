@@ -1,43 +1,22 @@
 """The Strip and Strip + map views' content: rows, times, vehicles, panel."""
 
-# pylint: disable=too-many-lines
-
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
-from paperroute.core.map_view import (
-    MapView,
-    Marker,
-    is_fresh,
-    position_age,
-    timetable_moment,
-)
-from paperroute.core.model import (
-    Departure,
-    StopPlace,
-    service_seconds,
-    service_time,
-    shifted,
-)
-from paperroute.core.patterns import TripPattern, hop_at, hop_near
-from paperroute.core.positions import PositionsSnapshot, VehiclePosition
-from paperroute.core.reach import (
-    Reach,
-    ReachRow,
-    RowKind,
-    StripKey,
-    every_route,
-)
-from paperroute.core.stop_view import (
-    DOT,
-    PinTag,
-    Row,
-    StopView,
-    clock_text,
-    not_departed,
+from paperroute.core.map_view import MapView, Marker
+from paperroute.core.model import StopPlace
+from paperroute.core.patterns import TripPattern
+from paperroute.core.positions import PositionsSnapshot
+from paperroute.core.reach import Reach, ReachRow, RowKind, StripKey
+from paperroute.core.stop_view import DOT, PinTag, Row, StopView, clock_text
+from paperroute.core.strip_vehicles import (
+    Spot,
+    TripInputs,
+    first_arrivals,
+    vehicle_markers,
 )
 
 STRIP_TOP: Final[int] = 44
@@ -48,11 +27,8 @@ INDENT: Final[int] = 16
 PANE_TRACK_X: Final[int] = 500
 PANE_ROWS: Final[int] = 12
 PANE_FROM_ROW: Final[int] = 2
-BADGE_STEP: Final[int] = 22
 PANEL_ROWS: Final[int] = 4
 CURSOR_MARGIN: Final[int] = 2
-STRIP_LOOKBACK: Final[timedelta] = timedelta(minutes=60)
-STRIP_AHEAD: Final[timedelta] = timedelta(minutes=30)
 LOADING: Final[str] = 'Loading the line…'
 NO_STRIP: Final[str] = 'No strip for this stop'
 NEEDS_UPDATE: Final[str] = 'Strip needs a timetable update'
@@ -71,7 +47,6 @@ EMPTY_STOP_VIEW: Final[StopView] = StopView(
     empty=None,
     scroll=0,
 )
-type Heard = Mapping[str, tuple[VehiclePosition, float]]
 
 
 @dataclass(frozen=True)
@@ -325,114 +300,6 @@ class Marks:
     picking: str | None
 
 
-def on_strip(*, departure: Departure, key: StripKey) -> bool:
-    """
-    Say whether a departure feeds a strip.
-
-    Parameters
-    ----------
-    departure : Departure
-        Departure.
-    key : StripKey
-        Strip kind and routes.
-
-    Returns
-    -------
-    bool
-        True when the key has no kind, or the departure is of its kind
-        and, for a kind that takes only its routes, one of them.
-    """
-    if key.kind is None:
-        return True
-    if departure.facts.kind != key.kind:
-        return False
-    return every_route(key=key) or departure.route in key.routes
-
-
-def strip_departures(
-    *, departures: Sequence[Departure], key: StripKey,
-) -> tuple[Departure, ...]:
-    """
-    Keep the departures of a strip's own kind or routes.
-
-    Parameters
-    ----------
-    departures : Sequence[Departure]
-        Every departure from the From.
-    key : StripKey
-        Strip kind and routes.
-
-    Returns
-    -------
-    tuple[Departure, ...]
-        The ones that feed the strip, in order.
-    """
-    return tuple(
-        departure
-        for departure in departures
-        if on_strip(departure=departure, key=key)
-    )
-
-
-def strip_trips(
-    *, departures: Sequence[Departure], key: StripKey, now: datetime,
-) -> frozenset[str]:
-    """
-    List the trips whose vehicles the strip draws.
-
-    Parameters
-    ----------
-    departures : Sequence[Departure]
-        Every departure from the From.
-    key : StripKey
-        Strip kind and routes.
-    now : datetime
-        Current time.
-
-    Returns
-    -------
-    frozenset[str]
-        Trip IDs of the strip's departures that left in the last
-        `STRIP_LOOKBACK` or leave in the next `STRIP_AHEAD`; every one.
-    """
-    return frozenset(
-        departure.trip_id
-        for departure in window_departures(
-            departures=departures, key=key, now=now,
-        )
-    )
-
-
-def window_departures(
-    *, departures: Sequence[Departure], key: StripKey, now: datetime,
-) -> list[Departure]:
-    """
-    Keep a strip's departures timetabled near now, one per trip.
-
-    Parameters
-    ----------
-    departures : Sequence[Departure]
-        Every departure from the From.
-    key : StripKey
-        Strip kind and routes.
-    now : datetime
-        Current time.
-
-    Returns
-    -------
-    list[Departure]
-        The first departure of each trip leaving from `STRIP_LOOKBACK`
-        before now to `STRIP_AHEAD` after, in order.
-    """
-    start = (now - STRIP_LOOKBACK).timestamp()
-    end = (now + STRIP_AHEAD).timestamp()
-    kept: dict[str, Departure] = {}
-    for departure in strip_departures(departures=departures, key=key):
-        if start <= departure.departs.timestamp() <= end:
-            kept.setdefault(departure.trip_id, departure)
-    return list(kept.values())
-
-
 def line_reach(*, line: Sequence[StopPlace]) -> Reach:
     """
     Lay out a towards line as a plain strip, for picking a From.
@@ -546,144 +413,6 @@ def ride_of(*, reach: Reach, target: int | None) -> frozenset[int]:
     return frozenset(path)
 
 
-def live_strip(*, inputs: StripInputs) -> list[LiveDeparture]:
-    """
-    Keep the live departures that feed the strip.
-
-    Parameters
-    ----------
-    inputs : StripInputs
-        The view's inputs.
-
-    Returns
-    -------
-    list[LiveDeparture]
-        The strip's departures; none without a key.
-    """
-    key = inputs.key
-    if key is None:
-        return []
-    return [
-        item
-        for item in inputs.departures
-        if on_strip(departure=item.departure, key=key)
-    ]
-
-
-def from_call(*, departure: Departure, pattern: TripPattern, origin: str,
-              stations: Mapping[str, str]) -> int | None:
-    """
-    Find the call at which a departure leaves the From.
-
-    Parameters
-    ----------
-    departure : Departure
-        Departure.
-    pattern : TripPattern
-        Its trip.
-    origin : str
-        The From station ID.
-    stations : Mapping[str, str]
-        Station ID by stop ID, for stops under a strip station.
-
-    Returns
-    -------
-    int | None
-        The index of the call at the From at the departure's time, else
-        the first call at the From, else None.
-    """
-    at_from = [
-        index
-        for index, stop in enumerate(pattern.stops)
-        if stations.get(stop.station, stop.station) == origin
-    ]
-    leaves = service_seconds(
-        day=departure.service_day, moment=departure.departs,
-    )
-    timed = [i for i in at_from if pattern.stops[i].departs == leaves]
-    return next(iter(timed or at_from), None)
-
-
-def arrivals_after(
-    *,
-    item: LiveDeparture,
-    pattern: TripPattern,
-    origin: str,
-    stations: Mapping[str, str],
-) -> Iterator[tuple[str, datetime]]:
-    """
-    List the stations a departure calls at after the From, with times.
-
-    Parameters
-    ----------
-    item : LiveDeparture
-        Departure with live times.
-    pattern : TripPattern
-        Its trip.
-    origin : str
-        The From station ID.
-    stations : Mapping[str, str]
-        Station ID by stop ID, for stops under a strip station.
-
-    Yields
-    ------
-    tuple[str, datetime]
-        Each later call's station and arrival, shifted by the delay.
-    """
-    departure = item.departure
-    start = from_call(
-        departure=departure, pattern=pattern, origin=origin, stations=stations,
-    )
-    if start is None:
-        return
-    delay = int(item.departs.timestamp() - departure.departs.timestamp())
-    for stop in pattern.stops[start + 1:]:
-        arrives = service_time(day=departure.service_day, seconds=stop.arrives)
-        yield (
-            stations.get(stop.station, stop.station),
-            shifted(moment=arrives, seconds=delay),
-        )
-
-
-def first_arrivals(*, inputs: StripInputs, reach: Reach, origin: str
-                   ) -> dict[str, datetime]:
-    """
-    Find the first arrival at each station after the From.
-
-    Parameters
-    ----------
-    inputs : StripInputs
-        The view's inputs.
-    reach : Reach
-        The reach.
-    origin : str
-        The From station ID.
-
-    Returns
-    -------
-    dict[str, datetime]
-        Earliest arrival by station, among the strip's departures not yet
-        gone and not cancelled whose patterns are loaded.
-    """
-    best: dict[str, datetime] = {}
-    upcoming = not_departed(
-        departures=live_strip(inputs=inputs), now=inputs.now,
-    )
-    for item in upcoming:
-        pattern = inputs.patterns.get(item.departure.trip_id)
-        if item.cancelled or pattern is None:
-            continue
-        for station, moment in arrivals_after(
-            item=item,
-            pattern=pattern,
-            origin=origin,
-            stations=reach.station_of,
-        ):
-            if station not in best or moment < best[station]:
-                best[station] = moment
-    return best
-
-
 def row_times(
     *,
     inputs: StripInputs,
@@ -715,7 +444,7 @@ def row_times(
     if origin is None:
         return {}
     best = first_arrivals(
-        inputs=inputs, reach=reach, origin=reach.rows[origin].place.stop_id,
+        trips=trips_of(inputs=inputs), origin=reach.rows[origin].place.stop_id,
     )
     return {
         index: clock_text(moment=best[row.place.stop_id])
@@ -945,7 +674,8 @@ def band_of(*, inputs: StripInputs, reach: Reach, first: int
     top = origin < first
     name = reach.rows[origin].place.name.removesuffix(' Station')
     turns = turns_away(inputs=inputs, origin=origin, top=top)
-    return Band(text=f'FROM {name}{DOT}{turns} turns away', top=top)
+    unit = 'turn' if turns == 1 else 'turns'
+    return Band(text=f'FROM {name}{DOT}{turns} {unit} away', top=top)
 
 
 def strip_rows(*, inputs: StripInputs, reach: Reach
@@ -979,11 +709,9 @@ def strip_rows(*, inputs: StripInputs, reach: Reach
     return rows, band
 
 
-def heard_trips(
-    *, inputs: StripInputs,
-) -> dict[str, tuple[VehiclePosition, float]]:
+def trips_of(*, inputs: StripInputs) -> TripInputs:
     """
-    Find the most recently heard vehicle of each trip.
+    Pick out what the strip's times and vehicles come from.
 
     Parameters
     ----------
@@ -992,172 +720,17 @@ def heard_trips(
 
     Returns
     -------
-    dict[str, tuple[VehiclePosition, float]]
-        Each trip's vehicle and the seconds since it reported.
+    TripInputs
+        The departures, key, patterns, positions, time and station map.
     """
-    best: dict[str, tuple[VehiclePosition, float]] = {}
-    for snapshot in inputs.positions.values():
-        for vehicle in snapshot.vehicles:
-            age = position_age(
-                vehicle=vehicle, snapshot=snapshot, now=inputs.now,
-            )
-            known = best.get(vehicle.trip_id)
-            if known is None or age < known[1]:
-                best[vehicle.trip_id] = (vehicle, age)
-    return best
-
-
-def vehicle_of(*, departure: Departure, heard: Heard
-               ) -> tuple[VehiclePosition, float] | None:
-    """
-    Find a departure's vehicle by its trip ID or an alias.
-
-    Parameters
-    ----------
-    departure : Departure
-        Departure.
-    heard : Heard
-        Each trip's vehicle and age.
-
-    Returns
-    -------
-    tuple[VehiclePosition, float] | None
-        The freshest match, or None.
-    """
-    found = [
-        heard[trip]
-        for trip in (departure.trip_id, *departure.aliases)
-        if trip in heard
-    ]
-    return min(found, key=lambda each: each[1], default=None)
-
-
-def trip_marker(
-    *,
-    departure: Departure,
-    inputs: StripInputs,
-    rows: Mapping[str, StripRow],
-    heard: Heard,
-    track_x: int,
-) -> Marker | None:
-    """
-    Place one trip's badge on the strip.
-
-    Parameters
-    ----------
-    departure : Departure
-        The trip's departure from the From.
-    inputs : StripInputs
-        The view's inputs.
-    rows : Mapping[str, StripRow]
-        Visible rows by station.
-    heard : Heard
-        Each trip's vehicle and age.
-    track_x : int
-        Track x at depth 0.
-
-    Returns
-    -------
-    Marker | None
-        A solid badge at a fresh position's nearest hop, else a hollow one
-        at the timetable hop; None without a pattern, a hop, or both of
-        the hop's rows.
-    """
-    pattern = inputs.patterns.get(departure.trip_id)
-    if pattern is None:
-        return None
-    found = vehicle_of(departure=departure, heard=heard)
-    fresh = found is not None and is_fresh(age=found[1])
-    if found is not None and fresh:
-        hop = hop_near(pattern=pattern, point=found[0].point)
-    else:
-        moment = timetable_moment(now=inputs.now)
-        hop = hop_at(pattern=pattern, seconds=service_seconds(
-            day=departure.service_day, moment=moment,
-        ))
-    age = None if found is None or fresh else found[1] // 60 * 60
-    return hop_marker(
-        pattern=pattern, hop=hop, rows=rows, track_x=track_x, age=age,
-        live=fresh,
+    return TripInputs(
+        departures=inputs.departures,
+        key=inputs.key,
+        patterns=inputs.patterns,
+        positions=inputs.positions,
+        now=inputs.now,
+        station_of={} if inputs.reach is None else inputs.reach.station_of,
     )
-
-
-def hop_marker(
-    *,
-    pattern: TripPattern,
-    hop: tuple[int, float] | None,
-    rows: Mapping[str, StripRow],
-    track_x: int,
-    age: float | None,
-    live: bool,
-) -> Marker | None:
-    """
-    Make a badge part way along a hop between two strip rows.
-
-    Parameters
-    ----------
-    pattern : TripPattern
-        The trip.
-    hop : tuple[int, float] | None
-        The stop last left and the share of the hop run.
-    rows : Mapping[str, StripRow]
-        Visible rows by station.
-    track_x : int
-        Track x at depth 0.
-    age : float | None
-        Seconds since a stale vehicle reported, or None.
-    live : bool
-        True for a fresh position.
-
-    Returns
-    -------
-    Marker | None
-        The badge on the later row's track, with a wedge down the strip
-        when that row is lower and up otherwise, if live; None when either
-        end of the hop is not a visible row.
-    """
-    if hop is None:
-        return None
-    index, fraction = hop
-    start, end = (
-        rows.get(stop.station) for stop in pattern.stops[index:index + 2]
-    )
-    if start is None or end is None:
-        return None
-    return Marker(
-        route=pattern.route,
-        x=track_x + INDENT * end.depth,
-        y=start.y + (end.y - start.y) * fraction,
-        bearing=(180.0 if end.y > start.y else 0.0) if live else None,
-        live=live,
-        pinned=True,
-        age=age,
-    )
-
-
-def pushed(*, markers: Sequence[Marker]) -> tuple[Marker, ...]:
-    """
-    Push overlapping badges in a column down, in y order.
-
-    Parameters
-    ----------
-    markers : Sequence[Marker]
-        Badges.
-
-    Returns
-    -------
-    tuple[Marker, ...]
-        Badges by x then y, each moved down to at least `BADGE_STEP`
-        below the one above it in its column.
-    """
-    placed: list[Marker] = []
-    for marker in sorted(markers, key=lambda each: (each.x, each.y)):
-        above = placed[-1] if placed else None
-        y = marker.y
-        if above is not None and above.x == marker.x:
-            y = max(y, above.y + BADGE_STEP)
-        placed.append(replace(marker, y=y))
-    return tuple(placed)
 
 
 def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
@@ -1179,22 +752,13 @@ def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
     tuple[Marker, ...]
         One badge per strip trip that can be placed, pushed apart.
     """
-    key = inputs.key
-    if key is None or not rows:
-        return ()
-    by_station = {row.station: row for row in rows}
-    heard = heard_trips(inputs=inputs)
-    departures = window_departures(
-        departures=[item.departure for item in inputs.departures],
-        key=key,
-        now=inputs.now,
+    return vehicle_markers(
+        trips=trips_of(inputs=inputs),
+        spots={
+            row.station: Spot(x=track_x + INDENT * row.depth, y=row.y)
+            for row in rows
+        },
     )
-    placed = (
-        trip_marker(departure=departure, inputs=inputs, rows=by_station,
-                    heard=heard, track_x=track_x)
-        for departure in departures
-    )
-    return pushed(markers=[each for each in placed if each is not None])
 
 
 def strip_panel(*, inputs: StripInputs) -> StripPanel:

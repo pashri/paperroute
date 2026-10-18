@@ -1,6 +1,7 @@
 """Interfaces the core and app depend on; adapters implement them."""
 
 from collections.abc import Collection
+from dataclasses import dataclass
 from datetime import date, datetime
 from typing import Protocol
 
@@ -12,6 +13,7 @@ from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
+from paperroute.core.saved import Saved
 from paperroute.core.tiles import StreetLabel, TileVariant
 
 
@@ -346,3 +348,49 @@ class Observer(Protocol):
 
     def ticked(self) -> None:
         """Record that the app loop ran once."""
+
+
+@dataclass(frozen=True)
+class Loaded:
+    """
+    What the state repository found.
+
+    Attributes
+    ----------
+    saved : Saved
+        The saved state, or the defaults.
+    stored : bool
+        False when there was no file or it fell back to the defaults.
+    """
+
+    saved: Saved
+    stored: bool
+
+
+class StateRepository(Protocol):
+    """Keeps the pins and view across restarts."""
+
+    def load(self) -> Loaded:
+        """
+        Read the saved state.
+
+        Returns
+        -------
+        Loaded
+            The saved state, or the defaults when there is none.
+        """
+
+    def save(self, *, saved: Saved) -> None:
+        """
+        Write the saved state.
+
+        Parameters
+        ----------
+        saved : Saved
+            The pins and view.
+
+        Raises
+        ------
+        OSError
+            When it can't be written.
+        """

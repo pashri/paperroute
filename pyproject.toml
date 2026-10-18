@@ -9,6 +9,7 @@ dependencies = [
     "aiohttp>=3.12",
     "gtfs-realtime-bindings>=1.0",
     "numpy>=2.3",
+    "pydantic>=2.12",
     "python-json-logger>=3.2",
     "skia-python>=138.0",
 ]

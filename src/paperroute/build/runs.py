@@ -30,11 +30,17 @@ type CallRow = tuple[
 
 @dataclass(frozen=True)
 class TripCalls:
-    """One trip's route, block and the stations it calls at."""
+    """
+    One trip's route, block and the stations it calls at.
+
+    Hidden trips (an empty-running headsign, or a route with no kind) are
+    kept so they still break block chains; check ``shown`` before offering
+    a trip.
+    """
 
     trip_id: str
     route_id: str
-    kind: RouteKind
+    kind: RouteKind | None
     route: str
     headsign: str
     block: str | None
@@ -43,6 +49,18 @@ class TripCalls:
     last_arr: int
     stations: tuple[str, ...]
     rail: bool
+
+    @property
+    def shown(self) -> bool:
+        """
+        Whether the trip carries passengers on a route with a kind.
+
+        Returns
+        -------
+        bool
+            False for a hidden headsign or a route with no kind.
+        """
+        return self.kind is not None and self.headsign not in HIDDEN_HEADSIGNS
 
 
 def collapsed(*, stations: Iterable[str]) -> tuple[str, ...]:
@@ -65,7 +83,7 @@ def collapsed(*, stations: Iterable[str]) -> tuple[str, ...]:
     )
 
 
-def trip_from_rows(*, rows: Sequence[CallRow]) -> TripCalls | None:
+def trip_from_rows(*, rows: Sequence[CallRow]) -> TripCalls:
     """
     Turn one trip's call rows into a TripCalls.
 
@@ -76,30 +94,33 @@ def trip_from_rows(*, rows: Sequence[CallRow]) -> TripCalls | None:
 
     Returns
     -------
-    TripCalls | None
-        The trip; None when its headsign is hidden or its route has no
-        kind.
+    TripCalls
+        The trip.
     """
-    trip_id, _, _, first_dep, route_id, route, route_type, agency, \
-        headsign, block, service = rows[0]
-    kind = kind_for(route_type=route_type, agency_id=agency, short_name=route)
-    if kind is None or headsign in HIDDEN_HEADSIGNS:
-        return None
+    (
+        trip_id, _, _, first_dep, route_id, route, route_type, agency,
+        headsign, block, service,
+    ) = rows[0]
+    _, _, last_arr, *_ = rows[-1]
     return TripCalls(
-        trip_id=trip_id, route_id=route_id, kind=kind, route=route,
-        headsign=headsign, block=block, service=service,
-        first_dep=first_dep, last_arr=rows[-1][2],
-        stations=collapsed(stations=(row[1] for row in rows)),
+        trip_id=trip_id, route_id=route_id,
+        kind=kind_for(
+            route_type=route_type, agency_id=agency, short_name=route,
+        ),
+        route=route, headsign=headsign, block=block, service=service,
+        first_dep=first_dep, last_arr=last_arr,
+        stations=collapsed(stations=(station for _, station, *_ in rows)),
         rail=route_type in RAIL_TYPES,
     )
 
 
 def trip_calls(*, conn: sqlite3.Connection) -> Iterator[TripCalls]:
     """
-    Read every shown trip with the parent stations it calls at.
+    Read every trip with the parent stations it calls at.
 
     Platforms are merged into their parent station, and a station called
-    at twice in a row counts once.
+    at twice in a row counts once. Hidden trips are included (their
+    ``shown`` is False).
 
     Parameters
     ----------
@@ -109,12 +130,10 @@ def trip_calls(*, conn: sqlite3.Connection) -> Iterator[TripCalls]:
     Yields
     ------
     TripCalls
-        One per trip, skipping hidden headsigns and routes with no kind.
+        One per trip.
     """
     for _, rows in groupby(conn.execute(TRIP_CALLS), key=itemgetter(0)):
-        trip = trip_from_rows(rows=list(rows))
-        if trip is not None:
-            yield trip
+        yield trip_from_rows(rows=list(rows))
 
 
 def next_on_block(
@@ -128,15 +147,16 @@ def next_on_block(
     trip : TripCalls
         A trip.
     later : Sequence[TripCalls]
-        Candidate trips; those on another block or service are ignored.
+        Candidate trips, hidden ones included; those on another block or
+        service are ignored.
 
     Returns
     -------
     TripCalls | None
         The block's next trip on the same service (the earliest leaving at
-        or after trip arrives) when it starts at trip's last station; None
-        otherwise, so a later trip from that station is never chained past
-        one that starts elsewhere.
+        or after trip arrives) when it is shown and starts at trip's last
+        station; None otherwise, so a trip is never chained past one that
+        is hidden or starts elsewhere.
     """
     following = [
         other
@@ -148,7 +168,8 @@ def next_on_block(
     if not following:
         return None
     upcoming = min(following, key=lambda other: other.first_dep)
-    return upcoming if upcoming.stations[0] == trip.stations[-1] else None
+    joins = upcoming.shown and upcoming.stations[0] == trip.stations[-1]
+    return upcoming if joins else None
 
 
 def next_trips(
@@ -160,7 +181,7 @@ def next_trips(
     Parameters
     ----------
     trips : Sequence[TripCalls]
-        Trips.
+        Trips, hidden ones included.
 
     Returns
     -------
@@ -179,21 +200,49 @@ def next_trips(
     return {trip_id: after for trip_id, after in found if after is not None}
 
 
+def runs_on(
+    *, current: TripCalls, after: TripCalls | None, joined: set[str],
+) -> bool:
+    """
+    Decide whether a run carries on from one trip into the next.
+
+    Rail trips run on into any route; others only into the same route
+    short name. A trip already in the run is never joined again.
+
+    Parameters
+    ----------
+    current : TripCalls
+        Last trip in the run so far.
+    after : TripCalls | None
+        Its next trip on the block, if any.
+    joined : set[str]
+        Trip IDs already in the run.
+
+    Returns
+    -------
+    bool
+        True when after joins the run.
+    """
+    if after is None or after.trip_id in joined:
+        return False
+    return current.rail or after.route == current.route
+
+
 def run_of(
     *, trip: TripCalls, nexts: dict[str, TripCalls],
 ) -> tuple[str, ...]:
     """
-    Follow one trip along its block until the run repeats a hop.
+    Follow one trip along its block, cut before the first repeated hop.
 
-    Rail trips run on into any route; others only into the same route
-    short name.
+    This owns the repeated-hop cut: the run stops growing as soon as a hop
+    repeats, and is cut with until_repeated_hop.
 
     Parameters
     ----------
     trip : TripCalls
         First trip of the run.
     nexts : dict[str, TripCalls]
-        Trip ID to its next trip on the block.
+        Trip ID to its next trip on the block, from next_trips.
 
     Returns
     -------
@@ -203,60 +252,65 @@ def run_of(
     run = list(trip.stations)
     joined = {trip.trip_id}
     current = trip
-    while (after := nexts.get(current.trip_id)) is not None \
-            and after.trip_id not in joined \
-            and (current.rail or after.route == current.route):
-        run.extend(after.stations[1:])
+    while runs_on(
+        current=current, after=nexts.get(current.trip_id), joined=joined,
+    ):
+        current = nexts[current.trip_id]
+        run.extend(current.stations[1:])
         if len(cut := until_repeated_hop(stations=run)) < len(run):
             return cut
-        joined.add(after.trip_id)
-        current = after
-    return tuple(run)
+        joined.add(current.trip_id)
+    return until_repeated_hop(stations=run)
 
 
-def chained(*, trips: Sequence[TripCalls]) -> dict[str, tuple[str, ...]]:
+def chained(
+    *, trips: Sequence[TripCalls], nexts: dict[str, TripCalls],
+) -> dict[str, tuple[str, ...]]:
     """
-    Find the run of stations each trip's vehicle makes from its start.
+    Find the run of stations each shown trip's vehicle makes from its start.
 
     Parameters
     ----------
     trips : Sequence[TripCalls]
-        Trips.
+        Trips; hidden ones get no run.
+    nexts : dict[str, TripCalls]
+        Trip ID to its next trip on the block, from next_trips.
 
     Returns
     -------
     dict[str, tuple[str, ...]]
-        Trip ID to its run, cut before the first repeated hop.
+        Trip ID to its run from run_of.
     """
-    nexts = next_trips(trips=trips)
     return {
-        trip.trip_id: until_repeated_hop(
-            stations=run_of(trip=trip, nexts=nexts),
-        )
+        trip.trip_id: run_of(trip=trip, nexts=nexts)
         for trip in trips
+        if trip.shown
     }
 
 
-def carry_ons(*, trips: Sequence[TripCalls]) -> dict[str, tuple[str, str]]:
+def carry_ons(
+    *, trips: Sequence[TripCalls], nexts: dict[str, TripCalls],
+) -> dict[str, tuple[str, str]]:
     """
-    Find block trips that carry on as a route of another short name.
+    Find shown block trips that carry on as a route of another short name.
 
     Parameters
     ----------
     trips : Sequence[TripCalls]
         Trips.
+    nexts : dict[str, TripCalls]
+        Trip ID to its next trip on the block, from next_trips.
 
     Returns
     -------
     dict[str, tuple[str, str]]
         Trip ID to the next trip's short name and headsign.
     """
-    nexts = next_trips(trips=trips)
-    by_id = {trip.trip_id: trip for trip in trips}
     return {
-        trip_id: (after.route, after.headsign)
-        for trip_id, after in nexts.items()
-        if after.route != by_id[trip_id].route
+        trip.trip_id: (after.route, after.headsign)
+        for trip in trips
+        if trip.shown and (after := nexts.get(trip.trip_id)) is not None
+        and after.route != trip.route
     }
 
 

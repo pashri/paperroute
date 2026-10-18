@@ -186,7 +186,7 @@ def block_trips() -> list[tuple[dict[str, str], list[dict[str, str]]]]:
                      block='b4'),
         network_trip(trip='v2', route='811', calls='B2 B3', start='10:05',
                      block='b4', headsign='Parramatta Stn'),
-        network_trip(trip='empty1', route='T1', calls='C J R1',
+        network_trip(trip='empty1', route='T1', calls='R1 L2',
                      start='11:00', headsign='Empty Train'),
     ]
 

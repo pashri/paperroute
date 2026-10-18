@@ -18,7 +18,7 @@ class Level(StrEnum):
     REPLACEMENTS = 'replacements'
 
 
-type ChooserPath = tuple[tuple[Level, str], ...]
+ChooserPath = tuple[tuple[Level, str], ...]
 
 KIND_ORDER: Final[tuple[RouteKind, ...]] = (
     RouteKind.BUS,

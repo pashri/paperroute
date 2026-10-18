@@ -403,6 +403,22 @@ def test_train_line_ends_with_replacement_buses(copy: Path) -> None:
     assert two.items[-1].detail == '1 route'
 
 
+def test_line_without_towards_still_offers_replacements(copy: Path) -> None:
+    """A line with no towards rows but replacement routes offers them."""
+    add_routes(path=copy, rows=[
+        ('replacement:1T1:a', 'replacement', '', 0, '1T1', 1, 'A', '', 'T1'),
+    ])
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute("DELETE FROM chooser_towards WHERE route_key = 'train:T1'")
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        column = repo.choices(path=T1)
+    assert column == Column(level=Level.TOWARDS, items=(
+        Choice(key='replacements', label='Replacement buses',
+               detail='1 route', level=Level.REPLACEMENTS),
+    ))
+
+
 def test_replacements_list_routes_of_that_line(copy: Path) -> None:
     """Replacement buses list that line's routes, each with towards rows."""
     add_routes(path=copy, rows=[
@@ -479,6 +495,17 @@ def test_reach_input_for_bus_filters_by_route(network_db: Path) -> None:
     assert tails == (RunTail(before=(), after=('B3',), trips=3),)
 
 
+def test_reach_input_for_bus_with_no_routes_takes_every_bus_route(
+    network_db: Path,
+) -> None:
+    """A Bus strip with no routes chosen takes every bus route's runs."""
+    tails = tails_from(path=network_db, station='B2', kind=RouteKind.BUS)
+    assert set(tails) == {
+        RunTail(before=(), after=('B3',), trips=3),
+        RunTail(before=('B1',), after=(), trips=3),
+    }
+
+
 def test_reach_input_with_no_kind_takes_every_run(network_db: Path) -> None:
     """A strip with no kind takes buses and trains alike."""
     tails = tails_from(path=network_db, station='B2', kind=None)
@@ -531,6 +558,14 @@ def test_reach_input_merges_identical_tails(copy: Path) -> None:
     set_runs(path=copy, runs=[('E2 E1 C J W1', 2), ('E1 C J W1', 5)])
     assert tails_from(path=copy, station='C') == (
         RunTail(before=('E1',), after=('J', 'W1'), trips=7),
+    )
+
+
+def test_reach_input_merge_tie_keeps_the_first_run(copy: Path) -> None:
+    """Merging runs of equal trips keeps the first run's before."""
+    set_runs(path=copy, runs=[('E2 E1 C J W1', 3), ('E1 C J W1', 3)])
+    assert tails_from(path=copy, station='C') == (
+        RunTail(before=('E2', 'E1'), after=('J', 'W1'), trips=6),
     )
 
 

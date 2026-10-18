@@ -471,7 +471,7 @@ class SqliteNetworkRepository:
         ]
         buses = (
             len(self.fetch(sql=REPLACEMENTS_OF, params=(route_key,)))
-            if line and items
+            if line
             else 0
         )
         if buses:
@@ -573,7 +573,8 @@ class SqliteNetworkRepository:
         Read the tails of the runs through a station that feed a strip.
 
         Train, Metro and Light rail take every run of their kind; other
-        kinds only their routes' runs; no kind takes every run.
+        kinds only their routes' runs, or every run of the kind when no
+        routes are chosen; no kind takes every run.
 
         Parameters
         ----------
@@ -590,7 +591,9 @@ class SqliteNetworkRepository:
         rows = self.fetch(sql=RUNS_THROUGH, params={
             'station': station,
             'kind': None if key.kind is None else str(key.kind),
-            'any_route': key.kind is None or key.kind in LINE_KINDS,
+            'any_route': (
+                key.kind is None or key.kind in LINE_KINDS or not key.routes
+            ),
             'routes': json.dumps(list(key.routes)),
         })
         return merged_tails(rows=rows)

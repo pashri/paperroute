@@ -7,10 +7,14 @@ import pytest
 from paperroute.core.model import (
     SYDNEY,
     Mode,
+    RouteKind,
+    kind_for,
     mode_for,
     service_epoch,
     service_seconds,
     service_time,
+    until_repeated_hop,
+    until_revisit,
 )
 
 
@@ -65,3 +69,49 @@ def test_service_time_before_daylight_saving_start() -> None:
     """A GTFS 01:00:00 on the change day is before the clocks jump."""
     one = service_time(day=date(2026, 10, 4), seconds=3600)
     assert one.astimezone(UTC) == datetime(2026, 10, 3, 14, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(('route_type', 'agency_id', 'short_name', 'kind'), [
+    (2, 'SydneyTrains', 'T1', RouteKind.TRAIN),
+    (2, 'SydneyTrains', 'CCN', RouteKind.TRAIN),
+    (2, 'NSWTrains', 'NRC', RouteKind.REGIONAL),
+    (2, 'SydneyTrains', '', None),
+    (700, '2436', '', None),
+    (106, None, '31', RouteKind.REGIONAL),
+    (204, None, '700', RouteKind.REGIONAL),
+    (205, None, '701', RouteKind.REGIONAL),
+    (700, '711', '480', RouteKind.REGIONAL),
+    (2, '711', 'T1', RouteKind.REGIONAL),
+    (401, 'SMNW', 'M1', RouteKind.METRO),
+    (900, None, 'L1', RouteKind.LIGHT_RAIL),
+    (4, None, 'F1', RouteKind.FERRY),
+    (700, '2436', '606', RouteKind.BUS),
+    (712, '2436', '2606', RouteKind.SCHOOL),
+    (714, '2436', 'RTTA', RouteKind.REPLACEMENT),
+    (715, '2436', 'OD1', None),
+])
+def test_kind_for_sorts_every_route_type(
+    route_type: int, agency_id: str | None, short_name: str,
+    kind: RouteKind | None,
+) -> None:
+    """Route types, agencies and line names sort into chooser kinds."""
+    assert kind_for(
+        route_type=route_type, agency_id=agency_id, short_name=short_name,
+    ) == kind
+
+
+def test_until_revisit_cuts_before_a_repeat() -> None:
+    """The run stops before the first station seen twice."""
+    assert until_revisit(stations=['A', 'B', 'C', 'B', 'D']) == (
+        'A', 'B', 'C',
+    )
+    assert until_revisit(stations=['A', 'B']) == ('A', 'B')
+
+
+def test_until_repeated_hop_keeps_a_loop() -> None:
+    """A loop through a station twice stays whole until a hop repeats."""
+    loop = ('C', 'L1', 'L2', 'J', 'C', 'E1')
+    assert until_repeated_hop(stations=loop) == loop
+    assert until_repeated_hop(stations=['A', 'B', 'C', 'A', 'B', 'D']) == (
+        'A', 'B', 'C', 'A',
+    )

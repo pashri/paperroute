@@ -1,8 +1,11 @@
 """Places, services and departures."""
 
+import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
+from itertools import pairwise
 from typing import Final
 from zoneinfo import ZoneInfo
 
@@ -60,6 +63,113 @@ def mode_for(*, route_type: int, agency_id: str | None) -> Mode:
     if 700 <= route_type < 800:
         return Mode.BUS
     return Mode.COACH if 200 <= route_type < 300 else Mode.OTHER
+
+
+class RouteKind(StrEnum):
+    """Kinds of route offered when choosing lines."""
+
+    BUS = 'bus'
+    TRAIN = 'train'
+    METRO = 'metro'
+    LIGHT_RAIL = 'light_rail'
+    FERRY = 'ferry'
+    SCHOOL = 'school'
+    REGIONAL = 'regional'
+    REPLACEMENT = 'replacement'
+
+
+INTERCITY: Final[tuple[str, ...]] = ('BMT', 'CCN', 'SCO', 'SHL', 'HUN')
+SYDNEY_LINES: Final[re.Pattern[str]] = re.compile(r'^T[1-9]$')
+EXACT_KINDS: Final[dict[int, RouteKind]] = {
+    106: RouteKind.REGIONAL,
+    204: RouteKind.REGIONAL,
+    205: RouteKind.REGIONAL,
+    401: RouteKind.METRO,
+    900: RouteKind.LIGHT_RAIL,
+    4: RouteKind.FERRY,
+    700: RouteKind.BUS,
+    712: RouteKind.SCHOOL,
+    714: RouteKind.REPLACEMENT,
+}
+
+
+def kind_for(
+    *, route_type: int, agency_id: str | None, short_name: str,
+) -> RouteKind | None:
+    """
+    Sort a route into a kind from its type, agency and short name.
+
+    Parameters
+    ----------
+    route_type : int
+        GTFS route_type.
+    agency_id : str | None
+        GTFS agency_id, when the feed gives one.
+    short_name : str
+        Route short name.
+
+    Returns
+    -------
+    RouteKind | None
+        Kind; None for a route with no short name, or an on-demand or
+        unknown type.
+    """
+    if not short_name:
+        return None
+    if agency_id in REGIONAL_AGENCIES:
+        return RouteKind.REGIONAL
+    if route_type == 2:
+        suburban = SYDNEY_LINES.match(short_name) or short_name in INTERCITY
+        return RouteKind.TRAIN if suburban else RouteKind.REGIONAL
+    return EXACT_KINDS.get(route_type)
+
+
+def until_repeated_hop(*, stations: Sequence[str]) -> tuple[str, ...]:
+    """
+    Cut a run before the first hop it has already made.
+
+    A hop is a consecutive pair of stations, in order. A loop that passes a
+    station twice is kept whole until it travels between the same two
+    stations in the same direction again.
+
+    Parameters
+    ----------
+    stations : Sequence[str]
+        Station IDs in order.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Stations up to and including the start of the repeated hop.
+    """
+    made: set[tuple[str, str]] = set()
+    for index, hop in enumerate(pairwise(stations)):
+        if hop in made:
+            return tuple(stations[:index + 1])
+        made.add(hop)
+    return tuple(stations)
+
+
+def until_revisit(*, stations: Sequence[str]) -> tuple[str, ...]:
+    """
+    Cut a run before the first station it calls at twice.
+
+    Parameters
+    ----------
+    stations : Sequence[str]
+        Station IDs in order.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Stations before the first repeat.
+    """
+    seen: set[str] = set()
+    for index, station in enumerate(stations):
+        if station in seen:
+            return tuple(stations[:index])
+        seen.add(station)
+    return tuple(stations)
 
 
 @dataclass(frozen=True)

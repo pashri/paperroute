@@ -7,6 +7,7 @@ from paperroute.core.stop_view import PinTag, Row
 from paperroute.render.canvas import INK, PAPER, WIDTH, Box, Canvas, Face
 
 HEADER: Final[int] = 40
+ARROW_WIDTH: Final[float] = 22.0
 BANNER: Final[int] = 34
 FASTER: Final[str] = 'FASTER'
 TAG_GAP: Final[int] = 8
@@ -36,7 +37,7 @@ def arrow(canvas: Canvas, *, x: float, y: float, grey: int) -> float:
     canvas.line(points=[(x, y), (x + 12, y)], width=2, grey=grey)
     canvas.polygon(
         points=[(x + 16, y), (x + 10, y - 5), (x + 10, y + 5)], grey=grey)
-    return 22.0
+    return ARROW_WIDTH
 
 
 def header_tabs(canvas: Canvas, *, clock: str, active: str) -> float:

@@ -16,7 +16,6 @@ from paperroute.core.tiles import ZOOMS, to_pixels
 MAP_WIDTH: Final[int] = 520
 MAP_HEIGHT: Final[int] = 440
 DEFAULT_ZOOM: Final[int] = 2
-SIDEBAR_ROWS: Final[int] = 5
 POSITION_STALE_AFTER: Final[timedelta] = timedelta(minutes=2)
 TIMETABLE_STEP: Final[timedelta] = timedelta(seconds=30)
 NO_LOCATION: Final[str] = 'No location for this stop'
@@ -730,6 +729,30 @@ def markers_for(*, inputs: MapInputs, centre: Point) -> tuple[Marker, ...]:
     )
 
 
+def map_departures(
+    *, stop_view: StopView, departures: Sequence[Departure]
+) -> tuple[Departure, ...]:
+    """
+    Choose the departures the Map draws and asks about.
+
+    Parameters
+    ----------
+    stop_view : StopView
+        The unscrolled Stop view.
+    departures : Sequence[Departure]
+        Every departure loaded.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        All of them with a destination; with none, only those behind the
+        sidebar's rows.
+    """
+    if stop_view.destination is None:
+        return stop_view.head_departures
+    return tuple(departures)
+
+
 def build_map_view(*, inputs: MapInputs) -> MapView:
     """
     Build the Map view.
@@ -745,7 +768,6 @@ def build_map_view(*, inputs: MapInputs) -> MapView:
         The view.
     """
     stop = inputs.stop_view
-    hero = (stop.hero,) if stop.hero else ()
     centre = inputs.centre
     return MapView(
         origin=stop.origin,
@@ -765,7 +787,7 @@ def build_map_view(*, inputs: MapInputs) -> MapView:
             if centre is None
             else markers_for(inputs=inputs, centre=centre)
         ),
-        sidebar=(hero + stop.rows)[:SIDEBAR_ROWS],
+        sidebar=stop.head_rows,
         banner=stop.banner,
         empty=NO_LOCATION if centre is None else stop.empty,
         tag=stop.tag,

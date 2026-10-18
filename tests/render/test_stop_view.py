@@ -2,6 +2,8 @@
 
 from dataclasses import replace
 
+import numpy as np
+
 from paperroute.core.model import CarryOn, Mode
 from paperroute.core.stop_view import Pill, Row, StopView
 from paperroute.render.canvas import INK, PAPER, Canvas, Face
@@ -168,8 +170,8 @@ def test_no_destination_frame_draws_rows_under_the_header() -> None:
     assert (frame[HEADER + 100:, 90:140] == PAPER).all()
 
 
-def test_no_destination_rows_draw_pills_and_hide_dead_countdowns() -> None:
-    """Board rows carry CANCELLED and FASTER; a timetable row has no count."""
+def test_no_destination_rows_draw_pills_and_every_countdown() -> None:
+    """Board rows carry CANCELLED and FASTER; timetable rows count too."""
     rows = (
         row(pill=Pill.CANCELLED),
         row(pill=Pill.FASTER),
@@ -181,4 +183,19 @@ def test_no_destination_rows_draw_pills_and_hide_dead_countdowns() -> None:
     assert frame[top + 12:top + 36, 600:780].mean() < 128
     assert (frame[top + 50 + 18:top + 50 + 31, 602:672] == INK).any()
     assert (frame[top + 50 + 5:top + 50 + 38, 720:790] == INK).any()
-    assert (frame[top + 100 + 5:top + 100 + 38, 600:790] == PAPER).all()
+    assert (frame[top + 100 + 5:top + 100 + 38, 720:790] == INK).any()
+
+
+def test_a_real_tag_is_not_cut_under_a_short_headsign() -> None:
+    """A short headsign leaves the tag room for its whole text."""
+    then = CarryOn(route='811', headsign='Parramatta Stn')
+    face = Face(weight=700, px=12)
+    canvas = Canvas()
+    tag = canvas.length(text='811 Parramatta Stn', face=face)
+    head = canvas.length(text='Parramatta', face=Face(weight=400, px=13))
+    frame = draw_stop_view(
+        view=replace(BASE, hero=None, rows=(row(then=then),)))
+    top = HEADER + 30
+    ink = np.flatnonzero(
+        (frame[top + 34:top + 46, 456:700] == INK).any(axis=0))
+    assert ink.max() >= head + 8 + 22 + 4 + tag - 3

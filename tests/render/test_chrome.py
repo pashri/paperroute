@@ -187,4 +187,5 @@ def test_titles_stop_before_the_tag() -> None:
     assert int(grey[:40, int(box_left) - 8:int(box_left)].max()) == INK
     ink_columns = np.flatnonzero(grey[:40, :int(box_left)].max(axis=0))
     limit = box_left - 8
-    assert limit - 18 - 24 <= ink_columns.max() <= limit - 18
+    slack = text_width(text='W…', face=Face(weight=700, px=18))
+    assert limit - 18 - slack <= ink_columns.max() <= limit - 18

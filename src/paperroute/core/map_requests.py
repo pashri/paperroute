@@ -1,14 +1,14 @@
 """The map data and positions the Map view asks for."""
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from paperroute.core.feeds import FeedKind, feed_for, position_feeds
-from paperroute.core.live import LiveDeparture, resolve
+from paperroute.core.feeds import FeedKind, position_feeds
 from paperroute.core.map_state import area_box
 from paperroute.core.map_view import (
-    SIDEBAR_ROWS,
     MapInputs,
+    map_departures,
     needed_patterns,
     pin_trips,
 )
@@ -23,7 +23,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import SYDNEY, Departure
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import POLL_EVERY, RETRY_AFTER, State
-from paperroute.core.stop_view import StopView, in_view
+from paperroute.core.stop_view import StopView
 from paperroute.core.tiles import ZOOMS
 
 
@@ -94,48 +94,6 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
     return position_feeds(modes=modes)
 
 
-def resolved_departures(*, state: State) -> tuple[LiveDeparture, ...]:
-    """
-    Resolve the state's departures against its live snapshots.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    tuple[LiveDeparture, ...]
-        One per departure, in timetable order.
-    """
-    return tuple(
-        resolve(
-            departure=dep,
-            snapshot=state.snapshots.get(feed_for(mode=dep.mode) or ''),
-            now=state.now,
-        )
-        for dep in state.departures
-    )
-
-
-def sidebar_departures(*, state: State) -> tuple[Departure, ...]:
-    """
-    List the departures the Map's sidebar rows show.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    tuple[Departure, ...]
-        The first `SIDEBAR_ROWS` of the unscrolled board, in live order.
-    """
-    board = in_view(departures=resolved_departures(state=state), now=state.now)
-    return tuple(item.departure for item in board[:SIDEBAR_ROWS])
-
-
 def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     """
     Gather what the Map view is built from.
@@ -154,14 +112,12 @@ def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
         destination, the departures are only those in the sidebar.
     """
     feeds = map_feeds(state=state)
-    departures = (
-        state.departures
-        if state.pin.destination is not None
-        else sidebar_departures(state=state)
-    )
     return MapInputs(
         stop_view=stop_view,
-        departures=departures,
+        departures=map_departures(
+            stop_view=stop_view,
+            departures=state.departures,
+        ),
         centre=state.map.centre,
         zoom=state.map.zoom,
         positions={
@@ -203,7 +159,9 @@ def request_modes(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     return replace(state, map=pending), (load,)
 
 
-def request_shapes(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+def request_shapes(
+    *, state: State, departures: Sequence[Departure]
+) -> tuple[State, tuple[Effect, ...]]:
     """
     Ask for the departures' shapes not yet asked for.
 
@@ -211,6 +169,8 @@ def request_shapes(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     ----------
     state : State
         State.
+    departures : Sequence[Departure]
+        The departures the Map shows.
 
     Returns
     -------
@@ -219,7 +179,7 @@ def request_shapes(*, state: State) -> tuple[State, tuple[Effect, ...]]:
         and no failure is backing off.
     """
     asked = state.map.requested_shapes
-    wanted = {dep.shape_id for dep in state.departures if dep.shape_id}
+    wanted = {dep.shape_id for dep in departures if dep.shape_id}
     new = frozenset(wanted) - asked
     if not new or not may_load(state=state, kind=MapData.SHAPES):
         return state, ()
@@ -282,7 +242,9 @@ def request_patterns(
     return replace(state, map=map_state), (load,)
 
 
-def pruned(*, state: State, wanted: frozenset[str]) -> State:
+def pruned(
+    *, state: State, wanted: frozenset[str], departures: Sequence[Departure]
+) -> State:
     """
     Drop the patterns and shapes the Map no longer needs.
 
@@ -292,6 +254,8 @@ def pruned(*, state: State, wanted: frozenset[str]) -> State:
         State.
     wanted : frozenset[str]
         Trip IDs whose patterns the Map needs.
+    departures : Sequence[Departure]
+        The departures the Map shows.
 
     Returns
     -------
@@ -309,7 +273,7 @@ def pruned(*, state: State, wanted: frozenset[str]) -> State:
         pattern.shape_id
         for pattern in patterns.values()
         if pattern is not None and pattern.shape_id
-    } | {dep.shape_id for dep in state.departures if dep.shape_id}
+    } | {dep.shape_id for dep in departures if dep.shape_id}
     map_state = replace(
         state.map,
         patterns=patterns,
@@ -323,7 +287,9 @@ def pruned(*, state: State, wanted: frozenset[str]) -> State:
     return replace(state, map=map_state)
 
 
-def awaiting_fetch(*, state: State) -> frozenset[str]:
+def awaiting_fetch(
+    *, state: State, departures: Sequence[Departure]
+) -> frozenset[str]:
     """
     List the trips seen in positions feeds with a newer fetch in flight.
 
@@ -331,6 +297,8 @@ def awaiting_fetch(*, state: State) -> frozenset[str]:
     ----------
     state : State
         State.
+    departures : Sequence[Departure]
+        The departures the Map shows.
 
     Returns
     -------
@@ -344,7 +312,7 @@ def awaiting_fetch(*, state: State) -> frozenset[str]:
         for feed, snapshot in state.map.positions.items()
         if fetched_at.get(feed, snapshot.fetched_at) > snapshot.fetched_at
         for vehicle in snapshot.vehicles
-    ) - pin_trips(departures=state.departures)
+    ) - pin_trips(departures=departures)
 
 
 def map_effects(
@@ -372,15 +340,15 @@ def map_effects(
     """
     if state.view is not LiveView.MAP:
         return state, ()
-    wanted = needed_patterns(
-        inputs=map_inputs(state=state, stop_view=stop_view),
-    )
-    state = pruned(state=state, wanted=wanted)
+    inputs = map_inputs(state=state, stop_view=stop_view)
+    shown = inputs.departures
+    wanted = needed_patterns(inputs=inputs)
+    state = pruned(state=state, wanted=wanted, departures=shown)
     state, modes = request_modes(state=state)
-    state, shapes = request_shapes(state=state)
+    state, shapes = request_shapes(state=state, departures=shown)
     state, fetches = request_positions(state=state)
     state, loads = request_patterns(
         state=state,
-        wanted=wanted - awaiting_fetch(state=state),
+        wanted=wanted - awaiting_fetch(state=state, departures=shown),
     )
     return state, (*modes, *shapes, *fetches, *loads)

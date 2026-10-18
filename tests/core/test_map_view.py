@@ -10,7 +10,6 @@ from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
     NO_LOCATION,
-    SIDEBAR_ROWS,
     MapInputs,
     Marker,
     build_map_view,
@@ -26,7 +25,7 @@ from paperroute.core.map_view import (
 from paperroute.core.model import Departure, Mode
 from paperroute.core.patterns import timetable_point
 from paperroute.core.positions import VehiclePosition
-from paperroute.core.stop_view import Row, StopView
+from paperroute.core.stop_view import SIDEBAR_ROWS, Row, StopView
 from paperroute.core.tiles import ZOOMS
 from tests.core.factories import START, departure, pattern, snapshot, vehicle
 
@@ -91,6 +90,7 @@ def stop_view(*, hero: Row | None, rows: tuple[Row, ...]) -> StopView:
         banner='Live times unavailable',
         empty=None,
         scroll=0,
+        head_rows=(((hero,) if hero else ()) + rows)[:SIDEBAR_ROWS],
     )
 
 

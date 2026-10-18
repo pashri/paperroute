@@ -9,6 +9,7 @@ from paperroute.core.model import Mode
 from paperroute.core.stop_view import DOT, Pill, Row, StopView
 from paperroute.render.canvas import HEIGHT, INK, WIDTH, Canvas, Face
 from paperroute.render.chrome import (
+    ARROW_WIDTH,
     BANNER,
     FASTER,
     HEADER,
@@ -28,14 +29,17 @@ VEHICLE: Final[dict[Mode, str]] = {
     Mode.BUS: 'bus', Mode.TRAIN: 'train', Mode.METRO: 'metro',
     Mode.FERRY: 'ferry', Mode.LIGHT_RAIL: 'light rail', Mode.COACH: 'coach',
     Mode.REGIONAL: 'service', Mode.OTHER: 'service'}
+LIST_LEFT: Final[int] = 456
 LIST_WIDTH: Final[int] = 140
-TAGGED_WIDTH: Final[int] = 240
+FASTER_LEFT: Final[int] = 712
+PILL_LEFT: Final[int] = 600
+TAGGED_WIDTH: Final[int] = FASTER_LEFT - LIST_LEFT - 16
 BOARD_BADGE_X: Final[int] = 96
-BOARD_RIGHT: Final[int] = 580
+BOARD_RIGHT: Final[int] = PILL_LEFT - 20
 TAG_FACE: Final[Face] = Face(weight=700, px=12)
 TAG_GAP: Final[int] = 8
 ARROW_GAP: Final[int] = 4
-ARROW_WIDTH: Final[int] = 22
+TAG_FLOOR: Final[int] = 40
 BAY: Final[dict[Mode, str]] = {Mode.BUS: 'stand', Mode.COACH: 'stand',
                                Mode.FERRY: 'wharf'}
 
@@ -143,8 +147,9 @@ def headline(
     """
     Draw a headsign and, after it, the tag for where the vehicle runs on.
 
-    The headsign and tag are fitted together into `width`; the tag gets at
-    most half of it.
+    The headsign and tag are fitted together into `width`. The headsign
+    keeps what it needs; the tag gets the rest, but never less than a
+    floor.
 
     Parameters
     ----------
@@ -168,8 +173,11 @@ def headline(
         return
     lead = ARROW_WIDTH + ARROW_GAP
     tag = f'{then.route} {then.headsign}'
+    room = width - TAG_GAP - canvas.length(text=text, face=face)
     tag_width = min(
-        canvas.length(text=tag, face=TAG_FACE) + lead, width / 2)
+        canvas.length(text=tag, face=TAG_FACE) + lead,
+        max(room, lead + TAG_FLOOR),
+    )
     fitted = canvas.fit(
         text=text, face=face, width=width - tag_width - TAG_GAP)
     x, baseline = at
@@ -196,11 +204,11 @@ def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
     y : int
         Row top.
     """
-    badge(canvas, x=456, y=y + 14, route=row.route, px=14)
+    badge(canvas, x=LIST_LEFT, y=y + 14, route=row.route, px=14)
     headline(
         canvas,
         row=row,
-        at=(456, y + 42),
+        at=(LIST_LEFT, y + 42),
         text=row.destination,
         face=Face(weight=400, px=13),
         width=LIST_WIDTH if row.then is None else TAGGED_WIDTH,
@@ -208,7 +216,7 @@ def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
     if row.pill is Pill.CANCELLED:
         pill(
             canvas,
-            box=(600, y + 10, 786, y + 38),
+            box=(PILL_LEFT, y + 10, 786, y + 38),
             text=cancelled(row=row),
             px=15,
         )
@@ -220,7 +228,12 @@ def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
             at=(786, y + 24), text=row.arrives_at,
             face=Face(weight=800, px=20), grey=INK, anchor='rs')
     if row.pill is Pill.FASTER:
-        pill(canvas, box=(712, y + 30, 786, y + 45), text=FASTER, px=11)
+        pill(
+            canvas,
+            box=(FASTER_LEFT, y + 30, 786, y + 45),
+            text=FASTER,
+            px=11,
+        )
     canvas.rect(box=(452, y + 49, 786, y + 50), grey=INK)
 
 
@@ -253,16 +266,21 @@ def board_row(canvas: Canvas, *, row: Row, y: int) -> None:
     if row.pill is Pill.CANCELLED:
         pill(
             canvas,
-            box=(600, y + 10, 786, y + 38),
+            box=(PILL_LEFT, y + 10, 786, y + 38),
             text=cancelled(row=row),
             px=15,
         )
-    elif row.live:
+    else:
         canvas.text(
             at=(786, y + 33), text=row.countdown,
             face=Face(weight=800, px=28), grey=INK, anchor='rs')
     if row.pill is Pill.FASTER:
-        pill(canvas, box=(600, y + 17, 674, y + 32), text=FASTER, px=11)
+        pill(
+            canvas,
+            box=(PILL_LEFT, y + 17, PILL_LEFT + 74, y + 32),
+            text=FASTER,
+            px=11,
+        )
     canvas.rect(box=(0, y + 49, WIDTH, y + 50), grey=INK)
 
 

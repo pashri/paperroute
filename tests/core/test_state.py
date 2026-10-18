@@ -11,7 +11,7 @@ from hypothesis import strategies as st
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import Point, make_shape
 from paperroute.core.map_state import area_box
-from paperroute.core.map_view import DEFAULT_ZOOM, SIDEBAR_ROWS, MapView
+from paperroute.core.map_view import DEFAULT_ZOOM, MapView
 from paperroute.core.messages import (
     DeparturesFailed,
     DeparturesLoaded,
@@ -50,7 +50,12 @@ from paperroute.core.state_model import (
     RETRY_AFTER,
     State,
 )
-from paperroute.core.stop_view import HORIZON, VISIBLE_ROWS, StopView
+from paperroute.core.stop_view import (
+    HORIZON,
+    SIDEBAR_ROWS,
+    VISIBLE_ROWS,
+    StopView,
+)
 from paperroute.core.tiles import CITY, ZOOMS
 from tests.core.factories import (
     START,
@@ -1250,3 +1255,52 @@ def test_no_destination_map_caps_patterns() -> None:
     loads = effects_of(effects=effects, kind=LoadPatterns)
     assert len(loads) == 1
     assert 0 < len(loads[0].trip_ids) <= SIDEBAR_ROWS
+
+
+def no_destination_map(*, count: int) -> State:
+    """
+    Show the Map for a place with no destination and shaped departures.
+
+    Parameters
+    ----------
+    count : int
+        Departures, each with its own shape.
+
+    Returns
+    -------
+    State
+        The state before the Map's first request.
+    """
+    pin = replace(
+        PIN,
+        origin=replace(PIN.origin, point=CENTRE),
+        destination=None,
+    )
+    state = initial_state(pin=pin, now=START)
+    return loaded(state=state, count=count, shaped=True)
+
+
+def test_no_destination_map_asks_for_and_keeps_only_sidebar_shapes() -> None:
+    """500 departures ask for the sidebar's shapes; other shapes go."""
+    state = no_destination_map(count=500)
+    state, effects = step(state, PRESS)
+    [load] = effects_of(effects=effects, kind=LoadShapes)
+    assert load.shape_ids == {f'b:{i}' for i in range(SIDEBAR_ROWS)}
+    line = make_shape(shape_id='b:400', points=[CENTRE, (0.0, 0.0)])
+    state, _ = step(state, ShapesLoaded(shapes={'b:400': line}))
+    assert not state.map.shapes
+    assert state.map.requested_shapes == load.shape_ids
+
+
+def test_no_destination_map_ignores_the_stop_scroll() -> None:
+    """The sidebar and the drawn departures both start at the board's top."""
+    state = no_destination_map(count=30)
+    state, _ = turned(state=state, steps=4)
+    assert state.scroll == 4
+    state, effects = step(state, PRESS)
+    assert isinstance(state.last_view, MapView)
+    [load] = effects_of(effects=effects, kind=LoadShapes)
+    assert load.shape_ids == {f'b:{i}' for i in range(SIDEBAR_ROWS)}
+    assert [row.leaves_at for row in state.last_view.sidebar] == [
+        f'8:{3 * (i + 1):02d}' for i in range(SIDEBAR_ROWS)
+    ]

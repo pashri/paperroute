@@ -7,10 +7,11 @@ from enum import StrEnum
 from typing import Final
 
 from paperroute.core.live import STALE_AFTER, LiveDeparture
-from paperroute.core.model import SYDNEY, CarryOn, Mode, shifted
+from paperroute.core.model import SYDNEY, CarryOn, Departure, Mode, shifted
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
+SIDEBAR_ROWS: Final[int] = 5
 HORIZON: Final[timedelta] = timedelta(hours=3)
 HORIZON_TEXT: Final[str] = f'the next {HORIZON // timedelta(hours=1)} hours'
 DOT: Final[str] = ' \u00b7 '
@@ -74,7 +75,17 @@ def pin_tag(*, index: int | None, total: int) -> PinTag:
 
 @dataclass(frozen=True)
 class StopView:
-    """Everything the Stop view draws."""
+    """
+    Everything the Stop view draws.
+
+    Attributes
+    ----------
+    head_rows : tuple[Row, ...]
+        The hero, if any, then the first rows of the unscrolled list, at
+        most `SIDEBAR_ROWS` in all. They do not depend on `scroll`.
+    head_departures : tuple[Departure, ...]
+        The departures behind `head_rows`, in the same order.
+    """
 
     origin: str
     destination: str | None
@@ -85,6 +96,8 @@ class StopView:
     empty: str | None
     scroll: int
     tag: PinTag = NOT_PINNED
+    head_rows: tuple[Row, ...] = ()
+    head_departures: tuple[Departure, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -394,6 +407,10 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
             None,
         )
     rest = [row for i, row in enumerate(rows) if i != lead]
+    order = [i for i in range(len(rows)) if i != lead]
+    if lead is not None:
+        order.insert(0, lead)
+    head = order[:SIDEBAR_ROWS]
     text = banner(
         live_since=inputs.live_since, now=now, has_feed=inputs.has_feed
     )
@@ -411,4 +428,6 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         ),
         scroll=offset,
         tag=inputs.tag,
+        head_rows=tuple(rows[i] for i in head),
+        head_departures=tuple(upcoming[i].departure for i in head),
     )

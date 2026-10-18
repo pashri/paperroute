@@ -283,7 +283,12 @@ NO_FACTS: Final[TripFacts] = TripFacts()
 
 @dataclass(frozen=True)
 class Departure:
-    """One direct service from a pin's From to its Destination."""
+    """
+    One direct service leaving a pin's From.
+
+    With a Destination it runs to that Destination; without one, to the
+    trip's last stop.
+    """
 
     trip_id: str
     aliases: tuple[str, ...]

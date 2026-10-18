@@ -703,8 +703,9 @@ class SqliteTimetableRepository:
         Returns
         -------
         list[Departure]
-            In departure order. Without a Destination, every departure
-            from any platform of the From, each running to its last stop.
+            In departure order, then trip ID. Without a Destination,
+            every departure from any platform of the From, each running
+            to its last stop.
         """
         destination = pin.destination
         first = start.astimezone(SYDNEY).date()
@@ -723,7 +724,10 @@ class SqliteTimetableRepository:
                 end=end,
             )
         ]
-        return sorted(found, key=lambda departure: departure.departs)
+        return sorted(
+            found,
+            key=lambda departure: (departure.departs, departure.trip_id),
+        )
 
     def on_day(
         self,

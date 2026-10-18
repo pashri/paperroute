@@ -1,13 +1,11 @@
 """Refresh the timetable from TfNSW and swap it in atomically."""
 
 import fcntl
-import os
-import shutil
 import sqlite3
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Final
@@ -20,11 +18,22 @@ from paperroute.build.sources import (
     SourceState,
     download,
     file_sha256,
-    fsync_dir,
     head,
     load_states,
     needs_download,
     save_states,
+)
+from paperroute.build.swap import (
+    HANDOFF_NAME,
+    Fetched,
+    Handoff,
+    Layout,
+    RefreshReport,
+    RefreshTail,
+    check_timetable,
+    clear_work,
+    progress,
+    swap_in,
 )
 from paperroute.build.timetable import (
     SCHEMA_VERSION,
@@ -34,108 +43,16 @@ from paperroute.build.timetable import (
 )
 from paperroute.rss import max_rss_mb
 
-MIN_TRIPS: Final[int] = 1000
 TIMEOUT_S: Final[float] = 60
 MIN_DAYS_LEFT: Final[int] = 7
-
-
-@dataclass(frozen=True)
-class RefreshReport:
-    """What a refresh did."""
-
-    downloaded: tuple[str, ...]
-    changed: tuple[str, ...]
-    rebuilt: bool
-    seconds: float
-    max_rss_mb: float
-
-
-@dataclass(frozen=True)
-class Fetched:
-    """The outcome of checking and downloading every source."""
-
-    states: dict[str, SourceState]
-    downloaded: tuple[str, ...]
-    changed: tuple[str, ...]
-
-
-@dataclass(frozen=True)
-class Layout:
-    """Paths under the data directory."""
-
-    data_dir: Path
-
-    @property
-    def work(self) -> Path:
-        """
-        Build scratch directory.
-
-        Returns
-        -------
-        Path
-            The work directory under data_dir.
-        """
-        return self.data_dir / 'work'
-
-    @property
-    def sources(self) -> Path:
-        """
-        Directory of the last good zips and their states.
-
-        Returns
-        -------
-        Path
-            The sources directory under data_dir.
-        """
-        return self.data_dir / 'sources'
-
-    @property
-    def states(self) -> Path:
-        """
-        Stored source states.
-
-        Returns
-        -------
-        Path
-            The sources.json file in the sources directory.
-        """
-        return self.sources / 'sources.json'
-
-    @property
-    def timetable(self) -> Path:
-        """
-        Live timetable.
-
-        Returns
-        -------
-        Path
-            The timetable.db file under data_dir.
-        """
-        return self.data_dir / 'timetable.db'
 
 
 class RefreshBusy(Exception):
     """Another refresh holds the lock."""
 
 
-class TimetableCheckError(Exception):
-    """A newly built timetable failed its integrity check."""
-
-
-def progress(*, phase: str) -> None:
-    """
-    Print a progress line.
-
-    Parameters
-    ----------
-    phase : str
-        What the refresh is doing.
-    """
-    print(f'progress {phase}', flush=True)
-
-
 @contextmanager
-def refresh_lock(*, path: Path) -> Iterator[None]:
+def refresh_lock(*, path: Path) -> Iterator[int]:
     """
     Hold an exclusive lock on a file.
 
@@ -146,8 +63,8 @@ def refresh_lock(*, path: Path) -> Iterator[None]:
 
     Yields
     ------
-    None
-        While the lock is held.
+    int
+        The descriptor holding the lock, while it is held.
 
     Raises
     ------
@@ -159,24 +76,7 @@ def refresh_lock(*, path: Path) -> Iterator[None]:
             fcntl.flock(file, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError as error:
             raise RefreshBusy(str(path)) from error
-        yield
-
-
-def clear_work(*, work: Path) -> None:
-    """
-    Empty the scratch directory, keeping the directory itself.
-
-    Parameters
-    ----------
-    work : Path
-        Scratch directory, created if missing.
-    """
-    work.mkdir(parents=True, exist_ok=True)
-    for entry in work.iterdir():
-        if entry.is_dir() and not entry.is_symlink():
-            shutil.rmtree(entry)
-        else:
-            entry.unlink()
+        yield file.fileno()
 
 
 def head_all(*, base_url: str, api_key: str) -> dict[str, SourceState]:
@@ -345,32 +245,8 @@ def download_changed(
     )
 
 
-def check_timetable(*, path: Path) -> None:
-    """
-    Check a built timetable before it goes live.
-
-    Parameters
-    ----------
-    path : Path
-        Built timetable.
-
-    Raises
-    ------
-    TimetableCheckError
-        If SQLite's integrity check fails or it has under MIN_TRIPS trips.
-    """
-    progress(phase='check')
-    with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True)) as conn:
-        (verdict,) = conn.execute('PRAGMA integrity_check').fetchone()
-        (trips,) = conn.execute('SELECT count(*) FROM trips').fetchone()
-    if verdict != 'ok':
-        raise TimetableCheckError(f'integrity_check: {verdict}')
-    if trips < MIN_TRIPS:
-        raise TimetableCheckError(f'{trips} trips, want {MIN_TRIPS}')
-
-
 def build_and_check(*, layout: Layout, changed: tuple[str, ...],
-                    days: int) -> Path:
+                    days: int, handoff: Handoff | None) -> Path:
     """
     Build a timetable in the scratch directory and check it.
 
@@ -383,6 +259,9 @@ def build_and_check(*, layout: Layout, changed: tuple[str, ...],
         the stored zips.
     days : int
         Days the timetable covers, from yesterday in Sydney.
+    handoff : Handoff | None
+        When set, the build execs into the extras program, which checks
+        and swaps in, and this never returns.
 
     Returns
     -------
@@ -403,34 +282,10 @@ def build_and_check(*, layout: Layout, changed: tuple[str, ...],
         ],
         window=Window(start=yesterday(), days=days),
         out=out,
+        handoff=handoff,
     )
     check_timetable(path=out)
     return out
-
-
-def swap_in(*, layout: Layout, built: Path, fetched: Fetched) -> None:
-    """
-    Make a checked timetable live, then store the zips it came from.
-
-    The timetable is replaced before the states are saved, so a crash in
-    between leaves the old validators and the next run rebuilds.
-
-    Parameters
-    ----------
-    layout : Layout
-        Data paths.
-    built : Path
-        Checked timetable in the scratch directory.
-    fetched : Fetched
-        Downloads to store.
-    """
-    progress(phase='swap')
-    os.replace(built, layout.timetable)
-    fsync_dir(path=layout.data_dir)
-    for name in fetched.changed:
-        os.replace(layout.work / f'{name}.zip', layout.sources / f'{name}.zip')
-    fsync_dir(path=layout.sources)
-    save_states(path=layout.states, states=fetched.states)
 
 
 def read_meta(*, path: Path) -> dict[str, str]:
@@ -479,7 +334,7 @@ def days_left(*, meta: dict[str, str]) -> int:
 
 
 def update(*, layout: Layout, fetched: Fetched, days: int,
-           force: bool) -> bool:
+           force: bool, handoff: Handoff | None = None) -> bool:
     """
     Rebuild and swap in when needed, else just store the new validators.
 
@@ -493,6 +348,8 @@ def update(*, layout: Layout, fetched: Fetched, days: int,
         Days the timetable covers.
     force : bool
         Rebuild even when nothing changed.
+    handoff : Handoff | None
+        Hand the rebuild over to the extras program; see build_and_check.
 
     Returns
     -------
@@ -510,7 +367,8 @@ def update(*, layout: Layout, fetched: Fetched, days: int,
     if not (fetched.changed or force or stale):
         save_states(path=layout.states, states=fetched.states)
         return False
-    built = build_and_check(layout=layout, changed=fetched.changed, days=days)
+    built = build_and_check(layout=layout, changed=fetched.changed, days=days,
+                            handoff=handoff)
     swap_in(layout=layout, built=built, fetched=fetched)
     return True
 
@@ -522,6 +380,8 @@ def refresh(
     base_url: str = BASE_URL,
     days: int = 14,
     force: bool = False,
+    error_log: Path | None = None,
+    hand_over: bool = False,
 ) -> RefreshReport:
     """
     Fetch changed sources and rebuild the timetable if their bytes changed.
@@ -541,6 +401,13 @@ def refresh(
         Days the timetable covers, from yesterday in Sydney.
     force : bool
         Rebuild even when no source changed.
+    error_log : Path | None
+        The errors.jsonl file inside data_dir, for the extras program
+        after a hand over.
+    hand_over : bool
+        Exec into the extras program after the load, so the two never
+        share memory; a rebuild then never returns here, and the extras
+        program checks, swaps in, clears work/ and prints the report.
 
     Returns
     -------
@@ -549,7 +416,7 @@ def refresh(
     """
     started = time.monotonic()
     layout = Layout(data_dir=data_dir)
-    with refresh_lock(path=data_dir / 'refresh.lock'):
+    with refresh_lock(path=layout.lock) as lock_fd:
         clear_work(work=layout.work)
         layout.sources.mkdir(exist_ok=True)
         try:
@@ -559,8 +426,18 @@ def refresh(
                 api_key=api_key,
                 fresh=head_all(base_url=base_url, api_key=api_key),
             )
-            rebuilt = update(layout=layout, fetched=fetched, days=days,
-                             force=force)
+            tail = RefreshTail(
+                data_dir=data_dir, fetched=fetched, started=started,
+                error_log=error_log, lock_fd=lock_fd,
+            )
+            rebuilt = update(
+                layout=layout, fetched=fetched, days=days, force=force,
+                handoff=(
+                    Handoff(path=layout.work / HANDOFF_NAME, tail=tail)
+                    if hand_over
+                    else None
+                ),
+            )
         finally:
             clear_work(work=layout.work)
     return RefreshReport(

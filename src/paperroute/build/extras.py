@@ -4,12 +4,13 @@ import sqlite3
 import subprocess
 import sys
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from contextlib import closing
 from pathlib import Path
 
 from paperroute.build.runs import RUN_SCHEMA, load_runs
-from paperroute.rss import max_rss_mb
+from paperroute.build.swap import HandoffError, complete, read_handoff
+from paperroute.rss import peak_rss_mb
 
 
 def timed(*, phase: str, step: Callable[[], object]) -> None:
@@ -44,7 +45,7 @@ def run_extras(*, path: Path) -> None:
         conn.executescript(RUN_SCHEMA)
         timed(phase='runs', step=lambda: load_runs(conn=conn))
         conn.commit()
-    print(f'progress extras peak {max_rss_mb():.0f}MB', flush=True)
+    print(f'progress extras peak {peak_rss_mb():.0f}MB', flush=True)
 
 
 def build_extras(*, path: Path) -> None:
@@ -71,5 +72,37 @@ def build_extras(*, path: Path) -> None:
         )
 
 
+def main(*, argv: Sequence[str]) -> int:
+    """
+    Run as a child (scratch only) or after a hand over (scratch, handoff).
+
+    Parameters
+    ----------
+    argv : Sequence[str]
+        The scratch file, then the handoff file if any.
+
+    Returns
+    -------
+    int
+        Exit status.
+
+    Raises
+    ------
+    HandoffError
+        When the handoff names another scratch file.
+    """
+    scratch = Path(argv[0])
+    if len(argv) == 1:
+        run_extras(path=scratch)
+        return 0
+    path = Path(argv[1])
+    record = read_handoff(path=path)
+    if record.scratch != scratch:
+        raise HandoffError(f'handoff is for {record.scratch}, not {scratch}')
+    return complete(
+        record=record, path=path, build=lambda: run_extras(path=scratch),
+    )
+
+
 if __name__ == '__main__':
-    run_extras(path=Path(sys.argv[1]))
+    sys.exit(main(argv=sys.argv[1:]))

@@ -21,8 +21,9 @@ from paperroute.build.gtfs_files import (
     read_rows,
 )
 from paperroute.build.shapes import load_shapes
+from paperroute.build.swap import Handoff, HandoffRecord, hand_over
 from paperroute.core.model import SYDNEY, Mode, mode_for
-from paperroute.rss import current_rss_mb
+from paperroute.rss import current_rss_mb, max_rss_mb
 
 SCHEMA_VERSION: Final[str] = '3'
 PLATFORM: Final[re.Pattern[str]] = re.compile(r'(?:Platform|Stand)\s+(\w+)$')
@@ -338,8 +339,41 @@ def write_meta(*, conn: sqlite3.Connection, window: Window) -> None:
         ('built_at', datetime.now(timezone.utc).isoformat())])
 
 
+def load_all(*, sources: list[Source], window: Window,
+             scratch: Path) -> MergeReport:
+    """
+    Load every source into a new file and merge rail duplicates.
+
+    Parameters
+    ----------
+    sources : list[Source]
+        Feeds in load order.
+    window : Window
+        Dates to cover.
+    scratch : Path
+        New timetable file.
+
+    Returns
+    -------
+    MergeReport
+        Result of merging rail duplicates.
+    """
+    with closing(sqlite3.connect(scratch)) as conn:
+        create_schema(conn=conn)
+        for source in sources:
+            print(f'progress load {source.name}', flush=True)
+            load_source(conn=conn, source=source, window=window)
+        print('progress merge', flush=True)
+        report = merge_rail(conn=conn)
+        conn.execute(DROP_UNUSED_SHAPES)
+        create_indexes(conn=conn)
+        write_meta(conn=conn, window=window)
+        conn.commit()
+    return report
+
+
 def build_timetable(*, sources: list[Source], window: Window,
-                    out: Path) -> MergeReport:
+                    out: Path, handoff: Handoff | None = None) -> MergeReport:
     """
     Build a timetable file from sources, replacing out only on success.
 
@@ -355,6 +389,10 @@ def build_timetable(*, sources: list[Source], window: Window,
         Dates to cover.
     out : Path
         Timetable file to write.
+    handoff : Handoff | None
+        When set, write the handoff file and exec into the extras program
+        instead of returning, so the load and the extras never share
+        memory; the extras program finishes the job.
 
     Returns
     -------
@@ -363,19 +401,18 @@ def build_timetable(*, sources: list[Source], window: Window,
     """
     scratch = out.with_suffix('.new')
     scratch.unlink(missing_ok=True)
-    with closing(sqlite3.connect(scratch)) as conn:
-        create_schema(conn=conn)
-        for source in sources:
-            print(f'progress load {source.name}', flush=True)
-            load_source(conn=conn, source=source, window=window)
-        print('progress merge', flush=True)
-        report = merge_rail(conn=conn)
-        conn.execute(DROP_UNUSED_SHAPES)
-        create_indexes(conn=conn)
-        write_meta(conn=conn, window=window)
-        conn.commit()
+    report = load_all(sources=sources, window=window, scratch=scratch)
     gc.collect()
-    print(f'progress extras parent {current_rss_mb():.0f}MB', flush=True)
+    print(
+        f'progress extras parent {current_rss_mb():.0f}MB '
+        f'peak {max_rss_mb():.0f}MB',
+        flush=True,
+    )
+    if handoff is not None:
+        hand_over(handoff=handoff, record=HandoffRecord(
+            scratch=scratch, out=out, dropped=report.dropped,
+            partial=report.partial, peak_mb=max_rss_mb(), tail=handoff.tail,
+        ))
     build_extras(path=scratch)
     os.replace(scratch, out)
     return report

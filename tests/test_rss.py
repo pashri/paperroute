@@ -6,7 +6,9 @@ import sys
 from pathlib import Path
 from typing import Final
 
-from paperroute.rss import current_rss_mb, max_rss_mb
+import pytest
+
+from paperroute.rss import current_rss_mb, max_rss_mb, peak_rss_mb
 
 CHILD_PEAK: Final[str] = (
     'import subprocess, sys\n'
@@ -46,3 +48,18 @@ def test_current_rss_mb_reads_statm(tmp_path: Path) -> None:
     pages = (64 << 20) // os.sysconf('SC_PAGE_SIZE')
     statm.write_text(f'100000 {pages} 300 1 0 500 0\n')
     assert current_rss_mb(statm=statm) == 64.0
+
+
+def test_peak_rss_mb_reads_vmhwm(tmp_path: Path) -> None:
+    """On Linux the peak is VmHWM, which an exec resets."""
+    status = tmp_path / 'status'
+    status.write_text('Name:\tpython\nVmHWM:\t   73728 kB\n', encoding='ascii')
+    assert peak_rss_mb(status=status) == 72.0
+    status.write_text('Name:\tpython\n', encoding='ascii')
+    with pytest.raises(ValueError, match='VmHWM'):
+        peak_rss_mb(status=status)
+
+
+def test_peak_rss_mb_falls_back_to_rusage(tmp_path: Path) -> None:
+    """Without a status file the peak is this process's ru_maxrss."""
+    assert 1.0 < peak_rss_mb(status=tmp_path / 'missing') <= max_rss_mb()

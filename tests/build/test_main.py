@@ -3,8 +3,11 @@
 import json
 import logging
 import os
+import sqlite3
+import subprocess
 import sys
 from collections.abc import Iterator
+from contextlib import closing
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -12,6 +15,7 @@ import pytest
 
 from paperroute.build.__main__ import main, parse_args
 from paperroute.core.model import SYDNEY
+from tests.build.network_feed import network_feed
 from tests.build.osm_factory import TINY_BBOX, write_tiny_osm
 from tests.build.tile_inputs import write_timetable
 
@@ -193,3 +197,25 @@ def test_tiles_logs_a_failed_build(
     lines = capsys.readouterr().err.splitlines()
     assert json.loads(lines[-1])['msg'] == 'tile build failed'
     assert not (tmp_path / 'tiles.db').exists()
+
+
+def test_gtfs_execs_into_the_extras(tmp_path: Path) -> None:
+    """The gtfs build hands over to extras, which finishes the file."""
+    out = tmp_path / 'timetable.db'
+    result = subprocess.run(
+        [
+            sys.executable, '-m', 'paperroute.build', 'gtfs',
+            '--bundle', str(network_feed(path=tmp_path / 'network.zip')),
+            '--out', str(out), '--start', '2026-10-05', '--days', '3',
+        ],
+        check=False, capture_output=True, text=True,
+    )
+    assert result.returncode == 0, result.stderr
+    lines = result.stdout.splitlines()
+    assert lines[-1] == 'progress done dropped=0 partial=0'
+    assert lines[-2].startswith('progress extras peak ')
+    assert sorted(path.name for path in tmp_path.iterdir()) == [
+        'network.zip', 'timetable.db',
+    ]
+    with closing(sqlite3.connect(out)) as conn:
+        assert conn.execute('SELECT count(*) FROM runs').fetchone()[0] > 0

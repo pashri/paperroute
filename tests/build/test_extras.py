@@ -10,8 +10,8 @@ from typing import Final
 
 import pytest
 
-from paperroute.build import timetable
-from paperroute.build.extras import build_extras, run_extras
+from paperroute.build import extras, timetable
+from paperroute.build.extras import build_extras
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from tests.build.network_feed import network_feed
@@ -97,7 +97,7 @@ def test_run_extras_prints_each_phase(
     db = network_build(folder=tmp_path)
     assert not RUN_TABLES & tables_of(db=db)
     capsys.readouterr()
-    run_extras(path=db)
+    assert extras.main(argv=[str(db)]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == 'progress runs'
     assert lines[1].startswith('progress runs done ')

@@ -6,7 +6,6 @@ import logging
 import os
 import sqlite3
 import sys
-import zipfile
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
@@ -14,23 +13,14 @@ from typing import Final
 
 from paperroute.adapters.tfnsw import api_key_from_env
 from paperroute.build.gtfs_files import Source
-from paperroute.build.refresh import RefreshBusy, TimetableCheckError, refresh
-from paperroute.build.sources import SourceError
+from paperroute.build.refresh import RefreshBusy, refresh
+from paperroute.build.swap import Handoff, guarded
 from paperroute.build.timetable import Window, build_timetable, yesterday
 from paperroute.core.tiles import OPAL_BBOX, ZOOMS
 from paperroute.logs import configure_logging
 
 logger = logging.getLogger(__name__)
 
-REFRESH_ERRORS: Final[tuple[type[Exception], ...]] = (
-    SourceError,
-    TimetableCheckError,
-    sqlite3.Error,
-    zipfile.BadZipFile,
-    OSError,
-    KeyError,
-    ValueError,
-)
 TILE_ERRORS: Final[tuple[type[Exception], ...]] = (
     OSError,
     sqlite3.Error,
@@ -173,11 +163,13 @@ def run_gtfs(*, args: argparse.Namespace) -> None:
     preferred = [Source(name=name, archive=path) for name, path in
                  (('sydneytrains', args.sydneytrains),
                   ('metro', args.metro)) if path]
-    report = build_timetable(
+    build_timetable(
         sources=[*preferred, Source(name='bundle', archive=args.bundle)],
-        window=Window(start=args.start, days=args.days), out=args.out)
-    print(f'progress done dropped={report.dropped} '
-          f'partial={report.partial}')
+        window=Window(start=args.start, days=args.days), out=args.out,
+        handoff=Handoff(
+            path=args.out.with_name(f'{args.out.stem}.handoff.json'),
+        ),
+    )
 
 
 def run_refresh(*, args: argparse.Namespace) -> int:
@@ -196,21 +188,21 @@ def run_refresh(*, args: argparse.Namespace) -> int:
     """
     configure_logging(error_file=args.error_log)
     try:
-        report = refresh(
-            data_dir=args.data_dir,
-            api_key=api_key_from_env(),
-            days=args.days,
-            force=args.force,
+        report = guarded(
+            step=lambda: refresh(
+                data_dir=args.data_dir,
+                api_key=api_key_from_env(),
+                days=args.days,
+                force=args.force,
+                error_log=args.error_log,
+                hand_over=True,
+            ),
+            passthrough=(RefreshBusy,),
         )
     except RefreshBusy:
         print('refresh already running')
         return 1
-    except REFRESH_ERRORS:
-        logger.exception('refresh failed')
-        return 1
-    # Last resort at the process edge, so any crash reaches errors.jsonl.
-    except Exception:  # pylint: disable=broad-exception-caught
-        logger.exception('refresh failed unexpectedly')
+    if report is None:
         return 1
     print(json.dumps(asdict(report)))
     return 0

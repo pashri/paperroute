@@ -15,8 +15,10 @@ from typing import Final
 import pytest
 
 from paperroute.build import refresh as refresh_module
-from paperroute.build.refresh import RefreshBusy, TimetableCheckError, refresh
+from paperroute.build import swap
+from paperroute.build.refresh import RefreshBusy, refresh
 from paperroute.build.sources import SOURCES, SourceError
+from paperroute.build.swap import RefreshReport, TimetableCheckError
 from tests.build.feed_server import FeedServer, Served, feed_server
 from tests.build.feeds import bus_feed
 
@@ -94,7 +96,7 @@ def _data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     Path
         The data directory.
     """
-    monkeypatch.setattr(refresh_module, 'MIN_TRIPS', 1)
+    monkeypatch.setattr(swap, 'MIN_TRIPS', 1)
     monkeypatch.setattr(
         refresh_module,
         'yesterday',
@@ -110,7 +112,7 @@ def run(
     server: FeedServer,
     data_dir: Path,
     force: bool = False,
-) -> refresh_module.RefreshReport:
+) -> RefreshReport:
     """
     Refresh a two-day timetable against the test server.
 
@@ -125,7 +127,7 @@ def run(
 
     Returns
     -------
-    refresh_module.RefreshReport
+    RefreshReport
         The refresh's report.
     """
     return refresh(
@@ -304,7 +306,7 @@ def test_integrity_failure_keeps_old(
         body=metro_zip(tmp_path=tmp_path, comment=b'v2'),
         etag='"2"',
     )
-    monkeypatch.setattr(refresh_module, 'MIN_TRIPS', 10**9)
+    monkeypatch.setattr(swap, 'MIN_TRIPS', 10**9)
     with pytest.raises(TimetableCheckError):
         run(server=server, data_dir=data_dir)
     assert snapshot(data_dir=data_dir) == before
@@ -364,7 +366,7 @@ def test_crash_before_states_saved_rebuilds_next_run(
         raise OSError('power cut')
 
     with monkeypatch.context() as patch:
-        patch.setattr(refresh_module, 'save_states', crash)
+        patch.setattr(swap, 'save_states', crash)
         with pytest.raises(OSError, match='power cut'):
             run(server=server, data_dir=data_dir)
     report = run(server=server, data_dir=data_dir)
@@ -428,3 +430,45 @@ def test_refresh_rebuilds_when_schema_version_differs(
 def test_read_meta_of_missing_file_is_empty(tmp_path: Path) -> None:
     """An unreadable timetable has no meta."""
     assert not refresh_module.read_meta(path=tmp_path / 'missing.db')
+
+
+class Execed(Exception):
+    """Raised by the stand-in for os.execv."""
+
+
+def test_refresh_hands_over_after_the_load(
+    server: FeedServer,
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With hand_over, the load execs into extras with a checked handoff."""
+    seen: dict[str, object] = {}
+
+    def execv(path: str, argv: list[str]) -> None:
+        record = swap.read_handoff(path=Path(argv[-1]))
+        assert record.tail is not None
+        seen.update(
+            path=path, argv=argv, record=record,
+            inheritable=os.get_inheritable(record.tail.lock_fd),
+        )
+        raise Execed
+
+    monkeypatch.setattr(os, 'execv', execv)
+    with pytest.raises(Execed):
+        refresh(
+            data_dir=data_dir, api_key=KEY, base_url=server.base_url,
+            days=DAYS, error_log=data_dir / 'log' / 'errors.jsonl',
+            hand_over=True,
+        )
+    work = data_dir / 'work'
+    assert seen['argv'] == [
+        seen['path'], '-m', 'paperroute.build.extras',
+        str(work / 'timetable.new'), str(work / 'handoff.json'),
+    ]
+    assert seen['inheritable'] is True
+    record = seen['record']
+    assert isinstance(record, swap.HandoffRecord)
+    assert record.tail is not None
+    assert record.tail.fetched.changed == ('sydneytrains', 'metro', 'bundle')
+    assert record.out == work / 'timetable.db'
+    assert not (data_dir / 'timetable.db').exists()

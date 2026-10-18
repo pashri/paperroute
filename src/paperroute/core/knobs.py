@@ -29,7 +29,7 @@ def switched(*, state: State) -> State:
 
 def bottom_turned(*, state: State, steps: int) -> State:
     """
-    Scroll the Stop view or zoom a map.
+    Scroll the Stop view or the Strip, or zoom a map.
 
     Parameters
     ----------
@@ -41,15 +41,17 @@ def bottom_turned(*, state: State, steps: int) -> State:
     Returns
     -------
     State
-        State scrolled on the Stop view or zoomed on the Map and
-        Strip + map; unchanged on the Strip.
+        State scrolled on the Stop view or the Strip, each its own
+        scroll, or zoomed on the Map and Strip + map. The Strip's scroll
+        is clamped when the view is next built.
     """
     match state.view:
         case LiveView.STOP:
             return replace(state, scroll=max(0, state.scroll + steps))
-        case LiveView.MAP | LiveView.STRIP_MAP:
-            return replace(state, map=zoomed(map_state=state.map, steps=steps))
-    return state
+        case LiveView.STRIP:
+            strip = replace(state.strip, scroll=state.strip.scroll + steps)
+            return replace(state, strip=strip)
+    return replace(state, map=zoomed(map_state=state.map, steps=steps))
 
 
 def knob_moved(

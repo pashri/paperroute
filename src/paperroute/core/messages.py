@@ -11,9 +11,11 @@ from paperroute.core.map_view import MapView
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import TripPattern
 from paperroute.core.positions import PositionsSnapshot
+from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import Saved
 from paperroute.core.stop_view import StopView
+from paperroute.core.strip_view import StripMapView, StripView
 
 
 class Knob(StrEnum):
@@ -73,10 +75,18 @@ class LoadModes:
 
 
 @dataclass(frozen=True)
+class LoadStrip:
+    """Build the reach of a strip from its From, in a worker."""
+
+    key: StripKey
+    origin: StopPlace
+
+
+@dataclass(frozen=True)
 class Render:
     """Draw a view."""
 
-    view: StopView | MapView
+    view: StopView | MapView | StripView | StripMapView
 
 
 @dataclass(frozen=True)
@@ -105,6 +115,7 @@ Effect = (
     | LoadShapes
     | LoadPatterns
     | LoadModes
+    | LoadStrip
     | Render
     | Stop
     | SaveState
@@ -270,6 +281,30 @@ class MapDataFailed:
         return MapData.MODES
 
 
+@dataclass(frozen=True)
+class StripLoaded:
+    """
+    A strip's reach was built.
+
+    Attributes
+    ----------
+    key : StripKey
+        The strip asked for.
+    reach : Reach | None
+        The reach, or None when the timetable has no run tables.
+    """
+
+    key: StripKey
+    reach: Reach | None
+
+
+@dataclass(frozen=True)
+class StripFailed:
+    """A strip's reach couldn't be built; a later tick tries again."""
+
+    key: StripKey
+
+
 MapEvent = (
     ShapesLoaded
     | PatternsLoaded
@@ -289,5 +324,7 @@ Event = (
     | QuitRequested
     | TimetableSeen
     | PlacesMatched
+    | StripLoaded
+    | StripFailed
     | MapEvent
 )

@@ -12,7 +12,7 @@ from hypothesis import strategies as st
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import Point, make_shape
 from paperroute.core.map_state import area_box
-from paperroute.core.map_view import DEFAULT_ZOOM, MapView
+from paperroute.core.map_view import DEFAULT_ZOOM, MAP_WIDTH, MapView
 from paperroute.core.messages import (
     DeparturesFailed,
     DeparturesLoaded,
@@ -29,6 +29,7 @@ from paperroute.core.messages import (
     LoadModes,
     LoadPatterns,
     LoadShapes,
+    LoadStrip,
     MapData,
     MapDataFailed,
     MapRequest,
@@ -42,6 +43,8 @@ from paperroute.core.messages import (
     SaveState,
     ShapesLoaded,
     Stop,
+    StripFailed,
+    StripLoaded,
     Tick,
     TimetableSeen,
 )
@@ -56,6 +59,7 @@ from paperroute.core.model import (
     shifted,
 )
 from paperroute.core.places import shown
+from paperroute.core.reach import Reach, ReachInput, RunTail, build_reach
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 from paperroute.core.saved import (
     DEFAULT_SAVED,
@@ -85,6 +89,19 @@ from paperroute.core.stop_view import (
     SIDEBAR_ROWS,
     VISIBLE_ROWS,
     StopView,
+)
+from paperroute.core.strip_state import (
+    STRIP_VIEWS,
+    keys_in_use,
+    scroll_range,
+    shown_reach,
+    strip_key,
+)
+from paperroute.core.strip_view import (
+    PANE_ROWS,
+    STRIP_ROWS,
+    StripMapView,
+    StripView,
 )
 from paperroute.core.tiles import CITY, ZOOMS
 from tests.core.factories import (
@@ -249,7 +266,7 @@ def test_step_no_feed_for_ferry_pin() -> None:
     )
     assert state.feeds == ()
     assert not any(isinstance(effect, FetchFeed) for effect in effects)
-    assert state.last_view is not None
+    assert isinstance(state.last_view, StopView)
     assert state.last_view.banner is not None
     assert 'no live feed' in state.last_view.banner
 
@@ -654,12 +671,32 @@ def test_positions_are_not_fetched_twice_within_a_poll() -> None:
     ]
 
 
+def left_for_stop(*, state: State) -> State:
+    """
+    Press from the Map round to the Stop view, all at one moment.
+
+    Parameters
+    ----------
+    state : State
+        State on the Map.
+
+    Returns
+    -------
+    State
+        State on the Stop view, which polls no positions.
+    """
+    for _ in range(len(LIVE_VIEWS) - 1):
+        state, _ = step(state, PRESS)
+    assert state.view is LiveView.STOP
+    return state
+
+
 def test_returning_to_the_map_fetches_at_once() -> None:
     """Coming back to the Map after 30 s fetches positions straight away."""
     state, _ = step(loaded(state=fresh()), Tick(now=START))
     state, _ = step(state, PRESS)
     state, _ = step(state, Tick(now=START + timedelta(seconds=29)))
-    state, _ = step(state, PRESS)
+    state = left_for_stop(state=state)
     state, _ = step(state, Tick(now=START + timedelta(seconds=151)))
     _, effects = step(state, PRESS)
     fetch = FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS)
@@ -690,7 +727,7 @@ def test_idle_position_feeds_are_dropped_after_ten_minutes() -> None:
     positions = snapshot(fetched_at=START, vehicles=())
     event = PositionsFetched(feed=BUS_POSITIONS, snapshot=positions)
     state, _ = step(state, event)
-    state, _ = step(state, PRESS)
+    state = left_for_stop(state=state)
     almost = START + FEED_IDLE - timedelta(seconds=1)
     state, _ = step(state, Tick(now=almost))
     assert BUS_POSITIONS in state.map.positions
@@ -832,6 +869,72 @@ def place_events(draw: st.DrawFn) -> Event:
     return draw(st.sampled_from(options))
 
 
+def reach_through(*, origin: str, side: int) -> Reach:
+    """
+    Build a reach with the same number of stations each side of a From.
+
+    Parameters
+    ----------
+    origin : str
+        From stop ID.
+    side : int
+        Stations each side.
+
+    Returns
+    -------
+    Reach
+        The reach.
+    """
+    ups = tuple(f'up-{i}' for i in range(side))
+    downs = tuple(f'down-{i}' for i in range(side))
+    return build_reach(
+        data=ReachInput(
+            origin=place(origin, name=origin),
+            tails=(
+                RunTail(before=(), after=ups, trips=2),
+                RunTail(before=(), after=downs, trips=1),
+            ),
+            places={key: place(key, name=key) for key in (*ups, *downs)},
+            station_of={},
+        )
+    )
+
+
+@st.composite
+def strip_events(draw: st.DrawFn) -> Event:
+    """
+    A random reach built or failed, for any place's strip or another.
+
+    Parameters
+    ----------
+    draw : st.DrawFn
+        Hypothesis draw function.
+
+    Returns
+    -------
+    Event
+        A StripLoaded with no reach, a short or a long one, or a
+        StripFailed.
+    """
+    pin = draw(st.sampled_from(POOL))
+    key = draw(
+        st.sampled_from(
+            [strip_key(pin=pin), replace(strip_key(pin=pin), station='x')]
+        )
+    )
+    side = draw(st.sampled_from([0, 2, 20]))
+    reach = draw(
+        st.sampled_from(
+            [None, reach_through(origin=pin.origin.stop_id, side=side)]
+        )
+    )
+    options: list[Event] = [
+        StripLoaded(key=key, reach=reach),
+        StripFailed(key=key),
+    ]
+    return draw(st.sampled_from(options))
+
+
 @st.composite
 def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
     """
@@ -860,6 +963,7 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
         'unreadable',
         'map',
         'place',
+        'strip',
         'quit',
     ]
     for kind in draw(st.lists(st.sampled_from(kinds), max_size=40)):
@@ -883,6 +987,8 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
             )
         elif kind == 'place':
             events.append(draw(place_events()))
+        elif kind == 'strip':
+            events.append(draw(strip_events()))
         elif kind == 'quit':
             events.append(QuitRequested())
         elif kind == 'ok':
@@ -936,11 +1042,16 @@ def check_effects(
     assert after.view in LIVE_VIEWS
     if after.view is LiveView.STOP and isinstance(after.last_view, StopView):
         assert after.scroll == after.last_view.scroll
+    assert set(after.strip.reaches) <= keys_in_use(state=after)
     check_map_requests(before=before, after=after, effects=effects)
     for effect in effects:
         if isinstance(effect, Render):
-            check_render(view=effect.view)
+            check_render(state=after, view=effect.view)
             assert effect.view != before.last_view
+        if isinstance(effect, LoadStrip):
+            assert after.view in STRIP_VIEWS
+            assert effect.key not in before.strip.pending
+            assert effect.key not in before.strip.reaches
         if isinstance(effect, LoadDepartures):
             assert not before.board.loading or not same_place(
                 first=shown(state=before), second=effect.pin
@@ -974,8 +1085,13 @@ def check_map_requests(
             and effect.kind is FeedKind.POSITIONS
         )
     ]
-    if after.view in (LiveView.STOP, LiveView.STRIP):
+    if after.view is LiveView.STOP:
         assert not requests
+    if after.view is LiveView.STRIP:
+        assert all(
+            isinstance(request, (LoadPatterns, FetchFeed))
+            for request in requests
+        )
     moved = before.map.centre != after.map.centre or not same_place(
         first=shown(state=before), second=shown(state=after)
     )
@@ -986,19 +1102,41 @@ def check_map_requests(
         assert load.mpp not in known
 
 
-def check_render(*, view: StopView | MapView) -> None:
+VIEW_TYPES: Final[dict[LiveView, type]] = {
+    LiveView.STOP: StopView,
+    LiveView.MAP: MapView,
+    LiveView.STRIP: StripView,
+    LiveView.STRIP_MAP: StripMapView,
+}
+
+
+def check_render(
+    *, state: State, view: StopView | MapView | StripView | StripMapView
+) -> None:
     """
-    Assert a rendered view fits the screen.
+    Assert a rendered view is the Live view shown and fits the screen,
+    and the Strip's stored scroll is within its reach.
 
     Parameters
     ----------
-    view : StopView | MapView
+    state : State
+        State after the event.
+    view : StopView | MapView | StripView | StripMapView
         The view drawn.
     """
-    if isinstance(view, StopView):
-        assert len(view.rows) <= VISIBLE_ROWS
-    else:
-        assert len(view.sidebar) <= SIDEBAR_ROWS
+    assert type(view) is VIEW_TYPES[state.view]
+    match view:
+        case StopView():
+            assert len(view.rows) <= VISIBLE_ROWS
+        case MapView():
+            assert len(view.sidebar) <= SIDEBAR_ROWS
+        case StripView():
+            assert len(view.rows) <= STRIP_ROWS
+            low, high = scroll_range(reach=shown_reach(state=state))
+            assert low <= state.strip.scroll <= high
+        case StripMapView():
+            assert len(view.pane.rows) <= PANE_ROWS
+            assert view.map.base.width < MAP_WIDTH
 
 
 def polled(*, before: State, event: Event) -> bool:
@@ -1246,7 +1384,7 @@ def test_empty_never_shows_while_a_departure_is_within_horizon() -> None:
     for minute in range(0, 6 * 60 + 1):
         now = START + timedelta(minutes=minute)
         state = run_tick(state=state, timetable=timetable, now=now)
-        assert state.last_view is not None
+        assert isinstance(state.last_view, StopView)
         in_reach = only.departs <= now + HORIZON
         if in_reach and only.departs >= now:
             assert state.last_view.empty is None, now
@@ -1282,13 +1420,13 @@ def test_late_service_timetabled_before_now_appears_after_load() -> None:
 def test_view_says_loading_before_the_first_load() -> None:
     """Until departures have loaded, the empty text says so."""
     state, _ = step(fresh(), Tick(now=START))
-    assert state.last_view is not None
+    assert isinstance(state.last_view, StopView)
     assert state.last_view.empty == 'Loading timetable'
     loaded_state, _ = step(
         state,
         DeparturesLoaded(pin=PIN, departures=(), until=START + HORIZON),
     )
-    assert loaded_state.last_view is not None
+    assert isinstance(loaded_state.last_view, StopView)
     assert loaded_state.last_view.empty is not None
     assert 'No direct services' in loaded_state.last_view.empty
 
@@ -1421,7 +1559,7 @@ def test_stale_patterns_wait_for_the_fetch_in_flight() -> None:
         snapshot=snapshot(fetched_at=START, vehicles=(bus,)),
     )
     state, _ = step(state, event)
-    state, _ = step(state, PRESS)
+    state = left_for_stop(state=state)
     later = START + timedelta(minutes=5)
     state, _ = step(state, Tick(now=later))
     state, effects = step(state, PRESS)
@@ -1443,7 +1581,12 @@ def test_stale_patterns_wait_for_the_fetch_in_flight() -> None:
 
 
 def test_pin_patterns_do_not_wait_for_the_fetch_in_flight() -> None:
-    """A pin trip whose vehicle went stale is asked for at once."""
+    """
+    A pin trip whose vehicle went stale is asked for at once.
+
+    The state jumps from the Map to the Stop view, since pressing round
+    passes the Strip, which loads every strip trip's pattern.
+    """
     state = city_map()
     [pin] = state.board.departures
     state, _ = step(
@@ -1467,7 +1610,7 @@ def test_pin_patterns_do_not_wait_for_the_fetch_in_flight() -> None:
         ),
     )
     assert pin.trip_id not in state.map.patterns
-    state, _ = step(state, PRESS)
+    state = replace(state, view=LiveView.STOP)
     state, _ = step(state, Tick(now=START + timedelta(minutes=5)))
     _, effects = step(state, PRESS)
     [load] = effects_of(effects=effects, kind=LoadPatterns)
@@ -1706,7 +1849,7 @@ def test_bottom_press_cycles_four_views() -> None:
     """Presses go Stop, Map, Strip, Strip + map and back to Stop."""
     state, _ = step(fresh(centre=CENTRE), Tick(now=START))
     views: list[LiveView] = []
-    drawn: list[type[StopView | MapView]] = []
+    drawn: list[type[StopView | MapView | StripView | StripMapView]] = []
     for _ in LIVE_VIEWS:
         state, effects = step(state, PRESS)
         views.append(state.view)
@@ -1721,7 +1864,7 @@ def test_bottom_press_cycles_four_views() -> None:
         LiveView.STRIP_MAP,
         LiveView.STOP,
     ]
-    assert drawn == [MapView, StopView, MapView, StopView]
+    assert drawn == [MapView, StripView, StripMapView, StopView]
 
 
 def test_bottom_turn_scrolls_stop_and_zooms_map_and_strip_map() -> None:

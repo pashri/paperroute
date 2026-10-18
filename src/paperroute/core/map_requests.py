@@ -1,8 +1,7 @@
-"""The map data and positions the Map view asks for."""
+"""The map data and positions the Map and strip views ask for."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.core.feeds import FeedKind, position_feeds
@@ -22,37 +21,16 @@ from paperroute.core.messages import (
     MapData,
 )
 from paperroute.core.model import SYDNEY, Departure
+from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.saved import LiveView
-from paperroute.core.state_model import POLL_EVERY, RETRY_AFTER, State
+from paperroute.core.state_model import POLL_EVERY, RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
+from paperroute.core.strip_state import strip_patterns, strip_window
 from paperroute.core.tiles import ZOOMS
 
 MAP_VIEWS: Final[frozenset[LiveView]] = frozenset(
     {LiveView.MAP, LiveView.STRIP_MAP}
 )
-
-
-def elapsed(*, since: datetime | None, now: datetime, span: timedelta) -> bool:
-    """
-    Say whether a span of real time has passed since a moment.
-
-    Parameters
-    ----------
-    since : datetime | None
-        The moment, or None for never.
-    now : datetime
-        Current time.
-    span : timedelta
-        Span of real time.
-
-    Returns
-    -------
-    bool
-        True when `since` is None or at least `span` ago.
-    """
-    if since is None:
-        return True
-    return now.timestamp() - since.timestamp() >= span.total_seconds()
 
 
 def may_load(*, state: State, kind: MapData) -> bool:
@@ -80,7 +58,7 @@ def may_load(*, state: State, kind: MapData) -> bool:
 
 def map_feeds(*, state: State) -> tuple[str, ...]:
     """
-    List the positions feeds the Map polls.
+    List the positions feeds the view polls.
 
     Parameters
     ----------
@@ -90,18 +68,68 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
     Returns
     -------
     tuple[str, ...]
-        The feeds for the modes in the map area at the current zoom, or
-        for the departures' modes when none are known there.
+        On a map, the feeds for the modes in the map area at the current
+        zoom, or for the departures' modes when none are known there; on
+        the Strip, the departures' modes.
     """
-    modes = state.map.area_modes.get(ZOOMS[state.map.zoom]) or frozenset(
-        departure.mode for departure in state.board.departures
-    )
+    modes = frozenset(departure.mode for departure in state.board.departures)
+    if state.view in MAP_VIEWS:
+        modes = state.map.area_modes.get(ZOOMS[state.map.zoom]) or modes
     return position_feeds(modes=modes)
+
+
+def polled_positions(*, state: State) -> Mapping[str, PositionsSnapshot]:
+    """
+    Keep the positions downloads of the feeds the view polls.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    Mapping[str, PositionsSnapshot]
+        Downloads by feed, only for `map_feeds`.
+    """
+    feeds = map_feeds(state=state)
+    return {
+        feed: snapshot
+        for feed, snapshot in state.map.positions.items()
+        if feed in feeds
+    }
+
+
+def drawn_departures(
+    *, state: State, stop_view: StopView
+) -> tuple[Departure, ...]:
+    """
+    Choose the departures a map draws and asks about.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    stop_view : StopView
+        The pin's unscrolled Stop view.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        With no destination, the strip's trips on Strip + map and the
+        sidebar's departures on the Map; every one with a destination.
+    """
+    if state.view is LiveView.STRIP_MAP and stop_view.destination is None:
+        return strip_window(state=state)
+    return map_departures(
+        stop_view=stop_view,
+        departures=state.board.departures,
+    )
 
 
 def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     """
-    Gather what the Map view is built from.
+    Gather what a map is built from.
 
     Parameters
     ----------
@@ -113,23 +141,15 @@ def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     Returns
     -------
     MapInputs
-        Inputs, with only the positions of feeds the Map polls. With no
-        destination, the departures are only those in the sidebar.
+        Inputs at the Map's width, with only the positions of feeds the
+        view polls and the departures from `drawn_departures`.
     """
-    feeds = map_feeds(state=state)
     return MapInputs(
         stop_view=stop_view,
-        departures=map_departures(
-            stop_view=stop_view,
-            departures=state.board.departures,
-        ),
+        departures=drawn_departures(state=state, stop_view=stop_view),
         centre=state.map.centre,
         zoom=state.map.zoom,
-        positions={
-            feed: snapshot
-            for feed, snapshot in state.map.positions.items()
-            if feed in feeds
-        },
+        positions=polled_positions(state=state),
         patterns=state.map.patterns,
         shapes=state.map.shapes,
         now=state.now,
@@ -320,15 +340,87 @@ def awaiting_fetch(
     ) - pin_trips(departures=departures)
 
 
+def held_back(
+    *, state: State, departures: Sequence[Departure]
+) -> frozenset[str]:
+    """
+    List the trips whose patterns wait for a positions fetch in flight.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    departures : Sequence[Departure]
+        The departures the map draws.
+
+    Returns
+    -------
+    frozenset[str]
+        The trips from `awaiting_fetch`, apart from the strip's own.
+    """
+    return awaiting_fetch(
+        state=state, departures=departures
+    ) - strip_patterns(state=state)
+
+
+def map_patterns(*, state: State, inputs: MapInputs) -> frozenset[str]:
+    """
+    List the trips whose patterns the view needs.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    inputs : MapInputs
+        The map's inputs.
+
+    Returns
+    -------
+    frozenset[str]
+        The map's needs on a map view, with the strip's trips on a strip
+        view.
+    """
+    wanted = strip_patterns(state=state)
+    if state.view in MAP_VIEWS:
+        wanted |= needed_patterns(inputs=inputs)
+    return wanted
+
+
+def area_effects(
+    *, state: State, departures: Sequence[Departure]
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Ask for the map area's modes and the drawn departures' shapes.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    departures : Sequence[Departure]
+        The departures the map draws.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with the requests recorded, and the effects; nothing on a
+        view without a map.
+    """
+    if state.view not in MAP_VIEWS:
+        return state, ()
+    state, modes = request_modes(state=state)
+    state, shapes = request_shapes(state=state, departures=departures)
+    return state, (*modes, *shapes)
+
+
 def map_effects(
     *, state: State, stop_view: StopView
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Ask for the map data the map needs, when one is shown.
+    Ask for the map data and positions the view needs.
 
-    Patterns and shapes the Map no longer needs are dropped, so memory
-    stays bounded. Stale vehicles' patterns wait while their feed has a
-    newer fetch in flight.
+    Patterns and shapes no longer needed are dropped, so memory stays
+    bounded. Stale vehicles' patterns wait while their feed has a newer
+    fetch in flight; the strip's own trips never wait.
 
     Parameters
     ----------
@@ -340,20 +432,19 @@ def map_effects(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the requests recorded, and the effects; nothing on a
-        view without a map.
+        State with the requests recorded, and the effects; nothing on the
+        Stop view.
     """
-    if state.view not in MAP_VIEWS:
+    if state.view is LiveView.STOP:
         return state, ()
     inputs = map_inputs(state=state, stop_view=stop_view)
-    shown = inputs.departures
-    wanted = needed_patterns(inputs=inputs)
-    state = pruned(state=state, wanted=wanted, departures=shown)
-    state, modes = request_modes(state=state)
-    state, shapes = request_shapes(state=state, departures=shown)
+    drawn = inputs.departures if state.view in MAP_VIEWS else ()
+    wanted = map_patterns(state=state, inputs=inputs)
+    state = pruned(state=state, wanted=wanted, departures=drawn)
+    state, area = area_effects(state=state, departures=drawn)
     state, fetches = request_positions(state=state)
     state, loads = request_patterns(
         state=state,
-        wanted=wanted - awaiting_fetch(state=state, departures=shown),
+        wanted=wanted - held_back(state=state, departures=drawn),
     )
-    return state, (*modes, *shapes, *fetches, *loads)
+    return state, (*area, *fetches, *loads)

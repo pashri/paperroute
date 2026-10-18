@@ -6,16 +6,15 @@ from typing import Final
 
 from paperroute.core.feeds import feed_for
 from paperroute.core.knobs import knob_moved
-from paperroute.core.live import resolve
+from paperroute.core.live import LiveDeparture, resolve
 from paperroute.core.map_requests import (
-    MAP_VIEWS,
-    elapsed,
     map_effects,
     map_feeds,
     map_inputs,
+    polled_positions,
 )
 from paperroute.core.map_state import MapState, failed, with_patterns
-from paperroute.core.map_view import MapView, build_map_view
+from paperroute.core.map_view import STRIP_MAP_WIDTH, MapView, build_map_view
 from paperroute.core.messages import (
     DeparturesFailed,
     DeparturesLoaded,
@@ -40,6 +39,8 @@ from paperroute.core.messages import (
     SaveState,
     ShapesLoaded,
     Stop,
+    StripFailed,
+    StripLoaded,
     Tick,
     TimetableSeen,
 )
@@ -63,6 +64,7 @@ from paperroute.core.state_model import (
     Board,
     Saving,
     State,
+    elapsed,
 )
 from paperroute.core.stop_view import (
     HORIZON,
@@ -70,6 +72,20 @@ from paperroute.core.stop_view import (
     StopView,
     build_stop_view,
     pin_tag,
+)
+from paperroute.core.strip_state import (
+    clamped,
+    request_strips,
+    strip_failed,
+    strip_inputs,
+    strip_loaded,
+)
+from paperroute.core.strip_view import (
+    StripInputs,
+    StripMapView,
+    StripView,
+    build_strip_pane,
+    build_strip_view,
 )
 from paperroute.core.tiles import ZOOMS
 
@@ -132,6 +148,30 @@ def saved_of(*, state: State) -> Saved:
     )
 
 
+def live_departures(*, state: State) -> tuple[LiveDeparture, ...]:
+    """
+    Apply the trip updates to the loaded departures.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[LiveDeparture, ...]
+        Every departure, with its feed's live times where known.
+    """
+    return tuple(
+        resolve(
+            departure=dep,
+            snapshot=state.snapshots.get(feed_for(mode=dep.mode) or ''),
+            now=state.now,
+        )
+        for dep in state.board.departures
+    )
+
+
 def stop_view_of(*, state: State) -> StopView:
     """
     Build the Stop view for the current state.
@@ -148,14 +188,6 @@ def stop_view_of(*, state: State) -> StopView:
     """
     pin = shown(state=state)
     destination = pin.destination
-    resolved = [
-        resolve(
-            departure=dep,
-            snapshot=state.snapshots.get(feed_for(mode=dep.mode) or ''),
-            now=state.now,
-        )
-        for dep in state.board.departures
-    ]
     fetched = [
         state.snapshots[feed].fetched_at if feed in state.snapshots else None
         for feed in state.feeds
@@ -173,7 +205,7 @@ def stop_view_of(*, state: State) -> StopView:
         inputs=StopInputs(
             origin=pin.origin.name,
             destination=None if destination is None else destination.name,
-            departures=tuple(resolved),
+            departures=live_departures(state=state),
             now=state.now,
             scroll=state.scroll,
             live_since=since,
@@ -200,9 +232,10 @@ def needed_feeds(*, state: State) -> tuple[str, ...]:
     Returns
     -------
     tuple[str, ...]
-        The trip-updates feeds, then on a map its positions feeds.
+        The trip-updates feeds, then on every view but the Stop view its
+        positions feeds.
     """
-    if state.view not in MAP_VIEWS:
+    if state.view is LiveView.STOP:
         return state.feeds
     return (*state.feeds, *map_feeds(state=state))
 
@@ -227,9 +260,33 @@ def live_stop_view(*, state: State) -> StopView:
     return stop_view_of(state=state)
 
 
+def shown_strip(*, state: State, stop_view: StopView) -> StripInputs:
+    """
+    Gather what the shown place's Strip views are built from.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    stop_view : StopView
+        The state's unscrolled Stop view.
+
+    Returns
+    -------
+    StripInputs
+        Inputs with live departures and the polled feeds' positions.
+    """
+    return strip_inputs(
+        state=state,
+        stop_view=stop_view,
+        departures=live_departures(state=state),
+        positions=polled_positions(state=state),
+    )
+
+
 def current_view(
     *, state: State, stop_view: StopView
-) -> StopView | MapView:
+) -> StopView | MapView | StripView | StripMapView:
     """
     Build the view for the current state.
 
@@ -242,14 +299,25 @@ def current_view(
 
     Returns
     -------
-    StopView | MapView
-        The Live view shown. Until they are built, the Strip shows the
-        unscrolled Stop view and the Strip + map shows the Map.
+    StopView | MapView | StripView | StripMapView
+        The Live view shown; the Strip + map's map at its own width.
     """
-    if state.view in MAP_VIEWS:
-        return build_map_view(
-            inputs=map_inputs(state=state, stop_view=stop_view),
-        )
+    match state.view:
+        case LiveView.MAP:
+            inputs = map_inputs(state=state, stop_view=stop_view)
+            return build_map_view(inputs=inputs)
+        case LiveView.STRIP:
+            strip = shown_strip(state=state, stop_view=stop_view)
+            return build_strip_view(inputs=strip)
+        case LiveView.STRIP_MAP:
+            inputs = map_inputs(state=state, stop_view=stop_view)
+            strip = shown_strip(state=state, stop_view=stop_view)
+            return StripMapView(
+                map=build_map_view(
+                    inputs=replace(inputs, width=STRIP_MAP_WIDTH),
+                ),
+                pane=build_strip_pane(inputs=strip),
+            )
     return stop_view
 
 
@@ -289,7 +357,10 @@ def settled(
     *, state: State, effects: tuple[Effect, ...] = ()
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Ask for the map data needed and redraw, building the Stop view once.
+    Ask for the reaches and map data needed, and redraw.
+
+    The Stop view is built once, and the Strip's scroll is clamped to
+    its reach first.
 
     Parameters
     ----------
@@ -304,11 +375,12 @@ def settled(
         New state and effects.
     """
     stop_view = live_stop_view(state=state)
+    state, strips = request_strips(state=clamped(state=state))
     state, requests = map_effects(state=state, stop_view=stop_view)
     return rendered(
         state=state,
         stop_view=stop_view,
-        effects=(*effects, *requests),
+        effects=(*effects, *strips, *requests),
     )
 
 
@@ -614,10 +686,10 @@ def on_timetable(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the version recorded and the departures due to reload
-        (a load in flight is forgotten, its reply now stale), and a
-        MatchPlaces when there is a timetable; unchanged for the
-        version already seen.
+        State with the version recorded, the departures due to reload
+        (a load in flight is forgotten, its reply now stale) and no
+        reaches built or pending, and a MatchPlaces when there is a
+        timetable; unchanged for the version already seen.
     """
     if event.version == state.saving.timetable:
         return state, ()
@@ -625,6 +697,7 @@ def on_timetable(
         state,
         board=replace(state.board, loaded_until=None, loading=False),
         saving=replace(state.saving, timetable=event.version),
+        strip=replace(state.strip, reaches={}, pending=frozenset()),
     )
     if event.version is None:
         return state, ()
@@ -778,6 +851,10 @@ def dispatched(
             result = on_timetable(state=state, event=event)
         case PlacesMatched():
             result = on_matched(state=state, event=event)
+        case StripLoaded():
+            result = settled(state=strip_loaded(state=state, event=event))
+        case StripFailed():
+            result = (strip_failed(state=state, event=event), ())
         case (
             ShapesLoaded()
             | PatternsLoaded()

@@ -30,6 +30,7 @@ from paperroute.core.messages import (
     LoadModes,
     LoadPatterns,
     LoadShapes,
+    LoadStrip,
     MapDataFailed,
     MapRequest,
     MatchPlaces,
@@ -534,10 +535,10 @@ async def perform(
         Draws Map views.
     """
     match effect:
-        case Render(view=view):
+        case Render(view=StopView() | MapView() as view):
             await render(ports=ports, view=view, maps=maps)
             return
-        case Stop() | SaveState() | MatchPlaces():
+        case Render() | Stop() | SaveState() | MatchPlaces() | LoadStrip():
             return
     work, failed = background(ports=ports, effect=effect, queue=queue)
     task = asyncio.create_task(work)

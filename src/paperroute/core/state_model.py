@@ -8,15 +8,40 @@ from typing import Final
 from paperroute.core.map_state import MapState
 from paperroute.core.map_view import MapView
 from paperroute.core.model import Departure, Pin
+from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.stop_view import StopView
+from paperroute.core.strip_view import StripMapView, StripView
 
 POLL_EVERY: Final[timedelta] = timedelta(seconds=30)
 RELOAD_BEFORE: Final[timedelta] = timedelta(minutes=30)
 LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 RETRY_AFTER: Final[timedelta] = timedelta(seconds=30)
 FEED_IDLE: Final[timedelta] = timedelta(minutes=10)
+
+
+def elapsed(*, since: datetime | None, now: datetime, span: timedelta) -> bool:
+    """
+    Say whether a span of real time has passed since a moment.
+
+    Parameters
+    ----------
+    since : datetime | None
+        The moment, or None for never.
+    now : datetime
+        Current time.
+    span : timedelta
+        Span of real time.
+
+    Returns
+    -------
+    bool
+        True when `since` is None or at least `span` ago.
+    """
+    if since is None:
+        return True
+    return now.timestamp() - since.timestamp() >= span.total_seconds()
 
 
 @dataclass(frozen=True)
@@ -80,6 +105,29 @@ class Saving:
 
 
 @dataclass(frozen=True)
+class StripState:
+    """
+    The strips' reaches and the Strip's scroll.
+
+    Attributes
+    ----------
+    reaches : Mapping[StripKey, Reach | None]
+        Built reaches by key; None when the timetable has no run tables.
+    pending : frozenset[StripKey]
+        Keys whose reaches are being built.
+    failed_at : datetime | None
+        When a reach last failed to build, or None.
+    scroll : int
+        The Strip's scroll, in rows from the default; may be negative.
+    """
+
+    reaches: Mapping[StripKey, Reach | None] = field(default_factory=dict)
+    pending: frozenset[StripKey] = frozenset()
+    failed_at: datetime | None = None
+    scroll: int = 0
+
+
+@dataclass(frozen=True)
 class State:
     """
     Everything the app knows.
@@ -100,7 +148,7 @@ class State:
         When the trip-updates feeds were last asked for.
     scroll : int
         The Stop view's scroll.
-    last_view : StopView | MapView | None
+    last_view : StopView | MapView | StripView | StripMapView | None
         The view last drawn.
     running : bool
         False once the app should stop.
@@ -110,6 +158,8 @@ class State:
         The map's zoom, centre and data.
     saving : Saving
         What was last saved and the timetable last matched against.
+    strip : StripState
+        The strips' reaches and the Strip's scroll.
     """
 
     now: datetime
@@ -119,8 +169,9 @@ class State:
     snapshots: Mapping[str, RealtimeSnapshot] = field(default_factory=dict)
     last_fetch: datetime | None = None
     scroll: int = 0
-    last_view: StopView | MapView | None = None
+    last_view: StopView | MapView | StripView | StripMapView | None = None
     running: bool = True
     view: LiveView = LiveView.STOP
     map: MapState = field(default_factory=MapState)
     saving: Saving = field(default_factory=Saving)
+    strip: StripState = field(default_factory=StripState)

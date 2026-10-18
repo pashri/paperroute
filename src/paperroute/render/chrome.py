@@ -148,8 +148,7 @@ def header_titles(
         What is being picked, such as 'To'.
     """
     title = Face(weight=700, px=18)
-    second = None if picking is None else f'pick {picking}'
-    second = destination if second is None else second
+    second = destination if picking is None else f'pick {picking}'
     limit = right - TAG_GAP
     if second is None:
         shown = canvas.fit(text=origin, face=title, width=limit - 12)

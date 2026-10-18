@@ -472,3 +472,17 @@ def test_empty_text_too_long_for_two_lines_uses_the_smallest_face() -> None:
     lines, face = empty_lines(text=text)
     assert face == Face(weight=700, px=15)
     assert ' '.join(lines) == text
+
+
+def test_map_sidebar_omits_the_destination_line_without_one() -> None:
+    """With no destination the sidebar opens straight on its rows."""
+    frame = draw_map_view(
+        view=replace(VIEW, destination=None, sidebar=()), base=paper())
+    band = frame[HEADER:90, SIDEBAR_LEFT + 3:]
+    assert np.all(band == band[0, 0])
+    assert np.any(
+        draw_map_view(view=replace(VIEW, sidebar=()), base=paper())[
+            HEADER:90, SIDEBAR_LEFT + 3:
+        ]
+        != band
+    )

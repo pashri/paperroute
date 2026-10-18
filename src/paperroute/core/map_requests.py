@@ -3,9 +3,15 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from paperroute.core.feeds import FeedKind, position_feeds
+from paperroute.core.feeds import FeedKind, feed_for, position_feeds
+from paperroute.core.live import LiveDeparture, resolve
 from paperroute.core.map_state import area_box
-from paperroute.core.map_view import MapInputs, needed_patterns, pin_trips
+from paperroute.core.map_view import (
+    SIDEBAR_ROWS,
+    MapInputs,
+    needed_patterns,
+    pin_trips,
+)
 from paperroute.core.messages import (
     Effect,
     FetchFeed,
@@ -14,10 +20,10 @@ from paperroute.core.messages import (
     LoadShapes,
     MapData,
 )
-from paperroute.core.model import SYDNEY
+from paperroute.core.model import SYDNEY, Departure
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import POLL_EVERY, RETRY_AFTER, State
-from paperroute.core.stop_view import StopView
+from paperroute.core.stop_view import StopView, in_view
 from paperroute.core.tiles import ZOOMS
 
 
@@ -88,6 +94,48 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
     return position_feeds(modes=modes)
 
 
+def resolved_departures(*, state: State) -> tuple[LiveDeparture, ...]:
+    """
+    Resolve the state's departures against its live snapshots.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[LiveDeparture, ...]
+        One per departure, in timetable order.
+    """
+    return tuple(
+        resolve(
+            departure=dep,
+            snapshot=state.snapshots.get(feed_for(mode=dep.mode) or ''),
+            now=state.now,
+        )
+        for dep in state.departures
+    )
+
+
+def sidebar_departures(*, state: State) -> tuple[Departure, ...]:
+    """
+    List the departures the Map's sidebar rows show.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        The first `SIDEBAR_ROWS` of the unscrolled board, in live order.
+    """
+    board = in_view(departures=resolved_departures(state=state), now=state.now)
+    return tuple(item.departure for item in board[:SIDEBAR_ROWS])
+
+
 def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     """
     Gather what the Map view is built from.
@@ -102,12 +150,18 @@ def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     Returns
     -------
     MapInputs
-        Inputs, with only the positions of feeds the Map polls.
+        Inputs, with only the positions of feeds the Map polls. With no
+        destination, the departures are only those in the sidebar.
     """
     feeds = map_feeds(state=state)
+    departures = (
+        state.departures
+        if state.pin.destination is not None
+        else sidebar_departures(state=state)
+    )
     return MapInputs(
         stop_view=stop_view,
-        departures=state.departures,
+        departures=departures,
         centre=state.map.centre,
         zoom=state.map.zoom,
         positions={

@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Final
 
 from paperroute.core.live import STALE_AFTER, LiveDeparture
-from paperroute.core.model import SYDNEY, Mode, shifted
+from paperroute.core.model import SYDNEY, CarryOn, Mode, shifted
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
@@ -37,6 +37,7 @@ class Row:
     ride_minutes: int
     live: bool
     pill: Pill | None
+    then: CarryOn | None = None
 
 
 @dataclass(frozen=True)
@@ -197,6 +198,7 @@ def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
         ride_minutes=int(ride_s // 60),
         live=item.live,
         pill=pill,
+        then=dep.facts.then,
     )
 
 
@@ -372,7 +374,8 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     -------
     StopView
         View-model, with scroll clamped to the rows that fit under any
-        banner.
+        banner. With no destination there is no hero: every departure is
+        a row.
     """
     now = inputs.now
     upcoming = in_view(departures=inputs.departures, now=now)
@@ -380,10 +383,16 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         to_row(item=item, now=now, pill=pill)
         for item, pill in zip(upcoming, pills(items=upcoming), strict=True)
     ]
-    lead = next(
-        (i for i, row in enumerate(rows) if row.pill is not Pill.CANCELLED),
-        None,
-    )
+    lead = None
+    if inputs.destination is not None:
+        lead = next(
+            (
+                i
+                for i, row in enumerate(rows)
+                if row.pill is not Pill.CANCELLED
+            ),
+            None,
+        )
     rest = [row for i, row in enumerate(rows) if i != lead]
     text = banner(
         live_since=inputs.live_since, now=now, has_feed=inputs.has_feed

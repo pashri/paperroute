@@ -4,12 +4,12 @@ from dataclasses import replace
 from datetime import datetime
 
 from paperroute.core.feeds import feed_for
-from paperroute.core.live import resolve
 from paperroute.core.map_requests import (
     elapsed,
     map_effects,
     map_feeds,
     map_inputs,
+    resolved_departures,
 )
 from paperroute.core.map_state import MapState, failed, with_patterns, zoomed
 from paperroute.core.map_view import MapView, build_map_view
@@ -88,14 +88,6 @@ def stop_view_of(*, state: State) -> StopView:
         View.
     """
     destination = state.pin.destination
-    resolved = [
-        resolve(
-            departure=dep,
-            snapshot=state.snapshots.get(feed_for(mode=dep.mode) or ''),
-            now=state.now,
-        )
-        for dep in state.departures
-    ]
     fetched = [
         state.snapshots[feed].fetched_at if feed in state.snapshots else None
         for feed in state.feeds
@@ -113,7 +105,7 @@ def stop_view_of(*, state: State) -> StopView:
         inputs=StopInputs(
             origin=state.pin.origin.name,
             destination=None if destination is None else destination.name,
-            departures=tuple(resolved),
+            departures=resolved_departures(state=state),
             now=state.now,
             scroll=state.scroll,
             live_since=since,

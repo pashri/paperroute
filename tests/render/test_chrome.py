@@ -3,6 +3,8 @@
 from collections.abc import Sequence
 from typing import Any
 
+import numpy as np
+
 from paperroute.core.stop_view import NOT_PINNED, PinTag
 from paperroute.core.stop_view import pin_tag as tag_of
 from paperroute.render.canvas import (
@@ -121,6 +123,13 @@ def test_unpinned_tag_is_dashed() -> None:
     assert int(inside) == INK
 
 
+def test_unpinned_tag_text_is_paper() -> None:
+    """An unpinned tag's text is paper on the ink header."""
+    canvas, left = _tag_box(tag=NOT_PINNED)
+    text = canvas.grey()[14:27, int(left) + 3:int(left) + 50]
+    assert int(text.max()) == PAPER
+
+
 def test_no_destination_title() -> None:
     """With no destination the header draws no arrow and one name."""
     canvas = Recording()
@@ -176,3 +185,6 @@ def test_titles_stop_before_the_tag() -> None:
     )
     grey = canvas.grey()
     assert int(grey[:40, int(box_left) - 8:int(box_left)].max()) == INK
+    ink_columns = np.flatnonzero(grey[:40, :int(box_left)].max(axis=0))
+    limit = box_left - 8
+    assert limit - 18 - 24 <= ink_columns.max() <= limit - 18

@@ -1,9 +1,10 @@
 """Tests for the Stop view view-model."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import SYDNEY
+from paperroute.core.model import SYDNEY, CarryOn, Mode, TripFacts
 from paperroute.core.stop_view import (
     HORIZON,
     NOT_PINNED,
@@ -27,6 +28,8 @@ def live(
     cancelled: bool = False,
     is_live: bool = True,
     late: int = 0,
+    mode: Mode = Mode.BUS,
+    facts: TripFacts = TripFacts(),
 ) -> LiveDeparture:
     """
     A resolved departure leaving some minutes after START.
@@ -43,13 +46,24 @@ def live(
         Live flag.
     late : int
         Minutes the live times run behind the timetable.
+    mode : Mode
+        Mode.
+    facts : TripFacts
+        What is known about the trip.
 
     Returns
     -------
     LiveDeparture
         Departure.
     """
-    dep = departure(departs=START + timedelta(minutes=minutes), ride=ride)
+    dep = replace(
+        departure(
+            departs=START + timedelta(minutes=minutes),
+            ride=ride,
+            mode=mode,
+        ),
+        facts=facts,
+    )
     delay = timedelta(minutes=late)
     return LiveDeparture(
         departure=dep,
@@ -66,6 +80,7 @@ def view(
     scroll: int = 0,
     age: timedelta | None = timedelta(seconds=5),
     has_feed: bool = True,
+    destination: str | None = 'Parramatta Station',
 ) -> StopView:
     """
     Build a view with fixed names and time.
@@ -80,6 +95,8 @@ def view(
         Age of the live data, or None when there is none.
     has_feed : bool
         Whether the pin has a live feed.
+    destination : str | None
+        Destination name, or None for none.
 
     Returns
     -------
@@ -89,7 +106,7 @@ def view(
     return build_stop_view(
         inputs=StopInputs(
             origin='Hollis St',
-            destination='Parramatta Station',
+            destination=destination,
             departures=departures,
             now=START,
             scroll=scroll,
@@ -481,3 +498,84 @@ def test_view_cancelled_placed_by_timetabled_time() -> None:
         ('8:04', Pill.CANCELLED),
         ('8:06', None),
     ]
+
+
+def test_no_destination_has_no_hero_and_lists_every_departure() -> None:
+    """A train, a bus and a light rail departure all show, in order."""
+    result = view(
+        departures=(
+            live(minutes=9, mode=Mode.LIGHT_RAIL),
+            live(minutes=3, mode=Mode.TRAIN),
+            live(minutes=6),
+        ),
+        destination=None,
+    )
+    assert result.hero is None
+    assert [row.countdown for row in result.rows] == ['3', '6', '9']
+    assert [row.mode for row in result.rows] == [
+        Mode.TRAIN,
+        Mode.BUS,
+        Mode.LIGHT_RAIL,
+    ]
+    assert result.empty is None
+
+
+def test_no_destination_scroll_clamps() -> None:
+    """Scrolling past the end shows the last full page; 0 is the first."""
+    first = view(departures=many(), destination=None)
+    assert len(first.rows) == VISIBLE_ROWS
+    assert first.rows[0].countdown == 'now'
+    past = view(departures=many(), destination=None, scroll=99)
+    assert past.scroll == len(many()) - VISIBLE_ROWS
+    assert past.rows[-1].leaves_at == '8:56'
+    under = view(departures=many(), destination=None, scroll=99, age=None)
+    assert len(under.rows) == ROWS_UNDER_BANNER
+    assert under.scroll == len(many()) - ROWS_UNDER_BANNER
+
+
+def test_no_destination_rows_keep_pills() -> None:
+    """A cancelled trip carries CANCELLED and a faster one FASTER."""
+    result = view(
+        departures=(
+            live(minutes=3, cancelled=True),
+            live(minutes=6, ride=40),
+            live(minutes=9, ride=20),
+        ),
+        destination=None,
+    )
+    assert [row.pill for row in result.rows] == [
+        Pill.CANCELLED,
+        None,
+        Pill.FASTER,
+    ]
+
+
+def test_row_carries_on_tag() -> None:
+    """A row holds its departure's carry-on, with or without a destination."""
+    on = CarryOn(route='811', headsign='Parramatta Stn')
+    for destination in ('Parramatta Station', None):
+        result = view(
+            departures=(
+                live(minutes=3, facts=TripFacts(then=on)),
+                live(minutes=6),
+            ),
+            destination=destination,
+        )
+        rows = (*([result.hero] if result.hero else []), *result.rows)
+        assert [row.then for row in rows] == [on, None]
+
+
+def test_train_row_carries_on_to_another_line() -> None:
+    """A T1 departure that runs on as a T9 has the T9 in its row."""
+    result = view(
+        departures=(
+            live(
+                minutes=3,
+                mode=Mode.TRAIN,
+                facts=TripFacts(then=CarryOn(route='T9', headsign='Hornsby')),
+            ),
+        ),
+        destination=None,
+    )
+    assert result.rows[0].then is not None
+    assert result.rows[0].then.route == 'T9'

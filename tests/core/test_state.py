@@ -1236,3 +1236,17 @@ def test_stop_view_tag_is_the_first_of_one_pin_for_now() -> None:
     state, _ = step(fresh(), Tick(now=START))
     assert isinstance(state.last_view, StopView)
     assert state.last_view.tag.text == 'pin 1/1'
+
+
+def test_no_destination_map_caps_patterns() -> None:
+    """A place with 500 departures asks for no more than the sidebar shows."""
+    pin = replace(
+        PIN,
+        origin=replace(PIN.origin, point=CENTRE),
+        destination=None,
+    )
+    state = loaded(state=initial_state(pin=pin, now=START), count=500)
+    _, effects = step(state, PRESS)
+    loads = effects_of(effects=effects, kind=LoadPatterns)
+    assert len(loads) == 1
+    assert 0 < len(loads[0].trip_ids) <= SIDEBAR_ROWS

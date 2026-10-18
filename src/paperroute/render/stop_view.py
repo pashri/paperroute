@@ -12,6 +12,7 @@ from paperroute.render.chrome import (
     BANNER,
     FASTER,
     HEADER,
+    arrow,
     badge,
     banner,
     cancelled,
@@ -27,6 +28,14 @@ VEHICLE: Final[dict[Mode, str]] = {
     Mode.BUS: 'bus', Mode.TRAIN: 'train', Mode.METRO: 'metro',
     Mode.FERRY: 'ferry', Mode.LIGHT_RAIL: 'light rail', Mode.COACH: 'coach',
     Mode.REGIONAL: 'service', Mode.OTHER: 'service'}
+LIST_WIDTH: Final[int] = 140
+TAGGED_WIDTH: Final[int] = 240
+BOARD_BADGE_X: Final[int] = 96
+BOARD_RIGHT: Final[int] = 580
+TAG_FACE: Final[Face] = Face(weight=700, px=12)
+TAG_GAP: Final[int] = 8
+ARROW_GAP: Final[int] = 4
+ARROW_WIDTH: Final[int] = 22
 BAY: Final[dict[Mode, str]] = {Mode.BUS: 'stand', Mode.COACH: 'stand',
                                Mode.FERRY: 'wharf'}
 
@@ -122,6 +131,58 @@ def hero(canvas: Canvas, *, row: Row, top: int) -> None:
     hero_footer(canvas, row=row, top=top)
 
 
+def headline(
+    canvas: Canvas,
+    *,
+    row: Row,
+    at: tuple[float, float],
+    text: str,
+    face: Face,
+    width: float,
+) -> None:
+    """
+    Draw a headsign and, after it, the tag for where the vehicle runs on.
+
+    The headsign and tag are fitted together into `width`; the tag gets at
+    most half of it.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure.
+    at : tuple[float, float]
+        Left end and baseline.
+    text : str
+        Headsign text.
+    face : Face
+        Headsign face.
+    width : float
+        Width for the headsign and tag together.
+    """
+    then = row.then
+    if then is None:
+        fitted = canvas.fit(text=text, face=face, width=width)
+        canvas.text(at=at, text=fitted, face=face, grey=INK)
+        return
+    lead = ARROW_WIDTH + ARROW_GAP
+    tag = f'{then.route} {then.headsign}'
+    tag_width = min(
+        canvas.length(text=tag, face=TAG_FACE) + lead, width / 2)
+    fitted = canvas.fit(
+        text=text, face=face, width=width - tag_width - TAG_GAP)
+    x, baseline = at
+    x += canvas.text(at=at, text=fitted, face=face, grey=INK) + TAG_GAP
+    arrow(canvas, x=x, y=baseline - 4, grey=INK)
+    canvas.text(
+        at=(x + lead, baseline),
+        text=canvas.fit(text=tag, face=TAG_FACE, width=tag_width - lead),
+        face=TAG_FACE,
+        grey=INK,
+    )
+
+
 def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
     """
     Draw one list row.
@@ -136,9 +197,14 @@ def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
         Row top.
     """
     badge(canvas, x=456, y=y + 14, route=row.route, px=14)
-    small = Face(weight=400, px=13)
-    fitted = canvas.fit(text=row.destination, face=small, width=140)
-    canvas.text(at=(456, y + 42), text=fitted, face=small, grey=INK)
+    headline(
+        canvas,
+        row=row,
+        at=(456, y + 42),
+        text=row.destination,
+        face=Face(weight=400, px=13),
+        width=LIST_WIDTH if row.then is None else TAGGED_WIDTH,
+    )
     if row.pill is Pill.CANCELLED:
         pill(
             canvas,
@@ -156,6 +222,66 @@ def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
     if row.pill is Pill.FASTER:
         pill(canvas, box=(712, y + 30, 786, y + 45), text=FASTER, px=11)
     canvas.rect(box=(452, y + 49, 786, y + 50), grey=INK)
+
+
+def board_row(canvas: Canvas, *, row: Row, y: int) -> None:
+    """
+    Draw one full-width row of the board with no destination.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure.
+    y : int
+        Row top.
+    """
+    canvas.text(
+        at=(18, y + 33), text=row.leaves_at,
+        face=Face(weight=800, px=22), grey=INK)
+    width = badge(canvas, x=BOARD_BADGE_X, y=y + 25, route=row.route, px=16)
+    left = BOARD_BADGE_X + width + 14
+    headline(
+        canvas,
+        row=row,
+        at=(left, y + 31),
+        text=f'to {row.destination}',
+        face=Face(weight=400, px=17),
+        width=BOARD_RIGHT - left,
+    )
+    if row.pill is Pill.CANCELLED:
+        pill(
+            canvas,
+            box=(600, y + 10, 786, y + 38),
+            text=cancelled(row=row),
+            px=15,
+        )
+    elif row.live:
+        canvas.text(
+            at=(786, y + 33), text=row.countdown,
+            face=Face(weight=800, px=28), grey=INK, anchor='rs')
+    if row.pill is Pill.FASTER:
+        pill(canvas, box=(600, y + 17, 674, y + 32), text=FASTER, px=11)
+    canvas.rect(box=(0, y + 49, WIDTH, y + 50), grey=INK)
+
+
+def finish(canvas: Canvas) -> NDArray[np.uint8]:
+    """
+    Threshold a canvas to a 1-bit frame.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Drawn canvas.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        480 by 800 pixels, 0 or 255.
+    """
+    grey = canvas.grey()
+    return np.where(grey < 128, 0, 255).astype(np.uint8)
 
 
 def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
@@ -193,8 +319,11 @@ def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
         canvas.text(
             at=(786, top + 22), text='ARRIVES',
             face=Face(weight=700, px=11), grey=INK, anchor='rs')
+    if view.destination is None:
+        for index, item in enumerate(view.rows[:(HEIGHT - top) // ROW_H]):
+            board_row(canvas, row=item, y=top + index * ROW_H)
+        return finish(canvas)
     fits = (HEIGHT - top - LIST_TOP) // ROW_H
     for index, item in enumerate(view.rows[:fits]):
         list_row(canvas, row=item, y=top + LIST_TOP + index * ROW_H)
-    grey = canvas.grey()
-    return np.where(grey < 128, 0, 255).astype(np.uint8)
+    return finish(canvas)

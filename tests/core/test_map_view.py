@@ -501,3 +501,19 @@ def test_vehicles_without_a_trip_are_each_drawn() -> None:
     second = vehicle(timestamp=heard(age=0), trip_id='', point=(80.0, 0.0))
     view = build_map_view(inputs=inputs(vehicles=(first, second)))
     assert len(view.markers) == 2
+
+
+def test_no_destination_map_sidebar_lists_departures() -> None:
+    """With no destination and no hero the sidebar is the rows."""
+    rows = tuple(row(route=str(606 + i)) for i in range(7))
+    view = build_map_view(
+        inputs=replace(
+            inputs(),
+            stop_view=replace(
+                stop_view(hero=None, rows=rows),
+                destination=None,
+            ),
+        ),
+    )
+    assert view.destination is None
+    assert view.sidebar == rows[:SIDEBAR_ROWS]

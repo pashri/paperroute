@@ -1,7 +1,5 @@
 """Build the route chooser's catalogue: route lists, tags and towards rows."""
 
-import logging
-import math
 import re
 import sqlite3
 import statistics
@@ -13,10 +11,9 @@ from operator import itemgetter
 from typing import Final
 
 from paperroute.build.gtfs_files import insert_many
+from paperroute.build.route_tags import CatalogueRoute, agency_towns, tags_of
 from paperroute.core.geo import Point, to_metres
 from paperroute.core.model import INTERCITY, RouteKind, kind_for
-
-logger = logging.getLogger(__name__)
 
 CATALOGUE_SCHEMA: Final[str] = """
 CREATE TABLE chooser_routes (route_key TEXT PRIMARY KEY, kind TEXT NOT NULL,
@@ -28,43 +25,6 @@ CREATE TABLE chooser_towards (towards_id INTEGER PRIMARY KEY,
   stations TEXT NOT NULL);
 CREATE INDEX chooser_towards_route ON chooser_towards (route_key, trips);
 """
-CENTRES: Final[tuple[tuple[str, float, float, float], ...]] = (
-    ('Sydney', 151.207, -33.870, 55),
-    ('Newcastle', 151.750, -32.930, 40),
-    ('C Coast', 151.340, -33.430, 30),
-    ('Wollongong', 150.890, -34.420, 30),
-    ('Blue Mtns', 150.400, -33.700, 25),
-)  # label, lon, lat, radius in km
-PLACE_SUFFIX: Final[re.Pattern[str]] = re.compile(
-    r'\s+(City Centre|Town Centre|CBD|Station|Interchange|Mall|City|Park Ave'
-    r'|Shopping Centre|Shops|Market Square|Manning Mall|East|West|North'
-    r'|South|CBD)$',
-)
-PLACE_SHORT: Final[dict[str, str]] = {
-    'Port Macquarie': 'Port Mac',
-    'Coffs Harbour': 'Coffs',
-    'Wagga Wagga': 'Wagga',
-    'Batemans Bay': 'Batemans',
-    'Raymond Terrace': 'Raymond T',
-    'Soldiers Point': 'Soldiers P',
-    'Muswellbrook': 'Muswellbk',
-    'Murwillumbah': 'Murwillum',
-    'Queanbeyan': 'Queanbeyan',
-    'University of Wollongong': 'UOW',
-    'City Martin Place': 'City',
-    'City Wynyard': 'City',
-    'City QVB': 'City',
-    'Broken Hill': 'Broken Hl',
-    'Campbelltown': 'Campbelltn',
-    'Stockland Forster': 'Forster',
-    'QEII Square': 'Albury',
-    'Orana': 'Dubbo',
-    'Green Hills': 'Maitland',
-    'Park Beach Plaza': 'Coffs',
-    'Toormina Gardens': 'Coffs',
-    'Sunnyside': 'Murwillum',
-}
-TAG_MAX: Final[int] = 10
 REPLACEMENT: Final[re.Pattern[str]] = re.compile(
     r'^\d+[A-Z]?(T\d|BM|CN|HU|SC|SH)',
 )
@@ -72,13 +32,13 @@ REPLACEMENT_LINES: Final[dict[str, str]] = {
     'BM': 'BMT', 'CN': 'CCN', 'HU': 'HUN', 'SC': 'SCO', 'SH': 'SHL',
 }
 FIRST_HUNDRED: Final[str] = '1\u201399'
-LEVELS: Final[int] = 4  # region, first place, last place, via place
 LETTERED: Final[int] = 10**6
 NO_NUMBER: Final[int] = 10**9
 LINE_SORT: Final[dict[str, int]] = {
     **{f'T{line}': line for line in range(1, 10)},
     **{code: 101 + index for index, code in enumerate(INTERCITY)},
 }
+OTHER_LINES: Final[int] = 200
 LINE_KINDS: Final[frozenset[RouteKind]] = frozenset(
     {RouteKind.TRAIN, RouteKind.METRO, RouteKind.LIGHT_RAIL},
 )
@@ -87,8 +47,6 @@ TAGGED_KINDS: Final[frozenset[RouteKind]] = frozenset(
 )
 LEADING_DIGITS: Final[re.Pattern[str]] = re.compile(r'^\d+')
 NATURAL_PARTS: Final[re.Pattern[str]] = re.compile(r'\d+|\D+')
-WORD: Final[re.Pattern[str]] = re.compile(r'[^\W_]+')
-UNKNOWN_TOWN: Final[str] = '?'
 ROUTES: Final[str] = """
 SELECT r.route_id, r.short_name, r.long_name, r.type, r.agency_id,
   SUM(p.trips)
@@ -122,35 +80,6 @@ ORDER BY k.route_key, p.headsign, p.stations
 """
 type Merge = tuple[RouteKind, str, str]
 type RouteRow = tuple[str, str, str, int, str, int, str, str, str]
-
-
-@dataclass(frozen=True)
-class CatalogueRoute:
-    """
-    One chooser route: every route ID of a kind, number and long name.
-
-    Attributes
-    ----------
-    route_key : str
-        'kind:number:long name'.
-    kind : RouteKind
-        Kind.
-    number : str
-        Route short name.
-    long_name : str
-        Route long name.
-    agency : str
-        The operator running the most trips.
-    middle : Point | None
-        Median station point in metres; None without station positions.
-    """
-
-    route_key: str
-    kind: RouteKind
-    number: str
-    long_name: str
-    agency: str
-    middle: Point | None
 
 
 @dataclass(frozen=True)
@@ -256,379 +185,6 @@ def line_name(*, long_name: str, code: str) -> str:
     return name.replace(' and ', ' & ')
 
 
-def end_places(*, long_name: str) -> list[str]:
-    """
-    Pull the place names out of a long name such as 'A to B via C'.
-
-    Parameters
-    ----------
-    long_name : str
-        Route long name.
-
-    Returns
-    -------
-    list[str]
-        The places before any 'via', '(', ' or ' or ' and ', cleaned of
-        suffixes; 'Unknown' and blanks are left out.
-    """
-    trimmed = re.split(r' via |\(| or | and ', long_name)[0]
-    return [
-        PLACE_SUFFIX.sub('', part.strip()).strip()
-        for part in trimmed.split(' to ')
-        if part.strip() and part.strip() != 'Unknown'
-    ]
-
-
-def via_place(*, long_name: str) -> str:
-    """
-    Find the place a long name says the route runs via.
-
-    Parameters
-    ----------
-    long_name : str
-        Route long name.
-
-    Returns
-    -------
-    str
-        The text after ' via ' up to any '(', cleaned of suffixes; '' when
-        there is none.
-    """
-    _, via, rest = long_name.partition(' via ')
-    place = PLACE_SUFFIX.sub('', rest.split('(')[0].strip()).strip()
-    return place if via else ''
-
-
-def short_tag(*, place: str, other: str | None = None) -> str:
-    """
-    Shorten a place to a tag, keeping it apart from another place.
-
-    Parameters
-    ----------
-    place : str
-        Place name.
-    other : str | None
-        A different place whose cut might read the same.
-
-    Returns
-    -------
-    str
-        The PLACE_SHORT form or the name when it fits TAG_MAX, else its
-        first nine characters and '.'; when that equals the other's cut
-        although the names differ, its first four characters, '.', then
-        its last five.
-    """
-    short = PLACE_SHORT.get(place, place)
-    cut = short
-    if len(short) > TAG_MAX:
-        cut = short[:TAG_MAX - 1].rstrip() + '.'
-    if other is None or other == place or short_tag(place=other) != cut:
-        return cut
-    return f'{short[:4]}.{short[-5:]}'
-
-
-def agency_towns(*, routes: Sequence[CatalogueRoute]) -> dict[str, str]:
-    """
-    Name each operator after the place its routes most often end at.
-
-    Parameters
-    ----------
-    routes : Sequence[CatalogueRoute]
-        Routes.
-
-    Returns
-    -------
-    dict[str, str]
-        Place by operator ID; operators with no places are missing.
-    """
-    ends: dict[str, Counter[str]] = defaultdict(Counter)
-    for route in routes:
-        ends[route.agency].update(end_places(long_name=route.long_name))
-    return {
-        agency: places.most_common(1)[0][0]
-        for agency, places in ends.items()
-        if places
-    }
-
-
-def centre_of(*, middle: Point) -> str | None:
-    """
-    Find the big centre a point belongs to, if any.
-
-    Parameters
-    ----------
-    middle : Point
-        Position in metres.
-
-    Returns
-    -------
-    str | None
-        The centre whose radius holds the point, nearest by share of
-        radius, or None outside them all.
-    """
-    reach = []
-    for label, lon, lat, radius in CENTRES:
-        reached = math.dist(middle, to_metres(lon=lon, lat=lat))
-        if (share := reached / (radius * 1000)) < 1:
-            reach.append((share, label))
-    return min(reach)[1] if reach else None
-
-
-def level_values(
-    *, route: CatalogueRoute, towns: Mapping[str, str],
-) -> tuple[str, str, str, str]:
-    """
-    Give a route's candidate tags, level by level.
-
-    Parameters
-    ----------
-    route : CatalogueRoute
-        Route.
-    towns : Mapping[str, str]
-        Place by operator ID.
-
-    Returns
-    -------
-    tuple[str, str, str, str]
-        Region (centre, else operator town, else '?'), first place, last
-        place and via place; '' where there is none.
-    """
-    centre = None if route.middle is None else centre_of(middle=route.middle)
-    places = end_places(long_name=route.long_name) or ['']
-    return (
-        centre or towns.get(route.agency, UNKNOWN_TOWN),
-        places[0],
-        places[-1],
-        via_place(long_name=route.long_name),
-    )
-
-
-def twin_of(*, place: str, places: Iterable[str]) -> str | None:
-    """
-    Find another place whose cut reads the same as this one's.
-
-    Parameters
-    ----------
-    place : str
-        Place.
-    places : Iterable[str]
-        Places to look through.
-
-    Returns
-    -------
-    str | None
-        The first different place with the same cut, if any.
-    """
-    cut = short_tag(place=place)
-    return next(
-        (
-            other
-            for other in places
-            if other != place and short_tag(place=other) == cut
-        ),
-        None,
-    )
-
-
-def level_tags(
-    *, values: Mapping[str, str], given: set[str],
-) -> dict[str, str]:
-    """
-    Tag the routes whose value at one level tells them apart.
-
-    Parameters
-    ----------
-    values : Mapping[str, str]
-        Each untagged route's value at the level, by route key.
-    given : set[str]
-        Tags already given in the group.
-
-    Returns
-    -------
-    dict[str, str]
-        Tags, for routes whose value is usable and whose tag is unique.
-    """
-    tags = {
-        key: short_tag(
-            place=value, other=twin_of(place=value, places=values.values()),
-        )
-        for key, value in values.items()
-        if value not in ('', UNKNOWN_TOWN)
-    }
-    seen = Counter(tags.values())
-    return {
-        key: tag
-        for key, tag in tags.items()
-        if seen[tag] == 1 and tag not in given
-    }
-
-
-def differing_word(
-    *, words: tuple[str, ...], others: Sequence[tuple[str, ...]],
-    taken: set[str],
-) -> str | None:
-    """
-    Find the first word unlike the other routes' words in its place.
-
-    Parameters
-    ----------
-    words : tuple[str, ...]
-        One route's words.
-    others : Sequence[tuple[str, ...]]
-        The other routes' words.
-    taken : set[str]
-        Tags already used.
-
-    Returns
-    -------
-    str | None
-        Tag of the first word that differs from every other route's word
-        at the same position and is not taken, if any.
-    """
-    return next(
-        (
-            short_tag(place=word)
-            for index, word in enumerate(words)
-            if all(other[index:index + 1] != (word,) for other in others)
-            and short_tag(place=word) not in taken
-        ),
-        None,
-    )
-
-
-def free_word(*, words: tuple[str, ...], taken: set[str]) -> str:
-    """
-    Pick a route's first word whose tag is not yet used.
-
-    Parameters
-    ----------
-    words : tuple[str, ...]
-        One route's words.
-    taken : set[str]
-        Tags already used.
-
-    Returns
-    -------
-    str
-        That tag; else the first word's tag (shared), or '?' with no words.
-    """
-    tags = [short_tag(place=word) for word in words] or [UNKNOWN_TOWN]
-    return next((tag for tag in tags if tag not in taken), tags[0])
-
-
-def word_tags(
-    *, routes: Sequence[CatalogueRoute], given: set[str],
-) -> dict[str, str]:
-    """
-    Tag routes alike at every level by a word of their long names.
-
-    Routes with the same words share one tag.
-
-    Parameters
-    ----------
-    routes : Sequence[CatalogueRoute]
-        Routes left untagged.
-    given : set[str]
-        Tags already given in the group.
-
-    Returns
-    -------
-    dict[str, str]
-        Tags by route key.
-    """
-    words = {
-        route.route_key: tuple(WORD.findall(route.long_name))
-        for route in routes
-    }
-    units = list(dict.fromkeys(words.values()))
-    taken = set(given)
-    picks: dict[tuple[str, ...], str] = {}
-    for unit in units:
-        others = [other for other in units if other != unit]
-        if pick := differing_word(words=unit, others=others, taken=taken):
-            picks[unit] = pick
-            taken.add(pick)
-    for unit in (unit for unit in units if unit not in picks):
-        picks[unit] = free_word(words=unit, taken=taken)
-        taken.add(picks[unit])
-    return {key: picks[unit] for key, unit in words.items()}
-
-
-def group_tags(
-    *, group: Sequence[CatalogueRoute], towns: Mapping[str, str],
-) -> dict[str, str]:
-    """
-    Tag the routes of one repeated number.
-
-    Each level (region, first place, last place, via place) tags the
-    routes it tells apart; any left are warned about and tagged by words.
-
-    Parameters
-    ----------
-    group : Sequence[CatalogueRoute]
-        Routes sharing a kind and number.
-    towns : Mapping[str, str]
-        Place by operator ID.
-
-    Returns
-    -------
-    dict[str, str]
-        Tags by route key.
-    """
-    values = {
-        route.route_key: level_values(route=route, towns=towns)
-        for route in group
-    }
-    tags: dict[str, str] = {}
-    for level in range(LEVELS):
-        tags.update(level_tags(
-            values={
-                key: value[level]
-                for key, value in values.items()
-                if key not in tags
-            },
-            given=set(tags.values()),
-        ))
-    left = [route for route in group if route.route_key not in tags]
-    if left:
-        logger.warning(
-            'route tags clash after every level: %s',
-            ', '.join(route.route_key for route in left),
-        )
-        tags.update(word_tags(routes=left, given=set(tags.values())))
-    return tags
-
-
-def tags_of(
-    *, routes: Sequence[CatalogueRoute], towns: Mapping[str, str],
-) -> dict[str, str]:
-    """
-    Tag every route whose kind and number repeat.
-
-    Parameters
-    ----------
-    routes : Sequence[CatalogueRoute]
-        Merged routes.
-    towns : Mapping[str, str]
-        Place by operator ID.
-
-    Returns
-    -------
-    dict[str, str]
-        Tags by route key; routes with a unique number are missing.
-    """
-    groups: dict[tuple[RouteKind, str], list[CatalogueRoute]] = defaultdict(
-        list,
-    )
-    for route in routes:
-        groups[(route.kind, route.number)].append(route)
-    tags: dict[str, str] = {}
-    for group in groups.values():
-        if len(group) > 1:
-            tags.update(group_tags(group=group, towns=towns))
-    return tags
-
-
 def route_sources(*, conn: sqlite3.Connection) -> list[RouteSource]:
     """
     Read every route ID with route patterns and a kind.
@@ -732,7 +288,9 @@ def busiest_agencies(*, sources: Sequence[RouteSource]) -> dict[str, str]:
     }
 
 
-def merged_routes(*, conn: sqlite3.Connection) -> list[CatalogueRoute]:
+def merged_routes(
+    *, conn: sqlite3.Connection, sources: Sequence[RouteSource] | None = None,
+) -> list[CatalogueRoute]:
     """
     Merge the route IDs of each kind, number and long name.
 
@@ -740,6 +298,8 @@ def merged_routes(*, conn: sqlite3.Connection) -> list[CatalogueRoute]:
     ----------
     conn : sqlite3.Connection
         Timetable with the run tables.
+    sources : Sequence[RouteSource] | None
+        Route IDs from route_sources; None to read them.
 
     Returns
     -------
@@ -747,7 +307,7 @@ def merged_routes(*, conn: sqlite3.Connection) -> list[CatalogueRoute]:
         One route per kind, number and long name with route patterns, in
         kind, number and long name order.
     """
-    sources = route_sources(conn=conn)
+    sources = route_sources(conn=conn) if sources is None else sources
     points = middles(conn=conn, sources=sources)
     agencies = busiest_agencies(sources=sources)
     routes = {
@@ -883,7 +443,7 @@ def kind_rows(*, entries: Sequence[Entry]) -> Iterator[RouteRow]:
         if entry.kind not in TAGGED_KINDS:
             grp = ''
         if entry.kind is RouteKind.TRAIN:
-            rank = LINE_SORT.get(entry.number, rank)
+            rank = LINE_SORT.get(entry.number, OTHER_LINES + rank)
         yield (
             entry.key, str(entry.kind), grp,
             bucket_order(bucket=grp) if grp else 0, entry.number, rank,
@@ -914,6 +474,7 @@ def towards_rows(*, conn: sqlite3.Connection) -> Iterator[tuple[object, ...]]:
 
 def write_towards(
     *, conn: sqlite3.Connection, routes: Sequence[CatalogueRoute],
+    sources: Sequence[RouteSource],
 ) -> None:
     """
     Write the chooser_towards rows of every kept chooser row.
@@ -924,6 +485,8 @@ def write_towards(
         Timetable with chooser_routes written.
     routes : Sequence[CatalogueRoute]
         Merged routes; those without a chooser row get no towards rows.
+    sources : Sequence[RouteSource]
+        The route IDs they were merged from.
     """
     rows = {
         route.route_key: (
@@ -935,7 +498,7 @@ def write_towards(
     }
     write_keys(conn=conn, keys=(
         (source.route_id, rows[source.key])
-        for source in route_sources(conn=conn)
+        for source in sources
     ))
     insert_many(conn=conn, rows=towards_rows(conn=conn), sql=(
         'INSERT INTO chooser_towards (route_key, headsign, trips, stations) '
@@ -960,7 +523,8 @@ def load_catalogue(*, conn: sqlite3.Connection) -> int:
     int
         Number of chooser_routes rows written.
     """
-    routes = merged_routes(conn=conn)
+    sources = route_sources(conn=conn)
+    routes = merged_routes(conn=conn, sources=sources)
     tagged = [route for route in routes if route.kind in TAGGED_KINDS]
     tags = tags_of(routes=tagged, towns=agency_towns(routes=tagged))
     entries = [
@@ -972,13 +536,16 @@ def load_catalogue(*, conn: sqlite3.Connection) -> int:
             routes=[r for r in routes if r.kind not in LINE_KINDS], tags=tags,
         ),
     ]
+    kinds: dict[RouteKind, list[Entry]] = defaultdict(list)
+    for entry in entries:
+        kinds[entry.kind].append(entry)
     rows = [
         row
-        for _, group in groupby(entries, key=lambda entry: entry.kind)
-        for row in kind_rows(entries=list(group))
+        for group in kinds.values()
+        for row in kind_rows(entries=group)
     ]
     insert_many(conn=conn, rows=rows, sql=(
         'INSERT INTO chooser_routes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ))
-    write_towards(conn=conn, routes=routes)
+    write_towards(conn=conn, routes=routes, sources=sources)
     return len(rows)

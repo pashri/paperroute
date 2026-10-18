@@ -17,28 +17,32 @@ from hypothesis import strategies as st
 
 from paperroute.build.catalogue import (
     CATALOGUE_SCHEMA,
-    CENTRES,
-    TAG_MAX,
-    CatalogueRoute,
-    agency_towns,
+    Entry,
     bucket_of,
     bucket_order,
+    kind_rows,
     line_name,
     load_catalogue,
     merged_routes,
     route_order,
+)
+from paperroute.build.gtfs_files import Source
+from paperroute.build.route_tags import (
+    CENTRES,
+    TAG_MAX,
+    CatalogueRoute,
+    agency_towns,
     short_tag,
     tags_of,
 )
-from paperroute.build.gtfs_files import Source
 from paperroute.build.runs import RUN_SCHEMA
 from paperroute.build.timetable import Window, build_timetable, create_schema
 from paperroute.core.geo import Point, to_metres
 from paperroute.core.model import RouteKind
 from tests.build.network_feed import EAST_WEST, network_feed
 
-REAL_DB: Final[Path] = Path('data/timetable.db')
-LOGGER: Final[str] = 'paperroute.build.catalogue'
+REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
+LOGGER: Final[str] = 'paperroute.build.route_tags'
 FAR: Final[Point] = to_metres(lon=146.0, lat=-34.3)
 PLACES: Final[tuple[str, ...]] = (
     'Alpha', 'Bravo', 'Charlie', 'Delta Heights', 'Campbelltown North',
@@ -281,6 +285,29 @@ def test_unknown_town_is_never_a_tag() -> None:
     assert tags == {known.route_key: 'Wollongong', unknown.route_key: 'Leeton'}
 
 
+def test_lone_leftover_takes_its_number_without_a_warning() -> None:
+    """One route with no usable value or word is tagged with its number."""
+    known = bus(number='70', long_name='Coledale to Wollongong',
+                middle=centre(label='Wollongong'))
+    blank = bus(number='70', long_name='', agency='Z9')
+    with warnings_logged() as found:
+        tags = tags_of(routes=[known, blank], towns={})
+    assert tags == {known.route_key: 'Wollongong', blank.route_key: '70'}
+    assert not found
+
+
+def test_agency_ties_go_to_the_lowest_id(tmp_path: Path) -> None:
+    """Operators running equal trips of a route give way to the lowest ID."""
+    with closing(tiny_db(path=tmp_path / 't.db', routes=[
+        RouteRow(route_id='r1', number='78', long_name='A to B',
+                 agency='X2', patterns=(('B', ('S1', 'S2'), 4),)),
+        RouteRow(route_id='r2', number='78', long_name='A to B',
+                 agency='X1', patterns=(('B', ('S1', 'S3'), 4),)),
+    ])) as conn:
+        (route,) = merged_routes(conn=conn)
+    assert route.agency == 'X1'
+
+
 def test_identical_long_names_merge_into_one_untagged_row(
     tmp_path: Path,
 ) -> None:
@@ -486,6 +513,18 @@ def test_train_lines_in_decision_order(tmp_path: Path) -> None:
     assert rows[0][1] == 'North Shore & Western'
     assert rows[1][1] == 'City to T2'
     assert 'train:T1' in keys
+
+
+def test_unlisted_train_lines_sort_after_the_listed_ones() -> None:
+    """A train line outside T1-T9 and the intercity lines sorts last."""
+    rows = kind_rows(entries=[
+        Entry(key=f'train:{code}', kind=RouteKind.TRAIN, number=code,
+              name=code, tag='', line='')
+        for code in ('T1', 'XPT', 'HUN')
+    ])
+    assert {row[4]: row[5] for row in rows} == {
+        'T1': 1, 'HUN': 105, 'XPT': 203,
+    }
 
 
 def test_regional_keeps_xpt_and_coaches(tmp_path: Path) -> None:

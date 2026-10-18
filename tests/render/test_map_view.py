@@ -14,6 +14,7 @@ from paperroute.core.geo import Point, to_metres
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
+    STRIP_MAP_WIDTH,
     MapBase,
     MapView,
     Marker,
@@ -295,6 +296,28 @@ def test_markers_stay_inside_the_map() -> None:
     changed = np.argwhere(plain != marked)
     assert changed.size
     assert changed[:, 1].max() < SIDEBAR_LEFT
+
+
+def test_overlay_is_clipped_to_the_base_width() -> None:
+    """At 480 px a badge at x 500 is clipped; at 520 px it is drawn."""
+    badge = (live(at=(500.0, 200.0)),)
+    narrow = replace(VIEW, base=replace(VIEW.base, width=STRIP_MAP_WIDTH))
+    base = paper()[:, :STRIP_MAP_WIDTH]
+    plain = draw_map_view(view=narrow, base=base)
+    marked = draw_map_view(view=replace(narrow, markers=badge), base=base)
+    assert np.array_equal(plain[:, STRIP_MAP_WIDTH:], marked[:, STRIP_MAP_WIDTH:])
+    wide_plain = draw_map_view(view=VIEW, base=paper())
+    wide = draw_map_view(view=replace(VIEW, markers=badge), base=paper())
+    assert np.any(wide_plain[:, STRIP_MAP_WIDTH:] != wide[:, STRIP_MAP_WIDTH:])
+
+
+def test_narrow_stop_is_drawn_at_the_narrow_centre() -> None:
+    """The stop is over the 480 px map's middle, not the 520 px one's."""
+    narrow = replace(VIEW, base=replace(VIEW.base, width=STRIP_MAP_WIDTH))
+    frame = draw_map_view(view=narrow, base=paper()[:, :STRIP_MAP_WIDTH])
+    row_ = HEADER + MAP_HEIGHT // 2
+    assert frame[row_, STRIP_MAP_WIDTH // 2] == INK
+    assert frame[row_, MAP_WIDTH // 2 + 8] == PAPER
 
 
 def test_banner_is_drawn_over_the_map() -> None:

@@ -10,9 +10,11 @@ from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
     NO_LOCATION,
+    STRIP_MAP_WIDTH,
     MapInputs,
     Marker,
     build_map_view,
+    map_window,
     needed_patterns,
     pin_trips,
     pinned_routes,
@@ -192,6 +194,28 @@ def test_screen_point_centre_is_map_middle_and_north_is_up() -> None:
     assert ny == pytest.approx(y - 100 / MPP)
 
 
+def test_map_window_centres_at_width() -> None:
+    """At 480 px the centre lands at x 240 and the window is 480 wide."""
+    centre = (1234.5, -678.9)
+    x, _ = screen_point(
+        centre=centre,
+        mpp=MPP,
+        point=centre,
+        width=STRIP_MAP_WIDTH,
+    )
+    assert abs(x - STRIP_MAP_WIDTH / 2) <= 1
+    wide, _ = map_window(centre=centre, mpp=MPP)
+    narrow, _ = map_window(centre=centre, mpp=MPP, width=STRIP_MAP_WIDTH)
+    assert narrow - wide == (MAP_WIDTH - STRIP_MAP_WIDTH) // 2
+
+
+def test_visible_margin_follows_the_width() -> None:
+    """The right edge of the margin is the width plus 20 px."""
+    assert visible(at=(STRIP_MAP_WIDTH + 20.0, 0.0), width=STRIP_MAP_WIDTH)
+    assert not visible(at=(STRIP_MAP_WIDTH + 21.0, 0.0), width=STRIP_MAP_WIDTH)
+    assert visible(at=(STRIP_MAP_WIDTH + 21.0, 0.0))
+
+
 def test_visible_allows_a_twenty_pixel_margin() -> None:
     """Points up to 20 px outside the map still count."""
     assert visible(at=(-20.0, MAP_HEIGHT + 20.0))
@@ -207,6 +231,22 @@ def test_fresh_vehicle_is_solid_with_bearing() -> None:
     assert view.markers == (
         Marker(route='606', x=x, y=y, bearing=90.0, live=True, pinned=False),
     )
+
+
+def test_build_map_view_carries_the_width_to_base_and_markers() -> None:
+    """A 480 px view keys its base at 480 and shifts markers by 20 px."""
+    bus = vehicle(timestamp=heard(age=0), point=(100.0, 200.0), bearing=90.0)
+    wide = build_map_view(inputs=inputs(vehicles=(bus,)))
+    narrow = build_map_view(
+        inputs=replace(
+            inputs(vehicles=(bus,)),
+            width=STRIP_MAP_WIDTH,
+        ),
+    )
+    assert wide.base.width == MAP_WIDTH
+    assert narrow.base.width == STRIP_MAP_WIDTH
+    shift = (MAP_WIDTH - STRIP_MAP_WIDTH) // 2
+    assert narrow.markers[0].x == pytest.approx(wide.markers[0].x - shift, abs=1)
 
 
 def test_vehicle_over_two_minutes_old_moves_to_timetable_position() -> None:

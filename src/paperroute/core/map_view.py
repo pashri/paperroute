@@ -15,6 +15,7 @@ from paperroute.core.tiles import ZOOMS, to_pixels
 
 MAP_WIDTH: Final[int] = 520
 MAP_HEIGHT: Final[int] = 440
+STRIP_MAP_WIDTH: Final[int] = 480
 DEFAULT_ZOOM: Final[int] = 2
 POSITION_STALE_AFTER: Final[timedelta] = timedelta(minutes=2)
 TIMETABLE_STEP: Final[timedelta] = timedelta(seconds=30)
@@ -35,11 +36,14 @@ class MapBase:
         Metres per pixel.
     route : tuple[tuple[Point, ...], ...]
         The pin's route lines in metres.
+    width : int
+        Map width in pixels.
     """
 
     centre: Point | None
     mpp: int
     route: tuple[tuple[Point, ...], ...]
+    width: int = MAP_WIDTH
 
 
 @dataclass(frozen=True)
@@ -112,6 +116,8 @@ class MapInputs:
         Loaded shapes by shape ID.
     now : datetime
         Current time.
+    width : int
+        Map width in pixels.
     """
 
     stop_view: StopView
@@ -122,9 +128,15 @@ class MapInputs:
     patterns: Mapping[str, TripPattern | None]
     shapes: Mapping[str, Shape]
     now: datetime
+    width: int = MAP_WIDTH
 
 
-def map_window(*, centre: Point, mpp: int) -> tuple[int, int]:
+def map_window(
+    *,
+    centre: Point,
+    mpp: int,
+    width: int = MAP_WIDTH,
+) -> tuple[int, int]:
     """
     Find the global pixel of the map's top-left corner.
 
@@ -134,6 +146,8 @@ def map_window(*, centre: Point, mpp: int) -> tuple[int, int]:
         The map centre in metres.
     mpp : int
         Metres per pixel.
+    width : int
+        Map width in pixels.
 
     Returns
     -------
@@ -141,7 +155,7 @@ def map_window(*, centre: Point, mpp: int) -> tuple[int, int]:
         Left and top, in whole global pixels.
     """
     x, y = to_pixels(point=centre, mpp=mpp)
-    return math.floor(x - MAP_WIDTH / 2), math.floor(y - MAP_HEIGHT / 2)
+    return math.floor(x - width / 2), math.floor(y - MAP_HEIGHT / 2)
 
 
 def screen_point(
@@ -149,6 +163,7 @@ def screen_point(
     centre: Point,
     mpp: int,
     point: Point,
+    width: int = MAP_WIDTH,
 ) -> tuple[float, float]:
     """
     Convert metres to map pixels.
@@ -164,18 +179,20 @@ def screen_point(
         Metres per pixel.
     point : Point
         The point in metres.
+    width : int
+        Map width in pixels.
 
     Returns
     -------
     tuple[float, float]
         Pixels from the map's left and top edges.
     """
-    left, top = map_window(centre=centre, mpp=mpp)
+    left, top = map_window(centre=centre, mpp=mpp, width=width)
     x, y = to_pixels(point=point, mpp=mpp)
     return x - left, y - top
 
 
-def visible(*, at: tuple[float, float]) -> bool:
+def visible(*, at: tuple[float, float], width: int = MAP_WIDTH) -> bool:
     """
     Check whether a map pixel is on the map, with a small margin.
 
@@ -183,6 +200,8 @@ def visible(*, at: tuple[float, float]) -> bool:
     ----------
     at : tuple[float, float]
         Map pixels.
+    width : int
+        Map width in pixels.
 
     Returns
     -------
@@ -190,7 +209,7 @@ def visible(*, at: tuple[float, float]) -> bool:
         True within 20 px of the map rectangle.
     """
     return (
-        -VISIBLE_MARGIN <= at[0] <= MAP_WIDTH + VISIBLE_MARGIN
+        -VISIBLE_MARGIN <= at[0] <= width + VISIBLE_MARGIN
         and -VISIBLE_MARGIN <= at[1] <= MAP_HEIGHT + VISIBLE_MARGIN
     )
 
@@ -495,6 +514,7 @@ def live_marker(
         centre=centre,
         mpp=ZOOMS[inputs.zoom],
         point=vehicle.point,
+        width=inputs.width,
     )
     return Marker(
         route=vehicle.label,
@@ -545,7 +565,12 @@ def timetable_marker(
     )
     if point is None:
         return None
-    x, y = screen_point(centre=centre, mpp=ZOOMS[inputs.zoom], point=point)
+    x, y = screen_point(
+        centre=centre,
+        mpp=ZOOMS[inputs.zoom],
+        point=point,
+        width=inputs.width,
+    )
     return Marker(
         route=pattern.route,
         x=x,
@@ -712,11 +737,16 @@ def markers_for(*, inputs: MapInputs, centre: Point) -> tuple[Marker, ...]:
         covered=frozenset(trip for trip, _ in drawn),
         pinned=pinned,
     )
-    middle = screen_point(centre=centre, mpp=ZOOMS[inputs.zoom], point=centre)
+    middle = screen_point(
+        centre=centre,
+        mpp=ZOOMS[inputs.zoom],
+        point=centre,
+        width=inputs.width,
+    )
     shown = [
         marker
         for marker in (*(marker for _, marker in drawn), *pins)
-        if visible(at=(marker.x, marker.y))
+        if visible(at=(marker.x, marker.y), width=inputs.width)
     ]
     return tuple(
         sorted(
@@ -780,6 +810,7 @@ def build_map_view(*, inputs: MapInputs) -> MapView:
                 departures=inputs.departures,
                 shapes=inputs.shapes,
             ),
+            width=inputs.width,
         ),
         zoom=inputs.zoom,
         markers=(

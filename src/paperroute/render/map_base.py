@@ -11,7 +11,6 @@ from paperroute.build.map_style import DARK, STREET_FACE, SUPERSAMPLE
 from paperroute.core.geo import Point
 from paperroute.core.map_view import (
     MAP_HEIGHT,
-    MAP_WIDTH,
     MapBase,
     map_window,
     screen_point,
@@ -89,7 +88,11 @@ def window_of(*, base: MapBase) -> Window:
     """
     if base.centre is None:
         raise ValueError('a map base without a centre has no window')
-    return map_window(centre=base.centre, mpp=base.mpp)
+    return map_window(
+        centre=base.centre,
+        mpp=base.mpp,
+        width=base.width,
+    )
 
 
 def paste(
@@ -123,6 +126,7 @@ def tiles_in(
     mpp: int,
     window: Window,
     variant: TileVariant,
+    width: int,
 ) -> NDArray[np.uint8]:
     """
     Stitch the stored tiles under a map window.
@@ -137,19 +141,21 @@ def tiles_in(
         The map's top-left corner in global pixels.
     variant : TileVariant
         Which rendering to read.
+    width : int
+        Map width in pixels.
 
     Returns
     -------
     NDArray[np.uint8]
-        ``MAP_HEIGHT`` by ``MAP_WIDTH`` grey levels; missing tiles are
+        ``MAP_HEIGHT`` by ``width`` grey levels; missing tiles are
         paper.
     """
     left, top = window
-    out = np.full((MAP_HEIGHT, MAP_WIDTH), PAPER, dtype=np.uint8)
+    out = np.full((MAP_HEIGHT, width), PAPER, dtype=np.uint8)
     for col, row in tiles_covering(
         left=left,
         top=top,
-        right=left + MAP_WIDTH,
+        right=left + width,
         bottom=top + MAP_HEIGHT,
     ):
         tile = tiles.tile(zoom=mpp, col=col, row=row, variant=variant)
@@ -179,7 +185,7 @@ def compose_tiles(
     Returns
     -------
     NDArray[np.uint8]
-        ``MAP_HEIGHT`` by ``MAP_WIDTH`` grey levels; missing tiles are
+        ``MAP_HEIGHT`` by ``base.width`` grey levels; missing tiles are
         paper.
     """
     return tiles_in(
@@ -187,6 +193,7 @@ def compose_tiles(
         mpp=base.mpp,
         window=window_of(base=base),
         variant=variant,
+        width=base.width,
     )
 
 
@@ -195,6 +202,7 @@ def route_pixels(
     lines: Sequence[Sequence[Point]],
     centre: Point,
     mpp: int,
+    width: int,
 ) -> list[NDArray[np.float64]]:
     """
     Convert route lines to map pixels.
@@ -207,6 +215,8 @@ def route_pixels(
         The map centre in metres.
     mpp : int
         Metres per pixel.
+    width : int
+        Map width in pixels.
 
     Returns
     -------
@@ -217,7 +227,12 @@ def route_pixels(
     return [
         np.array(
             [
-                screen_point(centre=centre, mpp=mpp, point=point)
+                screen_point(
+                    centre=centre,
+                    mpp=mpp,
+                    point=point,
+                    width=width,
+                )
                 for point in line
             ],
             dtype=np.float64,
@@ -454,7 +469,11 @@ def redraw_name(
     grey[rows, cols] = quantise4(grey=canvas.grey())
 
 
-def label_query(*, window: Window) -> tuple[float, float, float, float]:
+def label_query(
+    *,
+    window: Window,
+    width: int,
+) -> tuple[float, float, float, float]:
     """
     Give the box to fetch street labels for, grown by the label reach.
 
@@ -462,6 +481,8 @@ def label_query(*, window: Window) -> tuple[float, float, float, float]:
     ----------
     window : Window
         The map's top-left corner in global pixels.
+    width : int
+        Map width in pixels.
 
     Returns
     -------
@@ -472,7 +493,7 @@ def label_query(*, window: Window) -> tuple[float, float, float, float]:
     return (
         left - LABEL_REACH,
         top - LABEL_REACH,
-        left + MAP_WIDTH + LABEL_REACH,
+        left + width + LABEL_REACH,
         top + MAP_HEIGHT + LABEL_REACH,
     )
 
@@ -506,11 +527,16 @@ def draw_line_and_names(
     list[StreetLabel]
         The labels redrawn over the line.
     """
-    routes = route_pixels(lines=base.route, centre=centre, mpp=base.mpp)
+    routes = route_pixels(
+        lines=base.route,
+        centre=centre,
+        mpp=base.mpp,
+        width=base.width,
+    )
     draw_route(canvas, routes=routes, mpp=base.mpp)
     labels = tiles.street_labels(
         zoom=base.mpp,
-        box=label_query(window=window),
+        box=label_query(window=window, width=base.width),
     )
     return draw_route_names(
         canvas,
@@ -627,7 +653,7 @@ def draw_scale(canvas: Canvas, *, mpp: int) -> None:
     )
 
 
-def draw_notes(canvas: Canvas, *, installed: bool) -> None:
+def draw_notes(canvas: Canvas, *, installed: bool, width: int) -> None:
     """
     Draw the OSM credit, or a note below the stop when there is no map.
 
@@ -637,10 +663,12 @@ def draw_notes(canvas: Canvas, *, installed: bool) -> None:
         Target.
     installed : bool
         False when there is no tiles file.
+    width : int
+        Map width in pixels.
     """
     if installed:
         canvas.text(
-            at=(MAP_WIDTH - EDGE, MAP_HEIGHT - EDGE),
+            at=(width - EDGE, MAP_HEIGHT - EDGE),
             text=CREDIT,
             face=CREDIT_FACE,
             grey=DARK,
@@ -649,7 +677,7 @@ def draw_notes(canvas: Canvas, *, installed: bool) -> None:
         )
         return
     canvas.text(
-        at=(MAP_WIDTH / 2, MAP_HEIGHT / 2 + NOT_INSTALLED_DROP),
+        at=(width / 2, MAP_HEIGHT / 2 + NOT_INSTALLED_DROP),
         text=NOT_INSTALLED,
         face=NOT_INSTALLED_FACE,
         grey=INK,
@@ -739,19 +767,20 @@ def draw_map_base(
     Returns
     -------
     NDArray[np.uint8]
-        ``MAP_HEIGHT`` by ``MAP_WIDTH`` grey levels; plain paper when the
+        ``MAP_HEIGHT`` by ``base.width`` grey levels; plain paper when the
         stop has no location.
     """
     if base.centre is None:
-        return np.full((MAP_HEIGHT, MAP_WIDTH), PAPER, dtype=np.uint8)
+        return np.full((MAP_HEIGHT, base.width), PAPER, dtype=np.uint8)
     window = window_of(base=base)
-    canvas = Canvas(width=MAP_WIDTH, height=MAP_HEIGHT)
+    canvas = Canvas(width=base.width, height=MAP_HEIGHT)
     canvas.image(
         grey=tiles_in(
             tiles=tiles,
             mpp=base.mpp,
             window=window,
             variant=variant,
+            width=base.width,
         ),
         at=(0, 0),
     )
@@ -764,10 +793,19 @@ def draw_map_base(
     )
     draw_stop(
         canvas,
-        at=screen_point(centre=base.centre, mpp=base.mpp, point=base.centre),
+        at=screen_point(
+            centre=base.centre,
+            mpp=base.mpp,
+            point=base.centre,
+            width=base.width,
+        ),
     )
     draw_scale(canvas, mpp=base.mpp)
-    draw_notes(canvas, installed=tiles.version() is not None)
+    draw_notes(
+        canvas,
+        installed=tiles.version() is not None,
+        width=base.width,
+    )
     return finish(
         grey=canvas.grey(),
         variant=variant,

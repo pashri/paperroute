@@ -16,7 +16,6 @@ from paperroute.render.canvas import (
     HEIGHT,
     INK,
     PAPER,
-    Box,
     Canvas,
     Face,
     text_width,
@@ -40,7 +39,6 @@ SIDEBAR_LEFT: Final[int] = 520
 RULE_WIDTH: Final[int] = 3
 SIDEBAR_TEXT: Final[int] = 538
 SIDEBAR_RIGHT: Final[int] = 784
-MAP_BOX: Final[Box] = (0, HEADER, SIDEBAR_LEFT, HEIGHT)
 EMPTY_FACE: Final[Face] = Face(weight=700, px=22)
 EMPTY_FACES: Final[tuple[Face, ...]] = (
     EMPTY_FACE,
@@ -168,9 +166,14 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
     stop = (
         None
         if centre is None
-        else screen_point(centre=centre, mpp=view.base.mpp, point=centre)
+        else screen_point(
+            centre=centre,
+            mpp=view.base.mpp,
+            point=centre,
+            width=view.base.width,
+        )
     )
-    with canvas.clipped(box=MAP_BOX):
+    with canvas.clipped(box=(0, HEADER, view.base.width, HEIGHT)):
         draw_markers(
             canvas,
             markers=view.markers,

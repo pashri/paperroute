@@ -21,6 +21,7 @@ from paperroute.core.geo import Point, to_metres
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
+    STRIP_MAP_WIDTH,
     MapBase,
     screen_point,
 )
@@ -703,6 +704,38 @@ def test_scale_bar_and_credit_are_drawn(tmp_path: Path) -> None:
     assert np.all(np.any(bar == INK, axis=0))
     credit = grey[MAP_HEIGHT - 20 :, MAP_WIDTH - 120 :]
     assert np.count_nonzero(credit == DARK) > 0
+
+
+def test_base_is_width_wide() -> None:
+    """A base 480 px wide draws a MAP_HEIGHT by 480 map."""
+    grey = draw_map_base(
+        base=replace(base(), width=STRIP_MAP_WIDTH),
+        tiles=NullTiles(),
+        variant=TileVariant.GREY,
+    )
+    assert grey.shape == (MAP_HEIGHT, STRIP_MAP_WIDTH)
+
+
+def test_credit_sits_at_the_narrow_edge(tmp_path: Path) -> None:
+    """At 480 px the credit is at the right edge, not at 520."""
+    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
+        grey = draw_map_base(
+            base=replace(base(), width=STRIP_MAP_WIDTH),
+            tiles=tiles,
+            variant=TileVariant.GREY,
+        )
+    credit = grey[MAP_HEIGHT - 20 :, STRIP_MAP_WIDTH - 120 :]
+    assert np.count_nonzero(credit == DARK) > 0
+
+
+def test_stop_sits_on_the_narrow_centre() -> None:
+    """At 480 px the stop is drawn at x 240."""
+    grey = draw_map_base(
+        base=replace(base(), width=STRIP_MAP_WIDTH),
+        tiles=NullTiles(),
+        variant=TileVariant.GREY,
+    )
+    assert grey[centre_row(), STRIP_MAP_WIDTH // 2] == INK
 
 
 def test_no_tiles_hides_the_credit() -> None:

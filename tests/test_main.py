@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from http import HTTPStatus
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Final, cast
 
 import aiohttp
 import pytest
@@ -24,6 +24,7 @@ import paperroute.adapters.tk_monitor as tk_monitor
 from paperroute.__main__ import (
     main,
     parse_args,
+    pin_for,
     serve_or_exit,
     serve_web,
     tiles_for,
@@ -38,16 +39,19 @@ from paperroute.app import Ports
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.messages import Event
-from paperroute.core.model import SYDNEY, Pin
+from paperroute.core.model import SYDNEY
 from paperroute.core.tiles import TileVariant
 from paperroute.observers import Timings
+from tests.core.factories import pin_of
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
-PIN = Pin(origin='215020', destination='200060')
+ORIGIN: Final[str] = '215020'
+DESTINATION: Final[str] = '200060'
+PIN = pin_of(ORIGIN, DESTINATION)
 
 
 def test_pin_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -59,6 +63,12 @@ def test_pin_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     args = parse_args()
     assert (args.origin, args.destination) == ('215020', '200060')
+
+
+def test_pin_for_builds_bare_places() -> None:
+    """--from and --to become places with no names or points yet."""
+    args = argparse.Namespace(origin=ORIGIN, destination=DESTINATION)
+    assert pin_for(args=args) == PIN
 
 
 def test_missing_pin_exits(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -238,8 +248,8 @@ def test_web_main_logs_a_bind_failure(
     """A port that is taken is logged with its address and exits 1."""
     args = argparse.Namespace(
         timetable=tmp_path / 'timetable.db',
-        origin=PIN.origin,
-        destination=PIN.destination,
+        origin=ORIGIN,
+        destination=DESTINATION,
         at=AT,
         host='127.0.0.1',
         port=0,
@@ -338,8 +348,8 @@ def test_serve_or_exit_passes_the_tiles_variant(
     monkeypatch.setattr(cli, 'serve_web', fake_serve_web)
     display = WebDisplay(status=Timings().snapshot)
     args = argparse.Namespace(
-        origin=PIN.origin,
-        destination=PIN.destination,
+        origin=ORIGIN,
+        destination=DESTINATION,
         host='127.0.0.1',
         port=0,
         tiles_variant=TileVariant.BITS,
@@ -396,8 +406,8 @@ def test_tk_main_passes_the_tiles_variant(
     timetable.touch()
     args = argparse.Namespace(
         timetable=timetable,
-        origin=PIN.origin,
-        destination=PIN.destination,
+        origin=ORIGIN,
+        destination=DESTINATION,
         at=AT,
         tiles=None,
         tiles_variant=TileVariant.BITS,

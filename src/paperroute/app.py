@@ -621,7 +621,7 @@ async def ticker(
 
 def starting_state(*, ports: Ports, pin: Pin) -> State:
     """
-    Make the state at start-up, centring the Map on the pin's From.
+    Make the state at start-up, with the pin's places from the timetable.
 
     Parameters
     ----------
@@ -635,14 +635,18 @@ def starting_state(*, ports: Ports, pin: Pin) -> State:
     State
         State.
     """
-    place = ports.timetable.stop(stop_id=pin.origin)
-    return initial_state(
-        pin=pin,
-        now=ports.clock.now(),
-        origin=place.name,
-        destination=ports.timetable.stop_name(stop_id=pin.destination),
-        centre=place.point,
+    timetable = ports.timetable
+    destination = pin.destination
+    filled = replace(
+        pin,
+        origin=timetable.stop(stop_id=pin.origin.stop_id),
+        destination=(
+            None
+            if destination is None
+            else timetable.stop(stop_id=destination.stop_id)
+        ),
     )
+    return initial_state(pin=filled, now=ports.clock.now())
 
 
 async def handle(

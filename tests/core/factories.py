@@ -3,13 +3,58 @@
 from datetime import date, datetime, timedelta
 
 from paperroute.core.geo import Point
-from paperroute.core.model import SYDNEY, Departure, Mode
+from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.positions import PositionsSnapshot, VehiclePosition
 
 START = datetime(2026, 10, 16, 8, 0, tzinfo=SYDNEY)
 EIGHT: int = 8 * 3600  # seconds into the service day
 TEN_MINUTES: int = 600  # seconds
+
+
+def place(
+    stop_id: str, *, name: str = '', point: Point | None = None
+) -> StopPlace:
+    """
+    A stop or station, bare unless a name or point is given.
+
+    Parameters
+    ----------
+    stop_id : str
+        Stop or station ID.
+    name : str
+        Name.
+    point : Point | None
+        Position in metres.
+
+    Returns
+    -------
+    StopPlace
+        The place.
+    """
+    return StopPlace(stop_id=stop_id, name=name, point=point)
+
+
+def pin_of(origin: str, destination: str | None) -> Pin:
+    """
+    A pin between two bare places.
+
+    Parameters
+    ----------
+    origin : str
+        From stop or station ID.
+    destination : str | None
+        Destination stop or station ID, or None for no Destination.
+
+    Returns
+    -------
+    Pin
+        The pin.
+    """
+    return Pin(
+        origin=place(origin),
+        destination=None if destination is None else place(destination),
+    )
 
 
 def departure(

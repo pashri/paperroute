@@ -173,11 +173,112 @@ def until_revisit(*, stations: Sequence[str]) -> tuple[str, ...]:
 
 
 @dataclass(frozen=True)
-class Pin:
-    """A From stop or station and a Destination."""
+class StopPlace:
+    """A stop or station with its position."""
 
-    origin: str
-    destination: str
+    stop_id: str
+    name: str
+    point: Point | None
+
+
+@dataclass(frozen=True)
+class Pin:
+    """
+    A From place, an optional Destination, and the routes it shows.
+
+    Attributes
+    ----------
+    origin : StopPlace
+        From stop or station.
+    destination : StopPlace | None
+        Destination, or None for every service leaving the From.
+    kind : RouteKind | None
+        Kind of route chosen, or None for any.
+    routes : tuple[str, ...]
+        Route short names chosen; empty for all.
+    missing : bool
+        True when the timetable no longer knows a place.
+    """
+
+    origin: StopPlace
+    destination: StopPlace | None = None
+    kind: RouteKind | None = None
+    routes: tuple[str, ...] = ()
+    missing: bool = False
+
+
+def same_place(*, first: Pin, second: Pin) -> bool:
+    """
+    Say whether two pins show the same services.
+
+    Names, points and whether a place is missing are ignored.
+
+    Parameters
+    ----------
+    first : Pin
+        One pin.
+    second : Pin
+        The other pin.
+
+    Returns
+    -------
+    bool
+        True when the stop IDs, kind and routes all match.
+    """
+    return pin_key(pin=first) == pin_key(pin=second)
+
+
+def pin_key(
+    *, pin: Pin
+) -> tuple[str, str | None, RouteKind | None, tuple[str, ...]]:
+    """
+    Reduce a pin to what says which services it shows.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+
+    Returns
+    -------
+    tuple[str, str | None, RouteKind | None, tuple[str, ...]]
+        From stop ID, Destination stop ID or None, kind and routes.
+    """
+    destination = pin.destination
+    return (
+        pin.origin.stop_id,
+        None if destination is None else destination.stop_id,
+        pin.kind,
+        pin.routes,
+    )
+
+
+@dataclass(frozen=True)
+class CarryOn:
+    """The service a vehicle runs next, after this trip."""
+
+    route: str
+    headsign: str
+
+
+@dataclass(frozen=True)
+class TripFacts:
+    """
+    What is known about a departure's trip beyond its times.
+
+    Attributes
+    ----------
+    kind : RouteKind | None
+        Kind of route, or None when not known.
+    then : CarryOn | None
+        The service the vehicle runs next, or None when not known.
+    """
+
+    kind: RouteKind | None = None
+    then: CarryOn | None = None
+
+
+NO_FACTS: Final[TripFacts] = TripFacts()
 
 
 @dataclass(frozen=True)
@@ -198,15 +299,7 @@ class Departure:
     arrives: datetime
     service_day: date
     shape_id: str | None = None
-
-
-@dataclass(frozen=True)
-class StopPlace:
-    """A stop or station with its position."""
-
-    stop_id: str
-    name: str
-    point: Point | None
+    facts: TripFacts = NO_FACTS
 
 
 def service_epoch(*, day: date) -> datetime:

@@ -19,11 +19,14 @@ class PatternStop:
         Departure in seconds from the start of the service day.
     point : Point | None
         Position in metres, or None when the stop has no coordinates.
+    station : str
+        The stop's parent station, or the stop itself when it has none.
     """
 
     arrives: int
     departs: int
     point: Point | None
+    station: str = ''
 
 
 @dataclass(frozen=True)

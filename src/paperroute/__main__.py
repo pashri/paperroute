@@ -24,7 +24,7 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports, run
 from paperroute.core.messages import Event, QuitRequested
-from paperroute.core.model import SYDNEY, Pin
+from paperroute.core.model import SYDNEY, Pin, StopPlace
 from paperroute.core.tiles import TileVariant
 from paperroute.logs import configure_logging
 from paperroute.observers import ObserverGroup, Timings
@@ -228,9 +228,12 @@ def pin_for(*, args: argparse.Namespace) -> Pin:
     Returns
     -------
     Pin
-        Pin.
+        Pin between bare places, without names or points.
     """
-    return Pin(origin=args.origin, destination=args.destination)
+    return Pin(
+        origin=StopPlace(stop_id=args.origin, name='', point=None),
+        destination=StopPlace(stop_id=args.destination, name='', point=None),
+    )
 
 
 @contextmanager

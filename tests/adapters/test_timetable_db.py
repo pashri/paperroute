@@ -19,7 +19,7 @@ from paperroute.adapters.timetable_db import (
 from paperroute.build.dedupe import merge_rail
 from paperroute.build.gtfs_files import Source
 from paperroute.core.geo import to_metres
-from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
+from paperroute.core.model import SYDNEY, Departure, Mode, StopPlace
 from tests.build.feeds import (
     DAILY,
     STATIONS,
@@ -31,10 +31,11 @@ from tests.build.feeds import (
     stop_times,
     sydneytrains_feed,
 )
+from tests.core.factories import pin_of
 from tests.helpers import write_feed
 
-HOLLIS_TO_PARRA = Pin(origin='2145615', destination='215020')
-PARRA_TO_CENTRAL = Pin(origin='215020', destination='200060')
+HOLLIS_TO_PARRA = pin_of('2145615', '215020')
+PARRA_TO_CENTRAL = pin_of('215020', '200060')
 
 
 @pytest.fixture(name='repo')
@@ -125,6 +126,18 @@ def test_departures_uses_station_children_and_skips_no_pickup(
     assert found[0].platform == '1'
 
 
+def test_departures_without_a_destination_are_none(
+    repo: SqliteTimetableRepository,
+) -> None:
+    """A pin with no Destination lists no departures yet."""
+    found = repo.departures(
+        pin=pin_of('2145615', None),
+        start=at(hour=8, minute=0),
+        end=at(hour=9, minute=0),
+    )
+    assert not found
+
+
 def test_departures_excludes_wrong_direction(
     repo: SqliteTimetableRepository,
 ) -> None:
@@ -170,7 +183,7 @@ def test_departures_kept_xpt_stays_regional(tmp_path: Path) -> None:
         merge_rail(conn=conn)
     with closing(SqliteTimetableRepository(path=db)) as repo:
         found = repo.departures(
-            pin=Pin(origin='200060', destination='215020'),
+            pin=pin_of('200060', '215020'),
             start=at(hour=7, minute=0),
             end=at(hour=8, minute=0),
         )
@@ -196,7 +209,7 @@ def test_departures_partial_xpt_listed_once_per_day(
         )
         conn.commit()
         merge_rail(conn=conn)
-    pin = Pin(origin='200060', destination='215020')
+    pin = pin_of('200060', '215020')
     with closing(SqliteTimetableRepository(path=db)) as repo:
         found = [
             repo.departures(
@@ -236,7 +249,7 @@ def test_departures_before_daylight_saving_jump(tmp_path: Path) -> None:
     )
     with closing(SqliteTimetableRepository(path=db)) as repo:
         found = repo.departures(
-            pin=Pin(origin='215020', destination='200060'),
+            pin=pin_of('215020', '200060'),
             start=at(hour=23, minute=0, day=3),
             end=at(hour=1, minute=0, day=4),
         )
@@ -616,6 +629,27 @@ def test_patterns_resolve_alias_and_days(
     assert pattern.days
     assert set(pattern.days) <= {date(2026, 10, 15), AROUND}
     assert all(stop.point is not None for stop in pattern.stops)
+
+
+def test_patterns_carry_stations(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """Each call names its parent station, or the stop when it has none."""
+    trips = [d.trip_id for d in slice_departures(repo=slice_repo)]
+    found = slice_repo.patterns(trip_ids=trips, around=AROUND)
+    stations = {stop.station for p in found.values() for stop in p.stops}
+    parents = {
+        str(row[0])
+        for row in slice_repo.fetch(
+            sql="SELECT stop_id FROM stops WHERE parent_station IS NULL "
+            "OR parent_station = ''",
+            params=(),
+        )
+    }
+    assert f'G{HOLLIS}' in stations
+    assert HOLLIS not in stations
+    assert '215020' in stations
+    assert stations <= parents
 
 
 def test_unknown_trip_pattern_is_absent(

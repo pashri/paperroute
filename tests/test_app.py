@@ -22,6 +22,7 @@ from paperroute.app import (
     loaded_patterns,
     perform,
     run,
+    starting_state,
     ticker,
 )
 from paperroute.build.gtfs_files import Source
@@ -55,10 +56,11 @@ from paperroute.core.tiles import (
 from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
 from paperroute.render.tile_codec import pack_bits, pack_grey
+from tests.core.factories import pin_of, place
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
-PIN = Pin(origin='215020', destination='200060')
+PIN = pin_of('215020', '200060')
 
 
 @dataclass
@@ -728,7 +730,7 @@ async def test_run_sends_a_watchdog_for_each_handled_tick(
     assert observer.ticks >= 1
 
 
-MAP_PIN = Pin(origin='2145615', destination='215020')
+MAP_PIN = pin_of('2145615', '215020')
 MAP_MPP = 8
 BUS_POSITIONS = 'v1/gtfs/vehiclepos/buses'
 STOP_POINT: Point = to_metres(lon=151.0036, lat=-33.8170)
@@ -828,7 +830,7 @@ def light_tiles(*, out: Path, point: Point) -> SqliteTileRepository:
 async def test_run_draws_map_after_bottom_press(tmp_path: Path) -> None:
     """A bottom press shows the Map over the tiles and polls positions."""
     timetable = SqliteTimetableRepository(path=_build_db(tmp_path))
-    place = timetable.stop(stop_id=MAP_PIN.origin)
+    place = timetable.stop(stop_id=MAP_PIN.origin.stop_id)
     assert place.point is not None
     tiles = light_tiles(out=tmp_path / 'tiles.db', point=place.point)
     display = PressingDisplay()
@@ -1099,6 +1101,26 @@ class PlacedTimetable(BrokenTimetable):
             The stop, named after its ID.
         """
         return StopPlace(stop_id=stop_id, name=stop_id, point=STOP_POINT)
+
+
+def test_starting_state_fills_the_pins_places() -> None:
+    """The pin's places get their names and points from the timetable."""
+    ports = Ports(
+        timetable=PlacedTimetable(),
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+        tiles=NullTiles(),
+    )
+    state = starting_state(ports=ports, pin=MAP_PIN)
+    assert state.pin.origin == place(
+        '2145615', name='2145615', point=STOP_POINT,
+    )
+    assert state.pin.destination == place(
+        '215020', name='215020', point=STOP_POINT,
+    )
+    assert state.map.centre == STOP_POINT
+    assert state.now == AT
 
 
 async def test_run_draws_the_map_in_the_variant_asked_for() -> None:

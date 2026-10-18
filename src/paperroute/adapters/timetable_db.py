@@ -75,7 +75,9 @@ WHERE sv.date IN (?, ?) AND t.trip_id IN ({marks})
 ORDER BY t.trip_id, sv.date
 """
 PATTERN_STOPS: Final[str] = """
-SELECT st.trip_id, st.arr, st.dep, s.lon, s.lat FROM stop_times st
+SELECT st.trip_id, st.arr, st.dep, s.lon, s.lat,
+  COALESCE(NULLIF(s.parent_station, ''), s.stop_id)
+FROM stop_times st
 JOIN stops s ON s.stop_id = st.stop_id
 WHERE st.trip_id IN ({marks})
 ORDER BY st.trip_id, st.seq
@@ -451,7 +453,7 @@ class SqliteTimetableRepository:
             Trip ID to its calls.
         """
         calls: dict[str, list[PatternStop]] = {}
-        for trip, arr, dep, lon, lat in self.fetch_in(
+        for trip, arr, dep, lon, lat, station in self.fetch_in(
             sql=PATTERN_STOPS, ids=trip_ids
         ):
             calls.setdefault(str(trip), []).append(
@@ -459,6 +461,7 @@ class SqliteTimetableRepository:
                     arrives=int(str(arr)),
                     departs=int(str(dep)),
                     point=to_point(lon=lon, lat=lat),
+                    station=str(station),
                 )
             )
         return calls
@@ -575,8 +578,11 @@ class SqliteTimetableRepository:
         Returns
         -------
         list[Departure]
-            In departure order.
+            In departure order; none for a pin without a Destination.
         """
+        destination = pin.destination
+        if destination is None:
+            return []
         first = start.astimezone(SYDNEY).date()
         last = end.astimezone(SYDNEY).date()
         days = {first - timedelta(days=1), first, last}
@@ -584,21 +590,29 @@ class SqliteTimetableRepository:
             departure
             for day in sorted(days)
             for departure in self.on_day(
-                pin=pin, day=day, start=start, end=end
+                ends=(pin.origin.stop_id, destination.stop_id),
+                day=day,
+                start=start,
+                end=end,
             )
         ]
         return sorted(found, key=lambda departure: departure.departs)
 
     def on_day(
-        self, *, pin: Pin, day: date, start: datetime, end: datetime
+        self,
+        *,
+        ends: tuple[str, str],
+        day: date,
+        start: datetime,
+        end: datetime,
     ) -> list[Departure]:
         """
         List departures from one service day within the range.
 
         Parameters
         ----------
-        pin : Pin
-            From and Destination.
+        ends : tuple[str, str]
+            From and Destination stop or station IDs.
         day : date
             Service date.
         start : datetime
@@ -615,8 +629,8 @@ class SqliteTimetableRepository:
             sql=DEPARTURES.format(shape=self.shape_column()),
             params={
                 'day': day.isoformat(),
-                'origin': pin.origin,
-                'dest': pin.destination,
+                'origin': ends[0],
+                'dest': ends[1],
                 'lo': service_seconds(day=day, moment=start),
                 'hi': service_seconds(day=day, moment=end),
             },

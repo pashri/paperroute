@@ -7,15 +7,18 @@ import pytest
 from paperroute.core.model import (
     SYDNEY,
     Mode,
+    Pin,
     RouteKind,
     kind_for,
     mode_for,
+    same_place,
     service_epoch,
     service_seconds,
     service_time,
     until_repeated_hop,
     until_revisit,
 )
+from tests.core.factories import pin_of, place
 
 
 @pytest.mark.parametrize(('route_type', 'agency_id', 'mode'), [
@@ -115,3 +118,27 @@ def test_until_repeated_hop_keeps_a_loop() -> None:
     assert until_repeated_hop(stations=['A', 'B', 'C', 'A', 'B', 'D']) == (
         'A', 'B', 'C', 'A',
     )
+
+
+def test_same_place_ignores_names_and_points() -> None:
+    """Pins match on stop IDs, kind and routes, not names or points."""
+    bare = Pin(origin=place('A'), destination=place('B'), routes=('606',))
+    named = Pin(
+        origin=place('A', name='Hollis St', point=(1.0, 2.0)),
+        destination=place('B', name='Parramatta'),
+        routes=('606',),
+        missing=True,
+    )
+    assert same_place(first=bare, second=named)
+
+
+@pytest.mark.parametrize('other', [
+    pin_of('A', None),
+    pin_of('A', 'C'),
+    pin_of('C', 'B'),
+    Pin(origin=place('A'), destination=place('B'), kind=RouteKind.BUS),
+    Pin(origin=place('A'), destination=place('B'), routes=('606',)),
+])
+def test_same_place_tells_pins_apart(other: Pin) -> None:
+    """A different stop, kind or route list is a different pin."""
+    assert not same_place(first=pin_of('A', 'B'), second=other)

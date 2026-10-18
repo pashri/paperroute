@@ -52,9 +52,19 @@ from paperroute.core.state_model import (
 )
 from paperroute.core.stop_view import HORIZON, VISIBLE_ROWS, StopView
 from paperroute.core.tiles import CITY, ZOOMS
-from tests.core.factories import START, departure, pattern, snapshot, vehicle
+from tests.core.factories import (
+    START,
+    departure,
+    pattern,
+    place,
+    snapshot,
+    vehicle,
+)
 
-PIN = Pin(origin='2145615', destination='215020')
+PIN = Pin(
+    origin=place('2145615', name='Hollis St'),
+    destination=place('215020', name='Parramatta'),
+)
 BUSES = 'v1/gtfs/realtime/buses'
 BUS_POSITIONS: Final[str] = 'v1/gtfs/vehiclepos/buses'
 FERRY_POSITIONS: Final[str] = 'v1/gtfs/vehiclepos/ferries/sydneyferries'
@@ -79,11 +89,8 @@ def fresh(*, now: datetime = START, centre: Point | None = None) -> State:
         Initial state.
     """
     return initial_state(
-        pin=PIN,
-        origin='Hollis St',
-        destination='Parramatta',
+        pin=replace(PIN, origin=replace(PIN.origin, point=centre)),
         now=now,
-        centre=centre,
     )
 
 
@@ -127,6 +134,30 @@ def loaded(
         departures=deps, until=START + HORIZON + RELOAD_BEFORE
     )
     return step(state, event)[0]
+
+
+def test_initial_state_centres_on_the_pins_point() -> None:
+    """The Map starts centred on the pin's From."""
+    assert fresh(centre=CENTRE).map.centre == CENTRE
+    assert fresh().map.centre is None
+
+
+def test_stop_view_names_the_pins_places() -> None:
+    """The Stop view's header names the pin's From and Destination."""
+    state, _ = step(fresh(), Tick(now=START))
+    assert isinstance(state.last_view, StopView)
+    assert (state.last_view.origin, state.last_view.destination) == (
+        'Hollis St',
+        'Parramatta',
+    )
+
+
+def test_stop_view_without_a_destination_names_none() -> None:
+    """A pin with no Destination leaves the header's Destination blank."""
+    state = initial_state(pin=replace(PIN, destination=None), now=START)
+    state, _ = step(state, Tick(now=START))
+    assert isinstance(state.last_view, StopView)
+    assert state.last_view.destination == ''
 
 
 def test_first_tick_loads_departures() -> None:

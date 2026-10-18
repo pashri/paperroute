@@ -12,8 +12,9 @@ from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolve
-from paperroute.core.model import SYDNEY, Mode, Pin
+from paperroute.core.model import SYDNEY, Mode
 from paperroute.core.realtime import RealtimeSnapshot
+from tests.core.factories import pin_of
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
@@ -103,7 +104,7 @@ def resolved(*, db: Path, query: str) -> list[list[LiveDeparture]]:
         result = []
         for trip, origin, destination in pins:
             found = repo.departures(
-                pin=Pin(origin=origin, destination=destination),
+                pin=pin_of(origin, destination),
                 start=DAY_START,
                 end=DAY_START + timedelta(days=1),
             )
@@ -150,7 +151,7 @@ def test_central_to_casino_xpt_listed_once(tmp_path: Path) -> None:
     try:
         days = [
             repo.departures(
-                pin=Pin(origin='200060', destination=CASINO),
+                pin=pin_of('200060', CASINO),
                 start=DAY_START + timedelta(days=n),
                 end=DAY_START + timedelta(days=n + 1),
             )

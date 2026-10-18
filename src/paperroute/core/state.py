@@ -4,7 +4,6 @@ from dataclasses import replace
 from datetime import datetime
 
 from paperroute.core.feeds import feed_for
-from paperroute.core.geo import Point
 from paperroute.core.live import resolve
 from paperroute.core.map_requests import (
     elapsed,
@@ -49,42 +48,23 @@ from paperroute.core.state_model import (
 from paperroute.core.stop_view import HORIZON, StopView, build_stop_view
 
 
-def initial_state(
-    *,
-    pin: Pin,
-    origin: str,
-    destination: str,
-    now: datetime,
-    centre: Point | None = None,
-) -> State:
+def initial_state(*, pin: Pin, now: datetime) -> State:
     """
-    Make the state at start-up.
+    Make the state at start-up, centring the Map on the pin's From.
 
     Parameters
     ----------
     pin : Pin
-        Pin to show.
-    origin : str
-        From name.
-    destination : str
-        Destination name.
+        Pin to show, with its places' names and points filled in.
     now : datetime
         Start time.
-    centre : Point | None
-        The From stop in metres, or None when it has no location.
 
     Returns
     -------
     State
         State.
     """
-    return State(
-        pin=pin,
-        origin=origin,
-        destination=destination,
-        now=now,
-        map=MapState(centre=centre),
-    )
+    return State(pin=pin, now=now, map=MapState(centre=pin.origin.point))
 
 
 def stop_view_of(*, state: State) -> StopView:
@@ -101,6 +81,7 @@ def stop_view_of(*, state: State) -> StopView:
     StopView
         View.
     """
+    destination = state.pin.destination
     resolved = [
         resolve(
             departure=dep,
@@ -123,8 +104,8 @@ def stop_view_of(*, state: State) -> StopView:
         )
     )
     return build_stop_view(
-        origin=state.origin,
-        destination=state.destination,
+        origin=state.pin.origin.name,
+        destination='' if destination is None else destination.name,
         departures=resolved,
         now=state.now,
         scroll=state.scroll,

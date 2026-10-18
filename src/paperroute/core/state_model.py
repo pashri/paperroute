@@ -24,8 +24,6 @@ class State:
     """Everything the app knows."""
 
     pin: Pin
-    origin: str
-    destination: str
     now: datetime
     departures: tuple[Departure, ...] = ()
     loaded_until: datetime | None = None

@@ -40,7 +40,7 @@ def run_extras(*, path: Path) -> None:
         Timetable file.
     """
     with closing(sqlite3.connect(path)) as conn:
-        conn.execute('PRAGMA cache_size = -8000')
+        conn.execute('PRAGMA cache_size = -2000')
         conn.executescript(RUN_SCHEMA)
         timed(phase='runs', step=lambda: load_runs(conn=conn))
         conn.commit()

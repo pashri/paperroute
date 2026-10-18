@@ -1,10 +1,12 @@
 """Tests for peak memory measurement."""
 
+import os
 import subprocess
 import sys
+from pathlib import Path
 from typing import Final
 
-from paperroute.rss import max_rss_mb
+from paperroute.rss import current_rss_mb, max_rss_mb
 
 CHILD_PEAK: Final[str] = (
     'import subprocess, sys\n'
@@ -30,3 +32,17 @@ def test_max_rss_covers_children() -> None:
         text=True,
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_current_rss_mb_asks_ps_without_statm(tmp_path: Path) -> None:
+    """Without a statm file the live size comes from ps, below the peak."""
+    live = current_rss_mb(statm=tmp_path / 'missing')
+    assert 1.0 < live <= max_rss_mb() + 1.0
+
+
+def test_current_rss_mb_reads_statm(tmp_path: Path) -> None:
+    """The resident page count is the second field of statm."""
+    statm = tmp_path / 'statm'
+    pages = (64 << 20) // os.sysconf('SC_PAGE_SIZE')
+    statm.write_text(f'100000 {pages} 300 1 0 500 0\n')
+    assert current_rss_mb(statm=statm) == 64.0

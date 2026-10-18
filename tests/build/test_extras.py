@@ -107,9 +107,18 @@ def test_run_extras_prints_each_phase(
     assert RUN_TABLES <= tables_of(db=db)
 
 
-def test_extras_run_in_a_child(tmp_path: Path) -> None:
-    """The build writes the run tables, and a failing child raises."""
+def test_extras_run_in_a_child(
+    tmp_path: Path, capfd: pytest.CaptureFixture[str],
+) -> None:
+    """The build writes the run tables and both processes' sizes."""
     assert RUN_TABLES <= tables_of(db=network_build(folder=tmp_path))
+    lines = capfd.readouterr().out.splitlines()
+    parent = lines.index(next(
+        line for line in lines if line.startswith('progress extras parent ')
+    ))
+    assert lines[parent].endswith('MB')
+    assert lines[parent + 1] == 'progress runs'
+    assert lines[-1].startswith('progress extras peak ')
     junk = tmp_path / 'junk.db'
     junk.write_bytes(b'not a timetable')
     with pytest.raises(RuntimeError, match='exit code'):

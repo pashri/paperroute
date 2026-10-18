@@ -22,6 +22,7 @@ from paperroute.build.gtfs_files import (
 )
 from paperroute.build.shapes import load_shapes
 from paperroute.core.model import SYDNEY, Mode, mode_for
+from paperroute.rss import current_rss_mb
 
 SCHEMA_VERSION: Final[str] = '3'
 PLATFORM: Final[re.Pattern[str]] = re.compile(r'(?:Platform|Stand)\s+(\w+)$')
@@ -374,6 +375,7 @@ def build_timetable(*, sources: list[Source], window: Window,
         write_meta(conn=conn, window=window)
         conn.commit()
     gc.collect()
+    print(f'progress extras parent {current_rss_mb():.0f}MB', flush=True)
     build_extras(path=scratch)
     os.replace(scratch, out)
     return report

@@ -9,16 +9,17 @@ from paperroute.core.messages import MapData
 from paperroute.core.model import Mode, Pin
 from paperroute.core.places import (
     flipped,
+    matched,
     shown,
     shown_index,
     toggled,
     with_place,
 )
 from paperroute.core.realtime import RealtimeSnapshot
-from paperroute.core.saved import LiveView, Saved
+from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved
 from paperroute.core.state import initial_state
 from paperroute.core.state_model import Board, State
-from tests.core.factories import START, departure, pin_at, snapshot
+from tests.core.factories import START, departure, pin_at, place, snapshot
 
 FIRST = pin_at('first', x=100.0)
 SECOND = pin_at('second', x=200.0)
@@ -58,7 +59,7 @@ def state_with(
         view=LiveView.STOP,
         zoom=DEFAULT_ZOOM,
     )
-    return initial_state(saved=saved, now=START)
+    return initial_state(saved=saved, now=START, stored=True)
 
 
 def test_shown_is_the_current_pin() -> None:
@@ -151,3 +152,62 @@ def test_unpinning_the_only_pin_leaves_no_pins() -> None:
     assert state.places.pins == ()
     assert state.places.current == 0
     assert shown(state=state) == FIRST
+
+
+def test_matched_same_id_refreshes_name_and_point() -> None:
+    """A stop found under its own ID takes the new name and point."""
+    fresh = place('second', name='Second St', point=(250.0, 5.0))
+    state = matched(state=state_with(), found={'second': fresh})
+    assert state.places.pins[1] == Pin(origin=fresh)
+    assert state.places.pins[0] == FIRST
+
+
+def test_unmatched_pin_is_marked_missing() -> None:
+    """A stop not found marks its pin missing and keeps its old data."""
+    state = matched(state=state_with(), found={'third': None})
+    assert state.places.pins[2] == replace(THIRD, missing=True)
+
+
+def test_unmatched_destination_marks_the_pin_missing() -> None:
+    """A Destination not found marks the pin missing too."""
+    pin = replace(FIRST, destination=place('far', name='Far'))
+    state = state_with(pins=(pin,))
+    state = matched(
+        state=state, found={'first': FIRST.origin, 'far': None}
+    )
+    assert state.places.pins == (replace(pin, missing=True),)
+
+
+def test_matched_again_clears_missing() -> None:
+    """A later match clears the missing mark."""
+    state = matched(state=state_with(), found={'third': None})
+    state = matched(state=state, found={'third': THIRD.origin})
+    assert state.places.pins[2] == THIRD
+
+
+def test_matched_onto_another_pin_marks_missing() -> None:
+    """A re-match that would duplicate another pin keeps the old stop."""
+    state = matched(state=state_with(), found={'third': FIRST.origin})
+    assert state.places.pins == (FIRST, SECOND, replace(THIRD, missing=True))
+
+
+def test_matched_updates_the_unpinned_place() -> None:
+    """The unpinned place is matched like the pins."""
+    moved = place('elsewhere-2', name='elsewhere', point=(905.0, 0.0))
+    state = state_with(unpinned=ELSEWHERE)
+    state = matched(state=state, found={'elsewhere': moved})
+    assert state.places.unpinned == Pin(origin=moved)
+
+
+def test_initial_state_without_any_place_shows_the_default() -> None:
+    """A saved file with no pins and no unpinned place shows Town Hall."""
+    saved = replace(DEFAULT_SAVED, unpinned=None, current=3)
+    state = initial_state(saved=saved, now=START, stored=True)
+    assert shown(state=state) == DEFAULT_SAVED.unpinned
+    assert state.places.current == 0
+
+
+def test_initial_state_clamps_an_out_of_range_current() -> None:
+    """A current past the last pin shows the last pin."""
+    assert shown(state=state_with(current=7)) == THIRD
+    assert shown(state=state_with(current=-2)) == FIRST

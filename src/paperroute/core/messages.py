@@ -8,10 +8,11 @@ from enum import StrEnum
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.map_view import MapView
-from paperroute.core.model import Departure, Mode, Pin
+from paperroute.core.model import Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import TripPattern
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.realtime import RealtimeSnapshot
+from paperroute.core.saved import Saved
 from paperroute.core.stop_view import StopView
 
 
@@ -82,6 +83,20 @@ class Stop:
     """Stop the app."""
 
 
+@dataclass(frozen=True)
+class SaveState:
+    """Write what the device keeps between restarts."""
+
+    saved: Saved
+
+
+@dataclass(frozen=True)
+class MatchPlaces:
+    """Look some places up in the timetable."""
+
+    places: tuple[StopPlace, ...]
+
+
 MapRequest = LoadShapes | LoadPatterns | LoadModes
 Effect = (
     LoadDepartures
@@ -91,6 +106,8 @@ Effect = (
     | LoadModes
     | Render
     | Stop
+    | SaveState
+    | MatchPlaces
 )
 
 
@@ -159,6 +176,28 @@ class KnobHeld:
 @dataclass(frozen=True)
 class QuitRequested:
     """The user asked to quit (development monitor only)."""
+
+
+@dataclass(frozen=True)
+class TimetableSeen:
+    """The timetable in use was checked; None when there is none."""
+
+    version: str | None
+
+
+@dataclass(frozen=True)
+class PlacesMatched:
+    """
+    Places were looked up in the timetable.
+
+    Attributes
+    ----------
+    found : Mapping[str, StopPlace | None]
+        The place now found for each old stop ID, or None when it is
+        gone.
+    """
+
+    found: Mapping[str, StopPlace | None]
 
 
 @dataclass(frozen=True)
@@ -245,5 +284,7 @@ Event = (
     | KnobPressed
     | KnobHeld
     | QuitRequested
+    | TimetableSeen
+    | PlacesMatched
     | MapEvent
 )

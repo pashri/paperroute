@@ -1,6 +1,6 @@
 """The pins, the place shown, and moving between them."""
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
 from paperroute.core.feeds import feed_for
@@ -14,8 +14,38 @@ from paperroute.core.messages import (
     MapDataFailed,
     ModesLoaded,
 )
-from paperroute.core.model import Departure, Pin, same_place
+from paperroute.core.model import (
+    Departure,
+    Pin,
+    StopPlace,
+    pin_key,
+    same_place,
+)
+from paperroute.core.saved import DEFAULT_PLACE, Saved
 from paperroute.core.state_model import Board, Places, State
+
+
+def places_of(*, saved: Saved) -> Places:
+    """
+    Take the pins and the place shown from what was saved.
+
+    Parameters
+    ----------
+    saved : Saved
+        What was saved, possibly from a damaged file.
+
+    Returns
+    -------
+    Places
+        The saved places with `current` clamped onto the pins, and Town
+        Hall unpinned when there would be no place to show.
+    """
+    pins = saved.pins
+    current = min(max(saved.current, 0), max(len(pins) - 1, 0))
+    unpinned = saved.unpinned
+    if unpinned is None and not pins:
+        unpinned = DEFAULT_PLACE
+    return Places(pins=pins, current=current, unpinned=unpinned)
 
 
 def shown(*, state: State) -> Pin:
@@ -284,3 +314,148 @@ def is_stale(*, state: State, event: Event) -> bool:
         ):
             return other_area(state=state, mpp=mpp, box=box)
     return False
+
+
+
+def stops_to_match(*, state: State) -> tuple[StopPlace, ...]:
+    """
+    List every stop the places use.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[StopPlace, ...]
+        Each pin's From and Destination, then the unpinned place's, each
+        stop ID once.
+    """
+    places = state.places
+    pins = places.pins
+    if places.unpinned is not None:
+        pins = (*pins, places.unpinned)
+    stops: dict[str, StopPlace] = {}
+    for pin in pins:
+        for stop in (pin.origin, pin.destination):
+            if stop is not None:
+                stops.setdefault(stop.stop_id, stop)
+    return tuple(stops.values())
+
+
+def looked_up(
+    *, stop: StopPlace, found: Mapping[str, StopPlace | None]
+) -> StopPlace | None:
+    """
+    Find a stop's new place.
+
+    Parameters
+    ----------
+    stop : StopPlace
+        The stop as stored.
+    found : Mapping[str, StopPlace | None]
+        New places by old stop ID.
+
+    Returns
+    -------
+    StopPlace | None
+        The new place, None when it is gone, or `stop` itself when it was
+        not looked up.
+    """
+    return found[stop.stop_id] if stop.stop_id in found else stop
+
+
+def rematched(*, pin: Pin, found: Mapping[str, StopPlace | None]) -> Pin:
+    """
+    Match one place's stops against the timetable.
+
+    Parameters
+    ----------
+    pin : Pin
+        The place.
+    found : Mapping[str, StopPlace | None]
+        New places by old stop ID.
+
+    Returns
+    -------
+    Pin
+        The place with its stops' new IDs, names and points; marked
+        missing, with its old stops, when either is gone; unchanged when
+        neither was looked up.
+    """
+    stops = (pin.origin, pin.destination)
+    if not any(stop is not None and stop.stop_id in found for stop in stops):
+        return pin
+    origin = looked_up(stop=pin.origin, found=found)
+    destination = (
+        None
+        if pin.destination is None
+        else looked_up(stop=pin.destination, found=found)
+    )
+    if origin is None or (pin.destination is not None and destination is None):
+        return replace(pin, missing=True)
+    return replace(pin, origin=origin, destination=destination, missing=False)
+
+
+def rematched_pins(
+    *, pins: tuple[Pin, ...], found: Mapping[str, StopPlace | None]
+) -> tuple[Pin, ...]:
+    """
+    Match every pin, never letting two pins become the same place.
+
+    Parameters
+    ----------
+    pins : tuple[Pin, ...]
+        The pins, all different places.
+    found : Mapping[str, StopPlace | None]
+        New places by old stop ID.
+
+    Returns
+    -------
+    tuple[Pin, ...]
+        The pins in the same order. A pin whose match would be another
+        pin's place keeps its old stops and is marked missing.
+    """
+    result = list(pins)
+    for index, pin in enumerate(pins):
+        new = rematched(pin=pin, found=found)
+        taken = {
+            pin_key(pin=other)
+            for other_index, other in enumerate(result)
+            if other_index != index
+        }
+        if pin_key(pin=new) in taken:
+            new = replace(pin, missing=True)
+        result[index] = new
+    return tuple(result)
+
+
+def matched(
+    *, state: State, found: Mapping[str, StopPlace | None]
+) -> State:
+    """
+    Apply a timetable look-up to every pin and the unpinned place.
+
+    A stop found under its own ID takes its new name and point; one found
+    under another ID moves to it; one not found marks its place missing
+    and keeps its old data. A later match clears the mark.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    found : Mapping[str, StopPlace | None]
+        New places by old stop ID; stops not in it are left alone.
+
+    Returns
+    -------
+    State
+        State with the places matched. Nothing else changes.
+    """
+    places = state.places
+    unpinned = places.unpinned
+    if unpinned is not None:
+        unpinned = rematched(pin=unpinned, found=found)
+    pins = rematched_pins(pins=places.pins, found=found)
+    return replace(state, places=replace(places, pins=pins, unpinned=unpinned))

@@ -57,10 +57,11 @@ TOWN_HALL: Final[StopPlace] = StopPlace(
     name='Town Hall Station',
     point=to_metres(lon=151.206899293, lat=-33.8735963257),
 )
+DEFAULT_PLACE: Final[Pin] = Pin(origin=TOWN_HALL, kind=RouteKind.TRAIN)
 DEFAULT_SAVED: Final[Saved] = Saved(
     pins=(),
     current=0,
-    unpinned=Pin(origin=TOWN_HALL, kind=RouteKind.TRAIN),
+    unpinned=DEFAULT_PLACE,
     view=LiveView.MAP,
     zoom=DEFAULT_ZOOM,
 )

@@ -127,6 +127,8 @@ class StopInputs:
         says it is loading rather than that nothing runs.
     tag : PinTag
         The header's pin tag.
+    missing : bool
+        Whether the timetable no longer knows the place.
     """
 
     origin: str
@@ -138,6 +140,7 @@ class StopInputs:
     has_feed: bool
     loaded: bool = True
     tag: PinTag = NOT_PINNED
+    missing: bool = False
 
 
 def clock_text(*, moment: datetime) -> str:
@@ -351,7 +354,9 @@ def order_time(*, item: LiveDeparture) -> float:
     return moment.timestamp()
 
 
-def empty_text(*, destination: str | None, loaded: bool) -> str:
+def empty_text(
+    *, destination: str | None, loaded: bool, missing: bool = False
+) -> str:
     """
     Say why the list is empty.
 
@@ -361,12 +366,16 @@ def empty_text(*, destination: str | None, loaded: bool) -> str:
         Destination name, or None when the place has none.
     loaded : bool
         Whether the timetable has been read yet.
+    missing : bool
+        Whether the timetable no longer knows the place.
 
     Returns
     -------
     str
         Message.
     """
+    if missing:
+        return 'Stop not in the new timetable'
     if not loaded:
         return 'Loading timetable'
     if destination is None:
@@ -424,7 +433,9 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         rows=tuple(rest[offset : offset + shown]),
         banner=text,
         empty=None if rows else empty_text(
-            destination=inputs.destination, loaded=inputs.loaded
+            destination=inputs.destination,
+            loaded=inputs.loaded,
+            missing=inputs.missing,
         ),
         scroll=offset,
         tag=inputs.tag,

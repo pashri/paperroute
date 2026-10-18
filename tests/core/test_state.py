@@ -32,26 +32,46 @@ from paperroute.core.messages import (
     MapData,
     MapDataFailed,
     MapRequest,
+    MatchPlaces,
     ModesLoaded,
     PatternsLoaded,
+    PlacesMatched,
     PositionsFetched,
     QuitRequested,
     Render,
+    SaveState,
     ShapesLoaded,
     Stop,
     Tick,
+    TimetableSeen,
 )
-from paperroute.core.model import SYDNEY, Departure, Mode, Pin, shifted
+from paperroute.core.model import (
+    SYDNEY,
+    Departure,
+    Mode,
+    Pin,
+    RouteKind,
+    pin_key,
+    same_place,
+    shifted,
+)
 from paperroute.core.places import shown
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 from paperroute.core.saved import (
     DEFAULT_SAVED,
     LIVE_VIEWS,
+    TOWN_HALL,
     LiveView,
     Saved,
     seeded,
 )
-from paperroute.core.state import initial_state, needed_feeds, step
+from paperroute.core.state import (
+    SAVE_AFTER,
+    initial_state,
+    needed_feeds,
+    saved_of,
+    step,
+)
 from paperroute.core.state_model import (
     FEED_IDLE,
     LOOKBACK,
@@ -86,6 +106,18 @@ BUS_POSITIONS: Final[str] = 'v1/gtfs/vehiclepos/buses'
 FERRY_POSITIONS: Final[str] = 'v1/gtfs/vehiclepos/ferries/sydneyferries'
 CENTRE: Final[Point] = (-17_000.0, 1_000.0)
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
+PINS: Final[tuple[Pin, ...]] = (
+    pin_at('first', x=100.0),
+    pin_at('second', x=200.0),
+    pin_at('third', x=300.0),
+)
+ELSEWHERE: Final[Pin] = pin_at('elsewhere', x=900.0)
+POOL: Final[tuple[Pin, ...]] = (
+    PIN,
+    *PINS,
+    ELSEWHERE,
+    Pin(origin=TOWN_HALL, kind=RouteKind.TRAIN),
+)
 
 
 def fresh(*, now: datetime = START, centre: Point | None = None) -> State:
@@ -105,7 +137,7 @@ def fresh(*, now: datetime = START, centre: Point | None = None) -> State:
         Initial state.
     """
     pin = replace(PIN, origin=replace(PIN.origin, point=centre))
-    return initial_state(saved=seeded(pin=pin), now=now)
+    return initial_state(saved=seeded(pin=pin), now=now, stored=True)
 
 
 def loaded(
@@ -171,7 +203,7 @@ def test_stop_view_names_the_pins_places() -> None:
 def test_stop_view_without_a_destination_names_none() -> None:
     """A pin with no Destination gives the view no destination."""
     saved = seeded(pin=replace(PIN, destination=None))
-    state = initial_state(saved=saved, now=START)
+    state = initial_state(saved=saved, now=START, stored=True)
     state, _ = step(state, Tick(now=START))
     assert isinstance(state.last_view, StopView)
     assert state.last_view.destination is None
@@ -734,6 +766,71 @@ def map_events(draw: st.DrawFn, now: datetime) -> Event:
     return draw(st.sampled_from(options))
 
 
+STOP_IDS: Final[tuple[str, ...]] = (
+    '2145615',
+    '215020',
+    'first',
+    'second',
+    'third',
+    'elsewhere',
+    TOWN_HALL.stop_id,
+)
+
+
+@st.composite
+def found_places(draw: st.DrawFn) -> PlacesMatched:
+    """
+    A random answer to a re-match.
+
+    Parameters
+    ----------
+    draw : st.DrawFn
+        Hypothesis draw function.
+
+    Returns
+    -------
+    PlacesMatched
+        Some stop IDs each found under itself, another ID, or not at all.
+    """
+    found = draw(
+        st.dictionaries(
+            keys=st.sampled_from(STOP_IDS),
+            values=st.one_of(
+                st.none(),
+                st.sampled_from(STOP_IDS).map(
+                    lambda stop_id: place(
+                        stop_id, name=stop_id, point=(1.0, 2.0)
+                    )
+                ),
+            ),
+        )
+    )
+    return PlacesMatched(found=found)
+
+
+@st.composite
+def place_events(draw: st.DrawFn) -> Event:
+    """
+    A random hold, timetable version or re-match.
+
+    Parameters
+    ----------
+    draw : st.DrawFn
+        Hypothesis draw function.
+
+    Returns
+    -------
+    Event
+        A knob hold, a timetable seen or places matched.
+    """
+    options: list[Event] = [
+        KnobHeld(knob=draw(st.sampled_from(list(Knob)))),
+        TimetableSeen(version=draw(st.sampled_from([None, 'v1', 'v2']))),
+        draw(found_places()),
+    ]
+    return draw(st.sampled_from(options))
+
+
 @st.composite
 def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
     """
@@ -761,6 +858,8 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
         'load',
         'unreadable',
         'map',
+        'place',
+        'quit',
     ]
     for kind in draw(st.lists(st.sampled_from(kinds), max_size=40)):
         if kind == 'tick':
@@ -775,7 +874,11 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
         elif kind == 'fail':
             events.append(FeedFailed(feed=BUSES, at=now, reason='timeout'))
         elif kind == 'unreadable':
-            events.append(DeparturesFailed(pin=PIN))
+            events.append(DeparturesFailed(pin=draw(st.sampled_from(POOL))))
+        elif kind == 'place':
+            events.append(draw(place_events()))
+        elif kind == 'quit':
+            events.append(QuitRequested())
         elif kind == 'ok':
             snap = RealtimeSnapshot(fetched_at=now, trips={})
             events.append(FeedFetched(feed=BUSES, snapshot=snap))
@@ -795,7 +898,11 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
             )
             until = shifted(moment=now, seconds=3 * 3600 + 1800)
             events.append(
-                DeparturesLoaded(pin=PIN, departures=deps, until=until)
+                DeparturesLoaded(
+                    pin=draw(st.sampled_from(POOL)),
+                    departures=deps,
+                    until=until,
+                )
             )
     return events
 
@@ -828,7 +935,9 @@ def check_effects(
             check_render(view=effect.view)
             assert effect.view != before.last_view
         if isinstance(effect, LoadDepartures):
-            assert not before.board.loading
+            assert not before.board.loading or not same_place(
+                first=shown(state=before), second=effect.pin
+            )
         if isinstance(effect, FetchFeed):
             check_fetch(before=before, after=after, event=event, effect=effect)
 
@@ -837,7 +946,8 @@ def check_map_requests(
     *, before: State, after: State, effects: tuple[Effect, ...]
 ) -> None:
     """
-    Assert map data is asked for only on the Map, and modes once per zoom.
+    Assert map data is asked for only on the Map, and modes once per zoom
+    while the map shows the same place in the same spot.
 
     Parameters
     ----------
@@ -859,6 +969,11 @@ def check_map_requests(
     ]
     if after.view in (LiveView.STOP, LiveView.STRIP):
         assert not requests
+    moved = before.map.centre != after.map.centre or not same_place(
+        first=shown(state=before), second=shown(state=after)
+    )
+    if moved:
+        return
     known = before.map.area_modes.keys() | before.map.pending_modes
     for load in effects_of(effects=effects, kind=LoadModes):
         assert load.mpp not in known
@@ -931,24 +1046,112 @@ def check_fetch(
         assert gap >= POLL_EVERY.total_seconds()
 
 
+def check_places(*, before: State, after: State, event: Event) -> None:
+    """
+    Assert a place is shown, current is in range and pins are unique.
+
+    Parameters
+    ----------
+    before : State
+        State before the event.
+    after : State
+        State after the event.
+    event : Event
+        The event applied.
+    """
+    places = after.places
+    shown(state=after)
+    assert 0 <= places.current < max(1, len(places.pins))
+    keys = [pin_key(pin=pin) for pin in places.pins]
+    assert len(set(keys)) == len(keys)
+    change = len(places.pins) - len(before.places.pins)
+    if change:
+        assert event == KnobHeld(knob=Knob.BOTTOM)
+        assert abs(change) == 1
+
+
+def check_saves(
+    *, after: State, effects: tuple[Effect, ...], last: Saved | None
+) -> Saved | None:
+    """
+    Assert every save carries the state and differs from the last one.
+
+    Parameters
+    ----------
+    after : State
+        State after the event.
+    effects : tuple[Effect, ...]
+        Effects returned.
+    last : Saved | None
+        What was last saved, or None before the first save.
+
+    Returns
+    -------
+    Saved | None
+        What is now last saved.
+    """
+    for save in effects_of(effects=effects, kind=SaveState):
+        assert save.saved == saved_of(state=after)
+        assert save.saved != last
+        last = save.saved
+    return last
+
+
+@st.composite
+def start_saved(draw: st.DrawFn) -> Saved:
+    """
+    A random place to start from.
+
+    Parameters
+    ----------
+    draw : st.DrawFn
+        Hypothesis draw function.
+
+    Returns
+    -------
+    Saved
+        One pin, three pins with or without an unpinned place, the
+        default, or a damaged file with no place and current out of range.
+    """
+    centre = draw(st.sampled_from([None, CENTRE]))
+    pin = replace(PIN, origin=replace(PIN.origin, point=centre))
+    options = [
+        seeded(pin=pin),
+        DEFAULT_SAVED,
+        replace(DEFAULT_SAVED, unpinned=None, current=5),
+        Saved(
+            pins=PINS,
+            current=draw(st.integers(-1, 4)),
+            unpinned=draw(st.sampled_from([None, ELSEWHERE])),
+            view=draw(st.sampled_from(LIVE_VIEWS)),
+            zoom=DEFAULT_ZOOM,
+        ),
+    ]
+    return draw(st.sampled_from(options))
+
+
 @given(
     st.sampled_from([START, FALL_BACK_EVE]).flatmap(
         lambda start: st.tuples(st.just(start), event_lists(start))
     ),
-    st.sampled_from([None, CENTRE]),
+    start_saved(),
+    st.booleans(),
 )
 def test_step_invariants(
-    case: tuple[datetime, list[Event]], centre: Point | None
+    case: tuple[datetime, list[Event]], saved: Saved, stored: bool
 ) -> None:
     """No event sequence breaks the reducer's invariants."""
     start, events = case
-    state = fresh(now=start, centre=centre)
+    state = initial_state(saved=saved, now=start, stored=stored)
+    last = state.saving.saved
     for event in events:
         before = state
         state, effects = step(before, event)
         check_effects(
             before=before, after=state, event=event, effects=effects
         )
+        check_places(before=before, after=state, event=event)
+        last = check_saves(after=state, effects=effects, last=last)
 
 
 @dataclass
@@ -1260,7 +1463,7 @@ def test_no_destination_map_caps_patterns() -> None:
         origin=replace(PIN.origin, point=CENTRE),
         destination=None,
     )
-    state = initial_state(saved=seeded(pin=pin), now=START)
+    state = initial_state(saved=seeded(pin=pin), now=START, stored=True)
     state = loaded(state=state, count=500)
     _, effects = step(state, PRESS)
     loads = effects_of(effects=effects, kind=LoadPatterns)
@@ -1287,7 +1490,7 @@ def no_destination_map(*, count: int) -> State:
         origin=replace(PIN.origin, point=CENTRE),
         destination=None,
     )
-    state = initial_state(saved=seeded(pin=pin), now=START)
+    state = initial_state(saved=seeded(pin=pin), now=START, stored=True)
     return loaded(state=state, count=count, shaped=True)
 
 
@@ -1317,12 +1520,6 @@ def test_no_destination_map_ignores_the_stop_scroll() -> None:
     ]
 
 
-PINS: Final[tuple[Pin, ...]] = (
-    pin_at('first', x=100.0),
-    pin_at('second', x=200.0),
-    pin_at('third', x=300.0),
-)
-ELSEWHERE: Final[Pin] = pin_at('elsewhere', x=900.0)
 HOLD: Final[KnobHeld] = KnobHeld(knob=Knob.BOTTOM)
 
 
@@ -1356,7 +1553,8 @@ def pinned(
         view=view,
         zoom=DEFAULT_ZOOM,
     )
-    state, _ = step(initial_state(saved=saved, now=START), Tick(now=START))
+    state = initial_state(saved=saved, now=START, stored=True)
+    state, _ = step(state, Tick(now=START))
     return state
 
 
@@ -1416,7 +1614,7 @@ def test_top_turn_drops_unpinned_and_keeps_current() -> None:
 def test_top_turn_without_pins_does_nothing() -> None:
     """With only the unpinned place there is nothing to turn to."""
     state, _ = step(
-        initial_state(saved=DEFAULT_SAVED, now=START),
+        initial_state(saved=DEFAULT_SAVED, now=START, stored=True),
         Tick(now=START),
     )
     assert step(state, top(steps=1)) == (state, ())
@@ -1573,3 +1771,148 @@ def test_flip_forgets_the_old_places_map_failures() -> None:
     state, effects = step(state, top(steps=1))
     assert not state.map.failed_at
     assert effects_of(effects=effects, kind=LoadModes)
+
+
+def saves(*, effects: tuple[Effect, ...]) -> list[SaveState]:
+    """
+    Pick the saves from some effects.
+
+    Parameters
+    ----------
+    effects : tuple[Effect, ...]
+        Effects.
+
+    Returns
+    -------
+    list[SaveState]
+        The saves, in order.
+    """
+    return effects_of(effects=effects, kind=SaveState)
+
+
+def at(*, seconds: int) -> Tick:
+    """
+    Tick some seconds after START.
+
+    Parameters
+    ----------
+    seconds : int
+        Seconds after START.
+
+    Returns
+    -------
+    Tick
+        The tick.
+    """
+    return Tick(now=START + timedelta(seconds=seconds))
+
+
+def test_save_waits_three_seconds_after_last_change() -> None:
+    """A change is saved once, on the first tick 3 s after it."""
+    state, _ = step(pinned(), at(seconds=10))
+    state, _ = step(state, HOLD)
+    state, _ = step(state, at(seconds=11))
+    state, _ = step(state, top(steps=1))
+    state, effects = step(state, at(seconds=13))
+    assert not saves(effects=effects)
+    state, effects = step(state, at(seconds=11 + 3))
+    assert saves(effects=effects) == [SaveState(saved=saved_of(state=state))]
+    assert state.saving.saved == saved_of(state=state)
+    _, effects = step(state, at(seconds=20))
+    assert not saves(effects=effects)
+    assert SAVE_AFTER == timedelta(seconds=3)
+
+
+def test_first_tick_saves_when_never_stored() -> None:
+    """With no file yet, the first tick writes one."""
+    saved = seeded(pin=PIN)
+    state = initial_state(saved=saved, now=START, stored=False)
+    assert state.saving.saved is None
+    state, effects = step(state, Tick(now=START))
+    assert saves(effects=effects) == [SaveState(saved=saved)]
+    _, effects = step(state, at(seconds=60))
+    assert not saves(effects=effects)
+
+
+def test_no_save_without_change() -> None:
+    """Ticks, scrolling, loads and a full round of views save nothing."""
+    state, _ = turned(state=loaded(state=pinned(), count=20), steps=2)
+    for _ in LIVE_VIEWS:
+        state, _ = step(state, PRESS)
+    for seconds in range(0, 3600, 5):
+        state, effects = step(state, at(seconds=seconds))
+        assert not saves(effects=effects)
+
+
+def test_quit_saves_unsaved_changes_first() -> None:
+    """Quitting with an unsaved change saves before stopping."""
+    state, _ = step(pinned(), HOLD)
+    state, effects = step(state, QuitRequested())
+    assert effects == (SaveState(saved=saved_of(state=state)), Stop())
+    assert not state.running
+
+
+def test_new_timetable_version_matches_every_place() -> None:
+    """A new version re-matches every place and reloads departures."""
+    far = place('far', name='Far', point=(5.0, 5.0))
+    pins = (replace(PINS[0], destination=far), *PINS[1:])
+    saved = Saved(
+        pins=pins,
+        current=0,
+        unpinned=ELSEWHERE,
+        view=LiveView.STOP,
+        zoom=DEFAULT_ZOOM,
+    )
+    state = initial_state(saved=saved, now=START, stored=True)
+    state = loaded(state=state)
+    state, effects = step(state, TimetableSeen(version='v2'))
+    origins = tuple(pin.origin for pin in PINS)
+    assert MatchPlaces(
+        places=(origins[0], far, *origins[1:], ELSEWHERE.origin)
+    ) in effects
+    assert state.saving.timetable == 'v2'
+    assert state.board.loaded_until is None
+    _, effects = step(state, Tick(now=START))
+    assert effects_of(effects=effects, kind=LoadDepartures)
+    assert step(state, TimetableSeen(version='v2')) == (state, ())
+
+
+def test_unmatched_shown_pin_says_stop_not_in_the_new_timetable() -> None:
+    """A missing shown pin's Stop view says it is not in the timetable."""
+    state = loaded(state=pinned(), count=0)
+    state, _ = step(state, PlacesMatched(found={'first': None}))
+    assert state.places.pins[0].missing
+    assert isinstance(state.last_view, StopView)
+    assert state.last_view.empty == 'Stop not in the new timetable'
+
+
+def test_matched_id_change_updates_pin_and_reloads() -> None:
+    """A re-match onto a new ID shows the new stop and loads it."""
+    moved = place('first-2', name='first', point=(105.0, 0.0))
+    state = loaded(state=pinned(view=LiveView.MAP))
+    state, effects = step(state, PlacesMatched(found={'first': moved}))
+    assert shown(state=state) == Pin(origin=moved)
+    [load] = effects_of(effects=effects, kind=LoadDepartures)
+    assert load.pin == Pin(origin=moved)
+    assert state.board.departures == ()
+    assert state.map.centre == moved.point
+
+
+def test_matched_name_only_refresh_keeps_the_board() -> None:
+    """A re-match under the same ID keeps the departures loaded."""
+    renamed = replace(PINS[0].origin, name='First St')
+    state = loaded(state=pinned())
+    before = state.board
+    state, effects = step(state, PlacesMatched(found={'first': renamed}))
+    assert state.board == before
+    assert not effects_of(effects=effects, kind=LoadDepartures)
+    assert isinstance(state.last_view, StopView)
+    assert state.last_view.origin == 'First St'
+
+
+def test_no_timetable_matches_nothing() -> None:
+    """With no timetable there is nothing to match against."""
+    state, _ = step(pinned(), TimetableSeen(version='v1'))
+    state, effects = step(state, TimetableSeen(version=None))
+    assert effects == ()
+    assert state.saving.timetable is None

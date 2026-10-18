@@ -9,7 +9,7 @@ from paperroute.core.map_state import MapState
 from paperroute.core.map_view import MapView
 from paperroute.core.model import Departure, Pin
 from paperroute.core.realtime import RealtimeSnapshot
-from paperroute.core.saved import LiveView
+from paperroute.core.saved import LiveView, Saved
 from paperroute.core.stop_view import StopView
 
 POLL_EVERY: Final[timedelta] = timedelta(seconds=30)
@@ -60,6 +60,26 @@ class Places:
 
 
 @dataclass(frozen=True)
+class Saving:
+    """
+    What was last saved, and when the saved state last changed.
+
+    Attributes
+    ----------
+    saved : Saved | None
+        What was last written, or None when nothing has been.
+    changed_at : datetime | None
+        When the saved state last changed, or None since start.
+    timetable : str | None
+        The timetable version the places were last matched against.
+    """
+
+    saved: Saved | None = None
+    changed_at: datetime | None = None
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
 class State:
     """
     Everything the app knows.
@@ -88,6 +108,8 @@ class State:
         The Live view shown.
     map : MapState
         The map's zoom, centre and data.
+    saving : Saving
+        What was last saved and the timetable last matched against.
     """
 
     now: datetime
@@ -101,3 +123,4 @@ class State:
     running: bool = True
     view: LiveView = LiveView.STOP
     map: MapState = field(default_factory=MapState)
+    saving: Saving = field(default_factory=Saving)

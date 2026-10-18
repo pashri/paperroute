@@ -1,7 +1,8 @@
 """The pure function that advances the device's state."""
 
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, timedelta
+from typing import Final
 
 from paperroute.core.feeds import feed_for
 from paperroute.core.knobs import knob_moved
@@ -29,17 +30,30 @@ from paperroute.core.messages import (
     LoadDepartures,
     MapDataFailed,
     MapEvent,
+    MatchPlaces,
     ModesLoaded,
     PatternsLoaded,
+    PlacesMatched,
     PositionsFetched,
     QuitRequested,
     Render,
+    SaveState,
     ShapesLoaded,
     Stop,
     Tick,
+    TimetableSeen,
 )
 from paperroute.core.model import same_place, shifted
-from paperroute.core.places import feeds_of, is_stale, shown, shown_index
+from paperroute.core.places import (
+    feeds_of,
+    is_stale,
+    matched,
+    places_of,
+    shown,
+    shown_index,
+    stops_to_match,
+    with_place,
+)
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state_model import (
     FEED_IDLE,
@@ -47,7 +61,7 @@ from paperroute.core.state_model import (
     POLL_EVERY,
     RELOAD_BEFORE,
     Board,
-    Places,
+    Saving,
     State,
 )
 from paperroute.core.stop_view import (
@@ -57,9 +71,12 @@ from paperroute.core.stop_view import (
     build_stop_view,
     pin_tag,
 )
+from paperroute.core.tiles import ZOOMS
+
+SAVE_AFTER: Final[timedelta] = timedelta(seconds=3)
 
 
-def initial_state(*, saved: Saved, now: datetime) -> State:
+def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
     """
     Make the state at start-up, centring the map on the shown From.
 
@@ -70,20 +87,49 @@ def initial_state(*, saved: Saved, now: datetime) -> State:
         names and points filled in.
     now : datetime
         Start time.
+    stored : bool
+        Whether `saved` came from the file; if not, the first tick writes
+        it.
 
     Returns
     -------
     State
-        State.
+        State. A current pin out of range is clamped, a zoom too, and with
+        no place to show Town Hall is unpinned.
     """
-    places = Places(
-        pins=saved.pins,
-        current=saved.current,
-        unpinned=saved.unpinned,
+    state = State(
+        now=now,
+        places=places_of(saved=saved),
+        view=saved.view,
+        saving=Saving(saved=saved if stored else None),
     )
-    state = State(now=now, places=places, view=saved.view)
     centre = shown(state=state).origin.point
-    return replace(state, map=MapState(zoom=saved.zoom, centre=centre))
+    zoom = min(max(saved.zoom, 0), len(ZOOMS) - 1)
+    return replace(state, map=MapState(zoom=zoom, centre=centre))
+
+
+def saved_of(*, state: State) -> Saved:
+    """
+    Take what the device keeps between restarts from the state.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    Saved
+        The pins, the place shown, the Live view and the zoom.
+    """
+    places = state.places
+    return Saved(
+        pins=places.pins,
+        current=places.current,
+        unpinned=places.unpinned,
+        view=state.view,
+        zoom=state.map.zoom,
+    )
 
 
 def stop_view_of(*, state: State) -> StopView:
@@ -133,6 +179,7 @@ def stop_view_of(*, state: State) -> StopView:
             live_since=since,
             has_feed=bool(state.feeds) or not state.board.departures,
             loaded=state.board.loaded_until is not None,
+            missing=pin.missing,
             tag=pin_tag(
                 index=shown_index(state=state),
                 total=len(state.places.pins),
@@ -388,6 +435,39 @@ def idle_dropped(*, state: State) -> State:
     return replace(state, map=map_state)
 
 
+def saved_effects(
+    *, state: State, wait: bool = True
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Save when the saved state differs from what was last written.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    wait : bool
+        Hold the save until `SAVE_AFTER` after the last change, unless
+        nothing was ever written.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with the save recorded, and a SaveState; unchanged when
+        nothing is due.
+    """
+    saving = state.saving
+    current = saved_of(state=state)
+    settled_long = elapsed(
+        since=saving.changed_at, now=state.now, span=SAVE_AFTER
+    )
+    if current == saving.saved:
+        return state, ()
+    if wait and saving.saved is not None and not settled_long:
+        return state, ()
+    saving = replace(saving, saved=current)
+    return replace(state, saving=saving), (SaveState(saved=current),)
+
+
 def on_tick(
     *, state: State, event: Tick
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -409,7 +489,8 @@ def on_tick(
     state = idle_dropped(state=replace(state, now=event.now))
     state, loads = reload_effects(state=state)
     state, fetches = poll_effects(state=state)
-    return settled(state=state, effects=(*loads, *fetches))
+    state, saves = saved_effects(state=state)
+    return settled(state=state, effects=(*loads, *fetches, *saves))
 
 
 def on_loaded(
@@ -485,10 +566,107 @@ def on_knob(
     after = knob_moved(state=state, event=event)
     if after is state:
         return state, ()
+    return reloaded(before=state, after=after)
+
+
+def reloaded(
+    *, before: State, after: State
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Load departures when the place shown changed, and redraw.
+
+    Parameters
+    ----------
+    before : State
+        State before the event.
+    after : State
+        State after it, already showing the new place.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        New state and effects.
+    """
     loads: tuple[Effect, ...] = ()
-    if not same_place(first=shown(state=after), second=shown(state=state)):
+    if not same_place(first=shown(state=after), second=shown(state=before)):
         after, loads = reload_effects(state=after)
     return settled(state=after, effects=loads)
+
+
+def on_timetable(
+    *, state: State, event: TimetableSeen
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Match every place again and reload when the timetable changed.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    event : TimetableSeen
+        The timetable version in use.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with the version recorded and the departures due to reload,
+        and a MatchPlaces when there is a timetable; unchanged for the
+        version already seen.
+    """
+    if event.version == state.saving.timetable:
+        return state, ()
+    state = replace(
+        state,
+        board=replace(state.board, loaded_until=None),
+        saving=replace(state.saving, timetable=event.version),
+    )
+    if event.version is None:
+        return state, ()
+    return state, (MatchPlaces(places=stops_to_match(state=state)),)
+
+
+def on_matched(
+    *, state: State, event: PlacesMatched
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Apply a timetable look-up, showing and loading a moved place afresh.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    event : PlacesMatched
+        The places found.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        New state and effects; none when nothing changed.
+    """
+    after = matched(state=state, found=event.found)
+    if after.places == state.places:
+        return state, ()
+    if not same_place(first=shown(state=after), second=shown(state=state)):
+        after = with_place(state=after, pin=after.places.unpinned)
+    return reloaded(before=state, after=after)
+
+
+def on_quit(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Stop, saving any unsaved change first.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        Stopped state, and a SaveState if needed, then Stop.
+    """
+    state, saves = saved_effects(state=state, wait=False)
+    return replace(state, running=False), (*saves, Stop())
 
 
 def on_map_event(
@@ -537,7 +715,32 @@ def on_map_event(
 
 def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
     """
-    Apply one event.
+    Apply one event, noting when the saved state changed.
+
+    Parameters
+    ----------
+    state : State
+        Current state.
+    event : Event
+        What happened.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        Next state and the effects to perform.
+    """
+    after, effects = dispatched(state=state, event=event)
+    if after is state or saved_of(state=after) == saved_of(state=state):
+        return after, effects
+    saving = replace(after.saving, changed_at=after.now)
+    return replace(after, saving=saving), effects
+
+
+def dispatched(
+    *, state: State, event: Event
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Hand an event to its handler.
 
     Parameters
     ----------
@@ -564,7 +767,11 @@ def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
         case KnobTurned() | KnobPressed() | KnobHeld():
             result = on_knob(state=state, event=event)
         case QuitRequested():
-            result = replace(state, running=False), (Stop(),)
+            result = on_quit(state=state)
+        case TimetableSeen():
+            result = on_timetable(state=state, event=event)
+        case PlacesMatched():
+            result = on_matched(state=state, event=event)
         case (
             ShapesLoaded()
             | PatternsLoaded()

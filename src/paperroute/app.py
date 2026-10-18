@@ -32,11 +32,13 @@ from paperroute.core.messages import (
     LoadShapes,
     MapDataFailed,
     MapRequest,
+    MatchPlaces,
     ModesLoaded,
     PatternsLoaded,
     PositionsFetched,
     QuitRequested,
     Render,
+    SaveState,
     ShapesLoaded,
     Stop,
     Tick,
@@ -530,7 +532,7 @@ async def perform(
         case Render(view=view):
             await render(ports=ports, view=view, maps=maps)
             return
-        case Stop():
+        case Stop() | SaveState() | MatchPlaces():
             return
     work, failed = background(ports=ports, effect=effect, queue=queue)
     task = asyncio.create_task(work)
@@ -650,7 +652,9 @@ def starting_state(*, ports: Ports, pin: Pin) -> State:
             else timetable.stop(stop_id=destination.stop_id)
         ),
     )
-    return initial_state(saved=seeded(pin=filled), now=ports.clock.now())
+    return initial_state(
+        saved=seeded(pin=filled), now=ports.clock.now(), stored=True
+    )
 
 
 async def handle(

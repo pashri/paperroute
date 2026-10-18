@@ -44,6 +44,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import Pin
 from paperroute.core.patterns import measure
 from paperroute.core.positions import PositionsSnapshot, with_labels
+from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
@@ -217,7 +218,9 @@ async def load(
         await queue.put(DeparturesFailed())
         return
     await queue.put(
-        DeparturesLoaded(departures=tuple(found), until=effect.end)
+        DeparturesLoaded(
+            pin=effect.pin, departures=tuple(found), until=effect.end
+        )
     )
 
 
@@ -646,7 +649,7 @@ def starting_state(*, ports: Ports, pin: Pin) -> State:
             else timetable.stop(stop_id=destination.stop_id)
         ),
     )
-    return initial_state(pin=filled, now=ports.clock.now())
+    return initial_state(saved=seeded(pin=filled), now=ports.clock.now())
 
 
 async def handle(

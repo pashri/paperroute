@@ -4,14 +4,16 @@ from dataclasses import replace
 from datetime import datetime
 
 from paperroute.core.feeds import feed_for
+from paperroute.core.knobs import knob_moved
 from paperroute.core.live import resolve
 from paperroute.core.map_requests import (
+    MAP_VIEWS,
     elapsed,
     map_effects,
     map_feeds,
     map_inputs,
 )
-from paperroute.core.map_state import MapState, failed, with_patterns, zoomed
+from paperroute.core.map_state import MapState, failed, with_patterns
 from paperroute.core.map_view import MapView, build_map_view
 from paperroute.core.messages import (
     DeparturesFailed,
@@ -21,7 +23,7 @@ from paperroute.core.messages import (
     FeedFailed,
     FeedFetched,
     FetchFeed,
-    Knob,
+    KnobHeld,
     KnobPressed,
     KnobTurned,
     LoadDepartures,
@@ -36,13 +38,16 @@ from paperroute.core.messages import (
     Stop,
     Tick,
 )
-from paperroute.core.model import Pin, shifted
-from paperroute.core.saved import LIVE_VIEWS, LiveView
+from paperroute.core.model import same_place, shifted
+from paperroute.core.places import feeds_of, shown, shown_index
+from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state_model import (
     FEED_IDLE,
     LOOKBACK,
     POLL_EVERY,
     RELOAD_BEFORE,
+    Board,
+    Places,
     State,
 )
 from paperroute.core.stop_view import (
@@ -54,14 +59,15 @@ from paperroute.core.stop_view import (
 )
 
 
-def initial_state(*, pin: Pin, now: datetime) -> State:
+def initial_state(*, saved: Saved, now: datetime) -> State:
     """
-    Make the state at start-up, centring the Map on the pin's From.
+    Make the state at start-up, centring the map on the shown From.
 
     Parameters
     ----------
-    pin : Pin
-        Pin to show, with its places' names and points filled in.
+    saved : Saved
+        The pins, place, view and zoom to start with, with the places'
+        names and points filled in.
     now : datetime
         Start time.
 
@@ -70,7 +76,14 @@ def initial_state(*, pin: Pin, now: datetime) -> State:
     State
         State.
     """
-    return State(pin=pin, now=now, map=MapState(centre=pin.origin.point))
+    places = Places(
+        pins=saved.pins,
+        current=saved.current,
+        unpinned=saved.unpinned,
+    )
+    state = State(now=now, places=places, view=saved.view)
+    centre = shown(state=state).origin.point
+    return replace(state, map=MapState(zoom=saved.zoom, centre=centre))
 
 
 def stop_view_of(*, state: State) -> StopView:
@@ -87,14 +100,15 @@ def stop_view_of(*, state: State) -> StopView:
     StopView
         View.
     """
-    destination = state.pin.destination
+    pin = shown(state=state)
+    destination = pin.destination
     resolved = [
         resolve(
             departure=dep,
             snapshot=state.snapshots.get(feed_for(mode=dep.mode) or ''),
             now=state.now,
         )
-        for dep in state.departures
+        for dep in state.board.departures
     ]
     fetched = [
         state.snapshots[feed].fetched_at if feed in state.snapshots else None
@@ -111,15 +125,18 @@ def stop_view_of(*, state: State) -> StopView:
     )
     return build_stop_view(
         inputs=StopInputs(
-            origin=state.pin.origin.name,
+            origin=pin.origin.name,
             destination=None if destination is None else destination.name,
             departures=tuple(resolved),
             now=state.now,
             scroll=state.scroll,
             live_since=since,
-            has_feed=bool(state.feeds) or not state.departures,
-            loaded=state.loaded_until is not None,
-            tag=pin_tag(index=0, total=1),
+            has_feed=bool(state.feeds) or not state.board.departures,
+            loaded=state.board.loaded_until is not None,
+            tag=pin_tag(
+                index=shown_index(state=state),
+                total=len(state.places.pins),
+            ),
         ),
     )
 
@@ -136,9 +153,9 @@ def needed_feeds(*, state: State) -> tuple[str, ...]:
     Returns
     -------
     tuple[str, ...]
-        The trip-updates feeds, then on the Map its positions feeds.
+        The trip-updates feeds, then on a map its positions feeds.
     """
-    if state.view is not LiveView.MAP:
+    if state.view not in MAP_VIEWS:
         return state.feeds
     return (*state.feeds, *map_feeds(state=state))
 
@@ -155,10 +172,10 @@ def live_stop_view(*, state: State) -> StopView:
     Returns
     -------
     StopView
-        The scrolled Stop view on the Stop view; unscrolled on the Map,
-        whose sidebar always starts at the next departure.
+        The scrolled Stop view on the Stop view; unscrolled on the other
+        views, whose sidebar always starts at the next departure.
     """
-    if state.view is LiveView.MAP:
+    if state.view is not LiveView.STOP:
         state = replace(state, scroll=0)
     return stop_view_of(state=state)
 
@@ -179,9 +196,10 @@ def current_view(
     Returns
     -------
     StopView | MapView
-        The Live view shown.
+        The Live view shown. Until they are built, the Strip shows the
+        unscrolled Stop view and the Strip + map shows the Map.
     """
-    if state.view is LiveView.MAP:
+    if state.view in MAP_VIEWS:
         return build_map_view(
             inputs=map_inputs(state=state, stop_view=stop_view),
         )
@@ -209,11 +227,11 @@ def rendered(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the view recorded, the scroll too for a Stop view,
+        State with the view recorded, the scroll too on the Stop view,
         and effects.
     """
     view = current_view(state=state, stop_view=stop_view)
-    if isinstance(view, StopView):
+    if isinstance(view, StopView) and state.view is LiveView.STOP:
         state = replace(state, scroll=view.scroll)
     if view == state.last_view:
         return state, effects
@@ -263,9 +281,10 @@ def reload_due(*, state: State, now: datetime) -> bool:
     bool
         True when less than HORIZON of real time remains loaded.
     """
-    if state.loaded_until is None:
+    loaded_until = state.board.loaded_until
+    if loaded_until is None:
         return True
-    left = state.loaded_until.timestamp() - now.timestamp()
+    left = loaded_until.timestamp() - now.timestamp()
     return left < HORIZON.total_seconds()
 
 
@@ -310,13 +329,14 @@ def reload_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
         State marked loading, and a LoadDepartures; unchanged otherwise.
     """
     now = state.now
-    if not reload_due(state=state, now=now) or state.loading:
+    if not reload_due(state=state, now=now) or state.board.loading:
         return state, ()
     reach = HORIZON + RELOAD_BEFORE
     start = shifted(moment=now, seconds=-int(LOOKBACK.total_seconds()))
     end = shifted(moment=now, seconds=int(reach.total_seconds()))
-    load = LoadDepartures(pin=state.pin, start=start, end=end)
-    return replace(state, loading=True), (load,)
+    load = LoadDepartures(pin=shown(state=state), start=start, end=end)
+    board = replace(state.board, loading=True)
+    return replace(state, board=board), (load,)
 
 
 def poll_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
@@ -408,26 +428,14 @@ def on_loaded(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        New state and effects.
+        New state and effects; nothing changes when the departures are
+        for a place no longer shown.
     """
-    feeds = tuple(
-        sorted(
-            {
-                feed
-                for dep in event.departures
-                if (feed := feed_for(mode=dep.mode)) is not None
-            }
-        )
-    )
-    return settled(
-        state=replace(
-            state,
-            departures=event.departures,
-            loaded_until=event.until,
-            loading=False,
-            feeds=feeds,
-        )
-    )
+    if not same_place(first=event.pin, second=shown(state=state)):
+        return state, ()
+    board = Board(departures=event.departures, loaded_until=event.until)
+    feeds = feeds_of(departures=event.departures)
+    return settled(state=replace(state, board=board, feeds=feeds))
 
 
 def on_feed(
@@ -450,7 +458,8 @@ def on_feed(
     """
     match event:
         case DeparturesFailed():
-            state = replace(state, loading=False)
+            board = replace(state.board, loading=False)
+            state = replace(state, board=board)
         case FeedFetched(feed=feed, snapshot=snapshot):
             state = replace(
                 state, snapshots={**state.snapshots, feed: snapshot}
@@ -458,56 +467,31 @@ def on_feed(
     return settled(state=state)
 
 
-def switched(*, state: State) -> State:
-    """
-    Move to the next Live view.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    State
-        State showing the view after the current one in `LIVE_VIEWS`.
-    """
-    index = LIVE_VIEWS.index(state.view)
-    return replace(state, view=LIVE_VIEWS[(index + 1) % len(LIVE_VIEWS)])
-
-
 def on_knob(
-    *, state: State, event: KnobTurned | KnobPressed
+    *, state: State, event: KnobTurned | KnobPressed | KnobHeld
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Switch views on a bottom press; zoom or scroll on a bottom turn.
+    Apply a knob event, loading departures when the place changed.
 
     Parameters
     ----------
     state : State
         State.
-    event : KnobTurned | KnobPressed
-        Knob event; the top knob does nothing yet.
+    event : KnobTurned | KnobPressed | KnobHeld
+        Knob event.
 
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        New state and effects.
+        New state and effects; none when the event does nothing.
     """
-    match event:
-        case KnobPressed(knob=Knob.BOTTOM):
-            state = switched(state=state)
-        case KnobTurned(knob=Knob.BOTTOM, steps=steps) if (
-            state.view is LiveView.MAP
-        ):
-            state = replace(
-                state, map=zoomed(map_state=state.map, steps=steps)
-            )
-        case KnobTurned(knob=Knob.BOTTOM, steps=steps):
-            state = replace(state, scroll=max(0, state.scroll + steps))
-        case _:
-            return state, ()
-    return settled(state=state)
+    after = knob_moved(state=state, event=event)
+    if after is state:
+        return state, ()
+    loads: tuple[Effect, ...] = ()
+    if not same_place(first=shown(state=after), second=shown(state=state)):
+        after, loads = reload_effects(state=after)
+    return settled(state=after, effects=loads)
 
 
 def on_map_event(
@@ -578,7 +562,7 @@ def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
             result = on_loaded(state=state, event=event)
         case DeparturesFailed() | FeedFetched() | FeedFailed():
             result = on_feed(state=state, event=event)
-        case KnobTurned() | KnobPressed():
+        case KnobTurned() | KnobPressed() | KnobHeld():
             result = on_knob(state=state, event=event)
         case QuitRequested():
             result = replace(state, running=False), (Stop(),)

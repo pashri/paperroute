@@ -3,6 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import Final
 
 from paperroute.core.feeds import FeedKind, position_feeds
 from paperroute.core.map_state import area_box
@@ -25,6 +26,10 @@ from paperroute.core.saved import LiveView
 from paperroute.core.state_model import POLL_EVERY, RETRY_AFTER, State
 from paperroute.core.stop_view import StopView
 from paperroute.core.tiles import ZOOMS
+
+MAP_VIEWS: Final[frozenset[LiveView]] = frozenset(
+    {LiveView.MAP, LiveView.STRIP_MAP}
+)
 
 
 def elapsed(*, since: datetime | None, now: datetime, span: timedelta) -> bool:
@@ -89,7 +94,7 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
         for the departures' modes when none are known there.
     """
     modes = state.map.area_modes.get(ZOOMS[state.map.zoom]) or frozenset(
-        departure.mode for departure in state.departures
+        departure.mode for departure in state.board.departures
     )
     return position_feeds(modes=modes)
 
@@ -116,7 +121,7 @@ def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
         stop_view=stop_view,
         departures=map_departures(
             stop_view=stop_view,
-            departures=state.departures,
+            departures=state.board.departures,
         ),
         centre=state.map.centre,
         zoom=state.map.zoom,
@@ -319,7 +324,7 @@ def map_effects(
     *, state: State, stop_view: StopView
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Ask for the map data the Map view needs, when it is shown.
+    Ask for the map data the map needs, when one is shown.
 
     Patterns and shapes the Map no longer needs are dropped, so memory
     stays bounded. Stale vehicles' patterns wait while their feed has a
@@ -335,10 +340,10 @@ def map_effects(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the requests recorded, and the effects; nothing on the
-        Stop view.
+        State with the requests recorded, and the effects; nothing on a
+        view without a map.
     """
-    if state.view is not LiveView.MAP:
+    if state.view not in MAP_VIEWS:
         return state, ()
     inputs = map_inputs(state=state, stop_view=stop_view)
     shown = inputs.departures

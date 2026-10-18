@@ -103,8 +103,9 @@ class Tick:
 
 @dataclass(frozen=True)
 class DeparturesLoaded:
-    """Departures arrived from the timetable."""
+    """Departures arrived from the timetable for a pin."""
 
+    pin: Pin
     departures: tuple[Departure, ...]
     until: datetime
 
@@ -142,6 +143,13 @@ class KnobTurned:
 @dataclass(frozen=True)
 class KnobPressed:
     """A knob was pressed."""
+
+    knob: Knob
+
+
+@dataclass(frozen=True)
+class KnobHeld:
+    """A knob was held down."""
 
     knob: Knob
 
@@ -232,6 +240,7 @@ Event = (
     | FeedFailed
     | KnobTurned
     | KnobPressed
+    | KnobHeld
     | QuitRequested
     | MapEvent
 )

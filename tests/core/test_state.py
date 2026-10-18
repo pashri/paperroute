@@ -21,6 +21,7 @@ from paperroute.core.messages import (
     FeedFetched,
     FetchFeed,
     Knob,
+    KnobHeld,
     KnobPressed,
     KnobTurned,
     LoadDepartures,
@@ -39,8 +40,15 @@ from paperroute.core.messages import (
     Tick,
 )
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, shifted
+from paperroute.core.places import shown
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
-from paperroute.core.saved import LIVE_VIEWS, LiveView
+from paperroute.core.saved import (
+    DEFAULT_SAVED,
+    LIVE_VIEWS,
+    LiveView,
+    Saved,
+    seeded,
+)
 from paperroute.core.state import initial_state, needed_feeds, step
 from paperroute.core.state_model import (
     FEED_IDLE,
@@ -61,6 +69,7 @@ from tests.core.factories import (
     START,
     departure,
     pattern,
+    pin_at,
     place,
     snapshot,
     vehicle,
@@ -93,10 +102,8 @@ def fresh(*, now: datetime = START, centre: Point | None = None) -> State:
     State
         Initial state.
     """
-    return initial_state(
-        pin=replace(PIN, origin=replace(PIN.origin, point=centre)),
-        now=now,
-    )
+    pin = replace(PIN, origin=replace(PIN.origin, point=centre))
+    return initial_state(saved=seeded(pin=pin), now=now)
 
 
 def loaded(
@@ -136,7 +143,9 @@ def loaded(
         for i in range(count)
     )
     event = DeparturesLoaded(
-        departures=deps, until=START + HORIZON + RELOAD_BEFORE
+        pin=shown(state=state),
+        departures=deps,
+        until=START + HORIZON + RELOAD_BEFORE,
     )
     return step(state, event)[0]
 
@@ -159,7 +168,8 @@ def test_stop_view_names_the_pins_places() -> None:
 
 def test_stop_view_without_a_destination_names_none() -> None:
     """A pin with no Destination gives the view no destination."""
-    state = initial_state(pin=replace(PIN, destination=None), now=START)
+    saved = seeded(pin=replace(PIN, destination=None))
+    state = initial_state(saved=saved, now=START)
     state, _ = step(state, Tick(now=START))
     assert isinstance(state.last_view, StopView)
     assert state.last_view.destination is None
@@ -240,9 +250,9 @@ def test_step_feed_failure_keeps_timetable_and_retries() -> None:
 def test_failed_load_retries_on_next_tick() -> None:
     """A failed timetable read clears the loading flag so it reloads."""
     state, _ = step(fresh(), Tick(now=START))
-    assert state.loading
+    assert state.board.loading
     state, _ = step(state, DeparturesFailed())
-    assert not state.loading
+    assert not state.board.loading
     _, effects = step(state, Tick(now=START + timedelta(seconds=5)))
     assert any(isinstance(effect, LoadDepartures) for effect in effects)
 
@@ -301,7 +311,7 @@ def test_mixed_modes_fetch_each_needed_feed_once() -> None:
         for i, mode in enumerate(modes)
     )
     event = DeparturesLoaded(
-        departures=deps, until=START + HORIZON + RELOAD_BEFORE
+        pin=PIN, departures=deps, until=START + HORIZON + RELOAD_BEFORE
     )
     state, _ = step(fresh(), event)
     _, effects = step(state, Tick(now=START))
@@ -372,18 +382,6 @@ def turned(*, state: State, steps: int) -> tuple[State, tuple[Effect, ...]]:
     return step(state, KnobTurned(knob=Knob.BOTTOM, steps=steps))
 
 
-def test_bottom_press_switches_to_map_and_back() -> None:
-    """The bottom press toggles the Live view between Stop and Map."""
-    state = loaded(state=fresh())
-    assert state.view is LiveView.STOP
-    state, _ = step(state, PRESS)
-    assert state.view is LiveView.MAP
-    assert isinstance(state.last_view, MapView)
-    state, _ = step(state, PRESS)
-    assert state.view is LiveView.STOP
-    assert isinstance(state.last_view, StopView)
-
-
 def test_entering_map_requests_modes_shapes_and_renders_map() -> None:
     """The Map asks for its area's modes and the pin's shapes, and draws."""
     state = loaded(state=fresh(centre=CENTRE), count=2, shaped=True)
@@ -430,7 +428,8 @@ def test_zoom_is_kept_after_returning_to_stop() -> None:
     state, _ = turned(state=state, steps=3)
     state, _ = step(state, PRESS)
     state, _ = turned(state=state, steps=-1)
-    state, _ = step(state, PRESS)
+    for _ in range(len(LIVE_VIEWS) - 1):
+        state, _ = step(state, PRESS)
     assert isinstance(state.last_view, StopView)
     assert state.last_view.scroll == 3
     state, _ = step(state, PRESS)
@@ -516,7 +515,7 @@ def test_modes_requested_once_per_zoom() -> None:
 def test_patterns_requested_once() -> None:
     """The pin's trip patterns are asked for once, then kept."""
     state = loaded(state=fresh(centre=CENTRE))
-    trips = frozenset(dep.trip_id for dep in state.departures)
+    trips = frozenset(dep.trip_id for dep in state.board.departures)
     state, effects = step(state, PRESS)
     load = LoadPatterns(trip_ids=trips, day=START.date())
     assert effects_of(effects=effects, kind=LoadPatterns) == [load]
@@ -789,7 +788,9 @@ def event_lists(draw: st.DrawFn, start: datetime) -> list[Event]:
                 for i in range(count)
             )
             until = shifted(moment=now, seconds=3 * 3600 + 1800)
-            events.append(DeparturesLoaded(departures=deps, until=until))
+            events.append(
+                DeparturesLoaded(pin=PIN, departures=deps, until=until)
+            )
     return events
 
 
@@ -813,7 +814,7 @@ def check_effects(
     assert after.scroll >= 0
     assert 0 <= after.map.zoom < len(ZOOMS)
     assert after.view in LIVE_VIEWS
-    if isinstance(after.last_view, StopView):
+    if after.view is LiveView.STOP and isinstance(after.last_view, StopView):
         assert after.scroll == after.last_view.scroll
     check_map_requests(before=before, after=after, effects=effects)
     for effect in effects:
@@ -821,7 +822,7 @@ def check_effects(
             check_render(view=effect.view)
             assert effect.view != before.last_view
         if isinstance(effect, LoadDepartures):
-            assert not before.loading
+            assert not before.board.loading
         if isinstance(effect, FetchFeed):
             check_fetch(before=before, after=after, event=event, effect=effect)
 
@@ -850,7 +851,7 @@ def check_map_requests(
             and effect.kind is FeedKind.POSITIONS
         )
     ]
-    if after.view is LiveView.STOP:
+    if after.view in (LiveView.STOP, LiveView.STRIP):
         assert not requests
     known = before.map.area_modes.keys() | before.map.pending_modes
     for load in effects_of(effects=effects, kind=LoadModes):
@@ -971,7 +972,9 @@ class WindowedTimetable:
             <= dep.departs.timestamp()
             < effect.end.timestamp()
         )
-        return DeparturesLoaded(departures=found, until=effect.end)
+        return DeparturesLoaded(
+            pin=effect.pin, departures=found, until=effect.end
+        )
 
 
 def run_tick(
@@ -1048,7 +1051,8 @@ def test_view_says_loading_before_the_first_load() -> None:
     assert state.last_view is not None
     assert state.last_view.empty == 'Loading timetable'
     loaded_state, _ = step(
-        state, DeparturesLoaded(departures=(), until=START + HORIZON)
+        state,
+        DeparturesLoaded(pin=PIN, departures=(), until=START + HORIZON),
     )
     assert loaded_state.last_view is not None
     assert loaded_state.last_view.empty is not None
@@ -1207,7 +1211,7 @@ def test_stale_patterns_wait_for_the_fetch_in_flight() -> None:
 def test_pin_patterns_do_not_wait_for_the_fetch_in_flight() -> None:
     """A pin trip whose vehicle went stale is asked for at once."""
     state = city_map()
-    [pin] = state.departures
+    [pin] = state.board.departures
     state, _ = step(
         state,
         PatternsLoaded(
@@ -1236,8 +1240,8 @@ def test_pin_patterns_do_not_wait_for_the_fetch_in_flight() -> None:
     assert pin.trip_id in load.trip_ids
 
 
-def test_stop_view_tag_is_the_first_of_one_pin_for_now() -> None:
-    """Until pins are stored, the tag reads pin 1/1."""
+def test_stop_view_tag_counts_the_pins() -> None:
+    """A single pin's tag reads pin 1/1."""
     state, _ = step(fresh(), Tick(now=START))
     assert isinstance(state.last_view, StopView)
     assert state.last_view.tag.text == 'pin 1/1'
@@ -1250,7 +1254,8 @@ def test_no_destination_map_caps_patterns() -> None:
         origin=replace(PIN.origin, point=CENTRE),
         destination=None,
     )
-    state = loaded(state=initial_state(pin=pin, now=START), count=500)
+    state = initial_state(saved=seeded(pin=pin), now=START)
+    state = loaded(state=state, count=500)
     _, effects = step(state, PRESS)
     loads = effects_of(effects=effects, kind=LoadPatterns)
     assert len(loads) == 1
@@ -1276,7 +1281,7 @@ def no_destination_map(*, count: int) -> State:
         origin=replace(PIN.origin, point=CENTRE),
         destination=None,
     )
-    state = initial_state(pin=pin, now=START)
+    state = initial_state(saved=seeded(pin=pin), now=START)
     return loaded(state=state, count=count, shaped=True)
 
 
@@ -1304,3 +1309,203 @@ def test_no_destination_map_ignores_the_stop_scroll() -> None:
     assert [row.leaves_at for row in state.last_view.sidebar] == [
         f'8:{3 * (i + 1):02d}' for i in range(SIDEBAR_ROWS)
     ]
+
+
+PINS: Final[tuple[Pin, ...]] = (
+    pin_at('first', x=100.0),
+    pin_at('second', x=200.0),
+    pin_at('third', x=300.0),
+)
+ELSEWHERE: Final[Pin] = pin_at('elsewhere', x=900.0)
+HOLD: Final[KnobHeld] = KnobHeld(knob=Knob.BOTTOM)
+
+
+def pinned(
+    *,
+    current: int = 0,
+    unpinned: Pin | None = None,
+    view: LiveView = LiveView.STOP,
+) -> State:
+    """
+    A state with three pins, drawn once.
+
+    Parameters
+    ----------
+    current : int
+        Index of the current pin.
+    unpinned : Pin | None
+        The unpinned place, if shown.
+    view : LiveView
+        The Live view shown.
+
+    Returns
+    -------
+    State
+        The state after its first tick.
+    """
+    saved = Saved(
+        pins=PINS,
+        current=current,
+        unpinned=unpinned,
+        view=view,
+        zoom=DEFAULT_ZOOM,
+    )
+    state, _ = step(initial_state(saved=saved, now=START), Tick(now=START))
+    return state
+
+
+def top(*, steps: int) -> KnobTurned:
+    """
+    Turn the top knob.
+
+    Parameters
+    ----------
+    steps : int
+        Detents.
+
+    Returns
+    -------
+    KnobTurned
+        The turn.
+    """
+    return KnobTurned(knob=Knob.TOP, steps=steps)
+
+
+def tag_text(*, state: State) -> str:
+    """
+    Read the pin tag of the view last drawn.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    str
+        The tag's text.
+    """
+    assert isinstance(state.last_view, (StopView, MapView))
+    return state.last_view.tag.text
+
+
+def test_top_turn_flips_pins_and_wraps() -> None:
+    """The top knob steps through the pins and wraps at both ends."""
+    state, _ = step(pinned(), top(steps=1))
+    assert (shown(state=state), tag_text(state=state)) == (PINS[1], 'pin 2/3')
+    state, _ = step(state, top(steps=2))
+    assert (shown(state=state), tag_text(state=state)) == (PINS[0], 'pin 1/3')
+    state, _ = step(state, top(steps=-1))
+    assert (shown(state=state), tag_text(state=state)) == (PINS[2], 'pin 3/3')
+
+
+def test_top_turn_drops_unpinned_and_keeps_current() -> None:
+    """The first turn away from the unpinned place shows the current pin."""
+    state, _ = step(pinned(current=1, unpinned=ELSEWHERE), top(steps=5))
+    assert shown(state=state) == PINS[1]
+    assert state.places.unpinned is None
+    assert state.places.current == 1
+
+
+def test_top_turn_without_pins_does_nothing() -> None:
+    """With only the unpinned place there is nothing to turn to."""
+    state, _ = step(
+        initial_state(saved=DEFAULT_SAVED, now=START),
+        Tick(now=START),
+    )
+    assert step(state, top(steps=1)) == (state, ())
+
+
+def test_hold_pins_unpinned_at_the_end() -> None:
+    """Holding pins the unpinned place last and selects it, in place."""
+    state, effects = step(pinned(unpinned=ELSEWHERE), HOLD)
+    assert state.places.pins == (*PINS, ELSEWHERE)
+    assert (state.places.current, state.places.unpinned) == (3, None)
+    assert tag_text(state=state) == 'pin 4/4'
+    assert not effects_of(effects=effects, kind=LoadDepartures)
+
+
+def test_hold_unpins_current_into_unpinned() -> None:
+    """Holding unpins the current pin and keeps showing its departures."""
+    state = loaded(state=pinned(current=1))
+    state, effects = step(state, HOLD)
+    assert state.places.pins == (PINS[0], PINS[2])
+    assert state.places.unpinned == PINS[1]
+    assert state.places.current == 1
+    assert tag_text(state=state) == 'not pinned'
+    assert state.board.departures
+    assert not effects_of(effects=effects, kind=LoadDepartures)
+
+
+def test_hold_with_duplicate_selects_existing_pin() -> None:
+    """Pinning a place already pinned selects that pin instead."""
+    renamed = replace(PINS[2].origin, name='Renamed')
+    duplicate = replace(PINS[2], origin=renamed)
+    state, _ = step(pinned(unpinned=duplicate), HOLD)
+    assert state.places.pins == PINS
+    assert (state.places.current, state.places.unpinned) == (2, None)
+
+
+def test_top_hold_does_nothing() -> None:
+    """Holding the top knob is kept for settings."""
+    state = pinned(unpinned=ELSEWHERE)
+    assert step(state, KnobHeld(knob=Knob.TOP)) == (state, ())
+
+
+def test_bottom_press_cycles_four_views() -> None:
+    """Presses go Stop, Map, Strip, Strip + map and back to Stop."""
+    state, _ = step(fresh(centre=CENTRE), Tick(now=START))
+    views: list[LiveView] = []
+    drawn: list[type[StopView | MapView]] = []
+    for _ in LIVE_VIEWS:
+        state, effects = step(state, PRESS)
+        views.append(state.view)
+        drawn.extend(
+            type(effect.view) for effect in effects_of(
+                effects=effects, kind=Render
+            )
+        )
+    assert views == [
+        LiveView.MAP,
+        LiveView.STRIP,
+        LiveView.STRIP_MAP,
+        LiveView.STOP,
+    ]
+    assert drawn == [MapView, StopView, MapView, StopView]
+
+
+def test_bottom_turn_scrolls_stop_and_zooms_map_and_strip_map() -> None:
+    """The Stop view scrolls; both map views zoom; the Strip moves neither."""
+    state = loaded(state=fresh(centre=CENTRE), count=20)
+    state, _ = step(state, KnobTurned(knob=Knob.BOTTOM, steps=2))
+    assert (state.scroll, state.map.zoom) == (2, DEFAULT_ZOOM)
+    zooms = []
+    for _ in range(3):
+        state, _ = step(state, PRESS)
+        state, _ = step(state, KnobTurned(knob=Knob.BOTTOM, steps=-1))
+        zooms.append(state.map.zoom)
+    assert zooms == [DEFAULT_ZOOM + 1, DEFAULT_ZOOM + 1, DEFAULT_ZOOM + 2]
+    assert state.scroll == 2
+
+
+def test_flip_reloads_departures_and_recentres_map() -> None:
+    """A new pin empties the board, loads its departures and moves the map."""
+    state = loaded(state=pinned(view=LiveView.MAP))
+    state, effects = step(state, top(steps=1))
+    [load] = effects_of(effects=effects, kind=LoadDepartures)
+    assert load.pin == PINS[1]
+    assert state.board.departures == ()
+    assert state.board.loading
+    assert state.map.centre == PINS[1].origin.point
+
+
+def test_departures_for_another_place_are_dropped() -> None:
+    """A load that lands after a flip doesn't fill the new place's board."""
+    state, _ = step(pinned(), top(steps=1))
+    late = departure(departs=START + timedelta(minutes=3))
+    event = DeparturesLoaded(
+        pin=PINS[0], departures=(late,), until=START + HORIZON
+    )
+    state, _ = step(state, event)
+    assert state.board.departures == ()
+    assert state.board.loading

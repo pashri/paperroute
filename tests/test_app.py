@@ -46,6 +46,7 @@ from paperroute.core.messages import (
 )
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import PatternStop, TripPattern
+from paperroute.core.places import shown
 from paperroute.core.tiles import (
     TILE,
     StreetLabel,
@@ -370,7 +371,7 @@ async def test_run_retries_after_a_failed_load() -> None:
     )
     state = await run(ports=ports, pin=PIN, tick_every=0.01, max_events=20)
     assert timetable.calls >= 2
-    assert not state.departures
+    assert not state.board.departures
 
 
 async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
@@ -399,7 +400,7 @@ async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
     finally:
         timetable.close()
     assert display.frames
-    assert state.departures
+    assert state.board.departures
     assert 'v2/gtfs/realtime/sydneytrains' in state.snapshots
 
 
@@ -1124,10 +1125,10 @@ def test_starting_state_fills_the_pins_places() -> None:
         tiles=NullTiles(),
     )
     state = starting_state(ports=ports, pin=MAP_PIN)
-    assert state.pin.origin == place(
+    assert shown(state=state).origin == place(
         '2145615', name='2145615', point=STOP_POINT,
     )
-    assert state.pin.destination == place(
+    assert shown(state=state).destination == place(
         '215020', name='215020', point=STOP_POINT,
     )
     assert state.map.centre == STOP_POINT
@@ -1144,10 +1145,10 @@ def test_starting_state_keeps_no_destination() -> None:
         tiles=NullTiles(),
     )
     state = starting_state(ports=ports, pin=pin_of('2145615', None))
-    assert state.pin.origin == place(
+    assert shown(state=state).origin == place(
         '2145615', name='2145615', point=STOP_POINT,
     )
-    assert state.pin.destination is None
+    assert shown(state=state).destination is None
     assert state.map.centre == STOP_POINT
 
 

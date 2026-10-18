@@ -20,14 +20,79 @@ FEED_IDLE: Final[timedelta] = timedelta(minutes=10)
 
 
 @dataclass(frozen=True)
-class State:
-    """Everything the app knows."""
+class Board:
+    """
+    The departures loaded for the place shown.
 
-    pin: Pin
-    now: datetime
+    Attributes
+    ----------
+    departures : tuple[Departure, ...]
+        Departures, in timetable order.
+    loaded_until : datetime | None
+        The end of the loaded window, or None before the first load.
+    loading : bool
+        True while a load is in flight.
+    """
+
     departures: tuple[Departure, ...] = ()
     loaded_until: datetime | None = None
     loading: bool = False
+
+
+@dataclass(frozen=True)
+class Places:
+    """
+    The pins and which place is shown.
+
+    Attributes
+    ----------
+    pins : tuple[Pin, ...]
+        The pins, in knob order.
+    current : int
+        Index of the current pin; 0 when there are none.
+    unpinned : Pin | None
+        The place shown ahead of the pins, or None to show the current pin.
+    """
+
+    pins: tuple[Pin, ...] = ()
+    current: int = 0
+    unpinned: Pin | None = None
+
+
+@dataclass(frozen=True)
+class State:
+    """
+    Everything the app knows.
+
+    Attributes
+    ----------
+    now : datetime
+        The latest time seen.
+    places : Places
+        The pins and the place shown.
+    board : Board
+        The shown place's departures.
+    feeds : tuple[str, ...]
+        The trip-updates feeds the departures need.
+    snapshots : Mapping[str, RealtimeSnapshot]
+        The latest download of each trip-updates feed.
+    last_fetch : datetime | None
+        When the trip-updates feeds were last asked for.
+    scroll : int
+        The Stop view's scroll.
+    last_view : StopView | MapView | None
+        The view last drawn.
+    running : bool
+        False once the app should stop.
+    view : LiveView
+        The Live view shown.
+    map : MapState
+        The map's zoom, centre and data.
+    """
+
+    now: datetime
+    places: Places
+    board: Board = field(default_factory=Board)
     feeds: tuple[str, ...] = ()
     snapshots: Mapping[str, RealtimeSnapshot] = field(default_factory=dict)
     last_fetch: datetime | None = None

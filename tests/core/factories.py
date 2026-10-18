@@ -67,6 +67,25 @@ def pin_of(origin: str, destination: str | None) -> Pin:
     )
 
 
+def pin_at(origin: str, *, x: float) -> Pin:
+    """
+    A pin with no Destination at a named From with a point.
+
+    Parameters
+    ----------
+    origin : str
+        From stop ID, also used as its name.
+    x : float
+        The From's easting in metres; its northing is 0.
+
+    Returns
+    -------
+    Pin
+        The pin.
+    """
+    return Pin(origin=place(origin, name=origin, point=(x, 0.0)))
+
+
 def departure(
     *,
     departs: datetime,

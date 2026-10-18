@@ -1,7 +1,9 @@
 """Timetable repository over the built SQLite file."""
 
+import math
 import sqlite3
 from collections.abc import Collection
+from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from itertools import batched
 from pathlib import Path
@@ -12,13 +14,23 @@ from paperroute.adapters.sqlite_ro import (
     ReadOnlyDatabase,
     file_identity,
 )
-from paperroute.core.geo import MetreBox, Point, Shape, to_metres, unpack_shape
+from paperroute.core.geo import (
+    MetreBox,
+    Point,
+    Shape,
+    to_lonlat,
+    to_metres,
+    unpack_shape,
+)
 from paperroute.core.model import (
     SYDNEY,
+    CarryOn,
     Departure,
     Mode,
     Pin,
     StopPlace,
+    TripFacts,
+    kind_for,
     mode_for,
     service_seconds,
     service_time,
@@ -29,12 +41,23 @@ DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/timetable.db')
 CHUNK: Final[int] = 500
 LABEL_LIMIT: Final[int] = 20_000
 NO_SHAPE: Final[str] = 'NULL'
+MATCH_RADIUS: Final[float] = 100.0  # metres
 SCHEMA_CHECK: Final[str] = """
 SELECT
   (SELECT COUNT(*) FROM pragma_table_info('trips')
    WHERE name = 'shape_id'),
   (SELECT COUNT(*) FROM sqlite_master
-   WHERE type = 'table' AND name = 'shapes')
+   WHERE type = 'table' AND name = 'shapes'),
+  (SELECT COUNT(*) FROM sqlite_master
+   WHERE type = 'table' AND name = 'trip_next')
+"""
+NEXT_COLUMNS: Final[str] = 'n.route, n.headsign'
+NEXT_JOIN: Final[str] = 'LEFT JOIN trip_next n ON n.trip_id = t.trip_id'
+NO_NEXT: Final[str] = 'NULL, NULL'
+NAMED_NEAR: Final[str] = """
+SELECT stop_id, lon, lat FROM stops
+WHERE name = :name AND lon BETWEEN :west AND :east
+  AND lat BETWEEN :south AND :north
 """
 TRIP_COLUMNS: Final[str] = """
 t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
@@ -96,13 +119,14 @@ SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
   o.seq, o.stop_id, MIN(d.seq), d.stop_id, o.dep, d.arr,
   (SELECT group_concat(a.alias_id, ' ') FROM trip_aliases a
      WHERE a.trip_id = t.trip_id),
-  {shape}
+  {shape}, {then}
 FROM stop_times o
 JOIN trips t ON t.trip_id = o.trip_id
 JOIN services sv ON sv.service_id = t.service_id AND sv.date = :day
 JOIN routes r ON r.route_id = t.route_id
 JOIN stops os ON os.stop_id = o.stop_id
 JOIN stop_times d ON d.trip_id = o.trip_id AND d.seq > o.seq
+{next_join}
 WHERE o.stop_id IN (SELECT stop_id FROM stops
                     WHERE stop_id = :origin OR parent_station = :origin)
   AND d.stop_id IN (SELECT stop_id FROM stops
@@ -112,6 +136,49 @@ WHERE o.stop_id IN (SELECT stop_id FROM stops
                   WHERE k.trip_id = t.trip_id AND k.date = :day)
 GROUP BY o.trip_id, o.seq
 """
+WHOLE_STOP: Final[str] = """
+SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
+  t.headsign, os.platform,
+  o.seq, o.stop_id, d.seq, d.stop_id, o.dep, d.arr,
+  (SELECT group_concat(a.alias_id, ' ') FROM trip_aliases a
+     WHERE a.trip_id = t.trip_id),
+  {shape}, {then}
+FROM stop_times o
+JOIN trips t ON t.trip_id = o.trip_id
+JOIN services sv ON sv.service_id = t.service_id AND sv.date = :day
+JOIN routes r ON r.route_id = t.route_id
+JOIN stops os ON os.stop_id = o.stop_id
+JOIN stop_times d ON d.trip_id = o.trip_id
+  AND d.seq = (SELECT MAX(l.seq) FROM stop_times l
+               WHERE l.trip_id = o.trip_id)
+{next_join}
+WHERE o.stop_id IN (SELECT stop_id FROM stops
+                    WHERE stop_id = :origin OR parent_station = :origin)
+  AND d.seq > o.seq
+  AND o.dep BETWEEN :lo AND :hi AND o.pickup <> 1
+  AND NOT EXISTS (SELECT 1 FROM trip_skip k
+                  WHERE k.trip_id = t.trip_id AND k.date = :day)
+"""
+
+
+@dataclass(frozen=True)
+class Features:
+    """
+    Which optional parts of the schema a timetable file has.
+
+    Attributes
+    ----------
+    shape_column : bool
+        Whether trips has a shape_id column.
+    shapes : bool
+        Whether the shapes table exists.
+    carry_ons : bool
+        Whether the trip_next table exists.
+    """
+
+    shape_column: bool = False
+    shapes: bool = False
+    carry_ons: bool = False
 
 
 class SqliteTimetableRepository:
@@ -146,7 +213,7 @@ class SqliteTimetableRepository:
             probe='SELECT 1 FROM stops LIMIT 1',
             label='timetable',
         )
-        self.schema: tuple[Identity | None, bool, bool] | None = None
+        self.schema: tuple[Identity | None, Features] | None = None
         self.labels: dict[str, str] = {}
         self.labels_id: Identity | None = None
 
@@ -216,9 +283,9 @@ class SqliteTimetableRepository:
             rows.extend(self.fetch(sql=query, params=(*lead, *chunk)))
         return rows
 
-    def shaped(self) -> tuple[bool, bool]:
+    def features(self) -> Features:
         """
-        Say whether the file has shapes, after following any replacement.
+        Say which optional tables the file has, after any replacement.
 
         The answer is kept while the file is unchanged on disk. When it
         may have changed, a query first lets the database reopen it, and
@@ -226,23 +293,29 @@ class SqliteTimetableRepository:
 
         Returns
         -------
-        tuple[bool, bool]
-            Whether trips has a shape_id column and whether the shapes
-            table exists. Both are false for a file built before shapes.
+        Features
+            What the file has; nothing for a file built before shapes.
         """
         path = self.db.path
         known = self.schema
         if known is not None and (
             path is None or file_identity(path=path) == known[0]
         ):
-            return known[1], known[2]
+            return known[1]
         self.fetch(sql='SELECT 1', params=())
         if known is None or known[0] != self.identity:
             rows = self.fetch(sql=SCHEMA_CHECK, params=())
-            found = rows[0] if rows else (0, 0)
-            known = (self.identity, bool(found[0]), bool(found[1]))
+            found = rows[0] if rows else (0, 0, 0)
+            known = (
+                self.identity,
+                Features(
+                    shape_column=bool(found[0]),
+                    shapes=bool(found[1]),
+                    carry_ons=bool(found[2]),
+                ),
+            )
             self.schema = known
-        return known[1], known[2]
+        return known[1]
 
     def shape_column(self) -> str:
         """
@@ -253,7 +326,22 @@ class SqliteTimetableRepository:
         str
             ``t.shape_id``, or NULL for a file without the column.
         """
-        return 't.shape_id' if self.shaped()[0] else NO_SHAPE
+        return 't.shape_id' if self.features().shape_column else NO_SHAPE
+
+    def version(self) -> str | None:
+        """
+        Say which build the file is.
+
+        Returns
+        -------
+        str | None
+            The build time, or None when the file doesn't record one.
+        """
+        rows = self.fetch(
+            sql='SELECT value FROM meta WHERE key = ?',
+            params=('built_at',),
+        )
+        return str(rows[0][0]) if rows else None
 
     def stop(self, *, stop_id: str) -> StopPlace:
         """
@@ -287,6 +375,70 @@ class SqliteTimetableRepository:
             point=to_point(lon=lon, lat=lat),
         )
 
+    def match_stop(self, *, place: StopPlace) -> StopPlace | None:
+        """
+        Find a place again in the current timetable.
+
+        Parameters
+        ----------
+        place : StopPlace
+            A place from an earlier timetable.
+
+        Returns
+        -------
+        StopPlace | None
+            The stop with the same ID; else the nearest stop of the same
+            name within MATCH_RADIUS of the place's point; else None. A
+            place without a point matches by ID only.
+        """
+        try:
+            return self.stop(stop_id=place.stop_id)
+        except KeyError:
+            if place.point is None:
+                return None
+            return self.nearest_named(name=place.name, point=place.point)
+
+    def nearest_named(self, *, name: str, point: Point) -> StopPlace | None:
+        """
+        Find the nearest stop of a name within MATCH_RADIUS of a point.
+
+        Parameters
+        ----------
+        name : str
+            Exact stop name.
+        point : Point
+            Metres from the projection origin.
+
+        Returns
+        -------
+        StopPlace | None
+            The nearest such stop, the lowest ID on a tie, or None.
+        """
+        west, south = to_lonlat(
+            point=(point[0] - MATCH_RADIUS, point[1] - MATCH_RADIUS),
+        )
+        east, north = to_lonlat(
+            point=(point[0] + MATCH_RADIUS, point[1] + MATCH_RADIUS),
+        )
+        rows = self.fetch(
+            sql=NAMED_NEAR,
+            params={
+                'name': name,
+                'west': west,
+                'east': east,
+                'south': south,
+                'north': north,
+            },
+        )
+        near = sorted(
+            (math.dist(found, point), str(stop_id), found)
+            for stop_id, lon, lat in rows
+            if (found := to_point(lon=lon, lat=lat)) is not None
+        )
+        if not near or near[0][0] > MATCH_RADIUS:
+            return None
+        return StopPlace(stop_id=near[0][1], name=name, point=near[0][2])
+
     def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
         """
         Route shapes by ID.
@@ -302,7 +454,7 @@ class SqliteTimetableRepository:
             The shapes found; unknown IDs are absent, and so is everything
             for a file built before shapes.
         """
-        if not self.shaped()[1]:
+        if not self.features().shapes:
             return {}
         rows = self.fetch_in(sql=SHAPES_BY_ID, ids=shape_ids)
         return {
@@ -327,7 +479,7 @@ class SqliteTimetableRepository:
         frozenset[Mode]
             The modes; empty for a file built before shapes.
         """
-        if not self.shaped()[1]:
+        if not self.features().shapes:
             return frozenset()
         west, south, east, north = box
         rows = self.fetch(
@@ -530,33 +682,6 @@ class SqliteTimetableRepository:
             found.setdefault(str(alias), str(label))
         return found
 
-    def stop_name(self, *, stop_id: str) -> str:
-        """
-        Name of a stop or station.
-
-        Parameters
-        ----------
-        stop_id : str
-            Stop or station ID.
-
-        Returns
-        -------
-        str
-            Name.
-
-        Raises
-        ------
-        KeyError
-            When the stop isn't in the timetable.
-        """
-        rows = self.fetch(
-            sql='SELECT name FROM stops WHERE stop_id = ?',
-            params=(stop_id,),
-        )
-        if not rows:
-            raise KeyError(stop_id)
-        return str(rows[0][0])
-
     def departures(
         self, *, pin: Pin, start: datetime, end: datetime
     ) -> list[Departure]:
@@ -578,11 +703,10 @@ class SqliteTimetableRepository:
         Returns
         -------
         list[Departure]
-            In departure order; none for a pin without a Destination.
+            In departure order. Without a Destination, every departure
+            from any platform of the From, each running to its last stop.
         """
         destination = pin.destination
-        if destination is None:
-            return []
         first = start.astimezone(SYDNEY).date()
         last = end.astimezone(SYDNEY).date()
         days = {first - timedelta(days=1), first, last}
@@ -590,7 +714,10 @@ class SqliteTimetableRepository:
             departure
             for day in sorted(days)
             for departure in self.on_day(
-                ends=(pin.origin.stop_id, destination.stop_id),
+                ends=(
+                    pin.origin.stop_id,
+                    None if destination is None else destination.stop_id,
+                ),
                 day=day,
                 start=start,
                 end=end,
@@ -601,7 +728,7 @@ class SqliteTimetableRepository:
     def on_day(
         self,
         *,
-        ends: tuple[str, str],
+        ends: tuple[str, str | None],
         day: date,
         start: datetime,
         end: datetime,
@@ -611,8 +738,9 @@ class SqliteTimetableRepository:
 
         Parameters
         ----------
-        ends : tuple[str, str]
-            From and Destination stop or station IDs.
+        ends : tuple[str, str | None]
+            From and Destination stop or station IDs; no Destination for
+            the whole stop.
         day : date
             Service date.
         start : datetime
@@ -625,8 +753,14 @@ class SqliteTimetableRepository:
         list[Departure]
             Unsorted departures.
         """
+        carry_ons = self.features().carry_ons
+        sql = DEPARTURES if ends[1] is not None else WHOLE_STOP
         rows = self.fetch(
-            sql=DEPARTURES.format(shape=self.shape_column()),
+            sql=sql.format(
+                shape=self.shape_column(),
+                then=NEXT_COLUMNS if carry_ons else NO_NEXT,
+                next_join=NEXT_JOIN if carry_ons else '',
+            ),
             params={
                 'day': day.isoformat(),
                 'origin': ends[0],
@@ -649,7 +783,7 @@ def to_departure(*, row: tuple[object, ...], day: date) -> Departure:
     Parameters
     ----------
     row : tuple[object, ...]
-        DEPARTURES row.
+        DEPARTURES or WHOLE_STOP row.
     day : date
         Service date the row's times count from.
 
@@ -678,6 +812,38 @@ def to_departure(*, row: tuple[object, ...], day: date) -> Departure:
         arrives=service_time(day=day, seconds=int(str(arr))),
         service_day=day,
         shape_id=str(row[13]) if row[13] else None,
+        facts=facts_of(row=row),
+    )
+
+
+def facts_of(*, row: tuple[object, ...]) -> TripFacts:
+    """
+    Read a departure row's route kind and carry-on.
+
+    Parameters
+    ----------
+    row : tuple[object, ...]
+        DEPARTURES or WHOLE_STOP row.
+
+    Returns
+    -------
+    TripFacts
+        Kind of the route and the service the vehicle runs next, None
+        when the row has none.
+    """
+    route, route_type, agency = row[1:4]
+    then, then_to = row[14:16]
+    return TripFacts(
+        kind=kind_for(
+            route_type=int(str(route_type)),
+            agency_id=str(agency) if agency else None,
+            short_name=str(route),
+        ),
+        then=(
+            None
+            if then is None
+            else CarryOn(route=str(then), headsign=str(then_to))
+        ),
     )
 
 

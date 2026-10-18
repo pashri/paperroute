@@ -2,7 +2,9 @@
 
 import csv
 import io
+import sqlite3
 import zipfile
+from contextlib import closing
 from pathlib import Path
 
 
@@ -48,3 +50,28 @@ def write_feed(*, path: Path, files: dict[str, list[dict[str, str]]]) -> Path:
         for name, rows in files.items():
             archive.writestr(name, to_csv(rows))
     return path
+
+
+def old_schema(*, path: Path) -> None:
+    """
+    Turn a built timetable back into a schema-2 file.
+
+    The run, carry-on and chooser tables are dropped and the schema version
+    set to '2'.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file, changed in place.
+    """
+    tables = (
+        'runs', 'run_stops', 'trip_runs', 'trip_next', 'route_patterns',
+        'chooser_routes', 'chooser_towards',
+    )
+    with closing(sqlite3.connect(path)) as conn:
+        for table in tables:
+            conn.execute(f'DROP TABLE IF EXISTS {table}')
+        conn.execute(
+            "UPDATE meta SET value = '2' WHERE key = 'schema_version'",
+        )
+        conn.commit()

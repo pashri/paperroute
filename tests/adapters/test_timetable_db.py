@@ -1,13 +1,16 @@
 """Tests for the SQLite timetable repository."""
 
+import dataclasses
 import logging
 import os
+import shutil
 import sqlite3
 import threading
 from collections.abc import Iterator
 from contextlib import closing
 from datetime import UTC, date, datetime
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -18,8 +21,18 @@ from paperroute.adapters.timetable_db import (
 )
 from paperroute.build.dedupe import merge_rail
 from paperroute.build.gtfs_files import Source
+from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.geo import to_metres
-from paperroute.core.model import SYDNEY, Departure, Mode, StopPlace
+from paperroute.core.model import (
+    SYDNEY,
+    CarryOn,
+    Departure,
+    Mode,
+    Pin,
+    RouteKind,
+    StopPlace,
+    TripFacts,
+)
 from tests.build.feeds import (
     DAILY,
     STATIONS,
@@ -31,9 +44,12 @@ from tests.build.feeds import (
     stop_times,
     sydneytrains_feed,
 )
-from tests.core.factories import pin_of
-from tests.helpers import write_feed
+from tests.build.network_feed import network_feed
+from tests.core.factories import pin_of, place
+from tests.helpers import old_schema, write_feed
 
+REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
+MONDAY: Final[date] = date(2026, 10, 19)
 HOLLIS_TO_PARRA = pin_of('2145615', '215020')
 PARRA_TO_CENTRAL = pin_of('215020', '200060')
 
@@ -126,18 +142,6 @@ def test_departures_uses_station_children_and_skips_no_pickup(
     assert found[0].platform == '1'
 
 
-def test_departures_without_a_destination_are_none(
-    repo: SqliteTimetableRepository,
-) -> None:
-    """A pin with no Destination lists no departures yet."""
-    found = repo.departures(
-        pin=pin_of('2145615', None),
-        start=at(hour=8, minute=0),
-        end=at(hour=9, minute=0),
-    )
-    assert not found
-
-
 def test_departures_excludes_wrong_direction(
     repo: SqliteTimetableRepository,
 ) -> None:
@@ -166,9 +170,9 @@ def test_departures_includes_previous_service_day_after_midnight(
 
 def test_stop_name_and_unknown_stop(repo: SqliteTimetableRepository) -> None:
     """Names come from stops; unknown IDs raise KeyError."""
-    assert repo.stop_name(stop_id='215020') == 'Parramatta Station'
+    assert repo.stop(stop_id='215020').name == 'Parramatta Station'
     with pytest.raises(KeyError):
-        repo.stop_name(stop_id='nope')
+        repo.stop(stop_id='nope')
 
 
 def test_departures_kept_xpt_stays_regional(tmp_path: Path) -> None:
@@ -397,12 +401,12 @@ def test_departures_keeps_old_data_when_replacement_is_junk(
     assert levels == {logging.WARNING}
 
 
-def test_stop_name_reopens_after_file_replaced(tmp_path: Path) -> None:
-    """stop_name() also reopens a replaced file."""
+def test_stop_reopens_after_file_replaced(tmp_path: Path) -> None:
+    """stop() also reopens a replaced file."""
     live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
     with closing(SqliteTimetableRepository(path=live)) as repo:
         replace_with(live=live, trip='B-0810')
-        assert repo.stop_name(stop_id='215020') == 'Parramatta Station'
+        assert repo.stop(stop_id='215020').name == 'Parramatta Station'
         assert repo.identity == file_identity(path=live)
 
 
@@ -535,12 +539,12 @@ def test_stop_has_projected_point(
     """A stop's point is its stored lon and lat in metres."""
     found = slice_repo.stop(stop_id=HOLLIS)
     row = slice_repo.fetch(
-        sql='SELECT lon, lat FROM stops WHERE stop_id = ?',
+        sql='SELECT name, lon, lat FROM stops WHERE stop_id = ?',
         params=(HOLLIS,),
     )[0]
     assert found.stop_id == HOLLIS
-    assert found.name == slice_repo.stop_name(stop_id=HOLLIS)
-    lon, lat = (float(str(value)) for value in row)
+    assert found.name == row[0]
+    lon, lat = (float(str(value)) for value in row[1:])
     assert found.point == to_metres(lon=lon, lat=lat)
     with pytest.raises(KeyError):
         slice_repo.stop(stop_id='nope')
@@ -913,3 +917,392 @@ def test_old_schema_checked_after_reopen(tmp_path: Path) -> None:
         assert repo.shapes(shape_ids=['bundle:S1']) == {}
         os.replace(new, old)
         assert list(repo.shapes(shape_ids=['bundle:S1'])) == ['bundle:S1']
+
+
+@pytest.fixture(name='network_db', scope='module')
+def _network_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """
+    Build the network feed, with its run tables, over a 3-day window.
+
+    Parameters
+    ----------
+    tmp_path_factory : pytest.TempPathFactory
+        Temporary directories.
+
+    Returns
+    -------
+    Path
+        Timetable file.
+    """
+    folder = tmp_path_factory.mktemp('network')
+    out = folder / 'timetable.db'
+    build_timetable(
+        sources=[
+            Source(
+                name='sydneytrains',
+                archive=network_feed(path=folder / 'network.zip'),
+            ),
+        ],
+        window=Window(start=date(2026, 10, 5), days=3),
+        out=out,
+    )
+    return out
+
+
+@pytest.fixture(name='network')
+def _network(network_db: Path) -> Iterator[SqliteTimetableRepository]:
+    """
+    A repository over the network timetable.
+
+    Parameters
+    ----------
+    network_db : Path
+        Timetable file.
+
+    Yields
+    ------
+    SqliteTimetableRepository
+        Repository, closed after the test.
+    """
+    with closing(SqliteTimetableRepository(path=network_db)) as repo:
+        yield repo
+
+
+@pytest.fixture(name='old_network')
+def _old_network(
+    network_db: Path, tmp_path: Path,
+) -> Iterator[SqliteTimetableRepository]:
+    """
+    A repository over a schema-2 copy of the network timetable.
+
+    Parameters
+    ----------
+    network_db : Path
+        Timetable file.
+    tmp_path : Path
+        Working directory.
+
+    Yields
+    ------
+    SqliteTimetableRepository
+        Repository, closed after the test.
+    """
+    copy = tmp_path / 'timetable.db'
+    shutil.copy(network_db, copy)
+    old_schema(path=copy)
+    with closing(SqliteTimetableRepository(path=copy)) as repo:
+        yield repo
+
+
+def whole_stop(
+    *,
+    repo: SqliteTimetableRepository,
+    origin: str,
+    hours: tuple[int, int] = (7, 8),
+) -> list[Departure]:
+    """
+    Departures from a network stop with no Destination on 6 October.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Repository to query.
+    origin : str
+        From stop or station ID.
+    hours : tuple[int, int]
+        First and last hour of the range, from the hour to its 59th minute.
+
+    Returns
+    -------
+    list[Departure]
+        Departures, earliest first.
+    """
+    return repo.departures(
+        pin=Pin(
+            origin=place(origin),
+            kind=RouteKind.BUS,
+            routes=('606',),
+        ),
+        start=at(hour=hours[0], minute=0, day=6),
+        end=at(hour=hours[1], minute=59, day=6),
+    )
+
+
+def test_no_destination_lists_the_whole_stop(
+    network: SqliteTimetableRepository,
+) -> None:
+    """Every kind and route leaving C is listed, whatever the pin chose."""
+    found = whole_stop(repo=network, origin='C', hours=(7, 7))
+    assert [d.trip_id for d in found] == [
+        'ew1', 'we1', 'er1', 'cc1', 're1', 'y1', 'cc1',
+    ]
+    assert {d.route for d in found} == {'T1', 'T2'}
+    assert [d.departs for d in found] == sorted(d.departs for d in found)
+
+
+def test_no_destination_covers_every_platform(tmp_path: Path) -> None:
+    """Departures from two platforms of one station both appear."""
+    stops = [
+        {'stop_id': 'P', 'stop_name': 'P Station', 'location_type': '1',
+         'parent_station': '', 'stop_lat': '-33.8', 'stop_lon': '151.0'},
+        *(
+            {'stop_id': f'P_{n}', 'stop_name': f'P Station, Platform {n}',
+             'location_type': '0', 'parent_station': 'P',
+             'stop_lat': '-33.8', 'stop_lon': '151.0'}
+            for n in (1, 2)
+        ),
+        {'stop_id': 'Q', 'stop_name': 'Q Station', 'location_type': '0',
+         'parent_station': '', 'stop_lat': '-33.9', 'stop_lon': '151.1'},
+    ]
+    archive = write_feed(
+        path=tmp_path / 'p.zip',
+        files={
+            'stops.txt': stops,
+            'routes.txt': [{'route_id': 'T1', 'agency_id': 'SydneyTrains',
+                            'route_short_name': 'T1',
+                            'route_long_name': 'Line T1',
+                            'route_type': '2'}],
+            'calendar.txt': [{'service_id': 'daily', **DAILY}],
+            'trips.txt': [
+                {'route_id': 'T1', 'service_id': 'daily', 'trip_id': trip,
+                 'trip_headsign': 'Q', 'direction_id': '0',
+                 'block_id': ''}
+                for trip in ('a', 'b')
+            ],
+            'stop_times.txt': [
+                *stop_times(trip='a', times=[('P_1', '08:00:00'),
+                                             ('Q', '08:10:00')]),
+                *stop_times(trip='b', times=[('P_2', '08:05:00'),
+                                             ('Q', '08:15:00')]),
+            ],
+        },
+    )
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[Source(name='sydneytrains', archive=archive)],
+    )
+    with closing(SqliteTimetableRepository(path=db)) as repo:
+        found = repo.departures(
+            pin=pin_of('P', None),
+            start=at(hour=8, minute=0),
+            end=at(hour=9, minute=0),
+        )
+    assert [(d.trip_id, d.platform, d.facts.then) for d in found] == [
+        ('a', '1', None),
+        ('b', '2', None),
+    ]
+
+
+def test_no_destination_runs_to_the_last_stop(
+    network: SqliteTimetableRepository,
+) -> None:
+    """A C to W2 trip runs to its last call, at W2."""
+    found = whole_stop(repo=network, origin='C', hours=(7, 7))[0]
+    assert (found.trip_id, found.origin_stop) == ('ew1', 'C_1')
+    assert (found.destination_seq, found.destination_stop) == (6, 'W2_1')
+    assert found.arrives == at(hour=7, minute=15, day=6)
+
+
+def test_no_destination_skips_trips_ending_here(
+    network: SqliteTimetableRepository,
+) -> None:
+    """From W2, only the trips leaving W2 are listed, not those ending."""
+    found = whole_stop(repo=network, origin='W2', hours=(0, 23))
+    assert [d.trip_id for d in found] == [
+        'we1', 'y2', 'we2', 'we3', 'we4', 'we5', 'we6',
+    ]
+
+
+def test_departures_carry_their_kind(
+    network: SqliteTimetableRepository,
+) -> None:
+    """T1 departures are Train, with or without a Destination."""
+    to_w2 = network.departures(
+        pin=pin_of('C', 'W2'),
+        start=at(hour=7, minute=0, day=6),
+        end=at(hour=7, minute=10, day=6),
+    )
+    anywhere = whole_stop(repo=network, origin='C', hours=(7, 7))
+    assert to_w2[0].facts.kind is RouteKind.TRAIN
+    assert anywhere[0].facts.kind is RouteKind.TRAIN
+
+
+def test_departures_carry_on_as_the_next_route(
+    network: SqliteTimetableRepository,
+    old_network: SqliteTimetableRepository,
+) -> None:
+    """v1 carries on as the 811; an old timetable doesn't know."""
+    then = CarryOn(route='811', headsign='Parramatta Stn')
+    for pin in (pin_of('B1', None), pin_of('B1', 'B2')):
+        found = network.departures(
+            pin=pin,
+            start=at(hour=9, minute=0, day=6),
+            end=at(hour=10, minute=0, day=6),
+        )
+        assert [(d.trip_id, d.facts) for d in found] == [
+            ('v1', TripFacts(kind=RouteKind.BUS, then=then)),
+        ]
+    old = old_network.departures(
+        pin=pin_of('B1', None),
+        start=at(hour=9, minute=0, day=6),
+        end=at(hour=10, minute=0, day=6),
+    )
+    assert [(d.trip_id, d.facts) for d in old] == [
+        ('v1', TripFacts(kind=RouteKind.BUS, then=None)),
+    ]
+
+
+def test_old_schema_lists_the_whole_stop(
+    network: SqliteTimetableRepository,
+    old_network: SqliteTimetableRepository,
+) -> None:
+    """A schema-2 file lists the same whole stop, without carry-ons."""
+    new = whole_stop(repo=network, origin='C', hours=(0, 23))
+    old = whole_stop(repo=old_network, origin='C', hours=(0, 23))
+    assert old == [
+        dataclasses.replace(
+            departure,
+            facts=dataclasses.replace(departure.facts, then=None),
+        )
+        for departure in new
+    ]
+    assert len(old) > 7
+
+
+def real_809_stops() -> list[str]:
+    """
+    Find Merrylands Rd Near Bambil St in the real timetable.
+
+    Skips the test when the file is missing, has no run tables or does not
+    cover Monday 19 October 2026.
+
+    Returns
+    -------
+    list[str]
+        Stop IDs with that name.
+    """
+    if not REAL_DB.exists():
+        pytest.skip('no real timetable')
+    with closing(sqlite3.connect(REAL_DB)) as conn:
+        tables = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'trip_next'",
+        ).fetchall()
+        meta = dict(conn.execute('SELECT key, value FROM meta').fetchall())
+        stops = conn.execute(
+            'SELECT stop_id FROM stops WHERE name = ?',
+            ('Merrylands Rd Near Bambil St',),
+        ).fetchall()
+    if not tables:
+        pytest.skip('real timetable has no run tables')
+    start = date.fromisoformat(meta['window_start'])
+    if not 0 <= (MONDAY - start).days < int(meta['window_days']):
+        pytest.skip('real timetable does not cover 19 October 2026')
+    return [str(stop) for stop, in stops]
+
+
+def test_809_carries_on_as_811_at_merrylands() -> None:
+    """20 of the 46 809s carry on as the 811; the 9:04 and 15:29 don't."""
+    stops = real_809_stops()
+    with closing(SqliteTimetableRepository(path=REAL_DB)) as repo:
+        found = [
+            departure
+            for stop in stops
+            for departure in repo.departures(
+                pin=pin_of(stop, None),
+                start=datetime(2026, 10, 19, tzinfo=SYDNEY),
+                end=datetime(2026, 10, 19, 23, 59, 59, tzinfo=SYDNEY),
+            )
+            if departure.route == '809'
+        ]
+    then = CarryOn(route='811', headsign='Parramatta Stn')
+    on = {d.departs.strftime('%H:%M') for d in found if d.facts.then == then}
+    assert len(found) == 46
+    assert len([d for d in found if d.facts.then == then]) == 20
+    assert not on & {'09:04', '15:29'}
+    assert {'09:04', '15:29'} <= {d.departs.strftime('%H:%M') for d in found}
+
+
+def test_version_reads_built_at(
+    network: SqliteTimetableRepository, network_db: Path, tmp_path: Path,
+) -> None:
+    """The version is the build time; a file without one has None."""
+    with closing(sqlite3.connect(network_db)) as conn:
+        built_at = conn.execute(
+            "SELECT value FROM meta WHERE key = 'built_at'",
+        ).fetchone()[0]
+    assert network.version() == built_at
+    bare = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=1,
+        sources=[
+            Source(name='bundle', archive=bus_feed(path=tmp_path / 'b.zip')),
+        ],
+    )
+    with closing(SqliteTimetableRepository(path=bare)) as repo:
+        assert repo.version() is None
+
+
+def test_match_stop_same_id_refreshes_name_and_point(
+    network: SqliteTimetableRepository,
+) -> None:
+    """A place whose ID is still there comes back as the timetable has it."""
+    stale = StopPlace(stop_id='B1', name='Old Name', point=None)
+    assert network.match_stop(place=stale) == network.stop(stop_id='B1')
+
+
+def moved_b1(
+    *,
+    network: SqliteTimetableRepository,
+    east: float,
+    name: str,
+    north: float = 0.0,
+) -> StopPlace:
+    """
+    A place with a retired ID, a distance east of B1.
+
+    Parameters
+    ----------
+    network : SqliteTimetableRepository
+        Network repository.
+    east : float
+        Metres east of B1.
+    name : str
+        Name of the place.
+    north : float
+        Metres north of B1.
+
+    Returns
+    -------
+    StopPlace
+        The place.
+    """
+    point = network.stop(stop_id='B1').point
+    assert point is not None
+    return StopPlace(
+        stop_id='retired',
+        name=name,
+        point=(point[0] + east, point[1] + north),
+    )
+
+
+def test_match_stop_by_name_within_100_m(
+    network: SqliteTimetableRepository,
+) -> None:
+    """A renamed ID 60 m away is found by its name."""
+    place_60 = moved_b1(network=network, east=60.0, name='B1 Stop')
+    assert network.match_stop(place=place_60) == network.stop(stop_id='B1')
+
+
+def test_match_stop_too_far_or_renamed_is_none(
+    network: SqliteTimetableRepository,
+) -> None:
+    """150 m away, 113 m diagonally, another name or no point gives None."""
+    far = moved_b1(network=network, east=150.0, name='B1 Stop')
+    corner = moved_b1(network=network, east=80.0, name='B1 Stop', north=80.0)
+    renamed = moved_b1(network=network, east=60.0, name='B2 Stop')
+    pointless = StopPlace(stop_id='retired', name='B1 Stop', point=None)
+    for lost in (far, corner, renamed, pointless):
+        assert network.match_stop(place=lost) is None

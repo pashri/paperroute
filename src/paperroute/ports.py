@@ -16,21 +16,6 @@ from paperroute.core.tiles import StreetLabel, TileVariant
 class TimetableRepository(Protocol):
     """Read access to the built timetable."""
 
-    def stop_name(self, *, stop_id: str) -> str:
-        """
-        Name of a stop or station.
-
-        Parameters
-        ----------
-        stop_id : str
-            Stop or station ID.
-
-        Returns
-        -------
-        str
-            Name.
-        """
-
     def stop(self, *, stop_id: str) -> StopPlace:
         """
         A stop or station with its position.
@@ -49,6 +34,32 @@ class TimetableRepository(Protocol):
         ------
         KeyError
             When the stop isn't in the timetable.
+        """
+
+    def match_stop(self, *, place: StopPlace) -> StopPlace | None:
+        """
+        Find a place again in the current timetable.
+
+        Parameters
+        ----------
+        place : StopPlace
+            A place from an earlier timetable.
+
+        Returns
+        -------
+        StopPlace | None
+            The stop with the same ID; else the nearest stop of the same
+            name within 100 m of the place's point; else None.
+        """
+
+    def version(self) -> str | None:
+        """
+        Say which build the file is.
+
+        Returns
+        -------
+        str | None
+            The build time, or None when there is none.
         """
 
     def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
@@ -133,7 +144,8 @@ class TimetableRepository(Protocol):
         Returns
         -------
         list[Departure]
-            In departure order.
+            In departure order. Without a Destination, every departure
+            from the From, each running to its last stop.
         """
 
 

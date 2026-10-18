@@ -105,22 +105,6 @@ class BrokenTimetable:
 
     calls: int = 0
 
-    def stop_name(self, *, stop_id: str) -> str:
-        """
-        Name any stop after its ID.
-
-        Parameters
-        ----------
-        stop_id : str
-            Stop ID.
-
-        Returns
-        -------
-        str
-            The ID.
-        """
-        return stop_id
-
     def stop(self, *, stop_id: str) -> StopPlace:
         """
         Place any stop with no position, named after its ID.
@@ -136,6 +120,33 @@ class BrokenTimetable:
             The stop, without a point.
         """
         return StopPlace(stop_id=stop_id, name=stop_id, point=None)
+
+    def match_stop(self, *, place: StopPlace) -> StopPlace | None:
+        """
+        Find no place.
+
+        Parameters
+        ----------
+        place : StopPlace
+            Place to find.
+
+        Returns
+        -------
+        StopPlace | None
+            Always None.
+        """
+        return None
+
+    def version(self) -> str | None:
+        """
+        Name no build.
+
+        Returns
+        -------
+        str | None
+            Always None.
+        """
+        return None
 
     def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
         """
@@ -1121,6 +1132,23 @@ def test_starting_state_fills_the_pins_places() -> None:
     )
     assert state.map.centre == STOP_POINT
     assert state.now == AT
+
+
+def test_starting_state_keeps_no_destination() -> None:
+    """A pin without a Destination starts with its From filled in."""
+    ports = Ports(
+        timetable=PlacedTimetable(),
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+        tiles=NullTiles(),
+    )
+    state = starting_state(ports=ports, pin=pin_of('2145615', None))
+    assert state.pin.origin == place(
+        '2145615', name='2145615', point=STOP_POINT,
+    )
+    assert state.pin.destination is None
+    assert state.map.centre == STOP_POINT
 
 
 async def test_run_draws_the_map_in_the_variant_asked_for() -> None:

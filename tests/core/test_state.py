@@ -40,18 +40,15 @@ from paperroute.core.messages import (
 )
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, shifted
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
-from paperroute.core.state import (
+from paperroute.core.saved import LIVE_VIEWS, LiveView
+from paperroute.core.state import initial_state, needed_feeds, step
+from paperroute.core.state_model import (
     FEED_IDLE,
-    LIVE_VIEWS,
     LOOKBACK,
     POLL_EVERY,
     RELOAD_BEFORE,
     RETRY_AFTER,
-    LiveView,
     State,
-    initial_state,
-    needed_feeds,
-    step,
 )
 from paperroute.core.stop_view import HORIZON, VISIBLE_ROWS, StopView
 from paperroute.core.tiles import CITY, ZOOMS

@@ -44,7 +44,8 @@ from paperroute.core.messages import (
 from paperroute.core.model import Pin
 from paperroute.core.patterns import measure
 from paperroute.core.positions import PositionsSnapshot, with_labels
-from paperroute.core.state import State, initial_state, step
+from paperroute.core.state import initial_state, step
+from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
 from paperroute.core.tiles import TileVariant
 from paperroute.observers import NullObserver, ObserverGroup

@@ -251,6 +251,17 @@ def test_station_joins_the_way_most_trips_come_from() -> None:
     assert parents_on_their_side(reach=reach)
 
 
+def test_run_entering_from_another_way_joins_at_its_way() -> None:
+    """S, reached from A2 by its own way, hangs at A2, never at FROM."""
+    reach = reach_of(tails=[
+        tail('A1 A2 M', 20), tail('B1 S', 12), tail('A1 A2 S', 7),
+        tail('A1 A2 S X', 6), tail('B1 B2', 30),
+    ])
+    assert ids(reach=reach) == ['M', 'X', 'S', 'A2', 'A1', 'C', 'B1', 'B2']
+    assert reach.rows[2].depth == 1
+    assert reach.rows[2].parent == row_of(reach=reach, key='A2')
+
+
 def test_busier_branch_is_main_line() -> None:
     """At J the branch with more trips is the main line."""
     west = reach_of(tails=[tail('J W1', 6), tail('J R1', 3)])
@@ -460,6 +471,14 @@ def test_each_station_once(tails: list[RunTail]) -> None:
     assert [row.kind for row in reach.rows].count(RowKind.ORIGIN) == 1
     assert reach.stations == len(after)
     assert parents_on_their_side(reach=reach)
+    firsts = {each.after[0] for each in tails if each.after}
+    assert all(
+        row.place.stop_id in firsts
+        for row in reach.rows
+        if row.parent is not None
+        and reach.rows[row.parent].kind == RowKind.ORIGIN
+        and row.kind != RowKind.APPROACH
+    )
     for row in reach.rows:
         if row.parent is not None:
             parent = reach.rows[row.parent]
@@ -512,7 +531,7 @@ def has_runs(*, path: Path) -> bool:
     return bool(found)
 
 
-def train_reach(*, station: str) -> Reach:
+def train_reach(*, station: str) -> tuple[Reach, set[str]]:
     """
     Build a station's Train strip reach from the real timetable.
 
@@ -523,8 +542,8 @@ def train_reach(*, station: str) -> Reach:
 
     Returns
     -------
-    Reach
-        The reach.
+    tuple[Reach, set[str]]
+        The reach, and every station after the From in its tails.
     """
     with closing(SqliteNetworkRepository(path=REAL_DB)) as repo:
         found = repo.reach_input(
@@ -532,7 +551,8 @@ def train_reach(*, station: str) -> Reach:
             origin=StopPlace(stop_id=station, name=station, point=None),
         )
     assert found is not None
-    return build_reach(data=found)
+    after = {key for each in found.tails for key in each.after}
+    return build_reach(data=found), after
 
 
 @pytest.mark.skipif(
@@ -541,8 +561,9 @@ def train_reach(*, station: str) -> Reach:
 )
 def test_town_hall_train_strip_has_two_sides_and_strands_nothing() -> None:
     """Town Hall reaches both ways, every track on its own side."""
-    reach = train_reach(station=TOWN_HALL)
+    reach, after = train_reach(station=TOWN_HALL)
     home = origin_row(reach=reach)
+    assert reach.stations == len(after)
     assert any(row.kind != RowKind.APPROACH for row in reach.rows[:home])
     assert reach.rows[home + 1:]
     assert parents_on_their_side(reach=reach)
@@ -554,7 +575,7 @@ def test_town_hall_train_strip_has_two_sides_and_strands_nothing() -> None:
 )
 def test_strathfield_keeps_the_hornsby_branch_together() -> None:
     """The stations past Hornsby hang on the Hornsby branch."""
-    reach = train_reach(station=STRATHFIELD)
+    reach, _ = train_reach(station=STRATHFIELD)
     names = [row.place.name for row in reach.rows]
     for name in HORNSBY_LINE:
         track = track_names(reach=reach, index=names.index(name))

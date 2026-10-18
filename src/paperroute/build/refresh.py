@@ -32,7 +32,7 @@ from paperroute.build.timetable import (
     build_timetable,
     yesterday,
 )
-from paperroute.observers import max_rss_mb
+from paperroute.rss import max_rss_mb
 
 MIN_TRIPS: Final[int] = 1000
 TIMEOUT_S: Final[float] = 60

@@ -16,8 +16,8 @@ from aiohttp import web
 from numpy.typing import NDArray
 
 from paperroute.core.messages import Event, Knob, KnobPressed, KnobTurned
-from paperroute.observers import max_rss_mb
 from paperroute.render.canvas import encode_png
+from paperroute.rss import max_rss_mb
 
 logger = logging.getLogger(__name__)
 

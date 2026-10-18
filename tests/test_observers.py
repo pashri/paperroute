@@ -4,12 +4,7 @@ import logging
 
 import pytest
 
-from paperroute.observers import (
-    NullObserver,
-    ObserverGroup,
-    Timings,
-    max_rss_mb,
-)
+from paperroute.observers import NullObserver, ObserverGroup, Timings
 
 
 class _Failing:
@@ -90,8 +85,3 @@ def test_observer_group_isolates_a_failing_observer(
     assert 'f' in snap['feeds']  # type: ignore[operator]
     assert snap['tick_age_s'] is not None
     assert len(caplog.records) == 3
-
-
-def test_max_rss_mb_is_positive() -> None:
-    """Peak memory is a positive number of megabytes."""
-    assert 1.0 < max_rss_mb() < 100_000.0

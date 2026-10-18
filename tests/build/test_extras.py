@@ -1,0 +1,135 @@
+"""Tests for building the run tables in a child process."""
+
+import sqlite3
+import subprocess
+import sys
+from contextlib import closing
+from datetime import date
+from pathlib import Path
+from typing import Final
+
+import pytest
+
+from paperroute.build import timetable
+from paperroute.build.extras import build_extras, run_extras
+from paperroute.build.gtfs_files import Source
+from paperroute.build.timetable import Window, build_timetable
+from tests.build.network_feed import network_feed
+
+RUN_TABLES: Final[set[str]] = {
+    'runs', 'run_stops', 'trip_runs', 'trip_next', 'route_patterns',
+}
+IMPORTS_ONLY: Final[str] = (
+    'import paperroute.build.extras, sys; '
+    "assert not {'numpy', 'aiohttp'} & set(sys.modules)"
+)
+CHILD_RUN: Final[str] = (
+    'import runpy, sys\n'
+    "sys.argv = ['extras', sys.argv[1]]\n"
+    "runpy.run_module('paperroute.build.extras', run_name='__main__')\n"
+    "assert not {'numpy', 'aiohttp'} & set(sys.modules)\n"
+)
+
+
+def network_build(*, folder: Path) -> Path:
+    """
+    Build the network feed into a 3-day timetable.
+
+    Parameters
+    ----------
+    folder : Path
+        Directory for the feed and the timetable.
+
+    Returns
+    -------
+    Path
+        Timetable file.
+    """
+    out = folder / 'timetable.db'
+    source = Source(name='sydneytrains',
+                    archive=network_feed(path=folder / 'network.zip'))
+    build_timetable(sources=[source],
+                    window=Window(start=date(2026, 10, 5), days=3), out=out)
+    return out
+
+
+def skip_extras(*, path: Path) -> None:
+    """
+    Stand in for build_extras and build nothing.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file, ignored.
+    """
+    del path
+
+
+def tables_of(*, db: Path) -> set[str]:
+    """
+    List the tables of a database.
+
+    Parameters
+    ----------
+    db : Path
+        Database file.
+
+    Returns
+    -------
+    set[str]
+        Table names.
+    """
+    with closing(sqlite3.connect(db)) as conn:
+        return {
+            name
+            for name, in conn.execute(
+                "SELECT name FROM sqlite_master WHERE type = 'table'",
+            )
+        }
+
+
+def test_run_extras_prints_each_phase(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Each phase prints its start, its time and the child's peak."""
+    monkeypatch.setattr(timetable, 'build_extras', skip_extras)
+    db = network_build(folder=tmp_path)
+    assert not RUN_TABLES & tables_of(db=db)
+    capsys.readouterr()
+    run_extras(path=db)
+    lines = capsys.readouterr().out.splitlines()
+    assert lines[0] == 'progress runs'
+    assert lines[1].startswith('progress runs done ')
+    assert lines[1].endswith('s')
+    assert lines[-1].startswith('progress extras peak ')
+    assert lines[-1].endswith('MB')
+    assert RUN_TABLES <= tables_of(db=db)
+
+
+def test_extras_run_in_a_child(tmp_path: Path) -> None:
+    """The build writes the run tables, and a failing child raises."""
+    assert RUN_TABLES <= tables_of(db=network_build(folder=tmp_path))
+    junk = tmp_path / 'junk.db'
+    junk.write_bytes(b'not a timetable')
+    with pytest.raises(RuntimeError, match='exit code'):
+        build_extras(path=junk)
+
+
+def test_extras_never_import_numpy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The extras module and its real child run load neither numpy nor aiohttp."""
+    imported = subprocess.run(
+        [sys.executable, '-c', IMPORTS_ONLY],
+        check=False, capture_output=True, text=True,
+    )
+    assert imported.returncode == 0, imported.stderr
+    monkeypatch.setattr(timetable, 'build_extras', skip_extras)
+    db = network_build(folder=tmp_path)
+    child = subprocess.run(
+        [sys.executable, '-c', CHILD_RUN, str(db)],
+        check=False, capture_output=True, text=True,
+    )
+    assert child.returncode == 0, child.stderr
+    assert RUN_TABLES <= tables_of(db=db)

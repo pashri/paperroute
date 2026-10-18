@@ -23,7 +23,7 @@ from paperroute.build.tile_set import (
 from paperroute.build.tile_store import TileWriter
 from paperroute.core.geo import MetreBox, to_metres
 from paperroute.core.tiles import OPAL_BBOX, ZOOMS
-from paperroute.observers import BYTES_PER_MB, max_rss_mb
+from paperroute.rss import BYTES_PER_MB, max_rss_mb
 
 STORE_NAME: Final[str] = 'features.db'
 SCRATCH_NAMES: Final[tuple[str, ...]] = (

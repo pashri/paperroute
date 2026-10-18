@@ -1,28 +1,29 @@
 """Stream GTFS sources into a SQLite timetable."""
 
+import gc
 import os
 import re
 import sqlite3
-from collections.abc import Iterable, Iterator
+from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from itertools import batched
 from pathlib import Path
 from typing import Final
 
 from paperroute.build.dedupe import MergeReport, merge_rail
+from paperroute.build.extras import build_extras
 from paperroute.build.gtfs_files import (
     Source,
     active_dates,
+    insert_many,
     parse_time,
     read_rows,
 )
 from paperroute.build.shapes import load_shapes
 from paperroute.core.model import SYDNEY, Mode, mode_for
 
-BATCH: Final[int] = 10_000
-SCHEMA_VERSION: Final[str] = '2'
+SCHEMA_VERSION: Final[str] = '3'
 PLATFORM: Final[re.Pattern[str]] = re.compile(r'(?:Platform|Stand)\s+(\w+)$')
 SCHEMA: Final[str] = """
 CREATE TABLE stops (stop_id TEXT PRIMARY KEY, name TEXT NOT NULL,
@@ -115,24 +116,6 @@ def platform_of(*, row: dict[str, str]) -> str:
         return row['platform_code']
     found = PLATFORM.search(row.get('stop_name', ''))
     return found.group(1) if found else ''
-
-
-def insert_many(*, conn: sqlite3.Connection, sql: str,
-                rows: Iterable[tuple[object, ...]]) -> None:
-    """
-    Insert rows in fixed-size batches.
-
-    Parameters
-    ----------
-    conn : sqlite3.Connection
-        Target database.
-    sql : str
-        INSERT statement.
-    rows : Iterable[tuple[object, ...]]
-        Values.
-    """
-    for chunk in batched(rows, BATCH):
-        conn.executemany(sql, chunk)
 
 
 def stop_rows(*, archive: Path) -> Iterator[tuple[object, ...]]:
@@ -360,7 +343,8 @@ def build_timetable(*, sources: list[Source], window: Window,
     Build a timetable file from sources, replacing out only on success.
 
     Load preferred feeds (Sydney Trains, Metro) before the bundle so that a
-    trip ID in both keeps the preferred copy.
+    trip ID in both keeps the preferred copy. The run tables are then built
+    in a child process, see build_extras.
 
     Parameters
     ----------
@@ -389,6 +373,8 @@ def build_timetable(*, sources: list[Source], window: Window,
         create_indexes(conn=conn)
         write_meta(conn=conn, window=window)
         conn.commit()
+    gc.collect()
+    build_extras(path=scratch)
     os.replace(scratch, out)
     return report
 

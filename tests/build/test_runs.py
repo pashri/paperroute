@@ -1,7 +1,10 @@
 """Tests for following trips through their blocks."""
 
 import dataclasses
+import json
+import shutil
 import sqlite3
+from collections import Counter
 from collections.abc import Iterator
 from contextlib import closing
 from datetime import date
@@ -12,18 +15,25 @@ import pytest
 
 from paperroute.build.gtfs_files import Source
 from paperroute.build.runs import (
+    RUN_SCHEMA,
+    RUN_STOPS_INDEX,
+    RunReport,
+    RunTable,
     TripCalls,
+    block_trip_runs,
     carry_ons,
     chained,
+    load_runs,
     next_on_block,
     next_trips,
+    plain_trip_runs,
     trip_calls,
     trip_days,
     trip_skips,
 )
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.model import RouteKind
-from tests.build.network_feed import network_feed
+from tests.build.network_feed import EAST_WEST, network_feed
 
 
 @pytest.fixture(name='network_db', scope='module')
@@ -179,7 +189,7 @@ def test_trip_calls_merge_platforms_and_skip_hidden(
 def test_trip_days_subtract_skipped_dates(
     network: sqlite3.Connection,
 ) -> None:
-    """A trip with one skipped date over three runs on two of them."""
+    """Services count their dates and trips their skipped dates."""
     network.execute("INSERT INTO trip_skip VALUES ('x1', '2026-10-06')")
     try:
         days = trip_days(conn=network)
@@ -188,7 +198,6 @@ def test_trip_days_subtract_skipped_dates(
         network.rollback()
     assert days == {'sydneytrains:daily': 3}
     assert skips == {'x1': 1}
-    assert days['sydneytrains:daily'] - skips['x1'] == 2
 
 
 def test_chained_runs_through_a_block(calls: list[TripCalls]) -> None:
@@ -281,3 +290,146 @@ def test_next_on_block_stops_at_a_hidden_trip() -> None:
     assert 'x1' not in carry_ons_of(trips=trips)
     kindless = dataclasses.replace(empty, kind=None, headsign='to D')
     assert next_on_block(trip=x1, later=[x1, kindless, x3]) is None
+
+
+def run_id_of(*, conn: sqlite3.Connection, stations: str) -> int:
+    """
+    Find the run with the given stations.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable with run tables.
+    stations : str
+        Space-separated station IDs.
+
+    Returns
+    -------
+    int
+        Run ID.
+    """
+    (run_id,), = conn.execute(
+        'SELECT run_id FROM runs WHERE stations = ?',
+        (json.dumps(stations.split()),),
+    )
+    return int(run_id)
+
+
+def test_loop_run_keeps_its_second_call(network: sqlite3.Connection) -> None:
+    """The T2 loop passes C twice, so C has two run_stops rows."""
+    run_id = run_id_of(conn=network, stations='C L1 L2 J C E1 E2')
+    assert network.execute(
+        'SELECT kind, route FROM runs WHERE run_id = ?', (run_id,),
+    ).fetchall() == [('train', 'T2')]
+    assert network.execute(
+        "SELECT pos FROM run_stops WHERE station_id = 'C' AND run_id = ?",
+        (run_id,),
+    ).fetchall() == [(0,), (4,)]
+
+
+def test_load_runs_dedupes_and_weights(network: sqlite3.Connection) -> None:
+    """Five plain T1 trips over three days share one run of 15 trip-days."""
+    assert network.execute(
+        'SELECT trips FROM runs WHERE stations = ?',
+        (json.dumps(EAST_WEST.split()),),
+    ).fetchall() == [(5 * 3,)]
+    assert network.execute(
+        'SELECT trip_id FROM trip_runs WHERE run_id = ?',
+        (run_id_of(conn=network, stations='E2 E1 C J W1 W2 W1 J'),),
+    ).fetchall() == [('y1',)]
+    assert not network.execute(
+        'SELECT 1 FROM runs WHERE stations = ?',
+        (json.dumps(['C', 'J', 'R1']),),
+    ).fetchall()
+    shown = {
+        trip_id
+        for trip_id, headsign in network.execute(
+            'SELECT trip_id, headsign FROM trips',
+        )
+        if headsign != 'Empty Train'
+    }
+    mapped = {
+        trip_id
+        for trip_id, in network.execute('SELECT trip_id FROM trip_runs')
+    }
+    assert mapped == shown
+    assert 'empty1' not in mapped
+
+
+def test_load_runs_subtracts_skipped_dates(
+    network_db: Path, tmp_path: Path,
+) -> None:
+    """x1 skipped on one of three dates weighs 2 in its run."""
+    db = tmp_path / 'timetable.db'
+    shutil.copy(network_db, db)
+    with closing(sqlite3.connect(db)) as conn:
+        conn.executescript(
+            "INSERT INTO trip_skip VALUES ('x1', '2026-10-06');"
+            'DROP TABLE runs; DROP TABLE run_stops; DROP TABLE trip_runs;'
+            'DROP TABLE trip_next; DROP TABLE route_patterns;',
+        )
+        conn.executescript(RUN_SCHEMA)
+        report = load_runs(conn=conn)
+        run_id = run_id_of(conn=conn, stations='E2 E1 C J W1')
+        assert conn.execute(
+            'SELECT trips FROM runs WHERE run_id = ?', (run_id,),
+        ).fetchall() == [(2,)]
+    assert report == RunReport(runs=13, trips=27)
+
+
+def test_trip_next_rows(network: sqlite3.Connection) -> None:
+    """The 809 carries on as the 811; x1 carries on as the same T1."""
+    assert network.execute(
+        "SELECT route, headsign FROM trip_next WHERE trip_id = 'v1'",
+    ).fetchall() == [('811', 'Parramatta Stn')]
+    assert not network.execute(
+        "SELECT 1 FROM trip_next WHERE trip_id = 'x1'",
+    ).fetchall()
+
+
+def test_run_stops_hold_positions(network: sqlite3.Connection) -> None:
+    """C is the third station of the plain east-west run, found by index."""
+    run_id = run_id_of(conn=network, stations=EAST_WEST)
+    assert network.execute(
+        "SELECT pos FROM run_stops WHERE station_id = 'C' AND run_id = ?",
+        (run_id,),
+    ).fetchall() == [(2,)]
+    assert network.execute(
+        "SELECT sql FROM sqlite_master WHERE name = 'run_stops_station'",
+    ).fetchall() == [(RUN_STOPS_INDEX,)]
+
+
+def test_route_patterns_are_trip_level(network: sqlite3.Connection) -> None:
+    """x1's pattern is its own stations, not its chained run."""
+    rows = network.execute(
+        'SELECT stations, trips FROM route_patterns '
+        "WHERE route_id = 'sydneytrains:T1' AND headsign = 'C'",
+    ).fetchall()
+    assert rows == [(json.dumps(['E2', 'E1', 'C']), 1)]
+
+
+def test_load_runs_skips_hidden_block_trips_and_orphans(
+    network_db: Path, tmp_path: Path,
+) -> None:
+    """A hidden block trip has no run; unmatched trips and calls are skipped."""
+    db = tmp_path / 'timetable.db'
+    shutil.copy(network_db, db)
+    with closing(sqlite3.connect(db)) as conn:
+        conn.executescript(
+            "UPDATE trips SET block_id = 'b9' WHERE trip_id = 'empty1';"
+            "DELETE FROM trips WHERE trip_id = 'cc1';"
+            "DELETE FROM stop_times WHERE trip_id = 'cc2';"
+            'DELETE FROM trip_runs;',
+        )
+        assert {'cc1', 'cc2'}.isdisjoint(
+            trip.trip_id for trip in trip_calls(conn=conn)
+        )
+        plain = RunTable(days={'sydneytrains:daily': 3}, skips=Counter())
+        blocks: list[TripCalls] = []
+        assert 'empty1' not in dict(plain_trip_runs(
+            trips=trip_calls(conn=conn), table=plain, blocks=blocks,
+        ))
+        assert 'empty1' in {trip.trip_id for trip in blocks}
+        assert 'empty1' not in dict(block_trip_runs(
+            trips=blocks, nexts=next_trips(trips=blocks), table=plain,
+        ))

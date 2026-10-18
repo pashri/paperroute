@@ -1,14 +1,17 @@
-"""Read GTFS zip members as streams, and work out active service dates."""
+"""Read GTFS zip members as streams, work out service dates, insert rows."""
 
 import csv
 import io
+import sqlite3
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from datetime import date, timedelta
+from itertools import batched
 from pathlib import Path
 from typing import Final
 
+BATCH: Final[int] = 10_000
 DAY_NAMES: Final[tuple[str, ...]] = (
     'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
     'sunday')
@@ -129,3 +132,21 @@ def active_dates(*, archive: Path, start: date,
             added = row['exception_type'] == '1'
             (change.add if added else change.discard)(day)
     return {key: frozenset(value) for key, value in result.items() if value}
+
+
+def insert_many(*, conn: sqlite3.Connection, sql: str,
+                rows: Iterable[tuple[object, ...]]) -> None:
+    """
+    Insert rows in fixed-size batches.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Target database.
+    sql : str
+        INSERT statement.
+    rows : Iterable[tuple[object, ...]]
+        Values.
+    """
+    for chunk in batched(rows, BATCH):
+        conn.executemany(sql, chunk)

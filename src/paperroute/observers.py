@@ -1,19 +1,13 @@
 """Observers that collect timings from the running app."""
 
 import logging
-import resource
-import sys
 import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
-from typing import Final
 
 from paperroute.ports import Observer
 
 logger = logging.getLogger(__name__)
-
-BYTES_PER_KB: Final[int] = 1024
-BYTES_PER_MB: Final[int] = BYTES_PER_KB * BYTES_PER_KB
 
 
 @dataclass(frozen=True)
@@ -252,19 +246,3 @@ class ObserverGroup:
     def ticked(self) -> None:
         """Pass on a tick."""
         self._each(call=lambda o: o.ticked())
-
-
-def max_rss_mb() -> float:
-    """
-    Peak memory use of this process.
-
-    Returns
-    -------
-    float
-        Megabytes. Linux reports kilobytes and macOS bytes, so the raw
-        value is scaled by platform.
-    """
-    peak = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    if sys.platform == 'linux':
-        return peak / BYTES_PER_KB
-    return peak / BYTES_PER_MB

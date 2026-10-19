@@ -85,6 +85,12 @@ button {
   font: inherit;
 }
 
+button[data-action='press'] {
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
 button:active {
   transform: translateY(1px);
 }

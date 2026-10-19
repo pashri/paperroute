@@ -1,6 +1,7 @@
 """Tests for the web display."""
 
 import asyncio
+import re
 import time
 from collections.abc import AsyncIterator
 from http import HTTPStatus
@@ -13,7 +14,13 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters import web_display
 from paperroute.adapters.web_display import WebDisplay, knob_event
-from paperroute.core.messages import Event, Knob, KnobPressed, KnobTurned
+from paperroute.core.messages import (
+    Event,
+    Knob,
+    KnobHeld,
+    KnobPressed,
+    KnobTurned,
+)
 
 Client = TestClient[web.Request, web.Application]
 FRAME = np.full((480, 800), 255, dtype=np.uint8)
@@ -65,6 +72,7 @@ async def _read_event(*, response: ClientResponse) -> tuple[str, str]:
     ('bottom', 'left', KnobTurned(knob=Knob.BOTTOM, steps=-1)),
     ('bottom', 'right', KnobTurned(knob=Knob.BOTTOM, steps=1)),
     ('bottom', 'press', KnobPressed(knob=Knob.BOTTOM)),
+    ('bottom', 'hold', KnobHeld(knob=Knob.BOTTOM)),
     ('middle', 'left', None),
     ('top', 'spin', None),
 ])
@@ -350,3 +358,34 @@ async def test_malformed_host_header_is_refused(
     """A Host header that cannot be parsed is a 403, not a 500."""
     response = await client.get('/status', headers={'Host': host})
     assert response.status == HTTPStatus.FORBIDDEN
+
+
+def test_hold_action_posts_knob_held() -> None:
+    """The hold action on the bottom knob becomes a KnobHeld event."""
+    event = knob_event(knob='bottom', action='hold')
+    assert event == KnobHeld(knob=Knob.BOTTOM)
+
+
+def test_page_has_hold_button() -> None:
+    """The bottom knob has a Hold button after Press, and the hint says so."""
+    web_dir = files('paperroute') / 'assets' / 'web'
+    html = (web_dir / 'live.html').read_text(encoding='utf-8')
+    hold = (
+        '<button type="button" data-knob="bottom" data-action="hold"'
+        ' aria-label="Bottom knob, hold">Hold</button>'
+    )
+    flat = ' '.join(html.split())
+    assert hold in flat
+    bottom = flat[flat.index('id="bottom-knob"'):]
+    assert bottom.index('Bottom knob, press') < bottom.index(hold)
+    plain = re.sub(r'<[^>]+>', '', flat)
+    assert 'hold K or Press to pin' in plain
+
+
+def test_page_click_handler_only_for_keyboard() -> None:
+    """The click listener sends a press only when detail is zero."""
+    web_dir = files('paperroute') / 'assets' / 'web'
+    script = (web_dir / 'live.js').read_text(encoding='utf-8')
+    assert "addEventListener('click'" in script
+    assert 'event.detail === 0' in script
+    assert 'HOLD_MS = 800' in script

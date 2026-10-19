@@ -1,6 +1,7 @@
 """A Tkinter window standing in for the e-paper panel and knobs."""
 
 import base64
+import time
 import tkinter
 from collections.abc import Callable
 from typing import Final
@@ -11,6 +12,7 @@ from numpy.typing import NDArray
 from paperroute.core.messages import (
     Event,
     Knob,
+    KnobHeld,
     KnobPressed,
     KnobTurned,
     QuitRequested,
@@ -23,10 +25,86 @@ KEYS: Final[dict[str, Event]] = {
     's': KnobPressed(knob=Knob.TOP),
     'j': KnobTurned(knob=Knob.BOTTOM, steps=-1),
     'l': KnobTurned(knob=Knob.BOTTOM, steps=1),
-    'k': KnobPressed(knob=Knob.BOTTOM),
     'q': QuitRequested(),
     'Escape': QuitRequested(),
 }
+HOLD_S: Final[float] = 0.8  # seconds a key is held to count as a hold
+REPEAT_GAP_S: Final[float] = 0.05  # seconds between an autorepeat up and down
+HOLD_KEY: Final[str] = 'k'
+
+
+class HoldKey:
+    """
+    Tells a tap from a hold on the bottom knob's key.
+
+    X11 autorepeat sends a release then a press for each repeat, so a
+    release only counts once no press follows it within `REPEAT_GAP_S`.
+    The caller passes the current time and calls `poll` regularly.
+    """
+
+    def __init__(self) -> None:
+        self._down_at: float | None = None
+        self._up_at: float | None = None
+        self._held = False
+
+    def down(self, now: float) -> Event | None:
+        """
+        Record a key press; a press during autorepeat changes nothing.
+
+        Parameters
+        ----------
+        now : float
+            Current time in seconds.
+
+        Returns
+        -------
+        Event | None
+            The event for an earlier release this press settles, if any.
+        """
+        event = self.poll(now)
+        if self._down_at is None:
+            self._down_at = now
+        self._up_at = None
+        return event
+
+    def up(self, now: float) -> None:
+        """
+        Record a key release; `poll` decides what it meant.
+
+        Parameters
+        ----------
+        now : float
+            Current time in seconds.
+        """
+        if self._down_at is not None:
+            self._up_at = now
+
+    def poll(self, now: float) -> Event | None:
+        """
+        Resolve a hold or a release once enough time has passed.
+
+        Parameters
+        ----------
+        now : float
+            Current time in seconds.
+
+        Returns
+        -------
+        Event | None
+            `KnobHeld` once per hold, `KnobPressed` for a tap, else None.
+        """
+        if self._down_at is None:
+            return None
+        end = now if self._up_at is None else self._up_at
+        if not self._held and end - self._down_at >= HOLD_S:
+            self._held = True
+            return KnobHeld(knob=Knob.BOTTOM)
+        if self._up_at is None or now - self._up_at < REPEAT_GAP_S:
+            return None
+        tapped = not self._held
+        self._down_at = self._up_at = None
+        self._held = False
+        return KnobPressed(knob=Knob.BOTTOM) if tapped else None
 
 
 def key_event(*, keysym: str) -> Event | None:
@@ -51,6 +129,7 @@ class TkMonitor:
 
     def __init__(self) -> None:
         self.post: Callable[[Event], None] | None = None
+        self.hold = HoldKey()
         self.root = tkinter.Tk()
         self.root.title('paperroute')
         self.root.protocol('WM_DELETE_WINDOW', self.on_close)
@@ -84,6 +163,7 @@ class TkMonitor:
         """
         self.post = post
         self.root.bind('<KeyPress>', self.on_key)
+        self.root.bind('<KeyRelease>', self.on_key_release)
 
     def on_key(self, key: 'tkinter.Event[tkinter.Misc]') -> None:
         """
@@ -94,9 +174,24 @@ class TkMonitor:
         key : tkinter.Event[tkinter.Misc]
             Tk key event.
         """
-        event = key_event(keysym=key.keysym)
+        if key.keysym == HOLD_KEY:
+            event = self.hold.down(time.monotonic())
+        else:
+            event = key_event(keysym=key.keysym)
         if event is not None and self.post is not None:
             self.post(event)
+
+    def on_key_release(self, key: 'tkinter.Event[tkinter.Misc]') -> None:
+        """
+        Note the release of the hold key.
+
+        Parameters
+        ----------
+        key : tkinter.Event[tkinter.Misc]
+            Tk key event.
+        """
+        if key.keysym == HOLD_KEY:
+            self.hold.up(time.monotonic())
 
     def on_close(self) -> None:
         """Post QuitRequested when the window's close button is pressed."""
@@ -106,6 +201,9 @@ class TkMonitor:
     def pump(self) -> None:
         """Process pending window events."""
         self.root.update()
+        event = self.hold.poll(time.monotonic())
+        if event is not None and self.post is not None:
+            self.post(event)
 
     def close(self) -> None:
         """Close the window; does nothing if it is already gone."""

@@ -15,7 +15,13 @@ import numpy as np
 from aiohttp import web
 from numpy.typing import NDArray
 
-from paperroute.core.messages import Event, Knob, KnobPressed, KnobTurned
+from paperroute.core.messages import (
+    Event,
+    Knob,
+    KnobHeld,
+    KnobPressed,
+    KnobTurned,
+)
 from paperroute.render.canvas import encode_png
 from paperroute.rss import max_rss_mb
 
@@ -37,7 +43,7 @@ def knob_event(*, knob: str, action: str) -> Event | None:
     knob : str
         `top` or `bottom`.
     action : str
-        `left`, `right` or `press`.
+        `left`, `right`, `press` or `hold`.
 
     Returns
     -------
@@ -48,6 +54,8 @@ def knob_event(*, knob: str, action: str) -> Event | None:
         return None
     if action == 'press':
         return KnobPressed(knob=Knob(knob))
+    if action == 'hold':
+        return KnobHeld(knob=Knob(knob))
     if action in ACTIONS:
         return KnobTurned(knob=Knob(knob), steps=ACTIONS[action])
     return None

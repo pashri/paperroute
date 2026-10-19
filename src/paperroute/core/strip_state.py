@@ -22,10 +22,9 @@ from paperroute.core.stop_view import StopView
 from paperroute.core.strip_vehicles import strip_trips, window_departures
 from paperroute.core.strip_view import (
     NEEDS_UPDATE,
-    PANE_FROM_ROW,
     STRIP_ROWS,
     StripInputs,
-    origin_of,
+    home_of,
 )
 
 STRIP_VIEWS: Final[frozenset[LiveView]] = frozenset(
@@ -265,7 +264,8 @@ def shown_reach(*, state: State) -> Reach | None:
     return state.strip.reaches.get(strip_key(pin=shown(state=state)))
 
 
-def scroll_range(*, reach: Reach | None) -> tuple[int, int]:
+def scroll_range(*, reach: Reach | None, destination: str | None
+                 ) -> tuple[int, int]:
     """
     Find how far the Strip scrolls before its rows stop moving.
 
@@ -273,18 +273,19 @@ def scroll_range(*, reach: Reach | None) -> tuple[int, int]:
     ----------
     reach : Reach | None
         The reach shown, or None.
+    destination : str | None
+        The place's Destination stop or station ID, or None.
 
     Returns
     -------
     tuple[int, int]
         The lowest and highest scroll; both 0 with no reach. The range
-        always holds 0, the resting scroll, even when the From sits so
-        near the top that a few scrolls down move nothing.
+        always holds 0, the resting scroll, even when the home window sits
+        so near the top that a few scrolls down move nothing.
     """
     if reach is None:
         return 0, 0
-    origin = origin_of(reach=reach)
-    shift = 0 if origin is None else origin - PANE_FROM_ROW
+    shift = home_of(reach=reach, destination=destination)
     low = min(0, -shift)
     return low, max(low, len(reach.rows) - STRIP_ROWS - shift)
 
@@ -303,7 +304,11 @@ def clamped(*, state: State) -> State:
     State
         State with the scroll clamped to `scroll_range`.
     """
-    low, high = scroll_range(reach=shown_reach(state=state))
+    destination = shown(state=state).destination
+    low, high = scroll_range(
+        reach=shown_reach(state=state),
+        destination=None if destination is None else destination.stop_id,
+    )
     scroll = min(max(state.strip.scroll, low), high)
     return replace(state, strip=replace(state.strip, scroll=scroll))
 

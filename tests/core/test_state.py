@@ -1503,7 +1503,13 @@ def check_render(
             assert len(view.sidebar) <= SIDEBAR_ROWS
         case StripView():
             assert len(view.rows) <= STRIP_ROWS
-            low, high = scroll_range(reach=shown_reach(state=state))
+            destination = shown(state=state).destination
+            low, high = scroll_range(
+                reach=shown_reach(state=state),
+                destination=(
+                    None if destination is None else destination.stop_id
+                ),
+            )
             assert low <= state.strip.scroll <= high
         case StripMapView():
             assert len(view.pane.rows) <= PANE_ROWS

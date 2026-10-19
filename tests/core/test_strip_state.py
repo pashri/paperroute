@@ -379,32 +379,36 @@ def first_name(*, state: State) -> str:
 
 
 def test_strip_scroll_is_separate_from_stop_scroll() -> None:
-    """Each view keeps its own scroll."""
+    """Each view keeps its own scroll; the long ride to S5 ends at FROM."""
     state, _ = on_view(view=LiveView.STOP, departures=trains(count=20))
     state, _ = step(state, turn(steps=2))
     state, _ = run(state=state, events=[PRESS, PRESS])
     state, _ = step(state, StripLoaded(key=KEY, reach=long_reach()))
-    assert first_name(state=state) == 'S18'
+    assert first_name(state=state) == 'S9'
     state, _ = step(state, turn(steps=1))
     assert (state.scroll, state.strip.scroll) == (2, 1)
-    assert first_name(state=state) == 'S19'
+    assert first_name(state=state) == 'S10'
     state, _ = run(state=state, events=[PRESS, PRESS])
     assert state.view is LiveView.STOP
     assert state.scroll == 2
 
 
 def test_strip_scroll_is_clamped() -> None:
-    """The stored strip scroll stops where the view stops moving."""
+    """The stored strip scroll stops where the view stops moving.
+
+    The ride to S5 is longer than the strip, so it rests with FROM, S20,
+    in the bottom slot: rows S9 to S20.
+    """
     state, _ = on_view(view=LiveView.STRIP)
     state, _ = step(state, turn(steps=5))
     assert state.strip.scroll == 0
     state, _ = step(state, StripLoaded(key=KEY, reach=long_reach()))
     state, _ = step(state, turn(steps=100))
-    assert state.strip.scroll == 40 - STRIP_ROWS - 18
+    assert state.strip.scroll == 40 - STRIP_ROWS - 9
     state, effects = step(state, turn(steps=1))
     assert not effects
     state, _ = step(state, turn(steps=-100))
-    assert state.strip.scroll == -18
+    assert state.strip.scroll == -9
     assert first_name(state=state) == 'S0'
 
 

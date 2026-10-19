@@ -404,6 +404,45 @@ def test_band_shows_when_from_scrolls_off() -> None:
     assert build_strip_view(inputs=replace(base, scroll=3)).band is not None
 
 
+def names_shown(*, destination: str, scroll: int = 0) -> list[str]:
+    """
+    List the rows shown on the long reach with a Destination.
+
+    Parameters
+    ----------
+    destination : str
+        Destination row's station.
+    scroll : int
+        Rows scrolled down.
+
+    Returns
+    -------
+    list[str]
+        Row names, top to bottom.
+    """
+    inputs = inputs_of(reach=long_reach(), destination=destination)
+    view = build_strip_view(inputs=replace(inputs, scroll=scroll))
+    return [row.name for row in view.rows]
+
+
+def test_destination_ride_shown_when_it_fits() -> None:
+    """The window moves the least that shows FROM to the Destination."""
+    assert names_shown(destination='S26')[2] == 'S20'
+    assert names_shown(destination='S31')[::11] == ['S20', 'S31']
+    assert names_shown(destination='S12')[::8] == ['S12', 'S20']
+
+
+def test_long_ride_starts_at_from_toward_the_destination() -> None:
+    """A ride longer than the strip starts at FROM and runs its way."""
+    assert names_shown(destination='S35')[0] == 'S20'
+    assert names_shown(destination='S5')[-1] == 'S20'
+    inputs = inputs_of(reach=long_reach(), destination='S35')
+    view = build_strip_view(inputs=replace(inputs, scroll=1))
+    assert view.band is not None
+    assert view.band.text == 'FROM S20 · 1 turn away'
+    assert view.band.top
+
+
 def test_band_at_the_bottom_when_scrolled_up() -> None:
     """Scrolling up past FROM puts the band in the bottom slot."""
     base = inputs_of(reach=long_reach())

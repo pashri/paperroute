@@ -5,6 +5,7 @@ import sqlite3
 import time
 from collections.abc import Mapping, Sequence
 from contextlib import closing
+from datetime import datetime
 from pathlib import Path
 from typing import Final
 
@@ -14,7 +15,7 @@ from hypothesis import strategies as st
 
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.core.geo import Point
-from paperroute.core.model import RouteKind, StopPlace
+from paperroute.core.model import SYDNEY, RouteKind, StopPlace
 from paperroute.core.reach import (
     Reach,
     ReachInput,
@@ -23,11 +24,14 @@ from paperroute.core.reach import (
     StripKey,
     build_reach,
 )
+from paperroute.core.stop_view import NOT_PINNED
+from paperroute.core.strip_view import StripInputs, build_strip_view
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 TOWN_HALL: Final[str] = '200070'
 STRATHFIELD: Final[str] = '213510'
 BLACKTOWN: Final[str] = '214810'
+PARRAMATTA: Final[str] = '215020'
 WESTERN_LINE: Final[tuple[str, ...]] = (
     'Parramatta Station',
     'Westmead Station',
@@ -656,3 +660,34 @@ def test_blacktown_rides_to_parramatta_through_seven_hills() -> None:
     sides = {reach.rows[names.index(name)].above for name in WESTERN_LINE}
     assert len(sides) == 1
     assert parents_on_their_side(reach=reach)
+
+
+@pytest.mark.skipif(
+    not has_runs(path=REAL_DB),
+    reason='needs data/timetable.db with run tables',
+)
+def test_blacktown_strip_opens_from_from_toward_parramatta() -> None:
+    """
+    Blacktown to Parramatta opens with FROM at the foot, facing the ride.
+
+    The Richmond branch sits between FROM and Seven Hills, so the ride is
+    longer than the strip and the window starts at FROM going up.
+    """
+    reach, _ = train_reach(station=BLACKTOWN)
+    view = build_strip_view(inputs=StripInputs(
+        reach=reach,
+        unavailable=None,
+        departures=(),
+        patterns={},
+        positions={},
+        now=datetime(2026, 10, 19, 8, 5, tzinfo=SYDNEY),
+        scroll=0,
+        cursor=None,
+        picking=None,
+        destination=PARRAMATTA,
+        tag=NOT_PINNED,
+    ))
+    assert view.band is None
+    assert view.rows[-1].station == BLACKTOWN
+    assert view.rows[0].name == 'Seven Hills'
+    assert view.rows[0].ride

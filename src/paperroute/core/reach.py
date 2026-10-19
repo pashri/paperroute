@@ -6,7 +6,8 @@ from enum import StrEnum
 from typing import Final
 
 from paperroute.core.model import RouteKind, StopPlace
-from paperroute.core.reach_layout import FROM_KEY, Entry, lay_out, place_of
+from paperroute.core.reach_layout import Entry, lay_out
+from paperroute.core.reach_track import FROM_KEY, place_of
 
 APPROACH_ROWS: Final[int] = 2
 LINE_KINDS: Final[frozenset[RouteKind]] = frozenset(

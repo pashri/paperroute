@@ -75,3 +75,23 @@ def old_schema(*, path: Path) -> None:
             "UPDATE meta SET value = '2' WHERE key = 'schema_version'",
         )
         conn.commit()
+
+
+def schema_three(path: Path) -> None:
+    """
+    Turn a built timetable back into a schema-3 file.
+
+    Only the line_stations table is dropped, and the schema version set
+    to '3'.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file, changed in place.
+    """
+    with closing(sqlite3.connect(path)) as conn:
+        conn.execute('DROP TABLE IF EXISTS line_stations')
+        conn.execute(
+            "UPDATE meta SET value = '3' WHERE key = 'schema_version'",
+        )
+        conn.commit()

@@ -735,6 +735,31 @@ def test_towards_rows_use_busiest_pattern(tmp_path: Path) -> None:
     assert json.loads(stations) == EAST_WEST.split()
 
 
+def test_catalogue_writes_line_stations_for_station_first_lines(
+    tmp_path: Path,
+) -> None:
+    """T1 opens at R3 and splits at J, the busier way to E2 first."""
+    out = tmp_path / 'timetable.db'
+    source = Source(name='sydneytrains',
+                    archive=network_feed(path=tmp_path / 'network.zip'))
+    build_timetable(sources=[source],
+                    window=Window(start=date(2026, 10, 5), days=3), out=out)
+    with closing(sqlite3.connect(out)) as conn:
+        t1 = conn.execute(
+            'SELECT station_id, head FROM line_stations '
+            "WHERE line_key = 'train:T1' ORDER BY pos",
+        ).fetchall()
+        keys = {key for (key,) in conn.execute(
+            'SELECT DISTINCT line_key FROM line_stations',
+        )}
+    assert t1 == [
+        ('R3', 'R3'), ('R2', ''), ('R1', ''), ('J', ''), ('C', 'E2'),
+        ('E1', ''), ('E2', ''), ('W1', 'W2'), ('W2', ''),
+    ]
+    assert keys == {'train:T1', 'train:T2'}
+
+
+
 def test_train_lines_sort_sydney_then_intercity_then_trainlink() -> None:
     """T1-T9, then the intercity lines, then NRC, NRW, STH and WST."""
     rows = kind_rows(entries=[

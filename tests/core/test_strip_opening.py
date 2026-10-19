@@ -298,21 +298,21 @@ def test_to_stage_opens_folds_before_the_cursor_reaches_them() -> None:
     reason='needs data/timetable.db with run tables',
 )
 def test_central_opens_with_the_quiet_far_ends_folded() -> None:
-    """Central opens 128 rows above FROM; Strathfield is 50 turns up."""
+    """Central opens 133 rows above FROM; Strathfield is 53 turns up."""
     reach, _ = train_reach(station=CENTRAL)
     shown = folded(reach=reach)
-    assert origin_of(reach=shown) == 128
+    assert origin_of(reach=shown) == 133
     assert [row.place.name for row in shown.rows][0] == (
-        'Lapstone … Bathurst +26'
+        'Lapstone … Dubbo +40'
     )
-    assert sum(row.kind is RowKind.FOLD for row in shown.rows) == 5
+    assert sum(row.kind is RowKind.FOLD for row in shown.rows) == 4
     home = home_of(
         reach=shown, destination=None, rows=window_of(banner=False).rows,
     )
     turns = home - [row.place.stop_id for row in shown.rows].index(
         STRATHFIELD,
     )
-    assert turns == 50
+    assert turns == 53
 
 
 @pytest.mark.skipif(

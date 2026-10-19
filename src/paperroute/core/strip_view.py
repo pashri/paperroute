@@ -101,6 +101,28 @@ def origin_of(*, reach: Reach) -> int | None:
     )
 
 
+def destination_station(*, reach: Reach, destination: str | None
+                        ) -> str | None:
+    """
+    Find the station a Destination stop is under.
+
+    Parameters
+    ----------
+    reach : Reach
+        The reach.
+    destination : str | None
+        Destination stop or station ID.
+
+    Returns
+    -------
+    str | None
+        The station ID, on the strip or not; None with no Destination.
+    """
+    if destination is None:
+        return None
+    return reach.station_of.get(destination, destination)
+
+
 def target_of(*, reach: Reach, destination: str | None) -> int | None:
     """
     Find the Destination's row.
@@ -118,14 +140,13 @@ def target_of(*, reach: Reach, destination: str | None) -> int | None:
         The index of the station's row past the From, or None when there
         is no destination or it isn't on the strip.
     """
-    if destination is None:
-        return None
-    station = reach.station_of.get(destination, destination)
+    station = destination_station(reach=reach, destination=destination)
     return next(
         (
             index
             for index, row in enumerate(reach.rows)
-            if row.place.stop_id == station
+            if station is not None
+            and row.place.stop_id == station
             and row.kind in (RowKind.MAIN, RowKind.BRANCH)
         ),
         None,
@@ -161,7 +182,6 @@ def row_times(
     inputs: StripInputs,
     reach: Reach,
     origin: int | None,
-    target: int | None,
     ride: frozenset[int],
 ) -> dict[int, str]:
     """
@@ -175,8 +195,6 @@ def row_times(
         The reach.
     origin : int | None
         The From row; with none no row has a time.
-    target : int | None
-        The Destination row, or None when it is not on the strip.
     ride : frozenset[int]
         The ridden rows; empty when there is no Destination row.
 
@@ -184,8 +202,9 @@ def row_times(
     -------
     dict[int, str]
         Clock time by row: the From's next departure (to the Destination
-        when there is one), then the first arrival on the ridden rows
-        past the From, or on every reached row when nothing is ridden.
+        when there is one, on the strip or not), then the first arrival
+        on the ridden rows past the From, or on every reached row when
+        nothing is ridden.
         Approach rows have none.
     """
     if origin is None:
@@ -203,7 +222,9 @@ def row_times(
     leaves = next_departure(
         trips=trips,
         origin=station,
-        target=None if target is None else reach.rows[target].place.stop_id,
+        target=destination_station(
+            reach=reach, destination=inputs.destination,
+        ),
     )
     if leaves is not None:
         times[origin] = clock_text(moment=leaves)
@@ -237,7 +258,6 @@ def marks_of(*, inputs: StripInputs, reach: Reach) -> Marks:
             inputs=inputs,
             reach=reach,
             origin=origin,
-            target=target,
             ride=ride,
         ),
         cursor=inputs.cursor,

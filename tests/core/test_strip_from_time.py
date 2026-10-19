@@ -4,7 +4,9 @@ from dataclasses import replace
 
 from paperroute.core.strip_view import build_strip_pane, build_strip_view
 from tests.core.test_strip_view import (
+    WEST,
     inputs_of,
+    line_pattern,
     live,
     long_reach,
     row_named,
@@ -29,6 +31,22 @@ def test_from_row_shows_the_next_departure_to_the_destination() -> None:
     target = row_named(rows=view.rows, name='W1')
     assert (origin.tag, origin.time) == ('', '8:03')
     assert (target.tag, target.time, target.bold) == ('', '8:09', True)
+
+
+def test_from_row_heads_for_a_destination_off_the_strip() -> None:
+    """A Destination past the strip's rows still picks the From's train."""
+    inputs = three_trains()
+    inputs = replace(
+        inputs,
+        destination='X',
+        patterns={
+            **inputs.patterns,
+            'w': line_pattern(trip_id='w', stations=(*WEST, 'X'), minutes=3),
+        },
+    )
+    view = build_strip_view(inputs=inputs)
+    assert row_named(rows=view.rows, name='C').time == '8:03'
+    assert all(not row.bold for row in view.rows if row.name != 'C')
 
 
 def test_from_row_skips_cancelled_departures() -> None:

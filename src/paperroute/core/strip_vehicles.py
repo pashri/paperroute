@@ -322,6 +322,77 @@ def first_arrivals(*, trips: TripInputs, origin: str
     return best
 
 
+def boardable(*, item: LiveDeparture, trips: TripInputs, origin: str,
+              target: str | None) -> bool:
+    """
+    Say whether a departure from the From can be taken.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+    trips : TripInputs
+        The strip's departures and live data.
+    origin : str
+        The From station ID.
+    target : str | None
+        The Destination's station ID, or None.
+
+    Returns
+    -------
+    bool
+        False when cancelled; with a Destination, True only when the
+        trip's loaded pattern calls there after the From.
+    """
+    if item.cancelled:
+        return False
+    if target is None:
+        return True
+    pattern = trips.patterns.get(item.departure.trip_id)
+    return pattern is not None and any(
+        station == target
+        for station, _ in arrivals_after(
+            item=item, pattern=pattern, origin=origin,
+            stations=trips.station_of,
+        )
+    )
+
+
+def next_departure(*, trips: TripInputs, origin: str, target: str | None
+                   ) -> datetime | None:
+    """
+    Find when the strip's next departure leaves the From.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    origin : str
+        The From station ID.
+    target : str | None
+        The Destination's station ID, or None for any departure.
+
+    Returns
+    -------
+    datetime | None
+        The earliest live departure time among the strip's departures
+        not yet gone that can be taken, or None.
+    """
+    upcoming = not_departed(
+        departures=live_strip(trips=trips), now=trips.now,
+    )
+    return min(
+        (
+            item.departs
+            for item in upcoming
+            if boardable(
+                item=item, trips=trips, origin=origin, target=target,
+            )
+        ),
+        default=None,
+    )
+
+
 def heard_trips(
     *, trips: TripInputs,
 ) -> dict[str, tuple[VehiclePosition, float]]:

@@ -65,9 +65,10 @@ class StripRow:
     parent_depth : int
         Depth of that row; the row's own depth when it has none.
     tag : str
-        'FROM', 'TO', 'TO?', 'FROM?' or ''.
+        'TO?' or 'FROM?' on the cursor while picking, else ''.
     time : str
-        Clock time of the first arrival, or ''.
+        Clock time of the next departure on the From, of the first
+        arrival elsewhere, or ''.
     ride : bool
         True on the ridden rows, From to Destination.
     cursor : bool

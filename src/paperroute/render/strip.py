@@ -114,15 +114,14 @@ def draw_station(canvas: Canvas, *, row: StripRow, x: float) -> None:
 
 def draw_tag(canvas: Canvas, *, row: StripRow, right: float) -> float:
     """
-    Draw a row's tag box ending at an edge.
+    Draw a cursor row's tag as a paper box ending at an edge.
 
     Parameters
     ----------
     canvas : Canvas
         Target.
     row : StripRow
-        The row; its tag is inverted, or paper with ink text on the
-        cursor row.
+        The cursor row; its tag is ink on paper over the ink bar.
     right : float
         Right edge.
 
@@ -135,14 +134,13 @@ def draw_tag(canvas: Canvas, *, row: StripRow, right: float) -> float:
                 TAG_MIN)
     left = right - width
     canvas.rect(
-        box=(left, row.y - TAG_HALF, right, row.y + TAG_HALF),
-        grey=PAPER if row.cursor else INK,
+        box=(left, row.y - TAG_HALF, right, row.y + TAG_HALF), grey=PAPER,
     )
     canvas.text(
         at=((left + right) / 2, row.y + 1),
         text=row.tag,
         face=TAG_FACE,
-        grey=INK if row.cursor else PAPER,
+        grey=INK,
         anchor='mm',
     )
     return left
@@ -171,7 +169,7 @@ def name_face(*, row: StripRow) -> Face:
 
 def draw_end(canvas: Canvas, *, row: StripRow, columns: Columns) -> float:
     """
-    Draw a row's tag, or its time when it has no tag.
+    Draw a cursor row's tag, or the row's time when it has no tag.
 
     Parameters
     ----------

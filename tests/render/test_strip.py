@@ -36,6 +36,7 @@ def strip_row(
     cursor: bool = False,
     name: str = 'Wynyard',
     time: str = '',
+    bold: bool = False,
 ) -> StripRow:
     """
     Make a strip row for drawing.
@@ -60,6 +61,8 @@ def strip_row(
         Station name.
     time : str
         Clock time.
+    bold : bool
+        The From or the Destination.
 
     Returns
     -------
@@ -77,7 +80,7 @@ def strip_row(
         time=time,
         ride=ride,
         cursor=cursor,
-        bold=tag in ('FROM', 'TO'),
+        bold=bold,
         station=name,
     )
 
@@ -137,10 +140,10 @@ def test_track_is_thick_on_ride() -> None:
     """The track is 9 px from FROM to TO and 3 px past TO."""
     step = ROW_H
     rows = (
-        strip_row(y=FROM_Y, tag='FROM', ride=True),
+        strip_row(y=FROM_Y, bold=True, ride=True),
         strip_row(y=FROM_Y + step, parent_y=FROM_Y, ride=True),
         strip_row(y=FROM_Y + 2 * step, parent_y=FROM_Y + step, ride=True,
-                  tag='TO'),
+                  bold=True),
         strip_row(y=FROM_Y + 3 * step, parent_y=FROM_Y + 2 * step),
     )
     frame = drawn(rows=rows)
@@ -170,7 +173,7 @@ def test_spur_rows_indent_by_16() -> None:
 def test_elbow_joins_a_spur_to_its_parent() -> None:
     """A spur's track leaves the parent's x and arrives at its own."""
     rows = (
-        strip_row(y=FROM_Y, tag='FROM'),
+        strip_row(y=FROM_Y, bold=True),
         strip_row(y=FROM_Y + ROW_H, parent_y=FROM_Y, depth=1),
     )
     frame = drawn(rows=rows)
@@ -187,7 +190,7 @@ def test_elbow_joins_a_spur_to_its_parent() -> None:
 def test_from_and_to_are_discs_and_others_rings() -> None:
     """FROM is a filled disc; a plain station is a hollow ring."""
     frame = drawn(rows=(
-        strip_row(y=FROM_Y, tag='FROM'),
+        strip_row(y=FROM_Y, bold=True),
         strip_row(y=FROM_Y + ROW_H, parent_y=FROM_Y),
     ))
     assert frame[int(FROM_Y), TRACK_X] == INK
@@ -196,13 +199,13 @@ def test_from_and_to_are_discs_and_others_rings() -> None:
     assert frame[int(FROM_Y + ROW_H), TRACK_X - 3] == PAPER
 
 
-def test_tag_box_is_ink_with_paper_text() -> None:
-    """A FROM tag is an ink box ending at the time column, with text."""
-    frame = drawn(rows=(strip_row(y=FROM_Y, tag='FROM'),))
-    box = frame[int(FROM_Y) - 9:int(FROM_Y) + 9, TIME_RIGHT - 40:TIME_RIGHT]
-    assert box.mean() < 128
-    assert (box == PAPER).any()
-    assert frame[int(FROM_Y), TIME_RIGHT + 2] == PAPER
+def test_from_row_shows_its_time_without_a_box() -> None:
+    """The From keeps its disc and shows its time in ink, with no box."""
+    frame = drawn(rows=(strip_row(y=FROM_Y, bold=True, time='8:09'),))
+    column = frame[int(FROM_Y) - 9:int(FROM_Y) + 9, TIME_RIGHT - 40:TIME_RIGHT]
+    assert column.mean() > 128
+    assert (column == INK).any()
+    assert frame[int(FROM_Y), TRACK_X + 8] == INK
 
 
 def test_cursor_row_is_inverted() -> None:
@@ -239,11 +242,13 @@ def test_long_names_fit_their_column() -> None:
 
 
 def test_long_names_stop_short_of_a_tag() -> None:
-    """A long name never runs into the FROM tag."""
+    """A long name never runs into the cursor's TO? tag."""
     name = 'Long Station Name ' * 7
-    frame = drawn(rows=(strip_row(y=FROM_Y, name=name, tag='FROM'),))
+    frame = drawn(
+        rows=(strip_row(y=FROM_Y, name=name, tag='TO?', cursor=True),),
+    )
     row = frame[int(FROM_Y) - 12:int(FROM_Y) + 12, NAME_X:TIME_RIGHT]
-    ink = np.flatnonzero((row == INK).any(axis=0))
+    ink = np.flatnonzero((row == PAPER).any(axis=0))
     gaps = np.flatnonzero(np.diff(ink) > 4)
     assert len(gaps) >= 1
 

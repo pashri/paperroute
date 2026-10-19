@@ -91,11 +91,11 @@ def strip_row(*, index: int, tag: str = '', parent: bool = True,
         name=f'Station {index}', depth=0, kind=RowKind.MAIN, y=y,
         parent_y=y - ROW_H if parent else None, parent_depth=0, tag=tag,
         time='' if tag else f'8:{10 + index}', ride=False, cursor=cursor,
-        bold=tag in ('FROM', 'TO'), station=f'S{index}')
+        bold=index == 2, station=f'S{index}')
 
 
 ROWS = tuple(
-    strip_row(index=index, tag='FROM' if index == 2 else '', parent=index > 0)
+    strip_row(index=index, parent=index > 0)
     for index in range(12)
 )
 PANEL = StripPanel(

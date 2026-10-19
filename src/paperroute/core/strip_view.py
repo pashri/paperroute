@@ -36,6 +36,7 @@ from paperroute.core.strip_vehicles import (
     Spot,
     TripInputs,
     first_arrivals,
+    next_departure,
     vehicle_markers,
 )
 
@@ -158,6 +159,7 @@ def row_times(
     inputs: StripInputs,
     reach: Reach,
     origin: int | None,
+    target: int | None,
     ride: frozenset[int],
 ) -> dict[int, str]:
     """
@@ -171,28 +173,39 @@ def row_times(
         The reach.
     origin : int | None
         The From row; with none no row has a time.
+    target : int | None
+        The Destination row, or None when it is not on the strip.
     ride : frozenset[int]
         The ridden rows; empty when there is no Destination row.
 
     Returns
     -------
     dict[int, str]
-        Clock time by row: the ridden rows past the From, or every
-        reached row when nothing is ridden. Approach rows and the From
-        have none.
+        Clock time by row: the From's next departure (to the Destination
+        when there is one), then the first arrival on the ridden rows
+        past the From, or on every reached row when nothing is ridden.
+        Approach rows have none.
     """
     if origin is None:
         return {}
-    best = first_arrivals(
-        trips=trips_of(inputs=inputs), origin=reach.rows[origin].place.stop_id,
-    )
-    return {
+    station = reach.rows[origin].place.stop_id
+    trips = trips_of(inputs=inputs)
+    best = first_arrivals(trips=trips, origin=station)
+    times = {
         index: clock_text(moment=best[row.place.stop_id])
         for index, row in enumerate(reach.rows)
         if row.kind in (RowKind.MAIN, RowKind.BRANCH)
         and (not ride or index in ride)
         and row.place.stop_id in best
     }
+    leaves = next_departure(
+        trips=trips,
+        origin=station,
+        target=None if target is None else reach.rows[target].place.stop_id,
+    )
+    if leaves is not None:
+        times[origin] = clock_text(moment=leaves)
+    return times
 
 
 def marks_of(*, inputs: StripInputs, reach: Reach) -> Marks:
@@ -219,7 +232,11 @@ def marks_of(*, inputs: StripInputs, reach: Reach) -> Marks:
         target=target,
         ride=ride,
         times=row_times(
-            inputs=inputs, reach=reach, origin=origin, ride=ride,
+            inputs=inputs,
+            reach=reach,
+            origin=origin,
+            target=target,
+            ride=ride,
         ),
         cursor=inputs.cursor,
         picking=inputs.picking,
@@ -240,14 +257,12 @@ def tag_of(*, index: int, marks: Marks) -> str:
     Returns
     -------
     str
-        'FROM' on the From, then 'TO?' or 'FROM?' on the cursor, then
-        'TO' on the Destination, else ''.
+        'TO?' or 'FROM?' on the cursor while picking, else ''. The From
+        and the Destination carry no tag; their discs mark them.
     """
-    if index == marks.origin:
-        return 'FROM'
     if index == marks.cursor and marks.picking is not None:
         return f'{marks.picking}?'
-    return 'TO' if index == marks.target else ''
+    return ''
 
 
 def window_of(*, banner: bool, rows: int = STRIP_ROWS) -> Window:

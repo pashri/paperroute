@@ -376,7 +376,7 @@ def test_from_sits_on_third_row() -> None:
     view = build_strip_view(inputs=inputs_of(reach=long_reach()))
     assert len(view.rows) == 12
     assert view.rows[2].name == 'S20'
-    assert view.rows[2].tag == 'FROM'
+    assert view.rows[2].bold
     assert view.rows[2].y == STRIP_TOP + 2 * ROW_H + ROW_H / 2
     assert view.band is None
 
@@ -482,7 +482,7 @@ def test_cursor_keeps_two_rows_margin() -> None:
         row = next(row for row in view.rows if row.cursor)
         assert row.name == f'S{cursor}'
         assert 2 <= slot_of(row=row) <= 9
-        assert row.tag == ('FROM' if cursor == 20 else 'TO?')
+        assert row.tag == 'TO?'
 
 
 def test_ride_rows_between_from_and_to() -> None:
@@ -493,15 +493,14 @@ def test_ride_rows_between_from_and_to() -> None:
     ride = [row.name for row in view.rows if row.ride]
     assert ride == ['W1', 'J', 'C']
     assert [row.name for row in view.rows if row.bold] == ['W1', 'C']
-    assert row_named(rows=view.rows, name='W1').tag == 'TO'
-    assert row_named(rows=view.rows, name='C').tag == 'FROM'
+    assert {row.tag for row in view.rows} == {''}
 
 
 def test_times_only_on_ride_rows_with_destination() -> None:
     """With a destination only the ridden rows after FROM have times."""
     assert times(inputs=replace(three_trains(), destination='W1')) == {
         'W2': '', 'W1': '8:09', 'R3': '', 'R2': '', 'R1': '', 'J': '8:06',
-        'C': '', 'E1': '', 'E2': '',
+        'C': '8:03', 'E1': '', 'E2': '',
     }
 
 
@@ -509,7 +508,7 @@ def test_times_on_every_reached_row_no_destination() -> None:
     """With no destination every reached row has its first arrival."""
     assert times(inputs=three_trains()) == {
         'W2': '8:12', 'W1': '8:09', 'R3': '8:16', 'R2': '8:13',
-        'R1': '8:10', 'J': '8:06', 'C': '', 'E1': '8:03', 'E2': '8:06',
+        'R1': '8:10', 'J': '8:06', 'C': '8:00', 'E1': '8:03', 'E2': '8:06',
     }
     assert not any(
         row.ride or row.bold
@@ -559,7 +558,10 @@ def test_times_ignore_other_kinds() -> None:
 
 
 def test_times_need_a_key_and_a_call_at_from() -> None:
-    """No key, or a pattern that never calls at FROM, gives no times."""
+    """No key, or a pattern that never calls at FROM, gives no times.
+
+    The From's own time comes from the departures, not the patterns.
+    """
     inputs = three_trains()
     assert set(times(inputs=replace(inputs, key=None)).values()) == {''}
     elsewhere = replace(
@@ -569,7 +571,9 @@ def test_times_need_a_key_and_a_call_at_from() -> None:
             for trip in ('e', 'w', 'r')
         },
     )
-    assert set(times(inputs=elsewhere).values()) == {''}
+    shown = times(inputs=elsewhere)
+    assert shown.pop('C') == '8:00'
+    assert set(shown.values()) == {''}
 
 
 def test_platform_destination_matches_its_station() -> None:
@@ -577,7 +581,7 @@ def test_platform_destination_matches_its_station() -> None:
     view = build_strip_view(
         inputs=replace(three_trains(), destination='W1_1'),
     )
-    assert row_named(rows=view.rows, name='W1').tag == 'TO'
+    assert row_named(rows=view.rows, name='W1').bold
     assert row_named(rows=view.rows, name='J').ride
 
 
@@ -941,10 +945,10 @@ def test_pane_puts_from_on_third_row_and_never_bands() -> None:
             inputs_of(reach=long_reach()), scroll=scroll,
         ))
         assert len(pane.rows) == 12
-        assert pane.rows[2].tag == 'FROM'
+        assert pane.rows[2].name == 'S20'
     short = build_strip_pane(inputs=three_trains())
     assert [row.name for row in short.rows] == ['R1', 'J', 'C', 'E1', 'E2']
-    assert short.rows[2].tag == 'FROM'
+    assert short.rows[2].bold
 
 
 def test_pane_markers_sit_on_the_pane_track() -> None:

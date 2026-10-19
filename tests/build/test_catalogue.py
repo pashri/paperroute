@@ -539,6 +539,26 @@ def test_replacement_buses_are_named_by_their_ends(tmp_path: Path) -> None:
     }
 
 
+def test_merged_replacement_takes_the_busiest_long_name(
+    tmp_path: Path,
+) -> None:
+    """Both directions merge under the long name with the most trips."""
+    with closing(tiny_db(path=tmp_path / 't.db', routes=[
+        RouteRow(
+            route_id='8a', number='8T6', long_name='Bankstown to Lidcombe',
+            route_type=714,
+            patterns=(('L', ('Bankstown Station', 'Lidcombe Station'), 9),),
+        ),
+        RouteRow(
+            route_id='8b', number='8T6', long_name='Lidcombe to Bankstown',
+            route_type=714,
+            patterns=(('B', ('Lidcombe Station', 'Bankstown Station'), 7),),
+        ),
+    ])) as conn:
+        (route,) = merged_routes(conn=conn)
+    assert route.long_name == 'Bankstown to Lidcombe'
+
+
 def test_replacement_bus_is_one_row_per_route(tmp_path: Path) -> None:
     """Both directions of a replacement bus make one row and two towards."""
     with closing(tiny_db(path=tmp_path / 't.db', routes=[

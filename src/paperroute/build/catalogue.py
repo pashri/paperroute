@@ -325,11 +325,31 @@ def busiest_agencies(*, sources: Sequence[RouteSource]) -> dict[str, str]:
     }
 
 
+def busiest_names(*, sources: Sequence[RouteSource]) -> dict[str, str]:
+    """
+    Pick the long name with the most trips of each merged route.
+
+    Parameters
+    ----------
+    sources : Sequence[RouteSource]
+        Route IDs.
+
+    Returns
+    -------
+    dict[str, str]
+        Long name by merged key; ties go to the smallest name.
+    """
+    trips: dict[str, Counter[str]] = defaultdict(Counter)
+    for source in sources:
+        trips[source.key][source.merge[2]] += source.trips
+    return {key: busiest(counts=counts) for key, counts in trips.items()}
+
+
 def merged_routes(
     *, conn: sqlite3.Connection, sources: Sequence[RouteSource] | None = None,
 ) -> list[CatalogueRoute]:
     """
-    Merge the route IDs of each kind, number and long name.
+    Merge the route IDs that make one route.
 
     Parameters
     ----------
@@ -342,15 +362,18 @@ def merged_routes(
     -------
     list[CatalogueRoute]
         One route per kind, number and long name with route patterns, in
-        kind, number and long name order.
+        kind, number and long name order. A replacement bus merges by
+        kind and number alone, across directions, under its busiest
+        long name.
     """
     sources = route_sources(conn=conn) if sources is None else sources
     points = middles(conn=conn, sources=sources)
     agencies = busiest_agencies(sources=sources)
+    names = busiest_names(sources=sources)
     routes = {
         source.key: CatalogueRoute(
             route_key=source.key, kind=source.merge[0],
-            number=source.merge[1], long_name=source.merge[2],
+            number=source.merge[1], long_name=names[source.key],
             agency=agencies[source.key], middle=points.get(source.key),
         )
         for source in sources

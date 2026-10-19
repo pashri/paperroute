@@ -6,8 +6,10 @@ from typing import Final
 
 import pytest
 
-from paperroute.core.chooser import turned_to
-from paperroute.core.messages import Knob, KnobPressed, StripLoaded
+from paperroute.core.chooser import Stage, turned_to
+from paperroute.core.map_view import DEFAULT_ZOOM
+from paperroute.core.messages import Knob, KnobPressed, KnobTurned, StripLoaded
+from paperroute.core.model import Pin, RouteKind
 from paperroute.core.reach import (
     Reach,
     ReachInput,
@@ -16,7 +18,8 @@ from paperroute.core.reach import (
     RunTail,
     build_reach,
 )
-from paperroute.core.saved import LiveView
+from paperroute.core.saved import LiveView, Saved
+from paperroute.core.state import initial_state
 from paperroute.core.state_model import State
 from paperroute.core.strip_folds import FOLD_MIN, folded
 from paperroute.core.strip_model import OPEN_TAG, StripMapView, StripView
@@ -46,6 +49,8 @@ from tests.core.test_reach import (
 from tests.core.test_strip_state import KEY, PIN, on_view, run, turn
 
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
+TOP_PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.TOP)
+TOP_TURN: Final[KnobTurned] = KnobTurned(knob=Knob.TOP, steps=1)
 QUIET: Final[int] = 2  # trips into a quiet station
 BUSY: Final[int] = 100  # trips into a busy one
 CENTRAL: Final[str] = '200060'
@@ -359,3 +364,102 @@ def test_to_cursor_on_a_fold_offers_to_open_it() -> None:
     assert isinstance(view, StripView)
     assert next(row for row in view.rows if row.cursor).tag == 'TO?'
     assert view.panel.hint == 'Press: set TO · press FROM: all departures'
+
+
+def strip_with_end_open(*, pins: tuple[Pin, ...]) -> State:
+    """
+    Show the first pin's Strip and scroll up until its top fold opens.
+
+    Parameters
+    ----------
+    pins : tuple[Pin, ...]
+        Pins; the first is shown.
+
+    Returns
+    -------
+    State
+        State on the Strip with fold 'S5' open.
+    """
+    saved = Saved(
+        pins=pins, current=0, unpinned=None, view=LiveView.STRIP,
+        zoom=DEFAULT_ZOOM,
+    )
+    state = initial_state(saved=saved, now=START, stored=True)
+    state, _ = run(state=state, events=[
+        StripLoaded(key=KEY, reach=fold_reach()), turn(steps=-30),
+    ])
+    assert state.strip.opened == {'S5'}
+    return state
+
+
+def test_place_change_shuts_the_folds() -> None:
+    """Turning to a pin with another strip shuts the folds."""
+    other = Pin(origin=place('D', name='D'), kind=RouteKind.TRAIN)
+    state = strip_with_end_open(pins=(replace(PIN, destination=None), other))
+    state, _ = run(state=state, events=[TOP_TURN])
+    assert state.strip.opened == frozenset()
+
+
+def test_destination_change_shuts_the_folds() -> None:
+    """The same strip with another Destination starts with folds shut."""
+    state = strip_with_end_open(pins=(
+        replace(PIN, destination=None),
+        replace(PIN, destination=place('S30', name='S30')),
+    ))
+    state, _ = run(state=state, events=[TOP_TURN])
+    assert state.strip.opened == frozenset()
+
+
+def to_stage_on_fold() -> State:
+    """
+    Reach the TO stage over the mid-fold strip with the cursor on Q1…Q4.
+
+    Returns
+    -------
+    State
+        State in the TO stage, cursor on the closed fold.
+    """
+    state, _ = on_view(view=LiveView.STOP, pin=replace(PIN, kind=None))
+    state, _ = run(state=state, events=[
+        *TO_STAGE,
+        StripLoaded(key=CHOSEN_KEY, reach=mid_fold_reach(origin='S2')),
+        DOWN, DOWN, DOWN, DOWN,
+    ])
+    return state
+
+
+def test_leaving_the_to_stage_shuts_a_fold_it_opened() -> None:
+    """A fold opened by a TO press shuts on going back to FROM."""
+    state, _ = run(state=to_stage_on_fold(), events=[PRESS])
+    assert state.strip.opened == {'Q1'}
+    state, _ = run(state=state, events=[TOP_PRESS])
+    assert state.chooser is not None
+    assert state.chooser.stage is Stage.FROM
+    assert state.strip.opened == frozenset()
+
+
+def test_leaving_the_to_stage_shuts_an_end_fold() -> None:
+    """A fold the TO screen opened at the end shuts on going back."""
+    state, _ = on_view(view=LiveView.STOP, pin=replace(PIN, kind=None))
+    state, _ = run(state=state, events=[
+        *TO_STAGE,
+        StripLoaded(
+            key=CHOSEN_KEY, reach=fold_reach(origin='S2', at=0, size=40),
+        ),
+        *([DOWN] * 40),
+    ])
+    assert state.strip.opened == {'S34'}
+    state, _ = run(state=state, events=[TOP_PRESS])
+    assert state.strip.opened == frozenset()
+
+
+def test_closing_the_chooser_shuts_its_folds() -> None:
+    """Backing out of the chooser altogether leaves no fold open."""
+    state, _ = run(state=to_stage_on_fold(), events=[PRESS])
+    for _ in range(8):
+        if state.chooser is None:
+            break
+        state, _ = run(state=state, events=[TOP_PRESS])
+    assert state.chooser is None
+    assert state.strip.opened == frozenset()
+

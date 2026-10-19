@@ -30,12 +30,16 @@ class Branch:
         Indent of every station on the branch.
     weight : int
         Trips from the junction to the first station.
+    trips : tuple[int, ...]
+        Trips into each station from the one before it, or from the
+        junction for the first.
     """
 
     junction: str
     stations: tuple[str, ...]
     depth: int
     weight: int
+    trips: tuple[int, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -368,11 +372,16 @@ def grow(*, layout: Layout, junction: str, depth: int) -> bool:
     stations = walk(graph=layout.graph, start=junction, placed=layout.placed)
     if not stations:
         return False
+    trips = tuple(
+        layout.graph.succ[here][there]
+        for here, there in pairwise((junction, *stations))
+    )
     layout.hung[junction].append(Branch(
         junction=junction,
         stations=stations,
         depth=depth,
-        weight=layout.graph.succ[junction][stations[0]],
+        weight=trips[0],
+        trips=trips,
     ))
     layout.depth.update(dict.fromkeys(stations, depth))
     return True

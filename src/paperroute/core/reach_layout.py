@@ -55,12 +55,16 @@ class Entry:
         True above the From.
     parent : str | None
         Station the track comes from, or None for the From.
+    trips : int
+        Trips on the track from the parent; 0 for the From and approach
+        rows.
     """
 
     key: str
     depth: int
     above: bool
     parent: str | None
+    trips: int = 0
 
 
 @dataclass(frozen=True)
@@ -134,13 +138,15 @@ def travel(*, hung: Hung, branch: Branch, above: bool) -> Iterator[Entry]:
     Entry
         Rows in travel order.
     """
-    for back, key in zip((branch.junction, *branch.stations),
-                         branch.stations):
+    for back, key, trips in zip(
+        (branch.junction, *branch.stations), branch.stations, branch.trips,
+    ):
         yield Entry(
             key=key,
             depth=branch.depth,
             above=above,
             parent=back,
+            trips=trips,
         )
         for child in hung.get(key, ()):
             yield from travel(hung=hung, branch=child, above=above)

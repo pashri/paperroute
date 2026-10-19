@@ -104,6 +104,7 @@ class RowKind(StrEnum):
     ORIGIN = 'origin'
     MAIN = 'main'
     BRANCH = 'branch'
+    FOLD = 'fold'
 
 
 @dataclass(frozen=True)
@@ -116,7 +117,7 @@ class ReachRow:
     place : StopPlace
         The station.
     kind : RowKind
-        Approach, the From, the main line or a branch.
+        Approach, the From, the main line, a branch or a closed fold.
     depth : int
         Indent: 0 for the main line, one more per branch level.
     above : bool
@@ -125,6 +126,11 @@ class ReachRow:
         Index of the row the track comes from: the previous station on
         the row's branch, or its junction for a branch's first row. An
         approach row's is the row below it; None for the From.
+    trips : int
+        Trip-days on the track from the parent; 0 for the From and
+        approach rows.
+    folded : int
+        Stations a fold row stands for; 0 for any other row.
     """
 
     place: StopPlace
@@ -132,6 +138,8 @@ class ReachRow:
     depth: int
     above: bool
     parent: int | None
+    trips: int = 0
+    folded: int = 0
 
 
 @dataclass(frozen=True)
@@ -270,6 +278,7 @@ def build_reach(*, data: ReachInput) -> Reach:
                 depth=entry.depth,
                 above=entry.above,
                 parent=None if entry.parent is None else index[entry.parent],
+                trips=entry.trips,
             )
             for kind, entry in rows
         ),

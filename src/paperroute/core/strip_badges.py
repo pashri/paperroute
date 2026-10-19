@@ -8,7 +8,8 @@ from paperroute.core.map_view import Marker
 from paperroute.core.strip_extents import Extent, extent_of, reaches
 
 NAME_REACH: Final[float] = 18.0  # half a strip row
-NAME_HALF: Final[float] = 7.0  # a name's height either side of its row
+NAME_ABOVE: Final[float] = 7.0  # a name's capitals above its row's centre
+NAME_BELOW: Final[float] = 10.0  # a name's descenders below it
 DISC_REACH: Final[float] = 11.0  # a disc's radius
 AT_REACH: Final[float] = 12.0  # a vehicle this near a disc is at it
 HALF_WIDE: Final[float] = 28.0  # half a five-letter badge, and a pixel
@@ -91,10 +92,13 @@ def level_with(*, marker: Marker, spot: Spot) -> bool:
     -------
     bool
         True when the badge, wedge and age tab included, meets the band
-        `NAME_HALF` either side of the row's centre line.
+        from `NAME_ABOVE` above the row's centre line to `NAME_BELOW`
+        below it.
     """
     box = extent_of(marker=marker)
-    return box.top < spot.y + NAME_HALF and box.bottom > spot.y - NAME_HALF
+    return (
+        box.top < spot.y + NAME_BELOW and box.bottom > spot.y - NAME_ABOVE
+    )
 
 
 def in_gutter(*, marker: Marker, spots: Mapping[str, Spot]) -> Marker:
@@ -295,8 +299,8 @@ def edges(*, badge: Badge, boxes: Sequence[Extent], keep: Keepouts
         *(box.bottom + up for box in boxes),
         *(disc.y - DISC_REACH - down for disc in keep.discs),
         *(disc.y + DISC_REACH + up for disc in keep.discs),
-        *(spot.y - NAME_HALF - down for spot in keep.spots.values()),
-        *(spot.y + NAME_HALF + up for spot in keep.spots.values()),
+        *(spot.y - NAME_ABOVE - down for spot in keep.spots.values()),
+        *(spot.y + NAME_BELOW + up for spot in keep.spots.values()),
     }
 
 

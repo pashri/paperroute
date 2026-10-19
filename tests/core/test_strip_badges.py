@@ -126,9 +126,9 @@ def test_pushed_keeps_spur_badges_off_main_line_names() -> None:
     )
     assert found == [('T1', 30, 100), ('S', 46, 136)]
     between = shown(
-        badges=[badge(x=46, y=118, low=100, high=136)], spots=spots,
+        badges=[badge(x=46, y=122, low=100, high=136)], spots=spots,
     )
-    assert between == [('T1', 46, 118)]
+    assert between == [('T1', 46, 122)]
 
 
 def test_pushed_stacks_badges_in_neighbouring_columns() -> None:
@@ -164,12 +164,12 @@ def test_pushed_moves_a_badge_left_onto_a_free_place() -> None:
 
 def test_pushed_moves_a_badge_up_its_own_hop_before_folding() -> None:
     """A spur badge with no room below moves up its hop, still uncounted."""
-    spots = {'main': Spot(x=30, y=100), 'spur': Spot(x=46, y=200)}
+    spots = {'main': Spot(x=30, y=90), 'spur': Spot(x=46, y=200)}
     found = shown(
         badges=[
-            badge(x=30, y=140, low=100, high=200, route='M1', bearing=None),
-            badge(x=30, y=150, low=100, high=200, route='M2', bearing=None),
-            badge(x=46, y=150, low=100, high=200, route='S', bearing=None),
+            badge(x=30, y=140, low=90, high=200, route='M1', bearing=None),
+            badge(x=30, y=150, low=90, high=200, route='M2', bearing=None),
+            badge(x=46, y=150, low=90, high=200, route='S', bearing=None),
         ],
         spots=spots,
     )

@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Final
 
 import pytest
+import skia
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -15,22 +16,41 @@ from paperroute.core.map_view import Marker
 from paperroute.core.strip_badges import Badge, Keepouts, Spot, pushed
 from paperroute.core.strip_extents import half_width
 from paperroute.core.strip_model import TRACK_X
-from paperroute.render.canvas import Box
+from paperroute.render.canvas import Box, Face, font
 from paperroute.render.markers import (
     badge_box,
     badge_half,
     tab_box,
     wedge_points,
 )
-from paperroute.render.strip import DISC_RADIUS
+from paperroute.render.strip import BASELINE_DROP, DISC_RADIUS, MAIN_PX
 from paperroute.render.strip_view import NAME_X
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 NAME_GAP: Final[float] = NAME_X - TRACK_X  # a name's start past its track
-TEXT_HALF: Final[float] = 7.0  # a name's drawn height either side of its row
+SAMPLE_NAME: Final[str] = 'Gypsy Quay'  # capitals and descenders
 LABELS: Final[tuple[str, ...]] = ('T1', 'SH100', '610X', 'M', '320')
 AGES: Final[tuple[float, ...]] = (60.0, 3_540.0, 82_800.0)
 STEP: Final[float] = 0.5  # pixels between tried places
+
+
+def name_reach() -> tuple[float, float]:
+    """
+    Measure how far a drawn name reaches above and below its row.
+
+    Returns
+    -------
+    tuple[float, float]
+        Pixels above and below the row's centre line.
+    """
+    bounds = skia.Rect()
+    font(Face(weight=700, px=MAIN_PX)).measureText(
+        SAMPLE_NAME, skia.TextEncoding.kUTF8, bounds,
+    )
+    return -bounds.top() - BASELINE_DROP, bounds.bottom() + BASELINE_DROP
+
+
+NAME_TOP, NAME_BOTTOM = name_reach()
 
 
 def union(*, boxes: Sequence[Box]) -> Box:
@@ -141,8 +161,8 @@ def name_box(*, spot: Spot) -> Box:
         From the name's start to far right, its height round the row.
     """
     return (
-        spot.x + NAME_GAP, spot.y - TEXT_HALF,
-        10_000.0, spot.y + TEXT_HALF,
+        spot.x + NAME_GAP, spot.y - NAME_TOP,
+        10_000.0, spot.y + NAME_BOTTOM,
     )
 
 
@@ -169,7 +189,7 @@ def gutter_x(*, marker: Marker, spots: Sequence[Spot]) -> float:
         *(
             spot.x
             for spot in spots
-            if box[1] < spot.y + TEXT_HALF and spot.y - TEXT_HALF < box[3]
+            if box[1] < spot.y + NAME_BOTTOM and spot.y - NAME_TOP < box[3]
         ),
     ))
 

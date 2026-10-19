@@ -400,9 +400,11 @@ def real_routes() -> list[str]:
     return [row[0] for row in rows]
 
 
-@pytest.mark.parametrize('extra', [list(LABELS), ['+3', '+12', 'WWWWW']])
+@pytest.mark.parametrize(
+    'extra', [list(LABELS), ['+3', '+12', 'WWWWW', 'Stkn', '32/4', 'mw']],
+)
 def test_core_badge_width_is_never_less_than_drawn(extra: list[str]) -> None:
-    """The core's badge half width covers the drawn one, outline included."""
+    """The core's badge half width covers the drawn one, closely."""
     for route in [*extra, *real_routes()]:
         drawn_half = badge_half(route=route)[0] + 1
-        assert drawn_half <= half_width(route=route) <= drawn_half + 8
+        assert drawn_half <= half_width(route=route) <= drawn_half + 1

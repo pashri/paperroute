@@ -8,15 +8,18 @@ from typing import Final
 from paperroute.core.map_view import Marker
 
 GLYPH_WIDTH: Final[Mapping[str, float]] = {  # badge text, rounded up
+    '+': 9.0, '-': 6.0, '/': 7.5, '0': 9.5, '1': 5.75, '2': 8.75, '3': 8.5,
+    '4': 9.25, '5': 8.75, '6': 8.75, '7': 7.75, '8': 9.0, '9': 8.75,
     'A': 10.25, 'B': 10.0, 'C': 9.0, 'D': 10.25, 'E': 9.0, 'F': 8.25,
     'G': 9.75, 'H': 10.25, 'I': 4.25, 'J': 8.0, 'K': 10.25, 'L': 8.0,
     'M': 11.5, 'N': 10.25, 'O': 10.25, 'P': 9.0, 'Q': 10.25, 'R': 10.0,
     'S': 8.75, 'T': 8.75, 'U': 10.25, 'V': 9.75, 'W': 12.0, 'X': 10.0,
-    'Y': 10.0, 'Z': 9.0, '0': 9.5, '1': 5.75, '2': 8.75, '3': 8.5,
-    '4': 9.25, '5': 8.75, '6': 8.75, '7': 7.75, '8': 9.0, '9': 8.75,
-    '+': 9.0, '-': 6.0,
+    'Y': 10.0, 'Z': 9.0, 'a': 8.0, 'b': 8.25, 'c': 8.0, 'd': 8.25, 'e': 8.0,
+    'f': 5.25, 'g': 8.25, 'h': 8.5, 'i': 4.25, 'j': 4.25, 'k': 8.0, 'l': 4.25,
+    'm': 12.5, 'n': 8.5, 'o': 8.0, 'p': 8.25, 'q': 8.25, 'r': 6.0, 's': 7.0,
+    't': 5.75, 'u': 8.5, 'v': 8.25, 'w': 10.75, 'x': 8.5, 'y': 8.25, 'z': 8.0,
 }
-WIDEST_GLYPH: Final[float] = 12.0  # any glyph not in the table
+WIDEST_GLYPH: Final[float] = 12.5  # any glyph not in the table
 BADGE_PAD: Final[float] = 5.0  # a badge's box past its text, each side
 BADGE_HALF: Final[float] = 10.0  # half a badge's height
 WEDGE_REACH: Final[float] = 10.0  # a live badge's wedge past its box

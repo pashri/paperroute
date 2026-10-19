@@ -563,6 +563,29 @@ def test_towards_rows_sum_merged_routes(tmp_path: Path) -> None:
     ]
 
 
+def test_towards_rows_merge_headsigns_differing_in_case(
+    tmp_path: Path,
+) -> None:
+    """'B via X' and 'B Via X' make one row under the busier spelling."""
+    with closing(tiny_db(path=tmp_path / 't.db', routes=[
+        RouteRow(route_id='r1', number='9', long_name='A to B', patterns=(
+            ('B Via X', ('A', 'X', 'B'), 3), ('B via X', ('A', 'X', 'B'), 2),
+            ('B via X', ('A', 'Y', 'X', 'B'), 2), ('B', ('A', 'B'), 1),
+            ('Bz', ('A', 'B'), 1),
+        )),
+    ])) as conn:
+        load_catalogue(conn=conn)
+        rows = conn.execute(
+            'SELECT headsign, trips, stations FROM chooser_towards '
+            'ORDER BY headsign',
+        ).fetchall()
+    assert rows == [
+        ('B', 1, '["A", "B"]'),
+        ('B via X', 7, '["A", "X", "B"]'),
+        ('Bz', 1, '["A", "B"]'),
+    ]
+
+
 def test_towards_rows_use_busiest_pattern(tmp_path: Path) -> None:
     """On the network feed, T1 towards W2 holds the six-trip pattern."""
     out = tmp_path / 'timetable.db'

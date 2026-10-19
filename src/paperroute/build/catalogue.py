@@ -451,9 +451,54 @@ def kind_rows(*, entries: Sequence[Entry]) -> Iterator[RouteRow]:
         )
 
 
+def busiest(*, counts: Counter[str]) -> str:
+    """
+    Pick the value with the most trips.
+
+    Parameters
+    ----------
+    counts : Counter[str]
+        Trips by value.
+
+    Returns
+    -------
+    str
+        The value with the most trips; the smallest on a tie.
+    """
+    return min(counts, key=lambda value: (-counts[value], value))
+
+
+def merged_towards(
+    *, group: Sequence[tuple[str, str, int]],
+) -> tuple[str, int, str]:
+    """
+    Merge the headsigns that differ only in case into one towards row.
+
+    Parameters
+    ----------
+    group : Sequence[tuple[str, str, int]]
+        Headsign, station sequence and trips of each pattern row.
+
+    Returns
+    -------
+    tuple[str, int, str]
+        The busiest spelling, total trips and the busiest sequence.
+    """
+    spellings: Counter[str] = Counter()
+    sequences: Counter[str] = Counter()
+    for headsign, stations, trips in group:
+        spellings[headsign] += trips
+        sequences[stations] += trips
+    return (
+        busiest(counts=spellings),
+        spellings.total(),
+        busiest(counts=sequences),
+    )
+
+
 def towards_rows(*, conn: sqlite3.Connection) -> Iterator[tuple[object, ...]]:
     """
-    Give one towards row per row key and headsign.
+    Give one towards row per row key and headsign, ignoring case.
 
     Parameters
     ----------
@@ -465,11 +510,13 @@ def towards_rows(*, conn: sqlite3.Connection) -> Iterator[tuple[object, ...]]:
     tuple[object, ...]
         Row key, headsign, total trips and the busiest station sequence.
     """
-    rows = conn.execute(TOWARDS)
-    for (key, headsign), group in groupby(rows, key=itemgetter(0, 1)):
-        sequences = [(trips, stations) for _, _, stations, trips in group]
-        busiest = max(sequences, key=itemgetter(0))
-        yield key, headsign, sum(trips for trips, _ in sequences), busiest[1]
+    groups: dict[tuple[str, str], list[tuple[str, str, int]]] = {}
+    for key, headsign, stations, trips in conn.execute(TOWARDS):
+        groups.setdefault((key, headsign.casefold()), []).append(
+            (headsign, stations, trips),
+        )
+    for (key, _), group in groups.items():
+        yield key, *merged_towards(group=group)
 
 
 def write_towards(

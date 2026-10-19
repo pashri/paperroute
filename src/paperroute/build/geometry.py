@@ -13,6 +13,7 @@ Line = NDArray[np.float64]
 Ring = NDArray[np.float64]
 
 NUDGE: Final[float] = 0.001  # metres either side of the nearest point
+HEADING_BACK: Final[float] = 5_000.0  # metres back that set an end's heading
 
 
 def coordinates(*, geometry: shapely.Geometry) -> Line:
@@ -177,6 +178,29 @@ def clip_rings(*, rings: Sequence[Ring], box: MetreBox) -> list[Ring]:
     ]
 
 
+def merge_coast(*, lines: Sequence[Line]) -> shapely.Geometry:
+    """
+    Join coastline ways that run on from one another.
+
+    A way is only joined to one running the same way, so every part
+    keeps OSM's land-on-the-left direction.
+
+    Parameters
+    ----------
+    lines : Sequence[Line]
+        Coastline ways in metres.
+
+    Returns
+    -------
+    shapely.Geometry
+        The joined lines.
+    """
+    return shapely.line_merge(
+        shapely.MultiLineString(list(lines)),
+        directed=True,
+    )
+
+
 def sea_rings(*, coast: Sequence[Line], frame: MetreBox) -> list[Ring]:
     """
     Fill the sea side of coastlines inside a frame.
@@ -195,10 +219,10 @@ def sea_rings(*, coast: Sequence[Line], frame: MetreBox) -> list[Ring]:
     """
     if not coast:
         return []
-    merged = shapely.line_merge(shapely.MultiLineString(list(coast)))
+    merged = merge_coast(lines=coast)
     ends = cut_ends(merged=merged, frame=frame)
-    merged = shapely.line_merge(
-        shapely.MultiLineString([*shapely.get_parts(merged), *ends]),
+    merged = merge_coast(
+        lines=[*line_parts(geometry=merged), *ends],
     )
     edges = shapely.union_all(
         [shapely.clip_by_rect(merged, *frame), shapely.box(*frame).exterior],
@@ -239,23 +263,57 @@ def cut_ends(
     """
     inner = shapely.box(*frame)
     reach = 2.0 * float(np.hypot(frame[2] - frame[0], frame[3] - frame[1]))
-    extensions: list[Line] = []
-    for part in shapely.get_parts(merged):
-        if part.is_closed or len(part.coords) < 2:
-            continue
-        coords = coordinates(geometry=part)
-        for tip, before, forward in (
-            (coords[0], coords[1], False),
-            (coords[-1], coords[-2], True),
-        ):
-            heading = tip - before
-            length = float(np.hypot(*heading))
-            if length > 0.0 and inner.contains(shapely.Point(tip)):
-                far = tip + heading / length * reach
-                extensions.append(
-                    np.array([tip, far] if forward else [far, tip]),
-                )
-    return extensions
+    extensions = (
+        end_extension(part=part, forward=forward, reach=reach, inner=inner)
+        for part in shapely.get_parts(merged)
+        if not part.is_closed and part.length > 0.0
+        for forward in (False, True)
+    )
+    return [extension for extension in extensions if extension is not None]
+
+
+def end_extension(
+    *,
+    part: shapely.LineString,
+    forward: bool,
+    reach: float,
+    inner: shapely.Polygon,
+) -> Line | None:
+    """
+    Carry one end of a line on in the direction it was heading.
+
+    The heading runs to the end from a point up to `HEADING_BACK` back
+    along the line, so a short jog or a repeated vertex at the end
+    doesn't turn it.
+
+    Parameters
+    ----------
+    part : shapely.LineString
+        The line, of non-zero length.
+    forward : bool
+        True for the last end, False for the first.
+    reach : float
+        How far to carry the end on, in metres.
+    inner : shapely.Polygon
+        The frame; ends outside it are left alone.
+
+    Returns
+    -------
+    Line | None
+        A two-point line in the line's direction, or None for an end
+        outside the frame or one the line comes back to.
+    """
+    back = min(HEADING_BACK, part.length)
+    ends = (part.length, part.length - back) if forward else (0.0, back)
+    tip, before = (
+        coordinates(geometry=part.interpolate(at))[0] for at in ends
+    )
+    heading = tip - before
+    length = float(np.hypot(*heading))
+    if length == 0.0 or not inner.contains(shapely.Point(tip)):
+        return None
+    far = tip + heading / length * reach
+    return np.array([tip, far] if forward else [far, tip])
 
 
 def is_sea(*, face: shapely.Polygon, tree: shapely.STRtree) -> bool:

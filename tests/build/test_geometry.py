@@ -1,11 +1,15 @@
 """Tests for the map geometry helpers."""
 
 import numpy as np
+import shapely
 from numpy.typing import NDArray
 
 from paperroute.build.geometry import (
     clip_lines,
     clip_rings,
+    cut_ends,
+    line_parts,
+    merge_coast,
     merge_lines,
     sea_rings,
 )
@@ -62,6 +66,41 @@ def test_sea_follows_a_bent_coast_cut_at_both_ends() -> None:
     assert not any(
         inside(rings=[ring], point=(-500.0, 500.0)) for ring in rings
     )
+
+
+def test_cut_ends_runs_on_past_a_repeated_last_vertex() -> None:
+    """A last vertex drawn twice still runs on to the frame."""
+    coast = shapely.LineString([(0.0, -2000.0), (0.0, 500.0), (0.0, 500.0)])
+    ends = cut_ends(merged=coast, frame=(-1000.0, -1000.0, 1000.0, 1000.0))
+    assert len(ends) == 1
+    (tip_x, tip_y), (far_x, far_y) = ends[0].tolist()
+    assert (tip_x, tip_y) == (0.0, 500.0)
+    assert far_x == 0.0
+    assert far_y > 1000.0
+
+
+def test_sea_ignores_a_short_jog_back_at_a_coast_end() -> None:
+    """A last segment turning back runs on the way the coast ran."""
+    coast = line((0.0, -500.0), (0.0, 500.0), (20.0, 480.0))
+    rings = sea_rings(coast=[coast], frame=(-1000.0, -1000.0, 1000.0, 1000.0))
+    assert any(inside(rings=[ring], point=(500.0, 900.0)) for ring in rings)
+    assert any(inside(rings=[ring], point=(500.0, 0.0)) for ring in rings)
+    assert not any(
+        inside(rings=[ring], point=(-500.0, 900.0)) for ring in rings
+    )
+    assert not any(
+        inside(rings=[ring], point=(-500.0, 0.0)) for ring in rings
+    )
+
+
+def test_merge_coast_keeps_each_way_direction() -> None:
+    """Ways meeting head to head are not turned round to join."""
+    north = line((0.0, 0.0), (0.0, 100.0))
+    south = line((0.0, 200.0), (0.0, 100.0))
+    merged = merge_coast(lines=[north, south])
+    assert sorted(
+        part.tolist() for part in line_parts(geometry=merged)
+    ) == sorted([north.tolist(), south.tolist()])
 
 
 def test_sea_rings_without_coast_are_empty() -> None:

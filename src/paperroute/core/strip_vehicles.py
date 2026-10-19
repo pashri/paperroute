@@ -1,5 +1,6 @@
 """Which trips feed a strip, when they reach its stations, and where."""
 
+from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
@@ -602,38 +603,39 @@ def counted(*, marker: Marker, extra: int) -> Marker:
     )
 
 
-def slot_below(*, placed: Sequence[Marker], marker: Marker
+def slot_below(*, plan: Sequence[Marker | int], marker: Marker
                ) -> tuple[int | None, float]:
     """
     Find where a badge goes under the badges already placed.
 
     Parameters
     ----------
-    placed : Sequence[Marker]
-        Badges placed so far.
+    plan : Sequence[Marker | int]
+        The stack so far, from `stack_plan`.
     marker : Marker
         The next badge, no higher than any placed.
 
     Returns
     -------
     tuple[int | None, float]
-        The lowest placed badge within `BADGE_SPAN` across, or None, and
-        the badge's y: at least `BADGE_STEP` below that one.
+        The plan index of the lowest drawn badge within `BADGE_SPAN`
+        across, or None, and the badge's y: at least `BADGE_STEP` below
+        that one.
     """
-    near = [
-        index
-        for index, other in enumerate(placed)
-        if abs(other.x - marker.x) < BADGE_SPAN
-    ]
-    above = max(near, key=lambda index: placed[index].y, default=None)
+    near = {
+        index: other
+        for index, other in enumerate(plan)
+        if isinstance(other, Marker) and abs(other.x - marker.x) < BADGE_SPAN
+    }
+    above = max(near, key=lambda index: near[index].y, default=None)
     if above is None:
         return None, marker.y
-    return above, max(marker.y, placed[above].y + BADGE_STEP)
+    return above, max(marker.y, near[above].y + BADGE_STEP)
 
 
-def stacked(*, markers: Sequence[Marker]) -> list[Marker]:
+def stack_plan(*, markers: Sequence[Marker]) -> list[Marker | int]:
     """
-    Push overlapping badges apart, folding a crowd into a count.
+    Work out where each badge goes when overlapping badges are pushed apart.
 
     Parameters
     ----------
@@ -642,24 +644,70 @@ def stacked(*, markers: Sequence[Marker]) -> list[Marker]:
 
     Returns
     -------
-    list[Marker]
-        Each badge moved down to at least `BADGE_STEP` below the lowest
-        badge overlapping it across. One that would move more than
-        `STACK_REACH` is folded into that badge, which becomes a '+<n>'
-        count.
+    list[Marker | int]
+        One entry per badge: the badge moved down to at least
+        `BADGE_STEP` below the lowest drawn badge overlapping it across,
+        or, when that would move it more than `STACK_REACH`, the index of
+        that badge, which it is folded into.
     """
-    placed: list[Marker] = []
-    folded: list[int] = []
+    plan: list[Marker | int] = []
     for marker in markers:
-        above, y = slot_below(placed=placed, marker=marker)
+        above, y = slot_below(plan=plan, marker=marker)
         if above is not None and y - marker.y > STACK_REACH:
-            folded[above] += 1
-            continue
-        placed.append(replace(marker, y=y))
-        folded.append(0)
+            plan.append(above)
+        else:
+            plan.append(replace(marker, y=y))
+    return plan
+
+
+def stacked(*, plan: Sequence[Marker | int]) -> list[Marker]:
+    """
+    Draw a stack plan, turning badges with others folded in into counts.
+
+    Parameters
+    ----------
+    plan : Sequence[Marker | int]
+        The plan, from `stack_plan`.
+
+    Returns
+    -------
+    list[Marker]
+        The drawn badges; one with others folded into it becomes a
+        '+<n>' count.
+    """
+    extras = Counter(entry for entry in plan if isinstance(entry, int))
     return [
-        counted(marker=marker, extra=extra)
-        for marker, extra in zip(placed, folded, strict=True)
+        counted(marker=entry, extra=extras[index])
+        for index, entry in enumerate(plan)
+        if isinstance(entry, Marker)
+    ]
+
+
+def leftward(*, markers: Sequence[Marker], plan: Sequence[Marker | int],
+             spots: Mapping[str, Spot]) -> list[Marker]:
+    """
+    Move badges left where their stacked place is level with a name.
+
+    Parameters
+    ----------
+    markers : Sequence[Marker]
+        Badges at their own y, in y order.
+    plan : Sequence[Marker | int]
+        Their stack plan.
+    spots : Mapping[str, Spot]
+        Visible rows' track spots by station.
+
+    Returns
+    -------
+    list[Marker]
+        The badges at their own y, each drawn one given the x
+        `in_gutter` finds at its stacked y; folded ones as they are.
+    """
+    return [
+        marker
+        if isinstance(entry, int)
+        else replace(marker, x=in_gutter(marker=entry, spots=spots).x)
+        for marker, entry in zip(markers, plan, strict=True)
     ]
 
 
@@ -678,19 +726,27 @@ def pushed(*, markers: Sequence[Marker], spots: Mapping[str, Spot]
     Returns
     -------
     tuple[Marker, ...]
-        Badges by x then y: moved onto the track of any shallower row
-        level with them, stacked with at most one step of push, and moved
-        left again if the push brought them level with a shallower row.
+        Badges by x then y. Each is moved onto the track of any
+        shallower row level with it, then the badges are stacked, each
+        pushed at most `STACK_REACH` from its own y or folded into a
+        count. A badge the push brings level with a shallower row moves
+        left onto its track, and the stack is worked out again from the
+        badges' own y, until no badge moves left. Badges only ever move
+        left, so this ends.
     """
     moved = sorted(
         (in_gutter(marker=marker, spots=spots) for marker in markers),
         key=lambda each: each.y,
     )
-    placed = (
-        in_gutter(marker=marker, spots=spots)
-        for marker in stacked(markers=moved)
+    plan = stack_plan(markers=moved)
+    settled = leftward(markers=moved, plan=plan, spots=spots)
+    while settled != moved:
+        moved = settled
+        plan = stack_plan(markers=moved)
+        settled = leftward(markers=moved, plan=plan, spots=spots)
+    return tuple(
+        sorted(stacked(plan=plan), key=lambda each: (each.x, each.y)),
     )
-    return tuple(sorted(placed, key=lambda each: (each.x, each.y)))
 
 
 def vehicle_markers(*, trips: TripInputs, spots: Mapping[str, Spot]

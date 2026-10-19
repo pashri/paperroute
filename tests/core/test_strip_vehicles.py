@@ -1,13 +1,18 @@
 """Tests for the trips that feed a strip."""
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import timedelta
 from typing import Final
+
+from hypothesis import given
+from hypothesis import strategies as st
 
 from paperroute.core.map_view import Marker
 from paperroute.core.model import Departure, RouteKind
 from paperroute.core.reach import StripKey
 from paperroute.core.strip_vehicles import (
+    BADGE_SPAN,
     BADGE_STEP,
     Spot,
     pushed,
@@ -150,3 +155,85 @@ def test_pushed_stacks_badges_in_neighbouring_columns() -> None:
     )
     assert (main.x, main.y) == (30, 140)
     assert (spur.x, spur.y) == (46, 162)
+
+
+def overlapping(*, shown: Sequence[Marker]) -> bool:
+    """
+    Say whether any two badges overlap.
+
+    Parameters
+    ----------
+    shown : Sequence[Marker]
+        Badges.
+
+    Returns
+    -------
+    bool
+        True when two sit nearer than `BADGE_SPAN` across and
+        `BADGE_STEP` down.
+    """
+    return any(
+        abs(one.x - other.x) < BADGE_SPAN and abs(one.y - other.y) < BADGE_STEP
+        for index, one in enumerate(shown)
+        for other in shown[index + 1:]
+    )
+
+
+def test_pushed_restacks_a_badge_moved_left_onto_another() -> None:
+    """A badge pushed left onto a busy track is stacked again there."""
+    spots = {
+        'main': Spot(x=30, y=180),
+        'mid': Spot(x=62, y=100),
+        'deep': Spot(x=78, y=130),
+    }
+    shown = pushed(
+        markers=[
+            badge(x=62, y=150, route='B'),
+            badge(x=78, y=160, route='A'),
+            badge(x=30, y=190, route='C'),
+        ],
+        spots=spots,
+    )
+    assert not overlapping(shown=shown)
+    assert [(each.route, each.x, each.y) for each in shown] == [
+        ('A', 30, 172), ('C', 30, 194), ('B', 62, 150),
+    ]
+
+
+def test_pushed_folds_a_badge_into_the_neighbouring_column() -> None:
+    """A spur badge pushed too far joins the main-line badge's count."""
+    spots = {'main': Spot(x=30, y=100), 'spur': Spot(x=46, y=200)}
+    shown = pushed(
+        markers=[
+            badge(x=30, y=140, route='M1'),
+            badge(x=30, y=150, route='M2'),
+            badge(x=46, y=150, route='S'),
+        ],
+        spots=spots,
+    )
+    assert [(each.route, each.x, each.y) for each in shown] == [
+        ('M1', 30, 140), ('+2', 30, 162),
+    ]
+
+
+@given(
+    rows=st.lists(
+        st.tuples(st.integers(0, 3), st.integers(0, 11)), max_size=8,
+    ),
+    places=st.lists(
+        st.tuples(st.integers(0, 3), st.integers(44, 476)), max_size=12,
+    ),
+)
+def test_pushed_never_leaves_badges_overlapping(
+    rows: list[tuple[int, int]], places: list[tuple[int, int]],
+) -> None:
+    """Whatever the rows and badges, no two drawn badges overlap."""
+    spots = {
+        f'{depth}-{slot}': Spot(x=30 + 16 * depth, y=62 + 36 * slot)
+        for depth, slot in rows
+    }
+    shown = pushed(
+        markers=[badge(x=30 + 16 * depth, y=y) for depth, y in places],
+        spots=spots,
+    )
+    assert not overlapping(shown=shown)

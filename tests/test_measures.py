@@ -115,6 +115,26 @@ def test_stop_lists_per_shape_are_bounded() -> None:
     assert again.along is not first.along
 
 
+def test_used_stop_list_outlasts_an_older_unused_one() -> None:
+    """A hit keeps a stop list; the least recently used one goes."""
+    measures = StopMeasures(max_stop_lists=2)
+    short = ((0.0, 0.0), (200.0, 0.0))
+    first = measures.measure(pattern=trip(trip_id='a', points=STOPS),
+                             shape=LINE)
+    other = measures.measure(pattern=trip(trip_id='b', points=short),
+                             shape=LINE)
+    measures.measure(pattern=trip(trip_id='c', points=STOPS), shape=LINE)
+    measures.measure(
+        pattern=trip(trip_id='d', points=((0.0, 0.0),)), shape=LINE,
+    )
+    kept = measures.measure(pattern=trip(trip_id='e', points=STOPS),
+                            shape=LINE)
+    dropped = measures.measure(pattern=trip(trip_id='f', points=short),
+                               shape=LINE)
+    assert kept.along is first.along
+    assert dropped.along is not other.along
+
+
 def test_unmeasurable_trips_pass_through() -> None:
     """No shape, or a stop with no point, leaves the trip unmeasured."""
     measures = StopMeasures()

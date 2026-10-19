@@ -9,7 +9,7 @@ from paperroute.core.geo import Point, Shape
 from paperroute.core.patterns import TripPattern, measure
 
 MAX_SHAPES: Final[int] = 64
-MAX_STOP_LISTS: Final[int] = 32  # per shape
+MAX_STOP_LISTS: Final[int] = 16  # per shape
 
 type ShapeKey = tuple[str, int, float]
 type StopList = tuple[Point | None, ...]
@@ -39,9 +39,9 @@ class StopMeasures:
     Remember where trips' stops fall along their shapes.
 
     Trips on one shape calling at the same stops share one measurement.
-    Measurements are kept for the shapes used most recently; dropping a
-    shape drops every measurement on it. Safe to use from several
-    threads.
+    Measurements are kept for the shapes used most recently, and on each
+    shape for the stop lists used most recently; dropping a shape drops
+    every measurement on it. Safe to use from several threads.
 
     Parameters
     ----------
@@ -60,9 +60,9 @@ class StopMeasures:
         self.max_shapes = max_shapes
         self.max_stop_lists = max_stop_lists
         self.lock = threading.Lock()
-        self.kept: OrderedDict[ShapeKey, dict[StopList, Along]] = (
-            OrderedDict()
-        )
+        self.kept: OrderedDict[
+            ShapeKey, OrderedDict[StopList, Along]
+        ] = OrderedDict()
 
     def recall(self, *, key: ShapeKey, stops: StopList) -> Along:
         """
@@ -79,18 +79,22 @@ class StopMeasures:
         -------
         Along
             Metres along the shape at each stop, or None when not kept;
-            a hit marks the shape as just used.
+            a hit marks the shape and the stop list as just used.
         """
         with self.lock:
             lists = self.kept.get(key)
             if lists is None:
                 return None
             self.kept.move_to_end(key)
+            if stops in lists:
+                lists.move_to_end(stops)
             return lists.get(stops)
 
     def keep(self, *, key: ShapeKey, stops: StopList, along: Along) -> None:
         """
-        Store where stops fall on a shape, dropping the oldest past limits.
+        Store where stops fall on a shape, dropping the least used past limits.
+
+        The stop list and the shape used least recently go first.
 
         Parameters
         ----------
@@ -102,11 +106,12 @@ class StopMeasures:
             Metres along the shape at each stop.
         """
         with self.lock:
-            lists = self.kept.setdefault(key, {})
+            lists = self.kept.setdefault(key, OrderedDict())
             self.kept.move_to_end(key)
             lists[stops] = along
+            lists.move_to_end(stops)
             if len(lists) > self.max_stop_lists:
-                del lists[next(iter(lists))]
+                lists.popitem(last=False)
             if len(self.kept) > self.max_shapes:
                 self.kept.popitem(last=False)
 

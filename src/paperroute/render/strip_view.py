@@ -20,8 +20,8 @@ from paperroute.render.chrome import (
     arrow,
     badge,
     banner,
-    header,
     pill,
+    view_header,
 )
 from paperroute.render.map_view import draw_overlay, snap, wrap
 from paperroute.render.stop_view import TAG_FACE, finish
@@ -227,12 +227,12 @@ def panel_heading(canvas: Canvas, *, panel: StripPanel) -> None:
         face=TITLE_FACE,
         grey=INK,
     )
-    if panel.subtitle is not None:
+    if panel.destination is not None:
         x = TEXT_LEFT + arrow(canvas, x=TEXT_LEFT, y=SUBTITLE_Y - 5, grey=INK)
         canvas.text(
             at=(x, SUBTITLE_Y),
             text=canvas.fit(
-                text=panel.subtitle.removeprefix('→ '),
+                text=panel.destination,
                 face=SUBTITLE_FACE,
                 width=TEXT_RIGHT - x,
             ),
@@ -349,6 +349,27 @@ def draw_strip(canvas: Canvas, *, view: StripView) -> None:
         )
 
 
+def paint_strip_view(canvas: Canvas, *, view: StripView) -> None:
+    """
+    Draw a Strip view onto a canvas in ink and paper only.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target, aliased.
+    view : StripView
+        View-model.
+    """
+    draw_strip(canvas, view=view)
+    canvas.rect(
+        box=(STRIP_RIGHT, HEADER, STRIP_RIGHT + RULE_WIDTH, HEIGHT), grey=INK,
+    )
+    draw_panel(canvas, panel=view.panel)
+    view_header(canvas, view=view, active='Strip', picking=view.picking)
+    if view.banner:
+        banner(canvas, text=view.banner)
+
+
 def draw_strip_view(*, view: StripView) -> NDArray[np.uint8]:
     """
     Draw a Strip view as a 1-bit frame.
@@ -364,22 +385,7 @@ def draw_strip_view(*, view: StripView) -> NDArray[np.uint8]:
         480 by 800 pixels, 0 or 255.
     """
     canvas = Canvas()
-    draw_strip(canvas, view=view)
-    canvas.rect(
-        box=(STRIP_RIGHT, HEADER, STRIP_RIGHT + RULE_WIDTH, HEIGHT), grey=INK,
-    )
-    draw_panel(canvas, panel=view.panel)
-    header(
-        canvas,
-        active='Strip',
-        picking=view.picking,
-        tag=view.tag,
-        origin=view.origin,
-        destination=view.destination,
-        clock=view.clock,
-    )
-    if view.banner:
-        banner(canvas, text=view.banner)
+    paint_strip_view(canvas, view=view)
     return finish(canvas)
 
 
@@ -433,14 +439,7 @@ def draw_strip_map_view(
     canvas.image(grey=base, at=(0, HEADER))
     draw_overlay(canvas, view=view.map)
     draw_pane(canvas, view=view)
-    header(
-        canvas,
-        origin=view.map.origin,
-        destination=view.map.destination,
-        clock=view.map.clock,
-        active='Strip + map',
-        tag=view.map.tag,
-    )
+    view_header(canvas, view=view.map, active='Strip + map')
     if view.map.banner:
         banner(canvas, text=view.map.banner)
     return snap(grey=canvas.grey(), width=view.map.base.width)

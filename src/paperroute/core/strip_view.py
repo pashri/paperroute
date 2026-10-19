@@ -124,8 +124,9 @@ class StripPanel:
     ----------
     title : str
         The From name.
-    subtitle : str | None
-        '→ <Destination>', or None when the place has no destination.
+    destination : str | None
+        The Destination's name, drawn after an arrow, or None when the
+        place has no destination.
     note : str
         How many stations the strip reaches.
     rows : tuple[Row, ...]
@@ -139,7 +140,7 @@ class StripPanel:
     """
 
     title: str
-    subtitle: str | None
+    destination: str | None
     note: str
     rows: tuple[Row, ...]
     no_destination: bool
@@ -787,7 +788,7 @@ def strip_panel(*, inputs: StripInputs) -> StripPanel:
     reach = inputs.reach
     return StripPanel(
         title=stop.origin,
-        subtitle=None if stop.destination is None else f'→ {stop.destination}',
+        destination=stop.destination,
         note='' if reach is None else f'{reach.stations} stations from here',
         rows=() if inputs.picking == PICK_FROM else stop.head_rows[:shown],
         no_destination=stop.destination is None,

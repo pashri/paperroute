@@ -28,9 +28,13 @@ from paperroute.core.strip_view import (
     StripRow,
     StripView,
 )
-from paperroute.render.canvas import INK, PAPER
+from paperroute.render.canvas import INK, PAPER, Canvas
 from paperroute.render.chrome import HEADER
-from paperroute.render.strip_view import draw_strip_map_view, draw_strip_view
+from paperroute.render.strip_view import (
+    draw_strip_map_view,
+    draw_strip_view,
+    paint_strip_view,
+)
 from paperroute.render.tile_codec import GREYS
 
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
@@ -95,7 +99,7 @@ ROWS = tuple(
     for index in range(12)
 )
 PANEL = StripPanel(
-    title='Town Hall', subtitle='→ Parramatta', note='201 stations from here',
+    title='Town Hall', destination='Parramatta', note='201 stations from here',
     rows=(panel_row(),) * 4, no_destination=False, hint=None)
 VIEW = StripView(
     origin='Town Hall', destination='Parramatta', clock='8:05',
@@ -104,7 +108,7 @@ VIEW = StripView(
 
 
 def test_strip_frame_is_two_level() -> None:
-    """Every pixel is ink or paper, with a band, cursor, markers, hint."""
+    """Drawing makes only ink and paper, before any threshold."""
     live = Marker(route='T1', x=TRACK_X, y=150.0, bearing=180.0, live=True,
                   pinned=True)
     stale = replace(live, y=300.0, bearing=None, live=False, age=240.0)
@@ -121,9 +125,11 @@ def test_strip_frame_is_two_level() -> None:
         panel=replace(PANEL, rows=(panel_row(),) * 3, hint=HINTS['TO']),
         banner='Live data unavailable',
     )
-    frame = draw_strip_view(view=view)
-    assert frame.shape == (480, 800)
-    assert set(np.unique(frame).tolist()) <= {INK, PAPER}
+    canvas = Canvas()
+    paint_strip_view(canvas, view=view)
+    drawn = canvas.grey()
+    assert set(np.unique(drawn).tolist()) == {INK, PAPER}
+    assert (draw_strip_view(view=view) == drawn).all()
 
 
 def test_strip_frame_has_rule_and_header() -> None:
@@ -158,7 +164,7 @@ def test_no_destination_panel_has_no_destination_line() -> None:
     view = replace(
         VIEW,
         destination=None,
-        panel=replace(PANEL, subtitle=None, no_destination=True),
+        panel=replace(PANEL, destination=None, no_destination=True),
     )
     line = (slice(88, 106), slice(456, 786))
     assert (draw_strip_view(view=VIEW)[line] == INK).any()
@@ -170,7 +176,7 @@ def test_no_destination_panel_rows_show_badges() -> None:
     view = replace(
         VIEW,
         destination=None,
-        panel=replace(PANEL, subtitle=None, no_destination=True),
+        panel=replace(PANEL, destination=None, no_destination=True),
     )
     frame = draw_strip_view(view=view)
     badge = frame[PANEL_TOP + 26:PANEL_TOP + 42, 556:590]
@@ -309,3 +315,19 @@ def test_strip_map_draws_the_banner() -> None:
     )
     frame = draw_strip_map_view(view=view, base=base)
     assert (frame[HEADER:HEADER + 3, :] == INK).all()
+
+
+def test_hint_box_clears_three_panel_rows() -> None:
+    """Three rows, the last running on, end above the hint box."""
+    then = CarryOn(route='T9', headsign='Hornsby')
+    view = replace(
+        VIEW,
+        panel=replace(
+            PANEL, rows=(panel_row(then=then),) * 3, hint=HINTS['TO'],
+        ),
+    )
+    frame = draw_strip_view(view=view)
+    third = PANEL_TOP + 2 * PANEL_STEP
+    assert (frame[third + 52:third + 66, 556:786] == INK).any()
+    assert (frame[third + 70:420, 452:790] == PAPER).all()
+    assert (frame[420:423, 456:786] == INK).all()

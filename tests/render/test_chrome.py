@@ -1,6 +1,7 @@
 """Tests for the shared header, banner and badge."""
 
 from collections.abc import Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -16,7 +17,13 @@ from paperroute.render.canvas import (
     Point,
     text_width,
 )
-from paperroute.render.chrome import TABS, header, header_tabs, pin_tag
+from paperroute.render.chrome import (
+    TABS,
+    header,
+    header_tabs,
+    pin_tag,
+    view_header,
+)
 
 PINNED = PinTag(text='pin 2/3', pinned=True)
 
@@ -189,3 +196,27 @@ def test_titles_stop_before_the_tag() -> None:
     limit = box_left - 8
     slack = text_width(text='W…', face=Face(weight=700, px=18))
     assert limit - 18 - slack <= ink_columns.max() <= limit - 18
+
+
+@dataclass(frozen=True)
+class Titles:
+    """The texts a header shows."""
+
+    origin: str
+    destination: str | None
+    tag: PinTag
+    clock: str
+
+
+def test_view_header_passes_picking() -> None:
+    """A view's header shows the pick target while picking."""
+    view = Titles(
+        origin='Town Hall', destination='Parramatta', tag=NOT_PINNED,
+        clock='8:41',
+    )
+    picking = Recording()
+    view_header(picking, view=view, active='Strip', picking='TO')
+    plain = Recording()
+    view_header(plain, view=view, active='Strip')
+    assert picking.fitted == ['Town Hall', 'pick TO']
+    assert plain.fitted == ['Town Hall', 'Parramatta']

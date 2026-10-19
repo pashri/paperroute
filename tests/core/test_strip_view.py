@@ -575,7 +575,7 @@ def test_no_destination_panel_has_four_departures_and_no_destination_line(
         ],
     )
     panel = build_strip_view(inputs=inputs).panel
-    assert panel.subtitle is None
+    assert panel.destination is None
     assert panel.no_destination
     assert len(panel.rows) == 4
     assert panel.title == 'C Station'
@@ -590,7 +590,7 @@ def test_destination_panel_has_destination_line() -> None:
         departures=inputs.departures, now=inputs.now, destination='Wx',
     )
     panel = build_strip_view(inputs=replace(inputs, stop_view=stop)).panel
-    assert panel.subtitle == '→ Wx'
+    assert panel.destination == 'Wx'
     assert not panel.no_destination
     assert panel.rows == stop.head_rows[:4]
 

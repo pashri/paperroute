@@ -226,7 +226,13 @@ class Titled(Protocol):
         """The clock text."""
 
 
-def view_header(canvas: Canvas, *, view: Titled, active: str) -> None:
+def view_header(
+    canvas: Canvas,
+    *,
+    view: Titled,
+    active: str,
+    picking: str | None = None,
+) -> None:
     """
     Draw the header for a view.
 
@@ -238,6 +244,8 @@ def view_header(canvas: Canvas, *, view: Titled, active: str) -> None:
         The view whose origin, destination and clock are shown.
     active : str
         Name of the highlighted tab.
+    picking : str | None
+        What is being picked; the title reads '<origin> -> pick <it>'.
     """
     header(
         canvas,
@@ -246,6 +254,7 @@ def view_header(canvas: Canvas, *, view: Titled, active: str) -> None:
         clock=view.clock,
         active=active,
         tag=view.tag,
+        picking=picking,
     )
 
 

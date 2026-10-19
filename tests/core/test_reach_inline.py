@@ -57,3 +57,23 @@ def test_inlined_takes_the_busiest_detour() -> None:
         'A', 'Q', 'K',
     )
     assert placed == {'A', 'K', 'Q'}
+
+
+def test_nested_detours_insert_at_most_six_stations_per_link() -> None:
+    """Ways round inside ways round never add more than six stations."""
+    detour = [f'Q{k}' for k in range(6)]
+    succ = {
+        'A': {'K': 10, 'P': 6, detour[0]: 5},
+        'P': {'K': 6},
+        **{
+            here: {there: 5}
+            for here, there in zip(detour, [*detour[1:], 'P'])
+        },
+    }
+    assert inlined(succ=succ, chain=('A', 'K'), placed={'A', 'K'}) == (
+        'A', 'P', 'K',
+    )
+    shorter = {**succ, detour[4]: {'P': 5}}
+    assert inlined(succ=shorter, chain=('A', 'K'), placed={'A', 'K'}) == (
+        'A', *detour[:5], 'P', 'K',
+    )

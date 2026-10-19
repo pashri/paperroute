@@ -8,6 +8,7 @@ from paperroute.core.model import StopPlace
 from paperroute.core.reach import Reach, ReachRow, RowKind
 from paperroute.core.stop_view import DOT, clock_text
 from paperroute.core.strip_model import (
+    ALL_TAG,
     BANNER_ROWS,
     CURSOR_MARGIN,
     HINTS,
@@ -19,6 +20,7 @@ from paperroute.core.strip_model import (
     PANE_TRACK_X,
     PANEL_ROWS,
     PICK_FROM,
+    PICK_TO,
     ROW_H,
     STRIP_ROWS,
     STRIP_TOP,
@@ -257,12 +259,16 @@ def tag_of(*, index: int, marks: Marks) -> str:
     Returns
     -------
     str
-        'TO?' or 'FROM?' on the cursor while picking, else ''. The From
-        and the Destination carry no tag; their discs mark them.
+        'TO?' or 'FROM?' on the cursor while picking, else ''. On the
+        From while picking TO it reads ALL_TAG, as pressing there commits
+        all departures. The From and the Destination carry no other tag;
+        their discs mark them.
     """
-    if index == marks.cursor and marks.picking is not None:
-        return f'{marks.picking}?'
-    return ''
+    if index != marks.cursor or marks.picking is None:
+        return ''
+    if marks.picking == PICK_TO and index == marks.origin:
+        return ALL_TAG
+    return f'{marks.picking}?'
 
 
 def window_of(*, banner: bool, rows: int = STRIP_ROWS) -> Window:

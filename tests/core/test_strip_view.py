@@ -482,7 +482,17 @@ def test_cursor_keeps_two_rows_margin() -> None:
         row = next(row for row in view.rows if row.cursor)
         assert row.name == f'S{cursor}'
         assert 2 <= slot_of(row=row) <= 9
-        assert row.tag == 'TO?'
+        assert row.tag == ('ALL' if cursor == 20 else 'TO?')
+
+
+def test_cursor_on_from_while_picking_to_reads_all() -> None:
+    """Pressing on the From row commits all departures, so it reads ALL."""
+    view = build_strip_view(inputs=replace(
+        inputs_of(reach=long_reach()), picking='TO', cursor=20,
+    ))
+    row = next(row for row in view.rows if row.cursor)
+    assert row.name == 'S20'
+    assert row.tag == 'ALL'
 
 
 def test_ride_rows_between_from_and_to() -> None:

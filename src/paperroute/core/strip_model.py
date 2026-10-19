@@ -32,6 +32,7 @@ HINTS: Final[dict[str, str]] = {
 }
 PICK_FROM: Final[str] = 'FROM'
 PICK_TO: Final[str] = 'TO'
+ALL_TAG: Final[str] = 'ALL'  # the From row while picking TO
 EMPTY_STOP_VIEW: Final[StopView] = StopView(
     origin='',
     destination=None,
@@ -65,7 +66,8 @@ class StripRow:
     parent_depth : int
         Depth of that row; the row's own depth when it has none.
     tag : str
-        'TO?' or 'FROM?' on the cursor while picking, else ''.
+        'TO?' or 'FROM?' on the cursor while picking (ALL_TAG on the From
+        while picking TO), else ''.
     time : str
         Clock time of the next departure on the From, of the first
         arrival elsewhere, or ''.

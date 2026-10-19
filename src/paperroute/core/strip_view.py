@@ -435,15 +435,17 @@ def home_of(*, reach: Reach, destination: str | None, rows: int) -> int:
 
 
 def first_row(
-    *, inputs: StripInputs, total: int, home: int, rows: int,
+    *, scroll: int, cursor: int | None, total: int, home: int, rows: int,
 ) -> int:
     """
     Choose the row in the Strip's top slot.
 
     Parameters
     ----------
-    inputs : StripInputs
-        The view's inputs.
+    scroll : int
+        Rows scrolled from the home row.
+    cursor : int | None
+        The cursor's row, or None.
     total : int
         Rows in the reach.
     home : int
@@ -457,8 +459,7 @@ def first_row(
         The home row moved by the scroll, then moved to keep any cursor
         `CURSOR_MARGIN` rows from the edges, clamped to the rows.
     """
-    start = home + inputs.scroll
-    cursor = inputs.cursor
+    start = home + scroll
     if cursor is not None:
         start = min(
             max(start, cursor + CURSOR_MARGIN + 1 - rows),
@@ -467,30 +468,32 @@ def first_row(
     return max(0, min(start, total - rows))
 
 
-def stops_away(*, origin: int, first: int, top: bool, rows: int) -> int:
+def stops_away(*, reach: Reach, origin: int, near: int) -> int:
     """
-    Count the stations between the From and the strip.
+    Count the stations on the way from a row back to the From.
 
     Parameters
     ----------
+    reach : Reach
+        The reach.
     origin : int
         The From row.
-    first : int
-        The row in the top slot.
-    top : bool
-        True when the From is above the strip.
-    rows : int
-        Row slots on the strip.
+    near : int
+        The row shown nearest the From.
 
     Returns
     -------
     int
-        Rows between the From and the nearest row shown, the band taking
-        the slot at the From's edge.
+        Stations on its track back to the From, neither end counted; a
+        fold row counts as the stations it stands for. Spur rows that
+        sit between but off that track are not counted.
     """
-    if top:
-        return first - origin
-    return origin - (first + rows - 1)
+    count = 0
+    here = reach.rows[near].parent
+    while here is not None and here != origin:
+        count += reach.rows[here].folded or 1
+        here = reach.rows[here].parent
+    return count
 
 
 def band_of(*, reach: Reach, first: int, window: Window) -> Band | None:
@@ -518,7 +521,9 @@ def band_of(*, reach: Reach, first: int, window: Window) -> Band | None:
     top = origin < first
     name = reach.rows[origin].place.name.removesuffix(' Station')
     stops = stops_away(
-        origin=origin, first=first, top=top, rows=window.rows,
+        reach=reach,
+        origin=origin,
+        near=first + 1 if top else first + window.rows - 2,
     )
     unit = 'stop' if stops == 1 else 'stops'
     return Band(
@@ -550,7 +555,11 @@ def strip_rows(*, inputs: StripInputs, reach: Reach
         reach=reach, destination=inputs.destination, rows=window.rows,
     )
     first = first_row(
-        inputs=inputs, total=len(reach.rows), home=home, rows=window.rows,
+        scroll=inputs.scroll,
+        cursor=inputs.cursor,
+        total=len(reach.rows),
+        home=home,
+        rows=window.rows,
     )
     band = band_of(reach=reach, first=first, window=window)
     indices = range(first, min(first + window.rows, len(reach.rows)))

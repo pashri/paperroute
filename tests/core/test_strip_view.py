@@ -264,6 +264,21 @@ def test_band_counts_stations_to_the_strip_while_picking() -> None:
     assert view.band.text == 'FROM S20 · 6 stops away'
 
 
+def test_band_skips_spur_rows_off_the_track_back() -> None:
+    """Rows of a spur between FROM and the strip are not stops."""
+    rows = list(long_reach().rows)
+    for index in range(21, 26):
+        rows[index] = replace(rows[index], depth=1)
+    rows[26] = replace(rows[26], parent=20)
+    reach = replace(long_reach(), rows=tuple(rows))
+    view = build_strip_view(inputs=replace(
+        inputs_of(reach=reach), scroll=10,
+    ))
+    assert view.rows[0].name == 'S29'
+    assert view.band is not None
+    assert view.band.text == 'FROM S20 · 3 stops away'
+
+
 def test_cursor_keeps_two_rows_margin() -> None:
     """The cursor row stays two rows from either edge."""
     base = replace(inputs_of(reach=long_reach()), picking='TO')

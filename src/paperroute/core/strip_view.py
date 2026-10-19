@@ -608,14 +608,21 @@ def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
     Returns
     -------
     tuple[Marker, ...]
-        One badge per strip trip that can be placed, pushed apart.
+        One badge per strip trip that can be placed, pushed apart and off
+        the From and Destination discs.
     """
+    spots = {
+        row.station: Spot(x=track_x + INDENT * row.depth, y=row.y)
+        for row in rows
+    }
     return vehicle_markers(
         trips=trips_of(inputs=inputs),
-        spots={
-            row.station: Spot(x=track_x + INDENT * row.depth, y=row.y)
+        spots=spots,
+        discs=[
+            Spot(x=track_x + INDENT * row.depth, y=row.y)
             for row in rows
-        },
+            if row.bold
+        ],
     )
 
 

@@ -237,3 +237,84 @@ def test_pushed_never_leaves_badges_overlapping(
         spots=spots,
     )
     assert not overlapping(shown=shown)
+
+
+def on_a_disc(*, shown: Sequence[Marker], discs: Sequence[Spot]) -> bool:
+    """
+    Say whether any badge covers a From or Destination disc.
+
+    Parameters
+    ----------
+    shown : Sequence[Marker]
+        Badges.
+    discs : Sequence[Spot]
+        Disc centres.
+
+    Returns
+    -------
+    bool
+        True when a badge sits nearer than `BADGE_SPAN` across and
+        `BADGE_STEP` down from a disc.
+    """
+    return any(
+        abs(one.x - disc.x) < BADGE_SPAN and abs(one.y - disc.y) < BADGE_STEP
+        for one in shown
+        for disc in discs
+    )
+
+
+def test_pushed_moves_badges_off_the_from_disc() -> None:
+    """Badges just before and on FROM move above and below its disc."""
+    spots = {'A': Spot(x=30, y=100), 'C': Spot(x=30, y=136)}
+    discs = (spots['C'],)
+    shown = pushed(
+        markers=[badge(x=30, y=126, route='A'), badge(x=30, y=140)],
+        spots=spots,
+        discs=discs,
+    )
+    assert [(each.route, each.y) for each in shown] == [
+        ('A', 136 - BADGE_STEP), ('T1', 136 + BADGE_STEP),
+    ]
+
+
+def test_pushed_folds_a_badge_pushed_across_a_disc() -> None:
+    """A badge stacked onto the disc folds into the one above it."""
+    spots = {'A': Spot(x=30, y=100), 'C': Spot(x=30, y=136)}
+    shown = pushed(
+        markers=[badge(x=30, y=100, route='A'), badge(x=30, y=110)],
+        spots=spots,
+        discs=(spots['C'],),
+    )
+    assert [(each.route, each.y) for each in shown] == [('+2', 100)]
+
+
+@given(
+    rows=st.lists(
+        st.tuples(st.integers(0, 3), st.integers(0, 11)), max_size=8,
+    ),
+    places=st.lists(
+        st.tuples(st.integers(0, 3), st.integers(44, 476)), max_size=12,
+    ),
+    marked=st.lists(st.integers(0, 7), max_size=2),
+)
+def test_pushed_never_leaves_badges_on_discs(
+    rows: list[tuple[int, int]], places: list[tuple[int, int]],
+    marked: list[int],
+) -> None:
+    """Whatever the rows, badges and discs, no badge covers a disc."""
+    spots = {
+        f'{depth}-{slot}': Spot(x=30 + 16 * depth, y=62 + 36 * slot)
+        for depth, slot in rows
+    }
+    discs = [
+        spot
+        for index, spot in enumerate(spots.values())
+        if index in marked
+    ]
+    shown = pushed(
+        markers=[badge(x=30 + 16 * depth, y=y) for depth, y in places],
+        spots=spots,
+        discs=discs,
+    )
+    assert not overlapping(shown=shown)
+    assert not on_a_disc(shown=shown, discs=discs)

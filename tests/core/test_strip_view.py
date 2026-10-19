@@ -38,7 +38,7 @@ from paperroute.core.strip_model import (
     StripInputs,
     StripRow,
 )
-from paperroute.core.strip_vehicles import strip_trips
+from paperroute.core.strip_vehicles import BADGE_STEP, strip_trips
 from paperroute.core.strip_view import (
     build_strip_pane,
     build_strip_view,
@@ -877,7 +877,7 @@ def test_crowded_hop_folds_into_a_count() -> None:
 
 def test_close_badges_pushed_to_one_step_apart() -> None:
     """A badge 12 px below another is pushed to 22 px below it."""
-    now = START + timedelta(minutes=2)
+    now = START + timedelta(minutes=4)
     inputs = east_inputs(at=None, reported=now, now=now)
     inputs = replace(
         inputs,
@@ -891,7 +891,7 @@ def test_close_badges_pushed_to_one_step_apart() -> None:
     )
     first, second = build_strip_view(inputs=inputs).markers
     origin = row_named(rows=build_strip_view(inputs=inputs).rows, name='C')
-    assert first.y == pytest.approx(origin.y + 12)
+    assert first.y == pytest.approx(origin.y + ROW_H)
     assert second.y == pytest.approx(first.y + 22)
 
 
@@ -969,6 +969,18 @@ def test_pane_markers_sit_on_the_pane_track() -> None:
     )
     (marker,) = pane.markers
     assert marker.x == 500
+
+
+def test_badge_at_the_from_clears_its_disc() -> None:
+    """A train standing at C sits a badge step off C's disc, both views."""
+    now = START + timedelta(minutes=1)
+    inputs = east_inputs(at=(0.0, 0.0), reported=now, now=now)
+    view = build_strip_view(inputs=inputs)
+    pane = build_strip_pane(inputs=inputs)
+    for rows, markers in ((view.rows, view.markers), (pane.rows, pane.markers)):
+        home = next(row for row in rows if row.bold)
+        (marker,) = markers
+        assert abs(marker.y - home.y) == BADGE_STEP
 
 
 def test_line_reach_has_no_origin_and_from_cursor_tag() -> None:

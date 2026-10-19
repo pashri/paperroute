@@ -19,6 +19,7 @@ from paperroute.core.reach import Reach, StripKey
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
+from paperroute.core.strip_folds import folded
 from paperroute.core.strip_model import NEEDS_UPDATE, StripInputs
 from paperroute.core.strip_times import strip_trips, window_departures
 from paperroute.core.strip_view import home_of, window_of
@@ -242,9 +243,56 @@ def strip_failed(*, state: State, event: StripFailed) -> State:
     return replace(state, strip=strip)
 
 
+def folded_reach(*, state: State, key: StripKey | None,
+                 destination: str | None) -> Reach | None:
+    """
+    Find a strip's reach with its folds shut but for the opened ones.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    key : StripKey | None
+        The strip, or None.
+    destination : str | None
+        The Destination stop or station ID, never folded away, or None.
+
+    Returns
+    -------
+    Reach | None
+        The reach as shown, or None while it is not built or the
+        timetable has none.
+    """
+    reach = None if key is None else state.strip.reaches.get(key)
+    if reach is None:
+        return None
+    keep = () if destination is None else (
+        reach.station_of.get(destination, destination),
+    )
+    return folded(reach=reach, opened=state.strip.opened, keep=keep)
+
+
+def destination_id(*, state: State) -> str | None:
+    """
+    Give the shown place's Destination ID.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    str | None
+        The Destination's stop or station ID, or None.
+    """
+    destination = shown(state=state).destination
+    return None if destination is None else destination.stop_id
+
+
 def shown_reach(*, state: State) -> Reach | None:
     """
-    Find the shown place's reach.
+    Find the shown place's reach as the Strip shows it.
 
     Parameters
     ----------
@@ -254,10 +302,14 @@ def shown_reach(*, state: State) -> Reach | None:
     Returns
     -------
     Reach | None
-        The reach, or None while it is not built or the timetable has
-        none.
+        The reach with its folds, or None while it is not built or the
+        timetable has none.
     """
-    return state.strip.reaches.get(strip_key(pin=shown(state=state)))
+    return folded_reach(
+        state=state,
+        key=strip_key(pin=shown(state=state)),
+        destination=destination_id(state=state),
+    )
 
 
 def scroll_range(
@@ -306,10 +358,9 @@ def clamped(*, state: State, banner: bool) -> State:
     State
         State with the scroll clamped to `scroll_range`.
     """
-    destination = shown(state=state).destination
     low, high = scroll_range(
         reach=shown_reach(state=state),
-        destination=None if destination is None else destination.stop_id,
+        destination=destination_id(state=state),
         banner=banner,
     )
     scroll = min(max(state.strip.scroll, low), high)
@@ -417,12 +468,10 @@ def strip_inputs(
         Inputs with no cursor; `NEEDS_UPDATE` when the timetable has no
         reach for the place.
     """
-    pin = shown(state=state)
-    key = strip_key(pin=pin)
+    key = strip_key(pin=shown(state=state))
     reaches = state.strip.reaches
-    destination = pin.destination
     return StripInputs(
-        reach=reaches.get(key),
+        reach=shown_reach(state=state),
         unavailable=(
             NEEDS_UPDATE
             if key in reaches and reaches[key] is None
@@ -435,7 +484,7 @@ def strip_inputs(
         scroll=state.strip.scroll,
         cursor=None,
         picking=None,
-        destination=None if destination is None else destination.stop_id,
+        destination=destination_id(state=state),
         tag=stop_view.tag,
         stop_view=stop_view,
         key=key,

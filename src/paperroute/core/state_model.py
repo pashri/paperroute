@@ -150,6 +150,9 @@ class Saving:
     timetable: str | None = None
 
 
+type FoldContext = tuple[str, StripKey | None, str | None]
+
+
 @dataclass(frozen=True)
 class StripState:
     """
@@ -165,12 +168,19 @@ class StripState:
         When a reach last failed to build, or None.
     scroll : int
         The Strip's scroll, in rows from the default; may be negative.
+    opened : frozenset[str]
+        Keys of the folds opened on the strip on screen.
+    context : FoldContext | None
+        Which strip on screen `opened` belongs to: the view or chooser
+        stage, the strip and the Destination; None off the strips.
     """
 
     reaches: Mapping[StripKey, Reach | None] = field(default_factory=dict)
     pending: frozenset[StripKey] = frozenset()
     failed_at: datetime | None = None
     scroll: int = 0
+    opened: frozenset[str] = frozenset()
+    context: FoldContext | None = None
 
 
 @dataclass(frozen=True)

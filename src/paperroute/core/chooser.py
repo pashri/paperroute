@@ -104,6 +104,11 @@ class Column:
     collapsed: bool = False
 
 
+UNPICKED: Final[frozenset[RowKind]] = frozenset(
+    {RowKind.APPROACH, RowKind.FOLD},
+)  # strip rows the TO cursor never lands on
+
+
 class Stage(StrEnum):
     """What the chooser is picking."""
 
@@ -584,13 +589,13 @@ def to_row(*, chooser: ChooserState, reach: Reach, origin: int) -> int:
     Returns
     -------
     int
-        The cursor's row; the From row when the cursor is off the strip
-        or on an approach row.
+        The cursor's row; the From row when the cursor is off the strip,
+        on an approach row or on a closed fold.
     """
     target = origin + chooser.to_cursor
     on_strip = (
         0 <= target < len(reach.rows)
-        and reach.rows[target].kind is not RowKind.APPROACH
+        and reach.rows[target].kind not in UNPICKED
     )
     return target if on_strip else origin
 
@@ -599,7 +604,9 @@ def turned_to(
     *, chooser: ChooserState, steps: int, reach: Reach | None,
 ) -> ChooserState:
     """
-    Move the TO cursor over the strip's rows, skipping approach rows.
+    Move the TO cursor over the strip's stations, skipping some rows.
+
+    The cursor never lands on an approach row or a closed fold.
 
     Parameters
     ----------
@@ -621,7 +628,7 @@ def turned_to(
     rows = [
         index
         for index, row in enumerate(reach.rows)
-        if row.kind is not RowKind.APPROACH
+        if row.kind not in UNPICKED
     ]
     at = rows.index(to_row(chooser=chooser, reach=reach, origin=origin))
     row = rows[clamped(value=at + steps, count=len(rows))]

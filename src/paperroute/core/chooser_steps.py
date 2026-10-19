@@ -63,7 +63,7 @@ from paperroute.core.strip_model import (
     StripInputs,
     StripView,
 )
-from paperroute.core.strip_state import picking_to
+from paperroute.core.strip_state import folded_reach, picking_to
 from paperroute.core.strip_view import build_strip_view, line_reach, origin_of
 
 LINE_FAILED: Final[str] = "Can't load the line"
@@ -84,12 +84,10 @@ def chooser_reach(*, chooser: ChooserState, state: State) -> Reach | None:
     Returns
     -------
     Reach | None
-        The TO stage's reach, or None while it is not built or before the
-        TO stage.
+        The TO stage's reach with its folds, or None while it is not
+        built or before the TO stage.
     """
-    if chooser.key is None:
-        return None
-    return state.strip.reaches.get(chooser.key)
+    return folded_reach(state=state, key=chooser.key, destination=None)
 
 
 def picked_load(

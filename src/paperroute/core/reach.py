@@ -1,7 +1,7 @@
 """The stations a strip reaches from its From."""
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final
 
@@ -223,6 +223,27 @@ def ordered(*, data: ReachInput, places: Mapping[str, StopPlace]
     )]
 
 
+def located(*, data: ReachInput) -> StopPlace:
+    """
+    Give the From a position from its station when it has none.
+
+    Parameters
+    ----------
+    data : ReachInput
+        The From and its places.
+
+    Returns
+    -------
+    StopPlace
+        The From, positioned like its station in the places when its own
+        position is missing.
+    """
+    station = data.places.get(data.origin.stop_id)
+    if data.origin.point is not None or station is None:
+        return data.origin
+    return replace(data.origin, point=station.point)
+
+
 def build_reach(*, data: ReachInput) -> Reach:
     """
     Lay out the stations a strip reaches from its From.
@@ -237,7 +258,7 @@ def build_reach(*, data: ReachInput) -> Reach:
     Reach
         Rows top to bottom; just the From when nothing runs on from it.
     """
-    places = {**data.places, FROM_KEY: data.origin}
+    places = {**data.places, FROM_KEY: located(data=data)}
     rows = ordered(data=data, places=places)
     index = {entry.key: row for row, (_, entry) in enumerate(rows)}
     return Reach(

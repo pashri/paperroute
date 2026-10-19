@@ -8,6 +8,7 @@ from itertools import groupby, pairwise
 from typing import Final
 
 from paperroute.core.model import StopPlace
+from paperroute.core.reach_hops import hop_ways
 
 FROM_KEY: Final[str] = ''  # stands for the From in a way's track graph
 SETTLE_PASSES: Final[int] = 50
@@ -204,7 +205,8 @@ def nearest_first(*, trails: Sequence[Trail]) -> list[str]:
     return sorted(near, key=lambda key: (near[key], key))
 
 
-def arrivals(*, trails: Sequence[Trail]) -> dict[str, list[Came]]:
+def arrivals(*, trails: Sequence[Trail], hops: Owners
+             ) -> dict[str, list[Came]]:
     """
     List where each station's trains come from.
 
@@ -212,17 +214,19 @@ def arrivals(*, trails: Sequence[Trail]) -> dict[str, list[Came]]:
     ----------
     trails : Sequence[Trail]
         Stations after the From and trips, heaviest first.
+    hops : Owners
+        Way by first hop.
 
     Returns
     -------
     dict[str, list[Came]]
-        By station, the previous station, the first hop and the trips of
+        By station, the previous station, the tail's way and the trips of
         every tail past it but the first hops, heaviest first.
     """
     came: dict[str, list[Came]] = defaultdict(list)
     for stations, trips in trails:
         for back, key in pairwise(stations):
-            came[key].append((back, stations[0], trips))
+            came[key].append((back, hops[stations[0]], trips))
     return came
 
 
@@ -233,7 +237,7 @@ def inherit(*, came: Sequence[Came], owner: Owners) -> str:
     Parameters
     ----------
     came : Sequence[Came]
-        Previous station, first hop and trips, heaviest first.
+        Previous station, way and trips, heaviest first.
     owner : Owners
         Way of each station settled so far.
 
@@ -241,8 +245,8 @@ def inherit(*, came: Sequence[Came], owner: Owners) -> str:
     -------
     str
         The way: the trip-weighted way of the stations it is reached
-        from, ties to the heaviest tail's; with none settled, the first
-        hop of the heaviest tail.
+        from, ties to the heaviest tail's; with none settled, the way of
+        the heaviest tail.
     """
     votes: Counter[str] = Counter()
     for back, _, trips in came:
@@ -251,8 +255,8 @@ def inherit(*, came: Sequence[Came], owner: Owners) -> str:
     return votes.most_common(1)[0][0] if votes else came[0][1]
 
 
-def inherited(*, trails: Sequence[Trail], came: Mapping[str, list[Came]]
-              ) -> Owners:
+def inherited(*, trails: Sequence[Trail], came: Mapping[str, list[Came]],
+              hops: Owners) -> Owners:
     """
     Put each station on the way of the stations its trains come from.
 
@@ -262,14 +266,16 @@ def inherited(*, trails: Sequence[Trail], came: Mapping[str, list[Came]]
         Stations after the From and trips, heaviest first.
     came : Mapping[str, list[Came]]
         Where each station's trains come from.
+    hops : Owners
+        Way by first hop.
 
     Returns
     -------
     Owners
-        Way (first hop) by station. A first hop owns itself; the rest are
-        settled nearest first.
+        Way (a first hop) by station. A first hop takes its own way; the
+        rest are settled nearest first.
     """
-    owner = {stations[0]: stations[0] for stations, _ in trails}
+    owner = dict(hops)
     for key in nearest_first(trails=trails):
         if key not in owner:
             owner[key] = inherit(came=came[key], owner=owner)
@@ -285,7 +291,7 @@ def strays(*, trails: Sequence[Trail], owner: Owners) -> set[str]:
     trails : Sequence[Trail]
         Stations after the From and trips.
     owner : Owners
-        Way by station.
+        Way by station; a tail's way is its first hop's.
 
     Returns
     -------
@@ -295,7 +301,7 @@ def strays(*, trails: Sequence[Trail], owner: Owners) -> set[str]:
     reached: set[str] = set()
     for stations, _ in trails:
         for key in stations:
-            if owner[key] != stations[0]:
+            if owner[key] != owner[stations[0]]:
                 break
             reached.add(key)
     return set(owner) - reached
@@ -324,8 +330,8 @@ def ballots(*, trails: Sequence[Trail], owner: Owners, stray: set[str]
     for stations, trips in trails:
         for key in stations:
             if key in stray:
-                votes[key][stations[0]] += trips
-            elif owner[key] != stations[0]:
+                votes[key][owner[stations[0]]] += trips
+            elif owner[key] != owner[stations[0]]:
                 break
     return votes
 
@@ -363,7 +369,8 @@ def settle_pass(*, trails: Sequence[Trail], owner: Owners,
     return moved
 
 
-def ways_of(*, trails: Sequence[Trail]) -> Owners:
+def ways_of(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
+            ) -> Owners:
     """
     Split stations into ways by following the trains in (rule D).
 
@@ -371,15 +378,19 @@ def ways_of(*, trails: Sequence[Trail]) -> Owners:
     ----------
     trails : Sequence[Trail]
         Stations after the From and trips, heaviest first.
+    places : Mapping[str, StopPlace]
+        Every station by ID, and the From under FROM_KEY.
 
     Returns
     -------
     Owners
-        Way (first hop) by station, settled so that each way reaches its
-        stations through its own stations where any tail does.
+        Way (a first hop) by station, settled so that each way reaches
+        its stations through its own stations where any tail does. First
+        hops riding the same line share one way.
     """
-    came = arrivals(trails=trails)
-    owner = inherited(trails=trails, came=came)
+    hops = hop_ways(trails=trails, places=places, origin=FROM_KEY)
+    came = arrivals(trails=trails, hops=hops)
+    owner = inherited(trails=trails, came=came, hops=hops)
     for _ in range(SETTLE_PASSES):
         if not settle_pass(trails=trails, owner=owner, came=came):
             break
@@ -717,7 +728,9 @@ def lay_ways(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
         Ways by trips, then by first hop. The first two have main chains
         at depth 0; the rest at depth 1.
     """
-    ways = way_runs(trails=trails, owner=ways_of(trails=trails))
+    ways = way_runs(
+        trails=trails, owner=ways_of(trails=trails, places=places),
+    )
     order = sorted(ways, key=lambda way: (
         -sum(run.trips for run in ways[way]), way,
     ))

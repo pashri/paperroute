@@ -27,6 +27,15 @@ from paperroute.core.reach import (
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 TOWN_HALL: Final[str] = '200070'
 STRATHFIELD: Final[str] = '213510'
+BLACKTOWN: Final[str] = '214810'
+WESTERN_LINE: Final[tuple[str, ...]] = (
+    'Parramatta Station',
+    'Westmead Station',
+    'Wentworthville Station',
+    'Pendle Hill Station',
+    'Toongabbie Station',
+    'Seven Hills Station',
+)
 HORNSBY_LINE: Final[tuple[str, ...]] = (
     'Asquith Station',
     'Berowra Station',
@@ -333,6 +342,57 @@ def test_loop_through_from_splits_into_two_sides() -> None:
     assert parents_on_their_side(reach=reach)
 
 
+def test_express_hop_rides_with_the_all_stops_line() -> None:
+    """An express first hop the all-stops line reaches joins its way."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'S1': (1000, 0), 'S2': (2000, 0), 'P': (3000, 0),
+        'H1': (4000, 0), 'W1': (-1000, 0), 'W2': (-2000, 0),
+    }
+    reach = reach_of(tails=[
+        tail('S1 S2 P H1', 10), tail('W1 W2', 8), tail('P H1', 2),
+    ], points=points)
+    assert ids(reach=reach) == ['H1', 'P', 'S2', 'S1', 'C', 'W1', 'W2']
+    assert all(row.depth == 0 for row in reach.rows)
+    assert reach.rows[row_of(reach=reach, key='P')].parent == row_of(
+        reach=reach, key='S2',
+    )
+
+
+def test_express_hop_uses_the_from_station_position() -> None:
+    """A From with no position takes its station's to group first hops."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'S1': (1000, 0), 'P': (3000, 0), 'H1': (4000, 0),
+    }
+    places = {
+        key: StopPlace(stop_id=key, name=key, point=point)
+        for key, point in points.items()
+    }
+    reach = build_reach(data=ReachInput(
+        origin=StopPlace(stop_id='C', name='Here', point=None),
+        tails=(tail('S1 P H1', 10), tail('P H1', 2)),
+        places=places,
+        station_of={key: key for key in places},
+    ))
+    assert ids(reach=reach)[-4:] == ['C', 'S1', 'P', 'H1']
+    assert reach.rows[row_of(reach=reach, key='C')].place.name == 'Here'
+
+
+def test_hop_reached_the_other_way_round_stays_a_way() -> None:
+    """A loop reaching the other first hop doesn't merge the two ways."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'N1': (0, 1000), 'N2': (1000, 1000),
+        'E1': (1000, 0), 'S1': (0, -1000), 'S2': (0, -2000),
+    }
+    reach = reach_of(tails=[
+        tail('N1 N2 E1 S1 S2', 10), tail('S1 S2', 8),
+    ], points=points)
+    home = origin_row(reach=reach)
+    below = {row.place.stop_id for row in reach.rows[home + 1:]}
+    assert {'S1', 'S2'} <= below or below <= {'S1', 'S2'}
+    assert reach.rows[:home]
+    assert reach.rows[home + 1:]
+
+
 def loop_input() -> ReachInput:
     """
     Make the tails from J of a line that loops back through it.
@@ -580,3 +640,19 @@ def test_strathfield_keeps_the_hornsby_branch_together() -> None:
     for name in HORNSBY_LINE:
         track = track_names(reach=reach, index=names.index(name))
         assert 'Hornsby Station' in track
+
+
+@pytest.mark.skipif(
+    not has_runs(path=REAL_DB),
+    reason='needs data/timetable.db with run tables',
+)
+def test_blacktown_rides_to_parramatta_through_seven_hills() -> None:
+    """Parramatta follows Seven Hills..Westmead on one side of FROM."""
+    reach, _ = train_reach(station=BLACKTOWN)
+    names = [row.place.name for row in reach.rows]
+    index = names.index('Parramatta Station')
+    track = track_names(reach=reach, index=index)
+    assert tuple(track[:-1]) == WESTERN_LINE
+    sides = {reach.rows[names.index(name)].above for name in WESTERN_LINE}
+    assert len(sides) == 1
+    assert parents_on_their_side(reach=reach)

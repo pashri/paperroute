@@ -3,7 +3,7 @@
 import pytest
 
 from paperroute.core.reach_inline import inlined
-from tests.core.test_reach import ids, reach_of, tail
+from tests.core.reach_factories import ids, reach_of, tail
 
 
 def test_skipped_stations_that_rejoin_go_inline_in_order() -> None:

@@ -44,7 +44,7 @@ from tests.core.factories import (
     place,
     train,
 )
-from tests.core.test_reach import (
+from tests.core.reach_factories import (
     BLACKTOWN,
     REAL_DB,
     STRATHFIELD,
@@ -52,7 +52,7 @@ from tests.core.test_reach import (
     has_runs,
     train_reach,
 )
-from tests.core.test_strip_state import KEY, PIN, on_view, run, turn
+from tests.core.strip_factories import KEY, PIN, on_view, run, turn
 
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 TOP_PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.TOP)

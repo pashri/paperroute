@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from paperroute.core.strip_view import build_strip_pane, build_strip_view
 from tests.core.factories import inputs_of, line_pattern, live
-from tests.core.test_strip_view import (
+from tests.core.strip_factories import (
     WEST,
     long_reach,
     row_named,

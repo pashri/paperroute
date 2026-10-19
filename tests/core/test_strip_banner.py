@@ -13,7 +13,7 @@ from paperroute.core.strip_model import (
 from paperroute.core.strip_state import scroll_range
 from paperroute.core.strip_view import build_strip_pane, build_strip_view
 from tests.core.factories import inputs_of
-from tests.core.test_strip_view import long_reach
+from tests.core.strip_factories import long_reach
 
 BANNER: Final[str] = 'No live data since 7:56'
 UNDER: Final[float] = STRIP_TOP + ROW_H  # top slot's top under a banner

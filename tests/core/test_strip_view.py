@@ -1,21 +1,13 @@
 """Tests for the Strip and Strip + map view-models."""
 
-from collections.abc import Sequence
 from dataclasses import replace
 from datetime import timedelta
-from typing import Final
 
 import pytest
 
 from paperroute.core.map_view import Marker
 from paperroute.core.model import CarryOn, RouteKind, StopPlace
-from paperroute.core.reach import (
-    Reach,
-    ReachInput,
-    ReachRow,
-    RowKind,
-    build_reach,
-)
+from paperroute.core.reach import ReachInput, RowKind, build_reach
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_badges import DISC_SPAN, HALF_WIDE
 from paperroute.core.strip_model import (
@@ -51,76 +43,14 @@ from tests.core.factories import (
     stop_view_of,
     train,
 )
-
-WEST: Final[tuple[str, ...]] = ('C', 'J', 'W1', 'W2')
-SOUTH: Final[tuple[str, ...]] = ('C', 'J', 'R1', 'R2', 'R3')
-
-
-def long_reach() -> Reach:
-    """
-    Build a 40-row depth-0 reach with the From at row 20.
-
-    Returns
-    -------
-    Reach
-        Rows S0 to S39, tracks running away from S20.
-    """
-    return Reach(
-        rows=tuple(
-            ReachRow(
-                place=StopPlace(stop_id=f'S{i}', name=f'S{i}', point=None),
-                kind=RowKind.ORIGIN if i == 20 else RowKind.MAIN,
-                depth=0,
-                above=i < 20,
-                parent=None if i == 20 else (i + 1 if i < 20 else i - 1),
-            )
-            for i in range(40)
-        ),
-        stations=39,
-        station_of={},
-    )
-
-
-def three_trains() -> StripInputs:
-    """
-    Make inputs with one train each way from C at 8:00, 8:03 and 8:04.
-
-    Returns
-    -------
-    StripInputs
-        The inputs on the example reach, at 7:58.
-    """
-    trips = {'e': (EAST, 0), 'w': (WEST, 3), 'r': (SOUTH, 4)}
-    return inputs_of(
-        reach=example_reach(),
-        departures=[
-            live(item=train(minutes=minutes, trip_id=trip))
-            for trip, (_, minutes) in trips.items()
-        ],
-        patterns={
-            trip: line_pattern(trip_id=trip, stations=line, minutes=minutes)
-            for trip, (line, minutes) in trips.items()
-        },
-    )
-
-
-def row_named(*, rows: Sequence[StripRow], name: str) -> StripRow:
-    """
-    Find a row by name.
-
-    Parameters
-    ----------
-    rows : Sequence[StripRow]
-        Rows.
-    name : str
-        Station name without ' Station'.
-
-    Returns
-    -------
-    StripRow
-        The row.
-    """
-    return next(row for row in rows if row.name == name)
+from tests.core.strip_factories import (
+    SOUTH,
+    WEST,
+    long_reach,
+    row_named,
+    three_trains,
+    times,
+)
 
 
 def slot_of(*, row: StripRow) -> int:
@@ -138,24 +68,6 @@ def slot_of(*, row: StripRow) -> int:
         Slot from the top, from 0.
     """
     return int((row.y - STRIP_TOP - ROW_H / 2) // ROW_H)
-
-
-def times(*, inputs: StripInputs) -> dict[str, str]:
-    """
-    Read each row's time.
-
-    Parameters
-    ----------
-    inputs : StripInputs
-        The inputs.
-
-    Returns
-    -------
-    dict[str, str]
-        Time by row name.
-    """
-    view = build_strip_view(inputs=inputs)
-    return {row.name: row.time for row in view.rows}
 
 
 def test_from_sits_on_third_row() -> None:

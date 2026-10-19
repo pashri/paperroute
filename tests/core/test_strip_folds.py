@@ -8,7 +8,7 @@ from hypothesis import strategies as st
 from paperroute.core.model import StopPlace
 from paperroute.core.reach import Reach, ReachRow, RowKind, RunTail
 from paperroute.core.strip_folds import folded, folds_of
-from tests.core.test_reach import STATIONS, random_tails, reach_of
+from tests.core.reach_factories import STATIONS, random_tails, reach_of
 
 type RowSpec = tuple[str, int, int | None, int]
 

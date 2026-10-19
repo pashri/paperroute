@@ -5,12 +5,10 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.core.feeds import FeedKind
-from paperroute.core.geo import Point
 from paperroute.core.map_view import DEFAULT_ZOOM, MapView
 from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
-    Event,
     FetchFeed,
     Knob,
     KnobPressed,
@@ -26,7 +24,7 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.model import Departure, Mode, Pin, RouteKind
+from paperroute.core.model import Departure, Mode, RouteKind
 from paperroute.core.reach import Reach, ReachRow, RowKind, StripKey
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import initial_state, step
@@ -42,16 +40,16 @@ from paperroute.core.strip_model import (
 from paperroute.core.strip_state import keys_in_use, request_strips, strip_key
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.factories import START, departure, place, snapshot, vehicle
+from tests.core.strip_factories import (
+    CENTRE,
+    KEY,
+    PIN,
+    on_view,
+    run,
+    trains,
+    turn,
+)
 
-CENTRE: Final[Point] = (-17_000.0, 1_000.0)
-PIN: Final[Pin] = Pin(
-    origin=place('C', name='Central', point=CENTRE),
-    destination=place('S5', name='S5'),
-    kind=RouteKind.TRAIN,
-)
-KEY: Final[StripKey] = StripKey(
-    station='C', kind=RouteKind.TRAIN, routes=(),
-)
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 TRAIN_POSITIONS: Final[str] = 'v2/gtfs/vehiclepos/sydneytrains'
 BUS_POSITIONS: Final[str] = 'v1/gtfs/vehiclepos/buses'
@@ -96,69 +94,6 @@ def long_reach(*, size: int = 40, origin: int = 20) -> Reach:
     )
 
 
-def trains(*, count: int = 3) -> tuple[Departure, ...]:
-    """
-    Make train departures five minutes apart from 8:05.
-
-    Parameters
-    ----------
-    count : int
-        Departures.
-
-    Returns
-    -------
-    tuple[Departure, ...]
-        Departures, each its own trip.
-    """
-    return tuple(
-        departure(
-            departs=START + timedelta(minutes=5 * (i + 1)),
-            mode=Mode.TRAIN,
-            route='T1',
-            trip_id=f'train-{i}',
-            kind=RouteKind.TRAIN,
-        )
-        for i in range(count)
-    )
-
-
-def on_view(
-    *,
-    view: LiveView,
-    pin: Pin = PIN,
-    departures: tuple[Departure, ...] | None = None,
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Start on a view and load departures there.
-
-    Parameters
-    ----------
-    view : LiveView
-        The Live view to start on.
-    pin : Pin
-        The only pin, shown.
-    departures : tuple[Departure, ...] | None
-        Departures loaded; three trains by default.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State and effects after the load.
-    """
-    saved = Saved(
-        pins=(pin,), current=0, unpinned=None, view=view, zoom=DEFAULT_ZOOM,
-    )
-    state = initial_state(saved=saved, now=START, stored=True)
-    return step(
-        state,
-        DeparturesLoaded(
-            pin=pin,
-            departures=trains() if departures is None else departures,
-            until=START + HORIZON,
-        ),
-    )
-
-
 def kinds[T](*, effects: tuple[Effect, ...], kind: type[T]) -> list[T]:
     """
     Pick the effects of one type.
@@ -176,48 +111,6 @@ def kinds[T](*, effects: tuple[Effect, ...], kind: type[T]) -> list[T]:
         The matching effects, in order.
     """
     return [effect for effect in effects if isinstance(effect, kind)]
-
-
-def run(
-    *, state: State, events: list[Event],
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Apply events in turn.
-
-    Parameters
-    ----------
-    state : State
-        State before.
-    events : list[Event]
-        Events.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State after, and every effect in order.
-    """
-    effects: tuple[Effect, ...] = ()
-    for event in events:
-        state, more = step(state, event)
-        effects = (*effects, *more)
-    return state, effects
-
-
-def turn(*, steps: int) -> KnobTurned:
-    """
-    Turn the bottom knob.
-
-    Parameters
-    ----------
-    steps : int
-        Detents, clockwise positive.
-
-    Returns
-    -------
-    KnobTurned
-        The turn.
-    """
-    return KnobTurned(knob=Knob.BOTTOM, steps=steps)
 
 
 def test_strip_key_takes_the_pins_from_kind_and_routes() -> None:

@@ -120,6 +120,36 @@ def step_label(*, chooser: ChooserState, index: int) -> str:
     return choice.label
 
 
+def route_title(*, chooser: ChooserState) -> str:
+    """
+    Name the route and towards row being picked on.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser in the FROM or TO stage.
+
+    Returns
+    -------
+    str
+        For example '606 to Parramatta': the number of the last route or
+        line chosen, then the towards row pressed.
+    """
+    number = next(
+        (
+            step_label(chooser=chooser, index=index)
+            for index in reversed(range(len(chooser.columns)))
+            if index < chooser.focus
+            and chooser.columns[index].level in NAMED_BY_BADGE
+        ),
+        '',
+    )
+    towards = chooser.towards
+    if towards is None:
+        return number
+    return f'{number} to {towards.label}'.strip()
+
+
 def column_view(
     *, column: Column, cursor: int, focused: bool,
 ) -> ColumnView:

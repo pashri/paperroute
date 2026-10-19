@@ -3,7 +3,7 @@
 import math
 from typing import Final, Protocol
 
-from paperroute.core.stop_view import PinTag, Row
+from paperroute.core.stop_view import DOT, PinTag, Row
 from paperroute.render.canvas import INK, PAPER, WIDTH, Box, Canvas, Face
 
 HEADER: Final[int] = 40
@@ -12,6 +12,7 @@ BANNER: Final[int] = 34
 FASTER: Final[str] = 'FASTER'
 TAG_GAP: Final[int] = 8
 TABS: Final[tuple[str, ...]] = ('Stop', 'Map', 'Strip', 'Strip + map')
+ONE_TITLE_PICKS: Final[frozenset[str]] = frozenset({'FROM'})
 
 
 def arrow(canvas: Canvas, *, x: float, y: float, grey: int) -> float:
@@ -133,7 +134,9 @@ def header_titles(
     Draw the origin and, when there is one, an arrow and a second title.
 
     The second title is 'pick <picking>' while picking, else the
-    destination. With neither, only the origin is drawn.
+    destination. With neither, only the origin is drawn. Picking a From
+    reads as one title, '<origin> · pick FROM', as the origin is then the
+    route being picked on.
 
     Parameters
     ----------
@@ -150,6 +153,8 @@ def header_titles(
     """
     title = Face(weight=700, px=18)
     second = destination if picking is None else f'pick {picking}'
+    if picking in ONE_TITLE_PICKS:
+        origin, second = f'{origin}{DOT}{second}', None
     limit = right - TAG_GAP
     if second is None:
         shown = canvas.fit(text=origin, face=title, width=limit - 12)

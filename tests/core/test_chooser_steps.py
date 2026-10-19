@@ -253,6 +253,11 @@ def test_from_stage_draws_the_line() -> None:
     assert isinstance(view, StripView)
     assert (view.picking, view.panel.rows) == ('FROM', ())
     assert view.panel.hint == HINTS['FROM']
+    assert (view.origin, view.destination) == ('606 to Parramatta', None)
+    assert (view.panel.title, view.panel.destination) == (
+        '606 to Parramatta', None,
+    )
+    assert view.panel.note == ''
     assert [row.name for row in view.rows] == [
         'Parramatta', 'Northmead', 'Baulkham Hills',
     ]

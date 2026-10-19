@@ -9,7 +9,7 @@ from paperroute.core.chooser import (
     pressed,
     turned,
 )
-from paperroute.core.chooser_view import build_chooser_view
+from paperroute.core.chooser_view import build_chooser_view, route_title
 from paperroute.core.model import Pin
 from tests.core.chooser_walks import (
     BUS_606,
@@ -89,3 +89,9 @@ def test_empty_preview_shows_a_note() -> None:
     assert (preview.note, preview.total, preview.items) == (
         'Nothing here', 0, (),
     )
+
+
+def test_route_title_names_the_route_then_the_towards_row() -> None:
+    """The route number alone, then 'to' the towards row once pressed."""
+    assert route_title(chooser=at_towards()) == '606'
+    assert route_title(chooser=at_to()) == '606 to Parramatta'

@@ -170,6 +170,22 @@ def test_picking_title() -> None:
     assert len(canvas.polygons) == 1
 
 
+def test_picking_from_title() -> None:
+    """Picking a From reads as one title, the route then 'pick FROM'."""
+    canvas = Recording()
+    header(
+        canvas,
+        origin='606 to Parramatta',
+        destination=None,
+        clock='8:41',
+        active='Strip',
+        tag=NOT_PINNED,
+        picking='FROM',
+    )
+    assert canvas.fitted == ['606 to Parramatta · pick FROM']
+    assert not canvas.polygons
+
+
 def test_titles_stop_before_the_tag() -> None:
     """A long origin and destination leave the tag's box untouched."""
     canvas = Canvas()

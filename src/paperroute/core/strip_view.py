@@ -780,7 +780,8 @@ def strip_panel(*, inputs: StripInputs) -> StripPanel:
     StripPanel
         The From, its Destination line, the station count and the first
         departures: four, three under a hint, none while picking a From;
-        the Stop view's empty text when there are none to list.
+        the Stop view's empty text when there are none to list. No station
+        count while picking a From, as there is no From yet.
     """
     stop = inputs.stop_view
     hint = None if inputs.picking is None else HINTS.get(inputs.picking)
@@ -789,7 +790,11 @@ def strip_panel(*, inputs: StripInputs) -> StripPanel:
     return StripPanel(
         title=stop.origin,
         destination=stop.destination,
-        note='' if reach is None else f'{reach.stations} stations from here',
+        note=(
+            ''
+            if reach is None or inputs.picking == PICK_FROM
+            else f'{reach.stations} stations from here'
+        ),
         rows=() if inputs.picking == PICK_FROM else stop.head_rows[:shown],
         no_destination=stop.destination is None,
         hint=hint,

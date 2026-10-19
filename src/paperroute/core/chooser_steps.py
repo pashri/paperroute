@@ -20,7 +20,11 @@ from paperroute.core.chooser import (
     with_column,
     with_line,
 )
-from paperroute.core.chooser_view import ChooserView, build_chooser_view
+from paperroute.core.chooser_view import (
+    ChooserView,
+    build_chooser_view,
+    route_title,
+)
 from paperroute.core.live import live_since, resolved
 from paperroute.core.map_requests import polled_positions
 from paperroute.core.messages import (
@@ -53,6 +57,7 @@ from paperroute.core.stop_view import (
 )
 from paperroute.core.strip_state import picking_to
 from paperroute.core.strip_view import (
+    EMPTY_STOP_VIEW,
     NEEDS_UPDATE,
     PICK_FROM,
     PICK_TO,
@@ -493,8 +498,9 @@ def from_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
     Returns
     -------
     StripInputs
-        The towards line as a plain strip with its cursor, no
-        departures, and `LINE_FAILED` when the line can't be read.
+        The towards line as a plain strip with its cursor, titled with
+        the route, no departures, and `LINE_FAILED` when the line can't
+        be read.
     """
     line = chooser.line
     return StripInputs(
@@ -509,6 +515,9 @@ def from_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
         picking=PICK_FROM,
         destination=None,
         tag=NOT_PINNED,
+        stop_view=replace(
+            EMPTY_STOP_VIEW, origin=route_title(chooser=chooser),
+        ),
     )
 
 

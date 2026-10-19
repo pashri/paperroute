@@ -341,6 +341,23 @@ def pill(canvas: Canvas, *, box: Box, text: str, px: int) -> None:
     )
 
 
+def with_minutes(*, text: str) -> str:
+    """
+    Name the unit of a bare count of minutes.
+
+    Parameters
+    ----------
+    text : str
+        Countdown text.
+
+    Returns
+    -------
+    str
+        '<n> min' for a count; 'now' and clock times as they are.
+    """
+    return f'{text} min' if text.isdigit() else text
+
+
 def leaves(*, row: Row) -> str:
     """
     Say when a departure leaves.
@@ -353,9 +370,10 @@ def leaves(*, row: Row) -> str:
     Returns
     -------
     str
-        The countdown when live, else the timetabled clock time.
+        The countdown when live ('<n> min' for a count of minutes), else
+        the timetabled clock time.
     """
-    return row.countdown if row.live else row.leaves_at
+    return with_minutes(text=row.countdown) if row.live else row.leaves_at
 
 
 def countdown_slot(*, row: Row) -> str:
@@ -370,10 +388,11 @@ def countdown_slot(*, row: Row) -> str:
     Returns
     -------
     str
-        The countdown, or '' for a far departure, whose countdown is the
-        clock time the row already shows.
+        The countdown ('<n> min' for a count of minutes), or '' for a far
+        departure, whose countdown is the clock time the row already
+        shows.
     """
-    return '' if row.far else row.countdown
+    return '' if row.far else with_minutes(text=row.countdown)
 
 
 def cancelled(*, row: Row) -> str:

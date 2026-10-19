@@ -6,9 +6,14 @@ import numpy as np
 
 from paperroute.core.model import CarryOn, Mode
 from paperroute.core.stop_view import Pill, Row, StopView
-from paperroute.render.canvas import INK, PAPER, Canvas, Face
-from paperroute.render.chrome import HEADER
-from paperroute.render.stop_view import draw_stop_view
+from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
+from paperroute.render.chrome import HEADER, badge
+from paperroute.render.stop_view import (
+    BOARD_RIGHT,
+    LIST_LEFT,
+    PILL_LEFT,
+    draw_stop_view,
+)
 
 
 def row(
@@ -209,3 +214,11 @@ def test_a_real_tag_is_not_cut_under_a_short_headsign() -> None:
     ink = np.flatnonzero(
         (frame[top + 34:top + 46, 456:700] == INK).any(axis=0))
     assert ink.max() >= head + 8 + 22 + 4 + tag - 3
+
+
+def test_minute_countdowns_fit_beside_badges_and_pills() -> None:
+    """'99 min' clears a five-letter badge, the FASTER pill and headsigns."""
+    wide = text_width(text='99 min', face=Face(weight=800, px=28))
+    route = badge(Canvas(), x=LIST_LEFT, y=14, route='SH100', px=14)
+    assert LIST_LEFT + route + 8 < 640 - wide
+    assert max(PILL_LEFT + 74, BOARD_RIGHT) + 8 < 786 - wide

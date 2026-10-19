@@ -32,11 +32,15 @@ from paperroute.render.canvas import (
     Face,
     text_width,
 )
-from paperroute.render.chrome import BANNER, HEADER, header
+from paperroute.render.chrome import BANNER, HEADER, badge, header
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_view import (
+    BADGE_PX,
+    COUNTDOWN_FACE,
     EMPTY_MARGIN,
     SIDEBAR_LEFT,
+    SIDEBAR_RIGHT,
+    SIDEBAR_TEXT,
     draw_map_view,
     empty_lines,
     snap,
@@ -540,3 +544,10 @@ def test_map_sidebar_omits_the_destination_line_without_one() -> None:
         ]
         != band
     )
+
+
+def test_sidebar_minute_countdown_clears_a_wide_badge() -> None:
+    """'99 min' fits right of a five-letter route badge."""
+    route = badge(Canvas(), x=SIDEBAR_TEXT, y=0, route='SH100', px=BADGE_PX)
+    wide = text_width(text='99 min', face=COUNTDOWN_FACE)
+    assert SIDEBAR_TEXT + route + 8 < SIDEBAR_RIGHT - wide

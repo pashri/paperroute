@@ -73,25 +73,6 @@ HINT_FACE: Final[Face] = Face(weight=700, px=14)
 HINT_PAD: Final[int] = 6  # pixels each side of the hint text
 
 
-def countdown_text(*, row: Row) -> str:
-    """
-    Write a departure's countdown.
-
-    Parameters
-    ----------
-    row : Row
-        Departure.
-
-    Returns
-    -------
-    str
-        '<n> min' for a count of minutes, nothing for a departure 100
-        minutes or more away, else the text as it is.
-    """
-    slot = countdown_slot(row=row)
-    return f'{slot} min' if slot.isdigit() else slot
-
-
 def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> None:
     """
     Draw a departure's arrival, or its route badge and headsign.
@@ -152,7 +133,7 @@ def row_countdown(canvas: Canvas, *, row: Row, top: int) -> None:
         return
     canvas.text(
         at=(TEXT_RIGHT, top + TIME_DROP),
-        text=countdown_text(row=row),
+        text=countdown_slot(row=row),
         face=COUNTDOWN_FACE,
         grey=INK,
         anchor='rs',

@@ -23,6 +23,7 @@ from paperroute.render.chrome import (
     countdown_slot,
     header,
     header_tabs,
+    leaves,
     pin_tag,
     view_header,
 )
@@ -247,6 +248,18 @@ def test_countdown_slot_follows_the_far_flag() -> None:
         countdown='9', leaves_at='8:09', arrives_at='8:45', ride_minutes=36,
         live=True, pill=None,
     )
-    assert countdown_slot(row=near) == '9'
+    assert countdown_slot(row=near) == '9 min'
     assert countdown_slot(row=replace(near, countdown='now')) == 'now'
     assert countdown_slot(row=replace(near, countdown='9:51', far=True)) == ''
+
+
+def test_leaves_names_its_minutes() -> None:
+    """A live count reads '<n> min'; 'now' and clock times stay as they are."""
+    near = Row(
+        route='T1', mode=Mode.TRAIN, platform='3', destination='Emu Plains',
+        countdown='12', leaves_at='8:17', arrives_at='8:45', ride_minutes=28,
+        live=True, pill=None,
+    )
+    assert leaves(row=near) == '12 min'
+    assert leaves(row=replace(near, countdown='now')) == 'now'
+    assert leaves(row=replace(near, live=False)) == '8:17'

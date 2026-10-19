@@ -131,13 +131,14 @@ def merge_rail(*, conn: sqlite3.Connection) -> MergeReport:
 
 
 STATIONS_OF_ROUTES: Final[str] = """
-SELECT DISTINCT r.route_id, r.short_name, r.long_name, r.type, r.agency_id,
+SELECT DISTINCT r.route_id, r.short_name, r.long_name, r.type,
   COALESCE(s.parent_station, s.stop_id)
 FROM routes r JOIN trips t ON t.route_id = r.route_id
   JOIN stop_times st ON st.trip_id = t.trip_id
   JOIN stops s ON s.stop_id = st.stop_id
-WHERE (r.type = 106 AND r.agency_id IN ({agencies}))
-  OR (r.type = 2 AND r.short_name IN ({lines}))
+WHERE ((r.type = 106 AND r.agency_id IN ({agencies}))
+  OR (r.type = 2 AND r.short_name IN ({lines})))
+  AND (st.pickup <> 1 OR st.dropoff <> 1)
 ORDER BY r.route_id
 """
 
@@ -168,7 +169,7 @@ def stations_by_route(
     lines: dict[str, set[str]] = defaultdict(set)
     names: dict[str, str] = {}
     routes: dict[str, set[str]] = defaultdict(set)
-    for route_id, short, long, kind, _, station in conn.execute(
+    for route_id, short, long, kind, station in conn.execute(
         sql, (*sorted(REGIONAL_AGENCIES), *TRAINLINK),
     ):
         if kind == 2:

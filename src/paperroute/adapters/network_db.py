@@ -1,7 +1,6 @@
 """Network repository: chooser columns, towards lines and station runs."""
 
 import json
-import re
 import sqlite3
 from collections.abc import Collection, Iterable, Sequence
 from dataclasses import replace
@@ -25,6 +24,8 @@ from paperroute.core.chooser import (
 )
 from paperroute.core.model import (
     INTERCITY,
+    SYDNEY_FERRIES,
+    SYDNEY_LINES,
     TRAINLINK,
     RouteKind,
     StopPlace,
@@ -38,9 +39,6 @@ from paperroute.core.reach import (
     every_route,
 )
 
-SYDNEY_LINE: Final[re.Pattern[str]] = re.compile(
-    r'^(T[1-9]|F([1-9]|10))$',
-)
 NETWORK_TABLES: Final[tuple[str, ...]] = (
     'runs', 'run_stops', 'chooser_routes', 'chooser_towards',
 )
@@ -187,7 +185,7 @@ def line_group(*, number: str) -> int:
         return 1
     if number in TRAINLINK:
         return 2
-    if SYDNEY_LINE.match(number):
+    if SYDNEY_LINES.match(number) or SYDNEY_FERRIES.match(number):
         return 0
     return 3
 

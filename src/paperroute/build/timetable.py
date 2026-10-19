@@ -22,6 +22,7 @@ from paperroute.build.gtfs_files import (
 )
 from paperroute.build.handoff import Handoff, HandoffRecord, hand_over
 from paperroute.build.shapes import load_shapes
+from paperroute.build.trainlink import trim_trainlink
 from paperroute.core.model import SYDNEY, Mode, mode_for
 from paperroute.rss import current_rss_mb, max_rss_mb
 
@@ -365,6 +366,7 @@ def load_all(*, sources: list[Source], window: Window,
             load_source(conn=conn, source=source, window=window)
         print('progress merge', flush=True)
         report = merge_rail(conn=conn)
+        trim_trainlink(conn=conn)
         relabel_trainlink(conn=conn)
         conn.execute(DROP_UNUSED_SHAPES)
         create_indexes(conn=conn)

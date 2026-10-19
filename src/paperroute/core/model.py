@@ -90,10 +90,14 @@ STATION_FIRST: Final[frozenset[RouteKind]] = frozenset({
     RouteKind.FERRY,
 })
 SYDNEY_LINES: Final[re.Pattern[str]] = re.compile(r'^T[1-9]$')
-EXACT_KINDS: Final[dict[int, RouteKind]] = {
+SYDNEY_FERRIES: Final[re.Pattern[str]] = re.compile(r'^F(?:[1-9]|10)$')
+TRAINLINK_KINDS: Final[dict[int, RouteKind]] = {
     106: RouteKind.TRAIN,
     204: RouteKind.COACH,
     205: RouteKind.COACH,
+}
+EXACT_KINDS: Final[dict[int, RouteKind]] = {
+    **TRAINLINK_KINDS,
     401: RouteKind.METRO,
     900: RouteKind.LIGHT_RAIL,
     4: RouteKind.FERRY,
@@ -101,13 +105,6 @@ EXACT_KINDS: Final[dict[int, RouteKind]] = {
     712: RouteKind.SCHOOL,
     714: RouteKind.REPLACEMENT,
 }
-TRAINLINK_KINDS: Final[dict[int, RouteKind]] = {
-    106: RouteKind.TRAIN,
-    204: RouteKind.COACH,
-    205: RouteKind.COACH,
-}
-
-
 def kind_for(
     *, route_type: int, agency_id: str | None, short_name: str,
 ) -> RouteKind | None:

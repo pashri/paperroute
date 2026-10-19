@@ -15,6 +15,7 @@ from hypothesis import strategies as st
 from paperroute.adapters.state_file import (
     SCHEMA_VERSION,
     JsonStateRepository,
+    regional_to_coach,
     write_atomic,
 )
 from paperroute.core.model import Pin, RouteKind, StopPlace
@@ -435,3 +436,9 @@ def test_migrate_regional_with_no_unpinned_place(path: Path) -> None:
     assert loaded.stored
     assert loaded.saved.unpinned is None
     assert loaded.saved.pins[0].kind is RouteKind.COACH
+
+
+def test_regional_to_coach_leaves_a_malformed_pin_list_alone() -> None:
+    """Data the migration cannot read is passed on for validation to fail."""
+    data: dict[str, object] = {'pins': 'oops', 'unpinned': 3}
+    assert regional_to_coach(data) == data

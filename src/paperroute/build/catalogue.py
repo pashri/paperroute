@@ -17,6 +17,7 @@ from paperroute.core.geo import Point, to_metres
 from paperroute.core.model import (
     INTERCITY,
     STATION_FIRST,
+    SYDNEY_FERRIES,
     TRAINLINK,
     RouteKind,
     kind_for,
@@ -45,9 +46,6 @@ LINE_SORT: Final[dict[str, int]] = {
     **{f'T{line}': line for line in range(1, 10)},
     **{code: 101 + index for index, code in enumerate(INTERCITY)},
     **{code: 111 + index for index, code in enumerate(TRAINLINK)},
-}
-FERRY_SORT: Final[dict[str, int]] = {
-    f'F{line}': line for line in range(1, 11)
 }
 OTHER_LINES: Final[int] = 200
 LINE_KINDS: Final[frozenset[RouteKind]] = STATION_FIRST
@@ -552,6 +550,25 @@ def route_entries(
         )
 
 
+def ferry_rank(*, number: str, fallback: int = OTHER_LINES) -> int:
+    """
+    Rank a ferry line: Sydney Ferries F1-F10 by number, others after.
+
+    Parameters
+    ----------
+    number : str
+        Ferry line number.
+    fallback : int
+        Rank of a line outside F1-F10.
+
+    Returns
+    -------
+    int
+        The number of an F1-F10 line, else ``fallback``.
+    """
+    return int(number[1:]) if SYDNEY_FERRIES.match(number) else fallback
+
+
 def kind_rows(*, entries: Sequence[Entry]) -> Iterator[RouteRow]:
     """
     Sort one kind's entries and give their chooser_routes rows.
@@ -569,7 +586,7 @@ def kind_rows(*, entries: Sequence[Entry]) -> Iterator[RouteRow]:
     ranked = sorted(
         entries,
         key=lambda entry: (
-            (FERRY_SORT.get(entry.number, OTHER_LINES), (), entry.name)
+            (ferry_rank(number=entry.number), (), entry.name)
             if entry.kind is RouteKind.FERRY
             else (*route_order(number=entry.number), entry.name)
         ),
@@ -581,7 +598,7 @@ def kind_rows(*, entries: Sequence[Entry]) -> Iterator[RouteRow]:
         if entry.kind is RouteKind.TRAIN:
             rank = LINE_SORT.get(entry.number, OTHER_LINES + rank)
         elif entry.kind is RouteKind.FERRY:
-            rank = FERRY_SORT.get(entry.number, OTHER_LINES + rank)
+            rank = ferry_rank(number=entry.number, fallback=OTHER_LINES + rank)
         yield (
             entry.key, str(entry.kind), grp,
             bucket_order(bucket=grp) if grp else 0, entry.number, rank,

@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from paperroute.core.map_view import Marker
+from paperroute.core.strip_extents import age_text
 from paperroute.core.tiles import CITY
 from paperroute.render.canvas import (
     INK,
@@ -150,25 +151,6 @@ def badge_box(*, route: str, centre: Point) -> Box:
     half_width, half_height = badge_half(route=route)
     x, y = centre
     return x - half_width, y - half_height, x + half_width, y + half_height
-
-
-def age_text(*, seconds: float) -> str:
-    """
-    Write an age as floored whole minutes, or whole hours from an hour.
-
-    Parameters
-    ----------
-    seconds : float
-        Seconds since last heard.
-
-    Returns
-    -------
-    str
-        For example ``4m`` or ``1h``.
-    """
-    if seconds < 3_600:
-        return f'{int(seconds // 60)}m'
-    return f'{int(seconds // 3_600)}h'
 
 
 def tab_box(*, centre: Point, age: float) -> Box:

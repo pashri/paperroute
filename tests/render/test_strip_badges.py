@@ -4,6 +4,7 @@ import sqlite3
 from collections import Counter
 from collections.abc import Sequence
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 from typing import Final
 
@@ -14,7 +15,7 @@ from hypothesis import strategies as st
 
 from paperroute.core.map_view import Marker
 from paperroute.core.strip_badges import Badge, Keepouts, Spot, pushed
-from paperroute.core.strip_extents import half_width
+from paperroute.core.strip_extents import half_width, tab_half
 from paperroute.core.strip_model import TRACK_X
 from paperroute.render.canvas import Box, Face, font
 from paperroute.render.markers import (
@@ -230,8 +231,42 @@ def clear(*, marker: Marker, others: Sequence[Marker],
     ))
 
 
+def tracks_of(*, badge: Badge, inputs: Sequence[Badge],
+              spots: Sequence[Spot]) -> set[float]:
+    """
+    List the xs a placed badge's vehicles start from.
+
+    Parameters
+    ----------
+    badge : Badge
+        Badge as placed.
+    inputs : Sequence[Badge]
+        The badges at their vehicles' places.
+    spots : Sequence[Spot]
+        Visible rows.
+
+    Returns
+    -------
+    set[float]
+        The vehicle x, moved off the names level with the vehicle, of
+        every input on the badge's hop it may stand for: one like it, or
+        any on the hop for a '+<n>' count.
+    """
+    return {
+        gutter_x(marker=each.marker, spots=spots)
+        for each in inputs
+        if (each.low, each.high) == (badge.low, badge.high)
+        and (
+            badge.extra
+            or (each.marker.route, each.marker.bearing, each.marker.age)
+            == (badge.marker.route, badge.marker.bearing, badge.marker.age)
+        )
+    }
+
+
 def has_room(*, badge: Badge, others: Sequence[Marker],
-             spots: Sequence[Spot], discs: Sequence[Spot]) -> bool:
+             spots: Sequence[Spot], discs: Sequence[Spot],
+             tracks: set[float]) -> bool:
     """
     Say whether a badge would fit anywhere on its hop.
 
@@ -245,35 +280,60 @@ def has_room(*, badge: Badge, others: Sequence[Marker],
         Visible rows.
     discs : Sequence[Spot]
         The discs.
+    tracks : set[float]
+        The xs its vehicle may start from (see `tracks_of`).
 
     Returns
     -------
     bool
-        True when some place on its hop, every `STEP` pixels, keeps it
-        clear on the leftmost track it may take there.
+        True when, from every x in `tracks`, some place on its hop,
+        every `STEP` pixels, keeps it clear once moved left off the
+        names level with it. A badge leaves its vehicle's track only to
+        clear names, so a place at another x doesn't count.
     """
     steps = int((badge.high - badge.low) / STEP)
-    tries = (
-        Marker(
-            route=badge.marker.route, x=badge.marker.x,
-            y=badge.low + step * STEP, bearing=badge.marker.bearing,
-            live=badge.marker.live, pinned=True, age=badge.marker.age,
+    return all(
+        any(
+            clear(
+                marker=moved(
+                    marker=badge.marker,
+                    x=track,
+                    y=badge.low + step * STEP,
+                    spots=spots,
+                ),
+                others=others,
+                spots=spots,
+                discs=discs,
+            )
+            for step in range(steps + 1)
         )
-        for step in range(steps + 1)
+        for track in tracks
     )
-    return any(
-        clear(
-            marker=Marker(
-                route=each.route, x=gutter_x(marker=each, spots=spots),
-                y=each.y, bearing=each.bearing, live=each.live,
-                pinned=True, age=each.age,
-            ),
-            others=others,
-            spots=spots,
-            discs=discs,
-        )
-        for each in tries
-    )
+
+
+def moved(*, marker: Marker, x: float, y: float,
+          spots: Sequence[Spot]) -> Marker:
+    """
+    Put a badge at a place, moved left off the names level with it.
+
+    Parameters
+    ----------
+    marker : Marker
+        Badge.
+    x : float
+        Its track.
+    y : float
+        Its centre.
+    spots : Sequence[Spot]
+        Visible rows.
+
+    Returns
+    -------
+    Marker
+        The badge there.
+    """
+    there = replace(marker, x=x, y=y)
+    return replace(there, x=gutter_x(marker=there, spots=spots))
 
 
 @st.composite
@@ -381,10 +441,66 @@ CROWD_BESIDE_DISC: Final[tuple[dict[str, Spot], list[Badge], list[Spot]]] = (
     ],
     [Spot(x=62, y=98)],
 )  # a '+2' narrower than the badge it began as
+FACING_AT_DISCS: Final[tuple[dict[str, Spot], list[Badge], list[Spot]]] = (
+    {
+        'S0': Spot(x=30, y=62),
+        'S1': Spot(x=30, y=98),
+        'S2': Spot(x=30, y=134),
+    },
+    [
+        Badge(
+            marker=Marker(
+                route='T1', x=30, y=62.0, bearing=180.0, live=True,
+                pinned=True, age=None,
+            ),
+            low=62,
+            high=134,
+        ),
+        Badge(
+            marker=Marker(
+                route='T1', x=30, y=98.0, bearing=0.0, live=True,
+                pinned=True, age=None,
+            ),
+            low=98,
+            high=134,
+        ),
+    ],
+    [Spot(x=30, y=62), Spot(x=30, y=98)],
+)  # wedges pointing at each other from discs on neighbouring rows
+NARROW_TAB: Final[tuple[dict[str, Spot], list[Badge], list[Spot]]] = (
+    {
+        f'S{slot}': Spot(x=x, y=62 + 36 * slot)
+        for slot, x in enumerate((30, 30, 30, 62, 30, 30, 30, 62, 30, 46, 62))
+    },
+    [
+        Badge(
+            marker=Marker(
+                route='SH100', x=30, y=206.0, bearing=0.0, live=True,
+                pinned=True, age=None,
+            ),
+            low=62,
+            high=206,
+        ),
+        Badge(marker=plain(route='T1', x=30, y=260.0), low=134, high=278),
+        Badge(marker=plain(route='T1', x=62, y=404.0), low=278, high=422),
+        Badge(marker=plain(route='320', x=30, y=314.0), low=62, high=314),
+        Badge(
+            marker=Marker(
+                route='M', x=62, y=422.0, bearing=None, live=False,
+                pinned=True, age=60.0,
+            ),
+            low=170,
+            high=422,
+        ),
+    ],
+    [Spot(x=30, y=350)],
+)  # a '1m' tab narrower than the widest one
 
 
 @given(case=strip_cases())
 @example(case=CROWD_BESIDE_DISC)
+@example(case=FACING_AT_DISCS)
+@example(case=NARROW_TAB)
 def test_badges_as_drawn_stay_on_their_hops_and_clear(
     case: tuple[dict[str, Spot], list[Badge], list[Spot]],
 ) -> None:
@@ -410,10 +526,12 @@ def test_badges_as_drawn_stay_on_their_hops_and_clear(
         ):
             assert not has_room(
                 badge=each, others=others, spots=rows, discs=discs,
+                tracks=tracks_of(badge=each, inputs=badges, spots=rows),
             ) or any(
                 not has_room(
                     badge=other, spots=rows, discs=discs,
                     others=[m for m in markers if m is not other.marker],
+                    tracks=tracks_of(badge=other, inputs=badges, spots=rows),
                 )
                 for other in found
                 if other is not each
@@ -469,3 +587,14 @@ def test_core_badge_width_is_never_less_than_drawn(extra: list[str]) -> None:
     for route in [*extra, *real_routes()]:
         drawn_half = badge_half(route=route)[0] + 1
         assert drawn_half <= half_width(route=route) <= drawn_half + 1
+
+
+@pytest.mark.parametrize(
+    'seconds',
+    [0.0, 60.0, 659.0, 3_540.0, 3_600.0, 36_000.0, 82_800.0, 360_000.0],
+)
+def test_core_tab_width_is_never_less_than_drawn(seconds: float) -> None:
+    """The core's age tab half width covers the drawn one, closely."""
+    left, _, right, _ = tab_box(centre=(0.0, 0.0), age=seconds)
+    drawn_half = (right - left) / 2
+    assert drawn_half <= tab_half(seconds=seconds) <= drawn_half + 1

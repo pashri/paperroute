@@ -551,13 +551,48 @@ def at_stations(*, badges: Sequence[Badge], keep: Keepouts
         The badges beside the discs, and the rest.
     """
     found = {id(each): at_disc(badge=each, keep=keep) for each in badges}
-    lined = [
-        placed
-        for disc in keep.discs
-        if (crowd := [each for each in badges if found[id(each)] == disc])
-        for placed in beside(disc=disc, crowd=crowd)
-    ]
+    lined: list[Badge] = []
+    for disc in keep.discs:
+        if crowd := [each for each in badges if found[id(each)] == disc]:
+            lined.extend(off_lined(
+                lineup=beside(disc=disc, crowd=crowd), lined=lined,
+            ))
     return lined, [each for each in badges if found[id(each)] is None]
+
+
+def off_lined(*, lineup: Sequence[Badge], lined: Sequence[Badge]
+              ) -> list[Badge]:
+    """
+    Move a disc's badges along, a slot at a time, off ones lined already.
+
+    Parameters
+    ----------
+    lineup : Sequence[Badge]
+        Badges beside one disc.
+    lined : Sequence[Badge]
+        Badges beside the discs before it.
+
+    Returns
+    -------
+    list[Badge]
+        The lineup, still level with its disc, moved right by the fewest
+        whole slots that keep its drawings off the lined badges. Wedges
+        of badges at discs on neighbouring rows can otherwise meet.
+    """
+    shift = 0.0
+    while any(
+        overlaps(
+            one=replace(each.marker, x=each.marker.x + shift),
+            other=other.marker,
+        )
+        for each in lineup
+        for other in lined
+    ):
+        shift += 2 * HALF_WIDE
+    return [
+        replace(each, marker=replace(each.marker, x=each.marker.x + shift))
+        for each in lineup
+    ]
 
 
 def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:

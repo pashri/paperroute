@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, Marker
+from paperroute.core.strip_extents import age_text
 from paperroute.core.tiles import CITY, ZOOMS
 from paperroute.render.canvas import (
     HEIGHT,
@@ -22,7 +23,6 @@ from paperroute.render.markers import (
     AGE_FACE,
     BADGE_FACE,
     OFFSETS,
-    age_text,
     badge_half,
     draw_markers,
     draw_tab,

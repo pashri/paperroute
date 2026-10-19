@@ -20,11 +20,15 @@ GLYPH_WIDTH: Final[Mapping[str, float]] = {  # badge text, rounded up
     't': 5.75, 'u': 8.5, 'v': 8.25, 'w': 10.75, 'x': 8.5, 'y': 8.25, 'z': 8.0,
 }
 WIDEST_GLYPH: Final[float] = 12.5  # any glyph not in the table
+AGE_GLYPH_WIDTH: Final[Mapping[str, float]] = {  # age tab text, rounded up
+    '0': 6.75, '1': 4.25, '2': 6.25, '3': 6.0, '4': 6.5, '5': 6.25,
+    '6': 6.25, '7': 5.5, '8': 6.5, '9': 6.25, 'h': 6.25, 'm': 9.0,
+}
 BADGE_PAD: Final[float] = 5.0  # a badge's box past its text, each side
 BADGE_HALF: Final[float] = 10.0  # half a badge's height
 WEDGE_REACH: Final[float] = 10.0  # a live badge's wedge past its box
 TAB_REACH: Final[float] = 12.0  # a stale badge's age tab below its box
-TAB_HALF: Final[float] = 15.0  # half the widest age tab, outline included
+TAB_PAD: Final[float] = 3.0  # an age tab's box past its text, each side
 OUTLINE: Final[float] = 1.0  # the paper edge drawn round a badge
 
 
@@ -70,6 +74,47 @@ def half_width(*, route: str) -> float:
     return text / 2 + BADGE_PAD + OUTLINE
 
 
+def age_text(*, seconds: float) -> str:
+    """
+    Write an age as floored whole minutes, or whole hours from an hour.
+
+    Parameters
+    ----------
+    seconds : float
+        Seconds since last heard.
+
+    Returns
+    -------
+    str
+        For example ``4m`` or ``1h``.
+    """
+    if seconds < 3_600:
+        return f'{int(seconds // 60)}m'
+    return f'{int(seconds // 3_600)}h'
+
+
+def tab_half(*, seconds: float) -> float:
+    """
+    Give an age tab's half width, never less than drawn.
+
+    Parameters
+    ----------
+    seconds : float
+        Seconds since last heard.
+
+    Returns
+    -------
+    float
+        Half the age text's width from `AGE_GLYPH_WIDTH`, plus `TAB_PAD`
+        and the outline.
+    """
+    text = sum(
+        AGE_GLYPH_WIDTH.get(glyph, WIDEST_GLYPH)
+        for glyph in age_text(seconds=seconds)
+    )
+    return text / 2 + TAB_PAD + OUTLINE
+
+
 def reaches(*, marker: Marker) -> tuple[float, float]:
     """
     Measure how far a badge's drawing reaches above and below its centre.
@@ -111,12 +156,12 @@ def extent_of(*, marker: Marker) -> Extent:
     Returns
     -------
     Extent
-        Its badge, at least as wide as an age tab when it has one, and
+        Its badge, at least as wide as its age tab when it has one, and
         its wedge and tab above and below.
     """
     half = max(
         half_width(route=marker.route),
-        0.0 if marker.age is None else TAB_HALF,
+        0.0 if marker.age is None else tab_half(seconds=marker.age),
     )
     up, down = reaches(marker=marker)
     return Extent(

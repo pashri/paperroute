@@ -215,3 +215,12 @@ def test_every_station_shows_once_folded_or_open(
     assert sum(row.kind is RowKind.FOLD for row in shown.rows) == len(
         set(keys) - opened,
     )
+
+
+def test_folding_is_worked_out_once_per_reach() -> None:
+    """The same reach and opened folds give back the same folded reach."""
+    reach = reach_from(specs=line(100, 4, 4, 4, 4))
+    shut = folded(reach=reach)
+    assert folded(reach=reach) is shut
+    assert folded(reach=reach, opened={'E2'}) is reach
+    assert folded(reach=reach_from(specs=line(100, 4, 4, 4, 4))) == shut

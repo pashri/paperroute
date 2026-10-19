@@ -12,6 +12,7 @@ FOLD_MIN: Final[int] = 4  # stations in a fold
 STATIONS: Final[frozenset[RowKind]] = frozenset(
     {RowKind.MAIN, RowKind.BRANCH},
 )
+MAX_CACHED: Final[int] = 16  # reaches whose folds are kept
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,13 @@ class Fold:
     rows: range
     entry: int
 
+
+
+type FoldsKept = tuple[Reach, tuple[Fold, ...], list[list[int]]]
+type FoldedKey = tuple[int, frozenset[str], frozenset[str]]
+
+FOLDS_CACHE: Final[dict[int, FoldsKept]] = {}  # by reach identity
+FOLDED_CACHE: Final[dict[FoldedKey, tuple[Reach, Reach]]] = {}
 
 def children_of(*, reach: Reach) -> list[list[int]]:
     """
@@ -130,6 +138,39 @@ def is_quiet(*, reach: Reach, rows: Sequence[int], floor: float) -> bool:
     )
 
 
+def quiet_rows(*, reach: Reach, children: Sequence[list[int]],
+               floor: float) -> list[bool]:
+    """
+    Say for each row whether it and everything after it is quiet.
+
+    Parameters
+    ----------
+    reach : Reach
+        The reach.
+    children : Sequence[list[int]]
+        Child rows by row.
+    floor : float
+        Trips under which a station is quiet.
+
+    Returns
+    -------
+    list[bool]
+        True for a station reached on fewer than `floor` trips whose
+        child rows are all quiet too; worked out leaves first in one
+        pass from the From.
+    """
+    origin = next(
+        (i for i, row in enumerate(reach.rows) if row.parent is None), None,
+    )
+    order = [] if origin is None else under(index=origin, children=children)
+    quiet = [False] * len(reach.rows)
+    for index in reversed(order):
+        quiet[index] = is_quiet(
+            reach=reach, rows=(index,), floor=floor,
+        ) and all(quiet[child] for child in children[index])
+    return quiet
+
+
 def far_ends(*, reach: Reach, children: Sequence[list[int]],
              floor: float) -> list[list[int]]:
     """
@@ -151,12 +192,7 @@ def far_ends(*, reach: Reach, children: Sequence[list[int]],
         its parent with everything after that is not, those rows, the
         station first.
     """
-    quiet = [
-        is_quiet(
-            reach=reach, rows=under(index=i, children=children), floor=floor,
-        )
-        for i in range(len(reach.rows))
-    ]
+    quiet = quiet_rows(reach=reach, children=children, floor=floor)
     return [
         under(index=i, children=children)
         for i, row in enumerate(reach.rows)
@@ -164,10 +200,54 @@ def far_ends(*, reach: Reach, children: Sequence[list[int]],
     ]
 
 
+def all_folds(*, reach: Reach) -> tuple[tuple[Fold, ...], list[list[int]]]:
+    """
+    Find every quiet far end of a reach's lines, once per reach.
+
+    Parameters
+    ----------
+    reach : Reach
+        The reach.
+
+    Returns
+    -------
+    tuple[tuple[Fold, ...], list[list[int]]]
+        Each far end of at least `FOLD_MIN` stations, everything after
+        its first station included so nothing hangs beyond it, each
+        reached on fewer than `FOLD_SHARE` of the trips on the busiest
+        track out of the From, top to bottom; and the child rows by
+        row. Kept for the last `MAX_CACHED` reaches asked about.
+    """
+    hit = FOLDS_CACHE.get(id(reach))
+    if hit is not None and hit[0] is reach:
+        return hit[1], hit[2]
+    children = children_of(reach=reach)
+    ends = far_ends(
+        reach=reach, children=children, floor=floor_of(reach=reach),
+    )
+    folds = tuple(sorted(
+        (
+            Fold(
+                key=reach.rows[found[0]].place.stop_id,
+                rows=range(min(found), max(found) + 1),
+                entry=found[0],
+            )
+            for found in ends
+            if len(found) >= FOLD_MIN
+            and max(found) - min(found) + 1 == len(found)
+        ),
+        key=lambda fold: fold.rows.start,
+    ))
+    remembered(cache=FOLDS_CACHE, key=id(reach), value=(
+        reach, folds, children,
+    ))
+    return folds, children
+
+
 def folds_of(*, reach: Reach, keep: Collection[str] = ()
              ) -> tuple[Fold, ...]:
     """
-    Find the quiet far ends of a reach's lines.
+    Find the quiet far ends of a reach's lines that may fold.
 
     Parameters
     ----------
@@ -179,29 +259,32 @@ def folds_of(*, reach: Reach, keep: Collection[str] = ()
     Returns
     -------
     tuple[Fold, ...]
-        Each far end of at least `FOLD_MIN` stations, everything after
-        its first station included so nothing hangs beyond it, each
-        reached on fewer than `FOLD_SHARE` of the trips on the busiest
-        track out of the From; top to bottom.
+        The folds of `all_folds` holding no kept station, top to bottom.
     """
-    children = children_of(reach=reach)
-    ends = far_ends(
-        reach=reach, children=children, floor=floor_of(reach=reach),
+    folds, _ = all_folds(reach=reach)
+    return tuple(
+        fold
+        for fold in folds
+        if not any(reach.rows[i].place.stop_id in keep for i in fold.rows)
     )
-    return tuple(sorted(
-        (
-            Fold(
-                key=reach.rows[found[0]].place.stop_id,
-                rows=range(min(found), max(found) + 1),
-                entry=found[0],
-            )
-            for found in ends
-            if len(found) >= FOLD_MIN
-            and max(found) - min(found) + 1 == len(found)
-            and not any(reach.rows[i].place.stop_id in keep for i in found)
-        ),
-        key=lambda fold: fold.rows.start,
-    ))
+
+
+def remembered[K, V](*, cache: dict[K, V], key: K, value: V) -> None:
+    """
+    Keep a value, dropping the oldest once `MAX_CACHED` are kept.
+
+    Parameters
+    ----------
+    cache : dict[K, V]
+        The cache; changed in place.
+    key : K
+        Key.
+    value : V
+        Value.
+    """
+    if len(cache) >= MAX_CACHED:
+        cache.pop(next(iter(cache)))
+    cache[key] = value
 
 
 def line_end(*, reach: Reach, index: int, children: Sequence[list[int]]
@@ -251,7 +334,8 @@ def short_name(*, place: StopPlace) -> str:
     return place.name.removesuffix(' Station')
 
 
-def fold_row(*, reach: Reach, fold: Fold) -> ReachRow:
+def fold_row(*, reach: Reach, fold: Fold, children: Sequence[list[int]]
+             ) -> ReachRow:
     """
     Make the row a closed fold shows.
 
@@ -261,6 +345,8 @@ def fold_row(*, reach: Reach, fold: Fold) -> ReachRow:
         The reach.
     fold : Fold
         The fold.
+    children : Sequence[list[int]]
+        Child rows by row.
 
     Returns
     -------
@@ -270,9 +356,7 @@ def fold_row(*, reach: Reach, fold: Fold) -> ReachRow:
         station's track and parent, with its position.
     """
     entry = reach.rows[fold.entry]
-    last = line_end(
-        reach=reach, index=fold.entry, children=children_of(reach=reach),
-    )
+    last = line_end(reach=reach, index=fold.entry, children=children)
     name = (
         f'{short_name(place=entry.place)} … '
         f'{short_name(place=reach.rows[last].place)} +{len(fold.rows)}'
@@ -360,18 +444,45 @@ def folded(*, reach: Reach, opened: Collection[str] = (),
     Reach
         The reach with each closed fold's rows replaced by its fold row,
         tracks renumbered, and its stations' stops mapped to the fold
-        row; the reach itself with none closed.
+        row; the reach itself with none closed. Kept for the last
+        `MAX_CACHED` asked for.
     """
+    key = (id(reach), frozenset(opened), frozenset(keep))
+    hit = FOLDED_CACHE.get(key)
+    if hit is not None and hit[0] is reach:
+        return hit[1]
     closed = [
         fold
         for fold in folds_of(reach=reach, keep=keep)
         if fold.key not in opened
     ]
-    if not closed:
-        return reach
+    shown = shut(reach=reach, closed=closed) if closed else reach
+    remembered(cache=FOLDED_CACHE, key=key, value=(reach, shown))
+    return shown
+
+
+def shut(*, reach: Reach, closed: Sequence[Fold]) -> Reach:
+    """
+    Replace each closed fold's rows with its fold row.
+
+    Parameters
+    ----------
+    reach : Reach
+        The reach.
+    closed : Sequence[Fold]
+        Folds to close, top to bottom.
+
+    Returns
+    -------
+    Reach
+        The reach with the folds closed, tracks renumbered and the
+        folded stations' stops mapped to their fold rows.
+    """
+    _, children = all_folds(reach=reach)
     index = new_indexes(total=len(reach.rows), closed=closed)
     shown = {
-        fold.rows.start: fold_row(reach=reach, fold=fold) for fold in closed
+        fold.rows.start: fold_row(reach=reach, fold=fold, children=children)
+        for fold in closed
     }
     gone = {i for fold in closed for i in fold.rows} - shown.keys()
     rows = (

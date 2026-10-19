@@ -259,7 +259,7 @@ def chooser_opened(state: State, banner: bool) -> State | None:
     state : State
         State with the chooser in the TO stage.
     banner : bool
-        Unused; the TO stage's own board says whether a banner shows.
+        True while a live data banner shortens the TO stage's strip.
 
     Returns
     -------
@@ -267,7 +267,6 @@ def chooser_opened(state: State, banner: bool) -> State | None:
         State with the fold open and the cursor on the same station, or
         None when no fold is on screen.
     """
-    del banner
     chooser = picking_to(state=state)
     reach = None if chooser is None else chooser_reach(
         chooser=chooser, state=state,
@@ -276,7 +275,7 @@ def chooser_opened(state: State, banner: bool) -> State | None:
     if chooser is None or reach is None or origin is None:
         return None
     cursor = to_row(chooser=chooser, reach=reach, origin=origin)
-    fold = chooser_fold(state=state, reach=reach, cursor=cursor)
+    fold = chooser_fold(reach=reach, cursor=cursor, banner=banner)
     return None if fold is None else replace(
         with_opened(state=state, reach=reach, index=fold),
         chooser=replace(chooser, to_cursor=grown(
@@ -285,28 +284,24 @@ def chooser_opened(state: State, banner: bool) -> State | None:
     )
 
 
-def chooser_fold(*, state: State, reach: Reach, cursor: int) -> int | None:
+def chooser_fold(*, reach: Reach, cursor: int, banner: bool) -> int | None:
     """
-    Find a closed fold on the TO stage's screen.
+    Find a closed end fold on the TO stage's screen.
 
     Parameters
     ----------
-    state : State
-        State with the chooser in the TO stage.
     reach : Reach
         Its strip as shown.
     cursor : int
         The cursor's row; the screen follows it.
+    banner : bool
+        True while a live data banner shortens the strip.
 
     Returns
     -------
     int | None
-        The first fold row on screen, or None.
+        The fold row of `fold_in`, or None.
     """
-    chooser = picking_to(state=state)
-    banner = chooser is not None and picked_stop_view(
-        state=state, chooser=chooser,
-    ).banner is not None
     rows = window_of(banner=banner).rows
     first = first_row(
         scroll=0,
@@ -340,6 +335,29 @@ def opener_of(*, context: FoldContext | None) -> Opener | None:
     return None if context is None else openers.get(context[0])
 
 
+def to_banner(*, state: State, banner: bool) -> bool:
+    """
+    Say whether a banner shortens the strip on screen.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    banner : bool
+        Whether the live Stop view shows a banner.
+
+    Returns
+    -------
+    bool
+        In the TO stage, whether its own board shows one, built once
+        here; elsewhere `banner`.
+    """
+    chooser = picking_to(state=state)
+    if chooser is None:
+        return banner
+    return picked_stop_view(state=state, chooser=chooser).banner is not None
+
+
 def with_folds(*, state: State, banner: bool) -> State:
     """
     Open every fold the strip on screen shows, after shutting stale ones.
@@ -355,10 +373,11 @@ def with_folds(*, state: State, banner: bool) -> State:
     -------
     State
         State with the folds shut when the strip on screen changed, and
-        then each fold on screen opened, until none shows.
+        then each end fold on screen opened, until none shows.
     """
     state = refolded(state=state)
     opener = opener_of(context=state.strip.context)
+    banner = to_banner(state=state, banner=banner)
     while opener is not None and (
         opened := opener(state, banner)
     ) is not None:

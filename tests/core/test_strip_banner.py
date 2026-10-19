@@ -4,6 +4,7 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute.core.strip_model import (
+    PANE_ROWS,
     ROW_H,
     STRIP_ROWS,
     STRIP_TOP,
@@ -95,6 +96,6 @@ def test_scroll_range_uses_the_shorter_strip() -> None:
 def test_pane_starts_below_the_banner() -> None:
     """Strip + map's pane drops a row under a banner, FROM still third."""
     pane = build_strip_pane(inputs=bannered())
-    assert len(pane.rows) == STRIP_ROWS - 1
+    assert len(pane.rows) == PANE_ROWS - 1
     assert pane.rows[0].y == UNDER + ROW_H / 2
     assert pane.rows[2].name == 'S20'

@@ -4,6 +4,7 @@ import math
 from typing import Final, Protocol
 
 from paperroute.core.stop_view import DOT, PinTag, Row
+from paperroute.core.strip_model import PICK_FROM
 from paperroute.render.canvas import INK, PAPER, WIDTH, Box, Canvas, Face
 
 HEADER: Final[int] = 40
@@ -12,7 +13,7 @@ BANNER: Final[int] = 34
 FASTER: Final[str] = 'FASTER'
 TAG_GAP: Final[int] = 8
 TABS: Final[tuple[str, ...]] = ('Stop', 'Map', 'Strip', 'Strip + map')
-ONE_TITLE_PICKS: Final[frozenset[str]] = frozenset({'FROM'})
+ONE_TITLE_PICKS: Final[frozenset[str]] = frozenset({PICK_FROM})
 
 
 def arrow(canvas: Canvas, *, x: float, y: float, grey: int) -> float:

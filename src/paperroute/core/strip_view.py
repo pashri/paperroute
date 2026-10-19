@@ -16,6 +16,8 @@ from paperroute.core.strip_model import (
     INDENT,
     LOADING,
     NO_STRIP,
+    OPEN_HINT,
+    OPEN_TAG,
     PANE_FROM_ROW,
     PANE_ROWS,
     PANE_TRACK_X,
@@ -265,7 +267,7 @@ def marks_of(*, inputs: StripInputs, reach: Reach) -> Marks:
     )
 
 
-def tag_of(*, index: int, marks: Marks) -> str:
+def tag_of(*, index: int, marks: Marks, kind: RowKind) -> str:
     """
     Choose a row's tag.
 
@@ -275,19 +277,24 @@ def tag_of(*, index: int, marks: Marks) -> str:
         Row index.
     marks : Marks
         What the rows are marked with.
+    kind : RowKind
+        What the row shows.
 
     Returns
     -------
     str
         'TO?' or 'FROM?' on the cursor while picking, else ''. On the
         From while picking TO it reads ALL_TAG, as pressing there commits
-        all departures. The From and the Destination carry no other tag;
+        all departures, and on a closed fold OPEN_TAG, as pressing there
+        opens it. The From and the Destination carry no other tag;
         their discs mark them.
     """
     if index != marks.cursor or marks.picking is None:
         return ''
     if marks.picking == PICK_TO and index == marks.origin:
         return ALL_TAG
+    if marks.picking == PICK_TO and kind is RowKind.FOLD:
+        return OPEN_TAG
     return f'{marks.picking}?'
 
 
@@ -389,7 +396,7 @@ def strip_row(
             else slot_y(index=row.parent, first=first, window=window)
         ),
         parent_depth=row.depth if parent is None else parent.depth,
-        tag=tag_of(index=index, marks=marks),
+        tag=tag_of(index=index, marks=marks, kind=row.kind),
         time=marks.times.get(index, ''),
         ride=index in marks.ride,
         cursor=index == marks.cursor,
@@ -695,6 +702,31 @@ def with_vehicles(*, inputs: StripInputs, rows: Sequence[StripRow],
     )
 
 
+def on_fold(*, inputs: StripInputs) -> bool:
+    """
+    Say whether the TO cursor is on a closed fold.
+
+    Parameters
+    ----------
+    inputs : StripInputs
+        The view's inputs.
+
+    Returns
+    -------
+    bool
+        True while picking TO with the cursor on a fold row, which a
+        press opens.
+    """
+    reach, cursor = inputs.reach, inputs.cursor
+    return (
+        inputs.picking == PICK_TO
+        and reach is not None
+        and cursor is not None
+        and 0 <= cursor < len(reach.rows)
+        and reach.rows[cursor].kind is RowKind.FOLD
+    )
+
+
 def strip_panel(*, inputs: StripInputs) -> StripPanel:
     """
     Fill the departures panel.
@@ -713,7 +745,9 @@ def strip_panel(*, inputs: StripInputs) -> StripPanel:
         count while picking a From, as there is no From yet.
     """
     stop = inputs.stop_view
-    hint = None if inputs.picking is None else HINTS.get(inputs.picking)
+    hint = OPEN_HINT if on_fold(inputs=inputs) else (
+        None if inputs.picking is None else HINTS.get(inputs.picking)
+    )
     shown = PANEL_ROWS - (hint is not None)
     reach = inputs.reach
     return StripPanel(

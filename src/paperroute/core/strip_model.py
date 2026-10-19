@@ -30,6 +30,8 @@ HINTS: Final[dict[str, str]] = {
     'TO': f'Press: set TO{DOT}press FROM: all departures',
     'FROM': f'Press: set FROM{DOT}top press: back',
 }
+OPEN_HINT: Final[str] = f'Press: open{DOT}press FROM: all departures'
+OPEN_TAG: Final[str] = 'OPEN'  # a closed fold under the TO cursor
 PICK_FROM: Final[str] = 'FROM'
 PICK_TO: Final[str] = 'TO'
 ALL_TAG: Final[str] = 'ALL'  # the From row while picking TO

@@ -19,7 +19,7 @@ from paperroute.core.reach import (
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import State
 from paperroute.core.strip_folds import FOLD_MIN, folded
-from paperroute.core.strip_model import StripMapView, StripView
+from paperroute.core.strip_model import OPEN_TAG, StripMapView, StripView
 from paperroute.core.strip_view import (
     build_strip_view,
     home_of,
@@ -339,3 +339,23 @@ def test_vehicle_inside_a_closed_fold_is_drawn_on_its_row() -> None:
     fold = next(row for row in view.rows if row.kind is RowKind.FOLD)
     assert marker.y == fold.y
     assert fold.time == ''
+
+
+def test_to_cursor_on_a_fold_offers_to_open_it() -> None:
+    """On a closed fold the TO tag reads OPEN and the hint says open."""
+    state, _ = on_view(view=LiveView.STOP, pin=replace(PIN, kind=None))
+    state, _ = run(state=state, events=[
+        *TO_STAGE,
+        StripLoaded(key=CHOSEN_KEY, reach=mid_fold_reach(origin='S2')),
+        DOWN, DOWN, DOWN, DOWN,
+    ])
+    view = state.last_view
+    assert isinstance(view, StripView)
+    cursor = next(row for row in view.rows if row.cursor)
+    assert (cursor.kind, cursor.tag) == (RowKind.FOLD, OPEN_TAG)
+    assert view.panel.hint == 'Press: open · press FROM: all departures'
+    state, _ = run(state=state, events=[PRESS])
+    view = state.last_view
+    assert isinstance(view, StripView)
+    assert next(row for row in view.rows if row.cursor).tag == 'TO?'
+    assert view.panel.hint == 'Press: set TO · press FROM: all departures'

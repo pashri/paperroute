@@ -235,6 +235,16 @@ def test_cursor_row_is_inverted() -> None:
     assert frame[int(FROM_Y), NAME_X - 10] == PAPER
 
 
+def test_open_tag_is_a_paper_box_like_to() -> None:
+    """A cursor on a fold carries a paper OPEN tag at the row's end."""
+    frame = drawn(rows=(strip_row(y=FROM_Y, tag='OPEN', cursor=True),))
+    to = drawn(rows=(strip_row(y=FROM_Y, tag='TO?', cursor=True),))
+    box = frame[int(FROM_Y) - 8:int(FROM_Y) + 8, TIME_RIGHT - 40:TIME_RIGHT]
+    assert box.mean() > 128
+    assert (box == INK).any()
+    assert (frame != to).any()
+
+
 def test_cursor_row_shows_its_time_in_paper() -> None:
     """A cursor row without a tag keeps its time, in paper."""
     plain = drawn(rows=(strip_row(y=FROM_Y, cursor=True),))

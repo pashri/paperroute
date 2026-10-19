@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import timedelta
 
 import numpy as np
+from numpy.typing import NDArray
 
 from paperroute.core.geo import Point, to_metres
 from paperroute.core.map_view import (
@@ -19,6 +20,7 @@ from paperroute.core.stop_view import Pill, PinTag, Row
 from paperroute.core.strip_badges import HALF_WIDE
 from paperroute.core.strip_model import (
     HINTS,
+    OPEN_HINT,
     PANE_TRACK_X,
     ROW_H,
     STRIP_TOP,
@@ -208,6 +210,19 @@ def test_hint_box_replaces_the_fourth_departure() -> None:
     box = draw_strip_view(view=view)[420:464, 456:786]
     assert box.mean() < 128
     assert (box == PAPER).any()
+
+
+def test_open_hint_draws_in_the_hint_box() -> None:
+    """The fold hint fills the same box with its own paper text."""
+    def box(hint: str) -> NDArray[np.uint8]:
+        view = replace(
+            VIEW, panel=replace(PANEL, rows=(panel_row(),) * 3, hint=hint),
+        )
+        return draw_strip_view(view=view)[420:464, 456:786]
+    opens = box(OPEN_HINT)
+    assert opens.mean() < 128
+    assert (opens == PAPER).any()
+    assert (opens != box(HINTS['TO'])).any()
 
 
 def test_panel_draws_empty_text() -> None:

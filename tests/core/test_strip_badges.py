@@ -11,6 +11,8 @@ from paperroute.core.map_view import Marker
 from paperroute.core.strip_badges import (
     BADGE_SPAN,
     BADGE_STEP,
+    DISC_SPAN,
+    HALF_WIDE,
     Badge,
     Keepouts,
     Spot,
@@ -21,9 +23,10 @@ BOX_HALF: Final[float] = 10.0  # half a drawn badge's height
 WEDGE: Final[float] = 10.0  # a drawn wedge's length past the box
 TAB: Final[float] = 12.0  # a drawn age tab's depth below the box
 DISC: Final[float] = 11.0  # a drawn disc's radius
-WIDEST: Final[float] = 21.0  # half the widest drawn badge, outline included
-NAME_GAP: Final[float] = 22.0  # a name's start right of its track
+WIDEST: Final[float] = 27.6  # half a drawn 'SH100' badge and its outline
+NAME_GAP: Final[float] = 28.0  # a name's start right of its track
 TEXT_HALF: Final[float] = 8.0  # half a name's drawn height
+BESIDE: Final[float] = 30 + DISC_SPAN  # first slot beside a disc at x 30
 
 
 def badge(*, x: float, y: float, low: float, high: float,
@@ -196,7 +199,7 @@ def test_pushed_lines_up_vehicles_at_the_from_beside_its_disc() -> None:
         spots=spots,
         discs=discs,
     )
-    assert pair == [('A', 64, 136), ('B', 108, 136)]
+    assert pair == [('A', BESIDE, 136), ('B', BESIDE + 2 * HALF_WIDE, 136)]
     crowd = shown(
         badges=[
             badge(x=30, y=136 + i, low=136, high=172, route=f'T{i}')
@@ -205,7 +208,7 @@ def test_pushed_lines_up_vehicles_at_the_from_beside_its_disc() -> None:
         spots=spots,
         discs=discs,
     )
-    assert crowd == [('T0', 64, 136), ('+3', 108, 136)]
+    assert crowd == [('T0', BESIDE, 136), ('+3', BESIDE + 2 * HALF_WIDE, 136)]
 
 
 def test_pushed_keeps_wedges_and_tabs_off_the_disc() -> None:
@@ -232,7 +235,7 @@ def test_badge_at_a_disc_on_the_top_row_stays_level_with_it() -> None:
         discs=(spots['P'],),
         top=80,
     )
-    assert found == [('T1', 64, 98)]
+    assert found == [('T1', BESIDE, 98)]
 
 
 def overlapping(*, drawn: Sequence[Marker]) -> bool:

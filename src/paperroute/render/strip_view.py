@@ -6,6 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.core.stop_view import Pill, Row
+from paperroute.core.strip_badges import HALF_WIDE
 from paperroute.core.strip_model import (
     PANE_TRACK_X,
     TRACK_X,
@@ -29,7 +30,7 @@ from paperroute.render.map_view import draw_overlay, snap, wrap
 from paperroute.render.stop_view import TAG_FACE, finish
 from paperroute.render.strip import draw_band, draw_rows, draw_strip_markers
 
-NAME_X: Final[int] = 52
+NAME_X: Final[int] = TRACK_X + int(HALF_WIDE)
 TIME_RIGHT: Final[int] = 424
 STRIP_RIGHT: Final[int] = 440
 RULE_WIDTH: Final[int] = 3

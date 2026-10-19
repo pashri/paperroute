@@ -16,6 +16,7 @@ from paperroute.core.map_view import (
 from paperroute.core.model import CarryOn, Mode
 from paperroute.core.reach import RowKind
 from paperroute.core.stop_view import Pill, PinTag, Row
+from paperroute.core.strip_badges import HALF_WIDE
 from paperroute.core.strip_model import (
     HINTS,
     PANE_TRACK_X,
@@ -380,11 +381,11 @@ def test_hint_box_clears_three_panel_rows() -> None:
 
 
 def test_line_badges_on_a_track_clear_its_names() -> None:
-    """On the strip and the pane, a line badge on a track ends before names."""
+    """On the strip and the pane, a badge on a track ends before names."""
     for track_x, name_x in ((TRACK_X, NAME_X), (PANE_TRACK_X, PANE_NAME_X)):
-        for route in ('HUN', 'BMT', 'SCO', 'CCN', '+10'):
+        for route in ('HUN', 'BMT', 'SCO', 'CCN', '+10', '610X', 'SH100'):
             right = badge_box(route=route, centre=(track_x, 0))[2]
-            assert right < name_x, (route, track_x)
+            assert right < track_x + HALF_WIDE <= name_x, (route, track_x)
 
 
 def at_the_from(*, stale: bool) -> StripView:

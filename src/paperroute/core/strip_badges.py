@@ -14,7 +14,7 @@ BADGE_HALF: Final[float] = 10.0  # half a badge's height
 WEDGE_REACH: Final[float] = 10.0  # a live badge's wedge past its box
 TAB_REACH: Final[float] = 12.0  # a stale badge's age tab below its box
 DISC_REACH: Final[float] = 12.0  # a disc's radius and a pixel
-HALF_WIDE: Final[float] = 22.0  # half the widest badge, and a pixel
+HALF_WIDE: Final[float] = 28.0  # half a five-letter badge, and a pixel
 DISC_SPAN: Final[float] = DISC_REACH + HALF_WIDE  # badges nearer overlap
 
 

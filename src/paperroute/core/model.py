@@ -105,6 +105,8 @@ EXACT_KINDS: Final[dict[int, RouteKind]] = {
     712: RouteKind.SCHOOL,
     714: RouteKind.REPLACEMENT,
 }
+
+
 def kind_for(
     *, route_type: int, agency_id: str | None, short_name: str,
 ) -> RouteKind | None:

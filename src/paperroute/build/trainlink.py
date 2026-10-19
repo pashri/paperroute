@@ -103,11 +103,15 @@ def load_trips(
     Returns
     -------
     list[Trip]
-        Trips in trip ID order; a trip with no dates is left out.
+        Trips in trip ID order, with the dates it runs and is not already
+        skipped on; a trip with none is left out.
     """
     dates: dict[str, set[str]] = defaultdict(set)
     for service, date in conn.execute('SELECT service_id, date FROM services'):
         dates[service].add(date)
+    skipped: dict[str, set[str]] = defaultdict(set)
+    for trip, date in conn.execute('SELECT trip_id, date FROM trip_skip'):
+        skipped[trip].add(date)
     calls: dict[tuple[str, str], list[Call]] = defaultdict(list)
     for trip, service, seq, station, arr, dep, active in conn.execute(
         CALLS.format(where=where), params,
@@ -117,11 +121,12 @@ def load_trips(
         ))
     return [
         Trip(
-            trip_id=trip, service_id=service, dates=frozenset(dates[service]),
+            trip_id=trip, service_id=service,
+            dates=frozenset(dates[service] - skipped[trip]),
             calls=tuple(found),
         )
         for (trip, service), found in calls.items()
-        if dates[service]
+        if dates[service] - skipped[trip]
     ]
 
 
@@ -167,6 +172,38 @@ def action_for(*, bundle: Trip, twin: Trip) -> Action | None:
     return None
 
 
+def closeness(
+    *, bundle: Trip, action: Action, twin: Trip,
+) -> tuple[int, int, int, str]:
+    """
+    Rank a twin's action on a bundle trip; the smallest is applied first.
+
+    Parameters
+    ----------
+    bundle : Trip
+        Bundle trip.
+    action : Action
+        What the twin would do.
+    twin : Trip
+        The twin.
+
+    Returns
+    -------
+    tuple[int, int, int, str]
+        The kind of action (a drop first), then how far apart the trips'
+        times are at the end the twin matched (the departure, or the
+        arrival for a TAIL cut), then the negated number of the twin's
+        calls (the longest overlap first), then the twin's trip ID.
+    """
+    mine, theirs = bundle.stops, twin.stops
+    gap = (
+        abs(mine[-1].arr - theirs[-1].arr)
+        if action.cut is Cut.TAIL
+        else abs(mine[0].dep - theirs[0].dep)
+    )
+    return int(action.cut), gap, -len(theirs), twin.trip_id
+
+
 def trimmed(
     *, bundle: Trip, twins: list[Trip],
 ) -> tuple[Trip | None, set[str]]:
@@ -198,7 +235,9 @@ def trimmed(
                 for twin in twins
                 if (action := action_for(bundle=current, twin=twin))
             ),
-            key=lambda pair: pair[0].cut,
+            key=lambda pair: closeness(
+                bundle=current, action=pair[0], twin=pair[1],
+            ),
         )
         if not found:
             return current, used
@@ -346,7 +385,8 @@ def clone_cut(
     """
     Add a shortened copy of a trip that runs only on some dates.
 
-    The original is skipped on those dates.
+    The original is skipped on those dates and aliased to the copy, so
+    realtime notes under its ID reach the copy.
 
     Parameters
     ----------
@@ -379,6 +419,10 @@ def clone_cut(
         'dropoff FROM stop_times WHERE trip_id = ? AND seq = ?',
         [(copy, trip.trip_id, call.seq) for call in keep],
     )
+    conn.execute(
+        'INSERT OR IGNORE INTO trip_aliases VALUES (?, ?)',
+        (trip.trip_id, copy),
+    )
     skip_dates(conn=conn, trip=trip, dates=dates)
 
 
@@ -407,8 +451,9 @@ def adopt_agency(
     *, conn: sqlite3.Connection, trip: Trip, twin_ids: set[str],
 ) -> None:
     """
-    Give trains-feed trips the agency of the bundle trip they repeat.
+    Give trains-feed trips the agency of the bundle trip they replace.
 
+    Only for a dropped bundle trip: a twin of a cut trip keeps its agency.
     As in `merge_rail`, a trip kept from the trains feed keeps the bundle
     agency, so it stays Regional and is matched in the nswtrains feed.
 
@@ -461,8 +506,8 @@ def apply_group(
         when it was shortened.
     """
     whole = dates == bundle.dates
-    adopt_agency(conn=conn, trip=bundle, twin_ids=twin_ids)
     if sum(call.active for call in keep) < MIN_CALLS:
+        adopt_agency(conn=conn, trip=bundle, twin_ids=twin_ids)
         alias_twins(conn=conn, trip=bundle, twin_ids=twin_ids)
         if whole:
             remove_trip(conn=conn, trip=bundle)
@@ -529,5 +574,13 @@ def trim_trainlink(*, conn: sqlite3.Connection) -> TrimReport:
             )
             dropped += gone
             cut += shortened
+        if len(groups) > 1 and set().union(
+            *(dates for dates, _ in groups.values()),
+        ) == bundle.dates:
+            remove_trip(conn=conn, trip=bundle)
+            conn.execute(
+                'DELETE FROM trip_skip WHERE trip_id = ?', (bundle.trip_id,),
+            )
+            dropped += 1
     conn.commit()
     return TrimReport(dropped=dropped, cut=cut)

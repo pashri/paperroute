@@ -9,8 +9,11 @@ import pytest
 from paperroute.build.timetable import create_schema
 from paperroute.build.trainlink import (
     MATCH_SECONDS,
+    Action,
+    Cut,
     TrimReport,
     apply_group,
+    kept_calls,
     load_trips,
     trim_trainlink,
 )
@@ -269,3 +272,151 @@ def test_through_train_carried_as_two_trips_is_dropped(
     assert conn.execute(
         'SELECT trip_id FROM trip_aliases ORDER BY trip_id',
     ).fetchall() == [('n1',), ('n2',)]
+
+
+def agency_of(*, conn: sqlite3.Connection, trip_id: str) -> object:
+    """
+    Read a trip's agency.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable.
+    trip_id : str
+        Trip ID.
+
+    Returns
+    -------
+    object
+        The agency ID.
+    """
+    return conn.execute(
+        'SELECT agency_id FROM trips WHERE trip_id = ?', (trip_id,),
+    ).fetchone()[0]
+
+
+def test_twin_of_a_head_cut_keeps_its_agency(
+    conn: sqlite3.Connection,
+) -> None:
+    """A twin of a cut trip is not retagged and gets no alias."""
+    add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH)
+    add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[:3])
+    trim_trainlink(conn=conn)
+    assert agency_of(conn=conn, trip_id='n1') == 'NSWTrains'
+    assert conn.execute('SELECT * FROM trip_aliases').fetchall() == []
+
+
+def test_twin_of_a_tail_cut_keeps_its_agency(
+    conn: sqlite3.Connection,
+) -> None:
+    """The same holds when the twin starts late."""
+    add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH)
+    add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[1:])
+    trim_trainlink(conn=conn)
+    assert stations(conn=conn, trip_id='b1') == ['C', 'M']
+    assert agency_of(conn=conn, trip_id='n1') == 'NSWTrains'
+    assert conn.execute('SELECT * FROM trip_aliases').fetchall() == []
+
+
+def test_copy_of_a_trimmed_trip_is_an_alias_of_it(
+    conn: sqlite3.Connection,
+) -> None:
+    """Realtime under the original ID reaches the shortened copy."""
+    add_trip(
+        conn=conn, trip_id='b1', route='b', calls=THROUGH,
+        dates=(DAY, NEXT),
+    )
+    add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[:3])
+    trim_trainlink(conn=conn)
+    copy = next(trip for trip in trip_ids(conn=conn) if '~' in trip)
+    assert conn.execute('SELECT * FROM trip_aliases').fetchall() == [
+        ('b1', copy),
+    ]
+
+
+def test_nearest_twin_decides_a_cut(conn: sqlite3.Connection) -> None:
+    """Of two twins that would cut a trip, the nearer departure wins."""
+    add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH)
+    add_trip(conn=conn, trip_id='n1', route='n', calls=[
+        ('C', 8 * HOUR + 100, 8 * HOUR + 100), THROUGH[1],
+    ])
+    add_trip(conn=conn, trip_id='n2', route='n', calls=[
+        ('C', 8 * HOUR + 10, 8 * HOUR + 10), THROUGH[1], THROUGH[2],
+    ])
+    trim_trainlink(conn=conn)
+    assert stations(conn=conn, trip_id='b1') == ['W', 'A']
+
+
+def test_longest_overlap_breaks_a_tie(conn: sqlite3.Connection) -> None:
+    """With equal departures the twin covering more of the trip wins."""
+    add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH)
+    add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[:2])
+    add_trip(conn=conn, trip_id='n2', route='n', calls=THROUGH[:3])
+    trim_trainlink(conn=conn)
+    assert stations(conn=conn, trip_id='b1') == ['W', 'A']
+
+
+def test_original_with_every_date_handled_is_deleted(
+    conn: sqlite3.Connection,
+) -> None:
+    """A trip dropped on one date and copied on the other is removed."""
+    add_trip(
+        conn=conn, trip_id='b1', route='b', calls=THROUGH,
+        dates=(DAY, NEXT),
+    )
+    add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH)
+    add_trip(
+        conn=conn, trip_id='n2', route='n', calls=THROUGH[:3],
+        dates=(NEXT,),
+    )
+    assert trim_trainlink(conn=conn) == TrimReport(dropped=1, cut=1)
+    assert 'b1' not in trip_ids(conn=conn)
+    assert stations(conn=conn, trip_id='b1') == []
+    assert conn.execute(
+        "SELECT * FROM trip_skip WHERE trip_id = 'b1'",
+    ).fetchall() == []
+
+
+def test_kept_calls_cut_through_pass_through_calls(
+    conn: sqlite3.Connection,
+) -> None:
+    """A cut keeps the calls where the train only passes."""
+    conn.execute('UPDATE routes SET type = 106 WHERE route_id = ?', ('b',))
+    add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH)
+    conn.execute(
+        "UPDATE stop_times SET pickup = 1, dropoff = 1 WHERE seq = 1",
+    )
+    trip = load_trips(conn=conn, where="t.trip_id = 'b1'", params=())[0]
+    assert len(trip.stops) == 3
+    assert [
+        call.station
+        for call in kept_calls(
+            trip=trip, action=Action(cut=Cut.HEAD, station='W'),
+        )
+    ] == ['W', 'A']
+    assert [
+        call.station
+        for call in kept_calls(
+            trip=trip, action=Action(cut=Cut.TAIL, station='W'),
+        )
+    ] == ['C', 'M', 'W']
+
+
+def test_date_skipped_by_the_rail_merge_is_not_revived(
+    conn: sqlite3.Connection,
+) -> None:
+    """A copy runs only on dates the bundle trip is still listed on."""
+    add_trip(
+        conn=conn, trip_id='b1', route='b', calls=THROUGH,
+        dates=(DAY, NEXT),
+    )
+    conn.execute("INSERT INTO trip_skip VALUES ('b1', ?)", (NEXT,))
+    add_trip(
+        conn=conn, trip_id='n1', route='n', calls=THROUGH[:3],
+        dates=(DAY, NEXT),
+    )
+    trim_trainlink(conn=conn)
+    assert stations(conn=conn, trip_id='b1') == ['W', 'A']
+    assert conn.execute(
+        'SELECT date FROM trip_skip ORDER BY date',
+    ).fetchall() == [(NEXT,)]

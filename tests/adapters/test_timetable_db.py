@@ -1481,3 +1481,104 @@ def test_destination_keeps_the_pins_kind(tmp_path: Path) -> None:
     assert [d.trip_id for d in trains] == ['a']
     assert [d.trip_id for d in every] == ['a', 'b']
     assert [d.trip_id for d in whole] == ['a', 'b']
+
+
+def platform_repo(
+    *, tmp_path: Path, trips: list[tuple[str, str, list[tuple[str, str]]]],
+) -> SqliteTimetableRepository:
+    """
+    Build a timetable with station P (platforms P_1, P_2) and stop Q.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Working directory.
+    trips : list[tuple[str, str, list[tuple[str, str]]]]
+        Each trip's ID, headsign and calls.
+
+    Returns
+    -------
+    SqliteTimetableRepository
+        Repository over the built file; the caller closes it.
+    """
+    stops = [
+        {'stop_id': 'P', 'stop_name': 'P Station', 'location_type': '1',
+         'parent_station': '', 'stop_lat': '-33.8', 'stop_lon': '151.0'},
+        *(
+            {'stop_id': f'P_{n}', 'stop_name': f'P Station, Platform {n}',
+             'location_type': '0', 'parent_station': 'P',
+             'stop_lat': '-33.8', 'stop_lon': '151.0'}
+            for n in (1, 2)
+        ),
+        {'stop_id': 'Q', 'stop_name': 'Q Station', 'location_type': '0',
+         'parent_station': '', 'stop_lat': '-33.9', 'stop_lon': '151.1'},
+    ]
+    archive = write_feed(
+        path=tmp_path / 'p.zip',
+        files={
+            'stops.txt': stops,
+            'routes.txt': [{'route_id': 'T1', 'agency_id': 'SydneyTrains',
+                            'route_short_name': 'T1',
+                            'route_long_name': 'Line T1',
+                            'route_type': '2'}],
+            'calendar.txt': [{'service_id': 'daily', **DAILY}],
+            'trips.txt': [
+                {'route_id': 'T1', 'service_id': 'daily', 'trip_id': trip,
+                 'trip_headsign': headsign, 'direction_id': '0',
+                 'block_id': ''}
+                for trip, headsign, _ in trips
+            ],
+            'stop_times.txt': [
+                row
+                for trip, _, times in trips
+                for row in stop_times(trip=trip, times=times)
+            ],
+        },
+    )
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[Source(name='sydneytrains', archive=archive)],
+    )
+    return SqliteTimetableRepository(path=db)
+
+
+def p_departures(
+    *, repo: SqliteTimetableRepository, destination: str | None,
+) -> list[tuple[str, datetime]]:
+    """
+    List the trips and times leaving P from 8:00 to 9:00.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Repository.
+    destination : str | None
+        Destination, or None for the whole stop.
+
+    Returns
+    -------
+    list[tuple[str, datetime]]
+        Trip ID and departure time of each departure.
+    """
+    found = repo.departures(
+        pin=pin_of('P', destination),
+        start=at(hour=8, minute=0),
+        end=at(hour=9, minute=0),
+    )
+    return [(d.trip_id, d.departs) for d in found]
+
+
+def test_empty_running_trips_are_never_listed(tmp_path: Path) -> None:
+    """An Empty Train is left off the whole-stop and Destination boards."""
+    trips = [
+        ('a', 'Q', [('P_1', '08:00:00'), ('Q', '08:10:00')]),
+        ('e', 'Empty Train', [('P_2', '08:05:00'), ('Q', '08:15:00')]),
+    ]
+    with closing(platform_repo(tmp_path=tmp_path, trips=trips)) as repo:
+        for destination in (None, 'Q'):
+            assert p_departures(repo=repo, destination=destination) == [
+                ('a', at(hour=8, minute=0)),
+            ]
+

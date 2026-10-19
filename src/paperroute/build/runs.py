@@ -12,11 +12,13 @@ from operator import itemgetter
 from typing import Final
 
 from paperroute.build.gtfs_files import insert_many
-from paperroute.core.model import RouteKind, kind_for, until_repeated_hop
-
-HIDDEN_HEADSIGNS: Final[frozenset[str]] = frozenset(
-    {'Empty Train', 'Out Of Service', 'Non Revenue'},
+from paperroute.core.model import (
+    HIDDEN_HEADSIGNS,
+    RouteKind,
+    kind_for,
+    until_repeated_hop,
 )
+
 RAIL_TYPES: Final[frozenset[int]] = frozenset({2, 401, 900})
 CALLS: Final[str] = """
 SELECT st.trip_id, COALESCE(NULLIF(s.parent_station, ''), s.stop_id),

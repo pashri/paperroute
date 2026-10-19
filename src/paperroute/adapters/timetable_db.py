@@ -23,6 +23,7 @@ from paperroute.core.geo import (
     unpack_shape,
 )
 from paperroute.core.model import (
+    HIDDEN_HEADSIGNS,
     SYDNEY,
     CarryOn,
     Departure,
@@ -767,7 +768,7 @@ class SqliteTimetableRepository:
         Returns
         -------
         list[Departure]
-            Unsorted departures.
+            Unsorted departures, leaving out empty-running trips.
         """
         carry_ons = self.features().carry_ons
         sql = DEPARTURES if ends[1] is not None else WHOLE_STOP
@@ -785,7 +786,11 @@ class SqliteTimetableRepository:
                 'hi': service_seconds(day=day, moment=end),
             },
         )
-        return [to_departure(row=row, day=day) for row in rows]
+        return [
+            to_departure(row=row, day=day)
+            for row in rows
+            if row[4] not in HIDDEN_HEADSIGNS
+        ]
 
     def close(self) -> None:
         """Close the database connection."""

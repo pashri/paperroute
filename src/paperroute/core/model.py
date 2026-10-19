@@ -13,6 +13,9 @@ from paperroute.core.geo import Point
 
 SYDNEY: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 REGIONAL_AGENCIES: Final[frozenset[str]] = frozenset({'711'})
+HIDDEN_HEADSIGNS: Final[frozenset[str]] = frozenset(
+    {'Empty Train', 'Out Of Service', 'Non Revenue'},
+)
 
 
 class Mode(StrEnum):

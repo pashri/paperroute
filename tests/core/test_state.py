@@ -2217,9 +2217,10 @@ def test_flip_and_hold_on_the_strip_views(view: LiveView) -> None:
     assert (state.view, state.places.unpinned) == (view, PINS[1])
 
 
-def test_top_hold_does_nothing() -> None:
-    """Holding the top knob is kept for settings."""
-    state = pinned(unpinned=ELSEWHERE)
+@pytest.mark.parametrize('view', list(LiveView))
+def test_top_hold_does_nothing(view: LiveView) -> None:
+    """Holding the top knob is kept for settings, on every Live view."""
+    state = pinned(unpinned=ELSEWHERE, view=view)
     assert step(state, KnobHeld(knob=Knob.TOP)) == (state, ())
 
 

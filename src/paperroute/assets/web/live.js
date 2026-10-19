@@ -108,24 +108,43 @@ const holders = {
   bottom: holdable('bottom'),
 };
 
+const downKeys = new Set();
+
 /**
- * Handle a key going down or up, ignoring repeats, typing and chords.
+ * Act on a key going down, ignoring repeats, typing and chords.
  * @param {KeyboardEvent} event The key event.
- * @param {boolean} isDown True for keydown.
  * @returns {void}
  */
-function onKey(event, isDown) {
+function onKeyDown(event) {
   if (event.repeat || event.target.closest(EDITABLE)) return;
-  const target = KEYS[event.key.toLowerCase()];
+  const key = event.key.toLowerCase();
+  const target = KEYS[key];
   if (!target || event.metaKey || event.ctrlKey || event.altKey) return;
-  const [knob, action] = target;
-  if (action !== 'press') {
-    if (isDown) sendKnob(knob, action);
-  } else if (isDown) {
-    holders[knob].start();
-  } else {
-    holders[knob].finish();
+  if (target[1] !== 'press') sendKnob(...target);
+  else if (!downKeys.has(key)) {
+    downKeys.add(key);
+    holders[target[0]].start();
   }
+}
+
+/**
+ * Finish a key that started a press, whatever modifiers are down now.
+ * @param {KeyboardEvent} event The key event.
+ * @returns {void}
+ */
+function onKeyUp(event) {
+  const key = event.key.toLowerCase();
+  if (!downKeys.delete(key)) return;
+  holders[KEYS[key][0]].finish();
+}
+
+/**
+ * Drop every pending press or hold without sending anything.
+ * @returns {void}
+ */
+function cancelAll() {
+  downKeys.clear();
+  Object.values(holders).forEach((holder) => holder.cancel());
 }
 
 /**
@@ -135,7 +154,9 @@ function onKey(event, isDown) {
  */
 function wirePress(button) {
   const holder = holders[button.dataset.knob];
-  button.addEventListener('pointerdown', holder.start);
+  button.addEventListener('pointerdown', (event) => {
+    if (event.button === 0) holder.start();
+  });
   button.addEventListener('pointerup', holder.finish);
   button.addEventListener('pointercancel', holder.cancel);
   button.addEventListener('pointerleave', holder.cancel);
@@ -148,8 +169,9 @@ function wirePress(button) {
 new EventSource('/events').addEventListener('frame', (event) => {
   frame.src = `/frame.png?v=${event.data}`;
 });
-document.addEventListener('keydown', (event) => onKey(event, true));
-document.addEventListener('keyup', (event) => onKey(event, false));
+document.addEventListener('keydown', onKeyDown);
+document.addEventListener('keyup', onKeyUp);
+window.addEventListener('blur', cancelAll);
 document.querySelectorAll('button[data-knob]').forEach((button) => {
   if (button.dataset.action === 'press') {
     wirePress(button);

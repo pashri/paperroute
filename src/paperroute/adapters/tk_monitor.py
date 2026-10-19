@@ -79,6 +79,11 @@ class HoldKey:
         if self._down_at is not None:
             self._up_at = now
 
+    def cancel(self) -> None:
+        """Forget a pending press or hold without posting anything."""
+        self._down_at = self._up_at = None
+        self._held = False
+
     def poll(self, now: float) -> Event | None:
         """
         Resolve a hold or a release once enough time has passed.
@@ -99,6 +104,22 @@ class HoldKey:
         if not self._held and end - self._down_at >= HOLD_S:
             self._held = True
             return KnobHeld(knob=Knob.BOTTOM)
+        return self._released(now)
+
+    def _released(self, now: float) -> Event | None:
+        """
+        Settle a release once the repeat gap has passed.
+
+        Parameters
+        ----------
+        now : float
+            Current time in seconds.
+
+        Returns
+        -------
+        Event | None
+            `KnobPressed` for a tap, else None.
+        """
         if self._up_at is None or now - self._up_at < REPEAT_GAP_S:
             return None
         tapped = not self._held
@@ -164,6 +185,7 @@ class TkMonitor:
         self.post = post
         self.root.bind('<KeyPress>', self.on_key)
         self.root.bind('<KeyRelease>', self.on_key_release)
+        self.root.bind('<FocusOut>', self.on_focus_out)
 
     def on_key(self, key: 'tkinter.Event[tkinter.Misc]') -> None:
         """
@@ -174,7 +196,7 @@ class TkMonitor:
         key : tkinter.Event[tkinter.Misc]
             Tk key event.
         """
-        if key.keysym == HOLD_KEY:
+        if key.keysym.lower() == HOLD_KEY:
             event = self.hold.down(time.monotonic())
         else:
             event = key_event(keysym=key.keysym)
@@ -190,8 +212,20 @@ class TkMonitor:
         key : tkinter.Event[tkinter.Misc]
             Tk key event.
         """
-        if key.keysym == HOLD_KEY:
+        if key.keysym.lower() == HOLD_KEY:
             self.hold.up(time.monotonic())
+
+    def on_focus_out(self, key: 'tkinter.Event[tkinter.Misc]') -> None:
+        """
+        Drop a pending hold when the window loses focus.
+
+        Parameters
+        ----------
+        key : tkinter.Event[tkinter.Misc]
+            Tk focus event.
+        """
+        del key
+        self.hold.cancel()
 
     def on_close(self) -> None:
         """Post QuitRequested when the window's close button is pressed."""

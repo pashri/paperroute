@@ -74,3 +74,13 @@ def test_hold_key_x11_up_down_pair_is_a_repeat() -> None:
     assert key.down(0.52) is None
     assert key.poll(0.9) == KnobHeld(knob=Knob.BOTTOM)
     assert key.poll(1.0) is None
+
+
+def test_hold_key_cancel_sends_nothing() -> None:
+    """Cancelling drops a pending hold and the later release."""
+    key = HoldKey()
+    key.down(0)
+    key.cancel()
+    assert key.poll(1.0) is None
+    key.up(1.1)
+    assert key.poll(1.5) is None

@@ -802,6 +802,24 @@ def test_overlapping_badges_pushed_down() -> None:
     assert first.x == second.x
 
 
+def test_crowded_hop_folds_into_a_count() -> None:
+    """Six trains on one hop show one badge and a '+5' count."""
+    now = START + timedelta(minutes=1)
+    trips = [f't{i}' for i in range(6)]
+    inputs = inputs_of(
+        reach=example_reach(),
+        departures=[live(item=train(minutes=0, trip_id=t)) for t in trips],
+        patterns={
+            t: line_pattern(trip_id=t, stations=EAST, minutes=0)
+            for t in trips
+        },
+        now=now,
+    )
+    first, count = build_strip_view(inputs=inputs).markers
+    assert (first.route, count.route) == ('T1', '+5')
+    assert count.y - first.y == 22
+
+
 def test_close_badges_pushed_to_one_step_apart() -> None:
     """A badge 12 px below another is pushed to 22 px below it."""
     now = START + timedelta(minutes=2)

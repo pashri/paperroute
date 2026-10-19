@@ -4,9 +4,15 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
+from paperroute.core.map_view import Marker
 from paperroute.core.model import Departure, RouteKind
 from paperroute.core.reach import StripKey
-from paperroute.core.strip_vehicles import strip_trips
+from paperroute.core.strip_vehicles import (
+    BADGE_STEP,
+    Spot,
+    pushed,
+    strip_trips,
+)
 from tests.core.factories import START, departure
 
 TRAIN: Final[StripKey] = StripKey(
@@ -75,3 +81,62 @@ def test_strip_trips_follow_the_routes_rule() -> None:
     assert strip_trips(departures=both, key=anything, now=START) == {
         'a', 'b',
     }
+
+
+def badge(*, x: float, y: float, route: str = 'T1') -> Marker:
+    """
+    Make a live strip badge.
+
+    Parameters
+    ----------
+    x : float
+        Track x.
+    y : float
+        Centre y.
+    route : str
+        Route label.
+
+    Returns
+    -------
+    Marker
+        The badge.
+    """
+    return Marker(
+        route=route, x=x, y=y, bearing=180.0, live=True, pinned=True,
+    )
+
+
+def test_pushed_caps_a_crowded_hop_at_two_badges() -> None:
+    """Eight badges on one hop show one badge and a '+7' just below it."""
+    spots = {'A': Spot(x=30, y=100), 'B': Spot(x=30, y=136)}
+    crowd = [badge(x=30, y=100 + i, route=f'T{i}') for i in range(8)]
+    first, rest = pushed(markers=crowd, spots=spots)
+    assert (first.route, first.y, first.live) == ('T0', 100, True)
+    assert (rest.route, rest.y, rest.live) == ('+7', 100 + BADGE_STEP, False)
+    assert (rest.bearing, rest.age) == (None, None)
+
+
+def test_pushed_keeps_badges_apart_in_separate_hops() -> None:
+    """Badges far enough apart are each kept, pushed at most one step."""
+    spots = {'A': Spot(x=30, y=100), 'B': Spot(x=30, y=172)}
+    shown = pushed(
+        markers=[badge(x=30, y=y) for y in (100, 110, 172, 172)],
+        spots=spots,
+    )
+    assert [each.y for each in shown] == [100, 122, 172, 194]
+    assert {each.route for each in shown} == {'T1'}
+
+
+def test_pushed_keeps_spur_badges_off_main_line_names() -> None:
+    """A spur badge level with a main-line row moves onto its track."""
+    spots = {
+        'main': Spot(x=30, y=100),
+        'spur': Spot(x=46, y=136),
+    }
+    junction, spur = pushed(
+        markers=[badge(x=46, y=100), badge(x=46, y=136)], spots=spots,
+    )
+    assert (junction.x, junction.y) == (30, 100)
+    assert (spur.x, spur.y) == (46, 136)
+    (between,) = pushed(markers=[badge(x=46, y=118)], spots=spots)
+    assert between.x == 46

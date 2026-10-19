@@ -24,6 +24,8 @@ from paperroute.core.reach import StripKey, every_route
 from paperroute.core.stop_view import not_departed
 
 BADGE_STEP: Final[int] = 22
+STACK_REACH: Final[int] = BADGE_STEP  # furthest a badge is pushed down
+NAME_REACH: Final[float] = 18.0  # half a strip row
 STRIP_LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 STRIP_AHEAD: Final[timedelta] = timedelta(minutes=30)
 type Heard = Mapping[str, tuple[VehiclePosition, float]]
@@ -474,29 +476,123 @@ def hop_marker(
     )
 
 
-def pushed(*, markers: Sequence[Marker]) -> tuple[Marker, ...]:
+def in_gutter(*, marker: Marker, spots: Mapping[str, Spot]) -> Marker:
     """
-    Push overlapping badges in a column down, in y order.
+    Keep a badge off the names of the rows level with it.
+
+    Parameters
+    ----------
+    marker : Marker
+        Badge.
+    spots : Mapping[str, Spot]
+        Visible rows' track spots by station.
+
+    Returns
+    -------
+    Marker
+        The badge moved left onto the track of the shallowest row within
+        `NAME_REACH` of it, whose name starts right of that track; as it
+        was when no row that close sits further left.
+    """
+    level = (
+        spot.x
+        for spot in spots.values()
+        if abs(spot.y - marker.y) < NAME_REACH
+    )
+    return replace(marker, x=min((marker.x, *level)))
+
+
+def counted(*, marker: Marker, extra: int) -> Marker:
+    """
+    Turn the last badge of a full stack into a count.
+
+    Parameters
+    ----------
+    marker : Marker
+        The stack's last badge.
+    extra : int
+        Badges folded into it.
+
+    Returns
+    -------
+    Marker
+        The badge as it is with none folded in, else a hollow '+<n>'
+        badge counting itself and the folded ones.
+    """
+    if not extra:
+        return marker
+    return replace(
+        marker,
+        route=f'+{extra + 1}',
+        bearing=None,
+        live=False,
+        age=None,
+    )
+
+
+def stacked(*, column: Sequence[Marker]) -> list[Marker]:
+    """
+    Push one column's badges apart, folding a crowd into a count.
+
+    Parameters
+    ----------
+    column : Sequence[Marker]
+        Badges at one x, in y order.
+
+    Returns
+    -------
+    list[Marker]
+        Each badge moved down to at least `BADGE_STEP` below the one
+        above it. One that would move more than `STACK_REACH` is folded
+        into the badge above, which becomes a '+<n>' count.
+    """
+    placed: list[Marker] = []
+    folded: list[int] = []
+    for marker in column:
+        y = marker.y if not placed else max(
+            marker.y, placed[-1].y + BADGE_STEP,
+        )
+        if y - marker.y > STACK_REACH:
+            folded[-1] += 1
+            continue
+        placed.append(replace(marker, y=y))
+        folded.append(0)
+    return [
+        counted(marker=marker, extra=extra)
+        for marker, extra in zip(placed, folded, strict=True)
+    ]
+
+
+def pushed(*, markers: Sequence[Marker], spots: Mapping[str, Spot]
+           ) -> tuple[Marker, ...]:
+    """
+    Keep badges off station names and apart from each other.
 
     Parameters
     ----------
     markers : Sequence[Marker]
         Badges.
+    spots : Mapping[str, Spot]
+        Visible rows' track spots by station.
 
     Returns
     -------
     tuple[Marker, ...]
-        Badges by x then y, each moved down to at least `BADGE_STEP`
-        below the one above it in its column.
+        Badges by x then y: moved onto the track of any shallower row
+        level with them, stacked down each column with at most one step
+        of push, and moved left again if the push brought them level with
+        a shallower row.
     """
-    placed: list[Marker] = []
-    for marker in sorted(markers, key=lambda each: (each.x, each.y)):
-        above = placed[-1] if placed else None
-        y = marker.y
-        if above is not None and above.x == marker.x:
-            y = max(y, above.y + BADGE_STEP)
-        placed.append(replace(marker, y=y))
-    return tuple(placed)
+    columns: dict[float, list[Marker]] = {}
+    for marker in sorted(markers, key=lambda each: each.y):
+        moved = in_gutter(marker=marker, spots=spots)
+        columns.setdefault(moved.x, []).append(moved)
+    placed = (
+        in_gutter(marker=marker, spots=spots)
+        for column in columns.values()
+        for marker in stacked(column=column)
+    )
+    return tuple(sorted(placed, key=lambda each: (each.x, each.y)))
 
 
 def vehicle_markers(*, trips: TripInputs, spots: Mapping[str, Spot]
@@ -515,7 +611,7 @@ def vehicle_markers(*, trips: TripInputs, spots: Mapping[str, Spot]
     -------
     tuple[Marker, ...]
         One badge per strip trip in the window, not cancelled, that can
-        be placed, pushed apart.
+        be placed, kept off the names and stacked at most two high.
     """
     key = trips.key
     if key is None or not spots:
@@ -534,4 +630,6 @@ def vehicle_markers(*, trips: TripInputs, spots: Mapping[str, Spot]
         )
         for departure in departures
     )
-    return pushed(markers=[each for each in placed if each is not None])
+    return pushed(
+        markers=[each for each in placed if each is not None], spots=spots,
+    )

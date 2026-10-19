@@ -533,8 +533,8 @@ def test_no_destination_scroll_clamps() -> None:
     assert under.scroll == len(many()) - ROWS_UNDER_BANNER
 
 
-def test_no_destination_rows_keep_pills() -> None:
-    """A cancelled trip carries CANCELLED and a faster one FASTER."""
+def test_no_destination_rows_keep_cancelled_but_never_faster() -> None:
+    """A cancelled trip carries CANCELLED; with no Destination, no FASTER."""
     result = view(
         departures=(
             live(minutes=3, cancelled=True),
@@ -543,11 +543,7 @@ def test_no_destination_rows_keep_pills() -> None:
         ),
         destination=None,
     )
-    assert [row.pill for row in result.rows] == [
-        Pill.CANCELLED,
-        None,
-        Pill.FASTER,
-    ]
+    assert [row.pill for row in result.rows] == [Pill.CANCELLED, None, None]
 
 
 def test_row_carries_on_tag() -> None:

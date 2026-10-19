@@ -218,17 +218,23 @@ def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
     )
 
 
-def pills(*, items: Sequence[LiveDeparture]) -> list[Pill | None]:
+def pills(
+    *, items: Sequence[LiveDeparture], faster: bool,
+) -> list[Pill | None]:
     """
     Mark each departure CANCELLED, FASTER or nothing.
 
-    FASTER means it arrives before the service leaving just ahead of it. M1
-    pill priority is CANCELLED > FASTER; EXTRA and CHANGED come later.
+    FASTER means it arrives at the Destination before the service leaving
+    just ahead of it. M1 pill priority is CANCELLED > FASTER; EXTRA and
+    CHANGED come later.
 
     Parameters
     ----------
     items : Sequence[LiveDeparture]
         Departures in order.
+    faster : bool
+        Whether FASTER applies: only with a Destination, as without one
+        each departure arrives somewhere else.
 
     Returns
     -------
@@ -241,11 +247,12 @@ def pills(*, items: Sequence[LiveDeparture]) -> list[Pill | None]:
         if item.cancelled:
             result.append(Pill.CANCELLED)
             continue
-        faster = (
-            ahead is not None
+        beats = (
+            faster
+            and ahead is not None
             and item.arrives.timestamp() < ahead.arrives.timestamp()
         )
-        result.append(Pill.FASTER if faster else None)
+        result.append(Pill.FASTER if beats else None)
         ahead = item
     return result
 
@@ -403,7 +410,11 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     upcoming = in_view(departures=inputs.departures, now=now)
     rows = [
         to_row(item=item, now=now, pill=pill)
-        for item, pill in zip(upcoming, pills(items=upcoming), strict=True)
+        for item, pill in zip(
+            upcoming,
+            pills(items=upcoming, faster=inputs.destination is not None),
+            strict=True,
+        )
     ]
     lead = None
     if inputs.destination is not None:

@@ -34,6 +34,15 @@ STRATHFIELD: Final[str] = '213510'
 BLACKTOWN: Final[str] = '214810'
 STANMORE: Final[str] = '204810'
 PARRAMATTA: Final[str] = '215020'
+REDFERN: Final[str] = '201510'
+SYDENHAM: Final[str] = '204420'
+INNER_WEST: Final[tuple[str, ...]] = (
+    'Summer Hill Station',
+    'Lewisham Station',
+    'Petersham Station',
+    'Stanmore Station',
+    'Newtown Station',
+)
 WESTERN_LINE: Final[tuple[str, ...]] = (
     'Parramatta Station',
     'Westmead Station',
@@ -818,6 +827,7 @@ def test_blacktown_strip_opens_on_the_ride_to_parramatta() -> None:
     home = origin_row(reach=reach)
     richmond = reach.rows[names.index('Marayong Station')]
     assert richmond.parent == home
+    assert richmond.depth > 0
     assert richmond.above == reach.rows[names.index('Doonside Station')].above
     assert reach.rows[names.index('Seven Hills Station')].parent == home
     view = build_strip_view(inputs=StripInputs(
@@ -841,3 +851,31 @@ def test_blacktown_strip_opens_on_the_ride_to_parramatta() -> None:
         row.ride
         for row in view.rows[shown.index(PARRAMATTA):shown.index(BLACKTOWN)]
     )
+
+
+@pytest.mark.skipif(
+    not has_runs(path=REAL_DB),
+    reason='needs data/timetable.db with run tables',
+)
+def test_redfern_reads_the_inner_west_inline_in_order() -> None:
+    """Westbound from Redfern the stations the expresses skip are inline."""
+    reach, _ = train_reach(station=REDFERN)
+    names = [row.place.name for row in reach.rows]
+    index = names.index('Summer Hill Station')
+    track = track_names(reach=reach, index=index)
+    assert tuple(track[:len(INNER_WEST)]) == INNER_WEST
+    assert all(
+        reach.rows[names.index(name)].depth == 0 for name in INNER_WEST
+    )
+
+
+@pytest.mark.skipif(
+    not has_runs(path=REAL_DB),
+    reason='needs data/timetable.db with run tables',
+)
+def test_sydenham_keeps_turrella_off_the_illawarra() -> None:
+    """Few trains run Tempe to Turrella, so Turrella stays on a spur."""
+    reach, _ = train_reach(station=SYDENHAM)
+    names = [row.place.name for row in reach.rows]
+    assert reach.rows[names.index('Turrella Station')].depth > 0
+    assert reach.rows[names.index('Tempe Station')].depth == 0

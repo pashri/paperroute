@@ -8,6 +8,7 @@ from itertools import pairwise
 from typing import Final
 
 from paperroute.core.model import StopPlace
+from paperroute.core.reach_inline import inlined
 
 FROM_KEY: Final[str] = ''  # stands for the From in a way's track graph
 
@@ -334,15 +335,16 @@ def walk(*, graph: WayGraph, start: str, placed: set[str]
     Returns
     -------
     tuple[str, ...]
-        Stations stepped to, in order.
+        Stations stepped to, in order, with the stations each step skips
+        put back inline where trains stopping at them come straight back.
     """
-    chain: list[str] = []
+    chain: list[str] = [start]
     here: str | None = next_step(graph=graph, here=start, placed=placed)
     while here is not None:
         chain.append(here)
         placed.add(here)
         here = next_step(graph=graph, here=here, placed=placed)
-    return tuple(chain)
+    return inlined(succ=graph.succ, chain=chain, placed=placed)[1:]
 
 
 def grow(*, layout: Layout, junction: str, depth: int) -> bool:

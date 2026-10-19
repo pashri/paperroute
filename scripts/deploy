@@ -42,6 +42,30 @@ if [[ -f data/tiles.db ]]; then
         printf 'deploy: run scripts/provision first (tiles)\n' >&2
         exit 1
     fi
+    NUMBER='^(0|[1-9][0-9]*)$'
+    free=$(ssh -- "$host" df -Pk "$STAGE" | awk 'NR == 2 { print $4 }')
+    remote=$(ssh -- "$host" \
+        "stat -c '%s %Y' $STAGE/tiles/tiles.db 2>/dev/null || echo '0 0'")
+    staged_size=${remote%% *}
+    staged_mtime=${remote##* }
+    read -r size mtime < <(stat -f '%z %m' data/tiles.db)
+    for value in "$free" "$staged_size" "$staged_mtime" "$size" "$mtime"; do
+        [[ $value =~ $NUMBER ]] || {
+            printf 'deploy: cannot read the tile sizes\n' >&2
+            exit 1
+        }
+    done
+    free=$((free * 1024))
+    margin=$((64 * 1024 * 1024))
+    if [[ $staged_size -ne $size || $staged_mtime -ne $mtime ]]; then
+        if (( free < size || free + staged_size < 2 * size + margin )); then
+            need=$((2 * size + margin - staged_size))
+            (( need >= size )) || need=$size
+            printf 'deploy: not enough free disk on the Pi for the tiles (need %d MB, have %d MB)\n' \
+                $((need >> 20)) $((free >> 20)) >&2
+            exit 1
+        fi
+    fi
     ssh -- "$host" mkdir -p "$STAGE/tiles"
     rsync -a --partial data/tiles.db "$host:$STAGE/tiles/tiles.db"
     ssh -- "$host" sudo -n "$TILES" || exit

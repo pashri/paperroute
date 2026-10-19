@@ -88,6 +88,23 @@ if as_service test -e "$DEST" >/dev/null && [[ $old == "$stamp" ]]; then
     printf 'tiles unchanged\n'
     exit 0
 fi
+# The temporary copy needs the staged file's size free, plus a margin.
+MARGIN=$((64 * 1024 * 1024))
+NUMBER='^(0|[1-9][0-9]*)$'  # no leading zero: bash would read octal
+size=${stamp%% *}
+[[ $size =~ $NUMBER ]] || fail 'cannot read the staged tiles'
+if [[ $EUID -ne 0 && -n ${PAPERROUTE_FREE_BYTES:-} ]]; then
+    free=$PAPERROUTE_FREE_BYTES
+    [[ $free =~ $NUMBER ]] || abort 'cannot read the free disk space'
+else
+    free=$(as_service df -Pk -- "$DATA" | awk 'NR == 2 { print $4 }') \
+        || abort 'cannot read the free disk space'
+    [[ $free =~ $NUMBER ]] || abort 'cannot read the free disk space'
+    free=$((free * 1024))
+fi
+need=$((size + MARGIN))
+(( free >= need )) \
+    || abort "not enough free disk: need $((need >> 20)) MB, have $((free >> 20)) MB"
 [[ $EUID -eq 0 ]] || fail 'checks passed; installing needs root'
 
 exec 9>"$LOCK"

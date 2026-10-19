@@ -11,11 +11,11 @@ TILE: Final[int] = 256
 LABEL_REACH: Final[int] = TILE  # pixels a baked label may reach past
 ZOOMS: Final[tuple[int, ...]] = (3, 5, 8, 14, 45)
 CITY: Final[int] = 45
-OPAL_BBOX: Final[tuple[float, float, float, float]] = (
-    149.5,
-    -35.0,
-    152.1,
-    -32.0,
+NSW_BBOX: Final[tuple[float, float, float, float]] = (
+    140.99,
+    -37.51,
+    153.64,
+    -28.15,
 )
 GRID_ORIGIN: Final[Point] = to_metres(lon=149.5, lat=-32.0)
 

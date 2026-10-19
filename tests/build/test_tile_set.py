@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from paperroute.build.tile_set import (
+    SEA_MARGIN_DEG,
     blocks,
     coverage,
     coverage_lonlat,
@@ -14,7 +15,7 @@ from paperroute.build.tile_set import (
 )
 from paperroute.build.timetable import SCHEMA
 from paperroute.core.geo import to_lonlat, to_metres
-from paperroute.core.tiles import GRID_ORIGIN, OPAL_BBOX, TILE, to_pixels
+from paperroute.core.tiles import GRID_ORIGIN, NSW_BBOX, TILE, to_pixels
 
 
 def test_tile_set_covers_half_screen() -> None:
@@ -70,6 +71,45 @@ def test_stop_points_reads_stops_in_the_box(tmp_path: Path) -> None:
     )
 
 
+def test_stop_points_ignore_stops_outside_nsw(tmp_path: Path) -> None:
+    """Only the stops inside the NSW box are returned."""
+    path = tmp_path / 'timetable.db'
+    inside = {
+        'Sydney': (-33.87, 151.21),
+        'Broken Hill': (-31.95, 141.45),
+        'Tweed Heads': (-28.18, 153.54),
+    }
+    outside = (
+        (-37.81, 144.96),
+        (-27.47, 153.03),
+        (0.0, 0.0),
+        (-34.9, -180.0),
+        (30.5, -30.5),
+    )
+    rows = [
+        (name, name, lat, lon, '')
+        for name, (lat, lon) in inside.items()
+    ] + [
+        (f'out{index}', 'Out', lat, lon, '')
+        for index, (lat, lon) in enumerate(outside)
+    ]
+    with sqlite3.connect(path) as conn:
+        conn.executescript(SCHEMA)
+        conn.executemany(
+            'INSERT INTO stops VALUES (?, ?, NULL, ?, ?, ?)',
+            rows,
+        )
+    conn.close()
+    points = stop_points(timetable=path, bbox=NSW_BBOX)
+    expected = sorted(
+        (float(round(x)), float(round(y)))
+        for x, y in (
+            to_metres(lon=lon, lat=lat) for lat, lon in inside.values()
+        )
+    )
+    assert points == expected
+
+
 def test_coverage_bounds_every_tile_at_every_zoom() -> None:
     """The coverage box holds each tile at each zoom."""
     x0, y0 = GRID_ORIGIN
@@ -82,16 +122,23 @@ def test_coverage_bounds_every_tile_at_every_zoom() -> None:
     )
 
 
-def test_coverage_lonlat_is_clipped_to_opal() -> None:
-    """A box past the Opal area is cut back to it."""
-    west, south = to_metres(lon=149.0, lat=-36.0)
-    east, north = to_metres(lon=153.0, lat=-31.0)
+def test_coverage_lonlat_is_clipped_to_nsw_with_a_sea_margin() -> None:
+    """A huge box is cut back to NSW grown by the sea margin."""
+    west, south = to_metres(lon=100.0, lat=-60.0)
+    east, north = to_metres(lon=170.0, lat=-10.0)
     clipped = coverage_lonlat(box=(west, south, east, north))
-    assert clipped == OPAL_BBOX
+    assert clipped == pytest.approx(
+        (
+            NSW_BBOX[0] - SEA_MARGIN_DEG,
+            NSW_BBOX[1] - SEA_MARGIN_DEG,
+            NSW_BBOX[2] + SEA_MARGIN_DEG,
+            NSW_BBOX[3] + SEA_MARGIN_DEG,
+        ),
+    )
 
 
 def test_coverage_lonlat_keeps_a_small_box() -> None:
-    """A box inside the Opal area keeps its corners."""
+    """A box inside NSW keeps its corners."""
     west, south = to_metres(lon=151.0, lat=-33.9)
     east, north = to_metres(lon=151.1, lat=-33.8)
     clipped = coverage_lonlat(box=(west, south, east, north))
@@ -101,11 +148,11 @@ def test_coverage_lonlat_keeps_a_small_box() -> None:
     )
 
 
-def test_coverage_lonlat_refuses_a_box_outside_opal() -> None:
-    """A box wholly outside the Opal area has nothing to build."""
-    west, south = to_metres(lon=153.0, lat=-31.0)
-    east, north = to_metres(lon=154.0, lat=-30.0)
-    with pytest.raises(ValueError, match='outside the Opal area'):
+def test_coverage_lonlat_refuses_a_box_outside_nsw() -> None:
+    """A box wholly outside NSW has nothing to build."""
+    west, south = to_metres(lon=130.0, lat=-31.0)
+    east, north = to_metres(lon=131.0, lat=-30.0)
+    with pytest.raises(ValueError, match='outside NSW'):
         coverage_lonlat(box=(west, south, east, north))
 
 

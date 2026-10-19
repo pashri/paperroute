@@ -17,7 +17,7 @@ from paperroute.build.handoff import Handoff
 from paperroute.build.refresh import RefreshBusy, refresh
 from paperroute.build.swap import guarded
 from paperroute.build.timetable import Window, build_timetable, yesterday
-from paperroute.core.tiles import OPAL_BBOX, ZOOMS
+from paperroute.core.tiles import NSW_BBOX, ZOOMS
 from paperroute.logs import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -120,7 +120,7 @@ def add_tiles(*, command: argparse.ArgumentParser) -> None:
     command.add_argument('--timetable', type=Path, required=True)
     command.add_argument('--out', type=Path, required=True)
     command.add_argument('--work', type=Path)
-    command.add_argument('--bbox', type=parse_bbox, default=OPAL_BBOX)
+    command.add_argument('--bbox', type=parse_bbox, default=NSW_BBOX)
     command.add_argument('--zooms', type=parse_zooms, default=ZOOMS)
     command.add_argument('--jobs', type=int, default=os.cpu_count() or 1)
     command.add_argument('--index', default='flex_mem')

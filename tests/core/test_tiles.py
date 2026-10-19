@@ -1,7 +1,11 @@
 """Tests for the tile grid."""
 
+import pytest
+
+from paperroute.core.geo import to_metres
 from paperroute.core.tiles import (
     GRID_ORIGIN,
+    ZOOMS,
     from_pixels,
     tile_of,
     tiles_covering,
@@ -37,3 +41,17 @@ def test_tiles_covering_is_half_open() -> None:
     """A box ending exactly on a tile edge excludes the next tile."""
     tiles = tiles_covering(left=0, right=256, top=0, bottom=256)
     assert tiles == [(0, 0)]
+
+
+@pytest.mark.parametrize('mpp', ZOOMS)
+def test_pixels_round_trip_west_and_north_of_the_origin(mpp: int) -> None:
+    """Broken Hill and Tweed Heads have negative columns or rows."""
+    broken_hill = to_metres(lon=141.45, lat=-31.95)
+    tweed_heads = to_metres(lon=153.54, lat=-28.18)
+    for point in (broken_hill, tweed_heads):
+        pixel = to_pixels(point=point, mpp=mpp)
+        assert from_pixels(pixel=pixel, mpp=mpp) == pytest.approx(point)
+    assert to_pixels(point=broken_hill, mpp=mpp)[0] < 0
+    assert to_pixels(point=tweed_heads, mpp=mpp)[1] < 0
+    assert tile_of(pixel=to_pixels(point=broken_hill, mpp=mpp))[0] < 0
+    assert tile_of(pixel=to_pixels(point=tweed_heads, mpp=mpp))[1] < 0

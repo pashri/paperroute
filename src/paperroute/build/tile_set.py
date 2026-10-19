@@ -9,7 +9,7 @@ from urllib.parse import quote
 
 from paperroute.core.geo import MetreBox, Point, to_lonlat, to_metres
 from paperroute.core.tiles import (
-    OPAL_BBOX,
+    NSW_BBOX,
     TILE,
     from_pixels,
     tiles_covering,
@@ -18,6 +18,7 @@ from paperroute.core.tiles import (
 
 HALF_SCREEN: Final[tuple[int, int]] = (400, 240)
 BLOCK: Final[int] = 8
+SEA_MARGIN_DEG: Final[float] = 0.2
 SELECT_STOPS: Final[str] = """
 SELECT lon, lat FROM stops
 WHERE lon BETWEEN ? AND ? AND lat BETWEEN ? AND ?
@@ -115,7 +116,7 @@ def coverage(*, tiles: Mapping[int, set[tuple[int, int]]]) -> MetreBox:
 
 def coverage_lonlat(*, box: MetreBox) -> tuple[float, float, float, float]:
     """
-    Turn a metre box into degrees, cut to the Opal area.
+    Turn a metre box into degrees, cut to NSW and a margin of sea.
 
     Parameters
     ----------
@@ -125,23 +126,24 @@ def coverage_lonlat(*, box: MetreBox) -> tuple[float, float, float, float]:
     Returns
     -------
     tuple[float, float, float, float]
-        West, south, east and north in degrees, inside ``OPAL_BBOX``.
+        West, south, east and north in degrees, inside ``NSW_BBOX``
+        grown by ``SEA_MARGIN_DEG`` on every side.
 
     Raises
     ------
     ValueError
-        If the box lies wholly outside the Opal area.
+        If the box lies wholly outside NSW.
     """
     west, south = to_lonlat(point=(box[0], box[1]))
     east, north = to_lonlat(point=(box[2], box[3]))
     clipped = (
-        max(west, OPAL_BBOX[0]),
-        max(south, OPAL_BBOX[1]),
-        min(east, OPAL_BBOX[2]),
-        min(north, OPAL_BBOX[3]),
+        max(west, NSW_BBOX[0] - SEA_MARGIN_DEG),
+        max(south, NSW_BBOX[1] - SEA_MARGIN_DEG),
+        min(east, NSW_BBOX[2] + SEA_MARGIN_DEG),
+        min(north, NSW_BBOX[3] + SEA_MARGIN_DEG),
     )
     if clipped[0] >= clipped[2] or clipped[1] >= clipped[3]:
-        raise ValueError('the tiles lie outside the Opal area')
+        raise ValueError('the tiles lie outside NSW')
     return clipped
 
 

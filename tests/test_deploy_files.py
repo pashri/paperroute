@@ -1389,6 +1389,77 @@ def test_install_tiles_needs_root_when_changed(
     assert snapshot(root=tiles.root) == before
 
 
+def test_install_tiles_checks_free_disk_before_copying(
+    tiles: TilesSandbox,
+) -> None:
+    """Too little free disk exits 1 before anything is written."""
+    (tiles.data / 'tiles.db').write_text('old tiles\n', encoding='utf-8')
+    (tiles.data / 'tiles.stamp').write_text('0 0\n', encoding='utf-8')
+    before = snapshot(root=tiles.root)
+    result = run_tiles(
+        tiles=TilesSandbox(
+            root=tiles.root,
+            staged=tiles.staged,
+            data=tiles.data,
+            env=tiles.env | {'PAPERROUTE_FREE_BYTES': '1'},
+        ),
+    )
+    assert result.returncode == 1
+    assert 'not enough free disk' in result.stderr
+    assert list(tiles.data.glob('tiles.db.*')) == []
+    assert snapshot(root=tiles.root) == before
+
+
+def test_install_tiles_free_check_runs_df_as_service() -> None:
+    """df runs only as the service user, before root's first write."""
+    text = script_text(path=TILES_SCRIPT)
+    found = commands(path=TILES_SCRIPT, word='df')
+    assert len(found) == 1
+    assert 'as_service df ' in found[0]
+    assert text.index('as_service df ') < text.index('installing needs root')
+    assert text.index('as_service df ') < text.index('mktemp')
+    assert text.index('installing needs root') < text.index('mktemp')
+
+
+def test_install_tiles_ignores_free_override_as_root() -> None:
+    """The free-space override applies only when the caller isn't root."""
+    assert (
+        "if [[ $EUID -ne 0 && -n ${PAPERROUTE_FREE_BYTES:-} ]]; then\n"
+        '    free=$PAPERROUTE_FREE_BYTES\n'
+    ) in script_text(path=TILES_SCRIPT)
+    assert len(commands(path=TILES_SCRIPT, word='PAPERROUTE_FREE_BYTES')) == 2
+
+
+def test_install_tiles_rejects_a_non_numeric_free_override(
+    tiles: TilesSandbox,
+) -> None:
+    """A free-space override that is not a plain number is refused."""
+    result = run_tiles(
+        tiles=TilesSandbox(
+            root=tiles.root,
+            staged=tiles.staged,
+            data=tiles.data,
+            env=tiles.env | {'PAPERROUTE_FREE_BYTES': '1+1'},
+        ),
+    )
+    assert result.returncode == 1
+    assert 'cannot read the free disk space' in result.stderr
+
+
+def test_deploy_checks_free_disk_before_tile_upload() -> None:
+    """scripts/deploy reads the Pi's free space before the tile rsync."""
+    text = DEPLOY_SCRIPT.read_text(encoding='utf-8')
+    rsync = text.index('rsync -a --partial data/tiles.db')
+    assert 0 < text.index('df -Pk') < rsync
+    assert text.count('^(0|[1-9][0-9]*)$') >= 1
+    assert (
+        'for value in "$free" "$staged_size" "$staged_mtime" "$size" '
+        '"$mtime"; do\n        [[ $value =~ $NUMBER ]]'
+    ) in text
+    assert text.index('=~ $NUMBER') < rsync
+    assert 'not enough free disk on the Pi for the tiles' in text
+
+
 def test_install_tiles_ignores_overrides_as_root() -> None:
     """The test overrides apply only when the caller isn't root."""
     assert (

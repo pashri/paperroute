@@ -22,7 +22,7 @@ from paperroute.build.tile_set import (
 )
 from paperroute.build.tile_store import TileWriter
 from paperroute.core.geo import MetreBox, to_metres
-from paperroute.core.tiles import OPAL_BBOX, ZOOMS
+from paperroute.core.tiles import NSW_BBOX, ZOOMS
 from paperroute.rss import BYTES_PER_MB, max_rss_mb
 
 STORE_NAME: Final[str] = 'features.db'
@@ -74,7 +74,7 @@ class TileBuildConfig:
     timetable: Path
     out: Path
     work: Path
-    bbox: tuple[float, float, float, float] = OPAL_BBOX
+    bbox: tuple[float, float, float, float] = NSW_BBOX
     zooms: tuple[int, ...] = ZOOMS
     jobs: int = 1
     index: str = 'flex_mem'

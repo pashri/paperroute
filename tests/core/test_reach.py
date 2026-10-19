@@ -9,13 +9,15 @@ import pytest
 from hypothesis import given
 
 from paperroute.core.geo import Point
-from paperroute.core.model import SYDNEY, StopPlace
+from paperroute.core.model import SYDNEY, RouteKind, StopPlace
 from paperroute.core.reach import (
     Reach,
     ReachInput,
     RowKind,
     RunTail,
+    StripKey,
     build_reach,
+    every_route,
 )
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_model import StripInputs
@@ -724,3 +726,9 @@ def test_sydenham_keeps_turrella_off_the_illawarra() -> None:
     names = [row.place.name for row in reach.rows]
     assert reach.rows[names.index('Turrella Station')].depth > 0
     assert reach.rows[names.index('Tempe Station')].depth == 0
+
+
+def test_ferry_routes_ignored_for_trips() -> None:
+    """A Ferry strip takes every ferry through the From, as a line kind."""
+    key = StripKey(station='W', kind=RouteKind.FERRY, routes=('F1',))
+    assert every_route(key=key)

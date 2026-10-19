@@ -1,8 +1,13 @@
 """Drop bundle rail trips that the Sydney Trains or Metro feeds also carry."""
 
 import sqlite3
+from collections import defaultdict
 from dataclasses import dataclass
 from typing import Final
+
+from paperroute.core.model import REGIONAL_AGENCIES, TRAINLINK
+
+MIN_SHARED: Final[int] = 2
 
 KEYS: Final[str] = """
 CREATE TEMP TABLE trip_key AS
@@ -123,3 +128,112 @@ def merge_rail(*, conn: sqlite3.Connection) -> MergeReport:
         raise
     conn.executescript(CLEANUP)
     return MergeReport(dropped=int(dropped or 0), partial=int(partial or 0))
+
+
+STATIONS_OF_ROUTES: Final[str] = """
+SELECT DISTINCT r.route_id, r.short_name, r.long_name, r.type, r.agency_id,
+  COALESCE(s.parent_station, s.stop_id)
+FROM routes r JOIN trips t ON t.route_id = r.route_id
+  JOIN stop_times st ON st.trip_id = t.trip_id
+  JOIN stops s ON s.stop_id = st.stop_id
+WHERE (r.type = 106 AND r.agency_id IN ({agencies}))
+  OR (r.type = 2 AND r.short_name IN ({lines}))
+ORDER BY r.route_id
+"""
+
+
+def stations_by_route(
+    *, conn: sqlite3.Connection,
+) -> tuple[
+    dict[str, set[str]], dict[str, str], dict[str, set[str]],
+]:
+    """
+    Read the stations of each TrainLink line and each bundle 106 route.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Loaded timetable.
+
+    Returns
+    -------
+    tuple[dict[str, set[str]], dict[str, str], dict[str, set[str]]]
+        Parent stations by NSWTrains line name; the first long name by
+        line name; parent stations by bundle route ID.
+    """
+    sql = STATIONS_OF_ROUTES.format(
+        agencies=', '.join('?' * len(REGIONAL_AGENCIES)),
+        lines=', '.join('?' * len(TRAINLINK)),
+    )
+    lines: dict[str, set[str]] = defaultdict(set)
+    names: dict[str, str] = {}
+    routes: dict[str, set[str]] = defaultdict(set)
+    for route_id, short, long, kind, _, station in conn.execute(
+        sql, (*sorted(REGIONAL_AGENCIES), *TRAINLINK),
+    ):
+        if kind == 2:
+            lines[short].add(station)
+            names.setdefault(short, long)
+        else:
+            routes[route_id].add(station)
+    return lines, names, routes
+
+
+def closest_line(
+    *, shared: dict[str, int],
+) -> str | None:
+    """
+    Pick the TrainLink line that shares the most stations.
+
+    Parameters
+    ----------
+    shared : dict[str, int]
+        Stations shared with each line, by line name.
+
+    Returns
+    -------
+    str | None
+        The line with the most, the first in TRAINLINK order on a tie;
+        None when no line shares enough stations to be the same line.
+    """
+    best = max(shared.values(), default=0)
+    if best < MIN_SHARED:
+        return None
+    return next(line for line in TRAINLINK if shared.get(line) == best)
+
+
+def relabel_trainlink(*, conn: sqlite3.Connection) -> int:
+    """
+    Name each bundle NSW TrainLink train route after its NSWTrains line.
+
+    The bundle numbers these services (31 to 36, 621 to 644) while the
+    Sydney Trains feed names the same lines NRC, NRW, STH and WST. A
+    bundle route takes the name and long name of the line whose trips
+    call at the most of the same parent stations. A route sharing too few
+    stations with any line keeps its number.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Loaded timetable, after `merge_rail`.
+
+    Returns
+    -------
+    int
+        Number of routes renamed.
+    """
+    lines, names, routes = stations_by_route(conn=conn)
+    renamed = 0
+    for route_id, stations in routes.items():
+        line = closest_line(shared={
+            code: len(stations & lines[code]) for code in names
+        })
+        if line is not None:
+            conn.execute(
+                'UPDATE routes SET short_name = ?, long_name = ? '
+                'WHERE route_id = ?',
+                (line, names[line], route_id),
+            )
+            renamed += 1
+    conn.commit()
+    return renamed

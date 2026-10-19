@@ -30,7 +30,7 @@ KIND_ORDER: Final[tuple[RouteKind, ...]] = (
     RouteKind.LIGHT_RAIL,
     RouteKind.FERRY,
     RouteKind.SCHOOL,
-    RouteKind.REGIONAL,
+    RouteKind.COACH,
 )
 KIND_LABELS: Final[dict[RouteKind, str]] = {
     RouteKind.BUS: 'Bus',
@@ -39,7 +39,7 @@ KIND_LABELS: Final[dict[RouteKind, str]] = {
     RouteKind.LIGHT_RAIL: 'Light rail',
     RouteKind.FERRY: 'Ferry',
     RouteKind.SCHOOL: 'School',
-    RouteKind.REGIONAL: 'Regional',
+    RouteKind.COACH: 'Coach',
 }
 KIND_LETTERS: Final[dict[RouteKind, str]] = {
     RouteKind.BUS: 'B',
@@ -48,7 +48,7 @@ KIND_LETTERS: Final[dict[RouteKind, str]] = {
     RouteKind.LIGHT_RAIL: 'L',
     RouteKind.FERRY: 'F',
     RouteKind.SCHOOL: 'S',
-    RouteKind.REGIONAL: 'R',
+    RouteKind.COACH: 'C',
 }
 
 

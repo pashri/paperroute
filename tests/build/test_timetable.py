@@ -241,7 +241,7 @@ def test_meta_records_schema_version(tmp_path: Path) -> None:
     assert query(db=db, sql="SELECT value FROM meta "
                             "WHERE key = 'schema_version'") == [
         (SCHEMA_VERSION,)]
-    assert SCHEMA_VERSION == '3'
+    assert SCHEMA_VERSION == '4'
 
 
 def test_partly_merged_trip_keeps_its_shape(tmp_path: Path) -> None:

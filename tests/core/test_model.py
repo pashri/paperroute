@@ -4,8 +4,10 @@ from datetime import UTC, date, datetime
 
 import pytest
 
+from paperroute.core.chooser import KIND_LABELS, KIND_LETTERS, KIND_ORDER
 from paperroute.core.model import (
     SYDNEY,
+    TRAINLINK,
     Mode,
     Pin,
     RouteKind,
@@ -77,14 +79,19 @@ def test_service_time_before_daylight_saving_start() -> None:
 @pytest.mark.parametrize(('route_type', 'agency_id', 'short_name', 'kind'), [
     (2, 'SydneyTrains', 'T1', RouteKind.TRAIN),
     (2, 'SydneyTrains', 'CCN', RouteKind.TRAIN),
-    (2, 'NSWTrains', 'NRC', RouteKind.REGIONAL),
+    (2, 'NSWTrains', 'NRC', RouteKind.TRAIN),
+    (2, 'NSWTrains', 'NRW', RouteKind.TRAIN),
+    (2, 'NSWTrains', 'STH', RouteKind.TRAIN),
+    (2, 'NSWTrains', 'WST', RouteKind.TRAIN),
+    (2, 'NSWTrains', 'XPT', None),
     (2, 'SydneyTrains', '', None),
     (700, '2436', '', None),
-    (106, None, '31', RouteKind.REGIONAL),
-    (204, None, '700', RouteKind.REGIONAL),
-    (205, None, '701', RouteKind.REGIONAL),
-    (700, '711', '480', RouteKind.REGIONAL),
-    (2, '711', 'T1', RouteKind.REGIONAL),
+    (106, '711', '31', RouteKind.TRAIN),
+    (204, '711', '700', RouteKind.COACH),
+    (205, '711', '701', RouteKind.COACH),
+    (204, None, '700', RouteKind.COACH),
+    (700, '711', '480', None),
+    (2, '711', 'T1', None),
     (401, 'SMNW', 'M1', RouteKind.METRO),
     (900, None, 'L1', RouteKind.LIGHT_RAIL),
     (4, None, 'F1', RouteKind.FERRY),
@@ -142,3 +149,39 @@ def test_same_place_ignores_names_and_points() -> None:
 def test_same_place_tells_pins_apart(other: Pin) -> None:
     """A different stop, kind or route list is a different pin."""
     assert not same_place(first=pin_of('A', 'B'), second=other)
+
+
+def test_kind_for_bundle_trainlink_services_are_train() -> None:
+    """The bundle's numbered XPT services are trains, not coaches."""
+    assert kind_for(
+        route_type=106, agency_id='711', short_name='31',
+    ) is RouteKind.TRAIN
+
+
+def test_kind_for_trainlink_lines_are_train() -> None:
+    """NRC, NRW, STH and WST are Train lines."""
+    assert {
+        code: kind_for(
+            route_type=2, agency_id='NSWTrains', short_name=code,
+        )
+        for code in TRAINLINK
+    } == dict.fromkeys(TRAINLINK, RouteKind.TRAIN)
+
+
+def test_kind_for_coaches_are_coach() -> None:
+    """Route types 204 and 205 of agency 711 are coaches."""
+    assert [
+        kind_for(route_type=kind, agency_id='711', short_name='C1')
+        for kind in (204, 205)
+    ] == [RouteKind.COACH, RouteKind.COACH]
+
+
+def test_kind_order_is_bus_train_metro_lr_ferry_school_coach() -> None:
+    """The chooser lists kinds in its fixed order, with Coach last."""
+    assert KIND_ORDER == (
+        RouteKind.BUS, RouteKind.TRAIN, RouteKind.METRO,
+        RouteKind.LIGHT_RAIL, RouteKind.FERRY, RouteKind.SCHOOL,
+        RouteKind.COACH,
+    )
+    assert KIND_LABELS[RouteKind.COACH] == 'Coach'
+    assert KIND_LETTERS[RouteKind.COACH] == 'C'

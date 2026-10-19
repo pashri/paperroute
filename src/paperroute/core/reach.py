@@ -5,14 +5,12 @@ from dataclasses import dataclass, replace
 from enum import StrEnum
 from typing import Final
 
-from paperroute.core.model import RouteKind, StopPlace
+from paperroute.core.model import STATION_FIRST, RouteKind, StopPlace
 from paperroute.core.reach_layout import Entry, lay_out
 from paperroute.core.reach_track import FROM_KEY, place_of
 
 APPROACH_ROWS: Final[int] = 2
-LINE_KINDS: Final[frozenset[RouteKind]] = frozenset(
-    {RouteKind.TRAIN, RouteKind.METRO, RouteKind.LIGHT_RAIL},
-)
+LINE_KINDS: Final[frozenset[RouteKind]] = STATION_FIRST
 
 
 @dataclass(frozen=True)

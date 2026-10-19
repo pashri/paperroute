@@ -12,7 +12,7 @@ from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from paperroute.core.model import Pin, RouteKind, StopPlace
+from paperroute.core.model import TRAINLINK, Pin, RouteKind, StopPlace
 from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved
 from paperroute.core.tiles import ZOOMS
 from paperroute.ports import Loaded
@@ -20,10 +20,7 @@ from paperroute.ports import Loaded
 logger = logging.getLogger(__name__)
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/state.json')
-SCHEMA_VERSION: Final[int] = 1
-MIGRATIONS: Final[
-    dict[int, Callable[[dict[str, object]], dict[str, object]]]
-] = {}
+SCHEMA_VERSION: Final[int] = 2
 TEMP_PREFIX: Final[str] = '.state.json.'
 BAD_PREFIX: Final[str] = 'state.json.bad-'
 BAD_KEPT: Final[int] = 2
@@ -217,6 +214,63 @@ def from_model(*, model: StateModel) -> Saved:
         view=model.view,
         zoom=model.zoom,
     )
+
+
+def coach_pin(*, pin: object) -> object:
+    """
+    Move one stored Regional pin to Coach, or to Train for a TrainLink line.
+
+    Parameters
+    ----------
+    pin : object
+        A stored pin; anything that is not a Regional pin is returned as
+        it is.
+
+    Returns
+    -------
+    object
+        The pin with its kind rewritten.
+    """
+    if not isinstance(pin, dict) or pin.get('kind') != 'regional':
+        return pin
+    routes = pin.get('routes')
+    trainlink = (
+        isinstance(routes, list)
+        and bool(routes)
+        and all(route in TRAINLINK for route in routes)
+    )
+    return {**pin, 'kind': 'train' if trainlink else 'coach'}
+
+
+def regional_to_coach(data: dict[str, object]) -> dict[str, object]:
+    """
+    Rewrite every Regional pin, and the unpinned place, as Coach or Train.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Version 1 data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with its pins rewritten.
+    """
+    pins = data.get('pins')
+    return {
+        **data,
+        'pins': (
+            [coach_pin(pin=pin) for pin in pins]
+            if isinstance(pins, list)
+            else pins
+        ),
+        'unpinned': coach_pin(pin=data.get('unpinned')),
+    }
+
+
+MIGRATIONS: Final[
+    dict[int, Callable[[dict[str, object]], dict[str, object]]]
+] = {1: regional_to_coach}
 
 
 def migrate(*, data: dict[str, object]) -> dict[str, object]:

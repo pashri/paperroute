@@ -290,10 +290,10 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
 
 
 def test_written_json_shape(path: Path) -> None:
-    """The version is 1 and stops carry their metre coordinates."""
+    """The version is 2 and stops carry their metre coordinates."""
     JsonStateRepository(path=path).save(saved=sample())
     data = json.loads(path.read_text())
-    assert data['schema_version'] == 1
+    assert data['schema_version'] == 2
     assert data['pins'][0]['origin'] == {
         'stop_id': 'a',
         'name': 'A',
@@ -372,3 +372,66 @@ def test_deeply_nested_json_gives_defaults(path: Path) -> None:
     loaded = JsonStateRepository(path=path).load()
     assert loaded.saved == DEFAULT_SAVED
     assert not loaded.stored
+
+
+def v1_pin(*, kind: str, routes: list[str]) -> dict[str, object]:
+    """
+    Build a stored version 1 pin.
+
+    Parameters
+    ----------
+    kind : str
+        Stored kind.
+    routes : list[str]
+        Stored route badges.
+
+    Returns
+    -------
+    dict[str, object]
+        The pin as JSON.
+    """
+    stop = {'stop_id': 'a', 'name': 'A', 'x': 1.0, 'y': 2.0}
+    return {
+        'origin': stop, 'destination': None, 'kind': kind, 'routes': routes,
+    }
+
+
+def test_migrate_regional_pin_to_coach(path: Path) -> None:
+    """Regional pins load as Coach, or Train for a TrainLink line."""
+    path.write_text(json.dumps({
+        'schema_version': 1,
+        'pins': [
+            v1_pin(kind='regional', routes=['C1']),
+            v1_pin(kind='regional', routes=['STH']),
+            v1_pin(kind='regional', routes=[]),
+            v1_pin(kind='bus', routes=['333']),
+        ],
+        'current': 0,
+        'unpinned': v1_pin(kind='regional', routes=['NRC', 'WST']),
+        'view': 'strip',
+        'zoom': 0,
+    }))
+    loaded = JsonStateRepository(path=path).load()
+    assert loaded.stored
+    assert [pin.kind for pin in loaded.saved.pins] == [
+        RouteKind.COACH, RouteKind.TRAIN, RouteKind.COACH, RouteKind.BUS,
+    ]
+    assert loaded.saved.unpinned is not None
+    assert loaded.saved.unpinned.kind is RouteKind.TRAIN
+    assert not list(path.parent.glob('state.json.bad-*'))
+
+
+def test_migrate_regional_with_no_unpinned_place(path: Path) -> None:
+    """A null unpinned place stays null."""
+    path.write_text(json.dumps({
+        'schema_version': 1,
+        'pins': [v1_pin(kind='regional', routes=['C1'])],
+        'current': 0,
+        'unpinned': None,
+        'view': 'strip',
+        'zoom': 0,
+    }))
+    loaded = JsonStateRepository(path=path).load()
+    assert loaded.stored
+    assert loaded.saved.unpinned is None
+    assert loaded.saved.pins[0].kind is RouteKind.COACH

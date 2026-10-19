@@ -77,22 +77,34 @@ class RouteKind(StrEnum):
     LIGHT_RAIL = 'light_rail'
     FERRY = 'ferry'
     SCHOOL = 'school'
-    REGIONAL = 'regional'
+    COACH = 'coach'
     REPLACEMENT = 'replacement'
 
 
 INTERCITY: Final[tuple[str, ...]] = ('BMT', 'CCN', 'SCO', 'SHL', 'HUN')
+TRAINLINK: Final[tuple[str, ...]] = ('NRC', 'NRW', 'STH', 'WST')
+STATION_FIRST: Final[frozenset[RouteKind]] = frozenset({
+    RouteKind.TRAIN,
+    RouteKind.METRO,
+    RouteKind.LIGHT_RAIL,
+    RouteKind.FERRY,
+})
 SYDNEY_LINES: Final[re.Pattern[str]] = re.compile(r'^T[1-9]$')
 EXACT_KINDS: Final[dict[int, RouteKind]] = {
-    106: RouteKind.REGIONAL,
-    204: RouteKind.REGIONAL,
-    205: RouteKind.REGIONAL,
+    106: RouteKind.TRAIN,
+    204: RouteKind.COACH,
+    205: RouteKind.COACH,
     401: RouteKind.METRO,
     900: RouteKind.LIGHT_RAIL,
     4: RouteKind.FERRY,
     700: RouteKind.BUS,
     712: RouteKind.SCHOOL,
     714: RouteKind.REPLACEMENT,
+}
+TRAINLINK_KINDS: Final[dict[int, RouteKind]] = {
+    106: RouteKind.TRAIN,
+    204: RouteKind.COACH,
+    205: RouteKind.COACH,
 }
 
 
@@ -114,16 +126,21 @@ def kind_for(
     Returns
     -------
     RouteKind | None
-        Kind; None for a route with no short name, or an on-demand or
+        Kind; None for a route with no short name, a rail line that is
+        not a Sydney, intercity or NSW TrainLink line, or an on-demand or
         unknown type.
     """
     if not short_name:
         return None
     if agency_id in REGIONAL_AGENCIES:
-        return RouteKind.REGIONAL
+        return TRAINLINK_KINDS.get(route_type)
     if route_type == 2:
-        suburban = SYDNEY_LINES.match(short_name) or short_name in INTERCITY
-        return RouteKind.TRAIN if suburban else RouteKind.REGIONAL
+        known = (
+            SYDNEY_LINES.match(short_name)
+            or short_name in INTERCITY
+            or short_name in TRAINLINK
+        )
+        return RouteKind.TRAIN if known else None
     return EXACT_KINDS.get(route_type)
 
 

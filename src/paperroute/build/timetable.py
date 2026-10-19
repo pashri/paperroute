@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Final
 
-from paperroute.build.dedupe import MergeReport, merge_rail
+from paperroute.build.dedupe import MergeReport, merge_rail, relabel_trainlink
 from paperroute.build.extras import build_extras
 from paperroute.build.gtfs_files import (
     Source,
@@ -25,7 +25,7 @@ from paperroute.build.shapes import load_shapes
 from paperroute.core.model import SYDNEY, Mode, mode_for
 from paperroute.rss import current_rss_mb, max_rss_mb
 
-SCHEMA_VERSION: Final[str] = '3'
+SCHEMA_VERSION: Final[str] = '4'
 PLATFORM: Final[re.Pattern[str]] = re.compile(r'(?:Platform|Stand)\s+(\w+)$')
 SCHEMA: Final[str] = """
 CREATE TABLE stops (stop_id TEXT PRIMARY KEY, name TEXT NOT NULL,
@@ -365,6 +365,7 @@ def load_all(*, sources: list[Source], window: Window,
             load_source(conn=conn, source=source, window=window)
         print('progress merge', flush=True)
         report = merge_rail(conn=conn)
+        relabel_trainlink(conn=conn)
         conn.execute(DROP_UNUSED_SHAPES)
         create_indexes(conn=conn)
         write_meta(conn=conn, window=window)

@@ -290,9 +290,9 @@ def test_kind_column_lists_seven_kinds_in_order(copy: Path) -> None:
     add_routes(path=copy, rows=[
         ('metro:M1', 'metro', '', 0, 'M1', 1, 'North West', '', ''),
         ('light_rail:L1', 'light_rail', '', 0, 'L1', 1, 'Dulwich', '', ''),
-        ('ferry:F1:x', 'ferry', '', 0, 'F1', 1, 'Manly', '', ''),
+        ('ferry:F1', 'ferry', '', 0, 'F1', 1, 'Manly', '', ''),
         ('school:S1:x', 'school', '1–99', 0, 'S1', 1, 'School', '', ''),
-        ('regional:R1:x', 'regional', '', 0, 'R1', 1, 'Far', '', ''),
+        ('coach:C1:x', 'coach', '', 0, 'C1', 1, 'Far', '', ''),
         ('replacement:1T1:x', 'replacement', '', 0, '1T1', 1, 'B', '',
          'T1'),
     ])
@@ -304,9 +304,9 @@ def test_kind_column_lists_seven_kinds_in_order(copy: Path) -> None:
         Choice(key='metro', label='Metro', badge='M', detail='1 line'),
         Choice(key='light_rail', label='Light rail', badge='L',
                detail='1 line'),
-        Choice(key='ferry', label='Ferry', badge='F', detail='1 route'),
+        Choice(key='ferry', label='Ferry', badge='F', detail='1 line'),
         Choice(key='school', label='School', badge='S', detail='1 route'),
-        Choice(key='regional', label='Regional', badge='R',
+        Choice(key='coach', label='Coach', badge='C',
                detail='1 route'),
     ))
 
@@ -357,7 +357,7 @@ def test_train_lines_rule_off_intercity(copy: Path) -> None:
     add_routes(path=copy, rows=[
         ('train:BMT', 'train', '', 0, 'BMT', 101, 'Blue Mountains', '', ''),
         ('train:CCN', 'train', '', 0, 'CCN', 102, 'Central Coast', '', ''),
-        ('ferry:F1:x', 'ferry', '', 0, 'F1', 1, 'Manly', '', ''),
+        ('ferry:F1', 'ferry', '', 0, 'F1', 1, 'Manly', '', ''),
     ])
     with closing(SqliteNetworkRepository(path=copy)) as repo:
         lines = repo.choices(path=TRAIN)
@@ -368,8 +368,8 @@ def test_train_lines_rule_off_intercity(copy: Path) -> None:
         ('T1', 'Line T1', False), ('T2', 'Line T2', False),
         ('BMT', 'Blue Mountains', True), ('CCN', 'Central Coast', False),
     ]
-    assert ferries == Column(level=Level.ROUTE, items=(
-        Choice(key='ferry:F1:x', label='Manly', badge='F1'),
+    assert ferries == Column(level=Level.LINE, items=(
+        Choice(key='ferry:F1', label='Manly', badge='F1'),
     ))
 
 
@@ -625,3 +625,48 @@ def test_injected_connection_is_read(network_db: Path) -> None:
     with closing(SqliteNetworkRepository(connection=conn)) as repo:
         port: NetworkRepository = repo
         assert labels(column=port.choices(path=())) == ['Bus', 'Train']
+
+
+def test_train_lines_rule_off_each_group(copy: Path) -> None:
+    """A rule sits above the first intercity and the first TrainLink line."""
+    add_routes(path=copy, rows=[
+        ('train:BMT', 'train', '', 0, 'BMT', 101, 'Blue Mountains', '', ''),
+        ('train:CCN', 'train', '', 0, 'CCN', 102, 'Central Coast', '', ''),
+        ('train:NRC', 'train', '', 0, 'NRC', 111, 'North Coast', '', ''),
+        ('train:WST', 'train', '', 0, 'WST', 114, 'Western', '', ''),
+    ])
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        lines = repo.choices(path=TRAIN)
+    assert lines is not None
+    assert [(c.badge, c.rule_above) for c in lines.items] == [
+        ('T1', False), ('T2', False), ('BMT', True), ('CCN', False),
+        ('NRC', True), ('WST', False),
+    ]
+
+
+def test_ferry_lines_rule_off_the_non_sydney_ferries(copy: Path) -> None:
+    """Ferry opens a LINE column; a rule sits above the first non-F row."""
+    add_routes(path=copy, rows=[
+        ('ferry:F1', 'ferry', '', 0, 'F1', 1, 'Manly', '', ''),
+        ('ferry:F2', 'ferry', '', 0, 'F2', 2, 'Taronga', '', ''),
+        ('ferry:SM', 'ferry', '', 0, 'SM', 200, 'Stockton', '', ''),
+    ])
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        ferries = repo.choices(path=((Level.KIND, 'ferry'),))
+    assert ferries is not None
+    assert ferries.level is Level.LINE
+    assert [(c.badge, c.rule_above) for c in ferries.items] == [
+        ('F1', False), ('F2', False), ('SM', True),
+    ]
+
+
+def test_coach_opens_a_route_column(copy: Path) -> None:
+    """Coach lists routes, not lines."""
+    add_routes(path=copy, rows=[
+        ('coach:C1:x', 'coach', '', 0, 'C1', 1, 'Far', '', ''),
+    ])
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        coaches = repo.choices(path=((Level.KIND, 'coach'),))
+    assert coaches == Column(level=Level.ROUTE, items=(
+        Choice(key='coach:C1:x', label='Far', badge='C1'),
+    ))

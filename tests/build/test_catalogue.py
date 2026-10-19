@@ -626,8 +626,8 @@ def test_unlisted_train_lines_sort_after_the_listed_ones() -> None:
     }
 
 
-def test_regional_keeps_xpt_and_coaches(tmp_path: Path) -> None:
-    """The XPT and coaches are regional; the Central Coast line is not."""
+def test_trainlink_is_train_and_coaches_are_coach(tmp_path: Path) -> None:
+    """The XPT is a train line and coaches are Coach."""
     with closing(tiny_db(path=tmp_path / 't.db', routes=[
         RouteRow(route_id='nrc', number='NRC', long_name='Sydney to Brisbane',
                  route_type=2, agency='NSWTrains'),
@@ -638,7 +638,7 @@ def test_regional_keeps_xpt_and_coaches(tmp_path: Path) -> None:
     ])) as conn:
         load_catalogue(conn=conn)
         kinds = dict(conn.execute('SELECT number, kind FROM chooser_routes'))
-    assert kinds == {'NRC': 'regional', 'C1': 'regional', 'CCN': 'train'}
+    assert kinds == {'NRC': 'train', 'C1': 'coach', 'CCN': 'train'}
 
 
 def test_towards_rows_sum_merged_routes(tmp_path: Path) -> None:
@@ -733,3 +733,30 @@ def test_towards_rows_use_busiest_pattern(tmp_path: Path) -> None:
         ).fetchone()
     assert trips == 6
     assert json.loads(stations) == EAST_WEST.split()
+
+
+def test_train_lines_sort_sydney_then_intercity_then_trainlink() -> None:
+    """T1-T9, then the intercity lines, then NRC, NRW, STH and WST."""
+    rows = kind_rows(entries=[
+        Entry(key=f'train:{code}', kind=RouteKind.TRAIN, number=code,
+              name=code, tag='', line='')
+        for code in ('WST', 'XPT', 'HUN', 'NRC', 'T1', 'STH', 'NRW')
+    ])
+    assert sorted((row[5], row[4]) for row in rows) == [
+        (1, 'T1'), (105, 'HUN'), (111, 'NRC'), (112, 'NRW'), (113, 'STH'),
+        (114, 'WST'), (207, 'XPT'),
+    ]
+
+
+def test_ferry_lines_sort_sydney_ferries_first() -> None:
+    """F1-F10 come in number order, then the other ferries by name."""
+    rows = kind_rows(entries=[
+        Entry(key=f'ferry:{code}', kind=RouteKind.FERRY, number=code,
+              name=name, tag='', line='')
+        for code, name in (
+            ('MFF', 'Zeta'), ('F10', 'Ten'), ('F2', 'Two'), ('SM', 'Alpha'),
+        )
+    ])
+    assert [row[4] for row in sorted(rows, key=lambda row: row[5])] == [
+        'F2', 'F10', 'SM', 'MFF',
+    ]

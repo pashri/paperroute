@@ -1,6 +1,7 @@
 """Network repository: chooser columns, towards lines and station runs."""
 
 import json
+import re
 import sqlite3
 from collections.abc import Collection, Iterable, Sequence
 from dataclasses import replace
@@ -24,6 +25,7 @@ from paperroute.core.chooser import (
 )
 from paperroute.core.model import (
     INTERCITY,
+    TRAINLINK,
     RouteKind,
     StopPlace,
     until_revisit,
@@ -36,6 +38,9 @@ from paperroute.core.reach import (
     every_route,
 )
 
+SYDNEY_LINE: Final[re.Pattern[str]] = re.compile(
+    r'^(T[1-9]|F([1-9]|10))$',
+)
 NETWORK_TABLES: Final[tuple[str, ...]] = (
     'runs', 'run_stops', 'chooser_routes', 'chooser_towards',
 )
@@ -163,9 +168,33 @@ def route_choices(*, rows: Iterable[Row]) -> tuple[Choice, ...]:
     )
 
 
+def line_group(*, number: str) -> int:
+    """
+    Sort a line number into the group it is listed in.
+
+    Parameters
+    ----------
+    number : str
+        Line number, such as 'T1', 'BMT' or 'F1'.
+
+    Returns
+    -------
+    int
+        0 for Sydney Trains and Sydney Ferries lines, 1 for intercity
+        lines, 2 for NSW TrainLink lines and 3 for anything else.
+    """
+    if number in INTERCITY:
+        return 1
+    if number in TRAINLINK:
+        return 2
+    if SYDNEY_LINE.match(number):
+        return 0
+    return 3
+
+
 def ruled_off(*, lines: Sequence[Choice]) -> tuple[Choice, ...]:
     """
-    Put a rule above the first intercity line.
+    Put a rule above each line that starts a new group.
 
     Parameters
     ----------
@@ -175,19 +204,14 @@ def ruled_off(*, lines: Sequence[Choice]) -> tuple[Choice, ...]:
     Returns
     -------
     tuple[Choice, ...]
-        The same lines, the first intercity one with ``rule_above``.
+        The same lines, each one whose group differs from the line before
+        it with ``rule_above``.
     """
-    first = next(
-        (
-            index
-            for index, line in enumerate(lines)
-            if line.badge in INTERCITY
-        ),
-        None,
-    )
+    groups = [line_group(number=line.badge) for line in lines]
     return tuple(
-        replace(line, rule_above=True) if index == first else line
-        for index, line in enumerate(lines)
+        replace(line, rule_above=True) if index and group != groups[index - 1]
+        else line
+        for index, (line, group) in enumerate(zip(lines, groups))
     )
 
 
@@ -343,11 +367,14 @@ class SqliteNetworkRepository:
         match (level, kind):
             case (Level.KIND, RouteKind.BUS | RouteKind.SCHOOL):
                 column = self.group_column(kind=kind)
-            case (Level.KIND, RouteKind.FERRY | RouteKind.REGIONAL):
+            case (Level.KIND, RouteKind.COACH):
                 column = self.route_column(sql=ROUTES_OF_KIND, params=(kind,))
             case (
                 Level.KIND,
-                RouteKind.TRAIN | RouteKind.METRO | RouteKind.LIGHT_RAIL,
+                RouteKind.TRAIN
+                | RouteKind.METRO
+                | RouteKind.LIGHT_RAIL
+                | RouteKind.FERRY,
             ):
                 column = self.line_column(kind=kind)
             case (Level.GROUP, RouteKind()):
@@ -434,12 +461,12 @@ class SqliteNetworkRepository:
 
     def line_column(self, *, kind: RouteKind) -> Column:
         """
-        The LINE column of a kind, the intercity lines ruled off.
+        The LINE column of a kind, each group of lines ruled off.
 
         Parameters
         ----------
         kind : RouteKind
-            Train, Metro or Light rail.
+            Train, Metro, Light rail or Ferry.
 
         Returns
         -------

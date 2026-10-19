@@ -7,8 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.build.dedupe import MergeReport, merge_rail
+from paperroute.build.dedupe import MergeReport, merge_rail, relabel_trainlink
 from paperroute.build.gtfs_files import Source
+from paperroute.build.timetable import create_schema
 from tests.build.feeds import (
     DAILY,
     STATIONS,
@@ -329,3 +330,117 @@ def test_merge_skips_partial_duplicate_on_covered_dates(
         assert agency.fetchall() == [('711',)]
     assert report == MergeReport(dropped=0, partial=1)
     assert trip_ids(db=db) == {'NT31-bundle', 'NT31-feed'}
+
+
+def trainlink_db(
+    *, routes: dict[str, tuple[str, str, int, str, tuple[str, ...]]],
+) -> sqlite3.Connection:
+    """
+    Make a timetable of single-trip routes.
+
+    Parameters
+    ----------
+    routes : dict[str, tuple[str, str, int, str, tuple[str, ...]]]
+        Route ID to short name, long name, route type, agency and the
+        stations its one trip calls at.
+
+    Returns
+    -------
+    sqlite3.Connection
+        Open in-memory database.
+    """
+    conn = sqlite3.connect(':memory:')
+    create_schema(conn=conn)
+    for route_id, (short, long, kind, agency, calls) in routes.items():
+        conn.execute(
+            'INSERT INTO routes VALUES (?, ?, ?, ?, NULL, NULL, ?, ?)',
+            (route_id, short, long, kind, agency, 'x'),
+        )
+        conn.execute(
+            "INSERT INTO trips VALUES (?, ?, 's', '', NULL, NULL, ?, 'x', "
+            'NULL)',
+            (f't-{route_id}', route_id, agency),
+        )
+        for seq, station in enumerate(calls):
+            conn.execute(
+                "INSERT OR IGNORE INTO stops VALUES (?, ?, NULL, 0, 0, '')",
+                (station, station),
+            )
+            conn.execute(
+                'INSERT INTO stop_times VALUES (?, ?, ?, 0, 0, 0, 0)',
+                (f't-{route_id}', seq, station),
+            )
+    return conn
+
+
+LINES: dict[str, tuple[str, str, int, str, tuple[str, ...]]] = {
+    'wst': ('WST', 'Sydney to Dubbo', 2, 'NSWTrains',
+            ('Central', 'Lithgow', 'Orange', 'Dubbo')),
+    'sth': ('STH', 'Sydney to Melbourne', 2, 'NSWTrains',
+            ('Central', 'Goulburn', 'Albury')),
+}
+
+
+def names_after(
+    *, extra: dict[str, tuple[str, str, int, str, tuple[str, ...]]],
+) -> dict[str, tuple[str, str]]:
+    """
+    Relabel a timetable of the LINES and some bundle routes.
+
+    Parameters
+    ----------
+    extra : dict[str, tuple[str, str, int, str, tuple[str, ...]]]
+        Bundle routes to add.
+
+    Returns
+    -------
+    dict[str, tuple[str, str]]
+        Short and long name by route ID of the bundle routes.
+    """
+    with closing(trainlink_db(routes={**LINES, **extra})) as conn:
+        relabel_trainlink(conn=conn)
+        return {
+            route_id: (short, long)
+            for route_id, short, long in conn.execute(
+                'SELECT route_id, short_name, long_name FROM routes '
+                "WHERE agency_id = '711'",
+            )
+        }
+
+
+def test_relabel_names_a_bundle_route_after_its_line() -> None:
+    """A Broken Hill-style route sharing Central to Orange is WST."""
+    found = names_after(extra={
+        'b446': ('446', 'Sydney to Broken Hill', 106, '711',
+                 ('Central', 'Lithgow', 'Orange', 'Bathurst', 'Broken Hill')),
+        'b644': ('644', 'Sydney to Griffith', 106, '711',
+                 ('Central', 'Goulburn', 'Wagga', 'Griffith')),
+    })
+    assert found == {
+        'b446': ('WST', 'Sydney to Dubbo'),
+        'b644': ('STH', 'Sydney to Melbourne'),
+    }
+
+
+def test_relabel_keeps_a_route_with_no_overlap() -> None:
+    """A route sharing under two stations with every line keeps its name."""
+    found = names_after(extra={
+        'b9': ('9', 'Elsewhere', 106, '711', ('Central', 'Nowhere')),
+    })
+    assert found == {'b9': ('9', 'Elsewhere')}
+
+
+def test_relabel_breaks_a_tie_in_trainlink_order() -> None:
+    """Equal overlap goes to the line first in TRAINLINK order."""
+    found = names_after(extra={
+        'b1': ('1', 'Tie', 106, '711', ('Central', 'Goulburn', 'Lithgow')),
+    })
+    assert found['b1'][0] == 'STH'
+
+
+def test_relabel_without_nswtrains_routes_changes_nothing() -> None:
+    """With no NSWTrains lines loaded, bundle numbers stay."""
+    with closing(trainlink_db(routes={
+        'b1': ('1', 'One', 106, '711', ('Central', 'Lithgow')),
+    })) as conn:
+        assert relabel_trainlink(conn=conn) == 0

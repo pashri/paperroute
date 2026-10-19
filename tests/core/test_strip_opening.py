@@ -481,6 +481,14 @@ def test_new_timetable_shuts_the_folds() -> None:
     assert not state.strip.reaches
 
 
+def test_new_timetable_with_folds_open_sends_the_strip_home() -> None:
+    """A swap drops the reach, so the scroll goes back to home."""
+    state = strip_with_end_open(pins=(replace(PIN, destination=None),))
+    assert state.strip.scroll != 0
+    state, _ = run(state=state, events=[TimetableSeen(version='v2')])
+    assert state.strip.scroll == 0
+
+
 def test_opening_the_chooser_sends_the_strip_home() -> None:
     """Folds shut as the chooser opens; cancelling lands on home rows."""
     state = strip_with_end_open(pins=(replace(PIN, destination=None),))

@@ -467,20 +467,16 @@ def first_row(
     return max(0, min(start, total - rows))
 
 
-def turns_away(
-    *, inputs: StripInputs, origin: int, start: int, top: bool, rows: int,
-) -> int:
+def stops_away(*, origin: int, first: int, top: bool, rows: int) -> int:
     """
-    Count the detents back to the From.
+    Count the stations between the From and the strip.
 
     Parameters
     ----------
-    inputs : StripInputs
-        The view's inputs.
     origin : int
         The From row.
-    start : int
-        The unclamped top row: the home row moved by the scroll.
+    first : int
+        The row in the top slot.
     top : bool
         True when the From is above the strip.
     rows : int
@@ -489,34 +485,24 @@ def turns_away(
     Returns
     -------
     int
-        The cursor's distance from the From while picking; otherwise the
-        fewest scroll steps that bring the From onto the strip.
+        Rows between the From and the nearest row shown, the band taking
+        the slot at the From's edge.
     """
-    if inputs.cursor is not None:
-        return abs(inputs.cursor - origin)
     if top:
-        return start - origin
-    return origin - (start + rows - 1)
+        return first - origin
+    return origin - (first + rows - 1)
 
 
-def band_of(
-    *,
-    inputs: StripInputs,
-    reach: Reach,
-    rows: tuple[int, int],
-    window: Window,
-) -> Band | None:
+def band_of(*, reach: Reach, first: int, window: Window) -> Band | None:
     """
     Make the From band when the From is off the Strip.
 
     Parameters
     ----------
-    inputs : StripInputs
-        The view's inputs.
     reach : Reach
         The reach.
-    rows : tuple[int, int]
-        The home row and the row in the top slot.
+    first : int
+        The row in the top slot.
     window : Window
         Where the slots sit.
 
@@ -526,22 +512,17 @@ def band_of(
         The band at the edge nearest the From, or None when the From is
         on the strip or there is none.
     """
-    home, first = rows
     origin = origin_of(reach=reach)
     if origin is None or first <= origin < first + window.rows:
         return None
     top = origin < first
     name = reach.rows[origin].place.name.removesuffix(' Station')
-    turns = turns_away(
-        inputs=inputs,
-        origin=origin,
-        start=home + inputs.scroll,
-        top=top,
-        rows=window.rows,
+    stops = stops_away(
+        origin=origin, first=first, top=top, rows=window.rows,
     )
-    unit = 'turn' if turns == 1 else 'turns'
+    unit = 'stop' if stops == 1 else 'stops'
     return Band(
-        text=f'FROM {name}{DOT}{turns} {unit} away',
+        text=f'FROM {name}{DOT}{stops} {unit} away',
         top=top,
         y=window.top + (0 if top else (window.rows - 1) * ROW_H),
     )
@@ -571,9 +552,7 @@ def strip_rows(*, inputs: StripInputs, reach: Reach
     first = first_row(
         inputs=inputs, total=len(reach.rows), home=home, rows=window.rows,
     )
-    band = band_of(
-        inputs=inputs, reach=reach, rows=(home, first), window=window,
-    )
+    band = band_of(reach=reach, first=first, window=window)
     indices = range(first, min(first + window.rows, len(reach.rows)))
     if band is not None:
         indices = indices[1:] if band.top else indices[:-1]

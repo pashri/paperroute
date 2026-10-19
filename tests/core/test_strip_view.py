@@ -396,12 +396,15 @@ def test_short_reach_starts_at_the_top() -> None:
 
 
 def test_band_shows_when_from_scrolls_off() -> None:
-    """The band counts the fewest detents back that show FROM."""
+    """The band counts the stations between FROM and the strip."""
     base = inputs_of(reach=long_reach())
     view = build_strip_view(inputs=replace(base, scroll=20))
     assert view.band is not None
     assert view.band.top
-    assert view.band.text == 'FROM S20 · 18 turns away'
+    assert view.band.text == 'FROM S20 · 8 stops away'
+    nearer = build_strip_view(inputs=replace(base, scroll=5)).band
+    assert nearer is not None
+    assert nearer.text == 'FROM S20 · 3 stops away'
     assert len(view.rows) == 11
     assert view.rows[0].y == STRIP_TOP + ROW_H + ROW_H / 2
     assert build_strip_view(inputs=replace(base, scroll=2)).band is None
@@ -443,7 +446,7 @@ def test_long_ride_starts_at_from_toward_the_destination() -> None:
     inputs = inputs_of(reach=long_reach(), destination='S35')
     view = build_strip_view(inputs=replace(inputs, scroll=1))
     assert view.band is not None
-    assert view.band.text == 'FROM S20 · 1 turn away'
+    assert view.band.text == 'FROM S20 · 1 stop away'
     assert view.band.top
 
 
@@ -453,27 +456,27 @@ def test_band_at_the_bottom_when_scrolled_up() -> None:
     view = build_strip_view(inputs=replace(base, scroll=-12))
     assert view.band is not None
     assert not view.band.top
-    assert view.band.text == 'FROM S20 · 3 turns away'
+    assert view.band.text == 'FROM S20 · 3 stops away'
     assert slot_of(row=view.rows[-1]) == 10
     assert build_strip_view(inputs=replace(base, scroll=-9)).band is None
 
 
-def test_band_says_turn_for_one() -> None:
-    """One detent away reads in the singular."""
+def test_band_says_stop_for_one() -> None:
+    """One station between reads in the singular."""
     view = build_strip_view(inputs=replace(
         inputs_of(reach=long_reach()), scroll=3,
     ))
     assert view.band is not None
-    assert view.band.text == 'FROM S20 · 1 turn away'
+    assert view.band.text == 'FROM S20 · 1 stop away'
 
 
-def test_band_counts_cursor_distance_while_picking() -> None:
-    """While picking, the band counts rows from the cursor to FROM."""
+def test_band_counts_stations_to_the_strip_while_picking() -> None:
+    """While picking, the band counts stations from FROM to the strip."""
     view = build_strip_view(inputs=replace(
         inputs_of(reach=long_reach()), picking='TO', cursor=35,
     ))
     assert view.band is not None
-    assert view.band.text == 'FROM S20 · 15 turns away'
+    assert view.band.text == 'FROM S20 · 6 stops away'
 
 
 def test_cursor_keeps_two_rows_margin() -> None:

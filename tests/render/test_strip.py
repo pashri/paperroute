@@ -260,7 +260,7 @@ def test_band_is_inverted_with_text() -> None:
         draw_band(
             canvas,
             band=Band(
-                text='FROM Town Hall · 3 turns away',
+                text='FROM Town Hall · 3 stops away',
                 top=top,
                 y=STRIP_TOP + slot * ROW_H,
             ),

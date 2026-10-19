@@ -58,18 +58,18 @@ def test_band_sits_below_the_banner() -> None:
     assert view.band is not None
     assert view.band.top
     assert view.band.y == UNDER
-    assert view.band.text == 'FROM S20 · 18 turns away'
+    assert view.band.text == 'FROM S20 · 9 stops away'
     assert len(view.rows) == STRIP_ROWS - 2
     assert view.rows[0].y == UNDER + ROW_H * 1.5
 
 
 def test_bottom_band_counts_the_shorter_strip() -> None:
-    """With eleven slots the From is one more turn away below."""
+    """With eleven slots more stations lie between FROM and the strip."""
     view = build_strip_view(inputs=bannered(scroll=-20))
     assert view.band is not None
     assert not view.band.top
     assert view.band.y == UNDER + (STRIP_ROWS - 2) * ROW_H
-    assert view.band.text == 'FROM S20 · 12 turns away'
+    assert view.band.text == 'FROM S20 · 10 stops away'
 
 
 def test_long_ride_rests_with_from_in_the_last_slot() -> None:

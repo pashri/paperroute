@@ -129,7 +129,7 @@ def test_strip_frame_is_two_level() -> None:
         picking='TO',
         rows=rows,
         band=Band(
-            text='FROM Town Hall · 3 turns away', top=True, y=STRIP_TOP,
+            text='FROM Town Hall · 3 stops away', top=True, y=STRIP_TOP,
         ),
         markers=(live, stale),
         panel=replace(PANEL, rows=(panel_row(),) * 3, hint=HINTS['TO']),
@@ -273,7 +273,7 @@ def test_band_shows_below_the_banner() -> None:
     view = replace(
         VIEW,
         rows=(),
-        band=Band(text='FROM Town Hall · 3 turns away', top=True, y=y),
+        band=Band(text='FROM Town Hall · 3 stops away', top=True, y=y),
         banner='No live data',
     )
     frame = draw_strip_view(view=view)

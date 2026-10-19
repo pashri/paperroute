@@ -107,7 +107,7 @@ class Band:
     Attributes
     ----------
     text : str
-        For example 'FROM Town Hall · 3 turns away'.
+        For example 'FROM Town Hall · 3 stops away'.
     top : bool
         True in the top slot, False in the bottom one.
     y : float

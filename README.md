@@ -25,12 +25,20 @@ the interface boards.
       --sydneytrains data/raw/st/sydneytrains.zip --metro data/raw/st/metro_v2.zip \
       --out data/timetable.db
     PAPERROUTE_API_KEY_FILE=~/tfnsw_api_key \
-      uv run python -m paperroute run --timetable data/timetable.db --from 215020 --to 200060 \
-      --tiles data/tiles.db
+      uv run python -m paperroute run --timetable data/timetable.db \
+      --tiles data/tiles.db --state data/state.json
 
-Keys: A/D/S top knob, J/L/K bottom knob, Q quits. K switches between Stop
-and Map, and J and L zoom on the Map. Replay recorded feeds with
-`--feeds tests/fixtures/real --at 2026-10-16T06:25`.
+`--from` and `--to` (stop ids, for example `--from 215020 --to 200060`)
+only seed a first start; after that the pins come from `--state`.
+
+Keys: Q quits.
+
+- S opens the route chooser, and goes back.
+- A and D switch pins.
+- K switches views, and holding K (about 0.8 s) pins or unpins.
+- J and L scroll, zoom or move the cursor.
+
+Replay recorded feeds with `--feeds tests/fixtures/real --at 2026-10-16T06:25`.
 
 ## Map tiles
 
@@ -40,15 +48,16 @@ then build the tiles on the Mac:
     uv run python -m paperroute.build tiles --osm data/raw/nsw.osm.pbf \
       --timetable data/timetable.db --out data/tiles.db
 
-This builds the whole Opal area. It takes about 7 minutes on an
-Apple-silicon Mac, needs about 2 GB of RAM and makes about 145 MB. Add
-`--bbox` to build a smaller area for trying things out. Without
-`data/tiles.db` the Map shows "Map not installed".
+This builds all of NSW. It takes about 28 minutes on an Apple-silicon Mac,
+needs about 2 GB of RAM and makes about 470 MB. Add `--bbox` to build a
+smaller area for trying things out. Without `data/tiles.db` the Map shows
+"Map not installed".
 
 `scripts/deploy` copies `data/tiles.db` to the Pi only when it has changed.
-The first upload takes a few minutes, and later deploys print "tiles
+The first upload takes about 12.5 minutes, and later deploys print "tiles
 unchanged". The Pi needs about 3 times the tiles file's size free while
-deploy installs it.
+deploy installs it (about 1.4 GB), and deploy says so before copying when
+it doesn't.
 
 On the Map, press the bottom knob to switch between Stop and Map, and turn
 it to zoom. Hollow badges are timetable positions. A small "4m" tab means
@@ -107,13 +116,10 @@ unplug the data cable.
 
 ### Upgrade from the previous install
 
-Run `scripts/provision <user>@paperroute.local` once more, without
-`--reboot`, then run `scripts/deploy <user>@paperroute.local` straight
-after. The app stops between the two steps.
-
-The timetable then rebuilds itself to add route shapes. This takes about 40
-minutes on a Zero 2 W. Start it with the `systemctl start` command from
-step 4; the map shows no route line until it finishes.
+1. Run `scripts/deploy <user>@paperroute.local`.
+2. Wait until the app has written `/var/lib/paperroute/state.json`.
+3. Run `scripts/provision <user>@paperroute.local` once more, without
+   `--reboot`. It refuses to run before step 2 finishes.
 
 ### Green LED
 
@@ -121,10 +127,11 @@ step 4; the map shows no route line until it finishes.
 - Steady: running.
 - Slow blink: rebuilding the timetable.
 
-### Pin and refresh
+### Pins and refresh
 
-The pin is `PAPERROUTE_FROM` and `PAPERROUTE_TO` in the root-owned
-`/etc/paperroute/m2a.env`, defaulting to the 606. To change it, edit the file
-with `sudo`, then `sudo systemctl restart paperroute`.
+Make pins with the route chooser on the device or on its web page, and hold
+to pin. On the web page, hold is the Hold button; on the device, hold the
+bottom knob's press button for about 0.8 s. The pins live in
+`/var/lib/paperroute/state.json`. A new device starts on Town Hall's map.
 
 The timetable refreshes nightly at 03:30 Sydney time.

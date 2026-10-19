@@ -8,7 +8,13 @@ import pytest
 
 from paperroute.core.chooser import Stage, turned_to
 from paperroute.core.map_view import DEFAULT_ZOOM
-from paperroute.core.messages import Knob, KnobPressed, KnobTurned, StripLoaded
+from paperroute.core.messages import (
+    Knob,
+    KnobPressed,
+    KnobTurned,
+    StripLoaded,
+    TimetableSeen,
+)
 from paperroute.core.model import Pin, RouteKind
 from paperroute.core.reach import (
     Reach,
@@ -462,4 +468,12 @@ def test_closing_the_chooser_shuts_its_folds() -> None:
         state, _ = run(state=state, events=[TOP_PRESS])
     assert state.chooser is None
     assert state.strip.opened == frozenset()
+
+
+def test_new_timetable_shuts_the_folds() -> None:
+    """A timetable swap drops the opened folds with the reaches."""
+    state = strip_with_end_open(pins=(replace(PIN, destination=None),))
+    state, _ = run(state=state, events=[TimetableSeen(version='v2')])
+    assert state.strip.opened == frozenset()
+    assert not state.strip.reaches
 

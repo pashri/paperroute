@@ -683,9 +683,9 @@ def on_timetable(
     tuple[State, tuple[Effect, ...]]
         State with the version recorded, the departures due to reload
         (a load in flight is forgotten, its reply now stale), no reaches
-        built or pending and the chooser carried over, redrawn with the
-        new reach asked for, and a MatchPlaces when there is a
-        timetable; unchanged for the version already seen.
+        built or pending, no fold open, the chooser carried over,
+        redrawn with the new reach asked for, and a MatchPlaces when
+        there is a timetable; unchanged for the version already seen.
     """
     if event.version == state.saving.timetable:
         return state, ()
@@ -693,7 +693,13 @@ def on_timetable(
         state,
         board=replace(state.board, loaded_until=None, loading=False),
         saving=replace(state.saving, timetable=event.version),
-        strip=replace(state.strip, reaches={}, pending=frozenset()),
+        strip=replace(
+            state.strip,
+            reaches={},
+            pending=frozenset(),
+            opened=frozenset(),
+            context=None,
+        ),
     )
     state, asks = chooser_retimed(state=state)
     if event.version is None:

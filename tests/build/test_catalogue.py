@@ -395,6 +395,27 @@ def test_indistinguishable_routes_share_a_tag_with_a_warning() -> None:
     assert len(found) == 1
 
 
+def test_warning_names_every_route_sharing_a_tag() -> None:
+    """A word tag that falls back onto a level's tag names both routes."""
+    routes = [
+        bus(number='10', long_name=name)
+        for name in (
+            'Alpha to Alpha', 'Alpha to Bravo', 'Alpha to Charlie',
+            'Bravo to Alpha', 'Charlie to Alpha',
+        )
+    ]
+    with warnings_logged() as found:
+        tags = tags_of(routes=routes, towns={'A1': 'Alpha'})
+    shared = [
+        key
+        for key, tag in tags.items()
+        if Counter(tags.values())[tag] > 1
+    ]
+    assert shared
+    assert len(found) == 1
+    assert all(key in found[0] for key in shared)
+
+
 @st.composite
 def route_groups(draw: st.DrawFn) -> list[CatalogueRoute]:
     """

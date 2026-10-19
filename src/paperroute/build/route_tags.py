@@ -387,6 +387,34 @@ def word_tags(
     return {key: picks[unit] for key, unit in words.items()}
 
 
+def clashes(
+    *, tags: Mapping[str, str], left: Sequence[CatalogueRoute],
+) -> list[str]:
+    """
+    List the routes to warn about once a group is tagged.
+
+    Parameters
+    ----------
+    tags : Mapping[str, str]
+        Tags by route key.
+    left : Sequence[CatalogueRoute]
+        Routes no level told apart.
+
+    Returns
+    -------
+    list[str]
+        Route keys in the order tagged: every route sharing a tag, and the
+        routes left when more than one is left; empty when none.
+    """
+    seen = Counter(tags.values())
+    named = {route.route_key for route in left} if len(left) > 1 else set()
+    return [
+        key
+        for key, tag in tags.items()
+        if key in named or seen[tag] > 1
+    ]
+
+
 def group_tags(
     *, group: Sequence[CatalogueRoute], towns: Mapping[str, str],
 ) -> dict[str, str]:
@@ -423,13 +451,12 @@ def group_tags(
             given=set(tags.values()),
         ))
     left = [route for route in group if route.route_key not in tags]
-    if len(left) > 1:
-        logger.warning(
-            'route tags clash after every level: %s',
-            ', '.join(route.route_key for route in left),
-        )
     if left:
         tags.update(word_tags(routes=left, given=set(tags.values())))
+    if clashing := clashes(tags=tags, left=left):
+        logger.warning(
+            'route tags clash after every level: %s', ', '.join(clashing),
+        )
     return tags
 
 

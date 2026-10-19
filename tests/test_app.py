@@ -1449,3 +1449,22 @@ def test_starting_state_keeps_unknown_seed_places_bare(
         )
     assert shown(state=state) == MAP_PIN
     assert 'stop 2145615 not in the timetable' in caplog.text
+
+
+async def test_queued_knob_turns_draw_one_frame() -> None:
+    """A tick and five turns queued at once draw a single frame."""
+    display = FrameRecorder()
+
+    def hook(post: Callable[[Event], None]) -> None:
+        post(Tick(now=AT))
+        for steps in (1, -1, 1, -1, 1):
+            post(KnobTurned(knob=Knob.BOTTOM, steps=steps))
+
+    async with asyncio.timeout(5):
+        await run(
+            ports=ports_of(display=display),
+            post_hook=hook,
+            tick_every=60.0,
+            max_events=6,
+        )
+    assert len(display.frames) == 1

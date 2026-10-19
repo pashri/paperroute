@@ -4,7 +4,7 @@ import asyncio
 import functools
 import logging
 import sqlite3
-from collections.abc import Callable, Coroutine
+from collections.abc import Callable, Coroutine, Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any, Final
 
@@ -602,6 +602,20 @@ def starting_state(*, ports: Ports, seed: Pin | None = None) -> State:
     )
 
 
+@dataclass
+class PendingView:
+    """
+    The last view asked for and not drawn yet.
+
+    Attributes
+    ----------
+    view : View | None
+        The view, or None when the screen is up to date.
+    """
+
+    view: View | None = None
+
+
 @dataclass(frozen=True)
 class Outputs:
     """
@@ -613,10 +627,69 @@ class Outputs:
         Draws the views with a map.
     saver : StateSaver
         Writes the saved state.
+    pending : PendingView
+        The view waiting to be drawn.
     """
 
     maps: MapRenderer
     saver: StateSaver
+    pending: PendingView = field(default_factory=PendingView)
+
+
+async def draw_pending(*, ports: Ports, outputs: Outputs) -> None:
+    """
+    Draw the waiting view, if there is one.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters.
+    outputs : Outputs
+        What effects draw and write through.
+    """
+    view = outputs.pending.view
+    if view is None:
+        return
+    outputs.pending.view = None
+    await render(ports=ports, view=view, maps=outputs.maps)
+
+
+async def carry_out(
+    *,
+    effects: Sequence[Effect],
+    ports: Ports,
+    queue: asyncio.Queue[Event],
+    tasks: set[asyncio.Task[None]],
+    outputs: Outputs,
+) -> None:
+    """
+    Perform an event's effects in order, keeping its view to draw later.
+
+    Parameters
+    ----------
+    effects : Sequence[Effect]
+        The effects.
+    ports : Ports
+        Adapters.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    tasks : set[asyncio.Task[None]]
+        Background tasks kept alive until done.
+    outputs : Outputs
+        What effects draw and write through.
+    """
+    for effect in effects:
+        if isinstance(effect, Render):
+            outputs.pending.view = effect.view
+            continue
+        await perform(
+            ports=ports,
+            effect=effect,
+            queue=queue,
+            tasks=tasks,
+            maps=outputs.maps,
+            saver=outputs.saver,
+        )
 
 
 async def handle(
@@ -630,6 +703,9 @@ async def handle(
 ) -> State:
     """
     Advance the state by one event and carry out its effects.
+
+    The view is drawn only once no other event is waiting, so a burst
+    of knob turns draws one frame of the last state, not one per turn.
 
     Parameters
     ----------
@@ -654,15 +730,15 @@ async def handle(
     if isinstance(event, Tick):
         ports.observer.ticked()
     state, effects = step(state, event)
-    for effect in effects:
-        await perform(
-            ports=ports,
-            effect=effect,
-            queue=queue,
-            tasks=tasks,
-            maps=outputs.maps,
-            saver=outputs.saver,
-        )
+    await carry_out(
+        effects=effects,
+        ports=ports,
+        queue=queue,
+        tasks=tasks,
+        outputs=outputs,
+    )
+    if queue.empty() or not state.running:
+        await draw_pending(ports=ports, outputs=outputs)
     return state
 
 
@@ -736,6 +812,7 @@ async def run(
                 outputs=outputs,
             )
             handled += 1
+        await draw_pending(ports=ports, outputs=outputs)
     finally:
         await stop(tasks={clock, *tasks})
     return state

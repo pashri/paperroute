@@ -518,6 +518,29 @@ def test_replacement_buses_are_named_by_their_ends(tmp_path: Path) -> None:
     }
 
 
+def test_replacement_bus_is_one_row_per_route(tmp_path: Path) -> None:
+    """Both directions of a replacement bus make one row and two towards."""
+    with closing(tiny_db(path=tmp_path / 't.db', routes=[
+        RouteRow(
+            route_id='8a', number='8T6', long_name='Bankstown to Lidcombe',
+            route_type=714,
+            patterns=(('L', ('Bankstown Station', 'Lidcombe Station'), 9),),
+        ),
+        RouteRow(
+            route_id='8b', number='8T6', long_name='Lidcombe to Bankstown',
+            route_type=714,
+            patterns=(('B', ('Lidcombe Station', 'Bankstown Station'), 7),),
+        ),
+    ])) as conn:
+        load_catalogue(conn=conn)
+        rows = chooser_rows(conn=conn, kind='replacement')
+        towards = conn.execute(
+            'SELECT headsign, trips FROM chooser_towards ORDER BY headsign',
+        ).fetchall()
+    assert [row[:2] for row in rows] == [('8T6', 'Bankstown – Lidcombe')]
+    assert towards == [('B', 7), ('L', 9)]
+
+
 def test_train_lines_in_decision_order(tmp_path: Path) -> None:
     """Sydney lines go T1 to T9, then the intercity lines in order."""
     codes = ['HUN', 'T9', 'SHL', 'T1', 'CCN', 'T5', 'SCO', 'T2', 'BMT']

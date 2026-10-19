@@ -195,6 +195,30 @@ def line_name(*, long_name: str, code: str) -> str:
     return name.replace(' and ', ' & ')
 
 
+def merge_key(*, kind: RouteKind, number: str, long_name: str) -> str:
+    """
+    Key the merged route a route ID joins.
+
+    Parameters
+    ----------
+    kind : RouteKind
+        Kind of route.
+    number : str
+        Route short name.
+    long_name : str
+        Route long name.
+
+    Returns
+    -------
+    str
+        Kind, number and long name; a replacement bus by kind and number
+        alone, as its long names differ by direction.
+    """
+    if kind is RouteKind.REPLACEMENT:
+        return f'{kind}:{number}'
+    return f'{kind}:{number}:{long_name}'
+
+
 def route_sources(*, conn: sqlite3.Connection) -> list[RouteSource]:
     """
     Read every route ID with route patterns and a kind.
@@ -219,7 +243,10 @@ def route_sources(*, conn: sqlite3.Connection) -> list[RouteSource]:
         if kind is not None:
             found.append(RouteSource(
                 route_id=route_id, merge=(kind, number, long_name),
-                key=f'{kind}:{number}:{long_name}', agency=agency or '',
+                key=merge_key(
+                    kind=kind, number=number, long_name=long_name,
+                ),
+                agency=agency or '',
                 trips=trips,
             ))
     return found

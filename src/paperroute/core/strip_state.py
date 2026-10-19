@@ -19,9 +19,9 @@ from paperroute.core.reach import Reach, StripKey
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
-from paperroute.core.strip_model import NEEDS_UPDATE, STRIP_ROWS, StripInputs
+from paperroute.core.strip_model import NEEDS_UPDATE, StripInputs
 from paperroute.core.strip_vehicles import strip_trips, window_departures
-from paperroute.core.strip_view import home_of
+from paperroute.core.strip_view import home_of, window_of
 
 STRIP_VIEWS: Final[frozenset[LiveView]] = frozenset(
     {LiveView.STRIP, LiveView.STRIP_MAP}
@@ -260,8 +260,9 @@ def shown_reach(*, state: State) -> Reach | None:
     return state.strip.reaches.get(strip_key(pin=shown(state=state)))
 
 
-def scroll_range(*, reach: Reach | None, destination: str | None
-                 ) -> tuple[int, int]:
+def scroll_range(
+    *, reach: Reach | None, destination: str | None, banner: bool,
+) -> tuple[int, int]:
     """
     Find how far the Strip scrolls before its rows stop moving.
 
@@ -271,6 +272,8 @@ def scroll_range(*, reach: Reach | None, destination: str | None
         The reach shown, or None.
     destination : str | None
         The place's Destination stop or station ID, or None.
+    banner : bool
+        True while a live data banner shortens the strip.
 
     Returns
     -------
@@ -281,12 +284,13 @@ def scroll_range(*, reach: Reach | None, destination: str | None
     """
     if reach is None:
         return 0, 0
-    shift = home_of(reach=reach, destination=destination)
+    rows = window_of(banner=banner).rows
+    shift = home_of(reach=reach, destination=destination, rows=rows)
     low = min(0, -shift)
-    return low, max(low, len(reach.rows) - STRIP_ROWS - shift)
+    return low, max(low, len(reach.rows) - rows - shift)
 
 
-def clamped(*, state: State) -> State:
+def clamped(*, state: State, banner: bool) -> State:
     """
     Keep the Strip's scroll within its reach.
 
@@ -294,6 +298,8 @@ def clamped(*, state: State) -> State:
     ----------
     state : State
         State.
+    banner : bool
+        True while a live data banner shortens the strip.
 
     Returns
     -------
@@ -304,6 +310,7 @@ def clamped(*, state: State) -> State:
     low, high = scroll_range(
         reach=shown_reach(state=state),
         destination=None if destination is None else destination.stop_id,
+        banner=banner,
     )
     scroll = min(max(state.strip.scroll, low), high)
     return replace(state, strip=replace(state.strip, scroll=scroll))

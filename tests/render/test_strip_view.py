@@ -29,7 +29,7 @@ from paperroute.core.strip_model import (
     StripView,
 )
 from paperroute.render.canvas import INK, PAPER, Canvas
-from paperroute.render.chrome import HEADER
+from paperroute.render.chrome import BANNER, HEADER
 from paperroute.render.strip_view import (
     draw_strip_map_view,
     draw_strip_view,
@@ -120,7 +120,9 @@ def test_strip_frame_is_two_level() -> None:
         VIEW,
         picking='TO',
         rows=rows,
-        band=Band(text='FROM Town Hall · 3 turns away', top=True),
+        band=Band(
+            text='FROM Town Hall · 3 turns away', top=True, y=STRIP_TOP,
+        ),
         markers=(live, stale),
         panel=replace(PANEL, rows=(panel_row(),) * 3, hint=HINTS['TO']),
         banner='Live data unavailable',
@@ -245,6 +247,31 @@ def test_banner_is_drawn_over_the_strip() -> None:
     """A live data banner sits under the header."""
     frame = draw_strip_view(view=replace(VIEW, banner='Live data unavailable'))
     assert (frame[HEADER:HEADER + 3, :] == INK).all()
+
+
+def test_panel_moves_below_the_banner() -> None:
+    """Under a banner the whole panel is drawn a banner's height lower."""
+    plain = draw_strip_view(view=VIEW)
+    bannered = draw_strip_view(view=replace(VIEW, banner='No live data'))
+    panel = slice(447, 800)
+    assert (
+        bannered[HEADER + BANNER:, panel] == plain[HEADER:-BANNER, panel]
+    ).all()
+
+
+def test_band_shows_below_the_banner() -> None:
+    """A top band in the first slot under the banner stays in view."""
+    y = STRIP_TOP + ROW_H
+    view = replace(
+        VIEW,
+        rows=(),
+        band=Band(text='FROM Town Hall · 3 turns away', top=True, y=y),
+        banner='No live data',
+    )
+    frame = draw_strip_view(view=view)
+    box = frame[y + 4:y + ROW_H - 4, 12:400]
+    assert box.mean() < 128
+    assert (box[:, 40:] == PAPER).any()
 
 
 def map_view() -> MapView:

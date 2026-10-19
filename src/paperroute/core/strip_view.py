@@ -8,6 +8,7 @@ from paperroute.core.model import StopPlace
 from paperroute.core.reach import Reach, ReachRow, RowKind
 from paperroute.core.stop_view import DOT, clock_text
 from paperroute.core.strip_model import (
+    BANNER_ROWS,
     CURSOR_MARGIN,
     HINTS,
     INDENT,
@@ -29,6 +30,7 @@ from paperroute.core.strip_model import (
     StripPanel,
     StripRow,
     StripView,
+    Window,
 )
 from paperroute.core.strip_vehicles import (
     Spot,
@@ -248,7 +250,47 @@ def tag_of(*, index: int, marks: Marks) -> str:
     return 'TO' if index == marks.target else ''
 
 
-def slot_y(*, index: int, first: int) -> float:
+def window_of(*, banner: bool, rows: int = STRIP_ROWS) -> Window:
+    """
+    Find where a strip's row slots sit.
+
+    Parameters
+    ----------
+    banner : bool
+        True while a live data banner shows under the header.
+    rows : int
+        Slots with no banner.
+
+    Returns
+    -------
+    Window
+        The slots from `STRIP_TOP`; under a banner they start below it,
+        `BANNER_ROWS` fewer.
+    """
+    drop = BANNER_ROWS if banner else 0
+    return Window(top=STRIP_TOP + drop * ROW_H, rows=rows - drop)
+
+
+def inputs_window(*, inputs: StripInputs, rows: int = STRIP_ROWS) -> Window:
+    """
+    Find where the slots sit for a view's inputs.
+
+    Parameters
+    ----------
+    inputs : StripInputs
+        The view's inputs; their Stop view says whether a banner shows.
+    rows : int
+        Slots with no banner.
+
+    Returns
+    -------
+    Window
+        The slots.
+    """
+    return window_of(banner=inputs.stop_view.banner is not None, rows=rows)
+
+
+def slot_y(*, index: int, first: int, window: Window) -> float:
     """
     Find the screen y of a row's centre line.
 
@@ -258,17 +300,20 @@ def slot_y(*, index: int, first: int) -> float:
         Row index.
     first : int
         The row in the top slot.
+    window : Window
+        Where the slots sit.
 
     Returns
     -------
     float
         Screen y; above or below the strip for rows off it.
     """
-    return STRIP_TOP + (index - first) * ROW_H + ROW_H / 2
+    return window.top + (index - first) * ROW_H + ROW_H / 2
 
 
-def strip_row(*, reach: Reach, index: int, first: int, marks: Marks
-              ) -> StripRow:
+def strip_row(
+    *, reach: Reach, index: int, first: int, marks: Marks, window: Window,
+) -> StripRow:
     """
     Make one visible row.
 
@@ -282,6 +327,8 @@ def strip_row(*, reach: Reach, index: int, first: int, marks: Marks
         The row in the top slot.
     marks : Marks
         What the rows are marked with.
+    window : Window
+        Where the slots sit.
 
     Returns
     -------
@@ -294,11 +341,11 @@ def strip_row(*, reach: Reach, index: int, first: int, marks: Marks
         name=row.place.name.removesuffix(' Station'),
         depth=row.depth,
         kind=row.kind,
-        y=slot_y(index=index, first=first),
+        y=slot_y(index=index, first=first, window=window),
         parent_y=(
             None
             if row.parent is None
-            else slot_y(index=row.parent, first=first)
+            else slot_y(index=row.parent, first=first, window=window)
         ),
         parent_depth=row.depth if parent is None else parent.depth,
         tag=tag_of(index=index, marks=marks),
@@ -310,7 +357,7 @@ def strip_row(*, reach: Reach, index: int, first: int, marks: Marks
     )
 
 
-def home_of(*, reach: Reach, destination: str | None) -> int:
+def home_of(*, reach: Reach, destination: str | None, rows: int) -> int:
     """
     Find the unscrolled, unclamped top row of the Strip.
 
@@ -320,6 +367,8 @@ def home_of(*, reach: Reach, destination: str | None) -> int:
         The reach.
     destination : str | None
         Destination stop or station ID, or None.
+    rows : int
+        Row slots on the strip.
 
     Returns
     -------
@@ -339,12 +388,14 @@ def home_of(*, reach: Reach, destination: str | None) -> int:
     if not ride:
         return start
     low, high = min(ride), max(ride)
-    if high - low < STRIP_ROWS:
-        return min(max(start, high + 1 - STRIP_ROWS), low)
-    return origin if high > origin else origin + 1 - STRIP_ROWS
+    if high - low < rows:
+        return min(max(start, high + 1 - rows), low)
+    return origin if high > origin else origin + 1 - rows
 
 
-def first_row(*, inputs: StripInputs, total: int, home: int) -> int:
+def first_row(
+    *, inputs: StripInputs, total: int, home: int, rows: int,
+) -> int:
     """
     Choose the row in the Strip's top slot.
 
@@ -356,6 +407,8 @@ def first_row(*, inputs: StripInputs, total: int, home: int) -> int:
         Rows in the reach.
     home : int
         The unscrolled top row, from `home_of`.
+    rows : int
+        Row slots on the strip.
 
     Returns
     -------
@@ -367,14 +420,15 @@ def first_row(*, inputs: StripInputs, total: int, home: int) -> int:
     cursor = inputs.cursor
     if cursor is not None:
         start = min(
-            max(start, cursor + CURSOR_MARGIN + 1 - STRIP_ROWS),
+            max(start, cursor + CURSOR_MARGIN + 1 - rows),
             cursor - CURSOR_MARGIN,
         )
-    return max(0, min(start, total - STRIP_ROWS))
+    return max(0, min(start, total - rows))
 
 
-def turns_away(*, inputs: StripInputs, origin: int, start: int,
-               top: bool) -> int:
+def turns_away(
+    *, inputs: StripInputs, origin: int, start: int, top: bool, rows: int,
+) -> int:
     """
     Count the detents back to the From.
 
@@ -388,6 +442,8 @@ def turns_away(*, inputs: StripInputs, origin: int, start: int,
         The unclamped top row: the home row moved by the scroll.
     top : bool
         True when the From is above the strip.
+    rows : int
+        Row slots on the strip.
 
     Returns
     -------
@@ -399,11 +455,16 @@ def turns_away(*, inputs: StripInputs, origin: int, start: int,
         return abs(inputs.cursor - origin)
     if top:
         return start - origin
-    return origin - (start + STRIP_ROWS - 1)
+    return origin - (start + rows - 1)
 
 
-def band_of(*, inputs: StripInputs, reach: Reach, rows: tuple[int, int]
-            ) -> Band | None:
+def band_of(
+    *,
+    inputs: StripInputs,
+    reach: Reach,
+    rows: tuple[int, int],
+    window: Window,
+) -> Band | None:
     """
     Make the From band when the From is off the Strip.
 
@@ -415,6 +476,8 @@ def band_of(*, inputs: StripInputs, reach: Reach, rows: tuple[int, int]
         The reach.
     rows : tuple[int, int]
         The home row and the row in the top slot.
+    window : Window
+        Where the slots sit.
 
     Returns
     -------
@@ -424,15 +487,23 @@ def band_of(*, inputs: StripInputs, reach: Reach, rows: tuple[int, int]
     """
     home, first = rows
     origin = origin_of(reach=reach)
-    if origin is None or first <= origin < first + STRIP_ROWS:
+    if origin is None or first <= origin < first + window.rows:
         return None
     top = origin < first
     name = reach.rows[origin].place.name.removesuffix(' Station')
     turns = turns_away(
-        inputs=inputs, origin=origin, start=home + inputs.scroll, top=top,
+        inputs=inputs,
+        origin=origin,
+        start=home + inputs.scroll,
+        top=top,
+        rows=window.rows,
     )
     unit = 'turn' if turns == 1 else 'turns'
-    return Band(text=f'FROM {name}{DOT}{turns} {unit} away', top=top)
+    return Band(
+        text=f'FROM {name}{DOT}{turns} {unit} away',
+        top=top,
+        y=window.top + (0 if top else (window.rows - 1) * ROW_H),
+    )
 
 
 def strip_rows(*, inputs: StripInputs, reach: Reach
@@ -452,16 +523,24 @@ def strip_rows(*, inputs: StripInputs, reach: Reach
     tuple[tuple[StripRow, ...], Band | None]
         Rows top to bottom, and the band, which takes the edge slot.
     """
-    marks = marks_of(inputs=inputs, reach=reach)
-    total = len(reach.rows)
-    home = home_of(reach=reach, destination=inputs.destination)
-    first = first_row(inputs=inputs, total=total, home=home)
-    band = band_of(inputs=inputs, reach=reach, rows=(home, first))
-    indices = range(first, min(first + STRIP_ROWS, total))
+    window = inputs_window(inputs=inputs)
+    home = home_of(
+        reach=reach, destination=inputs.destination, rows=window.rows,
+    )
+    first = first_row(
+        inputs=inputs, total=len(reach.rows), home=home, rows=window.rows,
+    )
+    band = band_of(
+        inputs=inputs, reach=reach, rows=(home, first), window=window,
+    )
+    indices = range(first, min(first + window.rows, len(reach.rows)))
     if band is not None:
         indices = indices[1:] if band.top else indices[:-1]
+    marks = marks_of(inputs=inputs, reach=reach)
     rows = tuple(
-        strip_row(reach=reach, index=index, first=first, marks=marks)
+        strip_row(
+            reach=reach, index=index, first=first, marks=marks, window=window,
+        )
         for index in indices
     )
     return rows, band
@@ -640,20 +719,23 @@ def build_strip_pane(*, inputs: StripInputs) -> StripPane:
     Returns
     -------
     StripPane
-        Up to `PANE_ROWS` rows with the From in the third slot, or the
-        top slot as far up as it is, and their vehicles; nothing when
-        there is no strip.
+        Up to `PANE_ROWS` rows, one fewer below a banner, with the From
+        in the third slot, or the top slot as far up as it is, and their
+        vehicles; nothing when there is no strip.
     """
     reach = shown_reach(inputs=inputs)
     if reach is None:
         return StripPane(rows=(), markers=())
     marks = marks_of(inputs=replace(inputs, cursor=None), reach=reach)
+    window = inputs_window(inputs=inputs, rows=PANE_ROWS)
     first = max(
         0, 0 if marks.origin is None else marks.origin - PANE_FROM_ROW,
     )
     rows = tuple(
-        strip_row(reach=reach, index=index, first=first, marks=marks)
-        for index in range(first, min(first + PANE_ROWS, len(reach.rows)))
+        strip_row(
+            reach=reach, index=index, first=first, marks=marks, window=window,
+        )
+        for index in range(first, min(first + window.rows, len(reach.rows)))
     )
     return StripPane(
         rows=rows,

@@ -6,14 +6,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from paperroute.core.map_view import Marker
-from paperroute.core.strip_model import (
-    INDENT,
-    ROW_H,
-    STRIP_ROWS,
-    STRIP_TOP,
-    Band,
-    StripRow,
-)
+from paperroute.core.strip_model import INDENT, ROW_H, Band, StripRow
 from paperroute.render.canvas import INK, PAPER, Canvas, Face
 from paperroute.render.markers import draw_hollow, draw_live
 
@@ -317,7 +310,7 @@ def draw_band(canvas: Canvas, *, band: Band, left: int, right: int) -> None:
     right : int
         Right edge.
     """
-    top = STRIP_TOP + (0 if band.top else (STRIP_ROWS - 1) * ROW_H)
+    top = band.y
     canvas.rect(
         box=(left, top + BAND_INSET, right, top + ROW_H - BAND_INSET),
         grey=INK,

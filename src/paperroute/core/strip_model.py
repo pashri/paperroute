@@ -21,6 +21,7 @@ PANE_TRACK_X: Final[int] = 500
 PANE_ROWS: Final[int] = 12
 PANE_FROM_ROW: Final[int] = 2
 PANEL_ROWS: Final[int] = 4
+BANNER_ROWS: Final[int] = 1  # row slots the live data banner covers
 CURSOR_MARGIN: Final[int] = 2
 LOADING: Final[str] = 'Loading the line…'
 NO_STRIP: Final[str] = 'No strip for this stop'
@@ -102,10 +103,30 @@ class Band:
         For example 'FROM Town Hall · 3 turns away'.
     top : bool
         True in the top slot, False in the bottom one.
+    y : float
+        Screen y of the slot's top edge.
     """
 
     text: str
     top: bool
+    y: float
+
+
+@dataclass(frozen=True)
+class Window:
+    """
+    Where a strip's row slots sit on screen.
+
+    Attributes
+    ----------
+    top : int
+        Screen y of the top slot's top edge.
+    rows : int
+        How many slots there are.
+    """
+
+    top: int
+    rows: int
 
 
 @dataclass(frozen=True)

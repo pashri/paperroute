@@ -16,6 +16,7 @@ from paperroute.core.strip_model import (
 from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH, Canvas, Face
 from paperroute.render.chrome import (
     ARROW_WIDTH,
+    BANNER,
     HEADER,
     arrow,
     badge,
@@ -213,7 +214,7 @@ def panel_row(canvas: Canvas, *, row: Row, top: int, whole: bool) -> None:
     carry_on(canvas, row=row, top=top)
 
 
-def panel_heading(canvas: Canvas, *, panel: StripPanel) -> None:
+def panel_heading(canvas: Canvas, *, panel: StripPanel, drop: int) -> None:
     """
     Draw the From, the Destination line and the station count.
 
@@ -223,17 +224,20 @@ def panel_heading(canvas: Canvas, *, panel: StripPanel) -> None:
         Target.
     panel : StripPanel
         The panel.
+    drop : int
+        Pixels to move it all down.
     """
     canvas.text(
-        at=(TEXT_LEFT, TITLE_Y),
+        at=(TEXT_LEFT, TITLE_Y + drop),
         text=canvas.fit(text=panel.title, face=TITLE_FACE, width=TEXT_WIDTH),
         face=TITLE_FACE,
         grey=INK,
     )
     if panel.destination is not None:
-        x = TEXT_LEFT + arrow(canvas, x=TEXT_LEFT, y=SUBTITLE_Y - 5, grey=INK)
+        y = SUBTITLE_Y + drop
+        x = TEXT_LEFT + arrow(canvas, x=TEXT_LEFT, y=y - 5, grey=INK)
         canvas.text(
-            at=(x, SUBTITLE_Y),
+            at=(x, y),
             text=canvas.fit(
                 text=panel.destination,
                 face=SUBTITLE_FACE,
@@ -243,11 +247,14 @@ def panel_heading(canvas: Canvas, *, panel: StripPanel) -> None:
             grey=INK,
         )
     canvas.text(
-        at=(TEXT_LEFT, NOTE_Y), text=panel.note, face=NOTE_FACE, grey=INK,
+        at=(TEXT_LEFT, NOTE_Y + drop),
+        text=panel.note,
+        face=NOTE_FACE,
+        grey=INK,
     )
 
 
-def panel_empty(canvas: Canvas, *, text: str) -> None:
+def panel_empty(canvas: Canvas, *, text: str, drop: int) -> None:
     """
     Say why the panel lists no departures, over up to two lines.
 
@@ -257,11 +264,13 @@ def panel_empty(canvas: Canvas, *, text: str) -> None:
         Target.
     text : str
         The reason.
+    drop : int
+        Pixels to move it down.
     """
     lines = wrap(text=text, face=EMPTY_FACE, width=TEXT_WIDTH)
     for index, line in enumerate(lines[:2]):
         canvas.text(
-            at=(TEXT_LEFT, EMPTY_Y + index * EMPTY_LEADING),
+            at=(TEXT_LEFT, EMPTY_Y + drop + index * EMPTY_LEADING),
             text=canvas.fit(text=line, face=EMPTY_FACE, width=TEXT_WIDTH),
             face=EMPTY_FACE,
             grey=INK,
@@ -292,7 +301,7 @@ def hint_box(canvas: Canvas, *, text: str) -> None:
     )
 
 
-def draw_panel(canvas: Canvas, *, panel: StripPanel) -> None:
+def draw_panel(canvas: Canvas, *, panel: StripPanel, drop: int) -> None:
     """
     Draw the departures panel right of the strip.
 
@@ -302,17 +311,19 @@ def draw_panel(canvas: Canvas, *, panel: StripPanel) -> None:
         Target.
     panel : StripPanel
         The panel.
+    drop : int
+        Pixels to move all but the hint down, below a banner.
     """
-    panel_heading(canvas, panel=panel)
+    panel_heading(canvas, panel=panel, drop=drop)
     for index, row in enumerate(panel.rows):
         panel_row(
             canvas,
             row=row,
-            top=ROWS_TOP + index * ROW_STEP,
+            top=ROWS_TOP + drop + index * ROW_STEP,
             whole=panel.no_destination,
         )
     if not panel.rows and panel.empty:
-        panel_empty(canvas, text=panel.empty)
+        panel_empty(canvas, text=panel.empty, drop=drop)
     if panel.hint is not None:
         hint_box(canvas, text=panel.hint)
 
@@ -367,7 +378,7 @@ def paint_strip_view(canvas: Canvas, *, view: StripView) -> None:
     canvas.rect(
         box=(STRIP_RIGHT, HEADER, STRIP_RIGHT + RULE_WIDTH, HEIGHT), grey=INK,
     )
-    draw_panel(canvas, panel=view.panel)
+    draw_panel(canvas, panel=view.panel, drop=BANNER if view.banner else 0)
     view_header(canvas, view=view, active='Strip', picking=view.picking)
     if view.banner:
         banner(canvas, text=view.banner)

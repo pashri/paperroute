@@ -376,7 +376,9 @@ def settled(
         New state and effects.
     """
     stop_view = live_stop_view(state=state)
-    state, strips = request_strips(state=clamped(state=state))
+    state, strips = request_strips(
+        state=clamped(state=state, banner=stop_view.banner is not None),
+    )
     state, requests = map_effects(state=state, stop_view=stop_view)
     return rendered(
         state=state,

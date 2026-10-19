@@ -1502,17 +1502,18 @@ def check_render(
         case MapView():
             assert len(view.sidebar) <= SIDEBAR_ROWS
         case StripView():
-            assert len(view.rows) <= STRIP_ROWS
+            assert len(view.rows) <= STRIP_ROWS - bool(view.banner)
             destination = shown(state=state).destination
             low, high = scroll_range(
                 reach=shown_reach(state=state),
                 destination=(
                     None if destination is None else destination.stop_id
                 ),
+                banner=view.banner is not None,
             )
             assert low <= state.strip.scroll <= high
         case StripMapView():
-            assert len(view.pane.rows) <= PANE_ROWS
+            assert len(view.pane.rows) <= PANE_ROWS - bool(view.map.banner)
             assert view.map.base.width < MAP_WIDTH
 
 

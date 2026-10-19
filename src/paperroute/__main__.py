@@ -17,6 +17,9 @@ from aiohttp import web
 from paperroute.adapters.act_led import ActLed
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.network_db import SqliteNetworkRepository
+from paperroute.adapters.state_file import DEFAULT_PATH as STATE_PATH
+from paperroute.adapters.state_file import JsonStateRepository
 from paperroute.adapters.systemd import SystemdNotifier
 from paperroute.adapters.tfnsw import AiohttpFeedsClient, api_key_from_env
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
@@ -118,19 +121,34 @@ def add_tiles_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def require_pin(*, args: argparse.Namespace) -> None:
+def add_state_argument(parser: argparse.ArgumentParser) -> None:
     """
-    Exit with a message if the origin or destination is missing.
+    Add --state, the file the pins and view are kept in.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        Parser to add to.
+    """
+    parser.add_argument(
+        '--state',
+        type=Path,
+        default=STATE_PATH,
+        help=f'saved state file (default: {STATE_PATH})',
+    )
+
+
+def require_both_or_neither(*, args: argparse.Namespace) -> None:
+    """
+    Exit with a message if only one of the origin and destination is given.
 
     Parameters
     ----------
     args : argparse.Namespace
         Parsed arguments.
     """
-    if not args.origin or not args.destination:
-        sys.exit(
-            'give --from and --to, or set PAPERROUTE_FROM and PAPERROUTE_TO'
-        )
+    if bool(args.origin) != bool(args.destination):
+        sys.exit('give both --from and --to, or neither')
 
 
 class BindError(Exception):
@@ -148,14 +166,15 @@ def parse_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(prog='python -m paperroute')
     sub = parser.add_subparsers(dest='command', required=True)
-    runner = sub.add_parser('run', help='show a pin on the monitor')
+    runner = sub.add_parser('run', help='run the device software')
     runner.add_argument('--timetable', type=Path, required=True)
     add_pin_arguments(runner)
     add_display_arguments(runner)
     add_source_arguments(runner)
     add_tiles_arguments(runner)
+    add_state_argument(runner)
     args = parser.parse_args()
-    require_pin(args=args)
+    require_both_or_neither(args=args)
     return args
 
 
@@ -216,9 +235,9 @@ def clock_for(*, args: argparse.Namespace) -> Clock:
     return SystemClock()
 
 
-def pin_for(*, args: argparse.Namespace) -> Pin:
+def seed_for(*, args: argparse.Namespace) -> Pin | None:
     """
-    Make the pin from --from and --to.
+    Make the seed pin from --from and --to.
 
     Parameters
     ----------
@@ -227,9 +246,12 @@ def pin_for(*, args: argparse.Namespace) -> Pin:
 
     Returns
     -------
-    Pin
-        Pin between bare places, without names or points.
+    Pin | None
+        Pin between bare places, without names or points; None when
+        neither was given.
     """
+    if not args.origin or not args.destination:
+        return None
     return Pin(
         origin=StopPlace(stop_id=args.origin, name='', point=None),
         destination=StopPlace(stop_id=args.destination, name='', point=None),
@@ -258,6 +280,30 @@ def timetable_for(
         yield timetable
     finally:
         timetable.close()
+
+
+@contextmanager
+def network_for(
+    *, args: argparse.Namespace
+) -> Iterator[SqliteNetworkRepository]:
+    """
+    Open the chooser and runs reader on the timetable, and close it on exit.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Yields
+    ------
+    SqliteNetworkRepository
+        The open reader.
+    """
+    network = SqliteNetworkRepository(path=args.timetable)
+    try:
+        yield network
+    finally:
+        network.close()
 
 
 @contextmanager
@@ -366,7 +412,7 @@ async def serve_web(
     *,
     ports: Ports,
     display: WebDisplay,
-    pin: Pin,
+    seed: Pin | None,
     host: str,
     port: int,
     tick_every: float = 5.0,
@@ -385,8 +431,8 @@ async def serve_web(
         Adapters; the display must be the given web display.
     display : WebDisplay
         Web display.
-    pin : Pin
-        Pin to show.
+    seed : Pin | None
+        Pin to start with when there is no saved state.
     host : str
         Address to listen on.
     port : int
@@ -405,7 +451,7 @@ async def serve_web(
         await listen(runner=runner, host=host, port=port)
         await run(
             ports=ports,
-            pin=pin,
+            seed=seed,
             tick_every=tick_every,
             post_hook=lambda post: bind_web(
                 loop=loop, display=display, post=post
@@ -424,7 +470,7 @@ async def serve_web(
 async def show(
     *,
     ports: Ports,
-    pin: Pin,
+    seed: Pin | None,
     monitor: 'TkMonitor',
     tiles_variant: TileVariant = TileVariant.GREY,
 ) -> None:
@@ -435,8 +481,8 @@ async def show(
     ----------
     ports : Ports
         Adapters.
-    pin : Pin
-        Pin to show.
+    seed : Pin | None
+        Pin to start with when there is no saved state.
     monitor : TkMonitor
         Window that pumps events and posts key presses.
     tiles_variant : TileVariant
@@ -445,7 +491,7 @@ async def show(
     try:
         await run(
             ports=ports,
-            pin=pin,
+            seed=seed,
             pump=monitor.pump,
             post_hook=lambda post: monitor.bind(post=post),
             tiles_variant=tiles_variant,
@@ -456,7 +502,7 @@ async def show(
 
 def tk_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
     """
-    Run the Stop view for one pin in a Tkinter window.
+    Run the device software in a Tkinter window.
 
     Parameters
     ----------
@@ -473,6 +519,7 @@ def tk_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
     try:
         with (
             timetable_for(args=args) as timetable,
+            network_for(args=args) as network,
             tiles_for(args=args) as tiles,
         ):
             ports = Ports(
@@ -480,12 +527,14 @@ def tk_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
                 feeds=feeds,
                 display=monitor,
                 clock=clock_for(args=args),
+                network=network,
+                states=JsonStateRepository(path=args.state),
                 tiles=tiles,
             )
             asyncio.run(
                 show(
                     ports=ports,
-                    pin=pin_for(args=args),
+                    seed=seed_for(args=args),
                     monitor=monitor,
                     tiles_variant=args.tiles_variant,
                 )
@@ -514,7 +563,7 @@ def serve_or_exit(
             serve_web(
                 ports=ports,
                 display=display,
-                pin=pin_for(args=args),
+                seed=seed_for(args=args),
                 host=args.host,
                 port=args.port,
                 tiles_variant=args.tiles_variant,
@@ -526,7 +575,7 @@ def serve_or_exit(
 
 def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
     """
-    Serve the Stop view for one pin to browsers.
+    Serve the device software to browsers.
 
     Parameters
     ----------
@@ -546,6 +595,7 @@ def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
     )
     with (
         timetable_for(args=args) as timetable,
+        network_for(args=args) as network,
         tiles_for(args=args) as tiles,
     ):
         ports = Ports(
@@ -553,6 +603,8 @@ def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
             feeds=feeds,
             display=display,
             clock=clock_for(args=args),
+            network=network,
+            states=JsonStateRepository(path=args.state),
             observer=observer,
             tiles=tiles,
         )
@@ -560,7 +612,7 @@ def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
 
 
 def main() -> None:
-    """Run the Stop view for one pin in a window or in browsers."""
+    """Run the device software in a window or in browsers."""
     args = parse_args()
     configure_logging(error_file=args.error_log)
     try:

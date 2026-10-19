@@ -4,19 +4,27 @@ import asyncio
 import functools
 import logging
 import sqlite3
-import time
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field, replace
-from datetime import datetime
 from typing import Any, Final
 
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.adapters.gtfs_rt import parse_positions, parse_trip_updates
 from paperroute.adapters.tfnsw import FeedError
 from paperroute.adapters.tiles_db import NullTiles
-from paperroute.core.feeds import FeedKind
+from paperroute.app_effects import (
+    StateSaver,
+    VersionWatch,
+    WorkerEffect,
+    filled,
+    map_data,
+    parse_feed,
+    timed_async,
+    work_for,
+    worked,
+)
+from paperroute.core.chooser_view import ChooserView
 from paperroute.core.map_view import MapBase, MapView
 from paperroute.core.messages import (
     DeparturesFailed,
@@ -24,36 +32,25 @@ from paperroute.core.messages import (
     Effect,
     Event,
     FeedFailed,
-    FeedFetched,
     FetchFeed,
-    LoadChooserDepartures,
-    LoadColumn,
     LoadDepartures,
-    LoadLine,
     LoadModes,
     LoadPatterns,
     LoadShapes,
-    LoadStrip,
     MapDataFailed,
     MapRequest,
-    MatchPlaces,
-    ModesLoaded,
-    PatternsLoaded,
-    PositionsFetched,
     QuitRequested,
     Render,
     SaveState,
-    ShapesLoaded,
     Stop,
     Tick,
 )
 from paperroute.core.model import Pin
-from paperroute.core.positions import PositionsSnapshot, with_labels
 from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
-from paperroute.core.strip_model import StripMapView
+from paperroute.core.strip_model import StripMapView, StripView
 from paperroute.core.tiles import TileVariant
 from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, ObserverGroup
@@ -61,18 +58,24 @@ from paperroute.ports import (
     Clock,
     Display,
     FeedsClient,
+    NetworkRepository,
     Observer,
+    StateRepository,
     TileRepository,
     TimetableRepository,
 )
+from paperroute.render.chooser import draw_chooser_view
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_view import draw_map_view
 from paperroute.render.stop_view import draw_stop_view
-from paperroute.render.strip_view import draw_strip_map_view
+from paperroute.render.strip_view import draw_strip_map_view, draw_strip_view
 
 logger = logging.getLogger(__name__)
 
-MS_PER_SECOND: Final[float] = 1000.0
+TICK_PAUSE: Final[float] = 0.03  # seconds between window pumps
+
+type View = StopView | MapView | StripView | StripMapView | ChooserView
+type Frame = NDArray[np.uint8]
 
 
 @dataclass(frozen=True)
@@ -83,6 +86,8 @@ class Ports:
     feeds: FeedsClient
     display: Display
     clock: Clock
+    network: NetworkRepository
+    states: StateRepository
     observer: Observer = field(default_factory=NullObserver)
     tiles: TileRepository = field(default_factory=NullTiles)
     measures: StopMeasures = field(default_factory=StopMeasures)
@@ -215,25 +220,6 @@ class MapRenderer:
         )
 
 
-async def timed_async[T](*, call: Awaitable[T]) -> tuple[T, float]:
-    """
-    Await a call and measure how long it took.
-
-    Parameters
-    ----------
-    call : Awaitable[T]
-        Awaitable to run.
-
-    Returns
-    -------
-    tuple[T, float]
-        The result and the elapsed milliseconds.
-    """
-    started = time.perf_counter()
-    result = await call
-    return result, (time.perf_counter() - started) * MS_PER_SECOND
-
-
 async def load(
     *, ports: Ports, effect: LoadDepartures, queue: asyncio.Queue[Event]
 ) -> None:
@@ -270,72 +256,6 @@ async def load(
             timetable=effect.timetable,
         )
     )
-
-
-def labelled_positions(
-    *,
-    timetable: TimetableRepository,
-    data: bytes,
-    fetched_at: datetime,
-) -> PositionsSnapshot:
-    """
-    Parse a positions feed and label its vehicles from the timetable.
-
-    Parameters
-    ----------
-    timetable : TimetableRepository
-        Where route labels come from.
-    data : bytes
-        Feed body.
-    fetched_at : datetime
-        When it was downloaded.
-
-    Returns
-    -------
-    PositionsSnapshot
-        Vehicles labelled with their routes' short names where known.
-    """
-    snapshot = parse_positions(data=data, fetched_at=fetched_at)
-    labels = timetable.route_labels(
-        trip_ids={vehicle.trip_id for vehicle in snapshot.vehicles}
-    )
-    return with_labels(snapshot=snapshot, labels=labels)
-
-
-def parse_feed(
-    *,
-    timetable: TimetableRepository,
-    effect: FetchFeed,
-    data: bytes,
-    fetched_at: datetime,
-) -> tuple[FeedFetched | PositionsFetched, int]:
-    """
-    Parse a downloaded feed into the event that carries it.
-
-    Parameters
-    ----------
-    timetable : TimetableRepository
-        Where vehicles' route labels come from.
-    effect : FetchFeed
-        The fetch request.
-    data : bytes
-        Feed body.
-    fetched_at : datetime
-        When it was downloaded.
-
-    Returns
-    -------
-    tuple[FeedFetched | PositionsFetched, int]
-        The event, and how many trips or vehicles it holds.
-    """
-    if effect.kind is FeedKind.POSITIONS:
-        positions = labelled_positions(
-            timetable=timetable, data=data, fetched_at=fetched_at
-        )
-        fetched = PositionsFetched(feed=effect.feed, snapshot=positions)
-        return fetched, len(positions.vehicles)
-    trips = parse_trip_updates(data=data, fetched_at=fetched_at)
-    return FeedFetched(feed=effect.feed, snapshot=trips), len(trips.trips)
 
 
 async def fetch(
@@ -391,88 +311,6 @@ async def fetch(
     await queue.put(event)
 
 
-def loaded_patterns(
-    *,
-    timetable: TimetableRepository,
-    effect: LoadPatterns,
-    measures: StopMeasures,
-) -> PatternsLoaded:
-    """
-    Read trip patterns and their shapes, and place the stops on them.
-
-    Parameters
-    ----------
-    timetable : TimetableRepository
-        Timetable.
-    effect : LoadPatterns
-        Request.
-    measures : StopMeasures
-        Stop places already worked out, reused per shape and stops.
-
-    Returns
-    -------
-    PatternsLoaded
-        Every requested trip; None for trips the timetable doesn't know.
-    """
-    found = timetable.patterns(trip_ids=effect.trip_ids, around=effect.day)
-    shapes = timetable.shapes(
-        shape_ids={
-            pattern.shape_id
-            for pattern in found.values()
-            if pattern.shape_id
-        }
-    )
-    patterns = {
-        trip_id: (
-            measures.measure(
-                pattern=found[trip_id],
-                shape=shapes.get(found[trip_id].shape_id or ''),
-            )
-            if trip_id in found
-            else None
-        )
-        for trip_id in effect.trip_ids
-    }
-    return PatternsLoaded(
-        trip_ids=effect.trip_ids, patterns=patterns, shapes=shapes
-    )
-
-
-def map_data(
-    *,
-    timetable: TimetableRepository,
-    effect: MapRequest,
-    measures: StopMeasures,
-) -> Event:
-    """
-    Read one kind of map data from the timetable.
-
-    Parameters
-    ----------
-    timetable : TimetableRepository
-        Timetable.
-    effect : MapRequest
-        Request.
-    measures : StopMeasures
-        Stop places already worked out.
-
-    Returns
-    -------
-    Event
-        ShapesLoaded, PatternsLoaded or ModesLoaded.
-    """
-    match effect:
-        case LoadShapes(shape_ids=shape_ids):
-            return ShapesLoaded(shapes=timetable.shapes(shape_ids=shape_ids))
-        case LoadPatterns():
-            return loaded_patterns(
-                timetable=timetable, effect=effect, measures=measures,
-            )
-        case LoadModes(mpp=mpp, box=box):
-            modes = timetable.modes_near(box=box)
-            return ModesLoaded(mpp=mpp, box=box, modes=modes)
-
-
 async def load_map(
     *, ports: Ports, effect: MapRequest, queue: asyncio.Queue[Event]
 ) -> None:
@@ -502,9 +340,35 @@ async def load_map(
     await queue.put(event)
 
 
-async def render(
-    *, ports: Ports, view: StopView | MapView, maps: MapRenderer
-) -> None:
+def drawing(*, view: View, maps: MapRenderer) -> Callable[[], Frame]:
+    """
+    Pick the drawing for a view.
+
+    Parameters
+    ----------
+    view : View
+        View to draw.
+    maps : MapRenderer
+        Draws the views with a map.
+
+    Returns
+    -------
+    Callable[[], Frame]
+        Draws the frame when called.
+    """
+    match view:
+        case StopView():
+            return functools.partial(draw_stop_view, view=view)
+        case MapView():
+            return functools.partial(maps.frame, view=view)
+        case StripView():
+            return functools.partial(draw_strip_view, view=view)
+        case StripMapView():
+            return functools.partial(maps.strip_map_frame, view=view)
+    return functools.partial(draw_chooser_view, view=view)
+
+
+async def render(*, ports: Ports, view: View, maps: MapRenderer) -> None:
     """
     Draw a view off the event loop, show it and report how long it took.
 
@@ -512,15 +376,12 @@ async def render(
     ----------
     ports : Ports
         Adapters.
-    view : StopView | MapView
+    view : View
         View to draw.
     maps : MapRenderer
-        Draws Map views.
+        Draws the views with a map.
     """
-    if isinstance(view, StopView):
-        draw = functools.partial(draw_stop_view, view=view)
-    else:
-        draw = functools.partial(maps.frame, view=view)
+    draw = drawing(view=view, maps=maps)
     frame, render_ms = await timed_async(call=asyncio.to_thread(draw))
     ports.display.show(frame=frame)
     logger.info('frame drawn', extra={'render_ms': render_ms})
@@ -530,7 +391,7 @@ async def render(
 def background(
     *,
     ports: Ports,
-    effect: LoadDepartures | FetchFeed | MapRequest,
+    effect: LoadDepartures | FetchFeed | MapRequest | WorkerEffect,
     queue: asyncio.Queue[Event],
 ) -> tuple[Coroutine[Any, Any, None], Event]:
     """
@@ -540,7 +401,7 @@ def background(
     ----------
     ports : Ports
         Adapters.
-    effect : LoadDepartures | FetchFeed | MapRequest
+    effect : LoadDepartures | FetchFeed | MapRequest | WorkerEffect
         Effect.
     queue : asyncio.Queue[Event]
         Event queue.
@@ -561,10 +422,15 @@ def background(
                 feed=feed, at=ports.clock.now(), reason='unexpected error'
             )
             return fetch(ports=ports, effect=effect, queue=queue), failed
-    return (
-        load_map(ports=ports, effect=effect, queue=queue),
-        MapDataFailed(request=effect),
+        case LoadShapes() | LoadPatterns() | LoadModes():
+            return (
+                load_map(ports=ports, effect=effect, queue=queue),
+                MapDataFailed(request=effect),
+            )
+    call, fallback = work_for(
+        timetable=ports.timetable, network=ports.network, effect=effect
     )
+    return worked(call=call, failed=fallback, queue=queue), fallback
 
 
 async def perform(
@@ -574,9 +440,13 @@ async def perform(
     queue: asyncio.Queue[Event],
     tasks: set[asyncio.Task[None]],
     maps: MapRenderer,
+    saver: StateSaver,
 ) -> None:
     """
     Carry out one effect.
+
+    Drawing and saving finish before this returns, so a quit's save is
+    written before the loop ends; other work runs in the background.
 
     Parameters
     ----------
@@ -589,22 +459,18 @@ async def perform(
     tasks : set[asyncio.Task[None]]
         Background tasks kept alive until done.
     maps : MapRenderer
-        Draws Map views.
+        Draws the views with a map.
+    saver : StateSaver
+        Writes the saved state.
     """
     match effect:
-        case Render(view=StopView() | MapView() as view):
+        case Render(view=view):
             await render(ports=ports, view=view, maps=maps)
             return
-        case (
-            Render()
-            | Stop()
-            | SaveState()
-            | MatchPlaces()
-            | LoadStrip()
-            | LoadColumn()
-            | LoadLine()
-            | LoadChooserDepartures()
-        ):
+        case SaveState():
+            await saver.save(effect=effect)
+            return
+        case Stop():
             return
     work, failed = background(ports=ports, effect=effect, queue=queue)
     task = asyncio.create_task(work)
@@ -673,7 +539,10 @@ async def ticker(
     pump: Callable[[], None] | None,
 ) -> None:
     """
-    Post ticks and keep the window responsive.
+    Post ticks, note timetable changes and keep the window responsive.
+
+    The timetable version is posted at start and before any tick it
+    changed by; a version read error posts nothing.
 
     Parameters
     ----------
@@ -686,47 +555,68 @@ async def ticker(
     pump : Callable[[], None] | None
         Called often to process window events.
     """
+    watch = VersionWatch(timetable=ports.timetable)
     elapsed = every
     while True:
         if elapsed >= every:
+            seen = await watch.check()
+            if seen is not None:
+                await queue.put(seen)
             await queue.put(Tick(now=ports.clock.now()))
             elapsed = 0.0
         if pump:
             pump()
-        await asyncio.sleep(0.03)
-        elapsed += 0.03
+        await asyncio.sleep(TICK_PAUSE)
+        elapsed += TICK_PAUSE
 
 
-def starting_state(*, ports: Ports, pin: Pin) -> State:
+def starting_state(*, ports: Ports, seed: Pin | None = None) -> State:
     """
-    Make the state at start-up, with the pin's places from the timetable.
+    Make the state at start-up from the saved state, or else the seed.
+
+    Without saved state the seed becomes the one pin, its places filled
+    in from the timetable; without either, the defaults show. State not
+    from the store is written on the first tick.
 
     Parameters
     ----------
     ports : Ports
         Adapters.
-    pin : Pin
-        Pin to show.
+    seed : Pin | None
+        Pin from the command line or environment.
 
     Returns
     -------
     State
         State.
     """
-    timetable = ports.timetable
-    destination = pin.destination
-    filled = replace(
-        pin,
-        origin=timetable.stop(stop_id=pin.origin.stop_id),
-        destination=(
-            None
-            if destination is None
-            else timetable.stop(stop_id=destination.stop_id)
-        ),
-    )
+    loaded = ports.states.load()
+    saved = loaded.saved
+    if seed is not None and loaded.stored:
+        logger.info('seed ignored: the saved state is used')
+    elif seed is not None:
+        saved = seeded(pin=filled(timetable=ports.timetable, pin=seed))
+        logger.info('state seeded from the command line or environment')
     return initial_state(
-        saved=seeded(pin=filled), now=ports.clock.now(), stored=True
+        saved=saved, now=ports.clock.now(), stored=loaded.stored
     )
+
+
+@dataclass(frozen=True)
+class Outputs:
+    """
+    What effects draw and write through.
+
+    Attributes
+    ----------
+    maps : MapRenderer
+        Draws the views with a map.
+    saver : StateSaver
+        Writes the saved state.
+    """
+
+    maps: MapRenderer
+    saver: StateSaver
 
 
 async def handle(
@@ -736,7 +626,7 @@ async def handle(
     ports: Ports,
     queue: asyncio.Queue[Event],
     tasks: set[asyncio.Task[None]],
-    maps: MapRenderer,
+    outputs: Outputs,
 ) -> State:
     """
     Advance the state by one event and carry out its effects.
@@ -753,8 +643,8 @@ async def handle(
         Event queue.
     tasks : set[asyncio.Task[None]]
         Background tasks kept alive until done.
-    maps : MapRenderer
-        Draws Map views.
+    outputs : Outputs
+        What effects draw and write through.
 
     Returns
     -------
@@ -766,7 +656,12 @@ async def handle(
     state, effects = step(state, event)
     for effect in effects:
         await perform(
-            ports=ports, effect=effect, queue=queue, tasks=tasks, maps=maps
+            ports=ports,
+            effect=effect,
+            queue=queue,
+            tasks=tasks,
+            maps=outputs.maps,
+            saver=outputs.saver,
         )
     return state
 
@@ -774,7 +669,7 @@ async def handle(
 async def run(
     *,
     ports: Ports,
-    pin: Pin,
+    seed: Pin | None = None,
     tick_every: float = 5.0,
     pump: Callable[[], None] | None = None,
     post_hook: Callable[[Callable[[Event], None]], None] | None = None,
@@ -793,8 +688,8 @@ async def run(
     ----------
     ports : Ports
         Adapters.
-    pin : Pin
-        Pin to show.
+    seed : Pin | None
+        Pin to start with when there is no saved state.
     tick_every : float
         Seconds between ticks.
     pump : Callable[[], None] | None
@@ -817,8 +712,11 @@ async def run(
     queue: asyncio.Queue[Event] = asyncio.Queue()
     if post_hook:
         post_hook(queue.put_nowait)
-    state = starting_state(ports=ports, pin=pin)
-    maps = MapRenderer(tiles=ports.tiles, variant=tiles_variant)
+    state = starting_state(ports=ports, seed=seed)
+    outputs = Outputs(
+        maps=MapRenderer(tiles=ports.tiles, variant=tiles_variant),
+        saver=StateSaver(states=ports.states),
+    )
     tasks: set[asyncio.Task[None]] = set()
     clock = asyncio.create_task(
         ticker(ports=ports, queue=queue, every=tick_every, pump=pump)
@@ -835,7 +733,7 @@ async def run(
                 ports=ports,
                 queue=queue,
                 tasks=tasks,
-                maps=maps,
+                outputs=outputs,
             )
             handled += 1
     finally:

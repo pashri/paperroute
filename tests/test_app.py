@@ -3,10 +3,10 @@
 import asyncio
 import logging
 import sqlite3
-from collections.abc import Callable, Collection
+from collections.abc import Callable, Collection, Sequence
 from contextlib import closing
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -19,34 +19,64 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app import (
     MapRenderer,
     Ports,
-    loaded_patterns,
     perform,
     run,
     starting_state,
     ticker,
 )
+from paperroute.app_effects import StateSaver, loaded_patterns
 from paperroute.build.gtfs_files import Source
 from paperroute.build.map_style import LIGHT
 from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.core.chooser import Column, Level
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import MetreBox, Point, Shape, make_shape, to_metres
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, MapView, Marker
 from paperroute.core.messages import (
+    ChooserDeparturesFailed,
+    ChooserDeparturesLoaded,
+    ColumnFailed,
+    ColumnLoaded,
+    Effect,
     Event,
     FeedFailed,
     FetchFeed,
     Knob,
     KnobPressed,
     KnobTurned,
+    LineFailed,
+    LineLoaded,
+    LoadChooserDepartures,
+    LoadColumn,
+    LoadLine,
     LoadPatterns,
+    LoadStrip,
     MapData,
     MapDataFailed,
+    MatchPlaces,
+    PlacesMatched,
     PositionsFetched,
+    QuitRequested,
+    Render,
+    SaveState,
+    StripFailed,
+    StripLoaded,
+    Tick,
+    TimetableSeen,
 )
-from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
+from paperroute.core.model import (
+    SYDNEY,
+    Departure,
+    Mode,
+    Pin,
+    RouteKind,
+    StopPlace,
+)
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.places import shown
+from paperroute.core.reach import ReachInput, RunTail, StripKey, build_reach
+from paperroute.core.saved import TOWN_HALL, LiveView, seeded
 from paperroute.core.strip_model import StripMapView, StripPane
 from paperroute.core.tiles import (
     TILE,
@@ -57,10 +87,17 @@ from paperroute.core.tiles import (
 )
 from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, Timings
-from paperroute.ports import Observer
+from paperroute.ports import Observer, TimetableRepository
+from paperroute.render.chooser import draw_chooser_view
 from paperroute.render.chrome import HEADER
+from paperroute.render.stop_view import draw_stop_view
+from paperroute.render.strip_view import draw_strip_view
 from paperroute.render.tile_codec import pack_bits, pack_grey
 from tests.core.factories import pin_of, place
+from tests.fakes import FakeNetwork, MemoryStates
+from tests.render.test_chooser import groups, view_of
+from tests.render.test_stop_view import BASE
+from tests.render.test_strip_view import VIEW
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
@@ -320,6 +357,8 @@ async def test_fetch_crash_posts_feed_failed_and_logs(
         feeds=CrashingFeeds(),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
     )
     queue: asyncio.Queue[Event] = asyncio.Queue()
     tasks: set[asyncio.Task[None]] = set()
@@ -330,6 +369,7 @@ async def test_fetch_crash_posts_feed_failed_and_logs(
             queue=queue,
             tasks=tasks,
             maps=MapRenderer(tiles=ports.tiles),
+            saver=StateSaver(states=ports.states),
         )
         await asyncio.gather(*tasks, return_exceptions=True)
         await asyncio.sleep(0)
@@ -352,11 +392,13 @@ async def test_run_quits_when_the_ticker_crashes(
         feeds=FileFeedsClient(directory=REAL),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
     )
     with caplog.at_level(logging.ERROR):
         async with asyncio.timeout(5):
             state = await run(
-                ports=ports, pin=PIN, tick_every=0.01, pump=pump
+                ports=ports, seed=PIN, tick_every=0.01, pump=pump
             )
     assert not state.running
     errors = [r.exc_info[1] for r in caplog.records if r.exc_info]
@@ -371,8 +413,10 @@ async def test_run_retries_after_a_failed_load() -> None:
         feeds=FileFeedsClient(directory=REAL),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
     )
-    state = await run(ports=ports, pin=PIN, tick_every=0.01, max_events=20)
+    state = await run(ports=ports, seed=PIN, tick_every=0.01, max_events=20)
     assert timetable.calls >= 2
     assert not state.board.departures
 
@@ -395,10 +439,12 @@ async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
         feeds=FileFeedsClient(directory=REAL),
         display=display,
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
     )
     try:
         state = await run(
-            ports=ports, pin=PIN, tick_every=0.01, max_events=60
+            ports=ports, seed=PIN, tick_every=0.01, max_events=60
         )
     finally:
         timetable.close()
@@ -426,10 +472,12 @@ async def test_run_reports_frames_feeds_and_ticks(tmp_path: Path) -> None:
         feeds=FileFeedsClient(directory=REAL),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
         observer=observer,
     )
     try:
-        await run(ports=ports, pin=PIN, tick_every=0.01, max_events=60)
+        await run(ports=ports, seed=PIN, tick_every=0.01, max_events=60)
     finally:
         timetable.close()
     assert timings.frames >= 1
@@ -445,6 +493,8 @@ def test_ports_default_observer_is_silent() -> None:
         feeds=CrashingFeeds(),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
     )
     assert isinstance(ports.observer, NullObserver)
 
@@ -581,11 +631,13 @@ async def test_run_survives_a_raising_observer(tmp_path: Path) -> None:
         feeds=FileFeedsClient(directory=REAL),
         display=display,
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
         observer=RaisingObserver(),
     )
     try:
         state = await run(
-            ports=ports, pin=PIN, tick_every=0.01, max_events=60
+            ports=ports, seed=PIN, tick_every=0.01, max_events=60
         )
     finally:
         timetable.close()
@@ -604,10 +656,12 @@ async def test_run_logs_frame_and_feed_timings_at_info(
         feeds=FileFeedsClient(directory=REAL),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
     )
     with caplog.at_level(logging.INFO):
         try:
-            await run(ports=ports, pin=PIN, tick_every=0.01, max_events=60)
+            await run(ports=ports, seed=PIN, tick_every=0.01, max_events=60)
         finally:
             timetable.close()
     frames = [r for r in caplog.records if r.message == 'frame drawn']
@@ -633,6 +687,8 @@ async def test_fetch_failure_does_not_report_a_parsed_feed(
         feeds=FileFeedsClient(directory=tmp_path),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
         observer=observer,
     )
     queue: asyncio.Queue[Event] = asyncio.Queue()
@@ -643,6 +699,7 @@ async def test_fetch_failure_does_not_report_a_parsed_feed(
         queue=queue,
         tasks=tasks,
         maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
     )
     await asyncio.gather(*tasks)
     assert isinstance(queue.get_nowait(), FeedFailed)
@@ -659,9 +716,13 @@ async def test_run_survives_unexpected_load_error(
         feeds=FileFeedsClient(directory=REAL),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
     )
     with caplog.at_level(logging.ERROR):
-        state = await run(ports=ports, pin=PIN, tick_every=0.01, max_events=20)
+        state = await run(
+            ports=ports, seed=PIN, tick_every=0.01, max_events=20
+        )
     assert state.running
     assert timetable.calls >= 2
     errors = [r.exc_info[1] for r in caplog.records if r.exc_info]
@@ -690,11 +751,13 @@ async def test_run_draws_when_every_feed_fails(
         feeds=FileFeedsClient(directory=empty),
         display=display,
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
     )
     try:
         with caplog.at_level(logging.WARNING):
             state = await run(
-                ports=ports, pin=PIN, tick_every=0.01, max_events=60
+                ports=ports, seed=PIN, tick_every=0.01, max_events=60
             )
     finally:
         timetable.close()
@@ -712,6 +775,8 @@ async def test_a_queued_tick_that_is_never_handled_sends_no_watchdog(
         feeds=FileFeedsClient(directory=REAL),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
         observer=observer,
     )
     queue: asyncio.Queue[Event] = asyncio.Queue()
@@ -721,7 +786,8 @@ async def test_a_queued_tick_that_is_never_handled_sends_no_watchdog(
     await asyncio.sleep(0.1)
     task.cancel()
     await asyncio.gather(task, return_exceptions=True)
-    assert queue.qsize() == 1
+    posted = [queue.get_nowait() for _ in range(queue.qsize())]
+    assert [type(event) for event in posted] == [TimetableSeen, Tick]
     assert observer.ticks == 0
 
 
@@ -736,10 +802,12 @@ async def test_run_sends_a_watchdog_for_each_handled_tick(
         feeds=FileFeedsClient(directory=REAL),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
         observer=observer,
     )
     try:
-        await run(ports=ports, pin=PIN, tick_every=0.01, max_events=20)
+        await run(ports=ports, seed=PIN, tick_every=0.01, max_events=20)
     finally:
         timetable.close()
     assert observer.ticks >= 1
@@ -855,12 +923,14 @@ async def test_run_draws_map_after_bottom_press(tmp_path: Path) -> None:
         feeds=feeds,
         display=display,
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
         tiles=tiles,
     )
     try:
         await run(
             ports=ports,
-            pin=MAP_PIN,
+            seed=MAP_PIN,
             tick_every=0.01,
             post_hook=display.hook,
             max_events=80,
@@ -1067,6 +1137,8 @@ async def test_positions_are_labelled_from_the_timetable(
         feeds=FileFeedsClient(directory=REAL),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
     )
     queue: asyncio.Queue[Event] = asyncio.Queue()
     tasks: set[asyncio.Task[None]] = set()
@@ -1077,6 +1149,7 @@ async def test_positions_are_labelled_from_the_timetable(
             queue=queue,
             tasks=tasks,
             maps=MapRenderer(tiles=ports.tiles),
+            saver=StateSaver(states=ports.states),
         )
         await asyncio.gather(*tasks)
     finally:
@@ -1127,6 +1200,8 @@ async def test_map_data_failure_posts_event() -> None:
         feeds=CrashingFeeds(),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
     )
     request = LoadPatterns(trip_ids=frozenset({'t1'}), day=AT.date())
     queue: asyncio.Queue[Event] = asyncio.Queue()
@@ -1137,6 +1212,7 @@ async def test_map_data_failure_posts_event() -> None:
         queue=queue,
         tasks=tasks,
         maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
     )
     await asyncio.gather(*tasks)
     posted = queue.get_nowait()
@@ -1172,9 +1248,11 @@ def test_starting_state_fills_the_pins_places() -> None:
         feeds=FileFeedsClient(directory=REAL),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
         tiles=NullTiles(),
     )
-    state = starting_state(ports=ports, pin=MAP_PIN)
+    state = starting_state(ports=ports, seed=MAP_PIN)
     assert shown(state=state).origin == place(
         '2145615', name='2145615', point=STOP_POINT,
     )
@@ -1192,9 +1270,11 @@ def test_starting_state_keeps_no_destination() -> None:
         feeds=FileFeedsClient(directory=REAL),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
         tiles=NullTiles(),
     )
-    state = starting_state(ports=ports, pin=pin_of('2145615', None))
+    state = starting_state(ports=ports, seed=pin_of('2145615', None))
     assert shown(state=state).origin == place(
         '2145615', name='2145615', point=STOP_POINT,
     )
@@ -1211,11 +1291,13 @@ async def test_run_draws_the_map_in_the_variant_asked_for() -> None:
         feeds=FileFeedsClient(directory=REAL),
         display=display,
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
         tiles=tiles,
     )
     await run(
         ports=ports,
-        pin=MAP_PIN,
+        seed=MAP_PIN,
         tick_every=0.01,
         post_hook=display.hook,
         max_events=10,
@@ -1260,6 +1342,8 @@ async def test_label_failure_posts_feed_failed_for_that_feed(
         feeds=FileFeedsClient(directory=REAL),
         display=FrameRecorder(),
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
     )
     queue: asyncio.Queue[Event] = asyncio.Queue()
     tasks: set[asyncio.Task[None]] = set()
@@ -1270,6 +1354,7 @@ async def test_label_failure_posts_feed_failed_for_that_feed(
             queue=queue,
             tasks=tasks,
             maps=MapRenderer(tiles=ports.tiles),
+            saver=StateSaver(states=ports.states),
         )
         await asyncio.gather(*tasks, return_exceptions=True)
         await asyncio.sleep(0)
@@ -1459,12 +1544,14 @@ async def test_run_survives_a_tiles_read_error(
         feeds=FileFeedsClient(directory=REAL),
         display=display,
         clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
         tiles=tiles,
     )
     with caplog.at_level(logging.WARNING), closing(tiles):
         state = await run(
             ports=ports,
-            pin=MAP_PIN,
+            seed=MAP_PIN,
             tick_every=0.01,
             post_hook=display.hook,
             max_events=30,
@@ -1556,3 +1643,468 @@ def test_corrupt_tile_draws_map_not_installed_and_warns_once(
     assert np.array_equal(first, missing)
     unusable = [r for r in caplog.records if r.message == 'tiles file unusable']
     assert len(unusable) == 1
+
+
+def ports_of(
+    *,
+    timetable: TimetableRepository | None = None,
+    network: FakeNetwork | None = None,
+    states: MemoryStates | None = None,
+    display: FrameRecorder | None = None,
+) -> Ports:
+    """
+    Make ports on fakes, replacing the ones given.
+
+    Parameters
+    ----------
+    timetable : TimetableRepository | None
+        Timetable; a placed one with no departures by default.
+    network : FakeNetwork | None
+        Network; one that knows nothing by default.
+    states : MemoryStates | None
+        Saved state; empty by default.
+    display : FrameRecorder | None
+        Display; a new recorder by default.
+
+    Returns
+    -------
+    Ports
+        The ports.
+    """
+    return Ports(
+        timetable=timetable or EmptyPlacedTimetable(),
+        feeds=FileFeedsClient(directory=REAL),
+        display=display or FrameRecorder(),
+        clock=FixedClock(at=AT),
+        network=network or FakeNetwork(),
+        states=states or MemoryStates(),
+    )
+
+
+async def posted_by(
+    *, ports: Ports, effects: Sequence[Effect], saver: StateSaver | None = None
+) -> list[Event]:
+    """
+    Carry out effects and give every event they posted.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters.
+    effects : Sequence[Effect]
+        Effects, in order.
+    saver : StateSaver | None
+        Writes saved state; a new one on the ports' store by default.
+
+    Returns
+    -------
+    list[Event]
+        The events posted, in order.
+    """
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    maps = MapRenderer(tiles=ports.tiles)
+    saver = saver or StateSaver(states=ports.states)
+    for effect in effects:
+        await perform(
+            ports=ports,
+            effect=effect,
+            queue=queue,
+            tasks=tasks,
+            maps=maps,
+            saver=saver,
+        )
+    await asyncio.gather(*tasks)
+    return [queue.get_nowait() for _ in range(queue.qsize())]
+
+
+async def test_run_starts_on_town_hall_map_without_state() -> None:
+    """With no saved state and no seed, Town Hall shows on the Map."""
+    state = await run(ports=ports_of(), tick_every=0.01, max_events=5)
+    assert state.places.pins == ()
+    assert shown(state=state).origin.stop_id == TOWN_HALL.stop_id
+    assert state.view is LiveView.MAP
+
+
+async def test_run_seeds_pin_when_no_state(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A seed with no saved state becomes the one pin, and is saved."""
+    states = MemoryStates()
+    with caplog.at_level(logging.INFO):
+        state = await run(
+            ports=ports_of(states=states),
+            seed=MAP_PIN,
+            tick_every=0.01,
+            max_events=5,
+        )
+    origin = place('2145615', name='2145615', point=STOP_POINT)
+    assert shown(state=state).origin == origin
+    assert state.view is LiveView.STOP
+    assert states.saves
+    assert states.saves[0].pins[0].origin == origin
+    assert (
+        'state seeded from the command line or environment' in caplog.text
+    )
+
+
+async def test_run_ignores_seed_when_state_exists(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Saved state wins over a seed, and the seed is logged as ignored."""
+    stored = seeded(pin=pin_of('2145615', None))
+    with caplog.at_level(logging.INFO):
+        state = await run(
+            ports=ports_of(states=MemoryStates(stored=stored)),
+            seed=PIN,
+            tick_every=0.01,
+            max_events=5,
+        )
+    assert state.places.pins == stored.pins
+    assert 'seed ignored' in caplog.text
+
+
+async def test_save_effect_writes_through_store() -> None:
+    """SaveState writes the saved state to the store and posts nothing."""
+    states = MemoryStates()
+    saved = seeded(pin=MAP_PIN)
+    posted = await posted_by(
+        ports=ports_of(states=states), effects=[SaveState(saved=saved)]
+    )
+    assert states.saves == [saved]
+    assert not posted
+
+
+async def test_save_failure_is_logged_not_raised(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failing write is logged once for the same message, never raised."""
+    states = MemoryStates(error=OSError(30, 'Read-only file system'))
+    save = SaveState(saved=seeded(pin=MAP_PIN))
+    with caplog.at_level(logging.ERROR):
+        await posted_by(ports=ports_of(states=states), effects=[save, save])
+    failures = [
+        record
+        for record in caplog.records
+        if record.message == 'saving state failed'
+    ]
+    assert len(failures) == 1
+
+
+async def test_quit_writes_unsaved_state() -> None:
+    """A change followed at once by a quit is saved before the run ends."""
+    states = MemoryStates(stored=seeded(pin=MAP_PIN))
+
+    def hook(post: Callable[[Event], None]) -> None:
+        post(KnobPressed(knob=Knob.BOTTOM))
+        post(QuitRequested())
+
+    async with asyncio.timeout(5):
+        state = await run(
+            ports=ports_of(states=states), post_hook=hook, tick_every=60.0
+        )
+    assert not state.running
+    assert states.stored is not None
+    assert states.stored.view is LiveView.MAP
+
+
+@dataclass
+class VersionedTimetable(EmptyPlacedTimetable):
+    """A timetable whose build can be swapped."""
+
+    built: str | None = 'v1'
+
+    def version(self) -> str | None:
+        """
+        Name the current build.
+
+        Returns
+        -------
+        str | None
+            The build.
+        """
+        return self.built
+
+
+@dataclass
+class VersionFailingTimetable(EmptyPlacedTimetable):
+    """A timetable whose version read fails."""
+
+    def version(self) -> str | None:
+        """
+        Fail like a damaged database file.
+
+        Returns
+        -------
+        str | None
+            Never returns.
+
+        Raises
+        ------
+        sqlite3.Error
+            Always.
+        """
+        raise sqlite3.OperationalError('disk I/O error')
+
+
+async def test_version_error_does_not_quit(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failing version read is logged once and the app keeps running."""
+    with caplog.at_level(logging.ERROR):
+        state = await run(
+            ports=ports_of(timetable=VersionFailingTimetable()),
+            seed=MAP_PIN,
+            tick_every=0.01,
+            max_events=15,
+        )
+    assert state.running
+    failures = [
+        record
+        for record in caplog.records
+        if record.message == 'reading the timetable version failed'
+    ]
+    assert len(failures) == 1
+
+
+async def test_timetable_version_change_posts_seen() -> None:
+    """The ticker posts the version at start and again when it changes."""
+    timetable = VersionedTimetable()
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    task = asyncio.create_task(
+        ticker(
+            ports=ports_of(timetable=timetable),
+            queue=queue,
+            every=0.01,
+            pump=None,
+        )
+    )
+    await asyncio.sleep(0.1)
+    timetable.built = 'v2'
+    await asyncio.sleep(0.1)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    posted = [queue.get_nowait() for _ in range(queue.qsize())]
+    seen = [event for event in posted if isinstance(event, TimetableSeen)]
+    assert seen == [TimetableSeen(version='v1'), TimetableSeen(version='v2')]
+    assert isinstance(posted[0], TimetableSeen)
+
+
+def reach_data() -> ReachInput:
+    """
+    Make the runs C E1 E2 through the From C.
+
+    Returns
+    -------
+    ReachInput
+        The runs.
+    """
+    places = {
+        key: StopPlace(stop_id=key, name=f'{key} Station', point=None)
+        for key in ('C', 'E1', 'E2')
+    }
+    return ReachInput(
+        origin=places['C'],
+        tails=(RunTail(before=(), after=('E1', 'E2'), trips=8),),
+        places=places,
+        station_of={key: key for key in places},
+    )
+
+
+STRIP_KEY = StripKey(station='C', kind=RouteKind.TRAIN, routes=())
+
+
+async def test_load_strip_posts_reach(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """LoadStrip builds the reach and echoes the key and timetable."""
+    data = reach_data()
+    load = LoadStrip(key=STRIP_KEY, origin=data.origin, timetable='v1')
+    with caplog.at_level(logging.INFO):
+        posted = await posted_by(
+            ports=ports_of(network=FakeNetwork(data=data)), effects=[load]
+        )
+    assert posted == [
+        StripLoaded(
+            key=STRIP_KEY, reach=build_reach(data=data), timetable='v1'
+        )
+    ]
+    built = [r for r in caplog.records if r.message == 'strip built']
+    assert len(built) == 1
+    assert built[0].__dict__['ms'] >= 0
+
+
+async def test_load_strip_without_runs_posts_no_reach() -> None:
+    """A timetable with no run tables loads a strip with no reach."""
+    load = LoadStrip(key=STRIP_KEY, origin=place('C'), timetable='v1')
+    posted = await posted_by(ports=ports_of(), effects=[load])
+    assert posted == [StripLoaded(key=STRIP_KEY, reach=None, timetable='v1')]
+
+
+async def test_load_strip_failure_posts_strip_failed() -> None:
+    """A failed runs read posts StripFailed with the timetable echoed."""
+    network = FakeNetwork(error=sqlite3.OperationalError('locked'))
+    load = LoadStrip(key=STRIP_KEY, origin=place('C'), timetable='v1')
+    posted = await posted_by(ports=ports_of(network=network), effects=[load])
+    assert posted == [StripFailed(key=STRIP_KEY, timetable='v1')]
+
+
+async def test_load_chooser_departures_posts_result() -> None:
+    """The chooser's departures come back up to the end asked for."""
+    end = AT + timedelta(hours=1)
+    load = LoadChooserDepartures(
+        pin=MAP_PIN, start=AT, end=end, timetable='v1'
+    )
+    posted = await posted_by(ports=ports_of(), effects=[load])
+    assert posted == [
+        ChooserDeparturesLoaded(
+            pin=MAP_PIN, departures=(), until=end, timetable='v1'
+        )
+    ]
+
+
+async def test_load_chooser_departures_failure_posts_failed() -> None:
+    """A failed departures read posts ChooserDeparturesFailed."""
+    load = LoadChooserDepartures(
+        pin=MAP_PIN, start=AT, end=AT, timetable='v1'
+    )
+    posted = await posted_by(
+        ports=ports_of(timetable=BrokenTimetable()), effects=[load]
+    )
+    assert posted == [ChooserDeparturesFailed(pin=MAP_PIN, timetable='v1')]
+
+
+async def test_load_column_posts_column() -> None:
+    """LoadColumn posts the network's column with the timetable echoed."""
+    column = Column(level=Level.KIND, items=())
+    network = FakeNetwork(column=column)
+    posted = await posted_by(
+        ports=ports_of(network=network),
+        effects=[LoadColumn(path=(), timetable='v1')],
+    )
+    assert posted == [ColumnLoaded(path=(), column=column, timetable='v1')]
+
+
+async def test_load_column_failure_posts_column_failed() -> None:
+    """A failed column read posts ColumnFailed with the timetable echoed."""
+    network = FakeNetwork(error=sqlite3.OperationalError('locked'))
+    posted = await posted_by(
+        ports=ports_of(network=network),
+        effects=[LoadColumn(path=(), timetable='v1')],
+    )
+    assert posted == [ColumnFailed(path=(), timetable='v1')]
+
+
+async def test_load_line_posts_line_and_failure() -> None:
+    """LoadLine posts the stations, or LineFailed when the read fails."""
+    line = (place('A'), place('B'))
+    load = LoadLine(towards=7, timetable='v1')
+    posted = await posted_by(
+        ports=ports_of(network=FakeNetwork(line=line)), effects=[load]
+    )
+    assert posted == [LineLoaded(towards=7, line=line, timetable='v1')]
+    broken = FakeNetwork(error=sqlite3.OperationalError('locked'))
+    posted = await posted_by(ports=ports_of(network=broken), effects=[load])
+    assert posted == [LineFailed(towards=7, timetable='v1')]
+
+
+@dataclass
+class MatchingTimetable(EmptyPlacedTimetable):
+    """A timetable that finds stop A again and loses every other stop."""
+
+    def match_stop(self, *, place: StopPlace) -> StopPlace | None:
+        """
+        Find stop A at the test point.
+
+        Parameters
+        ----------
+        place : StopPlace
+            Place to find.
+
+        Returns
+        -------
+        StopPlace | None
+            Stop A placed; None for any other.
+        """
+        return self.stop(stop_id='A') if place.stop_id == 'A' else None
+
+
+async def test_match_places_posts_found() -> None:
+    """MatchPlaces posts each place's match by its old stop ID."""
+    posted = await posted_by(
+        ports=ports_of(timetable=MatchingTimetable()),
+        effects=[MatchPlaces(places=(place('A'), place('B')))],
+    )
+    assert posted == [
+        PlacesMatched(
+            found={
+                'A': StopPlace(stop_id='A', name='A', point=STOP_POINT),
+                'B': None,
+            }
+        )
+    ]
+
+
+async def test_renders_each_view_type() -> None:
+    """Every kind of view is drawn by its own renderer and shown."""
+    display = FrameRecorder()
+    chooser = view_of(groups(focused=True))
+    await posted_by(
+        ports=ports_of(display=display),
+        effects=[
+            Render(view=BASE),
+            Render(view=map_view()),
+            Render(view=VIEW),
+            Render(view=strip_map_view()),
+            Render(view=chooser),
+        ],
+    )
+    maps = MapRenderer(tiles=NullTiles())
+    expected = [
+        draw_stop_view(view=BASE),
+        maps.frame(view=map_view()),
+        draw_strip_view(view=VIEW),
+        maps.strip_map_frame(view=strip_map_view()),
+        draw_chooser_view(view=chooser),
+    ]
+    assert len(display.frames) == len(expected)
+    for frame, want in zip(display.frames, expected, strict=True):
+        assert np.array_equal(frame, want)
+
+
+@dataclass
+class StoplessTimetable(EmptyPlacedTimetable):
+    """A timetable that knows no stops."""
+
+    def stop(self, *, stop_id: str) -> StopPlace:
+        """
+        Find no stop.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop ID.
+
+        Returns
+        -------
+        StopPlace
+            Never returns.
+
+        Raises
+        ------
+        KeyError
+            Always.
+        """
+        raise KeyError(stop_id)
+
+
+def test_starting_state_keeps_unknown_seed_places_bare(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A seed stop the timetable lacks stays bare, with a warning."""
+    with caplog.at_level(logging.WARNING):
+        state = starting_state(
+            ports=ports_of(timetable=StoplessTimetable()), seed=MAP_PIN
+        )
+    assert shown(state=state) == MAP_PIN
+    assert 'stop 2145615 not in the timetable' in caplog.text

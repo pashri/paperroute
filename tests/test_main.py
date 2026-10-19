@@ -24,7 +24,7 @@ import paperroute.adapters.tk_monitor as tk_monitor
 from paperroute.__main__ import (
     main,
     parse_args,
-    pin_for,
+    seed_for,
     serve_or_exit,
     serve_web,
     tiles_for,
@@ -43,6 +43,7 @@ from paperroute.core.model import SYDNEY
 from paperroute.core.tiles import TileVariant
 from paperroute.observers import Timings
 from tests.core.factories import pin_of
+from tests.fakes import FakeNetwork, MemoryStates
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor
@@ -65,21 +66,63 @@ def test_pin_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     assert (args.origin, args.destination) == ('215020', '200060')
 
 
-def test_pin_for_builds_bare_places() -> None:
+def test_seed_for_builds_bare_places() -> None:
     """--from and --to become places with no names or points yet."""
     args = argparse.Namespace(origin=ORIGIN, destination=DESTINATION)
-    assert pin_for(args=args) == PIN
+    assert seed_for(args=args) == PIN
 
 
-def test_missing_pin_exits(monkeypatch: pytest.MonkeyPatch) -> None:
-    """With no pin anywhere, the command exits with a message."""
+def test_seed_for_is_none_without_a_pin() -> None:
+    """With neither --from nor --to there is no seed."""
+    args = argparse.Namespace(origin=None, destination=None)
+    assert seed_for(args=args) is None
+
+
+@pytest.mark.parametrize(
+    ('given', 'seeded'),
+    [
+        ([], False),
+        (['--from', 'a', '--to', 'b'], True),
+    ],
+)
+def test_main_accepts_neither_or_both_seeds(
+    monkeypatch: pytest.MonkeyPatch, given: list[str], seeded: bool
+) -> None:
+    """Neither or both of --from and --to parse; the state path defaults."""
     monkeypatch.delenv('PAPERROUTE_FROM', raising=False)
     monkeypatch.delenv('PAPERROUTE_TO', raising=False)
     monkeypatch.setattr(
-        sys, 'argv', ['paperroute', 'run', '--timetable', 'x.db']
+        sys, 'argv', ['paperroute', 'run', '--timetable', 'x.db', *given]
     )
-    with pytest.raises(SystemExit, match='PAPERROUTE_FROM'):
+    args = parse_args()
+    assert (seed_for(args=args) is not None) == seeded
+    assert args.state == Path('/var/lib/paperroute/state.json')
+
+
+@pytest.mark.parametrize('given', [['--from', 'a'], ['--to', 'b']])
+def test_main_rejects_one_seed(
+    monkeypatch: pytest.MonkeyPatch, given: list[str]
+) -> None:
+    """Only one of --from and --to exits with a message."""
+    monkeypatch.delenv('PAPERROUTE_FROM', raising=False)
+    monkeypatch.delenv('PAPERROUTE_TO', raising=False)
+    monkeypatch.setattr(
+        sys, 'argv', ['paperroute', 'run', '--timetable', 'x.db', *given]
+    )
+    with pytest.raises(
+        SystemExit, match='give both --from and --to, or neither'
+    ):
         parse_args()
+
+
+def test_state_path_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """--state sets where the saved state is kept."""
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        ['paperroute', 'run', '--timetable', 'x.db', '--state', 's.json'],
+    )
+    assert parse_args().state == Path('s.json')
 
 
 def test_web_choices_parse(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -216,6 +259,8 @@ async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
         feeds=FileFeedsClient(directory=REAL),
         display=display,
         clock=ReplayClock(start=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
         observer=timings,
     )
     port = free_port()
@@ -223,7 +268,7 @@ async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
         serve_web(
             ports=ports,
             display=display,
-            pin=PIN,
+            seed=PIN,
             host='127.0.0.1',
             port=port,
             tick_every=0.01,
@@ -255,6 +300,7 @@ def test_web_main_logs_a_bind_failure(
         port=0,
         tiles=None,
         tiles_variant=TileVariant.GREY,
+        state=tmp_path / 'state.json',
     )
     build_db(path=args.timetable)
     with socket.socket() as held:
@@ -324,11 +370,13 @@ async def test_serve_web_passes_the_tiles_variant_to_run(
             feeds=FileFeedsClient(directory=REAL),
             display=display,
             clock=ReplayClock(start=AT),
+            network=FakeNetwork(),
+            states=MemoryStates(),
         )
         await serve_web(
             ports=ports,
             display=display,
-            pin=PIN,
+            seed=PIN,
             host='127.0.0.1',
             port=free_port(),
             tiles_variant=TileVariant.BITS,
@@ -361,6 +409,8 @@ def test_serve_or_exit_passes_the_tiles_variant(
             feeds=FileFeedsClient(directory=REAL),
             display=display,
             clock=ReplayClock(start=AT),
+            network=FakeNetwork(),
+            states=MemoryStates(),
         )
         serve_or_exit(args=args, ports=ports, display=display)
     assert seen == [TileVariant.BITS]
@@ -411,6 +461,7 @@ def test_tk_main_passes_the_tiles_variant(
         at=AT,
         tiles=None,
         tiles_variant=TileVariant.BITS,
+        state=tmp_path / 'state.json',
     )
     cli.tk_main(args=args, feeds=FileFeedsClient(directory=REAL))
     assert seen == [TileVariant.BITS]
@@ -434,10 +485,12 @@ async def test_show_passes_the_tiles_variant_to_run(
             feeds=FileFeedsClient(directory=REAL),
             display=WebDisplay(status=Timings().snapshot),
             clock=ReplayClock(start=AT),
+            network=FakeNetwork(),
+            states=MemoryStates(),
         )
         await cli.show(
             ports=ports,
-            pin=PIN,
+            seed=PIN,
             monitor=cast('TkMonitor', FakeMonitor()),
             tiles_variant=TileVariant.BITS,
         )

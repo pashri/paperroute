@@ -370,10 +370,10 @@ def countdown_slot(*, row: Row) -> str:
     Returns
     -------
     str
-        The countdown, or '' when it is a clock time (100 minutes or more
-        away), as the row already shows that time.
+        The countdown, or '' for a far departure, whose countdown is the
+        clock time the row already shows.
     """
-    return '' if ':' in row.countdown else row.countdown
+    return '' if row.far else row.countdown
 
 
 def cancelled(*, row: Row) -> str:

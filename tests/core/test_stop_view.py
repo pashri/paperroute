@@ -180,12 +180,14 @@ def test_view_countdown_over_99_minutes_shows_clock() -> None:
     """Countdowns of 100 minutes or more show the clock time instead."""
     result = view(departures=(live(minutes=130),))
     assert hero(result=result).countdown == '10:10'
+    assert hero(result=result).far
 
 
 def test_view_countdown_99_minutes_stays_minutes() -> None:
     """99 minutes still counts down."""
     result = view(departures=(live(minutes=99),))
     assert hero(result=result).countdown == '99'
+    assert not hero(result=result).far
 
 
 def test_view_faster_and_cancelled_pills() -> None:

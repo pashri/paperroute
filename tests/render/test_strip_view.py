@@ -225,7 +225,7 @@ def test_cancelled_panel_row_has_block() -> None:
 
 def test_far_departure_leaves_the_countdown_slot_empty() -> None:
     """A departure 100+ minutes away doesn't repeat its time as a count."""
-    far = replace(panel_row(), countdown='9:51', leaves_at='9:51')
+    far = replace(panel_row(), countdown='9:51', leaves_at='9:51', far=True)
     view = replace(VIEW, panel=replace(PANEL, rows=(far,)))
     slot = draw_strip_view(view=view)[PANEL_TOP + 20:PANEL_TOP + 48, 700:786]
     assert (slot == PAPER).all()

@@ -1,12 +1,13 @@
 """Tests for the shared header, banner and badge."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
 
-from paperroute.core.stop_view import NOT_PINNED, PinTag
+from paperroute.core.model import Mode
+from paperroute.core.stop_view import NOT_PINNED, PinTag, Row
 from paperroute.core.stop_view import pin_tag as tag_of
 from paperroute.render.canvas import (
     INK,
@@ -19,6 +20,7 @@ from paperroute.render.canvas import (
 )
 from paperroute.render.chrome import (
     TABS,
+    countdown_slot,
     header,
     header_tabs,
     pin_tag,
@@ -236,3 +238,15 @@ def test_view_header_passes_picking() -> None:
     view_header(plain, view=view, active='Strip')
     assert picking.fitted == ['Town Hall', 'pick TO']
     assert plain.fitted == ['Town Hall', 'Parramatta']
+
+
+def test_countdown_slot_follows_the_far_flag() -> None:
+    """The slot is empty only for a row marked far, whatever its text."""
+    near = Row(
+        route='T1', mode=Mode.TRAIN, platform='3', destination='Emu Plains',
+        countdown='9', leaves_at='8:09', arrives_at='8:45', ride_minutes=36,
+        live=True, pill=None,
+    )
+    assert countdown_slot(row=near) == '9'
+    assert countdown_slot(row=replace(near, countdown='now')) == 'now'
+    assert countdown_slot(row=replace(near, countdown='9:51', far=True)) == ''

@@ -12,6 +12,7 @@ from paperroute.core.model import SYDNEY, CarryOn, Departure, Mode, shifted
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
 SIDEBAR_ROWS: Final[int] = 5
+FAR_MINUTES: Final[int] = 100  # from here a countdown shows the clock time
 HORIZON: Final[timedelta] = timedelta(hours=3)
 HORIZON_TEXT: Final[str] = f'the next {HORIZON // timedelta(hours=1)} hours'
 DOT: Final[str] = ' \u00b7 '
@@ -26,7 +27,7 @@ class Pill(StrEnum):
 
 @dataclass(frozen=True)
 class Row:
-    """One departure as shown."""
+    """One departure as shown; `far` when its countdown is a clock time."""
 
     route: str
     mode: Mode
@@ -39,6 +40,7 @@ class Row:
     live: bool
     pill: Pill | None
     then: CarryOn | None = None
+    far: bool = False
 
 
 @dataclass(frozen=True)
@@ -161,6 +163,25 @@ def clock_text(*, moment: datetime) -> str:
     return f'{local.hour}:{local.minute:02d}'
 
 
+def is_far(*, departs: datetime, now: datetime) -> bool:
+    """
+    Say whether a departure counts down as a clock time.
+
+    Parameters
+    ----------
+    departs : datetime
+        Departure time.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    bool
+        True when it is `FAR_MINUTES` or more away.
+    """
+    return departs.timestamp() - now.timestamp() >= FAR_MINUTES * 60
+
+
 def countdown(*, departs: datetime, now: datetime) -> str:
     """
     Count down to a departure: minutes, 'now', or the clock time if 100+ away.
@@ -177,10 +198,10 @@ def countdown(*, departs: datetime, now: datetime) -> str:
     str
         Countdown text.
     """
+    if is_far(departs=departs, now=now):
+        return clock_text(moment=departs)
     minutes = int((departs.timestamp() - now.timestamp()) // 60)
-    if minutes <= 0:
-        return 'now'
-    return str(minutes) if minutes < 100 else clock_text(moment=departs)
+    return 'now' if minutes <= 0 else str(minutes)
 
 
 def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
@@ -215,6 +236,7 @@ def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
         live=item.live,
         pill=pill,
         then=dep.facts.then,
+        far=is_far(departs=item.departs, now=now),
     )
 
 

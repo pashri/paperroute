@@ -188,7 +188,7 @@ def test_no_destination_rows_draw_pills_and_every_countdown() -> None:
 
 def test_no_destination_far_row_leaves_the_countdown_slot_empty() -> None:
     """A board row 100+ minutes away shows its time once, at the left."""
-    far = replace(row(), countdown='9:51', leaves_at='9:51')
+    far = replace(row(), countdown='9:51', leaves_at='9:51', far=True)
     frame = draw_stop_view(
         view=replace(BASE, destination=None, hero=None, rows=(far,)))
     top = HEADER

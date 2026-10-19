@@ -493,6 +493,46 @@ def retried(*, placed: list[Badge], forced: Sequence[tuple[int, Badge]],
         placed[index] = found or now
 
 
+def settled_all(*, badges: Sequence[Badge], placed: list[Badge],
+                keep: Keepouts, first: int) -> list[tuple[int, Badge]]:
+    """
+    Place badges in turn and list the ones to try again.
+
+    Parameters
+    ----------
+    badges : Sequence[Badge]
+        Badges in y order.
+    placed : list[Badge]
+        Badges already placed; each badge is added or counted.
+    keep : Keepouts
+        What badges stay off.
+    first : int
+        Index of the first placed badge that may be a host.
+
+    Returns
+    -------
+    list[tuple[int, Badge]]
+        Where in `placed` each '+<n>' count and each badge drawn with no
+        room is, and the badge as it was before placing; the counts
+        first. A count is placed for the badge it began as, and is
+        often a different size, so it is placed again.
+    """
+    homes: dict[int, Badge] = {}
+    forced: list[tuple[int, Badge]] = []
+    for badge in badges:
+        size = len(placed)
+        if not settle(badge=badge, placed=placed, keep=keep, first=first):
+            forced.append((len(placed) - 1, badge))
+        if len(placed) > size:
+            homes[size] = badge
+    counts = [
+        (index, homes[index])
+        for index, each in enumerate(placed)
+        if each.extra and index in homes
+    ]
+    return [*counts, *forced]
+
+
 def at_stations(*, badges: Sequence[Badge], keep: Keepouts
                 ) -> tuple[list[Badge], list[Badge]]:
     """
@@ -551,12 +591,10 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
         key=lambda each: (each.marker.y, each.marker.x),
     )
     placed, rest = at_stations(badges=order, keep=keep)
-    first = len(placed)
-    forced: list[tuple[int, Badge]] = []
-    for badge in rest:
-        if not settle(badge=badge, placed=placed, keep=keep, first=first):
-            forced.append((len(placed) - 1, badge))
-    retried(placed=placed, forced=forced, keep=keep)
+    again = settled_all(
+        badges=rest, placed=placed, keep=keep, first=len(placed),
+    )
+    retried(placed=placed, forced=again, keep=keep)
     return tuple(sorted(
         placed, key=lambda each: (each.marker.x, each.marker.y),
     ))

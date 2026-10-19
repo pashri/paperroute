@@ -9,7 +9,7 @@ from typing import Final
 
 import pytest
 import skia
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 from paperroute.core.map_view import Marker
@@ -343,7 +343,48 @@ def count_of(*, marker: Marker) -> int:
     return int(marker.route[1:]) if marker.route[0] == '+' else 1
 
 
+def plain(*, route: str, x: float, y: float) -> Marker:
+    """
+    Make a pinned badge with no wedge and no age tab.
+
+    Parameters
+    ----------
+    route : str
+        Label.
+    x : float
+        Track x.
+    y : float
+        Centre y.
+
+    Returns
+    -------
+    Marker
+        The badge.
+    """
+    return Marker(
+        route=route, x=x, y=y, bearing=None, live=False, pinned=True,
+        age=None,
+    )
+
+
+CROWD_BESIDE_DISC: Final[tuple[dict[str, Spot], list[Badge], list[Spot]]] = (
+    {
+        'S0': Spot(x=30, y=62),
+        'S1': Spot(x=62, y=98),
+        'S2': Spot(x=30, y=134),
+    },
+    [
+        Badge(marker=plain(route='T1', x=62, y=62.0), low=62, high=98),
+        Badge(marker=plain(route='SH100', x=30, y=62.0), low=62, high=134),
+        Badge(marker=plain(route='SH100', x=30, y=62.0), low=62, high=134),
+        Badge(marker=plain(route='T1', x=62, y=116.0), low=98, high=134),
+    ],
+    [Spot(x=62, y=98)],
+)  # a '+2' narrower than the badge it began as
+
+
 @given(case=strip_cases())
+@example(case=CROWD_BESIDE_DISC)
 def test_badges_as_drawn_stay_on_their_hops_and_clear(
     case: tuple[dict[str, Spot], list[Badge], list[Spot]],
 ) -> None:

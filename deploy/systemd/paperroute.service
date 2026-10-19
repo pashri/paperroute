@@ -9,9 +9,8 @@ Type=notify
 NotifyAccess=main
 User=paperroute
 Group=paperroute
-EnvironmentFile=/etc/paperroute/m2a.env
 Environment=PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets
-ExecStart=/opt/paperroute/current/.venv/bin/python -m paperroute run --display web --timetable /var/lib/paperroute/timetable.db --tiles /var/lib/paperroute/tiles.db --error-log /var/lib/paperroute/log/errors.jsonl
+ExecStart=/opt/paperroute/current/.venv/bin/python -m paperroute run --display web --timetable /var/lib/paperroute/timetable.db --tiles /var/lib/paperroute/tiles.db --state /var/lib/paperroute/state.json --error-log /var/lib/paperroute/log/errors.jsonl
 # + runs it as root: the paperroute user can't write delay_on or delay_off
 ExecStopPost=+/usr/local/bin/paperroute-led boot
 Restart=always

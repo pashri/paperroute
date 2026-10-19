@@ -81,13 +81,11 @@ install_uv() {
     rm -f -- "$tmp"
 }
 
-# Root-owned and never overwritten, so a re-provision keeps a changed pin.
-write_pin() {
-    make_dir root 0755 "$PIN_DIR"
-    if [[ ! -e $PIN_FILE ]]; then
-        printf 'PAPERROUTE_FROM=2145615\nPAPERROUTE_TO=215020\n' >"$PIN_FILE"
-        chmod 0644 "$PIN_FILE"
-    fi
+# The M2a pin moved into state.json; remove the old root-owned copy.
+retire_pin() {
+    [[ ! -L $PIN_DIR ]] || fail "$PIN_DIR is a symlink"
+    rm -f -- "$PIN_FILE"
+    rmdir -- "$PIN_DIR" 2>/dev/null || true
 }
 
 copy_deploy() {
@@ -146,7 +144,6 @@ make_service_dir /var/lib/paperroute/sources
 make_service_dir /var/lib/paperroute/work
 make_service_dir /var/lib/paperroute/log
 make_dir pashri 0700 /var/cache/paperroute-stage
-write_pin
 
 install_uv
 
@@ -169,6 +166,7 @@ install -m 0755 -o root -g root "$SHARE/deploy/bin/install-files" \
 install -m 0755 -o root -g root "$SHARE/deploy/bin/install-tiles" \
     /usr/local/sbin/paperroute-install-tiles
 /usr/local/sbin/paperroute-install-files
+retire_pin
 
 install_sudoers
 printf 'Provisioned: reboot to apply config.txt\n'

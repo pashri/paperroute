@@ -63,7 +63,6 @@ APP_SERVICE: Final[dict[str, str]] = {
     'NotifyAccess': 'main',
     'User': 'paperroute',
     'Group': 'paperroute',
-    'EnvironmentFile': '/etc/paperroute/m2a.env',
     'Environment': (
         'PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets'
     ),
@@ -71,6 +70,7 @@ APP_SERVICE: Final[dict[str, str]] = {
         f'{PYTHON} -m paperroute run --display web'
         ' --timetable /var/lib/paperroute/timetable.db'
         ' --tiles /var/lib/paperroute/tiles.db'
+        ' --state /var/lib/paperroute/state.json'
         ' --error-log /var/lib/paperroute/log/errors.jsonl'
     ),
     'ExecStopPost': '+/usr/local/bin/paperroute-led boot',
@@ -893,13 +893,32 @@ def test_uv_installer_is_pinned() -> None:
     assert '| env UV_UNMANAGED_INSTALL' not in script_text(path=script)
 
 
-def test_provision_writes_root_owned_pin() -> None:
-    """The pin file is root's, under /etc, and never overwritten."""
+def test_provision_retires_the_pin_file() -> None:
+    """provision-device removes the old pin file and never writes one."""
     script = BIN / 'provision-device'
+    text = script_text(path=script)
     assert script_value(path=script, name='PIN_DIR') == '/etc/paperroute'
     assert script_value(path=script, name='PIN_FILE') == '$PIN_DIR/m2a.env'
-    assert 'if [[ ! -e $PIN_FILE ]]; then' in script_text(path=script)
+    assert 'PAPERROUTE_FROM' not in text
+    assert 'write_pin' not in text
+    assert 'rm -f -- "$PIN_FILE"' in text
+    assert '[[ ! -L $PIN_DIR ]] || fail "$PIN_DIR is a symlink"' in text
     assert 'm2a.env' not in script_text(path=BIN / 'install-release')
+
+
+def test_no_unit_reads_m2a_env() -> None:
+    """No systemd unit loads the retired pin file."""
+    for unit in sorted(SYSTEMD.iterdir()):
+        text = unit.read_text(encoding='utf-8')
+        assert 'EnvironmentFile' not in text, unit.name
+        assert 'm2a.env' not in text, unit.name
+
+
+def test_provision_retires_pin_after_installing_files() -> None:
+    """The pin goes only once the new unit is installed and loaded."""
+    lines = script_text(path=BIN / 'provision-device').splitlines()
+    install = lines.index('/usr/local/sbin/paperroute-install-files')
+    assert lines.index('retire_pin') > install
 
 
 @pytest.mark.parametrize('mode', sorted(LED_PATTERNS))

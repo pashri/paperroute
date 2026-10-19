@@ -42,8 +42,7 @@ from paperroute.render.strip_view import (
     paint_strip_view,
 )
 from paperroute.render.tile_codec import GREYS
-from tests.core.factories import START
-from tests.core.test_strip_view import east_inputs
+from tests.core.factories import START, east_inputs
 
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
 PANEL_TOP = 160

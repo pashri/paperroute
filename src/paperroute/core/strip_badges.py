@@ -1,21 +1,18 @@
 """Keep a strip's vehicle badges off its names, discs and each other."""
 
-import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from typing import Final
 
 from paperroute.core.map_view import Marker
+from paperroute.core.strip_extents import Extent, extent_of, reaches
 
-BADGE_STEP: Final[int] = 22
 NAME_REACH: Final[float] = 18.0  # half a strip row
-BADGE_SPAN: Final[float] = 36.0  # badges nearer than this across overlap
-BADGE_HALF: Final[float] = 10.0  # half a badge's height
-WEDGE_REACH: Final[float] = 10.0  # a live badge's wedge past its box
-TAB_REACH: Final[float] = 12.0  # a stale badge's age tab below its box
-DISC_REACH: Final[float] = 12.0  # a disc's radius and a pixel
+NAME_HALF: Final[float] = 7.0  # a name's height either side of its row
+DISC_REACH: Final[float] = 11.0  # a disc's radius
+AT_REACH: Final[float] = 12.0  # a vehicle this near a disc is at it
 HALF_WIDE: Final[float] = 28.0  # half a five-letter badge, and a pixel
-DISC_SPAN: Final[float] = DISC_REACH + HALF_WIDE  # badges nearer overlap
+DISC_SPAN: Final[float] = DISC_REACH + 1 + HALF_WIDE  # slot beside a disc
 
 
 @dataclass(frozen=True)
@@ -79,6 +76,27 @@ class Keepouts:
     top: float = 0.0
 
 
+def level_with(*, marker: Marker, spot: Spot) -> bool:
+    """
+    Say whether a badge's drawing reaches a row's name band.
+
+    Parameters
+    ----------
+    marker : Marker
+        Badge.
+    spot : Spot
+        The row's track spot.
+
+    Returns
+    -------
+    bool
+        True when the badge, wedge and age tab included, meets the band
+        `NAME_HALF` either side of the row's centre line.
+    """
+    box = extent_of(marker=marker)
+    return box.top < spot.y + NAME_HALF and box.bottom > spot.y - NAME_HALF
+
+
 def in_gutter(*, marker: Marker, spots: Mapping[str, Spot]) -> Marker:
     """
     Keep a badge off the names of the rows level with it.
@@ -93,14 +111,14 @@ def in_gutter(*, marker: Marker, spots: Mapping[str, Spot]) -> Marker:
     Returns
     -------
     Marker
-        The badge moved left onto the track of the shallowest row within
-        `NAME_REACH` of it, whose name starts right of that track; as it
-        was when no row that close sits further left.
+        The badge moved left onto the track of the shallowest row whose
+        name band its drawing reaches, as names start right of their
+        tracks; as it was when no such row sits further left.
     """
     level = (
         spot.x
         for spot in spots.values()
-        if abs(spot.y - marker.y) < NAME_REACH
+        if level_with(marker=marker, spot=spot)
     )
     return replace(marker, x=min((marker.x, *level)))
 
@@ -133,35 +151,6 @@ def counted(*, marker: Marker, extra: int) -> Marker:
     )
 
 
-def reaches(*, marker: Marker) -> tuple[float, float]:
-    """
-    Measure how far a badge's drawing reaches above and below its centre.
-
-    Parameters
-    ----------
-    marker : Marker
-        Badge.
-
-    Returns
-    -------
-    tuple[float, float]
-        Pixels above and below: half the badge, plus a live badge's
-        wedge on the side it points to and a stale badge's age tab
-        below.
-    """
-    heading = (
-        0.0
-        if marker.bearing is None or not marker.live
-        else round(math.cos(math.radians(marker.bearing)), 6)
-    )
-    up = BADGE_HALF + (WEDGE_REACH if heading > 0 else 0.0)
-    down = BADGE_HALF + max(
-        WEDGE_REACH if heading < 0 else 0.0,
-        0.0 if marker.age is None else TAB_REACH,
-    )
-    return up, down
-
-
 def clear_of(*, marker: Marker, disc: Spot) -> bool:
     """
     Say whether a badge's drawing keeps off a disc.
@@ -176,19 +165,19 @@ def clear_of(*, marker: Marker, disc: Spot) -> bool:
     Returns
     -------
     bool
-        True when the badge is at least `DISC_SPAN` across from the disc,
-        or its drawing ends at least `DISC_REACH` above or below the
-        disc's centre.
+        True when its drawing ends at least `DISC_REACH` from the disc's
+        centre across or down.
     """
-    up, down = reaches(marker=marker)
+    box = extent_of(marker=marker)
     return (
-        abs(marker.x - disc.x) >= DISC_SPAN
-        or marker.y <= disc.y - DISC_REACH - down
-        or marker.y >= disc.y + DISC_REACH + up
+        box.left >= disc.x + DISC_REACH
+        or box.right <= disc.x - DISC_REACH
+        or box.bottom <= disc.y - DISC_REACH
+        or box.top >= disc.y + DISC_REACH
     )
 
 
-def at_disc(*, badge: Badge, discs: Sequence[Spot]) -> Spot | None:
+def at_disc(*, badge: Badge, keep: Keepouts) -> Spot | None:
     """
     Find the disc whose station a badge's vehicle is at.
 
@@ -196,26 +185,26 @@ def at_disc(*, badge: Badge, discs: Sequence[Spot]) -> Spot | None:
     ----------
     badge : Badge
         Badge.
-    discs : Sequence[Spot]
-        The From and Destination discs on screen.
+    keep : Keepouts
+        What badges stay off, the discs among them.
 
     Returns
     -------
     Spot | None
-        A disc the badge covers, at one end of its hop and no further
-        than `NAME_REACH` from it; None when there is none.
+        The disc at the nearer end of the badge's hop, when the badge is
+        within `AT_REACH` of it or its hop has no place clear of the
+        discs; None otherwise.
     """
     marker = badge.marker
-    return next(
-        (
-            disc
-            for disc in discs
-            if disc.y in (badge.low, badge.high)
-            and abs(marker.y - disc.y) <= NAME_REACH
-            and not clear_of(marker=marker, disc=disc)
-        ),
-        None,
+    near = min(
+        (disc for disc in keep.discs if disc.y in (badge.low, badge.high)),
+        key=lambda disc: abs(disc.y - marker.y),
+        default=None,
     )
+    if near is None or abs(near.y - marker.y) <= AT_REACH:
+        return near
+    roomless = place(badge=badge, placed=(), keep=keep) is None
+    return near if roomless else None
 
 
 def beside(*, disc: Spot, crowd: Sequence[Badge]) -> list[Badge]:
@@ -239,9 +228,13 @@ def beside(*, disc: Spot, crowd: Sequence[Badge]) -> list[Badge]:
     return [
         replace(
             each,
-            marker=replace(
-                each.marker, x=disc.x + DISC_SPAN + slot * 2 * HALF_WIDE,
-                y=disc.y,
+            marker=counted(
+                marker=replace(
+                    each.marker,
+                    x=disc.x + DISC_SPAN + slot * 2 * HALF_WIDE,
+                    y=disc.y,
+                ),
+                extra=len(rest) - 1 if slot else 0,
             ),
             extra=len(rest) - 1 if slot else 0,
         )
@@ -251,7 +244,7 @@ def beside(*, disc: Spot, crowd: Sequence[Badge]) -> list[Badge]:
 
 def overlaps(*, one: Marker, other: Marker) -> bool:
     """
-    Say whether two badges overlap.
+    Say whether two badges' drawings overlap.
 
     Parameters
     ----------
@@ -263,11 +256,48 @@ def overlaps(*, one: Marker, other: Marker) -> bool:
     Returns
     -------
     bool
-        True when nearer than `BADGE_SPAN` across and `BADGE_STEP` down.
+        True when their drawings, outlines, wedges and age tabs
+        included, share any area.
     """
+    a, b = extent_of(marker=one), extent_of(marker=other)
     return (
-        abs(one.x - other.x) < BADGE_SPAN and abs(one.y - other.y) < BADGE_STEP
+        a.left < b.right
+        and b.left < a.right
+        and a.top < b.bottom
+        and b.top < a.bottom
     )
+
+
+def edges(*, badge: Badge, boxes: Sequence[Extent], keep: Keepouts
+          ) -> set[float]:
+    """
+    List the ys where a badge's drawing just meets what it keeps off.
+
+    Parameters
+    ----------
+    badge : Badge
+        Badge.
+    boxes : Sequence[Extent]
+        Drawings of the badges already placed.
+    keep : Keepouts
+        What badges stay off.
+
+    Returns
+    -------
+    set[float]
+        Badge centres that put its drawing just above or below each
+        placed badge, disc and name band, and just under the top.
+    """
+    up, down = reaches(marker=badge.marker)
+    return {
+        keep.top + up,
+        *(box.top - down for box in boxes),
+        *(box.bottom + up for box in boxes),
+        *(disc.y - DISC_REACH - down for disc in keep.discs),
+        *(disc.y + DISC_REACH + up for disc in keep.discs),
+        *(spot.y - NAME_HALF - down for spot in keep.spots.values()),
+        *(spot.y + NAME_HALF + up for spot in keep.spots.values()),
+    }
 
 
 def candidates(*, badge: Badge, placed: Sequence[Badge],
@@ -287,21 +317,22 @@ def candidates(*, badge: Badge, placed: Sequence[Badge],
     Returns
     -------
     list[float]
-        Its own y, its hop's ends, and the edges of what it must keep
-        off (other badges, discs, names, the top), within its hop.
+        Its own y, its hop's ends, and the `edges` of what it must keep
+        off, within its hop; ones that keep it under the top first.
     """
-    up, down = reaches(marker=badge.marker)
-    edges = {
-        badge.marker.y, badge.low, badge.high, keep.top + up,
-        *(each.marker.y + side * BADGE_STEP for each in placed
-          for side in (-1, 1)),
-        *(disc.y - DISC_REACH - down for disc in keep.discs),
-        *(disc.y + DISC_REACH + up for disc in keep.discs),
-        *(spot.y + side * NAME_REACH for spot in keep.spots.values()
-          for side in (-1, 1)),
+    up, _ = reaches(marker=badge.marker)
+    found = {
+        badge.marker.y,
+        badge.low,
+        badge.high,
+        *edges(
+            badge=badge,
+            boxes=[extent_of(marker=each.marker) for each in placed],
+            keep=keep,
+        ),
     }
     return sorted(
-        (y for y in edges if badge.low <= y <= badge.high),
+        (y for y in found if badge.low <= y <= badge.high),
         key=lambda y: (y - up < keep.top, abs(y - badge.marker.y), y),
     )
 
@@ -364,35 +395,101 @@ def place(*, badge: Badge, placed: Sequence[Badge], keep: Keepouts
     )
 
 
-def fold_into(*, badge: Badge, placed: Sequence[Badge]) -> int:
+def host_of(*, badge: Badge, placed: Sequence[Badge], first: int
+            ) -> int | None:
     """
-    Choose the placed badge a badge with no room is counted in.
+    Choose the placed badge on the same hop a badge is counted in.
 
     Parameters
     ----------
     badge : Badge
         The badge with no room.
     placed : Sequence[Badge]
-        Badges already placed; at least one overlaps it.
+        Badges already placed.
+    first : int
+        Index of the first placed badge that may be a host; the ones
+        before are beside the discs.
 
     Returns
     -------
-    int
-        Index of the last placed badge on the same hop; with none, of the
-        nearest placed badge.
+    int | None
+        Index of the last placed badge from `first` on the same hop, or
+        None when there is none.
     """
     same = [
         index
-        for index, each in enumerate(placed)
-        if (each.low, each.high) == (badge.low, badge.high)
+        for index in range(first, len(placed))
+        if (placed[index].low, placed[index].high) == (badge.low, badge.high)
     ]
-    return same[-1] if same else min(
-        range(len(placed)),
-        key=lambda index: abs(placed[index].marker.y - badge.marker.y),
-    )
+    return same[-1] if same else None
 
 
-def at_stations(*, badges: Sequence[Badge], discs: Sequence[Spot]
+def settle(*, badge: Badge, placed: list[Badge], keep: Keepouts,
+           first: int) -> bool:
+    """
+    Place one badge, or count it in a badge on its hop.
+
+    Parameters
+    ----------
+    badge : Badge
+        Badge.
+    placed : list[Badge]
+        Badges already placed; the badge is added or counted.
+    keep : Keepouts
+        What badges stay off.
+    first : int
+        Index of the first placed badge that may be a host.
+
+    Returns
+    -------
+    bool
+        False when the badge had no room and was drawn over another.
+    """
+    found = place(badge=badge, placed=placed, keep=keep)
+    host = None if found else host_of(badge=badge, placed=placed, first=first)
+    if found is not None:
+        placed.append(found)
+    elif host is not None:
+        extra = placed[host].extra + 1
+        placed[host] = replace(placed[host], extra=extra, marker=counted(
+            marker=placed[host].marker, extra=extra,
+        ))
+    else:
+        # Last resort, no room on its hop: drawn on it over another badge,
+        # never moved off it or counted in another hop's badge.
+        placed.append(place(badge=badge, placed=(), keep=keep) or badge)
+    return found is not None or host is not None
+
+
+def retried(*, placed: list[Badge], forced: Sequence[tuple[int, Badge]],
+            keep: Keepouts) -> None:
+    """
+    Try again to clear the badges drawn over others, now all are placed.
+
+    Parameters
+    ----------
+    placed : list[Badge]
+        Every placed badge; a forced one, counted or not, that now fits
+        is moved.
+    forced : Sequence[tuple[int, Badge]]
+        Where in `placed` each badge drawn with no room is, and the badge
+        as it was before placing.
+    keep : Keepouts
+        What badges stay off.
+    """
+    for index, badge in forced:
+        now = placed[index]
+        found = place(
+            badge=replace(now, marker=replace(
+                now.marker, x=badge.marker.x, y=badge.marker.y,
+            )),
+            placed=placed[:index] + placed[index + 1:],
+            keep=keep,
+        )
+        placed[index] = found or now
+
+
+def at_stations(*, badges: Sequence[Badge], keep: Keepouts
                 ) -> tuple[list[Badge], list[Badge]]:
     """
     Line up badges at the From and Destination beside their discs.
@@ -401,18 +498,18 @@ def at_stations(*, badges: Sequence[Badge], discs: Sequence[Spot]
     ----------
     badges : Sequence[Badge]
         Badges in y order.
-    discs : Sequence[Spot]
-        The From and Destination discs on screen.
+    keep : Keepouts
+        What badges stay off, the discs among them.
 
     Returns
     -------
     tuple[list[Badge], list[Badge]]
         The badges beside the discs, and the rest.
     """
-    found = {id(each): at_disc(badge=each, discs=discs) for each in badges}
+    found = {id(each): at_disc(badge=each, keep=keep) for each in badges}
     lined = [
         placed
-        for disc in discs
+        for disc in keep.discs
         if (crowd := [each for each in badges if found[id(each)] == disc])
         for placed in beside(disc=disc, crowd=crowd)
     ]
@@ -434,10 +531,11 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
     -------
     tuple[Badge, ...]
         Badges by x then y, each still on its own hop. One at the From or
-        Destination goes beside its disc, level with it; the rest move
-        the least they need to clear the names level with them, the
-        discs and each other, top to bottom. One with no room on its hop
-        is counted in a badge on the same hop, which becomes a '+<n>'.
+        Destination (see `at_disc`) goes beside its disc, level with it;
+        the rest move the least they need to clear the names level with
+        them, the discs and each other, top to bottom. One with no room
+        on its hop is counted in a badge on the same hop, which becomes a
+        '+<n>', or with none there is drawn on its hop anyway.
     """
     order = sorted(
         (
@@ -448,21 +546,13 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
         ),
         key=lambda each: (each.marker.y, each.marker.x),
     )
-    placed, rest = at_stations(badges=order, discs=keep.discs)
+    placed, rest = at_stations(badges=order, keep=keep)
+    first = len(placed)
+    forced: list[tuple[int, Badge]] = []
     for badge in rest:
-        found = place(badge=badge, placed=placed, keep=keep)
-        if found is None and placed:
-            index = fold_into(badge=badge, placed=placed)
-            host = placed[index]
-            placed[index] = replace(host, extra=host.extra + 1)
-        else:
-            placed.append(found or badge)
+        if not settle(badge=badge, placed=placed, keep=keep, first=first):
+            forced.append((len(placed) - 1, badge))
+    retried(placed=placed, forced=forced, keep=keep)
     return tuple(sorted(
-        (
-            replace(each, marker=counted(
-                marker=each.marker, extra=each.extra,
-            ))
-            for each in placed
-        ),
-        key=lambda each: (each.marker.x, each.marker.y),
+        placed, key=lambda each: (each.marker.x, each.marker.y),
     ))

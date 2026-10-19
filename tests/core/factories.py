@@ -1,9 +1,11 @@
-"""Departures, trip patterns and vehicle positions for core tests."""
+"""Departures, trip patterns, vehicle positions and strip inputs."""
 
 from collections.abc import Mapping, Sequence
 from datetime import date, datetime, timedelta
+from typing import Final
 
 from paperroute.core.geo import Point
+from paperroute.core.live import LiveDeparture
 from paperroute.core.model import (
     SYDNEY,
     CarryOn,
@@ -16,10 +18,35 @@ from paperroute.core.model import (
 )
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.positions import PositionsSnapshot, VehiclePosition
+from paperroute.core.reach import (
+    Reach,
+    ReachInput,
+    RunTail,
+    StripKey,
+    build_reach,
+)
+from paperroute.core.stop_view import (
+    NOT_PINNED,
+    StopInputs,
+    StopView,
+    build_stop_view,
+)
+from paperroute.core.strip_model import StripInputs
 
 START = datetime(2026, 10, 16, 8, 0, tzinfo=SYDNEY)
 EIGHT: int = 8 * 3600  # seconds into the service day
 TEN_MINUTES: int = 600  # seconds
+TRAIN: Final[StripKey] = StripKey(
+    station='C', kind=RouteKind.TRAIN, routes=(),
+)
+POINTS: Final[dict[str, Point]] = {
+    'C': (0.0, 0.0),
+    'E1': (0.0, -1000.0),
+    'E2': (0.0, -2000.0),
+    'J': (0.0, 1000.0),
+    'X': (5000.0, 0.0),
+}
+EAST: Final[tuple[str, ...]] = ('C', 'E1', 'E2')
 
 
 def place(
@@ -300,4 +327,238 @@ def snapshot(
         fetched_at=fetched_at,
         header_time=int(fetched_at.timestamp()),
         vehicles=vehicles,
+    )
+
+
+def example_reach() -> Reach:
+    """
+    Build the reach W2 W1 R3 R2 R1 J C E1 E2, with C the From.
+
+    Returns
+    -------
+    Reach
+        The reach; `W1_1` is a platform of W1.
+    """
+    keys = ('C', 'J', 'W1', 'W2', 'R1', 'R2', 'R3', 'E1', 'E2')
+    places = {
+        key: StopPlace(
+            stop_id=key, name=f'{key} Station', point=POINTS.get(key),
+        )
+        for key in keys
+    }
+    return build_reach(data=ReachInput(
+        origin=places['C'],
+        tails=(
+            RunTail(before=(), after=('J', 'W1', 'W2'), trips=6),
+            RunTail(before=(), after=('J', 'R1', 'R2', 'R3'), trips=3),
+            RunTail(before=(), after=('E1', 'E2'), trips=8),
+        ),
+        places=places,
+        station_of={'W1_1': 'W1', **{key: key for key in keys}},
+    ))
+
+
+def train(
+    *, minutes: int, trip_id: str, kind: RouteKind = RouteKind.TRAIN,
+) -> Departure:
+    """
+    Make a departure from C some minutes after 8:00.
+
+    Parameters
+    ----------
+    minutes : int
+        Minutes after 8:00.
+    trip_id : str
+        Trip ID.
+    kind : RouteKind
+        Kind of route.
+
+    Returns
+    -------
+    Departure
+        The departure.
+    """
+    return departure(
+        departs=START + timedelta(minutes=minutes),
+        trip_id=trip_id,
+        route='T1',
+        kind=kind,
+    )
+
+
+def line_pattern(
+    *, trip_id: str, stations: Sequence[str], minutes: int,
+) -> TripPattern:
+    """
+    Make a pattern calling every 3 minutes from some minutes after 8:00.
+
+    Parameters
+    ----------
+    trip_id : str
+        Trip ID.
+    stations : Sequence[str]
+        Stations in order.
+    minutes : int
+        Minutes after 8:00 at the first station.
+
+    Returns
+    -------
+    TripPattern
+        The pattern.
+    """
+    return pattern(
+        trip_id=trip_id,
+        route='T1',
+        stops=calls(
+            stations=stations,
+            start=EIGHT + minutes * 60,
+            step=180,
+            points=POINTS,
+        ),
+    )
+
+
+def live(
+    *, item: Departure, late: int = 0, cancelled: bool = False,
+) -> LiveDeparture:
+    """
+    Wrap a departure with a delay.
+
+    Parameters
+    ----------
+    item : Departure
+        Departure.
+    late : int
+        Minutes late.
+    cancelled : bool
+        Whether it is cancelled.
+
+    Returns
+    -------
+    LiveDeparture
+        The departure, shifted by the delay.
+    """
+    return LiveDeparture(
+        departure=item,
+        departs=item.departs + timedelta(minutes=late),
+        arrives=item.arrives + timedelta(minutes=late),
+        live=late != 0,
+        cancelled=cancelled,
+    )
+
+
+def stop_view_of(
+    *,
+    departures: Sequence[LiveDeparture],
+    now: datetime,
+    destination: str | None = None,
+) -> StopView:
+    """
+    Build the Stop view of some departures from C.
+
+    Parameters
+    ----------
+    departures : Sequence[LiveDeparture]
+        Departures.
+    now : datetime
+        Current time.
+    destination : str | None
+        Destination name.
+
+    Returns
+    -------
+    StopView
+        The view.
+    """
+    return build_stop_view(inputs=StopInputs(
+        origin='C Station',
+        destination=destination,
+        departures=tuple(departures),
+        now=now,
+        scroll=0,
+        live_since=now,
+        has_feed=True,
+    ))
+
+
+def inputs_of(
+    *,
+    reach: Reach | None,
+    departures: Sequence[LiveDeparture] = (),
+    patterns: Mapping[str, TripPattern | None] | None = None,
+    positions: Mapping[str, PositionsSnapshot] | None = None,
+    now: datetime = START - timedelta(minutes=2),
+    destination: str | None = None,
+) -> StripInputs:
+    """
+    Make Strip inputs with the usual defaults.
+
+    Parameters
+    ----------
+    reach : Reach | None
+        The reach.
+    departures : Sequence[LiveDeparture]
+        Departures from C.
+    patterns : Mapping[str, TripPattern | None] | None
+        Loaded patterns.
+    positions : Mapping[str, PositionsSnapshot] | None
+        Positions downloads.
+    now : datetime
+        Current time.
+    destination : str | None
+        Destination stop or station ID.
+
+    Returns
+    -------
+    StripInputs
+        The inputs.
+    """
+    return StripInputs(
+        reach=reach,
+        unavailable=None,
+        departures=tuple(departures),
+        patterns=patterns or {},
+        positions=positions or {},
+        now=now,
+        scroll=0,
+        cursor=None,
+        picking=None,
+        destination=destination,
+        tag=NOT_PINNED,
+        stop_view=stop_view_of(departures=departures, now=now),
+        key=TRAIN,
+    )
+
+
+def east_inputs(
+    *, at: Point | None, reported: datetime, now: datetime,
+) -> StripInputs:
+    """
+    Make inputs with one eastbound train leaving C at 8:00.
+
+    Parameters
+    ----------
+    at : Point | None
+        Where its vehicle reported, or None for no vehicle.
+    reported : datetime
+        When the vehicle reported.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    StripInputs
+        The inputs.
+    """
+    vehicles = () if at is None else (vehicle(
+        timestamp=int(reported.timestamp()), trip_id='e', point=at,
+    ),)
+    return inputs_of(
+        reach=example_reach(),
+        departures=[live(item=train(minutes=0, trip_id='e'))],
+        patterns={
+            'e': line_pattern(trip_id='e', stations=EAST, minutes=0),
+        },
+        positions={'trains': snapshot(fetched_at=now, vehicles=vehicles)},
+        now=now,
     )

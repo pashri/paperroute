@@ -11,6 +11,7 @@ from paperroute.core.strip_badges import (
     Badge,
     Keepouts,
     Spot,
+    overlaps,
     pushed,
 )
 
@@ -363,3 +364,28 @@ def test_one_count_beside_a_disc() -> None:
         ('T0', BESIDE, 136),
         ('+3', BESIDE + 2 * HALF_WIDE, 136),
     ]
+
+
+def test_a_count_is_placed_again_at_its_own_size() -> None:
+    """A '+2' narrower than its first badge moves up, leaving room below."""
+    spots = {
+        'S0': Spot(x=30, y=62),
+        'S1': Spot(x=62, y=98),
+        'S2': Spot(x=30, y=134),
+    }
+    found = pushed(
+        badges=[
+            badge(x=62, y=62, low=62, high=98, bearing=None),
+            badge(x=30, y=62, low=62, high=134, route='SH100', bearing=None),
+            badge(x=30, y=62, low=62, high=134, route='SH100', bearing=None),
+            badge(x=62, y=116, low=98, high=134, bearing=None),
+        ],
+        keep=Keepouts(spots=spots, discs=[Spot(x=62, y=98)]),
+    )
+    markers = [each.marker for each in found]
+    assert [each.route for each in markers].count('+2') == 1
+    assert not any(
+        overlaps(one=one, other=other)
+        for index, one in enumerate(markers)
+        for other in markers[index + 1:]
+    )

@@ -48,7 +48,6 @@ from paperroute.core.messages import (
     Tick,
 )
 from paperroute.core.model import Pin
-from paperroute.core.patterns import measure
 from paperroute.core.positions import PositionsSnapshot, with_labels
 from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
@@ -56,6 +55,7 @@ from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView
 from paperroute.core.tiles import TileVariant
+from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, ObserverGroup
 from paperroute.ports import (
     Clock,
@@ -85,6 +85,7 @@ class Ports:
     clock: Clock
     observer: Observer = field(default_factory=NullObserver)
     tiles: TileRepository = field(default_factory=NullTiles)
+    measures: StopMeasures = field(default_factory=StopMeasures)
 
 
 class MapRenderer:
@@ -391,7 +392,10 @@ async def fetch(
 
 
 def loaded_patterns(
-    *, timetable: TimetableRepository, effect: LoadPatterns
+    *,
+    timetable: TimetableRepository,
+    effect: LoadPatterns,
+    measures: StopMeasures,
 ) -> PatternsLoaded:
     """
     Read trip patterns and their shapes, and place the stops on them.
@@ -402,6 +406,8 @@ def loaded_patterns(
         Timetable.
     effect : LoadPatterns
         Request.
+    measures : StopMeasures
+        Stop places already worked out, reused per shape and stops.
 
     Returns
     -------
@@ -418,7 +424,7 @@ def loaded_patterns(
     )
     patterns = {
         trip_id: (
-            measure(
+            measures.measure(
                 pattern=found[trip_id],
                 shape=shapes.get(found[trip_id].shape_id or ''),
             )
@@ -432,7 +438,12 @@ def loaded_patterns(
     )
 
 
-def map_data(*, timetable: TimetableRepository, effect: MapRequest) -> Event:
+def map_data(
+    *,
+    timetable: TimetableRepository,
+    effect: MapRequest,
+    measures: StopMeasures,
+) -> Event:
     """
     Read one kind of map data from the timetable.
 
@@ -442,6 +453,8 @@ def map_data(*, timetable: TimetableRepository, effect: MapRequest) -> Event:
         Timetable.
     effect : MapRequest
         Request.
+    measures : StopMeasures
+        Stop places already worked out.
 
     Returns
     -------
@@ -452,7 +465,9 @@ def map_data(*, timetable: TimetableRepository, effect: MapRequest) -> Event:
         case LoadShapes(shape_ids=shape_ids):
             return ShapesLoaded(shapes=timetable.shapes(shape_ids=shape_ids))
         case LoadPatterns():
-            return loaded_patterns(timetable=timetable, effect=effect)
+            return loaded_patterns(
+                timetable=timetable, effect=effect, measures=measures,
+            )
         case LoadModes(mpp=mpp, box=box):
             modes = timetable.modes_near(box=box)
             return ModesLoaded(mpp=mpp, box=box, modes=modes)
@@ -475,7 +490,10 @@ async def load_map(
     """
     try:
         event = await asyncio.to_thread(
-            map_data, timetable=ports.timetable, effect=effect
+            map_data,
+            timetable=ports.timetable,
+            effect=effect,
+            measures=ports.measures,
         )
     except sqlite3.Error:
         logger.exception('reading map data failed')

@@ -55,6 +55,7 @@ from paperroute.core.tiles import (
     tile_of,
     to_pixels,
 )
+from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
 from paperroute.render.chrome import HEADER
@@ -1287,7 +1288,7 @@ class PatternedTimetable(BrokenTimetable):
         self, *, trip_ids: Collection[str], around: date
     ) -> dict[str, TripPattern]:
         """
-        Know trip t1.
+        Know trips t1 and t3, which share a shape and stops.
 
         Parameters
         ----------
@@ -1299,7 +1300,7 @@ class PatternedTimetable(BrokenTimetable):
         Returns
         -------
         dict[str, TripPattern]
-            t1 when asked for.
+            Those asked for.
         """
         trip = TripPattern(
             trip_id='t1',
@@ -1312,7 +1313,11 @@ class PatternedTimetable(BrokenTimetable):
             ),
             days=(around,),
         )
-        return {'t1': trip} if 't1' in trip_ids else {}
+        return {
+            trip_id: replace(trip, trip_id=trip_id)
+            for trip_id in ('t1', 't3')
+            if trip_id in trip_ids
+        }
 
     def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
         """
@@ -1337,6 +1342,7 @@ def test_loaded_patterns_measures_found_trips_and_nones_the_rest() -> None:
     loaded = loaded_patterns(
         timetable=PatternedTimetable(),
         effect=LoadPatterns(trip_ids=frozenset({'t1', 't2'}), day=AT.date()),
+        measures=StopMeasures(),
     )
     assert loaded.trip_ids == {'t1', 't2'}
     assert set(loaded.patterns) == {'t1', 't2'}
@@ -1345,6 +1351,27 @@ def test_loaded_patterns_measures_found_trips_and_nones_the_rest() -> None:
     assert found is not None
     assert found.along == pytest.approx((0.0, 100.0))
     assert set(loaded.shapes) == {'s1'}
+
+
+def test_loaded_patterns_measure_a_shape_and_stops_once() -> None:
+    """Trips sharing a shape and stops share one measurement."""
+    measures = StopMeasures()
+    loaded = loaded_patterns(
+        timetable=PatternedTimetable(),
+        effect=LoadPatterns(trip_ids=frozenset({'t1', 't3'}), day=AT.date()),
+        measures=measures,
+    )
+    first, third = loaded.patterns['t1'], loaded.patterns['t3']
+    assert first is not None
+    assert third is not None
+    assert first.along is third.along
+    later = loaded_patterns(
+        timetable=PatternedTimetable(),
+        effect=LoadPatterns(trip_ids=frozenset({'t1'}), day=AT.date()),
+        measures=measures,
+    ).patterns['t1']
+    assert later is not None
+    assert later.along is first.along
 
 
 def tableless_tiles(*, out: Path) -> SqliteTileRepository:

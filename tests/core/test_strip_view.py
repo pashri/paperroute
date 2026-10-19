@@ -978,7 +978,9 @@ def test_badge_at_the_from_clears_its_disc() -> None:
     inputs = east_inputs(at=(0.0, 0.0), reported=now, now=now)
     view = build_strip_view(inputs=inputs)
     pane = build_strip_pane(inputs=inputs)
-    for rows, markers in ((view.rows, view.markers), (pane.rows, pane.markers)):
+    for rows, markers in (
+        (view.rows, view.markers), (pane.rows, pane.markers),
+    ):
         home = next(row for row in rows if row.bold)
         (marker,) = markers
         assert abs(marker.y - home.y) == BADGE_STEP

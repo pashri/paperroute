@@ -13,6 +13,7 @@ FROM_KEY: Final[str] = ''  # stands for the From in a way's track graph
 
 type Hung = dict[str, list[Branch]]
 
+
 @dataclass(frozen=True)
 class Branch:
     """
@@ -35,6 +36,7 @@ class Branch:
     depth: int
     weight: int
 
+
 @dataclass(frozen=True)
 class Run:
     """
@@ -54,6 +56,7 @@ class Run:
     trips: int
     joined: bool
 
+
 @dataclass(frozen=True)
 class WayGraph:
     """
@@ -69,6 +72,7 @@ class WayGraph:
 
     succ: Mapping[str, Counter[str]]
     places: Mapping[str, StopPlace]
+
 
 @dataclass
 class Layout:
@@ -92,6 +96,7 @@ class Layout:
     depth: dict[str, int]
     hung: Hung
 
+
 def place_of(*, places: Mapping[str, StopPlace], key: str) -> StopPlace:
     """
     Find a station's place, or a bare one named by its ID.
@@ -114,6 +119,7 @@ def place_of(*, places: Mapping[str, StopPlace], key: str) -> StopPlace:
         if found is None
         else found
     )
+
 
 def track(*, run: Run) -> tuple[str, ...]:
     """

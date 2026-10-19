@@ -49,6 +49,7 @@ class TripInputs:
     now: datetime
     station_of: Mapping[str, str]
 
+
 def on_strip(*, departure: Departure, key: StripKey) -> bool:
     """
     Say whether a departure feeds a strip.

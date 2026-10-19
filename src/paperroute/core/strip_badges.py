@@ -29,6 +29,7 @@ class Spot:
     x: float
     y: float
 
+
 def in_gutter(*, marker: Marker, spots: Mapping[str, Spot]) -> Marker:
     """
     Keep a badge off the names of the rows level with it.

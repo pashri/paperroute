@@ -171,6 +171,7 @@ def hop_marker(
         age=age,
     )
 
+
 def vehicle_markers(*, trips: TripInputs, spots: Mapping[str, Spot],
                     discs: Sequence[Spot] = ()) -> tuple[Marker, ...]:
     """

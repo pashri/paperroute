@@ -39,6 +39,7 @@ class LaidWay:
     hop: str
     hung: Hung
 
+
 @dataclass(frozen=True)
 class Entry:
     """
@@ -61,6 +62,7 @@ class Entry:
     above: bool
     parent: str | None
 
+
 @dataclass(frozen=True)
 class Sides:
     """
@@ -76,6 +78,7 @@ class Sides:
 
     above: tuple[Entry, ...]
     below: tuple[Entry, ...]
+
 
 def lay_ways(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
              ) -> list[LaidWay]:

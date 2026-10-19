@@ -20,7 +20,7 @@ from paperroute.core.saved import LiveView
 from paperroute.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import NEEDS_UPDATE, StripInputs
-from paperroute.core.strip_vehicles import strip_trips, window_departures
+from paperroute.core.strip_times import strip_trips, window_departures
 from paperroute.core.strip_view import home_of, window_of
 
 STRIP_VIEWS: Final[frozenset[LiveView]] = frozenset(

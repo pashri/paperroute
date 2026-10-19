@@ -28,6 +28,7 @@ from paperroute.core.stop_view import (
     StopView,
     build_stop_view,
 )
+from paperroute.core.strip_badges import BADGE_STEP
 from paperroute.core.strip_model import (
     LOADING,
     NEEDS_UPDATE,
@@ -38,7 +39,7 @@ from paperroute.core.strip_model import (
     StripInputs,
     StripRow,
 )
-from paperroute.core.strip_vehicles import BADGE_STEP, strip_trips
+from paperroute.core.strip_times import strip_trips
 from paperroute.core.strip_view import (
     build_strip_pane,
     build_strip_view,

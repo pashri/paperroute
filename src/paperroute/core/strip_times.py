@@ -1,0 +1,364 @@
+"""Which trips feed a strip, and when they reach its stations."""
+
+from collections.abc import Iterator, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from typing import Final
+
+from paperroute.core.live import LiveDeparture
+from paperroute.core.model import (
+    Departure,
+    service_seconds,
+    service_time,
+    shifted,
+)
+from paperroute.core.patterns import TripPattern
+from paperroute.core.positions import PositionsSnapshot
+from paperroute.core.reach import StripKey, every_route
+from paperroute.core.stop_view import not_departed
+
+STRIP_LOOKBACK: Final[timedelta] = timedelta(minutes=60)
+STRIP_AHEAD: Final[timedelta] = timedelta(minutes=30)
+
+
+@dataclass(frozen=True)
+class TripInputs:
+    """
+    The departures and live data a strip's times and vehicles come from.
+
+    Attributes
+    ----------
+    departures : tuple[LiveDeparture, ...]
+        Every departure from the From, with live times applied.
+    key : StripKey | None
+        Which runs feed the strip; None for no departures.
+    patterns : Mapping[str, TripPattern | None]
+        Loaded trip patterns by trip ID; None when unknown.
+    positions : Mapping[str, PositionsSnapshot]
+        The latest download of each positions feed in use.
+    now : datetime
+        Current time.
+    station_of : Mapping[str, str]
+        The station ID of each stop under a strip station.
+    """
+
+    departures: tuple[LiveDeparture, ...]
+    key: StripKey | None
+    patterns: Mapping[str, TripPattern | None]
+    positions: Mapping[str, PositionsSnapshot]
+    now: datetime
+    station_of: Mapping[str, str]
+
+def on_strip(*, departure: Departure, key: StripKey) -> bool:
+    """
+    Say whether a departure feeds a strip.
+
+    Parameters
+    ----------
+    departure : Departure
+        Departure.
+    key : StripKey
+        Strip kind and routes.
+
+    Returns
+    -------
+    bool
+        True when the key has no kind, or the departure is of its kind
+        and, for a kind that takes only its routes, one of them.
+    """
+    if key.kind is None:
+        return True
+    if departure.facts.kind != key.kind:
+        return False
+    return every_route(key=key) or departure.route in key.routes
+
+
+def strip_departures(
+    *, departures: Sequence[Departure], key: StripKey,
+) -> tuple[Departure, ...]:
+    """
+    Keep the departures of a strip's own kind or routes.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        Every departure from the From.
+    key : StripKey
+        Strip kind and routes.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        The ones that feed the strip, in order.
+    """
+    return tuple(
+        departure
+        for departure in departures
+        if on_strip(departure=departure, key=key)
+    )
+
+
+def strip_trips(
+    *, departures: Sequence[Departure], key: StripKey, now: datetime,
+) -> frozenset[str]:
+    """
+    List the trips whose vehicles the strip draws.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        Every departure from the From.
+    key : StripKey
+        Strip kind and routes.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    frozenset[str]
+        Trip IDs of the strip's departures that left in the last
+        `STRIP_LOOKBACK` or leave in the next `STRIP_AHEAD`; every one.
+    """
+    return frozenset(
+        departure.trip_id
+        for departure in window_departures(
+            departures=departures, key=key, now=now,
+        )
+    )
+
+
+def window_departures(
+    *, departures: Sequence[Departure], key: StripKey, now: datetime,
+) -> list[Departure]:
+    """
+    Keep a strip's departures timetabled near now, one per trip.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        Every departure from the From.
+    key : StripKey
+        Strip kind and routes.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    list[Departure]
+        The first departure of each trip leaving from `STRIP_LOOKBACK`
+        before now to `STRIP_AHEAD` after, in order.
+    """
+    start = (now - STRIP_LOOKBACK).timestamp()
+    end = (now + STRIP_AHEAD).timestamp()
+    kept: dict[str, Departure] = {}
+    for departure in strip_departures(departures=departures, key=key):
+        if start <= departure.departs.timestamp() <= end:
+            kept.setdefault(departure.trip_id, departure)
+    return list(kept.values())
+
+
+def live_strip(*, trips: TripInputs) -> list[LiveDeparture]:
+    """
+    Keep the live departures that feed the strip.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+
+    Returns
+    -------
+    list[LiveDeparture]
+        The strip's departures; none without a key.
+    """
+    key = trips.key
+    if key is None:
+        return []
+    return [
+        item
+        for item in trips.departures
+        if on_strip(departure=item.departure, key=key)
+    ]
+
+
+def from_call(*, departure: Departure, pattern: TripPattern, origin: str,
+              stations: Mapping[str, str]) -> int | None:
+    """
+    Find the call at which a departure leaves the From.
+
+    Parameters
+    ----------
+    departure : Departure
+        Departure.
+    pattern : TripPattern
+        Its trip.
+    origin : str
+        The From station ID.
+    stations : Mapping[str, str]
+        Station ID by stop ID, for stops under a strip station.
+
+    Returns
+    -------
+    int | None
+        The index of the call at the From at the departure's time, else
+        the first call at the From, else None.
+    """
+    at_from = [
+        index
+        for index, stop in enumerate(pattern.stops)
+        if stations.get(stop.station, stop.station) == origin
+    ]
+    leaves = service_seconds(
+        day=departure.service_day, moment=departure.departs,
+    )
+    timed = [i for i in at_from if pattern.stops[i].departs == leaves]
+    return next(iter(timed or at_from), None)
+
+
+def arrivals_after(
+    *,
+    item: LiveDeparture,
+    pattern: TripPattern,
+    origin: str,
+    stations: Mapping[str, str],
+) -> Iterator[tuple[str, datetime]]:
+    """
+    List the stations a departure calls at after the From, with times.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+    pattern : TripPattern
+        Its trip.
+    origin : str
+        The From station ID.
+    stations : Mapping[str, str]
+        Station ID by stop ID, for stops under a strip station.
+
+    Yields
+    ------
+    tuple[str, datetime]
+        Each later call's station and arrival, shifted by the delay.
+    """
+    departure = item.departure
+    start = from_call(
+        departure=departure, pattern=pattern, origin=origin, stations=stations,
+    )
+    if start is None:
+        return
+    delay = int(item.departs.timestamp() - departure.departs.timestamp())
+    for stop in pattern.stops[start + 1:]:
+        arrives = service_time(day=departure.service_day, seconds=stop.arrives)
+        yield (
+            stations.get(stop.station, stop.station),
+            shifted(moment=arrives, seconds=delay),
+        )
+
+
+def first_arrivals(*, trips: TripInputs, origin: str
+                   ) -> dict[str, datetime]:
+    """
+    Find the first arrival at each station after the From.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    origin : str
+        The From station ID.
+
+    Returns
+    -------
+    dict[str, datetime]
+        Earliest arrival by station, among the strip's departures not yet
+        gone and not cancelled whose patterns are loaded.
+    """
+    best: dict[str, datetime] = {}
+    upcoming = not_departed(
+        departures=live_strip(trips=trips), now=trips.now,
+    )
+    for item in upcoming:
+        pattern = trips.patterns.get(item.departure.trip_id)
+        if item.cancelled or pattern is None:
+            continue
+        for station, moment in arrivals_after(
+            item=item,
+            pattern=pattern,
+            origin=origin,
+            stations=trips.station_of,
+        ):
+            if station not in best or moment < best[station]:
+                best[station] = moment
+    return best
+
+
+def boardable(*, item: LiveDeparture, trips: TripInputs, origin: str,
+              target: str | None) -> bool:
+    """
+    Say whether a departure from the From can be taken.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+    trips : TripInputs
+        The strip's departures and live data.
+    origin : str
+        The From station ID.
+    target : str | None
+        The Destination's station ID, or None.
+
+    Returns
+    -------
+    bool
+        False when cancelled; with a Destination, True only when the
+        trip's loaded pattern calls there after the From.
+    """
+    if item.cancelled:
+        return False
+    if target is None:
+        return True
+    pattern = trips.patterns.get(item.departure.trip_id)
+    return pattern is not None and any(
+        station == target
+        for station, _ in arrivals_after(
+            item=item, pattern=pattern, origin=origin,
+            stations=trips.station_of,
+        )
+    )
+
+
+def next_departure(*, trips: TripInputs, origin: str, target: str | None
+                   ) -> datetime | None:
+    """
+    Find when the strip's next departure leaves the From.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    origin : str
+        The From station ID.
+    target : str | None
+        The Destination's station ID, or None for any departure.
+
+    Returns
+    -------
+    datetime | None
+        The earliest live departure time among the strip's departures
+        not yet gone that can be taken, or None.
+    """
+    upcoming = not_departed(
+        departures=live_strip(trips=trips), now=trips.now,
+    )
+    return min(
+        (
+            item.departs
+            for item in upcoming
+            if boardable(
+                item=item, trips=trips, origin=origin, target=target,
+            )
+        ),
+        default=None,
+    )

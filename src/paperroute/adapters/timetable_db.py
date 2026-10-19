@@ -38,7 +38,7 @@ from paperroute.core.model import (
 )
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.reach import StripKey
-from paperroute.core.strip_vehicles import strip_departures
+from paperroute.core.strip_times import strip_departures
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/timetable.db')
 CHUNK: Final[int] = 500

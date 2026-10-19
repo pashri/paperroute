@@ -30,7 +30,10 @@ from paperroute.core.strip_model import (
 )
 from paperroute.render.canvas import INK, PAPER, Canvas
 from paperroute.render.chrome import BANNER, HEADER
+from paperroute.render.markers import badge_box
 from paperroute.render.strip_view import (
+    NAME_X,
+    PANE_NAME_X,
     draw_strip_map_view,
     draw_strip_view,
     paint_strip_view,
@@ -370,3 +373,11 @@ def test_hint_box_clears_three_panel_rows() -> None:
     assert (frame[third + 52:third + 66, 556:786] == INK).any()
     assert (frame[third + 70:420, 452:790] == PAPER).all()
     assert (frame[420:423, 456:786] == INK).all()
+
+
+def test_line_badges_on_a_track_clear_its_names() -> None:
+    """On the strip and the pane, a line badge on a track ends before names."""
+    for track_x, name_x in ((TRACK_X, NAME_X), (PANE_TRACK_X, PANE_NAME_X)):
+        for route in ('HUN', 'BMT', 'SCO', 'CCN', '+10'):
+            right = badge_box(route=route, centre=(track_x, 0))[2]
+            assert right < name_x, (route, track_x)

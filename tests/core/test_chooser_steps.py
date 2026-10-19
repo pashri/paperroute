@@ -41,7 +41,7 @@ from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import initial_state, saved_of, step
 from paperroute.core.state_model import LOOKBACK, RELOAD_BEFORE, State
 from paperroute.core.stop_view import HORIZON, StopView
-from paperroute.core.strip_view import HINTS, StripView
+from paperroute.core.strip_model import HINTS, StripView
 from tests.core.chooser_walks import (
     BUS_606,
     CHOSEN,

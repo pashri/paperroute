@@ -7,7 +7,7 @@ from numpy.typing import NDArray
 
 from paperroute.core.map_view import Marker
 from paperroute.core.reach import RowKind
-from paperroute.core.strip_view import (
+from paperroute.core.strip_model import (
     INDENT,
     ROW_H,
     STRIP_ROWS,

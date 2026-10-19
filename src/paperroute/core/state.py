@@ -89,6 +89,7 @@ from paperroute.core.stop_view import (
     build_stop_view,
     pin_tag,
 )
+from paperroute.core.strip_model import StripInputs, StripMapView, StripView
 from paperroute.core.strip_state import (
     clamped,
     request_strips,
@@ -96,13 +97,7 @@ from paperroute.core.strip_state import (
     strip_inputs,
     strip_loaded,
 )
-from paperroute.core.strip_view import (
-    StripInputs,
-    StripMapView,
-    StripView,
-    build_strip_pane,
-    build_strip_view,
-)
+from paperroute.core.strip_view import build_strip_pane, build_strip_view
 from paperroute.core.tiles import ZOOMS
 
 SAVE_AFTER: Final[timedelta] = timedelta(seconds=3)

@@ -17,7 +17,7 @@ from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import Saved
 from paperroute.core.stop_view import StopView
-from paperroute.core.strip_view import StripMapView, StripView
+from paperroute.core.strip_model import StripMapView, StripView
 
 
 class Knob(StrEnum):

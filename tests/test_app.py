@@ -47,7 +47,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.places import shown
-from paperroute.core.strip_view import StripMapView, StripPane
+from paperroute.core.strip_model import StripMapView, StripPane
 from paperroute.core.tiles import (
     TILE,
     StreetLabel,

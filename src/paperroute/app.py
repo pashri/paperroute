@@ -54,7 +54,7 @@ from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
-from paperroute.core.strip_view import StripMapView
+from paperroute.core.strip_model import StripMapView
 from paperroute.core.tiles import TileVariant
 from paperroute.observers import NullObserver, ObserverGroup
 from paperroute.ports import (

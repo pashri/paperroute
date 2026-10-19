@@ -15,7 +15,7 @@ from paperroute.core.map_view import (
 from paperroute.core.model import CarryOn, Mode
 from paperroute.core.reach import RowKind
 from paperroute.core.stop_view import Pill, PinTag, Row
-from paperroute.core.strip_view import (
+from paperroute.core.strip_model import (
     HINTS,
     PANE_TRACK_X,
     ROW_H,

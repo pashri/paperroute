@@ -28,8 +28,7 @@ from paperroute.core.stop_view import (
     StopView,
     build_stop_view,
 )
-from paperroute.core.strip_vehicles import strip_trips
-from paperroute.core.strip_view import (
+from paperroute.core.strip_model import (
     LOADING,
     NEEDS_UPDATE,
     NO_STRIP,
@@ -38,6 +37,9 @@ from paperroute.core.strip_view import (
     TRACK_X,
     StripInputs,
     StripRow,
+)
+from paperroute.core.strip_vehicles import strip_trips
+from paperroute.core.strip_view import (
     build_strip_pane,
     build_strip_view,
     line_reach,

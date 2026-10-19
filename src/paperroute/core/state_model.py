@@ -14,7 +14,7 @@ from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.stop_view import HORIZON, StopView
-from paperroute.core.strip_view import StripMapView, StripView
+from paperroute.core.strip_model import StripMapView, StripView
 
 POLL_EVERY: Final[timedelta] = timedelta(seconds=30)
 RELOAD_BEFORE: Final[timedelta] = timedelta(minutes=30)

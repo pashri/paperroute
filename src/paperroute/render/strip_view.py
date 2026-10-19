@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.core.stop_view import Pill, Row
-from paperroute.core.strip_view import (
+from paperroute.core.strip_model import (
     PANE_TRACK_X,
     TRACK_X,
     StripMapView,

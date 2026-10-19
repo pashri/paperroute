@@ -32,14 +32,14 @@ from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import RETRY_AFTER, State
 from paperroute.core.stop_view import HORIZON
-from paperroute.core.strip_state import keys_in_use, request_strips, strip_key
-from paperroute.core.strip_view import (
+from paperroute.core.strip_model import (
     LOADING,
     NEEDS_UPDATE,
     STRIP_ROWS,
     StripMapView,
     StripView,
 )
+from paperroute.core.strip_state import keys_in_use, request_strips, strip_key
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.factories import START, departure, place, snapshot, vehicle
 

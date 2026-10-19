@@ -25,7 +25,8 @@ from paperroute.core.reach import (
     build_reach,
 )
 from paperroute.core.stop_view import NOT_PINNED
-from paperroute.core.strip_view import StripInputs, build_strip_view
+from paperroute.core.strip_model import StripInputs
+from paperroute.core.strip_view import build_strip_view
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 TOWN_HALL: Final[str] = '200070'

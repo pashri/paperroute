@@ -19,13 +19,9 @@ from paperroute.core.reach import Reach, StripKey
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
+from paperroute.core.strip_model import NEEDS_UPDATE, STRIP_ROWS, StripInputs
 from paperroute.core.strip_vehicles import strip_trips, window_departures
-from paperroute.core.strip_view import (
-    NEEDS_UPDATE,
-    STRIP_ROWS,
-    StripInputs,
-    home_of,
-)
+from paperroute.core.strip_view import home_of
 
 STRIP_VIEWS: Final[frozenset[LiveView]] = frozenset(
     {LiveView.STRIP, LiveView.STRIP_MAP}

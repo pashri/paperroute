@@ -116,6 +116,16 @@ SELECT DISTINCT mode FROM shapes
 WHERE west <= :east AND east >= :west
   AND south <= :north AND north >= :south
 """
+STILL_AT_FROM: Final[str] = """
+  AND NOT EXISTS (SELECT 1 FROM stop_times p
+                  WHERE p.trip_id = o.trip_id AND p.pickup <> 1
+                    AND p.seq = (SELECT MAX(q.seq) FROM stop_times q
+                                 WHERE q.trip_id = o.trip_id
+                                   AND q.seq < o.seq)
+                    AND p.stop_id IN (SELECT stop_id FROM stops
+                                      WHERE stop_id = :origin
+                                        OR parent_station = :origin))
+"""
 DEPARTURES: Final[str] = """
 SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
   t.headsign, os.platform,
@@ -137,6 +147,7 @@ WHERE o.stop_id IN (SELECT stop_id FROM stops
   AND o.dep BETWEEN :lo AND :hi AND o.pickup <> 1 AND d.dropoff <> 1
   AND NOT EXISTS (SELECT 1 FROM trip_skip k
                   WHERE k.trip_id = t.trip_id AND k.date = :day)
+""" + STILL_AT_FROM + """
 GROUP BY o.trip_id, o.seq
 """
 WHOLE_STOP: Final[str] = """
@@ -161,7 +172,7 @@ WHERE o.stop_id IN (SELECT stop_id FROM stops
   AND o.dep BETWEEN :lo AND :hi AND o.pickup <> 1
   AND NOT EXISTS (SELECT 1 FROM trip_skip k
                   WHERE k.trip_id = t.trip_id AND k.date = :day)
-"""
+""" + STILL_AT_FROM
 
 
 @dataclass(frozen=True)
@@ -709,7 +720,9 @@ class SqliteTimetableRepository:
             In departure order, then trip ID. With a Destination, only
             the pin's kind and routes, as on its strip: a station's bus
             stands sit under it too. Without one, every departure from
-            any platform of the From, each running to its last stop.
+            any platform of the From, each running to its last stop. A
+            trip calling at the From twice in a row, such as a bus moving
+            between two stands, leaves once, from its first call there.
         """
         destination = pin.destination
         first = start.astimezone(SYDNEY).date()

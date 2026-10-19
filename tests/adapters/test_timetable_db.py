@@ -1582,3 +1582,21 @@ def test_empty_running_trips_are_never_listed(tmp_path: Path) -> None:
                 ('a', at(hour=8, minute=0)),
             ]
 
+
+def test_consecutive_calls_within_the_from_are_one_departure(
+    tmp_path: Path,
+) -> None:
+    """A trip moving between two platforms of the From leaves once."""
+    trips = [
+        ('two', 'Q', [('P_1', '08:00:00'), ('P_2', '08:05:00'),
+                      ('Q', '08:10:00')]),
+        ('loop', 'Q', [('P_1', '08:20:00'), ('Q', '08:30:00'),
+                       ('P_2', '08:40:00'), ('Q', '08:50:00')]),
+    ]
+    with closing(platform_repo(tmp_path=tmp_path, trips=trips)) as repo:
+        for destination in (None, 'Q'):
+            assert p_departures(repo=repo, destination=destination) == [
+                ('two', at(hour=8, minute=0)),
+                ('loop', at(hour=8, minute=20)),
+                ('loop', at(hour=8, minute=40)),
+            ]

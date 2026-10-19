@@ -196,6 +196,10 @@ def sea_rings(*, coast: Sequence[Line], frame: MetreBox) -> list[Ring]:
     if not coast:
         return []
     merged = shapely.line_merge(shapely.MultiLineString(list(coast)))
+    ends = cut_ends(merged=merged, frame=frame)
+    merged = shapely.line_merge(
+        shapely.MultiLineString([*shapely.get_parts(merged), *ends]),
+    )
     edges = shapely.union_all(
         [shapely.clip_by_rect(merged, *frame), shapely.box(*frame).exterior],
     )
@@ -206,6 +210,52 @@ def sea_rings(*, coast: Sequence[Line], frame: MetreBox) -> list[Ring]:
         if is_sea(face=face, tree=tree)
         for ring in polygon_rings(geometry=face)
     ]
+
+
+def cut_ends(
+    *,
+    merged: shapely.Geometry,
+    frame: MetreBox,
+) -> list[Line]:
+    """
+    Run each open coastline end inside a frame on to the frame's edge.
+
+    An extract cuts coastline at its boundary, such as a state border. A
+    cut end inside the frame leaves sea and land joined, so the end is
+    carried on in the direction it was heading.
+
+    Parameters
+    ----------
+    merged : shapely.Geometry
+        Merged coastlines in metres.
+    frame : MetreBox
+        West, south, east and north.
+
+    Returns
+    -------
+    list[Line]
+        A two-point line at each open end inside the frame, along the
+        coast and reaching a point beyond the frame.
+    """
+    inner = shapely.box(*frame)
+    reach = 2.0 * float(np.hypot(frame[2] - frame[0], frame[3] - frame[1]))
+    extensions: list[Line] = []
+    for part in shapely.get_parts(merged):
+        if part.is_closed or len(part.coords) < 2:
+            continue
+        coords = coordinates(geometry=part)
+        for tip, before, forward in (
+            (coords[0], coords[1], False),
+            (coords[-1], coords[-2], True),
+        ):
+            heading = tip - before
+            length = float(np.hypot(*heading))
+            if length > 0.0 and inner.contains(shapely.Point(tip)):
+                far = tip + heading / length * reach
+                extensions.append(
+                    np.array([tip, far] if forward else [far, tip]),
+                )
+    return extensions
 
 
 def is_sea(*, face: shapely.Polygon, tree: shapely.STRtree) -> bool:

@@ -39,6 +39,31 @@ def test_sea_is_right_of_the_coastline() -> None:
     )
 
 
+def test_sea_reaches_the_frame_past_a_coast_cut_inside_it() -> None:
+    """A coastline that stops inside the frame still splits sea and land."""
+    coast = line((0.0, -500.0), (0.0, 500.0))
+    rings = sea_rings(coast=[coast], frame=(-1000.0, -1000.0, 1000.0, 1000.0))
+    assert any(inside(rings=[ring], point=(500.0, 0.0)) for ring in rings)
+    assert any(inside(rings=[ring], point=(500.0, 900.0)) for ring in rings)
+    assert not any(
+        inside(rings=[ring], point=(-500.0, 0.0)) for ring in rings
+    )
+    assert not any(
+        inside(rings=[ring], point=(-500.0, 900.0)) for ring in rings
+    )
+
+
+def test_sea_follows_a_bent_coast_cut_at_both_ends() -> None:
+    """A coast cut at both ends runs on in the direction it was heading."""
+    coast = line((-500.0, -500.0), (0.0, 0.0), (0.0, 500.0))
+    rings = sea_rings(coast=[coast], frame=(-1000.0, -1000.0, 1000.0, 1000.0))
+    assert any(inside(rings=[ring], point=(500.0, 0.0)) for ring in rings)
+    assert any(inside(rings=[ring], point=(0.0, -900.0)) for ring in rings)
+    assert not any(
+        inside(rings=[ring], point=(-500.0, 500.0)) for ring in rings
+    )
+
+
 def test_sea_rings_without_coast_are_empty() -> None:
     """No coastline gives no sea."""
     assert not sea_rings(coast=[], frame=(0.0, 0.0, 1.0, 1.0))

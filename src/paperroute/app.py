@@ -54,6 +54,7 @@ from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
+from paperroute.core.strip_view import StripMapView
 from paperroute.core.tiles import TileVariant
 from paperroute.observers import NullObserver, ObserverGroup
 from paperroute.ports import (
@@ -67,6 +68,7 @@ from paperroute.ports import (
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_view import draw_map_view
 from paperroute.render.stop_view import draw_stop_view
+from paperroute.render.strip_view import draw_strip_map_view
 
 logger = logging.getLogger(__name__)
 
@@ -125,11 +127,45 @@ class MapRenderer:
         NDArray[np.uint8]
             480 by 800 pixels.
         """
-        key = (view.base, self.version())
+        return draw_map_view(view=view, base=self.cached(base=view.base))
+
+    def strip_map_frame(self, *, view: StripMapView) -> NDArray[np.uint8]:
+        """
+        Draw one Strip + map frame, sharing the cached map base.
+
+        Parameters
+        ----------
+        view : StripMapView
+            View to draw.
+
+        Returns
+        -------
+        NDArray[np.uint8]
+            480 by 800 pixels.
+        """
+        return draw_strip_map_view(
+            view=view, base=self.cached(base=view.map.base),
+        )
+
+    def cached(self, *, base: MapBase) -> NDArray[np.uint8]:
+        """
+        Give the map base, drawing it again only when it changed.
+
+        Parameters
+        ----------
+        base : MapBase
+            The base map key, which carries the width.
+
+        Returns
+        -------
+        NDArray[np.uint8]
+            The map base for the installed tiles.
+        """
+        key = (base, self.version())
         if self.base is None or key != self.key:
-            self.base = self.drawn_base(base=view.base, version=key[1])
+            self.base = self.drawn_base(base=base, version=key[1])
             self.key = key
-        return draw_map_view(view=view, base=self.base)
+        return self.base
 
     def version(self) -> str | None:
         """

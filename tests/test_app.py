@@ -31,7 +31,7 @@ from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import MetreBox, Point, Shape, make_shape, to_metres
-from paperroute.core.map_view import MapBase, MapView, Marker
+from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, MapView, Marker
 from paperroute.core.messages import (
     Event,
     FeedFailed,
@@ -47,6 +47,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.places import shown
+from paperroute.core.strip_view import StripMapView, StripPane
 from paperroute.core.tiles import (
     TILE,
     StreetLabel,
@@ -56,6 +57,7 @@ from paperroute.core.tiles import (
 )
 from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
+from paperroute.render.chrome import HEADER
 from paperroute.render.tile_codec import pack_bits, pack_grey
 from tests.core.factories import pin_of, place
 
@@ -985,6 +987,53 @@ def test_tiles_replaced_rebuilds_base() -> None:
     tiles.built = 'v2'
     maps.frame(view=map_view())
     assert tiles.reads == 2 * once
+
+
+def strip_map_view(*, markers: tuple[Marker, ...] = ()) -> StripMapView:
+    """
+    Make a Strip + map view at the 606 stop's area.
+
+    Parameters
+    ----------
+    markers : tuple[Marker, ...]
+        Vehicles drawn on the map.
+
+    Returns
+    -------
+    StripMapView
+        The view, with an empty pane.
+    """
+    view = map_view(markers=markers)
+    return StripMapView(
+        map=replace(view, base=replace(view.base, width=STRIP_MAP_WIDTH)),
+        pane=StripPane(rows=(), markers=()),
+    )
+
+
+def test_strip_map_reuses_base_cache() -> None:
+    """A second Strip + map frame reads no more tiles than the first."""
+    tiles = CountingTiles()
+    maps = MapRenderer(tiles=tiles)
+    first = maps.strip_map_frame(view=strip_map_view())
+    once = tiles.reads
+    bus = Marker(
+        route='606', x=200.0, y=200.0, bearing=90.0, live=True, pinned=True
+    )
+    maps.strip_map_frame(view=strip_map_view(markers=(bus,)))
+    assert once > 0
+    assert tiles.reads == once
+    assert first.shape == (480, 800)
+    assert (first[HEADER:, :STRIP_MAP_WIDTH] == LIGHT).any()
+
+
+def test_strip_map_and_map_keep_separate_bases() -> None:
+    """Flipping between Map and Strip + map draws each width's base."""
+    tiles = CountingTiles()
+    maps = MapRenderer(tiles=tiles)
+    maps.frame(view=map_view())
+    wide = tiles.reads
+    maps.strip_map_frame(view=strip_map_view())
+    assert tiles.reads > wide
 
 
 class RelabellingTimetable(SqliteTimetableRepository):

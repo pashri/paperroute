@@ -1,0 +1,311 @@
+"""Facts about the drawn Strip and Strip + map frames (no golden images)."""
+
+from dataclasses import replace
+
+import numpy as np
+
+from paperroute.core.geo import Point, to_metres
+from paperroute.core.map_view import (
+    MAP_HEIGHT,
+    STRIP_MAP_WIDTH,
+    MapBase,
+    MapView,
+    Marker,
+)
+from paperroute.core.model import CarryOn, Mode
+from paperroute.core.reach import RowKind
+from paperroute.core.stop_view import Pill, PinTag, Row
+from paperroute.core.strip_view import (
+    HINTS,
+    PANE_TRACK_X,
+    ROW_H,
+    STRIP_TOP,
+    TRACK_X,
+    Band,
+    StripMapView,
+    StripPane,
+    StripPanel,
+    StripRow,
+    StripView,
+)
+from paperroute.render.canvas import INK, PAPER
+from paperroute.render.chrome import HEADER
+from paperroute.render.strip_view import draw_strip_map_view, draw_strip_view
+from paperroute.render.tile_codec import GREYS
+
+CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
+PANEL_TOP = 160
+PANEL_STEP = 70
+
+
+def panel_row(*, then: CarryOn | None = None,
+              pill: Pill | None = None) -> Row:
+    """
+    Make a panel departure.
+
+    Parameters
+    ----------
+    then : CarryOn | None
+        Where the vehicle runs on to.
+    pill : Pill | None
+        Marker.
+
+    Returns
+    -------
+    Row
+        The departure.
+    """
+    return Row(
+        route='T1', mode=Mode.TRAIN, platform='3', destination='Emu Plains',
+        countdown='6', leaves_at='8:11', arrives_at='8:47', ride_minutes=36,
+        live=True, pill=pill, then=then)
+
+
+def strip_row(*, index: int, tag: str = '', parent: bool = True,
+              cursor: bool = False) -> StripRow:
+    """
+    Make a main-line row in a slot.
+
+    Parameters
+    ----------
+    index : int
+        Slot from the top.
+    tag : str
+        Tag text.
+    parent : bool
+        Join it to the slot above.
+    cursor : bool
+        The row being picked.
+
+    Returns
+    -------
+    StripRow
+        The row.
+    """
+    y = STRIP_TOP + index * ROW_H + ROW_H / 2
+    return StripRow(
+        name=f'Station {index}', depth=0, kind=RowKind.MAIN, y=y,
+        parent_y=y - ROW_H if parent else None, parent_depth=0, tag=tag,
+        time='' if tag else f'8:{10 + index}', ride=False, cursor=cursor,
+        bold=tag in ('FROM', 'TO'), station=f'S{index}')
+
+
+ROWS = tuple(
+    strip_row(index=index, tag='FROM' if index == 2 else '', parent=index > 0)
+    for index in range(12)
+)
+PANEL = StripPanel(
+    title='Town Hall', subtitle='→ Parramatta', note='201 stations from here',
+    rows=(panel_row(),) * 4, no_destination=False, hint=None)
+VIEW = StripView(
+    origin='Town Hall', destination='Parramatta', clock='8:05',
+    tag=PinTag(text='pin 2/3', pinned=True), picking=None, rows=ROWS,
+    band=None, markers=(), panel=PANEL, empty=None, banner=None)
+
+
+def test_strip_frame_is_two_level() -> None:
+    """Every pixel is ink or paper, with a band, cursor, markers, hint."""
+    live = Marker(route='T1', x=TRACK_X, y=150.0, bearing=180.0, live=True,
+                  pinned=True)
+    stale = replace(live, y=300.0, bearing=None, live=False, age=240.0)
+    rows = tuple(
+        replace(row, cursor=index == 6, tag='TO?' if index == 6 else row.tag)
+        for index, row in enumerate(ROWS[1:], start=1)
+    )
+    view = replace(
+        VIEW,
+        picking='TO',
+        rows=rows,
+        band=Band(text='FROM Town Hall · 3 turns away', top=True),
+        markers=(live, stale),
+        panel=replace(PANEL, rows=(panel_row(),) * 3, hint=HINTS['TO']),
+        banner='Live data unavailable',
+    )
+    frame = draw_strip_view(view=view)
+    assert frame.shape == (480, 800)
+    assert set(np.unique(frame).tolist()) <= {INK, PAPER}
+
+
+def test_strip_frame_has_rule_and_header() -> None:
+    """The header is ink and a 3 px rule splits the strip from the panel."""
+    frame = draw_strip_view(view=VIEW)
+    assert frame[2:38, :400].mean() < 80
+    assert (frame[HEADER:, 440:443] == INK).all()
+    assert (frame[HEADER + 2:, 443:447] == PAPER).all()
+
+
+def test_strip_frame_draws_rows_on_the_track() -> None:
+    """The track runs down x 30 between the rows."""
+    frame = draw_strip_view(view=VIEW)
+    between = int(STRIP_TOP + 4 * ROW_H)
+    assert frame[between, TRACK_X] == INK
+
+
+def test_panel_draws_carry_on_second_line() -> None:
+    """A departure that runs on gets a second line under it."""
+    then = CarryOn(route='T9', headsign='Hornsby')
+    plain = draw_strip_view(view=VIEW)
+    carried = draw_strip_view(view=replace(
+        VIEW, panel=replace(PANEL, rows=(panel_row(then=then),)),
+    ))
+    line = (slice(PANEL_TOP + 52, PANEL_TOP + 66), slice(460, 786))
+    assert (plain[line] == PAPER).all()
+    assert (carried[line] == INK).any()
+
+
+def test_no_destination_panel_has_no_destination_line() -> None:
+    """With no destination the line under the title stays empty."""
+    view = replace(
+        VIEW,
+        destination=None,
+        panel=replace(PANEL, subtitle=None, no_destination=True),
+    )
+    line = (slice(88, 106), slice(456, 786))
+    assert (draw_strip_view(view=VIEW)[line] == INK).any()
+    assert (draw_strip_view(view=view)[line] == PAPER).all()
+
+
+def test_no_destination_panel_rows_show_badges() -> None:
+    """A whole-stop panel row has an ink route badge after the time."""
+    view = replace(
+        VIEW,
+        destination=None,
+        panel=replace(PANEL, subtitle=None, no_destination=True),
+    )
+    frame = draw_strip_view(view=view)
+    badge = frame[PANEL_TOP + 26:PANEL_TOP + 42, 556:590]
+    assert badge.mean() < 128
+
+
+def test_panel_rows_are_ruled_and_spaced() -> None:
+    """Each departure starts under a rule, 70 px apart."""
+    frame = draw_strip_view(view=VIEW)
+    for index in range(4):
+        y = PANEL_TOP + index * PANEL_STEP
+        assert (frame[y - 2, 460:780] == INK).all()
+
+
+def test_hint_box_replaces_the_fourth_departure() -> None:
+    """The hint is an ink box at the panel's foot with paper text."""
+    view = replace(
+        VIEW, panel=replace(PANEL, rows=(panel_row(),) * 3, hint=HINTS['TO']),
+    )
+    box = draw_strip_view(view=view)[420:464, 456:786]
+    assert box.mean() < 128
+    assert (box == PAPER).any()
+
+
+def test_panel_draws_empty_text() -> None:
+    """With no departures, the panel says why."""
+    empty = replace(VIEW, panel=replace(PANEL, rows=()))
+    said = replace(
+        VIEW, panel=replace(PANEL, rows=(), empty='No more services today'),
+    )
+    area = (slice(PANEL_TOP, PANEL_TOP + 60), slice(456, 786))
+    assert (draw_strip_view(view=empty)[area] == PAPER).all()
+    assert (draw_strip_view(view=said)[area] == INK).any()
+
+
+def test_cancelled_panel_row_has_block() -> None:
+    """A cancelled departure shows a block where the countdown goes."""
+    view = replace(
+        VIEW, panel=replace(PANEL, rows=(panel_row(pill=Pill.CANCELLED),)),
+    )
+    block = draw_strip_view(view=view)[PANEL_TOP + 22:PANEL_TOP + 42, 700:780]
+    assert block.mean() < 128
+
+
+def test_empty_strip_says_why() -> None:
+    """With no strip, its column shows the reason and no track."""
+    view = replace(VIEW, rows=(), empty='Loading the line…')
+    frame = draw_strip_view(view=view)
+    assert (frame[200:300, 40:400] == INK).any()
+    assert (frame[HEADER:, TRACK_X - 2:TRACK_X + 2] == PAPER).all()
+
+
+def test_banner_is_drawn_over_the_strip() -> None:
+    """A live data banner sits under the header."""
+    frame = draw_strip_view(view=replace(VIEW, banner='Live data unavailable'))
+    assert (frame[HEADER:HEADER + 3, :] == INK).all()
+
+
+def map_view() -> MapView:
+    """
+    Make the Strip + map's map.
+
+    Returns
+    -------
+    MapView
+        A 480 px wide map.
+    """
+    return MapView(
+        origin='Town Hall', destination='Parramatta', clock='8:05',
+        base=MapBase(centre=CENTRE, mpp=8, route=(), width=STRIP_MAP_WIDTH),
+        zoom=2, markers=(), sidebar=(), banner=None, empty=None,
+        tag=PinTag(text='pin 2/3', pinned=True))
+
+
+def pane_rows() -> tuple[StripRow, ...]:
+    """
+    Make the pane's rows.
+
+    Returns
+    -------
+    tuple[StripRow, ...]
+        Twelve rows with FROM in the third.
+    """
+    return tuple(
+        replace(row, name='A Very Long Station Name Indeed That Goes On')
+        for row in ROWS
+    )
+
+
+def test_strip_map_frame_keeps_greys_only_in_map() -> None:
+    """Four greys inside the map; ink and paper everywhere else."""
+    base = np.full((MAP_HEIGHT, STRIP_MAP_WIDTH), GREYS[2], dtype=np.uint8)
+    marker = Marker(route='T1', x=PANE_TRACK_X, y=150.0, bearing=0.0,
+                    live=True, pinned=True)
+    view = StripMapView(
+        map=map_view(), pane=StripPane(rows=pane_rows(), markers=(marker,)),
+    )
+    frame = draw_strip_map_view(view=view, base=base)
+    assert frame.shape == (480, 800)
+    assert GREYS[2] in frame[HEADER:, :STRIP_MAP_WIDTH]
+    outside = np.concatenate(
+        [frame[:HEADER].ravel(), frame[HEADER:, STRIP_MAP_WIDTH:].ravel()],
+    )
+    assert set(np.unique(outside).tolist()) <= {INK, PAPER}
+
+
+def test_strip_map_frame_has_rule_and_pane() -> None:
+    """A 3 px rule at 480, the pane's track at 500 and names inside."""
+    base = np.full((MAP_HEIGHT, STRIP_MAP_WIDTH), PAPER, dtype=np.uint8)
+    view = StripMapView(
+        map=map_view(), pane=StripPane(rows=pane_rows(), markers=()),
+    )
+    frame = draw_strip_map_view(view=view, base=base)
+    assert (frame[HEADER:, 480:483] == INK).all()
+    assert frame[int(STRIP_TOP + 4 * ROW_H), PANE_TRACK_X] == INK
+    names = frame[STRIP_TOP:, 518:760]
+    assert (names == INK).any()
+    assert (frame[HEADER:, 796:] == PAPER).all()
+
+
+def test_strip_map_header_marks_strip_map_tab() -> None:
+    """The header is drawn, with the Strip + map tab lit in paper."""
+    base = np.full((MAP_HEIGHT, STRIP_MAP_WIDTH), PAPER, dtype=np.uint8)
+    view = StripMapView(map=map_view(), pane=StripPane(rows=(), markers=()))
+    frame = draw_strip_map_view(view=view, base=base)
+    assert frame[2:38, :200].mean() < 80
+    assert (frame[15:27, 660:720] == PAPER).mean() > 0.5
+
+
+def test_strip_map_draws_the_banner() -> None:
+    """A live data banner sits under the header across the map and pane."""
+    base = np.full((MAP_HEIGHT, STRIP_MAP_WIDTH), PAPER, dtype=np.uint8)
+    view = StripMapView(
+        map=replace(map_view(), banner='Live data unavailable'),
+        pane=StripPane(rows=(), markers=()),
+    )
+    frame = draw_strip_map_view(view=view, base=base)
+    assert (frame[HEADER:HEADER + 3, :] == INK).all()

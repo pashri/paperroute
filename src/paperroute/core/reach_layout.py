@@ -8,7 +8,7 @@ from itertools import groupby, pairwise
 from typing import Final
 
 from paperroute.core.model import StopPlace
-from paperroute.core.reach_hops import hop_ways
+from paperroute.core.reach_hops import drawn_through, hop_ways
 
 FROM_KEY: Final[str] = ''  # stands for the From in a way's track graph
 SETTLE_PASSES: Final[int] = 50
@@ -369,8 +369,7 @@ def settle_pass(*, trails: Sequence[Trail], owner: Owners,
     return moved
 
 
-def ways_of(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
-            ) -> Owners:
+def ways_of(*, trails: Sequence[Trail], hops: Owners) -> Owners:
     """
     Split stations into ways by following the trains in (rule D).
 
@@ -378,8 +377,8 @@ def ways_of(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
     ----------
     trails : Sequence[Trail]
         Stations after the From and trips, heaviest first.
-    places : Mapping[str, StopPlace]
-        Every station by ID, and the From under FROM_KEY.
+    hops : Owners
+        Way by first hop.
 
     Returns
     -------
@@ -388,7 +387,6 @@ def ways_of(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
         its stations through its own stations where any tail does. First
         hops riding the same line share one way.
     """
-    hops = hop_ways(trails=trails, places=places, origin=FROM_KEY)
     came = arrivals(trails=trails, hops=hops)
     owner = inherited(trails=trails, came=came, hops=hops)
     for _ in range(SETTLE_PASSES):
@@ -517,6 +515,36 @@ def joined(*, runs: Sequence[Run]) -> list[Run]:
     return [
         run if run.stations[0] in reached else replace(run, joined=True)
         for run in runs
+    ]
+
+
+def drawn(*, runs: Sequence[Run], through: set[str]) -> list[Run]:
+    """
+    Draw runs from the line that passes their first hop, where it can.
+
+    Parameters
+    ----------
+    runs : Sequence[Run]
+        Runs of one way.
+    through : set[str]
+        First hops to draw on another hop's line.
+
+    Returns
+    -------
+    list[Run]
+        The runs. One starting at a hop in through no longer leaves the
+        From when the way's other runs reach that hop from the From.
+    """
+    loose = [
+        replace(run, joined=False) if run.stations[0] in through else run
+        for run in runs
+    ]
+    reached = closure(
+        succ=edge_trips(runs=loose), key=FROM_KEY, placed=set(),
+    )
+    return [
+        free if free.stations[0] in reached else run
+        for run, free in zip(runs, loose)
     ]
 
 
@@ -677,7 +705,7 @@ def junctions(*, runs: Sequence[Run], placed: set[str]) -> list[str]:
 
 
 def lay_way(*, runs: Sequence[Run], places: Mapping[str, StopPlace],
-            depth: int) -> Hung:
+            depth: int, through: set[str]) -> Hung:
     """
     Lay a way out: a main chain, then every other run hung, indented.
 
@@ -689,6 +717,8 @@ def lay_way(*, runs: Sequence[Run], places: Mapping[str, StopPlace],
         Every station by ID, and the From under FROM_KEY.
     depth : int
         Indent of the way's main chain.
+    through : set[str]
+        First hops to draw on another hop's line.
 
     Returns
     -------
@@ -696,7 +726,7 @@ def lay_way(*, runs: Sequence[Run], places: Mapping[str, StopPlace],
         Branches by junction; the From's first is the main chain. Other
         branches at the From have depth 1.
     """
-    runs = joined(runs=runs)
+    runs = joined(runs=drawn(runs=runs, through=through))
     layout = Layout(
         graph=WayGraph(succ=edge_trips(runs=runs), places=places),
         placed={FROM_KEY}, depth={FROM_KEY: 0}, hung=defaultdict(list),
@@ -728,15 +758,18 @@ def lay_ways(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
         Ways by trips, then by first hop. The first two have main chains
         at depth 0; the rest at depth 1.
     """
-    ways = way_runs(
-        trails=trails, owner=ways_of(trails=trails, places=places),
-    )
+    hops = hop_ways(trails=trails, places=places, origin=FROM_KEY)
+    ways = way_runs(trails=trails, owner=ways_of(trails=trails, hops=hops))
+    through = drawn_through(trails=trails, way=hops)
     order = sorted(ways, key=lambda way: (
         -sum(run.trips for run in ways[way]), way,
     ))
     return [
         LaidWay(hop=way, hung=lay_way(
-            runs=ways[way], places=places, depth=0 if rank < SIDES else 1,
+            runs=ways[way],
+            places=places,
+            depth=0 if rank < SIDES else 1,
+            through=through,
         ))
         for rank, way in enumerate(order)
     ]

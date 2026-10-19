@@ -31,6 +31,7 @@ REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 TOWN_HALL: Final[str] = '200070'
 STRATHFIELD: Final[str] = '213510'
 BLACKTOWN: Final[str] = '214810'
+STANMORE: Final[str] = '204810'
 PARRAMATTA: Final[str] = '215020'
 WESTERN_LINE: Final[tuple[str, ...]] = (
     'Parramatta Station',
@@ -362,6 +363,79 @@ def test_express_hop_rides_with_the_all_stops_line() -> None:
     )
 
 
+def test_heavier_express_hop_rides_with_the_all_stops_line() -> None:
+    """A busier express first hop still draws the all-stops line."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'S1': (1000, 0), 'S2': (2000, 0), 'P': (3000, 0),
+        'H1': (4000, 0), 'W1': (-1000, 0), 'W2': (-2000, 0),
+    }
+    reach = reach_of(tails=[
+        tail('S1 S2 P H1', 10), tail('W1 W2', 8), tail('P H1', 12),
+    ], points=points)
+    assert ids(reach=reach) == ['H1', 'P', 'S2', 'S1', 'C', 'W1', 'W2']
+    assert all(row.depth == 0 for row in reach.rows)
+    assert reach.rows[row_of(reach=reach, key='P')].parent == row_of(
+        reach=reach, key='S2',
+    )
+
+
+def test_hop_where_its_own_tails_stop_rides_with_the_line() -> None:
+    """A first hop that is also a terminus joins the line through it."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'S1': (1000, 0), 'P': (2000, 0), 'W1': (-1000, 0),
+    }
+    reach = reach_of(tails=[
+        tail('S1 P', 10), tail('W1', 8), tail('P', 2),
+    ], points=points)
+    assert ids(reach=reach) == ['P', 'S1', 'C', 'W1']
+    assert all(row.depth == 0 for row in reach.rows)
+
+
+def test_hop_passed_on_a_few_trips_still_leaves_from() -> None:
+    """R1 rides with G1, but G1 rarely passes it, so R1 leaves FROM."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'G1': (1000, 300), 'G2': (2000, 600),
+        'R1': (1000, -300), 'R2': (2000, -600), 'W1': (-1000, 0),
+    }
+    reach = reach_of(tails=[
+        tail('G1 R1 R2', 1), tail('G1 G2', 9), tail('R1 R2', 20),
+        tail('W1', 15),
+    ], points=points)
+    home = origin_row(reach=reach)
+    assert reach.rows[row_of(reach=reach, key='R1')].parent == home
+    assert reach.rows[row_of(reach=reach, key='R1')].depth == 0
+    assert reach.rows[row_of(reach=reach, key='G1')].depth == 1
+
+
+def test_hops_passing_each_other_both_leave_from() -> None:
+    """S0 and S2 each pass the other, so both lines still leave FROM."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'S0': (700, 900), 'S1': (1400, 1800),
+        'S2': (2100, 0), 'S3': (2800, 900),
+    }
+    reach = reach_of(tails=[
+        tail('S1 S0', 1), tail('S0 S2 S3', 1), tail('S2 S0 S1 S3', 3),
+    ], points=points)
+    home = origin_row(reach=reach)
+    assert reach.rows[row_of(reach=reach, key='S3')].parent != home
+
+
+def test_merge_checks_the_heading_of_the_hosts_way() -> None:
+    """G heads like its host H but not like H's way R, so stays apart."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'R': (0, 1000), 'H': (1000, 1000), 'G': (1000, -200),
+        'W1': (-1000, 0),
+    }
+    reach = reach_of(tails=[
+        tail('R H G', 5), tail('H G', 3), tail('G', 1), tail('W1', 9),
+    ], points=points)
+    home = origin_row(reach=reach)
+    assert reach.rows[row_of(reach=reach, key='H')].parent == row_of(
+        reach=reach, key='R',
+    )
+    assert reach.rows[row_of(reach=reach, key='G')].parent == home
+
+
 def test_express_hop_uses_the_from_station_position() -> None:
     """A From with no position takes its station's to group first hops."""
     points: dict[str, Point] = {
@@ -391,10 +465,10 @@ def test_hop_reached_the_other_way_round_stays_a_way() -> None:
         tail('N1 N2 E1 S1 S2', 10), tail('S1 S2', 8),
     ], points=points)
     home = origin_row(reach=reach)
+    above = {row.place.stop_id for row in reach.rows[:home]}
     below = {row.place.stop_id for row in reach.rows[home + 1:]}
-    assert {'S1', 'S2'} <= below or below <= {'S1', 'S2'}
-    assert reach.rows[:home]
-    assert reach.rows[home + 1:]
+    assert above == {'N1', 'N2', 'E1'}
+    assert below == {'S1', 'S2'}
 
 
 def loop_input() -> ReachInput:
@@ -660,6 +734,33 @@ def test_blacktown_rides_to_parramatta_through_seven_hills() -> None:
     sides = {reach.rows[names.index(name)].above for name in WESTERN_LINE}
     assert len(sides) == 1
     assert parents_on_their_side(reach=reach)
+
+
+@pytest.mark.skipif(
+    not has_runs(path=REAL_DB),
+    reason='needs data/timetable.db with run tables',
+)
+def test_stanmore_rides_to_strathfield_on_the_main_line() -> None:
+    """Stanmore's sides head apart; no spur sits on the way to Strathfield."""
+    reach, _ = train_reach(station=STANMORE)
+    home = origin_row(reach=reach)
+    index = ids(reach=reach).index(STRATHFIELD)
+    between = reach.rows[min(index, home) + 1:max(index, home)]
+    assert all(row.depth == 0 for row in between)
+    start = reach.rows[home].place.point
+    firsts = [
+        row.place.point
+        for row in reach.rows
+        if row.parent == home and row.depth == 0
+    ]
+    assert start is not None
+    assert len(firsts) == 2
+    one, two = firsts
+    assert one is not None and two is not None
+    assert (
+        (one[0] - start[0]) * (two[0] - start[0])
+        + (one[1] - start[1]) * (two[1] - start[1])
+    ) < 0
 
 
 @pytest.mark.skipif(

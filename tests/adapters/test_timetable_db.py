@@ -1416,8 +1416,8 @@ def stand_feed(*, path: Path) -> Path:
     Returns
     -------
     Path
-        The feed: train `a` P_1 8:00 to Q_1 8:10, bus `b` P_B 8:02 to Q_B
-        8:50.
+        The feed: train `a` P_1 8:00 to Q_1 8:10, 706 bus `b` P_B 8:02 to
+        Q_B 8:50 and 606 bus `c` P_B 8:04 to Q_B 8:30.
     """
     stops = [
         {'stop_id': key, 'stop_name': f'{key} Station',
@@ -1439,20 +1439,24 @@ def stand_feed(*, path: Path) -> Path:
                 {'route_id': route, 'agency_id': 'SydneyTrains',
                  'route_short_name': route, 'route_long_name': route,
                  'route_type': kind}
-                for route, kind in (('T1', '2'), ('706', '700'))
+                for route, kind in (
+                    ('T1', '2'), ('706', '700'), ('606', '700'),
+                )
             ],
             'calendar.txt': [{'service_id': 'daily', **DAILY}],
             'trips.txt': [
                 {'route_id': route, 'service_id': 'daily', 'trip_id': trip,
                  'trip_headsign': 'Q', 'direction_id': '0',
                  'block_id': ''}
-                for trip, route in (('a', 'T1'), ('b', '706'))
+                for trip, route in (('a', 'T1'), ('b', '706'), ('c', '606'))
             ],
             'stop_times.txt': [
                 *stop_times(trip='a', times=[('P_1', '08:00:00'),
                                              ('Q_1', '08:10:00')]),
                 *stop_times(trip='b', times=[('P_B', '08:02:00'),
                                              ('Q_B', '08:50:00')]),
+                *stop_times(trip='c', times=[('P_B', '08:04:00'),
+                                             ('Q_B', '08:30:00')]),
             ],
         },
     )
@@ -1479,8 +1483,30 @@ def test_destination_keeps_the_pins_kind(tmp_path: Path) -> None:
             train, destination=None,
         ), **window)
     assert [d.trip_id for d in trains] == ['a']
-    assert [d.trip_id for d in every] == ['a', 'b']
-    assert [d.trip_id for d in whole] == ['a', 'b']
+    assert [d.trip_id for d in every] == ['a', 'b', 'c']
+    assert [d.trip_id for d in whole] == ['a', 'b', 'c']
+
+
+def test_destination_keeps_the_pins_bus_routes(tmp_path: Path) -> None:
+    """A 606 Bus pin to Q lists the 606, not the 706 or the train."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[Source(
+            name='sydneytrains', archive=stand_feed(path=tmp_path / 'p.zip'),
+        )],
+    )
+    window = {'start': at(hour=8, minute=0), 'end': at(hour=9, minute=0)}
+    bus = Pin(
+        origin=place('P'),
+        destination=place('Q'),
+        kind=RouteKind.BUS,
+        routes=('606',),
+    )
+    with closing(SqliteTimetableRepository(path=db)) as repo:
+        found = repo.departures(pin=bus, **window)
+    assert [d.trip_id for d in found] == ['c']
 
 
 def platform_repo(

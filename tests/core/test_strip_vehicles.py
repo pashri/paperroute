@@ -140,3 +140,13 @@ def test_pushed_keeps_spur_badges_off_main_line_names() -> None:
     assert (spur.x, spur.y) == (46, 136)
     (between,) = pushed(markers=[badge(x=46, y=118)], spots=spots)
     assert between.x == 46
+
+
+def test_pushed_stacks_badges_in_neighbouring_columns() -> None:
+    """A spur badge level with a main-line badge goes below it, not on it."""
+    spots = {'main': Spot(x=30, y=100), 'spur': Spot(x=46, y=172)}
+    main, spur = pushed(
+        markers=[badge(x=30, y=140), badge(x=46, y=150)], spots=spots,
+    )
+    assert (main.x, main.y) == (30, 140)
+    assert (spur.x, spur.y) == (46, 162)

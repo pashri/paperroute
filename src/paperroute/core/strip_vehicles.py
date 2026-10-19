@@ -26,6 +26,7 @@ from paperroute.core.stop_view import not_departed
 BADGE_STEP: Final[int] = 22
 STACK_REACH: Final[int] = BADGE_STEP  # furthest a badge is pushed down
 NAME_REACH: Final[float] = 18.0  # half a strip row
+BADGE_SPAN: Final[float] = 36.0  # badges nearer than this across overlap
 STRIP_LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 STRIP_AHEAD: Final[timedelta] = timedelta(minutes=30)
 type Heard = Mapping[str, tuple[VehiclePosition, float]]
@@ -530,30 +531,58 @@ def counted(*, marker: Marker, extra: int) -> Marker:
     )
 
 
-def stacked(*, column: Sequence[Marker]) -> list[Marker]:
+def slot_below(*, placed: Sequence[Marker], marker: Marker
+               ) -> tuple[int | None, float]:
     """
-    Push one column's badges apart, folding a crowd into a count.
+    Find where a badge goes under the badges already placed.
 
     Parameters
     ----------
-    column : Sequence[Marker]
-        Badges at one x, in y order.
+    placed : Sequence[Marker]
+        Badges placed so far.
+    marker : Marker
+        The next badge, no higher than any placed.
+
+    Returns
+    -------
+    tuple[int | None, float]
+        The lowest placed badge within `BADGE_SPAN` across, or None, and
+        the badge's y: at least `BADGE_STEP` below that one.
+    """
+    near = [
+        index
+        for index, other in enumerate(placed)
+        if abs(other.x - marker.x) < BADGE_SPAN
+    ]
+    above = max(near, key=lambda index: placed[index].y, default=None)
+    if above is None:
+        return None, marker.y
+    return above, max(marker.y, placed[above].y + BADGE_STEP)
+
+
+def stacked(*, markers: Sequence[Marker]) -> list[Marker]:
+    """
+    Push overlapping badges apart, folding a crowd into a count.
+
+    Parameters
+    ----------
+    markers : Sequence[Marker]
+        Badges in y order.
 
     Returns
     -------
     list[Marker]
-        Each badge moved down to at least `BADGE_STEP` below the one
-        above it. One that would move more than `STACK_REACH` is folded
-        into the badge above, which becomes a '+<n>' count.
+        Each badge moved down to at least `BADGE_STEP` below the lowest
+        badge overlapping it across. One that would move more than
+        `STACK_REACH` is folded into that badge, which becomes a '+<n>'
+        count.
     """
     placed: list[Marker] = []
     folded: list[int] = []
-    for marker in column:
-        y = marker.y if not placed else max(
-            marker.y, placed[-1].y + BADGE_STEP,
-        )
-        if y - marker.y > STACK_REACH:
-            folded[-1] += 1
+    for marker in markers:
+        above, y = slot_below(placed=placed, marker=marker)
+        if above is not None and y - marker.y > STACK_REACH:
+            folded[above] += 1
             continue
         placed.append(replace(marker, y=y))
         folded.append(0)
@@ -579,18 +608,16 @@ def pushed(*, markers: Sequence[Marker], spots: Mapping[str, Spot]
     -------
     tuple[Marker, ...]
         Badges by x then y: moved onto the track of any shallower row
-        level with them, stacked down each column with at most one step
-        of push, and moved left again if the push brought them level with
-        a shallower row.
+        level with them, stacked with at most one step of push, and moved
+        left again if the push brought them level with a shallower row.
     """
-    columns: dict[float, list[Marker]] = {}
-    for marker in sorted(markers, key=lambda each: each.y):
-        moved = in_gutter(marker=marker, spots=spots)
-        columns.setdefault(moved.x, []).append(moved)
+    moved = sorted(
+        (in_gutter(marker=marker, spots=spots) for marker in markers),
+        key=lambda each: each.y,
+    )
     placed = (
         in_gutter(marker=marker, spots=spots)
-        for column in columns.values()
-        for marker in stacked(column=column)
+        for marker in stacked(markers=moved)
     )
     return tuple(sorted(placed, key=lambda each: (each.x, each.y)))
 

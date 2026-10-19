@@ -483,6 +483,41 @@ def test_replacement_buses_go_under_their_line(tmp_path: Path) -> None:
         ) == [('42CN', 'CCN'), ('8T1', 'T1')]
 
 
+def test_replacement_buses_are_named_by_their_ends(tmp_path: Path) -> None:
+    """A replacement bus reads 'first - last' of its busiest pattern."""
+    with closing(tiny_db(path=tmp_path / 't.db', routes=[
+        RouteRow(
+            route_id='91', number='91T1', long_name='Unknown',
+            route_type=714,
+            patterns=(
+                ('P', ('Lidcombe Station', 'Mid', 'Parramatta Station'), 9),
+                ('L', ('Parramatta Station', 'Mid', 'Lidcombe Station'), 5),
+                ('L', ('Parramatta Station', 'Lidcombe Station'), 5),
+            ),
+        ),
+        RouteRow(
+            route_id='98', number='98T1',
+            long_name='Wynyard, then all stations to Hornsby',
+            route_type=714,
+            patterns=(('H', ('Wynyard Station, York St', 'Hornsby'), 3),),
+        ),
+        RouteRow(
+            route_id='7', number='7T1', long_name='Loop shuttle',
+            route_type=714, patterns=(('L', ('Loop', 'Mid', 'Loop'), 3),),
+        ),
+    ])) as conn:
+        load_catalogue(conn=conn)
+        names = {
+            row[0]: row[1]
+            for row in chooser_rows(conn=conn, kind='replacement')
+        }
+    assert names == {
+        '7T1': 'Loop shuttle',
+        '91T1': 'Parramatta – Lidcombe',
+        '98T1': 'Wynyard – Hornsby',
+    }
+
+
 def test_train_lines_in_decision_order(tmp_path: Path) -> None:
     """Sydney lines go T1 to T9, then the intercity lines in order."""
     codes = ['HUN', 'T9', 'SHL', 'T1', 'CCN', 'T5', 'SCO', 'T2', 'BMT']

@@ -1,5 +1,6 @@
 """Build the route chooser's catalogue: route lists, tags and towards rows."""
 
+import json
 import re
 import sqlite3
 import statistics
@@ -71,6 +72,15 @@ FROM (
 WHERE s.lon IS NOT NULL AND s.lat IS NOT NULL
 ORDER BY k.route_key
 """
+ENDS: Final[str] = """
+SELECT p.route_id, p.trips,
+  (SELECT name FROM stops WHERE stop_id = json_extract(p.stations, '$[0]')),
+  (SELECT name FROM stops WHERE stop_id = json_extract(p.stations, '$[#-1]'))
+FROM route_patterns p
+WHERE p.route_id IN (SELECT value FROM json_each(?))
+"""
+ENDS_DASH: Final[str] = ' – '
+PLACE_ENDS: Final[re.Pattern[str]] = re.compile(r'[,:]')
 TOWARDS: Final[str] = """
 SELECT k.route_key, p.headsign, p.stations, SUM(p.trips)
 FROM route_patterns p JOIN temp.catalogue_keys k USING (route_id)
@@ -389,8 +399,68 @@ def line_entries(
         )
 
 
+def short_place(*, name: str) -> str:
+    """
+    Shorten a stop name to its place.
+
+    Parameters
+    ----------
+    name : str
+        Stop name, such as 'Wynyard Station, York St, Stand N'.
+
+    Returns
+    -------
+    str
+        The text before any comma or colon, without ' Station'.
+    """
+    return PLACE_ENDS.split(name)[0].strip().removesuffix(' Station')
+
+
+def replacement_ends(
+    *, conn: sqlite3.Connection, sources: Sequence[RouteSource],
+) -> dict[str, str]:
+    """
+    Name each replacement bus route by where it runs from and to.
+
+    Replacement long names are often long service notes, or 'Unknown'.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable with the run tables.
+    sources : Sequence[RouteSource]
+        Route IDs and the merged routes they join.
+
+    Returns
+    -------
+    dict[str, str]
+        'First – last' by route key, from the ends with the most trips;
+        routes whose busiest ends are one place are left out.
+    """
+    keys = {
+        source.route_id: source.key
+        for source in sources
+        if source.merge[0] is RouteKind.REPLACEMENT
+    }
+    ends: dict[str, Counter[str]] = defaultdict(Counter)
+    rows = conn.execute(ENDS, (json.dumps(list(keys)),))
+    for route_id, trips, first, last in rows:
+        if first is not None and last is not None:
+            places = (short_place(name=first), short_place(name=last))
+            ends[keys[route_id]][ENDS_DASH.join(places)] += trips
+    named = {key: busiest(counts=counts) for key, counts in ends.items()}
+    return {
+        key: name
+        for key, name in named.items()
+        if len(set(name.split(ENDS_DASH))) == 2
+    }
+
+
 def route_entries(
-    *, routes: Sequence[CatalogueRoute], tags: Mapping[str, str],
+    *,
+    routes: Sequence[CatalogueRoute],
+    tags: Mapping[str, str],
+    ends: Mapping[str, str],
 ) -> Iterator[Entry]:
     """
     Make one entry per merged route of the other kinds.
@@ -401,6 +471,9 @@ def route_entries(
         Merged routes outside the line kinds.
     tags : Mapping[str, str]
         Tags by route key.
+    ends : Mapping[str, str]
+        Replacement bus names by route key, used in place of the long
+        name.
 
     Yields
     ------
@@ -415,7 +488,8 @@ def route_entries(
             line = REPLACEMENT_LINES.get(found.group(1), found.group(1))
         yield Entry(
             key=route.route_key, kind=route.kind, number=route.number,
-            name=route.long_name, tag=tags.get(route.route_key, ''),
+            name=ends.get(route.route_key, route.long_name),
+            tag=tags.get(route.route_key, ''),
             line=line,
         )
 
@@ -580,7 +654,9 @@ def load_catalogue(*, conn: sqlite3.Connection) -> int:
             names=bundle_names(conn=conn),
         ),
         *route_entries(
-            routes=[r for r in routes if r.kind not in LINE_KINDS], tags=tags,
+            routes=[r for r in routes if r.kind not in LINE_KINDS],
+            tags=tags,
+            ends=replacement_ends(conn=conn, sources=sources),
         ),
     ]
     kinds: dict[RouteKind, list[Entry]] = defaultdict(list)

@@ -56,6 +56,7 @@ from paperroute.core.messages import (
     MatchPlaces,
     ModesLoaded,
     PatternsLoaded,
+    PlacesFailed,
     PlacesMatched,
     PositionsFetched,
     QuitRequested,
@@ -78,7 +79,7 @@ from paperroute.core.model import (
     same_place,
     shifted,
 )
-from paperroute.core.places import shown
+from paperroute.core.places import shown, stops_to_match
 from paperroute.core.reach import (
     Reach,
     ReachInput,
@@ -2415,13 +2416,45 @@ def test_new_timetable_version_matches_every_place() -> None:
     state, effects = step(state, TimetableSeen(version='v2'))
     origins = tuple(pin.origin for pin in PINS)
     assert MatchPlaces(
-        places=(origins[0], far, *origins[1:], ELSEWHERE.origin)
+        places=(origins[0], far, *origins[1:], ELSEWHERE.origin),
+        timetable='v2',
     ) in effects
     assert state.saving.timetable == 'v2'
     assert state.board.loaded_until is None
     _, effects = step(state, Tick(now=START))
     assert effects_of(effects=effects, kind=LoadDepartures)
     assert step(state, TimetableSeen(version='v2')) == (state, ())
+
+
+def test_failed_match_is_retried_after_retry_after() -> None:
+    """A failed place look-up asks again on the first tick 30 s later."""
+    state, _ = step(loaded(state=pinned()), TimetableSeen(version='v2'))
+    state, effects = step(state, PlacesFailed(timetable='v2'))
+    assert not effects
+    _, effects = step(state, at(seconds=25))
+    assert not effects_of(effects=effects, kind=MatchPlaces)
+    state, effects = step(state, at(seconds=30))
+    assert effects_of(effects=effects, kind=MatchPlaces) == [
+        MatchPlaces(places=stops_to_match(state=state), timetable='v2')
+    ]
+    _, effects = step(state, at(seconds=90))
+    assert not effects_of(effects=effects, kind=MatchPlaces)
+
+
+def test_failed_match_from_an_old_timetable_is_ignored() -> None:
+    """A failure for another timetable version schedules no retry."""
+    state, _ = step(loaded(state=pinned()), TimetableSeen(version='v2'))
+    after, effects = step(state, PlacesFailed(timetable='v1'))
+    assert (after, effects) == (state, ())
+
+
+def test_new_timetable_cancels_a_match_retry() -> None:
+    """A new version matches at once and drops the pending retry."""
+    state, _ = step(loaded(state=pinned()), TimetableSeen(version='v2'))
+    state, _ = step(state, PlacesFailed(timetable='v2'))
+    state, effects = step(state, TimetableSeen(version='v3'))
+    assert effects_of(effects=effects, kind=MatchPlaces)
+    assert state.saving.match_failed_at is None
 
 
 def test_unmatched_shown_pin_says_stop_not_in_the_new_timetable() -> None:

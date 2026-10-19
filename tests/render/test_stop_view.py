@@ -5,7 +5,7 @@ from dataclasses import replace
 import numpy as np
 
 from paperroute.core.model import CarryOn, Mode
-from paperroute.core.stop_view import Pill, Row, StopView
+from paperroute.core.stop_view import Pill
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.chrome import HEADER, badge
 from paperroute.render.stop_view import (
@@ -14,41 +14,8 @@ from paperroute.render.stop_view import (
     PILL_LEFT,
     draw_stop_view,
 )
-
-
-def row(
-    *,
-    pill: Pill | None = None,
-    destination: str = 'Parramatta',
-    then: CarryOn | None = None,
-) -> Row:
-    """
-    A row for drawing.
-
-    Parameters
-    ----------
-    pill : Pill | None
-        Marker.
-    destination : str
-        Destination text.
-    then : CarryOn | None
-        Where the vehicle runs on to.
-
-    Returns
-    -------
-    Row
-        Row.
-    """
-    return Row(
-        route='606', mode=Mode.BUS, platform='B4', destination=destination,
-        countdown='9', leaves_at='8:09', arrives_at='8:45', ride_minutes=36,
-        live=True, pill=pill, then=then)
-
-
-BASE = StopView(
-    origin='Hollis St Opp Constitution Hill Library', destination='Parramatta Station',
-    clock='8:00', hero=row(), rows=(row(), row(pill=Pill.FASTER)),
-    banner=None, empty=None, scroll=0)
+from tests.render.factories import STOP_VIEW as BASE
+from tests.render.factories import stop_row as row
 
 
 def test_frame_is_one_bit_800_by_480() -> None:

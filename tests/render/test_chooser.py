@@ -11,110 +11,13 @@ from paperroute.core.chooser_view import (
     CHOOSER_TOP,
     FAILED_COLUMN,
     ROW_HEIGHTS,
-    ChooserView,
     ColumnView,
 )
 from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH
 from paperroute.render.chooser import COLUMN_WIDTHS, draw_chooser_view
+from tests.render.factories import column, groups, route_choice, view_of
 
 LONG_NAME = 'Parramatta to Blacktown via a very long and winding road home'
-
-
-def route_choice(*, label: str = 'Parramatta', tag: str = '') -> Choice:
-    """
-    Make a route row.
-
-    Parameters
-    ----------
-    label : str
-        Long name.
-    tag : str
-        Place tag.
-
-    Returns
-    -------
-    Choice
-        The row.
-    """
-    return Choice(key='606', label=label, badge='606', tag=tag)
-
-
-def column(
-    *,
-    level: Level,
-    items: tuple[Choice, ...],
-    focused: bool = True,
-    total: int | None = None,
-) -> ColumnView:
-    """
-    Make a column whose first row is selected.
-
-    Parameters
-    ----------
-    level : Level
-        What it lists.
-    items : tuple[Choice, ...]
-        Rows.
-    focused : bool
-        Whether the knob moves it.
-    total : int | None
-        Rows in the whole column; the row count when None.
-
-    Returns
-    -------
-    ColumnView
-        The column.
-    """
-    return ColumnView(
-        level=level,
-        items=items,
-        selected=0,
-        focused=focused,
-        first=0,
-        total=len(items) if total is None else total,
-    )
-
-
-def view_of(*columns: ColumnView, empty: str | None = None) -> ChooserView:
-    """
-    Make a chooser view.
-
-    Parameters
-    ----------
-    *columns : ColumnView
-        Columns, left to right.
-    empty : str | None
-        Text in place of the columns.
-
-    Returns
-    -------
-    ChooserView
-        The view.
-    """
-    return ChooserView(
-        title='Choose a route', trail='Bus', columns=columns, empty=empty,
-    )
-
-
-def groups(*, focused: bool) -> ColumnView:
-    """
-    Make a group column of three rows.
-
-    Parameters
-    ----------
-    focused : bool
-        Whether the knob moves it.
-
-    Returns
-    -------
-    ColumnView
-        The column.
-    """
-    items = tuple(
-        Choice(key=label, label=label, detail='12')
-        for label in ('1-99', '100s', '600s')
-    )
-    return column(level=Level.GROUP, items=items, focused=focused)
 
 
 def dark(*, frame: NDArray[np.uint8], box: tuple[int, int, int, int]) -> float:
@@ -276,6 +179,8 @@ ROW_ITEMS: tuple[Choice, ...] = (
         (Level.LINE, 12, 0),
     ],
 )
+
+
 def test_badge_box_is_ink_at_row_start(level: Level, x: int, row: int) -> None:
     """Rows with a badge or letter start with a solid ink box."""
     view = view_of(column(level=level, items=ROW_ITEMS, focused=False))

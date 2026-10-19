@@ -1,13 +1,22 @@
-"""Hand-written stand-ins for the network and state repositories."""
+"""Hand-written stand-ins for the app's ports."""
 
 import sqlite3
+from collections.abc import Collection
 from dataclasses import dataclass, field
+from datetime import date, datetime
+
+import numpy as np
+from numpy.typing import NDArray
 
 from paperroute.core.chooser import ChooserPath, Column
-from paperroute.core.model import StopPlace
+from paperroute.core.geo import MetreBox, Point, Shape, to_metres
+from paperroute.core.model import Departure, Mode, Pin, StopPlace
+from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.saved import DEFAULT_SAVED, Saved
 from paperroute.ports import Loaded
+
+STOP_POINT: Point = to_metres(lon=151.0036, lat=-33.8170)
 
 
 @dataclass
@@ -150,3 +159,233 @@ class MemoryStates:
             raise self.error
         self.stored = saved
         self.saves.append(saved)
+
+
+@dataclass
+class FrameRecorder:
+    """A display that keeps every frame."""
+
+    frames: list[NDArray[np.uint8]] = field(default_factory=list)
+
+    def show(self, *, frame: NDArray[np.uint8]) -> None:
+        """
+        Keep a frame.
+
+        Parameters
+        ----------
+        frame : NDArray[np.uint8]
+            Frame.
+        """
+        self.frames.append(frame)
+
+
+@dataclass(frozen=True)
+class FixedClock:
+    """A clock stuck at one moment."""
+
+    at: datetime
+
+    def now(self) -> datetime:
+        """
+        The fixed time.
+
+        Returns
+        -------
+        datetime
+            Time.
+        """
+        return self.at
+
+
+@dataclass
+class BrokenTimetable:
+    """A timetable whose departures query always fails."""
+
+    calls: int = 0
+
+    def stop(self, *, stop_id: str) -> StopPlace:
+        """
+        Place any stop with no position, named after its ID.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop ID.
+
+        Returns
+        -------
+        StopPlace
+            The stop, without a point.
+        """
+        return StopPlace(stop_id=stop_id, name=stop_id, point=None)
+
+    def match_stop(self, *, place: StopPlace) -> StopPlace | None:
+        """
+        Find no place.
+
+        Parameters
+        ----------
+        place : StopPlace
+            Place to find.
+
+        Returns
+        -------
+        StopPlace | None
+            Always None.
+        """
+        return None
+
+    def version(self) -> str | None:
+        """
+        Name no build.
+
+        Returns
+        -------
+        str | None
+            Always None.
+        """
+        return None
+
+    def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
+        """
+        Know no shapes.
+
+        Parameters
+        ----------
+        shape_ids : Collection[str]
+            Ignored.
+
+        Returns
+        -------
+        dict[str, Shape]
+            Nothing.
+        """
+        return {}
+
+    def patterns(
+        self, *, trip_ids: Collection[str], around: date
+    ) -> dict[str, TripPattern]:
+        """
+        Know no trips.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Ignored.
+        around : date
+            Ignored.
+
+        Returns
+        -------
+        dict[str, TripPattern]
+            Nothing.
+        """
+        return {}
+
+    def route_labels(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Know no routes.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Ignored.
+
+        Returns
+        -------
+        dict[str, str]
+            Nothing.
+        """
+        return {}
+
+    def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
+        """
+        Know no shapes.
+
+        Parameters
+        ----------
+        box : MetreBox
+            Ignored.
+
+        Returns
+        -------
+        frozenset[Mode]
+            Nothing.
+        """
+        return frozenset()
+
+    def departures(
+        self, *, pin: Pin, start: datetime, end: datetime
+    ) -> list[Departure]:
+        """
+        Fail like a damaged database file.
+
+        Parameters
+        ----------
+        pin : Pin
+            Ignored.
+        start : datetime
+            Ignored.
+        end : datetime
+            Ignored.
+
+        Returns
+        -------
+        list[Departure]
+            Never returns.
+
+        Raises
+        ------
+        sqlite3.DatabaseError
+            Always.
+        """
+        self.calls += 1
+        raise sqlite3.DatabaseError('file is not a database')
+
+
+@dataclass
+class PlacedTimetable(BrokenTimetable):
+    """A failing timetable whose stops all sit at the test point."""
+
+    def stop(self, *, stop_id: str) -> StopPlace:
+        """
+        Place any stop at the test point.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop ID.
+
+        Returns
+        -------
+        StopPlace
+            The stop, named after its ID.
+        """
+        return StopPlace(stop_id=stop_id, name=stop_id, point=STOP_POINT)
+
+
+@dataclass
+class EmptyPlacedTimetable(PlacedTimetable):
+    """A placed timetable with no departures."""
+
+    def departures(
+        self, *, pin: Pin, start: datetime, end: datetime
+    ) -> list[Departure]:
+        """
+        Find nothing.
+
+        Parameters
+        ----------
+        pin : Pin
+            Ignored.
+        start : datetime
+            Ignored.
+        end : datetime
+            Ignored.
+
+        Returns
+        -------
+        list[Departure]
+            Nothing.
+        """
+        return []

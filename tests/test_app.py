@@ -3,10 +3,10 @@
 import asyncio
 import logging
 import sqlite3
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection
 from contextlib import closing
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from pathlib import Path
 
 import numpy as np
@@ -29,55 +29,28 @@ from paperroute.build.gtfs_files import Source
 from paperroute.build.map_style import LIGHT
 from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.chooser import Column, Level
 from paperroute.core.feeds import FeedKind
-from paperroute.core.geo import MetreBox, Point, Shape, make_shape, to_metres
-from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, MapView, Marker
+from paperroute.core.geo import Point, Shape, make_shape
+from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
 from paperroute.core.messages import (
-    ChooserDeparturesFailed,
-    ChooserDeparturesLoaded,
-    ColumnFailed,
-    ColumnLoaded,
-    Effect,
     Event,
     FeedFailed,
     FetchFeed,
     Knob,
     KnobPressed,
     KnobTurned,
-    LineFailed,
-    LineLoaded,
-    LoadChooserDepartures,
-    LoadColumn,
-    LoadLine,
     LoadPatterns,
-    LoadStrip,
     MapData,
     MapDataFailed,
-    MatchPlaces,
-    PlacesMatched,
     PositionsFetched,
     QuitRequested,
-    Render,
-    SaveState,
-    StripFailed,
-    StripLoaded,
     Tick,
     TimetableSeen,
 )
-from paperroute.core.model import (
-    SYDNEY,
-    Departure,
-    Mode,
-    Pin,
-    RouteKind,
-    StopPlace,
-)
+from paperroute.core.model import Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.places import shown
-from paperroute.core.reach import ReachInput, RunTail, StripKey, build_reach
-from paperroute.core.saved import TOWN_HALL, LiveView, seeded
-from paperroute.core.strip_model import StripMapView, StripPane
+from paperroute.core.saved import DEFAULT_SAVED, TOWN_HALL, LiveView, seeded
 from paperroute.core.tiles import (
     TILE,
     StreetLabel,
@@ -87,203 +60,30 @@ from paperroute.core.tiles import (
 )
 from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, Timings
-from paperroute.ports import Observer, TimetableRepository
-from paperroute.render.chooser import draw_chooser_view
+from paperroute.ports import Observer
 from paperroute.render.chrome import HEADER
-from paperroute.render.stop_view import draw_stop_view
-from paperroute.render.strip_view import draw_strip_view
 from paperroute.render.tile_codec import pack_bits, pack_grey
+from tests.app_factories import (
+    AT,
+    MAP_MPP,
+    MAP_PIN,
+    PIN,
+    REAL,
+    map_view,
+    ports_of,
+    strip_map_view,
+)
 from tests.core.factories import pin_of, place
-from tests.fakes import FakeNetwork, MemoryStates
-from tests.render.test_chooser import groups, view_of
-from tests.render.test_stop_view import BASE
-from tests.render.test_strip_view import VIEW
-
-REAL = Path(__file__).parent / 'fixtures' / 'real'
-AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
-PIN = pin_of('215020', '200060')
-
-
-@dataclass
-class FrameRecorder:
-    """A display that keeps every frame."""
-
-    frames: list[NDArray[np.uint8]] = field(default_factory=list)
-
-    def show(self, *, frame: NDArray[np.uint8]) -> None:
-        """
-        Keep a frame.
-
-        Parameters
-        ----------
-        frame : NDArray[np.uint8]
-            Frame.
-        """
-        self.frames.append(frame)
-
-
-@dataclass(frozen=True)
-class FixedClock:
-    """A clock stuck at one moment."""
-
-    at: datetime
-
-    def now(self) -> datetime:
-        """
-        The fixed time.
-
-        Returns
-        -------
-        datetime
-            Time.
-        """
-        return self.at
-
-
-@dataclass
-class BrokenTimetable:
-    """A timetable whose departures query always fails."""
-
-    calls: int = 0
-
-    def stop(self, *, stop_id: str) -> StopPlace:
-        """
-        Place any stop with no position, named after its ID.
-
-        Parameters
-        ----------
-        stop_id : str
-            Stop ID.
-
-        Returns
-        -------
-        StopPlace
-            The stop, without a point.
-        """
-        return StopPlace(stop_id=stop_id, name=stop_id, point=None)
-
-    def match_stop(self, *, place: StopPlace) -> StopPlace | None:
-        """
-        Find no place.
-
-        Parameters
-        ----------
-        place : StopPlace
-            Place to find.
-
-        Returns
-        -------
-        StopPlace | None
-            Always None.
-        """
-        return None
-
-    def version(self) -> str | None:
-        """
-        Name no build.
-
-        Returns
-        -------
-        str | None
-            Always None.
-        """
-        return None
-
-    def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
-        """
-        Know no shapes.
-
-        Parameters
-        ----------
-        shape_ids : Collection[str]
-            Ignored.
-
-        Returns
-        -------
-        dict[str, Shape]
-            Nothing.
-        """
-        return {}
-
-    def patterns(
-        self, *, trip_ids: Collection[str], around: date
-    ) -> dict[str, TripPattern]:
-        """
-        Know no trips.
-
-        Parameters
-        ----------
-        trip_ids : Collection[str]
-            Ignored.
-        around : date
-            Ignored.
-
-        Returns
-        -------
-        dict[str, TripPattern]
-            Nothing.
-        """
-        return {}
-
-    def route_labels(self, *, trip_ids: Collection[str]) -> dict[str, str]:
-        """
-        Know no routes.
-
-        Parameters
-        ----------
-        trip_ids : Collection[str]
-            Ignored.
-
-        Returns
-        -------
-        dict[str, str]
-            Nothing.
-        """
-        return {}
-
-    def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
-        """
-        Know no shapes.
-
-        Parameters
-        ----------
-        box : MetreBox
-            Ignored.
-
-        Returns
-        -------
-        frozenset[Mode]
-            Nothing.
-        """
-        return frozenset()
-
-    def departures(
-        self, *, pin: Pin, start: datetime, end: datetime
-    ) -> list[Departure]:
-        """
-        Fail like a damaged database file.
-
-        Parameters
-        ----------
-        pin : Pin
-            Ignored.
-        start : datetime
-            Ignored.
-        end : datetime
-            Ignored.
-
-        Returns
-        -------
-        list[Departure]
-            Never returns.
-
-        Raises
-        ------
-        sqlite3.DatabaseError
-            Always.
-        """
-        self.calls += 1
-        raise sqlite3.DatabaseError('file is not a database')
+from tests.fakes import (
+    STOP_POINT,
+    BrokenTimetable,
+    EmptyPlacedTimetable,
+    FakeNetwork,
+    FixedClock,
+    FrameRecorder,
+    MemoryStates,
+    PlacedTimetable,
+)
 
 
 @dataclass
@@ -813,10 +613,7 @@ async def test_run_sends_a_watchdog_for_each_handled_tick(
     assert observer.ticks >= 1
 
 
-MAP_PIN = pin_of('2145615', '215020')
-MAP_MPP = 8
 BUS_POSITIONS = 'v1/gtfs/vehiclepos/buses'
-STOP_POINT: Point = to_metres(lon=151.0036, lat=-33.8170)
 
 
 @dataclass
@@ -1008,33 +805,6 @@ class CountingTiles:
         return self.built
 
 
-def map_view(*, markers: tuple[Marker, ...] = ()) -> MapView:
-    """
-    Make a Map view at the 606 stop's area.
-
-    Parameters
-    ----------
-    markers : tuple[Marker, ...]
-        Vehicles drawn.
-
-    Returns
-    -------
-    MapView
-        The view.
-    """
-    return MapView(
-        origin='Here',
-        destination='There',
-        clock='6:25',
-        base=MapBase(centre=STOP_POINT, mpp=MAP_MPP, route=()),
-        zoom=2,
-        markers=markers,
-        sidebar=(),
-        banner=None,
-        empty=None,
-    )
-
-
 def test_map_base_is_cached_between_overlay_frames() -> None:
     """A second frame with the same base reads no more tiles."""
     tiles = CountingTiles()
@@ -1058,27 +828,6 @@ def test_tiles_replaced_rebuilds_base() -> None:
     tiles.built = 'v2'
     maps.frame(view=map_view())
     assert tiles.reads == 2 * once
-
-
-def strip_map_view(*, markers: tuple[Marker, ...] = ()) -> StripMapView:
-    """
-    Make a Strip + map view at the 606 stop's area.
-
-    Parameters
-    ----------
-    markers : tuple[Marker, ...]
-        Vehicles drawn on the map.
-
-    Returns
-    -------
-    StripMapView
-        The view, with an empty pane.
-    """
-    view = map_view(markers=markers)
-    return StripMapView(
-        map=replace(view, base=replace(view.base, width=STRIP_MAP_WIDTH)),
-        pane=StripPane(rows=(), markers=()),
-    )
 
 
 def test_strip_map_reuses_base_cache() -> None:
@@ -1218,27 +967,6 @@ async def test_map_data_failure_posts_event() -> None:
     posted = queue.get_nowait()
     assert posted == MapDataFailed(request=request)
     assert posted.kind == MapData.PATTERNS
-
-
-@dataclass
-class PlacedTimetable(BrokenTimetable):
-    """A failing timetable whose stops all sit at the test point."""
-
-    def stop(self, *, stop_id: str) -> StopPlace:
-        """
-        Place any stop at the test point.
-
-        Parameters
-        ----------
-        stop_id : str
-            Stop ID.
-
-        Returns
-        -------
-        StopPlace
-            The stop, named after its ID.
-        """
-        return StopPlace(stop_id=stop_id, name=stop_id, point=STOP_POINT)
 
 
 def test_starting_state_fills_the_pins_places() -> None:
@@ -1480,33 +1208,6 @@ def tableless_tiles(*, out: Path) -> SqliteTileRepository:
 
 
 @dataclass
-class EmptyPlacedTimetable(PlacedTimetable):
-    """A placed timetable with no departures."""
-
-    def departures(
-        self, *, pin: Pin, start: datetime, end: datetime
-    ) -> list[Departure]:
-        """
-        Find nothing.
-
-        Parameters
-        ----------
-        pin : Pin
-            Ignored.
-        start : datetime
-            Ignored.
-        end : datetime
-            Ignored.
-
-        Returns
-        -------
-        list[Departure]
-            Nothing.
-        """
-        return []
-
-
-@dataclass
 class ZoomingDisplay(PressingDisplay):
     """A display that shows the Map, then zooms in on the next frames."""
 
@@ -1645,82 +1346,13 @@ def test_corrupt_tile_draws_map_not_installed_and_warns_once(
     assert len(unusable) == 1
 
 
-def ports_of(
-    *,
-    timetable: TimetableRepository | None = None,
-    network: FakeNetwork | None = None,
-    states: MemoryStates | None = None,
-    display: FrameRecorder | None = None,
-) -> Ports:
-    """
-    Make ports on fakes, replacing the ones given.
-
-    Parameters
-    ----------
-    timetable : TimetableRepository | None
-        Timetable; a placed one with no departures by default.
-    network : FakeNetwork | None
-        Network; one that knows nothing by default.
-    states : MemoryStates | None
-        Saved state; empty by default.
-    display : FrameRecorder | None
-        Display; a new recorder by default.
-
-    Returns
-    -------
-    Ports
-        The ports.
-    """
-    return Ports(
-        timetable=timetable or EmptyPlacedTimetable(),
-        feeds=FileFeedsClient(directory=REAL),
-        display=display or FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=network or FakeNetwork(),
-        states=states or MemoryStates(),
-    )
-
-
-async def posted_by(
-    *, ports: Ports, effects: Sequence[Effect], saver: StateSaver | None = None
-) -> list[Event]:
-    """
-    Carry out effects and give every event they posted.
-
-    Parameters
-    ----------
-    ports : Ports
-        Adapters.
-    effects : Sequence[Effect]
-        Effects, in order.
-    saver : StateSaver | None
-        Writes saved state; a new one on the ports' store by default.
-
-    Returns
-    -------
-    list[Event]
-        The events posted, in order.
-    """
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
-    maps = MapRenderer(tiles=ports.tiles)
-    saver = saver or StateSaver(states=ports.states)
-    for effect in effects:
-        await perform(
-            ports=ports,
-            effect=effect,
-            queue=queue,
-            tasks=tasks,
-            maps=maps,
-            saver=saver,
-        )
-    await asyncio.gather(*tasks)
-    return [queue.get_nowait() for _ in range(queue.qsize())]
-
-
 async def test_run_starts_on_town_hall_map_without_state() -> None:
     """With no saved state and no seed, Town Hall shows on the Map."""
-    state = await run(ports=ports_of(), tick_every=0.01, max_events=5)
+    states = MemoryStates()
+    state = await run(
+        ports=ports_of(states=states), tick_every=0.01, max_events=5
+    )
+    assert states.saves[:1] == [DEFAULT_SAVED]
     assert state.places.pins == ()
     assert shown(state=state).origin.stop_id == TOWN_HALL.stop_id
     assert state.view is LiveView.MAP
@@ -1764,33 +1396,6 @@ async def test_run_ignores_seed_when_state_exists(
     assert 'seed ignored' in caplog.text
 
 
-async def test_save_effect_writes_through_store() -> None:
-    """SaveState writes the saved state to the store and posts nothing."""
-    states = MemoryStates()
-    saved = seeded(pin=MAP_PIN)
-    posted = await posted_by(
-        ports=ports_of(states=states), effects=[SaveState(saved=saved)]
-    )
-    assert states.saves == [saved]
-    assert not posted
-
-
-async def test_save_failure_is_logged_not_raised(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """A failing write is logged once for the same message, never raised."""
-    states = MemoryStates(error=OSError(30, 'Read-only file system'))
-    save = SaveState(saved=seeded(pin=MAP_PIN))
-    with caplog.at_level(logging.ERROR):
-        await posted_by(ports=ports_of(states=states), effects=[save, save])
-    failures = [
-        record
-        for record in caplog.records
-        if record.message == 'saving state failed'
-    ]
-    assert len(failures) == 1
-
-
 async def test_quit_writes_unsaved_state() -> None:
     """A change followed at once by a quit is saved before the run ends."""
     states = MemoryStates(stored=seeded(pin=MAP_PIN))
@@ -1806,270 +1411,6 @@ async def test_quit_writes_unsaved_state() -> None:
     assert not state.running
     assert states.stored is not None
     assert states.stored.view is LiveView.MAP
-
-
-@dataclass
-class VersionedTimetable(EmptyPlacedTimetable):
-    """A timetable whose build can be swapped."""
-
-    built: str | None = 'v1'
-
-    def version(self) -> str | None:
-        """
-        Name the current build.
-
-        Returns
-        -------
-        str | None
-            The build.
-        """
-        return self.built
-
-
-@dataclass
-class VersionFailingTimetable(EmptyPlacedTimetable):
-    """A timetable whose version read fails."""
-
-    def version(self) -> str | None:
-        """
-        Fail like a damaged database file.
-
-        Returns
-        -------
-        str | None
-            Never returns.
-
-        Raises
-        ------
-        sqlite3.Error
-            Always.
-        """
-        raise sqlite3.OperationalError('disk I/O error')
-
-
-async def test_version_error_does_not_quit(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """A failing version read is logged once and the app keeps running."""
-    with caplog.at_level(logging.ERROR):
-        state = await run(
-            ports=ports_of(timetable=VersionFailingTimetable()),
-            seed=MAP_PIN,
-            tick_every=0.01,
-            max_events=15,
-        )
-    assert state.running
-    failures = [
-        record
-        for record in caplog.records
-        if record.message == 'reading the timetable version failed'
-    ]
-    assert len(failures) == 1
-
-
-async def test_timetable_version_change_posts_seen() -> None:
-    """The ticker posts the version at start and again when it changes."""
-    timetable = VersionedTimetable()
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    task = asyncio.create_task(
-        ticker(
-            ports=ports_of(timetable=timetable),
-            queue=queue,
-            every=0.01,
-            pump=None,
-        )
-    )
-    await asyncio.sleep(0.1)
-    timetable.built = 'v2'
-    await asyncio.sleep(0.1)
-    task.cancel()
-    await asyncio.gather(task, return_exceptions=True)
-    posted = [queue.get_nowait() for _ in range(queue.qsize())]
-    seen = [event for event in posted if isinstance(event, TimetableSeen)]
-    assert seen == [TimetableSeen(version='v1'), TimetableSeen(version='v2')]
-    assert isinstance(posted[0], TimetableSeen)
-
-
-def reach_data() -> ReachInput:
-    """
-    Make the runs C E1 E2 through the From C.
-
-    Returns
-    -------
-    ReachInput
-        The runs.
-    """
-    places = {
-        key: StopPlace(stop_id=key, name=f'{key} Station', point=None)
-        for key in ('C', 'E1', 'E2')
-    }
-    return ReachInput(
-        origin=places['C'],
-        tails=(RunTail(before=(), after=('E1', 'E2'), trips=8),),
-        places=places,
-        station_of={key: key for key in places},
-    )
-
-
-STRIP_KEY = StripKey(station='C', kind=RouteKind.TRAIN, routes=())
-
-
-async def test_load_strip_posts_reach(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """LoadStrip builds the reach and echoes the key and timetable."""
-    data = reach_data()
-    load = LoadStrip(key=STRIP_KEY, origin=data.origin, timetable='v1')
-    with caplog.at_level(logging.INFO):
-        posted = await posted_by(
-            ports=ports_of(network=FakeNetwork(data=data)), effects=[load]
-        )
-    assert posted == [
-        StripLoaded(
-            key=STRIP_KEY, reach=build_reach(data=data), timetable='v1'
-        )
-    ]
-    built = [r for r in caplog.records if r.message == 'strip built']
-    assert len(built) == 1
-    assert built[0].__dict__['ms'] >= 0
-
-
-async def test_load_strip_without_runs_posts_no_reach() -> None:
-    """A timetable with no run tables loads a strip with no reach."""
-    load = LoadStrip(key=STRIP_KEY, origin=place('C'), timetable='v1')
-    posted = await posted_by(ports=ports_of(), effects=[load])
-    assert posted == [StripLoaded(key=STRIP_KEY, reach=None, timetable='v1')]
-
-
-async def test_load_strip_failure_posts_strip_failed() -> None:
-    """A failed runs read posts StripFailed with the timetable echoed."""
-    network = FakeNetwork(error=sqlite3.OperationalError('locked'))
-    load = LoadStrip(key=STRIP_KEY, origin=place('C'), timetable='v1')
-    posted = await posted_by(ports=ports_of(network=network), effects=[load])
-    assert posted == [StripFailed(key=STRIP_KEY, timetable='v1')]
-
-
-async def test_load_chooser_departures_posts_result() -> None:
-    """The chooser's departures come back up to the end asked for."""
-    end = AT + timedelta(hours=1)
-    load = LoadChooserDepartures(
-        pin=MAP_PIN, start=AT, end=end, timetable='v1'
-    )
-    posted = await posted_by(ports=ports_of(), effects=[load])
-    assert posted == [
-        ChooserDeparturesLoaded(
-            pin=MAP_PIN, departures=(), until=end, timetable='v1'
-        )
-    ]
-
-
-async def test_load_chooser_departures_failure_posts_failed() -> None:
-    """A failed departures read posts ChooserDeparturesFailed."""
-    load = LoadChooserDepartures(
-        pin=MAP_PIN, start=AT, end=AT, timetable='v1'
-    )
-    posted = await posted_by(
-        ports=ports_of(timetable=BrokenTimetable()), effects=[load]
-    )
-    assert posted == [ChooserDeparturesFailed(pin=MAP_PIN, timetable='v1')]
-
-
-async def test_load_column_posts_column() -> None:
-    """LoadColumn posts the network's column with the timetable echoed."""
-    column = Column(level=Level.KIND, items=())
-    network = FakeNetwork(column=column)
-    posted = await posted_by(
-        ports=ports_of(network=network),
-        effects=[LoadColumn(path=(), timetable='v1')],
-    )
-    assert posted == [ColumnLoaded(path=(), column=column, timetable='v1')]
-
-
-async def test_load_column_failure_posts_column_failed() -> None:
-    """A failed column read posts ColumnFailed with the timetable echoed."""
-    network = FakeNetwork(error=sqlite3.OperationalError('locked'))
-    posted = await posted_by(
-        ports=ports_of(network=network),
-        effects=[LoadColumn(path=(), timetable='v1')],
-    )
-    assert posted == [ColumnFailed(path=(), timetable='v1')]
-
-
-async def test_load_line_posts_line_and_failure() -> None:
-    """LoadLine posts the stations, or LineFailed when the read fails."""
-    line = (place('A'), place('B'))
-    load = LoadLine(towards=7, timetable='v1')
-    posted = await posted_by(
-        ports=ports_of(network=FakeNetwork(line=line)), effects=[load]
-    )
-    assert posted == [LineLoaded(towards=7, line=line, timetable='v1')]
-    broken = FakeNetwork(error=sqlite3.OperationalError('locked'))
-    posted = await posted_by(ports=ports_of(network=broken), effects=[load])
-    assert posted == [LineFailed(towards=7, timetable='v1')]
-
-
-@dataclass
-class MatchingTimetable(EmptyPlacedTimetable):
-    """A timetable that finds stop A again and loses every other stop."""
-
-    def match_stop(self, *, place: StopPlace) -> StopPlace | None:
-        """
-        Find stop A at the test point.
-
-        Parameters
-        ----------
-        place : StopPlace
-            Place to find.
-
-        Returns
-        -------
-        StopPlace | None
-            Stop A placed; None for any other.
-        """
-        return self.stop(stop_id='A') if place.stop_id == 'A' else None
-
-
-async def test_match_places_posts_found() -> None:
-    """MatchPlaces posts each place's match by its old stop ID."""
-    posted = await posted_by(
-        ports=ports_of(timetable=MatchingTimetable()),
-        effects=[MatchPlaces(places=(place('A'), place('B')))],
-    )
-    assert posted == [
-        PlacesMatched(
-            found={
-                'A': StopPlace(stop_id='A', name='A', point=STOP_POINT),
-                'B': None,
-            }
-        )
-    ]
-
-
-async def test_renders_each_view_type() -> None:
-    """Every kind of view is drawn by its own renderer and shown."""
-    display = FrameRecorder()
-    chooser = view_of(groups(focused=True))
-    await posted_by(
-        ports=ports_of(display=display),
-        effects=[
-            Render(view=BASE),
-            Render(view=map_view()),
-            Render(view=VIEW),
-            Render(view=strip_map_view()),
-            Render(view=chooser),
-        ],
-    )
-    maps = MapRenderer(tiles=NullTiles())
-    expected = [
-        draw_stop_view(view=BASE),
-        maps.frame(view=map_view()),
-        draw_strip_view(view=VIEW),
-        maps.strip_map_frame(view=strip_map_view()),
-        draw_chooser_view(view=chooser),
-    ]
-    assert len(display.frames) == len(expected)
-    for frame, want in zip(display.frames, expected, strict=True):
-        assert np.array_equal(frame, want)
 
 
 @dataclass

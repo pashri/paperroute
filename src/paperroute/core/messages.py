@@ -132,9 +132,10 @@ class SaveState:
 
 @dataclass(frozen=True)
 class MatchPlaces:
-    """Look some places up in the timetable."""
+    """Look some places up in the timetable, tagged with its version."""
 
     places: tuple[StopPlace, ...]
+    timetable: str | None = None
 
 
 MapRequest = LoadShapes | LoadPatterns | LoadModes
@@ -243,6 +244,13 @@ class PlacesMatched:
     """
 
     found: Mapping[str, StopPlace | None]
+
+
+@dataclass(frozen=True)
+class PlacesFailed:
+    """The places couldn't be looked up; a later tick tries again."""
+
+    timetable: str | None = None
 
 
 @dataclass(frozen=True)
@@ -441,6 +449,7 @@ Event = (
     | QuitRequested
     | TimetableSeen
     | PlacesMatched
+    | PlacesFailed
     | StripLoaded
     | StripFailed
     | MapEvent

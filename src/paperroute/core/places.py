@@ -13,12 +13,15 @@ from paperroute.core.messages import (
     ColumnLoaded,
     DeparturesFailed,
     DeparturesLoaded,
+    Effect,
     Event,
     LineFailed,
     LineLoaded,
     LoadModes,
     MapDataFailed,
+    MatchPlaces,
     ModesLoaded,
+    PlacesFailed,
     StripFailed,
     StripLoaded,
 )
@@ -30,7 +33,13 @@ from paperroute.core.model import (
     same_place,
 )
 from paperroute.core.saved import DEFAULT_PLACE, Saved
-from paperroute.core.state_model import Board, Places, State
+from paperroute.core.state_model import (
+    RETRY_AFTER,
+    Board,
+    Places,
+    State,
+    elapsed,
+)
 
 
 def places_of(*, saved: Saved) -> Places:
@@ -365,9 +374,9 @@ def is_stale(*, state: State, event: Event) -> bool:
     -------
     bool
         True for departures loaded or failed for another place or another
-        timetable version, for a reach or a chooser load from another
-        timetable version, and for area modes loaded or failed for another
-        map area.
+        timetable version, for a reach, a chooser load or a failed place
+        look-up from another timetable version, and for area modes loaded
+        or failed for another map area.
     """
     match event:
         case (
@@ -386,6 +395,7 @@ def is_stale(*, state: State, event: Event) -> bool:
             | LineFailed(timetable=timetable)
             | ChooserDeparturesLoaded(timetable=timetable)
             | ChooserDeparturesFailed(timetable=timetable)
+            | PlacesFailed(timetable=timetable)
         ):
             return timetable != state.saving.timetable
         case (
@@ -550,3 +560,65 @@ def matched(
         unpinned = rematched(pin=unpinned, found=found)
     pins = rematched_pins(pins=places.pins, found=found)
     return replace(state, places=replace(places, pins=pins, unpinned=unpinned))
+
+
+def rematch(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Ask to match the places against the timetable in use.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with no retry due, and a MatchPlaces tagged with the
+        timetable version.
+    """
+    saving = replace(state.saving, match_failed_at=None)
+    ask = MatchPlaces(
+        places=stops_to_match(state=state), timetable=saving.timetable
+    )
+    return replace(state, saving=saving), (ask,)
+
+
+def rematch_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Match the places again `RETRY_AFTER` after a failed look-up.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State and a MatchPlaces when a retry is due; unchanged otherwise.
+    """
+    failed_at = state.saving.match_failed_at
+    if failed_at is None or not elapsed(
+        since=failed_at, now=state.now, span=RETRY_AFTER
+    ):
+        return state, ()
+    return rematch(state=state)
+
+
+def match_failed(*, state: State) -> State:
+    """
+    Note that a place look-up failed, so a later tick retries it.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    State
+        State with the failure time recorded.
+    """
+    saving = replace(state.saving, match_failed_at=state.now)
+    return replace(state, saving=saving)

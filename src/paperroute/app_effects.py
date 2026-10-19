@@ -33,6 +33,7 @@ from paperroute.core.messages import (
     MatchPlaces,
     ModesLoaded,
     PatternsLoaded,
+    PlacesFailed,
     PlacesMatched,
     PositionsFetched,
     SaveState,
@@ -81,7 +82,10 @@ async def timed_async[T](*, call: Awaitable[T]) -> tuple[T, float]:
 
 class StateSaver:
     """
-    Write the saved state, logging each different write error once.
+    Write the saved state, logging each kind of write error once.
+
+    Errors of the same type, number and text are one kind, whatever file
+    they name, since each save writes a new temporary file.
 
     Parameters
     ----------
@@ -91,7 +95,9 @@ class StateSaver:
 
     def __init__(self, *, states: StateRepository) -> None:
         self.states = states
-        self.logged: set[str] = set()
+        self.logged: set[tuple[type[OSError], int | None, str | None]] = (
+            set()
+        )
 
     async def save(self, *, effect: SaveState) -> None:
         """
@@ -105,8 +111,9 @@ class StateSaver:
         try:
             await asyncio.to_thread(self.states.save, saved=effect.saved)
         except OSError as error:
-            if str(error) not in self.logged:
-                self.logged.add(str(error))
+            kind = (type(error), error.errno, error.strerror)
+            if kind not in self.logged:
+                self.logged.add(kind)
                 logger.exception('saving state failed')
 
 
@@ -282,6 +289,77 @@ def line_loaded(*, network: NetworkRepository, effect: LoadLine) -> LineLoaded:
     )
 
 
+def read_for(
+    *,
+    timetable: TimetableRepository,
+    network: NetworkRepository,
+    effect: WorkerEffect,
+) -> Callable[[], Event]:
+    """
+    Give the read an effect asks for.
+
+    Parameters
+    ----------
+    timetable : TimetableRepository
+        Timetable.
+    network : NetworkRepository
+        Chooser catalogue and runs.
+    effect : WorkerEffect
+        Request.
+
+    Returns
+    -------
+    Callable[[], Event]
+        The read, giving its result event.
+    """
+    match effect:
+        case MatchPlaces(places=places):
+            return functools.partial(
+                matches, timetable=timetable, places=places
+            )
+        case LoadStrip():
+            return functools.partial(
+                strip_built, network=network, effect=effect
+            )
+        case LoadColumn():
+            return functools.partial(
+                column_loaded, network=network, effect=effect
+            )
+        case LoadLine():
+            return functools.partial(
+                line_loaded, network=network, effect=effect
+            )
+    return functools.partial(
+        chooser_departures, timetable=timetable, effect=effect
+    )
+
+
+def failure_of(*, effect: WorkerEffect) -> Event:
+    """
+    Give the event posted when an effect's read fails.
+
+    Parameters
+    ----------
+    effect : WorkerEffect
+        Request.
+
+    Returns
+    -------
+    Event
+        Its failure event, tagged with the request's timetable version.
+    """
+    match effect:
+        case MatchPlaces(timetable=version):
+            return PlacesFailed(timetable=version)
+        case LoadStrip(key=key, timetable=version):
+            return StripFailed(key=key, timetable=version)
+        case LoadColumn(path=path, timetable=version):
+            return ColumnFailed(path=path, timetable=version)
+        case LoadLine(towards=towards, timetable=version):
+            return LineFailed(towards=towards, timetable=version)
+    return ChooserDeparturesFailed(pin=effect.pin, timetable=effect.timetable)
+
+
 def work_for(
     *,
     timetable: TimetableRepository,
@@ -290,8 +368,6 @@ def work_for(
 ) -> tuple[Callable[[], Event], Event]:
     """
     Give the read an effect asks for, and the event posted if it fails.
-
-    A failed place look-up posts an empty match, which changes nothing.
 
     Parameters
     ----------
@@ -307,35 +383,8 @@ def work_for(
     tuple[Callable[[], Event], Event]
         The read, giving its result event, and the failure event.
     """
-    call: Callable[[], Event]
-    match effect:
-        case MatchPlaces(places=places):
-            call = functools.partial(
-                matches, timetable=timetable, places=places
-            )
-            return call, PlacesMatched(found={})
-        case LoadStrip(key=key, timetable=version):
-            call = functools.partial(
-                strip_built, network=network, effect=effect
-            )
-            return call, StripFailed(key=key, timetable=version)
-        case LoadColumn(path=path, timetable=version):
-            call = functools.partial(
-                column_loaded, network=network, effect=effect
-            )
-            return call, ColumnFailed(path=path, timetable=version)
-        case LoadLine(towards=towards, timetable=version):
-            call = functools.partial(
-                line_loaded, network=network, effect=effect
-            )
-            return call, LineFailed(towards=towards, timetable=version)
-    call = functools.partial(
-        chooser_departures, timetable=timetable, effect=effect
-    )
-    failed = ChooserDeparturesFailed(
-        pin=effect.pin, timetable=effect.timetable
-    )
-    return call, failed
+    read = read_for(timetable=timetable, network=network, effect=effect)
+    return read, failure_of(effect=effect)
 
 
 async def worked(

@@ -143,11 +143,15 @@ class Saving:
         When the saved state last changed, or None since start.
     timetable : str | None
         The timetable version the places were last matched against.
+    match_failed_at : datetime | None
+        When matching the places last failed, or None when no retry is
+        due.
     """
 
     saved: Saved | None = None
     changed_at: datetime | None = None
     timetable: str | None = None
+    match_failed_at: datetime | None = None
 
 
 type FoldContext = tuple[str, StripKey | None, str | None]

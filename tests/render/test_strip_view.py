@@ -14,9 +14,8 @@ from paperroute.core.map_view import (
     MapView,
     Marker,
 )
-from paperroute.core.model import CarryOn, Mode
-from paperroute.core.reach import RowKind
-from paperroute.core.stop_view import Pill, PinTag, Row
+from paperroute.core.model import CarryOn
+from paperroute.core.stop_view import Pill, PinTag
 from paperroute.core.strip_badges import HALF_WIDE
 from paperroute.core.strip_model import (
     HINTS,
@@ -28,7 +27,6 @@ from paperroute.core.strip_model import (
     Band,
     StripMapView,
     StripPane,
-    StripPanel,
     StripRow,
     StripView,
 )
@@ -45,75 +43,14 @@ from paperroute.render.strip_view import (
 )
 from paperroute.render.tile_codec import GREYS
 from tests.core.factories import START, east_inputs
+from tests.render.factories import STRIP_PANEL as PANEL
+from tests.render.factories import STRIP_ROWS as ROWS
+from tests.render.factories import STRIP_VIEW as VIEW
+from tests.render.factories import panel_row
 
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
 PANEL_TOP = 160
 PANEL_STEP = 70
-
-
-def panel_row(*, then: CarryOn | None = None,
-              pill: Pill | None = None) -> Row:
-    """
-    Make a panel departure.
-
-    Parameters
-    ----------
-    then : CarryOn | None
-        Where the vehicle runs on to.
-    pill : Pill | None
-        Marker.
-
-    Returns
-    -------
-    Row
-        The departure.
-    """
-    return Row(
-        route='T1', mode=Mode.TRAIN, platform='3', destination='Emu Plains',
-        countdown='6', leaves_at='8:11', arrives_at='8:47', ride_minutes=36,
-        live=True, pill=pill, then=then)
-
-
-def strip_row(*, index: int, tag: str = '', parent: bool = True,
-              cursor: bool = False) -> StripRow:
-    """
-    Make a main-line row in a slot.
-
-    Parameters
-    ----------
-    index : int
-        Slot from the top.
-    tag : str
-        Tag text.
-    parent : bool
-        Join it to the slot above.
-    cursor : bool
-        The row being picked.
-
-    Returns
-    -------
-    StripRow
-        The row.
-    """
-    y = STRIP_TOP + index * ROW_H + ROW_H / 2
-    return StripRow(
-        name=f'Station {index}', depth=0, kind=RowKind.MAIN, y=y,
-        parent_y=y - ROW_H if parent else None, parent_depth=0, tag=tag,
-        time='' if tag else f'8:{10 + index}', ride=False, cursor=cursor,
-        bold=index == 2, station=f'S{index}')
-
-
-ROWS = tuple(
-    strip_row(index=index, parent=index > 0)
-    for index in range(12)
-)
-PANEL = StripPanel(
-    title='Town Hall', destination='Parramatta', note='201 stations from here',
-    rows=(panel_row(),) * 4, no_destination=False, hint=None)
-VIEW = StripView(
-    origin='Town Hall', destination='Parramatta', clock='8:05',
-    tag=PinTag(text='pin 2/3', pinned=True), picking=None, rows=ROWS,
-    band=None, markers=(), panel=PANEL, empty=None, banner=None)
 
 
 def test_strip_frame_is_two_level() -> None:

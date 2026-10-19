@@ -46,9 +46,9 @@ from paperroute.core.messages import (
     LoadDepartures,
     MapDataFailed,
     MapEvent,
-    MatchPlaces,
     ModesLoaded,
     PatternsLoaded,
+    PlacesFailed,
     PlacesMatched,
     PositionsFetched,
     QuitRequested,
@@ -65,11 +65,13 @@ from paperroute.core.model import same_place
 from paperroute.core.places import (
     feeds_of,
     is_stale,
+    match_failed,
     matched,
     places_of,
+    rematch,
+    rematch_effects,
     shown,
     shown_index,
-    stops_to_match,
     with_place,
 )
 from paperroute.core.saved import LiveView, Saved
@@ -551,8 +553,10 @@ def on_tick(
     state, picked = picked_reloads(state=state)
     state, fetches = poll_effects(state=state)
     state, saves = saved_effects(state=state)
+    state, matches = rematch_effects(state=state)
     return settled(
-        state=state, effects=(*loads, *picked, *fetches, *saves),
+        state=state,
+        effects=(*loads, *picked, *fetches, *saves, *matches),
     )
 
 
@@ -692,7 +696,9 @@ def on_timetable(
     state = replace(
         state,
         board=replace(state.board, loaded_until=None, loading=False),
-        saving=replace(state.saving, timetable=event.version),
+        saving=replace(
+            state.saving, timetable=event.version, match_failed_at=None,
+        ),
         strip=replace(
             state.strip,
             reaches={},
@@ -704,12 +710,12 @@ def on_timetable(
     state, asks = chooser_retimed(state=state)
     if event.version is None:
         return settled(state=state, effects=asks)
-    rematch = MatchPlaces(places=stops_to_match(state=state))
-    return settled(state=state, effects=(*asks, rematch))
+    state, matches = rematch(state=state)
+    return settled(state=state, effects=(*asks, *matches))
 
 
 def on_matched(
-    *, state: State, event: PlacesMatched
+    *, state: State, event: PlacesMatched | PlacesFailed
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Apply a timetable look-up, showing and loading a moved place afresh.
@@ -718,14 +724,17 @@ def on_matched(
     ----------
     state : State
         State.
-    event : PlacesMatched
-        The places found.
+    event : PlacesMatched | PlacesFailed
+        The places found, or a failed look-up.
 
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        New state and effects; none when nothing changed.
+        New state and effects; none when nothing changed. A failed
+        look-up only notes when it failed, so a later tick retries.
     """
+    if isinstance(event, PlacesFailed):
+        return match_failed(state=state), ()
     after = matched(state=state, found=event.found)
     if after.places == state.places:
         return state, ()
@@ -877,7 +886,7 @@ def dispatched(
             result = on_quit(state=state)
         case TimetableSeen():
             result = on_timetable(state=state, event=event)
-        case PlacesMatched():
+        case PlacesMatched() | PlacesFailed():
             result = on_matched(state=state, event=event)
         case StripLoaded():
             result = settled(state=strip_loaded(state=state, event=event))

@@ -63,13 +63,18 @@ def refolded(*, state: State) -> State:
     -------
     State
         State as it is while the same strip is on screen; else with no
-        fold open, noting the strip now on screen.
+        fold open, noting the strip now on screen, and the Strip back on
+        its home window if a fold was open, as its rows have moved.
     """
     context = fold_context(state=state)
-    if context == state.strip.context:
+    strip = state.strip
+    if context == strip.context:
         return state
     return replace(state, strip=replace(
-        state.strip, opened=frozenset(), context=context,
+        strip,
+        opened=frozenset(),
+        context=context,
+        scroll=0 if strip.opened else strip.scroll,
     ))
 
 

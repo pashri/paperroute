@@ -477,3 +477,14 @@ def test_new_timetable_shuts_the_folds() -> None:
     assert state.strip.opened == frozenset()
     assert not state.strip.reaches
 
+
+def test_opening_the_chooser_sends_the_strip_home() -> None:
+    """Folds shut as the chooser opens; cancelling lands on home rows."""
+    state = strip_with_end_open(pins=(replace(PIN, destination=None),))
+    home = on_fold_strip()
+    state, _ = run(state=state, events=[TOP_PRESS])
+    assert state.chooser is not None
+    assert (state.strip.opened, state.strip.scroll) == (frozenset(), 0)
+    state, _ = run(state=state, events=[TOP_PRESS])
+    assert state.chooser is None
+    assert names(state=state)[0] == names(state=home)[0] == 'S18'

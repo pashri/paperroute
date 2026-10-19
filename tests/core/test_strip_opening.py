@@ -1,6 +1,7 @@
 """Tests for opening a strip's folds as they reach the screen."""
 
 from dataclasses import replace
+from datetime import timedelta
 from typing import Final
 
 import pytest
@@ -12,9 +13,16 @@ from paperroute.core.saved import LiveView
 from paperroute.core.state_model import State
 from paperroute.core.strip_folds import FOLD_MIN, folded
 from paperroute.core.strip_model import StripMapView, StripView
-from paperroute.core.strip_view import origin_of
+from paperroute.core.strip_view import build_strip_view, origin_of
 from tests.core.chooser_walks import CHOSEN_KEY, DOWN, TO_STAGE, at_to
-from tests.core.factories import place
+from tests.core.factories import (
+    START,
+    inputs_of,
+    line_pattern,
+    live,
+    place,
+    train,
+)
 from tests.core.test_reach import (
     BLACKTOWN,
     REAL_DB,
@@ -225,3 +233,21 @@ def test_town_hall_and_blacktown_fold_only_quiet_far_ends() -> None:
             for row in shown.rows
             if row.kind is RowKind.FOLD
         )
+
+
+def test_vehicle_inside_a_closed_fold_is_drawn_on_its_row() -> None:
+    """A train between two folded stations sits on the fold row."""
+    reach = folded(reach=fold_reach(at=0, size=12, quiet=4))
+    stations = ('C', *(f'S{i}' for i in range(1, 12)))
+    view = build_strip_view(inputs=inputs_of(
+        reach=reach,
+        departures=[live(item=train(minutes=0, trip_id='e'))],
+        patterns={
+            'e': line_pattern(trip_id='e', stations=stations, minutes=0),
+        },
+        now=START + timedelta(minutes=28),
+    ))
+    (marker,) = view.markers
+    fold = next(row for row in view.rows if row.kind is RowKind.FOLD)
+    assert marker.y == fold.y
+    assert fold.time == ''

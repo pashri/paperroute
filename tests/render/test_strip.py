@@ -199,6 +199,21 @@ def test_from_and_to_are_discs_and_others_rings() -> None:
     assert frame[int(FROM_Y + ROW_H), TRACK_X - 3] == PAPER
 
 
+def test_fold_row_is_a_double_ring() -> None:
+    """A closed fold is two hollow rings, one inside the other."""
+    fold = replace(
+        strip_row(y=FROM_Y + ROW_H, parent_y=FROM_Y, name='A … B +5'),
+        kind=RowKind.FOLD,
+    )
+    frame = drawn(rows=(strip_row(y=FROM_Y, bold=True), fold))
+    y = int(FROM_Y + ROW_H)
+    assert frame[y, TRACK_X] == PAPER
+    assert frame[y, TRACK_X + 4] == INK
+    assert frame[y, TRACK_X + 6] == PAPER
+    assert frame[y, TRACK_X + 8] == INK
+    assert frame[y, TRACK_X + 11] == PAPER
+
+
 def test_from_row_shows_its_time_without_a_box() -> None:
     """The From keeps its disc and shows its time in ink, with no box."""
     frame = drawn(rows=(strip_row(y=FROM_Y, bold=True, time='8:09'),))

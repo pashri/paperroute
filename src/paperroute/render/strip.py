@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from paperroute.core.map_view import Marker
+from paperroute.core.reach import RowKind
 from paperroute.core.strip_model import INDENT, ROW_H, Band, StripRow
 from paperroute.render.canvas import INK, PAPER, Canvas, Face
 from paperroute.render.markers import draw_hollow, draw_live
@@ -15,6 +16,8 @@ RIDE_WIDTH: Final[int] = 9
 RING_RADIUS: Final[float] = 6.0
 RING_STROKE: Final[float] = 3.0
 DISC_RADIUS: Final[float] = 11.0
+FOLD_RINGS: Final[tuple[float, ...]] = (9.0, 4.0)  # a fold's ring radii
+FOLD_STROKE: Final[float] = 2.0
 MAIN_PX: Final[int] = 15
 SPUR_PX: Final[int] = 13
 TIME_FACE: Final[Face] = Face(weight=400, px=15)
@@ -88,7 +91,10 @@ def draw_track(canvas: Canvas, *, row: StripRow, track_x: int) -> None:
 
 def draw_station(canvas: Canvas, *, row: StripRow, x: float) -> None:
     """
-    Draw a row's station: a disc for the From and Destination, else a ring.
+    Draw a row's station mark.
+
+    The From and Destination get a disc, a closed fold two rings, and
+    any other station a ring.
 
     Parameters
     ----------
@@ -106,10 +112,38 @@ def draw_station(canvas: Canvas, *, row: StripRow, x: float) -> None:
             grey=INK,
         )
         return
+    if row.kind is RowKind.FOLD:
+        draw_fold(canvas, y=row.y, x=x)
+        return
     box = (x - RING_RADIUS, row.y - RING_RADIUS,
            x + RING_RADIUS, row.y + RING_RADIUS)
     canvas.ellipse(box=box, grey=PAPER)
     canvas.ellipse(box=box, grey=INK, stroke=RING_STROKE)
+
+
+def draw_fold(canvas: Canvas, *, y: float, x: float) -> None:
+    """
+    Draw a closed fold's mark: two hollow rings, one inside the other.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    y : float
+        Row centre.
+    x : float
+        Track x at the row's depth.
+    """
+    outer = FOLD_RINGS[0] + FOLD_STROKE
+    canvas.ellipse(
+        box=(x - outer, y - outer, x + outer, y + outer), grey=PAPER,
+    )
+    for radius in FOLD_RINGS:
+        canvas.ellipse(
+            box=(x - radius, y - radius, x + radius, y + radius),
+            grey=INK,
+            stroke=FOLD_STROKE,
+        )
 
 
 def draw_tag(canvas: Canvas, *, row: StripRow, right: float) -> float:

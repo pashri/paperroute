@@ -322,7 +322,7 @@ def test_detour_is_listed_like_a_spur() -> None:
 
 
 def test_third_way_hangs_at_from_on_top() -> None:
-    """A third way out of FROM is a depth-1 spur at FROM, on top."""
+    """With no positions, a third way is a depth-1 spur at FROM, on top."""
     reach = reach_of(tails=[
         tail('E1 E2', 6), tail('W1 W2', 5), tail('N1 N2', 2),
     ])
@@ -332,6 +332,25 @@ def test_third_way_hangs_at_from_on_top() -> None:
     assert reach.rows[2].parent == 3
     assert reach.rows[1].parent == 4
     assert all(row.above for row in reach.rows[:4])
+
+
+def test_third_way_hangs_on_the_side_heading_its_way() -> None:
+    """N1 heads east, so it hangs at FROM on the east side, below."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'W1': (-1000, 0), 'W2': (-2000, 0),
+        'R1': (-1000, 1000), 'R2': (-1000, 2000), 'R3': (-1000, 3000),
+        'E1': (1000, 0), 'E2': (2000, 0), 'N1': (1000, 500),
+    }
+    reach = reach_of(tails=[
+        tail('W1 W2', 6), tail('W1 R1 R2 R3', 3), tail('E1 E2', 8),
+        tail('N1', 2),
+    ], points=points)
+    assert ids(reach=reach) == [
+        'W2', 'R3', 'R2', 'R1', 'W1', 'C', 'N1', 'E1', 'E2',
+    ]
+    assert reach.rows[6].depth == 1
+    assert reach.rows[6].parent == 5
+    assert reach.rows[7].parent == 5
 
 
 def test_loop_through_from_splits_into_two_sides() -> None:
@@ -767,14 +786,20 @@ def test_stanmore_rides_to_strathfield_on_the_main_line() -> None:
     not has_runs(path=REAL_DB),
     reason='needs data/timetable.db with run tables',
 )
-def test_blacktown_strip_opens_from_from_toward_parramatta() -> None:
+def test_blacktown_strip_opens_on_the_ride_to_parramatta() -> None:
     """
-    Blacktown to Parramatta opens with FROM at the foot, facing the ride.
+    Blacktown to Parramatta opens with the whole ride on the strip.
 
-    The Richmond branch sits between FROM and Seven Hills, so the ride is
-    longer than the strip and the window starts at FROM going up.
+    The Richmond branch hangs on the Emu Plains side, so the ride runs
+    from FROM straight up through Seven Hills.
     """
     reach, _ = train_reach(station=BLACKTOWN)
+    names = [row.place.name for row in reach.rows]
+    home = origin_row(reach=reach)
+    richmond = reach.rows[names.index('Marayong Station')]
+    assert richmond.parent == home
+    assert richmond.above == reach.rows[names.index('Doonside Station')].above
+    assert reach.rows[names.index('Seven Hills Station')].parent == home
     view = build_strip_view(inputs=StripInputs(
         reach=reach,
         unavailable=None,
@@ -788,7 +813,10 @@ def test_blacktown_strip_opens_from_from_toward_parramatta() -> None:
         destination=PARRAMATTA,
         tag=NOT_PINNED,
     ))
-    assert view.band is None
-    assert view.rows[-1].station == BLACKTOWN
-    assert view.rows[0].name == 'Seven Hills'
-    assert view.rows[0].ride
+    shown = [row.station for row in view.rows]
+    assert BLACKTOWN in shown
+    assert PARRAMATTA in shown
+    assert all(
+        row.ride
+        for row in view.rows[shown.index(PARRAMATTA):shown.index(BLACKTOWN)]
+    )

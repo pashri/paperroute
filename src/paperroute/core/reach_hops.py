@@ -149,6 +149,38 @@ def heading_match(*, places: Mapping[str, StopPlace], origin: str,
     )
 
 
+def closest(*, places: Mapping[str, StopPlace], origin: str, hop: str,
+            choices: Sequence[str]) -> int:
+    """
+    Pick the first hop heading closest to another's way from the From.
+
+    Parameters
+    ----------
+    places : Mapping[str, StopPlace]
+        Every station by ID, and the From.
+    origin : str
+        The From's key in places.
+    hop : str
+        The first hop to match.
+    choices : Sequence[str]
+        First hops to choose from; at least one.
+
+    Returns
+    -------
+    int
+        Index of the choice at the smallest angle to the hop; a choice
+        with no angle loses to one with an angle, and ties go to the
+        earliest.
+    """
+    matches = [
+        heading_match(places=places, origin=origin, one=hop, two=choice)
+        for choice in choices
+    ]
+    return max(range(len(choices)), key=lambda index: (
+        matches[index] is not None, matches[index] or 0.0, -index,
+    ))
+
+
 def partners(*, trails: Sequence[HopTrail], places: Mapping[str, StopPlace],
              origin: str, weight: Counter[str]) -> dict[str, list[str]]:
     """

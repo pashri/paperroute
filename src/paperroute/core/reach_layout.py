@@ -8,7 +8,7 @@ from itertools import groupby, pairwise
 from typing import Final
 
 from paperroute.core.model import StopPlace
-from paperroute.core.reach_hops import drawn_through, hop_ways
+from paperroute.core.reach_hops import closest, drawn_through, hop_ways
 
 FROM_KEY: Final[str] = ''  # stands for the From in a way's track graph
 SETTLE_PASSES: Final[int] = 50
@@ -879,15 +879,53 @@ def with_spurs(*, side: Hung, others: Sequence[LaidWay]) -> Hung:
     return merged
 
 
+def hang_further(*, sides: Sequence[LaidWay], others: Sequence[LaidWay],
+                 places: Mapping[str, StopPlace]) -> list[LaidWay]:
+    """
+    Hang each further way at the From of the side heading its way.
+
+    Parameters
+    ----------
+    sides : Sequence[LaidWay]
+        The two sides, the one to use without positions first.
+    others : Sequence[LaidWay]
+        Further ways, laid out at depth 1.
+    places : Mapping[str, StopPlace]
+        Every station by ID, and the From under FROM_KEY.
+
+    Returns
+    -------
+    list[LaidWay]
+        The sides, each with the further ways whose first hop heads
+        closest to its own.
+    """
+    picks = [
+        closest(
+            places=places,
+            origin=FROM_KEY,
+            hop=other.hop,
+            choices=[side.hop for side in sides],
+        )
+        for other in others
+    ]
+    return [
+        LaidWay(hop=side.hop, hung=with_spurs(side=side.hung, others=[
+            other for other, pick in zip(others, picks) if pick == index
+        ]))
+        for index, side in enumerate(sides)
+    ]
+
+
 def lay_out(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
             ) -> Sides:
     """
     Lay the stations out either side of the From.
 
-    The two busiest ways out of the From are its two sides; the side with
-    more spur rows, then more stations, goes on top, listed against travel
-    order. A further way is a depth-1 spur at the From on the top side.
-    One way goes below.
+    The two busiest ways out of the From are its two sides. A further way
+    is a depth-1 spur at the From on the side whose first hop heads
+    closest to its own, or on the top side without positions. The side
+    with more spur rows, then more stations, goes on top, listed against
+    travel order. One way goes below.
 
     Parameters
     ----------
@@ -905,11 +943,17 @@ def lay_out(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
     if len(ways) < SIDES:
         below = side_rows(hung=ways[0].hung, above=False) if ways else []
         return Sides(above=(), below=tuple(below))
-    top, bottom = sorted(ways[:SIDES], key=lambda way: side_rank(
+    sides = hang_further(
+        sides=sorted(ways[:SIDES], key=lambda way: side_rank(
+            way=way, places=places,
+        )),
+        others=ways[SIDES:],
+        places=places,
+    )
+    top, bottom = sorted(sides, key=lambda way: side_rank(
         way=way, places=places,
     ))
-    hung = with_spurs(side=top.hung, others=ways[SIDES:])
     return Sides(
-        above=tuple(reversed(side_rows(hung=hung, above=True))),
+        above=tuple(reversed(side_rows(hung=top.hung, above=True))),
         below=tuple(side_rows(hung=bottom.hung, above=False)),
     )

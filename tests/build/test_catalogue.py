@@ -665,6 +665,25 @@ def test_towards_rows_merge_headsigns_differing_in_case(
     ]
 
 
+def test_replacement_towards_drop_stand_suffixes(tmp_path: Path) -> None:
+    """'Lidcombe Station: Stand C' reads 'Lidcombe Station', merged."""
+    with closing(tiny_db(path=tmp_path / 't.db', routes=[
+        RouteRow(
+            route_id='8a', number='8T6', long_name='Bankstown to Lidcombe',
+            route_type=714,
+            patterns=(
+                ('Lidcombe Station: Stand C', ('Bankstown', 'Lidcombe'), 5),
+                ('Lidcombe Station: The Crescent', ('Bankstown', 'L2'), 2),
+            ),
+        ),
+    ])) as conn:
+        load_catalogue(conn=conn)
+        rows = conn.execute(
+            'SELECT headsign, trips FROM chooser_towards',
+        ).fetchall()
+    assert rows == [('Lidcombe Station', 7)]
+
+
 def test_towards_rows_use_busiest_pattern(tmp_path: Path) -> None:
     """On the network feed, T1 towards W2 holds the six-trip pattern."""
     out = tmp_path / 'timetable.db'

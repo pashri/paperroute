@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 import numpy as np
+import pytest
 from numpy.typing import NDArray
 
 from paperroute.core.chooser import Choice, Level
@@ -162,7 +163,8 @@ def test_unfocused_selection_is_outlined() -> None:
     top = CHOOSER_TOP
     height = ROW_HEIGHTS[Level.GROUP]
     assert dark(frame=frame, box=(300, top, 700, top + 2)) == 1
-    assert dark(frame=frame, box=(300, top + height - 2, 700, top + height)) == 1
+    bottom = top + height
+    assert dark(frame=frame, box=(300, bottom - 2, 700, bottom)) == 1
     assert dark(frame=frame, box=(300, top + 4, 700, top + height - 4)) == 0
 
 
@@ -213,12 +215,10 @@ def test_long_route_names_fit() -> None:
     )
     top = CHOOSER_TOP + 8
     bottom = CHOOSER_TOP + ROW_HEIGHTS[Level.ROUTE] - 8
-    tag_left = int(
-        np.flatnonzero(
-            (frame[top:bottom, 500:WIDTH - 4] != plain[top:bottom, 500:WIDTH - 4]
-             ).any(axis=0),
-        )[0]
-    ) + 500
+    differs = (
+        frame[top:bottom, 500:WIDTH - 4] != plain[top:bottom, 500:WIDTH - 4]
+    ).any(axis=0)
+    tag_left = int(np.flatnonzero(differs)[0]) + 500
     name = frame[top:bottom, 80:tag_left - 4]
     assert (name == INK).any()
     assert tag_left < WIDTH - 20
@@ -262,13 +262,82 @@ def test_header_shows_title_and_trail() -> None:
     assert (frame[:CHOOSER_TOP, WIDTH - 200:] == PAPER).any()
 
 
-def test_each_level_draws_rows() -> None:
-    """Every level draws something under the header."""
-    for level in (Level.KIND, Level.ROUTE, Level.LINE, Level.TOWARDS):
-        items = (
-            Choice(key='a', label='Alpha', badge='T1', detail='4', tag='X'),
-            Choice(key='b', label='Beta', badge='T2', rule_above=True),
-        )
-        view = view_of(column(level=level, items=items, focused=False))
-        frame = draw_chooser_view(view=view)
-        assert dark(frame=frame, box=(0, CHOOSER_TOP + 2, WIDTH, 300)) > 0
+ROW_ITEMS: tuple[Choice, ...] = (
+    Choice(key='a', label='Alpha', badge='T1', detail='4', tag='X'),
+    Choice(key='b', label='Beta', badge='T2', rule_above=True),
+)
+
+
+@pytest.mark.parametrize(
+    ('level', 'x', 'row'),
+    [
+        (Level.KIND, 12, 0),
+        (Level.ROUTE, 12, 0),
+        (Level.LINE, 12, 0),
+    ],
+)
+def test_badge_box_is_ink_at_row_start(level: Level, x: int, row: int) -> None:
+    """Rows with a badge or letter start with a solid ink box."""
+    view = view_of(column(level=level, items=ROW_ITEMS, focused=False))
+    frame = draw_chooser_view(view=view)
+    top = CHOOSER_TOP + ROW_HEIGHTS[level] * (row + 1)
+    middle = top + ROW_HEIGHTS[level] // 2
+    assert frame[middle, x] == INK
+    assert frame[middle, x - 8] == PAPER
+
+
+def test_group_row_count_is_right_aligned() -> None:
+    """A group row's count sits at the column's right, its label left."""
+    view = view_of(groups(focused=False), FAILED_COLUMN)
+    frame = draw_chooser_view(view=view)
+    row = (CHOOSER_TOP + ROW_HEIGHTS[Level.GROUP] + 2,
+           CHOOSER_TOP + 2 * ROW_HEIGHTS[Level.GROUP] - 2)
+    right = COLUMN_WIDTHS[Level.GROUP]
+    assert dark(frame=frame, box=(right - 30, row[0], right - 8, row[1])) > 0
+    assert dark(frame=frame, box=(10, row[0], 60, row[1])) > 0
+
+
+def test_route_tag_is_outlined_at_right() -> None:
+    """A route's tag is a box at the right with paper inside."""
+    view = view_of(column(
+        level=Level.ROUTE, items=ROW_ITEMS[:1], focused=False,
+    ))
+    frame = draw_chooser_view(view=view)
+    middle = CHOOSER_TOP + ROW_HEIGHTS[Level.ROUTE] // 2
+    right = WIDTH - 10
+    assert frame[middle, right - 1] == INK
+    assert frame[middle, right - 3] == PAPER
+
+
+def test_line_rule_above_is_dotted() -> None:
+    """A rule above a line row is dotted: ink and paper alternate."""
+    view = view_of(column(
+        level=Level.LINE, items=ROW_ITEMS, focused=False,
+    ))
+    frame = draw_chooser_view(view=view)
+    rule = frame[CHOOSER_TOP + ROW_HEIGHTS[Level.LINE], 20:200]
+    assert (rule == INK).any()
+    assert (rule == PAPER).any()
+
+
+def test_towards_count_is_right_aligned() -> None:
+    """A towards row's count sits at the column's right edge."""
+    view = view_of(column(
+        level=Level.TOWARDS, items=ROW_ITEMS[:1], focused=False,
+    ))
+    frame = draw_chooser_view(view=view)
+    top = CHOOSER_TOP
+    box = (WIDTH - 40, top + 10, WIDTH - 10, top + 40)
+    assert dark(frame=frame, box=box) > 0
+
+
+def test_scroll_thumb_shows_over_a_focused_selection() -> None:
+    """The thumb is paper where it crosses an ink-filled selection."""
+    items = tuple(route_choice() for _ in range(5))
+    view = view_of(column(
+        level=Level.TOWARDS, items=items, focused=True, total=60,
+    ))
+    frame = draw_chooser_view(view=view)
+    row = (CHOOSER_TOP + 5, CHOOSER_TOP + 40)
+    assert dark(frame=frame, box=(WIDTH - 4, row[0], WIDTH, row[1])) == 0
+    assert dark(frame=frame, box=(WIDTH - 30, row[0], WIDTH - 6, row[1])) == 1

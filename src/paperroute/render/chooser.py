@@ -1,7 +1,6 @@
 """Draw the route chooser frames in ink and paper."""
 
-from collections.abc import Callable
-from typing import Final
+from typing import Final, Protocol
 
 import numpy as np
 from numpy.typing import NDArray
@@ -50,6 +49,7 @@ NOTE_FACE: Final[Face] = Face(weight=700, px=15)
 NOTE_Y: Final[int] = 200
 EMPTY_FACE: Final[Face] = Face(weight=700, px=20)
 EMPTY_Y: Final[int] = 260
+VISIBLE_HEIGHT: Final[int] = CHOOSER_BOTTOM - CHOOSER_TOP
 DOT_DASH: Final[tuple[float, float]] = (2, 3)
 
 Rect = tuple[int, int, int, int]
@@ -122,7 +122,7 @@ def chip(
     inverted : bool
         Whether the row is a focused selection.
     """
-    text_grey, fill = ink_for(inverted=not inverted)
+    fill, text_grey = (PAPER, INK) if inverted else (INK, PAPER)
     canvas.rect(box=box, grey=fill)
     shown = canvas.fit(text=text, face=face, width=box[2] - box[0] - 4)
     canvas.text(
@@ -357,7 +357,33 @@ def draw_towards(canvas: Canvas, *, row: Choice, box: Rect, inverted: bool,
     )
 
 
-RowDrawer = Callable[..., None]
+class RowDrawer(Protocol):
+    """Draws one row of a column."""
+
+    def __call__(
+        self,
+        canvas: Canvas,
+        *,
+        row: Choice,
+        box: Rect,
+        inverted: bool,
+    ) -> None:
+        """
+        Draw the row inside its box.
+
+        Parameters
+        ----------
+        canvas : Canvas
+            Target.
+        row : Choice
+            The row.
+        box : Rect
+            The row's box.
+        inverted : bool
+            Whether the row is a focused selection.
+        """
+
+
 DRAWERS: Final[dict[Level, RowDrawer]] = {
     Level.KIND: draw_kind,
     Level.GROUP: draw_group,
@@ -394,9 +420,11 @@ def mark_selection(canvas: Canvas, *, box: Rect, focused: bool) -> None:
         )
 
 
-def scroll_bar(canvas: Canvas, *, view: ColumnView, fits: int) -> None:
+def scroll_bar(canvas: Canvas, *, view: ColumnView) -> None:
     """
     Draw an ink thumb at the right edge when the rows overflow.
+
+    Where it crosses a focused selection it is drawn in paper.
 
     Parameters
     ----------
@@ -404,15 +432,24 @@ def scroll_bar(canvas: Canvas, *, view: ColumnView, fits: int) -> None:
         Target.
     view : ColumnView
         The column.
-    fits : int
-        Rows that fit.
     """
+    if view.level is None:
+        return
+    fits = VISIBLE_HEIGHT // ROW_HEIGHTS[view.level]
     if view.total <= fits:
         return
     track = CHOOSER_BOTTOM - CHOOSER_TOP
     size = max(THUMB_MIN, track * fits // view.total)
     top = CHOOSER_TOP + (track - size) * view.first // (view.total - fits)
-    canvas.rect(box=(WIDTH - THUMB_WIDTH, top, WIDTH, top + size), grey=INK)
+    left = WIDTH - THUMB_WIDTH
+    canvas.rect(box=(left, top, WIDTH, top + size), grey=INK)
+    if not view.focused:
+        return
+    height = ROW_HEIGHTS[view.level]
+    row_top = CHOOSER_TOP + view.selected * height
+    cut = (max(top, row_top), min(top + size, row_top + height))
+    if cut[0] < cut[1]:
+        canvas.rect(box=(left, cut[0], WIDTH, cut[1]), grey=PAPER)
 
 
 def draw_note(canvas: Canvas, *, text: str, edges: tuple[int, int]) -> None:
@@ -436,6 +473,42 @@ def draw_note(canvas: Canvas, *, text: str, edges: tuple[int, int]) -> None:
         grey=INK,
         anchor='mm',
     )
+
+
+def draw_rows(
+    canvas: Canvas,
+    *,
+    view: ColumnView,
+    level: Level,
+    left: int,
+    right: int,
+) -> None:
+    """
+    Draw a column's rows and mark its selection.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    view : ColumnView
+        The column.
+    level : Level
+        What it lists.
+    left : int
+        Left edge.
+    right : int
+        Right edge, short of the rule.
+    """
+    height = ROW_HEIGHTS[level]
+    for index, row in enumerate(view.items):
+        top = CHOOSER_TOP + index * height
+        box = (left, top, right, top + height)
+        selected = index == view.selected
+        if selected:
+            mark_selection(canvas, box=box, focused=view.focused)
+        DRAWERS[level](
+            canvas, row=row, box=box, inverted=selected and view.focused,
+        )
 
 
 def draw_column(
@@ -464,23 +537,12 @@ def draw_column(
     if view.note is not None:
         draw_note(canvas, text=view.note, edges=(left, inner))
     if view.level is not None:
-        height = ROW_HEIGHTS[view.level]
-        for index, row in enumerate(view.items):
-            top = CHOOSER_TOP + index * height
-            box = (left, top, inner, top + height)
-            selected = index == view.selected
-            if selected:
-                mark_selection(canvas, box=box, focused=view.focused)
-            DRAWERS[view.level](
-                canvas, row=row, box=box,
-                inverted=selected and view.focused,
-            )
-        if last:
-            scroll_bar(
-                canvas, view=view,
-                fits=(CHOOSER_BOTTOM - CHOOSER_TOP) // height,
-            )
-    if not last:
+        draw_rows(
+            canvas, view=view, level=view.level, left=left, right=inner,
+        )
+    if last:
+        scroll_bar(canvas, view=view)
+    else:
         canvas.rect(box=(inner, CHOOSER_TOP, right, HEIGHT), grey=INK)
 
 

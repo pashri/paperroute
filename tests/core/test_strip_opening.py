@@ -6,7 +6,7 @@ from typing import Final
 
 import pytest
 
-from paperroute.core.chooser import Stage, turned_to
+from paperroute.core.chooser import Stage, to_row, turned_to
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import (
     Knob,
@@ -198,7 +198,10 @@ def test_to_cursor_stops_on_a_closed_fold() -> None:
     """The TO cursor may rest on a closed fold, the last row here."""
     reach = folded(reach=fold_reach(origin='S2', at=0, size=12, quiet=4))
     chooser = turned_to(chooser=at_to(), steps=12, reach=reach)
-    assert reach.rows[chooser.to_cursor].kind is RowKind.FOLD
+    origin = origin_of(reach=reach)
+    assert origin is not None
+    row = to_row(chooser=chooser, reach=reach, origin=origin)
+    assert reach.rows[row].kind is RowKind.FOLD
 
 
 def mid_fold_reach(*, origin: str = 'C') -> Reach:

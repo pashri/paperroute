@@ -620,27 +620,24 @@ def merged_towards(
     )
 
 
-def towards_text(*, key: str, headsign: str) -> str:
+def towards_text(*, headsign: str) -> str:
     """
     Choose the text a towards row shows for a headsign.
 
     Parameters
     ----------
-    key : str
-        Row key.
     headsign : str
         Pattern headsign.
 
     Returns
     -------
     str
-        The headsign; for a replacement bus, without the stand or street
-        after a colon ('Lidcombe Station: Stand C' reads
-        'Lidcombe Station').
+        The headsign without the stand or street after a colon
+        ('Lidcombe Station: Stand C' reads 'Lidcombe Station'); whole
+        when nothing comes before the colon.
     """
-    if key.startswith(f'{RouteKind.REPLACEMENT}:'):
-        return headsign.partition(':')[0].strip()
-    return headsign
+    place = headsign.partition(':')[0].strip()
+    return place or headsign
 
 
 def towards_rows(*, conn: sqlite3.Connection) -> Iterator[tuple[object, ...]]:
@@ -656,11 +653,11 @@ def towards_rows(*, conn: sqlite3.Connection) -> Iterator[tuple[object, ...]]:
     ------
     tuple[object, ...]
         Row key, headsign, total trips and the busiest station sequence.
-        Replacement headsigns lose any text after a colon.
+        Headsigns lose any stand or street after a colon.
     """
     groups: dict[tuple[str, str], list[tuple[str, str, int]]] = {}
     for key, headsign, stations, trips in conn.execute(TOWARDS):
-        shown = towards_text(key=key, headsign=headsign)
+        shown = towards_text(headsign=headsign)
         groups.setdefault((key, shown.casefold()), []).append(
             (shown, stations, trips),
         )

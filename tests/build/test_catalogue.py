@@ -704,6 +704,21 @@ def test_replacement_towards_drop_stand_suffixes(tmp_path: Path) -> None:
     assert rows == [('Lidcombe Station', 7)]
 
 
+def test_bus_towards_drop_stand_suffixes(tmp_path: Path) -> None:
+    """A bus's 'Bankstown Central: Stand D' reads 'Bankstown Central'."""
+    with closing(tiny_db(path=tmp_path / 't.db', routes=[
+        RouteRow(route_id='r1', number='923', long_name='A to B', patterns=(
+            ('Bankstown Central: Stand D', ('A', 'B'), 4),
+            (': Stand E', ('B', 'A'), 2),
+        )),
+    ])) as conn:
+        load_catalogue(conn=conn)
+        rows = conn.execute(
+            'SELECT headsign, trips FROM chooser_towards ORDER BY headsign',
+        ).fetchall()
+    assert rows == [(': Stand E', 2), ('Bankstown Central', 4)]
+
+
 def test_towards_rows_use_busiest_pattern(tmp_path: Path) -> None:
     """On the network feed, T1 towards W2 holds the six-trip pattern."""
     out = tmp_path / 'timetable.db'

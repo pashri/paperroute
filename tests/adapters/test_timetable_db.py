@@ -8,7 +8,7 @@ import sqlite3
 import threading
 from collections.abc import Iterator
 from contextlib import closing
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Final
 
@@ -1171,6 +1171,26 @@ def test_old_schema_lists_the_whole_stop(
     assert len(old) > 7
 
 
+def require_real_monday() -> None:
+    """
+    Skip the test unless the real timetable covers Monday 19 October 2026.
+
+    The file must exist and hold the run tables.
+    """
+    if not REAL_DB.exists():
+        pytest.skip('no real timetable')
+    with closing(sqlite3.connect(REAL_DB)) as conn:
+        tables = conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'trip_next'",
+        ).fetchall()
+        meta = dict(conn.execute('SELECT key, value FROM meta').fetchall())
+    if not tables:
+        pytest.skip('real timetable has no run tables')
+    start = date.fromisoformat(meta['window_start'])
+    if not 0 <= (MONDAY - start).days < int(meta['window_days']):
+        pytest.skip('real timetable does not cover 19 October 2026')
+
+
 def real_809_stops() -> list[str]:
     """
     Find Merrylands Rd Near Bambil St in the real timetable.
@@ -1183,22 +1203,12 @@ def real_809_stops() -> list[str]:
     list[str]
         Stop IDs with that name.
     """
-    if not REAL_DB.exists():
-        pytest.skip('no real timetable')
+    require_real_monday()
     with closing(sqlite3.connect(REAL_DB)) as conn:
-        tables = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE name = 'trip_next'",
-        ).fetchall()
-        meta = dict(conn.execute('SELECT key, value FROM meta').fetchall())
         stops = conn.execute(
             'SELECT stop_id FROM stops WHERE name = ?',
             ('Merrylands Rd Near Bambil St',),
         ).fetchall()
-    if not tables:
-        pytest.skip('real timetable has no run tables')
-    start = date.fromisoformat(meta['window_start'])
-    if not 0 <= (MONDAY - start).days < int(meta['window_days']):
-        pytest.skip('real timetable does not cover 19 October 2026')
     return [str(stop) for stop, in stops]
 
 
@@ -1372,3 +1382,102 @@ def test_departures_at_the_same_time_sort_by_trip(
         ('ew1', 6),
         ('zz', 5),
     ]
+
+
+def test_train_pin_to_blacktown_parramatta_lists_only_trains() -> None:
+    """The 8:09 706 bus between the stations' stands is not listed."""
+    require_real_monday()
+    with closing(SqliteTimetableRepository(path=REAL_DB)) as repo:
+        pin = Pin(
+            origin=repo.stop(stop_id='214810'),
+            destination=repo.stop(stop_id='215020'),
+            kind=RouteKind.TRAIN,
+            routes=('T1',),
+        )
+        found = repo.departures(
+            pin=pin,
+            start=datetime(2026, 10, 19, 8, 0, tzinfo=SYDNEY),
+            end=datetime(2026, 10, 19, 8, 30, tzinfo=SYDNEY),
+        )
+    assert found
+    assert {d.facts.kind for d in found} == {RouteKind.TRAIN}
+    assert all(d.arrives - d.departs < timedelta(minutes=30) for d in found)
+
+
+def stand_feed(*, path: Path) -> Path:
+    """
+    Write stations P and Q, each with a platform and a bus stand.
+
+    Parameters
+    ----------
+    path : Path
+        Feed zip to write.
+
+    Returns
+    -------
+    Path
+        The feed: train `a` P_1 8:00 to Q_1 8:10, bus `b` P_B 8:02 to Q_B
+        8:50.
+    """
+    stops = [
+        {'stop_id': key, 'stop_name': f'{key} Station',
+         'location_type': '1', 'parent_station': '',
+         'stop_lat': lat, 'stop_lon': '151.0'}
+        for key, lat in (('P', '-33.8'), ('Q', '-33.9'))
+    ] + [
+        {'stop_id': f'{key}_{kind}', 'stop_name': f'{key} Station {kind}',
+         'location_type': '0', 'parent_station': key,
+         'stop_lat': lat, 'stop_lon': '151.0'}
+        for key, lat in (('P', '-33.8'), ('Q', '-33.9'))
+        for kind in ('1', 'B')
+    ]
+    return write_feed(
+        path=path,
+        files={
+            'stops.txt': stops,
+            'routes.txt': [
+                {'route_id': route, 'agency_id': 'SydneyTrains',
+                 'route_short_name': route, 'route_long_name': route,
+                 'route_type': kind}
+                for route, kind in (('T1', '2'), ('706', '700'))
+            ],
+            'calendar.txt': [{'service_id': 'daily', **DAILY}],
+            'trips.txt': [
+                {'route_id': route, 'service_id': 'daily', 'trip_id': trip,
+                 'trip_headsign': 'Q', 'direction_id': '0',
+                 'block_id': ''}
+                for trip, route in (('a', 'T1'), ('b', '706'))
+            ],
+            'stop_times.txt': [
+                *stop_times(trip='a', times=[('P_1', '08:00:00'),
+                                             ('Q_1', '08:10:00')]),
+                *stop_times(trip='b', times=[('P_B', '08:02:00'),
+                                             ('Q_B', '08:50:00')]),
+            ],
+        },
+    )
+
+
+def test_destination_keeps_the_pins_kind(tmp_path: Path) -> None:
+    """A Train pin to Q lists the train, not the bus between the stands."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[Source(
+            name='sydneytrains', archive=stand_feed(path=tmp_path / 'p.zip'),
+        )],
+    )
+    window = {'start': at(hour=8, minute=0), 'end': at(hour=9, minute=0)}
+    train = Pin(
+        origin=place('P'), destination=place('Q'), kind=RouteKind.TRAIN,
+    )
+    with closing(SqliteTimetableRepository(path=db)) as repo:
+        trains = repo.departures(pin=train, **window)
+        every = repo.departures(pin=pin_of('P', 'Q'), **window)
+        whole = repo.departures(pin=dataclasses.replace(
+            train, destination=None,
+        ), **window)
+    assert [d.trip_id for d in trains] == ['a']
+    assert [d.trip_id for d in every] == ['a', 'b']
+    assert [d.trip_id for d in whole] == ['a', 'b']

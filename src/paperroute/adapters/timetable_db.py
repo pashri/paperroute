@@ -36,6 +36,8 @@ from paperroute.core.model import (
     service_time,
 )
 from paperroute.core.patterns import PatternStop, TripPattern
+from paperroute.core.reach import StripKey
+from paperroute.core.strip_vehicles import strip_departures
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/timetable.db')
 CHUNK: Final[int] = 500
@@ -703,9 +705,10 @@ class SqliteTimetableRepository:
         Returns
         -------
         list[Departure]
-            In departure order, then trip ID. Without a Destination,
-            every departure from any platform of the From, each running
-            to its last stop.
+            In departure order, then trip ID. With a Destination, only
+            the pin's kind and routes, as on its strip: a station's bus
+            stands sit under it too. Without one, every departure from
+            any platform of the From, each running to its last stop.
         """
         destination = pin.destination
         first = start.astimezone(SYDNEY).date()
@@ -724,6 +727,15 @@ class SqliteTimetableRepository:
                 end=end,
             )
         ]
+        if destination is not None:
+            found = list(strip_departures(
+                departures=found,
+                key=StripKey(
+                    station=pin.origin.stop_id,
+                    kind=pin.kind,
+                    routes=pin.routes,
+                ),
+            ))
         return sorted(
             found,
             key=lambda departure: (departure.departs, departure.trip_id),

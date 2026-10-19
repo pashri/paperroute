@@ -35,7 +35,6 @@ class Fold:
     entry: int
 
 
-
 type FoldsKept = tuple[Reach, tuple[Fold, ...], list[list[int]]]
 type FoldedKey = tuple[int, frozenset[str], frozenset[str]]
 

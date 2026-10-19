@@ -132,7 +132,7 @@ def coverage_lonlat(*, box: MetreBox) -> tuple[float, float, float, float]:
     Raises
     ------
     ValueError
-        If the box lies wholly outside NSW.
+        If the box lies wholly outside NSW and its margin of sea.
     """
     west, south = to_lonlat(point=(box[0], box[1]))
     east, north = to_lonlat(point=(box[2], box[3]))

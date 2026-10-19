@@ -427,6 +427,23 @@ def test_hop_passed_on_a_few_trips_still_leaves_from() -> None:
     assert reach.rows[row_of(reach=reach, key='G1')].depth == 1
 
 
+def test_one_trip_passing_a_heavy_hop_does_not_merge_ways() -> None:
+    """One G trip runs on through R; too few, so G and R stay two sides."""
+    points: dict[str, Point] = {
+        'C': (0, 0), 'R': (1000, 0), 'R1': (2000, 0), 'R2': (3000, 0),
+        'G': (1000, 300), 'G1': (2000, 600),
+    }
+    reach = reach_of(tails=[
+        tail('R R1 R2', 20), tail('G G1', 9), tail('G R R1', 1),
+    ], points=points)
+    home = origin_row(reach=reach)
+    green = reach.rows[row_of(reach=reach, key='G')]
+    red = reach.rows[row_of(reach=reach, key='R')]
+    assert green.parent == home
+    assert red.parent == home
+    assert green.above != red.above
+
+
 def test_hops_passing_each_other_both_leave_from() -> None:
     """S0 and S2 each pass the other, so both lines still leave FROM."""
     points: dict[str, Point] = {
@@ -438,6 +455,8 @@ def test_hops_passing_each_other_both_leave_from() -> None:
     ], points=points)
     home = origin_row(reach=reach)
     assert reach.rows[row_of(reach=reach, key='S3')].parent != home
+    assert reach.rows[row_of(reach=reach, key='S0')].parent == home
+    assert reach.rows[row_of(reach=reach, key='S2')].parent == home
 
 
 def test_merge_checks_the_heading_of_the_hosts_way() -> None:
@@ -817,6 +836,7 @@ def test_blacktown_strip_opens_on_the_ride_to_parramatta() -> None:
     shown = [row.station for row in view.rows]
     assert BLACKTOWN in shown
     assert PARRAMATTA in shown
+    assert shown.index(PARRAMATTA) < shown.index(BLACKTOWN)
     assert all(
         row.ride
         for row in view.rows[shown.index(PARRAMATTA):shown.index(BLACKTOWN)]

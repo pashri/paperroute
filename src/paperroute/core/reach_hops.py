@@ -3,6 +3,7 @@
 import math
 from collections import Counter, defaultdict
 from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
 from typing import Final
 
 from paperroute.core.model import StopPlace
@@ -10,6 +11,23 @@ from paperroute.core.model import StopPlace
 END: Final[str] = ''  # stands for a tail stopping at its first hop
 
 type HopTrail = tuple[tuple[str, ...], int]
+
+
+@dataclass(frozen=True)
+class HopStats:
+    """
+    Trip counts of the first hops out of a strip's From.
+
+    Attributes
+    ----------
+    weight : Counter[str]
+        Trips leaving the From by first hop.
+    passed : Counter[tuple[str, str]]
+        Trips by passing and passed first hop (see passes).
+    """
+
+    weight: Counter[str]
+    passed: Counter[tuple[str, str]]
 
 
 def guests(*, trails: Sequence[HopTrail]) -> dict[str, set[str]]:
@@ -181,34 +199,64 @@ def closest(*, places: Mapping[str, StopPlace], origin: str, hop: str,
     ))
 
 
-def partners(*, trails: Sequence[HopTrail], places: Mapping[str, StopPlace],
-             origin: str, weight: Counter[str]) -> dict[str, list[str]]:
+def shared_line(*, stats: HopStats, light: str, heavy: str) -> bool:
+    """
+    Say whether two first hops pass each other often enough to share a way.
+
+    Parameters
+    ----------
+    stats : HopStats
+        Trip counts of the first hops.
+    light : str
+        The lighter first hop.
+    heavy : str
+        The heavier first hop.
+
+    Returns
+    -------
+    bool
+        True when their tails pass each other, both ways together, on more
+        than half the lighter hop's trips, but not when each passes the
+        other on most of its own trips.
+    """
+    trips = stats.passed[(light, heavy)] + stats.passed[(heavy, light)]
+    mutual = all(
+        2 * stats.passed[(passer, passed)] > stats.weight[passer]
+        for passer, passed in ((light, heavy), (heavy, light))
+    )
+    return 2 * trips > stats.weight[light] and not mutual
+
+
+def partners(*, stats: HopStats, places: Mapping[str, StopPlace],
+             origin: str) -> dict[str, list[str]]:
     """
     List, for each first hop, the heavier hops it rides with.
 
     Parameters
     ----------
-    trails : Sequence[HopTrail]
-        Stations after the From and trips.
+    stats : HopStats
+        Trip counts of the first hops.
     places : Mapping[str, StopPlace]
         Every station by ID, and the From.
     origin : str
         The From's key in places.
-    weight : Counter[str]
-        Trips by first hop.
 
     Returns
     -------
     dict[str, list[str]]
         Heavier first hops by first hop, heaviest first. Two hops ride
-        together when either one's tails pass the other and both head the
-        same way, whichever is the express.
+        together when they head the same way and either one's tails pass
+        the other on more than half the lighter hop's trips, counting
+        both ways together, whichever is the express; not when each
+        passes the other on most of its own trips.
     """
-    rank = {hop: (weight[hop], hop) for hop in weight}
+    rank = {hop: (stats.weight[hop], hop) for hop in stats.weight}
     found: dict[str, list[str]] = defaultdict(list)
-    for pair in passes(trails=trails, after=guests(trails=trails)):
-        light, heavy = sorted(pair, key=rank.__getitem__)
-        if light != heavy and same_heading(
+    for one, two in {tuple(sorted(pair)) for pair in stats.passed}:
+        light, heavy = sorted((one, two), key=rank.__getitem__)
+        if light != heavy and shared_line(
+            stats=stats, light=light, heavy=heavy,
+        ) and same_heading(
             places=places, origin=origin, host=heavy, guest=light,
         ):
             found[light].append(heavy)
@@ -218,21 +266,41 @@ def partners(*, trails: Sequence[HopTrail], places: Mapping[str, StopPlace],
     }
 
 
-def hop_ways(*, trails: Sequence[HopTrail],
-             places: Mapping[str, StopPlace], origin: str) -> dict[str, str]:
+def hop_stats(*, trails: Sequence[HopTrail]) -> HopStats:
     """
-    Put each first hop on the way of the hop whose line it rides.
-
-    Of two first hops heading the same way, where one hop's tails call
-    at the other and ride on to a station its tails reach (or where its
-    tails stop), the lighter joins the heavier's way, when that way's
-    own first hop heads the same way too: an express shares the
-    all-stops line's way, whichever is busier.
+    Count the trips on and between the first hops out of the From.
 
     Parameters
     ----------
     trails : Sequence[HopTrail]
         Stations after the From and trips; none empty.
+
+    Returns
+    -------
+    HopStats
+        The counts.
+    """
+    return HopStats(
+        weight=hop_weight(trails=trails),
+        passed=passes(trails=trails, after=guests(trails=trails)),
+    )
+
+
+def hop_ways(*, stats: HopStats, places: Mapping[str, StopPlace],
+             origin: str) -> dict[str, str]:
+    """
+    Put each first hop on the way of the hop whose line it rides.
+
+    Of two first hops heading the same way, where one hop's tails call
+    at the other and ride on to a station its tails reach (or where its
+    tails stop) on enough trips, the lighter joins the heavier's way,
+    when that way's own first hop heads the same way too: an express
+    shares the all-stops line's way, whichever is busier.
+
+    Parameters
+    ----------
+    stats : HopStats
+        Trip counts of the first hops.
     places : Mapping[str, StopPlace]
         Every station by ID, and the From.
     origin : str
@@ -243,10 +311,8 @@ def hop_ways(*, trails: Sequence[HopTrail],
     dict[str, str]
         Way (a first hop) by first hop.
     """
-    weight = hop_weight(trails=trails)
-    rides = partners(
-        trails=trails, places=places, origin=origin, weight=weight,
-    )
+    weight = stats.weight
+    rides = partners(stats=stats, places=places, origin=origin)
     order = sorted(weight, key=lambda hop: (weight[hop], hop), reverse=True)
     way: dict[str, str] = {}
     for hop in order:
@@ -263,15 +329,14 @@ def hop_ways(*, trails: Sequence[HopTrail],
     return way
 
 
-def drawn_through(*, trails: Sequence[HopTrail], way: Mapping[str, str]
-                  ) -> set[str]:
+def drawn_through(*, stats: HopStats, way: Mapping[str, str]) -> set[str]:
     """
     Find first hops to draw on the line of another hop of their way.
 
     Parameters
     ----------
-    trails : Sequence[HopTrail]
-        Stations after the From and trips; none empty.
+    stats : HopStats
+        Trip counts of the first hops.
     way : Mapping[str, str]
         Way by first hop.
 
@@ -281,13 +346,10 @@ def drawn_through(*, trails: Sequence[HopTrail], way: Mapping[str, str]
         First hops that another hop of the same way passes on most of its
         trips, as the all-stops line passes an express's first stop.
     """
-    weight = hop_weight(trails=trails)
     return {
         passed
-        for (passer, passed), trips in passes(
-            trails=trails, after=guests(trails=trails),
-        ).items()
+        for (passer, passed), trips in stats.passed.items()
         if passer != passed
         and way[passer] == way[passed]
-        and 2 * trips > weight[passer]
+        and 2 * trips > stats.weight[passer]
     }

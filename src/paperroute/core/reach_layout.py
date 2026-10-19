@@ -8,7 +8,12 @@ from itertools import groupby, pairwise
 from typing import Final
 
 from paperroute.core.model import StopPlace
-from paperroute.core.reach_hops import closest, drawn_through, hop_ways
+from paperroute.core.reach_hops import (
+    closest,
+    drawn_through,
+    hop_stats,
+    hop_ways,
+)
 
 FROM_KEY: Final[str] = ''  # stands for the From in a way's track graph
 SETTLE_PASSES: Final[int] = 50
@@ -758,9 +763,10 @@ def lay_ways(*, trails: Sequence[Trail], places: Mapping[str, StopPlace]
         Ways by trips, then by first hop. The first two have main chains
         at depth 0; the rest at depth 1.
     """
-    hops = hop_ways(trails=trails, places=places, origin=FROM_KEY)
+    stats = hop_stats(trails=trails)
+    hops = hop_ways(stats=stats, places=places, origin=FROM_KEY)
     ways = way_runs(trails=trails, owner=ways_of(trails=trails, hops=hops))
-    through = drawn_through(trails=trails, way=hops)
+    through = drawn_through(stats=stats, way=hops)
     order = sorted(ways, key=lambda way: (
         -sum(run.trips for run in ways[way]), way,
     ))

@@ -117,12 +117,12 @@ WHERE west <= :east AND east >= :west
   AND south <= :north AND north >= :south
 """
 STILL_AT_FROM: Final[str] = """
-  AND NOT EXISTS (SELECT 1 FROM stop_times p
-                  WHERE p.trip_id = o.trip_id AND p.pickup <> 1
-                    AND p.seq = (SELECT MAX(q.seq) FROM stop_times q
+  AND NOT EXISTS (SELECT 1 FROM stop_times n
+                  WHERE n.trip_id = o.trip_id AND n.pickup <> 1
+                    AND n.seq = (SELECT MIN(q.seq) FROM stop_times q
                                  WHERE q.trip_id = o.trip_id
-                                   AND q.seq < o.seq)
-                    AND p.stop_id IN (SELECT stop_id FROM stops
+                                   AND q.seq > o.seq)
+                    AND n.stop_id IN (SELECT stop_id FROM stops
                                       WHERE stop_id = :origin
                                         OR parent_station = :origin))
 """
@@ -721,8 +721,9 @@ class SqliteTimetableRepository:
             the pin's kind and routes, as on its strip: a station's bus
             stands sit under it too. Without one, every departure from
             any platform of the From, each running to its last stop. A
-            trip calling at the From twice in a row, such as a bus moving
-            between two stands, leaves once, from its first call there.
+            trip calling at the From several times in a row, such as a
+            bus moving between two stands, leaves once, from its last call
+            there that takes passengers on.
         """
         destination = pin.destination
         first = start.astimezone(SYDNEY).date()

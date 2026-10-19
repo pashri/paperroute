@@ -1612,7 +1612,11 @@ def test_empty_running_trips_are_never_listed(tmp_path: Path) -> None:
 def test_consecutive_calls_within_the_from_are_one_departure(
     tmp_path: Path,
 ) -> None:
-    """A trip moving between two platforms of the From leaves once."""
+    """A trip moving between two platforms of the From leaves once.
+
+    It is listed at its last call there, when it leaves the place; a
+    trip that comes back after another stop is listed at both visits.
+    """
     trips = [
         ('two', 'Q', [('P_1', '08:00:00'), ('P_2', '08:05:00'),
                       ('Q', '08:10:00')]),
@@ -1622,7 +1626,28 @@ def test_consecutive_calls_within_the_from_are_one_departure(
     with closing(platform_repo(tmp_path=tmp_path, trips=trips)) as repo:
         for destination in (None, 'Q'):
             assert p_departures(repo=repo, destination=destination) == [
-                ('two', at(hour=8, minute=0)),
+                ('two', at(hour=8, minute=5)),
                 ('loop', at(hour=8, minute=20)),
                 ('loop', at(hour=8, minute=40)),
+            ]
+
+
+def test_consecutive_calls_keep_the_last_with_pickup(
+    tmp_path: Path,
+) -> None:
+    """A later call at the From with no pickup leaves the earlier one."""
+    trips = [
+        ('two', 'Q', [('P_1', '08:00:00'), ('P_2', '08:05:00'),
+                      ('Q', '08:10:00')]),
+    ]
+    with closing(platform_repo(tmp_path=tmp_path, trips=trips)) as repo:
+        with closing(sqlite3.connect(tmp_path / 'timetable.db')) as conn:
+            conn.execute(
+                "UPDATE stop_times SET pickup = 1 "
+                "WHERE trip_id = 'two' AND stop_id = 'P_2'",
+            )
+            conn.commit()
+        for destination in (None, 'Q'):
+            assert p_departures(repo=repo, destination=destination) == [
+                ('two', at(hour=8, minute=0)),
             ]

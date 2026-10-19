@@ -1,4 +1,4 @@
-"""Open a strip's folds as they reach the screen; shut them on leaving."""
+"""Open a strip's end folds as they reach the screen; shut them on leaving."""
 
 from collections.abc import Callable
 from dataclasses import replace
@@ -75,7 +75,7 @@ def refolded(*, state: State) -> State:
 
 def fold_in(*, reach: Reach, first: int, rows: int) -> int | None:
     """
-    Find a closed fold among the rows on screen.
+    Find a closed fold at the very top or bottom among the rows on screen.
 
     Parameters
     ----------
@@ -89,13 +89,15 @@ def fold_in(*, reach: Reach, first: int, rows: int) -> int | None:
     Returns
     -------
     int | None
-        The first fold row on screen, or None.
+        The first or last row when it is a fold on screen, else None.
+        A fold with rows beyond it stays shut as it scrolls past.
     """
     return next(
         (
             index
-            for index in range(first, min(first + rows, len(reach.rows)))
-            if reach.rows[index].kind is RowKind.FOLD
+            for index in (0, len(reach.rows) - 1)
+            if first <= index < first + rows
+            and reach.rows[index].kind is RowKind.FOLD
         ),
         None,
     )

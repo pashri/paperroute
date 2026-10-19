@@ -105,7 +105,7 @@ class Column:
 
 
 UNPICKED: Final[frozenset[RowKind]] = frozenset(
-    {RowKind.APPROACH, RowKind.FOLD},
+    {RowKind.APPROACH},
 )  # strip rows the TO cursor never lands on
 
 
@@ -589,8 +589,8 @@ def to_row(*, chooser: ChooserState, reach: Reach, origin: int) -> int:
     Returns
     -------
     int
-        The cursor's row; the From row when the cursor is off the strip,
-        on an approach row or on a closed fold.
+        The cursor's row; the From row when the cursor is off the strip
+        or on an approach row.
     """
     target = origin + chooser.to_cursor
     on_strip = (
@@ -604,9 +604,9 @@ def turned_to(
     *, chooser: ChooserState, steps: int, reach: Reach | None,
 ) -> ChooserState:
     """
-    Move the TO cursor over the strip's stations, skipping some rows.
+    Move the TO cursor over the strip's rows, skipping approach rows.
 
-    The cursor never lands on an approach row or a closed fold.
+    It may stop on a closed fold, which a press opens.
 
     Parameters
     ----------
@@ -746,12 +746,15 @@ def pressed_to(
     -------
     tuple[ChooserState, Pin | None]
         The chooser and the chosen place: no Destination when the cursor
-        is on the From. No place while the strip is loading.
+        is on the From. No place while the strip is loading or with the
+        cursor on a closed fold, which the press opens instead.
     """
     origin = None if reach is None else origin_of(reach=reach)
     if reach is None or origin is None:
         return chooser, None
     row = reach.rows[to_row(chooser=chooser, reach=reach, origin=origin)]
+    if row.kind is RowKind.FOLD:
+        return chooser, None
     destination = None if row.kind is RowKind.ORIGIN else row.place
     return chooser, chosen_pin(chooser=chooser, destination=destination)
 

@@ -8,12 +8,24 @@ import pytest
 
 from paperroute.core.chooser import turned_to
 from paperroute.core.messages import Knob, KnobPressed, StripLoaded
-from paperroute.core.reach import Reach, ReachRow, RowKind
+from paperroute.core.reach import (
+    Reach,
+    ReachInput,
+    ReachRow,
+    RowKind,
+    RunTail,
+    build_reach,
+)
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import State
 from paperroute.core.strip_folds import FOLD_MIN, folded
 from paperroute.core.strip_model import StripMapView, StripView
-from paperroute.core.strip_view import build_strip_view, origin_of
+from paperroute.core.strip_view import (
+    build_strip_view,
+    home_of,
+    origin_of,
+    window_of,
+)
 from tests.core.chooser_walks import CHOSEN_KEY, DOWN, TO_STAGE, at_to
 from tests.core.factories import (
     START,
@@ -26,6 +38,7 @@ from tests.core.factories import (
 from tests.core.test_reach import (
     BLACKTOWN,
     REAL_DB,
+    STRATHFIELD,
     TOWN_HALL,
     has_runs,
     train_reach,
@@ -170,14 +183,82 @@ def test_leaving_the_strip_shuts_its_folds() -> None:
     assert RowKind.FOLD not in shown_kinds(state=state)
 
 
-def test_to_cursor_never_lands_on_a_closed_fold() -> None:
-    """The TO cursor steps over a closed fold to the station past it."""
+def test_to_cursor_stops_on_a_closed_fold() -> None:
+    """The TO cursor may rest on a closed fold, the last row here."""
     reach = folded(reach=fold_reach(origin='S2', at=0, size=12, quiet=4))
-    assert reach.rows[-1].kind is RowKind.FOLD
-    chooser = at_to()
-    for _ in range(12):
-        chooser = turned_to(chooser=chooser, steps=1, reach=reach)
-        assert reach.rows[chooser.to_cursor].kind is not RowKind.FOLD
+    chooser = turned_to(chooser=at_to(), steps=12, reach=reach)
+    assert reach.rows[chooser.to_cursor].kind is RowKind.FOLD
+
+
+def mid_fold_reach(*, origin: str = 'C') -> Reach:
+    """
+    Build a reach with a quiet spur part way down and a quiet far end.
+
+    Parameters
+    ----------
+    origin : str
+        The From's ID.
+
+    Returns
+    -------
+    Reach
+        The From, A1..A20 below it with spur Q1..Q4 at A3 and the far
+        end Z1..Z4 after A20; both quiet ends fold.
+    """
+    line = ' '.join(f'A{k}' for k in range(1, 21))
+    keys = {origin, *line.split(), 'Q1', 'Q2', 'Q3', 'Q4'} | {
+        f'Z{k}' for k in range(1, 5)
+    }
+    places = {key: place(key, name=key) for key in keys}
+    return build_reach(data=ReachInput(
+        origin=places[origin],
+        tails=(
+            RunTail(before=(), after=tuple(line.split()), trips=100),
+            RunTail(before=(), after=('A1', 'A2', 'A3', 'Q1', 'Q2', 'Q3',
+                                      'Q4'), trips=2),
+            RunTail(before=(), after=(*line.split(), 'Z1', 'Z2', 'Z3',
+                                      'Z4'), trips=2),
+        ),
+        places=places,
+        station_of={key: key for key in keys},
+    ))
+
+
+def test_a_fold_with_rows_beyond_stays_shut_when_scrolled_past() -> None:
+    """The spur fold stays shut on the Strip; the far end opens."""
+    pin = replace(PIN, destination=None)
+    state, _ = on_view(view=LiveView.STRIP, pin=pin)
+    state, _ = run(
+        state=state, events=[StripLoaded(key=KEY, reach=mid_fold_reach())],
+    )
+    seen = set()
+    for _ in range(30):
+        state, _ = run(state=state, events=[turn(steps=1)])
+        assert isinstance(state.last_view, StripView)
+        seen |= {row.name for row in state.last_view.rows}
+        assert 'Q1' not in state.strip.opened
+    assert 'Q1 … Q4 +4' in seen
+    assert state.strip.opened == {'Z1'}
+    assert names(state=state)[-1] == 'Z4'
+
+
+def test_press_on_a_fold_opens_it_without_picking() -> None:
+    """In the TO stage a press on a fold opens it, cursor on its first."""
+    state, _ = on_view(view=LiveView.STOP, pin=replace(PIN, kind=None))
+    state, _ = run(state=state, events=[
+        *TO_STAGE,
+        StripLoaded(key=CHOSEN_KEY, reach=mid_fold_reach(origin='S2')),
+        DOWN, DOWN, DOWN, DOWN,
+    ])
+    view = state.last_view
+    assert isinstance(view, StripView)
+    assert next(row for row in view.rows if row.cursor).kind is RowKind.FOLD
+    state, _ = run(state=state, events=[PRESS])
+    assert state.chooser is not None
+    assert state.strip.opened == {'Q1'}
+    view = state.last_view
+    assert isinstance(view, StripView)
+    assert next(row for row in view.rows if row.cursor).name == 'Q1'
 
 
 def test_to_stage_opens_folds_before_the_cursor_reaches_them() -> None:
@@ -203,7 +284,7 @@ def test_to_stage_opens_folds_before_the_cursor_reaches_them() -> None:
     reason='needs data/timetable.db with run tables',
 )
 def test_central_opens_with_the_quiet_far_ends_folded() -> None:
-    """Central's strip opens 128 rows above FROM, five far ends folded."""
+    """Central opens 128 rows above FROM; Strathfield is 50 turns up."""
     reach, _ = train_reach(station=CENTRAL)
     shown = folded(reach=reach)
     assert origin_of(reach=shown) == 128
@@ -211,6 +292,13 @@ def test_central_opens_with_the_quiet_far_ends_folded() -> None:
         'Lapstone … Bathurst +26'
     )
     assert sum(row.kind is RowKind.FOLD for row in shown.rows) == 5
+    home = home_of(
+        reach=shown, destination=None, rows=window_of(banner=False).rows,
+    )
+    turns = home - [row.place.stop_id for row in shown.rows].index(
+        STRATHFIELD,
+    )
+    assert turns == 50
 
 
 @pytest.mark.skipif(

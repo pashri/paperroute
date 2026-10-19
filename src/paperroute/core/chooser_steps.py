@@ -46,7 +46,7 @@ from paperroute.core.messages import (
 )
 from paperroute.core.model import Departure, Pin
 from paperroute.core.places import committed, feeds_of, shown
-from paperroute.core.reach import Reach
+from paperroute.core.reach import Reach, RowKind
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import State, load_window, runs_short
 from paperroute.core.stop_view import (
@@ -244,14 +244,74 @@ def chooser_pressed(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        The chooser moved on, or its place committed.
+        The chooser moved on, its place committed, or the closed fold
+        under the TO cursor opened.
     """
+    unfolded = fold_pressed(state=state, chooser=chooser)
+    if unfolded is not None:
+        return moved(state=unfolded, chooser=unfolded.chooser or chooser)
     after, outcome = pressed(
         chooser=chooser, reach=chooser_reach(chooser=chooser, state=state),
     )
     if isinstance(outcome, Pin):
         return commit(state=state, chooser=chooser, pin=outcome), ()
     return moved(state=state, chooser=after, request=outcome)
+
+
+def cursor_at(*, reach: Reach | None, key: str) -> int:
+    """
+    Give a station's row counted from the From row.
+
+    Parameters
+    ----------
+    reach : Reach | None
+        The strip as shown.
+    key : str
+        Station ID.
+
+    Returns
+    -------
+    int
+        The station's row less the From row; 0 when either is missing.
+    """
+    origin = None if reach is None else origin_of(reach=reach)
+    rows = [] if reach is None else [r.place.stop_id for r in reach.rows]
+    if origin is None or key not in rows:
+        return 0
+    return rows.index(key) - origin
+
+
+def fold_pressed(*, state: State, chooser: ChooserState) -> State | None:
+    """
+    Open the closed fold under the TO cursor.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    chooser : ChooserState
+        Its chooser.
+
+    Returns
+    -------
+    State | None
+        State with the fold open and the cursor on its first station, or
+        None when the cursor is not on a closed fold in the TO stage.
+    """
+    reach = chooser_reach(chooser=chooser, state=state)
+    row = to_cursor_row(chooser=chooser, reach=reach)
+    if chooser.stage is not Stage.TO or reach is None or row is None:
+        return None
+    fold = reach.rows[row]
+    if fold.kind is not RowKind.FOLD:
+        return None
+    key = fold.place.stop_id
+    shown_open = replace(state, strip=replace(
+        state.strip, opened=state.strip.opened | {key},
+    ))
+    return replace(shown_open, chooser=replace(chooser, to_cursor=cursor_at(
+        reach=chooser_reach(chooser=chooser, state=shown_open), key=key,
+    )))
 
 
 def chooser_knob(

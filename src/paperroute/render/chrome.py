@@ -357,6 +357,24 @@ def leaves(*, row: Row) -> str:
     return row.countdown if row.live else row.leaves_at
 
 
+def countdown_slot(*, row: Row) -> str:
+    """
+    Say what goes in a countdown slot beside the departure's clock time.
+
+    Parameters
+    ----------
+    row : Row
+        Departure.
+
+    Returns
+    -------
+    str
+        The countdown, or '' when it is a clock time (100 minutes or more
+        away), as the row already shows that time.
+    """
+    return '' if ':' in row.countdown else row.countdown
+
+
 def cancelled(*, row: Row) -> str:
     """
     Label a cancelled departure.

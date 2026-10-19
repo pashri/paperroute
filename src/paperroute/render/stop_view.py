@@ -17,6 +17,7 @@ from paperroute.render.chrome import (
     badge,
     banner,
     cancelled,
+    countdown_slot,
     leaves,
     pill,
     view_header,
@@ -272,7 +273,7 @@ def board_row(canvas: Canvas, *, row: Row, y: int) -> None:
         )
     else:
         canvas.text(
-            at=(786, y + 33), text=row.countdown,
+            at=(786, y + 33), text=countdown_slot(row=row),
             face=Face(weight=800, px=28), grey=INK, anchor='rs')
     if row.pill is Pill.FASTER:
         pill(

@@ -186,6 +186,16 @@ def test_no_destination_rows_draw_pills_and_every_countdown() -> None:
     assert (frame[top + 100 + 5:top + 100 + 38, 720:790] == INK).any()
 
 
+def test_no_destination_far_row_leaves_the_countdown_slot_empty() -> None:
+    """A board row 100+ minutes away shows its time once, at the left."""
+    far = replace(row(), countdown='9:51', leaves_at='9:51')
+    frame = draw_stop_view(
+        view=replace(BASE, destination=None, hero=None, rows=(far,)))
+    top = HEADER
+    assert (frame[top + 5:top + 38, 720:790] == PAPER).all()
+    assert (frame[top + 5:top + 38, 18:80] == INK).any()
+
+
 def test_a_real_tag_is_not_cut_under_a_short_headsign() -> None:
     """A short headsign leaves the tag room for its whole text."""
     then = CarryOn(route='811', headsign='Parramatta Stn')

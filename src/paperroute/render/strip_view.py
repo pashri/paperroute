@@ -20,6 +20,7 @@ from paperroute.render.chrome import (
     arrow,
     badge,
     banner,
+    countdown_slot,
     pill,
     view_header,
 )
@@ -82,9 +83,11 @@ def countdown_text(*, row: Row) -> str:
     Returns
     -------
     str
-        '<n> min' for a count of minutes, else the text as it is.
+        '<n> min' for a count of minutes, nothing for a departure 100
+        minutes or more away, else the text as it is.
     """
-    return f'{row.countdown} min' if row.countdown.isdigit() else row.countdown
+    slot = countdown_slot(row=row)
+    return f'{slot} min' if slot.isdigit() else slot
 
 
 def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> None:

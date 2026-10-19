@@ -921,6 +921,17 @@ def test_provision_retires_pin_after_installing_files() -> None:
     assert lines.index('retire_pin') > install
 
 
+def test_provision_refuses_before_m4_saved_the_pin() -> None:
+    """Provision stops before installing anything if state.json is missing."""
+    lines = script_text(path=BIN / 'provision-device').splitlines()
+    gate = lines.index(
+        "[[ ! -e $PIN_FILE || -e /var/lib/paperroute/state.json ]] ||"
+        " fail 'deploy M4 first so state.json holds the pin'"
+    )
+    assert gate < lines.index('copy_deploy')
+    assert gate < lines.index('/usr/local/sbin/paperroute-install-files')
+
+
 @pytest.mark.parametrize('mode', sorted(LED_PATTERNS))
 def test_led_sets_pattern(tmp_path: Path, mode: str) -> None:
     """Each mode writes its trigger, then its delays when it blinks."""

@@ -124,6 +124,7 @@ bad=$(find "$DIR" ! -user "$uid" -print -quit) || fail 'cannot read DIR'
 bad=$(find "$DIR" ! -type f ! -type d -print -quit) || fail 'cannot read DIR'
 [[ -z $bad ]] || fail 'DIR may hold only regular files and directories'
 [[ $EUID -eq 0 ]] || fail 'checks passed; provisioning needs root'
+[[ ! -e $PIN_FILE || -e /var/lib/paperroute/state.json ]] || fail 'deploy M4 first so state.json holds the pin'
 
 apt-get update
 apt-get install -y rsync curl sqlite3 avahi-daemon libegl1 libgl1

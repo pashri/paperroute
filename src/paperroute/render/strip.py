@@ -204,6 +204,9 @@ def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
     """
     Draw one row's cursor bar, station, name, time and tag.
 
+    The name starts at the row's `name_after` when that is further
+    right, past badges beside its disc.
+
     Parameters
     ----------
     canvas : Canvas
@@ -213,7 +216,7 @@ def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
     columns : Columns
         Where the strip's parts sit.
     """
-    left = columns.name_x + INDENT * row.depth
+    left: float = columns.name_x + INDENT * row.depth
     if row.cursor:
         canvas.rect(
             box=(left - CURSOR_INSET, row.y - CURSOR_HALF,
@@ -223,6 +226,7 @@ def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
     draw_station(canvas, row=row, x=columns.track_x + INDENT * row.depth)
     edge = draw_end(canvas, row=row, columns=columns)
     face = name_face(row=row)
+    left = max(left, row.name_after or left)
     canvas.text(
         at=(left, row.y + BASELINE_DROP),
         text=canvas.fit(text=row.name, face=face, width=edge - left),

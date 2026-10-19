@@ -1,6 +1,7 @@
 """Facts about the drawn Strip and Strip + map frames (no golden images)."""
 
 from dataclasses import replace
+from datetime import timedelta
 
 import numpy as np
 
@@ -28,6 +29,7 @@ from paperroute.core.strip_model import (
     StripRow,
     StripView,
 )
+from paperroute.core.strip_view import build_strip_view
 from paperroute.render.canvas import INK, PAPER, Canvas
 from paperroute.render.chrome import BANNER, HEADER
 from paperroute.render.markers import badge_box
@@ -39,6 +41,8 @@ from paperroute.render.strip_view import (
     paint_strip_view,
 )
 from paperroute.render.tile_codec import GREYS
+from tests.core.factories import START
+from tests.core.test_strip_view import east_inputs
 
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
 PANEL_TOP = 160
@@ -381,3 +385,43 @@ def test_line_badges_on_a_track_clear_its_names() -> None:
         for route in ('HUN', 'BMT', 'SCO', 'CCN', '+10'):
             right = badge_box(route=route, centre=(track_x, 0))[2]
             assert right < name_x, (route, track_x)
+
+
+def at_the_from(*, stale: bool) -> StripView:
+    """
+    Build the example strip with one train standing at its From, C.
+
+    Parameters
+    ----------
+    stale : bool
+        True for a vehicle last heard ten minutes ago.
+
+    Returns
+    -------
+    StripView
+        The view one minute after the train's 8:00 departure.
+    """
+    now = START + timedelta(minutes=1)
+    return build_strip_view(inputs=east_inputs(
+        at=(0.0, 0.0),
+        reported=now - timedelta(minutes=10 if stale else 0),
+        now=now,
+    ))
+
+
+def test_trains_at_the_from_leave_its_disc_and_name_whole() -> None:
+    """Live and stale trains at C draw on its row without touching either."""
+    for stale in (False, True):
+        view = at_the_from(stale=stale)
+        home = next(row for row in view.rows if row.bold)
+        (marker,) = view.markers
+        assert (marker.live, marker.age is not None) == (not stale, stale)
+        drawn = draw_strip_view(view=view)
+        bare = draw_strip_view(view=replace(view, markers=()))
+        y = int(home.y)
+        disc = (slice(y - 12, y + 13), slice(TRACK_X - 12, TRACK_X + 13))
+        assert np.array_equal(drawn[disc], bare[disc])
+        assert home.name_after is not None
+        name = (slice(y - 9, y + 10), slice(int(home.name_after), 300))
+        assert np.array_equal(drawn[name], bare[name])
+        assert (bare[name] == INK).any()

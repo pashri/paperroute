@@ -79,6 +79,9 @@ class StripRow:
         True for the From and the Destination.
     station : str
         The row's station ID.
+    name_after : float | None
+        The x the name starts at or right of, past badges beside the
+        row's disc; None for the usual place.
     """
 
     name: str
@@ -93,6 +96,7 @@ class StripRow:
     cursor: bool
     bold: bool
     station: str
+    name_after: float | None = None
 
 
 @dataclass(frozen=True)

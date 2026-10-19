@@ -7,7 +7,7 @@ from paperroute.core.map_view import Marker
 from paperroute.core.model import StopPlace
 from paperroute.core.reach import Reach, ReachRow, RowKind
 from paperroute.core.stop_view import DOT, clock_text
-from paperroute.core.strip_badges import Spot
+from paperroute.core.strip_badges import HALF_WIDE, NAME_REACH, Keepouts, Spot
 from paperroute.core.strip_model import (
     ALL_TAG,
     BANNER_ROWS,
@@ -628,8 +628,8 @@ def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
     Returns
     -------
     tuple[Marker, ...]
-        One badge per strip trip that can be placed, pushed apart and off
-        the From and Destination discs.
+        One badge per strip trip that can be placed, on its own hop and
+        off the names, the From and Destination discs and each other.
     """
     spots = {
         row.station: Spot(x=track_x + INDENT * row.depth, y=row.y)
@@ -637,12 +637,73 @@ def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
     }
     return vehicle_markers(
         trips=trips_of(inputs=inputs),
-        spots=spots,
-        discs=[
-            Spot(x=track_x + INDENT * row.depth, y=row.y)
-            for row in rows
-            if row.bold
-        ],
+        keep=Keepouts(
+            spots=spots,
+            discs=[spots[row.station] for row in rows if row.bold],
+            top=min((row.y for row in rows), default=0.0) - ROW_H / 2,
+        ),
+    )
+
+
+def names_clear(*, rows: Sequence[StripRow], markers: Sequence[Marker],
+                track_x: int) -> tuple[StripRow, ...]:
+    """
+    Start each row's name past the badges beside its disc.
+
+    Parameters
+    ----------
+    rows : Sequence[StripRow]
+        Visible rows.
+    markers : Sequence[Marker]
+        Their badges.
+    track_x : int
+        Track x at depth 0.
+
+    Returns
+    -------
+    tuple[StripRow, ...]
+        The rows; one with a badge level with it and right of its track
+        names where those badges end.
+    """
+    return tuple(
+        replace(row, name_after=max(
+            (
+                marker.x + HALF_WIDE
+                for marker in markers
+                if abs(marker.y - row.y) < NAME_REACH
+                and marker.x > track_x + INDENT * row.depth
+            ),
+            default=None,
+        ))
+        for row in rows
+    )
+
+
+def with_vehicles(*, inputs: StripInputs, rows: Sequence[StripRow],
+                  track_x: int
+                  ) -> tuple[tuple[StripRow, ...], tuple[Marker, ...]]:
+    """
+    Place the vehicles on the rows and keep the names clear of them.
+
+    Parameters
+    ----------
+    inputs : StripInputs
+        The view's inputs.
+    rows : Sequence[StripRow]
+        Visible rows.
+    track_x : int
+        Track x at depth 0.
+
+    Returns
+    -------
+    tuple[tuple[StripRow, ...], tuple[Marker, ...]]
+        The rows, names past any badges beside their discs, and the
+        badges.
+    """
+    markers = strip_markers(inputs=inputs, rows=rows, track_x=track_x)
+    return (
+        names_clear(rows=rows, markers=markers, track_x=track_x),
+        markers,
     )
 
 
@@ -740,6 +801,7 @@ def build_strip_view(*, inputs: StripInputs) -> StripView:
         ((), None) if reach is None else strip_rows(inputs=inputs, reach=reach)
     )
     stop = inputs.stop_view
+    rows, markers = with_vehicles(inputs=inputs, rows=rows, track_x=TRACK_X)
     return StripView(
         origin=stop.origin,
         destination=stop.destination,
@@ -748,7 +810,7 @@ def build_strip_view(*, inputs: StripInputs) -> StripView:
         picking=inputs.picking,
         rows=rows,
         band=band,
-        markers=strip_markers(inputs=inputs, rows=rows, track_x=TRACK_X),
+        markers=markers,
         panel=strip_panel(inputs=inputs),
         empty=empty_of(inputs=inputs),
         banner=stop.banner,
@@ -785,9 +847,7 @@ def build_strip_pane(*, inputs: StripInputs) -> StripPane:
         )
         for index in range(first, min(first + window.rows, len(reach.rows)))
     )
-    return StripPane(
-        rows=rows,
-        markers=strip_markers(
-            inputs=inputs, rows=rows, track_x=PANE_TRACK_X,
-        ),
+    rows, markers = with_vehicles(
+        inputs=inputs, rows=rows, track_x=PANE_TRACK_X,
     )
+    return StripPane(rows=rows, markers=markers)

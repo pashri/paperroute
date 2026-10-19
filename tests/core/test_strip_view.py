@@ -28,11 +28,12 @@ from paperroute.core.stop_view import (
     StopView,
     build_stop_view,
 )
-from paperroute.core.strip_badges import BADGE_STEP
+from paperroute.core.strip_badges import DISC_SPAN, HALF_WIDE
 from paperroute.core.strip_model import (
     LOADING,
     NEEDS_UPDATE,
     NO_STRIP,
+    PANE_TRACK_X,
     ROW_H,
     STRIP_TOP,
     TRACK_X,
@@ -748,7 +749,7 @@ def test_live_vehicle_heading_up_points_up() -> None:
     """A westbound train's wedge points up the strip."""
     now = START + timedelta(minutes=4)
     inputs = replace(
-        east_inputs(at=(0.0, 500.0), reported=now, now=now),
+        east_inputs(at=(0.0, 800.0), reported=now, now=now),
         departures=(live(item=train(minutes=3, trip_id='e')),),
         patterns={
             'e': line_pattern(trip_id='e', stations=WEST, minutes=3),
@@ -842,7 +843,7 @@ def test_vehicle_off_strip_not_drawn() -> None:
 
 def test_overlapping_badges_pushed_down() -> None:
     """Two trains at one spot are drawn 22 px apart, in y order."""
-    now = START + timedelta(minutes=1)
+    now = START + timedelta(minutes=4)
     inputs = east_inputs(at=None, reported=now, now=now)
     twin = live(item=train(minutes=0, trip_id='f'))
     inputs = replace(
@@ -860,7 +861,7 @@ def test_overlapping_badges_pushed_down() -> None:
 
 def test_crowded_hop_folds_into_a_count() -> None:
     """Six trains on one hop show one badge and a '+5' count."""
-    now = START + timedelta(minutes=1)
+    now = START + timedelta(minutes=4)
     trips = [f't{i}' for i in range(6)]
     inputs = inputs_of(
         reach=example_reach(),
@@ -972,18 +973,21 @@ def test_pane_markers_sit_on_the_pane_track() -> None:
     assert marker.x == 500
 
 
-def test_badge_at_the_from_clears_its_disc() -> None:
-    """A train standing at C sits a badge step off C's disc, both views."""
+def test_train_at_the_from_is_drawn_beside_its_disc() -> None:
+    """A train at C stays on C's row, right of its disc, name moved on."""
     now = START + timedelta(minutes=1)
     inputs = east_inputs(at=(0.0, 0.0), reported=now, now=now)
     view = build_strip_view(inputs=inputs)
     pane = build_strip_pane(inputs=inputs)
-    for rows, markers in (
-        (view.rows, view.markers), (pane.rows, pane.markers),
+    for rows, markers, track in (
+        (view.rows, view.markers, TRACK_X),
+        (pane.rows, pane.markers, PANE_TRACK_X),
     ):
         home = next(row for row in rows if row.bold)
         (marker,) = markers
-        assert abs(marker.y - home.y) == BADGE_STEP
+        assert marker.y == home.y
+        assert marker.x == track + DISC_SPAN
+        assert home.name_after == marker.x + HALF_WIDE
 
 
 def test_line_reach_has_no_origin_and_from_cursor_tag() -> None:

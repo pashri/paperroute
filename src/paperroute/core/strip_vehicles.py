@@ -1,6 +1,6 @@
 """Where a strip's vehicles are drawn."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping
 
 from paperroute.core.map_view import (
     Marker,
@@ -11,7 +11,7 @@ from paperroute.core.map_view import (
 from paperroute.core.model import Departure, service_seconds
 from paperroute.core.patterns import hop_at, hop_near
 from paperroute.core.positions import VehiclePosition
-from paperroute.core.strip_badges import Spot, pushed
+from paperroute.core.strip_badges import Badge, Keepouts, Spot, pushed
 from paperroute.core.strip_times import TripInputs, window_departures
 
 type Heard = Mapping[str, tuple[VehiclePosition, float]]
@@ -76,7 +76,7 @@ def trip_marker(
     trips: TripInputs,
     spots: Mapping[str, Spot],
     heard: Heard,
-) -> Marker | None:
+) -> Badge | None:
     """
     Place one trip's badge on the strip.
 
@@ -93,7 +93,7 @@ def trip_marker(
 
     Returns
     -------
-    Marker | None
+    Badge | None
         A solid badge at a fresh position's nearest hop, else a hollow one
         at the timetable hop; None without a pattern, a hop, or both of
         the hop's rows.
@@ -131,7 +131,7 @@ def hop_marker(
     fraction: float,
     age: float | None,
     live: bool,
-) -> Marker | None:
+) -> Badge | None:
     """
     Make a badge part way along a hop between two strip rows.
 
@@ -151,7 +151,7 @@ def hop_marker(
 
     Returns
     -------
-    Marker | None
+    Badge | None
         The badge on the later row's track, with a wedge down the strip
         when that row is lower and up otherwise, if live; None when either
         end of the hop is not a visible row.
@@ -161,19 +161,23 @@ def hop_marker(
     start, end = ends
     if start is None or end is None:
         return None
-    return Marker(
-        route=route,
-        x=end.x,
-        y=start.y + (end.y - start.y) * fraction,
-        bearing=(180.0 if end.y > start.y else 0.0) if live else None,
-        live=live,
-        pinned=True,
-        age=age,
+    return Badge(
+        marker=Marker(
+            route=route,
+            x=end.x,
+            y=start.y + (end.y - start.y) * fraction,
+            bearing=(180.0 if end.y > start.y else 0.0) if live else None,
+            live=live,
+            pinned=True,
+            age=age,
+        ),
+        low=min(start.y, end.y),
+        high=max(start.y, end.y),
     )
 
 
-def vehicle_markers(*, trips: TripInputs, spots: Mapping[str, Spot],
-                    discs: Sequence[Spot] = ()) -> tuple[Marker, ...]:
+def vehicle_markers(*, trips: TripInputs, keep: Keepouts
+                    ) -> tuple[Marker, ...]:
     """
     Place the strip's vehicles on its visible rows.
 
@@ -181,19 +185,18 @@ def vehicle_markers(*, trips: TripInputs, spots: Mapping[str, Spot],
     ----------
     trips : TripInputs
         The strip's departures and live data.
-    spots : Mapping[str, Spot]
-        Visible rows' track spots by station.
-    discs : Sequence[Spot]
-        The From and Destination discs on screen.
+    keep : Keepouts
+        The visible rows' spots, the discs and the top.
 
     Returns
     -------
     tuple[Marker, ...]
         One badge per strip trip in the window, not cancelled, that can
-        be placed, kept off the names and the discs and stacked at most
-        two high.
+        be placed, each on its own hop, kept off the names, the discs and
+        each other (see `pushed`).
     """
     key = trips.key
+    spots = keep.spots
     if key is None or not spots:
         return ()
     heard = heard_trips(trips=trips)
@@ -210,8 +213,9 @@ def vehicle_markers(*, trips: TripInputs, spots: Mapping[str, Spot],
         )
         for departure in departures
     )
-    return pushed(
-        markers=[each for each in placed if each is not None],
-        spots=spots,
-        discs=discs,
+    return tuple(
+        each.marker
+        for each in pushed(
+            badges=[each for each in placed if each is not None], keep=keep,
+        )
     )

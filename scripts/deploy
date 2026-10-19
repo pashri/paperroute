@@ -43,9 +43,11 @@ if [[ -f data/tiles.db ]]; then
         exit 1
     fi
     NUMBER='^(0|[1-9][0-9]*)$'
-    free=$(ssh -- "$host" df -Pk "$STAGE" | awk 'NR == 2 { print $4 }')
+    free=$(ssh -- "$host" df -Pk "$STAGE" | awk 'NR == 2 { print $4 }') \
+        || free=
     remote=$(ssh -- "$host" \
-        "stat -c '%s %Y' $STAGE/tiles/tiles.db 2>/dev/null || echo '0 0'")
+        "stat -c '%s %Y' $STAGE/tiles/tiles.db 2>/dev/null || echo '0 0'") \
+        || remote=
     staged_size=${remote%% *}
     staged_mtime=${remote##* }
     read -r size mtime < <(stat -f '%z %m' data/tiles.db)

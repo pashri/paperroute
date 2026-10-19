@@ -1460,6 +1460,14 @@ def test_deploy_checks_free_disk_before_tile_upload() -> None:
     assert 'not enough free disk on the Pi for the tiles' in text
 
 
+def test_deploy_reports_a_failed_tile_size_read() -> None:
+    """An ssh failure reading sizes reaches the number check's message."""
+    text = DEPLOY_SCRIPT.read_text(encoding='utf-8')
+    assert "{ print $4 }') \\\n        || free=\n" in text
+    assert "|| echo '0 0'\") \\\n        || remote=\n" in text
+    assert text.index('|| remote=') < text.index('=~ $NUMBER')
+
+
 def test_install_tiles_ignores_overrides_as_root() -> None:
     """The test overrides apply only when the caller isn't root."""
     assert (

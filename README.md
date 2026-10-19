@@ -59,8 +59,7 @@ unchanged". The Pi needs about 3 times the tiles file's size free while
 deploy installs it (about 1.4 GB), and deploy says so before copying when
 it doesn't.
 
-On the Map, press the bottom knob to switch between Stop and Map, and turn
-it to zoom. Hollow badges are timetable positions. A small "4m" tab means
+Press the bottom knob to switch views; on the Map, turn it to zoom. Hollow badges are timetable positions. A small "4m" tab means
 the bus was last heard 4 minutes ago.
 
 ## Install on the device
@@ -130,8 +129,8 @@ unplug the data cable.
 ### Pins and refresh
 
 Make pins with the route chooser on the device or on its web page, and hold
-to pin. On the web page, hold is the Hold button; on the device, hold the
-bottom knob's press button for about 0.8 s. The pins live in
+to pin. On the web page, hold is the Hold button, or the bottom knob's
+press button held for about 0.8 s. The pins live in
 `/var/lib/paperroute/state.json`. A new device starts on Town Hall's map.
 
 The timetable refreshes nightly at 03:30 Sydney time.

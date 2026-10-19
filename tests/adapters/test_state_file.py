@@ -185,6 +185,31 @@ def test_future_version_gives_defaults(
     assert caplog.records
 
 
+def test_unusable_file_is_kept_aside(path: Path) -> None:
+    """A newer file survives a load and a save under a ``.bad-`` name."""
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=sample())
+    data = json.loads(path.read_text())
+    data['schema_version'] = SCHEMA_VERSION + 1
+    path.write_text(json.dumps(data))
+    repository.save(saved=repository.load().saved)
+    kept = list(path.parent.glob('state.json.bad-*'))
+    assert len(kept) == 1
+    assert json.loads(kept[0].read_text()) == data
+
+
+def test_only_the_newest_unusable_files_are_kept(path: Path) -> None:
+    """Older ``.bad-`` files beyond the newest two are deleted."""
+    for stamp in ('100', '20', '3'):
+        path.with_name(f'state.json.bad-{stamp}').write_text('old')
+    path.write_text('not json')
+    JsonStateRepository(path=path).load()
+    kept = sorted(p.name for p in path.parent.glob('state.json.bad-*'))
+    assert len(kept) == 2
+    assert 'state.json.bad-100' in kept
+    assert not path.exists()
+
+
 def test_current_out_of_range_is_clamped(path: Path) -> None:
     """A current index past the last pin becomes the last pin."""
     repository = JsonStateRepository(path=path)

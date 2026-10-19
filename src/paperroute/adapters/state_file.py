@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import tempfile
+import time
 from collections.abc import Callable
 from pathlib import Path
 from typing import Final
@@ -24,6 +25,8 @@ MIGRATIONS: Final[
     dict[int, Callable[[dict[str, object]], dict[str, object]]]
 ] = {}
 TEMP_PREFIX: Final[str] = '.state.json.'
+BAD_PREFIX: Final[str] = 'state.json.bad-'
+BAD_KEPT: Final[int] = 2
 FILE_MODE: Final[int] = 0o644
 
 
@@ -314,6 +317,24 @@ def sync_directory(directory: Path) -> None:
         os.close(descriptor)
 
 
+def bad_stamp(path: Path) -> int:
+    """
+    Give the time a moved-aside file was moved.
+
+    Parameters
+    ----------
+    path : Path
+        A ``state.json.bad-<seconds>`` file.
+
+    Returns
+    -------
+    int
+        The seconds in its name; 0 when they aren't a number.
+    """
+    stamp = path.name.removeprefix(BAD_PREFIX)
+    return int(stamp) if stamp.isdecimal() else 0
+
+
 class JsonStateRepository:
     """
     The saved state in a JSON file.
@@ -379,7 +400,10 @@ class JsonStateRepository:
 
     def defaults_after_error(self) -> Loaded:
         """
-        Log the failure being handled and give the defaults.
+        Log the failure, move the file aside and give the defaults.
+
+        The file is renamed rather than left in place, so the first save
+        of the defaults doesn't destroy the pins it holds.
 
         Returns
         -------
@@ -387,4 +411,20 @@ class JsonStateRepository:
             The defaults, not stored.
         """
         logger.error('state.json unusable, using defaults', exc_info=True)
+        with contextlib.suppress(OSError):
+            self.path.replace(
+                self.path.with_name(f'{BAD_PREFIX}{int(time.time())}'),
+            )
+            self.remove_old_bad_files()
         return Loaded(saved=DEFAULT_SAVED, stored=False)
+
+    def remove_old_bad_files(self) -> None:
+        """Delete all but the newest `BAD_KEPT` moved-aside files."""
+        bad = sorted(
+            self.path.parent.glob(f'{BAD_PREFIX}*'),
+            key=bad_stamp,
+            reverse=True,
+        )
+        for old in bad[BAD_KEPT:]:
+            with contextlib.suppress(OSError):
+                old.unlink()

@@ -3,8 +3,10 @@
 from dataclasses import replace
 
 from paperroute.core.chooser import (
+    ChooserPath,
     ChooserRequest,
     ChooserState,
+    Column,
     ColumnRequest,
     DepartureLoad,
     Level,
@@ -57,6 +59,29 @@ def has_list_from(*, chooser: ChooserState) -> bool:
         cursor leaves the station or the TO column is left.
     """
     return chooser.stage is Stage.LISTS and chooser.origin is not None
+
+
+def suited(*, path: ChooserPath, column: Column | None) -> Column | None:
+    """
+    Check a loaded column against the path that asked for it.
+
+    Parameters
+    ----------
+    path : ChooserPath
+        Path the column follows.
+    column : Column | None
+        The column, or None.
+
+    Returns
+    -------
+    Column | None
+        The column; None for a station press's answer that is not a TO
+        column with rows, which would leave the From with nothing to pick.
+    """
+    pressed_for = bool(path) and path[-1][0] is Level.STATION
+    if column is None or not pressed_for:
+        return column
+    return column if column.level is Level.TO and column.items else None
 
 
 def pressed_station(

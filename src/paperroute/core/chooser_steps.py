@@ -22,6 +22,7 @@ from paperroute.core.chooser_station import (
     has_list_from,
     knob_backed,
     knob_pressed,
+    suited,
 )
 from paperroute.core.chooser_view import (
     ChooserView,
@@ -467,7 +468,8 @@ def replied(
     match event:
         case ColumnLoaded(path=path, column=column):
             return with_column(
-                chooser=chooser, path=path, column=column,
+                chooser=chooser, path=path,
+                column=suited(path=path, column=column),
                 absent=column is None,
             )
         case ColumnFailed(path=path):

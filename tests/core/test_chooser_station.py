@@ -13,6 +13,7 @@ from paperroute.core.chooser import (
     ChooserState,
     Column,
     ColumnRequest,
+    Failure,
     Level,
     focusable,
     pressed,
@@ -337,6 +338,34 @@ def test_missing_station_column_note(event: Event, note: str) -> None:
     view = state.last_view
     assert isinstance(view, ChooserView)
     assert view.columns[-1].note == note
+
+
+@pytest.mark.parametrize(
+    'answer_column',
+    [
+        Column(level=Level.ROUTE, items=()),
+        Column(level=Level.TO, items=()),
+        T1_STATIONS,
+    ],
+)
+def test_station_press_answered_without_to_rows_fails(
+    answer_column: Column,
+) -> None:
+    """A station press answered by anything but a TO column with rows."""
+    state, _ = run_events(
+        state=started(),
+        events=[
+            *TO_COLUMN[:-1],
+            ColumnLoaded(path=PENRITH_PATH, column=answer_column),
+        ],
+    )
+    chooser = state.chooser
+    assert chooser is not None
+    assert (chooser.waiting, chooser.failed) == (None, Failure.LOAD)
+    assert len(chooser.columns) == chooser.focus + 1
+    view = state.last_view
+    assert isinstance(view, ChooserView)
+    assert view.columns[-1].note == CANT_LOAD
 
 
 def test_station_turn_asks_no_preview() -> None:

@@ -290,8 +290,9 @@ def odd_trips() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """
     Trips of the undefined category Z35 that loading should drop.
 
-    'hidden' runs empty, 'short' stops only once and 'yard' is on a route
-    with no trip of a defined category.
+    'hidden' runs empty, 'short' stops only once, 'yard' is on a route
+    with no trip of a defined category and 'perth' stops at PER, outside
+    NSW. 'xpt', an A8, also stops at PER and is kept.
 
     Returns
     -------
@@ -304,14 +305,17 @@ def odd_trips() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
          'vehicle_category_id': 'Z35'}
         for trip, route, headsign in (
             ('hidden', 'r606', 'Empty Train'), ('short', 'r606', 'Parramatta'),
-            ('yard', 'rX', 'Parramatta'),
+            ('yard', 'rX', 'Parramatta'), ('perth', 'r606', 'Perth'),
         )
     ]
+    trips.append({**trips[-1], 'trip_id': 'xpt', 'vehicle_category_id': 'A8'})
     times = [('2145615', '09:00:00'), ('2150109', '09:30:00')]
     calls = [
         *stop_times(trip='hidden', times=times),
         *stop_times(trip='short', times=times, pickup_first='1'),
         *stop_times(trip='yard', times=times),
+        *stop_times(trip='perth', times=[*times, ('PER', '23:00:00')]),
+        *stop_times(trip='xpt', times=[*times, ('PER', '23:00:00')]),
     ]
     for call in calls[2:4]:
         call['drop_off_type'] = '1'
@@ -341,6 +345,10 @@ def categorised_bus(
     """
     files = bus_files()
     trips, calls = odd_trips()
+    files['stops.txt'] = [*files['stops.txt'], {
+        'stop_id': 'PER', 'stop_name': 'Perth Station', 'location_type': '0',
+        'parent_station': '', 'stop_lat': '-31.95', 'stop_lon': '115.86',
+    }]
     files['routes.txt'] = [
         *files['routes.txt'], {**files['routes.txt'][0], 'route_id': 'rX'},
     ]
@@ -365,18 +373,18 @@ def categorised_bus(
 def test_trips_of_undefined_vehicle_categories_are_dropped(
     tmp_path: Path, caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Empty, one-stop and non-revenue Z35 trips go; the excursion stays."""
+    """Empty, one-stop, non-revenue and interstate Z35 trips go."""
     with caplog.at_level(logging.INFO, logger='paperroute.build.timetable'):
         db = build_db(tmp_path=tmp_path, start=date(2026, 10, 16), days=1,
                       sources=categorised_bus(tmp_path=tmp_path,
                                               categories=['A8']))
     assert query(db=db, sql='SELECT trip_id FROM trips ORDER BY trip_id') == [
-        ('bus-0803',), ('bus-2510',),
+        ('bus-0803',), ('bus-2510',), ('xpt',),
     ]
     assert query(
         db=db, sql="SELECT COUNT(*) FROM stop_times WHERE trip_id = 'short'",
     ) == [(0,)]
-    assert any('dropped 3 bundle trips' in m for m in caplog.messages)
+    assert any('dropped 4 bundle trips' in m for m in caplog.messages)
 
 
 def test_trip_categories_are_kept_without_a_categories_file(
@@ -387,5 +395,6 @@ def test_trip_categories_are_kept_without_a_categories_file(
                   sources=categorised_bus(tmp_path=tmp_path,
                                           categories=None))
     assert query(db=db, sql='SELECT trip_id FROM trips ORDER BY trip_id') == [
-        ('bus-0803',), ('bus-2510',), ('hidden',), ('short',), ('yard',),
+        ('bus-0803',), ('bus-2510',), ('hidden',), ('perth',), ('short',),
+        ('xpt',), ('yard',),
     ]

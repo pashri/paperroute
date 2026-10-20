@@ -28,6 +28,7 @@ from paperroute.build.handoff import Handoff, HandoffRecord, hand_over
 from paperroute.build.shapes import load_shapes
 from paperroute.build.trainlink import trim_trainlink
 from paperroute.core.model import HIDDEN_HEADSIGNS, SYDNEY, Mode, mode_for
+from paperroute.core.tiles import NSW_BBOX
 from paperroute.rss import current_rss_mb, max_rss_mb
 
 logger = logging.getLogger(__name__)
@@ -35,9 +36,12 @@ logger = logging.getLogger(__name__)
 SCHEMA_VERSION: Final[str] = '4'
 CATEGORIES: Final[str] = 'vehicle_categories.txt'
 SHORT_SUSPECTS: Final[str] = """
-SELECT j.value FROM json_each(?) j
+SELECT j.value FROM json_each(:trips) j
 WHERE (SELECT COUNT(*) FROM stop_times st
   WHERE st.trip_id = j.value AND (st.pickup <> 1 OR st.dropoff <> 1)) < 2
+OR EXISTS (SELECT 1 FROM stop_times st JOIN stops s USING (stop_id)
+  WHERE st.trip_id = j.value AND (st.pickup <> 1 OR st.dropoff <> 1)
+  AND NOT (s.lon BETWEEN :west AND :east AND s.lat BETWEEN :south AND :north))
 """
 PLATFORM: Final[re.Pattern[str]] = re.compile(r'(?:Platform|Stand)\s+(\w+)$')
 SCHEMA: Final[str] = """
@@ -322,7 +326,7 @@ def trip_fate(
         KEEP for a trip of a defined or no category. For an undefined
         category: DROP on a route with no defined-category trip or with
         a hidden headsign, else CHECK, kept only if it has two stopping
-        calls.
+        calls and stops nowhere outside NSW.
     """
     if not undefined_category(row=row, categories=categories):
         return Fate.KEEP
@@ -414,7 +418,7 @@ def drop_short_suspects(
     *, conn: sqlite3.Connection, suspects: set[str],
 ) -> int:
     """
-    Drop suspect trips with fewer than two stopping calls.
+    Drop suspect trips with fewer than two stopping calls or leaving NSW.
 
     Parameters
     ----------
@@ -426,13 +430,16 @@ def drop_short_suspects(
     Returns
     -------
     int
-        Trips dropped.
+        Trips dropped: those with fewer than two stopping calls, or with
+        a stopping call outside NSW_BBOX.
     """
+    west, south, east, north = NSW_BBOX
     short = [
         trip_id
-        for (trip_id,) in conn.execute(SHORT_SUSPECTS, (
-            json.dumps(sorted(suspects)),
-        ))
+        for (trip_id,) in conn.execute(SHORT_SUSPECTS, {
+            'trips': json.dumps(sorted(suspects)), 'west': west,
+            'south': south, 'east': east, 'north': north,
+        })
     ]
     for table in ('stop_times', 'trips'):
         conn.execute(

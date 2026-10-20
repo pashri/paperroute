@@ -1,9 +1,12 @@
 """Tests for loading GTFS sources into SQLite."""
 
+import logging
 import sqlite3
 from contextlib import closing
 from datetime import date
 from pathlib import Path
+
+import pytest
 
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import SCHEMA_VERSION, Window, build_timetable
@@ -12,6 +15,7 @@ from tests.build.feeds import (
     build_db,
     bundle_rail_files,
     bus_feed,
+    bus_files,
     shape_rows,
     shaped_bus_feed,
     sydneytrains_feed,
@@ -279,3 +283,60 @@ def test_shared_shape_takes_the_lowest_route_type(tmp_path: Path) -> None:
                sources=[Source(name='bundle', archive=feed)])
     assert query(db=db, sql='SELECT shape_id, mode FROM shapes') == [
         ('bundle:S1', 'train')]
+
+
+def categorised_bus(
+    *, tmp_path: Path, categories: list[str] | None,
+) -> list[Source]:
+    """
+    Make the bus feed with one trip of each of two vehicle categories.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Directory for the zip.
+    categories : list[str] | None
+        Categories vehicle_categories.txt defines; None for no file.
+
+    Returns
+    -------
+    list[Source]
+        One bundle source.
+    """
+    files = bus_files()
+    files['trips.txt'] = [
+        {**row, 'vehicle_category_id': category}
+        for row, category in zip(files['trips.txt'], ('A8', 'Z35'))
+    ]
+    if categories is not None:
+        files['vehicle_categories.txt'] = [
+            {'vehicle_category_id': category,
+             'vehicle_category_name': category}
+            for category in categories
+        ]
+    archive = write_feed(path=tmp_path / 'b.zip', files=files)
+    return [Source(name='bundle', archive=archive)]
+
+
+def test_trips_of_undefined_vehicle_categories_are_dropped(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A trip of category Z35, which the feed does not define, goes."""
+    with caplog.at_level(logging.INFO, logger='paperroute.build.timetable'):
+        db = build_db(tmp_path=tmp_path, start=date(2026, 10, 16), days=1,
+                      sources=categorised_bus(tmp_path=tmp_path,
+                                              categories=['A8']))
+    assert query(db=db, sql='SELECT trip_id FROM trips') == [('bus-0803',)]
+    assert any('dropped 1 bundle trips' in m for m in caplog.messages)
+
+
+def test_trip_categories_are_kept_without_a_categories_file(
+    tmp_path: Path,
+) -> None:
+    """A feed that defines no categories keeps every trip."""
+    db = build_db(tmp_path=tmp_path, start=date(2026, 10, 16), days=1,
+                  sources=categorised_bus(tmp_path=tmp_path,
+                                          categories=None))
+    assert query(db=db, sql='SELECT trip_id FROM trips ORDER BY trip_id') == [
+        ('bus-0803',), ('bus-2510',),
+    ]

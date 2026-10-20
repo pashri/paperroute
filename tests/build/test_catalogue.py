@@ -759,7 +759,6 @@ def test_catalogue_writes_line_stations_for_station_first_lines(
     assert keys == {'train:T1', 'train:T2'}
 
 
-
 def test_train_lines_sort_sydney_then_intercity_then_trainlink() -> None:
     """T1-T9, then the intercity lines, then NRC, NRW, STH and WST."""
     rows = kind_rows(entries=[

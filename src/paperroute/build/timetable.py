@@ -1,9 +1,11 @@
 """Stream GTFS sources into a SQLite timetable."""
 
 import gc
+import logging
 import os
 import re
 import sqlite3
+import zipfile
 from collections.abc import Iterator
 from contextlib import closing
 from dataclasses import dataclass
@@ -26,7 +28,10 @@ from paperroute.build.trainlink import trim_trainlink
 from paperroute.core.model import SYDNEY, Mode, mode_for
 from paperroute.rss import current_rss_mb, max_rss_mb
 
+logger = logging.getLogger(__name__)
+
 SCHEMA_VERSION: Final[str] = '4'
+CATEGORIES: Final[str] = 'vehicle_categories.txt'
 PLATFORM: Final[re.Pattern[str]] = re.compile(r'(?:Platform|Stand)\s+(\w+)$')
 SCHEMA: Final[str] = """
 CREATE TABLE stops (stop_id TEXT PRIMARY KEY, name TEXT NOT NULL,
@@ -194,10 +199,88 @@ def load_services(*, conn: sqlite3.Connection, source: Source,
     return set(dates)
 
 
+def known_categories(*, archive: Path) -> frozenset[str] | None:
+    """
+    Read the vehicle categories a feed defines.
+
+    Parameters
+    ----------
+    archive : Path
+        GTFS zip.
+
+    Returns
+    -------
+    frozenset[str] | None
+        Category IDs from vehicle_categories.txt; None when the feed has
+        no such file.
+    """
+    with zipfile.ZipFile(archive) as feed:
+        if CATEGORIES not in feed.namelist():
+            return None
+    return frozenset(
+        row['vehicle_category_id']
+        for row in read_rows(archive=archive, member=CATEGORIES)
+    )
+
+
+def undefined_category(
+    *, row: dict[str, str], categories: frozenset[str] | None,
+) -> bool:
+    """
+    Tell whether a trip names a vehicle category its feed does not define.
+
+    Sydney Trains marks empty running, track and special trains this way.
+
+    Parameters
+    ----------
+    row : dict[str, str]
+        A trips.txt record.
+    categories : frozenset[str] | None
+        Categories the feed defines; None when it defines none.
+
+    Returns
+    -------
+    bool
+        True when the trip should be dropped.
+    """
+    category = row.get('vehicle_category_id')
+    return bool(category) and categories is not None and (
+        category not in categories
+    )
+
+
+def trip_row(*, row: dict[str, str], source: Source) -> tuple[object, ...]:
+    """
+    Turn a trips.txt record into a trips table row.
+
+    Parameters
+    ----------
+    row : dict[str, str]
+        A trips.txt record.
+    source : Source
+        Feed.
+
+    Returns
+    -------
+    tuple[object, ...]
+        Values of a trips row, IDs namespaced by the feed.
+    """
+    return (
+        row['trip_id'], f'{source.name}:{row["route_id"]}',
+        f'{source.name}:{row["service_id"]}',
+        row.get('trip_headsign', ''),
+        int(row['direction_id']) if row.get('direction_id') else None,
+        row.get('block_id') or None, None, source.name,
+        f'{source.name}:{row["shape_id"]}' if row.get('shape_id') else None,
+    )
+
+
 def load_trips(*, conn: sqlite3.Connection, source: Source,
                services: set[str]) -> set[str]:
     """
     Insert active trips not already present and return those inserted.
+
+    Trips naming a vehicle category the feed does not define are dropped.
 
     Parameters
     ----------
@@ -214,20 +297,23 @@ def load_trips(*, conn: sqlite3.Connection, source: Source,
         Trip IDs inserted from this source.
     """
     existing = {row[0] for row in conn.execute('SELECT trip_id FROM trips')}
-    rows = [(row['trip_id'], f'{source.name}:{row["route_id"]}',
-             f'{source.name}:{row["service_id"]}',
-             row.get('trip_headsign', ''),
-             int(row['direction_id']) if row.get('direction_id') else None,
-             row.get('block_id') or None, None, source.name,
-             f'{source.name}:{row["shape_id"]}' if row.get('shape_id')
-             else None)
-            for row in read_rows(archive=source.archive, member='trips.txt')
-            if row['service_id'] in services
-            and row['trip_id'] not in existing]
+    categories = known_categories(archive=source.archive)
+    rows: list[tuple[object, ...]] = []
+    dropped = 0
+    for row in read_rows(archive=source.archive, member='trips.txt'):
+        if row['service_id'] not in services or row['trip_id'] in existing:
+            continue
+        if undefined_category(row=row, categories=categories):
+            dropped += 1
+            continue
+        rows.append(trip_row(row=row, source=source))
+    if dropped:
+        logger.info('dropped %d %s trips of undefined vehicle categories',
+                    dropped, source.name)
     insert_many(conn=conn,
                 sql='INSERT INTO trips VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 rows=rows)
-    return {row[0] for row in rows}
+    return {str(row[0]) for row in rows}
 
 
 def shape_modes(*, conn: sqlite3.Connection,

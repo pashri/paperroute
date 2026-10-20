@@ -12,7 +12,7 @@ from operator import itemgetter
 from typing import Final
 
 from paperroute.build.gtfs_files import insert_many
-from paperroute.build.line_order import line_order
+from paperroute.build.line_stations import write_line_stations
 from paperroute.build.route_tags import CatalogueRoute, agency_towns, tags_of
 from paperroute.core.geo import Point, to_metres
 from paperroute.core.model import (
@@ -36,6 +36,8 @@ CREATE INDEX chooser_towards_route ON chooser_towards (route_key, trips);
 CREATE TABLE line_stations (line_key TEXT NOT NULL, pos INTEGER NOT NULL,
   station_id TEXT NOT NULL, head TEXT NOT NULL,
   PRIMARY KEY (line_key, pos)) WITHOUT ROWID;
+CREATE TABLE line_aliases (station_id TEXT PRIMARY KEY,
+  kept_id TEXT NOT NULL) WITHOUT ROWID;
 """
 REPLACEMENT: Final[re.Pattern[str]] = re.compile(
     r'^\d+[A-Z]?(T\d|BM|CN|HU|SC|SH)',
@@ -97,20 +99,6 @@ FROM route_patterns p JOIN temp.catalogue_keys k USING (route_id)
   JOIN chooser_routes c ON c.route_key = k.route_key
 GROUP BY k.route_key, p.headsign, p.stations
 ORDER BY k.route_key, p.headsign, p.stations
-"""
-LINE_PATTERNS: Final[str] = """
-SELECT k.route_key, p.stations, p.trips
-FROM route_patterns p JOIN temp.catalogue_keys k USING (route_id)
-  JOIN chooser_routes c ON c.route_key = k.route_key
-WHERE c.kind IN (SELECT value FROM json_each(?))
-ORDER BY k.route_key, p.route_id, p.headsign, p.stations
-"""
-LINE_LATITUDES: Final[str] = """
-SELECT DISTINCT s.stop_id, s.lat
-FROM route_patterns p JOIN temp.catalogue_keys k USING (route_id)
-  JOIN chooser_routes c ON c.route_key = k.route_key,
-  json_each(p.stations) j JOIN stops s ON s.stop_id = j.value
-WHERE c.kind IN (SELECT value FROM json_each(?)) AND s.lat IS NOT NULL
 """
 type Merge = tuple[RouteKind, str, str]
 type RouteRow = tuple[str, str, str, int, str, int, str, str, str]
@@ -714,46 +702,15 @@ def towards_rows(*, conn: sqlite3.Connection) -> Iterator[tuple[object, ...]]:
         yield key, *merged_towards(group=group)
 
 
-def line_station_rows(
-    *, conn: sqlite3.Connection,
-) -> Iterator[tuple[str, int, str, str]]:
-    """
-    Give the line_stations rows of every station-first line.
-
-    Parameters
-    ----------
-    conn : sqlite3.Connection
-        Timetable with chooser_routes written, whose temp.catalogue_keys
-        maps route IDs to row keys.
-
-    Yields
-    ------
-    tuple[str, int, str, str]
-        Line key, position from 0, station ID and head.
-    """
-    kinds = json.dumps(sorted(str(kind) for kind in LINE_KINDS))
-    latitude = dict(conn.execute(LINE_LATITUDES, (kinds,)))
-    for key, rows in groupby(
-        conn.execute(LINE_PATTERNS, (kinds,)), key=itemgetter(0),
-    ):
-        patterns = [
-            (json.loads(stations), trips)
-            for _, stations, trips in rows
-        ]
-        order = line_order(patterns=patterns, latitude=latitude)
-        for pos, (station, head) in enumerate(order):
-            yield key, pos, station, head
-
-
 def write_towards(
     *, conn: sqlite3.Connection, routes: Sequence[CatalogueRoute],
     sources: Sequence[RouteSource],
 ) -> None:
     """
-    Write the chooser_towards and line_stations rows.
+    Write the chooser_towards, line_stations and line_aliases rows.
 
     Every kept chooser row gets towards rows; every station-first line
-    gets its line_stations rows.
+    gets its station list.
 
     Parameters
     ----------
@@ -780,15 +737,17 @@ def write_towards(
         'INSERT INTO chooser_towards (route_key, headsign, trips, stations) '
         'VALUES (?, ?, ?, ?)'
     ))
-    insert_many(conn=conn, rows=line_station_rows(conn=conn), sql=(
-        'INSERT INTO line_stations VALUES (?, ?, ?, ?)'
-    ))
     conn.execute('DROP TABLE temp.catalogue_keys')
+    write_line_stations(conn=conn, keys={
+        source.route_id: rows[source.key]
+        for source in sources
+        if source.merge[0] in LINE_KINDS
+    })
 
 
 def load_catalogue(*, conn: sqlite3.Connection) -> int:
     """
-    Write the chooser_routes, chooser_towards and line_stations tables.
+    Write the chooser and line tables.
 
     Repeated Bus and School numbers are tagged; lines get one row each.
 

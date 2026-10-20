@@ -5,7 +5,9 @@ from collections import Counter
 from collections.abc import Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from itertools import pairwise
+from typing import Final
 
+RARE: Final[float] = 0.02  # of the busiest hop's trips
 type Pair = tuple[str, str]
 type Graph = dict[str, dict[str, int]]
 type Layout = dict[str, list[int]]
@@ -85,40 +87,68 @@ def layout_of(*, stations: Sequence[str]) -> Layout:
     return places
 
 
-def is_shortcut(*, pair: Pair, layouts: Sequence[Layout]) -> bool:
+def closest_gap(*, places: Layout, pair: Pair) -> int:
     """
-    Tell whether some pattern runs through stations between a hop's ends.
+    Measure how far apart a hop's ends sit in a pattern, at their closest.
+
+    Parameters
+    ----------
+    places : Layout
+        Station positions of a pattern holding both ends.
+    pair : Pair
+        Hop.
+
+    Returns
+    -------
+    int
+        The smallest index gap between any call at one end and any call
+        at the other.
+    """
+    first, second = pair
+    return min(
+        abs(left - right)
+        for left in places[first]
+        for right in places[second]
+    )
+
+
+def is_shortcut(
+    *, pair: Pair, layouts: Sequence[tuple[Layout, int]], floor: float,
+) -> bool:
+    """
+    Tell whether enough trips run through stations between a hop's ends.
 
     Parameters
     ----------
     pair : Pair
         Hop.
-    layouts : Sequence[Layout]
-        Station positions of every pattern.
+    layouts : Sequence[tuple[Layout, int]]
+        Station positions and trips of every pattern.
+    floor : float
+        Trips the patterns with stations between the ends must reach.
 
     Returns
     -------
     bool
-        True when a pattern holding both ends has a station between them
-        even where they sit closest. Measuring at the closest pair keeps
-        a loop's real hops, where a station also sits far from its
-        neighbours.
+        True when the patterns that hold both ends with a station between
+        them, even where they sit closest, carry at least ``floor`` trips.
+        Measuring at the closest pair keeps a loop's real hops, where a
+        station also sits far from its neighbours.
     """
     first, second = pair
-    return any(
-        min(
-            abs(left - right)
-            for left in places[first]
-            for right in places[second]
-        ) > 1
-        for places in layouts
-        if first in places and second in places
+    proving = sum(
+        trips
+        for places, trips in layouts
+        if first in places
+        and second in places
+        and closest_gap(places=places, pair=pair) > 1
     )
+    return proving >= floor
 
 
 def hop_graph(*, patterns: Sequence[tuple[Sequence[str], int]]) -> Graph:
     """
-    Join the stations by the hops trains make, express shortcuts dropped.
+    Join the stations by the hops trains make, rare and express hops dropped.
 
     Parameters
     ----------
@@ -128,17 +158,23 @@ def hop_graph(*, patterns: Sequence[tuple[Sequence[str], int]]) -> Graph:
     Returns
     -------
     Graph
-        Trips of each kept hop, by station and neighbour; every station
-        of the patterns is a key.
+        Trips of each kept hop, by station and neighbour. A hop is kept
+        when it carries at least RARE of the busiest hop's trips and is
+        no express shortcut; stations with no kept hop are left out.
     """
-    layouts = [layout_of(stations=stations) for stations, _ in patterns]
-    graph: Graph = {
-        station: {} for stations, _ in patterns for station in stations
-    }
-    for (first, second), count in hop_trips(patterns=patterns).items():
-        if not is_shortcut(pair=(first, second), layouts=layouts):
-            graph[first][second] = count
-            graph[second][first] = count
+    trips = hop_trips(patterns=patterns)
+    floor = RARE * max(trips.values(), default=0)
+    layouts = [
+        (layout_of(stations=stations), count)
+        for stations, count in patterns
+    ]
+    graph: Graph = {}
+    for (first, second), count in trips.items():
+        if count >= floor and not is_shortcut(
+            pair=(first, second), layouts=layouts, floor=floor,
+        ):
+            graph.setdefault(first, {})[second] = count
+            graph.setdefault(second, {})[first] = count
     return graph
 
 
@@ -245,6 +281,51 @@ def grow(*, walk: Walk, graph: Graph, top: str) -> None:
         path.append((step, busiest_first(graph=graph, station=step)))
 
 
+def spans_of(*, walk: Walk) -> dict[str, list[str]]:
+    """
+    Give the part of the walk that starts at each station.
+
+    Parameters
+    ----------
+    walk : Walk
+        Finished walk.
+
+    Returns
+    -------
+    dict[str, list[str]]
+        The station and every station walked from it, in walk order.
+    """
+    sizes: dict[str, int] = {}
+    for station in reversed(walk.order):
+        sizes[station] = 1 + sum(sizes[c] for c in walk.children[station])
+    return {
+        station: walk.order[index:index + sizes[station]]
+        for index, station in enumerate(walk.order)
+    }
+
+
+def furthest(*, walk: Walk, part: Sequence[str]) -> str:
+    """
+    Pick the station a part of the walk runs to.
+
+    Parameters
+    ----------
+    walk : Walk
+        Finished walk.
+    part : Sequence[str]
+        Stations of the part.
+
+    Returns
+    -------
+    str
+        The station most hops from the walk's top, then with the most
+        trips into it, then the smallest ID.
+    """
+    return min(part, key=lambda station: (
+        -walk.depth[station], -walk.trips_in[station], station,
+    ))
+
+
 def heads_of(*, walk: Walk) -> dict[str, str]:
     """
     Find the station each block runs to.
@@ -257,22 +338,24 @@ def heads_of(*, walk: Walk) -> dict[str, str]:
     Returns
     -------
     dict[str, str]
-        Head by block-opening station: each top heads itself, and where
-        the walk entered two or more ways from one station, each way's
-        first station gets the furthest station walked from it (by hops,
-        then by trips into it, then smallest ID).
+        Head by block-opening station. Each top heads itself. Where the
+        walk entered two or more ways from one station, each way's first
+        station gets the furthest station walked from it, except the
+        busiest way when the enclosing block's head lies down it: that
+        way carries on the enclosing block.
     """
-    sizes: dict[str, int] = {}
-    for station in reversed(walk.order):
-        sizes[station] = 1 + sum(sizes[c] for c in walk.children[station])
-    where = {station: index for index, station in enumerate(walk.order)}
+    parts = spans_of(walk=walk)
     heads = {top: top for top in walk.tops}
-    for ways in walk.children.values():
-        for way in ways if len(ways) > 1 else ():
-            part = walk.order[where[way]:where[way] + sizes[way]]
-            heads[way] = min(part, key=lambda station: (
-                -walk.depth[station], -walk.trips_in[station], station,
-            ))
+    block = dict(heads)
+    for station in walk.order:
+        ways = walk.children[station]
+        for way in ways:
+            block[way] = block[station]
+            if len(ways) < 2:
+                continue
+            if way == ways[0] and block[station] in parts[way]:
+                continue
+            heads[way] = block[way] = furthest(walk=walk, part=parts[way])
     return heads
 
 
@@ -285,7 +368,8 @@ def line_order(
     List a line's stations once each, a block per branch.
 
     The list starts at the northernmost terminus and walks the line,
-    taking the busier way first at each split. Stations the hops leave
+    taking the busier way first at each split. Stations reached only by
+    rare hops are left out (see hop_graph); stations the kept hops leave
     apart from the rest follow in their own walk.
 
     Parameters

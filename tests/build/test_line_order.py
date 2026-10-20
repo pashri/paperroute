@@ -10,7 +10,8 @@ from typing import Final
 import pytest
 
 from paperroute.build.catalogue import route_sources
-from paperroute.build.line_order import line_order
+from paperroute.build.line_order import hop_graph, line_order
+from paperroute.build.line_stations import line_inputs
 from paperroute.core.model import STATION_FIRST
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
@@ -19,10 +20,6 @@ BLACKTOWN: Final[str] = 'Blacktown Station'
 BLOCK_ENDS: Final[tuple[str, ...]] = (
     'Berowra Station', 'Emu Plains Station',
 )
-PATTERN_STOPS: Final[str] = """
-SELECT DISTINCT j.value FROM route_patterns p, json_each(p.stations) j
-WHERE p.route_id = ?
-"""
 
 
 def northward(*, stations: str) -> dict[str, float]:
@@ -139,6 +136,39 @@ def test_line_order_lists_a_separate_part_too() -> None:
     assert rows == [('A', 'A'), ('B', ''), ('X', 'X'), ('Y', '')]
 
 
+def test_line_order_drops_rare_hops() -> None:
+    """A hop under RARE of the busiest one goes, and its lone station."""
+    rows = order_of(
+        patterns=[('A B C', 100), ('B X', 1)],
+        latitude=northward(stations='A B C X'),
+    )
+    assert rows == [('A', 'A'), ('B', ''), ('C', '')]
+
+
+def test_line_order_keeps_a_hop_only_rare_trips_skip() -> None:
+    """A busy hop A-D stays when only rare trips call between A and D."""
+    rows = order_of(
+        patterns=[('A D', 100), ('A X D', 1)],
+        latitude=northward(stations='A X D'),
+    )
+    assert rows == [('A', 'A'), ('D', '')]
+
+
+def test_line_order_busiest_way_carries_on_the_enclosing_block() -> None:
+    """At J the way to E carries on the block heading E; Q1 opens one."""
+    rows = order_of(
+        patterns=[
+            ('N M A1 J P1 E', 500), ('N M B1 B2', 300),
+            ('N M A1 J Q1', 200),
+        ],
+        latitude=northward(stations='N M A1 B1 J B2 P1 Q1 E'),
+    )
+    assert rows == [
+        ('N', 'N'), ('M', ''), ('A1', 'E'), ('J', ''), ('P1', ''),
+        ('E', ''), ('Q1', 'Q1'), ('B1', 'B2'), ('B2', ''),
+    ]
+
+
 @pytest.fixture(name='real', scope='module')
 def real_fixture() -> Iterator[sqlite3.Connection]:
     """
@@ -163,7 +193,7 @@ def real_fixture() -> Iterator[sqlite3.Connection]:
 
 def line_stops(*, conn: sqlite3.Connection) -> dict[str, set[str]]:
     """
-    Gather the pattern stations of every station-first line.
+    Gather the stations on the kept hops of every station-first line.
 
     Parameters
     ----------
@@ -175,17 +205,16 @@ def line_stops(*, conn: sqlite3.Connection) -> dict[str, set[str]]:
     dict[str, set[str]]
         Station IDs by line key.
     """
-    found: dict[str, set[str]] = {}
-    for source in route_sources(conn=conn):
-        kind, number, _ = source.merge
-        if kind in STATION_FIRST:
-            found.setdefault(f'{kind}:{number}', set()).update(
-                station
-                for (station,) in conn.execute(
-                    PATTERN_STOPS, (source.route_id,),
-                )
-            )
-    return found
+    keys = {
+        source.route_id: f'{source.merge[0]}:{source.merge[1]}'
+        for source in route_sources(conn=conn)
+        if source.merge[0] in STATION_FIRST
+    }
+    inputs = line_inputs(conn=conn, keys=keys)
+    return {
+        key: set(hop_graph(patterns=patterns))
+        for key, patterns in inputs.patterns.items()
+    }
 
 
 def line_rows(
@@ -238,6 +267,7 @@ def test_real_lines_list_each_station_once(real: sqlite3.Connection) -> None:
     ):
         listed.setdefault(key, []).append(station)
     assert listed
+    assert set(listed) == {key for key, found in stops.items() if found}
     for key, stations in listed.items():
         assert len(stations) == len(set(stations)), key
         assert set(stations) == stops[key], key

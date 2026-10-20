@@ -77,7 +77,7 @@ def old_schema(*, path: Path) -> None:
         conn.commit()
 
 
-def schema_three(path: Path) -> None:
+def schema_three(*, path: Path) -> None:
     """
     Turn a built timetable back into a schema-3 file.
 

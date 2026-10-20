@@ -73,13 +73,13 @@ TRAIN_LINES: Final[Column] = Column(
     ),
 )
 T1_PLACES: Final[dict[str, StopPlace]] = {
-    stop_id: place(stop_id, name=name)
-    for stop_id, name in (
+    stop_id: place(stop_id, name=name, point=(150.0 + index / 10, -33.6))
+    for index, (stop_id, name) in enumerate((
         ('R1', 'Richmond'),
         ('R2', 'Riverstone'),
         ('E1', 'Emu Plains'),
         ('E2', 'Penrith'),
-    )
+    ))
 }
 
 

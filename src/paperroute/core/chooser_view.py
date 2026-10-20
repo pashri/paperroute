@@ -1,6 +1,6 @@
 """The route chooser screen's view-model: titles, trail and columns."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 from paperroute.core.chooser import (
@@ -8,6 +8,7 @@ from paperroute.core.chooser import (
     Choice,
     ChooserState,
     Column,
+    Failure,
     Level,
     Stage,
     chosen,
@@ -81,6 +82,7 @@ FAILED_COLUMN: Final[ColumnView] = ColumnView(
     level=None, items=(), selected=0, focused=False, first=0, total=0,
     note=CANT_LOAD,
 )
+ABSENT_COLUMN: Final[ColumnView] = replace(FAILED_COLUMN, note=NEEDS_UPDATE)
 
 
 @dataclass(frozen=True)
@@ -210,7 +212,8 @@ def column_views(*, chooser: ChooserState) -> tuple[ColumnView, ...]:
     -------
     tuple[ColumnView, ...]
         Columns left to right. A preview that failed to load shows as a
-        column with a note.
+        column with a note: the timetable-update text when the timetable
+        has no such column.
     """
     preview = preview_of(chooser=chooser)
     last = chooser.focus if preview is None else preview
@@ -224,7 +227,11 @@ def column_views(*, chooser: ChooserState) -> tuple[ColumnView, ...]:
         if not column.collapsed
     ]
     if chooser.failed and chooser.columns:
-        views.append(FAILED_COLUMN)
+        views.append(
+            ABSENT_COLUMN
+            if chooser.failed is Failure.ABSENT
+            else FAILED_COLUMN,
+        )
     return tuple(views[-SHOWN_COLUMNS:])
 
 

@@ -138,6 +138,13 @@ UNPICKED: Final[frozenset[RowKind]] = frozenset(
 )  # strip rows the TO cursor never lands on
 
 
+class Failure(StrEnum):
+    """Why the last column or line asked for is missing."""
+
+    LOAD = 'load'
+    ABSENT = 'absent'  # the timetable has no such column
+
+
 class Stage(StrEnum):
     """What the chooser is picking."""
 
@@ -242,15 +249,16 @@ class ChooserState:
     line_cursor : int
         Station picked in the FROM stage.
     origin : StopPlace | None
-        From chosen, in the TO stage.
+        From chosen, in the TO stage or after a station press.
     key : StripKey | None
         The TO stage's strip.
     to_cursor : int
         Rows from the From row to the TO stage's cursor; negative above.
     prefer : RouteKind | None
         Kind the KIND column's cursor starts on.
-    failed : bool
-        True when the last column or line asked for could not be loaded.
+    failed : Failure | None
+        Why the last column or line asked for is missing; None when it
+        is not.
     departures : tuple[Departure, ...]
         The TO stage's departures from the From.
     load : DepartureLoad
@@ -269,7 +277,7 @@ class ChooserState:
     key: StripKey | None = None
     to_cursor: int = 0
     prefer: RouteKind | None = None
-    failed: bool = False
+    failed: Failure | None = None
     departures: tuple[Departure, ...] = ()
     load: DepartureLoad = field(default_factory=DepartureLoad)
 
@@ -427,7 +435,7 @@ def previewed(
         columns=chooser.columns[:end],
         cursors=chooser.cursors[:end],
         waiting=None,
-        failed=False,
+        failed=None,
         origin=None,
         departures=(),
         load=DepartureLoad(),
@@ -475,23 +483,30 @@ def first_cursor(*, column: Column, prefer: RouteKind | None) -> int:
     -------
     int
         The preferred kind's row in the KIND column (Train's for a
-        replacement bus place), the From's row in a TO column, else the
-        first row a cursor may rest on; 0 when none is found.
+        replacement bus place) or the From's row in a TO column; failing
+        those, the first row a cursor may rest on, else 0.
     """
     wanted = RouteKind.TRAIN if prefer is RouteKind.REPLACEMENT else prefer
-    rows = enumerate(column.items)
     match column.level:
         case Level.KIND:
-            found = (index for index, row in rows if row.key == wanted)
+            first = [row.key == wanted for row in column.items]
         case Level.TO:
-            found = (index for index, row in rows if row.tag == ALL_TAG)
+            first = [row.tag == ALL_TAG for row in column.items]
         case _:
-            found = (index for index, row in rows if focusable(choice=row))
-    return next(found, 0)
+            first = []
+    resting = [focusable(choice=row) for row in column.items]
+    return next(
+        (index for index, hit in enumerate(first) if hit),
+        next((index for index, hit in enumerate(resting) if hit), 0),
+    )
 
 
 def with_column(
-    *, chooser: ChooserState, path: ChooserPath, column: Column | None,
+    *,
+    chooser: ChooserState,
+    path: ChooserPath,
+    column: Column | None,
+    absent: bool = False,
 ) -> tuple[ChooserState, ChooserRequest | None]:
     """
     Take in a loaded column.
@@ -504,6 +519,9 @@ def with_column(
         Path the column follows.
     column : Column | None
         The column, or None when it could not be loaded.
+    absent : bool
+        Whether a missing column is not in the timetable, rather than
+        failed to load.
 
     Returns
     -------
@@ -516,7 +534,8 @@ def with_column(
     if path != chooser.waiting:
         return chooser, None
     if column is None:
-        return replace(chooser, waiting=None, failed=True), None
+        failure = Failure.ABSENT if absent else Failure.LOAD
+        return replace(chooser, waiting=None, failed=failure), None
     index = len(path)
     collapsed = column.level in COLLAPSIBLE and len(column.items) == 1
     stored = replace(
@@ -572,7 +591,7 @@ def with_line(
     ):
         return chooser
     if line is None:
-        return replace(chooser, failed=True)
+        return replace(chooser, failed=Failure.LOAD)
     places: dict[str, StopPlace] = {}
     for place in line:
         places.setdefault(place.stop_id, place)
@@ -870,8 +889,8 @@ def backed_lists(*, chooser: ChooserState) -> ChooserState | None:
     Returns
     -------
     ChooserState | None
-        The chooser, the old focus now its preview; None from the first
-        column, which closes the chooser.
+        The chooser, the old focus now its preview, with no From; None
+        from the first column, which closes the chooser.
     """
     earlier = [
         index
@@ -887,7 +906,10 @@ def backed_lists(*, chooser: ChooserState) -> ChooserState | None:
         cursors=chooser.cursors[:end],
         focus=earlier[-1],
         waiting=None,
-        failed=False,
+        failed=None,
+        origin=None,
+        departures=(),
+        load=DepartureLoad(),
     )
 
 
@@ -911,7 +933,7 @@ def backed(*, chooser: ChooserState) -> ChooserState | None:
         case Stage.FROM:
             return replace(
                 chooser, stage=Stage.LISTS, towards=None, line=(),
-                line_cursor=0, failed=False,
+                line_cursor=0, failed=None,
             )
         case Stage.TO:
             return replace(

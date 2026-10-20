@@ -396,12 +396,15 @@ def from_matches(*, chooser: ChooserState, pin: Pin) -> bool:
     Returns
     -------
     bool
-        True in the TO stage, or in the lists after a station press, when
-        the From is the place's From.
+        True in the TO stage when the From is the place's From; in the
+        lists after a station press, when the place is the one picked so
+        far, line included.
     """
+    if has_list_from(chooser=chooser):
+        return pin == chosen_pin(chooser=chooser, destination=None)
     origin = chooser.origin
     return (
-        (chooser.stage is Stage.TO or has_list_from(chooser=chooser))
+        chooser.stage is Stage.TO
         and origin is not None
         and origin.stop_id == pin.origin.stop_id
     )
@@ -463,7 +466,10 @@ def replied(
     """
     match event:
         case ColumnLoaded(path=path, column=column):
-            return with_column(chooser=chooser, path=path, column=column)
+            return with_column(
+                chooser=chooser, path=path, column=column,
+                absent=column is None,
+            )
         case ColumnFailed(path=path):
             return with_column(chooser=chooser, path=path, column=None)
         case LineLoaded(towards=towards, line=line):

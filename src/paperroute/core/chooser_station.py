@@ -83,7 +83,7 @@ def pressed_station(
     if chooser.waiting == path:
         return chooser, None
     picked = replace(
-        chooser, origin=choice.place, waiting=path, failed=False,
+        chooser, origin=choice.place, waiting=path, failed=None,
         departures=(), load=DepartureLoad(),
     )
     return picked, ColumnRequest(path=path)

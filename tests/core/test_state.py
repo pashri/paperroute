@@ -1211,6 +1211,32 @@ def chooser_events(draw: st.DrawFn) -> Event:
 
 
 @st.composite
+def train_walk(draw: st.DrawFn) -> list[Event | Answer]:
+    """
+    The start of a walk to a T1 station and its TO column and back.
+
+    Parameters
+    ----------
+    draw : st.DrawFn
+        Hypothesis draw function.
+
+    Returns
+    -------
+    list[Event | Answer]
+        Knob events, and stand-ins for the replies, cut short at random.
+    """
+    ok = Answer(outcome=Outcome.EXPECTED, current=True, side=0)
+    up = KnobTurned(knob=Knob.BOTTOM, steps=-9)
+    walk: list[Event | Answer] = [
+        OPEN,
+        *(ok, ok, up, ok, DOWN, ok, NEXT, ok, NEXT),
+        KnobTurned(knob=Knob.BOTTOM, steps=draw(st.integers(0, 3))),
+        *(NEXT, ok, ok, DOWN, OPEN, OPEN, NEXT, ok),
+    ]
+    return walk[:draw(st.integers(1, len(walk)))]
+
+
+@st.composite
 def event_lists(
     draw: st.DrawFn, start: datetime
 ) -> list[Event | Answer]:
@@ -1243,6 +1269,7 @@ def event_lists(
         'strip',
         'quit',
         'walk',
+        'train',
         'answer',
         'answer',
         'chooser',
@@ -1288,6 +1315,8 @@ def event_lists(
                 *(ok, ok, DOWN, DOWN),
             ]
             events.extend(walk[:draw(st.integers(1, len(walk)))])
+        elif kind == 'train':
+            events.extend(draw(train_walk()))
         elif kind == 'answer':
             events.append(
                 Answer(
@@ -1389,6 +1418,7 @@ def check_chooser(
     chooser = after.chooser
     if chooser is not None:
         check_cursors(state=after, chooser=chooser)
+        check_list_from(chooser=chooser)
     commit = event == PRESS and after.chooser is None
     if before.chooser is not None and not commit:
         if not isinstance(event, PlacesMatched):
@@ -1405,6 +1435,26 @@ def check_chooser(
         assert chooser is not None and chooser.origin is not None
         assert chooser.stage is Stage.TO or chooser.stage is Stage.LISTS
         assert asked.pin.origin == chooser.origin
+
+
+def check_list_from(*, chooser: ChooserState) -> None:
+    """
+    Assert a From chosen in the lists is the pressed station's.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        An open chooser.
+    """
+    if chooser.stage is not Stage.LISTS or chooser.origin is None:
+        return
+    level = chooser.columns[chooser.focus].level
+    if level is Level.TO:
+        return
+    assert level is Level.STATION
+    pressed = chosen(chooser=chooser, index=chooser.focus)
+    assert pressed.key == chooser.origin.stop_id
+    assert chooser.waiting is not None or chooser.failed
 
 
 def check_cursors(*, state: State, chooser: ChooserState) -> None:

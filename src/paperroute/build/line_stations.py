@@ -1,17 +1,17 @@
-"""Write each station-first line's station list and station aliases."""
+"""Write each station-first line's stations, aliases and exits."""
 
 import json
 import math
 import sqlite3
 from collections import Counter
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from dataclasses import dataclass
 from itertools import groupby
 from operator import itemgetter
 from typing import Final
 
 from paperroute.build.gtfs_files import insert_many
-from paperroute.build.line_order import line_order
+from paperroute.build.line_order import line_exits, line_order
 from paperroute.build.runs import collapsed
 from paperroute.core.model import until_repeated_hop
 
@@ -31,7 +31,20 @@ SELECT stop_id, name, lat, lon FROM stops
 WHERE stop_id IN (SELECT value FROM json_each(?)) AND lat IS NOT NULL
   AND lon IS NOT NULL
 """
+LINE_MEMBERS: Final[str] = """
+SELECT line_key, station_id FROM line_stations
+UNION
+SELECT l.line_key, a.station_id FROM line_aliases a
+JOIN line_stations l ON l.station_id = a.kept_id
+"""
+KIND_PATTERNS: Final[str] = """
+SELECT DISTINCT c.kind, c.number, c.sort, p.stations
+FROM route_patterns p JOIN temp.catalogue_keys k USING (route_id)
+  JOIN chooser_routes c ON c.route_key = k.route_key
+WHERE c.kind IN (SELECT value FROM json_each(?))
+"""
 type Patterns = list[tuple[tuple[str, ...], int]]
+type Numbered = list[tuple[str, list[str]]]
 
 
 @dataclass(frozen=True)
@@ -225,4 +238,99 @@ def write_line_stations(
     ))
     insert_many(conn=conn, rows=sorted(inputs.aliases.items()), sql=(
         'INSERT INTO line_aliases VALUES (?, ?)'
+    ))
+
+
+def line_members(*, conn: sqlite3.Connection) -> dict[str, set[str]]:
+    """
+    Read every line's stations, with the stations merged into them.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable with line_stations and line_aliases written.
+
+    Returns
+    -------
+    dict[str, set[str]]
+        Station IDs by line key.
+    """
+    found: dict[str, set[str]] = {}
+    for key, station in conn.execute(LINE_MEMBERS):
+        found.setdefault(str(key), set()).add(str(station))
+    return found
+
+
+def kind_patterns(
+    *, conn: sqlite3.Connection, kinds: Iterable[str],
+) -> tuple[dict[str, Numbered], dict[str, dict[str, int]]]:
+    """
+    Read the route patterns of some kinds, with their route numbers.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable whose temp.catalogue_keys maps route IDs to row keys,
+        with chooser_routes written.
+    kinds : Iterable[str]
+        Route kinds.
+
+    Returns
+    -------
+    tuple[dict[str, Numbered], dict[str, dict[str, int]]]
+        Route number and stations of each pattern, and chooser order by
+        route number, both by kind.
+    """
+    patterns: dict[str, Numbered] = {}
+    sort: dict[str, dict[str, int]] = {}
+    rows = conn.execute(KIND_PATTERNS, (json.dumps(sorted(kinds)),))
+    for kind, number, rank, stations in rows:
+        patterns.setdefault(kind, []).append((number, json.loads(stations)))
+        sort.setdefault(kind, {})[number] = rank
+    return patterns, sort
+
+
+def line_exit_rows(
+    *, conn: sqlite3.Connection,
+) -> Iterator[tuple[str, str, str, str]]:
+    """
+    Give the line_exits rows of every line.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable with the line tables and chooser_routes written, and
+        temp.catalogue_keys still there.
+
+    Yields
+    ------
+    tuple[str, str, str, str]
+        Line key, station on the line, first station off it, and the
+        route numbers of the line's kind making that hop, space-separated.
+    """
+    members = line_members(conn=conn)
+    kinds = {key: key.partition(':')[0] for key in members}
+    patterns, sort = kind_patterns(conn=conn, kinds=set(kinds.values()))
+    for key in sorted(members):
+        found = line_exits(
+            line=members[key],
+            patterns=patterns.get(kinds[key], []),
+            sort=sort.get(kinds[key], {}),
+        )
+        for (station, off), numbers in sorted(found.items()):
+            yield key, station, off, ' '.join(numbers)
+
+
+def write_line_exits(*, conn: sqlite3.Connection) -> None:
+    """
+    Write the line_exits rows.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable with the line tables and chooser_routes written, and
+        temp.catalogue_keys still there.
+    """
+    insert_many(conn=conn, rows=line_exit_rows(conn=conn), sql=(
+        'INSERT INTO line_exits VALUES (?, ?, ?, ?)'
     ))

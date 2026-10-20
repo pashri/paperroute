@@ -81,8 +81,8 @@ def schema_three(*, path: Path) -> None:
     """
     Turn a built timetable back into a schema-3 file.
 
-    Only the line_stations and line_aliases tables are dropped, and the
-    schema version set to '3'.
+    Only the line_stations, line_aliases and line_exits tables are
+    dropped, and the schema version set to '3'.
 
     Parameters
     ----------
@@ -92,6 +92,7 @@ def schema_three(*, path: Path) -> None:
     with closing(sqlite3.connect(path)) as conn:
         conn.execute('DROP TABLE IF EXISTS line_stations')
         conn.execute('DROP TABLE IF EXISTS line_aliases')
+        conn.execute('DROP TABLE IF EXISTS line_exits')
         conn.execute(
             "UPDATE meta SET value = '3' WHERE key = 'schema_version'",
         )

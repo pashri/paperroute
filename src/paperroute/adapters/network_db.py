@@ -43,11 +43,17 @@ from paperroute.core.reach import (
     line_key_of,
     merge_tails,
 )
+from paperroute.core.reach_exits import found_exits
+from paperroute.core.reach_layout import LineExit
 
 NETWORK_TABLES: Final[tuple[str, ...]] = (
     'runs', 'run_stops', 'chooser_routes', 'chooser_towards',
 )
 LINE_TABLES: Final[tuple[str, ...]] = ('line_stations', 'line_aliases')
+EXIT_TABLES: Final[tuple[str, ...]] = ('line_exits',)
+LINE_EXITS: Final[str] = (
+    'SELECT station_id, off_id, lines FROM line_exits WHERE line_key = ?'
+)
 SCHEMA_CHECK: Final[str] = """
 SELECT COUNT(*) FROM sqlite_master
 WHERE type = 'table' AND name IN (SELECT value FROM json_each(?))
@@ -890,6 +896,49 @@ class SqliteNetworkRepository:
         rows = self.fetch(sql=ON_LINE, params={'line': line_key})
         return frozenset(str(station) for station, in rows)
 
+    def _exits_of(
+        self, *, key: StripKey, tails: Sequence[RunTail],
+        line: Collection[str], origin: str,
+    ) -> tuple[LineExit, ...]:
+        """
+        Find the ways the runs through a line strip's From leave its line.
+
+        Parameters
+        ----------
+        key : StripKey
+            Strip kind and routes.
+        tails : Sequence[RunTail]
+            Tails through the From, not cut to the line.
+        line : Collection[str]
+            The line's stations (see `_line_of`); empty for none.
+        origin : str
+            The From's station ID.
+
+        Returns
+        -------
+        tuple[LineExit, ...]
+            Exits by junction and off station, each with the lines the
+            file lists for its hop, or none; empty without a line or
+            without the line_exits table.
+        """
+        line_key = line_key_of(key=key)
+        if not line or line_key is None or not self._has_tables(
+            tables=EXIT_TABLES,
+        ):
+            return ()
+        rows = self.fetch(sql=LINE_EXITS, params=(line_key,))
+        named = {(str(at), str(off)): str(lines) for at, off, lines in rows}
+        found = found_exits(tails=tails, line=line, origin=origin)
+        return tuple(
+            LineExit(
+                junction=at,
+                off=off,
+                lines=tuple(named.get((at, off), '').split()),
+                trips=trips,
+            )
+            for (at, off), trips in sorted(found.items())
+        )
+
     def reach_input(
         self, *, key: StripKey, origin: StopPlace,
     ) -> ReachInput | None:
@@ -908,16 +957,18 @@ class SqliteNetworkRepository:
         ReachInput | None
             The From's station, its tails, their places and stops; None
             for an old file. A strip following a line has each tail cut
-            before its first station off the line (see `_line_of`).
+            before its first station off the line (see `_line_of`), and
+            the ways off it as exits.
         """
         if not self.has_network():
             return None
         station = self.station_for(stop_id=key.station)
         tails = self.tails(station=station, key=key)
         line = self._line_of(key=key)
+        exits = self._exits_of(key=key, tails=tails, line=line, origin=station)
         if line:
             tails = cut_to_line(tails=tails, line=line)
-        named = {station}.union(
+        named = {station, *(each.off for each in exits)}.union(
             *(tail.before + tail.after for tail in tails),
         )
         places = self.places(stations=named)
@@ -930,6 +981,7 @@ class SqliteNetworkRepository:
             tails=tails,
             places=places,
             station_of=self.station_of(stations=places),
+            exits=exits,
         )
 
     def close(self) -> None:

@@ -35,6 +35,8 @@ BAND_FACE: Final[Face] = Face(weight=700, px=13)
 BAND_INSET: Final[float] = 3.0  # pixels inside the row slot
 BAND_ARROW: Final[float] = 14.0  # arrow x from the band's left
 BAND_TEXT: Final[float] = 30.0  # text x from the band's left
+EXIT_FACE: Final[Face] = Face(weight=700, px=13)
+EXIT_ARROW: Final[float] = 16.0  # an exit arrow's width, gap included
 
 
 @dataclass(frozen=True)
@@ -60,12 +62,43 @@ class Columns:
     right: int
 
 
-def draw_track(canvas: Canvas, *, row: StripRow, track_x: int) -> None:
+def track_points(*, row: StripRow, parent_y: float, track_x: int
+                 ) -> list[tuple[float, float]]:
     """
-    Draw the track from a row's parent to the row.
+    Give the points of the track from a row's parent to the row.
 
     A change of depth bends half a row from the parent, then runs
-    straight down or up to the row.
+    straight down or up to the row. An exit's stub runs down or up its
+    junction's track to a quarter row short of the row, then
+    diagonally one indent right to the row.
+
+    Parameters
+    ----------
+    row : StripRow
+        The row.
+    parent_y : float
+        Its parent's centre line.
+    track_x : int
+        Track x at depth 0.
+
+    Returns
+    -------
+    list[tuple[float, float]]
+        Points from the parent to the row.
+    """
+    start = (track_x + INDENT * row.parent_depth, parent_y)
+    x = track_x + INDENT * row.depth
+    if row.kind is RowKind.EXIT:
+        knee = row.y - math.copysign(ROW_H / 4, row.y - parent_y)
+        return [start, (x, knee), (x + INDENT, row.y)]
+    bend = math.copysign(ROW_H / 2, row.y - parent_y)
+    elbow = [] if start[0] == x else [(x, parent_y + bend)]
+    return [start, *elbow, (x, row.y)]
+
+
+def draw_track(canvas: Canvas, *, row: StripRow, track_x: int) -> None:
+    """
+    Draw the track from a row's parent to the row (see `track_points`).
 
     Parameters
     ----------
@@ -78,12 +111,10 @@ def draw_track(canvas: Canvas, *, row: StripRow, track_x: int) -> None:
     """
     if row.parent_y is None:
         return
-    start = (track_x + INDENT * row.parent_depth, row.parent_y)
-    x = track_x + INDENT * row.depth
-    bend = math.copysign(ROW_H / 2, row.y - row.parent_y)
-    elbow = [] if start[0] == x else [(x, row.parent_y + bend)]
     canvas.line(
-        points=[start, *elbow, (x, row.y)],
+        points=track_points(
+            row=row, parent_y=row.parent_y, track_x=track_x,
+        ),
         width=RIDE_WIDTH if row.ride else TRACK_WIDTH,
         grey=INK,
     )
@@ -93,8 +124,8 @@ def draw_station(canvas: Canvas, *, row: StripRow, x: float) -> None:
     """
     Draw a row's station mark.
 
-    The From and Destination get a disc, a closed fold two rings, and
-    any other station a ring.
+    The From and Destination get a disc, a closed fold two rings, an
+    exit nothing, and any other station a ring.
 
     Parameters
     ----------
@@ -114,6 +145,8 @@ def draw_station(canvas: Canvas, *, row: StripRow, x: float) -> None:
         return
     if row.kind is RowKind.FOLD:
         draw_fold(canvas, y=row.y, x=x)
+        return
+    if row.kind is RowKind.EXIT:
         return
     box = (x - RING_RADIUS, row.y - RING_RADIUS,
            x + RING_RADIUS, row.y + RING_RADIUS)
@@ -234,6 +267,69 @@ def draw_end(canvas: Canvas, *, row: StripRow, columns: Columns) -> float:
     return edge
 
 
+def exit_arrow(canvas: Canvas, *, x: float, y: float, up: bool) -> float:
+    """
+    Draw an up-right or down-right arrow as shapes.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    x : float
+        Left end.
+    y : float
+        Centre line.
+    up : bool
+        Point up and right when True, down and right when False.
+
+    Returns
+    -------
+    float
+        Width used, the gap before the text included.
+    """
+    sign = -1 if up else 1
+    canvas.line(
+        points=[(x + 2, y - sign * 6), (x + 10, y + sign * 2)],
+        width=2,
+        grey=INK,
+    )
+    canvas.polygon(
+        points=[(x + 13, y + sign * 5), (x + 13, y - sign * 3),
+                (x + 5, y + sign * 5)],
+        grey=INK,
+    )
+    return EXIT_ARROW
+
+
+def name_start(canvas: Canvas, *, row: StripRow, columns: Columns
+               ) -> tuple[float, Face]:
+    """
+    Find where a row's name starts and its face, drawing an exit's arrow.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : StripRow
+        The row.
+    columns : Columns
+        Where the strip's parts sit.
+
+    Returns
+    -------
+    tuple[float, Face]
+        The name's x, at its `name_after` when that is further right,
+        and its face. An exit's arrow goes at its stub's name place, or
+        at its `name_after`, and its text after the arrow.
+    """
+    if row.kind is not RowKind.EXIT:
+        left = columns.name_x + INDENT * row.depth
+        return max(left, row.name_after or left), name_face(row=row)
+    x = max(columns.name_x + INDENT * (row.depth + 1), row.name_after or 0.0)
+    up = row.parent_y is not None and row.parent_y > row.y
+    return x + exit_arrow(canvas, x=x, y=row.y, up=up), EXIT_FACE
+
+
 def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
     """
     Draw one row's cursor bar, station, name, time and tag.
@@ -259,8 +355,7 @@ def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
         )
     draw_station(canvas, row=row, x=columns.track_x + INDENT * row.depth)
     edge = draw_end(canvas, row=row, columns=columns)
-    face = name_face(row=row)
-    left = max(left, row.name_after or left)
+    left, face = name_start(canvas, row=row, columns=columns)
     canvas.text(
         at=(left, row.y + BASELINE_DROP),
         text=canvas.fit(text=row.name, face=face, width=edge - left),

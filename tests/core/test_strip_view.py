@@ -1,16 +1,24 @@
 """Tests for the Strip and Strip + map view-models."""
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 import pytest
 
 from paperroute.core.map_view import Marker
 from paperroute.core.model import CarryOn, RouteKind, StopPlace
-from paperroute.core.reach import ReachInput, RowKind, build_reach
+from paperroute.core.reach import (
+    Reach,
+    ReachInput,
+    RowKind,
+    RunTail,
+    build_reach,
+)
+from paperroute.core.reach_layout import LineExit
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_badges import DISC_SPAN, HALF_WIDE
 from paperroute.core.strip_model import (
+    INDENT,
     LOADING,
     NEEDS_UPDATE,
     NO_STRIP,
@@ -703,3 +711,97 @@ def test_line_reach_has_no_origin_and_from_cursor_tag() -> None:
     assert view.panel.rows == ()
     assert view.panel.hint == 'Press: set FROM · top press: back'
     assert view.empty is None
+
+
+def exit_reach() -> Reach:
+    """
+    Build the reach R2 R1 W1 X0 J C E1 E2: X0 and W1 exits off J.
+
+    Returns
+    -------
+    Reach
+        The reach; W1 is taken by T1 trains, the busier X0 by T9 ones.
+    """
+    keys = ('C', 'J', 'R1', 'R2', 'W1', 'X0', 'E1', 'E2')
+    places = {
+        key: StopPlace(
+            stop_id=key, name=f'{key} Station', point=POINTS.get(key),
+        )
+        for key in keys
+    }
+    return build_reach(data=ReachInput(
+        origin=places['C'],
+        tails=(
+            RunTail(before=(), after=('J', 'R1', 'R2'), trips=6),
+            RunTail(before=(), after=('E1', 'E2'), trips=8),
+        ),
+        places=places,
+        station_of={key: key for key in keys},
+        exits=(
+            LineExit(junction='J', off='W1', lines=('T1',), trips=3),
+            LineExit(junction='J', off='X0', lines=('T9',), trips=5),
+        ),
+    ))
+
+
+def west_inputs(*, now: datetime) -> StripInputs:
+    """
+    Make inputs with one guessed train from C to W2 at 8:00.
+
+    Parameters
+    ----------
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    StripInputs
+        The inputs over `exit_reach`; the train reaches J at 8:03 and
+        W1 at 8:06.
+    """
+    return inputs_of(
+        reach=exit_reach(),
+        departures=[live(item=train(minutes=0, trip_id='w'))],
+        patterns={
+            'w': line_pattern(trip_id='w', stations=WEST, minutes=0),
+        },
+        now=now,
+    )
+
+
+def test_exit_rows_are_named_with_their_lines() -> None:
+    """Exit rows read '<off> · <lines>' with no time or bold."""
+    view = build_strip_view(inputs=west_inputs(now=START))
+    exits = [each for each in view.rows if each.kind is RowKind.EXIT]
+    assert [row.name for row in exits] == ['W1 · T1', 'X0 · T9']
+    assert {(row.time, row.tag, row.bold) for row in exits} == {
+        ('', '', False),
+    }
+
+
+def test_bound_vehicle_rides_the_exit_stub() -> None:
+    """J's track to the row before W1, then W1's stub, names past it."""
+    early, late = (
+        build_strip_view(inputs=west_inputs(
+            now=START + timedelta(minutes=3, seconds=seconds),
+        ))
+        for seconds in (45, 135)
+    )
+    junction = row_named(rows=late.rows, name='J')
+    stub = row_named(rows=late.rows, name='W1 · T1')
+    (riding,) = early.markers
+    (marker,) = late.markers
+    assert riding.x == TRACK_X
+    assert junction.y - ROW_H < riding.y < junction.y
+    assert marker.x == TRACK_X + INDENT * (junction.depth + 1)
+    assert stub.y < marker.y < stub.y + ROW_H
+    for row in late.rows:
+        if abs(row.y - marker.y) < ROW_H / 2:
+            assert row.name_after is not None
+            assert row.name_after >= marker.x + HALF_WIDE
+
+
+def test_vehicle_past_the_exit_station_is_gone() -> None:
+    """Once the train reaches W1 it leaves the strip."""
+    now = START + timedelta(minutes=7)
+    assert build_strip_view(inputs=west_inputs(now=now)).markers == ()

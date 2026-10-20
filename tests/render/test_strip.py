@@ -214,6 +214,105 @@ def test_fold_row_is_a_double_ring() -> None:
     assert frame[y, TRACK_X + 11] == PAPER
 
 
+def exit_row(*, y: float, parent_y: float) -> StripRow:
+    """
+    Make a depth-0 exit row.
+
+    Parameters
+    ----------
+    y : float
+        Row centre.
+    parent_y : float
+        Its junction's row centre.
+
+    Returns
+    -------
+    StripRow
+        The row, named 'Berala · T3'.
+    """
+    return replace(
+        strip_row(y=y, parent_y=parent_y, name='Berala · T3'),
+        kind=RowKind.EXIT,
+    )
+
+
+def ink_in(*, frame: NDArray[np.uint8], left: float, top: float,
+           size: float) -> int:
+    """
+    Count the ink pixels in a square.
+
+    Parameters
+    ----------
+    frame : NDArray[np.uint8]
+        Pixels.
+    left : float
+        Left edge.
+    top : float
+        Top edge.
+    size : float
+        Side.
+
+    Returns
+    -------
+    int
+        Ink pixels.
+    """
+    box = frame[int(top):int(top + size), int(left):int(left + size)]
+    return int(np.count_nonzero(box < 128))
+
+
+def test_exit_row_draws_a_stub_and_no_ring() -> None:
+    """The stub runs from J's track diagonally to its end, ringless."""
+    y = FROM_Y + ROW_H
+    frame = drawn(rows=(
+        strip_row(y=FROM_Y, name='J'), exit_row(y=y, parent_y=FROM_Y),
+    ))
+    end = TRACK_X + INDENT
+    assert TRACK_X in ink_columns(frame=frame, y=y - 12, left=0, right=60)
+    middle = ink_columns(frame=frame, y=y - 4, left=0, right=60)
+    assert any(TRACK_X < x < end for x in middle)
+    assert any(
+        end - 2 <= x <= end + 1
+        for x in ink_columns(frame=frame, y=y, left=0, right=60)
+    )
+    assert frame[int(y) - 6, end] == PAPER
+    assert frame[int(y), end + 6] == PAPER
+    assert frame[int(y) + 6, end] == PAPER
+
+
+def test_exit_arrow_points_away_from_the_junction() -> None:
+    """Below its junction the arrow points down-right; above, up-right."""
+    arrow_x = NAME_X + INDENT
+    below = drawn(rows=(
+        strip_row(y=FROM_Y, name='J'),
+        exit_row(y=FROM_Y + ROW_H, parent_y=FROM_Y),
+    ))
+    above = drawn(rows=(
+        strip_row(y=FROM_Y, name='J'),
+        exit_row(y=FROM_Y - ROW_H, parent_y=FROM_Y),
+    ))
+    for frame, y, down in (
+        (below, FROM_Y + ROW_H, True), (above, FROM_Y - ROW_H, False),
+    ):
+        upper = ink_in(frame=frame, left=arrow_x + 8, top=y - 8, size=8)
+        lower = ink_in(frame=frame, left=arrow_x + 8, top=y, size=8)
+        assert (lower > upper) is down
+        assert ink_in(frame=frame, left=arrow_x, top=y - 8, size=16) > 0
+
+
+def test_three_exits_draw_three_stubs() -> None:
+    """Each of three exit rows below J has ink at its own stub end."""
+    exits = tuple(
+        exit_row(y=FROM_Y + k * ROW_H, parent_y=FROM_Y) for k in (1, 2, 3)
+    )
+    frame = drawn(rows=(strip_row(y=FROM_Y, name='J'), *exits))
+    for row in exits:
+        assert any(
+            TRACK_X + INDENT - 2 <= x <= TRACK_X + INDENT + 1
+            for x in ink_columns(frame=frame, y=row.y, left=0, right=60)
+        )
+
+
 def test_from_row_shows_its_time_without_a_box() -> None:
     """The From keeps its disc and shows its time in ink, with no box."""
     frame = drawn(rows=(strip_row(y=FROM_Y, bold=True, time='8:09'),))

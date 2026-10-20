@@ -74,13 +74,15 @@ def floor_of(*, reach: Reach) -> float:
     Returns
     -------
     float
-        `FOLD_SHARE` of the trips on the busiest track out of the From.
+        `FOLD_SHARE` of the trips on the busiest track out of the From;
+        exits do not count.
     """
     return FOLD_SHARE * max(
         (
             row.trips
             for row in reach.rows
             if row.parent is not None
+            and row.kind is not RowKind.EXIT
             and reach.rows[row.parent].kind is RowKind.ORIGIN
         ),
         default=0,

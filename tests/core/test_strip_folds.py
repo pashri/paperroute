@@ -7,8 +7,15 @@ from hypothesis import strategies as st
 
 from paperroute.core.model import StopPlace
 from paperroute.core.reach import Reach, ReachRow, RowKind, RunTail
-from paperroute.core.strip_folds import folded, folds_of
-from tests.core.reach_factories import STATIONS, random_tails, reach_of
+from paperroute.core.reach_layout import LineExit
+from paperroute.core.strip_folds import floor_of, folded, folds_of
+from tests.core.reach_factories import (
+    STATIONS,
+    ids,
+    random_tails,
+    reach_of,
+    tail,
+)
 
 type RowSpec = tuple[str, int, int | None, int]
 
@@ -112,6 +119,33 @@ def test_fold_thresholds() -> None:
     assert folds_of(reach=reach_from(specs=line(100, 100, 4, 4, 4))) == ()
     (fold,) = folds_of(reach=reach_from(specs=line(100, 4, 4, 4, 4)))
     assert (fold.key, fold.rows) == ('E2', range(2, 6))
+
+
+def test_exit_rows_never_fold() -> None:
+    """Past an exit the quiet line folds; the exit and J stay rows."""
+    reach = reach_of(
+        tails=[tail('W1 W2', 100), tail('J1 J F1 F2 F3 F4 F5', 2)],
+        exits=[LineExit(junction='J', off='X', lines=('T9',), trips=2)],
+    )
+    assert ids(reach=reach) == [
+        'F5', 'F4', 'F3', 'F2', 'F1', 'X', 'J', 'J1', 'C', 'W1', 'W2',
+    ]
+    shown = folded(reach=reach)
+    assert [row.kind for row in shown.rows[:4]] == [
+        RowKind.FOLD, RowKind.EXIT, RowKind.MAIN, RowKind.MAIN,
+    ]
+    assert ids(reach=shown)[:4] == ['F1', 'X', 'J', 'J1']
+    assert shown.rows[0].folded == 5
+
+
+def test_floor_ignores_exit_rows() -> None:
+    """A busy exit at the From does not raise the quiet floor."""
+    plain = reach_of(tails=[tail('E1 E2', 40)])
+    exited = reach_of(
+        tails=[tail('E1 E2', 40)],
+        exits=[LineExit(junction='C', off='X', lines=('T9',), trips=900)],
+    )
+    assert floor_of(reach=exited) == floor_of(reach=plain)
 
 
 def test_fold_needs_nothing_busy_beyond_it() -> None:

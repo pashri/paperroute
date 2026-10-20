@@ -196,7 +196,8 @@ def gutter_x(*, marker: Marker, spots: Sequence[Spot]) -> float:
 
 
 def clear(*, marker: Marker, others: Sequence[Marker],
-          spots: Sequence[Spot], discs: Sequence[Spot]) -> bool:
+          spots: Sequence[Spot], discs: Sequence[Spot],
+          spur: bool = False) -> bool:
     """
     Say whether a badge as drawn keeps off everything.
 
@@ -210,6 +211,9 @@ def clear(*, marker: Marker, others: Sequence[Marker],
         Visible rows.
     discs : Sequence[Spot]
         The discs.
+    spur : bool
+        True for a badge on an exit stub, which skips the names of rows
+        whose track is left of it, as those names start past it.
 
     Returns
     -------
@@ -220,6 +224,8 @@ def clear(*, marker: Marker, others: Sequence[Marker],
     beside = [
         disc for disc in discs if disc.y == marker.y and marker.x > disc.x
     ]
+    if spur:
+        beside += [spot for spot in spots if spot.x < marker.x]
     return not any((
         *(meet(one=box, other=drawn(marker=each)) for each in others),
         *(meet(one=box, other=disc_box(disc=disc)) for disc in discs),
@@ -250,10 +256,12 @@ def tracks_of(*, badge: Badge, inputs: Sequence[Badge],
     set[float]
         The vehicle x, moved off the names level with the vehicle, of
         every input on the badge's hop it may stand for: one like it, or
-        any on the hop for a '+<n>' count.
+        any on the hop for a '+<n>' count. A spur badge keeps its x.
     """
     return {
-        gutter_x(marker=each.marker, spots=spots)
+        each.marker.x if each.spur else gutter_x(
+            marker=each.marker, spots=spots,
+        )
         for each in inputs
         if (each.low, each.high) == (badge.low, badge.high)
         and (
@@ -299,11 +307,12 @@ def has_room(*, badge: Badge, others: Sequence[Marker],
                     marker=badge.marker,
                     x=track,
                     y=badge.low + step * STEP,
-                    spots=spots,
+                    spots=[] if badge.spur else spots,
                 ),
                 others=others,
                 spots=spots,
                 discs=discs,
+                spur=badge.spur,
             )
             for step in range(steps + 1)
         )
@@ -343,6 +352,9 @@ def strip_cases(draw: st.DrawFn) -> tuple[
     """
     Draw rows one per slot, badges on hops between them, and discs.
 
+    A spur badge stands for a vehicle near an exit row of its later
+    row's depth: it sits one indent right of that row's track.
+
     Parameters
     ----------
     draw : st.DrawFn
@@ -365,12 +377,13 @@ def strip_cases(draw: st.DrawFn) -> tuple[
         st.floats(0, 1),
         st.sampled_from([None, 0.0, 180.0, *AGES]),
         st.sampled_from(LABELS),
+        st.booleans(),
     ).filter(lambda hop: hop[0] != hop[1])
     badges = [
         Badge(
             marker=Marker(
                 route=label,
-                x=rows[end].x,
+                x=rows[end].x + (16 if spur else 0),
                 y=rows[start].y + (rows[end].y - rows[start].y) * share,
                 bearing=kind if kind in (0.0, 180.0) else None,
                 live=kind in (0.0, 180.0),
@@ -379,8 +392,11 @@ def strip_cases(draw: st.DrawFn) -> tuple[
             ),
             low=min(rows[start].y, rows[end].y),
             high=max(rows[start].y, rows[end].y),
+            spur=spur,
         )
-        for start, end, share, kind, label in draw(st.lists(hops, max_size=12))
+        for start, end, share, kind, label, spur in draw(
+            st.lists(hops, max_size=12),
+        )
     ]
     marked = draw(st.lists(st.integers(0, len(rows) - 1), max_size=2))
     return spots, badges, [rows[index] for index in set(marked)]
@@ -520,9 +536,18 @@ def test_badges_as_drawn_stay_on_their_hops_and_clear(
         others = markers[:index] + markers[index + 1:]
         assert clear(
             marker=each.marker, others=[], spots=rows, discs=discs,
+            spur=each.spur,
         )
+        if each.spur and not each.extra:
+            assert each.marker.x in tracks_of(
+                badge=each, inputs=badges, spots=rows,
+            ) or any(
+                disc.y == each.marker.y and each.marker.x > disc.x
+                for disc in discs
+            )
         if not clear(
             marker=each.marker, others=others, spots=rows, discs=discs,
+            spur=each.spur,
         ):
             assert not has_room(
                 badge=each, others=others, spots=rows, discs=discs,

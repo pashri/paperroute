@@ -6,8 +6,15 @@ from dataclasses import replace
 from paperroute.core.map_view import Marker
 from paperroute.core.model import StopPlace
 from paperroute.core.reach import Reach, ReachRow, RowKind
+from paperroute.core.reach_exits import exit_name
 from paperroute.core.stop_view import DOT, clock_text
-from paperroute.core.strip_badges import HALF_WIDE, NAME_REACH, Keepouts, Spot
+from paperroute.core.strip_badges import (
+    HALF_WIDE,
+    NAME_REACH,
+    Keepouts,
+    Spot,
+    level_with,
+)
 from paperroute.core.strip_model import (
     ALL_TAG,
     BANNER_ROWS,
@@ -381,12 +388,18 @@ def strip_row(
     Returns
     -------
     StripRow
-        The row.
+        The row; an exit row is named by `exit_name`, with no time, tag
+        or bold.
     """
     row = reach.rows[index]
     parent = None if row.parent is None else reach.rows[row.parent]
+    plain = row.kind is not RowKind.EXIT
     return StripRow(
-        name=row.place.name.removesuffix(' Station'),
+        name=(
+            row.place.name.removesuffix(' Station')
+            if plain
+            else exit_name(place=row.place, lines=row.lines)
+        ),
         depth=row.depth,
         kind=row.kind,
         y=slot_y(index=index, first=first, window=window),
@@ -396,11 +409,11 @@ def strip_row(
             else slot_y(index=row.parent, first=first, window=window)
         ),
         parent_depth=row.depth if parent is None else parent.depth,
-        tag=tag_of(index=index, marks=marks, kind=row.kind),
-        time=marks.times.get(index, ''),
+        tag=tag_of(index=index, marks=marks, kind=row.kind) if plain else '',
+        time=marks.times.get(index, '') if plain else '',
         ride=index in marks.ride,
         cursor=index == marks.cursor,
-        bold=index in (marks.origin, marks.target),
+        bold=plain and index in (marks.origin, marks.target),
         station=row.place.stop_id,
     )
 
@@ -627,7 +640,11 @@ def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
         off the names, the From and Destination discs and each other.
     """
     spots = {
-        row.station: Spot(x=track_x + INDENT * row.depth, y=row.y)
+        row.station: Spot(
+            x=track_x + INDENT * (row.depth + (row.kind is RowKind.EXIT)),
+            y=row.y,
+            exit=row.kind is RowKind.EXIT,
+        )
         for row in rows
     }
     return vehicle_markers(
@@ -657,16 +674,20 @@ def names_clear(*, rows: Sequence[StripRow], markers: Sequence[Marker],
     Returns
     -------
     tuple[StripRow, ...]
-        The rows; one with a badge level with it and right of its track
-        names where those badges end.
+        The rows; one with a badge right of its track, centred within
+        `NAME_REACH` of it or drawn into its name band, names where
+        those badges end.
     """
     return tuple(
         replace(row, name_after=max(
             (
                 marker.x + HALF_WIDE
                 for marker in markers
-                if abs(marker.y - row.y) < NAME_REACH
-                and marker.x > track_x + INDENT * row.depth
+                if marker.x > track_x + INDENT * row.depth
+                and (
+                    abs(marker.y - row.y) < NAME_REACH
+                    or level_with(marker=marker, spot=Spot(x=0, y=row.y))
+                )
             ),
             default=None,
         ))

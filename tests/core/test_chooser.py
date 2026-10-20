@@ -24,7 +24,7 @@ from paperroute.core.chooser import (
 from paperroute.core.chooser_station import knob_pressed
 from paperroute.core.chooser_view import build_chooser_view
 from paperroute.core.model import Pin, RouteKind
-from paperroute.core.reach import StripKey
+from paperroute.core.reach import RowKind, StripKey
 from tests.core.chooser_walks import (
     BUS_606,
     GROUPS,
@@ -43,6 +43,7 @@ from tests.core.chooser_walks import (
     at_towards,
     fed,
     opened_at_kind,
+    row,
 )
 from tests.core.factories import place
 
@@ -179,6 +180,17 @@ def test_to_cursor_skips_approach_rows() -> None:
     chooser, _ = turned(chooser=chooser, steps=-9, reach=REACH)
     assert chooser.to_cursor == 0
     assert turned(chooser=chooser, steps=1, reach=None) == (chooser, None)
+
+
+def test_exit_row_is_never_picked() -> None:
+    """Turning the TO cursor across an exit row skips it."""
+    reach = replace(REACH, rows=(
+        *REACH.rows[:3], row('X1', RowKind.EXIT), *REACH.rows[3:],
+    ))
+    chooser, _ = turned(chooser=at_to(), steps=1, reach=reach)
+    assert chooser.to_cursor == 1
+    chooser, _ = turned(chooser=chooser, steps=1, reach=reach)
+    assert chooser.to_cursor == 3
 
 
 def test_back_walks_stages_then_closes() -> None:

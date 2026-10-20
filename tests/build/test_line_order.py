@@ -10,7 +10,7 @@ from typing import Final
 import pytest
 
 from paperroute.build.catalogue import route_sources
-from paperroute.build.line_order import hop_graph, line_order
+from paperroute.build.line_order import hop_graph, line_exits, line_order
 from paperroute.build.line_stations import line_inputs
 from paperroute.core.model import STATION_FIRST
 
@@ -284,3 +284,18 @@ def test_real_line_stations_hold_only_station_first_lines(
         )
     }
     assert kinds == {str(kind) for kind in STATION_FIRST}
+
+
+def test_line_exits_lists_routes_leaving_the_line() -> None:
+    """Only hops from the line to a station off it are exits."""
+    found = line_exits(
+        line={'A', 'B', 'C'},
+        patterns=[
+            ('T9', 'A B X Y'.split()),
+            ('CCN', 'A B X'.split()),
+            ('T1', 'A B C'.split()),
+            ('T3', 'X B C'.split()),
+        ],
+        sort={'T1': 1, 'T9': 9, 'CCN': 20, 'T3': 3},
+    )
+    assert found == {('B', 'X'): ('T9', 'CCN')}

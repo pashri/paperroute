@@ -18,6 +18,7 @@ from paperroute.core.reach import (
     StripKey,
     build_reach,
 )
+from paperroute.core.reach_layout import LineExit
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 TOWN_HALL: Final[str] = '200070'
@@ -56,6 +57,7 @@ def reach_of(
     tails: Sequence[RunTail],
     points: Mapping[str, Point] | None = None,
     names: Mapping[str, str] | None = None,
+    exits: Sequence[LineExit] = (),
 ) -> Reach:
     """
     Build the reach from C, naming each station by its ID.
@@ -68,13 +70,17 @@ def reach_of(
         Station positions in metres.
     names : Mapping[str, str] | None
         Station names other than their IDs.
+    exits : Sequence[LineExit]
+        Ways off the line; their off stations are added to the places.
 
     Returns
     -------
     Reach
         The reach.
     """
-    keys = {'C'}.union(*(t.before + t.after for t in tails))
+    keys = {'C', *(each.off for each in exits)}.union(
+        *(t.before + t.after for t in tails),
+    )
     places = {
         key: StopPlace(
             stop_id=key,
@@ -86,6 +92,7 @@ def reach_of(
     return build_reach(data=ReachInput(
         origin=places['C'], tails=tuple(tails), places=places,
         station_of={key: key for key in keys},
+        exits=tuple(exits),
     ))
 
 

@@ -134,7 +134,7 @@ class Column:
 
 
 UNPICKED: Final[frozenset[RowKind]] = frozenset(
-    {RowKind.APPROACH},
+    {RowKind.APPROACH, RowKind.EXIT},
 )  # strip rows the TO cursor never lands on
 
 

@@ -12,7 +12,10 @@ from operator import itemgetter
 from typing import Final
 
 from paperroute.build.gtfs_files import insert_many
-from paperroute.build.line_stations import write_line_stations
+from paperroute.build.line_stations import (
+    write_line_exits,
+    write_line_stations,
+)
 from paperroute.build.route_tags import CatalogueRoute, agency_towns, tags_of
 from paperroute.core.geo import Point, to_metres
 from paperroute.core.model import (
@@ -38,6 +41,9 @@ CREATE TABLE line_stations (line_key TEXT NOT NULL, pos INTEGER NOT NULL,
   PRIMARY KEY (line_key, pos)) WITHOUT ROWID;
 CREATE TABLE line_aliases (station_id TEXT PRIMARY KEY,
   kept_id TEXT NOT NULL) WITHOUT ROWID;
+CREATE TABLE line_exits (line_key TEXT NOT NULL, station_id TEXT NOT NULL,
+  off_id TEXT NOT NULL, lines TEXT NOT NULL,
+  PRIMARY KEY (line_key, station_id, off_id)) WITHOUT ROWID;
 """
 REPLACEMENT: Final[re.Pattern[str]] = re.compile(
     r'^\d+[A-Z]?(T\d|BM|CN|HU|SC|SH)',
@@ -707,10 +713,10 @@ def write_towards(
     sources: Sequence[RouteSource],
 ) -> None:
     """
-    Write the chooser_towards, line_stations and line_aliases rows.
+    Write the chooser_towards rows and the line tables.
 
     Every kept chooser row gets towards rows; every station-first line
-    gets its station list.
+    gets its station list and its exits.
 
     Parameters
     ----------
@@ -737,12 +743,13 @@ def write_towards(
         'INSERT INTO chooser_towards (route_key, headsign, trips, stations) '
         'VALUES (?, ?, ?, ?)'
     ))
-    conn.execute('DROP TABLE temp.catalogue_keys')
     write_line_stations(conn=conn, keys={
         source.route_id: rows[source.key]
         for source in sources
         if source.merge[0] in LINE_KINDS
     })
+    write_line_exits(conn=conn)
+    conn.execute('DROP TABLE temp.catalogue_keys')
 
 
 def load_catalogue(*, conn: sqlite3.Connection) -> int:

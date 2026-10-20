@@ -2,7 +2,7 @@
 
 import math
 from collections import Counter
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass, field
 from itertools import pairwise
 from typing import Final
@@ -392,3 +392,40 @@ def line_order(
         grow(walk=walk, graph=graph, top=top)
     heads = heads_of(walk=walk)
     return tuple((station, heads.get(station, '')) for station in walk.order)
+
+
+def line_exits(
+    *,
+    line: Collection[str],
+    patterns: Iterable[tuple[str, Sequence[str]]],
+    sort: Mapping[str, int],
+) -> dict[tuple[str, str], tuple[str, ...]]:
+    """
+    Find the hops that leave a line and the routes making them.
+
+    Parameters
+    ----------
+    line : Collection[str]
+        Station IDs on the line, with the stations merged into them.
+    patterns : Iterable[tuple[str, Sequence[str]]]
+        Route number and station sequence of each pattern.
+    sort : Mapping[str, int]
+        Chooser order by route number.
+
+    Returns
+    -------
+    dict[tuple[str, str], tuple[str, ...]]
+        Route numbers by (station on the line, next station off it), in
+        chooser order, ties by number.
+    """
+    found: dict[tuple[str, str], set[str]] = {}
+    for number, stations in patterns:
+        for here, there in pairwise(stations):
+            if here in line and there not in line:
+                found.setdefault((here, there), set()).add(number)
+    return {
+        pair: tuple(sorted(
+            numbers, key=lambda number: (sort.get(number, 0), number),
+        ))
+        for pair, numbers in found.items()
+    }

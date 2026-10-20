@@ -14,6 +14,7 @@ from paperroute.core.strip_badges import (
     overlaps,
     pushed,
 )
+from paperroute.core.strip_vehicles import hop_marker
 
 STEP: Final[float] = 22.0  # two plain badges' centres, one under another
 BESIDE: Final[float] = 30 + DISC_SPAN  # first slot beside a disc at x 30
@@ -130,6 +131,32 @@ def test_pushed_keeps_spur_badges_off_main_line_names() -> None:
         badges=[badge(x=46, y=122, low=100, high=136)], spots=spots,
     )
     assert between == [('T1', 46, 122)]
+
+
+def test_pushed_keeps_exit_badges_on_their_stub() -> None:
+    """A badge bound off the line stays on its stub, level row or not."""
+    spots = {
+        'main': Spot(x=30, y=100), 'off': Spot(x=46, y=136, exit=True),
+    }
+    found = shown(
+        badges=[replace(badge(x=46, y=100, low=100, high=136), spur=True)],
+        spots=spots,
+    )
+    assert found == [('T1', 46, 100)]
+
+
+def test_hop_marker_marks_a_hop_into_an_exit_as_spur() -> None:
+    """Only a hop whose later end is an exit row gives a spur badge."""
+    main, off = Spot(x=30, y=100), Spot(x=46, y=136, exit=True)
+    into = hop_marker(
+        route='T1', ends=(main, off), fraction=0.5, age=None, live=False,
+    )
+    out = hop_marker(
+        route='T1', ends=(off, main), fraction=0.5, age=None, live=False,
+    )
+    assert into is not None and out is not None
+    assert (into.spur, into.marker.x) == (True, 46)
+    assert not out.spur
 
 
 def test_pushed_stacks_badges_in_neighbouring_columns() -> None:

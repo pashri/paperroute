@@ -27,10 +27,13 @@ class Spot:
         Track x at the row's depth.
     y : float
         The row's centre line.
+    exit : bool
+        True for an exit row, whose spot is its stub's end.
     """
 
     x: float
     y: float
+    exit: bool = False
 
 
 @dataclass(frozen=True)
@@ -48,12 +51,16 @@ class Badge:
         Screen y of the hop's lower row; the badge's y stays between.
     extra : int
         Other badges counted in this one.
+    spur : bool
+        True on the last stretch into an exit row, where it stays on the
+        exit's stub rather than moving left off the names.
     """
 
     marker: Marker
     low: float
     high: float
     extra: int = 0
+    spur: bool = False
 
 
 @dataclass(frozen=True)
@@ -125,6 +132,29 @@ def in_gutter(*, marker: Marker, spots: Mapping[str, Spot]) -> Marker:
         if level_with(marker=marker, spot=spot)
     )
     return replace(marker, x=min((marker.x, *level)))
+
+
+def off_names(*, badge: Badge, marker: Marker, spots: Mapping[str, Spot]
+              ) -> Marker:
+    """
+    Move a badge left off the names level with it, unless on a stub.
+
+    Parameters
+    ----------
+    badge : Badge
+        The badge the marker is for.
+    marker : Marker
+        Where it would go.
+    spots : Mapping[str, Spot]
+        Visible rows' track spots by station.
+
+    Returns
+    -------
+    Marker
+        The marker as `in_gutter` moves it; as it is for a spur badge,
+        whose level names start past it instead.
+    """
+    return marker if badge.spur else in_gutter(marker=marker, spots=spots)
 
 
 def counted(*, marker: Marker, extra: int) -> Marker:
@@ -383,10 +413,13 @@ def place(*, badge: Badge, placed: Sequence[Badge], keep: Keepouts
     -------
     Badge | None
         The badge at the first candidate y where, moved left off the
-        names level with it, it fits; None when none does.
+        names level with it (see `off_names`), it fits; None when none
+        does.
     """
     moves = (
-        in_gutter(marker=replace(badge.marker, y=y), spots=keep.spots)
+        off_names(
+            badge=badge, marker=replace(badge.marker, y=y), spots=keep.spots,
+        )
         for y in candidates(badge=badge, placed=placed, keep=keep)
     )
     return next(
@@ -612,14 +645,15 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
         Badges by x then y, each still on its own hop. One at the From or
         Destination (see `at_disc`) goes beside its disc, level with it;
         the rest move the least they need to clear the names level with
-        them, the discs and each other, top to bottom. One with no room
+        them, the discs and each other, top to bottom. A spur badge stays
+        on its stub; the names level with it start past it. One with no room
         on its hop is counted in a badge on the same hop, which becomes a
         '+<n>', or with none there is drawn on its hop anyway.
     """
     order = sorted(
         (
-            replace(each, marker=in_gutter(
-                marker=each.marker, spots=keep.spots,
+            replace(each, marker=off_names(
+                badge=each, marker=each.marker, spots=keep.spots,
             ))
             for each in badges
         ),

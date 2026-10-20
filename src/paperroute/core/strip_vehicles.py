@@ -12,6 +12,7 @@ from paperroute.core.model import Departure, service_seconds
 from paperroute.core.patterns import hop_at, hop_near
 from paperroute.core.positions import VehiclePosition
 from paperroute.core.strip_badges import Badge, Keepouts, Spot, pushed
+from paperroute.core.strip_model import ROW_H
 from paperroute.core.strip_times import TripInputs, window_departures
 
 type Heard = Mapping[str, tuple[VehiclePosition, float]]
@@ -154,18 +155,22 @@ def hop_marker(
     Badge | None
         The badge on the later row's track, with a wedge down the strip
         when that row is lower and up otherwise, if live; None when either
-        end of the hop is not a visible row.
+        end of the hop is not a visible row. Bound for an exit row, it
+        rides the earlier row's track until within a row of the exit,
+        then sits on the exit's stub end as a spur badge.
     """
     if ends is None:
         return None
     start, end = ends
     if start is None or end is None:
         return None
+    y = start.y + (end.y - start.y) * fraction
+    spur = end.exit and abs(end.y - y) < ROW_H
     return Badge(
         marker=Marker(
             route=route,
-            x=end.x,
-            y=start.y + (end.y - start.y) * fraction,
+            x=start.x if end.exit and not spur else end.x,
+            y=y,
             bearing=(180.0 if end.y > start.y else 0.0) if live else None,
             live=live,
             pinned=True,
@@ -173,6 +178,7 @@ def hop_marker(
         ),
         low=min(start.y, end.y),
         high=max(start.y, end.y),
+        spur=spur,
     )
 
 

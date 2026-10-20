@@ -18,9 +18,18 @@ from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.chooser import Choice, ChooserPath, Column, Level
 from paperroute.core.model import RouteKind, StopPlace
-from paperroute.core.reach import RunTail, StripKey
+from paperroute.core.reach import (
+    ReachInput,
+    RowKind,
+    RunTail,
+    StripKey,
+    build_reach,
+)
+from paperroute.core.reach_layout import LineExit
+from paperroute.core.strip_view import build_strip_view
 from paperroute.ports import NetworkRepository
 from tests.build.network_feed import network_feed
+from tests.core.factories import inputs_of
 from tests.helpers import old_schema, schema_three
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
@@ -698,6 +707,82 @@ def test_line_strip_without_line_stations_is_uncut(copy: Path) -> None:
     assert set(tails_from(path=copy, station='C', routes=('T1',))) == {
         RunTail(before=(), after=('L1', 'L2', 'J'), trips=6),
         RunTail(before=('C', 'L1', 'L2', 'J'), after=('E1', 'E2'), trips=6),
+    }
+
+
+def line_input(*, path: Path, station: str, line: str) -> ReachInput:
+    """
+    Read a Train line strip's reach input.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file.
+    station : str
+        From station ID.
+    line : str
+        Line number, such as 'T1'.
+
+    Returns
+    -------
+    ReachInput
+        The reach input.
+    """
+    with closing(SqliteNetworkRepository(path=path)) as repo:
+        found = repo.reach_input(
+            key=StripKey(station=station, kind=RouteKind.TRAIN,
+                         routes=(line,)),
+            origin=place(stop_id=station),
+        )
+    assert found is not None
+    return found
+
+
+def test_t1_strip_at_c_has_an_exit_to_l1(network_db: Path) -> None:
+    """T2 trains leave T1's line at C for L1."""
+    found = line_input(path=network_db, station='C', line='T1')
+    (way,) = found.exits
+    assert way == LineExit(
+        junction='C', off='L1', lines=('T2',), trips=way.trips,
+    )
+    assert way.trips > 0
+    assert found.places['L1'].name == 'L1 Stop'
+    assert found.station_of['L1_1'] == 'L1'
+
+
+def test_t2_strip_at_c_hangs_two_exits_at_j(network_db: Path) -> None:
+    """J's exits to W1 and R1, busier first, sit beyond it, named."""
+    reach = build_reach(data=line_input(
+        path=network_db, station='C', line='T2',
+    ))
+    keys = [row.place.stop_id for row in reach.rows]
+    junction = keys.index('J')
+    out = -1 if reach.rows[junction].above else 1
+    beyond = [reach.rows[junction + out * step] for step in (1, 2)]
+    assert [row.place.stop_id for row in beyond] == ['W1', 'R1']
+    assert {row.kind for row in beyond} == {RowKind.EXIT}
+    rows = build_strip_view(inputs=inputs_of(reach=reach)).rows
+    names = {row.station: row.name for row in rows}
+    assert (names['W1'], names['R1']) == ('W1 Stop · T1', 'R1 Stop · T1')
+
+
+def test_exits_need_line_tables(copy: Path) -> None:
+    """A schema-3 file gives no exits and leaves the tails whole."""
+    schema_three(path=copy)
+    found = line_input(path=copy, station='C', line='T1')
+    assert found.exits == ()
+    assert ('L1', 'L2', 'J') in {tail.after for tail in found.tails}
+
+
+def test_exits_without_their_table(copy: Path) -> None:
+    """A file with line stations but no line_exits still cuts, no exits."""
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute('DROP TABLE line_exits')
+        conn.commit()
+    found = line_input(path=copy, station='C', line='T1')
+    assert found.exits == ()
+    assert 'L1' not in {
+        key for tail in found.tails for key in tail.before + tail.after
     }
 
 

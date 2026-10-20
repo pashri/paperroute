@@ -7,7 +7,7 @@ from itertools import takewhile
 from typing import Final
 
 from paperroute.core.model import STATION_FIRST, RouteKind, StopPlace
-from paperroute.core.reach_layout import Entry, lay_out
+from paperroute.core.reach_layout import Entry, LineExit, lay_out
 from paperroute.core.reach_track import FROM_KEY, place_of
 
 APPROACH_ROWS: Final[int] = 2
@@ -50,12 +50,16 @@ class ReachInput:
     station_of : Mapping[str, str]
         The station ID of each stop under a station in the tails, and of
         each such station itself.
+    exits : tuple[LineExit, ...]
+        Ways trips leave the strip's line; their off stations are in the
+        places.
     """
 
     origin: StopPlace
     tails: tuple[RunTail, ...]
     places: Mapping[str, StopPlace]
     station_of: Mapping[str, str]
+    exits: tuple[LineExit, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -187,6 +191,7 @@ class RowKind(StrEnum):
     MAIN = 'main'
     BRANCH = 'branch'
     FOLD = 'fold'
+    EXIT = 'exit'
 
 
 @dataclass(frozen=True)
@@ -199,7 +204,8 @@ class ReachRow:
     place : StopPlace
         The station.
     kind : RowKind
-        Approach, the From, the main line, a branch or a closed fold.
+        Approach, the From, the main line, a branch, a closed fold or a
+        way off the line.
     depth : int
         Indent: 0 for the main line, one more per branch level.
     above : bool
@@ -213,6 +219,10 @@ class ReachRow:
         approach rows.
     folded : int
         Stations a fold row stands for; 0 for any other row.
+    lines : tuple[str, ...]
+        Route numbers of an exit row, whose place is the first station
+        off the line and whose depth is its junction's; empty for any
+        other row.
     """
 
     place: StopPlace
@@ -222,6 +232,7 @@ class ReachRow:
     parent: int | None
     trips: int = 0
     folded: int = 0
+    lines: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -234,7 +245,7 @@ class Reach:
     rows : tuple[ReachRow, ...]
         Rows, top to bottom, with exactly one From row.
     stations : int
-        Rows that are neither the From nor an approach.
+        Rows that are neither the From, an approach nor an exit.
     station_of : Mapping[str, str]
         The station ID of each stop under a station on the strip.
     """
@@ -274,6 +285,47 @@ def approach_rows(*, tails: Sequence[RunTail], placed: set[str]
     ][::-1]
 
 
+def exits_by_junction(*, data: ReachInput) -> dict[str, list[LineExit]]:
+    """
+    Group a strip's exits by junction.
+
+    Parameters
+    ----------
+    data : ReachInput
+        The From and its exits.
+
+    Returns
+    -------
+    dict[str, list[LineExit]]
+        Exits by junction station ID, the From's under FROM_KEY.
+    """
+    found: dict[str, list[LineExit]] = {}
+    origin = data.origin.stop_id
+    for each in data.exits:
+        at = FROM_KEY if each.junction == origin else each.junction
+        found.setdefault(at, []).append(each)
+    return found
+
+
+def kind_of(*, entry: Entry) -> RowKind:
+    """
+    Say what a laid-out station row shows.
+
+    Parameters
+    ----------
+    entry : Entry
+        The row.
+
+    Returns
+    -------
+    RowKind
+        EXIT for a way off the line, MAIN at depth 0, else BRANCH.
+    """
+    if entry.exit:
+        return RowKind.EXIT
+    return RowKind.MAIN if entry.depth == 0 else RowKind.BRANCH
+
+
 def ordered(*, data: ReachInput, places: Mapping[str, StopPlace]
             ) -> list[tuple[RowKind, Entry]]:
     """
@@ -296,12 +348,11 @@ def ordered(*, data: ReachInput, places: Mapping[str, StopPlace]
         ((each.after, each.trips) for each in data.tails if each.after),
         key=lambda trail: -trail[1],
     )
-    sides = lay_out(trails=trails, places=places)
-    above: list[tuple[RowKind, Entry]] = [
-        (RowKind.MAIN if entry.depth == 0 else RowKind.BRANCH, entry)
-        for entry in sides.above
-    ]
-    if sides.below and not sides.above:
+    sides = lay_out(
+        trails=trails, places=places, exits=exits_by_junction(data=data),
+    )
+    above = [(kind_of(entry=entry), entry) for entry in sides.above]
+    if sides.below and not sides.above and data.tails:
         placed = {data.origin.stop_id, *(each.key for each in sides.below)}
         above = [
             (RowKind.APPROACH, entry)
@@ -309,8 +360,7 @@ def ordered(*, data: ReachInput, places: Mapping[str, StopPlace]
         ]
     origin = Entry(key=FROM_KEY, depth=0, above=False, parent=None)
     return [*above, (RowKind.ORIGIN, origin), *(
-        (RowKind.MAIN if entry.depth == 0 else RowKind.BRANCH, entry)
-        for entry in sides.below
+        (kind_of(entry=entry), entry) for entry in sides.below
     )]
 
 
@@ -361,6 +411,7 @@ def build_reach(*, data: ReachInput) -> Reach:
                 above=entry.above,
                 parent=None if entry.parent is None else index[entry.parent],
                 trips=entry.trips,
+                lines=entry.lines,
             )
             for kind, entry in rows
         ),

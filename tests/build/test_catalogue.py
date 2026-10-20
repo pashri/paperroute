@@ -759,6 +759,27 @@ def test_catalogue_writes_line_stations_for_station_first_lines(
     assert keys == {'train:T1', 'train:T2'}
 
 
+def test_catalogue_writes_line_exits(tmp_path: Path) -> None:
+    """T1 leaves its line at C for L1 on T2; T2 leaves at J on T1."""
+    out = tmp_path / 'timetable.db'
+    source = Source(name='sydneytrains',
+                    archive=network_feed(path=tmp_path / 'network.zip'))
+    build_timetable(sources=[source],
+                    window=Window(start=date(2026, 10, 5), days=3), out=out)
+    with closing(sqlite3.connect(out)) as conn:
+        rows = conn.execute(
+            'SELECT line_key, station_id, off_id, lines FROM line_exits '
+            'ORDER BY line_key, station_id, off_id',
+        ).fetchall()
+    found: dict[str, list[tuple[str, str, str]]] = {}
+    for key, station, off, lines in rows:
+        found.setdefault(key, []).append((station, off, lines))
+    assert found == {
+        'train:T1': [('C', 'L1', 'T2')],
+        'train:T2': [('J', 'R1', 'T1'), ('J', 'W1', 'T1')],
+    }
+
+
 def test_train_lines_sort_sydney_then_intercity_then_trainlink() -> None:
     """T1-T9, then the intercity lines, then NRC, NRW, STH and WST."""
     rows = kind_rows(entries=[

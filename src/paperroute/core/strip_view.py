@@ -44,6 +44,7 @@ from paperroute.core.strip_model import (
     StripView,
     Window,
 )
+from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_times import (
     TripInputs,
     first_arrivals,
@@ -254,7 +255,7 @@ def marks_of(*, inputs: StripInputs, reach: Reach) -> Marks:
     Returns
     -------
     Marks
-        The From, Destination, ride, times and cursor.
+        The From, Destination, ride, times, cursor and carry-on note.
     """
     origin = origin_of(reach=reach)
     target = target_of(reach=reach, destination=inputs.destination)
@@ -271,6 +272,7 @@ def marks_of(*, inputs: StripInputs, reach: Reach) -> Marks:
         ),
         cursor=inputs.cursor,
         picking=inputs.picking,
+        note=carry_note(trips=trips_of(inputs=inputs), reach=reach),
     )
 
 
@@ -415,6 +417,11 @@ def strip_row(
         cursor=index == marks.cursor,
         bold=plain and index in (marks.origin, marks.target),
         station=row.place.stop_id,
+        note=(
+            marks.note[1]
+            if marks.note is not None and marks.note[0] == index
+            else None
+        ),
     )
 
 

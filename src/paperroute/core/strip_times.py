@@ -1,6 +1,6 @@
 """Which trips feed a strip, and when they reach its stations."""
 
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final
@@ -154,14 +154,37 @@ def strip_trips(
     -------
     frozenset[str]
         Trip IDs of the strip's departures that left in the last
-        `STRIP_LOOKBACK` or leave in the next `STRIP_AHEAD`; every one.
+        `STRIP_LOOKBACK` or leave in the next `STRIP_AHEAD`, and of the
+        trips they carry on as; every one.
     """
-    return frozenset(
-        departure.trip_id
-        for departure in window_departures(
+    return trip_ids(
+        departures=window_departures(
             departures=departures, key=key, now=now,
-        )
+        ),
     )
+
+
+def trip_ids(*, departures: Iterable[Departure]) -> frozenset[str]:
+    """
+    List departures' trip IDs and the trips they carry on as.
+
+    Parameters
+    ----------
+    departures : Iterable[Departure]
+        Departures.
+
+    Returns
+    -------
+    frozenset[str]
+        Each departure's trip ID, and its carry-on's trip ID when known.
+    """
+    found: set[str] = set()
+    for departure in departures:
+        found.add(departure.trip_id)
+        then = departure.facts.then
+        if then is not None and then.trip_id:
+            found.add(then.trip_id)
+    return frozenset(found)
 
 
 def window_departures(

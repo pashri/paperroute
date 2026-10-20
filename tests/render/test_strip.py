@@ -14,15 +14,25 @@ from paperroute.core.strip_model import (
     STRIP_TOP,
     TRACK_X,
     Band,
+    CarryNote,
     StripRow,
 )
 from paperroute.render.canvas import INK, PAPER, Canvas
-from paperroute.render.strip import draw_band, draw_rows, draw_strip_markers
+from paperroute.render.strip import (
+    NAME_ROOM,
+    NOTE_MAX,
+    TAG_GAP,
+    TAG_HALF,
+    draw_band,
+    draw_rows,
+    draw_strip_markers,
+)
 
 NAME_X = 52
 TIME_RIGHT = 424
 RIGHT = 440
 FROM_Y = STRIP_TOP + 2 * ROW_H + ROW_H / 2
+NOTE = CarryNote(route='T8', then='T2 Leppington')
 
 
 def strip_row(
@@ -375,6 +385,91 @@ def test_long_names_stop_short_of_a_tag() -> None:
     ink = np.flatnonzero((row == PAPER).any(axis=0))
     gaps = np.flatnonzero(np.diff(ink) > 4)
     assert len(gaps) >= 1
+
+
+def note_box(*, frame: NDArray[np.uint8]) -> tuple[int, int]:
+    """
+    Find the note box's left and right columns on the row at FROM_Y.
+
+    Parameters
+    ----------
+    frame : NDArray[np.uint8]
+        Pixels.
+
+    Returns
+    -------
+    tuple[int, int]
+        First and last ink column of the box's top edge.
+    """
+    edge = ink_columns(
+        frame=frame, y=FROM_Y - TAG_HALF, left=NAME_X, right=TIME_RIGHT,
+    )
+    return edge[0], edge[-1]
+
+
+def name_end(*, frame: NDArray[np.uint8], before: int) -> int:
+    """
+    Find the last ink column of the name, left of a column.
+
+    Parameters
+    ----------
+    frame : NDArray[np.uint8]
+        Pixels.
+    before : int
+        Column the name must end before.
+
+    Returns
+    -------
+    int
+        Last ink column on the row's text lines.
+    """
+    band = frame[int(FROM_Y) - 8:int(FROM_Y) + 8, NAME_X:before]
+    return NAME_X + int(np.flatnonzero((band == INK).any(axis=0))[-1])
+
+
+def test_carry_note_is_outlined_between_name_and_time() -> None:
+    """A 2 px ink box left of the time's room, clear of the name."""
+    frame = drawn(
+        rows=(replace(strip_row(y=FROM_Y, time='8:06'), note=NOTE),),
+    )
+    left, right = note_box(frame=frame)
+    top = int(FROM_Y - TAG_HALF)
+    assert right <= TIME_RIGHT - NAME_ROOM
+    assert (frame[top:top + 2, left:right + 1] == INK).all()
+    assert (frame[top + 2, left + 2:right - 1] == PAPER).all()
+    assert (frame[int(FROM_Y), left:left + 2] == INK).all()
+    assert frame[int(FROM_Y), left + 2] == PAPER
+    assert (frame[top + 4:top + 16, left + 4:right - 3] == INK).any()
+    assert name_end(frame=frame, before=left) <= left - TAG_GAP
+
+
+def test_long_name_yields_to_the_note() -> None:
+    """A long name is cut short of the box; the note keeps its text."""
+    name = ('Long Station Name ' * 2)[:30]
+    short = drawn(rows=(replace(strip_row(y=FROM_Y), note=NOTE),))
+    frame = drawn(rows=(replace(strip_row(y=FROM_Y, name=name), note=NOTE),))
+    left, right = note_box(frame=frame)
+    assert (left, right) == note_box(frame=short)
+    assert name_end(frame=frame, before=left) <= left - TAG_GAP
+    wordy = CarryNote(route='T8', then='T2 ' + 'Leppington ' * 8)
+    full = drawn(rows=(replace(strip_row(y=FROM_Y), note=wordy),))
+    wide_left, wide_right = note_box(frame=full)
+    assert NOTE_MAX - 12 < wide_right - wide_left + 1 <= NOTE_MAX
+
+
+def test_no_note_without_room() -> None:
+    """A row whose name starts too near the time draws no note."""
+    row = replace(strip_row(y=FROM_Y), name_after=TIME_RIGHT - 60)
+    assert (drawn(rows=(replace(row, note=NOTE),)) == drawn(rows=(row,))).all()
+
+
+def test_no_note_on_the_cursor_row() -> None:
+    """A cursor row draws no note, with or without a tag."""
+    for tag in ('', 'TO?'):
+        row = strip_row(y=FROM_Y, cursor=True, tag=tag, time='8:06')
+        assert (
+            drawn(rows=(replace(row, note=NOTE),)) == drawn(rows=(row,))
+        ).all()
 
 
 def test_band_is_inverted_with_text() -> None:

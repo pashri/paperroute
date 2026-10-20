@@ -9,6 +9,7 @@ from paperroute.core.map_view import Marker
 from paperroute.core.reach import RowKind
 from paperroute.core.strip_model import INDENT, ROW_H, Band, StripRow
 from paperroute.render.canvas import INK, PAPER, Canvas, Face
+from paperroute.render.chrome import ARROW_WIDTH, arrow
 from paperroute.render.markers import draw_hollow, draw_live
 
 TRACK_WIDTH: Final[int] = 3
@@ -37,6 +38,11 @@ BAND_ARROW: Final[float] = 14.0  # arrow x from the band's left
 BAND_TEXT: Final[float] = 30.0  # text x from the band's left
 EXIT_FACE: Final[Face] = Face(weight=700, px=13)
 EXIT_ARROW: Final[float] = 16.0  # an exit arrow's width, gap included
+NOTE_FACE: Final[Face] = Face(weight=700, px=12)
+NOTE_MAX: Final[float] = 190.0  # a carry-on note box's widest
+NOTE_OUTLINE: Final[float] = 2.0
+NOTE_PAD: Final[float] = 6.0  # pixels inside each end of the note box
+NOTE_GAP: Final[float] = 4.0  # pixels between the route and the arrow
 
 
 @dataclass(frozen=True)
@@ -213,6 +219,73 @@ def draw_tag(canvas: Canvas, *, row: StripRow, right: float) -> float:
     return left
 
 
+def draw_note(canvas: Canvas, *, row: StripRow, right: float,
+              floor: float) -> float:
+    """
+    Draw a row's carry-on note as an outlined box ending at an edge.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : StripRow
+        The row; drawn only when it has a note.
+    right : float
+        Right edge of the box.
+    floor : float
+        Furthest left the box may start.
+
+    Returns
+    -------
+    float
+        Left edge of the box; right when nothing is drawn.
+    """
+    note = row.note
+    if note is None:
+        return right
+    route = canvas.length(text=note.route, face=NOTE_FACE)
+    fixed = 2 * NOTE_PAD + route + NOTE_GAP + ARROW_WIDTH
+    room = min(NOTE_MAX, right - floor) - fixed
+    then = canvas.fit(text=note.then, face=NOTE_FACE, width=room)
+    if room <= 0 or not then:
+        return right
+    left = right - fixed - canvas.length(text=then, face=NOTE_FACE)
+    top, bottom = row.y - TAG_HALF, row.y + TAG_HALF
+    canvas.rect(box=(left, top, right, bottom), grey=INK)
+    canvas.rect(
+        box=(left + NOTE_OUTLINE, top + NOTE_OUTLINE,
+             right - NOTE_OUTLINE, bottom - NOTE_OUTLINE),
+        grey=PAPER,
+    )
+    note_text(
+        canvas, texts=(note.route, then), x=left + NOTE_PAD, y=row.y + 1,
+    )
+    return left
+
+
+def note_text(canvas: Canvas, *, texts: tuple[str, str], x: float,
+              y: float) -> None:
+    """
+    Draw a note's route, an arrow and what it carries on as.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    texts : tuple[str, str]
+        The route, and the route and headsign it carries on as.
+    x : float
+        Left end.
+    y : float
+        Centre line.
+    """
+    route, then = texts
+    canvas.text(at=(x, y), text=route, face=NOTE_FACE, grey=INK, anchor='lm')
+    x += canvas.length(text=route, face=NOTE_FACE) + NOTE_GAP
+    x += arrow(canvas, x=x, y=y, grey=INK)
+    canvas.text(at=(x, y), text=then, face=NOTE_FACE, grey=INK, anchor='lm')
+
+
 def name_face(*, row: StripRow) -> Face:
     """
     Choose a row's name face.
@@ -332,10 +405,12 @@ def name_start(canvas: Canvas, *, row: StripRow, columns: Columns
 
 def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
     """
-    Draw one row's cursor bar, station, name, time and tag.
+    Draw one row's cursor bar, station, name, time, tag and note.
 
     The name starts at the row's `name_after` when that is further
-    right, past badges beside its disc.
+    right, past badges beside its disc. A carry-on note goes between
+    the name and the time on a row with no tag that isn't the cursor,
+    and the name is cut short of it.
 
     Parameters
     ----------
@@ -356,6 +431,14 @@ def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
     draw_station(canvas, row=row, x=columns.track_x + INDENT * row.depth)
     edge = draw_end(canvas, row=row, columns=columns)
     left, face = name_start(canvas, row=row, columns=columns)
+    if not row.tag and not row.cursor:
+        box = draw_note(
+            canvas,
+            row=row,
+            right=columns.time_right - (NAME_ROOM if row.time else 0),
+            floor=left + TAG_GAP,
+        )
+        edge = min(edge, box - TAG_GAP)
     canvas.text(
         at=(left, row.y + BASELINE_DROP),
         text=canvas.fit(text=row.name, face=face, width=edge - left),

@@ -1,6 +1,9 @@
 """Where a strip's vehicles are drawn."""
 
-from collections.abc import Mapping
+import math
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, replace
+from datetime import datetime
 
 from paperroute.core.map_view import (
     Marker,
@@ -9,13 +12,30 @@ from paperroute.core.map_view import (
     timetable_moment,
 )
 from paperroute.core.model import Departure, service_seconds
-from paperroute.core.patterns import hop_at, hop_near
+from paperroute.core.patterns import TripPattern, hop_at, hop_near
 from paperroute.core.positions import VehiclePosition
 from paperroute.core.strip_badges import Badge, Keepouts, Spot, pushed
 from paperroute.core.strip_model import ROW_H
 from paperroute.core.strip_times import TripInputs, window_departures
 
 type Heard = Mapping[str, tuple[VehiclePosition, float]]
+
+
+@dataclass(frozen=True)
+class Leg:
+    """
+    One trip a strip departure's vehicle runs, with its vehicle if heard.
+
+    Attributes
+    ----------
+    pattern : TripPattern
+        The trip's pattern.
+    found : tuple[VehiclePosition, float] | None
+        Its vehicle and the seconds since it reported, or None.
+    """
+
+    pattern: TripPattern
+    found: tuple[VehiclePosition, float] | None
 
 
 def heard_trips(
@@ -71,6 +91,111 @@ def vehicle_of(*, departure: Departure, heard: Heard
     return min(found, key=lambda each: each[1], default=None)
 
 
+def legs_of(
+    *, departure: Departure, trips: TripInputs, heard: Heard,
+) -> tuple[Leg, ...]:
+    """
+    List the trips a departure's vehicle runs whose patterns are loaded.
+
+    Parameters
+    ----------
+    departure : Departure
+        The trip's departure from the From.
+    trips : TripInputs
+        The strip's departures and live data.
+    heard : Heard
+        Each trip's vehicle and age.
+
+    Returns
+    -------
+    tuple[Leg, ...]
+        The departure's own trip, its vehicle matched by trip ID or
+        alias, then the trip it carries on as when that pattern is
+        loaded, its vehicle matched by that trip ID; none without a
+        pattern for the own trip.
+    """
+    own = trips.patterns.get(departure.trip_id)
+    if own is None:
+        return ()
+    first = Leg(
+        pattern=own, found=vehicle_of(departure=departure, heard=heard),
+    )
+    then = departure.facts.then
+    after = None if then is None else trips.patterns.get(then.trip_id)
+    if then is None or after is None:
+        return (first,)
+    return first, Leg(pattern=after, found=heard.get(then.trip_id))
+
+
+def fresh_leg(*, legs: Sequence[Leg]) -> Leg | None:
+    """
+    Find the leg with the freshest fresh position.
+
+    Parameters
+    ----------
+    legs : Sequence[Leg]
+        The departure's legs.
+
+    Returns
+    -------
+    Leg | None
+        That leg, or None when no leg has a fresh position.
+    """
+    fresh = [
+        leg
+        for leg in legs
+        if leg.found is not None and is_fresh(age=leg.found[1])
+    ]
+    return min(
+        fresh,
+        key=lambda leg: math.inf if leg.found is None else leg.found[1],
+        default=None,
+    )
+
+
+def current_leg(
+    *, legs: Sequence[Leg], departure: Departure, now: datetime,
+) -> tuple[Leg, tuple[int, float]] | None:
+    """
+    Find the leg a departure's vehicle is on now, and its hop.
+
+    Parameters
+    ----------
+    legs : Sequence[Leg]
+        The departure's legs, from `legs_of`.
+    departure : Departure
+        The departure.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    tuple[Leg, tuple[int, float]] | None
+        A fresh position's leg and nearest hop. Otherwise the own leg's
+        timetable hop until its last arrival; after it, the next leg's
+        timetable hop, or (0, 0.0) while that leg hasn't left its first
+        stop. None with no legs or no hop.
+    """
+    if not legs:
+        return None
+    if (fresh := fresh_leg(legs=legs)) is not None and fresh.found:
+        hop = hop_near(pattern=fresh.pattern, point=fresh.found[0].point)
+        return None if hop is None else (fresh, hop)
+    seconds = service_seconds(
+        day=departure.service_day, moment=timetable_moment(now=now),
+    )
+    own = legs[0]
+    stops = own.pattern.stops
+    if len(legs) == 1 or not stops or seconds <= stops[-1].arrives:
+        hop = hop_at(pattern=own.pattern, seconds=seconds)
+        return None if hop is None else (own, hop)
+    after = legs[1]
+    if after.pattern.stops and seconds < after.pattern.stops[0].departs:
+        return after, (0, 0.0)
+    hop = hop_at(pattern=after.pattern, seconds=seconds)
+    return None if hop is None else (after, hop)
+
+
 def trip_marker(
     *,
     departure: Departure,
@@ -96,39 +221,33 @@ def trip_marker(
     -------
     Badge | None
         A solid badge at a fresh position's nearest hop, else a hollow one
-        at the timetable hop; None without a pattern, a hop, or both of
-        the hop's rows.
+        at the timetable hop, on the trip or the one it carries on as and
+        labelled with that trip's route; None without a pattern, a hop,
+        or both of the hop's rows.
     """
-    pattern = trips.patterns.get(departure.trip_id)
-    if pattern is None:
+    legs = legs_of(departure=departure, trips=trips, heard=heard)
+    current = current_leg(legs=legs, departure=departure, now=trips.now)
+    if current is None:
         return None
-    found = vehicle_of(departure=departure, heard=heard)
-    fresh = found is not None and is_fresh(age=found[1])
-    if found is not None and fresh:
-        hop = hop_near(pattern=pattern, point=found[0].point)
-    else:
-        moment = timetable_moment(now=trips.now)
-        hop = hop_at(pattern=pattern, seconds=service_seconds(
-            day=departure.service_day, moment=moment,
-        ))
-    ends = None if hop is None else tuple(
-        spots.get(trips.station_of.get(stop.station, stop.station))
-        for stop in pattern.stops[hop[0]:hop[0] + 2]
-    )
-    age = None if found is None or fresh else found[1] // 60 * 60
+    leg, (index, fraction) = current
+    ages = [each.found[1] for each in legs if each.found is not None]
+    live = bool(ages) and is_fresh(age=min(ages))
     return hop_marker(
-        route=pattern.route,
-        ends=ends,
-        fraction=0.0 if hop is None else hop[1],
-        age=age,
-        live=fresh,
+        route=leg.pattern.route,
+        ends=tuple(
+            spots.get(trips.station_of.get(stop.station, stop.station))
+            for stop in leg.pattern.stops[index:index + 2]
+        ),
+        fraction=fraction,
+        age=None if live or not ages else min(ages) // 60 * 60,
+        live=live,
     )
 
 
 def hop_marker(
     *,
     route: str,
-    ends: tuple[Spot | None, ...] | None,
+    ends: tuple[Spot | None, ...],
     fraction: float,
     age: float | None,
     live: bool,
@@ -140,9 +259,9 @@ def hop_marker(
     ----------
     route : str
         Route label.
-    ends : tuple[Spot | None, ...] | None
+    ends : tuple[Spot | None, ...]
         The spots of the hop's two stops, each None when not a visible
-        row; None with no hop.
+        row.
     fraction : float
         Share of the hop run.
     age : float | None
@@ -159,8 +278,6 @@ def hop_marker(
         rides the earlier row's track until within a row of the exit,
         then sits on the exit's stub end as a spur badge.
     """
-    if ends is None:
-        return None
     start, end = ends
     if start is None or end is None:
         return None
@@ -182,6 +299,35 @@ def hop_marker(
     )
 
 
+def without_shown_next(
+    *, departures: Sequence[Departure],
+) -> list[Departure]:
+    """
+    Drop carry-ons onto trips that have their own strip departure.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        The strip's departures in the window.
+
+    Returns
+    -------
+    list[Departure]
+        The departures, with no carry-on where the next trip is one of
+        them, so its vehicle gets one badge.
+    """
+    shown = {departure.trip_id for departure in departures}
+    return [
+        (
+            replace(departure, facts=replace(departure.facts, then=None))
+            if departure.facts.then is not None
+            and departure.facts.then.trip_id in shown
+            else departure
+        )
+        for departure in departures
+    ]
+
+
 def vehicle_markers(*, trips: TripInputs, keep: Keepouts
                     ) -> tuple[Marker, ...]:
     """
@@ -199,20 +345,22 @@ def vehicle_markers(*, trips: TripInputs, keep: Keepouts
     tuple[Marker, ...]
         One badge per strip trip in the window, not cancelled, that can
         be placed, each on its own hop, kept off the names, the discs and
-        each other (see `pushed`).
+        each other (see `pushed`). A trip that carries on as another
+        strip trip in the window ends at the change, so the next trip's
+        vehicle has one badge.
     """
     key = trips.key
     spots = keep.spots
     if key is None or not spots:
         return ()
     heard = heard_trips(trips=trips)
-    departures = window_departures(
+    departures = without_shown_next(departures=window_departures(
         departures=[
             item.departure for item in trips.departures if not item.cancelled
         ],
         key=key,
         now=trips.now,
-    )
+    ))
     placed = (
         trip_marker(
             departure=departure, trips=trips, spots=spots, heard=heard,

@@ -48,6 +48,23 @@ EMPTY_STOP_VIEW: Final[StopView] = StopView(
 
 
 @dataclass(frozen=True)
+class CarryNote:
+    """
+    The note on the station where a strip run carries on as another route.
+
+    Attributes
+    ----------
+    route : str
+        The run's route.
+    then : str
+        The route and headsign it carries on as.
+    """
+
+    route: str
+    then: str
+
+
+@dataclass(frozen=True)
 class StripRow:
     """
     One station as the strip draws it.
@@ -84,6 +101,8 @@ class StripRow:
     name_after : float | None
         The x the name starts at or right of, past badges beside the
         row's disc; None for the usual place.
+    note : CarryNote | None
+        The carry-on note drawn on the row, if any.
     """
 
     name: str
@@ -99,6 +118,7 @@ class StripRow:
     bold: bool
     station: str
     name_after: float | None = None
+    note: CarryNote | None = None
 
 
 @dataclass(frozen=True)
@@ -318,6 +338,8 @@ class Marks:
         The row being picked.
     picking : str | None
         'TO' or 'FROM' while picking.
+    note : tuple[int, CarryNote] | None
+        The carry-on note and its row, if any.
     """
 
     origin: int | None
@@ -326,3 +348,4 @@ class Marks:
     times: Mapping[int, str]
     cursor: int | None
     picking: str | None
+    note: tuple[int, CarryNote] | None = None

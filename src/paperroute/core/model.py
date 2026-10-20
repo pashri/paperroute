@@ -277,10 +277,22 @@ def pin_key(
 
 @dataclass(frozen=True)
 class CarryOn:
-    """The service a vehicle runs next, after this trip."""
+    """
+    The service a vehicle runs next, after this trip.
+
+    Attributes
+    ----------
+    route : str
+        Next trip's route short name.
+    headsign : str
+        Next trip's headsign.
+    trip_id : str
+        Next trip's ID, or '' when the timetable doesn't say.
+    """
 
     route: str
     headsign: str
+    trip_id: str = ''
 
 
 @dataclass(frozen=True)

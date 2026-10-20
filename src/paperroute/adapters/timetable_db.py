@@ -9,6 +9,7 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
+from paperroute.adapters.departure_rows import to_departure
 from paperroute.adapters.sqlite_ro import (
     Identity,
     ReadOnlyDatabase,
@@ -25,16 +26,12 @@ from paperroute.core.geo import (
 from paperroute.core.model import (
     HIDDEN_HEADSIGNS,
     SYDNEY,
-    CarryOn,
     Departure,
     Mode,
     Pin,
     StopPlace,
-    TripFacts,
-    kind_for,
     mode_for,
     service_seconds,
-    service_time,
 )
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.reach import StripKey
@@ -52,11 +49,14 @@ SELECT
   (SELECT COUNT(*) FROM sqlite_master
    WHERE type = 'table' AND name = 'shapes'),
   (SELECT COUNT(*) FROM sqlite_master
-   WHERE type = 'table' AND name = 'trip_next')
+   WHERE type = 'table' AND name = 'trip_next'),
+  (SELECT COUNT(*) FROM pragma_table_info('trip_next')
+   WHERE name = 'next_trip')
 """
-NEXT_COLUMNS: Final[str] = 'n.route, n.headsign'
+NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, n.next_trip'
+OLD_NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, NULL'
 NEXT_JOIN: Final[str] = 'LEFT JOIN trip_next n ON n.trip_id = t.trip_id'
-NO_NEXT: Final[str] = 'NULL, NULL'
+NO_NEXT: Final[str] = 'NULL, NULL, NULL'
 NAMED_NEAR: Final[str] = """
 SELECT stop_id, lon, lat FROM stops
 WHERE name = :name AND lon BETWEEN :west AND :east
@@ -188,11 +188,28 @@ class Features:
         Whether the shapes table exists.
     carry_ons : bool
         Whether the trip_next table exists.
+    next_trips : bool
+        Whether trip_next has the next_trip column.
     """
 
     shape_column: bool = False
     shapes: bool = False
     carry_ons: bool = False
+    next_trips: bool = False
+
+    @property
+    def next_columns(self) -> str:
+        """
+        The carry-on columns a departure query selects.
+
+        Returns
+        -------
+        str
+            Next route, headsign and trip, NULL where the file lacks them.
+        """
+        if not self.carry_ons:
+            return NO_NEXT
+        return NEXT_COLUMNS if self.next_trips else OLD_NEXT_COLUMNS
 
 
 class SqliteTimetableRepository:
@@ -319,13 +336,14 @@ class SqliteTimetableRepository:
         self.fetch(sql='SELECT 1', params=())
         if known is None or known[0] != self.identity:
             rows = self.fetch(sql=SCHEMA_CHECK, params=())
-            found = rows[0] if rows else (0, 0, 0)
+            found = rows[0] if rows else (0, 0, 0, 0)
             known = (
                 self.identity,
                 Features(
                     shape_column=bool(found[0]),
                     shapes=bool(found[1]),
                     carry_ons=bool(found[2]),
+                    next_trips=bool(found[3]),
                 ),
             )
             self.schema = known
@@ -787,13 +805,13 @@ class SqliteTimetableRepository:
         list[Departure]
             Unsorted departures, leaving out empty-running trips.
         """
-        carry_ons = self.features().carry_ons
+        features = self.features()
         sql = DEPARTURES if ends[1] is not None else WHOLE_STOP
         rows = self.fetch(
             sql=sql.format(
                 shape=self.shape_column(),
-                then=NEXT_COLUMNS if carry_ons else NO_NEXT,
-                next_join=NEXT_JOIN if carry_ons else '',
+                then=features.next_columns,
+                next_join=NEXT_JOIN if features.carry_ons else '',
             ),
             params={
                 'day': day.isoformat(),
@@ -812,77 +830,6 @@ class SqliteTimetableRepository:
     def close(self) -> None:
         """Close the database connection."""
         self.db.close()
-
-
-def to_departure(*, row: tuple[object, ...], day: date) -> Departure:
-    """
-    Turn a query row into a Departure.
-
-    Parameters
-    ----------
-    row : tuple[object, ...]
-        DEPARTURES or WHOLE_STOP row.
-    day : date
-        Service date the row's times count from.
-
-    Returns
-    -------
-    Departure
-        The departure.
-    """
-    (trip, route, route_type, agency, headsign, platform, oseq, ostop,
-     dseq, dstop, dep, arr, aliases) = row[:13]
-    return Departure(
-        trip_id=str(trip),
-        aliases=tuple(sorted(str(aliases).split())) if aliases else (),
-        route=str(route),
-        mode=mode_for(
-            route_type=int(str(route_type)),
-            agency_id=str(agency) if agency else None,
-        ),
-        headsign=str(headsign),
-        platform=str(platform),
-        origin_seq=int(str(oseq)),
-        origin_stop=str(ostop),
-        destination_seq=int(str(dseq)),
-        destination_stop=str(dstop),
-        departs=service_time(day=day, seconds=int(str(dep))),
-        arrives=service_time(day=day, seconds=int(str(arr))),
-        service_day=day,
-        shape_id=str(row[13]) if row[13] else None,
-        facts=facts_of(row=row),
-    )
-
-
-def facts_of(*, row: tuple[object, ...]) -> TripFacts:
-    """
-    Read a departure row's route kind and carry-on.
-
-    Parameters
-    ----------
-    row : tuple[object, ...]
-        DEPARTURES or WHOLE_STOP row.
-
-    Returns
-    -------
-    TripFacts
-        Kind of the route and the service the vehicle runs next, None
-        when the row has none.
-    """
-    route, route_type, agency = row[1:4]
-    then, then_to = row[14:16]
-    return TripFacts(
-        kind=kind_for(
-            route_type=int(str(route_type)),
-            agency_id=str(agency) if agency else None,
-            short_name=str(route),
-        ),
-        then=(
-            None
-            if then is None
-            else CarryOn(route=str(then), headsign=str(then_to))
-        ),
-    )
 
 
 def pattern_of(

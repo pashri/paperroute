@@ -24,7 +24,7 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.model import Departure, Mode, RouteKind
+from paperroute.core.model import CarryOn, Departure, Mode, RouteKind
 from paperroute.core.reach import Reach, ReachRow, RowKind, StripKey
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import initial_state, step
@@ -355,6 +355,21 @@ def test_strip_trips_patterns_requested() -> None:
     _, effects = on_view(view=LiveView.STRIP, departures=(*trains(), late))
     [load] = kinds(effects=effects, kind=LoadPatterns)
     assert load.trip_ids == {'train-0', 'train-1', 'train-2'}
+
+
+def test_strip_trips_include_next_trips() -> None:
+    """The Strip asks for the pattern of the trip a train carries on as."""
+    t8 = departure(
+        departs=START + timedelta(minutes=3),
+        mode=Mode.TRAIN,
+        route='T8',
+        trip_id='a',
+        kind=RouteKind.TRAIN,
+        then=CarryOn(route='T2', headsign='Leppington', trip_id='b'),
+    )
+    _, effects = on_view(view=LiveView.STRIP, departures=(*trains(), t8))
+    [load] = kinds(effects=effects, kind=LoadPatterns)
+    assert {'a', 'b'} <= load.trip_ids
 
 
 def whole_stop(*, at: datetime) -> tuple[Departure, ...]:

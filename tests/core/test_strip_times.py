@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
-from paperroute.core.model import Departure, RouteKind
+from paperroute.core.model import CarryOn, Departure, RouteKind
 from paperroute.core.reach import StripKey
 from paperroute.core.strip_times import board_departures, strip_trips
 from tests.core.factories import START, departure
@@ -75,6 +75,18 @@ def test_strip_trips_follow_the_routes_rule() -> None:
     assert strip_trips(departures=both, key=anything, now=START) == {
         'a', 'b',
     }
+
+
+def test_strip_trips_include_next_trips() -> None:
+    """A T8 that carries on as trip b brings b's trip ID along."""
+    t8 = departure(
+        departs=START,
+        trip_id='a',
+        route='T8',
+        kind=RouteKind.TRAIN,
+        then=CarryOn(route='T2', headsign='Leppington', trip_id='b'),
+    )
+    assert strip_trips(departures=[t8], key=TRAIN, now=START) == {'a', 'b'}
 
 
 def test_bus_board_keeps_school_and_replacement() -> None:

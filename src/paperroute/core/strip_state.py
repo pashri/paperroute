@@ -21,7 +21,11 @@ from paperroute.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_folds import folded
 from paperroute.core.strip_model import NEEDS_UPDATE, StripInputs
-from paperroute.core.strip_times import strip_trips, window_departures
+from paperroute.core.strip_times import (
+    strip_trips,
+    trip_ids,
+    window_departures,
+)
 from paperroute.core.strip_view import home_of, window_of
 
 STRIP_VIEWS: Final[frozenset[LiveView]] = frozenset(
@@ -431,7 +435,7 @@ def strip_patterns(*, state: State) -> frozenset[str]:
         The shown strip's trips on a strip view, and the chooser's in
         the TO stage; none elsewhere.
     """
-    wanted = frozenset(dep.trip_id for dep in picked_window(state=state))
+    wanted = trip_ids(departures=picked_window(state=state))
     if state.view not in STRIP_VIEWS:
         return wanted
     return wanted | strip_trips(

@@ -153,7 +153,9 @@ def runs_of(*, trips: list[TripCalls]) -> dict[str, tuple[str, ...]]:
     return chained(trips=trips, nexts=next_trips(trips=trips))
 
 
-def carry_ons_of(*, trips: list[TripCalls]) -> dict[str, tuple[str, str]]:
+def carry_ons_of(
+    *, trips: list[TripCalls],
+) -> dict[str, tuple[str, str, str]]:
     """
     Find carry-ons with next trips found once.
 
@@ -164,8 +166,8 @@ def carry_ons_of(*, trips: list[TripCalls]) -> dict[str, tuple[str, str]]:
 
     Returns
     -------
-    dict[str, tuple[str, str]]
-        Trip ID to the next trip's short name and headsign.
+    dict[str, tuple[str, str, str]]
+        Trip ID to the next trip's short name, headsign and trip ID.
     """
     return carry_ons(trips=trips, nexts=next_trips(trips=trips))
 
@@ -232,7 +234,9 @@ def test_bus_blocks_chain_only_within_the_route(
 ) -> None:
     """The 809 does not run on as the 811, but is tagged with it."""
     assert runs_of(trips=calls)['v1'] == ('B1', 'B2')
-    assert carry_ons_of(trips=calls)['v1'] == ('811', 'Parramatta Stn')
+    assert carry_ons_of(trips=calls)['v1'] == (
+        '811', 'Parramatta Stn', 'v2',
+    )
 
 
 def test_rail_blocks_chain_across_routes() -> None:
@@ -255,7 +259,9 @@ def test_carry_ons_tag_trains_too() -> None:
                    first_dep=0, last_arr=100, block='c')
     u2 = hand_trip(trip_id='u2', route='T1', stations='C B A',
                    first_dep=150, last_arr=250, block='c')
-    assert carry_ons_of(trips=[t1, t9, u1, u2]) == {'t1': ('T9', 'to E')}
+    assert carry_ons_of(trips=[t1, t9, u1, u2]) == {
+        't1': ('T9', 'to E', 't9'),
+    }
 
 
 def test_chained_keeps_the_return_until_a_hop_repeats(
@@ -381,8 +387,9 @@ def test_load_runs_subtracts_skipped_dates(
 def test_trip_next_rows(network: sqlite3.Connection) -> None:
     """The 809 carries on as the 811; x1 carries on as the same T1."""
     assert network.execute(
-        "SELECT route, headsign FROM trip_next WHERE trip_id = 'v1'",
-    ).fetchall() == [('811', 'Parramatta Stn')]
+        "SELECT route, headsign, next_trip FROM trip_next"
+        " WHERE trip_id = 'v1'",
+    ).fetchall() == [('811', 'Parramatta Stn', 'v2')]
     assert not network.execute(
         "SELECT 1 FROM trip_next WHERE trip_id = 'x1'",
     ).fetchall()

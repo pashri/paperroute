@@ -25,6 +25,7 @@ from paperroute.core.reach import (
     StripKey,
     build_reach,
 )
+from paperroute.core.reach_layout import LineExit
 from paperroute.core.stop_view import (
     NOT_PINNED,
     StopInputs,
@@ -47,6 +48,15 @@ POINTS: Final[dict[str, Point]] = {
     'X': (5000.0, 0.0),
 }
 EAST: Final[tuple[str, ...]] = ('C', 'E1', 'E2')
+LINE: Final[dict[str, Point]] = {
+    'A': (0.0, 0.0),
+    'B': (0.0, -1000.0),
+    'C': (0.0, -2000.0),
+    'D': (0.0, -3000.0),
+}
+T2_ON: Final[CarryOn] = CarryOn(
+    route='T2', headsign='Leppington', trip_id='b',
+)
 
 
 def place(
@@ -559,6 +569,92 @@ def east_inputs(
         patterns={
             'e': line_pattern(trip_id='e', stations=EAST, minutes=0),
         },
+        positions={'trains': snapshot(fetched_at=now, vehicles=vehicles)},
+        now=now,
+    )
+
+
+def line_reach(*, off: bool = False) -> Reach:
+    """
+    Build the reach A B C D down one line, with A the From.
+
+    Parameters
+    ----------
+    off : bool
+        Make D an exit row off C instead of a station on the line.
+
+    Returns
+    -------
+    Reach
+        The reach.
+    """
+    places = {
+        key: StopPlace(stop_id=key, name=f'{key} Station', point=point)
+        for key, point in LINE.items()
+    }
+    return build_reach(data=ReachInput(
+        origin=places['A'],
+        tails=(
+            RunTail(
+                before=(), after=('B', 'C') if off else ('B', 'C', 'D'),
+                trips=6,
+            ),
+        ),
+        places=places,
+        station_of={key: key for key in LINE},
+        exits=(
+            (LineExit(junction='C', off='D', lines=('T2',), trips=3),)
+            if off
+            else ()
+        ),
+    ))
+
+
+def carry_on_inputs(
+    *,
+    now: datetime,
+    off: bool = False,
+    next_loaded: bool = True,
+    vehicles: tuple[VehiclePosition, ...] = (),
+) -> StripInputs:
+    """
+    Make inputs with a T8 from A to C that carries on there as a T2 to D.
+
+    Trip a leaves A at 8:00 and reaches C at 8:10; trip b, its carry-on,
+    leaves C at 8:12 and reaches D at 8:17.
+
+    Parameters
+    ----------
+    now : datetime
+        Current time.
+    off : bool
+        Make D an exit row off C.
+    next_loaded : bool
+        Load trip b's pattern.
+    vehicles : tuple[VehiclePosition, ...]
+        Vehicles in the positions feed.
+
+    Returns
+    -------
+    StripInputs
+        The inputs over `line_reach`.
+    """
+    a = pattern(
+        trip_id='a', route='T8',
+        stops=calls(stations='ABC', start=EIGHT, points=LINE),
+    )
+    b = pattern(
+        trip_id='b', route='T2',
+        stops=calls(stations='CD', start=EIGHT + 720, points=LINE),
+    )
+    item = departure(
+        departs=START, trip_id='a', route='T8', mode=Mode.TRAIN,
+        kind=RouteKind.TRAIN, then=T2_ON,
+    )
+    return inputs_of(
+        reach=line_reach(off=off),
+        departures=[live(item=item)],
+        patterns={'a': a, 'b': b} if next_loaded else {'a': a},
         positions={'trains': snapshot(fetched_at=now, vehicles=vehicles)},
         now=now,
     )

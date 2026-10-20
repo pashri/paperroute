@@ -40,7 +40,7 @@ CREATE TABLE run_stops (station_id TEXT NOT NULL, run_id INTEGER NOT NULL,
 CREATE TABLE trip_runs (trip_id TEXT PRIMARY KEY, run_id INTEGER NOT NULL)
   WITHOUT ROWID;
 CREATE TABLE trip_next (trip_id TEXT PRIMARY KEY, route TEXT NOT NULL,
-  headsign TEXT NOT NULL) WITHOUT ROWID;
+  headsign TEXT NOT NULL, next_trip TEXT NOT NULL) WITHOUT ROWID;
 CREATE TABLE route_patterns (route_id TEXT NOT NULL, headsign TEXT NOT NULL,
   stations TEXT NOT NULL, trips INTEGER NOT NULL);
 """
@@ -326,7 +326,7 @@ def chained(
 
 def carry_ons(
     *, trips: Sequence[TripCalls], nexts: dict[str, TripCalls],
-) -> dict[str, tuple[str, str]]:
+) -> dict[str, tuple[str, str, str]]:
     """
     Find shown block trips that carry on as a route of another short name.
 
@@ -339,11 +339,11 @@ def carry_ons(
 
     Returns
     -------
-    dict[str, tuple[str, str]]
-        Trip ID to the next trip's short name and headsign.
+    dict[str, tuple[str, str, str]]
+        Trip ID to the next trip's short name, headsign and trip ID.
     """
     return {
-        trip.trip_id: (after.route, after.headsign)
+        trip.trip_id: (after.route, after.headsign, after.trip_id)
         for trip in trips
         if trip.shown and (after := nexts.get(trip.trip_id)) is not None
         and after.route != trip.route
@@ -576,10 +576,10 @@ def load_block_runs(
     insert_many(conn=conn, sql='INSERT INTO trip_runs VALUES (?, ?)',
                 rows=block_trip_runs(trips=blocks, nexts=nexts, table=table))
     blocks.clear()
-    insert_many(conn=conn, sql='INSERT INTO trip_next VALUES (?, ?, ?)',
+    insert_many(conn=conn, sql='INSERT INTO trip_next VALUES (?, ?, ?, ?)',
                 rows=(
-                    (trip_id, route, headsign)
-                    for trip_id, (route, headsign) in tags.items()
+                    (trip_id, *tag)
+                    for trip_id, tag in tags.items()
                 ))
 
 

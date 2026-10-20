@@ -46,7 +46,7 @@ from tests.build.feeds import (
 )
 from tests.build.network_feed import network_feed
 from tests.core.factories import pin_of, place
-from tests.helpers import old_schema, write_feed
+from tests.helpers import old_schema, schema_three, write_feed
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 MONDAY: Final[date] = date(2026, 10, 19)
@@ -1134,7 +1134,7 @@ def test_departures_carry_on_as_the_next_route(
     old_network: SqliteTimetableRepository,
 ) -> None:
     """v1 carries on as the 811; an old timetable doesn't know."""
-    then = CarryOn(route='811', headsign='Parramatta Stn')
+    then = CarryOn(route='811', headsign='Parramatta Stn', trip_id='v2')
     for pin in (pin_of('B1', None), pin_of('B1', 'B2')):
         found = network.departures(
             pin=pin,
@@ -1151,6 +1151,24 @@ def test_departures_carry_on_as_the_next_route(
     )
     assert [(d.trip_id, d.facts) for d in old] == [
         ('v1', TripFacts(kind=RouteKind.BUS, then=None)),
+    ]
+
+
+def test_carry_on_without_next_trip_column(
+    network_db: Path, tmp_path: Path,
+) -> None:
+    """A schema-3 file still carries v1 on as the 811, with no trip."""
+    copy = tmp_path / 'timetable.db'
+    shutil.copy(network_db, copy)
+    schema_three(path=copy)
+    with closing(SqliteTimetableRepository(path=copy)) as repo:
+        found = repo.departures(
+            pin=pin_of('B1', None),
+            start=at(hour=9, minute=0, day=6),
+            end=at(hour=10, minute=0, day=6),
+        )
+    assert [(d.trip_id, d.facts.then) for d in found] == [
+        ('v1', CarryOn(route='811', headsign='Parramatta Stn', trip_id='')),
     ]
 
 
@@ -1226,10 +1244,16 @@ def test_809_carries_on_as_811_at_merrylands() -> None:
             )
             if departure.route == '809'
         ]
-    then = CarryOn(route='811', headsign='Parramatta Stn')
-    on = {d.departs.strftime('%H:%M') for d in found if d.facts.then == then}
+    carried = [
+        d
+        for d in found
+        if d.facts.then is not None
+        and (d.facts.then.route, d.facts.then.headsign)
+        == ('811', 'Parramatta Stn')
+    ]
+    on = {d.departs.strftime('%H:%M') for d in carried}
     assert len(found) == 46
-    assert len([d for d in found if d.facts.then == then]) == 20
+    assert len(carried) == 20
     assert not on & {'09:04', '15:29'}
     assert {'09:04', '15:29'} <= {d.departs.strftime('%H:%M') for d in found}
 

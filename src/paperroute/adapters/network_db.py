@@ -1,8 +1,8 @@
-"""Network repository: chooser columns, towards lines and station runs."""
+"""Network repository: chooser columns, line stations and station runs."""
 
 import json
 import sqlite3
-from collections.abc import Collection, Iterable, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import replace
 from pathlib import Path
 from typing import Final, cast
@@ -24,6 +24,7 @@ from paperroute.core.chooser import (
 )
 from paperroute.core.model import (
     INTERCITY,
+    STATION_FIRST,
     SYDNEY_FERRIES,
     SYDNEY_LINES,
     TRAINLINK,
@@ -42,6 +43,7 @@ from paperroute.core.reach import (
 NETWORK_TABLES: Final[tuple[str, ...]] = (
     'runs', 'run_stops', 'chooser_routes', 'chooser_towards',
 )
+LINE_TABLES: Final[tuple[str, ...]] = ('line_stations', 'line_aliases')
 SCHEMA_CHECK: Final[str] = """
 SELECT COUNT(*) FROM sqlite_master
 WHERE type = 'table' AND name IN (SELECT value FROM json_each(?))
@@ -101,7 +103,21 @@ SELECT stop_id, COALESCE(NULLIF(parent_station, ''), stop_id) FROM stops
 WHERE stop_id IN (SELECT value FROM json_each(:ids))
   OR parent_station IN (SELECT value FROM json_each(:ids))
 """
-REPLACEMENTS_KEY: Final[str] = 'replacements'
+LINE_STATIONS: Final[str] = """
+SELECT l.station_id, l.head, s.name, s.lon, s.lat, COALESCE(h.name, l.head)
+FROM line_stations l JOIN stops s ON s.stop_id = l.station_id
+  LEFT JOIN stops h ON h.stop_id = l.head
+WHERE l.line_key = ?
+ORDER BY l.pos
+"""
+ALIASES: Final[str] = 'SELECT station_id, kept_id FROM line_aliases'
+PASSES: Final[str] = """
+SELECT r.stations, s.pos
+FROM run_stops s JOIN runs r ON r.run_id = s.run_id
+WHERE s.station_id IN (SELECT value FROM json_each(:stations))
+  AND r.kind = :kind
+"""
+FROM_TAG: Final[str] = 'ALL'
 type Row = tuple[object, ...]
 
 
@@ -213,6 +229,116 @@ def ruled_off(*, lines: Sequence[Choice]) -> tuple[Choice, ...]:
     )
 
 
+def short_name(*, name: object) -> str:
+    """
+    Name a station without its ' Station' suffix.
+
+    Parameters
+    ----------
+    name : object
+        Stop name read from the file.
+
+    Returns
+    -------
+    str
+        The name.
+    """
+    return str(name).removesuffix(' Station')
+
+
+def station_choices(*, rows: Iterable[Row]) -> tuple[Choice, ...]:
+    """
+    Turn line_stations rows into station rows under block headings.
+
+    Parameters
+    ----------
+    rows : Iterable[Row]
+        Station ID, head, name, longitude, latitude and head name, in
+        line order. A row with a head opens a block.
+
+    Returns
+    -------
+    tuple[Choice, ...]
+        A heading before each block, then one row per station.
+    """
+    items: list[Choice] = []
+    for station, head, name, lon, lat, head_name in rows:
+        if head:
+            items.append(Choice(
+                key='', label=f'To {short_name(name=head_name)}',
+                heading=True,
+            ))
+        items.append(Choice(
+            key=str(station), label=short_name(name=name),
+            place=StopPlace(
+                stop_id=str(station), name=str(name),
+                point=to_point(lon=lon, lat=lat),
+            ),
+        ))
+    return tuple(items)
+
+
+def to_choice(
+    *, choice: Choice, origin: str, reached: Collection[str],
+) -> Choice:
+    """
+    Mark a station row for the TO column.
+
+    Parameters
+    ----------
+    choice : Choice
+        Row of the station column.
+    origin : str
+        The From station ID.
+    reached : Collection[str]
+        Stations reached directly from the From.
+
+    Returns
+    -------
+    Choice
+        The From tagged ALL, an unreached station dim, any other row as
+        it was.
+    """
+    if choice.heading:
+        return choice
+    if choice.key == origin:
+        return replace(choice, tag=FROM_TAG)
+    return choice if choice.key in reached else replace(choice, dim=True)
+
+
+def later_stops(
+    *, rows: Iterable[Row], aliases: Mapping[str, str],
+) -> frozenset[str]:
+    """
+    Collect the stations runs call at after a pass of the From.
+
+    Each run is cut, as a strip's tails are, before the first station it
+    would call at again after the From, so a run that turns back
+    reaches nothing past the turn.
+
+    Parameters
+    ----------
+    rows : Iterable[Row]
+        Each run's stations as JSON and the From's position in it, one
+        row per pass.
+    aliases : Mapping[str, str]
+        Kept station by merged station ID.
+
+    Returns
+    -------
+    frozenset[str]
+        Stations after the From on some run, merged ones as the kept
+        station.
+    """
+    return frozenset(
+        aliases.get(later, later)
+        for stations, pos in rows
+        for later in until_revisit(
+            stations=json.loads(str(stations))[cast(int, pos):],
+        )[1:]
+    )
+
+
 def merged_tails(*, rows: Iterable[Row]) -> tuple[RunTail, ...]:
     """
     Make one tail per pass of the From and merge identical tails.
@@ -276,7 +402,9 @@ class SqliteNetworkRepository:
             probe='SELECT 1 FROM stops LIMIT 1',
             label='network',
         )
-        self.schema: tuple[Identity | None, bool] | None = None
+        self.schema: dict[
+            tuple[str, ...], tuple[Identity | None, bool]
+        ] = {}
 
     def fetch(
         self, *, sql: str, params: tuple[object, ...] | dict[str, object]
@@ -298,32 +426,57 @@ class SqliteNetworkRepository:
         """
         return self.db.fetch(sql=sql, params=params)
 
-    def has_network(self) -> bool:
+    def _has_tables(self, *, tables: tuple[str, ...]) -> bool:
         """
-        Say whether the file has the run and chooser tables.
+        Say whether the file has every one of some tables.
 
         The answer is kept while the file is unchanged on disk.
+
+        Parameters
+        ----------
+        tables : tuple[str, ...]
+            Table names.
 
         Returns
         -------
         bool
-            True for a file with every network table.
+            True for a file with every table.
         """
         path = self.db.path
-        known = self.schema
+        known = self.schema.get(tables)
         if known is not None and (
             path is None or file_identity(path=path) == known[0]
         ):
             return known[1]
         self.fetch(sql='SELECT 1', params=())
         if known is None or known[0] != self.db.identity:
-            rows = self.fetch(
-                sql=SCHEMA_CHECK, params=(json.dumps(NETWORK_TABLES),),
-            )
-            found = bool(rows) and rows[0][0] == len(NETWORK_TABLES)
+            rows = self.fetch(sql=SCHEMA_CHECK, params=(json.dumps(tables),))
+            found = bool(rows) and rows[0][0] == len(tables)
             known = (self.db.identity, found)
-            self.schema = known
+            self.schema[tables] = known
         return known[1]
+
+    def has_network(self) -> bool:
+        """
+        Say whether the file has the run and chooser tables.
+
+        Returns
+        -------
+        bool
+            True for a file with every network table.
+        """
+        return self._has_tables(tables=NETWORK_TABLES)
+
+    def has_lines(self) -> bool:
+        """
+        Say whether the file has the line station tables.
+
+        Returns
+        -------
+        bool
+            True for a file with line_stations and line_aliases.
+        """
+        return self._has_tables(tables=LINE_TABLES)
 
     def choices(self, *, path: ChooserPath) -> Column | None:
         """
@@ -379,10 +532,12 @@ class SqliteNetworkRepository:
                 column = self.route_column(
                     sql=ROUTES_IN_GROUP, params=(kind, key),
                 )
-            case (Level.LINE, RouteKind.TRAIN):
-                column = self.towards_column(route_key=key, line=True)
+            case (Level.LINE | Level.STATION, RouteKind()) if (
+                kind in STATION_FIRST
+            ):
+                column = self.station_first_column(path=path, kind=kind)
             case (Level.ROUTE | Level.LINE, RouteKind()):
-                column = self.towards_column(route_key=key, line=False)
+                column = self.towards_column(route_key=key)
             case (Level.REPLACEMENTS, RouteKind.TRAIN) if (
                 path[-2][0] is Level.LINE
             ):
@@ -475,40 +630,111 @@ class SqliteNetworkRepository:
         lines = ruled_off(lines=route_choices(rows=rows))
         return Column(level=Level.LINE, items=lines)
 
-    def towards_column(self, *, route_key: str, line: bool) -> Column:
+    def towards_column(self, *, route_key: str) -> Column:
         """
-        The TOWARDS column of a route or line, busiest first.
+        The TOWARDS column of a route, busiest first.
 
         Parameters
         ----------
         route_key : str
             Chooser row key.
-        line : bool
-            Whether a train line's replacement buses row may follow.
 
         Returns
         -------
         Column
-            Headsigns with trip counts, then any replacement buses row.
+            Headsigns with trip counts.
         """
-        items = [
+        items = tuple(
             Choice(key=str(towards), label=str(headsign), detail=str(trips))
             for towards, headsign, trips in self.fetch(
                 sql=TOWARDS, params=(route_key,),
             )
-        ]
-        buses = (
-            len(self.fetch(sql=REPLACEMENTS_OF, params=(route_key,)))
-            if line
-            else 0
         )
-        if buses:
-            items.append(Choice(
-                key=REPLACEMENTS_KEY, label='Replacement buses',
-                detail=unit_count(count=buses, unit='route'),
-                level=Level.REPLACEMENTS,
-            ))
-        return Column(level=Level.TOWARDS, items=tuple(items))
+        return Column(level=Level.TOWARDS, items=items)
+
+    def station_first_column(
+        self, *, path: ChooserPath, kind: RouteKind,
+    ) -> Column | None:
+        """
+        The STATION or TO column after a station-first line or station.
+
+        Parameters
+        ----------
+        path : ChooserPath
+            Steps chosen so far, ending in a LINE or STATION step.
+        kind : RouteKind
+            The path's station-first kind.
+
+        Returns
+        -------
+        Column | None
+            The line's stations after a LINE step; the TO column after a
+            STATION step that follows a LINE step; None otherwise or for
+            a file without the line tables.
+        """
+        if not self.has_lines():
+            return None
+        level, key = path[-1]
+        if level is Level.LINE:
+            return self.station_column(line_key=key)
+        if path[-2][0] is not Level.LINE:
+            return None
+        return self.to_column(line_key=path[-2][1], origin=key, kind=kind)
+
+    def station_column(self, *, line_key: str) -> Column:
+        """
+        The STATION column of a line: its stations in blocks.
+
+        Parameters
+        ----------
+        line_key : str
+            Chooser row key of the line.
+
+        Returns
+        -------
+        Column
+            Block headings and stations in line order.
+        """
+        rows = self.fetch(sql=LINE_STATIONS, params=(line_key,))
+        return Column(level=Level.STATION, items=station_choices(rows=rows))
+
+    def to_column(
+        self, *, line_key: str, origin: str, kind: RouteKind,
+    ) -> Column:
+        """
+        The TO column of a line from a station.
+
+        Parameters
+        ----------
+        line_key : str
+            Chooser row key of the line.
+        origin : str
+            The From station ID.
+        kind : RouteKind
+            The line's kind.
+
+        Returns
+        -------
+        Column
+            The station column with the From tagged ALL and every station
+            no run of the kind reaches directly from it dim. A station
+            merged into another by line_aliases counts as the station
+            kept for it, both as the From and as a later stop.
+        """
+        aliases = {
+            str(merged): str(kept)
+            for merged, kept in self.fetch(sql=ALIASES, params=())
+        }
+        merged = [origin, *(m for m, k in aliases.items() if k == origin)]
+        rows = self.fetch(sql=PASSES, params={
+            'stations': json.dumps(merged), 'kind': str(kind),
+        })
+        reached = later_stops(rows=rows, aliases=aliases)
+        items = tuple(
+            to_choice(choice=choice, origin=origin, reached=reached)
+            for choice in self.station_column(line_key=line_key).items
+        )
+        return Column(level=Level.TO, items=items)
 
     def towards_line(self, *, towards: int) -> tuple[StopPlace, ...] | None:
         """

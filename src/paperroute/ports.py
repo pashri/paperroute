@@ -160,6 +160,10 @@ class NetworkRepository(Protocol):
         """
         The chooser column that follows a path.
 
+        A Train, Metro, Light rail or Ferry line opens its STATION
+        column, and a station on it the TO column; both are None on a
+        timetable without the line station tables.
+
         Parameters
         ----------
         path : ChooserPath

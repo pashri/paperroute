@@ -19,6 +19,8 @@ class Level(StrEnum):
     LINE = 'line'
     TOWARDS = 'towards'
     REPLACEMENTS = 'replacements'
+    STATION = 'station'
+    TO = 'to'
 
 
 ChooserPath = tuple[tuple[Level, str], ...]
@@ -73,6 +75,12 @@ class Choice:
         Whether a rule separates this row from the one above.
     level : Level | None
         The path step's level when it differs from its column's, or None.
+    heading : bool
+        Whether it is a block header: never focused or pressed.
+    dim : bool
+        Whether it is greyed out: never focused.
+    place : StopPlace | None
+        A station row's place, with its point; None for other rows.
     """
 
     key: str
@@ -82,6 +90,9 @@ class Choice:
     tag: str = ''
     rule_above: bool = False
     level: Level | None = None
+    heading: bool = False
+    dim: bool = False
+    place: StopPlace | None = None
 
 
 @dataclass(frozen=True)

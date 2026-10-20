@@ -21,7 +21,7 @@ from paperroute.core.model import RouteKind, StopPlace
 from paperroute.core.reach import RunTail, StripKey
 from paperroute.ports import NetworkRepository
 from tests.build.network_feed import network_feed
-from tests.helpers import old_schema
+from tests.helpers import old_schema, schema_three
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 TOWN_HALL: Final[str] = '200070'
@@ -373,50 +373,106 @@ def test_train_lines_rule_off_intercity(copy: Path) -> None:
     ))
 
 
-def test_towards_busiest_first(network: SqliteNetworkRepository) -> None:
-    """A line's towards rows run from the most trips to the fewest."""
-    column = network.choices(path=T1)
+def test_towards_busiest_first(copy: Path) -> None:
+    """A route's towards rows run from the most trips to the fewest."""
+    for headsign, trips in (('Few', 1), ('Most', 9), ('Some', 4)):
+        add_towards(
+            path=copy, route_key='bus:811:Line 811', headsign=headsign,
+            trips=trips,
+        )
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        column = repo.choices(path=(
+            (Level.KIND, 'bus'), (Level.GROUP, '800s'),
+            (Level.ROUTE, 'bus:811:Line 811'),
+        ))
     assert column is not None
     assert column.level is Level.TOWARDS
     assert [(c.label, c.detail) for c in column.items] == [
-        ('E2', '10'), ('W2', '6'), ('R3', '3'), ('J', '2'), ('C', '1'),
-        ('W1', '1'),
+        ('Most', '9'), ('Some', '4'), ('Parramatta Stn', '1'), ('Few', '1'),
     ]
 
 
-def test_train_line_ends_with_replacement_buses(copy: Path) -> None:
-    """A line with replacement routes ends with their row."""
-    add_routes(path=copy, rows=[
-        ('replacement:1T1:a', 'replacement', '', 0, '1T1', 1, 'A', '', 'T1'),
-        ('replacement:2T1:b', 'replacement', '', 0, '2T1', 2, 'B', '', 'T1'),
-        ('replacement:1T2:c', 'replacement', '', 0, '1T2', 3, 'C', '', 'T2'),
-    ])
-    with closing(SqliteNetworkRepository(path=copy)) as repo:
-        one = repo.choices(path=T1)
-        two = repo.choices(path=(*TRAIN, (Level.LINE, 'train:T2')))
-    assert one is not None
-    assert one.items[-1] == Choice(
-        key='replacements', label='Replacement buses', detail='2 routes',
-        level=Level.REPLACEMENTS,
-    )
-    assert two is not None
-    assert two.items[-1].detail == '1 route'
+def test_line_column_for_train_has_no_towards(
+    network: SqliteNetworkRepository,
+) -> None:
+    """A train line opens its stations in blocks, R3 first."""
+    column = network.choices(path=T1)
+    assert column is not None
+    assert column.level is Level.STATION
+    first, station = column.items[:2]
+    assert first == Choice(key='', label='To R3 Stop', heading=True)
+    assert (station.key, station.label) == ('R3', 'R3 Stop')
+    assert station.place is not None
+    assert station.place.point is not None
+    rows = [(c.key, c.label, c.heading) for c in column.items]
+    assert rows == [
+        ('', 'To R3 Stop', True), ('R3', 'R3 Stop', False),
+        ('R2', 'R2 Stop', False), ('R1', 'R1 Stop', False),
+        ('J', 'J Stop', False), ('', 'To E2 Stop', True),
+        ('C', 'C Stop', False), ('E1', 'E1 Stop', False),
+        ('E2', 'E2 Stop', False), ('', 'To W2 Stop', True),
+        ('W1', 'W1 Stop', False), ('W2', 'W2 Stop', False),
+    ]
 
 
-def test_line_without_towards_still_offers_replacements(copy: Path) -> None:
-    """A line with no towards rows but replacement routes offers them."""
-    add_routes(path=copy, rows=[
-        ('replacement:1T1:a', 'replacement', '', 0, '1T1', 1, 'A', '', 'T1'),
-    ])
+def test_to_column_marks_from_all_and_dims_unreached(
+    network: SqliteNetworkRepository,
+) -> None:
+    """From W2 the From reads ALL and only the R stations are grey."""
+    column = network.choices(path=(*T1, (Level.STATION, 'W2')))
+    assert column is not None
+    assert column.level is Level.TO
+    stations = {c.key: c for c in column.items if not c.heading}
+    assert stations['W2'].tag == 'ALL'
+    assert not stations['W2'].dim
+    assert {key for key, c in stations.items() if c.dim} == {
+        'R1', 'R2', 'R3',
+    }
+    assert not stations['C'].dim
+    assert [c.label for c in column.items if c.heading] == [
+        'To R3 Stop', 'To E2 Stop', 'To W2 Stop',
+    ]
+
+
+def test_to_column_treats_aliases_as_their_kept_station(copy: Path) -> None:
+    """A merged station counts as its kept one, as From and as a stop."""
     with closing(sqlite3.connect(copy)) as conn:
-        conn.execute("DELETE FROM chooser_towards WHERE route_key = 'train:T1'")
+        conn.execute("INSERT INTO line_aliases VALUES ('E2', 'R3')")
+        conn.execute("DELETE FROM line_stations WHERE station_id = 'E2'")
         conn.commit()
     with closing(SqliteNetworkRepository(path=copy)) as repo:
-        column = repo.choices(path=T1)
-    assert column == Column(level=Level.TOWARDS, items=(
-        Choice(key='replacements', label='Replacement buses',
-               detail='1 route', level=Level.REPLACEMENTS),
-    ))
+        column = repo.choices(path=(*T1, (Level.STATION, 'W2')))
+        merged = repo.choices(path=(*T1, (Level.STATION, 'R3')))
+    assert column is not None
+    assert {c.key for c in column.items if c.dim} == {'R1', 'R2'}
+    assert merged is not None
+    assert not any(c.dim for c in merged.items)
+
+
+def test_to_column_stops_at_a_turn_back(copy: Path) -> None:
+    """A run that turns back reaches nothing new after the turn."""
+    set_runs(path=copy, runs=[('W2 W1 J C J R1 R2 R3', 4)])
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        column = repo.choices(path=(*T1, (Level.STATION, 'W2')))
+    assert column is not None
+    assert {c.key for c in column.items if c.dim} == {
+        'R1', 'R2', 'R3', 'E1', 'E2',
+    }
+
+
+def test_station_column_on_old_timetable_is_none(copy: Path) -> None:
+    """A schema-3 file has no station column but keeps Bus and strips."""
+    schema_three(path=copy)
+    bus: ChooserPath = ((Level.KIND, 'bus'),)
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        assert repo.choices(path=T1) is None
+        assert repo.choices(path=(*T1, (Level.STATION, 'W2'))) is None
+        assert labels(column=repo.choices(path=())) == ['Bus', 'Train']
+        assert repo.choices(path=(*bus, (Level.GROUP, '800s'))) is not None
+        assert repo.reach_input(
+            key=StripKey(station='C', kind=RouteKind.TRAIN, routes=()),
+            origin=place(stop_id='C'),
+        ) is not None
 
 
 def test_replacements_list_routes_of_that_line(copy: Path) -> None:
@@ -461,13 +517,16 @@ def test_unknown_path_answers_none(
 
 def test_towards_line_has_names_and_points(network_db: Path) -> None:
     """A towards line lists its stations with names and points."""
+    with closing(sqlite3.connect(network_db)) as conn:
+        (towards,) = conn.execute(
+            "SELECT towards_id FROM chooser_towards "
+            "WHERE route_key = 'train:T1' AND headsign = 'E2'",
+        ).fetchone()
     with (
         closing(SqliteNetworkRepository(path=network_db)) as repo,
         closing(SqliteTimetableRepository(path=network_db)) as timetable,
     ):
-        column = repo.choices(path=T1)
-        assert column is not None
-        line = repo.towards_line(towards=int(column.items[0].key))
+        line = repo.towards_line(towards=towards)
         expected = tuple(
             timetable.stop(stop_id=station)
             for station in ('W2', 'W1', 'J', 'C', 'E1', 'E2')

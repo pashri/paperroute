@@ -517,30 +517,72 @@ def test_station_column_on_old_timetable_is_none(copy: Path) -> None:
         ) is not None
 
 
-def test_replacements_list_routes_of_that_line(copy: Path) -> None:
-    """Replacement buses list that line's routes, each with towards rows."""
-    add_routes(path=copy, rows=[
-        ('replacement:2T1:b', 'replacement', '', 0, '2T1', 2, 'Bee', 'Tg',
-         'T1'),
-        ('replacement:1T1:a', 'replacement', '', 0, '1T1', 1, 'Ay', '',
-         'T1'),
-        ('replacement:1T2:c', 'replacement', '', 0, '1T2', 3, 'Cee', '',
-         'T2'),
-    ])
+BUS: Final[ChooserPath] = ((Level.KIND, 'bus'),)
+REPLACEMENTS: Final[ChooserPath] = (
+    *BUS, (Level.REPLACEMENTS, 'replacements'),
+)
+REPLACEMENT_ROWS: Final[tuple[RouteInsert, ...]] = (
+    ('replacement:2T1:b', 'replacement', '', 0, '2T1', 2, 'Bee', 'Tg', 'T1'),
+    ('replacement:1T1:a', 'replacement', '', 0, '1T1', 1, 'Ay', '', 'T1'),
+    ('replacement:1T2:c', 'replacement', '', 0, '1T2', 3, 'Cee', '', 'T2'),
+    ('replacement:1BM:d', 'replacement', '', 0, '1BM', 4, 'Dee', '', 'BMT'),
+)
+
+
+def test_bus_groups_end_with_replacement_buses(copy: Path) -> None:
+    """Replacement buses close the Bus groups once any route has a line."""
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        before = repo.choices(path=BUS)
+    add_routes(path=copy, rows=REPLACEMENT_ROWS)
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        after = repo.choices(path=BUS)
+        school = repo.choices(path=((Level.KIND, 'school'),))
+    assert before is not None
+    assert after is not None
+    assert after.items[:-1] == before.items
+    assert after.items[-1] == Choice(
+        key='replacements', label='Replacement buses', rule_above=True,
+        level=Level.REPLACEMENTS,
+    )
+    assert school is None or school.items[-1].key != 'replacements'
+
+
+def test_replacement_path_lists_lines_then_routes(copy: Path) -> None:
+    """Replacement buses list lines, then a line's routes, then towards."""
+    add_routes(path=copy, rows=REPLACEMENT_ROWS)
     add_towards(path=copy, route_key='replacement:1T1:a', headsign='W2',
                 trips=4)
-    replacements = (*T1, (Level.REPLACEMENTS, 'replacements'))
+    lines = (*REPLACEMENTS, (Level.LINE, 'T1'))
     with closing(SqliteNetworkRepository(path=copy)) as repo:
-        routes = repo.choices(path=replacements)
+        line_column = repo.choices(path=REPLACEMENTS)
+        routes = repo.choices(path=lines)
         towards = repo.choices(
-            path=(*replacements, (Level.ROUTE, 'replacement:1T1:a')),
+            path=(*lines, (Level.ROUTE, 'replacement:1T1:a')),
         )
+    assert line_column is not None
+    assert line_column.level is Level.LINE
+    assert [(c.key, c.badge) for c in line_column.items] == [
+        ('T1', 'T1'), ('T2', 'T2'), ('BMT', 'BMT'),
+    ]
+    assert line_column.items[0].label == 'Line T1'
     assert routes == Column(level=Level.ROUTE, items=(
         Choice(key='replacement:1T1:a', label='Ay', badge='1T1'),
         Choice(key='replacement:2T1:b', label='Bee', badge='2T1', tag='Tg'),
     ))
     assert towards is not None
     assert [(c.label, c.detail) for c in towards.items] == [('W2', '4')]
+
+
+def test_train_line_has_no_replacement_row(copy: Path) -> None:
+    """A train line's column has no Replacement buses row."""
+    add_routes(path=copy, rows=REPLACEMENT_ROWS)
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        assert repo.choices(path=(*T1, (Level.REPLACEMENTS, 'x'))) is None
+        column = repo.choices(path=TRAIN)
+        stations = repo.choices(path=T1)
+    for found in (column, stations):
+        assert found is not None
+        assert all(c.level is not Level.REPLACEMENTS for c in found.items)
 
 
 @pytest.mark.parametrize('path', [

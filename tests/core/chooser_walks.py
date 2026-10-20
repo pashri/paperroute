@@ -61,6 +61,28 @@ TOWARDS: Final[Column] = Column(
         Choice(key='12', label='Hawkesbury', detail='38'),
     ),
 )
+REPLACEMENT_GROUPS: Final[Column] = Column(
+    level=Level.GROUP,
+    items=(
+        *GROUPS.items,
+        Choice(
+            key='replacements', label='Replacement buses', rule_above=True,
+            level=Level.REPLACEMENTS,
+        ),
+    ),
+)
+REPLACEMENT_LINES: Final[Column] = Column(
+    level=Level.LINE,
+    items=(Choice(key='T1', label='North Shore & Western', badge='T1'),),
+)
+REPLACEMENT_ROUTES: Final[Column] = Column(
+    level=Level.ROUTE,
+    items=(Choice(key='rep:1T1', label='Central to Penrith', badge='1T1'),),
+)
+BUS: Final[ChooserPath] = ((Level.KIND, 'bus'),)
+REPLACEMENTS_PATH: Final[ChooserPath] = (
+    *BUS, (Level.REPLACEMENTS, 'replacements'),
+)
 METRO_LINES: Final[Column] = Column(
     level=Level.LINE,
     items=(Choice(key='m1', label='North West & Bankstown', badge='M1'),),
@@ -310,6 +332,31 @@ def at_towards() -> ChooserState:
     chooser, request = fed(chooser, request, TOWARDS)
     chooser, request = pressed(chooser=chooser, reach=None)
     assert request is None
+    return chooser
+
+
+def at_replacement_towards() -> ChooserState:
+    """
+    Walk Bus, Replacement buses, T1, 1T1 to the focused TOWARDS column.
+
+    Returns
+    -------
+    ChooserState
+        The chooser focused on the replacement route's TOWARDS column.
+    """
+    chooser = opened_at_kind()
+    chooser, _ = fed(chooser, ColumnRequest(path=BUS), REPLACEMENT_GROUPS)
+    chooser, request = pressed(chooser=chooser, reach=None)
+    chooser, request = fed(chooser, request, None)  # 1-99 fails
+    chooser, request = turned(chooser=chooser, steps=2, reach=None)
+    assert request == ColumnRequest(path=REPLACEMENTS_PATH)
+    chooser, request = fed(chooser, request, REPLACEMENT_LINES)
+    chooser, request = fed(chooser, request, REPLACEMENT_ROUTES)
+    chooser, request = fed(chooser, request, TOWARDS)
+    for _ in range(3):
+        chooser, request = pressed(chooser=chooser, reach=None)
+    assert request is None
+    assert chooser.focus == 4
     return chooser
 
 

@@ -38,6 +38,7 @@ from tests.core.chooser_walks import (
     T1_TO,
     TOWARDS,
     at_from,
+    at_replacement_towards,
     at_stations,
     at_to,
     at_towards,
@@ -222,6 +223,17 @@ def test_station_first_walk_commits_line_kind() -> None:
     _, pin = knob_pressed(chooser=chooser, reach=None)
     assert pin == Pin(
         origin=T1_PLACES['E2'], kind=RouteKind.TRAIN, routes=('T1',),
+    )
+
+
+def test_replacement_route_commits_replacement_kind() -> None:
+    chooser, _ = pressed(chooser=at_replacement_towards(), reach=None)
+    chooser = with_line(chooser=chooser, towards=11, line=LINE)
+    chooser, _ = turned(chooser=chooser, steps=1, reach=None)
+    chooser, _ = pressed(chooser=chooser, reach=None)
+    _, pin = pressed(chooser=chooser, reach=REACH)
+    assert pin == Pin(
+        origin=LINE[1], kind=RouteKind.REPLACEMENT, routes=('1T1',),
     )
 
 

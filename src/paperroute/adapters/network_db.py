@@ -65,13 +65,21 @@ ROUTES_OF_KIND: Final[str] = ROUTE_COLUMNS + 'WHERE kind = ?' + ROUTE_ORDER
 ROUTES_IN_GROUP: Final[str] = (
     ROUTE_COLUMNS + 'WHERE kind = ? AND grp = ?' + ROUTE_ORDER
 )
-LINE_OF: Final[str] = (
-    'SELECT number FROM chooser_routes WHERE route_key = ?'
+REPLACEMENT_LINES: Final[str] = """
+SELECT r.line, r.line, COALESCE(t.name, r.line), ''
+FROM (SELECT DISTINCT line FROM chooser_routes WHERE kind = 'replacement') r
+LEFT JOIN chooser_routes t ON t.kind = 'train' AND t.number = r.line
+ORDER BY COALESCE(t.sort, 1000000), r.line
+"""
+HAS_REPLACEMENTS: Final[str] = (
+    "SELECT 1 FROM chooser_routes WHERE kind = 'replacement' LIMIT 1"
 )
 REPLACEMENTS_OF: Final[str] = (
-    ROUTE_COLUMNS
-    + f"WHERE kind = 'replacement' AND line = ({LINE_OF})"
-    + ROUTE_ORDER
+    ROUTE_COLUMNS + "WHERE kind = 'replacement' AND line = ?" + ROUTE_ORDER
+)
+REPLACEMENTS_ROW: Final[Choice] = Choice(
+    key='replacements', label='Replacement buses', rule_above=True,
+    level=Level.REPLACEMENTS,
 )
 TOWARDS: Final[str] = """
 SELECT towards_id, headsign, trips FROM chooser_towards
@@ -410,14 +418,14 @@ class SqliteNetworkRepository:
                 kind in STATION_FIRST
             ):
                 column = self.station_first_column(path=path, kind=kind)
+            case (Level.REPLACEMENTS, RouteKind.BUS):
+                column = self.replacement_lines()
+            case (Level.LINE, RouteKind.BUS):
+                column = self.route_column(
+                    sql=REPLACEMENTS_OF, params=(key,),
+                )
             case (Level.ROUTE | Level.LINE, RouteKind()):
                 column = self.towards_column(route_key=key)
-            case (Level.REPLACEMENTS, RouteKind.TRAIN) if (
-                path[-2][0] is Level.LINE
-            ):
-                column = self.route_column(
-                    sql=REPLACEMENTS_OF, params=(path[-2][1],),
-                )
         return column
 
     def kind_column(self) -> Column:
@@ -458,14 +466,32 @@ class SqliteNetworkRepository:
         Returns
         -------
         Column
-            Groups in group order.
+            Groups in group order; Bus ends with Replacement buses when
+            any route has a line.
         """
         rows = self.fetch(sql=GROUPS, params=(kind,))
         items = tuple(
             Choice(key=str(grp), label=str(grp), detail=str(count))
             for grp, count in rows
         )
+        if kind is RouteKind.BUS and self.fetch(
+            sql=HAS_REPLACEMENTS, params=(),
+        ):
+            items = (*items, REPLACEMENTS_ROW)
         return Column(level=Level.GROUP, items=items)
+
+    def replacement_lines(self) -> Column:
+        """
+        The LINE column of Replacement buses: train lines with routes.
+
+        Returns
+        -------
+        Column
+            Lines in line order, each group of lines ruled off.
+        """
+        rows = self.fetch(sql=REPLACEMENT_LINES, params=())
+        lines = ruled_off(lines=route_choices(rows=rows))
+        return Column(level=Level.LINE, items=lines)
 
     def route_column(self, *, sql: str, params: tuple[object, ...]) -> Column:
         """

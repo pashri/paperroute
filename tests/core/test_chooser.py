@@ -272,9 +272,13 @@ def test_empty_column_is_never_focused() -> None:
     assert pressed(chooser=chooser, reach=None) == (chooser, None)
 
 
-def test_replacement_place_starts_on_train() -> None:
-    chooser = opened_at_kind(kind=RouteKind.REPLACEMENT)
-    assert chooser.cursors == (1,)
+def test_replacement_place_starts_on_bus() -> None:
+    chooser, request = opened(
+        shown=Pin(origin=place('X'), kind=RouteKind.REPLACEMENT),
+    )
+    trains_first = replace(KINDS, items=KINDS.items[::-1])
+    chooser, _ = fed(chooser, request, trains_first)
+    assert chooser.cursors == (2,)
 
 
 def test_to_press_off_the_strip_commits_no_destination() -> None:

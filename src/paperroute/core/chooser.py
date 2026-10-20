@@ -482,11 +482,11 @@ def first_cursor(*, column: Column, prefer: RouteKind | None) -> int:
     Returns
     -------
     int
-        The preferred kind's row in the KIND column (Train's for a
+        The preferred kind's row in the KIND column (Bus's for a
         replacement bus place) or the From's row in a TO column; failing
         those, the first row a cursor may rest on, else 0.
     """
-    wanted = RouteKind.TRAIN if prefer is RouteKind.REPLACEMENT else prefer
+    wanted = RouteKind.BUS if prefer is RouteKind.REPLACEMENT else prefer
     match column.level:
         case Level.KIND:
             first = [row.key == wanted for row in column.items]

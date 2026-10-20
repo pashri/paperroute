@@ -38,7 +38,10 @@ from paperroute.core.reach import (
     ReachInput,
     RunTail,
     StripKey,
+    cut_to_line,
     every_route,
+    line_key_of,
+    merge_tails,
 )
 
 NETWORK_TABLES: Final[tuple[str, ...]] = (
@@ -112,6 +115,12 @@ WHERE l.line_key = ?
 ORDER BY l.pos
 """
 ALIASES: Final[str] = 'SELECT station_id, kept_id FROM line_aliases'
+ON_LINE: Final[str] = """
+SELECT station_id FROM line_stations WHERE line_key = :line
+UNION
+SELECT a.station_id FROM line_aliases a
+JOIN line_stations l ON l.station_id = a.kept_id AND l.line_key = :line
+"""
 PASSES: Final[str] = """
 SELECT DISTINCT r.run_id, r.stations
 FROM run_stops s JOIN runs r ON r.run_id = s.run_id
@@ -352,9 +361,8 @@ def merged_tails(*, rows: Iterable[Row]) -> tuple[RunTail, ...]:
     Make one tail per pass of the From and merge identical tails.
 
     Each tail is cut before the first station it would call at again
-    after the From; stations before the From never cut it. Tails with the
-    same stations after the From merge: their trips are summed and the
-    heaviest run's stations before the From are kept.
+    after the From; stations before the From never cut it. Tails are
+    then merged as `merge_tails` does.
 
     Parameters
     ----------
@@ -367,20 +375,18 @@ def merged_tails(*, rows: Iterable[Row]) -> tuple[RunTail, ...]:
     tuple[RunTail, ...]
         Tails, the most trips first, then by their stations.
     """
-    found: dict[tuple[str, ...], tuple[int, int, tuple[str, ...]]] = {}
-    for stations_json, trips, pos in rows:
-        stations = tuple(json.loads(str(stations_json)))
-        weight, at = cast(int, trips), cast(int, pos)
-        after = until_revisit(stations=stations[at:])[1:]
-        total, heaviest, before = found.get(after, (0, -1, ()))
-        if weight > heaviest:
-            heaviest, before = weight, stations[:at]
-        found[after] = (total + weight, heaviest, before)
-    tails = (
-        RunTail(before=before, after=after, trips=total)
-        for after, (total, _, before) in found.items()
+    passes = (
+        (tuple(json.loads(str(stations))), cast(int, trips), cast(int, pos))
+        for stations, trips, pos in rows
     )
-    return tuple(sorted(tails, key=lambda tail: (-tail.trips, tail.after)))
+    return merge_tails(tails=(
+        RunTail(
+            before=calls[:at],
+            after=until_revisit(stations=calls[at:])[1:],
+            trips=weight,
+        )
+        for calls, weight, at in passes
+    ))
 
 
 class SqliteNetworkRepository:
@@ -862,6 +868,28 @@ class SqliteNetworkRepository:
         })
         return merged_tails(rows=rows)
 
+    def _line_of(self, *, key: StripKey) -> frozenset[str]:
+        """
+        List the stations on the line a strip follows.
+
+        Parameters
+        ----------
+        key : StripKey
+            Strip kind and routes.
+
+        Returns
+        -------
+        frozenset[str]
+            The line's stations and the stations merged into them; empty
+            for a strip that follows no line, a line the file does not
+            list, or a file without the line tables.
+        """
+        line_key = line_key_of(key=key)
+        if line_key is None or not self.has_lines():
+            return frozenset()
+        rows = self.fetch(sql=ON_LINE, params={'line': line_key})
+        return frozenset(str(station) for station, in rows)
+
     def reach_input(
         self, *, key: StripKey, origin: StopPlace,
     ) -> ReachInput | None:
@@ -879,12 +907,16 @@ class SqliteNetworkRepository:
         -------
         ReachInput | None
             The From's station, its tails, their places and stops; None
-            for an old file.
+            for an old file. A strip following a line has each tail cut
+            before its first station off the line (see `_line_of`).
         """
         if not self.has_network():
             return None
         station = self.station_for(stop_id=key.station)
         tails = self.tails(station=station, key=key)
+        line = self._line_of(key=key)
+        if line:
+            tails = cut_to_line(tails=tails, line=line)
         named = {station}.union(
             *(tail.before + tail.after for tail in tails),
         )

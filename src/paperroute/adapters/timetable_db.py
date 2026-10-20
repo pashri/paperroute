@@ -38,7 +38,7 @@ from paperroute.core.model import (
 )
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.reach import StripKey
-from paperroute.core.strip_times import strip_departures
+from paperroute.core.strip_times import board_departures, strip_departures
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/timetable.db')
 CHUNK: Final[int] = 500
@@ -719,8 +719,9 @@ class SqliteTimetableRepository:
         list[Departure]
             In departure order, then trip ID. With a Destination, only
             the pin's kind and routes, as on its strip: a station's bus
-            stands sit under it too. Without one, every departure from
-            any platform of the From, each running to its last stop. A
+            stands sit under it too. Without one, the departures of the
+            pin's kind (see `board_departures`) from any platform of the
+            From, each running to its last stop. A
             trip calling at the From several times in a row, such as a
             bus moving between two stands, leaves once, from its last call
             there that takes passengers on.
@@ -742,7 +743,9 @@ class SqliteTimetableRepository:
                 end=end,
             )
         ]
-        if destination is not None:
+        if destination is None:
+            found = list(board_departures(departures=found, kind=pin.kind))
+        else:
             found = list(strip_departures(
                 departures=found,
                 key=StripKey(

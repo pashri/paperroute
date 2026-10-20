@@ -1020,8 +1020,8 @@ def whole_stop(
     return repo.departures(
         pin=Pin(
             origin=place(origin),
-            kind=RouteKind.BUS,
-            routes=('606',),
+            kind=RouteKind.TRAIN,
+            routes=('T2',),
         ),
         start=at(hour=hours[0], minute=0, day=6),
         end=at(hour=hours[1], minute=59, day=6),
@@ -1031,7 +1031,7 @@ def whole_stop(
 def test_no_destination_lists_the_whole_stop(
     network: SqliteTimetableRepository,
 ) -> None:
-    """Every kind and route leaving C is listed, whatever the pin chose."""
+    """Every train route leaving C is listed, whatever routes were chosen."""
     found = whole_stop(repo=network, origin='C', hours=(7, 7))
     assert [d.trip_id for d in found] == [
         'ew1', 'we1', 'er1', 'cc1', 're1', 'y1', 'cc1',
@@ -1479,12 +1479,29 @@ def test_destination_keeps_the_pins_kind(tmp_path: Path) -> None:
     with closing(SqliteTimetableRepository(path=db)) as repo:
         trains = repo.departures(pin=train, **window)
         every = repo.departures(pin=pin_of('P', 'Q'), **window)
-        whole = repo.departures(pin=dataclasses.replace(
-            train, destination=None,
-        ), **window)
     assert [d.trip_id for d in trains] == ['a']
     assert [d.trip_id for d in every] == ['a', 'b', 'c']
-    assert [d.trip_id for d in whole] == ['a', 'b', 'c']
+
+
+def test_whole_stop_board_only_pin_kind(tmp_path: Path) -> None:
+    """A Train pin's board leaves out the stand's buses; no kind keeps all."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[Source(
+            name='sydneytrains', archive=stand_feed(path=tmp_path / 'p.zip'),
+        )],
+    )
+    window = {'start': at(hour=8, minute=0), 'end': at(hour=9, minute=0)}
+    train = Pin(origin=place('P'), kind=RouteKind.TRAIN, routes=('T1',))
+    with closing(SqliteTimetableRepository(path=db)) as repo:
+        trains = repo.departures(pin=train, **window)
+        every = repo.departures(
+            pin=dataclasses.replace(train, kind=None, routes=()), **window,
+        )
+    assert [d.trip_id for d in trains] == ['a']
+    assert [d.trip_id for d in every] == ['a', 'b', 'c']
 
 
 def test_destination_keeps_the_pins_bus_routes(tmp_path: Path) -> None:

@@ -6,7 +6,7 @@ from typing import Final
 
 from paperroute.core.model import Departure, RouteKind
 from paperroute.core.reach import StripKey
-from paperroute.core.strip_times import strip_trips
+from paperroute.core.strip_times import board_departures, strip_trips
 from tests.core.factories import START, departure
 
 TRAIN: Final[StripKey] = StripKey(
@@ -75,3 +75,26 @@ def test_strip_trips_follow_the_routes_rule() -> None:
     assert strip_trips(departures=both, key=anything, now=START) == {
         'a', 'b',
     }
+
+
+def test_bus_board_keeps_school_and_replacement() -> None:
+    """A Bus board keeps school and replacement buses; others their kind."""
+    kinds = (
+        RouteKind.BUS, RouteKind.SCHOOL, RouteKind.REPLACEMENT,
+        RouteKind.TRAIN, RouteKind.COACH, None,
+    )
+    every = [
+        departure(departs=START, trip_id=str(kind), kind=kind)
+        for kind in kinds
+    ]
+    boards = {
+        kind: [
+            item.trip_id
+            for item in board_departures(departures=every, kind=kind)
+        ]
+        for kind in kinds
+    }
+    assert boards[RouteKind.BUS] == ['bus', 'school', 'replacement']
+    assert boards[RouteKind.SCHOOL] == ['school']
+    assert boards[RouteKind.TRAIN] == ['train']
+    assert boards[None] == [str(kind) for kind in kinds]

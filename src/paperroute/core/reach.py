@@ -1,8 +1,9 @@
 """The stations a strip reaches from its From."""
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
 from enum import StrEnum
+from itertools import takewhile
 from typing import Final
 
 from paperroute.core.model import STATION_FIRST, RouteKind, StopPlace
@@ -93,6 +94,89 @@ def every_route(*, key: StripKey) -> bool:
         another kind with no routes chosen.
     """
     return key.kind is None or key.kind in LINE_KINDS or not key.routes
+
+
+def line_key_of(*, key: StripKey) -> str | None:
+    """
+    Name the line a strip follows.
+
+    Parameters
+    ----------
+    key : StripKey
+        Strip kind and routes.
+
+    Returns
+    -------
+    str | None
+        The line key, such as 'train:T1', for a station-first kind with
+        one route; None otherwise.
+    """
+    if key.kind not in STATION_FIRST or len(key.routes) != 1:
+        return None
+    return f'{key.kind}:{key.routes[0]}'
+
+
+def merge_tails(*, tails: Iterable[RunTail]) -> tuple[RunTail, ...]:
+    """
+    Merge tails with the same stations after the From.
+
+    Their trips are summed and the heaviest tail's stations before the
+    From are kept; on a tie, the first one's.
+
+    Parameters
+    ----------
+    tails : Iterable[RunTail]
+        Tails in order.
+
+    Returns
+    -------
+    tuple[RunTail, ...]
+        Tails, the most trips first, then by their stations.
+    """
+    found: dict[tuple[str, ...], tuple[int, int, tuple[str, ...]]] = {}
+    for tail in tails:
+        total, heaviest, before = found.get(tail.after, (0, -1, ()))
+        if tail.trips > heaviest:
+            heaviest, before = tail.trips, tail.before
+        found[tail.after] = (total + tail.trips, heaviest, before)
+    merged = (
+        RunTail(before=before, after=after, trips=total)
+        for after, (total, _, before) in found.items()
+    )
+    return tuple(sorted(merged, key=lambda tail: (-tail.trips, tail.after)))
+
+
+def cut_to_line(
+    *, tails: Iterable[RunTail], line: Collection[str],
+) -> tuple[RunTail, ...]:
+    """
+    Cut each tail before its first station off a line, then merge them.
+
+    Both sides are counted outward from the From. Stations the runs skip
+    do not matter: only stations they call at are checked.
+
+    Parameters
+    ----------
+    tails : Iterable[RunTail]
+        Tails through the From.
+    line : Collection[str]
+        Station IDs on the line, with the stations merged into them.
+
+    Returns
+    -------
+    tuple[RunTail, ...]
+        Cut tails, merged as `merge_tails` does.
+    """
+    return merge_tails(tails=(
+        RunTail(
+            before=tuple(reversed(tuple(
+                takewhile(line.__contains__, reversed(tail.before)),
+            ))),
+            after=tuple(takewhile(line.__contains__, tail.after)),
+            trips=tail.trips,
+        )
+        for tail in tails
+    ))
 
 
 class RowKind(StrEnum):

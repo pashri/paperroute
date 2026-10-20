@@ -8,6 +8,7 @@ from typing import Final
 from paperroute.core.live import LiveDeparture
 from paperroute.core.model import (
     Departure,
+    RouteKind,
     service_seconds,
     service_time,
     shifted,
@@ -19,6 +20,12 @@ from paperroute.core.stop_view import not_departed
 
 STRIP_LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 STRIP_AHEAD: Final[timedelta] = timedelta(minutes=30)
+BOARD_KINDS: Final[dict[RouteKind, frozenset[RouteKind]]] = {
+    **{kind: frozenset({kind}) for kind in RouteKind},
+    RouteKind.BUS: frozenset({
+        RouteKind.BUS, RouteKind.SCHOOL, RouteKind.REPLACEMENT,
+    }),
+}
 
 
 @dataclass(frozen=True)
@@ -96,6 +103,35 @@ def strip_departures(
         departure
         for departure in departures
         if on_strip(departure=departure, key=key)
+    )
+
+
+def board_departures(
+    *, departures: Sequence[Departure], kind: RouteKind | None,
+) -> tuple[Departure, ...]:
+    """
+    Keep the departures a pin's board shows when it has no Destination.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        Every departure from the From.
+    kind : RouteKind | None
+        The pin's kind.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        Every departure for no kind; otherwise those whose route kind is
+        one of `BOARD_KINDS` for it, in order. A Bus board also keeps
+        school and replacement buses.
+    """
+    if kind is None:
+        return tuple(departures)
+    return tuple(
+        departure
+        for departure in departures
+        if departure.facts.kind in BOARD_KINDS[kind]
     )
 
 

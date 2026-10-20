@@ -7,6 +7,7 @@ from typing import Final
 
 from paperroute.core.model import Departure, Pin, RouteKind, StopPlace
 from paperroute.core.reach import Reach, RowKind, StripKey
+from paperroute.core.strip_model import ALL_TAG
 from paperroute.core.strip_view import origin_of
 
 
@@ -95,6 +96,23 @@ class Choice:
     place: StopPlace | None = None
 
 
+def focusable(*, choice: Choice) -> bool:
+    """
+    Say whether a cursor may rest on a row.
+
+    Parameters
+    ----------
+    choice : Choice
+        The row.
+
+    Returns
+    -------
+    bool
+        True unless it is a heading or greyed out.
+    """
+    return not (choice.heading or choice.dim)
+
+
 @dataclass(frozen=True)
 class Column:
     """
@@ -176,6 +194,7 @@ COLLAPSIBLE: Final[frozenset[Level]] = frozenset(
     {Level.GROUP, Level.ROUTE, Level.LINE},
 )
 NAMED_BY_BADGE: Final[frozenset[Level]] = frozenset({Level.ROUTE, Level.LINE})
+PRESS_ONLY: Final[frozenset[Level]] = frozenset({Level.STATION, Level.TO})
 
 
 @dataclass(frozen=True)
@@ -346,7 +365,7 @@ def preview_of(*, chooser: ChooserState) -> int | None:
 
 def opens_line(*, chooser: ChooserState) -> bool:
     """
-    Say whether the focus's cursor is on a towards row.
+    Say whether the focus's cursor asks for nothing until pressed.
 
     Parameters
     ----------
@@ -356,10 +375,12 @@ def opens_line(*, chooser: ChooserState) -> bool:
     Returns
     -------
     bool
-        True when pressing opens the FROM stage rather than a column.
+        True on a towards row, whose press opens the FROM stage, and in a
+        STATION or TO column, whose press opens the TO column or commits.
     """
-    return (
-        chooser.columns[chooser.focus].level is Level.TOWARDS
+    level = chooser.columns[chooser.focus].level
+    return level in PRESS_ONLY or (
+        level is Level.TOWARDS
         and chosen(chooser=chooser, index=chooser.focus).level is None
     )
 
@@ -397,8 +418,8 @@ def previewed(
     Returns
     -------
     tuple[ChooserState, ChooserRequest | None]
-        The chooser and its column request; no request for an empty
-        column, or for a towards row, whose next stage loads on the press.
+        The chooser, with no From, and its column request; no request for
+        an empty column, or one whose next step loads on the press.
     """
     end = chooser.focus + 1
     trimmed = replace(
@@ -407,6 +428,9 @@ def previewed(
         cursors=chooser.cursors[:end],
         waiting=None,
         failed=False,
+        origin=None,
+        departures=(),
+        load=DepartureLoad(),
     )
     if is_empty(chooser=trimmed, index=chooser.focus) or opens_line(
         chooser=trimmed,
@@ -451,19 +475,19 @@ def first_cursor(*, column: Column, prefer: RouteKind | None) -> int:
     -------
     int
         The preferred kind's row in the KIND column (Train's for a
-        replacement bus place), else 0.
+        replacement bus place), the From's row in a TO column, else the
+        first row a cursor may rest on; 0 when none is found.
     """
-    if column.level is not Level.KIND:
-        return 0
     wanted = RouteKind.TRAIN if prefer is RouteKind.REPLACEMENT else prefer
-    return next(
-        (
-            index
-            for index, choice in enumerate(column.items)
-            if choice.key == wanted
-        ),
-        0,
-    )
+    rows = enumerate(column.items)
+    match column.level:
+        case Level.KIND:
+            found = (index for index, row in rows if row.key == wanted)
+        case Level.TO:
+            found = (index for index, row in rows if row.tag == ALL_TAG)
+        case _:
+            found = (index for index, row in rows if focusable(choice=row))
+    return next(found, 0)
 
 
 def with_column(
@@ -486,7 +510,8 @@ def with_column(
     tuple[ChooserState, ChooserRequest | None]
         The chooser and its next request. A path other than the one
         waited for changes nothing. A single-row GROUP, ROUTE or LINE
-        column is stored collapsed and its own next column asked for.
+        column is stored collapsed and its own next column asked for. A
+        TO column, asked for by a press, takes the focus.
     """
     if path != chooser.waiting:
         return chooser, None
@@ -503,6 +528,7 @@ def with_column(
             *chooser.cursors[:index],
             first_cursor(column=column, prefer=chooser.prefer),
         ),
+        focus=index if column.level is Level.TO else chooser.focus,
         waiting=None,
     )
     if index == 0:
@@ -553,6 +579,36 @@ def with_line(
     return replace(chooser, line=tuple(places.values()), line_cursor=0)
 
 
+def stepped(*, column: Column, cursor: int, steps: int) -> int:
+    """
+    Move a cursor over the rows it may rest on.
+
+    Parameters
+    ----------
+    column : Column
+        Column.
+    cursor : int
+        Its cursor.
+    steps : int
+        Detents; positive moves down.
+
+    Returns
+    -------
+    int
+        The row ``steps`` resting rows on, stopping at either end; the
+        same row when it is the only one.
+    """
+    rows = [
+        index
+        for index, choice in enumerate(column.items)
+        if focusable(choice=choice)
+    ]
+    if cursor not in rows:
+        return cursor
+    at = rows.index(cursor)
+    return rows[clamped(value=at + steps, count=len(rows))]
+
+
 def turned_lists(
     *, chooser: ChooserState, steps: int,
 ) -> tuple[ChooserState, ChooserRequest | None]:
@@ -570,17 +626,19 @@ def turned_lists(
     -------
     tuple[ChooserState, ChooserRequest | None]
         The chooser and its request; unchanged when the cursor stays put.
+        A TO column keeps its From and asks for nothing.
     """
     if not chooser.columns:
         return chooser, None
     focus = chooser.focus
     old = chooser.cursors[focus]
-    cursor = clamped(
-        value=old + steps, count=len(chooser.columns[focus].items),
-    )
+    column = chooser.columns[focus]
+    cursor = stepped(column=column, cursor=old, steps=steps)
     if cursor == old:
         return chooser, None
     cursors = (*chooser.cursors[:focus], cursor, *chooser.cursors[focus + 1:])
+    if column.level is Level.TO:
+        return replace(chooser, cursors=cursors), None
     return previewed(chooser=replace(chooser, cursors=cursors))
 
 
@@ -694,9 +752,12 @@ def pressed_lists(
     -------
     tuple[ChooserState, ChooserRequest | None]
         The chooser and its request; unchanged until the preview loads,
-        and when the focus or the preview is empty.
+        when the focus or the preview is empty, and in a STATION or TO
+        column, whose presses `chooser_station` handles.
     """
     if not chooser.columns or is_empty(chooser=chooser, index=chooser.focus):
+        return chooser, None
+    if chooser.columns[chooser.focus].level in PRESS_ONLY:
         return chooser, None
     if opens_line(chooser=chooser):
         towards = chosen(chooser=chooser, index=chooser.focus)

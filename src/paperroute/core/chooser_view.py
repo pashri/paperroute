@@ -13,7 +13,9 @@ from paperroute.core.chooser import (
     chosen,
     preview_of,
 )
+from paperroute.core.chooser_station import focus_level
 from paperroute.core.stop_view import DOT
+from paperroute.core.strip_model import HINTS, PICK_TO
 
 ROW_HEIGHTS: Final[dict[Level, int]] = {
     Level.KIND: 56,
@@ -21,6 +23,8 @@ ROW_HEIGHTS: Final[dict[Level, int]] = {
     Level.ROUTE: 40,
     Level.LINE: 31,
     Level.TOWARDS: 45,
+    Level.STATION: 31,
+    Level.TO: 31,
 }
 CHOOSER_TOP: Final[int] = 40
 CHOOSER_BOTTOM: Final[int] = 480
@@ -30,6 +34,10 @@ TITLES: Final[dict[Stage, str]] = {
     Stage.LISTS: 'Choose a route',
     Stage.FROM: 'Choose a stop',
     Stage.TO: 'Choose a destination',
+}
+LEVEL_TITLES: Final[dict[Level, str]] = {
+    Level.STATION: 'Choose a station',
+    Level.TO: 'Choose a destination',
 }
 LOADING_LISTS: Final[str] = 'Loading…'
 NEEDS_UPDATE: Final[str] = 'Routes need a timetable update'
@@ -90,12 +98,15 @@ class ChooserView:
         Up to three columns, ending with the focus's preview.
     empty : str | None
         Text shown in place of the columns, or None.
+    hint : str | None
+        What the knobs do, shown on a TO column; None elsewhere.
     """
 
     title: str
     trail: str
     columns: tuple[ColumnView, ...]
     empty: str | None
+    hint: str | None = None
 
 
 def step_label(*, chooser: ChooserState, index: int) -> str:
@@ -251,7 +262,8 @@ def build_chooser_view(*, chooser: ChooserState) -> ChooserView:
     Returns
     -------
     ChooserView
-        Title, trail of choices made, columns and any empty text.
+        Title, trail of choices made, columns, any empty text, and on a TO
+        column its hint.
     """
     chosen_count = (
         chooser.focus if chooser.stage is Stage.LISTS else chooser.focus + 1
@@ -260,9 +272,12 @@ def build_chooser_view(*, chooser: ChooserState) -> ChooserView:
         step_label(chooser=chooser, index=index)
         for index in range(min(chosen_count, len(chooser.columns)))
     )
+    level = focus_level(chooser=chooser)
+    title = TITLES[chooser.stage]
     return ChooserView(
-        title=TITLES[chooser.stage],
+        title=title if level is None else LEVEL_TITLES.get(level, title),
         trail=trail,
         columns=column_views(chooser=chooser),
         empty=empty_text(chooser=chooser),
+        hint=HINTS[PICK_TO] if level is Level.TO else None,
     )

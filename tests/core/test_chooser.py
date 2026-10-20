@@ -21,6 +21,7 @@ from paperroute.core.chooser import (
     with_column,
     with_line,
 )
+from paperroute.core.chooser_station import knob_pressed
 from paperroute.core.chooser_view import build_chooser_view
 from paperroute.core.model import Pin, RouteKind
 from paperroute.core.reach import StripKey
@@ -31,11 +32,13 @@ from tests.core.chooser_walks import (
     LINE,
     METRO_LINES,
     REACH,
-    T1_BUSES,
-    T1_TOWARDS,
+    T1,
+    T1_PLACES,
+    T1_STATIONS,
+    T1_TO,
     TOWARDS,
-    TRAIN_LINES,
     at_from,
+    at_stations,
     at_to,
     at_towards,
     fed,
@@ -196,40 +199,35 @@ def test_back_walks_stages_then_closes() -> None:
     assert steps == [(3, 4), (2, 4), (1, 3), (0, 2)]
 
 
-def test_replacement_route_commits_replacement_kind() -> None:
-    chooser = opened_at_kind(kind=RouteKind.TRAIN)
-    train = ((Level.KIND, 'train'),)
-    chooser, _ = fed(chooser, ColumnRequest(path=train), TRAIN_LINES)
-    chooser, request = pressed(chooser=chooser, reach=None)
-    chooser, _ = fed(chooser, request, T1_TOWARDS)
-    chooser, request = pressed(chooser=chooser, reach=None)
-    assert request is None
-    chooser, request = turned(chooser=chooser, steps=1, reach=None)
-    assert request == ColumnRequest(path=(
-        *train, (Level.LINE, 't1'), (Level.REPLACEMENTS, 'replacements'),
-    ))
-    chooser, request = fed(chooser, request, T1_BUSES)
-    chooser, request = pressed(chooser=chooser, reach=None)
-    chooser, request = fed(chooser, request, TOWARDS)
-    chooser, request = pressed(chooser=chooser, reach=None)
-    chooser, request = pressed(chooser=chooser, reach=None)
-    assert request == LineRequest(towards=11)
-    chooser = with_line(chooser=chooser, towards=11, line=LINE)
-    chooser, request = pressed(chooser=chooser, reach=None)
-    assert request == StripRequest(key=StripKey(
-        station='S1', kind=RouteKind.REPLACEMENT, routes=('T1X',),
-    ))
+def test_station_first_walk_commits_line_kind() -> None:
+    chooser = at_stations()
+    assert chooser.columns[chooser.focus] == T1_STATIONS
+    chooser, preview = turned(chooser=chooser, steps=3, reach=None)
+    assert preview is None
+    chooser, request = knob_pressed(chooser=chooser, reach=None)
+    assert request == ColumnRequest(path=(*T1, (Level.STATION, 'E2')))
+    chooser, _ = fed(chooser, request, T1_TO)
+    _, pin = knob_pressed(chooser=chooser, reach=None)
+    assert pin == Pin(
+        origin=T1_PLACES['E2'], kind=RouteKind.TRAIN, routes=('T1',),
+    )
 
 
 def test_path_to_uses_choice_level() -> None:
-    chooser = opened_at_kind(kind=RouteKind.TRAIN)
-    train = ((Level.KIND, 'train'),)
-    chooser, _ = fed(chooser, ColumnRequest(path=train), TRAIN_LINES)
-    chooser, request = pressed(chooser=chooser, reach=None)
-    chooser, _ = fed(chooser, request, T1_TOWARDS)
-    chooser, _ = pressed(chooser=chooser, reach=None)
-    chooser, _ = turned(chooser=chooser, steps=1, reach=None)
-    assert path_to(chooser=chooser, index=2)[-1] == (
+    chooser = at_stations()
+    assert path_to(chooser=chooser, index=chooser.focus)[-1] == (
+        Level.STATION, 'R1',
+    )
+    replacements = Column(level=Level.GROUP, items=(
+        Choice(
+            key='replacements', label='Replacement buses',
+            level=Level.REPLACEMENTS,
+        ),
+    ))
+    chooser, _ = fed(
+        opened_at_kind(), ColumnRequest(path=BUS_606[:1]), replacements,
+    )
+    assert path_to(chooser=chooser, index=1)[-1] == (
         Level.REPLACEMENTS, 'replacements',
     )
 

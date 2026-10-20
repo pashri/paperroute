@@ -11,14 +11,17 @@ from paperroute.core.chooser import (
     LineRequest,
     Stage,
     StripRequest,
-    backed,
     chosen_pin,
     opened,
-    pressed,
     to_row,
     turned,
     with_column,
     with_line,
+)
+from paperroute.core.chooser_station import (
+    has_list_from,
+    knob_backed,
+    knob_pressed,
 )
 from paperroute.core.chooser_view import (
     ChooserView,
@@ -120,6 +123,27 @@ def picked_load(
     return replace(state, chooser=marked), (load,)
 
 
+def departures_chooser(*, state: State) -> ChooserState | None:
+    """
+    Find the chooser while it holds departures from its From.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    ChooserState | None
+        The chooser in the TO stage, or in the lists once a station press
+        has chosen its From; else None.
+    """
+    chooser = state.chooser
+    if chooser is None or not has_list_from(chooser=chooser):
+        return picking_to(state=state)
+    return chooser
+
+
 def picked_reloads(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
     Load the chooser's departures again when they run short.
@@ -132,11 +156,11 @@ def picked_reloads(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the load in flight, and a LoadChooserDepartures, in
-        the TO stage when no load is in flight and less than `HORIZON`
-        is loaded; unchanged otherwise.
+        State with the load in flight, and a LoadChooserDepartures, while
+        the chooser holds departures, no load is in flight and less than
+        `HORIZON` is loaded; unchanged otherwise.
     """
-    chooser = picking_to(state=state)
+    chooser = departures_chooser(state=state)
     if chooser is None or chooser.load.loading:
         return state, ()
     if not runs_short(loaded_until=chooser.load.loaded_until, now=state.now):
@@ -213,7 +237,7 @@ def commit(*, state: State, chooser: ChooserState, pin: Pin) -> State:
     state : State
         State.
     chooser : ChooserState
-        Chooser in the TO stage.
+        Chooser in the TO stage or on a TO column.
     pin : Pin
         The place chosen.
 
@@ -245,17 +269,24 @@ def chooser_pressed(
     -------
     tuple[State, tuple[Effect, ...]]
         The chooser moved on, its place committed, or the closed fold
-        under the TO cursor opened.
+        under the TO cursor opened. A station press also asks for the
+        departures from the station.
     """
     unfolded = fold_pressed(state=state, chooser=chooser)
     if unfolded is not None:
         return moved(state=unfolded, chooser=unfolded.chooser or chooser)
-    after, outcome = pressed(
+    after, outcome = knob_pressed(
         chooser=chooser, reach=chooser_reach(chooser=chooser, state=state),
     )
     if isinstance(outcome, Pin):
         return commit(state=state, chooser=chooser, pin=outcome), ()
-    return moved(state=state, chooser=after, request=outcome)
+    state, effects = moved(state=state, chooser=after, request=outcome)
+    if not isinstance(outcome, ColumnRequest) or not has_list_from(
+        chooser=after,
+    ):
+        return state, effects
+    state, load = picked_load(state=state, chooser=after)
+    return state, (*effects, *load)
 
 
 def cursor_at(*, reach: Reach | None, key: str) -> int:
@@ -338,7 +369,7 @@ def chooser_knob(
         return moved(state=state, chooser=first, request=kinds)
     match event:
         case KnobPressed(knob=Knob.TOP):
-            return moved(state=state, chooser=backed(chooser=chooser))
+            return moved(state=state, chooser=knob_backed(chooser=chooser))
         case KnobPressed(knob=Knob.BOTTOM):
             return chooser_pressed(state=state, chooser=chooser)
         case KnobTurned(knob=Knob.BOTTOM, steps=steps):
@@ -365,11 +396,12 @@ def from_matches(*, chooser: ChooserState, pin: Pin) -> bool:
     Returns
     -------
     bool
-        True in the TO stage when the From is the place's From.
+        True in the TO stage, or in the lists after a station press, when
+        the From is the place's From.
     """
     origin = chooser.origin
     return (
-        chooser.stage is Stage.TO
+        (chooser.stage is Stage.TO or has_list_from(chooser=chooser))
         and origin is not None
         and origin.stop_id == pin.origin.stop_id
     )
@@ -508,7 +540,8 @@ def chooser_retimed(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     -------
     tuple[State, tuple[Effect, ...]]
         State with a failed chooser closed, the TO cursor back on the
-        From and its departures due again, and the loads asked for again.
+        From and its departures due again, and the loads asked for again;
+        after a station press, the departures too.
     """
     chooser = state.chooser
     if chooser is None:
@@ -517,7 +550,12 @@ def chooser_retimed(*, state: State) -> tuple[State, tuple[Effect, ...]]:
         return replace(state, chooser=None), ()
     request = asked_again(chooser=chooser)
     fresh = replace(chooser, to_cursor=0, load=DepartureLoad())
-    return asked(state=replace(state, chooser=fresh), request=request)
+    state = replace(state, chooser=fresh)
+    state, effects = asked(state=state, request=request)
+    if not has_list_from(chooser=fresh):
+        return state, effects
+    state, load = picked_load(state=state, chooser=fresh)
+    return state, (*effects, *load)
 
 
 def trip_feeds(*, state: State) -> tuple[str, ...]:
@@ -533,9 +571,9 @@ def trip_feeds(*, state: State) -> tuple[str, ...]:
     -------
     tuple[str, ...]
         The shown place's feeds, then those the chooser's departures
-        need in the TO stage, each once.
+        need while it holds them, each once.
     """
-    chooser = picking_to(state=state)
+    chooser = departures_chooser(state=state)
     extra = () if chooser is None else feeds_of(departures=chooser.departures)
     return tuple(dict.fromkeys((*state.feeds, *extra)))
 

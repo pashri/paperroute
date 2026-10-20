@@ -17,6 +17,7 @@ from paperroute.core.chooser import (
     with_column,
     with_line,
 )
+from paperroute.core.chooser_station import knob_pressed
 from paperroute.core.messages import (
     ColumnLoaded,
     Event,
@@ -71,23 +72,92 @@ TRAIN_LINES: Final[Column] = Column(
         Choice(key='t2', label='Leppington & Inner West', badge='T2'),
     ),
 )
-T1_TOWARDS: Final[Column] = Column(
-    level=Level.TOWARDS,
+T1_PLACES: Final[dict[str, StopPlace]] = {
+    stop_id: place(stop_id, name=name)
+    for stop_id, name in (
+        ('R1', 'Richmond'),
+        ('R2', 'Riverstone'),
+        ('E1', 'Emu Plains'),
+        ('E2', 'Penrith'),
+    )
+}
+
+
+def station(stop_id: str, *, dim: bool = False, tag: str = '') -> Choice:
+    """
+    A station row of a T1 STATION or TO column.
+
+    Parameters
+    ----------
+    stop_id : str
+        Station ID: R1, R2, E1 or E2.
+    dim : bool
+        Whether it is greyed out.
+    tag : str
+        Its tag; 'ALL' on the From.
+
+    Returns
+    -------
+    Choice
+        The row, with its place.
+    """
+    found = T1_PLACES[stop_id]
+    return Choice(
+        key=stop_id, label=found.name, tag=tag, dim=dim, place=found,
+    )
+
+
+def heading(label: str) -> Choice:
+    """
+    A block heading of a T1 STATION or TO column.
+
+    Parameters
+    ----------
+    label : str
+        Its text.
+
+    Returns
+    -------
+    Choice
+        The heading row.
+    """
+    return Choice(key='', label=label, heading=True)
+
+
+T1_STATIONS: Final[Column] = Column(
+    level=Level.STATION,
     items=(
-        Choice(key='21', label='Emu Plains', detail='90'),
-        Choice(
-            key='replacements', label='Replacement buses',
-            detail='2 routes', level=Level.REPLACEMENTS,
-        ),
+        heading('To Richmond'),
+        station('R1'),
+        station('R2'),
+        heading('To Emu Plains'),
+        station('E1'),
+        station('E2'),
     ),
 )
-T1_BUSES: Final[Column] = Column(
-    level=Level.ROUTE,
+T1_TO: Final[Column] = Column(
+    level=Level.TO,
     items=(
-        Choice(key='b1', label='Strathfield to Parramatta', badge='T1X'),
-        Choice(key='b2', label='Penrith to Emu Plains', badge='T1Y'),
+        heading('To Richmond'),
+        station('R1', dim=True),
+        station('R2'),
+        heading('To Emu Plains'),
+        station('E1', dim=True),
+        station('E2', tag='ALL'),
     ),
-)
+)  # from Penrith
+T1_TO_END: Final[Column] = Column(
+    level=Level.TO,
+    items=(
+        heading('To Richmond'),
+        station('R1', dim=True),
+        station('R2', dim=True),
+        heading('To Emu Plains'),
+        station('E1', tag='ALL'),
+        station('E2', dim=True),
+    ),
+)  # from Emu Plains, where nothing else is reached
+T1: Final[ChooserPath] = ((Level.KIND, 'train'), (Level.LINE, 't1'))
 LINE: Final[tuple[StopPlace, ...]] = (
     place('S1', name='Parramatta'),
     place('S2', name='Northmead'),
@@ -110,6 +180,22 @@ UNTIL: Final[datetime] = START + HORIZON + RELOAD_BEFORE
 OPEN: Final[KnobPressed] = KnobPressed(knob=Knob.TOP)
 NEXT: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 DOWN: Final[KnobTurned] = KnobTurned(knob=Knob.BOTTOM, steps=1)
+PENRITH: Final[Pin] = Pin(
+    origin=T1_PLACES['E2'], kind=RouteKind.TRAIN, routes=('T1',),
+)
+TO_COLUMN: Final[tuple[Event, ...]] = (
+    OPEN,
+    ColumnLoaded(path=(), column=KINDS),
+    ColumnLoaded(path=BUS_606[:1], column=GROUPS),
+    DOWN,
+    ColumnLoaded(path=T1[:1], column=TRAIN_LINES),
+    NEXT,
+    ColumnLoaded(path=T1, column=T1_STATIONS),
+    NEXT,
+    KnobTurned(knob=Knob.BOTTOM, steps=3),
+    NEXT,
+    ColumnLoaded(path=(*T1, (Level.STATION, 'E2')), column=T1_TO),
+)
 TO_STAGE: Final[tuple[Event, ...]] = (
     OPEN,
     ColumnLoaded(path=(), column=KINDS),
@@ -251,6 +337,48 @@ def at_to() -> ChooserState:
     """
     chooser, _ = turned(chooser=at_from(), steps=1, reach=None)
     chooser, _ = pressed(chooser=chooser, reach=None)
+    return chooser
+
+
+def at_stations() -> ChooserState:
+    """
+    Walk Train and T1 to the focused STATION column.
+
+    Returns
+    -------
+    ChooserState
+        The chooser focused on T1's stations, cursor on Richmond.
+    """
+    chooser = opened_at_kind(kind=RouteKind.TRAIN)
+    chooser, request = fed(chooser, ColumnRequest(path=T1[:1]), TRAIN_LINES)
+    chooser, request = pressed(chooser=chooser, reach=None)
+    chooser, request = fed(chooser, request, T1_STATIONS)
+    chooser, request = pressed(chooser=chooser, reach=None)
+    assert request is None
+    return chooser
+
+
+def at_to_column(
+    *, steps: int = 3, column: Column = T1_TO,
+) -> ChooserState:
+    """
+    Press a T1 station and load its TO column.
+
+    Parameters
+    ----------
+    steps : int
+        Detents from Richmond to the From; 3 reaches Penrith.
+    column : Column
+        The TO column answered.
+
+    Returns
+    -------
+    ChooserState
+        The chooser focused on the TO column.
+    """
+    chooser, _ = turned(chooser=at_stations(), steps=steps, reach=None)
+    chooser, request = knob_pressed(chooser=chooser, reach=None)
+    chooser, _ = fed(chooser, request, column)
     return chooser
 
 

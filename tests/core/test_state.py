@@ -16,7 +16,9 @@ from paperroute.core.chooser import (
     Column,
     Level,
     Stage,
+    chosen,
     chosen_pin,
+    focusable,
 )
 from paperroute.core.chooser_steps import trip_feeds
 from paperroute.core.chooser_view import ChooserView
@@ -144,9 +146,10 @@ from tests.core.chooser_walks import (
     METRO_LINES,
     NEXT,
     OPEN,
+    PENRITH,
     ROUTES,
-    T1_BUSES,
-    T1_TOWARDS,
+    T1_STATIONS,
+    T1_TO,
     TOWARDS,
     TRAIN_LINES,
     UNTIL,
@@ -1024,7 +1027,7 @@ def column_for(*, path: ChooserPath) -> Column:
     Returns
     -------
     Column
-        Bus, Train or Metro routes and their towards rows.
+        Bus or Metro routes and their towards rows, or T1's stations.
     """
     known = {
         (): KINDS,
@@ -1037,10 +1040,10 @@ def column_for(*, path: ChooserPath) -> Column:
     match path[-1][0]:
         case Level.GROUP:
             return ROUTES
-        case Level.REPLACEMENTS:
-            return T1_BUSES
         case Level.LINE if path[0][1] == 'train':
-            return T1_TOWARDS
+            return T1_STATIONS
+        case Level.STATION:
+            return T1_TO
     return TOWARDS
 
 
@@ -1085,6 +1088,43 @@ def picked_reply(
     )
 
 
+def listed_reply(
+    *,
+    chooser: ChooserState,
+    answer: Answer,
+    now: datetime,
+    timetable: str | None,
+) -> Event:
+    """
+    Answer the departures load a station press asked for.
+
+    Parameters
+    ----------
+    chooser : ChooserState
+        Chooser with a From chosen in its lists.
+    answer : Answer
+        The stand-in.
+    now : datetime
+        Time of the reply.
+    timetable : str | None
+        The version the reply comes from.
+
+    Returns
+    -------
+    Event
+        The departures, or their failure.
+    """
+    pin = chosen_pin(chooser=chooser, destination=None)
+    if answer.outcome is Outcome.FAILED:
+        return ChooserDeparturesFailed(pin=pin, timetable=timetable)
+    return ChooserDeparturesLoaded(
+        pin=pin,
+        departures=chooser_departures(),
+        until=load_window(now=now)[1],
+        timetable=timetable,
+    )
+
+
 def answered(*, state: State, answer: Answer) -> Event:
     """
     Turn a stand-in into the reply the chooser waits for.
@@ -1108,6 +1148,11 @@ def answered(*, state: State, answer: Answer) -> Event:
         return Tick(now=state.now)
     if chooser.stage is Stage.TO:
         return picked_reply(state=state, answer=answer, timetable=timetable)
+    if chooser.origin is not None and chooser.waiting is None:
+        return listed_reply(
+            chooser=chooser, answer=answer, now=state.now,
+            timetable=timetable,
+        )
     if chooser.stage is Stage.FROM and chooser.towards is not None:
         towards = int(chooser.towards.key)
         if answer.outcome is Outcome.FAILED:
@@ -1146,7 +1191,7 @@ def chooser_events(draw: st.DrawFn) -> Event:
     timetable = draw(st.sampled_from(VERSIONS))
     path = draw(st.sampled_from([(), BUS_606[:1], BUS_606[:2], BUS_606]))
     towards = draw(st.sampled_from([11, 12, 21]))
-    pin = draw(st.sampled_from([CHOSEN, *POOL]))
+    pin = draw(st.sampled_from([CHOSEN, PENRITH, *POOL]))
     options: list[Event] = [
         ColumnLoaded(
             path=path, column=column_for(path=path), timetable=timetable,
@@ -1357,7 +1402,8 @@ def check_chooser(
         assert load.timetable == after.saving.timetable
         assert swapped or waiting is None or load.path != waiting
     for asked in effects_of(effects=effects, kind=LoadChooserDepartures):
-        assert chooser is not None and chooser.stage is Stage.TO
+        assert chooser is not None and chooser.origin is not None
+        assert chooser.stage is Stage.TO or chooser.stage is Stage.LISTS
         assert asked.pin.origin == chooser.origin
 
 
@@ -1376,6 +1422,11 @@ def check_cursors(*, state: State, chooser: ChooserState) -> None:
     for cursor, column in zip(chooser.cursors, chooser.columns, strict=True):
         assert 0 <= cursor < max(1, len(column.items))
     assert 0 <= chooser.line_cursor < max(1, len(chooser.line))
+    if chooser.columns and chooser.columns[chooser.focus].level in (
+        Level.STATION, Level.TO,
+    ):
+        choice = chosen(chooser=chooser, index=chooser.focus)
+        assert focusable(choice=choice)
     if chooser.stage is not Stage.TO or chooser.key is None:
         return
     reach = state.strip.reaches.get(chooser.key)

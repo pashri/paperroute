@@ -250,6 +250,26 @@ class Canvas:
         """
         self.canvas.drawRect(skia.Rect(*box), self.paint(grey=grey))
 
+    def checker(self, *, box: Box, grey: int) -> None:
+        """
+        Cover every other pixel of a box, in a checkerboard.
+
+        The pixel at the box's top left corner is covered.
+
+        Parameters
+        ----------
+        box : Box
+            Left, top, right, bottom, in whole pixels.
+        grey : int
+            Level of the covered pixels.
+        """
+        left, top, right, bottom = (int(edge) for edge in box)
+        squares = skia.Path()
+        for y in range(top, bottom):
+            for x in range(left + (y - top) % 2, right, 2):
+                squares.addRect(skia.Rect(x, y, x + 1, y + 1))
+        self.canvas.drawPath(squares, self.paint(grey=grey))
+
     def line(self, *, points: Sequence[Point], width: float, grey: int,
              dash: tuple[float, float] | None = None) -> None:
         """

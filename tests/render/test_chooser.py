@@ -1,6 +1,7 @@
 """Facts about the drawn chooser frames (no golden images)."""
 
 from dataclasses import replace
+from typing import Final
 
 import numpy as np
 import pytest
@@ -246,3 +247,142 @@ def test_scroll_thumb_shows_over_a_focused_selection() -> None:
     row = (CHOOSER_TOP + 5, CHOOSER_TOP + 40)
     assert dark(frame=frame, box=(WIDTH - 4, row[0], WIDTH, row[1])) == 0
     assert dark(frame=frame, box=(WIDTH - 30, row[0], WIDTH - 6, row[1])) == 1
+
+
+STATION_ROW: Final[int] = CHOOSER_TOP + ROW_HEIGHTS[Level.STATION]
+STATION_BOX: Final[tuple[int, int, int, int]] = (
+    0, STATION_ROW, 296, STATION_ROW + ROW_HEIGHTS[Level.STATION],
+)
+
+
+def station_frame(
+    *, items: tuple[Choice, ...], focused: bool = False,
+    hint: str | None = None,
+) -> NDArray[np.uint8]:
+    """
+    Draw a lone STATION column whose first row is selected.
+
+    Parameters
+    ----------
+    items : tuple[Choice, ...]
+        Rows; the one under test is the second.
+    focused : bool
+        Whether the knob moves the column.
+    hint : str | None
+        Knob hint for the header.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The frame.
+    """
+    view = view_of(
+        column(level=Level.STATION, items=items, focused=focused),
+        FAILED_COLUMN,
+    )
+    return draw_chooser_view(view=replace(view, hint=hint))
+
+
+def station_pair(
+    *, dim: bool = False, heading: bool = False,
+) -> tuple[Choice, ...]:
+    """
+    Make a first row and a second row with some flags.
+
+    Parameters
+    ----------
+    dim : bool
+        Grey out the second row.
+    heading : bool
+        Make the second row a heading.
+
+    Returns
+    -------
+    tuple[Choice, ...]
+        The rows.
+    """
+    return (
+        Choice(key='a', label='Hornsby'),
+        Choice(key='b', label='Berowra', dim=dim, heading=heading),
+    )
+
+
+def test_dim_row_has_less_ink() -> None:
+    """A dim row has between 30% and 70% of a normal row's ink."""
+    normal = station_frame(items=station_pair())
+    dim = station_frame(items=station_pair(dim=True))
+    ratio = dark(frame=dim, box=STATION_BOX) / dark(
+        frame=normal, box=STATION_BOX,
+    )
+    assert 0.3 < ratio < 0.7
+
+
+def test_heading_has_no_box() -> None:
+    """A heading draws small ink text on paper, with no filled box."""
+    frame = station_frame(items=station_pair(heading=True))
+    assert 0 < dark(frame=frame, box=STATION_BOX) < 0.2
+
+
+def test_all_tag_drawn_on_from() -> None:
+    """A row tagged ALL draws an outlined tag at its right."""
+    plain = station_frame(items=station_pair())
+    tagged = station_frame(items=(
+        Choice(key='a', label='Hornsby'),
+        Choice(key='b', label='Berowra', tag='ALL'),
+    ))
+    right = (240, STATION_ROW, 296, STATION_ROW + 31)
+    assert dark(frame=plain, box=right) == 0
+    assert dark(frame=tagged, box=right) > 0
+    assert tagged[STATION_ROW + 15, 287] == INK
+
+
+def test_station_column_names_fit() -> None:
+    """A 30-character name is clipped inside the column."""
+    items = (
+        Choice(key='a', label='Hornsby'),
+        Choice(key='b', label='N' * 30),
+    )
+    frame = station_frame(items=items)
+    rows = (STATION_ROW + 2, STATION_ROW + 29)
+    inside = dark(frame=frame, box=(0, rows[0], 280, rows[1]))
+    beyond = dark(frame=frame, box=(300, rows[0], 560, rows[1]))
+    assert inside > 0
+    assert beyond == 0
+
+
+def test_station_then_to_columns_draw() -> None:
+    """A STATION column that is not last gets its width and a rule."""
+    items = station_pair(dim=True)
+    view = view_of(
+        column(level=Level.LINE, items=items, focused=False),
+        column(level=Level.STATION, items=items, focused=False),
+        column(level=Level.TO, items=items, focused=True),
+    )
+    frame = draw_chooser_view(view=view)
+    rule = COLUMN_WIDTHS[Level.LINE] + COLUMN_WIDTHS[Level.STATION] - 1
+    assert frame[300, rule] == INK
+    assert frame[300, rule - 3] == PAPER
+
+
+def test_to_hint_drawn() -> None:
+    """A hint shows as paper text in the header, and only when given."""
+    hint = 'Press: set TO'
+    box = (200, 4, 500, CHOOSER_TOP - 4)
+    plain = station_frame(items=station_pair())
+    hinted = station_frame(items=station_pair(), hint=hint)
+    assert dark(frame=plain, box=box) == 1
+    assert dark(frame=hinted, box=box) < 1
+
+
+def test_kind_column_draws_coach_letter() -> None:
+    """The Coach row draws its C box in ink at the row start."""
+    items = (
+        Choice(key='bus', label='Bus', badge='B'),
+        Choice(key='coach', label='Coach', badge='C'),
+    )
+    frame = draw_chooser_view(
+        view=view_of(column(level=Level.KIND, items=items, focused=False)),
+    )
+    middle = CHOOSER_TOP + ROW_HEIGHTS[Level.KIND] + 28
+    assert frame[middle, 12] == INK
+    assert frame[middle, 4] == PAPER

@@ -22,6 +22,8 @@ COLUMN_WIDTHS: Final[dict[Level, int]] = {
     Level.LINE: 260,
     Level.ROUTE: 330,
     Level.TOWARDS: 366,
+    Level.STATION: 300,
+    Level.TO: 300,
 }
 RULE_WIDTH: Final[int] = 2
 PAD: Final[int] = 10
@@ -35,6 +37,9 @@ GROUP_FACE: Final[Face] = Face(weight=800, px=19)
 NAME_FACE: Final[Face] = Face(weight=400, px=15)
 COUNT_FACE: Final[Face] = Face(weight=700, px=13)
 TAG_FACE: Final[Face] = Face(weight=700, px=12)
+HEADING_FACE: Final[Face] = Face(weight=700, px=13)
+HINT_FACE: Final[Face] = Face(weight=700, px=14)
+HINT_GAP: Final[int] = 24
 CHIP_FACE: Final[Face] = Face(weight=800, px=15)
 LETTER_FACE: Final[Face] = Face(weight=800, px=14)
 ROUTE_BADGE: Final[int] = 60
@@ -357,6 +362,49 @@ def draw_towards(canvas: Canvas, *, row: Choice, box: Rect, inverted: bool,
     )
 
 
+def draw_station(canvas: Canvas, *, row: Choice, box: Rect, inverted: bool,
+                 ) -> None:
+    """
+    Draw a station row, or a block heading, in a STATION or TO column.
+
+    A dim station is covered with a checkerboard of paper so it reads
+    lighter than its neighbours.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Choice
+        The row.
+    box : Rect
+        The row's box.
+    inverted : bool
+        Whether the row is a focused selection.
+    """
+    left, top, right, bottom = box
+    grey, _ = ink_for(inverted=inverted)
+    middle = (top + bottom) // 2
+    face = HEADING_FACE if row.heading else NAME_FACE
+    limit = right - PAD
+    if row.tag:
+        limit = outlined_tag(
+            canvas, text=row.tag, right=right - PAD, top=middle - 9,
+            inverted=inverted,
+        ) - GAP
+    x = left + PAD + 2
+    name = canvas.fit(
+        text=row.label.upper() if row.heading else row.label,
+        face=face,
+        width=limit - x,
+    )
+    canvas.text(at=(x, middle + 5), text=name, face=face, grey=grey)
+    if row.dim:
+        canvas.checker(
+            box=(x, top, x + canvas.length(text=name, face=face) + 1, bottom),
+            grey=PAPER,
+        )
+
+
 class RowDrawer(Protocol):
     """Draws one row of a column."""
 
@@ -390,6 +438,8 @@ DRAWERS: Final[dict[Level, RowDrawer]] = {
     Level.ROUTE: draw_route,
     Level.LINE: draw_line,
     Level.TOWARDS: draw_towards,
+    Level.STATION: draw_station,
+    Level.TO: draw_station,
 }
 
 
@@ -548,7 +598,7 @@ def draw_column(
 
 def draw_header(canvas: Canvas, *, view: ChooserView) -> None:
     """
-    Draw the black bar with the title on the left and the trail on the right.
+    Draw the black bar: title and hint on the left, trail on the right.
 
     Parameters
     ----------
@@ -565,12 +615,22 @@ def draw_header(canvas: Canvas, *, view: ChooserView) -> None:
         grey=PAPER,
         anchor='rs',
     )
-    canvas.text(
+    title = canvas.text(
         at=(14, HEADER_BASELINE),
         text=canvas.fit(text=view.title, face=TITLE_FACE, width=right - 40),
         face=TITLE_FACE,
         grey=PAPER,
     )
+    if view.hint:
+        left = 14 + title + HINT_GAP
+        canvas.text(
+            at=(left, HEADER_BASELINE),
+            text=canvas.fit(
+                text=view.hint, face=HINT_FACE, width=right - HINT_GAP - left,
+            ),
+            face=HINT_FACE,
+            grey=PAPER,
+        )
 
 
 def draw_chooser_view(*, view: ChooserView) -> NDArray[np.uint8]:

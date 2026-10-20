@@ -19,8 +19,8 @@ from paperroute.build.timetable import Window, build_timetable
 from tests.build.network_feed import network_feed
 
 RUN_TABLES: Final[set[str]] = {
-    'runs', 'run_stops', 'trip_runs', 'trip_next', 'route_patterns',
-    'chooser_routes', 'chooser_towards',
+    'runs', 'run_stops', 'run_calls', 'trip_runs', 'trip_next',
+    'route_patterns', 'chooser_routes', 'chooser_towards',
 }
 IMPORTS_ONLY: Final[str] = (
     'import paperroute.build.extras, sys; '

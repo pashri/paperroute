@@ -16,6 +16,7 @@ from paperroute.core.reach_layout import LineExit
 LINE_TABLES: Final[tuple[str, ...]] = ('line_stations', 'line_aliases')
 EXIT_TABLES: Final[tuple[str, ...]] = ('line_exits',)
 TRACK_TABLES: Final[tuple[str, ...]] = ('line_track',)
+STOP_TABLES: Final[tuple[str, ...]] = ('run_calls',)
 LINE_EXITS: Final[str] = (
     'SELECT station_id, off_id, lines FROM line_exits WHERE line_key = ?'
 )
@@ -46,6 +47,13 @@ SELECT station_id FROM line_aliases WHERE kept_id IN (SELECT * FROM own)
 PASSES: Final[str] = """
 SELECT DISTINCT r.run_id, r.stations
 FROM run_stops s JOIN runs r ON r.run_id = s.run_id
+WHERE s.station_id IN (SELECT value FROM json_each(:stations))
+  AND r.kind = :kind
+"""
+STOPS: Final[str] = """
+SELECT DISTINCT c.run_id, c.stops
+FROM run_stops s JOIN runs r ON r.run_id = s.run_id
+  JOIN run_calls c ON c.run_id = r.run_id
 WHERE s.station_id IN (SELECT value FROM json_each(:stations))
   AND r.kind = :kind
 """
@@ -176,7 +184,7 @@ def later_stops(
     *, rows: Iterable[Row], origin: str, aliases: Mapping[str, str],
 ) -> frozenset[str]:
     """
-    Collect the stations runs call at after a pass of the From.
+    Collect the stations runs stop at after a stop at the From.
 
     Stations are first mapped to the station kept for them, with
     back-to-back calls at one kept station made one. Each pass is then
@@ -187,7 +195,9 @@ def later_stops(
     Parameters
     ----------
     rows : Iterable[Row]
-        Run ID and stations as JSON of each run through the From.
+        Run ID and stations as JSON of each run through the From: the
+        stations it stops at, or every station it passes on a file
+        without run_calls.
     origin : str
         The From's kept station ID.
     aliases : Mapping[str, str]
@@ -275,10 +285,11 @@ class LineTables:
         -------
         Column | None
             The station column with the From tagged ALL and every station
-            no run of the kind reaches directly from it dim; None when the
-            From is not on the line. A station merged into another by
-            line_aliases counts as the station kept for it, both as the
-            From and as a later stop.
+            no run of the kind stopping there stops at later dim; None
+            when the From is not on the line. A file without run_calls
+            counts stations runs pass through as stops. A station merged
+            into another by line_aliases counts as the station kept for
+            it, both as the From and as a later stop.
         """
         aliases = {
             str(merged): str(kept)
@@ -289,7 +300,8 @@ class LineTables:
         if origin not in {choice.key for choice in stations}:
             return None
         merged = [origin, *(m for m, k in aliases.items() if k == origin)]
-        rows = self.fetch(sql=PASSES, params={
+        stops = self.has_tables(tables=STOP_TABLES)
+        rows = self.fetch(sql=STOPS if stops else PASSES, params={
             'stations': json.dumps(merged), 'kind': str(kind),
         })
         reached = later_stops(rows=rows, origin=origin, aliases=aliases)

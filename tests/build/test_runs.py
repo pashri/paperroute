@@ -27,6 +27,7 @@ from paperroute.build.runs import (
     next_on_block,
     next_trips,
     plain_trip_runs,
+    run_calls_of,
     trip_calls,
     trip_days,
     trip_skips,
@@ -100,7 +101,8 @@ def fixture_calls(network: sqlite3.Connection) -> list[TripCalls]:
 
 def hand_trip(*, trip_id: str, route: str, stations: str, first_dep: int,
               last_arr: int, block: str | None = 'b',
-              headsign: str | None = None) -> TripCalls:
+              headsign: str | None = None,
+              passes: tuple[int, ...] = ()) -> TripCalls:
     """
     Build a trip by hand.
 
@@ -120,6 +122,8 @@ def hand_trip(*, trip_id: str, route: str, stations: str, first_dep: int,
         Block ID.
     headsign : str | None
         Headsign; None for 'to <last station>'.
+    passes : tuple[int, ...]
+        Positions passed through without stopping.
 
     Returns
     -------
@@ -133,6 +137,7 @@ def hand_trip(*, trip_id: str, route: str, stations: str, first_dep: int,
         kind=RouteKind.TRAIN if rail else RouteKind.BUS, route=route,
         headsign=headsign or f'to {calls[-1]}', block=block, service='daily',
         first_dep=first_dep, last_arr=last_arr, stations=calls, rail=rail,
+        passes=passes,
     )
 
 
@@ -372,7 +377,8 @@ def test_load_runs_subtracts_skipped_dates(
     with closing(sqlite3.connect(db)) as conn:
         conn.executescript(
             "INSERT INTO trip_skip VALUES ('x1', '2026-10-06');"
-            'DROP TABLE runs; DROP TABLE run_stops; DROP TABLE trip_runs;'
+            'DROP TABLE runs; DROP TABLE run_stops; DROP TABLE run_calls;'
+            'DROP TABLE trip_runs;'
             'DROP TABLE trip_next; DROP TABLE route_patterns;',
         )
         conn.executescript(RUN_SCHEMA)
@@ -455,3 +461,74 @@ def test_merged_trainlink_train_gets_a_run(tmp_path: Path) -> None:
             "WHERE t.trip_id = 'NT31-feed'",
         ).fetchone()
     assert (agency, runs) == ('711', 1)
+
+
+def test_run_calls_of_joins_stopping_stations() -> None:
+    """A carry-on's stops chain on; the meeting station stops if either does."""
+    x1 = hand_trip(trip_id='x1', route='T1', stations='A B C',
+                   first_dep=0, last_arr=100, passes=(1,))
+    x2 = hand_trip(trip_id='x2', route='T1', stations='C D E',
+                   first_dep=150, last_arr=200, passes=(0, 1))
+    assert run_calls_of(trip=x1, nexts=next_trips(trips=[x1, x2])) == (
+        ('A', 'B', 'C', 'D', 'E'), ('A', 'C', 'E'),
+    )
+    ends = dataclasses.replace(x1, passes=(2,))
+    assert run_calls_of(trip=ends, nexts={'x1': x2}) == (
+        ('A', 'B', 'C', 'D', 'E'), ('A', 'B', 'E'),
+    )
+
+
+def test_run_calls_of_cuts_stops_with_the_run() -> None:
+    """A shuttle's stops end where its run is cut."""
+    out = hand_trip(trip_id='s1', route='T1', stations='A B C',
+                    first_dep=0, last_arr=100, passes=(1,))
+    back = hand_trip(trip_id='s2', route='T1', stations='C B A',
+                     first_dep=150, last_arr=200)
+    again = hand_trip(trip_id='s3', route='T1', stations='A B C',
+                      first_dep=250, last_arr=300, passes=(1,))
+    run, stops = run_calls_of(
+        trip=out, nexts=next_trips(trips=[out, back, again]),
+    )
+    assert run == ('A', 'B', 'C', 'B', 'A')
+    assert stops == ('A', 'C', 'B', 'A')
+
+
+def test_load_runs_stores_stopping_calls(
+    network_db: Path, tmp_path: Path,
+) -> None:
+    """x1 passing E1 keeps E1 in its run but not in its run_calls row."""
+    db = tmp_path / 'timetable.db'
+    shutil.copy(network_db, db)
+    with closing(sqlite3.connect(db)) as conn:
+        conn.executescript(
+            'UPDATE stop_times SET pickup = 1, dropoff = 1 '
+            "WHERE trip_id = 'x1' AND stop_id = 'E1_1';"
+            'DROP TABLE runs; DROP TABLE run_stops; DROP TABLE run_calls;'
+            'DROP TABLE trip_runs;'
+            'DROP TABLE trip_next; DROP TABLE route_patterns;',
+        )
+        conn.executescript(RUN_SCHEMA)
+        assert next(
+            trip.passes
+            for trip in trip_calls(conn=conn)
+            if trip.trip_id == 'x1'
+        ) == (1,)
+        load_runs(conn=conn)
+        run_id = run_id_of(conn=conn, stations='E2 E1 C J W1')
+        rows = conn.execute(
+            'SELECT stops FROM run_calls WHERE run_id = ?', (run_id,),
+        ).fetchall()
+    assert rows == [(json.dumps(['E2', 'C', 'J', 'W1']),)]
+
+
+def test_run_calls_match_runs_without_passes(
+    network: sqlite3.Connection,
+) -> None:
+    """With every call stopping, each run has one row of its stations."""
+    rows = network.execute(
+        'SELECT r.stations, c.stops FROM runs r '
+        'JOIN run_calls c USING (run_id)',
+    ).fetchall()
+    runs, = network.execute('SELECT COUNT(*) FROM runs').fetchone()
+    assert len(rows) == runs
+    assert all(stations == stops for stations, stops in rows)

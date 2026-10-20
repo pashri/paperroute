@@ -226,17 +226,30 @@ def set_runs(*, path: Path, runs: Sequence[tuple[str, int]]) -> None:
     path : Path
         Timetable file, changed in place.
     runs : Sequence[tuple[str, int]]
-        Space-separated stations and trip-days of each run.
+        Space-separated stations and trip-days of each run; a station
+        written '~X' is passed through without stopping. The run_calls
+        rows are written only on a file with that table.
     """
     with closing(sqlite3.connect(path)) as conn:
         conn.execute('DELETE FROM runs')
         conn.execute('DELETE FROM run_stops')
+        stopping = bool(conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE name = 'run_calls'",
+        ).fetchall())
+        if stopping:
+            conn.execute('DELETE FROM run_calls')
         for run_id, (stations, trips) in enumerate(runs, start=1):
-            calls = stations.split()
+            calls = [call.lstrip('~') for call in stations.split()]
+            stops = [call for call in stations.split() if call[0] != '~']
             conn.execute(
                 "INSERT INTO runs VALUES (?, 'train', 'T1', ?, ?)",
                 (run_id, json.dumps(calls), trips),
             )
+            if stopping:
+                conn.execute(
+                    'INSERT INTO run_calls VALUES (?, ?)',
+                    (run_id, json.dumps(stops)),
+                )
             conn.executemany(
                 'INSERT INTO run_stops VALUES (?, ?, ?)',
                 [(station, run_id, pos) for pos, station in enumerate(calls)],
@@ -464,6 +477,55 @@ def test_to_column_stops_at_a_turn_back(copy: Path) -> None:
     assert {c.key for c in column.items if c.dim} == {
         'R1', 'R2', 'R3', 'E1', 'E2',
     }
+
+
+def test_to_column_dims_a_station_runs_pass_through(copy: Path) -> None:
+    """A run passing C without stopping leaves C grey from W2."""
+    set_runs(path=copy, runs=[('W2 W1 J ~C E1 E2', 4)])
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        column = repo.choices(path=(*T1, (Level.STATION, 'W2')))
+    assert column is not None
+    assert {c.key for c in column.items if c.dim} == {
+        'R1', 'R2', 'R3', 'C',
+    }
+
+
+def test_to_column_from_a_pass_through_reaches_nothing(copy: Path) -> None:
+    """From C, which the only run passes without stopping, all is grey."""
+    set_runs(path=copy, runs=[('W2 W1 J ~C E1 E2', 4)])
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        column = repo.choices(path=(*T1, (Level.STATION, 'C')))
+    assert column is not None
+    assert {c.key for c in column.items if not c.dim} == {'', 'C'}
+
+
+def test_to_column_keeps_one_trip_stopping_patterns_apart(
+    copy: Path,
+) -> None:
+    """Two trips of one run stopping at C or at E1 never join C to E1."""
+    set_runs(path=copy, runs=[('W2 W1 J C ~E1 E2', 4)])
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute(
+            'INSERT INTO run_calls VALUES (1, ?)',
+            (json.dumps(['W2', 'W1', 'J', 'E1', 'E2']),),
+        )
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        column = repo.choices(path=(*T1, (Level.STATION, 'C')))
+    assert column is not None
+    assert {c.key for c in column.items if not c.dim} == {'', 'C', 'E2'}
+
+
+def test_to_column_without_run_calls_counts_passes(copy: Path) -> None:
+    """A file without run_calls counts a pass-through as reached."""
+    set_runs(path=copy, runs=[('W2 W1 J ~C E1 E2', 4)])
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute('DROP TABLE run_calls')
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        column = repo.choices(path=(*T1, (Level.STATION, 'W2')))
+    assert column is not None
+    assert {c.key for c in column.items if c.dim} == {'R1', 'R2', 'R3'}
 
 
 def merge_e2_into_r3(*, path: Path) -> None:

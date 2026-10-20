@@ -41,7 +41,8 @@ Keys: Q quits.
 The chooser picks a kind first. Trains, metro, light rail and ferries go
 line, then station, then destination on the same line; grey stations have no
 direct service, and the From row reads ALL. Buses, school buses and coaches
-go route, then direction, then stop. Replacement buses are under Bus.
+go route, then direction, then stop. Replacement buses are under Bus, as
+Trackwork.
 
 Replay recorded feeds with `--feeds tests/fixtures/real --at 2026-10-16T06:25`.
 

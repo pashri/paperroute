@@ -541,7 +541,7 @@ def test_bus_groups_end_with_replacement_buses(copy: Path) -> None:
     assert after is not None
     assert after.items[:-1] == before.items
     assert after.items[-1] == Choice(
-        key='replacements', label='Replacement buses', rule_above=True,
+        key='replacements', label='Trackwork', rule_above=True,
         level=Level.REPLACEMENTS,
     )
     assert school is None or school.items[-1].key != 'replacements'

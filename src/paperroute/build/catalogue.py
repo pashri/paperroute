@@ -742,9 +742,9 @@ def write_towards(
         for source in sources
     ))
     lines = {
-        key for source in sources
+        rows[source.key]
+        for source in sources
         if source.merge[0] in LINE_KINDS
-        for key in (rows[source.key],)
     }
     insert_many(conn=conn, rows=(
         row for row in towards_rows(conn=conn) if row[0] not in lines

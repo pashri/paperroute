@@ -66,7 +66,7 @@ REPLACEMENT_GROUPS: Final[Column] = Column(
     items=(
         *GROUPS.items,
         Choice(
-            key='replacements', label='Replacement buses', rule_above=True,
+            key='replacements', label='Trackwork', rule_above=True,
             level=Level.REPLACEMENTS,
         ),
     ),

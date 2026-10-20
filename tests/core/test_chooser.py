@@ -244,7 +244,7 @@ def test_path_to_uses_choice_level() -> None:
     )
     replacements = Column(level=Level.GROUP, items=(
         Choice(
-            key='replacements', label='Replacement buses',
+            key='replacements', label='Trackwork',
             level=Level.REPLACEMENTS,
         ),
     ))

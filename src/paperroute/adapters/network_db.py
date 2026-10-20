@@ -78,7 +78,7 @@ REPLACEMENTS_OF: Final[str] = (
     ROUTE_COLUMNS + "WHERE kind = 'replacement' AND line = ?" + ROUTE_ORDER
 )
 REPLACEMENTS_ROW: Final[Choice] = Choice(
-    key='replacements', label='Replacement buses', rule_above=True,
+    key='replacements', label='Trackwork', rule_above=True,
     level=Level.REPLACEMENTS,
 )
 TOWARDS: Final[str] = """

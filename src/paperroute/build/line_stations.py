@@ -1,4 +1,4 @@
-"""Write each station-first line's stations, aliases and exits."""
+"""Write each station-first line's stations, track, aliases and exits."""
 
 import json
 import math
@@ -11,7 +11,7 @@ from operator import itemgetter
 from typing import Final
 
 from paperroute.build.gtfs_files import insert_many
-from paperroute.build.line_order import line_exits, line_order
+from paperroute.build.line_order import hop_graph, line_exits, line_order
 from paperroute.build.runs import collapsed
 from paperroute.core.model import until_repeated_hop
 
@@ -26,16 +26,29 @@ WHERE t.route_id IN (SELECT value FROM json_each(?))
   AND (st.pickup <> 1 OR st.dropoff <> 1)
 ORDER BY st.trip_id, st.seq
 """
+TRACK_CALLS: Final[str] = """
+SELECT st.trip_id, t.route_id,
+  COALESCE(NULLIF(s.parent_station, ''), s.stop_id)
+FROM trip_runs r JOIN trips t USING (trip_id)
+  JOIN stop_times st USING (trip_id) JOIN stops s ON s.stop_id = st.stop_id
+WHERE t.route_id IN (SELECT value FROM json_each(?))
+ORDER BY st.trip_id, st.seq
+"""
 STATION_SPOTS: Final[str] = """
 SELECT stop_id, name, lat, lon FROM stops
 WHERE stop_id IN (SELECT value FROM json_each(?)) AND lat IS NOT NULL
   AND lon IS NOT NULL
 """
 LINE_MEMBERS: Final[str] = """
-SELECT line_key, station_id FROM line_stations
+WITH own AS (
+  SELECT line_key, station_id FROM line_stations
+  UNION
+  SELECT line_key, station_id FROM line_track
+)
+SELECT line_key, station_id FROM own
 UNION
-SELECT l.line_key, a.station_id FROM line_aliases a
-JOIN line_stations l ON l.station_id = a.kept_id
+SELECT o.line_key, a.station_id FROM line_aliases a
+JOIN own o ON o.station_id = a.kept_id
 """
 KIND_PATTERNS: Final[str] = """
 SELECT DISTINCT c.kind, c.number, c.sort, p.stations
@@ -67,9 +80,10 @@ class LineInputs:
 
 def line_patterns(
     *, conn: sqlite3.Connection, keys: Mapping[str, str],
+    sql: str = LINE_CALLS,
 ) -> dict[str, Patterns]:
     """
-    Count each line's stopping patterns.
+    Count each line's calling patterns.
 
     Parameters
     ----------
@@ -77,16 +91,20 @@ def line_patterns(
         Timetable with the run tables.
     keys : Mapping[str, str]
         Line key by route ID.
+    sql : str
+        The calls to read: LINE_CALLS, or TRACK_CALLS to count the
+        stations trains run through without stopping too.
 
     Returns
     -------
     dict[str, Patterns]
-        Station sequences and trips by line key. Only calls that pick up
-        or set down count, so a train running through a station without
-        stopping does not put it on the line. Only trips with a run count.
+        Station sequences and trips by line key. With LINE_CALLS only
+        calls that pick up or set down count, so a train running through
+        a station without stopping does not put it on the line. Only
+        trips with a run count.
     """
     found: dict[str, Counter[tuple[str, ...]]] = {}
-    rows = conn.execute(LINE_CALLS, (json.dumps(sorted(keys)),))
+    rows = conn.execute(sql, (json.dumps(sorted(keys)),))
     for _, calls in groupby(rows, key=itemgetter(0)):
         listed = list(calls)
         stations = until_repeated_hop(stations=collapsed(
@@ -219,11 +237,44 @@ def line_station_rows(
             yield key, pos, station, head
 
 
+def line_track_rows(
+    *, conn: sqlite3.Connection, keys: Mapping[str, str],
+    aliases: Mapping[str, str],
+) -> Iterator[tuple[str, str]]:
+    """
+    Give the line_track rows: every station a line's trains run through.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable with the run tables.
+    keys : Mapping[str, str]
+        Line key by route ID.
+    aliases : Mapping[str, str]
+        Kept station by merged station ID.
+
+    Yields
+    ------
+    tuple[str, str]
+        Line key and station ID, stations it runs through without
+        stopping included. Merged stations become their kept one, and
+        rare hops are dropped as for the station list (see hop_graph).
+    """
+    raw = line_patterns(conn=conn, keys=keys, sql=TRACK_CALLS)
+    for key in sorted(raw):
+        graph = hop_graph(patterns=[
+            (collapsed(stations=(aliases.get(s, s) for s in stations)), n)
+            for stations, n in raw[key]
+        ])
+        for station in sorted(graph):
+            yield key, station
+
+
 def write_line_stations(
     *, conn: sqlite3.Connection, keys: Mapping[str, str],
 ) -> None:
     """
-    Write the line_stations and line_aliases rows.
+    Write the line_stations, line_aliases and line_track rows.
 
     Parameters
     ----------
@@ -239,6 +290,9 @@ def write_line_stations(
     insert_many(conn=conn, rows=sorted(inputs.aliases.items()), sql=(
         'INSERT INTO line_aliases VALUES (?, ?)'
     ))
+    insert_many(conn=conn, rows=line_track_rows(
+        conn=conn, keys=keys, aliases=inputs.aliases,
+    ), sql='INSERT INTO line_track VALUES (?, ?)')
 
 
 def line_members(*, conn: sqlite3.Connection) -> dict[str, set[str]]:

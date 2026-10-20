@@ -41,6 +41,8 @@ CREATE TABLE line_stations (line_key TEXT NOT NULL, pos INTEGER NOT NULL,
   PRIMARY KEY (line_key, pos)) WITHOUT ROWID;
 CREATE TABLE line_aliases (station_id TEXT PRIMARY KEY,
   kept_id TEXT NOT NULL) WITHOUT ROWID;
+CREATE TABLE line_track (line_key TEXT NOT NULL, station_id TEXT NOT NULL,
+  PRIMARY KEY (line_key, station_id)) WITHOUT ROWID;
 CREATE TABLE line_exits (line_key TEXT NOT NULL, station_id TEXT NOT NULL,
   off_id TEXT NOT NULL, lines TEXT NOT NULL,
   PRIMARY KEY (line_key, station_id, off_id)) WITHOUT ROWID;

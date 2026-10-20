@@ -90,7 +90,7 @@ def test_station_aliases_tie_goes_to_the_smallest_id() -> None:
 
 
 def test_pass_through_calls_leave_the_station_off(tmp_path: Path) -> None:
-    """Every T1 call at R2 neither picks up nor sets down: R2 is not listed."""
+    """No T1 call at R2 picks up or sets down: R2 is track, not listed."""
     files = network_files()
     files['stop_times.txt'] = [
         {**row, 'pickup_type': '1', 'drop_off_type': '1'}
@@ -99,7 +99,15 @@ def test_pass_through_calls_leave_the_station_off(tmp_path: Path) -> None:
     ]
     with closing(built(tmp_path=tmp_path, files=files)) as conn:
         rows = t1_rows(conn=conn)
+        track = {station for (station,) in conn.execute(
+            "SELECT station_id FROM line_track WHERE line_key = 'train:T1'",
+        )}
+        exits = conn.execute(
+            "SELECT * FROM line_exits WHERE off_id = 'R2'",
+        ).fetchall()
     assert rows == [('R3', 'R3'), ('R1', ''), *T1_TAIL]
+    assert track == {station for station, _ in rows} | {'R2'}
+    assert not exits
 
 
 def test_same_place_station_is_listed_once(tmp_path: Path) -> None:

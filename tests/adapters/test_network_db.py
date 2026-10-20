@@ -28,9 +28,9 @@ from paperroute.core.reach import (
 from paperroute.core.reach_layout import LineExit
 from paperroute.core.strip_view import build_strip_view
 from paperroute.ports import NetworkRepository
-from tests.build.network_feed import network_feed
+from tests.build.network_feed import network_feed, network_files
 from tests.core.factories import inputs_of
-from tests.helpers import old_schema, schema_three
+from tests.helpers import old_schema, schema_three, write_feed
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 TOWN_HALL: Final[str] = '200070'
@@ -764,6 +764,47 @@ def test_t2_strip_at_c_hangs_two_exits_at_j(network_db: Path) -> None:
     rows = build_strip_view(inputs=inputs_of(reach=reach)).rows
     names = {row.station: row.name for row in rows}
     assert (names['W1'], names['R1']) == ('W1 Stop · T1', 'R1 Stop · T1')
+
+
+def test_pass_through_station_stays_on_the_strip(tmp_path: Path) -> None:
+    """T1 runs through R2 without stopping: not cut there, no exit."""
+    files = network_files()
+    files['stop_times.txt'] = [
+        {**row, 'pickup_type': '1', 'drop_off_type': '1'}
+        if row['stop_id'] == 'R2_1' else row
+        for row in files['stop_times.txt']
+    ]
+    out = tmp_path / 'timetable.db'
+    build_timetable(
+        sources=[Source(
+            name='sydneytrains',
+            archive=write_feed(path=tmp_path / 'n.zip', files=files),
+        )],
+        window=Window(start=date(2026, 10, 5), days=3),
+        out=out,
+    )
+    found = line_input(path=out, station='C', line='T1')
+    assert ('J', 'R1', 'R2', 'R3') in {tail.after for tail in found.tails}
+    assert 'R2' not in {each.off for each in found.exits}
+
+
+def test_line_strip_without_line_track_cuts_at_line_stations(
+    copy: Path,
+) -> None:
+    """A file without line_track counts only line_stations as the line."""
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute("DELETE FROM line_stations WHERE station_id = 'R2'")
+        conn.execute(
+            "INSERT OR IGNORE INTO line_track VALUES ('train:T1', 'R2')",
+        )
+        conn.commit()
+    tracked = line_input(path=copy, station='C', line='T1')
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute('DROP TABLE line_track')
+        conn.commit()
+    listed = line_input(path=copy, station='C', line='T1')
+    assert ('J', 'R1', 'R2', 'R3') in {t.after for t in tracked.tails}
+    assert ('J', 'R1') in {t.after for t in listed.tails}
 
 
 def test_exits_need_line_tables(copy: Path) -> None:

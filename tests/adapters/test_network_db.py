@@ -436,10 +436,7 @@ def test_to_column_marks_from_all_and_dims_unreached(
 
 def test_to_column_treats_aliases_as_their_kept_station(copy: Path) -> None:
     """A merged station counts as its kept one, as From and as a stop."""
-    with closing(sqlite3.connect(copy)) as conn:
-        conn.execute("INSERT INTO line_aliases VALUES ('E2', 'R3')")
-        conn.execute("DELETE FROM line_stations WHERE station_id = 'E2'")
-        conn.commit()
+    merge_e2_into_r3(path=copy)
     with closing(SqliteNetworkRepository(path=copy)) as repo:
         column = repo.choices(path=(*T1, (Level.STATION, 'W2')))
         merged = repo.choices(path=(*T1, (Level.STATION, 'R3')))
@@ -458,6 +455,42 @@ def test_to_column_stops_at_a_turn_back(copy: Path) -> None:
     assert {c.key for c in column.items if c.dim} == {
         'R1', 'R2', 'R3', 'E1', 'E2',
     }
+
+
+def merge_e2_into_r3(*, path: Path) -> None:
+    """
+    Merge E2 into R3, as line_aliases would, and drop E2 from the lines.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file, changed in place.
+    """
+    with closing(sqlite3.connect(path)) as conn:
+        conn.execute("INSERT INTO line_aliases VALUES ('E2', 'R3')")
+        conn.execute("DELETE FROM line_stations WHERE station_id = 'E2'")
+        conn.commit()
+
+
+def test_to_column_for_a_station_off_the_line_is_none(copy: Path) -> None:
+    """A From not on the line has no TO column; a merged one is its kept."""
+    merge_e2_into_r3(path=copy)
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        stale = repo.choices(path=(*T1, (Level.STATION, 'B2')))
+        merged = repo.choices(path=(*T1, (Level.STATION, 'E2')))
+    assert stale is None
+    assert merged is not None
+    assert [c.key for c in merged.items if c.tag == 'ALL'] == ['R3']
+
+
+def test_to_column_cuts_at_a_merged_revisit(copy: Path) -> None:
+    """Calling at a merged station counts as calling at its kept one."""
+    merge_e2_into_r3(path=copy)
+    set_runs(path=copy, runs=[('W2 J R3 C E2 E1', 4)])
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        column = repo.choices(path=(*T1, (Level.STATION, 'W2')))
+    assert column is not None
+    assert {c.key for c in column.items if c.dim} == {'R2', 'R1', 'E1', 'W1'}
 
 
 def test_station_column_on_old_timetable_is_none(copy: Path) -> None:

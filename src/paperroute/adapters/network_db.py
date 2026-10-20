@@ -4,6 +4,7 @@ import json
 import sqlite3
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import replace
+from itertools import groupby
 from pathlib import Path
 from typing import Final, cast
 
@@ -112,7 +113,7 @@ ORDER BY l.pos
 """
 ALIASES: Final[str] = 'SELECT station_id, kept_id FROM line_aliases'
 PASSES: Final[str] = """
-SELECT r.stations, s.pos
+SELECT DISTINCT r.run_id, r.stations
 FROM run_stops s JOIN runs r ON r.run_id = s.run_id
 WHERE s.station_id IN (SELECT value FROM json_each(:stations))
   AND r.kind = :kind
@@ -307,36 +308,43 @@ def to_choice(
 
 
 def later_stops(
-    *, rows: Iterable[Row], aliases: Mapping[str, str],
+    *, rows: Iterable[Row], origin: str, aliases: Mapping[str, str],
 ) -> frozenset[str]:
     """
     Collect the stations runs call at after a pass of the From.
 
-    Each run is cut, as a strip's tails are, before the first station it
-    would call at again after the From, so a run that turns back
-    reaches nothing past the turn.
+    Stations are first mapped to the station kept for them, with
+    back-to-back calls at one kept station made one. Each pass is then
+    cut, as a strip's tails are, before the first station the run would
+    call at again, so a run that turns back reaches nothing past the
+    turn.
 
     Parameters
     ----------
     rows : Iterable[Row]
-        Each run's stations as JSON and the From's position in it, one
-        row per pass.
+        Run ID and stations as JSON of each run through the From.
+    origin : str
+        The From's kept station ID.
     aliases : Mapping[str, str]
         Kept station by merged station ID.
 
     Returns
     -------
     frozenset[str]
-        Stations after the From on some run, merged ones as the kept
-        station.
+        Kept stations after the From on some pass.
     """
-    return frozenset(
-        aliases.get(later, later)
-        for stations, pos in rows
-        for later in until_revisit(
-            stations=json.loads(str(stations))[cast(int, pos):],
-        )[1:]
-    )
+    reached: set[str] = set()
+    for _, stations in rows:
+        calls = [
+            station
+            for station, _ in groupby(
+                aliases.get(call, call) for call in json.loads(str(stations))
+            )
+        ]
+        for pos, station in enumerate(calls):
+            if station == origin:
+                reached.update(until_revisit(stations=calls[pos:])[1:])
+    return frozenset(reached)
 
 
 def merged_tails(*, rows: Iterable[Row]) -> tuple[RunTail, ...]:
@@ -700,7 +708,7 @@ class SqliteNetworkRepository:
 
     def to_column(
         self, *, line_key: str, origin: str, kind: RouteKind,
-    ) -> Column:
+    ) -> Column | None:
         """
         The TO column of a line from a station.
 
@@ -715,26 +723,30 @@ class SqliteNetworkRepository:
 
         Returns
         -------
-        Column
+        Column | None
             The station column with the From tagged ALL and every station
-            no run of the kind reaches directly from it dim. A station
-            merged into another by line_aliases counts as the station
-            kept for it, both as the From and as a later stop.
+            no run of the kind reaches directly from it dim; None when the
+            From is not on the line. A station merged into another by
+            line_aliases counts as the station kept for it, both as the
+            From and as a later stop.
         """
         aliases = {
             str(merged): str(kept)
             for merged, kept in self.fetch(sql=ALIASES, params=())
         }
+        origin = aliases.get(origin, origin)
+        stations = self.station_column(line_key=line_key).items
+        if origin not in {choice.key for choice in stations}:
+            return None
         merged = [origin, *(m for m, k in aliases.items() if k == origin)]
         rows = self.fetch(sql=PASSES, params={
             'stations': json.dumps(merged), 'kind': str(kind),
         })
-        reached = later_stops(rows=rows, aliases=aliases)
-        items = tuple(
+        reached = later_stops(rows=rows, origin=origin, aliases=aliases)
+        return Column(level=Level.TO, items=tuple(
             to_choice(choice=choice, origin=origin, reached=reached)
-            for choice in self.station_column(line_key=line_key).items
-        )
-        return Column(level=Level.TO, items=items)
+            for choice in stations
+        ))
 
     def towards_line(self, *, towards: int) -> tuple[StopPlace, ...] | None:
         """

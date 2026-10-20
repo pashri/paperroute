@@ -7,9 +7,9 @@ import os
 import re
 import sqlite3
 import zipfile
-from collections.abc import Iterator
+from collections.abc import Callable, Iterable, Iterator
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta, timezone
 from enum import Enum, auto
 from pathlib import Path
@@ -93,13 +93,13 @@ class Fate(Enum):
     CHECK = auto()
 
 
-@dataclass(frozen=True)
+@dataclass
 class TripLoad:
     """Trips one feed inserted, the suspects among them and those dropped."""
 
-    inserted: set[str]
-    suspects: set[str]
-    dropped: int
+    inserted: set[str] = field(default_factory=set)
+    suspects: set[str] = field(default_factory=set)
+    dropped: int = 0
 
 
 @dataclass(frozen=True)
@@ -279,14 +279,14 @@ def undefined_category(
 
 
 def revenue_routes(
-    *, rows: list[dict[str, str]], categories: frozenset[str] | None,
+    *, rows: Iterable[dict[str, str]], categories: frozenset[str] | None,
 ) -> set[str]:
     """
     Find the routes with at least one trip of a defined vehicle category.
 
     Parameters
     ----------
-    rows : list[dict[str, str]]
+    rows : Iterable[dict[str, str]]
         Records of trips.txt.
     categories : frozenset[str] | None
         Categories the feed defines; None when it defines none.
@@ -294,13 +294,14 @@ def revenue_routes(
     Returns
     -------
     set[str]
-        Raw route IDs.
+        Raw route IDs; empty, without reading rows, for no categories.
     """
+    if categories is None:
+        return set()
     return {
         row['route_id']
         for row in rows
-        if categories is not None
-        and row.get('vehicle_category_id') in categories
+        if row.get('vehicle_category_id') in categories
     }
 
 
@@ -363,6 +364,66 @@ def trip_row(*, row: dict[str, str], source: Source) -> tuple[object, ...]:
     )
 
 
+def window_trips(
+    *, source: Source, services: set[str], existing: set[str],
+) -> Iterator[dict[str, str]]:
+    """
+    Stream a feed's trips.txt records active in the window.
+
+    Parameters
+    ----------
+    source : Source
+        Feed.
+    services : set[str]
+        Raw service IDs active in the window.
+    existing : set[str]
+        Trip IDs already loaded, which are skipped.
+
+    Yields
+    ------
+    dict[str, str]
+        A trips.txt record.
+    """
+    for row in read_rows(archive=source.archive, member='trips.txt'):
+        if row['service_id'] in services and row['trip_id'] not in existing:
+            yield row
+
+
+def kept_trip_rows(
+    *, rows: Iterable[dict[str, str]],
+    fate_of: Callable[[dict[str, str]], Fate], source: Source,
+    load: TripLoad,
+) -> Iterator[tuple[object, ...]]:
+    """
+    Give the trips table rows of the trips kept, noting each trip's fate.
+
+    Parameters
+    ----------
+    rows : Iterable[dict[str, str]]
+        Records of trips.txt.
+    fate_of : Callable[[dict[str, str]], Fate]
+        Decides a record's fate.
+    source : Source
+        Feed.
+    load : TripLoad
+        Filled with the trips kept, the suspects and the count dropped.
+
+    Yields
+    ------
+    tuple[object, ...]
+        A trips row for each record not dropped.
+    """
+    for row in rows:
+        fate = fate_of(row)
+        if fate is Fate.DROP:
+            load.dropped += 1
+            continue
+        load.inserted.add(row['trip_id'])
+        if fate is Fate.CHECK:
+            load.suspects.add(row['trip_id'])
+        yield trip_row(row=row, source=source)
+
+
 def load_trips(*, conn: sqlite3.Connection, source: Source,
                services: set[str]) -> TripLoad:
     """
@@ -370,7 +431,8 @@ def load_trips(*, conn: sqlite3.Connection, source: Source,
 
     Trips naming a vehicle category the feed does not define are dropped
     on a non-revenue route or with a hidden headsign; the rest of them are
-    kept as suspects until their stop times are loaded.
+    kept as suspects until their stop times are loaded. trips.txt is read
+    twice, first for the revenue routes, so no trip records are held.
 
     Parameters
     ----------
@@ -388,30 +450,25 @@ def load_trips(*, conn: sqlite3.Connection, source: Source,
     """
     existing = {row[0] for row in conn.execute('SELECT trip_id FROM trips')}
     categories = known_categories(archive=source.archive)
-    records = [
-        row
-        for row in read_rows(archive=source.archive, member='trips.txt')
-        if row['service_id'] in services and row['trip_id'] not in existing
-    ]
-    revenue = revenue_routes(rows=records, categories=categories)
-    fates = {
-        row['trip_id']: trip_fate(
-            row=row, categories=categories, revenue=revenue,
-        )
-        for row in records
-    }
+    revenue = revenue_routes(
+        rows=window_trips(
+            source=source, services=services, existing=existing,
+        ),
+        categories=categories,
+    )
+    load = TripLoad()
     insert_many(conn=conn,
                 sql='INSERT INTO trips VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                rows=(
-                    trip_row(row=row, source=source)
-                    for row in records
-                    if fates[row['trip_id']] is not Fate.DROP
+                rows=kept_trip_rows(
+                    rows=window_trips(
+                        source=source, services=services, existing=existing,
+                    ),
+                    fate_of=lambda row: trip_fate(
+                        row=row, categories=categories, revenue=revenue,
+                    ),
+                    source=source, load=load,
                 ))
-    return TripLoad(
-        inserted={t for t, fate in fates.items() if fate is not Fate.DROP},
-        suspects={t for t, fate in fates.items() if fate is Fate.CHECK},
-        dropped=sum(fate is Fate.DROP for fate in fates.values()),
-    )
+    return load
 
 
 def drop_short_suspects(

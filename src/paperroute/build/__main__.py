@@ -161,6 +161,7 @@ def run_gtfs(*, args: argparse.Namespace) -> None:
     args : argparse.Namespace
         Parsed gtfs arguments.
     """
+    configure_logging()
     preferred = [Source(name=name, archive=path) for name, path in
                  (('sydneytrains', args.sydneytrains),
                   ('metro', args.metro)) if path]

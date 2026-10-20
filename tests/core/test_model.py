@@ -168,6 +168,13 @@ def test_kind_for_trainlink_lines_are_train() -> None:
     } == dict.fromkeys(TRAINLINK, RouteKind.TRAIN)
 
 
+def test_kind_for_merged_trainlink_trains_are_train() -> None:
+    """A trains-feed WST trip that took the bundle's agency 711 is Train."""
+    assert kind_for(
+        route_type=2, agency_id='711', short_name='WST',
+    ) is RouteKind.TRAIN
+
+
 def test_kind_for_coaches_are_coach() -> None:
     """Route types 204 and 205 of agency 711 are coaches."""
     assert [

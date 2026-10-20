@@ -18,6 +18,7 @@ from tests.build.feeds import (
     bus_files,
     shape_rows,
     shaped_bus_feed,
+    stop_times,
     sydneytrains_feed,
     sydneytrains_files,
 )
@@ -285,11 +286,46 @@ def test_shared_shape_takes_the_lowest_route_type(tmp_path: Path) -> None:
         ('bundle:S1', 'train')]
 
 
+def odd_trips() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    """
+    Trips of the undefined category Z35 that loading should drop.
+
+    'hidden' runs empty, 'short' stops only once and 'yard' is on a route
+    with no trip of a defined category.
+
+    Returns
+    -------
+    tuple[list[dict[str, str]], list[dict[str, str]]]
+        trips.txt and stop_times.txt rows.
+    """
+    trips = [
+        {'route_id': route, 'service_id': 'daily', 'trip_id': trip,
+         'trip_headsign': headsign, 'direction_id': '0', 'block_id': '',
+         'vehicle_category_id': 'Z35'}
+        for trip, route, headsign in (
+            ('hidden', 'r606', 'Empty Train'), ('short', 'r606', 'Parramatta'),
+            ('yard', 'rX', 'Parramatta'),
+        )
+    ]
+    times = [('2145615', '09:00:00'), ('2150109', '09:30:00')]
+    calls = [
+        *stop_times(trip='hidden', times=times),
+        *stop_times(trip='short', times=times, pickup_first='1'),
+        *stop_times(trip='yard', times=times),
+    ]
+    for call in calls[2:4]:
+        call['drop_off_type'] = '1'
+    return trips, calls
+
+
 def categorised_bus(
     *, tmp_path: Path, categories: list[str] | None,
 ) -> list[Source]:
     """
-    Make the bus feed with one trip of each of two vehicle categories.
+    Make the bus feed with vehicle categories on its trips.
+
+    'bus-0803' is an A8, the excursion 'bus-2510' a Z35 with two stopping
+    calls, and odd_trips adds three more Z35 trips.
 
     Parameters
     ----------
@@ -304,10 +340,18 @@ def categorised_bus(
         One bundle source.
     """
     files = bus_files()
-    files['trips.txt'] = [
-        {**row, 'vehicle_category_id': category}
-        for row, category in zip(files['trips.txt'], ('A8', 'Z35'))
+    trips, calls = odd_trips()
+    files['routes.txt'] = [
+        *files['routes.txt'], {**files['routes.txt'][0], 'route_id': 'rX'},
     ]
+    files['trips.txt'] = [
+        *(
+            {**row, 'vehicle_category_id': category}
+            for row, category in zip(files['trips.txt'], ('A8', 'Z35'))
+        ),
+        *trips,
+    ]
+    files['stop_times.txt'] = [*files['stop_times.txt'], *calls]
     if categories is not None:
         files['vehicle_categories.txt'] = [
             {'vehicle_category_id': category,
@@ -321,13 +365,18 @@ def categorised_bus(
 def test_trips_of_undefined_vehicle_categories_are_dropped(
     tmp_path: Path, caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A trip of category Z35, which the feed does not define, goes."""
+    """Empty, one-stop and non-revenue Z35 trips go; the excursion stays."""
     with caplog.at_level(logging.INFO, logger='paperroute.build.timetable'):
         db = build_db(tmp_path=tmp_path, start=date(2026, 10, 16), days=1,
                       sources=categorised_bus(tmp_path=tmp_path,
                                               categories=['A8']))
-    assert query(db=db, sql='SELECT trip_id FROM trips') == [('bus-0803',)]
-    assert any('dropped 1 bundle trips' in m for m in caplog.messages)
+    assert query(db=db, sql='SELECT trip_id FROM trips ORDER BY trip_id') == [
+        ('bus-0803',), ('bus-2510',),
+    ]
+    assert query(
+        db=db, sql="SELECT COUNT(*) FROM stop_times WHERE trip_id = 'short'",
+    ) == [(0,)]
+    assert any('dropped 3 bundle trips' in m for m in caplog.messages)
 
 
 def test_trip_categories_are_kept_without_a_categories_file(
@@ -338,5 +387,5 @@ def test_trip_categories_are_kept_without_a_categories_file(
                   sources=categorised_bus(tmp_path=tmp_path,
                                           categories=None))
     assert query(db=db, sql='SELECT trip_id FROM trips ORDER BY trip_id') == [
-        ('bus-0803',), ('bus-2510',),
+        ('bus-0803',), ('bus-2510',), ('hidden',), ('short',), ('yard',),
     ]

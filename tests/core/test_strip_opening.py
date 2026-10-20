@@ -298,10 +298,10 @@ def test_to_stage_opens_folds_before_the_cursor_reaches_them() -> None:
     reason='needs data/timetable.db with run tables',
 )
 def test_central_opens_with_the_quiet_far_ends_folded() -> None:
-    """Central opens 133 rows above FROM; Strathfield is 53 turns up."""
+    """Central opens 141 rows above FROM; Strathfield is 53 turns up."""
     reach, _ = train_reach(station=CENTRAL)
     shown = folded(reach=reach)
-    assert origin_of(reach=shown) == 133
+    assert origin_of(reach=shown) == 141
     assert [row.place.name for row in shown.rows][0] == (
         'Lapstone … Dubbo +40'
     )

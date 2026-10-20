@@ -33,6 +33,7 @@ from paperroute.build.runs import (
 )
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.model import RouteKind
+from tests.build.feeds import regional_sources
 from tests.build.network_feed import EAST_WEST, network_feed
 
 
@@ -433,3 +434,17 @@ def test_load_runs_skips_hidden_block_trips_and_orphans(
         assert 'empty1' not in dict(block_trip_runs(
             trips=blocks, nexts=next_trips(trips=blocks), table=plain,
         ))
+
+
+def test_merged_trainlink_train_gets_a_run(tmp_path: Path) -> None:
+    """The feed's NRC trip, given the bundle's agency 711, still runs."""
+    out = tmp_path / 'timetable.db'
+    build_timetable(sources=regional_sources(tmp_path=tmp_path),
+                    window=Window(start=date(2026, 10, 16), days=2), out=out)
+    with closing(sqlite3.connect(out)) as conn:
+        agency, runs = conn.execute(
+            'SELECT t.agency_id, COUNT(r.run_id) FROM trips t '
+            'LEFT JOIN trip_runs r USING (trip_id) '
+            "WHERE t.trip_id = 'NT31-feed'",
+        ).fetchone()
+    assert (agency, runs) == ('711', 1)

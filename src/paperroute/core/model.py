@@ -127,11 +127,14 @@ def kind_for(
     RouteKind | None
         Kind; None for a route with no short name, a rail line that is
         not a Sydney, intercity or NSW TrainLink line, or an on-demand or
-        unknown type.
+        unknown type. A rail trip keeps its line's kind when merging gave
+        it the bundle's NSW TrainLink agency.
     """
     if not short_name:
         return None
     if agency_id in REGIONAL_AGENCIES:
+        if route_type == 2:
+            return RouteKind.TRAIN if short_name in TRAINLINK else None
         return TRAINLINK_KINDS.get(route_type)
     if route_type == 2:
         known = (

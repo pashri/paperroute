@@ -1254,6 +1254,7 @@ def test_809_carries_on_as_811_at_merrylands() -> None:
     on = {d.departs.strftime('%H:%M') for d in carried}
     assert len(found) == 46
     assert len(carried) == 20
+    assert all(d.facts.then and d.facts.then.trip_id for d in carried)
     assert not on & {'09:04', '15:29'}
     assert {'09:04', '15:29'} <= {d.departs.strftime('%H:%M') for d in found}
 

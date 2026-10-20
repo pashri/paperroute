@@ -174,7 +174,8 @@ def current_leg(
         A fresh position's leg and nearest hop. Otherwise the own leg's
         timetable hop until its last arrival; after it, the next leg's
         timetable hop, or (0, 0.0) while that leg hasn't left its first
-        stop. None with no legs or no hop.
+        stop. None with no legs or no hop, which includes a next leg of
+        fewer than two stops.
     """
     if not legs:
         return None
@@ -190,7 +191,8 @@ def current_leg(
         hop = hop_at(pattern=own.pattern, seconds=seconds)
         return None if hop is None else (own, hop)
     after = legs[1]
-    if after.pattern.stops and seconds < after.pattern.stops[0].departs:
+    calls = after.pattern.stops
+    if len(calls) > 1 and seconds < calls[0].departs:
         return after, (0, 0.0)
     hop = hop_at(pattern=after.pattern, seconds=seconds)
     return None if hop is None else (after, hop)
@@ -273,11 +275,13 @@ def hop_marker(
     -------
     Badge | None
         The badge on the later row's track, with a wedge down the strip
-        when that row is lower and up otherwise, if live; None when either
-        end of the hop is not a visible row. Bound for an exit row, it
+        when that row is lower and up otherwise, if live; None unless the
+        hop has two ends that are both visible rows. Bound for an exit row, it
         rides the earlier row's track until within a row of the exit,
         then sits on the exit's stub end as a spur badge.
     """
+    if len(ends) != 2:
+        return None
     start, end = ends
     if start is None or end is None:
         return None
@@ -314,7 +318,8 @@ def without_shown_next(
     -------
     list[Departure]
         The departures, with no carry-on where the next trip is one of
-        them, so its vehicle gets one badge.
+        them, so its vehicle gets one badge. A cancelled next trip is not
+        among them, so the run still carries on into it.
     """
     shown = {departure.trip_id for departure in departures}
     return [

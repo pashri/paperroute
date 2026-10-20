@@ -7,9 +7,20 @@ import pytest
 
 from paperroute.core.map_view import Marker
 from paperroute.core.positions import VehiclePosition
+from paperroute.core.strip_badges import Spot
 from paperroute.core.strip_model import INDENT, ROW_H, TRACK_X, StripRow
+from paperroute.core.strip_vehicles import hop_marker
 from paperroute.core.strip_view import build_strip_view
-from tests.core.factories import START, carry_on_inputs, live, vehicle
+from tests.core.factories import (
+    EIGHT,
+    LINE,
+    START,
+    calls,
+    carry_on_inputs,
+    live,
+    pattern,
+    vehicle,
+)
 from tests.core.strip_factories import row_named
 
 
@@ -117,3 +128,68 @@ def test_next_trip_on_the_strip_keeps_one_badge() -> None:
     assert [m.route for m in build_strip_view(inputs=both).markers] == [
         'T2',
     ]
+
+
+def test_next_trip_cancelled_keeps_the_carry_on() -> None:
+    """A cancelled trip b has no badge of its own; a's follows into it."""
+    now = START + timedelta(minutes=13)
+    inputs = carry_on_inputs(now=now)
+    (item,) = inputs.departures
+    own = replace(
+        item.departure,
+        trip_id='b', route='T2', departs=START + timedelta(minutes=20),
+        facts=replace(item.departure.facts, then=None),
+    )
+    both = replace(
+        inputs, departures=(item, live(item=own, cancelled=True)),
+    )
+    assert [m.route for m in build_strip_view(inputs=both).markers] == [
+        'T2',
+    ]
+
+
+def test_one_stop_next_trip_gives_no_badge() -> None:
+    """A next trip of one stop gives no badge at the change, no crash."""
+    for minutes in (11, 13):
+        inputs = carry_on_inputs(now=START + timedelta(minutes=minutes))
+        lone = pattern(
+            trip_id='b', route='T2',
+            stops=calls(stations='C', start=EIGHT + 720, points=LINE),
+        )
+        alone = replace(inputs, patterns={**inputs.patterns, 'b': lone})
+        assert build_strip_view(inputs=alone).markers == ()
+
+
+def test_hop_marker_needs_two_ends() -> None:
+    """A hop with one end gives no badge."""
+    assert hop_marker(
+        route='T2', ends=(Spot(x=30, y=100),), fraction=0.0, age=None,
+        live=False,
+    ) is None
+
+
+def test_fresh_next_leg_beats_a_stale_own_leg() -> None:
+    """A stale vehicle on a and a fresh one on b: the solid T2 wins."""
+    now = START + timedelta(minutes=13)
+    stale = vehicle(
+        timestamp=int(now.timestamp()) - 300, trip_id='a',
+        point=(0.0, -1000.0),
+    )
+    fresh = vehicle(
+        timestamp=int(now.timestamp()), trip_id='b', point=(0.0, -2800.0),
+    )
+    marker, _ = badge_at(minutes=13, vehicles=(stale, fresh))
+    assert marker is not None
+    assert (marker.route, marker.live, marker.age) == ('T2', True, None)
+
+
+def test_fresh_own_leg_after_its_last_arrival() -> None:
+    """At 8:11 a fresh vehicle still on a sits at C as a solid T8."""
+    now = START + timedelta(minutes=11)
+    heard = vehicle(
+        timestamp=int(now.timestamp()), trip_id='a', point=(0.0, -2000.0),
+    )
+    marker, rows = badge_at(minutes=11, vehicles=(heard,))
+    assert marker is not None
+    assert (marker.route, marker.live) == ('T8', True)
+    assert marker.y == pytest.approx(rows['C'].y)

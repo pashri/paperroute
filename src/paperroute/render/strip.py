@@ -432,13 +432,10 @@ def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
     edge = draw_end(canvas, row=row, columns=columns)
     left, face = name_start(canvas, row=row, columns=columns)
     if not row.tag and not row.cursor:
-        box = draw_note(
-            canvas,
-            row=row,
-            right=columns.time_right - (NAME_ROOM if row.time else 0),
-            floor=left + TAG_GAP,
-        )
-        edge = min(edge, box - TAG_GAP)
+        right = columns.time_right - (NAME_ROOM if row.time else 0)
+        box = draw_note(canvas, row=row, right=right, floor=left + TAG_GAP)
+        if box < right:
+            edge = min(edge, box - TAG_GAP)
     canvas.text(
         at=(left, row.y + BASELINE_DROP),
         text=canvas.fit(text=row.name, face=face, width=edge - left),

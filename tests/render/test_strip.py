@@ -17,8 +17,9 @@ from paperroute.core.strip_model import (
     CarryNote,
     StripRow,
 )
-from paperroute.render.canvas import INK, PAPER, Canvas
+from paperroute.render.canvas import INK, PAPER, Canvas, Face
 from paperroute.render.strip import (
+    MAIN_PX,
     NAME_ROOM,
     NOTE_MAX,
     TAG_GAP,
@@ -373,6 +374,21 @@ def test_long_names_fit_their_column() -> None:
     gap = band[:, TIME_RIGHT - 40:TIME_RIGHT - 36]
     assert (gap == PAPER).all()
     assert (band[:, TIME_RIGHT - 30:TIME_RIGHT] == INK).any()
+
+
+def test_timed_name_without_note_keeps_its_edge() -> None:
+    """A name just fitting short of the time's room is drawn whole."""
+    face = Face(weight=400, px=MAIN_PX)
+    room = TIME_RIGHT - NAME_ROOM - NAME_X
+    name = 'Wynyard'
+    while Canvas().length(text=name, face=face) <= room - 4:
+        name += 'i'
+    width = Canvas().length(text=name, face=face)
+    assert width <= room
+    frame = drawn(rows=(strip_row(y=FROM_Y, name=name, time='8:09'),))
+    assert name_end(frame=frame, before=TIME_RIGHT - 30) >= (
+        NAME_X + width - 3
+    )
 
 
 def test_long_names_stop_short_of_a_tag() -> None:

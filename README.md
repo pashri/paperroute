@@ -38,6 +38,11 @@ Keys: Q quits.
 - K switches views, and holding K (about 0.8 s) pins or unpins.
 - J and L scroll, zoom or move the cursor.
 
+The chooser picks a kind first. Trains, metro, light rail and ferries go
+line, then station, then destination on the same line; grey stations have no
+direct service, and the From row reads ALL. Buses, school buses and coaches
+go route, then direction, then stop. Replacement buses are under Bus.
+
 Replay recorded feeds with `--feeds tests/fixtures/real --at 2026-10-16T06:25`.
 
 ## Map tiles
@@ -119,6 +124,9 @@ unplug the data cable.
 2. Wait until the app has written `/var/lib/paperroute/state.json`.
 3. Run `scripts/provision <user>@paperroute.local` once more, without
    `--reboot`. It refuses to run before step 2 finishes.
+4. Rebuild the timetable, as in Install step 4 (the nightly 03:30 run does
+   it too). Until it finishes the line chooser says "Routes need a timetable
+   update".
 
 ### Green LED
 

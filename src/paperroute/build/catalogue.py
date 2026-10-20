@@ -717,8 +717,8 @@ def write_towards(
     """
     Write the chooser_towards rows and the line tables.
 
-    Every kept chooser row gets towards rows; every station-first line
-    gets its station list and its exits.
+    Every kept chooser row of a bus-style kind gets towards rows; every
+    station-first line gets its station list and its exits instead.
 
     Parameters
     ----------
@@ -741,7 +741,14 @@ def write_towards(
         (source.route_id, rows[source.key])
         for source in sources
     ))
-    insert_many(conn=conn, rows=towards_rows(conn=conn), sql=(
+    lines = {
+        key for source in sources
+        if source.merge[0] in LINE_KINDS
+        for key in (rows[source.key],)
+    }
+    insert_many(conn=conn, rows=(
+        row for row in towards_rows(conn=conn) if row[0] not in lines
+    ), sql=(
         'INSERT INTO chooser_towards (route_key, headsign, trips, stations) '
         'VALUES (?, ?, ?, ?)'
     ))

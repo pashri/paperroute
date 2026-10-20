@@ -600,11 +600,11 @@ def test_unknown_path_answers_none(
 
 
 def test_towards_line_has_names_and_points(network_db: Path) -> None:
-    """A towards line lists its stations with names and points."""
+    """A bus towards line lists its stations with names and points."""
     with closing(sqlite3.connect(network_db)) as conn:
         (towards,) = conn.execute(
             "SELECT towards_id FROM chooser_towards "
-            "WHERE route_key = 'train:T1' AND headsign = 'E2'",
+            "WHERE route_key = 'bus:811:Line 811'",
         ).fetchone()
     with (
         closing(SqliteNetworkRepository(path=network_db)) as repo,
@@ -613,7 +613,7 @@ def test_towards_line_has_names_and_points(network_db: Path) -> None:
         line = repo.towards_line(towards=towards)
         expected = tuple(
             timetable.stop(stop_id=station)
-            for station in ('W2', 'W1', 'J', 'C', 'E1', 'E2')
+            for station in ('B2', 'B3')
         )
         unknown = repo.towards_line(towards=999)
     assert line == expected

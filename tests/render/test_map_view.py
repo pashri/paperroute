@@ -59,6 +59,7 @@ LONG_EMPTY = empty_text(
 def row(
     *,
     route: str = '606',
+    onto: str | None = None,
     pill: Pill | None = None,
     live: bool = True,
     countdown: str = '9',
@@ -70,6 +71,8 @@ def row(
     ----------
     route : str
         Route label.
+    onto : str | None
+        Route the vehicle becomes before the Destination.
     pill : Pill | None
         Marker.
     live : bool
@@ -93,6 +96,7 @@ def row(
         ride_minutes=36,
         live=live,
         pill=pill,
+        onto=onto,
     )
 
 
@@ -551,3 +555,27 @@ def test_sidebar_minute_countdown_clears_a_wide_badge() -> None:
     route = badge(Canvas(), x=SIDEBAR_TEXT, y=0, route='SH100', px=BADGE_PX)
     wide = text_width(text='99 min', face=COUNTDOWN_FACE)
     assert SIDEBAR_TEXT + route + 8 < SIDEBAR_RIGHT - wide
+
+
+def test_carry_on_sidebar_row_stays_inside_and_clear_of_the_time() -> None:
+    """Both badges fit the sidebar and end before the countdown starts."""
+    top = ROW_TOPS[0]
+    count = Canvas().length(text='12 min', face=Face(weight=800, px=34))
+    start = int(784 - count)
+    band = (slice(top - 8, top - 4), slice(538, start - 2))
+    frames = [
+        draw_map_view(
+            view=replace(
+                VIEW, sidebar=(row(onto=onto, countdown='12'),) * 5,
+            ),
+            base=paper(),
+        )
+        for onto in (None, 'T2')
+    ]
+    ends = [
+        np.flatnonzero((frame[band] == INK).any(axis=0))[-1]
+        for frame in frames
+    ]
+    assert ends[1] > ends[0] + 30
+    assert ends[1] + 538 < start - 4
+    assert not np.any(frames[1][top - 14 : top + 13, 785:] == INK)

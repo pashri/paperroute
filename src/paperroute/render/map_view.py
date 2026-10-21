@@ -24,11 +24,11 @@ from paperroute.render.chrome import (
     BANNER,
     FASTER,
     HEADER,
-    badge,
     banner,
     cancelled,
     leaves,
     pill,
+    route_pair,
     view_header,
 )
 from paperroute.render.map_base import HALO, NOT_INSTALLED_DROP, draw_stop
@@ -243,7 +243,14 @@ def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
     y : int
         The badge's vertical centre.
     """
-    badge(canvas, x=SIDEBAR_TEXT, y=y, route=row.route, px=BADGE_PX)
+    route_pair(
+        canvas,
+        x=SIDEBAR_TEXT,
+        y=y,
+        route=row.route,
+        onto=row.onto,
+        px=BADGE_PX,
+    )
     row_time(canvas, row=row, y=y)
     canvas.text(
         at=(SIDEBAR_TEXT, y + ARRIVES_DROP),

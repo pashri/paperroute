@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.geo import MetreBox, Shape
+from paperroute.core.messages import PowerAction
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
@@ -294,6 +295,25 @@ class TimetableBuilder(Protocol):
 
     async def stop(self) -> None:
         """End a rebuild still running."""
+
+
+class PowerControl(Protocol):
+    """Shuts the device down or restarts it."""
+
+    async def control(self, *, action: PowerAction) -> bool:
+        """
+        Carry out a power action.
+
+        Parameters
+        ----------
+        action : PowerAction
+            Shut down or restart.
+
+        Returns
+        -------
+        bool
+            True when the action was accepted.
+        """
 
 
 class FeedsClient(Protocol):

@@ -72,7 +72,7 @@ APP_SERVICE: Final[dict[str, str]] = {
         ' --tiles /var/lib/paperroute/tiles.db'
         ' --state /var/lib/paperroute/state.json'
         ' --error-log /var/lib/paperroute/log/errors.jsonl'
-        ' --rebuild'
+        ' --rebuild --power'
     ),
     'ExecStopPost': '+/usr/local/bin/paperroute-led boot',
     'Restart': 'always',
@@ -567,7 +567,7 @@ def test_service_unit_passes_rebuild() -> None:
     """The app rebuilds an outdated timetable; the nightly timer stays."""
     service = read_unit(name='paperroute.service')['Service']
     timer = read_unit(name='paperroute-timetable.timer')['Timer']
-    assert service['ExecStart'].endswith(' --rebuild')
+    assert service['ExecStart'].endswith(' --rebuild --power')
     assert timer['OnCalendar'] == '*-*-* 03:30:00 Australia/Sydney'
 
 
@@ -1614,8 +1614,8 @@ def test_provision_installs_install_tiles() -> None:
     """provision needs the script and installs it next to the other two."""
     assert commands(path=BIN / 'provision-device', word='install-tiles') == [
         'for need in bin/install-files bin/install-release'
-        ' bin/install-tiles bin/paperroute-led sudoers/paperroute-deploy;'
-        ' do',
+        ' bin/install-tiles bin/paperroute-led sudoers/paperroute-deploy'
+        ' polkit/50-paperroute-power.rules; do',
         'install -m 0755 -o root -g root "$SHARE/deploy/bin/install-tiles"'
         ' /usr/local/sbin/paperroute-install-tiles',
     ]
@@ -1642,3 +1642,60 @@ def test_deploy_installs_tiles_before_the_release() -> None:
         )
     ]
     assert order == sorted(order)
+
+
+POLKIT_RULE: Final[Path] = DEPLOY / 'polkit' / '50-paperroute-power.rules'
+POWER_ACTIONS: Final[frozenset[str]] = frozenset({
+    'org.freedesktop.login1.power-off',
+    'org.freedesktop.login1.power-off-multiple-sessions',
+    'org.freedesktop.login1.reboot',
+    'org.freedesktop.login1.reboot-multiple-sessions',
+})
+
+
+def test_polkit_rule_allows_only_power() -> None:
+    """The rule says YES to the four power actions for paperroute only."""
+    text = script_text(path=POLKIT_RULE)
+    code = '\n'.join(
+        line for line in text.splitlines()
+        if not line.lstrip().startswith('//')
+    )
+    compared = re.findall(pattern=r'action\.id == "([^"]+)"', string=code)
+    named = re.findall(pattern=r'org\.freedesktop\.[\w.-]+', string=code)
+    assert sorted(compared) == sorted(POWER_ACTIONS)
+    assert set(named) == POWER_ACTIONS
+    assert 'subject.user != "paperroute"' in code
+    assert code.count('polkit.Result.YES') == 1
+    assert code.count('polkit.Result') == 1
+    assert 'action.id' in code
+    for banned in ('indexOf', 'startsWith', 'match(', 'test(', 'RegExp'):
+        assert banned not in code
+    assert re.findall(pattern=r'action\.id\s*[^=\s]', string=code) == []
+
+
+def test_install_files_installs_polkit_rule() -> None:
+    """The rule file alone is installed root-owned; the directory is left."""
+    assert commands(path=BIN / 'install-files', word='polkit') == [
+        'install -D -m 0644 -o root -g root'
+        ' "$SRC/polkit/50-paperroute-power.rules"'
+        ' /etc/polkit-1/rules.d/50-paperroute-power.rules',
+    ]
+
+
+def test_provision_installs_polkitd() -> None:
+    """provision installs polkitd and needs the rule file."""
+    installs = commands(path=BIN / 'provision-device', word='apt-get')
+    assert 'polkitd' in installs[-1].split()
+    needed = commands(path=BIN / 'provision-device', word='polkit')
+    assert any(
+        line.startswith('for need in') and line.endswith(
+            ' polkit/50-paperroute-power.rules; do',
+        )
+        for line in needed
+    )
+
+
+def test_service_keeps_no_new_privileges() -> None:
+    """Power goes through polkit, so the unit still forbids new privileges."""
+    service = read_unit(name='paperroute.service')['Service']
+    assert service['NoNewPrivileges'] == 'yes'

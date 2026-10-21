@@ -114,7 +114,8 @@ install_sudoers() {
 DIR=$1
 [[ -d $DIR && ! -L $DIR ]] || fail 'DIR is not a directory'
 for need in bin/install-files bin/install-release bin/install-tiles \
-    bin/paperroute-led sudoers/paperroute-deploy; do
+    bin/paperroute-led sudoers/paperroute-deploy \
+    polkit/50-paperroute-power.rules; do
     [[ -f $DIR/$need ]] || fail "DIR has no $need"
 done
 [[ -n ${SUDO_USER:-} ]] || fail 'run it through sudo'
@@ -127,7 +128,7 @@ bad=$(find "$DIR" ! -type f ! -type d -print -quit) || fail 'cannot read DIR'
 [[ ! -e $PIN_FILE || -e /var/lib/paperroute/state.json ]] || fail 'deploy M4 first so state.json holds the pin'
 
 apt-get update
-apt-get install -y rsync curl sqlite3 avahi-daemon libegl1 libgl1
+apt-get install -y rsync curl sqlite3 avahi-daemon libegl1 libgl1 polkitd
 
 timedatectl set-timezone UTC
 systemctl enable systemd-time-wait-sync

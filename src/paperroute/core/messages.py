@@ -27,6 +27,13 @@ class Knob(StrEnum):
     BOTTOM = 'bottom'
 
 
+class PowerAction(StrEnum):
+    """What a power request does; the value is the systemctl verb."""
+
+    OFF = 'poweroff'
+    RESTART = 'reboot'
+
+
 class MapData(StrEnum):
     """The kinds of map data loaded from the timetable."""
 
@@ -112,10 +119,22 @@ class LoadChooserDepartures:
 
 
 @dataclass(frozen=True)
+class NoticeView:
+    """A screen showing one line of text, such as the shutdown notice."""
+
+    title: str
+
+
+ScreenView = (
+    StopView | MapView | StripView | StripMapView | ChooserView | NoticeView
+)
+
+
+@dataclass(frozen=True)
 class Render:
     """Draw a view."""
 
-    view: StopView | MapView | StripView | StripMapView | ChooserView
+    view: ScreenView
 
 
 @dataclass(frozen=True)
@@ -133,6 +152,13 @@ class SaveState:
 @dataclass(frozen=True)
 class RebuildTimetable:
     """Rebuild the timetable in the background."""
+
+
+@dataclass(frozen=True)
+class ControlPower:
+    """Shut the device down or restart it."""
+
+    action: PowerAction
 
 
 @dataclass(frozen=True)
@@ -157,6 +183,7 @@ Effect = (
     | SaveState
     | MatchPlaces
     | RebuildTimetable
+    | ControlPower
     | ChooserLoad
 )
 
@@ -266,6 +293,20 @@ class SettingsChanged:
     """
 
     auto_rebuild: bool
+
+
+@dataclass(frozen=True)
+class PowerRequested:
+    """Shutting down or restarting was asked for."""
+
+    action: PowerAction
+
+
+@dataclass(frozen=True)
+class PowerFailed:
+    """Shutting down or restarting didn't happen."""
+
+    action: PowerAction
 
 
 @dataclass(frozen=True)
@@ -487,6 +528,8 @@ Event = (
     | TimetableSeen
     | TimetableRebuilt
     | SettingsChanged
+    | PowerRequested
+    | PowerFailed
     | PlacesMatched
     | PlacesFailed
     | StripLoaded

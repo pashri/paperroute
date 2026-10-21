@@ -36,6 +36,40 @@
         <p id="settings-status" class="hint" aria-live="polite"></p>
       </form>
     </section>
+    <section class="setting" aria-labelledby="device">
+      <h2 id="device">Device</h2>
+      <div class="buttons">
+        <form method="post" action="/settings/power?action=reboot"
+              data-power="reboot">
+          <button type="submit">Restart</button>
+        </form>
+        <form method="post" action="/settings/power?action=poweroff"
+              data-power="poweroff">
+          <button type="submit">Shut down</button>
+        </form>
+      </div>
+      <p id="device-status" class="hint" aria-live="polite">{{device_status}}</p>
+      <dialog id="reboot-dialog" data-power="reboot"
+              aria-labelledby="reboot-question">
+        <form method="dialog">
+          <p id="reboot-question">Restart now?</p>
+          <div class="buttons">
+            <button value="cancel" autofocus>Cancel</button>
+            <button value="confirm">Restart</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="poweroff-dialog" data-power="poweroff"
+              aria-labelledby="poweroff-question">
+        <form method="dialog">
+          <p id="poweroff-question">Shut down now? The screen will say when it's safe to unplug.</p>
+          <div class="buttons">
+            <button value="cancel" autofocus>Cancel</button>
+            <button value="confirm">Shut down</button>
+          </div>
+        </form>
+      </dialog>
+    </section>
   </main>
 </body>
 </html>

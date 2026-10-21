@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.geo import MetreBox, Point, Shape, to_metres
+from paperroute.core.messages import PowerAction
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
@@ -436,3 +437,41 @@ class FakeBuilder:
     async def stop(self) -> None:
         """Count the stop."""
         self.stops += 1
+
+
+@dataclass
+class FakePower:
+    """
+    A power control that answers at once and notes the screen when called.
+
+    Attributes
+    ----------
+    result : bool
+        What each action returns.
+    display : FrameRecorder | None
+        The display whose frame count is noted at each call.
+    calls : list[tuple[PowerAction, int]]
+        Each action asked for, with how many frames were shown by then.
+    """
+
+    result: bool = True
+    display: FrameRecorder | None = None
+    calls: list[tuple[PowerAction, int]] = field(default_factory=list)
+
+    async def control(self, *, action: PowerAction) -> bool:
+        """
+        Note the call and give the set result.
+
+        Parameters
+        ----------
+        action : PowerAction
+            The action asked for.
+
+        Returns
+        -------
+        bool
+            `result`.
+        """
+        shown = 0 if self.display is None else len(self.display.frames)
+        self.calls.append((action, shown))
+        return self.result

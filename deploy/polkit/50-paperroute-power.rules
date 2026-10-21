@@ -1,0 +1,14 @@
+// Installed as /etc/polkit-1/rules.d/50-paperroute-power.rules (root, 0644).
+// Lets the paperroute service user shut down and restart the device
+// through systemctl; every other request falls through to the defaults.
+polkit.addRule(function (action, subject) {
+    if (subject.user != "paperroute") {
+        return;
+    }
+    if (action.id == "org.freedesktop.login1.power-off" ||
+        action.id == "org.freedesktop.login1.power-off-multiple-sessions" ||
+        action.id == "org.freedesktop.login1.reboot" ||
+        action.id == "org.freedesktop.login1.reboot-multiple-sessions") {
+        return polkit.Result.YES;
+    }
+});

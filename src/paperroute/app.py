@@ -11,6 +11,7 @@ from typing import Any, Final
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute.adapters.power import NullPower
 from paperroute.adapters.rebuild import NullBuilder
 from paperroute.adapters.tfnsw import FeedError
 from paperroute.adapters.tiles_db import NullTiles
@@ -25,9 +26,9 @@ from paperroute.app_effects import (
     work_for,
     worked,
 )
-from paperroute.core.chooser_view import ChooserView
 from paperroute.core.map_view import MapBase, MapView
 from paperroute.core.messages import (
+    ControlPower,
     DeparturesFailed,
     DeparturesLoaded,
     Effect,
@@ -40,10 +41,14 @@ from paperroute.core.messages import (
     LoadShapes,
     MapDataFailed,
     MapRequest,
+    NoticeView,
+    PowerAction,
+    PowerFailed,
     QuitRequested,
     RebuildTimetable,
     Render,
     SaveState,
+    ScreenView,
     Stop,
     Tick,
     TimetableRebuilt,
@@ -63,6 +68,7 @@ from paperroute.ports import (
     FeedsClient,
     NetworkRepository,
     Observer,
+    PowerControl,
     StateRepository,
     TileRepository,
     TimetableBuilder,
@@ -71,6 +77,7 @@ from paperroute.ports import (
 from paperroute.render.chooser import draw_chooser_view
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_view import draw_map_view
+from paperroute.render.notice import draw_notice_view
 from paperroute.render.stop_view import draw_stop_view
 from paperroute.render.strip_view import draw_strip_map_view, draw_strip_view
 
@@ -78,7 +85,7 @@ logger = logging.getLogger(__name__)
 
 TICK_PAUSE: Final[float] = 0.03  # seconds between window pumps
 
-type View = StopView | MapView | StripView | StripMapView | ChooserView
+type View = ScreenView
 type Frame = NDArray[np.uint8]
 
 
@@ -96,6 +103,7 @@ class Ports:
     tiles: TileRepository = field(default_factory=NullTiles)
     measures: StopMeasures = field(default_factory=StopMeasures)
     builder: TimetableBuilder = field(default_factory=NullBuilder)
+    power: PowerControl = field(default_factory=NullPower)
 
 
 class MapRenderer:
@@ -370,6 +378,8 @@ def drawing(*, view: View, maps: MapRenderer) -> Callable[[], Frame]:
             return functools.partial(draw_strip_view, view=view)
         case StripMapView():
             return functools.partial(maps.strip_map_frame, view=view)
+        case NoticeView():
+            return functools.partial(draw_notice_view, view=view)
     return functools.partial(draw_chooser_view, view=view)
 
 
@@ -401,6 +411,7 @@ def background(
         | FetchFeed
         | MapRequest
         | RebuildTimetable
+        | ControlPower
         | WorkerEffect
     ),
     queue: asyncio.Queue[Event],
@@ -413,7 +424,7 @@ def background(
     ports : Ports
         Adapters.
     effect : LoadDepartures | FetchFeed | MapRequest | RebuildTimetable
-        | WorkerEffect
+        | ControlPower | WorkerEffect
         Effect.
     queue : asyncio.Queue[Event]
         Event queue.
@@ -442,6 +453,11 @@ def background(
         case RebuildTimetable():
             failed_rebuild = TimetableRebuilt(ok=False)
             return rebuild(ports=ports, queue=queue), failed_rebuild
+        case ControlPower(action=action):
+            return (
+                power_control(ports=ports, action=action, queue=queue),
+                PowerFailed(action=action),
+            )
     call, fallback = work_for(
         timetable=ports.timetable, network=ports.network, effect=effect
     )
@@ -461,6 +477,25 @@ async def rebuild(*, ports: Ports, queue: asyncio.Queue[Event]) -> None:
     """
     ok = await ports.builder.rebuild()
     await queue.put(TimetableRebuilt(ok=ok))
+
+
+async def power_control(
+    *, ports: Ports, action: PowerAction, queue: asyncio.Queue[Event]
+) -> None:
+    """
+    Shut down or restart, posting PowerFailed when it is refused.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters.
+    action : PowerAction
+        Shut down or restart.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    """
+    if not await ports.power.control(action=action):
+        await queue.put(PowerFailed(action=action))
 
 
 async def perform(
@@ -695,6 +730,9 @@ async def carry_out(
     """
     Perform an event's effects in order, keeping its view to draw later.
 
+    A ControlPower draws the waiting view first, so the notice is on
+    screen before the device goes down.
+
     Parameters
     ----------
     effects : Sequence[Effect]
@@ -712,6 +750,8 @@ async def carry_out(
         if isinstance(effect, Render):
             outputs.pending.view = effect.view
             continue
+        if isinstance(effect, ControlPower):
+            await draw_pending(ports=ports, outputs=outputs)
         await perform(
             ports=ports,
             effect=effect,

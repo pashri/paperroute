@@ -57,6 +57,7 @@ from paperroute.core.messages import (
     MapRequest,
     MatchPlaces,
     ModesLoaded,
+    NoticeView,
     PatternsLoaded,
     PlacesFailed,
     PlacesMatched,
@@ -1607,7 +1608,8 @@ VIEW_TYPES: Final[dict[LiveView, type]] = {
 def check_render(
     *,
     state: State,
-    view: StopView | MapView | StripView | StripMapView | ChooserView,
+    view: StopView | MapView | StripView | StripMapView | ChooserView
+    | NoticeView,
 ) -> None:
     """
     Assert a rendered view is the chooser's stage or the Live view shown
@@ -1619,6 +1621,7 @@ def check_render(
     state : State
         State after the event.
     view : StopView | MapView | StripView | StripMapView | ChooserView
+        | NoticeView
         The view drawn.
     """
     chooser = state.chooser
@@ -2358,7 +2361,14 @@ def test_bottom_press_cycles_four_views() -> None:
     state, _ = step(fresh(centre=CENTRE), Tick(now=START))
     views: list[LiveView] = []
     drawn: list[
-        type[StopView | MapView | StripView | StripMapView | ChooserView]
+        type[
+            StopView
+            | MapView
+            | StripView
+            | StripMapView
+            | ChooserView
+            | NoticeView
+        ]
     ] = []
     for _ in LIVE_VIEWS:
         state, effects = step(state, PRESS)

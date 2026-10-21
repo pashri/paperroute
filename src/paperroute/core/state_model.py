@@ -6,15 +6,13 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.core.chooser import ChooserState
-from paperroute.core.chooser_view import ChooserView
 from paperroute.core.map_state import MapState
-from paperroute.core.map_view import MapView
+from paperroute.core.messages import PowerAction, ScreenView
 from paperroute.core.model import Departure, Pin, shifted
 from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import LiveView, Saved, Settings
-from paperroute.core.stop_view import HORIZON, StopView
-from paperroute.core.strip_model import StripMapView, StripView
+from paperroute.core.stop_view import HORIZON
 
 POLL_EVERY: Final[timedelta] = timedelta(seconds=30)
 RELOAD_BEFORE: Final[timedelta] = timedelta(minutes=30)
@@ -211,6 +209,7 @@ class StripState:
 
 
 @dataclass(frozen=True)
+# pylint: disable-next=too-many-instance-attributes
 class State:
     """
     Everything the app knows.
@@ -231,8 +230,7 @@ class State:
         When the trip-updates feeds were last asked for.
     scroll : int
         The Stop view's scroll.
-    last_view : StopView | MapView | StripView | StripMapView | ChooserView
-        | None
+    last_view : ScreenView | None
         The view last drawn.
     running : bool
         False once the app should stop.
@@ -250,6 +248,8 @@ class State:
         Whether the timetable needs rebuilding.
     settings : Settings
         The choices made on the Settings page.
+    power : PowerAction | None
+        The power action under way; while set, nothing is redrawn.
     """
 
     now: datetime
@@ -259,9 +259,7 @@ class State:
     snapshots: Mapping[str, RealtimeSnapshot] = field(default_factory=dict)
     last_fetch: datetime | None = None
     scroll: int = 0
-    last_view: (
-        StopView | MapView | StripView | StripMapView | ChooserView | None
-    ) = None
+    last_view: ScreenView | None = None
     running: bool = True
     view: LiveView = LiveView.STOP
     map: MapState = field(default_factory=MapState)
@@ -270,3 +268,4 @@ class State:
     chooser: ChooserState | None = None
     rebuild: Rebuild = field(default_factory=Rebuild)
     settings: Settings = field(default_factory=Settings)
+    power: PowerAction | None = None

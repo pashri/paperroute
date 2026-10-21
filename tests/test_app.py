@@ -18,10 +18,13 @@ from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app import (
     MapRenderer,
+    Outputs,
     Ports,
+    handle,
     perform,
     run,
     starting_state,
+    stop,
     ticker,
 )
 from paperroute.app_effects import StateSaver, loaded_patterns
@@ -29,6 +32,7 @@ from paperroute.build.gtfs_files import Source
 from paperroute.build.map_style import LIGHT
 from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.core.device import NOTICE
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import Point, Shape, make_shape
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
@@ -42,7 +46,11 @@ from paperroute.core.messages import (
     LoadPatterns,
     MapData,
     MapDataFailed,
+    NoticeView,
     PositionsFetched,
+    PowerAction,
+    PowerFailed,
+    PowerRequested,
     QuitRequested,
     RebuildTimetable,
     SettingsChanged,
@@ -71,6 +79,7 @@ from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
 from paperroute.render.chrome import HEADER
+from paperroute.render.notice import draw_notice_view
 from paperroute.render.tile_codec import pack_bits, pack_grey
 from tests.app_factories import (
     AT,
@@ -89,6 +98,7 @@ from tests.fakes import (
     EmptyPlacedTimetable,
     FakeBuilder,
     FakeNetwork,
+    FakePower,
     FixedClock,
     FrameRecorder,
     MemoryStates,
@@ -1555,3 +1565,58 @@ async def test_app_performs_rebuild() -> None:
     assert queue.get_nowait() == TimetableRebuilt(ok=True)
     await run(ports=ports, seed=PIN, tick_every=0.01, max_events=1)
     assert (builder.rebuilds, builder.stops) == (1, 1)
+
+
+async def test_app_draws_notice_before_power() -> None:
+    """The notice is on screen before the power action; a failure redraws."""
+    display = FrameRecorder()
+    power = FakePower(result=False, display=display)
+    ports = replace(ports_of(display=display), power=power)
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    outputs = Outputs(
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    state = starting_state(ports=ports, seed=PIN)
+    for event in (Tick(now=AT), PowerRequested(action=PowerAction.OFF)):
+        state = await handle(
+            state=state, event=event, ports=ports, queue=queue,
+            tasks=tasks, outputs=outputs,
+        )
+    await asyncio.gather(*tasks)
+    title = NOTICE[PowerAction.OFF]
+    notice = draw_notice_view(view=NoticeView(title=title))
+    [(action, shown)] = power.calls
+    assert action is PowerAction.OFF
+    assert np.array_equal(display.frames[shown - 1], notice)
+    failed = next_of(queue=queue, kind=PowerFailed)
+    state = await handle(
+        state=state, event=failed, ports=ports, queue=queue,
+        tasks=tasks, outputs=outputs,
+    )
+    assert state.power is None
+    assert not np.array_equal(display.frames[-1], notice)
+    await stop(tasks=tasks)
+
+
+def next_of[T](*, queue: asyncio.Queue[Event], kind: type[T]) -> T:
+    """
+    Take events off a queue until one of a kind turns up.
+
+    Parameters
+    ----------
+    queue : asyncio.Queue[Event]
+        Event queue.
+    kind : type[T]
+        The kind wanted.
+
+    Returns
+    -------
+    T
+        The first event of that kind.
+    """
+    while True:
+        event = queue.get_nowait()
+        if isinstance(event, kind):
+            return event

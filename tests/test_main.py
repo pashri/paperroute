@@ -25,6 +25,7 @@ from paperroute.__main__ import (
     builder_for,
     main,
     parse_args,
+    power_for,
     seed_for,
     serve_or_exit,
     serve_web,
@@ -33,6 +34,7 @@ from paperroute.__main__ import (
 )
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.power import NullPower, SystemctlPower
 from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
@@ -189,6 +191,15 @@ def test_tiles_for_tolerates_a_missing_file(tmp_path: Path) -> None:
         assert isinstance(tiles, NullTiles)
 
 
+def test_power_for_acts_only_when_asked() -> None:
+    """--power runs systemctl; without it the device never powers off."""
+    on = power_for(args=argparse.Namespace(power=True))
+    off = power_for(args=argparse.Namespace(power=False))
+    assert isinstance(on, SystemctlPower)
+    assert on.systemctl == '/usr/bin/systemctl'
+    assert isinstance(off, NullPower)
+
+
 def test_builder_for_rebuilds_only_when_asked(tmp_path: Path) -> None:
     """--rebuild runs the refresh on the timetable's directory."""
     timetable = tmp_path / 'timetable.db'
@@ -318,6 +329,7 @@ def test_web_main_logs_a_bind_failure(
         tiles_variant=TileVariant.GREY,
         state=tmp_path / 'state.json',
         rebuild=False,
+        power=False,
     )
     build_db(path=args.timetable)
     with socket.socket() as held:
@@ -480,6 +492,7 @@ def test_tk_main_passes_the_tiles_variant(
         tiles_variant=TileVariant.BITS,
         state=tmp_path / 'state.json',
         rebuild=False,
+        power=False,
     )
     cli.tk_main(args=args, feeds=FileFeedsClient(directory=REAL))
     assert seen == [TileVariant.BITS]

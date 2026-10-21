@@ -21,6 +21,8 @@ from paperroute.core.messages import (
     KnobHeld,
     KnobPressed,
     KnobTurned,
+    PowerAction,
+    PowerRequested,
     SettingsChanged,
 )
 from paperroute.render.canvas import encode_png
@@ -33,6 +35,21 @@ ACTIONS: Final[dict[str, int]] = {'left': -1, 'right': 1}
 HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
 SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
 CHECKED_MARK: Final[str] = '{{auto_rebuild}}'
+DEVICE_STATUS_MARK: Final[str] = '{{device_status}}'
+POWER_ACTIONS: Final[dict[str, PowerAction]] = {
+    action.value: action for action in PowerAction
+}
+CONFIRM: Final[dict[PowerAction, tuple[str, str]]] = {
+    PowerAction.OFF: (
+        "Shut down now? The screen will say when it's safe to unplug.",
+        'Shut down',
+    ),
+    PowerAction.RESTART: ('Restart now?', 'Restart'),
+}
+POWER_STATUS: Final[dict[PowerAction, str]] = {
+    PowerAction.OFF: 'Shutting down...',
+    PowerAction.RESTART: 'Restarting...',
+}
 
 Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 
@@ -64,7 +81,9 @@ def knob_event(*, knob: str, action: str) -> Event | None:
     return None
 
 
-def settings_event(*, fields: Mapping[str, str]) -> Event | None:
+def settings_event(
+    *, fields: Mapping[str, str]
+) -> SettingsChanged | None:
     """
     Turn the Settings form's fields into an event.
 
@@ -75,27 +94,34 @@ def settings_event(*, fields: Mapping[str, str]) -> Event | None:
 
     Returns
     -------
-    Event | None
+    SettingsChanged | None
         The event, or None if the value is not recognised.
     """
     value = SWITCH.get(fields.get('auto_rebuild', ''))
     return None if value is None else SettingsChanged(auto_rebuild=value)
 
 
-def auto_rebuild_of(*, status: Mapping[str, object]) -> bool:
+def auto_rebuild_of(
+    *, status: Mapping[str, object], saved: str | None = None
+) -> bool:
     """
-    Read the rebuild switch from the status fields.
+    Read the rebuild switch from a value just saved, else the status.
 
     Parameters
     ----------
     status : Mapping[str, object]
         The status page's extra fields.
+    saved : str | None
+        `on` or `off` when the form was just saved; the app may not have
+        handled it yet, so it wins over the status.
 
     Returns
     -------
     bool
         The switch; True, the default, until the app reports it.
     """
+    if saved in SWITCH:
+        return SWITCH[saved]
     settings = status.get('settings')
     if not isinstance(settings, Mapping):
         return True
@@ -321,6 +347,9 @@ class WebDisplay:
             web.get('/settings', self._settings_page),
             web.get('/settings.js', self._settings_js),
             web.post('/settings', self._settings),
+            web.get('/settings/power', self._power_page),
+            web.post('/settings/power', self._power_page),
+            web.post('/power', self._power),
             web.get('/status', self._status_json),
         ])
         return app
@@ -523,7 +552,7 @@ class WebDisplay:
 
     async def _settings_page(self, request: web.Request) -> web.Response:
         """
-        Serve the Settings page, its switch drawn as last reported.
+        Serve the Settings page, its switch drawn as just saved or reported.
 
         Parameters
         ----------
@@ -535,10 +564,15 @@ class WebDisplay:
         web.Response
             The response.
         """
-        del request
         status = self._status() if self._status else {}
-        checked = ' checked' if auto_rebuild_of(status=status) else ''
-        page = _asset(name='settings.html').replace(CHECKED_MARK, checked)
+        query = request.query
+        on = auto_rebuild_of(status=status, saved=query.get('saved'))
+        action = POWER_ACTIONS.get(query.get('power', ''))
+        page = _asset(name='settings.html').replace(
+            CHECKED_MARK, ' checked' if on else '',
+        ).replace(
+            DEVICE_STATUS_MARK, '' if action is None else POWER_STATUS[action],
+        )
         return web.Response(text=page, content_type='text/html')
 
     async def _settings_js(self, request: web.Request) -> web.Response:
@@ -582,7 +616,55 @@ class WebDisplay:
         self._post(event)
         if request.content_type == 'application/json':
             return web.Response(status=HTTPStatus.NO_CONTENT)
-        raise web.HTTPSeeOther(location='/settings')
+        saved = 'on' if event.auto_rebuild else 'off'
+        raise web.HTTPSeeOther(location=f'/settings?saved={saved}')
+
+    async def _power_page(self, request: web.Request) -> web.Response:
+        """
+        Serve the page that confirms a shutdown or restart.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; `action` in the query.
+
+        Returns
+        -------
+        web.Response
+            The page, or 400 for an unknown action.
+        """
+        action = POWER_ACTIONS.get(request.query.get('action', ''))
+        if action is None:
+            return web.Response(status=HTTPStatus.BAD_REQUEST)
+        question, confirm = CONFIRM[action]
+        page = _asset(name='power.html').replace(
+            '{{question}}', question,
+        ).replace('{{action}}', action.value).replace('{{confirm}}', confirm)
+        return web.Response(text=page, content_type='text/html')
+
+    async def _power(self, request: web.Request) -> web.Response:
+        """
+        Post a shutdown or restart from the browser.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; `action` is `poweroff` or `reboot`.
+
+        Returns
+        -------
+        web.Response
+            400 for an unknown action; otherwise 204 to the script's
+            JSON, or 303 back to the Settings page for a plain form.
+        """
+        fields = await _fields(request=request)
+        action = POWER_ACTIONS.get(fields.get('action', ''))
+        if action is None:
+            return web.Response(status=HTTPStatus.BAD_REQUEST)
+        self._post(PowerRequested(action=action))
+        if request.content_type == 'application/json':
+            return web.Response(status=HTTPStatus.NO_CONTENT)
+        raise web.HTTPSeeOther(location=f'/settings?power={action.value}')
 
     async def _status_json(self, request: web.Request) -> web.Response:
         """

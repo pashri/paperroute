@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Confirm - paperroute</title>
+  <link rel="stylesheet" href="/live.css">
+</head>
+<body>
+  <header>
+    <h1>paperroute</h1>
+    <nav aria-label="Pages">
+      <ul class="pages">
+        <li><a href="/">Live</a></li>
+        <li><a href="/settings">Settings</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main>
+    <section class="setting" aria-labelledby="device">
+      <h2 id="device">Device</h2>
+      <form method="post" action="/power">
+        <p>{{question}}</p>
+        <input type="hidden" name="action" value="{{action}}">
+        <div class="buttons">
+          <a class="cancel" href="/settings">Cancel</a>
+          <button type="submit">{{confirm}}</button>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

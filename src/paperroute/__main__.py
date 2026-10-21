@@ -18,6 +18,7 @@ from paperroute.adapters.act_led import ActLed
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.network_db import SqliteNetworkRepository
+from paperroute.adapters.power import NullPower, SystemctlPower
 from paperroute.adapters.rate_limit import StartLimiter
 from paperroute.adapters.rebuild import (
     ChildRebuilder,
@@ -41,6 +42,7 @@ from paperroute.observers import ObserverGroup, Timings
 from paperroute.ports import (
     Clock,
     FeedsClient,
+    PowerControl,
     TileRepository,
     TimetableBuilder,
 )
@@ -190,6 +192,11 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='rebuild an outdated timetable in the background',
     )
+    runner.add_argument(
+        '--power',
+        action='store_true',
+        help='let the Settings page shut down and restart the device',
+    )
     args = parser.parse_args()
     require_both_or_neither(args=args)
     return args
@@ -237,6 +244,25 @@ def builder_for(*, args: argparse.Namespace) -> TimetableBuilder:
         ),
         env=refresh_env(timetable=args.timetable),
     )
+
+
+def power_for(*, args: argparse.Namespace) -> PowerControl:
+    """
+    Choose how the device is shut down and restarted.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Returns
+    -------
+    PowerControl
+        The systemctl control with --power; otherwise one that never acts.
+    """
+    if args.power:
+        return SystemctlPower()
+    return NullPower()
 
 
 def feeds_client(*, choice: str) -> FeedsClient:
@@ -575,6 +601,7 @@ def tk_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
                 states=JsonStateRepository(path=args.state),
                 tiles=tiles,
                 builder=builder_for(args=args),
+                power=power_for(args=args),
             )
             asyncio.run(
                 show(
@@ -653,6 +680,7 @@ def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
             observer=observer,
             tiles=tiles,
             builder=builder_for(args=args),
+            power=power_for(args=args),
         )
         serve_or_exit(args=args, ports=ports, display=display)
 

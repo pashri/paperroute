@@ -1,7 +1,27 @@
-"""Tests for the device's own settings."""
+"""Tests for the device's own settings and power."""
 
-from paperroute.core.messages import SaveState, SettingsChanged, Tick
+from datetime import timedelta
+
+import pytest
+
+from paperroute.core.messages import (
+    ControlPower,
+    Knob,
+    KnobTurned,
+    NoticeView,
+    PowerAction,
+    PowerFailed,
+    PowerRequested,
+    QuitRequested,
+    Render,
+    SaveState,
+    SettingsChanged,
+    Stop,
+    Tick,
+)
 from paperroute.core.state import SAVE_AFTER, step
+from paperroute.core.state_model import State
+from paperroute.core.stop_view import StopView
 from tests.core.factories import START
 from tests.core.test_rebuild import pinned
 
@@ -14,3 +34,83 @@ def test_settings_change_is_saved() -> None:
     saves = [effect for effect in effects if isinstance(effect, SaveState)]
     assert len(saves) == 1
     assert saves[0].saved.settings.auto_rebuild is False
+
+
+def powering(*, action: PowerAction) -> State:
+    """
+    Return a pinned, drawn state with a power action accepted.
+
+    Parameters
+    ----------
+    action : PowerAction
+        The action asked for.
+
+    Returns
+    -------
+    State
+        The state after the request.
+    """
+    state, _ = step(pinned(), PowerRequested(action=action))
+    return state
+
+
+@pytest.mark.parametrize(
+    ('action', 'title'),
+    [
+        (PowerAction.OFF, 'Shut down - safe to unplug'),
+        (PowerAction.RESTART, 'Restarting'),
+    ],
+)
+def test_power_request_saves_draws_then_powers(
+    action: PowerAction, title: str
+) -> None:
+    """A power request saves, draws the notice, then powers."""
+    state, effects = step(pinned(), PowerRequested(action=action))
+    assert [type(effect) for effect in effects] == [
+        SaveState, Render, ControlPower,
+    ]
+    assert effects[1] == Render(view=NoticeView(title=title))
+    assert effects[2] == ControlPower(action=action)
+    assert state.power is action
+
+
+def test_no_redraw_while_powering() -> None:
+    """After a power request, nothing redraws; a quit still stops."""
+    state = powering(action=PowerAction.OFF)
+    for event in (
+        KnobTurned(knob=Knob.BOTTOM, steps=1),
+        Tick(now=START + timedelta(minutes=5)),
+    ):
+        state, effects = step(state, event)
+        assert not [e for e in effects if isinstance(e, Render)]
+    _, effects = step(state, QuitRequested())
+    assert not [e for e in effects if isinstance(e, Render)]
+    assert isinstance(effects[-1], Stop)
+
+
+def test_second_power_request_ignored() -> None:
+    """A second request while one is under way does nothing."""
+    state = powering(action=PowerAction.OFF)
+    after, effects = step(
+        state, PowerRequested(action=PowerAction.RESTART),
+    )
+    assert after is state
+    assert not effects
+
+
+def test_power_failure_restores_the_view() -> None:
+    """A failed power action clears it and draws the Live view again."""
+    state = powering(action=PowerAction.RESTART)
+    state, effects = step(state, PowerFailed(action=PowerAction.RESTART))
+    assert state.power is None
+    renders = [e for e in effects if isinstance(e, Render)]
+    assert len(renders) == 1
+    assert isinstance(renders[0].view, StopView)
+
+
+def test_stale_power_failure_ignored() -> None:
+    """A failure for an action not under way changes nothing."""
+    state = pinned()
+    after, effects = step(state, PowerFailed(action=PowerAction.OFF))
+    assert after is state
+    assert not effects

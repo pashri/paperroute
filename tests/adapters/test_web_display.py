@@ -20,6 +20,8 @@ from paperroute.core.messages import (
     KnobHeld,
     KnobPressed,
     KnobTurned,
+    PowerAction,
+    PowerRequested,
     SettingsChanged,
 )
 
@@ -36,6 +38,9 @@ ROUTES = [
     ('GET', '/settings'),
     ('GET', '/settings.js'),
     ('POST', '/settings'),
+    ('GET', '/settings/power'),
+    ('POST', '/settings/power'),
+    ('POST', '/power'),
 ]
 
 
@@ -428,7 +433,8 @@ async def test_settings_form_redirects_back(
         '/settings', data=fields, allow_redirects=False,
     )
     assert response.status == HTTPStatus.SEE_OTHER
-    assert response.headers['Location'] == '/settings'
+    saved = 'on' if expected else 'off'
+    assert response.headers['Location'] == f'/settings?saved={saved}'
     assert posted == [SettingsChanged(auto_rebuild=expected)]
 
 
@@ -470,3 +476,110 @@ def test_live_page_links_to_settings() -> None:
     web_dir = files('paperroute') / 'assets' / 'web'
     html = (web_dir / 'live.html').read_text(encoding='utf-8')
     assert '<a href="/settings">Settings</a>' in html
+
+
+@pytest.mark.parametrize(('query', 'checked'), [
+    ('?saved=on', True),
+    ('?saved=off', False),
+    ('?saved=maybe', True),
+])
+async def test_settings_page_prefers_the_saved_value(
+    query: str, checked: bool
+) -> None:
+    """After a form save the switch shows the posted value, not the old."""
+    status: dict[str, object] = {'settings': {'auto_rebuild': True}}
+    display = WebDisplay(status=lambda: status)
+    client = await _client(display=display)
+    try:
+        text = await (await client.get(f'/settings{query}')).text()
+    finally:
+        await client.close()
+    assert ('aria-describedby="auto-rebuild-hint" checked>' in text) is (
+        checked
+    )
+
+
+async def test_power_post_posts_event(
+    display: WebDisplay, client: Client
+) -> None:
+    """A known action posts PowerRequested; others and other sites fail."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    good = await client.post('/power', json={'action': 'reboot'})
+    halt = await client.post('/power', json={'action': 'halt'})
+    cross = await client.post(
+        '/power',
+        json={'action': 'poweroff'},
+        headers={'Origin': 'http://evil.example'},
+    )
+    form = await client.post(
+        '/power', data={'action': 'poweroff'}, allow_redirects=False,
+    )
+    assert good.status == HTTPStatus.NO_CONTENT
+    assert halt.status == HTTPStatus.BAD_REQUEST
+    assert cross.status == HTTPStatus.FORBIDDEN
+    assert form.status == HTTPStatus.SEE_OTHER
+    assert form.headers['Location'] == '/settings?power=poweroff'
+    assert posted == [
+        PowerRequested(action=PowerAction.RESTART),
+        PowerRequested(action=PowerAction.OFF),
+    ]
+
+
+async def test_settings_page_has_confirm_dialogs(client: Client) -> None:
+    """The Device section has both buttons and both confirm dialogs."""
+    text = await (await client.get('/settings')).text()
+    assert '<h2 id="device">Device</h2>' in text
+    assert '<button type="submit">Restart</button>' in text
+    assert '<button type="submit">Shut down</button>' in text
+    assert (
+        '<p id="poweroff-question">Shut down now? The screen will say '
+        "when it's safe to unplug.</p>"
+    ) in text
+    assert '<p id="reboot-question">Restart now?</p>' in text
+    assert text.count('<button value="cancel" autofocus>Cancel</button>') == 2
+    assert '<button value="confirm">Shut down</button>' in text
+    assert '<button value="confirm">Restart</button>' in text
+    assert text.count('<dialog ') == 2
+    assert '{{' not in text
+
+
+@pytest.mark.parametrize(('action', 'question', 'button', 'shown'), [
+    (
+        'poweroff',
+        "Shut down now? The screen will say when it's safe to unplug.",
+        'Shut down',
+        'Shutting down...',
+    ),
+    ('reboot', 'Restart now?', 'Restart', 'Restarting...'),
+])
+async def test_power_works_without_script(
+    display: WebDisplay,
+    client: Client,
+    action: str,
+    question: str,
+    button: str,
+    shown: str,
+) -> None:
+    """Button, confirm page, its form, then the page saying so."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    confirm = await client.post(f'/settings/power?action={action}')
+    text = await confirm.text()
+    assert f'<p>{question}</p>' in text
+    assert f'name="action" value="{action}"' in text
+    assert f'<button type="submit">{button}</button>' in text
+    assert '<a class="cancel" href="/settings">Cancel</a>' in text
+    assert '{{' not in text
+    assert not posted
+    done = await client.post('/power', data={'action': action})
+    assert done.url.path == '/settings'
+    after = await done.text()
+    assert f'aria-live="polite">{shown}</p>' in after
+    assert posted == [PowerRequested(action=PowerAction(action))]
+
+
+async def test_power_page_rejects_unknown(client: Client) -> None:
+    """The confirm page needs a known action."""
+    response = await client.get('/settings/power?action=halt')
+    assert response.status == HTTPStatus.BAD_REQUEST

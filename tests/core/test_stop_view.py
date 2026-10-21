@@ -17,6 +17,7 @@ from paperroute.core.stop_view import (
     build_stop_view,
     clock_text,
     pin_tag,
+    to_row,
 )
 from tests.core.factories import START, departure
 
@@ -577,3 +578,20 @@ def test_train_row_carries_on_to_another_line() -> None:
     )
     assert result.rows[0].then is not None
     assert result.rows[0].then.route == 'T9'
+
+
+def test_row_for_carry_on() -> None:
+    """A carry-on row names the route it becomes and where that goes."""
+    onto = CarryOn(route='T2', headsign='Leppington Station')
+    item = live(minutes=3, ride=40, facts=TripFacts(onto=onto))
+    row = to_row(item=item, now=START, pill=None)
+    assert row.onto == 'T2'
+    assert row.route == '606'
+    assert row.destination == 'Leppington'
+    assert row.arrives_at == clock_text(moment=item.arrives)
+    same = CarryOn(route='606', headsign='Revesby Station')
+    row = to_row(
+        item=live(minutes=3, facts=TripFacts(onto=same)), now=START, pill=None,
+    )
+    assert row.onto is None
+    assert row.destination == 'Revesby'

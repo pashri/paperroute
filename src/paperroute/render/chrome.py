@@ -9,6 +9,7 @@ from paperroute.render.canvas import INK, PAPER, WIDTH, Box, Canvas, Face
 
 HEADER: Final[int] = 40
 ARROW_WIDTH: Final[float] = 22.0
+ARROW_GAP: Final[int] = 4
 BANNER: Final[int] = 34
 FASTER: Final[str] = 'FASTER'
 TAG_GAP: Final[int] = 8
@@ -314,6 +315,46 @@ def badge(canvas: Canvas, *, x: float, y: float, route: str,
         at=(x + width / 2, y + 1), text=route, face=face, grey=PAPER,
         anchor='mm')
     return width
+
+
+def route_pair(
+    canvas: Canvas,
+    *,
+    x: float,
+    y: float,
+    route: str,
+    onto: str | None,
+    px: int,
+) -> float:
+    """
+    Draw a route badge, and for a carry-on an arrow and the onto badge.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    x : float
+        Left edge.
+    y : float
+        Vertical centre.
+    route : str
+        Route label of the boarded trip.
+    onto : str | None
+        Route label of the trip it becomes, or None.
+    px : int
+        Text size.
+
+    Returns
+    -------
+    float
+        Total width.
+    """
+    width = badge(canvas, x=x, y=y, route=route, px=px)
+    if onto is None:
+        return width
+    width += ARROW_GAP
+    width += arrow(canvas, x=x + width, y=y, grey=INK) + ARROW_GAP
+    return width + badge(canvas, x=x + width, y=y, route=onto, px=px)
 
 
 def pill(canvas: Canvas, *, box: Box, text: str, px: int) -> None:

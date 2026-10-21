@@ -20,11 +20,13 @@ from paperroute.render.canvas import (
 )
 from paperroute.render.chrome import (
     TABS,
+    badge,
     countdown_slot,
     header,
     header_tabs,
     leaves,
     pin_tag,
+    route_pair,
     view_header,
 )
 
@@ -263,3 +265,13 @@ def test_leaves_names_its_minutes() -> None:
     assert leaves(row=near) == '12 min'
     assert leaves(row=replace(near, countdown='now')) == 'now'
     assert leaves(row=replace(near, live=False)) == '8:17'
+
+
+def test_route_pair_wider_with_onto() -> None:
+    """A carry-on pair is over twice a lone badge; with None it is one."""
+    canvas = Canvas()
+    alone = badge(canvas, x=10, y=20, route='T8', px=14)
+    plain = route_pair(canvas, x=10, y=20, route='T8', onto=None, px=14)
+    pair = route_pair(canvas, x=10, y=20, route='T8', onto='T2', px=14)
+    assert plain == alone
+    assert pair > 2 * alone

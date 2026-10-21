@@ -457,3 +457,20 @@ def test_whole_stop_row_unchanged() -> None:
     row = drawn_row(whole=True)
     assert (row[FIRST_LINE, 556:680] == expected).all()
     assert (row[SECOND_LINE, MIDDLE] == PAPER).all()
+
+
+def test_strip_panel_row_draws_both_badges() -> None:
+    """A carry-on panel row's badges reach right, before its destination."""
+    band = (slice(PANEL_TOP + 25, PANEL_TOP + 28), slice(556, 786))
+    frames = [
+        draw_strip_view(view=replace(
+            VIEW, panel=replace(PANEL, rows=(panel_row(onto=onto),)),
+        ))
+        for onto in (None, 'T2')
+    ]
+
+    extents = [
+        np.flatnonzero((frame[band] == INK).any(axis=0))[-1]
+        for frame in frames
+    ]
+    assert extents[1] > extents[0] + 30

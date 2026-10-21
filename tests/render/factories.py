@@ -19,6 +19,7 @@ def stop_row(
     pill: Pill | None = None,
     destination: str = 'Parramatta',
     then: CarryOn | None = None,
+    onto: str | None = None,
 ) -> Row:
     """
     A row for drawing.
@@ -31,6 +32,8 @@ def stop_row(
         Destination text.
     then : CarryOn | None
         Where the vehicle runs on to.
+    onto : str | None
+        Route the vehicle becomes before the Destination.
 
     Returns
     -------
@@ -40,7 +43,7 @@ def stop_row(
     return Row(
         route='606', mode=Mode.BUS, platform='B4', destination=destination,
         countdown='9', leaves_at='8:09', arrives_at='8:45', ride_minutes=36,
-        live=True, pill=pill, then=then)
+        live=True, pill=pill, then=then, onto=onto)
 
 
 STOP_VIEW = StopView(
@@ -50,7 +53,7 @@ STOP_VIEW = StopView(
     banner=None, empty=None, scroll=0)
 
 def panel_row(*, then: CarryOn | None = None,
-              pill: Pill | None = None) -> Row:
+              pill: Pill | None = None, onto: str | None = None) -> Row:
     """
     Make a panel departure.
 
@@ -60,6 +63,8 @@ def panel_row(*, then: CarryOn | None = None,
         Where the vehicle runs on to.
     pill : Pill | None
         Marker.
+    onto : str | None
+        Route the vehicle becomes before the Destination.
 
     Returns
     -------
@@ -69,7 +74,7 @@ def panel_row(*, then: CarryOn | None = None,
     return Row(
         route='T1', mode=Mode.TRAIN, platform='3', destination='Emu Plains',
         countdown='6', leaves_at='8:11', arrives_at='8:47', ride_minutes=36,
-        live=True, pill=pill, then=then)
+        live=True, pill=pill, then=then, onto=onto)
 
 
 def strip_row(*, index: int, tag: str = '', parent: bool = True,

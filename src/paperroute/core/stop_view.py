@@ -41,6 +41,7 @@ class Row:
     pill: Pill | None
     then: CarryOn | None = None
     far: bool = False
+    onto: str | None = None
 
 
 @dataclass(frozen=True)
@@ -223,12 +224,15 @@ def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
         Row.
     """
     dep = item.departure
+    onto = dep.facts.onto
     ride_s = item.arrives.timestamp() - item.departs.timestamp()
     return Row(
         route=dep.route,
         mode=dep.mode,
         platform=dep.platform,
-        destination=dep.headsign.removesuffix(' Station'),
+        destination=(onto.headsign if onto else dep.headsign).removesuffix(
+            ' Station'
+        ),
         countdown=countdown(departs=item.departs, now=now),
         leaves_at=clock_text(moment=item.departs),
         arrives_at=clock_text(moment=item.arrives),
@@ -237,6 +241,7 @@ def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
         pill=pill,
         then=dep.facts.then,
         far=is_far(departs=item.departs, now=now),
+        onto=onto.route if onto and onto.route != dep.route else None,
     )
 
 

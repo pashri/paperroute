@@ -20,10 +20,10 @@ from paperroute.render.chrome import (
     BANNER,
     HEADER,
     arrow,
-    badge,
     banner,
     countdown_slot,
     pill,
+    route_pair,
     view_header,
 )
 from paperroute.render.map_view import draw_overlay, snap, wrap
@@ -94,8 +94,13 @@ def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
     int
         Where a carry-on line starts.
     """
-    x = MIDDLE_X + badge(
-        canvas, x=MIDDLE_X, y=top + BADGE_DROP, route=row.route, px=BADGE_PX,
+    x = MIDDLE_X + route_pair(
+        canvas,
+        x=MIDDLE_X,
+        y=top + BADGE_DROP,
+        route=row.route,
+        onto=row.onto,
+        px=BADGE_PX,
     ) + 8
     canvas.text(
         at=(x, top + 40),

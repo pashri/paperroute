@@ -9,17 +9,18 @@ from paperroute.core.model import Mode
 from paperroute.core.stop_view import DOT, Pill, Row, StopView
 from paperroute.render.canvas import HEIGHT, INK, WIDTH, Canvas, Face
 from paperroute.render.chrome import (
+    ARROW_GAP,
     ARROW_WIDTH,
     BANNER,
     FASTER,
     HEADER,
     arrow,
-    badge,
     banner,
     cancelled,
     countdown_slot,
     leaves,
     pill,
+    route_pair,
     view_header,
 )
 
@@ -39,7 +40,6 @@ BOARD_BADGE_X: Final[int] = 96
 BOARD_RIGHT: Final[int] = PILL_LEFT - 20
 TAG_FACE: Final[Face] = Face(weight=700, px=12)
 TAG_GAP: Final[int] = 8
-ARROW_GAP: Final[int] = 4
 TAG_FLOOR: Final[int] = 40
 BAY: Final[dict[Mode, str]] = {Mode.BUS: 'stand', Mode.COACH: 'stand',
                                Mode.FERRY: 'wharf'}
@@ -62,7 +62,9 @@ def hero_headline(canvas: Canvas, *, row: Row, top: int) -> None:
     canvas.text(
         at=(18, top + 24), text=f'NEXT {unit.upper()}',
         face=Face(weight=700, px=12), grey=INK)
-    width = badge(canvas, x=18, y=top + 50, route=row.route, px=20)
+    width = route_pair(
+        canvas, x=18, y=top + 50, route=row.route, onto=row.onto, px=20,
+    )
     dest = Face(weight=700, px=18)
     fitted = canvas.fit(
         text=row.destination, face=dest, width=SPLIT - 50 - width)
@@ -205,7 +207,9 @@ def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
     y : int
         Row top.
     """
-    badge(canvas, x=LIST_LEFT, y=y + 14, route=row.route, px=14)
+    route_pair(
+        canvas, x=LIST_LEFT, y=y + 14, route=row.route, onto=row.onto, px=14,
+    )
     headline(
         canvas,
         row=row,
@@ -254,7 +258,14 @@ def board_row(canvas: Canvas, *, row: Row, y: int) -> None:
     canvas.text(
         at=(18, y + 33), text=row.leaves_at,
         face=Face(weight=800, px=22), grey=INK)
-    width = badge(canvas, x=BOARD_BADGE_X, y=y + 25, route=row.route, px=16)
+    width = route_pair(
+        canvas,
+        x=BOARD_BADGE_X,
+        y=y + 25,
+        route=row.route,
+        onto=row.onto,
+        px=16,
+    )
     left = BOARD_BADGE_X + width + 14
     headline(
         canvas,

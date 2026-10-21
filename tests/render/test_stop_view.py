@@ -189,3 +189,47 @@ def test_minute_countdowns_fit_beside_badges_and_pills() -> None:
     route = badge(Canvas(), x=LIST_LEFT, y=14, route='SH100', px=14)
     assert LIST_LEFT + route + 8 < 640 - wide
     assert max(PILL_LEFT + 74, BOARD_RIGHT) + 8 < 786 - wide
+
+
+def _ink_extent(*, frame: np.ndarray, band: tuple[slice, slice]) -> int:
+    """Return the rightmost x holding ink in a band, or -1."""
+    columns = np.flatnonzero((frame[band] == INK).any(axis=0))
+    return int(columns[-1]) + band[1].start if columns.size else -1
+
+
+def test_list_row_draws_both_badges() -> None:
+    """A carry-on row's badges reach further right than a plain row's."""
+    top = HEADER + 30
+    band = (slice(top + 4, top + 9), slice(440, 640))
+    views = [
+        replace(BASE, hero=None, rows=(row(onto=onto),))
+        for onto in (None, 'T2')
+    ]
+    plain, pair = (draw_stop_view(view=view) for view in views)
+    assert _ink_extent(frame=pair, band=band) > _ink_extent(
+        frame=plain, band=band,
+    ) + 30
+
+
+def test_hero_destination_starts_after_both_badges() -> None:
+    """The hero's destination moves right to clear the second badge."""
+    top = HEADER
+    band = (slice(top + 40, top + 66), slice(0, 438))
+    plain = draw_stop_view(view=replace(BASE, hero=row()))
+    pair = draw_stop_view(view=replace(BASE, hero=row(onto='T2')))
+    assert _ink_extent(frame=pair, band=band) != _ink_extent(
+        frame=plain, band=band,
+    )
+    assert (pair[band][:, :18] == PAPER).all()
+
+
+def test_carry_on_pill_follows_boarded_trip() -> None:
+    """A cancelled boarded trip draws its pill on the carry-on row."""
+    top = HEADER + 30
+    band = (slice(top + 10, top + 38), slice(600, 786))
+    shown = replace(BASE, hero=None, rows=(row(onto='T2'),))
+    cancelled = replace(
+        BASE, hero=None, rows=(row(onto='T2', pill=Pill.CANCELLED),),
+    )
+    assert (draw_stop_view(view=shown)[band] == INK).mean() < 0.2
+    assert (draw_stop_view(view=cancelled)[band] == INK).mean() > 0.5

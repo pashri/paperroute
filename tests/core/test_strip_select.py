@@ -20,6 +20,7 @@ from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import live_stop_view
+from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import StripInputs, StripView, trip_day
 from paperroute.core.strip_select import panel_trains
 from paperroute.core.strip_view import build_strip_view, marks_of
@@ -331,3 +332,16 @@ def test_pick_invariants(events: list[Event]) -> None:
                 assert trip_day(departure=trains[index]) == (
                     state.strip.selected
                 )
+
+
+def test_the_from_shows_the_picked_trains_departure() -> None:
+    """The From's time is the picked train's, else the next train's."""
+    inputs = parramatta(express=1, stopping=3)
+    plain = followed(inputs=inputs)
+    chosen = followed(inputs=picked(inputs=inputs, trip_id='y'))
+    for laid, time in ((plain, '8:01'), (chosen, '8:03')):
+        reach = laid.reach
+        assert reach is not None
+        origin = origin_of(reach=reach)
+        assert origin is not None
+        assert marks_of(inputs=laid, reach=reach).times[origin] == time

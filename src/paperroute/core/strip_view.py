@@ -51,6 +51,7 @@ from paperroute.core.strip_model import (
     Window,
     hook_straight,
     selected_index,
+    trip_day,
 )
 from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_times import (
@@ -207,7 +208,8 @@ def row_times(
         nothing is ridden. Rows past the Destination have the times of
         the vehicle that reaches it first; rows below the From laid out
         along the next trains have the picked train's times instead, or
-        the next train's with none picked. Approach
+        the next train's with none picked. The From has the picked
+        train's departure, else the next. Approach
         rows have the times the From's next departure calls there.
     """
     if origin is None:
@@ -247,6 +249,14 @@ def row_times(
         target=destination_station(
             reach=reach, destination=inputs.destination,
         ),
+    )
+    leaves = next(
+        (
+            item.departs
+            for item in trips.departures
+            if trip_day(departure=item.departure) == inputs.selected
+        ),
+        leaves,
     )
     if leaves is not None:
         times[origin] = clock_text(moment=leaves)

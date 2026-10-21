@@ -386,16 +386,18 @@ def clamped(*, state: State, banner: bool) -> State:
     -------
     State
         State with the scroll set to the one last asked for, clamped to
-        `scroll_range`.
+        `scroll_range`, and those bounds kept for the knob; none kept
+        while there is no reach.
     """
+    reach = shown_reach(state=state)
     low, high = scroll_range(
-        reach=shown_reach(state=state),
-        destination=destination_id(state=state),
-        banner=banner,
+        reach=reach, destination=destination_id(state=state), banner=banner,
     )
     scroll = min(max(state.strip.asked, low), high)
     return replace(state, strip=replace(
-        state.strip, scroll=scroll, bounds=(low, high),
+        state.strip,
+        scroll=scroll,
+        bounds=None if reach is None else (low, high),
     ))
 
 

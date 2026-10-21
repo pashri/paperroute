@@ -451,3 +451,18 @@ def test_an_overshoot_is_kept_to_the_rows_shown() -> None:
     held = state.strip.asked
     state, _ = step(state, Tick(now=START + timedelta(minutes=11)))
     assert state.strip.scroll == held
+
+
+def test_a_turn_before_the_rows_load_is_kept() -> None:
+    """With no reach yet the knob's turn waits for the rows to bound it."""
+    state, _ = on_view(
+        view=LiveView.STRIP, pin=replace(PIN, destination=None),
+    )
+    state, _ = step(state, turn(steps=3))
+    assert state.strip.asked == 3
+    loaded = line_state(scroll=0)
+    state = replace(state, strip=replace(
+        state.strip, reaches=loaded.strip.reaches,
+    ), map=loaded.map)
+    state, _ = step(state, Tick(now=START))
+    assert state.strip.scroll == 3

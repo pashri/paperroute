@@ -358,7 +358,7 @@ def trainlink_db(
         )
         conn.execute(
             "INSERT INTO trips VALUES (?, ?, 's', '', NULL, NULL, ?, 'x', "
-            'NULL)',
+            'NULL, 1)',
             (f't-{route_id}', route_id, agency),
         )
         for seq, station in enumerate(calls):
@@ -444,3 +444,40 @@ def test_relabel_without_nswtrains_routes_changes_nothing() -> None:
         'b1': ('1', 'One', 106, '711', ('Central', 'Lithgow')),
     })) as conn:
         assert relabel_trainlink(conn=conn) == 0
+
+
+@pytest.mark.parametrize('trip_id', ['S-0835', 'B-0835'])
+def test_dedupe_ignores_non_service(tmp_path: Path, trip_id: str) -> None:
+    """An out-of-service twin is neither dropped nor kept over its copy."""
+    sources = [
+        Source(
+            name='sydneytrains',
+            archive=sydneytrains_feed(path=tmp_path / 's.zip'),
+        ),
+        Source(
+            name='bundle',
+            archive=bundle_rail_feed(path=tmp_path / 'r.zip'),
+        ),
+    ]
+    db = build_db(tmp_path=tmp_path, start=START, days=2, sources=sources)
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute(
+            'UPDATE trips SET service = 0 WHERE trip_id = ?', (trip_id,),
+        )
+        conn.commit()
+        merge_rail(conn=conn)
+    assert {'S-0835', 'B-0835'} <= trip_ids(db=db)
+
+
+def test_relabel_ignores_non_service() -> None:
+    """An out-of-service line trip does not name a bundle route."""
+    with closing(trainlink_db(routes={
+        **LINES,
+        'b446': ('446', 'Sydney to Broken Hill', 106, '711',
+                 ('Central', 'Lithgow', 'Orange', 'Broken Hill')),
+    })) as conn:
+        conn.execute("UPDATE trips SET service = 0 WHERE trip_id = 't-wst'")
+        relabel_trainlink(conn=conn)
+        assert conn.execute(
+            "SELECT short_name FROM routes WHERE route_id = 'b446'",
+        ).fetchall() == [('446',)]

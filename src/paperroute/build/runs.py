@@ -28,7 +28,8 @@ ORDER BY st.trip_id, st.seq
 """
 TRIP_ROUTES: Final[str] = """
 SELECT t.trip_id, t.route_id, r.short_name, r.type,
-  COALESCE(t.agency_id, r.agency_id), t.headsign, t.block_id, t.service_id
+  COALESCE(t.agency_id, r.agency_id), t.headsign, t.block_id, t.service_id,
+  t.service
 FROM trips t JOIN routes r USING (route_id)
 ORDER BY t.trip_id
 """
@@ -52,7 +53,9 @@ RUN_CALLS_INDEX: Final[str] = (
     'CREATE INDEX run_calls_run ON run_calls (run_id)'
 )
 type CallRow = tuple[str, str, int, int, int]
-type TripRow = tuple[str, str, str, int, str | None, str, str | None, str]
+type TripRow = tuple[
+    str, str, str, int, str | None, str, str | None, str, int,
+]
 
 
 @dataclass(frozen=True)
@@ -60,7 +63,7 @@ class TripCalls:
     """
     One trip's route, block and the stations it calls at.
 
-    Hidden trips (an empty-running headsign, or a route with no kind) are
+    Hidden trips (out of service, or on a route with no kind) are
     kept so they still break block chains; check ``shown`` before offering
     a trip. ``passes`` holds the positions in ``stations`` the trip runs
     through without stopping.
@@ -78,6 +81,7 @@ class TripCalls:
     stations: tuple[str, ...]
     rail: bool
     passes: tuple[int, ...] = ()
+    revenue: bool = True
 
     @property
     def shown(self) -> bool:
@@ -87,9 +91,13 @@ class TripCalls:
         Returns
         -------
         bool
-            False for a hidden headsign or a route with no kind.
+            False for a trip out of service, a hidden headsign or a route
+            with no kind.
         """
-        return self.kind is not None and self.headsign not in HIDDEN_HEADSIGNS
+        return (
+            self.revenue and self.kind is not None
+            and self.headsign not in HIDDEN_HEADSIGNS
+        )
 
 
 def collapsed(*, stations: Iterable[str]) -> tuple[str, ...]:
@@ -183,7 +191,7 @@ def trip_from_rows(
     """
     (
         trip_id, route_id, route, route_type, agency, headsign, block,
-        service,
+        service, revenue,
     ) = trip
     return TripCalls(
         trip_id=trip_id, route_id=sys.intern(route_id),
@@ -195,6 +203,7 @@ def trip_from_rows(
         first_dep=calls[0][3], last_arr=calls[-1][2],
         stations=collapsed(stations=(call[1] for call in calls)),
         rail=route_type in RAIL_TYPES, passes=passes_of(calls=calls),
+        revenue=bool(revenue),
     )
 
 

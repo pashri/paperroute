@@ -532,3 +532,53 @@ def test_run_calls_match_runs_without_passes(
     runs, = network.execute('SELECT COUNT(*) FROM runs').fetchone()
     assert len(rows) == runs
     assert all(stations == stops for stations, stops in rows)
+
+
+def test_no_carry_on_across_an_empty_move() -> None:
+    """A T1 whose block runs on out of service carries on as nothing."""
+    x1 = hand_trip(trip_id='x1', route='T1', stations='A B C',
+                   first_dep=0, last_arr=100)
+    empty = dataclasses.replace(
+        hand_trip(trip_id='e1', route='T9', stations='C D',
+                  first_dep=150, last_arr=200),
+        revenue=False,
+    )
+    x3 = hand_trip(trip_id='x3', route='T9', stations='D C',
+                   first_dep=300, last_arr=400)
+    trips = [x1, empty, x3]
+    assert 'x1' not in next_trips(trips=trips)
+    assert carry_ons_of(trips=trips) == {}
+    assert runs_of(trips=trips)['x1'] == ('A', 'B', 'C')
+
+
+def test_runs_skip_non_service(network_db: Path, tmp_path: Path) -> None:
+    """Out-of-service T2 trips add no runs, stops, calls or patterns."""
+    db = tmp_path / 'timetable.db'
+    shutil.copy(network_db, db)
+    with closing(sqlite3.connect(db)) as conn:
+        conn.executescript(
+            "UPDATE trips SET service = 0 WHERE trip_id IN ('cc1', 'cc2');"
+            'DROP TABLE runs; DROP TABLE run_stops; DROP TABLE run_calls;'
+            'DROP TABLE trip_runs;'
+            'DROP TABLE trip_next; DROP TABLE route_patterns;',
+        )
+        conn.executescript(RUN_SCHEMA)
+        load_runs(conn=conn)
+        assert conn.execute(
+            "SELECT COUNT(*) FROM trip_runs WHERE trip_id IN ('cc1', 'cc2')",
+        ).fetchall() == [(0,)]
+        assert conn.execute(
+            "SELECT COUNT(*) FROM runs WHERE route = 'T2'",
+        ).fetchall() == [(0,)]
+        assert conn.execute(
+            "SELECT COUNT(*) FROM route_patterns "
+            "WHERE route_id = 'sydneytrains:T2'",
+        ).fetchall() == [(0,)]
+        assert conn.execute(
+            'SELECT COUNT(*) FROM run_stops '
+            'WHERE run_id NOT IN (SELECT run_id FROM runs)',
+        ).fetchall() == [(0,)]
+        assert conn.execute(
+            'SELECT COUNT(*) FROM run_calls '
+            'WHERE run_id NOT IN (SELECT run_id FROM runs)',
+        ).fetchall() == [(0,)]

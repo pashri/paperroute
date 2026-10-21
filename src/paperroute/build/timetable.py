@@ -27,13 +27,19 @@ from paperroute.build.gtfs_files import (
 from paperroute.build.handoff import Handoff, HandoffRecord, hand_over
 from paperroute.build.shapes import load_shapes
 from paperroute.build.trainlink import trim_trainlink
-from paperroute.core.model import HIDDEN_HEADSIGNS, SYDNEY, Mode, mode_for
+from paperroute.core.model import (
+    HIDDEN_HEADSIGNS,
+    SYDNEY,
+    TIMETABLE_SCHEMA,
+    Mode,
+    mode_for,
+)
 from paperroute.core.tiles import NSW_BBOX
 from paperroute.rss import current_rss_mb, max_rss_mb
 
 logger = logging.getLogger(__name__)
 
-SCHEMA_VERSION: Final[str] = '4'
+SCHEMA_VERSION: Final[str] = TIMETABLE_SCHEMA
 CATEGORIES: Final[str] = 'vehicle_categories.txt'
 SHORT_SUSPECTS: Final[str] = """
 SELECT j.value FROM json_each(:trips) j
@@ -54,7 +60,8 @@ CREATE TABLE services (service_id TEXT NOT NULL, date TEXT NOT NULL,
   PRIMARY KEY (service_id, date)) WITHOUT ROWID;
 CREATE TABLE trips (trip_id TEXT PRIMARY KEY, route_id TEXT NOT NULL,
   service_id TEXT NOT NULL, headsign TEXT NOT NULL, direction_id INTEGER,
-  block_id TEXT, agency_id TEXT, source TEXT NOT NULL, shape_id TEXT);
+  block_id TEXT, agency_id TEXT, source TEXT NOT NULL, shape_id TEXT,
+  service INTEGER NOT NULL);
 CREATE TABLE stop_times (trip_id TEXT NOT NULL, seq INTEGER NOT NULL,
   stop_id TEXT NOT NULL, arr INTEGER NOT NULL, dep INTEGER NOT NULL,
   pickup INTEGER NOT NULL, dropoff INTEGER NOT NULL,
@@ -89,17 +96,17 @@ class Fate(Enum):
     """What loading does with a trip of the window."""
 
     KEEP = auto()
-    DROP = auto()
+    HIDE = auto()
     CHECK = auto()
 
 
 @dataclass
 class TripLoad:
-    """Trips one feed inserted, the suspects among them and those dropped."""
+    """Trips one feed inserted, the suspects among them and those hidden."""
 
     inserted: set[str] = field(default_factory=set)
     suspects: set[str] = field(default_factory=set)
-    dropped: int = 0
+    hidden: int = 0
 
 
 @dataclass(frozen=True)
@@ -310,7 +317,7 @@ def trip_fate(
     revenue: set[str],
 ) -> Fate:
     """
-    Decide whether a trip of the window is kept, dropped or checked later.
+    Decide whether a trip of the window is in service, out or checked later.
 
     Parameters
     ----------
@@ -325,20 +332,22 @@ def trip_fate(
     -------
     Fate
         KEEP for a trip of a defined or no category. For an undefined
-        category: DROP on a route with no defined-category trip or with
-        a hidden headsign, else CHECK, kept only if it has two stopping
-        calls and stops nowhere outside NSW.
+        category: HIDE on a route with no defined-category trip or with
+        a hidden headsign, else CHECK, in service only if it has two
+        stopping calls and stops nowhere outside NSW.
     """
     if not undefined_category(row=row, categories=categories):
         return Fate.KEEP
     if row['route_id'] not in revenue or (
         row.get('trip_headsign', '') in HIDDEN_HEADSIGNS
     ):
-        return Fate.DROP
+        return Fate.HIDE
     return Fate.CHECK
 
 
-def trip_row(*, row: dict[str, str], source: Source) -> tuple[object, ...]:
+def trip_row(
+    *, row: dict[str, str], source: Source, service: bool,
+) -> tuple[object, ...]:
     """
     Turn a trips.txt record into a trips table row.
 
@@ -348,6 +357,8 @@ def trip_row(*, row: dict[str, str], source: Source) -> tuple[object, ...]:
         A trips.txt record.
     source : Source
         Feed.
+    service : bool
+        Whether the trip carries passengers; a hidden headsign never does.
 
     Returns
     -------
@@ -361,6 +372,10 @@ def trip_row(*, row: dict[str, str], source: Source) -> tuple[object, ...]:
         int(row['direction_id']) if row.get('direction_id') else None,
         row.get('block_id') or None, None, source.name,
         f'{source.name}:{row["shape_id"]}' if row.get('shape_id') else None,
+        int(
+            service
+            and row.get('trip_headsign', '') not in HIDDEN_HEADSIGNS
+        ),
     )
 
 
@@ -395,7 +410,7 @@ def kept_trip_rows(
     load: TripLoad,
 ) -> Iterator[tuple[object, ...]]:
     """
-    Give the trips table rows of the trips kept, noting each trip's fate.
+    Give the trips table row of each record, noting each trip's fate.
 
     Parameters
     ----------
@@ -406,22 +421,22 @@ def kept_trip_rows(
     source : Source
         Feed.
     load : TripLoad
-        Filled with the trips kept, the suspects and the count dropped.
+        Filled with the trips, the suspects and the count hidden.
 
     Yields
     ------
     tuple[object, ...]
-        A trips row for each record not dropped.
+        A trips row for each record.
     """
     for row in rows:
         fate = fate_of(row)
-        if fate is Fate.DROP:
-            load.dropped += 1
-            continue
+        load.hidden += fate is Fate.HIDE
         load.inserted.add(row['trip_id'])
         if fate is Fate.CHECK:
             load.suspects.add(row['trip_id'])
-        yield trip_row(row=row, source=source)
+        yield trip_row(
+            row=row, source=source, service=fate is not Fate.HIDE,
+        )
 
 
 def load_trips(*, conn: sqlite3.Connection, source: Source,
@@ -429,9 +444,9 @@ def load_trips(*, conn: sqlite3.Connection, source: Source,
     """
     Insert active trips not already present and return those inserted.
 
-    Trips naming a vehicle category the feed does not define are dropped
-    on a non-revenue route or with a hidden headsign; the rest of them are
-    kept as suspects until their stop times are loaded. trips.txt is read
+    Trips naming a vehicle category the feed does not define are out of
+    service on a non-revenue route or with a hidden headsign; the rest of
+    them are suspects until their stop times are loaded. trips.txt is read
     twice, first for the revenue routes, so no trip records are held.
 
     Parameters
@@ -446,7 +461,7 @@ def load_trips(*, conn: sqlite3.Connection, source: Source,
     Returns
     -------
     TripLoad
-        Trips inserted, suspects among them and trips dropped.
+        Trips inserted, suspects among them and trips hidden.
     """
     existing = {row[0] for row in conn.execute('SELECT trip_id FROM trips')}
     categories = known_categories(archive=source.archive)
@@ -458,7 +473,7 @@ def load_trips(*, conn: sqlite3.Connection, source: Source,
     )
     load = TripLoad()
     insert_many(conn=conn,
-                sql='INSERT INTO trips VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                sql='INSERT INTO trips VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 rows=kept_trip_rows(
                     rows=window_trips(
                         source=source, services=services, existing=existing,
@@ -471,11 +486,11 @@ def load_trips(*, conn: sqlite3.Connection, source: Source,
     return load
 
 
-def drop_short_suspects(
+def mark_short_suspects(
     *, conn: sqlite3.Connection, suspects: set[str],
 ) -> int:
     """
-    Drop suspect trips with fewer than two stopping calls or leaving NSW.
+    Mark out of service suspects with under two stopping calls or out of NSW.
 
     Parameters
     ----------
@@ -487,7 +502,7 @@ def drop_short_suspects(
     Returns
     -------
     int
-        Trips dropped: those with fewer than two stopping calls, or with
+        Trips marked: those with fewer than two stopping calls, or with
         a stopping call outside NSW_BBOX.
     """
     west, south, east, north = NSW_BBOX
@@ -498,12 +513,11 @@ def drop_short_suspects(
             'south': south, 'east': east, 'north': north,
         })
     ]
-    for table in ('stop_times', 'trips'):
-        conn.execute(
-            f'DELETE FROM {table} WHERE trip_id IN '
-            '(SELECT value FROM json_each(?))',
-            (json.dumps(short),),
-        )
+    conn.execute(
+        'UPDATE trips SET service = 0 WHERE trip_id IN '
+        '(SELECT value FROM json_each(?))',
+        (json.dumps(short),),
+    )
     return len(short)
 
 
@@ -594,14 +608,14 @@ def load_source(*, conn: sqlite3.Connection, source: Source,
                 sql='INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, ?, ?)',
                 rows=stop_time_rows(archive=source.archive,
                                     trips=trips.inserted))
-    short = drop_short_suspects(conn=conn, suspects=trips.suspects)
-    if trips.dropped + short:
-        logger.info('dropped %d %s trips of undefined vehicle categories',
-                    trips.dropped + short, source.name)
+    short = mark_short_suspects(conn=conn, suspects=trips.suspects)
+    if trips.hidden + short:
+        logger.info('kept %d %s trips out of service',
+                    trips.hidden + short, source.name)
     load_shapes(conn=conn, source=source,
                 modes=shape_modes(conn=conn, source=source))
     conn.commit()
-    return len(trips.inserted) - short
+    return len(trips.inserted)
 
 
 def write_meta(*, conn: sqlite3.Connection, window: Window) -> None:

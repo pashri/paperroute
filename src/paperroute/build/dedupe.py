@@ -24,7 +24,7 @@ SELECT t.trip_id, t.source, t.service_id, r.short_name, r.agency_id,
      WHERE st.trip_id = t.trip_id AND (st.pickup <> 1 OR st.dropoff <> 1)
      ORDER BY st.seq DESC LIMIT 1) AS last_station
 FROM trips t JOIN routes r ON r.route_id = t.route_id
-WHERE r.type IN (2, 106, 401);
+WHERE r.type IN (2, 106, 401) AND t.service = 1;
 """
 MATCHES: Final[str] = """
 CREATE TEMP TABLE candidate AS
@@ -138,7 +138,7 @@ FROM routes r JOIN trips t ON t.route_id = r.route_id
   JOIN stops s ON s.stop_id = st.stop_id
 WHERE ((r.type = 106 AND r.agency_id IN ({agencies}))
   OR (r.type = 2 AND r.short_name IN ({lines})))
-  AND (st.pickup <> 1 OR st.dropoff <> 1)
+  AND (st.pickup <> 1 OR st.dropoff <> 1) AND t.service = 1
 ORDER BY r.route_id
 """
 

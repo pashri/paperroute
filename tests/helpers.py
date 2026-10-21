@@ -101,3 +101,23 @@ def schema_three(*, path: Path) -> None:
             "UPDATE meta SET value = '3' WHERE key = 'schema_version'",
         )
         conn.commit()
+
+
+def schema_four(*, path: Path) -> None:
+    """
+    Turn a built timetable back into a schema-4 file.
+
+    Only trips' service column is dropped, and the schema version set to
+    '4'.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file, changed in place.
+    """
+    with closing(sqlite3.connect(path)) as conn:
+        conn.execute('ALTER TABLE trips DROP COLUMN service')
+        conn.execute(
+            "UPDATE meta SET value = '4' WHERE key = 'schema_version'",
+        )
+        conn.commit()

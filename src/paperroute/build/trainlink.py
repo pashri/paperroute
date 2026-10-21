@@ -23,7 +23,7 @@ SELECT t.trip_id, t.service_id, st.seq, COALESCE(s.parent_station, s.stop_id),
 FROM trips t JOIN routes r ON r.route_id = t.route_id
   JOIN stop_times st ON st.trip_id = t.trip_id
   JOIN stops s ON s.stop_id = st.stop_id
-WHERE {where}
+WHERE t.service = 1 AND {where}
 ORDER BY t.trip_id, st.seq
 """
 
@@ -407,7 +407,8 @@ def clone_cut(
     copy, service = f'{trip.trip_id}{name}', f'{trip.service_id}~{stamp}'
     conn.execute(
         'INSERT INTO trips SELECT ?, route_id, ?, headsign, direction_id, '
-        'block_id, agency_id, source, shape_id FROM trips WHERE trip_id = ?',
+        'block_id, agency_id, source, shape_id, service FROM trips '
+        'WHERE trip_id = ?',
         (copy, service, trip.trip_id),
     )
     conn.executemany(

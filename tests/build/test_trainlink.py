@@ -48,7 +48,7 @@ def conn_fixture() -> Iterator[sqlite3.Connection]:
 
 def add_trip(
     *, conn: sqlite3.Connection, trip_id: str, route: str, calls: Calls,
-    dates: tuple[str, ...] = (DAY,),
+    dates: tuple[str, ...] = (DAY,), service: int = 1,
 ) -> None:
     """
     Add a trip, its service and its calls.
@@ -65,12 +65,14 @@ def add_trip(
         Station, arrival and departure in seconds, in order.
     dates : tuple[str, ...]
         Dates it runs on.
+    service : int
+        1 for a trip in service, 0 for one out of service.
     """
     source = 'bundle' if route == 'b' else 'sydneytrains'
     agency = '711' if route == 'b' else 'NSWTrains'
     conn.execute(
-        "INSERT INTO trips VALUES (?, ?, ?, '', NULL, NULL, ?, ?, NULL)",
-        (trip_id, route, f's-{trip_id}', agency, source),
+        "INSERT INTO trips VALUES (?, ?, ?, '', NULL, NULL, ?, ?, NULL, ?)",
+        (trip_id, route, f's-{trip_id}', agency, source, service),
     )
     conn.executemany(
         'INSERT INTO services VALUES (?, ?)',
@@ -231,6 +233,9 @@ def test_cut_on_some_dates_makes_a_copy(conn: sqlite3.Connection) -> None:
         '(SELECT service_id FROM trips WHERE trip_id = ?)',
         (copy,),
     ).fetchall() == [(DAY,)]
+    assert conn.execute(
+        'SELECT service FROM trips WHERE trip_id = ?', (copy,),
+    ).fetchall() == [(1,)]
 
 
 def test_drop_on_some_dates_skips_those_dates(
@@ -420,3 +425,18 @@ def test_date_skipped_by_the_rail_merge_is_not_revived(
     assert conn.execute(
         'SELECT date FROM trip_skip ORDER BY date',
     ).fetchall() == [(NEXT,)]
+
+
+@pytest.mark.parametrize('empty', ['b1', 'n1'])
+def test_trim_ignores_non_service(
+    conn: sqlite3.Connection, empty: str,
+) -> None:
+    """An out-of-service trip neither trims nor is trimmed by a twin."""
+    add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH,
+             service=int(empty != 'b1'))
+    add_trip(conn=conn, trip_id='n1', route='n', calls=[
+        ('C', 8 * HOUR, 8 * HOUR), ('A', 12 * HOUR, 12 * HOUR),
+    ], service=int(empty != 'n1'))
+    assert trim_trainlink(conn=conn) == TrimReport(dropped=0, cut=0)
+    assert trip_ids(conn=conn) == {'b1', 'n1'}
+    assert stations(conn=conn, trip_id='b1') == ['C', 'M', 'W', 'A']

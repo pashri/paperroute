@@ -1394,7 +1394,7 @@ def test_departures_at_the_same_time_sort_by_trip(
     late = 31 * 3600 + 6 * 60  # 07:06 the next morning
     script = (
         "INSERT INTO trips SELECT 'zz', route_id, service_id, headsign, "
-        'direction_id, block_id, agency_id, source, shape_id '
+        'direction_id, block_id, agency_id, source, shape_id, service '
         "FROM trips WHERE trip_id = 'ew1';"
         f"INSERT INTO stop_times VALUES ('zz', 1, 'C_1', {late}, {late}, 0, 0),"
         f"('zz', 2, 'J_1', {late + 180}, {late + 180}, 0, 0);"

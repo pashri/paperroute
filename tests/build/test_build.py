@@ -47,6 +47,7 @@ def test_build_real_slice_has_no_duplicate_t1_departures(
             JOIN routes r ON r.route_id = t.route_id
             JOIN stops s ON s.stop_id = st.stop_id
             WHERE r.short_name = 'T1' AND s.parent_station = '215020'
+              AND t.service = 1
             GROUP BY st.dep, st.stop_id, t.direction_id
             HAVING COUNT(*) > 1""").fetchall()
         aliases = conn.execute(

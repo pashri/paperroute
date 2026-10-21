@@ -246,7 +246,7 @@ def test_meta_records_schema_version(tmp_path: Path) -> None:
     assert query(db=db, sql="SELECT value FROM meta "
                             "WHERE key = 'schema_version'") == [
         (SCHEMA_VERSION,)]
-    assert SCHEMA_VERSION == '4'
+    assert SCHEMA_VERSION == '5'
 
 
 def test_partly_merged_trip_keeps_its_shape(tmp_path: Path) -> None:
@@ -288,11 +288,11 @@ def test_shared_shape_takes_the_lowest_route_type(tmp_path: Path) -> None:
 
 def odd_trips() -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     """
-    Trips of the undefined category Z35 that loading should drop.
+    Trips of the undefined category Z35 that loading marks out of service.
 
     'hidden' runs empty, 'short' stops only once, 'yard' is on a route
     with no trip of a defined category and 'perth' stops at PER, outside
-    NSW. 'xpt', an A8, also stops at PER and is kept.
+    NSW. 'xpt', an A8, also stops at PER and is in service.
 
     Returns
     -------
@@ -370,21 +370,74 @@ def categorised_bus(
     return [Source(name='bundle', archive=archive)]
 
 
-def test_trips_of_undefined_vehicle_categories_are_dropped(
+def services(*, db: Path) -> dict[object, object]:
+    """
+    Read each trip's service flag.
+
+    Parameters
+    ----------
+    db : Path
+        Built timetable.
+
+    Returns
+    -------
+    dict[object, object]
+        Trip ID to its service column.
+    """
+    return {
+        trip_id: service
+        for trip_id, service in query(
+            db=db, sql='SELECT trip_id, service FROM trips',
+        )
+    }
+
+
+def test_hidden_trip_kept_as_non_service(
     tmp_path: Path, caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Empty, one-stop, non-revenue and interstate Z35 trips go."""
+    """A Z35 trip on a non-revenue route stays, with its stop times."""
     with caplog.at_level(logging.INFO, logger='paperroute.build.timetable'):
         db = build_db(tmp_path=tmp_path, start=date(2026, 10, 16), days=1,
                       sources=categorised_bus(tmp_path=tmp_path,
                                               categories=['A8']))
-    assert query(db=db, sql='SELECT trip_id FROM trips ORDER BY trip_id') == [
-        ('bus-0803',), ('bus-2510',), ('xpt',),
-    ]
+    assert services(db=db)['yard'] == 0
+    assert services(db=db)['hidden'] == 0
+    assert query(
+        db=db, sql="SELECT COUNT(*) FROM stop_times WHERE trip_id = 'yard'",
+    ) == [(2,)]
+    assert any(
+        'kept 4 bundle trips out of service' in m for m in caplog.messages
+    )
+
+
+def test_out_of_nsw_suspect_kept_as_non_service(tmp_path: Path) -> None:
+    """A suspect stopping outside NSW, or stopping once, is out of service."""
+    db = build_db(tmp_path=tmp_path, start=date(2026, 10, 16), days=1,
+                  sources=categorised_bus(tmp_path=tmp_path,
+                                          categories=['A8']))
+    assert services(db=db)['perth'] == 0
+    assert services(db=db)['short'] == 0
     assert query(
         db=db, sql="SELECT COUNT(*) FROM stop_times WHERE trip_id = 'short'",
-    ) == [(0,)]
-    assert any('dropped 4 bundle trips' in m for m in caplog.messages)
+    ) == [(2,)]
+
+
+def test_hidden_headsign_is_non_service(tmp_path: Path) -> None:
+    """A trip of a defined category headed 'Empty Train' is out of service."""
+    db = build_db(tmp_path=tmp_path, start=date(2026, 10, 16), days=1,
+                  sources=categorised_bus(tmp_path=tmp_path,
+                                          categories=None))
+    assert services(db=db)['hidden'] == 0
+
+
+def test_revenue_trip_is_service(tmp_path: Path) -> None:
+    """An ordinary trip and a passing suspect (an excursion) are in service."""
+    db = build_db(tmp_path=tmp_path, start=date(2026, 10, 16), days=1,
+                  sources=categorised_bus(tmp_path=tmp_path,
+                                          categories=['A8']))
+    assert services(db=db)['bus-0803'] == 1
+    assert services(db=db)['bus-2510'] == 1
+    assert services(db=db)['xpt'] == 1
 
 
 def test_trip_categories_are_kept_without_a_categories_file(

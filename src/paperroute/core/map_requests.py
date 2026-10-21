@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Final
 
-from paperroute.core.feeds import FeedKind, position_feeds
+from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.map_state import area_box
 from paperroute.core.map_view import (
     MapInputs,
@@ -75,9 +75,9 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
     tuple[str, ...]
         While the chooser picks a Destination, the modes of its strip's
         departures. Otherwise, on a map, the feeds for the modes in the
-        map area at the current zoom, or for the departures' modes when
-        none are known there; on the Strip, the modes of the strip's own
-        departures.
+        map area at the current zoom, or for every mode when none are
+        known there (not loaded, failed or none found); on the Strip,
+        the modes of the strip's own departures.
     """
     departures = state.board.departures
     if state.chooser is not None:
@@ -86,7 +86,10 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
         departures = strip_window(state=state)
     modes = frozenset(departure.mode for departure in departures)
     if state.view in MAP_VIEWS and state.chooser is None:
-        modes = state.map.area_modes.get(ZOOMS[state.map.zoom]) or modes
+        modes = (
+            state.map.area_modes.get(ZOOMS[state.map.zoom])
+            or ALL_POSITION_MODES
+        )
     return position_feeds(modes=modes)
 
 

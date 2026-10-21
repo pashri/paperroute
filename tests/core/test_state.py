@@ -22,9 +22,9 @@ from paperroute.core.chooser import (
 )
 from paperroute.core.chooser_steps import trip_feeds
 from paperroute.core.chooser_view import ChooserView
-from paperroute.core.feeds import FeedKind
+from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.geo import Point, make_shape
-from paperroute.core.map_requests import shows_vehicles
+from paperroute.core.map_requests import map_feeds, shows_vehicles
 from paperroute.core.map_state import area_box
 from paperroute.core.map_view import DEFAULT_ZOOM, MAP_WIDTH, MapView
 from paperroute.core.messages import (
@@ -206,6 +206,21 @@ def fresh(*, now: datetime = START, centre: Point | None = None) -> State:
     """
     pin = replace(PIN, origin=replace(PIN.origin, point=centre))
     return initial_state(saved=seeded(pin=pin), now=now, stored=True)
+
+
+def every_position_fetch() -> list[FetchFeed]:
+    """
+    List the fetches for every mode's positions feeds.
+
+    Returns
+    -------
+    list[FetchFeed]
+        One per positions feed, in polling order.
+    """
+    return [
+        FetchFeed(feed=feed, kind=FeedKind.POSITIONS)
+        for feed in position_feeds(modes=ALL_POSITION_MODES)
+    ]
 
 
 def loaded(
@@ -539,15 +554,15 @@ def test_zoom_is_kept_after_returning_to_stop() -> None:
     assert ZOOMS[state.last_view.zoom] == 14
 
 
-def test_modes_loaded_fetches_position_feeds_now() -> None:
-    """The area's modes start their position feeds without waiting."""
+def test_modes_loaded_narrows_the_polled_feeds() -> None:
+    """The area's modes replace the every-mode feeds already polled."""
     state, _ = step(fresh(centre=CENTRE), PRESS)
     event = ModesLoaded(
         mpp=8, box=area_box(centre=CENTRE, mpp=8), modes=frozenset({Mode.BUS})
     )
     state, effects = step(state, event)
-    fetch = FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS)
-    assert effects_of(effects=effects, kind=FetchFeed) == [fetch]
+    assert not effects_of(effects=effects, kind=FetchFeed)
+    assert map_feeds(state=state) == (BUS_POSITIONS,)
     assert state.map.area_modes == {8: frozenset({Mode.BUS})}
     assert not state.map.pending_modes
 
@@ -556,14 +571,14 @@ def test_map_polls_positions_with_trip_updates() -> None:
     """On the Map a due tick fetches both trip updates and positions."""
     state, _ = step(loaded(state=fresh()), Tick(now=START))
     state, effects = step(state, PRESS)
-    fetch = FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS)
-    assert effects_of(effects=effects, kind=FetchFeed) == [fetch]
+    fetches = every_position_fetch()
+    assert effects_of(effects=effects, kind=FetchFeed) == fetches
     _, effects = step(state, Tick(now=START + timedelta(seconds=10)))
     assert not effects_of(effects=effects, kind=FetchFeed)
     _, effects = step(state, Tick(now=START + POLL_EVERY))
     assert effects_of(effects=effects, kind=FetchFeed) == [
         FetchFeed(feed=BUSES),
-        fetch,
+        *fetches,
     ]
 
 
@@ -580,8 +595,15 @@ def test_stop_view_never_polls_positions() -> None:
 
 def test_map_polls_positions_for_a_ferry_pin() -> None:
     """A ferry pin has no trip feed, yet the Map polls ferry positions."""
-    state, _ = step(loaded(state=fresh(), mode=Mode.FERRY), PRESS)
+    pin = loaded(state=fresh(centre=CENTRE), mode=Mode.FERRY)
+    state, _ = step(pin, PRESS)
     assert state.feeds == ()
+    ferry = ModesLoaded(
+        mpp=8,
+        box=area_box(centre=CENTRE, mpp=8),
+        modes=frozenset({Mode.FERRY}),
+    )
+    state, _ = step(state, ferry)
     fetch = FetchFeed(feed=FERRY_POSITIONS, kind=FeedKind.POSITIONS)
     for seconds in (30, 60, 90):
         now = START + timedelta(seconds=seconds)
@@ -589,13 +611,16 @@ def test_map_polls_positions_for_a_ferry_pin() -> None:
         assert effects_of(effects=effects, kind=FetchFeed) == [fetch]
 
 
-def test_empty_area_modes_fall_back_to_departure_modes() -> None:
-    """With no modes found in the area, the departures' modes are used."""
+def test_empty_area_modes_fall_back_to_every_mode() -> None:
+    """With no modes found in the area, every mode's positions are polled."""
     state, _ = step(loaded(state=fresh(centre=CENTRE)), PRESS)
     box = area_box(centre=CENTRE, mpp=8)
     empty = ModesLoaded(mpp=8, box=box, modes=frozenset())
     state, _ = step(state, empty)
-    assert needed_feeds(state=state) == (BUSES, BUS_POSITIONS)
+    assert needed_feeds(state=state) == (
+        BUSES,
+        *position_feeds(modes=ALL_POSITION_MODES),
+    )
     ferry = ModesLoaded(mpp=8, box=box, modes=frozenset({Mode.FERRY}))
     state, _ = step(state, ferry)
     assert needed_feeds(state=state) == (BUSES, FERRY_POSITIONS)
@@ -709,8 +734,9 @@ def test_map_sidebar_starts_at_the_next_departure() -> None:
 def test_positions_are_not_fetched_twice_within_a_poll() -> None:
     """The first fetch on entering the Map starts that feed's 30 s clock."""
     state, effects = step(loaded(state=fresh(), mode=Mode.FERRY), PRESS)
-    fetch = FetchFeed(feed=FERRY_POSITIONS, kind=FeedKind.POSITIONS)
-    assert effects_of(effects=effects, kind=FetchFeed) == [fetch]
+    assert effects_of(effects=effects, kind=FetchFeed) == (
+        every_position_fetch()
+    )
     _, effects = step(state, Tick(now=START + timedelta(seconds=1)))
     assert not effects_of(effects=effects, kind=FetchFeed)
     state, _ = step(loaded(state=fresh()), Tick(now=START))
@@ -750,13 +776,20 @@ def test_returning_to_the_map_fetches_at_once() -> None:
     state = left_for_stop(state=state)
     state, _ = step(state, Tick(now=START + timedelta(seconds=151)))
     _, effects = step(state, PRESS)
-    fetch = FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS)
-    assert effects_of(effects=effects, kind=FetchFeed) == [fetch]
+    assert effects_of(effects=effects, kind=FetchFeed) == (
+        every_position_fetch()
+    )
 
 
 def test_map_draws_only_the_feeds_it_polls() -> None:
     """A stored download from a feed the Map doesn't poll isn't drawn."""
     state, _ = step(loaded(state=fresh(centre=CENTRE)), PRESS)
+    buses_only = ModesLoaded(
+        mpp=8,
+        box=area_box(centre=CENTRE, mpp=8),
+        modes=frozenset({Mode.BUS}),
+    )
+    state, _ = step(state, buses_only)
     boat = vehicle(timestamp=int(START.timestamp()), point=CENTRE)
     positions = snapshot(fetched_at=START, vehicles=(boat,))
     event = PositionsFetched(feed=FERRY_POSITIONS, snapshot=positions)

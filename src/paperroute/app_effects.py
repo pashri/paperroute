@@ -571,6 +571,10 @@ def map_data(
             )
         case LoadModes(mpp=mpp, box=box):
             modes = timetable.modes_near(box=box)
+            logger.info(
+                'modes near',
+                extra={'mpp': mpp, 'modes': sorted(modes)},
+            )
             return ModesLoaded(mpp=mpp, box=box, modes=modes)
 
 

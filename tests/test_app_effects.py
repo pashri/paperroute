@@ -14,6 +14,7 @@ from paperroute.adapters.tiles_db import NullTiles
 from paperroute.app import MapRenderer, run, ticker
 from paperroute.app_effects import VersionWatch
 from paperroute.core.chooser import Column, Level
+from paperroute.core.map_state import area_box
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
@@ -25,8 +26,10 @@ from paperroute.core.messages import (
     LoadChooserDepartures,
     LoadColumn,
     LoadLine,
+    LoadModes,
     LoadStrip,
     MatchPlaces,
+    ModesLoaded,
     PlacesFailed,
     PlacesMatched,
     Render,
@@ -219,6 +222,21 @@ async def test_load_strip_without_runs_posts_no_reach() -> None:
     load = LoadStrip(key=STRIP_KEY, origin=place('C'), timetable='v1')
     posted = await posted_by(ports=ports_of(), effects=[load])
     assert posted == [StripLoaded(key=STRIP_KEY, reach=None, timetable='v1')]
+
+
+async def test_modes_load_logged(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Each LoadModes logs the modes it found."""
+    box = area_box(centre=STOP_POINT, mpp=8)
+    with caplog.at_level(logging.INFO):
+        posted = await posted_by(
+            ports=ports_of(), effects=[LoadModes(mpp=8, box=box)],
+        )
+    assert posted == [ModesLoaded(mpp=8, box=box, modes=frozenset())]
+    [record] = [r for r in caplog.records if r.message == 'modes near']
+    assert record.__dict__['mpp'] == 8
+    assert record.__dict__['modes'] == []
 
 
 async def test_load_strip_failure_posts_strip_failed() -> None:

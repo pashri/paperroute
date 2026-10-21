@@ -25,6 +25,7 @@ POSITION_FEEDS: Final[dict[Mode, tuple[str, ...]]] = {
         'v1/gtfs/vehiclepos/lightrail/newcastle',
     ),
 }
+ALL_POSITION_MODES: Final[frozenset[Mode]] = frozenset(POSITION_FEEDS)
 
 
 class FeedKind(StrEnum):

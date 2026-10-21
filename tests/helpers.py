@@ -66,7 +66,7 @@ def old_schema(*, path: Path) -> None:
     """
     tables = (
         'runs', 'run_stops', 'run_calls', 'trip_runs', 'trip_next',
-        'route_patterns', 'chooser_routes', 'chooser_towards',
+        'trip_joins', 'route_patterns', 'chooser_routes', 'chooser_towards',
     )
     with closing(sqlite3.connect(path)) as conn:
         for table in tables:

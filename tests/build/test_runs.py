@@ -30,6 +30,7 @@ from paperroute.build.runs import (
     run_calls_of,
     trip_calls,
     trip_days,
+    trip_joins,
     trip_skips,
 )
 from paperroute.build.timetable import Window, build_timetable
@@ -384,7 +385,8 @@ def test_load_runs_subtracts_skipped_dates(
             "INSERT INTO trip_skip VALUES ('x1', '2026-10-06');"
             'DROP TABLE runs; DROP TABLE run_stops; DROP TABLE run_calls;'
             'DROP TABLE trip_runs;'
-            'DROP TABLE trip_next; DROP TABLE route_patterns;',
+            'DROP TABLE trip_next; DROP TABLE trip_joins;'
+            'DROP TABLE route_patterns;',
         )
         conn.executescript(RUN_SCHEMA)
         report = load_runs(conn=conn)
@@ -540,7 +542,8 @@ def clear_runs(*, conn: sqlite3.Connection, change: str) -> None:
         f'{change};'
         'DROP TABLE runs; DROP TABLE run_stops; DROP TABLE run_calls;'
         'DROP TABLE trip_runs;'
-        'DROP TABLE trip_next; DROP TABLE route_patterns;',
+        'DROP TABLE trip_next; DROP TABLE trip_joins;'
+        'DROP TABLE route_patterns;',
     )
     conn.executescript(RUN_SCHEMA)
 
@@ -618,7 +621,8 @@ def test_runs_skip_non_service(network_db: Path, tmp_path: Path) -> None:
             "UPDATE trips SET service = 0 WHERE trip_id IN ('cc1', 'cc2');"
             'DROP TABLE runs; DROP TABLE run_stops; DROP TABLE run_calls;'
             'DROP TABLE trip_runs;'
-            'DROP TABLE trip_next; DROP TABLE route_patterns;',
+            'DROP TABLE trip_next; DROP TABLE trip_joins;'
+            'DROP TABLE route_patterns;',
         )
         conn.executescript(RUN_SCHEMA)
         load_runs(conn=conn)
@@ -640,3 +644,46 @@ def test_runs_skip_non_service(network_db: Path, tmp_path: Path) -> None:
             'SELECT COUNT(*) FROM run_calls '
             'WHERE run_id NOT IN (SELECT run_id FROM runs)',
         ).fetchall() == [(0,)]
+
+
+def joins_of(*, trips: list[TripCalls]) -> dict[str, str]:
+    """
+    Find trip joins with next trips found once.
+
+    Parameters
+    ----------
+    trips : list[TripCalls]
+        Trips.
+
+    Returns
+    -------
+    dict[str, str]
+        Trip ID to the trip its vehicle runs on as.
+    """
+    return dict(trip_joins(trips=trips, nexts=next_trips(trips=trips)))
+
+
+def test_trip_joins_rows() -> None:
+    """Rail joins any route, a bus only its own, never into service 0."""
+    t8 = hand_trip(trip_id='t8', route='T8', stations='A B C',
+                   first_dep=0, last_arr=100, block='r')
+    t2 = hand_trip(trip_id='t2', route='T2', stations='C D',
+                   first_dep=150, last_arr=200, block='r')
+    bus = hand_trip(trip_id='b1', route='400', stations='P Q',
+                    first_dep=0, last_arr=100)
+    same = hand_trip(trip_id='b2', route='400', stations='Q P',
+                     first_dep=150, last_arr=200)
+    other = hand_trip(trip_id='b3', route='401', stations='Q P',
+                      first_dep=150, last_arr=200)
+    empty = dataclasses.replace(t2, revenue=False)
+    assert joins_of(trips=[t8, t2]) == {'t8': 't2'}
+    assert joins_of(trips=[bus, same]) == {'b1': 'b2'}
+    assert not joins_of(trips=[bus, other])
+    assert not joins_of(trips=[t8, empty])
+
+
+def test_load_runs_stores_trip_joins(network: sqlite3.Connection) -> None:
+    """x1 runs on as x2, and the 809 as the 811 is not a join."""
+    rows = set(network.execute('SELECT trip_id, next_trip FROM trip_joins'))
+    assert ('x1', 'x2') in rows
+    assert ('v1', 'v2') not in rows

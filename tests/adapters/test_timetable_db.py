@@ -46,7 +46,13 @@ from tests.build.feeds import (
 )
 from tests.build.network_feed import network_feed
 from tests.core.factories import pin_of, place
-from tests.helpers import old_schema, schema_four, schema_three, write_feed
+from tests.helpers import (
+    old_schema,
+    schema_five,
+    schema_four,
+    schema_three,
+    write_feed,
+)
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 MONDAY: Final[date] = date(2026, 10, 19)
@@ -1758,3 +1764,46 @@ def test_departures_on_schema_four_file(tmp_path: Path) -> None:
                 trip
                 for trip, _ in p_departures(repo=old, destination=destination)
             ] == ['empty', 'revenue']
+
+
+def e2_to_w1(*, repo: SqliteTimetableRepository) -> list[tuple[str, bool]]:
+    """
+    The network's departures from E2 to W1 on 6 October, 7 to 9 am.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Repository to query.
+
+    Returns
+    -------
+    list[tuple[str, bool]]
+        Trip ID and whether it carries on into another trip, in order.
+    """
+    found = repo.departures(
+        pin=pin_of('E2', 'W1'),
+        start=at(hour=7, minute=0, day=6),
+        end=at(hour=8, minute=59, day=6),
+    )
+    return [(d.trip_id, d.facts.onto is not None) for d in found]
+
+
+def test_departures_add_carry_ons(
+    network: SqliteTimetableRepository,
+) -> None:
+    """x1 reaches W1 only by running on as x2."""
+    assert ('x1', True) in e2_to_w1(repo=network)
+
+
+def test_departures_without_trip_joins(
+    network_db: Path, tmp_path: Path,
+) -> None:
+    """A schema-5 file lists only direct trips, without an error."""
+    copy = tmp_path / 'timetable.db'
+    shutil.copy(network_db, copy)
+    schema_five(path=copy)
+    with closing(SqliteTimetableRepository(path=copy)) as repo:
+        found = e2_to_w1(repo=repo)
+    assert found
+    assert all(not onto for _, onto in found)
+    assert 'x1' not in [trip for trip, _ in found]

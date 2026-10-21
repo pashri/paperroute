@@ -9,7 +9,8 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.adapters.departure_rows import to_departure
+from paperroute.adapters.carry_on_rows import CARRY_ONS, carry_on_departure
+from paperroute.adapters.departure_rows import STILL_AT_FROM, to_departure
 from paperroute.adapters.sqlite_ro import (
     Identity,
     ReadOnlyDatabase,
@@ -53,7 +54,9 @@ SELECT
   (SELECT COUNT(*) FROM pragma_table_info('trip_next')
    WHERE name = 'next_trip'),
   (SELECT COUNT(*) FROM pragma_table_info('trips')
-   WHERE name = 'service')
+   WHERE name = 'service'),
+  (SELECT COUNT(*) FROM sqlite_master
+   WHERE type = 'table' AND name = 'trip_joins')
 """
 NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, n.next_trip'
 OLD_NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, NULL'
@@ -118,16 +121,6 @@ MODES_NEAR: Final[str] = """
 SELECT DISTINCT mode FROM shapes
 WHERE west <= :east AND east >= :west
   AND south <= :north AND north >= :south
-"""
-STILL_AT_FROM: Final[str] = """
-  AND NOT EXISTS (SELECT 1 FROM stop_times n
-                  WHERE n.trip_id = o.trip_id AND n.pickup <> 1
-                    AND n.seq = (SELECT MIN(q.seq) FROM stop_times q
-                                 WHERE q.trip_id = o.trip_id
-                                   AND q.seq > o.seq)
-                    AND n.stop_id IN (SELECT stop_id FROM stops
-                                      WHERE stop_id = :origin
-                                        OR parent_station = :origin))
 """
 DEPARTURES: Final[str] = """
 SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
@@ -197,6 +190,8 @@ class Features:
         Whether trip_next has the next_trip column.
     service : bool
         Whether trips has the service column.
+    joins : bool
+        Whether the trip_joins table exists.
     """
 
     shape_column: bool = False
@@ -204,6 +199,7 @@ class Features:
     carry_ons: bool = False
     next_trips: bool = False
     service: bool = False
+    joins: bool = False
 
     @property
     def next_columns(self) -> str:
@@ -345,7 +341,7 @@ class SqliteTimetableRepository:
         self.fetch(sql='SELECT 1', params=())
         if known is None or known[0] != self.identity:
             rows = self.fetch(sql=SCHEMA_CHECK, params=())
-            found = rows[0] if rows else (0, 0, 0, 0, 0)
+            found = rows[0] if rows else (0, 0, 0, 0, 0, 0)
             known = (
                 self.identity,
                 Features(
@@ -354,6 +350,7 @@ class SqliteTimetableRepository:
                     carry_ons=bool(found[2]),
                     next_trips=bool(found[3]),
                     service=bool(found[4]),
+                    joins=bool(found[5]),
                 ),
             )
             self.schema = known
@@ -840,10 +837,19 @@ class SqliteTimetableRepository:
         Returns
         -------
         list[Departure]
-            Unsorted departures, leaving out empty-running trips.
+            Unsorted departures, leaving out empty-running trips. With
+            a Destination, trips that reach it only by running on as
+            another trip are added (see CARRY_ONS).
         """
         features = self.features()
         sql = DEPARTURES if ends[1] is not None else WHOLE_STOP
+        params: dict[str, object] = {
+            'day': day.isoformat(),
+            'origin': ends[0],
+            'dest': ends[1],
+            'lo': service_seconds(day=day, moment=start),
+            'hi': service_seconds(day=day, moment=end),
+        }
         rows = self.fetch(
             sql=sql.format(
                 shape=self.shape_column(),
@@ -851,18 +857,24 @@ class SqliteTimetableRepository:
                 next_join=NEXT_JOIN if features.carry_ons else '',
                 service=self.service_filter(),
             ),
-            params={
-                'day': day.isoformat(),
-                'origin': ends[0],
-                'dest': ends[1],
-                'lo': service_seconds(day=day, moment=start),
-                'hi': service_seconds(day=day, moment=end),
-            },
+            params=params,
         )
+        found = [to_departure(row=row, day=day) for row in rows]
+        if ends[1] is not None and features.joins:
+            found.extend(
+                carry_on_departure(row=row, day=day)
+                for row in self.fetch(
+                    sql=CARRY_ONS.format(
+                        shape=self.shape_column(),
+                        service=self.service_filter(),
+                    ),
+                    params=params,
+                )
+            )
         return [
-            to_departure(row=row, day=day)
-            for row in rows
-            if row[4] not in HIDDEN_HEADSIGNS
+            departure
+            for departure in found
+            if departure.headsign not in HIDDEN_HEADSIGNS
         ]
 
     def close(self) -> None:

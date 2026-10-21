@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 from paperroute.core.live import resolve
-from paperroute.core.model import SYDNEY
+from paperroute.core.model import SYDNEY, CarryOn, TripFacts
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 from tests.core.factories import START, departure
 
@@ -296,3 +296,20 @@ def test_resolve_snapshot_age_counts_real_seconds() -> None:
         now=now,
     )
     assert not live.live
+
+
+def test_carry_on_arrival_follows_boarded_delay() -> None:
+    """The boarded trip's delay at its last stop moves the arrival."""
+    onto = replace(
+        DEP, facts=TripFacts(onto=CarryOn(route='T2', headsign='C')),
+    )
+    late = resolve(
+        departure=onto,
+        snapshot=snapshot(updates=(update(seq=20, arr=180),)),
+        now=START,
+    )
+    assert late.arrives == onto.arrives + timedelta(minutes=3)
+    cancelled = resolve(
+        departure=onto, snapshot=snapshot(cancelled=True), now=START,
+    )
+    assert cancelled.cancelled

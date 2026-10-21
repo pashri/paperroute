@@ -1,6 +1,7 @@
 """Turn timetable departure rows into Departures."""
 
 from datetime import date
+from typing import Final
 
 from paperroute.core.model import (
     CarryOn,
@@ -10,6 +11,17 @@ from paperroute.core.model import (
     mode_for,
     service_time,
 )
+
+STILL_AT_FROM: Final[str] = """
+  AND NOT EXISTS (SELECT 1 FROM stop_times n
+                  WHERE n.trip_id = o.trip_id AND n.pickup <> 1
+                    AND n.seq = (SELECT MIN(q.seq) FROM stop_times q
+                                 WHERE q.trip_id = o.trip_id
+                                   AND q.seq > o.seq)
+                    AND n.stop_id IN (SELECT stop_id FROM stops
+                                      WHERE stop_id = :origin
+                                        OR parent_station = :origin))
+"""
 
 
 def to_departure(*, row: tuple[object, ...], day: date) -> Departure:

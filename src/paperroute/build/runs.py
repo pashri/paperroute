@@ -44,6 +44,8 @@ CREATE TABLE trip_runs (trip_id TEXT PRIMARY KEY, run_id INTEGER NOT NULL)
   WITHOUT ROWID;
 CREATE TABLE trip_next (trip_id TEXT PRIMARY KEY, route TEXT NOT NULL,
   headsign TEXT NOT NULL, next_trip TEXT NOT NULL) WITHOUT ROWID;
+CREATE TABLE trip_joins (trip_id TEXT PRIMARY KEY, next_trip TEXT NOT NULL)
+  WITHOUT ROWID;
 CREATE TABLE route_patterns (route_id TEXT NOT NULL, headsign TEXT NOT NULL,
   stations TEXT NOT NULL, trips INTEGER NOT NULL);
 """
@@ -597,6 +599,32 @@ def carry_ons(
     }
 
 
+def trip_joins(
+    *, trips: Iterable[TripCalls], nexts: dict[str, TripCalls],
+) -> Iterator[tuple[str, str]]:
+    """
+    Find the shown trips whose vehicle runs on as another shown trip.
+
+    Parameters
+    ----------
+    trips : Iterable[TripCalls]
+        Trips, hidden ones included.
+    nexts : dict[str, TripCalls]
+        Trip ID to its next trip on the block, from next_trips.
+
+    Yields
+    ------
+    tuple[str, str]
+        Trip ID and the next trip's ID, where runs_on joins them.
+    """
+    for trip in trips:
+        after = nexts.get(trip.trip_id)
+        if trip.shown and after is not None and runs_on(
+            current=trip, after=after, joined={trip.trip_id},
+        ):
+            yield trip.trip_id, after.trip_id
+
+
 def trip_days(*, conn: sqlite3.Connection) -> dict[str, int]:
     """
     Count the dates each service runs on in the window.
@@ -843,7 +871,7 @@ def load_block_runs(
     *, conn: sqlite3.Connection, table: RunTable, blocks: list[TripCalls],
 ) -> None:
     """
-    Chain block trips into runs and store trip_runs and trip_next rows.
+    Chain block trips into runs; store trip_runs, trip_next, trip_joins.
 
     Parameters
     ----------
@@ -856,6 +884,8 @@ def load_block_runs(
     """
     nexts = next_trips(trips=blocks)
     tags = carry_ons(trips=blocks, nexts=nexts)
+    insert_many(conn=conn, sql='INSERT INTO trip_joins VALUES (?, ?)',
+                rows=trip_joins(trips=blocks, nexts=nexts))
     insert_many(conn=conn, sql='INSERT INTO trip_runs VALUES (?, ?)',
                 rows=block_trip_runs(trips=blocks, nexts=nexts, table=table))
     blocks.clear()

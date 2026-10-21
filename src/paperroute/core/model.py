@@ -307,10 +307,14 @@ class TripFacts:
         Kind of route, or None when not known.
     then : CarryOn | None
         The service the vehicle runs next, or None when not known.
+    onto : CarryOn | None
+        The trip the vehicle becomes before reaching the Destination,
+        when the boarded trip doesn't reach it itself; None otherwise.
     """
 
     kind: RouteKind | None = None
     then: CarryOn | None = None
+    onto: CarryOn | None = None
 
 
 NO_FACTS: Final[TripFacts] = TripFacts()

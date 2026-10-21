@@ -116,9 +116,11 @@ ORDER BY t.trip_id, sv.date
 """
 PATTERN_STOPS: Final[str] = """
 SELECT st.trip_id, st.arr, st.dep, s.lon, s.lat,
-  COALESCE(NULLIF(s.parent_station, ''), s.stop_id)
+  COALESCE(NULLIF(s.parent_station, ''), s.stop_id),
+  COALESCE(p.name, s.name)
 FROM stop_times st
 JOIN stops s ON s.stop_id = st.stop_id
+LEFT JOIN stops p ON p.stop_id = NULLIF(s.parent_station, '')
 WHERE st.trip_id IN ({marks})
 ORDER BY st.trip_id, st.seq
 """
@@ -705,7 +707,7 @@ class SqliteTimetableRepository:
             Trip ID to its calls.
         """
         calls: dict[str, list[PatternStop]] = {}
-        for trip, arr, dep, lon, lat, station in self.fetch_in(
+        for trip, arr, dep, lon, lat, station, name in self.fetch_in(
             sql=PATTERN_STOPS, ids=trip_ids
         ):
             calls.setdefault(str(trip), []).append(
@@ -714,6 +716,7 @@ class SqliteTimetableRepository:
                     departs=int(str(dep)),
                     point=to_point(lon=lon, lat=lat),
                     station=str(station),
+                    name=str(name),
                 )
             )
         return calls

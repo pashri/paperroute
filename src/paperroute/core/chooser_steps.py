@@ -59,6 +59,7 @@ from paperroute.core.stop_view import (
     StopView,
     build_stop_view,
 )
+from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import (
     EMPTY_STOP_VIEW,
     NEEDS_UPDATE,
@@ -68,7 +69,7 @@ from paperroute.core.strip_model import (
     StripView,
 )
 from paperroute.core.strip_state import folded_reach, picking_to
-from paperroute.core.strip_view import build_strip_view, line_reach, origin_of
+from paperroute.core.strip_view import build_strip_view, line_reach
 
 LINE_FAILED: Final[str] = "Can't load the line"
 DEPARTURES_FAILED: Final[str] = "Can't load departures"

@@ -7,8 +7,8 @@ from typing import Final
 
 from paperroute.core.model import Departure, Pin, RouteKind, StopPlace
 from paperroute.core.reach import Reach, RowKind, StripKey
+from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import ALL_TAG
-from paperroute.core.strip_view import origin_of
 
 
 class Level(StrEnum):

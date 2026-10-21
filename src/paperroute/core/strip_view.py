@@ -15,6 +15,7 @@ from paperroute.core.strip_badges import (
     Spot,
     level_with,
 )
+from paperroute.core.strip_follow import followed_text, origin_of
 from paperroute.core.strip_model import (
     ALL_TAG,
     BANNER_ROWS,
@@ -87,30 +88,6 @@ def line_reach(*, line: Sequence[StopPlace]) -> Reach:
         ),
         stations=len(places),
         station_of={},
-    )
-
-
-def origin_of(*, reach: Reach) -> int | None:
-    """
-    Find the From row.
-
-    Parameters
-    ----------
-    reach : Reach
-        The reach.
-
-    Returns
-    -------
-    int | None
-        Its index, or None for a reach without one.
-    """
-    return next(
-        (
-            index
-            for index, row in enumerate(reach.rows)
-            if row.kind is RowKind.ORIGIN
-        ),
-        None,
     )
 
 
@@ -218,8 +195,9 @@ def row_times(
         when there is one, on the strip or not), then the first arrival
         on the ridden rows past the From, or on every reached row when
         nothing is ridden. Rows past the Destination have the times of
-        the vehicle that reaches it first. Approach rows have the times
-        the From's next departure calls there.
+        the vehicle that reaches it first; rows below the From laid out
+        along a followed train have that train's times instead. Approach
+        rows have the times the From's next departure calls there.
     """
     if origin is None:
         return {}
@@ -242,6 +220,9 @@ def row_times(
     times.update(onward_text(
         trips=trips, reach=reach, origin=station, target=target,
     ))
+    if reach.trip is not None:
+        times = {i: text for i, text in times.items() if i < origin}
+        times.update(followed_text(trips=trips, reach=reach))
     leaves = next_departure(
         trips=trips,
         origin=station,

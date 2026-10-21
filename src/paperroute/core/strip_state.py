@@ -5,7 +5,7 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute.core.chooser import ChooserState, Stage
-from paperroute.core.live import LiveDeparture
+from paperroute.core.live import LiveDeparture, resolved
 from paperroute.core.messages import (
     Effect,
     LoadStrip,
@@ -20,8 +20,10 @@ from paperroute.core.saved import LiveView
 from paperroute.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_folds import folded
+from paperroute.core.strip_follow import followed_reach
 from paperroute.core.strip_model import NEEDS_UPDATE, StripInputs
 from paperroute.core.strip_times import (
+    TripInputs,
     joined_ids,
     strip_trips,
     trip_ids,
@@ -307,13 +309,35 @@ def shown_reach(*, state: State) -> Reach | None:
     Returns
     -------
     Reach | None
-        The reach with its folds, or None while it is not built or the
-        timetable has none.
+        The reach with its folds and its rows below the From along the
+        train it follows, or None while it is not built or the timetable
+        has none.
     """
-    return folded_reach(
-        state=state,
-        key=strip_key(pin=shown(state=state)),
-        destination=destination_id(state=state),
+    key = strip_key(pin=shown(state=state))
+    destination = destination_id(state=state)
+    reach = folded_reach(state=state, key=key, destination=destination)
+    if reach is None:
+        return None
+    trips = TripInputs(
+        departures=resolved(
+            departures=state.board.departures,
+            snapshots=state.snapshots,
+            now=state.now,
+        ),
+        key=key,
+        patterns=state.map.patterns,
+        positions={},
+        now=state.now,
+        station_of=reach.station_of,
+    )
+    return followed_reach(
+        reach=reach,
+        trips=trips,
+        target=(
+            None
+            if destination is None
+            else reach.station_of.get(destination, destination)
+        ),
     )
 
 

@@ -116,6 +116,7 @@ from paperroute.core.stop_view import (
     VISIBLE_ROWS,
     StopView,
 )
+from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import (
     PANE_ROWS,
     STRIP_ROWS,
@@ -130,7 +131,6 @@ from paperroute.core.strip_state import (
     shown_reach,
     strip_key,
 )
-from paperroute.core.strip_view import origin_of
 from paperroute.core.tiles import CITY, ZOOMS
 from tests.core.chooser_walks import (
     BUS_606,

@@ -247,11 +247,15 @@ class Reach:
         Rows that are neither the From, an approach nor an exit.
     station_of : Mapping[str, str]
         The station ID of each stop under a station on the strip.
+    trip : str | None
+        The trip whose calls are the rows below the From, in calling
+        order; None when they are the strip's fixed line.
     """
 
     rows: tuple[ReachRow, ...]
     stations: int
     station_of: Mapping[str, str]
+    trip: str | None = None
 
 
 def approach_rows(*, tails: Sequence[RunTail], placed: set[str]

@@ -9,6 +9,7 @@ from paperroute.core.places import shown
 from paperroute.core.reach import Reach, RowKind
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import FoldContext, State
+from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import PANE_FROM_ROW, PANE_ROWS
 from paperroute.core.strip_state import (
     STRIP_VIEWS,
@@ -17,7 +18,7 @@ from paperroute.core.strip_state import (
     shown_reach,
     strip_key,
 )
-from paperroute.core.strip_view import first_row, home_of, origin_of, window_of
+from paperroute.core.strip_view import first_row, home_of, window_of
 
 type Opener = Callable[[State, bool], State | None]
 

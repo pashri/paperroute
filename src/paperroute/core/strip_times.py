@@ -14,7 +14,7 @@ from paperroute.core.model import (
     service_time,
     shifted,
 )
-from paperroute.core.patterns import TripPattern
+from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.reach import Reach, RowKind, StripKey, every_route
 from paperroute.core.stop_view import clock_text, not_departed
@@ -340,14 +340,14 @@ def from_call(*, departure: Departure, pattern: TripPattern, origin: str,
     return next(iter(timed or at_from), None)
 
 
-def arrivals_after(
+def stops_after(
     *,
     item: LiveDeparture,
     trips: TripInputs,
     origin: str,
-) -> Iterator[tuple[str, datetime]]:
+) -> Iterator[tuple[str, PatternStop, datetime]]:
     """
-    List the stations a departure calls at after the From, with times.
+    List the calls a departure makes after the From, with times.
 
     The vehicle is followed on through the trips it joins onto. A joined
     trip's first call is where the vehicle already is, so it is skipped.
@@ -363,9 +363,9 @@ def arrivals_after(
 
     Yields
     ------
-    tuple[str, datetime]
-        Each later call's station and arrival, shifted by the delay;
-        none when the trip's pattern isn't loaded.
+    tuple[str, PatternStop, datetime]
+        Each later call's strip station, the call, and its arrival
+        shifted by the delay; none when the trip's pattern isn't loaded.
     """
     departure = item.departure
     stations = trips.station_of
@@ -386,8 +386,39 @@ def arrivals_after(
         arrives = service_time(day=departure.service_day, seconds=stop.arrives)
         yield (
             stations.get(stop.station, stop.station),
+            stop,
             shifted(moment=arrives, seconds=delay),
         )
+
+
+def arrivals_after(
+    *,
+    item: LiveDeparture,
+    trips: TripInputs,
+    origin: str,
+) -> Iterator[tuple[str, datetime]]:
+    """
+    List the stations a departure calls at after the From, with times.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+    trips : TripInputs
+        The strip's loaded patterns and station map.
+    origin : str
+        The From station ID.
+
+    Yields
+    ------
+    tuple[str, datetime]
+        Each later call's station and arrival, as `stops_after` gives
+        them.
+    """
+    for station, _, moment in stops_after(
+        item=item, trips=trips, origin=origin,
+    ):
+        yield station, moment
 
 
 def up_to(

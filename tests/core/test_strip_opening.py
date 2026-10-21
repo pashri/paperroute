@@ -28,13 +28,9 @@ from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import initial_state
 from paperroute.core.state_model import State
 from paperroute.core.strip_folds import FOLD_MIN, folded
+from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import OPEN_TAG, StripMapView, StripView
-from paperroute.core.strip_view import (
-    build_strip_view,
-    home_of,
-    origin_of,
-    window_of,
-)
+from paperroute.core.strip_view import build_strip_view, home_of, window_of
 from tests.core.chooser_walks import CHOSEN_KEY, DOWN, TO_STAGE, at_to
 from tests.core.factories import (
     START,

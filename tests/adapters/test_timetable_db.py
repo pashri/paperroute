@@ -662,6 +662,23 @@ def test_patterns_carry_stations(
     assert stations <= parents
 
 
+def test_patterns_name_each_calls_station(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """Each call carries its station's name, not its platform's."""
+    trips = [d.trip_id for d in slice_departures(repo=slice_repo)]
+    found = slice_repo.patterns(trip_ids=trips, around=AROUND)
+    names = {
+        str(row[0]): str(row[1])
+        for row in slice_repo.fetch(
+            sql='SELECT stop_id, name FROM stops', params=(),
+        )
+    }
+    stops = [stop for p in found.values() for stop in p.stops]
+    assert stops
+    assert all(stop.name == names[stop.station] for stop in stops)
+
+
 def test_unknown_trip_pattern_is_absent(
     slice_repo: SqliteTimetableRepository,
 ) -> None:

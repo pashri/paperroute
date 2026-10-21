@@ -29,12 +29,15 @@ class PatternStop:
         Position in metres, or None when the stop has no coordinates.
     station : str
         The stop's parent station, or the stop itself when it has none.
+    name : str
+        That station's name; empty when not known.
     """
 
     arrives: int
     departs: int
     point: Point | None
     station: str = ''
+    name: str = ''
 
 
 @dataclass(frozen=True)

@@ -164,12 +164,9 @@ function wirePress(button) {
     clearTimeout(holdTimer);
     holdTimer = null;
   };
-  const abandon = () => {
+  const cancel = () => {
     stopHold();
     held = false;
-  };
-  const cancel = () => {
-    abandon();
     clearTimeout(clickTimer);
     clickTimer = null;
   };
@@ -184,8 +181,10 @@ function wirePress(button) {
     }, HOLD_MS);
   };
   const onClick = (event) => {
-    if (held) held = false;
-    else if (event.detail === 0) sendKnob(knob, 'press');
+    if (event.detail === 0) {
+      held = false;
+      sendKnob(knob, 'press');
+    } else if (held) held = false;
     else if (clickTimer !== null) {
       clearTimeout(clickTimer);
       clickTimer = null;
@@ -199,8 +198,8 @@ function wirePress(button) {
   };
   button.addEventListener('pointerdown', onDown);
   button.addEventListener('pointerup', stopHold);
-  button.addEventListener('pointercancel', abandon);
-  button.addEventListener('pointerleave', abandon);
+  button.addEventListener('pointercancel', stopHold);
+  button.addEventListener('pointerleave', stopHold);
   button.addEventListener('contextmenu', (e) => e.preventDefault());
   button.addEventListener('click', onClick);
 }

@@ -88,6 +88,8 @@ results.delays = delays;
 down(); fire(); pointer.pointerleave();
 click(0);
 results.leave = sent.splice(0);
+down(); fire(); up(); pointer.pointerleave(); click(1);
+results.touchLong = sent.splice(0);
 down(); up(); click(1);
 listeners.blur();
 fire();
@@ -119,5 +121,5 @@ def test_page_hold_timer_in_node(tmp_path: Path) -> None:
         '"rightClick":[],"buttonTap":[],"buttonTapTimed":["press"],'
         '"buttonDouble":["hold"],"buttonLong":["hold"],'
         '"keyboardClick":["press"],"keyboardTimers":0,"delays":[800],'
-        '"leave":["hold","press"],"blurClick":[]}'
+        '"leave":["hold","press"],"touchLong":["hold"],"blurClick":[]}'
     )

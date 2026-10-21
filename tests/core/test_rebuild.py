@@ -130,8 +130,8 @@ def test_no_second_rebuild_while_running() -> None:
     """While a rebuild runs, neither TimetableSeen nor Ticks start another."""
     state, _ = step(pinned(), OLD)
     ticks = [
-        Tick(now=START + timedelta(hours=minute))
-        for minute in range(1, 11)
+        Tick(now=START + timedelta(hours=hour))
+        for hour in range(1, 11)
     ]
     _, effects = run_events(
         state=state,

@@ -3,12 +3,14 @@
 import asyncio
 import logging
 import os
+import signal
 import sys
 import time
 from pathlib import Path
 
 import pytest
 
+from paperroute.adapters import rebuild as rebuild_module
 from paperroute.adapters.rebuild import (
     REBUILD_MIN_AVAILABLE,
     ChildRebuilder,
@@ -155,3 +157,44 @@ async def test_null_builder_refuses_and_says_so_once(
         await builder.stop()
     assert results == [False, False]
     assert len(caplog.records) == 1
+
+
+async def test_stop_kills_a_child_ignoring_sigterm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A child that ignores SIGTERM is killed after the wait."""
+    monkeypatch.setattr(rebuild_module, 'STOP_WAIT', 0.5)
+    rebuilder = child(
+        code=(
+            'import signal, sys, time;'
+            ' signal.signal(signal.SIGTERM, signal.SIG_IGN);'
+            ' print("ready", flush=True); time.sleep(60)'
+        ),
+    )
+    task = asyncio.create_task(rebuilder.rebuild())
+    while rebuilder.process is None:
+        await asyncio.sleep(0.01)
+    process = rebuilder.process
+    assert process.stdout is not None
+    await asyncio.sleep(0.5)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    await rebuilder.stop()
+    assert process.returncode == -signal.SIGKILL
+    assert gone(pid=process.pid)
+
+
+async def test_overlong_output_line_stops_the_child(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A line past the reader's limit fails the rebuild and ends the child."""
+    rebuilder = child(
+        code=(
+            'import sys, time; print("x" * 100000, flush=True);'
+            ' time.sleep(60)'
+        ),
+    )
+    with caplog.at_level(logging.ERROR):
+        assert not await rebuilder.rebuild()
+    assert rebuilder.process is None
+    assert 'reading the rebuild output failed' in caplog.messages

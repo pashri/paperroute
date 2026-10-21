@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 REBUILD_MIN_AVAILABLE: Final[int] = 200 * 1024 * 1024  # bytes
 STOP_WAIT: Final[float] = 10.0  # seconds
 CHILD_NICE: Final[int] = 19
-CHILD_OOM_SCORE: Final[str] = '1000'
+CHILD_OOM_SCORE: Final[bytes] = b'1000'
 MEMINFO: Final[Path] = Path('/proc/meminfo')
 OOM_SCORE_ADJ: Final[str] = '/proc/self/oom_score_adj'
 KIB: Final[int] = 1024
@@ -44,13 +44,22 @@ def mem_available(*, meminfo: Path = MEMINFO) -> int | None:
 
 
 def lower_priority() -> None:
-    """Run in the child before exec: lowest CPU priority, first to kill."""
+    """
+    Run in the child before exec: lowest CPU priority, first to kill.
+
+    It runs between fork and exec, so it makes only bare system calls.
+    """
     os.nice(CHILD_NICE)
     try:
-        with open(OOM_SCORE_ADJ, 'w', encoding='ascii') as score:
-            score.write(CHILD_OOM_SCORE)
+        score = os.open(OOM_SCORE_ADJ, os.O_WRONLY)
+    except OSError:
+        return
+    try:
+        os.write(score, CHILD_OOM_SCORE)
     except OSError:
         pass
+    finally:
+        os.close(score)
 
 
 def refresh_command(
@@ -176,7 +185,12 @@ class ChildRebuilder:
             env=self.env,
             preexec_fn=lower_priority,
         )
-        code = await self.relayed(process=self.process)
+        try:
+            code = await self.relayed(process=self.process)
+        except ValueError:
+            logger.exception('reading the rebuild output failed')
+            await self.stop()
+            code = -1
         self.process = None
         logger.info('timetable rebuild finished', extra={'code': code})
         return code == 0

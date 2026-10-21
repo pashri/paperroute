@@ -12,6 +12,7 @@ import pytest
 
 from paperroute.adapters.tiles_db import NullTiles
 from paperroute.app import MapRenderer, run, ticker
+from paperroute.app_effects import VersionWatch
 from paperroute.core.chooser import Column, Level
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
@@ -431,3 +432,35 @@ async def test_match_places_failure_posts_places_failed() -> None:
         effects=[MatchPlaces(places=(place('A'),), timetable='v1')],
     )
     assert posted == [PlacesFailed(timetable='v1')]
+
+
+@dataclass
+class SchemaTimetable(VersionedTimetable):
+    """A timetable whose schema can change under the same build."""
+
+    schema: str | None = '4'
+
+    def schema_version(self) -> str | None:
+        """
+        Name the current schema.
+
+        Returns
+        -------
+        str | None
+            The schema.
+        """
+        return self.schema
+
+
+async def test_version_watch_reports_schema() -> None:
+    """The schema rides on the event, and a schema change alone is seen."""
+    timetable = SchemaTimetable()
+    watch = VersionWatch(timetable=timetable)
+    first = await watch.check()
+    timetable.schema = '5'
+    second = await watch.check()
+    assert (first, second, await watch.check()) == (
+        TimetableSeen(version='v1', schema='4'),
+        TimetableSeen(version='v1', schema='5'),
+        None,
+    )

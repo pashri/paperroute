@@ -18,6 +18,12 @@ from paperroute.adapters.act_led import ActLed
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.network_db import SqliteNetworkRepository
+from paperroute.adapters.rebuild import (
+    ChildRebuilder,
+    NullBuilder,
+    refresh_command,
+    refresh_env,
+)
 from paperroute.adapters.state_file import DEFAULT_PATH as STATE_PATH
 from paperroute.adapters.state_file import JsonStateRepository
 from paperroute.adapters.systemd import SystemdNotifier
@@ -31,7 +37,12 @@ from paperroute.core.model import SYDNEY, Pin, StopPlace
 from paperroute.core.tiles import TileVariant
 from paperroute.logs import configure_logging
 from paperroute.observers import ObserverGroup, Timings
-from paperroute.ports import Clock, FeedsClient, TileRepository
+from paperroute.ports import (
+    Clock,
+    FeedsClient,
+    TileRepository,
+    TimetableBuilder,
+)
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor
@@ -173,6 +184,11 @@ def parse_args() -> argparse.Namespace:
     add_source_arguments(runner)
     add_tiles_arguments(runner)
     add_state_argument(runner)
+    runner.add_argument(
+        '--rebuild',
+        action='store_true',
+        help='rebuild an outdated timetable in the background',
+    )
     args = parser.parse_args()
     require_both_or_neither(args=args)
     return args
@@ -195,6 +211,31 @@ def sydney(*, moment: datetime) -> datetime:
     if moment.tzinfo is None:
         return moment.replace(tzinfo=SYDNEY)
     return moment.astimezone(SYDNEY)
+
+
+def builder_for(*, args: argparse.Namespace) -> TimetableBuilder:
+    """
+    Choose how an outdated timetable is rebuilt.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Returns
+    -------
+    TimetableBuilder
+        A refresh child with --rebuild; otherwise a builder that never
+        rebuilds.
+    """
+    if not args.rebuild:
+        return NullBuilder()
+    return ChildRebuilder(
+        command=refresh_command(
+            timetable=args.timetable, error_log=args.error_log,
+        ),
+        env=refresh_env(timetable=args.timetable),
+    )
 
 
 def feeds_client(*, choice: str) -> FeedsClient:
@@ -530,6 +571,7 @@ def tk_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
                 network=network,
                 states=JsonStateRepository(path=args.state),
                 tiles=tiles,
+                builder=builder_for(args=args),
             )
             asyncio.run(
                 show(
@@ -607,6 +649,7 @@ def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
             states=JsonStateRepository(path=args.state),
             observer=observer,
             tiles=tiles,
+            builder=builder_for(args=args),
         )
         serve_or_exit(args=args, ports=ports, display=display)
 

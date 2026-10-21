@@ -246,6 +246,17 @@ class BrokenTimetable:
         """
         return None
 
+    def schema_version(self) -> str | None:
+        """
+        Name no schema.
+
+        Returns
+        -------
+        str | None
+            Always None.
+        """
+        return None
+
     def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
         """
         Know no shapes.
@@ -389,3 +400,39 @@ class EmptyPlacedTimetable(PlacedTimetable):
             Nothing.
         """
         return []
+
+
+@dataclass
+class FakeBuilder:
+    """
+    A timetable builder that answers at once and counts its calls.
+
+    Attributes
+    ----------
+    result : bool
+        What each rebuild returns.
+    rebuilds : int
+        How many rebuilds were asked for.
+    stops : int
+        How many times it was stopped.
+    """
+
+    result: bool = True
+    rebuilds: int = 0
+    stops: int = 0
+
+    async def rebuild(self) -> bool:
+        """
+        Count the rebuild and give the set result.
+
+        Returns
+        -------
+        bool
+            `result`.
+        """
+        self.rebuilds += 1
+        return self.result
+
+    async def stop(self) -> None:
+        """Count the stop."""
+        self.stops += 1

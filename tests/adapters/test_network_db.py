@@ -30,7 +30,7 @@ from paperroute.core.strip_view import build_strip_view
 from paperroute.ports import NetworkRepository
 from tests.build.network_feed import network_feed, network_files
 from tests.core.factories import inputs_of
-from tests.helpers import old_schema, schema_three, write_feed
+from tests.helpers import old_schema, schema_four, schema_three, write_feed
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 TOWN_HALL: Final[str] = '200070'
@@ -573,6 +573,19 @@ def test_station_column_on_old_timetable_is_none(copy: Path) -> None:
         assert repo.choices(path=(*T1, (Level.STATION, 'W2'))) is None
         assert labels(column=repo.choices(path=())) == ['Bus', 'Train']
         assert repo.choices(path=(*bus, (Level.GROUP, '800s'))) is not None
+        assert repo.reach_input(
+            key=StripKey(station='C', kind=RouteKind.TRAIN, routes=()),
+            origin=place(stop_id='C'),
+        ) is not None
+
+
+def test_schema_four_file_serves_chooser_and_strip(copy: Path) -> None:
+    """A schema-4 file still answers the chooser's and strip's queries."""
+    schema_four(path=copy)
+    with closing(SqliteNetworkRepository(path=copy)) as repo:
+        assert labels(column=repo.choices(path=())) == ['Bus', 'Train']
+        assert repo.choices(path=T1) is not None
+        assert repo.towards_line(towards=1) is not None
         assert repo.reach_input(
             key=StripKey(station='C', kind=RouteKind.TRAIN, routes=()),
             origin=place(stop_id='C'),

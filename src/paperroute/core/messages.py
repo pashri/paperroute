@@ -131,6 +131,11 @@ class SaveState:
 
 
 @dataclass(frozen=True)
+class RebuildTimetable:
+    """Rebuild the timetable in the background."""
+
+
+@dataclass(frozen=True)
 class MatchPlaces:
     """Look some places up in the timetable, tagged with its version."""
 
@@ -151,6 +156,7 @@ Effect = (
     | Stop
     | SaveState
     | MatchPlaces
+    | RebuildTimetable
     | ChooserLoad
 )
 
@@ -226,9 +232,26 @@ class QuitRequested:
 
 @dataclass(frozen=True)
 class TimetableSeen:
-    """The timetable in use was checked; None when there is none."""
+    """
+    The timetable in use was checked; None when there is none.
+
+    Attributes
+    ----------
+    version : str | None
+        The build time.
+    schema : str | None
+        The file's schema version, or None when it records none.
+    """
 
     version: str | None
+    schema: str | None = None
+
+
+@dataclass(frozen=True)
+class TimetableRebuilt:
+    """A timetable rebuild finished; ok is True when it succeeded."""
+
+    ok: bool
 
 
 @dataclass(frozen=True)
@@ -448,6 +471,7 @@ Event = (
     | KnobHeld
     | QuitRequested
     | TimetableSeen
+    | TimetableRebuilt
     | PlacesMatched
     | PlacesFailed
     | StripLoaded

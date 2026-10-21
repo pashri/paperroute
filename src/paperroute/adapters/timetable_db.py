@@ -397,6 +397,21 @@ class SqliteTimetableRepository:
         )
         return str(rows[0][0]) if rows else None
 
+    def schema_version(self) -> str | None:
+        """
+        Say which schema the file is built to.
+
+        Returns
+        -------
+        str | None
+            The schema version, or None when the file doesn't record one.
+        """
+        rows = self.fetch(
+            sql='SELECT value FROM meta WHERE key = ?',
+            params=('schema_version',),
+        )
+        return str(rows[0][0]) if rows else None
+
     def stop(self, *, stop_id: str) -> StopPlace:
         """
         A stop or station with its position.

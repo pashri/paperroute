@@ -44,7 +44,9 @@ from paperroute.core.messages import (
     MapDataFailed,
     PositionsFetched,
     QuitRequested,
+    RebuildTimetable,
     Tick,
+    TimetableRebuilt,
     TimetableSeen,
 )
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
@@ -78,6 +80,7 @@ from tests.fakes import (
     STOP_POINT,
     BrokenTimetable,
     EmptyPlacedTimetable,
+    FakeBuilder,
     FakeNetwork,
     FixedClock,
     FrameRecorder,
@@ -1468,3 +1471,23 @@ async def test_queued_knob_turns_draw_one_frame() -> None:
             max_events=6,
         )
     assert len(display.frames) == 1
+
+
+async def test_app_performs_rebuild() -> None:
+    """A RebuildTimetable posts how it went; stopping the app stops it."""
+    builder = FakeBuilder(result=True)
+    ports = replace(ports_of(), builder=builder)
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    await perform(
+        ports=ports,
+        effect=RebuildTimetable(),
+        queue=queue,
+        tasks=tasks,
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    await asyncio.gather(*tasks)
+    assert queue.get_nowait() == TimetableRebuilt(ok=True)
+    await run(ports=ports, seed=PIN, tick_every=0.01, max_events=1)
+    assert (builder.rebuilds, builder.stops) == (1, 1)

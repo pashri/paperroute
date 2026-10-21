@@ -11,6 +11,7 @@ from typing import Any, Final
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute.adapters.rebuild import NullBuilder
 from paperroute.adapters.tfnsw import FeedError
 from paperroute.adapters.tiles_db import NullTiles
 from paperroute.app_effects import (
@@ -40,10 +41,12 @@ from paperroute.core.messages import (
     MapDataFailed,
     MapRequest,
     QuitRequested,
+    RebuildTimetable,
     Render,
     SaveState,
     Stop,
     Tick,
+    TimetableRebuilt,
 )
 from paperroute.core.model import Pin
 from paperroute.core.saved import seeded
@@ -62,6 +65,7 @@ from paperroute.ports import (
     Observer,
     StateRepository,
     TileRepository,
+    TimetableBuilder,
     TimetableRepository,
 )
 from paperroute.render.chooser import draw_chooser_view
@@ -91,6 +95,7 @@ class Ports:
     observer: Observer = field(default_factory=NullObserver)
     tiles: TileRepository = field(default_factory=NullTiles)
     measures: StopMeasures = field(default_factory=StopMeasures)
+    builder: TimetableBuilder = field(default_factory=NullBuilder)
 
 
 class MapRenderer:
@@ -391,7 +396,13 @@ async def render(*, ports: Ports, view: View, maps: MapRenderer) -> None:
 def background(
     *,
     ports: Ports,
-    effect: LoadDepartures | FetchFeed | MapRequest | WorkerEffect,
+    effect: (
+        LoadDepartures
+        | FetchFeed
+        | MapRequest
+        | RebuildTimetable
+        | WorkerEffect
+    ),
     queue: asyncio.Queue[Event],
 ) -> tuple[Coroutine[Any, Any, None], Event]:
     """
@@ -401,7 +412,8 @@ def background(
     ----------
     ports : Ports
         Adapters.
-    effect : LoadDepartures | FetchFeed | MapRequest | WorkerEffect
+    effect : LoadDepartures | FetchFeed | MapRequest | RebuildTimetable
+        | WorkerEffect
         Effect.
     queue : asyncio.Queue[Event]
         Event queue.
@@ -427,10 +439,28 @@ def background(
                 load_map(ports=ports, effect=effect, queue=queue),
                 MapDataFailed(request=effect),
             )
+        case RebuildTimetable():
+            failed_rebuild = TimetableRebuilt(ok=False)
+            return rebuild(ports=ports, queue=queue), failed_rebuild
     call, fallback = work_for(
         timetable=ports.timetable, network=ports.network, effect=effect
     )
     return worked(call=call, failed=fallback, queue=queue), fallback
+
+
+async def rebuild(*, ports: Ports, queue: asyncio.Queue[Event]) -> None:
+    """
+    Rebuild the timetable and post how it went.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    """
+    ok = await ports.builder.rebuild()
+    await queue.put(TimetableRebuilt(ok=ok))
 
 
 async def perform(
@@ -815,6 +845,7 @@ async def run(
         await draw_pending(ports=ports, outputs=outputs)
     finally:
         await stop(tasks={clock, *tasks})
+        await ports.builder.stop()
     return state
 
 

@@ -66,6 +66,16 @@ class TimetableRepository(Protocol):
             The build time, or None when there is none.
         """
 
+    def schema_version(self) -> str | None:
+        """
+        Say which schema the file is built to.
+
+        Returns
+        -------
+        str | None
+            The schema version, or None when the file records none.
+        """
+
     def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
         """
         Route shapes by ID.
@@ -267,6 +277,23 @@ class TileRepository(Protocol):
         str | None
             The build time, or None when there is no file.
         """
+
+
+class TimetableBuilder(Protocol):
+    """Rebuilds the timetable file in the background."""
+
+    async def rebuild(self) -> bool:
+        """
+        Rebuild the timetable and wait for it to finish.
+
+        Returns
+        -------
+        bool
+            True when the rebuild succeeded.
+        """
+
+    async def stop(self) -> None:
+        """End a rebuild still running."""
 
 
 class FeedsClient(Protocol):

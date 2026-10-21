@@ -59,6 +59,7 @@ from paperroute.core.messages import (
     StripFailed,
     StripLoaded,
     Tick,
+    TimetableRebuilt,
     TimetableSeen,
 )
 from paperroute.core.model import same_place
@@ -74,6 +75,7 @@ from paperroute.core.places import (
     shown_index,
     with_place,
 )
+from paperroute.core.rebuild import rebuild_effects, rebuilt, seen_schema
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state_model import (
     FEED_IDLE,
@@ -852,6 +854,51 @@ def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
     return replace(after, saving=saving), effects
 
 
+def with_rebuild(
+    *, result: tuple[State, tuple[Effect, ...]]
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Add a timetable rebuild to a handler's result when one is due.
+
+    Parameters
+    ----------
+    result : tuple[State, tuple[Effect, ...]]
+        The handler's state and effects.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        The state and effects, with a RebuildTimetable when due.
+    """
+    state, effects = result
+    state, rebuilds = rebuild_effects(state=state)
+    return state, (*effects, *rebuilds)
+
+
+def on_timetable_file(
+    *, state: State, event: TimetableSeen | TimetableRebuilt
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Note a timetable seen or a rebuild finished, rebuilding when due.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    event : TimetableSeen | TimetableRebuilt
+        What happened.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        New state and effects.
+    """
+    if isinstance(event, TimetableRebuilt):
+        return rebuilt(state=state, ok=event.ok), ()
+    seen = seen_schema(state=state, schema=event.schema)
+    return with_rebuild(result=on_timetable(state=seen, event=event))
+
+
 def dispatched(
     *, state: State, event: Event
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -875,7 +922,7 @@ def dispatched(
         return result
     match event:
         case Tick():
-            result = on_tick(state=state, event=event)
+            result = with_rebuild(result=on_tick(state=state, event=event))
         case DeparturesLoaded():
             result = on_loaded(state=state, event=event)
         case DeparturesFailed() | FeedFetched() | FeedFailed():
@@ -884,8 +931,8 @@ def dispatched(
             result = on_knob(state=state, event=event)
         case QuitRequested():
             result = on_quit(state=state)
-        case TimetableSeen():
-            result = on_timetable(state=state, event=event)
+        case TimetableSeen() | TimetableRebuilt():
+            result = on_timetable_file(state=state, event=event)
         case PlacesMatched() | PlacesFailed():
             result = on_matched(state=state, event=event)
         case StripLoaded():

@@ -22,6 +22,7 @@ import pytest
 import paperroute.__main__ as cli
 import paperroute.adapters.tk_monitor as tk_monitor
 from paperroute.__main__ import (
+    builder_for,
     main,
     parse_args,
     seed_for,
@@ -32,6 +33,7 @@ from paperroute.__main__ import (
 )
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
@@ -187,6 +189,20 @@ def test_tiles_for_tolerates_a_missing_file(tmp_path: Path) -> None:
         assert isinstance(tiles, NullTiles)
 
 
+def test_builder_for_rebuilds_only_when_asked(tmp_path: Path) -> None:
+    """--rebuild runs the refresh on the timetable's directory."""
+    timetable = tmp_path / 'timetable.db'
+    off = argparse.Namespace(rebuild=False)
+    on = argparse.Namespace(
+        rebuild=True, timetable=timetable, error_log=None,
+    )
+    builder = builder_for(args=on)
+    assert isinstance(builder_for(args=off), NullBuilder)
+    assert isinstance(builder, ChildRebuilder)
+    assert builder.command[-1] == str(tmp_path)
+    assert builder.env['TMPDIR'] == str(tmp_path / 'work')
+
+
 def free_port() -> int:
     """
     Find a port nothing is listening on.
@@ -301,6 +317,7 @@ def test_web_main_logs_a_bind_failure(
         tiles=None,
         tiles_variant=TileVariant.GREY,
         state=tmp_path / 'state.json',
+        rebuild=False,
     )
     build_db(path=args.timetable)
     with socket.socket() as held:
@@ -462,6 +479,7 @@ def test_tk_main_passes_the_tiles_variant(
         tiles=None,
         tiles_variant=TileVariant.BITS,
         state=tmp_path / 'state.json',
+        rebuild=False,
     )
     cli.tk_main(args=args, feeds=FileFeedsClient(directory=REAL))
     assert seen == [TileVariant.BITS]

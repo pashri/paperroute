@@ -72,6 +72,7 @@ APP_SERVICE: Final[dict[str, str]] = {
         ' --tiles /var/lib/paperroute/tiles.db'
         ' --state /var/lib/paperroute/state.json'
         ' --error-log /var/lib/paperroute/log/errors.jsonl'
+        ' --rebuild'
     ),
     'ExecStopPost': '+/usr/local/bin/paperroute-led boot',
     'Restart': 'always',
@@ -560,6 +561,14 @@ def test_app_unit_is_notify_with_watchdog() -> None:
     assert (service['Type'], service['WatchdogSec']) == ('notify', '30')
     assert service['AmbientCapabilities'] == 'CAP_NET_BIND_SERVICE'
     assert service['CapabilityBoundingSet'] == 'CAP_NET_BIND_SERVICE'
+
+
+def test_service_unit_passes_rebuild() -> None:
+    """The app rebuilds an outdated timetable; the nightly timer stays."""
+    service = read_unit(name='paperroute.service')['Service']
+    timer = read_unit(name='paperroute-timetable.timer')['Timer']
+    assert service['ExecStart'].endswith(' --rebuild')
+    assert timer['OnCalendar'] == '*-*-* 03:30:00 Australia/Sydney'
 
 
 def test_root_exec_lines_carry_plus() -> None:

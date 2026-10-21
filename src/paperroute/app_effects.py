@@ -131,30 +131,42 @@ class VersionWatch:
 
     def __init__(self, *, timetable: TimetableRepository) -> None:
         self.timetable = timetable
-        self.seen: tuple[str | None] | None = None
+        self.seen: tuple[str | None, str | None] | None = None
         self.failing = False
 
     async def check(self) -> TimetableSeen | None:
         """
-        Read the version, giving an event the first time and on a change.
+        Read the version and schema, giving an event when either changes.
 
         Returns
         -------
         TimetableSeen | None
-            The version when it is new; None when unchanged or unreadable.
+            The version and schema the first time and on a change; None
+            when unchanged or unreadable.
         """
         try:
-            version = await asyncio.to_thread(self.timetable.version)
+            version, schema = await asyncio.to_thread(self.read)
         except sqlite3.Error:
             if not self.failing:
                 logger.exception('reading the timetable version failed')
             self.failing = True
             return None
         self.failing = False
-        if self.seen == (version,):
+        if self.seen == (version, schema):
             return None
-        self.seen = (version,)
-        return TimetableSeen(version=version)
+        self.seen = (version, schema)
+        return TimetableSeen(version=version, schema=schema)
+
+    def read(self) -> tuple[str | None, str | None]:
+        """
+        Read the build time and schema version.
+
+        Returns
+        -------
+        tuple[str | None, str | None]
+            The build time and the schema version.
+        """
+        return self.timetable.version(), self.timetable.schema_version()
 
 
 def matches(

@@ -154,6 +154,29 @@ class Saving:
     match_failed_at: datetime | None = None
 
 
+@dataclass(frozen=True)
+class Rebuild:
+    """
+    Whether the timetable needs rebuilding, and when to try again.
+
+    Attributes
+    ----------
+    outdated : bool
+        True when the timetable's schema is older than the app's.
+    running : bool
+        True while a rebuild runs.
+    failures : int
+        Rebuilds failed in a row.
+    retry_at : datetime | None
+        The earliest time for the next rebuild, or None for now.
+    """
+
+    outdated: bool = False
+    running: bool = False
+    failures: int = 0
+    retry_at: datetime | None = None
+
+
 type FoldContext = tuple[str, StripKey | None, str | None]
 
 
@@ -223,6 +246,8 @@ class State:
         The strips' reaches and the Strip's scroll.
     chooser : ChooserState | None
         The route chooser, or None while it is closed.
+    rebuild : Rebuild
+        Whether the timetable needs rebuilding.
     """
 
     now: datetime
@@ -241,3 +266,4 @@ class State:
     saving: Saving = field(default_factory=Saving)
     strip: StripState = field(default_factory=StripState)
     chooser: ChooserState | None = None
+    rebuild: Rebuild = field(default_factory=Rebuild)

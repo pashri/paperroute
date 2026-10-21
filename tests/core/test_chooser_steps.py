@@ -38,8 +38,9 @@ from paperroute.core.messages import (
 from paperroute.core.model import Departure, Pin, shifted
 from paperroute.core.places import shown
 from paperroute.core.saved import LiveView, Saved
-from paperroute.core.state import initial_state, saved_of, step
+from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import LOOKBACK, RELOAD_BEFORE, State
+from paperroute.core.state_views import saved_of
 from paperroute.core.stop_view import HORIZON, StopView
 from paperroute.core.strip_model import HINTS, StripView
 from tests.core.chooser_walks import (

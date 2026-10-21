@@ -13,6 +13,7 @@ from paperroute.core.chooser_steps import (
     trip_feeds,
 )
 from paperroute.core.chooser_view import ChooserView
+from paperroute.core.device import on_settings
 from paperroute.core.knobs import knob_moved
 from paperroute.core.live import LiveDeparture, live_since, resolved
 from paperroute.core.map_requests import (
@@ -54,6 +55,7 @@ from paperroute.core.messages import (
     QuitRequested,
     Render,
     SaveState,
+    SettingsChanged,
     ShapesLoaded,
     Stop,
     StripFailed,
@@ -134,6 +136,7 @@ def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
         places=places_of(saved=saved),
         view=saved.view,
         saving=Saving(saved=saved if stored else None),
+        settings=saved.settings,
     )
     centre = shown(state=state).origin.point
     zoom = min(max(saved.zoom, 0), len(ZOOMS) - 1)
@@ -152,7 +155,7 @@ def saved_of(*, state: State) -> Saved:
     Returns
     -------
     Saved
-        The pins, the place shown, the Live view and the zoom.
+        The pins, the place shown, the Live view, the zoom and settings.
     """
     places = state.places
     return Saved(
@@ -161,6 +164,7 @@ def saved_of(*, state: State) -> Saved:
         unpinned=places.unpinned,
         view=state.view,
         zoom=state.map.zoom,
+        settings=state.settings,
     )
 
 
@@ -899,6 +903,29 @@ def on_timetable_file(
     return with_rebuild(result=on_timetable(state=seen, event=event))
 
 
+def on_strip(
+    *, state: State, event: StripLoaded | StripFailed
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Store a built reach, redrawing, or note a failed one.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    event : StripLoaded | StripFailed
+        What happened.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        New state and effects.
+    """
+    if isinstance(event, StripFailed):
+        return strip_failed(state=state, event=event), ()
+    return settled(state=strip_loaded(state=state, event=event))
+
+
 def dispatched(
     *, state: State, event: Event
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -933,12 +960,12 @@ def dispatched(
             result = on_quit(state=state)
         case TimetableSeen() | TimetableRebuilt():
             result = on_timetable_file(state=state, event=event)
+        case SettingsChanged():
+            result = on_settings(state=state, event=event)
         case PlacesMatched() | PlacesFailed():
             result = on_matched(state=state, event=event)
-        case StripLoaded():
-            result = settled(state=strip_loaded(state=state, event=event))
-        case StripFailed():
-            result = (strip_failed(state=state, event=event), ())
+        case StripLoaded() | StripFailed():
+            result = on_strip(state=state, event=event)
         case (
             ColumnLoaded()
             | ColumnFailed()

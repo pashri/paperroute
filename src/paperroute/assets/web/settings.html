@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Settings - paperroute</title>
+  <link rel="stylesheet" href="/live.css">
+  <script type="module" src="/settings.js"></script>
+</head>
+<body>
+  <header>
+    <h1>paperroute</h1>
+    <nav aria-label="Pages">
+      <ul class="pages">
+        <li><a href="/">Live</a></li>
+        <li><a href="/settings" aria-current="page">Settings</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main>
+    <section class="setting" aria-labelledby="timetable">
+      <h2 id="timetable">Timetable</h2>
+      <form id="timetable-form" method="post" action="/settings">
+        <input type="hidden" name="auto_rebuild" value="off">
+        <label class="switch">
+          <input id="auto-rebuild" type="checkbox" role="switch"
+                 name="auto_rebuild" value="on"
+                 aria-describedby="auto-rebuild-hint"{{auto_rebuild}}>
+          Rebuild timetable automatically
+        </label>
+        <p id="auto-rebuild-hint" class="hint">
+          Rebuilds an outdated timetable on the device when a new version
+          needs it.
+        </p>
+        <button id="timetable-save" type="submit">Save</button>
+        <p id="settings-status" class="hint" aria-live="polite"></p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

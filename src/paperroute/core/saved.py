@@ -1,6 +1,6 @@
 """The Live views, and what the device keeps between restarts."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final
 
@@ -27,9 +27,23 @@ LIVE_VIEWS: Final[tuple[LiveView, ...]] = (
 
 
 @dataclass(frozen=True)
+class Settings:
+    """
+    The choices made on the Settings page.
+
+    Attributes
+    ----------
+    auto_rebuild : bool
+        Whether an outdated timetable is rebuilt on the device.
+    """
+
+    auto_rebuild: bool = True
+
+
+@dataclass(frozen=True)
 class Saved:
     """
-    The pins, the place shown, the Live view and the zoom.
+    The pins, the place shown, the Live view, the zoom and settings.
 
     Attributes
     ----------
@@ -43,6 +57,8 @@ class Saved:
         The Live view shown.
     zoom : int
         The map zoom, an index into `ZOOMS`.
+    settings : Settings
+        The choices made on the Settings page.
     """
 
     pins: tuple[Pin, ...]
@@ -50,6 +66,7 @@ class Saved:
     unpinned: Pin | None
     view: LiveView
     zoom: int
+    settings: Settings = field(default_factory=Settings)
 
 
 TOWN_HALL: Final[StopPlace] = StopPlace(

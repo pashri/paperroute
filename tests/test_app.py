@@ -45,6 +45,7 @@ from paperroute.core.messages import (
     PositionsFetched,
     QuitRequested,
     RebuildTimetable,
+    SettingsChanged,
     Tick,
     TimetableRebuilt,
     TimetableSeen,
@@ -52,7 +53,13 @@ from paperroute.core.messages import (
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.places import shown
-from paperroute.core.saved import DEFAULT_SAVED, TOWN_HALL, LiveView, seeded
+from paperroute.core.saved import (
+    DEFAULT_SAVED,
+    TOWN_HALL,
+    LiveView,
+    Settings,
+    seeded,
+)
 from paperroute.core.tiles import (
     TILE,
     StreetLabel,
@@ -357,13 +364,30 @@ class RaisingObserver:
         """
         raise RuntimeError('tick')
 
+    def settings_seen(self, *, settings: Settings) -> None:
+        """
+        Fail.
+
+        Parameters
+        ----------
+        settings : Settings
+            Ignored.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        raise RuntimeError(f'settings {settings}')
+
 
 @dataclass
 class CallRecorder:
-    """An observer that counts feed_parsed and ticked calls."""
+    """An observer that counts feeds and ticks and keeps the settings."""
 
     feeds: int = 0
     ticks: int = 0
+    settings: list[Settings] = field(default_factory=list)
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """
@@ -397,6 +421,46 @@ class CallRecorder:
     def ticked(self) -> None:
         """Count a tick."""
         self.ticks += 1
+
+    def settings_seen(self, *, settings: Settings) -> None:
+        """
+        Keep the settings.
+
+        Parameters
+        ----------
+        settings : Settings
+            The settings.
+        """
+        self.settings.append(settings)
+
+
+async def test_app_reports_settings() -> None:
+    """The observer sees the start settings, then each change."""
+    recorder = CallRecorder()
+    ports = replace(ports_of(), observer=recorder)
+
+    def post_change(post: Callable[[Event], None]) -> None:
+        """
+        Post a switched-off rebuild before anything else.
+
+        Parameters
+        ----------
+        post : Callable[[Event], None]
+            Posts an event.
+        """
+        post(SettingsChanged(auto_rebuild=False))
+
+    await run(
+        ports=ports,
+        seed=PIN,
+        tick_every=60,
+        post_hook=post_change,
+        max_events=2,
+    )
+    assert recorder.settings == [
+        Settings(auto_rebuild=True),
+        Settings(auto_rebuild=False),
+    ]
 
 
 def _build_db(tmp_path: Path) -> Path:

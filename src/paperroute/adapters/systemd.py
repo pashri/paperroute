@@ -4,6 +4,8 @@ import logging
 import os
 import socket
 
+from paperroute.core.saved import Settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -122,3 +124,13 @@ class SystemdNotifier:
     def ticked(self) -> None:
         """Send WATCHDOG=1."""
         self._send(message=b'WATCHDOG=1')
+
+    def settings_seen(self, *, settings: Settings) -> None:
+        """
+        Ignore the settings.
+
+        Parameters
+        ----------
+        settings : Settings
+            The settings.
+        """

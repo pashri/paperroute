@@ -3,6 +3,8 @@
 import logging
 from pathlib import Path
 
+from paperroute.core.saved import Settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,3 +66,13 @@ class ActLed:
 
     def ticked(self) -> None:
         """Ignore a tick."""
+
+    def settings_seen(self, *, settings: Settings) -> None:
+        """
+        Ignore the settings.
+
+        Parameters
+        ----------
+        settings : Settings
+            The settings.
+        """

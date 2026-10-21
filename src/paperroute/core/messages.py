@@ -255,6 +255,20 @@ class TimetableRebuilt:
 
 
 @dataclass(frozen=True)
+class SettingsChanged:
+    """
+    A setting was changed on the Settings page.
+
+    Attributes
+    ----------
+    auto_rebuild : bool
+        Whether an outdated timetable is rebuilt on the device.
+    """
+
+    auto_rebuild: bool
+
+
+@dataclass(frozen=True)
 class PlacesMatched:
     """
     Places were looked up in the timetable.
@@ -472,6 +486,7 @@ Event = (
     | QuitRequested
     | TimetableSeen
     | TimetableRebuilt
+    | SettingsChanged
     | PlacesMatched
     | PlacesFailed
     | StripLoaded

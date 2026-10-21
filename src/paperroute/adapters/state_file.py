@@ -13,14 +13,14 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict, Field
 
 from paperroute.core.model import TRAINLINK, Pin, RouteKind, StopPlace
-from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved
+from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved, Settings
 from paperroute.core.tiles import ZOOMS
 from paperroute.ports import Loaded
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/state.json')
-SCHEMA_VERSION: Final[int] = 2
+SCHEMA_VERSION: Final[int] = 3
 TEMP_PREFIX: Final[str] = '.state.json.'
 BAD_PREFIX: Final[str] = 'state.json.bad-'
 BAD_KEPT: Final[int] = 2
@@ -49,6 +49,14 @@ class PinModel(BaseModel):
     routes: tuple[str, ...]
 
 
+class SettingsModel(BaseModel):
+    """The Settings page's choices as stored."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    auto_rebuild: bool
+
+
 class StateModel(BaseModel):
     """The whole file."""
 
@@ -60,6 +68,7 @@ class StateModel(BaseModel):
     unpinned: PinModel | None
     view: LiveView
     zoom: int = Field(ge=0, le=len(ZOOMS) - 1)
+    settings: SettingsModel
 
 
 def stop_to_model(*, place: StopPlace) -> StopModel:
@@ -181,6 +190,7 @@ def to_model(*, saved: Saved) -> StateModel:
         unpinned=None if unpinned is None else pin_to_model(pin=unpinned),
         view=saved.view,
         zoom=saved.zoom,
+        settings=SettingsModel(auto_rebuild=saved.settings.auto_rebuild),
     )
 
 
@@ -213,6 +223,7 @@ def from_model(*, model: StateModel) -> Saved:
         unpinned=unpinned,
         view=model.view,
         zoom=model.zoom,
+        settings=Settings(auto_rebuild=model.settings.auto_rebuild),
     )
 
 
@@ -268,9 +279,26 @@ def regional_to_coach(data: dict[str, object]) -> dict[str, object]:
     }
 
 
+def add_settings(data: dict[str, object]) -> dict[str, object]:
+    """
+    Add the settings, with the timetable rebuilt automatically.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Version 2 data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with default settings.
+    """
+    return {**data, 'settings': {'auto_rebuild': True}}
+
+
 MIGRATIONS: Final[
     dict[int, Callable[[dict[str, object]], dict[str, object]]]
-] = {1: regional_to_coach}
+] = {1: regional_to_coach, 2: add_settings}
 
 
 def migrate(*, data: dict[str, object]) -> dict[str, object]:

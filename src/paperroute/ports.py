@@ -13,7 +13,7 @@ from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
-from paperroute.core.saved import Saved
+from paperroute.core.saved import Saved, Settings
 from paperroute.core.tiles import StreetLabel, TileVariant
 
 
@@ -379,6 +379,16 @@ class Observer(Protocol):
 
     def ticked(self) -> None:
         """Record that the app loop ran once."""
+
+    def settings_seen(self, *, settings: Settings) -> None:
+        """
+        Record the settings in force.
+
+        Parameters
+        ----------
+        settings : Settings
+            The settings, at start and after each change.
+        """
 
 
 @dataclass(frozen=True)

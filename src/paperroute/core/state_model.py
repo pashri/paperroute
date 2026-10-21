@@ -12,7 +12,7 @@ from paperroute.core.map_view import MapView
 from paperroute.core.model import Departure, Pin, shifted
 from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
-from paperroute.core.saved import LiveView, Saved
+from paperroute.core.saved import LiveView, Saved, Settings
 from paperroute.core.stop_view import HORIZON, StopView
 from paperroute.core.strip_model import StripMapView, StripView
 
@@ -248,6 +248,8 @@ class State:
         The route chooser, or None while it is closed.
     rebuild : Rebuild
         Whether the timetable needs rebuilding.
+    settings : Settings
+        The choices made on the Settings page.
     """
 
     now: datetime
@@ -267,3 +269,4 @@ class State:
     strip: StripState = field(default_factory=StripState)
     chooser: ChooserState | None = None
     rebuild: Rebuild = field(default_factory=Rebuild)
+    settings: Settings = field(default_factory=Settings)

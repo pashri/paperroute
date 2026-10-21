@@ -759,7 +759,10 @@ async def handle(
     """
     if isinstance(event, Tick):
         ports.observer.ticked()
+    before = state.settings
     state, effects = step(state, event)
+    if state.settings != before:
+        ports.observer.settings_seen(settings=state.settings)
     await carry_out(
         effects=effects,
         ports=ports,
@@ -819,6 +822,7 @@ async def run(
     if post_hook:
         post_hook(queue.put_nowait)
     state = starting_state(ports=ports, seed=seed)
+    ports.observer.settings_seen(settings=state.settings)
     outputs = Outputs(
         maps=MapRenderer(tiles=ports.tiles, variant=tiles_variant),
         saver=StateSaver(states=ports.states),

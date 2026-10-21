@@ -109,8 +109,11 @@ def rebuild_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     -------
     tuple[State, tuple[Effect, ...]]
         State with the rebuild marked running and a RebuildTimetable
-        when one is due; otherwise the state unchanged and no effects.
+        when one is due and the setting allows it; otherwise the state
+        unchanged and no effects.
     """
+    if not state.settings.auto_rebuild:
+        return state, ()
     if not due(rebuild=state.rebuild, now=state.now):
         return state, ()
     rebuild = started(rebuild=state.rebuild)

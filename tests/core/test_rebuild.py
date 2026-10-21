@@ -12,6 +12,7 @@ from paperroute.core.messages import (
     Event,
     LoadColumn,
     RebuildTimetable,
+    SettingsChanged,
     Tick,
     TimetableRebuilt,
     TimetableSeen,
@@ -124,6 +125,36 @@ def test_outdated_timetable_starts_rebuild() -> None:
     state, effects = step(pinned(), OLD)
     assert rebuilds(effects=effects) == 1
     assert state.rebuild.running and state.rebuild.outdated
+
+
+def test_switch_off_stops_rebuild() -> None:
+    """With the switch off, an outdated, due timetable is left alone."""
+    _, effects = run_events(
+        state=pinned(),
+        events=[
+            SettingsChanged(auto_rebuild=False),
+            OLD,
+            Tick(now=START + timedelta(hours=1)),
+        ],
+    )
+    assert rebuilds(effects=effects) == 0
+
+
+def test_switch_on_starts_due_rebuild() -> None:
+    """Turning the switch back on starts the due rebuild at the next tick."""
+    state, _ = run_events(
+        state=pinned(),
+        events=[SettingsChanged(auto_rebuild=False), OLD],
+    )
+    state, effects = run_events(
+        state=state,
+        events=[
+            SettingsChanged(auto_rebuild=True),
+            Tick(now=START + timedelta(minutes=1)),
+        ],
+    )
+    assert rebuilds(effects=effects) == 1
+    assert state.rebuild.running
 
 
 def test_no_second_rebuild_while_running() -> None:

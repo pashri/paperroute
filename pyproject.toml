@@ -90,7 +90,7 @@ generated-members = ["gtfs_realtime_pb2.*"]
 [tool.pylint.design]
 max-args = 8
 max-positional-arguments = 3
-max-attributes = 15
+max-attributes = 16
 
 [tool.pylint."messages control"]
 disable = ["too-few-public-methods"]

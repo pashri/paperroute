@@ -21,6 +21,7 @@ from paperroute.core.messages import (
     KnobHeld,
     KnobPressed,
     KnobTurned,
+    SettingsChanged,
 )
 from paperroute.render.canvas import encode_png
 from paperroute.rss import max_rss_mb
@@ -30,6 +31,8 @@ logger = logging.getLogger(__name__)
 PING_S: Final[float] = 15  # seconds of quiet before an SSE comment
 ACTIONS: Final[dict[str, int]] = {'left': -1, 'right': 1}
 HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
+SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
+CHECKED_MARK: Final[str] = '{{auto_rebuild}}'
 
 Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 
@@ -59,6 +62,44 @@ def knob_event(*, knob: str, action: str) -> Event | None:
     if action in ACTIONS:
         return KnobTurned(knob=Knob(knob), steps=ACTIONS[action])
     return None
+
+
+def settings_event(*, fields: Mapping[str, str]) -> Event | None:
+    """
+    Turn the Settings form's fields into an event.
+
+    Parameters
+    ----------
+    fields : Mapping[str, str]
+        The posted fields; `auto_rebuild` is `on` or `off`.
+
+    Returns
+    -------
+    Event | None
+        The event, or None if the value is not recognised.
+    """
+    value = SWITCH.get(fields.get('auto_rebuild', ''))
+    return None if value is None else SettingsChanged(auto_rebuild=value)
+
+
+def auto_rebuild_of(*, status: Mapping[str, object]) -> bool:
+    """
+    Read the rebuild switch from the status fields.
+
+    Parameters
+    ----------
+    status : Mapping[str, object]
+        The status page's extra fields.
+
+    Returns
+    -------
+    bool
+        The switch; True, the default, until the app reports it.
+    """
+    settings = status.get('settings')
+    if not isinstance(settings, Mapping):
+        return True
+    return settings.get('auto_rebuild') is not False
 
 
 def peer_address(request: web.BaseRequest) -> str | None:
@@ -178,7 +219,9 @@ async def _fields(*, request: web.Request) -> dict[str, str]:
     Returns
     -------
     dict[str, str]
-        The string fields found; empty if the body is not readable.
+        The string fields found; empty if the body is not readable. A
+        repeated form field keeps its last value, so a checkbox after a
+        hidden field of the same name wins when ticked.
     """
     if request.content_type == 'application/json':
         try:
@@ -275,6 +318,9 @@ class WebDisplay:
             web.get('/frame.png', self._frame),
             web.get('/events', self._events),
             web.post('/knob', self._knob),
+            web.get('/settings', self._settings_page),
+            web.get('/settings.js', self._settings_js),
+            web.post('/settings', self._settings),
             web.get('/status', self._status_json),
         ])
         return app
@@ -474,6 +520,69 @@ class WebDisplay:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         self._post(event)
         return web.Response(status=HTTPStatus.NO_CONTENT)
+
+    async def _settings_page(self, request: web.Request) -> web.Response:
+        """
+        Serve the Settings page, its switch drawn as last reported.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request.
+
+        Returns
+        -------
+        web.Response
+            The response.
+        """
+        del request
+        status = self._status() if self._status else {}
+        checked = ' checked' if auto_rebuild_of(status=status) else ''
+        page = _asset(name='settings.html').replace(CHECKED_MARK, checked)
+        return web.Response(text=page, content_type='text/html')
+
+    async def _settings_js(self, request: web.Request) -> web.Response:
+        """
+        Serve the Settings page's script.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request.
+
+        Returns
+        -------
+        web.Response
+            The response.
+        """
+        del request
+        return web.Response(
+            text=_asset(name='settings.js'),
+            content_type='text/javascript',
+        )
+
+    async def _settings(self, request: web.Request) -> web.Response:
+        """
+        Post a changed setting from the browser.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request.
+
+        Returns
+        -------
+        web.Response
+            400 for an unknown value; otherwise 204 to the script's JSON,
+            or 303 back to the page for a plain form.
+        """
+        event = settings_event(fields=await _fields(request=request))
+        if event is None:
+            return web.Response(status=HTTPStatus.BAD_REQUEST)
+        self._post(event)
+        if request.content_type == 'application/json':
+            return web.Response(status=HTTPStatus.NO_CONTENT)
+        raise web.HTTPSeeOther(location='/settings')
 
     async def _status_json(self, request: web.Request) -> web.Response:
         """

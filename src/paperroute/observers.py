@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
+from paperroute.core.saved import Settings
 from paperroute.ports import Observer
 
 logger = logging.getLogger(__name__)
@@ -66,6 +67,8 @@ class Timings:
         Latest timing per feed.
     last_tick_monotonic : float | None
         `time.monotonic()` at the latest app loop tick.
+    settings : Settings | None
+        The settings in force, or None before the app reports them.
     """
 
     frames: int = 0
@@ -74,6 +77,7 @@ class Timings:
     last_frame_monotonic: float | None = None
     feeds: dict[str, FeedTiming] = field(default_factory=dict)
     last_tick_monotonic: float | None = None
+    settings: Settings | None = None
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """
@@ -116,6 +120,17 @@ class Timings:
         """Record an app loop tick."""
         self.last_tick_monotonic = time.monotonic()
 
+    def settings_seen(self, *, settings: Settings) -> None:
+        """
+        Record the settings in force.
+
+        Parameters
+        ----------
+        settings : Settings
+            The settings.
+        """
+        self.settings = settings
+
     def snapshot(self) -> dict[str, object]:
         """
         Current timings in a JSON-ready form.
@@ -124,9 +139,10 @@ class Timings:
         -------
         dict[str, object]
             Frame counts and times, ages in seconds (None before the
-            first frame or tick) and the latest timing per feed.
+            first frame or tick), the latest timing per feed, and the
+            settings once reported.
         """
-        return {
+        snapshot: dict[str, object] = {
             'frames': self.frames,
             'last_render_ms': self.last_render_ms,
             'max_render_ms': self.max_render_ms,
@@ -141,6 +157,11 @@ class Timings:
                 for name, timing in self.feeds.items()
             },
         }
+        if self.settings is not None:
+            snapshot['settings'] = {
+                'auto_rebuild': self.settings.auto_rebuild,
+            }
+        return snapshot
 
 
 class NullObserver:
@@ -176,6 +197,16 @@ class NullObserver:
 
     def ticked(self) -> None:
         """Ignore a tick."""
+
+    def settings_seen(self, *, settings: Settings) -> None:
+        """
+        Ignore the settings.
+
+        Parameters
+        ----------
+        settings : Settings
+            The settings.
+        """
 
 
 class ObserverGroup:
@@ -246,3 +277,14 @@ class ObserverGroup:
     def ticked(self) -> None:
         """Pass on a tick."""
         self._each(call=lambda o: o.ticked())
+
+    def settings_seen(self, *, settings: Settings) -> None:
+        """
+        Pass on the settings.
+
+        Parameters
+        ----------
+        settings : Settings
+            The settings.
+        """
+        self._each(call=lambda o: o.settings_seen(settings=settings))

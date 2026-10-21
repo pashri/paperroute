@@ -20,6 +20,7 @@ from paperroute.core.messages import (
     KnobHeld,
     KnobPressed,
     KnobTurned,
+    SettingsChanged,
 )
 
 Client = TestClient[web.Request, web.Application]
@@ -32,6 +33,9 @@ ROUTES = [
     ('GET', '/events'),
     ('GET', '/status'),
     ('POST', '/knob'),
+    ('GET', '/settings'),
+    ('GET', '/settings.js'),
+    ('POST', '/settings'),
 ]
 
 
@@ -386,3 +390,83 @@ def test_page_click_handler_constants() -> None:
     assert 'event.detail === 0' in script
     assert 'HOLD_MS = 800' in script
     assert 'DOUBLE_MS = 300' in script
+
+
+async def test_settings_post_posts_event(
+    display: WebDisplay, client: Client
+) -> None:
+    """A switch change posts an event; bad values and other sites fail."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    good = await client.post('/settings', json={'auto_rebuild': 'off'})
+    maybe = await client.post('/settings', json={'auto_rebuild': 'maybe'})
+    cross = await client.post(
+        '/settings',
+        json={'auto_rebuild': 'on'},
+        headers={'Origin': 'http://evil.example'},
+    )
+    assert good.status == HTTPStatus.NO_CONTENT
+    assert maybe.status == HTTPStatus.BAD_REQUEST
+    assert cross.status == HTTPStatus.FORBIDDEN
+    assert posted == [SettingsChanged(auto_rebuild=False)]
+
+
+@pytest.mark.parametrize(('fields', 'expected'), [
+    ([('auto_rebuild', 'off')], False),
+    ([('auto_rebuild', 'off'), ('auto_rebuild', 'on')], True),
+])
+async def test_settings_form_redirects_back(
+    display: WebDisplay,
+    client: Client,
+    fields: list[tuple[str, str]],
+    expected: bool,
+) -> None:
+    """A plain form post is answered with 303 back to the page."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        '/settings', data=fields, allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert response.headers['Location'] == '/settings'
+    assert posted == [SettingsChanged(auto_rebuild=expected)]
+
+
+@pytest.mark.parametrize(('status', 'checked'), [
+    ({}, True),
+    ({'settings': {'auto_rebuild': True}}, True),
+    ({'settings': {'auto_rebuild': False}}, False),
+])
+async def test_settings_page_served(
+    status: dict[str, object], checked: bool
+) -> None:
+    """The page has the switch, drawn as reported, and a link to Live."""
+    display = WebDisplay(status=lambda: status)
+    client = await _client(display=display)
+    try:
+        page = await client.get('/settings')
+        text = await page.text()
+        script = await client.get('/settings.js')
+    finally:
+        await client.close()
+    assert page.content_type == 'text/html'
+    assert 'Rebuild timetable automatically' in text
+    assert (
+        'Rebuilds an outdated timetable on the device when a new version'
+        in text
+    )
+    assert '<a href="/">Live</a>' in text
+    assert ('aria-describedby="auto-rebuild-hint" checked>' in text) is (
+        checked
+    )
+    assert '{{' not in text
+    assert script.content_type in {
+        'text/javascript', 'application/javascript',
+    }
+
+
+def test_live_page_links_to_settings() -> None:
+    """The Live page's header links to Settings."""
+    web_dir = files('paperroute') / 'assets' / 'web'
+    html = (web_dir / 'live.html').read_text(encoding='utf-8')
+    assert '<a href="/settings">Settings</a>' in html

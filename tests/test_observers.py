@@ -4,6 +4,7 @@ import logging
 
 import pytest
 
+from paperroute.core.saved import Settings
 from paperroute.observers import NullObserver, ObserverGroup, Timings
 
 
@@ -23,6 +24,10 @@ class _Failing:
     def ticked(self) -> None:
         """Raise."""
         raise RuntimeError('tick')
+
+    def settings_seen(self, *, settings: Settings) -> None:
+        """Raise."""
+        raise RuntimeError(settings)
 
 
 def test_timings_records_frames_and_max() -> None:
@@ -54,8 +59,16 @@ def test_timings_records_tick() -> None:
     assert isinstance(timings.snapshot()['tick_age_s'], float)
 
 
+def test_timings_report_settings() -> None:
+    """The settings appear in the snapshot once reported."""
+    timings = Timings()
+    assert 'settings' not in timings.snapshot()
+    timings.settings_seen(settings=Settings(auto_rebuild=False))
+    assert timings.snapshot()['settings'] == {'auto_rebuild': False}
+
+
 def test_null_observer_does_nothing() -> None:
-    """All three calls return None."""
+    """Every call returns None."""
     null = NullObserver()
     results = [
         null.frame_drawn(render_ms=1.0),  # type: ignore[func-returns-value]
@@ -66,8 +79,11 @@ def test_null_observer_does_nothing() -> None:
             trips=1,
         ),
         null.ticked(),  # type: ignore[func-returns-value]
+        null.settings_seen(  # type: ignore[func-returns-value]
+            settings=Settings(),
+        ),
     ]
-    assert results == [None, None, None]
+    assert results == [None, None, None, None]
 
 
 def test_observer_group_isolates_a_failing_observer(
@@ -80,8 +96,10 @@ def test_observer_group_isolates_a_failing_observer(
         group.frame_drawn(render_ms=2.0)
         group.feed_parsed(feed='f', fetch_ms=1.0, parse_ms=1.0, trips=1)
         group.ticked()
+        group.settings_seen(settings=Settings(auto_rebuild=False))
     snap = timings.snapshot()
     assert snap['frames'] == 1
     assert 'f' in snap['feeds']  # type: ignore[operator]
     assert snap['tick_age_s'] is not None
-    assert len(caplog.records) == 3
+    assert snap['settings'] == {'auto_rebuild': False}
+    assert len(caplog.records) == 4

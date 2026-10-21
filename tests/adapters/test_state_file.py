@@ -6,6 +6,7 @@ import os
 import stat
 import tempfile
 from collections.abc import Iterator
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,7 @@ from paperroute.adapters.state_file import (
     write_atomic,
 )
 from paperroute.core.model import Pin, RouteKind, StopPlace
-from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved
+from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved, Settings
 from paperroute.core.tiles import ZOOMS
 
 NAMES = st.text(
@@ -66,6 +67,7 @@ def saved_values(draw: st.DrawFn) -> Saved:
         unpinned=unpinned,
         view=draw(st.sampled_from(LiveView)),
         zoom=draw(st.integers(0, len(ZOOMS) - 1)),
+        settings=Settings(auto_rebuild=draw(st.booleans())),
     )
 
 
@@ -171,7 +173,7 @@ def test_wrong_field_type_gives_defaults(path: Path) -> None:
     assert repository.load().saved == DEFAULT_SAVED
 
 
-def test_future_version_gives_defaults(
+def test_future_schema_falls_back(
     path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A file from a newer app is not guessed at."""
@@ -281,6 +283,7 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
         'unpinned',
         'view',
         'zoom',
+        'settings',
     }
     assert set(data['pins'][0]) == {
         'origin',
@@ -291,10 +294,11 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
 
 
 def test_written_json_shape(path: Path) -> None:
-    """The version is 2 and stops carry their metre coordinates."""
+    """The version is 3 and stops carry their metre coordinates."""
     JsonStateRepository(path=path).save(saved=sample())
     data = json.loads(path.read_text())
-    assert data['schema_version'] == 2
+    assert data['schema_version'] == 3
+    assert data['settings'] == {'auto_rebuild': True}
     assert data['pins'][0]['origin'] == {
         'stop_id': 'a',
         'name': 'A',
@@ -442,3 +446,27 @@ def test_regional_to_coach_leaves_a_malformed_pin_list_alone() -> None:
     """Data the migration cannot read is passed on for validation to fail."""
     data: dict[str, object] = {'pins': 'oops', 'unpinned': 3}
     assert regional_to_coach(data) == data
+
+
+def test_migrates_v2_to_v3_with_auto_rebuild(path: Path) -> None:
+    """A version 2 file loads with the rebuild on and saves as 3."""
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=sample())
+    data = json.loads(path.read_text())
+    del data['settings']
+    data['schema_version'] = 2
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved == sample()
+    assert loaded.saved.settings.auto_rebuild is True
+    repository.save(saved=loaded.saved)
+    assert json.loads(path.read_text())['schema_version'] == 3
+
+
+def test_round_trips_settings(path: Path) -> None:
+    """A switched-off rebuild survives a save and a load."""
+    repository = JsonStateRepository(path=path)
+    saved = replace(sample(), settings=Settings(auto_rebuild=False))
+    repository.save(saved=saved)
+    assert repository.load().saved.settings.auto_rebuild is False

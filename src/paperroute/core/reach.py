@@ -10,7 +10,6 @@ from paperroute.core.model import STATION_FIRST, RouteKind, StopPlace
 from paperroute.core.reach_layout import Entry, LineExit, lay_out
 from paperroute.core.reach_track import FROM_KEY, place_of
 
-APPROACH_ROWS: Final[int] = 2
 LINE_KINDS: Final[frozenset[RouteKind]] = STATION_FIRST
 
 
@@ -258,7 +257,7 @@ class Reach:
 def approach_rows(*, tails: Sequence[RunTail], placed: set[str]
                   ) -> list[Entry]:
     """
-    List up to two stations the busiest run calls at before the From.
+    List every station the busiest run calls at before the From.
 
     Parameters
     ----------
@@ -270,15 +269,15 @@ def approach_rows(*, tails: Sequence[RunTail], placed: set[str]
     Returns
     -------
     list[Entry]
-        The last two stations before the From not on the strip, top to
-        bottom, each one's track from the row below.
+        The stations before the From not on the strip, back to the
+        run's first stop, top to bottom, each one's track from the row
+        below.
     """
     heaviest = max(tails, key=lambda each: each.trips)
     picks: list[str] = []
     for key in reversed(heaviest.before):
         if key not in placed and key not in picks:
             picks.append(key)
-    picks = picks[:APPROACH_ROWS]
     return [
         Entry(key=key, depth=0, above=True, parent=back)
         for key, back in zip(picks, (FROM_KEY, *picks))
@@ -341,8 +340,8 @@ def ordered(*, data: ReachInput, places: Mapping[str, StopPlace]
     Returns
     -------
     list[tuple[RowKind, Entry]]
-        Rows top to bottom. With one side, it goes below, with up to two
-        approach rows above.
+        Rows top to bottom. With one side, it goes below, with the
+        busiest run's earlier stations above as approach rows.
     """
     trails = sorted(
         ((each.after, each.trips) for each in data.tails if each.after),

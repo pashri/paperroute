@@ -6,8 +6,13 @@ from typing import Final
 
 from paperroute.core.model import CarryOn, Departure, RouteKind
 from paperroute.core.reach import StripKey
-from paperroute.core.strip_times import board_departures, strip_trips
-from tests.core.factories import START, departure
+from paperroute.core.strip_times import (
+    TripInputs,
+    approach_times,
+    board_departures,
+    strip_trips,
+)
+from tests.core.factories import EIGHT, START, calls, departure, live, pattern
 
 TRAIN: Final[StripKey] = StripKey(
     station='C', kind=RouteKind.TRAIN, routes=(),
@@ -110,3 +115,57 @@ def test_bus_board_keeps_school_and_replacement() -> None:
     assert boards[RouteKind.SCHOOL] == ['school']
     assert boards[RouteKind.TRAIN] == ['train']
     assert boards[None] == [str(kind) for kind in kinds]
+
+
+def approach_inputs(*, late: int = 0) -> TripInputs:
+    """
+    Make trips through C at 8:10 and 8:20 from A; the first skips B.
+
+    Parameters
+    ----------
+    late : int
+        Minutes late for each departure.
+
+    Returns
+    -------
+    TripInputs
+        The trips, at 8:00.
+    """
+    first = train(minutes=10, trip_id='a')
+    second = train(minutes=20, trip_id='b')
+    return TripInputs(
+        departures=(
+            live(item=second, late=late), live(item=first, late=late),
+        ),
+        key=TRAIN,
+        patterns={
+            'a': pattern(trip_id='a', stops=calls(
+                stations=('A', 'C'), start=EIGHT + 300, step=300,
+            )),
+            'b': pattern(trip_id='b', stops=calls(
+                stations=('A', 'B', 'C'), start=EIGHT, step=600,
+            )),
+        },
+        positions={},
+        now=START,
+        station_of={},
+    )
+
+
+def test_approach_times_follow_the_next_departure() -> None:
+    """The earlier trip's calls give the times, shifted by its delay."""
+    on_time = approach_times(
+        trips=approach_inputs(), origin='C', stations={'A', 'B'},
+    )
+    assert on_time == {'A': START + timedelta(minutes=5)}
+    late = approach_times(
+        trips=approach_inputs(late=2), origin='C', stations={'A'},
+    )
+    assert late == {'A': START + timedelta(minutes=7)}
+
+
+def test_approach_time_blank_where_trip_skips() -> None:
+    """A station the next trip runs through gets no time."""
+    assert 'B' not in approach_times(
+        trips=approach_inputs(), origin='C', stations={'A', 'B'},
+    )

@@ -1,6 +1,6 @@
 """Which trips feed a strip, and when they reach its stations."""
 
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final
@@ -15,8 +15,8 @@ from paperroute.core.model import (
 )
 from paperroute.core.patterns import TripPattern
 from paperroute.core.positions import PositionsSnapshot
-from paperroute.core.reach import StripKey, every_route
-from paperroute.core.stop_view import not_departed
+from paperroute.core.reach import Reach, RowKind, StripKey, every_route
+from paperroute.core.stop_view import clock_text, not_departed
 
 STRIP_LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 STRIP_AHEAD: Final[timedelta] = timedelta(minutes=30)
@@ -389,6 +389,42 @@ def boardable(*, item: LiveDeparture, trips: TripInputs, origin: str,
     )
 
 
+def next_item(*, trips: TripInputs, origin: str, target: str | None
+              ) -> LiveDeparture | None:
+    """
+    Find the strip's next departure from the From.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    origin : str
+        The From station ID.
+    target : str | None
+        The Destination's station ID, or None for any departure.
+
+    Returns
+    -------
+    LiveDeparture | None
+        The departure not yet gone that can be taken and leaves first
+        by its live time, or None.
+    """
+    upcoming = not_departed(
+        departures=live_strip(trips=trips), now=trips.now,
+    )
+    return min(
+        (
+            item
+            for item in upcoming
+            if boardable(
+                item=item, trips=trips, origin=origin, target=target,
+            )
+        ),
+        key=lambda item: item.departs,
+        default=None,
+    )
+
+
 def next_departure(*, trips: TripInputs, origin: str, target: str | None
                    ) -> datetime | None:
     """
@@ -409,16 +445,86 @@ def next_departure(*, trips: TripInputs, origin: str, target: str | None
         The earliest live departure time among the strip's departures
         not yet gone that can be taken, or None.
     """
-    upcoming = not_departed(
-        departures=live_strip(trips=trips), now=trips.now,
+    item = next_item(trips=trips, origin=origin, target=target)
+    return None if item is None else item.departs
+
+
+def approach_times(*, trips: TripInputs, origin: str,
+                   stations: Collection[str]) -> dict[str, datetime]:
+    """
+    Find when the From's next departure calls at stations before it.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    origin : str
+        The From station ID.
+    stations : Collection[str]
+        Station IDs before the From.
+
+    Returns
+    -------
+    dict[str, datetime]
+        Departure time by station for each of the stations the next
+        departure (any target) stops at before the From, shifted by its
+        live delay; empty when there is none or its pattern is unknown.
+    """
+    item = next_item(trips=trips, origin=origin, target=None)
+    if item is None:
+        return {}
+    departure = item.departure
+    pattern = trips.patterns.get(departure.trip_id)
+    start = None if pattern is None else from_call(
+        departure=departure, pattern=pattern, origin=origin,
+        stations=trips.station_of,
     )
-    return min(
-        (
-            item.departs
-            for item in upcoming
-            if boardable(
-                item=item, trips=trips, origin=origin, target=target,
+    if pattern is None or start is None:
+        return {}
+    delay = int(item.departs.timestamp() - departure.departs.timestamp())
+    found: dict[str, datetime] = {}
+    for stop in pattern.stops[:start]:
+        station = trips.station_of.get(stop.station, stop.station)
+        if station in stations:
+            found[station] = shifted(
+                moment=service_time(
+                    day=departure.service_day,
+                    seconds=stop.departs or stop.arrives,
+                ),
+                seconds=delay,
             )
-        ),
-        default=None,
-    )
+    return found
+
+
+def approach_text(*, trips: TripInputs, reach: Reach, origin: str
+                  ) -> dict[int, str]:
+    """
+    Give each approach row the time the next departure calls there.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    reach : Reach
+        The reach.
+    origin : str
+        The From station ID.
+
+    Returns
+    -------
+    dict[int, str]
+        Clock time by approach row; a row the trip skips has none.
+    """
+    rows = {
+        index: row.place.stop_id
+        for index, row in enumerate(reach.rows)
+        if row.kind == RowKind.APPROACH
+    }
+    found = approach_times(
+        trips=trips, origin=origin, stations=set(rows.values()),
+    ) if rows else {}
+    return {
+        index: clock_text(moment=found[key])
+        for index, key in rows.items()
+        if key in found
+    }

@@ -24,6 +24,7 @@ from paperroute.core.strip_model import (
     NO_STRIP,
     PANE_TRACK_X,
     ROW_H,
+    STRIP_ROWS,
     STRIP_TOP,
     TRACK_X,
     StripInputs,
@@ -34,6 +35,8 @@ from paperroute.core.strip_times import strip_trips
 from paperroute.core.strip_view import (
     build_strip_pane,
     build_strip_view,
+    first_row,
+    home_of,
     line_reach,
 )
 from tests.core.factories import (
@@ -52,6 +55,7 @@ from tests.core.factories import (
     stop_view_of,
     train,
 )
+from tests.core.reach_factories import reach_of, tail
 from tests.core.strip_factories import (
     SOUTH,
     WEST,
@@ -820,3 +824,30 @@ def test_vehicle_past_the_exit_station_is_gone() -> None:
     """Once the train reaches W1 it leaves the strip."""
     now = START + timedelta(minutes=7)
     assert build_strip_view(inputs=west_inputs(now=now)).markers == ()
+
+
+def test_scroll_reaches_the_first_stop() -> None:
+    """Scrolling up far enough shows the run's first stop at the top."""
+    before = ' '.join(f'P{index}' for index in range(40))
+    reach = reach_of(tails=[tail('E1', 4, before=before)])
+    home = home_of(reach=reach, destination=None, rows=STRIP_ROWS)
+    assert first_row(
+        scroll=-50, cursor=None, total=len(reach.rows), home=home,
+        rows=STRIP_ROWS,
+    ) == 0
+
+
+def test_approach_row_shows_its_time() -> None:
+    """Approach rows show when the next departure calls there."""
+    inputs = inputs_of(
+        reach=reach_of(tails=[tail('E1 E2', 4, before='P2 P1')]),
+        departures=[live(item=train(minutes=6, trip_id='a'))],
+        patterns={
+            'a': line_pattern(
+                trip_id='a', stations=('P2', 'P1', 'C', 'E1', 'E2'),
+                minutes=0,
+            ),
+        },
+    )
+    shown = times(inputs=inputs)
+    assert (shown['P2'], shown['P1'], shown['C']) == ('8:00', '8:03', '8:06')

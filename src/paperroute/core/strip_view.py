@@ -48,6 +48,7 @@ from paperroute.core.strip_model import (
 from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_times import (
     TripInputs,
+    approach_text,
     first_arrivals,
     next_departure,
 )
@@ -215,8 +216,8 @@ def row_times(
         Clock time by row: the From's next departure (to the Destination
         when there is one, on the strip or not), then the first arrival
         on the ridden rows past the From, or on every reached row when
-        nothing is ridden.
-        Approach rows have none.
+        nothing is ridden. Approach rows have the times the From's next
+        departure calls there.
     """
     if origin is None:
         return {}
@@ -230,6 +231,7 @@ def row_times(
         and (not ride or index in ride)
         and row.place.stop_id in best
     }
+    times.update(approach_text(trips=trips, reach=reach, origin=station))
     leaves = next_departure(
         trips=trips,
         origin=station,

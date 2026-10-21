@@ -258,3 +258,11 @@ def test_folding_is_worked_out_once_per_reach() -> None:
     assert folded(reach=reach) is shut
     assert folded(reach=reach, opened={'E2'}) is reach
     assert folded(reach=reach_from(specs=line(100, 4, 4, 4, 4))) == shut
+
+
+def test_approach_rows_never_fold() -> None:
+    """A long quiet run before FROM is never folded."""
+    before = ' '.join(f'P{index}' for index in range(40))
+    reach = reach_of(tails=[tail('E1', 1, before=before)])
+    shown = folded(reach=reach)
+    assert ids(reach=shown)[:40] == ids(reach=reach)[:40]

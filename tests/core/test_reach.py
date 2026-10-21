@@ -17,6 +17,7 @@ from paperroute.core.reach import (
     RunTail,
     StripKey,
     build_reach,
+    cut_to_line,
     every_route,
 )
 from paperroute.core.stop_view import NOT_PINNED
@@ -463,13 +464,31 @@ def loop_input() -> ReachInput:
     )
 
 
-def test_one_sided_reach_gets_two_approach_rows() -> None:
-    """One side goes below, the two stations before FROM above."""
+def test_one_sided_reach_gets_every_approach_row() -> None:
+    """One side goes below, every station before FROM above."""
     reach = reach_of(tails=[tail('E1 E2', 4, before='P3 P2 P1')])
-    assert ids(reach=reach) == ['P2', 'P1', 'C', 'E1', 'E2']
-    assert [row.kind for row in reach.rows[:2]] == [RowKind.APPROACH] * 2
-    assert [row.parent for row in reach.rows] == [1, 2, None, 2, 3]
+    assert ids(reach=reach) == ['P3', 'P2', 'P1', 'C', 'E1', 'E2']
+    assert [row.kind for row in reach.rows[:3]] == [RowKind.APPROACH] * 3
+    assert [row.parent for row in reach.rows] == [1, 2, 3, None, 3, 4]
     assert reach.stations == 2
+
+
+def test_approach_rows_reach_the_first_stop() -> None:
+    """A run of 40 stops before FROM gives 40 approach rows."""
+    before = ' '.join(f'P{index}' for index in range(40))
+    reach = reach_of(tails=[tail('E1', 4, before=before)])
+    assert ids(reach=reach)[0] == 'P0'
+    assert reach.rows[40].kind == RowKind.ORIGIN
+    assert [row.kind for row in reach.rows[:40]] == [RowKind.APPROACH] * 40
+
+
+def test_approach_rows_on_a_line_stop_at_the_line_end() -> None:
+    """Tails cut to a line give approach rows only on the line."""
+    tails = cut_to_line(
+        tails=[tail('E1', 4, before='X1 X2 P2 P1')],
+        line={'P2', 'P1', 'C', 'E1'},
+    )
+    assert ids(reach=reach_of(tails=list(tails))) == ['P2', 'P1', 'C', 'E1']
 
 
 def test_approach_rows_skip_placed_stations() -> None:

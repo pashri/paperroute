@@ -47,8 +47,6 @@ TITLE_FACE: Final[Face] = Face(weight=700, px=20)
 TITLE_Y: Final[int] = 80
 SUBTITLE_FACE: Final[Face] = Face(weight=400, px=15)
 SUBTITLE_Y: Final[int] = 104
-NOTE_FACE: Final[Face] = Face(weight=400, px=12)
-NOTE_Y: Final[int] = 128
 ROWS_TOP: Final[int] = 160
 ROW_STEP: Final[int] = 70
 LEAVES_FACE: Final[Face] = Face(weight=800, px=30)
@@ -211,7 +209,7 @@ def panel_row(canvas: Canvas, *, row: Row, top: int, whole: bool) -> None:
 
 def panel_heading(canvas: Canvas, *, panel: StripPanel, drop: int) -> None:
     """
-    Draw the From, the Destination line and the station count.
+    Draw the From and the Destination line.
 
     Parameters
     ----------
@@ -241,12 +239,6 @@ def panel_heading(canvas: Canvas, *, panel: StripPanel, drop: int) -> None:
             face=SUBTITLE_FACE,
             grey=INK,
         )
-    canvas.text(
-        at=(TEXT_LEFT, NOTE_Y + drop),
-        text=panel.note,
-        face=NOTE_FACE,
-        grey=INK,
-    )
 
 
 def panel_empty(canvas: Canvas, *, text: str, drop: int) -> None:

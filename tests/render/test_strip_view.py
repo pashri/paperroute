@@ -493,3 +493,9 @@ def test_long_route_pair_leaves_the_countdown_clear() -> None:
     )
     rows = slice(PANEL_TOP + 30, PANEL_TOP + 43)
     assert (frame[rows, 701:int(784 - count) - 2] == PAPER).all()
+
+
+def test_panel_heading_has_no_station_count() -> None:
+    """Nothing is drawn between the Destination line and the first row."""
+    frame = draw_strip_view(view=VIEW)
+    assert (frame[112:PANEL_TOP - 4, 460:784] == PAPER).all()

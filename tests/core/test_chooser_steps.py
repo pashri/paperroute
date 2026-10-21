@@ -258,7 +258,6 @@ def test_from_stage_draws_the_line() -> None:
     assert (view.panel.title, view.panel.destination) == (
         '606 to Parramatta', None,
     )
-    assert view.panel.note == ''
     assert [row.name for row in view.rows] == [
         'Parramatta', 'Northmead', 'Baulkham Hills',
     ]

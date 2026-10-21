@@ -111,7 +111,7 @@ STRIP_ROWS = tuple(
     for index in range(12)
 )
 STRIP_PANEL = StripPanel(
-    title='Town Hall', destination='Parramatta', note='201 stations from here',
+    title='Town Hall', destination='Parramatta',
     rows=(panel_row(),) * 4, no_destination=False, hint=None)
 STRIP_VIEW = StripView(
     origin='Town Hall', destination='Parramatta', clock='8:05',

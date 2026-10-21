@@ -364,7 +364,6 @@ def test_no_destination_panel_has_four_departures_and_no_destination_line(
     assert panel.no_destination
     assert len(panel.rows) == 4
     assert panel.title == 'C Station'
-    assert panel.note == '8 stations from here'
     assert panel.hint is None
 
 

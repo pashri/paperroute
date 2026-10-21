@@ -191,8 +191,6 @@ class StripPanel:
     destination : str | None
         The Destination's name, drawn after an arrow, or None when the
         place has no destination.
-    note : str
-        How many stations the strip reaches.
     rows : tuple[Row, ...]
         Departures to show; each `Row.then` is drawn as a second line.
     no_destination : bool
@@ -205,7 +203,6 @@ class StripPanel:
 
     title: str
     destination: str | None
-    note: str
     rows: tuple[Row, ...]
     no_destination: bool
     hint: str | None

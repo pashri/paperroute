@@ -251,6 +251,18 @@ def test_carry_on_not_across_service_zero(chain_db: Path) -> None:
     assert not chain_departures(db=chain_db, dest='C')
 
 
+def test_carry_on_arrival_must_follow_the_boarded_departure(
+    chain_db: Path,
+) -> None:
+    """A To arrival at or before the boarding time gives nothing."""
+    change(
+        db=chain_db,
+        sql=f'UPDATE stop_times SET arr = {FIRST}, dep = {FIRST} '
+        "WHERE trip_id = 'c2' AND seq = 2",
+    )
+    assert not chain_departures(db=chain_db, dest='C')
+
+
 def test_carry_on_arrives_on_the_service_day(chain_db: Path) -> None:
     """The arrival counts from the boarded trip's service day."""
     departure, = chain_departures(db=chain_db, dest='C')

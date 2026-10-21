@@ -70,7 +70,7 @@ JOIN stop_times l ON l.trip_id = t.trip_id
                WHERE m.trip_id = t.trip_id)
 JOIN trips n ON n.trip_id = c.onto
 JOIN routes nr ON nr.route_id = n.route_id
-WHERE c.reached
+WHERE c.reached AND d.arr > o.dep
 GROUP BY c.trip_id, c.seq
 """
 

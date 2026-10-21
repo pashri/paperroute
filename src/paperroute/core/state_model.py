@@ -196,6 +196,9 @@ class StripState:
     asked : int
         The scroll last set, which `scroll` keeps to as far as the rows
         allow, so rows that shrink for a while don't lose it.
+    bounds : tuple[int, int] | None
+        The lowest and highest scroll of the rows last shown, which a
+        turn of the knob stays within; None before any.
     opened : frozenset[str]
         Keys of the folds opened on the strip on screen.
     context : FoldContext | None
@@ -208,6 +211,7 @@ class StripState:
     failed_at: datetime | None = None
     scroll: int = 0
     asked: int = 0
+    bounds: tuple[int, int] | None = None
     opened: frozenset[str] = frozenset()
     context: FoldContext | None = None
 

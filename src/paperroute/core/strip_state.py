@@ -394,7 +394,9 @@ def clamped(*, state: State, banner: bool) -> State:
         banner=banner,
     )
     scroll = min(max(state.strip.asked, low), high)
-    return replace(state, strip=replace(state.strip, scroll=scroll))
+    return replace(state, strip=replace(
+        state.strip, scroll=scroll, bounds=(low, high),
+    ))
 
 
 def strip_window(*, state: State) -> tuple[Departure, ...]:

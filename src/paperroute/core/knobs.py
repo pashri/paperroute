@@ -43,13 +43,16 @@ def bottom_turned(*, state: State, steps: int) -> State:
     State
         State scrolled on the Stop view or the Strip, each its own
         scroll, or zoomed on the Map and Strip + map. The Strip's scroll
-        is clamped when the view is next built.
+        stays within the rows last shown.
     """
     match state.view:
         case LiveView.STOP:
             return replace(state, scroll=max(0, state.scroll + steps))
         case LiveView.STRIP:
             scroll = state.strip.scroll + steps
+            if state.strip.bounds is not None:
+                low, high = state.strip.bounds
+                scroll = min(max(scroll, low), high)
             strip = replace(state.strip, scroll=scroll, asked=scroll)
             return replace(state, strip=strip)
     return replace(state, map=zoomed(map_state=state.map, steps=steps))

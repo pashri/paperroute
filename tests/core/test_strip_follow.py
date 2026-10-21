@@ -6,7 +6,7 @@ from typing import Final
 
 from paperroute.core.live import LiveDeparture
 from paperroute.core.messages import Tick
-from paperroute.core.model import StopPlace
+from paperroute.core.model import CarryOn, StopPlace
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import (
     Reach,
@@ -383,6 +383,7 @@ def line_state(*, scroll: int) -> State:
             ),
         }),
     )
+    state, _ = step(state, Tick(now=START))
     state, _ = step(state, turn(steps=scroll))
     return state
 
@@ -395,3 +396,58 @@ def test_a_scroll_survives_the_followed_train_changing() -> None:
     assert state.strip.scroll < 6
     state, _ = step(state, Tick(now=START + timedelta(minutes=11)))
     assert state.strip.scroll == 6
+
+
+def carrying(*, item: LiveDeparture) -> LiveDeparture:
+    """
+    Make a departure's vehicle carry on as a T2 to Leppington.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        The departure.
+
+    Returns
+    -------
+    LiveDeparture
+        It, with its next run set.
+    """
+    departure = item.departure
+    return replace(item, departure=replace(departure, facts=replace(
+        departure.facts,
+        then=CarryOn(route='T2', headsign='Leppington', trip_id='b'),
+    )))
+
+
+def test_the_carry_note_is_the_followed_trains() -> None:
+    """Another train's change is hidden; the followed one's shows."""
+    inputs = sydenham()
+    short, long = inputs.departures
+    other = followed(inputs=replace(
+        inputs, departures=(carrying(item=short), long),
+    ))
+    assert other.reach is not None
+    assert marks_of(inputs=other, reach=other.reach).note is None
+    own = followed(inputs=replace(
+        inputs, departures=(short, carrying(item=long)),
+    ))
+    reach = own.reach
+    assert reach is not None
+    note = marks_of(inputs=own, reach=reach).note
+    assert note is not None
+    origin = origin_of(reach=reach)
+    assert origin is not None
+    assert reach.rows[note[0]].place.stop_id == 'TH' and note[0] > origin
+    assert note[1].then == 'T2 Leppington'
+
+
+def test_an_overshoot_is_kept_to_the_rows_shown() -> None:
+    """Turning past the express's rows asks for no more than they show."""
+    state = line_state(scroll=0)
+    state, _ = step(state, Tick(now=START + timedelta(minutes=6)))
+    shown = state.strip.scroll
+    state, _ = step(state, turn(steps=20))
+    assert state.strip.asked == state.strip.scroll >= shown
+    held = state.strip.asked
+    state, _ = step(state, Tick(now=START + timedelta(minutes=11)))
+    assert state.strip.scroll == held

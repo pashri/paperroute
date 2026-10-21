@@ -366,6 +366,7 @@ def stops_after(
     tuple[str, PatternStop, datetime]
         Each later call's strip station, the call, and its arrival
         shifted by the delay; none when the trip's pattern isn't loaded.
+        Calls run through with no pick-up or set-down are left out.
     """
     departure = item.departure
     stations = trips.station_of
@@ -383,6 +384,8 @@ def stops_after(
         pattern.stops[start + 1:], *(more.stops[1:] for more in joined),
     )
     for stop in calls:
+        if stop.passes:
+            continue
         arrives = service_time(day=departure.service_day, seconds=stop.arrives)
         yield (
             stations.get(stop.station, stop.station),
@@ -695,7 +698,8 @@ def approach_times(*, trips: TripInputs, origin: str,
     -------
     dict[str, datetime]
         Departure time by station for each of the stations the next
-        departure (any target) stops at before the From, shifted by its
+        departure (any target) stops at before the From, not running
+        through, shifted by its
         live delay; empty when there is none or its pattern is unknown.
     """
     item = next_item(trips=trips, origin=origin, target=None)
@@ -713,7 +717,7 @@ def approach_times(*, trips: TripInputs, origin: str,
     found: dict[str, datetime] = {}
     for stop in pattern.stops[:start]:
         station = trips.station_of.get(stop.station, stop.station)
-        if station in stations:
+        if station in stations and not stop.passes:
             found[station] = shifted(
                 moment=service_time(
                     day=departure.service_day,

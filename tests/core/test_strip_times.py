@@ -10,6 +10,7 @@ from paperroute.core.strip_times import (
     STRIP_HOPS,
     TripInputs,
     approach_times,
+    arrivals_after,
     board_departures,
     joined_ids,
     strip_trips,
@@ -222,3 +223,35 @@ def test_joined_ids_follow_loaded_patterns_up_to_the_hop_limit() -> None:
     assert joined_ids(starts={'j0'}, patterns={'j0': patterns['j0']}) == {
         'j1',
     }
+
+
+def test_approach_times_skip_a_station_run_through() -> None:
+    """A station the next train runs through has no approach time."""
+    plain = approach_inputs()
+    through = calls(stations=('A', 'B', 'C'), start=EIGHT + 300, step=150)
+    trips = replace(plain, patterns={
+        **plain.patterns,
+        'a': pattern(trip_id='a', stops=(
+            through[0], replace(through[1], passes=True), through[2],
+        )),
+    })
+    assert set(approach_times(
+        trips=trips, origin='C', stations={'A', 'B'},
+    )) == {'A'}
+
+
+def test_calls_after_leave_out_stations_run_through() -> None:
+    """Times after the From skip a call with no pick-up or set-down."""
+    plain = approach_inputs()
+    stops = calls(stations=('C', 'D', 'E'), start=EIGHT + 600, step=300)
+    trips = replace(plain, patterns={
+        'a': pattern(trip_id='a', stops=(
+            stops[0], replace(stops[1], passes=True), stops[2],
+        )),
+    })
+    item = live(item=train(minutes=10, trip_id='a'))
+    assert [
+        station for station, _ in arrivals_after(
+            item=item, trips=trips, origin='C',
+        )
+    ] == ['E']

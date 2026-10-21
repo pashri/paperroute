@@ -46,7 +46,7 @@ from tests.build.feeds import (
 )
 from tests.build.network_feed import network_feed
 from tests.core.factories import pin_of, place
-from tests.helpers import old_schema, schema_three, write_feed
+from tests.helpers import old_schema, schema_four, schema_three, write_feed
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 MONDAY: Final[date] = date(2026, 10, 19)
@@ -1693,3 +1693,68 @@ def test_consecutive_calls_keep_the_last_with_pickup(
             assert p_departures(repo=repo, destination=destination) == [
                 ('two', at(hour=8, minute=0)),
             ]
+
+
+def empty_running_repo(*, tmp_path: Path) -> SqliteTimetableRepository:
+    """
+    Build P to Q with one revenue trip and one out-of-service trip.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Working directory.
+
+    Returns
+    -------
+    SqliteTimetableRepository
+        Repository over the built file; the caller closes it.
+    """
+    calls = [('P_1', '08:00:00'), ('Q', '08:10:00')]
+    repo = platform_repo(
+        tmp_path=tmp_path,
+        trips=[('revenue', 'Q', calls), ('empty', 'Q', calls)],
+    )
+    with closing(sqlite3.connect(tmp_path / 'timetable.db')) as conn:
+        conn.execute(
+            "UPDATE trips SET service = 0 WHERE trip_id = 'empty'",
+        )
+        conn.commit()
+    return repo
+
+
+def test_departures_skip_non_service(tmp_path: Path) -> None:
+    """An out-of-service trip is not listed, with or without a Destination."""
+    with closing(empty_running_repo(tmp_path=tmp_path)) as repo:
+        for destination in (None, 'Q'):
+            assert p_departures(repo=repo, destination=destination) == [
+                ('revenue', at(hour=8, minute=0)),
+            ]
+
+
+def test_route_labels_include_non_service(tmp_path: Path) -> None:
+    """The Map still labels an out-of-service trip."""
+    with closing(empty_running_repo(tmp_path=tmp_path)) as repo:
+        found = repo.route_labels(trip_ids={'empty'})
+    assert found == {'empty': 'T1'}
+
+
+def test_patterns_include_non_service(tmp_path: Path) -> None:
+    """The Map still gets the pattern of an out-of-service trip."""
+    with closing(empty_running_repo(tmp_path=tmp_path)) as repo:
+        found = repo.patterns(trip_ids={'empty'}, around=MONDAY)
+    assert found['empty'].route == 'T1'
+    assert len(found['empty'].stops) == 2
+
+
+def test_departures_on_schema_four_file(tmp_path: Path) -> None:
+    """A file without the service column still gives departures."""
+    empty_running_repo(tmp_path=tmp_path).close()
+    schema_four(path=tmp_path / 'timetable.db')
+    with closing(
+        SqliteTimetableRepository(path=tmp_path / 'timetable.db')
+    ) as old:
+        for destination in (None, 'Q'):
+            assert [
+                trip
+                for trip, _ in p_departures(repo=old, destination=destination)
+            ] == ['empty', 'revenue']

@@ -51,10 +51,13 @@ SELECT
   (SELECT COUNT(*) FROM sqlite_master
    WHERE type = 'table' AND name = 'trip_next'),
   (SELECT COUNT(*) FROM pragma_table_info('trip_next')
-   WHERE name = 'next_trip')
+   WHERE name = 'next_trip'),
+  (SELECT COUNT(*) FROM pragma_table_info('trips')
+   WHERE name = 'service')
 """
 NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, n.next_trip'
 OLD_NEXT_COLUMNS: Final[str] = 'n.route, n.headsign, NULL'
+SERVICE_ONLY: Final[str] = 'AND t.service = 1'
 NEXT_JOIN: Final[str] = 'LEFT JOIN trip_next n ON n.trip_id = t.trip_id'
 NO_NEXT: Final[str] = 'NULL, NULL, NULL'
 NAMED_NEAR: Final[str] = """
@@ -147,6 +150,7 @@ WHERE o.stop_id IN (SELECT stop_id FROM stops
   AND o.dep BETWEEN :lo AND :hi AND o.pickup <> 1 AND d.dropoff <> 1
   AND NOT EXISTS (SELECT 1 FROM trip_skip k
                   WHERE k.trip_id = t.trip_id AND k.date = :day)
+  {service}
 """ + STILL_AT_FROM + """
 GROUP BY o.trip_id, o.seq
 """
@@ -172,6 +176,7 @@ WHERE o.stop_id IN (SELECT stop_id FROM stops
   AND o.dep BETWEEN :lo AND :hi AND o.pickup <> 1
   AND NOT EXISTS (SELECT 1 FROM trip_skip k
                   WHERE k.trip_id = t.trip_id AND k.date = :day)
+  {service}
 """ + STILL_AT_FROM
 
 
@@ -190,12 +195,15 @@ class Features:
         Whether the trip_next table exists.
     next_trips : bool
         Whether trip_next has the next_trip column.
+    service : bool
+        Whether trips has the service column.
     """
 
     shape_column: bool = False
     shapes: bool = False
     carry_ons: bool = False
     next_trips: bool = False
+    service: bool = False
 
     @property
     def next_columns(self) -> str:
@@ -212,6 +220,7 @@ class Features:
         return NEXT_COLUMNS if self.next_trips else OLD_NEXT_COLUMNS
 
 
+# pylint: disable-next=too-many-public-methods
 class SqliteTimetableRepository:
     """
     Read-only queries against the timetable file.
@@ -336,7 +345,7 @@ class SqliteTimetableRepository:
         self.fetch(sql='SELECT 1', params=())
         if known is None or known[0] != self.identity:
             rows = self.fetch(sql=SCHEMA_CHECK, params=())
-            found = rows[0] if rows else (0, 0, 0, 0)
+            found = rows[0] if rows else (0, 0, 0, 0, 0)
             known = (
                 self.identity,
                 Features(
@@ -344,6 +353,7 @@ class SqliteTimetableRepository:
                     shapes=bool(found[1]),
                     carry_ons=bool(found[2]),
                     next_trips=bool(found[3]),
+                    service=bool(found[4]),
                 ),
             )
             self.schema = known
@@ -359,6 +369,18 @@ class SqliteTimetableRepository:
             ``t.shape_id``, or NULL for a file without the column.
         """
         return 't.shape_id' if self.features().shape_column else NO_SHAPE
+
+    def service_filter(self) -> str:
+        """
+        The clause that keeps out-of-service trips off a board.
+
+        Returns
+        -------
+        str
+            ``AND t.service = 1``, or nothing for a file without the
+            column, which has no such trips.
+        """
+        return SERVICE_ONLY if self.features().service else ''
 
     def version(self) -> str | None:
         """
@@ -812,6 +834,7 @@ class SqliteTimetableRepository:
                 shape=self.shape_column(),
                 then=features.next_columns,
                 next_join=NEXT_JOIN if features.carry_ons else '',
+                service=self.service_filter(),
             ),
             params={
                 'day': day.isoformat(),

@@ -1,15 +1,18 @@
 """Tests for the TfNSW HTTP feed client, against a real local server."""
 
 import asyncio
+import time
 from collections.abc import AsyncIterator
 from http import HTTPStatus
 from pathlib import Path
+from typing import Final
 
 import aiohttp
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
+from paperroute.adapters.rate_limit import StartLimiter
 from paperroute.adapters.tfnsw import (
     AiohttpFeedsClient,
     FeedError,
@@ -149,3 +152,75 @@ def test_api_key_from_env_exits_when_unset(
     monkeypatch.delenv('PAPERROUTE_API_KEY_FILE', raising=False)
     with pytest.raises(SystemExit, match='PAPERROUTE_API_KEY_FILE'):
         api_key_from_env()
+
+
+JITTER_S: Final[float] = 0.1
+
+
+async def test_burst_is_spaced_and_complete() -> None:
+    """A burst all returns in call order, five starts spanning a second."""
+    starts: list[tuple[float, int]] = []
+
+    async def handler(request: web.Request) -> web.Response:
+        starts.append((time.monotonic(), int(request.query['n'])))
+        return web.Response(body=b'payload')
+
+    app = web.Application()
+    for name in ('buses', 'ferries', 'trains'):
+        app.router.add_get(f'/v1/gtfs/realtime/{name}', handler)
+    server = TestServer(app)
+    await server.start_server()
+    client = AiohttpFeedsClient(
+        api_key='secret',
+        base_url=str(server.make_url('/')),
+        limiter=StartLimiter(),
+    )
+    names = ('buses', 'ferries', 'trains')
+    try:
+        bodies = await asyncio.gather(
+            *(
+                client.fetch(feed=f'v1/gtfs/realtime/{names[n % 3]}?n={n}')
+                for n in range(12)
+            )
+        )
+    finally:
+        await client.close()
+        await server.close()
+    assert bodies == [b'payload'] * 12
+    times = [moment for moment, _ in starts]
+    assert [n for _, n in starts] == list(range(12))
+    for first, fifth in zip(times, times[4:]):
+        assert fifth - first >= 1 - JITTER_S
+
+
+async def test_failure_does_not_stall_queue() -> None:
+    """A 429 in the burst raises, and later calls still return."""
+
+    async def handler(request: web.Request) -> web.Response:
+        if request.query['n'] == '2':
+            return web.Response(status=HTTPStatus.TOO_MANY_REQUESTS)
+        return web.Response(body=b'payload')
+
+    app = web.Application()
+    app.router.add_get('/v1/gtfs/realtime/buses', handler)
+    server = TestServer(app)
+    await server.start_server()
+    client = AiohttpFeedsClient(
+        api_key='secret',
+        base_url=str(server.make_url('/')),
+        limiter=StartLimiter(per_second=100),
+    )
+    try:
+        results = await asyncio.gather(
+            *(
+                client.fetch(feed=f'v1/gtfs/realtime/buses?n={n}')
+                for n in range(5)
+            ),
+            return_exceptions=True,
+        )
+    finally:
+        await client.close()
+        await server.close()
+    assert isinstance(results[2], FeedError)
+    assert '429' in str(results[2])
+    assert [r for i, r in enumerate(results) if i != 2] == [b'payload'] * 4

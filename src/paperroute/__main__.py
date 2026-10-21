@@ -18,6 +18,7 @@ from paperroute.adapters.act_led import ActLed
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.network_db import SqliteNetworkRepository
+from paperroute.adapters.rate_limit import StartLimiter
 from paperroute.adapters.rebuild import (
     ChildRebuilder,
     NullBuilder,
@@ -254,7 +255,9 @@ def feeds_client(*, choice: str) -> FeedsClient:
     """
     if choice != 'live':
         return FileFeedsClient(directory=Path(choice))
-    return AiohttpFeedsClient(api_key=api_key_from_env())
+    return AiohttpFeedsClient(
+        api_key=api_key_from_env(), limiter=StartLimiter(),
+    )
 
 
 def clock_for(*, args: argparse.Namespace) -> Clock:

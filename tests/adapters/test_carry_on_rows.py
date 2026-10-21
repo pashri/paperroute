@@ -1,5 +1,6 @@
 """Tests for departures that stay on as the vehicle becomes another trip."""
 
+import dataclasses
 import shutil
 import sqlite3
 from collections.abc import Iterator
@@ -10,18 +11,19 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.carry_on_rows import MAX_HOPS
+from paperroute.adapters.carry_on_rows import MAX_HOPS, first_to_arrive
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.model import SYDNEY, CarryOn, Departure
+from paperroute.core.model import SYDNEY, CarryOn, Departure, TripFacts
 from tests.build.network_feed import network_feed
+from tests.core.factories import START, departure
 
 DAY: Final[date] = date(2026, 10, 6)
 CHAIN: Final[tuple[str, ...]] = (
     'E2', 'E1', 'C', 'J', 'W1', 'W2', 'R1', 'R2', 'R3',
 )
-START: Final[int] = 3 * 3600  # before any network trip
+FIRST: Final[int] = 3 * 3600  # before any network trip
 HOP: Final[int] = 600  # seconds per chain trip
 
 
@@ -108,7 +110,7 @@ def add_trip(*, conn: sqlite3.Connection, k: int) -> None:
             CHAIN[k + 1], 'chain', 'sydneytrains',
         ),
     )
-    first = START + k * HOP
+    first = FIRST + k * HOP
     conn.executemany(
         'INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, 0, 0)',
         [
@@ -254,3 +256,20 @@ def test_carry_on_arrives_on_the_service_day(chain_db: Path) -> None:
     departure, = chain_departures(db=chain_db, dest='C')
     assert departure.service_day == DAY
     assert departure.departs == departure.arrives - timedelta(minutes=15)
+
+
+def test_first_to_arrive_drops_beaten_carry_ons() -> None:
+    """A carry-on stays only when no later direct trip gets there first."""
+    onto = TripFacts(onto=CarryOn(route='T2', headsign='C'))
+    slow = dataclasses.replace(
+        departure(departs=START, ride=60, trip_id='slow'), facts=onto,
+    )
+    quick = dataclasses.replace(
+        departure(departs=START, ride=20, trip_id='quick'), facts=onto,
+    )
+    later = departure(departs=START + timedelta(minutes=5), ride=30)
+    earlier = departure(departs=START - timedelta(minutes=5), ride=5)
+    found = first_to_arrive(departures=[slow, quick, later, earlier])
+    assert [d.trip_id for d in found] == [
+        'quick', later.trip_id, earlier.trip_id,
+    ]

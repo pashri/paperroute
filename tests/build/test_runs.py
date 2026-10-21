@@ -671,9 +671,9 @@ def test_trip_joins_rows() -> None:
                    first_dep=150, last_arr=200, block='r')
     bus = hand_trip(trip_id='b1', route='400', stations='P Q',
                     first_dep=0, last_arr=100)
-    same = hand_trip(trip_id='b2', route='400', stations='Q P',
+    same = hand_trip(trip_id='b2', route='400', stations='Q R',
                      first_dep=150, last_arr=200)
-    other = hand_trip(trip_id='b3', route='401', stations='Q P',
+    other = hand_trip(trip_id='b3', route='401', stations='Q R',
                       first_dep=150, last_arr=200)
     empty = dataclasses.replace(t2, revenue=False)
     assert joins_of(trips=[t8, t2]) == {'t8': 't2'}
@@ -687,3 +687,26 @@ def test_load_runs_stores_trip_joins(network: sqlite3.Connection) -> None:
     rows = set(network.execute('SELECT trip_id, next_trip FROM trip_joins'))
     assert ('x1', 'x2') in rows
     assert ('v1', 'v2') not in rows
+
+
+@pytest.mark.parametrize(('first', 'second', 'joined'), [
+    (('N619', 'CCN', 'CEN STR HOR GOS NWI'),
+     ('N440', 'CCN', 'NWI GOS HOR STR CEN'), False),
+    (('150E', 'T1', 'HBY STR BKT PEN'),
+     ('150F', 'T1', 'PEN BKT STR HBY'), False),
+    (('27-B', 'T8', 'CEN SYD GLF LEP'),
+     ('27-C', 'T2', 'LEP GLF HMP'), False),
+    (('42-C', 'T8', 'SYD RED CEN'),
+     ('42-D', 'T2', 'CEN TOW WYN'), True),
+])
+def test_trip_joins_skip_turnarounds(
+    first: tuple[str, str, str], second: tuple[str, str, str],
+    joined: bool,
+) -> None:
+    """A train reversing at the join is no carry-on; through-running is."""
+    trips = [
+        hand_trip(trip_id=trip_id, route=route, stations=stations,
+                  first_dep=dep, last_arr=dep + 100)
+        for (trip_id, route, stations), dep in ((first, 0), (second, 150))
+    ]
+    assert (first[0] in joins_of(trips=trips)) is joined

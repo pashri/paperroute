@@ -6,6 +6,7 @@ one, so a joined trip's first call never counts as reaching the
 Destination.
 """
 
+from collections.abc import Sequence
 from dataclasses import replace
 from datetime import date
 from typing import Final
@@ -106,3 +107,31 @@ def carry_on_departure(*, row: tuple[object, ...], day: date) -> Departure:
             ),
         ),
     )
+
+
+def first_to_arrive(*, departures: Sequence[Departure]) -> list[Departure]:
+    """
+    Drop carry-ons that a direct trip leaving no earlier beats.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        Direct and carry-on departures for one From and Destination.
+
+    Returns
+    -------
+    list[Departure]
+        The departures, less each carry-on for which a direct one leaves
+        at the same time or later and arrives no later.
+    """
+    direct = [d for d in departures if d.facts.onto is None]
+    return [
+        departure
+        for departure in departures
+        if departure.facts.onto is None
+        or not any(
+            other.departs >= departure.departs
+            and other.arrives <= departure.arrives
+            for other in direct
+        )
+    ]

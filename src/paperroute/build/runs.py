@@ -603,7 +603,10 @@ def trip_joins(
     *, trips: Iterable[TripCalls], nexts: dict[str, TripCalls],
 ) -> Iterator[tuple[str, str]]:
     """
-    Find the shown trips whose vehicle runs on as another shown trip.
+    Find the shown trips whose vehicle runs on through as another.
+
+    A vehicle that reverses at the join, its next trip's second station
+    being this trip's second-to-last, is a turnaround and not a join.
 
     Parameters
     ----------
@@ -621,8 +624,30 @@ def trip_joins(
         after = nexts.get(trip.trip_id)
         if trip.shown and after is not None and runs_on(
             current=trip, after=after, joined={trip.trip_id},
-        ):
+        ) and not reverses(trip=trip, after=after):
             yield trip.trip_id, after.trip_id
+
+
+def reverses(*, trip: TripCalls, after: TripCalls) -> bool:
+    """
+    Say whether a vehicle turns back where one trip becomes the next.
+
+    Parameters
+    ----------
+    trip : TripCalls
+        Earlier trip.
+    after : TripCalls
+        Trip it becomes.
+
+    Returns
+    -------
+    bool
+        True when after's second station is trip's second-to-last.
+    """
+    return (
+        len(trip.stations) > 1 and len(after.stations) > 1
+        and after.stations[1] == trip.stations[-2]
+    )
 
 
 def trip_days(*, conn: sqlite3.Connection) -> dict[str, int]:

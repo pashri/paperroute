@@ -9,7 +9,11 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.adapters.carry_on_rows import CARRY_ONS, carry_on_departure
+from paperroute.adapters.carry_on_rows import (
+    CARRY_ONS,
+    carry_on_departure,
+    first_to_arrive,
+)
 from paperroute.adapters.departure_rows import STILL_AT_FROM, to_departure
 from paperroute.adapters.sqlite_ro import (
     Identity,
@@ -799,7 +803,7 @@ class SqliteTimetableRepository:
             found = list(board_departures(departures=found, kind=pin.kind))
         else:
             found = list(strip_departures(
-                departures=found,
+                departures=first_to_arrive(departures=found),
                 key=StripKey(
                     station=pin.origin.stop_id,
                     kind=pin.kind,

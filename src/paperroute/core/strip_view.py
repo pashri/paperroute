@@ -51,6 +51,7 @@ from paperroute.core.strip_times import (
     approach_text,
     first_arrivals,
     next_departure,
+    onward_text,
 )
 from paperroute.core.strip_vehicles import vehicle_markers
 
@@ -216,14 +217,20 @@ def row_times(
         Clock time by row: the From's next departure (to the Destination
         when there is one, on the strip or not), then the first arrival
         on the ridden rows past the From, or on every reached row when
-        nothing is ridden. Approach rows have the times the From's next
-        departure calls there.
+        nothing is ridden. Rows past the Destination have the times of
+        the vehicle that reaches it first. Approach rows have the times
+        the From's next departure calls there.
     """
     if origin is None:
         return {}
     station = reach.rows[origin].place.stop_id
     trips = trips_of(inputs=inputs)
-    best = first_arrivals(trips=trips, origin=station)
+    target = target_of(reach=reach, destination=inputs.destination)
+    best = first_arrivals(
+        trips=trips,
+        origin=station,
+        target=None if target is None else reach.rows[target].place.stop_id,
+    )
     times = {
         index: clock_text(moment=best[row.place.stop_id])
         for index, row in enumerate(reach.rows)
@@ -232,6 +239,9 @@ def row_times(
         and row.place.stop_id in best
     }
     times.update(approach_text(trips=trips, reach=reach, origin=station))
+    times.update(onward_text(
+        trips=trips, reach=reach, origin=station, target=target,
+    ))
     leaves = next_departure(
         trips=trips,
         origin=station,

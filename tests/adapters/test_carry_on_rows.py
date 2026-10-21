@@ -355,3 +355,10 @@ def test_carry_on_uses_first_destination_call(chain_db: Path) -> None:
     assert departure.facts.onto.trip_id == 'cloop'
     assert departure.stops == 2
     assert departure.arrives == datetime(2026, 10, 6, 3, 10, tzinfo=SYDNEY)
+
+
+def test_patterns_name_the_trip_joined_onto(chain_db: Path) -> None:
+    """A chain trip's pattern names the next; the last names none."""
+    with closing(SqliteTimetableRepository(path=chain_db)) as repo:
+        found = repo.patterns(trip_ids=['c1', 'c8'], around=DAY)
+    assert (found['c1'].next_trip, found['c8'].next_trip) == ('c2', None)

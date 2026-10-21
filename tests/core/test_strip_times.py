@@ -7,10 +7,13 @@ from typing import Final
 from paperroute.core.model import CarryOn, Departure, RouteKind
 from paperroute.core.reach import StripKey
 from paperroute.core.strip_times import (
+    STRIP_HOPS,
     TripInputs,
     approach_times,
     board_departures,
+    joined_ids,
     strip_trips,
+    trip_ids,
 )
 from tests.core.factories import EIGHT, START, calls, departure, live, pattern
 
@@ -193,3 +196,29 @@ def test_approach_time_uses_a_departure_at_second_zero() -> None:
     assert approach_times(
         trips=trips, origin='C', stations={'A'},
     ) == approach_times(trips=expected, origin='C', stations={'A'})
+
+
+def test_trip_ids_include_the_trip_run_on_through_as() -> None:
+    """A carry-on departure asks for the trip it becomes."""
+    carried = replace(
+        train(minutes=1, trip_id='a'),
+        facts=replace(
+            train(minutes=1, trip_id='a').facts,
+            onto=CarryOn(route='T2', headsign='W', trip_id='b'),
+        ),
+    )
+    assert trip_ids(departures=[carried]) == {'a', 'b'}
+
+
+def test_joined_ids_follow_loaded_patterns_up_to_the_hop_limit() -> None:
+    """Joins are followed while patterns are loaded, at most STRIP_HOPS."""
+    patterns = {
+        f'j{k}': replace(pattern(trip_id=f'j{k}'), next_trip=f'j{k + 1}')
+        for k in range(STRIP_HOPS + 3)
+    }
+    assert joined_ids(starts={'j0'}, patterns=patterns) == {
+        f'j{k}' for k in range(1, STRIP_HOPS + 1)
+    }
+    assert joined_ids(starts={'j0'}, patterns={'j0': patterns['j0']}) == {
+        'j1',
+    }

@@ -19,6 +19,7 @@ from paperroute.adapters.departure_rows import (
     stop_count,
     to_departure,
 )
+from paperroute.adapters.pattern_rows import JOINED_TRIPS, pattern_of
 from paperroute.adapters.sqlite_ro import (
     Identity,
     ReadOnlyDatabase,
@@ -39,7 +40,6 @@ from paperroute.core.model import (
     Mode,
     Pin,
     StopPlace,
-    mode_for,
     service_seconds,
 )
 from paperroute.core.patterns import PatternStop, TripPattern
@@ -622,14 +622,39 @@ class SqliteTimetableRepository:
         real = {str(row[1]) for rows in found.values() for row in rows}
         days = self.running_days(trip_ids=real, around=around)
         calls = self.call_stops(trip_ids=real)
+        nexts = self.joined_trips(trip_ids=real)
         return {
             requested: pattern_of(
                 requested=requested,
                 rows=rows,
                 days=days,
-                calls=calls,
+                calls=(calls, nexts),
             )
             for requested, rows in found.items()
+        }
+
+    def joined_trips(self, *, trip_ids: Collection[str]) -> dict[str, str]:
+        """
+        Find the trip each trip's vehicle runs on through as.
+
+        Parameters
+        ----------
+        trip_ids : Collection[str]
+            Trip IDs.
+
+        Returns
+        -------
+        dict[str, str]
+            Joined trip by trip ID, for joins onto passenger trips; empty
+            for a file without joins.
+        """
+        features = self.features()
+        if not features.joins:
+            return {}
+        sql = JOINED_TRIPS + (' AND n.service = 1' if features.service else '')
+        return {
+            str(trip): str(joined)
+            for trip, joined in self.fetch_in(sql=sql, ids=trip_ids)
         }
 
     def running_days(
@@ -889,48 +914,6 @@ class SqliteTimetableRepository:
     def close(self) -> None:
         """Close the database connection."""
         self.db.close()
-
-
-def pattern_of(
-    *,
-    requested: str,
-    rows: list[tuple[object, ...]],
-    days: dict[str, list[date]],
-    calls: dict[str, list[PatternStop]],
-) -> TripPattern:
-    """
-    Build the pattern of a requested ID from its candidate trips.
-
-    Parameters
-    ----------
-    requested : str
-        The requested trip ID or alias.
-    rows : list[tuple[object, ...]]
-        Candidate trip rows, preferred first.
-    days : dict[str, list[date]]
-        Running dates by trip ID.
-    calls : dict[str, list[PatternStop]]
-        Stops by trip ID.
-
-    Returns
-    -------
-    TripPattern
-        The pattern; its dates are the union over all candidates, and the
-        rest comes from the first candidate that runs on any of them.
-    """
-    running = sorted({d for row in rows for d in days.get(str(row[1]), ())})
-    row = next((r for r in rows if days.get(str(r[1]))), rows[0])
-    return TripPattern(
-        trip_id=requested,
-        route=str(row[2]),
-        mode=mode_for(
-            route_type=int(str(row[3])),
-            agency_id=str(row[4]) if row[4] else None,
-        ),
-        shape_id=str(row[5]) if row[5] else None,
-        stops=tuple(calls.get(str(row[1]), ())),
-        days=tuple(running),
-    )
 
 
 def to_point(*, lon: object, lat: object) -> Point | None:

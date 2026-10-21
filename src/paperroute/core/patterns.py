@@ -57,6 +57,9 @@ class TripPattern:
         Service dates the trip runs on, near the date asked about.
     along : tuple[float, ...] | None
         Metres along the shape at each stop, once worked out.
+    next_trip : str | None
+        The trip the vehicle runs on through as, keeping its passengers;
+        None when it doesn't or it isn't known.
     """
 
     trip_id: str
@@ -66,6 +69,7 @@ class TripPattern:
     stops: tuple[PatternStop, ...]
     days: tuple[date, ...]
     along: tuple[float, ...] | None = None
+    next_trip: str | None = None
 
 
 def measure(*, pattern: TripPattern, shape: Shape | None) -> TripPattern:

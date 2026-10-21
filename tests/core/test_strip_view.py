@@ -236,10 +236,10 @@ def test_ride_rows_between_from_and_to() -> None:
     assert {row.tag for row in view.rows} == {''}
 
 
-def test_times_only_on_ride_rows_with_destination() -> None:
-    """With a destination only the ridden rows after FROM have times."""
+def test_times_on_ride_rows_and_on_past_the_destination() -> None:
+    """The ridden rows and the line on past TO have times, not branches."""
     assert times(inputs=replace(three_trains(), destination='W1')) == {
-        'W2': '', 'W1': '8:09', 'R3': '', 'R2': '', 'R1': '', 'J': '8:06',
+        'W2': '8:12', 'W1': '8:09', 'R3': '', 'R2': '', 'R1': '', 'J': '8:06',
         'C': '8:03', 'E1': '', 'E2': '',
     }
 
@@ -868,3 +868,57 @@ def test_banner_and_hint_leave_three_panel_rows() -> None:
         inputs=replace(inputs, picking='TO', cursor=7),
     ).panel
     assert len(panel.rows) == 3
+
+
+def joined_trains() -> StripInputs:
+    """
+    Make inputs for a train from C to J at 8:03 that runs on as one to W2.
+
+    Returns
+    -------
+    StripInputs
+        The inputs on the example reach, at 7:58, with W1 the TO.
+    """
+    return inputs_of(
+        reach=example_reach(),
+        departures=[live(item=train(minutes=3, trip_id='a'))],
+        patterns={
+            'a': replace(
+                line_pattern(trip_id='a', stations=('C', 'J'), minutes=3),
+                next_trip='b',
+            ),
+            'b': line_pattern(
+                trip_id='b', stations=('J', 'W1', 'W2'), minutes=6,
+            ),
+        },
+        destination='W1',
+    )
+
+
+def test_times_follow_the_train_through_a_join() -> None:
+    """A train joining onto another has times to TO and beyond."""
+    found = times(inputs=joined_trains())
+    assert {name: found[name] for name in ('C', 'J', 'W1', 'W2')} == {
+        'C': '8:03', 'J': '8:06', 'W1': '8:09', 'W2': '8:12',
+    }
+
+
+def test_times_stop_where_the_joined_trip_is_not_loaded() -> None:
+    """Without the joined trip's pattern the times end at the join."""
+    inputs = joined_trains()
+    inputs = replace(
+        inputs, patterns={'a': inputs.patterns['a']},
+    )
+    found = times(inputs=inputs)
+    assert (found['J'], found['W1'], found['W2']) == ('8:06', '', '')
+
+
+def test_onward_times_only_where_the_first_train_calls() -> None:
+    """Past TO, a station the first train doesn't reach has no time."""
+    inputs = joined_trains()
+    patterns = dict(inputs.patterns)
+    patterns['b'] = line_pattern(
+        trip_id='b', stations=('J', 'W1'), minutes=6,
+    )
+    found = times(inputs=replace(inputs, patterns=patterns))
+    assert (found['W1'], found['W2']) == ('8:09', '')

@@ -2,7 +2,8 @@
 
 from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
+from itertools import chain
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
@@ -20,6 +21,7 @@ from paperroute.core.stop_view import clock_text, not_departed
 
 STRIP_LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 STRIP_AHEAD: Final[timedelta] = timedelta(minutes=30)
+STRIP_HOPS: Final[int] = 6  # joins followed past a trip's last stop
 BOARD_KINDS: Final[dict[RouteKind, frozenset[RouteKind]]] = {
     **{kind: frozenset({kind}) for kind in RouteKind},
     RouteKind.BUS: frozenset({
@@ -176,15 +178,78 @@ def trip_ids(*, departures: Iterable[Departure]) -> frozenset[str]:
     Returns
     -------
     frozenset[str]
-        Each departure's trip ID, and its carry-on's trip ID when known.
+        Each departure's trip ID, and the trip IDs it runs next and runs
+        on through as, when known.
     """
     found: set[str] = set()
     for departure in departures:
         found.add(departure.trip_id)
-        then = departure.facts.then
-        if then is not None and then.trip_id:
-            found.add(then.trip_id)
+        for carry in (departure.facts.then, departure.facts.onto):
+            if carry is not None and carry.trip_id:
+                found.add(carry.trip_id)
     return frozenset(found)
+
+
+def joined_ids(
+    *, starts: Collection[str], patterns: Mapping[str, TripPattern | None],
+) -> frozenset[str]:
+    """
+    List the trips loaded patterns run on through as, hop by hop.
+
+    Parameters
+    ----------
+    starts : Collection[str]
+        Trip IDs to start from.
+    patterns : Mapping[str, TripPattern | None]
+        Loaded patterns.
+
+    Returns
+    -------
+    frozenset[str]
+        The trips joined onto, up to `STRIP_HOPS` joins on from each
+        starting trip whose patterns are loaded so far.
+    """
+    found: set[str] = set()
+    for trip in starts:
+        pattern = patterns.get(trip)
+        for _ in range(STRIP_HOPS):
+            if pattern is None or pattern.next_trip is None:
+                break
+            found.add(pattern.next_trip)
+            pattern = patterns.get(pattern.next_trip)
+    return frozenset(found)
+
+
+def joined_patterns(
+    *,
+    pattern: TripPattern,
+    patterns: Mapping[str, TripPattern | None],
+    day: date,
+) -> Iterator[TripPattern]:
+    """
+    Follow the trips a vehicle runs on through as.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The boarded trip.
+    patterns : Mapping[str, TripPattern | None]
+        Loaded patterns.
+    day : date
+        Service date of the boarded trip.
+
+    Yields
+    ------
+    TripPattern
+        Each joined trip in order, up to `STRIP_HOPS`, stopping at one
+        not loaded or not running that day.
+    """
+    for _ in range(STRIP_HOPS):
+        joined = patterns.get(pattern.next_trip or '')
+        if joined is None or day not in joined.days:
+            return
+        yield joined
+        pattern = joined
 
 
 def window_departures(
@@ -278,37 +343,46 @@ def from_call(*, departure: Departure, pattern: TripPattern, origin: str,
 def arrivals_after(
     *,
     item: LiveDeparture,
-    pattern: TripPattern,
+    trips: TripInputs,
     origin: str,
-    stations: Mapping[str, str],
 ) -> Iterator[tuple[str, datetime]]:
     """
     List the stations a departure calls at after the From, with times.
+
+    The vehicle is followed on through the trips it joins onto. A joined
+    trip's first call is where the vehicle already is, so it is skipped.
 
     Parameters
     ----------
     item : LiveDeparture
         Departure with live times.
-    pattern : TripPattern
-        Its trip.
+    trips : TripInputs
+        The strip's loaded patterns and station map.
     origin : str
         The From station ID.
-    stations : Mapping[str, str]
-        Station ID by stop ID, for stops under a strip station.
 
     Yields
     ------
     tuple[str, datetime]
-        Each later call's station and arrival, shifted by the delay.
+        Each later call's station and arrival, shifted by the delay;
+        none when the trip's pattern isn't loaded.
     """
     departure = item.departure
-    start = from_call(
+    stations = trips.station_of
+    pattern = trips.patterns.get(departure.trip_id)
+    start = None if pattern is None else from_call(
         departure=departure, pattern=pattern, origin=origin, stations=stations,
     )
-    if start is None:
+    if pattern is None or start is None:
         return
     delay = int(item.departs.timestamp() - departure.departs.timestamp())
-    for stop in pattern.stops[start + 1:]:
+    joined = joined_patterns(
+        pattern=pattern, patterns=trips.patterns, day=departure.service_day,
+    )
+    calls = chain(
+        pattern.stops[start + 1:], *(more.stops[1:] for more in joined),
+    )
+    for stop in calls:
         arrives = service_time(day=departure.service_day, seconds=stop.arrives)
         yield (
             stations.get(stop.station, stop.station),
@@ -316,8 +390,32 @@ def arrivals_after(
         )
 
 
-def first_arrivals(*, trips: TripInputs, origin: str
-                   ) -> dict[str, datetime]:
+def up_to(
+    *, calls: Iterable[tuple[str, datetime]], target: str | None,
+) -> Iterator[tuple[str, datetime]]:
+    """
+    Cut a run of calls after its first call at a station.
+
+    Parameters
+    ----------
+    calls : Iterable[tuple[str, datetime]]
+        Stations and times in running order.
+    target : str | None
+        The station to stop after, or None to keep every call.
+
+    Yields
+    ------
+    tuple[str, datetime]
+        The calls up to and including the first at the target.
+    """
+    for station, moment in calls:
+        yield station, moment
+        if station == target:
+            return
+
+
+def first_arrivals(*, trips: TripInputs, origin: str,
+                   target: str | None = None) -> dict[str, datetime]:
     """
     Find the first arrival at each station after the From.
 
@@ -327,6 +425,9 @@ def first_arrivals(*, trips: TripInputs, origin: str
         The strip's departures and live data.
     origin : str
         The From station ID.
+    target : str | None
+        The Destination's station ID; each departure counts only up to
+        its first call there. None counts every call.
 
     Returns
     -------
@@ -339,18 +440,116 @@ def first_arrivals(*, trips: TripInputs, origin: str
         departures=live_strip(trips=trips), now=trips.now,
     )
     for item in upcoming:
-        pattern = trips.patterns.get(item.departure.trip_id)
-        if item.cancelled or pattern is None:
+        if item.cancelled:
             continue
-        for station, moment in arrivals_after(
-            item=item,
-            pattern=pattern,
-            origin=origin,
-            stations=trips.station_of,
-        ):
+        calls = arrivals_after(item=item, trips=trips, origin=origin)
+        for station, moment in up_to(calls=calls, target=target):
             if station not in best or moment < best[station]:
                 best[station] = moment
     return best
+
+
+def onward_arrivals(*, trips: TripInputs, origin: str, target: str
+                    ) -> dict[str, datetime]:
+    """
+    Follow the first vehicle to reach the Destination on past it.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    origin : str
+        The From station ID.
+    target : str
+        The Destination's station ID.
+
+    Returns
+    -------
+    dict[str, datetime]
+        First arrival by station after its first call at the Destination,
+        for the departure not yet gone and not cancelled that gets there
+        first; empty when none does.
+    """
+    reached: list[tuple[datetime, list[tuple[str, datetime]]]] = []
+    upcoming = not_departed(
+        departures=live_strip(trips=trips), now=trips.now,
+    )
+    for item in upcoming:
+        calls = [] if item.cancelled else list(
+            arrivals_after(item=item, trips=trips, origin=origin),
+        )
+        at = next(
+            (i for i, (station, _) in enumerate(calls) if station == target),
+            None,
+        )
+        if at is not None:
+            reached.append((calls[at][1], calls[at + 1:]))
+    found: dict[str, datetime] = {}
+    if reached:
+        for station, moment in min(reached, key=lambda pair: pair[0])[1]:
+            found.setdefault(station, moment)
+    return found
+
+
+def past_rows(*, reach: Reach, target: int) -> list[int]:
+    """
+    List the line and branch rows the track reaches past a row.
+
+    Parameters
+    ----------
+    reach : Reach
+        The reach.
+    target : int
+        The Destination's row.
+
+    Returns
+    -------
+    list[int]
+        Indices of the rows whose track comes from the target row,
+        directly or through others, in row order.
+    """
+    found: list[int] = []
+    for index, row in enumerate(reach.rows):
+        at = row.parent
+        while at is not None and at != target:
+            at = reach.rows[at].parent
+        if at == target and row.kind in (RowKind.MAIN, RowKind.BRANCH):
+            found.append(index)
+    return found
+
+
+def onward_text(*, trips: TripInputs, reach: Reach, origin: str,
+                target: int | None) -> dict[int, str]:
+    """
+    Give the rows past the Destination the first vehicle's times there.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    reach : Reach
+        The reach.
+    origin : str
+        The From station ID.
+    target : int | None
+        The Destination's row, or None when it isn't on the strip.
+
+    Returns
+    -------
+    dict[int, str]
+        Clock time by row past the Destination, for the stations the
+        vehicle that reaches the Destination first goes on to call at.
+    """
+    if target is None:
+        return {}
+    found = onward_arrivals(
+        trips=trips, origin=origin, target=reach.rows[target].place.stop_id,
+    )
+    return {
+        index: clock_text(moment=found[reach.rows[index].place.stop_id])
+        for index in past_rows(reach=reach, target=target)
+        if reach.rows[index].place.stop_id in found
+    }
 
 
 def boardable(*, item: LiveDeparture, trips: TripInputs, origin: str,
@@ -379,12 +578,10 @@ def boardable(*, item: LiveDeparture, trips: TripInputs, origin: str,
         return False
     if target is None:
         return True
-    pattern = trips.patterns.get(item.departure.trip_id)
-    return pattern is not None and any(
+    return any(
         station == target
         for station, _ in arrivals_after(
-            item=item, pattern=pattern, origin=origin,
-            stations=trips.station_of,
+            item=item, trips=trips, origin=origin,
         )
     )
 

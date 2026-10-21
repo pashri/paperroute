@@ -22,6 +22,7 @@ from paperroute.core.stop_view import StopView
 from paperroute.core.strip_folds import folded
 from paperroute.core.strip_model import NEEDS_UPDATE, StripInputs
 from paperroute.core.strip_times import (
+    joined_ids,
     strip_trips,
     trip_ids,
     window_departures,
@@ -433,16 +434,17 @@ def strip_patterns(*, state: State) -> frozenset[str]:
     -------
     frozenset[str]
         The shown strip's trips on a strip view, and the chooser's in
-        the TO stage; none elsewhere.
+        the TO stage, with the trips their loaded patterns join onto;
+        none elsewhere.
     """
     wanted = trip_ids(departures=picked_window(state=state))
-    if state.view not in STRIP_VIEWS:
-        return wanted
-    return wanted | strip_trips(
-        departures=state.board.departures,
-        key=strip_key(pin=shown(state=state)),
-        now=state.now,
-    )
+    if state.view in STRIP_VIEWS:
+        wanted |= strip_trips(
+            departures=state.board.departures,
+            key=strip_key(pin=shown(state=state)),
+            now=state.now,
+        )
+    return wanted | joined_ids(starts=wanted, patterns=state.map.patterns)
 
 
 def strip_inputs(

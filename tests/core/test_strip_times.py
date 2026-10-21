@@ -169,3 +169,27 @@ def test_approach_time_blank_where_trip_skips() -> None:
     assert 'B' not in approach_times(
         trips=approach_inputs(), origin='C', stations={'A', 'B'},
     )
+
+
+def test_approach_time_uses_a_departure_at_second_zero() -> None:
+    """A departure at service-second 0 is used, not the arrival."""
+    plain = approach_inputs()
+    midnight = calls(stations=('A', 'C'), start=0, step=300)
+    early = (replace(midnight[0], arrives=-60), midnight[1])
+    trips = replace(
+        plain,
+        patterns={
+            **plain.patterns,
+            'a': pattern(trip_id='a', stops=early),
+        },
+    )
+    expected = replace(
+        plain,
+        patterns={
+            **plain.patterns,
+            'a': pattern(trip_id='a', stops=midnight),
+        },
+    )
+    assert approach_times(
+        trips=trips, origin='C', stations={'A'},
+    ) == approach_times(trips=expected, origin='C', stations={'A'})

@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from pathlib import Path
@@ -60,6 +61,27 @@ def lower_priority() -> None:
         pass
     finally:
         os.close(score)
+
+
+def idle_io(*, command: Sequence[str]) -> tuple[str, ...]:
+    """
+    Prefix a command so it runs in the idle I/O class, where possible.
+
+    Parameters
+    ----------
+    command : Sequence[str]
+        The command.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The command behind ``ionice -c 3``; unchanged when ``ionice``
+        isn't installed.
+    """
+    ionice = shutil.which('ionice')
+    if ionice is None:
+        return tuple(command)
+    return (ionice, '-c', '3', *command)
 
 
 def refresh_command(
@@ -178,13 +200,17 @@ class ChildRebuilder:
             logger.warning('timetable rebuild skipped: memory low')
             return False
         logger.info('timetable rebuild started')
-        self.process = await asyncio.create_subprocess_exec(
-            *self.command,
-            stdin=asyncio.subprocess.DEVNULL,
-            stdout=asyncio.subprocess.PIPE,
-            env=self.env,
-            preexec_fn=lower_priority,
-        )
+        try:
+            self.process = await asyncio.create_subprocess_exec(
+                *idle_io(command=self.command),
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                env=self.env,
+                preexec_fn=lower_priority,
+            )
+        except OSError:
+            logger.exception('timetable rebuild could not start')
+            return False
         try:
             code = await self.relayed(process=self.process)
         except ValueError:

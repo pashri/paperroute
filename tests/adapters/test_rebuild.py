@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import signal
 import sys
 import time
@@ -15,6 +16,7 @@ from paperroute.adapters.rebuild import (
     REBUILD_MIN_AVAILABLE,
     ChildRebuilder,
     NullBuilder,
+    idle_io,
     mem_available,
     refresh_command,
     refresh_env,
@@ -198,3 +200,32 @@ async def test_overlong_output_line_stops_the_child(
         assert not await rebuilder.rebuild()
     assert rebuilder.process is None
     assert 'reading the rebuild output failed' in caplog.messages
+
+
+def test_idle_io_prefixes_ionice_when_installed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The command runs behind ionice's idle class, if ionice exists."""
+    monkeypatch.setattr(
+        shutil, 'which', lambda name: '/usr/bin/ionice',
+    )
+    assert idle_io(command=('a', 'b')) == (
+        '/usr/bin/ionice', '-c', '3', 'a', 'b',
+    )
+    monkeypatch.setattr(shutil, 'which', lambda name: None)
+    assert idle_io(command=('a', 'b')) == ('a', 'b')
+
+
+async def test_rebuild_fails_when_the_child_cannot_start(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A missing executable fails the rebuild, is logged, leaves no child."""
+    rebuilder = ChildRebuilder(
+        command=('/nonexistent/paperroute-nothing',),
+        env=dict(os.environ),
+        available=lambda: None,
+    )
+    with caplog.at_level(logging.ERROR):
+        assert not await rebuilder.rebuild()
+    assert rebuilder.process is None
+    assert 'timetable rebuild could not start' in caplog.messages

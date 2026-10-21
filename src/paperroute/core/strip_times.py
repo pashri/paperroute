@@ -489,7 +489,11 @@ def approach_times(*, trips: TripInputs, origin: str,
             found[station] = shifted(
                 moment=service_time(
                     day=departure.service_day,
-                    seconds=stop.departs or stop.arrives,
+                    seconds=(
+                        stop.arrives
+                        if stop.departs is None
+                        else stop.departs
+                    ),
                 ),
                 seconds=delay,
             )

@@ -131,3 +131,22 @@ def test_same_place_station_is_listed_once(tmp_path: Path) -> None:
         aliases = conn.execute('SELECT * FROM line_aliases').fetchall()
     assert rows == [('R3', 'R3'), ('R2', ''), ('R1', ''), *T1_TAIL]
     assert aliases == [('R2X', 'R2')]
+
+
+def test_an_express_leaves_the_line_where_it_runs_through(
+    tmp_path: Path,
+) -> None:
+    """The 'er' trips run through R1 without stopping: their exit is R1."""
+    files = network_files()
+    files['stop_times.txt'] = [
+        {**row, 'pickup_type': '1', 'drop_off_type': '1'}
+        if row['stop_id'] == 'R1_1' and row['trip_id'].startswith('er')
+        else row
+        for row in files['stop_times.txt']
+    ]
+    with closing(built(tmp_path=tmp_path, files=files)) as conn:
+        exits = conn.execute(
+            "SELECT station_id, off_id FROM line_exits "
+            "WHERE line_key = 'train:T2' ORDER BY off_id",
+        ).fetchall()
+    assert exits == [('J', 'R1'), ('J', 'W1')]

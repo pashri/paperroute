@@ -2,7 +2,7 @@
 
 from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
-from itertools import chain, takewhile
+from itertools import chain
 
 from paperroute.core.model import StopPlace
 from paperroute.core.reach import RunTail
@@ -90,18 +90,81 @@ def off_runs(*, tails: Sequence[RunTail], line: Collection[str],
     Returns
     -------
     list[tuple[str, str, tuple[str, ...], int]]
-        Junction, first station off the line, the stations after it
-        until the line again, and trips, for each tail that leaves.
+        Junction, first station off the line, every station the tail
+        calls at after it, and trips, for each tail that leaves. A way
+        off can come back to the line before an express's first stop.
     """
     found = []
     for tail in tails:
         pair = first_off(tail=tail, line=line, origin=origin)
         if pair is not None:
             rest = tail.after[tail.after.index(pair[1]) + 1:]
-            found.append((*pair, tuple(
-                takewhile(lambda station: station not in line, rest),
-            ), tail.trips))
+            found.append((*pair, rest, tail.trips))
     return found
+
+
+def runs_on(*, rest: Sequence[str], off: str, onward: Sequence[str]
+            ) -> bool:
+    """
+    Say whether a way off runs on through another's first stop.
+
+    Parameters
+    ----------
+    rest : Sequence[str]
+        Stations one way off calls at after its first station off.
+    off : str
+        The other way's first station off.
+    onward : Sequence[str]
+        Stations the other way calls at after it.
+
+    Returns
+    -------
+    bool
+        True when the rest calls at the other way's first station and,
+        unless the other way ends there, later at its next station too.
+        A loop run the other way round, or a way that only crosses the
+        rest, is not the same turnoff.
+    """
+    if off not in rest:
+        return False
+    return not onward or onward[0] in rest[rest.index(off) + 1:]
+
+
+type OffRun = tuple[str, str, tuple[str, ...], int]
+
+
+def lead_of(*, runs: Sequence[OffRun], junction: str, off: str,
+            onward: Sequence[str]) -> str | None:
+    """
+    Choose the way off that leads another.
+
+    Parameters
+    ----------
+    runs : Sequence[OffRun]
+        Ways off, from `off_runs`.
+    junction : str
+        The other way's junction.
+    off : str
+        Its first station off.
+    onward : Sequence[str]
+        Stations it calls at after that.
+
+    Returns
+    -------
+    str | None
+        The first station off of the busiest way off at the junction
+        that runs on through it (see `runs_on`); on a tie, the lower ID.
+        None when no way does.
+    """
+    votes: Counter[str] = Counter()
+    for at, first, rest, trips in runs:
+        if at == junction and first != off and runs_on(
+            rest=rest, off=off, onward=onward,
+        ):
+            votes[first] += trips
+    return min(
+        votes, key=lambda first: (-votes[first], first), default=None,
+    )
 
 
 def exit_leads(
@@ -113,7 +176,8 @@ def exit_leads(
     A train that runs through a station without stopping leaves the line
     at the same turnoff as one that stops there, but its first stop off
     the line is further on. Such a way off is led by the busiest other
-    way off at its junction whose trains later call at its first stop.
+    way off at its junction whose trains later call at its first stop,
+    heading the same way (see `runs_on`).
 
     Parameters
     ----------
@@ -132,14 +196,10 @@ def exit_leads(
     """
     runs = off_runs(tails=tails, line=line, origin=origin)
     leads: dict[tuple[str, str], tuple[str, str]] = {}
-    for junction, off, _, _ in runs:
-        votes: Counter[str] = Counter()
-        for at, first, rest, trips in runs:
-            if at == junction and first != off and off in rest:
-                votes[first] += trips
-        if votes:
-            best = sorted(votes.items(), key=lambda vote: (-vote[1], vote[0]))
-            leads[junction, off] = (junction, best[0][0])
+    for junction, off, onward, _ in runs:
+        first = lead_of(runs=runs, junction=junction, off=off, onward=onward)
+        if first is not None:
+            leads[junction, off] = (junction, first)
     for pair, lead in list(leads.items()):
         for _ in range(len(leads)):
             lead = leads.get(lead, lead)

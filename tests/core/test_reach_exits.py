@@ -254,3 +254,24 @@ def test_separate_turnoffs_stay_apart() -> None:
     """Ways off whose trains never meet keep their own exits."""
     tails = [tail('J W1 W2', 5), tail('J R1', 3)]
     assert not exit_leads(tails=tails, line=LINE, origin='C')
+
+
+def test_an_express_back_on_the_line_joins_the_turnoff() -> None:
+    """At Campbelltown, an express to Central hooks at Leumeah."""
+    tails = [tail('LE MI GL CA CE', 20), tail('CE', 2), tail('MA', 30)]
+    line = frozenset({'CT', 'MA', 'CA'})
+    assert exit_leads(tails=tails, line=line, origin='CT') == {
+        ('CT', 'CE'): ('CT', 'LE'),
+    }
+
+
+def test_a_loop_run_the_other_way_is_another_turnoff() -> None:
+    """Round a loop each way, the first stops lead separate turnoffs."""
+    tails = [tail('TH WY CQ SJ MU', 20), tail('MU SJ CQ WY TH', 20)]
+    assert not exit_leads(tails=tails, line=frozenset({'CE'}), origin='CE')
+
+
+def test_a_way_crossing_another_is_another_turnoff() -> None:
+    """A way off whose first stop another passes, then leaves, stays."""
+    tails = [tail('MU SJ CQ WY TH', 20), tail('TH MP KC', 10)]
+    assert not exit_leads(tails=tails, line=frozenset({'CE'}), origin='CE')

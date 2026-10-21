@@ -49,6 +49,7 @@ SUBTITLE_FACE: Final[Face] = Face(weight=400, px=15)
 SUBTITLE_Y: Final[int] = 104
 ROWS_TOP: Final[int] = 128
 ROW_STEP: Final[int] = 70
+PICKED_DEPTH: Final[int] = ROW_STEP - 4  # inverted pixels below a rule
 LEAVES_FACE: Final[Face] = Face(weight=800, px=30)
 ARRIVES_FACE: Final[Face] = Face(weight=400, px=16)
 COUNTDOWN_FACE: Final[Face] = Face(weight=700, px=22)
@@ -182,7 +183,9 @@ def carry_on(canvas: Canvas, *, row: Row, top: int, left: int) -> None:
     )
 
 
-def panel_row(canvas: Canvas, *, row: Row, top: int, whole: bool) -> None:
+def panel_row(
+    canvas: Canvas, *, row: Row, top: int, whole: bool, picked: bool = False,
+) -> None:
     """
     Draw one departure in the panel under its rule.
 
@@ -196,6 +199,8 @@ def panel_row(canvas: Canvas, *, row: Row, top: int, whole: bool) -> None:
         The row's rule.
     whole : bool
         True on the whole-stop board.
+    picked : bool
+        True for the picked train, drawn paper on ink.
     """
     canvas.rect(box=(RULE_LEFT, top - 2, RULE_RIGHT, top - 1), grey=INK)
     canvas.text(
@@ -205,6 +210,8 @@ def panel_row(canvas: Canvas, *, row: Row, top: int, whole: bool) -> None:
     left = row_middle(canvas, row=row, top=top, whole=whole)
     row_countdown(canvas, row=row, top=top)
     carry_on(canvas, row=row, top=top, left=left)
+    if picked:
+        canvas.invert(box=(RULE_LEFT, top, RULE_RIGHT, top + PICKED_DEPTH))
 
 
 def panel_heading(canvas: Canvas, *, panel: StripPanel, drop: int) -> None:
@@ -308,6 +315,7 @@ def draw_panel(canvas: Canvas, *, panel: StripPanel, drop: int) -> None:
             row=row,
             top=ROWS_TOP + drop + index * ROW_STEP,
             whole=panel.no_destination,
+            picked=index == panel.selected,
         )
     if not panel.rows and panel.empty:
         panel_empty(canvas, text=panel.empty, drop=drop)

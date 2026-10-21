@@ -78,30 +78,41 @@ async function refreshStatus() {
 }
 
 /**
- * Press, or hold after `HOLD_MS`, for one control.
+ * Track one knob's press: a tap, a hold past `HOLD_MS`, or turns while
+ * it is held, which send `hold-left` or `hold-right` and stop the hold.
  * @param {string} knob `top` or `bottom`.
- * @returns {{start: () => void, finish: () => void, cancel: () => void}}
- *   Call `start` on down, `finish` on up and `cancel` to send nothing.
+ * @returns {{start: () => void, turn: (direction: string) => boolean,
+ *   finish: () => (string | null), cancel: () => void}}
+ *   `start` on down; `turn` sends a turn while held and says whether it
+ *   did; `finish` on up gives `press`, `hold`, `turned` or null when
+ *   not down; `cancel` forgets the press.
  */
 function holdable(knob) {
-  let timer = null;
+  const press = { timer: null, down: false, long: false, turned: false };
   const cancel = () => {
-    clearTimeout(timer);
-    timer = null;
+    clearTimeout(press.timer);
+    Object.assign(press, { timer: null, down: false });
   };
   const start = () => {
-    if (timer !== null) return;
-    timer = setTimeout(() => {
-      timer = null;
-      sendKnob(knob, 'hold');
+    if (press.down) return;
+    Object.assign(press, { down: true, long: false, turned: false });
+    press.timer = setTimeout(() => {
+      Object.assign(press, { timer: null, long: true });
     }, HOLD_MS);
   };
-  const finish = () => {
-    if (timer === null) return;
-    cancel();
-    sendKnob(knob, 'press');
+  const turn = (direction) => {
+    if (!press.down) return false;
+    press.turned = true;
+    sendKnob(knob, `hold-${direction}`);
+    return true;
   };
-  return { start, finish, cancel };
+  const finish = () => {
+    if (!press.down) return null;
+    cancel();
+    if (press.turned) return 'turned';
+    return press.long ? 'hold' : 'press';
+  };
+  return { start, turn, finish, cancel };
 }
 
 const holders = {
@@ -113,6 +124,16 @@ const downKeys = new Set();
 const pressCancels = [];
 
 /**
+ * Turn a knob, as a turn while held when its press is down.
+ * @param {string} knob `top` or `bottom`.
+ * @param {string} direction `left` or `right`.
+ * @returns {void}
+ */
+function turnKnob(knob, direction) {
+  if (!holders[knob].turn(direction)) sendKnob(knob, direction);
+}
+
+/**
  * Act on a key going down, ignoring repeats, typing and chords.
  * @param {KeyboardEvent} event The key event.
  * @returns {void}
@@ -122,7 +143,7 @@ function onKeyDown(event) {
   const key = event.key.toLowerCase();
   const target = KEYS[key];
   if (!target || event.metaKey || event.ctrlKey || event.altKey) return;
-  if (target[1] !== 'press') sendKnob(...target);
+  if (target[1] !== 'press') turnKnob(...target);
   else if (!downKeys.has(key)) {
     downKeys.add(key);
     holders[target[0]].start();
@@ -137,7 +158,9 @@ function onKeyDown(event) {
 function onKeyUp(event) {
   const key = event.key.toLowerCase();
   if (!downKeys.delete(key)) return;
-  holders[KEYS[key][0]].finish();
+  const knob = KEYS[key][0];
+  const outcome = holders[knob].finish();
+  if (outcome === 'press' || outcome === 'hold') sendKnob(knob, outcome);
 }
 
 /**
@@ -151,40 +174,37 @@ function cancelAll() {
 }
 
 /**
- * Wire a Press button: click presses, double click or long press holds.
+ * Wire a Press button: click presses, double click or long press holds,
+ * and turns while it is held down are turns while held.
  * @param {HTMLButtonElement} button A `press` button.
  * @returns {void}
  */
 function wirePress(button) {
   const knob = button.dataset.knob;
-  let holdTimer = null;
+  const holder = holders[knob];
   let clickTimer = null;
-  let held = false;
-  const stopHold = () => {
-    clearTimeout(holdTimer);
-    holdTimer = null;
-  };
+  let swallow = false;
   const cancel = () => {
-    stopHold();
-    held = false;
+    swallow = false;
     clearTimeout(clickTimer);
     clickTimer = null;
   };
   pressCancels.push(cancel);
   const onDown = (event) => {
     if (event.button !== 0) return;
-    held = false;
-    holdTimer = setTimeout(() => {
-      holdTimer = null;
-      held = true;
-      sendKnob(knob, 'hold');
-    }, HOLD_MS);
+    swallow = false;
+    holder.start();
+  };
+  const onUp = () => {
+    const outcome = holder.finish();
+    if (outcome === 'hold') sendKnob(knob, 'hold');
+    if (outcome === 'hold' || outcome === 'turned') swallow = true;
   };
   const onClick = (event) => {
     if (event.detail === 0) {
-      held = false;
+      swallow = false;
       sendKnob(knob, 'press');
-    } else if (held) held = false;
+    } else if (swallow) swallow = false;
     else if (clickTimer !== null) {
       clearTimeout(clickTimer);
       clickTimer = null;
@@ -197,9 +217,9 @@ function wirePress(button) {
     }
   };
   button.addEventListener('pointerdown', onDown);
-  button.addEventListener('pointerup', stopHold);
-  button.addEventListener('pointercancel', stopHold);
-  button.addEventListener('pointerleave', stopHold);
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach((name) => {
+    button.addEventListener(name, onUp);
+  });
   button.addEventListener('contextmenu', (e) => e.preventDefault());
   button.addEventListener('click', onClick);
 }
@@ -216,7 +236,7 @@ document.querySelectorAll('button[data-knob]').forEach((button) => {
     return;
   }
   button.addEventListener('click', () => {
-    sendKnob(button.dataset.knob, button.dataset.action);
+    turnKnob(button.dataset.knob, button.dataset.action);
   });
 });
 refreshStatus();

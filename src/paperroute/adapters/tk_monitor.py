@@ -13,6 +13,7 @@ from paperroute.core.messages import (
     Event,
     Knob,
     KnobHeld,
+    KnobHeldTurned,
     KnobPressed,
     KnobTurned,
     QuitRequested,
@@ -35,17 +36,19 @@ HOLD_KEY: Final[str] = 'k'
 
 class HoldKey:
     """
-    Tells a tap from a hold on the bottom knob's key.
+    Tells a tap, a hold and a turn while held apart on the bottom knob.
 
     X11 autorepeat sends a release then a press for each repeat, so a
     release only counts once no press follows it within `REPEAT_GAP_S`.
-    The caller passes the current time and calls `poll` regularly.
+    The hold is settled on release: a turn while the key is down makes
+    it a turn while held, with no hold after. The caller passes the
+    current time and calls `poll` regularly.
     """
 
     def __init__(self) -> None:
         self._down_at: float | None = None
         self._up_at: float | None = None
-        self._held = False
+        self._turned = False
 
     def down(self, now: float) -> Event | None:
         """
@@ -64,6 +67,7 @@ class HoldKey:
         event = self.poll(now)
         if self._down_at is None:
             self._down_at = now
+            self._turned = False
         self._up_at = None
         return event
 
@@ -82,31 +86,31 @@ class HoldKey:
     def cancel(self) -> None:
         """Forget a pending press or hold without posting anything."""
         self._down_at = self._up_at = None
-        self._held = False
+        self._turned = False
 
-    def poll(self, now: float) -> Event | None:
+    def steered(self, event: Event | None) -> Event | None:
         """
-        Resolve a hold or a release once enough time has passed.
+        Make a bottom turn a turn while held when the key is down.
 
         Parameters
         ----------
-        now : float
-            Current time in seconds.
+        event : Event | None
+            The event of another key.
 
         Returns
         -------
         Event | None
-            `KnobHeld` once per hold, `KnobPressed` for a tap, else None.
+            `KnobHeldTurned` for a bottom turn while held, which also
+            stops the hold; else the event as it is.
         """
-        if self._down_at is None:
-            return None
-        end = now if self._up_at is None else self._up_at
-        if not self._held and end - self._down_at >= HOLD_S:
-            self._held = True
-            return KnobHeld(knob=Knob.BOTTOM)
-        return self._released(now)
+        if self._down_at is None or not isinstance(event, KnobTurned):
+            return event
+        if event.knob is not Knob.BOTTOM:
+            return event
+        self._turned = True
+        return KnobHeldTurned(knob=Knob.BOTTOM, steps=event.steps)
 
-    def _released(self, now: float) -> Event | None:
+    def poll(self, now: float) -> Event | None:
         """
         Settle a release once the repeat gap has passed.
 
@@ -118,14 +122,19 @@ class HoldKey:
         Returns
         -------
         Event | None
+            `KnobHeld` for a release after `HOLD_S` with no turn,
             `KnobPressed` for a tap, else None.
         """
-        if self._up_at is None or now - self._up_at < REPEAT_GAP_S:
+        down, up = self._down_at, self._up_at
+        if down is None or up is None or now - up < REPEAT_GAP_S:
             return None
-        tapped = not self._held
-        self._down_at = self._up_at = None
-        self._held = False
-        return KnobPressed(knob=Knob.BOTTOM) if tapped else None
+        turned = self._turned
+        self.cancel()
+        if turned:
+            return None
+        if up - down >= HOLD_S:
+            return KnobHeld(knob=Knob.BOTTOM)
+        return KnobPressed(knob=Knob.BOTTOM)
 
 
 def key_event(*, keysym: str) -> Event | None:
@@ -199,7 +208,7 @@ class TkMonitor:
         if key.keysym.lower() == HOLD_KEY:
             event = self.hold.down(time.monotonic())
         else:
-            event = key_event(keysym=key.keysym)
+            event = self.hold.steered(key_event(keysym=key.keysym))
         if event is not None and self.post is not None:
             self.post(event)
 

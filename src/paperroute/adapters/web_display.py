@@ -19,6 +19,7 @@ from paperroute.core.messages import (
     Event,
     Knob,
     KnobHeld,
+    KnobHeldTurned,
     KnobPressed,
     KnobTurned,
     PowerAction,
@@ -32,6 +33,7 @@ logger = logging.getLogger(__name__)
 
 PING_S: Final[float] = 15  # seconds of quiet before an SSE comment
 ACTIONS: Final[dict[str, int]] = {'left': -1, 'right': 1}
+HELD_ACTIONS: Final[dict[str, int]] = {'hold-left': -1, 'hold-right': 1}
 HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
 SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
 CHECKED_MARK: Final[str] = '{{auto_rebuild}}'
@@ -63,7 +65,8 @@ def knob_event(*, knob: str, action: str) -> Event | None:
     knob : str
         `top` or `bottom`.
     action : str
-        `left`, `right`, `press` or `hold`.
+        `left`, `right`, `press`, `hold`, or `hold-left` or `hold-right`
+        for a turn while held.
 
     Returns
     -------
@@ -76,6 +79,8 @@ def knob_event(*, knob: str, action: str) -> Event | None:
         return KnobPressed(knob=Knob(knob))
     if action == 'hold':
         return KnobHeld(knob=Knob(knob))
+    if action in HELD_ACTIONS:
+        return KnobHeldTurned(knob=Knob(knob), steps=HELD_ACTIONS[action])
     if action in ACTIONS:
         return KnobTurned(knob=Knob(knob), steps=ACTIONS[action])
     return None

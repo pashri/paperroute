@@ -35,8 +35,9 @@ Keys: Q quits.
 
 - S opens the route chooser, and goes back.
 - A and D switch pins.
-- K switches views, and holding K (about 0.8 s) pins or unpins.
-- J and L scroll, zoom or move the cursor.
+- K switches views, and holding K (about 0.8 s) pins or unpins on release.
+- J and L scroll, zoom or move the cursor; on the Strip, J and L while K
+  is held pick a train in the panel instead.
 
 The chooser picks a kind first. Trains, metro, light rail and ferries go
 line, then station, then destination on the same line; grey stations have no

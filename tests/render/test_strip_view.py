@@ -542,3 +542,22 @@ def test_fullest_panels_end_on_screen_and_above_the_hint() -> None:
         assert (frame[476:480, 456:786] == PAPER).all()
     for frame in full[2:]:
         assert (frame[412:420, 456:786] == PAPER).all()
+
+
+def test_the_picked_panel_row_is_inverted_in_ink_and_paper() -> None:
+    """The picked row is paper on ink; the frame stays two-level."""
+    canvas = Canvas()
+    paint_strip_view(canvas, view=VIEW)
+    plain = canvas.grey()
+    canvas = Canvas()
+    paint_strip_view(
+        canvas, view=replace(VIEW, panel=replace(PANEL, selected=1)),
+    )
+    chosen = canvas.grey()
+    assert set(np.unique(chosen).tolist()) == {INK, PAPER}
+    top = PANEL_TOP + PANEL_STEP
+    box = (slice(top, top + PANEL_STEP - 4), slice(456, 786))
+    assert np.array_equal(chosen[box], PAPER - plain[box])
+    others = np.ones(chosen.shape, dtype=bool)
+    others[box] = False
+    assert np.array_equal(chosen[others], plain[others])

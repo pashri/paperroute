@@ -7,6 +7,7 @@ from paperroute.core.messages import (
     Event,
     Knob,
     KnobHeld,
+    KnobHeldTurned,
     KnobPressed,
     KnobTurned,
     QuitRequested,
@@ -47,15 +48,16 @@ def test_hold_key_short_is_press() -> None:
     assert key.poll(0.4) is None
 
 
-def test_hold_key_long_is_hold_once() -> None:
-    """Holding past 0.8 s gives one hold and no press on release."""
+def test_hold_key_long_is_hold_on_release() -> None:
+    """Holding past 0.8 s gives one hold, once the key is let go."""
     key = HoldKey()
     key.down(0)
     assert key.poll(0.5) is None
-    assert key.poll(0.8) == KnobHeld(knob=Knob.BOTTOM)
     assert key.poll(1.5) is None
     key.up(2)
-    assert key.poll(2.1) is None
+    assert key.poll(2.01) is None
+    assert key.poll(2.1) == KnobHeld(knob=Knob.BOTTOM)
+    assert key.poll(2.2) is None
 
 
 def test_hold_key_ignores_autorepeat() -> None:
@@ -63,7 +65,8 @@ def test_hold_key_ignores_autorepeat() -> None:
     key = HoldKey()
     key.down(0)
     assert key.down(0.4) is None
-    assert key.poll(0.8) == KnobHeld(knob=Knob.BOTTOM)
+    key.up(0.9)
+    assert key.poll(1.0) == KnobHeld(knob=Knob.BOTTOM)
 
 
 def test_hold_key_x11_up_down_pair_is_a_repeat() -> None:
@@ -72,8 +75,44 @@ def test_hold_key_x11_up_down_pair_is_a_repeat() -> None:
     key.down(0)
     key.up(0.5)
     assert key.down(0.52) is None
-    assert key.poll(0.9) == KnobHeld(knob=Knob.BOTTOM)
-    assert key.poll(1.0) is None
+    assert key.poll(0.9) is None
+    key.up(1.0)
+    assert key.poll(1.1) == KnobHeld(knob=Knob.BOTTOM)
+
+
+def test_hold_key_turn_while_held_selects_not_pins() -> None:
+    """Hold K and press L: a turn while held, and no hold on release."""
+    key = HoldKey()
+    key.down(0)
+    turn = key.steered(key_event(keysym='l'))
+    assert turn == KnobHeldTurned(knob=Knob.BOTTOM, steps=1)
+    key.up(2)
+    assert key.poll(2.1) is None
+    assert key.poll(3) is None
+
+
+def test_hold_key_short_turn_while_held_is_no_press() -> None:
+    """A quick K with J inside it is a turn while held, not a press."""
+    key = HoldKey()
+    key.down(0)
+    assert key.steered(key_event(keysym='j')) == KnobHeldTurned(
+        knob=Knob.BOTTOM, steps=-1,
+    )
+    key.up(0.2)
+    assert key.poll(0.3) is None
+
+
+def test_hold_key_steers_only_the_bottom_turn_while_down() -> None:
+    """Other keys, and L with K up, pass through unchanged."""
+    key = HoldKey()
+    right = key_event(keysym='l')
+    assert key.steered(right) == right
+    key.down(0)
+    top = key_event(keysym='d')
+    assert key.steered(top) == top
+    assert key.steered(None) is None
+    key.up(0.1)
+    assert key.poll(0.2) == KnobPressed(knob=Knob.BOTTOM)
 
 
 def test_hold_key_cancel_sends_nothing() -> None:

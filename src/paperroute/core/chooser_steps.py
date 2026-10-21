@@ -39,7 +39,7 @@ from paperroute.core.messages import (
     ColumnLoaded,
     Effect,
     Knob,
-    KnobHeld,
+    KnobEvent,
     KnobPressed,
     KnobTurned,
     LineFailed,
@@ -348,7 +348,7 @@ def fold_pressed(*, state: State, chooser: ChooserState) -> State | None:
 
 
 def chooser_knob(
-    *, state: State, event: KnobTurned | KnobPressed | KnobHeld,
+    *, state: State, event: KnobEvent,
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Apply a knob event to the chooser, opening it on a top press.
@@ -357,13 +357,14 @@ def chooser_knob(
     ----------
     state : State
         State with the chooser open, or a top press.
-    event : KnobTurned | KnobPressed | KnobHeld
+    event : KnobEvent
         Knob event.
 
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        New state and effects; the same state for a top turn or a hold.
+        New state and effects; the same state for a top turn, a hold or
+        a turn while held.
     """
     chooser = state.chooser
     if chooser is None:

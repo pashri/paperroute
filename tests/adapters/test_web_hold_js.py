@@ -29,7 +29,12 @@ const button = {
   dataset: { knob: 'bottom', action: 'press' },
   addEventListener: (name, fn) => { pointer[name] = fn; },
 };
-const buttons = [button];
+const turnClicks = {};
+const turnButton = {
+  dataset: { knob: 'bottom', action: 'right' },
+  addEventListener: (name, fn) => { turnClicks[name] = fn; },
+};
+const buttons = [button, turnButton];
 globalThis.document = {
   querySelector: stub,
   querySelectorAll: () => buttons,
@@ -94,13 +99,30 @@ down(); up(); click(1);
 listeners.blur();
 fire();
 results.blurClick = sent.splice(0);
+listeners.keydown(key('k'));
+listeners.keydown(key('l'));
+fire();
+listeners.keyup(key('k'));
+fire();
+results.heldTurnKeys = sent.splice(0);
+listeners.keydown(key('l'));
+results.plainTurn = sent.splice(0);
+down(); turnClicks.click(); fire(); up(); click(1); fire();
+results.heldTurnButton = sent.splice(0);
+down(); listeners.keydown(key('j')); up(); click(1); fire();
+results.heldTurnPointerKey = sent.splice(0);
+turnClicks.click();
+results.buttonTurn = sent.splice(0);
 console.log(JSON.stringify(results));
 """
 
 
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_page_hold_timer_in_node(tmp_path: Path) -> None:
-    """Keys and Press: click presses, double or long holds, none stranded."""
+    """
+    Keys and Press: click presses, double or long holds, none stranded;
+    a turn while held sends a held turn and no hold.
+    """
     web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'live.mjs'
     script.write_text(
@@ -121,5 +143,8 @@ def test_page_hold_timer_in_node(tmp_path: Path) -> None:
         '"rightClick":[],"buttonTap":[],"buttonTapTimed":["press"],'
         '"buttonDouble":["hold"],"buttonLong":["hold"],'
         '"keyboardClick":["press"],"keyboardTimers":0,"delays":[800],'
-        '"leave":["hold","press"],"touchLong":["hold"],"blurClick":[]}'
+        '"leave":["hold","press"],"touchLong":["hold"],"blurClick":[],'
+        '"heldTurnKeys":["hold-right"],"plainTurn":["right"],'
+        '"heldTurnButton":["hold-right"],'
+        '"heldTurnPointerKey":["hold-left"],"buttonTurn":["right"]}'
     )

@@ -250,6 +250,19 @@ class Canvas:
         """
         self.canvas.drawRect(skia.Rect(*box), self.paint(grey=grey))
 
+    def invert(self, *, box: Box) -> None:
+        """
+        Swap ink and paper inside a box given as left, top, right, bottom.
+
+        Parameters
+        ----------
+        box : Box
+            Edges in pixels.
+        """
+        flip = self.paint(grey=PAPER)
+        flip.setBlendMode(skia.BlendMode.kDifference)
+        self.canvas.drawRect(skia.Rect(*box), flip)
+
     def checker(self, *, box: Box, grey: int) -> None:
         """
         Cover every other pixel of a box, in a checkerboard.

@@ -3,10 +3,19 @@
 from dataclasses import replace
 
 from paperroute.core.map_state import zoomed
-from paperroute.core.messages import Knob, KnobHeld, KnobPressed, KnobTurned
+from paperroute.core.messages import (
+    Knob,
+    KnobEvent,
+    KnobHeld,
+    KnobHeldTurned,
+    KnobPressed,
+    KnobTurned,
+)
 from paperroute.core.places import flipped, toggled
 from paperroute.core.saved import LIVE_VIEWS, LiveView
 from paperroute.core.state_model import State
+from paperroute.core.state_views import live_stop_view
+from paperroute.core.strip_select import selected_turned, unselected
 
 
 def switched(*, state: State) -> State:
@@ -58,22 +67,41 @@ def bottom_turned(*, state: State, steps: int) -> State:
     return replace(state, map=zoomed(map_state=state.map, steps=steps))
 
 
-def knob_moved(
-    *, state: State, event: KnobTurned | KnobPressed | KnobHeld
-) -> State:
+def moved_off(*, before: State, after: State) -> State:
+    """
+    Drop the Strip's picked train when the pin or view changed.
+
+    Parameters
+    ----------
+    before : State
+        State before the knob event.
+    after : State
+        State after it.
+
+    Returns
+    -------
+    State
+        `after`, with no train picked unless it is `before`.
+    """
+    return before if after is before else unselected(state=after)
+
+
+def knob_moved(*, state: State, event: KnobEvent) -> State:
     """
     Apply a knob event on a Live view.
 
     The top knob turns between pins; the bottom knob scrolls or zooms,
-    its press moves to the next Live view and its hold pins or unpins.
-    The top press, which opens the chooser, is handled with the chooser's
-    knobs, and the top hold is kept for settings.
+    its press moves to the next Live view, its hold pins or unpins and a
+    turn while held picks a train in the Strip's panel. Changing the pin
+    or the view drops the pick. The top press, which opens the chooser,
+    is handled with the chooser's knobs, and the top hold is kept for
+    settings.
 
     Parameters
     ----------
     state : State
         State.
-    event : KnobTurned | KnobPressed | KnobHeld
+    event : KnobEvent
         Knob event.
 
     Returns
@@ -83,11 +111,17 @@ def knob_moved(
     """
     match event:
         case KnobTurned(knob=Knob.TOP, steps=steps):
-            return flipped(state=state, steps=steps)
+            after = flipped(state=state, steps=steps)
+            return moved_off(before=state, after=after)
         case KnobTurned(knob=Knob.BOTTOM, steps=steps):
             return bottom_turned(state=state, steps=steps)
         case KnobPressed(knob=Knob.BOTTOM):
-            return switched(state=state)
+            return moved_off(before=state, after=switched(state=state))
         case KnobHeld(knob=Knob.BOTTOM):
-            return toggled(state=state)
+            return moved_off(before=state, after=toggled(state=state))
+        case KnobHeldTurned(knob=Knob.BOTTOM, steps=steps):
+            stop_view = live_stop_view(state=state)
+            return selected_turned(
+                state=state, stop_view=stop_view, steps=steps,
+            )
     return state

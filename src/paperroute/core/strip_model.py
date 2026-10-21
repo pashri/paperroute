@@ -1,12 +1,13 @@
 """The Strip and Strip + map view-models, their inputs and layout sizes."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import date, datetime
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
 from paperroute.core.map_view import MapView, Marker
+from paperroute.core.model import Departure
 from paperroute.core.patterns import TripPattern
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.reach import Reach, RowKind, StripKey
@@ -27,6 +28,8 @@ PANE_FROM_ROW: Final[int] = 2
 PANEL_ROWS: Final[int] = 5
 BANNER_ROWS: Final[int] = 1  # row slots the live data banner covers
 CURSOR_MARGIN: Final[int] = 2
+type TripDay = tuple[str, date]  # a trip ID and its service day
+
 LOADING: Final[str] = 'Loading the line…'
 NO_STRIP: Final[str] = 'No strip for this stop'
 NEEDS_UPDATE: Final[str] = 'Strip needs a timetable update'
@@ -199,6 +202,8 @@ class StripPanel:
         The knob hint while picking, else None.
     empty : str | None
         Why there are no departures to list, or None.
+    selected : int | None
+        The row of the picked train, drawn inverted, or None.
     """
 
     title: str
@@ -207,6 +212,7 @@ class StripPanel:
     no_destination: bool
     hint: str | None
     empty: str | None = None
+    selected: int | None = None
 
 
 @dataclass(frozen=True)
@@ -320,6 +326,9 @@ class StripInputs:
         The place's unscrolled Stop view, for the header and panel.
     key : StripKey | None
         Which runs feed the strip; None for no departures.
+    selected : TripDay | None
+        The picked train, whose times the rows below the From show; None
+        for the next train.
     """
 
     reach: Reach | None
@@ -335,6 +344,7 @@ class StripInputs:
     tag: PinTag
     stop_view: StopView = EMPTY_STOP_VIEW
     key: StripKey | None = None
+    selected: TripDay | None = None
 
 
 @dataclass(frozen=True)
@@ -367,3 +377,49 @@ class Marks:
     cursor: int | None
     picking: str | None
     note: tuple[int, CarryNote] | None = None
+
+
+def trip_day(*, departure: Departure) -> TripDay:
+    """
+    Name a departure by its trip and service day.
+
+    Parameters
+    ----------
+    departure : Departure
+        The departure.
+
+    Returns
+    -------
+    TripDay
+        Its trip ID and service day.
+    """
+    return departure.trip_id, departure.service_day
+
+
+def selected_index(
+    *, selected: TripDay | None, trains: Sequence[Departure],
+) -> int | None:
+    """
+    Find the picked train among the panel's.
+
+    Parameters
+    ----------
+    selected : TripDay | None
+        The picked train, or None.
+    trains : Sequence[Departure]
+        The panel's departures.
+
+    Returns
+    -------
+    int | None
+        Its place in `trains`, or None when nothing is picked or it is
+        not there.
+    """
+    return next(
+        (
+            index
+            for index, train in enumerate(trains)
+            if trip_day(departure=train) == selected
+        ),
+        None,
+    )

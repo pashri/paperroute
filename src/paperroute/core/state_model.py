@@ -13,6 +13,7 @@ from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import LiveView, Saved, Settings
 from paperroute.core.stop_view import HORIZON
+from paperroute.core.strip_model import TripDay
 
 POLL_EVERY: Final[timedelta] = timedelta(seconds=30)
 RELOAD_BEFORE: Final[timedelta] = timedelta(minutes=30)
@@ -204,6 +205,10 @@ class StripState:
     context : FoldContext | None
         Which strip on screen `opened` belongs to: the view or chooser
         stage, the strip and the Destination; None off the strips.
+    selected : TripDay | None
+        The trip ID and service day of the panel train picked on the
+        Strip, whose times the rows below the From show; None for the
+        next train.
     """
 
     reaches: Mapping[StripKey, Reach | None] = field(default_factory=dict)
@@ -214,6 +219,7 @@ class StripState:
     bounds: tuple[int, int] | None = None
     opened: frozenset[str] = frozenset()
     context: FoldContext | None = None
+    selected: TripDay | None = None
 
 
 @dataclass(frozen=True)

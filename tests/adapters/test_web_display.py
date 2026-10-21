@@ -18,6 +18,7 @@ from paperroute.core.messages import (
     Event,
     Knob,
     KnobHeld,
+    KnobHeldTurned,
     KnobPressed,
     KnobTurned,
     PowerAction,
@@ -375,6 +376,17 @@ def test_hold_action_posts_knob_held() -> None:
     assert event == KnobHeld(knob=Knob.BOTTOM)
 
 
+@pytest.mark.parametrize(('action', 'steps'), [
+    ('hold-left', -1),
+    ('hold-right', 1),
+])
+def test_knob_event_held_turns(action: str, steps: int) -> None:
+    """The hold-left and hold-right actions are turns while held."""
+    assert knob_event(knob='bottom', action=action) == KnobHeldTurned(
+        knob=Knob.BOTTOM, steps=steps,
+    )
+
+
 def test_page_has_no_hold_buttons() -> None:
     """The page has two Press buttons, no Hold buttons, and the new hint."""
     web_dir = files('paperroute') / 'assets' / 'web'
@@ -385,6 +397,7 @@ def test_page_has_no_hold_buttons() -> None:
     assert html.count('data-action="press"') == 2
     plain = re.sub(r'<[^>]+>', '', ' '.join(html.split()))
     assert 'hold K, or double-click or hold Press, to pin.' in plain
+    assert 'hold K or Press, then press J or L' in plain
 
 
 def test_page_click_handler_constants() -> None:

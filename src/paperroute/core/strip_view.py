@@ -50,6 +50,7 @@ from paperroute.core.strip_model import (
     StripView,
     Window,
     hook_straight,
+    selected_index,
 )
 from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_times import (
@@ -205,7 +206,8 @@ def row_times(
         on the ridden rows past the From, or on every reached row when
         nothing is ridden. Rows past the Destination have the times of
         the vehicle that reaches it first; rows below the From laid out
-        along a followed train have that train's times instead. Approach
+        along the next trains have the picked train's times instead, or
+        the next train's with none picked. Approach
         rows have the times the From's next departure calls there.
     """
     if origin is None:
@@ -237,6 +239,7 @@ def row_times(
             target=destination_station(
                 reach=reach, destination=inputs.destination,
             ),
+            selected=inputs.selected,
         ))
     leaves = next_departure(
         trips=trips,
@@ -301,8 +304,8 @@ def note_of(*, inputs: StripInputs, reach: Reach
     -------
     tuple[int, CarryNote] | None
         On rows below the From laid out along the next trains, the
-        change of the train whose time a row shows; else the next strip
-        run's change. None when there is none.
+        change of the picked train, or the next with none picked; else
+        the next strip run's change. None when there is none.
     """
     trips = trips_of(inputs=inputs)
     if reach.trip is None:
@@ -313,6 +316,7 @@ def note_of(*, inputs: StripInputs, reach: Reach
         target=destination_station(
             reach=reach, destination=inputs.destination,
         ),
+        selected=inputs.selected,
     )
 
 
@@ -833,7 +837,7 @@ def strip_panel(*, inputs: StripInputs) -> StripPanel:
         The From, its Destination line and the first departures: five,
         one fewer under a hint and one fewer under a banner, none while
         picking a From; the Stop view's empty text when there are none
-        to list.
+        to list. The picked train's row is marked off the chooser.
     """
     stop = inputs.stop_view
     hint = OPEN_HINT if on_fold(inputs=inputs) else (
@@ -847,6 +851,9 @@ def strip_panel(*, inputs: StripInputs) -> StripPanel:
         no_destination=stop.destination is None,
         hint=hint,
         empty=None if inputs.picking == PICK_FROM else stop.empty,
+        selected=None if inputs.picking is not None else selected_index(
+            selected=inputs.selected, trains=stop.head_departures[:shown],
+        ),
     )
 
 

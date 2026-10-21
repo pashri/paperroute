@@ -247,9 +247,17 @@ class KnobPressed:
 
 @dataclass(frozen=True)
 class KnobHeld:
-    """A knob was held down."""
+    """A knob was held down and let go, with no turn while held."""
 
     knob: Knob
+
+
+@dataclass(frozen=True)
+class KnobHeldTurned:
+    """A knob turned by some detents while held down."""
+
+    knob: Knob
+    steps: int
 
 
 @dataclass(frozen=True)
@@ -508,6 +516,7 @@ ChooserEvent = (
     | ChooserDeparturesLoaded
     | ChooserDeparturesFailed
 )
+KnobEvent = KnobTurned | KnobPressed | KnobHeld | KnobHeldTurned
 MapEvent = (
     ShapesLoaded
     | PatternsLoaded
@@ -524,6 +533,7 @@ Event = (
     | KnobTurned
     | KnobPressed
     | KnobHeld
+    | KnobHeldTurned
     | QuitRequested
     | TimetableSeen
     | TimetableRebuilt

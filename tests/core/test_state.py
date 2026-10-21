@@ -41,6 +41,7 @@ from paperroute.core.messages import (
     FetchFeed,
     Knob,
     KnobHeld,
+    KnobHeldTurned,
     KnobPressed,
     KnobTurned,
     LineFailed,
@@ -109,7 +110,7 @@ from paperroute.core.state_model import (
     State,
     load_window,
 )
-from paperroute.core.state_views import saved_of
+from paperroute.core.state_views import live_stop_view, saved_of
 from paperroute.core.stop_view import (
     HORIZON,
     SIDEBAR_ROWS,
@@ -122,7 +123,9 @@ from paperroute.core.strip_model import (
     STRIP_ROWS,
     StripMapView,
     StripView,
+    trip_day,
 )
+from paperroute.core.strip_select import panel_trains
 from paperroute.core.strip_state import (
     STRIP_VIEWS,
     keys_in_use,
@@ -1302,6 +1305,7 @@ def event_lists(
         'answer',
         'answer',
         'chooser',
+        'held',
     ]
     for kind in draw(st.lists(st.sampled_from(kinds), max_size=40)):
         if kind == 'tick':
@@ -1313,6 +1317,11 @@ def event_lists(
             events.append(KnobTurned(knob=knob, steps=steps))
         elif kind == 'press':
             events.append(KnobPressed(knob=draw(st.sampled_from(list(Knob)))))
+        elif kind == 'held':
+            events.append(KnobHeldTurned(
+                knob=draw(st.sampled_from(list(Knob))),
+                steps=draw(st.integers(-6, 6)),
+            ))
         elif kind == 'fail':
             events.append(FeedFailed(feed=BUSES, at=now, reason='timeout'))
         elif kind == 'unreadable':
@@ -1410,6 +1419,7 @@ def check_effects(
     assert set(after.strip.reaches) <= keys_in_use(state=after)
     check_map_requests(before=before, after=after, effects=effects)
     check_chooser(before=before, after=after, event=event, effects=effects)
+    check_selection(before=before, after=after, event=event)
     for effect in effects:
         if isinstance(effect, Render):
             check_render(state=after, view=effect.view)
@@ -1424,6 +1434,32 @@ def check_effects(
             )
         if isinstance(effect, FetchFeed):
             check_fetch(before=before, after=after, event=event, effect=effect)
+
+
+def check_selection(*, before: State, after: State, event: Event) -> None:
+    """
+    Assert a picked train is in the panel of the Strip on screen, and a
+    turn while held changes nothing saved.
+
+    Parameters
+    ----------
+    before : State
+        State before the event.
+    after : State
+        State after the event.
+    event : Event
+        The event applied.
+    """
+    selected = after.strip.selected
+    if selected is not None:
+        assert after.view is LiveView.STRIP and after.chooser is None
+        trains = panel_trains(stop_view=live_stop_view(state=after))
+        assert selected in {trip_day(departure=train) for train in trains}
+    if isinstance(event, KnobHeldTurned):
+        assert saved_of(state=after) == saved_of(state=before)
+        assert after.chooser == before.chooser
+        if event.knob is Knob.TOP or before.view is not LiveView.STRIP:
+            assert after.strip.selected == before.strip.selected
 
 
 def check_chooser(

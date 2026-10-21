@@ -523,4 +523,5 @@ def strip_inputs(
         tag=stop_view.tag,
         stop_view=stop_view,
         key=key,
+        selected=state.strip.selected,
     )

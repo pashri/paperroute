@@ -29,7 +29,9 @@ from paperroute.core.messages import (
     FeedFetched,
     FetchFeed,
     Knob,
+    KnobEvent,
     KnobHeld,
+    KnobHeldTurned,
     KnobPressed,
     KnobTurned,
     LineFailed,
@@ -362,7 +364,7 @@ def on_feed(
 
 
 def on_knob(
-    *, state: State, event: KnobTurned | KnobPressed | KnobHeld
+    *, state: State, event: KnobEvent
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Apply a knob event, loading departures when the place changed.
@@ -374,7 +376,7 @@ def on_knob(
     ----------
     state : State
         State.
-    event : KnobTurned | KnobPressed | KnobHeld
+    event : KnobEvent
         Knob event.
 
     Returns
@@ -697,7 +699,7 @@ def dispatched(
             result = on_loaded(state=state, event=event)
         case DeparturesFailed() | FeedFetched() | FeedFailed():
             result = on_feed(state=state, event=event)
-        case KnobTurned() | KnobPressed() | KnobHeld():
+        case KnobTurned() | KnobPressed() | KnobHeld() | KnobHeldTurned():
             result = on_knob(state=state, event=event)
         case QuitRequested():
             result = on_quit(state=state)

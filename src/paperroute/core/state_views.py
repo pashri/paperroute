@@ -23,6 +23,7 @@ from paperroute.core.stop_view import (
 )
 from paperroute.core.strip_model import StripInputs, StripMapView, StripView
 from paperroute.core.strip_opening import with_folds
+from paperroute.core.strip_select import kept_selection
 from paperroute.core.strip_state import clamped, request_strips, strip_inputs
 from paperroute.core.strip_view import build_strip_pane, build_strip_view
 
@@ -233,7 +234,8 @@ def settled(
     Ask for the reaches and map data needed, and redraw.
 
     The Stop view is built once, the folds the strip on screen shows are
-    opened, and the Strip's scroll is clamped to its reach first.
+    opened, the Strip's scroll is clamped to its reach and a picked train
+    no longer in its panel is dropped first.
 
     Parameters
     ----------
@@ -249,9 +251,12 @@ def settled(
     """
     stop_view = live_stop_view(state=state)
     banner = stop_view.banner is not None
-    state, strips = request_strips(state=clamped(
-        state=with_folds(state=state, banner=banner), banner=banner,
-    ))
+    state = kept_selection(
+        state=with_folds(state=state, banner=banner), stop_view=stop_view,
+    )
+    state, strips = request_strips(
+        state=clamped(state=state, banner=banner),
+    )
     state, requests = map_effects(state=state, stop_view=stop_view)
     return rendered(
         state=state,

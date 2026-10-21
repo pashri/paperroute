@@ -10,7 +10,7 @@ from paperroute.core.model import StopPlace
 from paperroute.core.patterns import PatternStop
 from paperroute.core.reach import Reach, ReachRow, RowKind
 from paperroute.core.stop_view import clock_text, not_departed
-from paperroute.core.strip_model import CarryNote
+from paperroute.core.strip_model import CarryNote, TripDay, trip_day
 from paperroute.core.strip_times import (
     TripInputs,
     boardable,
@@ -537,10 +537,97 @@ def line_rows(*, reach: Reach, steady: Steady) -> list[int] | None:
     return rows if same else None
 
 
-def followed_text(*, trips: TripInputs, reach: Reach, target: str | None
-                  ) -> dict[int, str]:
+def picked_item(*, trips: TripInputs, steady: Steady,
+                selected: TripDay | None) -> LiveDeparture:
     """
-    Give the rows below the From the next train's times.
+    Find the train whose times the rows below the From show.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    steady : Steady
+        The merged stops.
+    selected : TripDay | None
+        The picked train, or None.
+
+    Returns
+    -------
+    LiveDeparture
+        The picked train; the next of the trains when none is picked or
+        it is not loaded.
+    """
+    return next(
+        (
+            item
+            for item in trips.departures
+            if trip_day(departure=item.departure) == selected
+        ),
+        steady.items[0],
+    )
+
+
+def item_calls(*, trips: TripInputs, reach: Reach, steady: Steady,
+               item: LiveDeparture) -> dict[int, datetime]:
+    """
+    Time a train at the rows below the From.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    reach : Reach
+        The reach, laid out by `followed_reach`; its rows match `steady`.
+    steady : Steady
+        The merged stops.
+    item : LiveDeparture
+        The train.
+
+    Returns
+    -------
+    dict[int, datetime]
+        Arrival by line row where the train stops; one of the trains the
+        rows come from by its own calls, any other by station.
+    """
+    rows = line_rows(reach=reach, steady=steady) or []
+    train = next(
+        (
+            index
+            for index, other in enumerate(steady.items)
+            if other.departure == item.departure
+        ),
+        None,
+    )
+    if train is not None:
+        return {
+            index: moment
+            for index, timed in zip(rows, steady.times)
+            for moment, which in timed
+            if which == train
+        }
+    origin = reach.rows[origin_of(reach=reach) or 0].place.stop_id
+    served = dict(reversed([
+        (station, moment)
+        for station, _, moment in served_after(
+            item=item, trips=trips, origin=origin,
+        )
+    ]))
+    return {
+        index: served[station]
+        for index, (station, _) in zip(rows, steady.rows)
+        if station in served
+    }
+
+
+def picked_calls(
+    *,
+    trips: TripInputs,
+    reach: Reach,
+    target: str | None,
+    selected: TripDay | None,
+) -> tuple[LiveDeparture, dict[int, datetime]] | None:
+    """
+    Find the picked train and its times at the rows below the From.
 
     Parameters
     ----------
@@ -550,23 +637,55 @@ def followed_text(*, trips: TripInputs, reach: Reach, target: str | None
         The reach, laid out by `followed_reach`.
     target : str | None
         The Destination's station ID, or None.
+    selected : TripDay | None
+        The picked train, or None for the next.
+
+    Returns
+    -------
+    tuple[LiveDeparture, dict[int, datetime]] | None
+        The train (see `picked_item`) and its arrival by line row; None
+        when the rows no longer match the trains.
+    """
+    steady = steady_of(reach=reach, trips=trips, target=target)
+    if steady is None or line_rows(reach=reach, steady=steady) is None:
+        return None
+    item = picked_item(trips=trips, steady=steady, selected=selected)
+    return item, item_calls(
+        trips=trips, reach=reach, steady=steady, item=item,
+    )
+
+
+def followed_text(*, trips: TripInputs, reach: Reach, target: str | None,
+                  selected: TripDay | None = None) -> dict[int, str]:
+    """
+    Give the rows below the From the picked train's times.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    reach : Reach
+        The reach, laid out by `followed_reach`.
+    target : str | None
+        The Destination's station ID, or None.
+    selected : TripDay | None
+        The picked train, or None for the next of the trains.
 
     Returns
     -------
     dict[int, str]
-        Clock time by line row below the From where the next of the
-        trains stops; none on the rows it skips or doesn't reach. Empty
-        when the rows no longer match the trains.
+        Clock time by line row below the From where the train stops;
+        none on the rows it skips or doesn't reach. Empty when the rows
+        no longer match the trains.
     """
-    steady = steady_of(reach=reach, trips=trips, target=target)
-    rows = None if steady is None else line_rows(reach=reach, steady=steady)
-    if steady is None or rows is None:
+    picked = picked_calls(
+        trips=trips, reach=reach, target=target, selected=selected,
+    )
+    if picked is None:
         return {}
     return {
         index: clock_text(moment=moment)
-        for index, timed in zip(rows, steady.times)
-        for moment, train in timed
-        if train == 0
+        for index, moment in picked[1].items()
     }
 
 
@@ -594,7 +713,8 @@ def change_at(*, trips: TripInputs, item: LiveDeparture) -> str | None:
     return trips.station_of.get(last, last)
 
 
-def followed_note(*, trips: TripInputs, reach: Reach, target: str | None
+def followed_note(*, trips: TripInputs, reach: Reach, target: str | None,
+                  selected: TripDay | None = None
                   ) -> tuple[int, CarryNote] | None:
     """
     Place the carry-on note on the rows below the From.
@@ -607,27 +727,28 @@ def followed_note(*, trips: TripInputs, reach: Reach, target: str | None
         The reach, laid out by `followed_reach`.
     target : str | None
         The Destination's station ID, or None.
+    selected : TripDay | None
+        The picked train, or None for the next of the trains.
 
     Returns
     -------
     tuple[int, CarryNote] | None
-        The row where the next of the trains runs on as another route,
-        with that change; None when it doesn't, or not on these rows.
+        The row where the picked train runs on as another route, with
+        that change; None when it doesn't, or not on these rows.
     """
-    steady = steady_of(reach=reach, trips=trips, target=target)
-    rows = None if steady is None else line_rows(reach=reach, steady=steady)
-    if steady is None or rows is None:
+    picked = picked_calls(
+        trips=trips, reach=reach, target=target, selected=selected,
+    )
+    if picked is None:
         return None
-    item = steady.items[0]
+    item, calls = picked
     then = item.departure.facts.then
     change = change_at(trips=trips, item=item)
     found = next(
         (
             index
-            for index, (station, _), timed in zip(
-                rows, steady.rows, steady.times,
-            )
-            if station == change and any(train == 0 for _, train in timed)
+            for index in sorted(calls)
+            if reach.rows[index].place.stop_id == change
         ),
         None,
     )

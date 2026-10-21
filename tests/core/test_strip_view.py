@@ -16,7 +16,7 @@ from paperroute.core.reach import (
 )
 from paperroute.core.reach_layout import LineExit
 from paperroute.core.stop_view import NOT_PINNED
-from paperroute.core.strip_badges import DISC_SPAN, HALF_WIDE
+from paperroute.core.strip_badges import HALF_WIDE
 from paperroute.core.strip_model import (
     INDENT,
     LOADING,
@@ -663,8 +663,8 @@ def test_pane_markers_sit_on_the_pane_track() -> None:
     assert marker.x == 500
 
 
-def test_train_at_the_from_is_drawn_beside_its_disc() -> None:
-    """A train at C stays on C's row, right of its disc, name moved on."""
+def test_train_at_the_from_is_drawn_on_its_disc() -> None:
+    """A train at C sits on C's disc, its name moved past the badge."""
     now = START + timedelta(minutes=1)
     inputs = east_inputs(at=(0.0, 0.0), reported=now, now=now)
     view = build_strip_view(inputs=inputs)
@@ -676,7 +676,7 @@ def test_train_at_the_from_is_drawn_beside_its_disc() -> None:
         home = next(row for row in rows if row.bold)
         (marker,) = markers
         assert marker.y == home.y
-        assert marker.x == track + DISC_SPAN
+        assert marker.x == track
         assert home.name_after == marker.x + HALF_WIDE
 
 

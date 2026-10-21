@@ -16,7 +16,15 @@ from hypothesis import strategies as st
 from paperroute.core.map_view import Marker
 from paperroute.core.strip_badges import Badge, Keepouts, Spot, pushed
 from paperroute.core.strip_extents import half_width, tab_half
-from paperroute.core.strip_model import TRACK_X
+from paperroute.core.strip_model import (
+    HOOK_GAP,
+    HOOK_LENGTH,
+    HOOK_RADIUS,
+    HOOK_TIP,
+    ROW_H,
+    TRACK_X,
+    hook_straight,
+)
 from paperroute.render.canvas import Box, Face, font
 from paperroute.render.markers import (
     badge_box,
@@ -162,8 +170,51 @@ def name_box(*, spot: Spot) -> Box:
         From the name's start to far right, its height round the row.
     """
     return (
-        spot.x + NAME_GAP, spot.y - NAME_TOP,
-        10_000.0, spot.y + NAME_BOTTOM,
+        label_x(spot=spot) if spot.exit else spot.x + NAME_GAP,
+        spot.y - NAME_TOP,
+        10_000.0,
+        spot.y + NAME_BOTTOM,
+    )
+
+
+def label_x(*, spot: Spot) -> float:
+    """
+    Give where an exit row's label starts.
+
+    Parameters
+    ----------
+    spot : Spot
+        The exit's spot, mid-way along its hook's straight.
+
+    Returns
+    -------
+    float
+        Past the hook's arrow and the gap after it.
+    """
+    junction = spot.x - (HOOK_RADIUS + HOOK_LENGTH) / 2
+    return junction + HOOK_LENGTH + HOOK_TIP + HOOK_GAP
+
+
+def on_its_disc(*, badge: Badge, disc: Spot) -> bool:
+    """
+    Say whether a badge is a vehicle at a disc's station, on the disc.
+
+    Parameters
+    ----------
+    badge : Badge
+        Badge as placed.
+    disc : Spot
+        Disc centre.
+
+    Returns
+    -------
+    bool
+        True when it is centred on the disc and its hop ends there.
+    """
+    marker = badge.marker
+    return (
+        (marker.x, marker.y) == (disc.x, disc.y)
+        and disc.y in (badge.low, badge.high)
     )
 
 
@@ -197,7 +248,7 @@ def gutter_x(*, marker: Marker, spots: Sequence[Spot]) -> float:
 
 def clear(*, marker: Marker, others: Sequence[Marker],
           spots: Sequence[Spot], discs: Sequence[Spot],
-          spur: bool = False) -> bool:
+          spur: bool = False, badge: Badge | None = None) -> bool:
     """
     Say whether a badge as drawn keeps off everything.
 
@@ -212,8 +263,12 @@ def clear(*, marker: Marker, others: Sequence[Marker],
     discs : Sequence[Spot]
         The discs.
     spur : bool
-        True for a badge on an exit stub, which skips the names of rows
-        whose track is left of it, as those names start past it.
+        True for a badge fixed on an exit hook, which skips the names of
+        rows whose track is left of it, as those names start past it. An
+        exit's own label is never skipped.
+    badge : Badge | None
+        The badge the marker is for, when placed: it may cover a disc it
+        is centred on when its vehicle is at that disc's station.
 
     Returns
     -------
@@ -225,10 +280,16 @@ def clear(*, marker: Marker, others: Sequence[Marker],
         disc for disc in discs if disc.y == marker.y and marker.x > disc.x
     ]
     if spur:
-        beside += [spot for spot in spots if spot.x < marker.x]
+        beside += [
+            spot for spot in spots if spot.x < marker.x and not spot.exit
+        ]
     return not any((
         *(meet(one=box, other=drawn(marker=each)) for each in others),
-        *(meet(one=box, other=disc_box(disc=disc)) for disc in discs),
+        *(
+            meet(one=box, other=disc_box(disc=disc))
+            for disc in discs
+            if badge is None or not on_its_disc(badge=badge, disc=disc)
+        ),
         *(
             meet(one=box, other=name_box(spot=spot))
             for spot in spots
@@ -345,6 +406,73 @@ def moved(*, marker: Marker, x: float, y: float,
     return replace(there, x=gutter_x(marker=there, spots=spots))
 
 
+def exit_spot(*, junction: Spot, y: float) -> Spot:
+    """
+    Give an exit row's spot off a junction.
+
+    Parameters
+    ----------
+    junction : Spot
+        The junction row's spot.
+    y : float
+        The exit row's centre line.
+
+    Returns
+    -------
+    Spot
+        Mid-way along the hook's straight, on the exit's centre line.
+    """
+    left, right = hook_straight(track_x=junction.x)
+    return Spot(x=(left + right) / 2, y=y, exit=True)
+
+
+def hop_badge(*, rows: Sequence[Spot], start: int, end: int,
+              share: float, kind: float | None, label: str) -> Badge:
+    """
+    Put a badge on a hop as `hop_marker` does.
+
+    Parameters
+    ----------
+    rows : Sequence[Spot]
+        Visible rows.
+    start : int
+        The hop's earlier row.
+    end : int
+        Its later row.
+    share : float
+        Share of the hop run.
+    kind : float | None
+        Wedge bearing down or up, an age, or None.
+    label : str
+        Route label.
+
+    Returns
+    -------
+    Badge
+        On the later row's track; bound for an exit, on the earlier
+        row's track until its last row, then fixed on the exit's spot
+        with its wedge pointing right.
+    """
+    first, last = rows[start], rows[end]
+    y = first.y + (last.y - first.y) * share
+    spur = last.exit and abs(last.y - y) < ROW_H
+    live = kind in (0.0, 180.0)
+    return Badge(
+        marker=Marker(
+            route=label,
+            x=first.x if last.exit and not spur else last.x,
+            y=last.y if spur else y,
+            bearing=(90.0 if spur else kind) if live else None,
+            live=live,
+            pinned=True,
+            age=kind if kind in AGES else None,
+        ),
+        low=min(first.y, last.y),
+        high=max(first.y, last.y),
+        spur=spur,
+    )
+
+
 @st.composite
 def strip_cases(draw: st.DrawFn) -> tuple[
     dict[str, Spot], list[Badge], list[Spot],
@@ -352,8 +480,9 @@ def strip_cases(draw: st.DrawFn) -> tuple[
     """
     Draw rows one per slot, badges on hops between them, and discs.
 
-    A spur badge stands for a vehicle near an exit row of its later
-    row's depth: it sits one indent right of that row's track.
+    A row after a non-exit row may be an exit off it, reached only by
+    the hop from that row; no hop leaves an exit. Discs are on non-exit
+    rows.
 
     Parameters
     ----------
@@ -365,40 +494,40 @@ def strip_cases(draw: st.DrawFn) -> tuple[
     tuple[dict[str, Spot], list[Badge], list[Spot]]
         Spots, badges with wide labels, wedges and tabs, and discs.
     """
-    depths = draw(st.lists(st.integers(0, 3), min_size=2, max_size=11))
-    spots = {
-        f'S{slot}': Spot(x=TRACK_X + 16 * depth, y=62 + 36 * slot)
-        for slot, depth in enumerate(depths)
-    }
-    rows = list(spots.values())
+    depths = draw(st.lists(
+        st.tuples(st.integers(0, 3), st.booleans()), min_size=2, max_size=11,
+    ))
+    rows: list[Spot] = []
+    for slot, (depth, off) in enumerate(depths):
+        y = 62 + 36 * slot
+        rows.append(
+            exit_spot(junction=rows[-1], y=y)
+            if off and rows and not rows[-1].exit
+            else Spot(x=TRACK_X + 16 * depth, y=y)
+        )
     hops = st.tuples(
         st.integers(0, len(rows) - 1),
         st.integers(0, len(rows) - 1),
         st.floats(0, 1),
         st.sampled_from([None, 0.0, 180.0, *AGES]),
         st.sampled_from(LABELS),
-        st.booleans(),
-    ).filter(lambda hop: hop[0] != hop[1])
+    ).filter(
+        lambda hop: hop[0] != hop[1]
+        and not rows[hop[0]].exit
+        and (not rows[hop[1]].exit or hop[0] == hop[1] - 1),
+    )
     badges = [
-        Badge(
-            marker=Marker(
-                route=label,
-                x=rows[end].x + (16 if spur else 0),
-                y=rows[start].y + (rows[end].y - rows[start].y) * share,
-                bearing=kind if kind in (0.0, 180.0) else None,
-                live=kind in (0.0, 180.0),
-                pinned=True,
-                age=kind if kind in AGES else None,
-            ),
-            low=min(rows[start].y, rows[end].y),
-            high=max(rows[start].y, rows[end].y),
-            spur=spur,
+        hop_badge(
+            rows=rows, start=start, end=end, share=share, kind=kind,
+            label=label,
         )
-        for start, end, share, kind, label, spur in draw(
+        for start, end, share, kind, label in draw(
             st.lists(hops, max_size=12),
         )
     ]
-    marked = draw(st.lists(st.integers(0, len(rows) - 1), max_size=2))
+    stations = [index for index, row in enumerate(rows) if not row.exit]
+    marked = draw(st.lists(st.sampled_from(stations), max_size=2))
+    spots = {f'S{slot}': row for slot, row in enumerate(rows)}
     return spots, badges, [rows[index] for index in set(marked)]
 
 
@@ -536,7 +665,7 @@ def test_badges_as_drawn_stay_on_their_hops_and_clear(
         others = markers[:index] + markers[index + 1:]
         assert clear(
             marker=each.marker, others=[], spots=rows, discs=discs,
-            spur=each.spur,
+            spur=each.spur, badge=each,
         )
         if each.spur and not each.extra:
             assert each.marker.x in tracks_of(
@@ -547,7 +676,7 @@ def test_badges_as_drawn_stay_on_their_hops_and_clear(
             )
         if not clear(
             marker=each.marker, others=others, spots=rows, discs=discs,
-            spur=each.spur,
+            spur=each.spur, badge=each,
         ):
             assert not has_room(
                 badge=each, others=others, spots=rows, discs=discs,

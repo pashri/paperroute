@@ -13,7 +13,7 @@ NAME_BELOW: Final[float] = 10.0  # a name's descenders below it
 DISC_REACH: Final[float] = 11.0  # a disc's radius
 AT_REACH: Final[float] = 12.0  # a vehicle this near a disc is at it
 HALF_WIDE: Final[float] = 28.0  # half a five-letter badge, and a pixel
-DISC_SPAN: Final[float] = DISC_REACH + 1 + HALF_WIDE  # slot beside a disc
+SLOT_SPAN: Final[float] = 2 * HALF_WIDE  # badge centres side by side
 
 
 @dataclass(frozen=True)
@@ -52,8 +52,8 @@ class Badge:
     extra : int
         Other badges counted in this one.
     spur : bool
-        True on the last stretch into an exit row, where it stays on the
-        exit's stub rather than moving left off the names.
+        True on the last row into an exit, where it sits fixed on the
+        exit hook's straight.
     """
 
     marker: Marker
@@ -132,29 +132,6 @@ def in_gutter(*, marker: Marker, spots: Mapping[str, Spot]) -> Marker:
         if level_with(marker=marker, spot=spot)
     )
     return replace(marker, x=min((marker.x, *level)))
-
-
-def off_names(*, badge: Badge, marker: Marker, spots: Mapping[str, Spot]
-              ) -> Marker:
-    """
-    Move a badge left off the names level with it, unless on a stub.
-
-    Parameters
-    ----------
-    badge : Badge
-        The badge the marker is for.
-    marker : Marker
-        Where it would go.
-    spots : Mapping[str, Spot]
-        Visible rows' track spots by station.
-
-    Returns
-    -------
-    Marker
-        The marker as `in_gutter` moves it; as it is for a spur badge,
-        whose level names start past it instead.
-    """
-    return marker if badge.spur else in_gutter(marker=marker, spots=spots)
 
 
 def counted(*, marker: Marker, extra: int) -> Marker:
@@ -243,7 +220,7 @@ def at_disc(*, badge: Badge, keep: Keepouts) -> Spot | None:
 
 def beside(*, disc: Spot, crowd: Sequence[Badge]) -> list[Badge]:
     """
-    Line up the badges of vehicles at a disc's station beside it.
+    Line up the badges of vehicles at a disc's station on and beside it.
 
     Parameters
     ----------
@@ -255,24 +232,52 @@ def beside(*, disc: Spot, crowd: Sequence[Badge]) -> list[Badge]:
     Returns
     -------
     list[Badge]
-        The first badge right of the disc, level with it; a second
-        beside that, or, with more, a '+<n>' count of the rest.
+        The first badge centred on the disc; a second right beside it,
+        level with it, or, with more, a '+<n>' count of the rest.
     """
     first, *rest = crowd
-    return [
+    extra = max(len(rest) - 1, 0)
+    on_disc = replace(
+        first, marker=replace(first.marker, x=disc.x, y=disc.y),
+    )
+    return [on_disc] + [
         replace(
             each,
             marker=counted(
-                marker=replace(
-                    each.marker,
-                    x=disc.x + DISC_SPAN + slot * 2 * HALF_WIDE,
-                    y=disc.y,
-                ),
-                extra=len(rest) - 1 if slot else 0,
+                marker=replace(each.marker, x=disc.x + SLOT_SPAN, y=disc.y),
+                extra=extra,
             ),
-            extra=len(rest) - 1 if slot else 0,
+            extra=extra,
         )
-        for slot, each in enumerate((first, *rest[:1]))
+        for each in rest[:1]
+    ]
+
+
+def on_hooks(*, badges: Sequence[Badge]) -> list[Badge]:
+    """
+    Keep spur badges where they are, counting ones at the same spot.
+
+    Parameters
+    ----------
+    badges : Sequence[Badge]
+        Spur badges, each at its exit's spot.
+
+    Returns
+    -------
+    list[Badge]
+        One badge per spot, unmoved; a spot with more than one vehicle
+        has a '+<n>' count.
+    """
+    spots: dict[tuple[float, float], list[Badge]] = {}
+    for each in badges:
+        spots.setdefault((each.marker.x, each.marker.y), []).append(each)
+    return [
+        replace(
+            first,
+            marker=counted(marker=first.marker, extra=len(rest)),
+            extra=len(rest),
+        )
+        for first, *rest in spots.values()
     ]
 
 
@@ -413,13 +418,11 @@ def place(*, badge: Badge, placed: Sequence[Badge], keep: Keepouts
     -------
     Badge | None
         The badge at the first candidate y where, moved left off the
-        names level with it (see `off_names`), it fits; None when none
+        names level with it (see `in_gutter`), it fits; None when none
         does.
     """
     moves = (
-        off_names(
-            badge=badge, marker=replace(badge.marker, y=y), spots=keep.spots,
-        )
+        in_gutter(marker=replace(badge.marker, y=y), spots=keep.spots)
         for y in candidates(badge=badge, placed=placed, keep=keep)
     )
     return next(
@@ -621,7 +624,7 @@ def off_lined(*, lineup: Sequence[Badge], lined: Sequence[Badge]
         for each in lineup
         for other in lined
     ):
-        shift += 2 * HALF_WIDE
+        shift += SLOT_SPAN
     return [
         replace(each, marker=replace(each.marker, x=each.marker.x + shift))
         for each in lineup
@@ -642,24 +645,27 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
     Returns
     -------
     tuple[Badge, ...]
-        Badges by x then y, each still on its own hop. One at the From or
-        Destination (see `at_disc`) goes beside its disc, level with it;
-        the rest move the least they need to clear the names level with
-        them, the discs and each other, top to bottom. A spur badge stays
-        on its stub; the names level with it start past it. One with no room
+        Badges by x then y, each still on its own hop. The first at the
+        From or Destination (see `at_disc`) goes on its disc and the next
+        beside it, level with it. A spur badge never moves, and others
+        keep off it; spur badges at one spot become a count. The rest
+        move the least they need to clear the names level with them, the
+        discs and each other, top to bottom. One with no room
         on its hop is counted in a badge on the same hop, which becomes a
         '+<n>', or with none there is drawn on its hop anyway.
     """
     order = sorted(
         (
-            replace(each, marker=off_names(
-                badge=each, marker=each.marker, spots=keep.spots,
+            replace(each, marker=in_gutter(
+                marker=each.marker, spots=keep.spots,
             ))
             for each in badges
+            if not each.spur
         ),
         key=lambda each: (each.marker.y, each.marker.x),
     )
     placed, rest = at_stations(badges=order, keep=keep)
+    placed.extend(on_hooks(badges=[each for each in badges if each.spur]))
     again = settled_all(
         badges=rest, placed=placed, keep=keep, first=len(placed),
     )

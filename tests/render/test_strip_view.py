@@ -361,8 +361,9 @@ def at_the_from(*, stale: bool) -> StripView:
     ))
 
 
-def test_trains_at_the_from_leave_its_disc_and_name_whole() -> None:
-    """Live and stale trains at C draw on its row without touching either."""
+def test_trains_at_the_from_sit_on_its_disc_and_leave_its_name_whole(
+) -> None:
+    """Live and stale trains at C cover its disc and leave its name."""
     for stale in (False, True):
         view = at_the_from(stale=stale)
         home = next(row for row in view.rows if row.bold)
@@ -372,7 +373,7 @@ def test_trains_at_the_from_leave_its_disc_and_name_whole() -> None:
         bare = draw_strip_view(view=replace(view, markers=()))
         y = int(home.y)
         disc = (slice(y - 12, y + 13), slice(TRACK_X - 12, TRACK_X + 13))
-        assert np.array_equal(drawn[disc], bare[disc])
+        assert not np.array_equal(drawn[disc], bare[disc])
         assert home.name_after is not None
         name = (slice(y - 9, y + 10), slice(int(home.name_after), 300))
         assert np.array_equal(drawn[name], bare[name])

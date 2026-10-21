@@ -701,7 +701,7 @@ def names_clear(*, rows: Sequence[StripRow], markers: Sequence[Marker],
     Returns
     -------
     tuple[StripRow, ...]
-        The rows; one with a badge right of its track, centred within
+        The rows; one with a badge on or right of its track, centred within
         `NAME_REACH` of it or drawn into its name band, names where
         those badges end.
     """
@@ -710,7 +710,7 @@ def names_clear(*, rows: Sequence[StripRow], markers: Sequence[Marker],
             (
                 marker.x + HALF_WIDE
                 for marker in markers
-                if marker.x > track_x + INDENT * row.depth
+                if marker.x >= track_x + INDENT * row.depth
                 and (
                     abs(marker.y - row.y) < NAME_REACH
                     or level_with(marker=marker, spot=Spot(x=0, y=row.y))

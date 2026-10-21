@@ -276,10 +276,10 @@ def hop_marker(
     Badge | None
         The badge on the later row's track, with a wedge down the strip
         when that row is lower and up otherwise, if live; None unless the
-        hop has two ends that are both visible rows. Bound for an exit row, it
-        rides the earlier row's track until within a row of the exit,
-        then sits on the exit's spot, on its centre line, as a spur
-        badge.
+        hop has two ends that are both visible rows. Bound for an exit
+        row, it rides the earlier row's track until within a row of the
+        exit, then sits on the exit's spot as a spur badge, its wedge
+        pointing right along the hook.
     """
     if len(ends) != 2:
         return None
@@ -288,12 +288,13 @@ def hop_marker(
         return None
     y = start.y + (end.y - start.y) * fraction
     spur = end.exit and abs(end.y - y) < ROW_H
+    down = 180.0 if end.y > start.y else 0.0
     return Badge(
         marker=Marker(
             route=route,
             x=start.x if end.exit and not spur else end.x,
             y=end.y if spur else y,
-            bearing=(180.0 if end.y > start.y else 0.0) if live else None,
+            bearing=(90.0 if spur else down) if live else None,
             live=live,
             pinned=True,
             age=age,

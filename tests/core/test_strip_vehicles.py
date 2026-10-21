@@ -109,7 +109,7 @@ def test_next_trip_without_pattern_ends_at_the_change() -> None:
     assert marker is None
 
 
-def test_next_route_off_the_line_rides_the_exit() -> None:
+def test_bound_vehicle_rides_the_exit_hook() -> None:
     """With D an exit off C, the T2 badge at 8:13 is on D's hook."""
     marker, rows = badge_at(minutes=13, off=True)
     junction = rows['C']
@@ -202,3 +202,54 @@ def test_fresh_own_leg_after_its_last_arrival() -> None:
     assert marker is not None
     assert (marker.route, marker.live) == ('T8', True)
     assert marker.y == pytest.approx(rows['C'].y)
+
+
+def hook_ends() -> tuple[Spot, Spot]:
+    """
+    Give a junction's spot and its exit's spot three rows below.
+
+    Returns
+    -------
+    tuple[Spot, Spot]
+        The junction on the depth 0 track, then the exit at the middle
+        of its hook's straight.
+    """
+    left, right = hook_straight(track_x=TRACK_X)
+    return (
+        Spot(x=TRACK_X, y=100),
+        Spot(x=(left + right) / 2, y=100 + 3 * ROW_H, exit=True),
+    )
+
+
+def test_spur_badge_sits_on_hook_straight() -> None:
+    """On its last row before the exit a badge sits on the exit's spot."""
+    junction, off = hook_ends()
+    found = hop_marker(
+        route='T2', ends=(junction, off), fraction=0.9, age=None, live=True,
+    )
+    left, right = hook_straight(track_x=TRACK_X)
+    assert found is not None
+    assert found.spur
+    assert (found.marker.x, found.marker.y) == (off.x, off.y)
+    assert left < found.marker.x < right
+    assert found.marker.bearing == 90.0
+
+
+def test_bound_badge_rides_junction_track_until_last_row() -> None:
+    """Further up the hop the badge rides the junction's track."""
+    junction, off = hook_ends()
+    found = hop_marker(
+        route='T2', ends=(junction, off), fraction=0.1, age=None,
+        live=False,
+    )
+    assert found is not None
+    assert not found.spur
+    assert found.marker.x == junction.x
+
+
+def test_leaving_train_disappears_past_the_exit() -> None:
+    """A hop on from the exit to a stop with no row gives no badge."""
+    _, off = hook_ends()
+    assert hop_marker(
+        route='T2', ends=(off, None), fraction=0.5, age=None, live=True,
+    ) is None

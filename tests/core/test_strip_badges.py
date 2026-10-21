@@ -6,18 +6,18 @@ from typing import Final
 
 from paperroute.core.map_view import Marker
 from paperroute.core.strip_badges import (
-    DISC_SPAN,
-    HALF_WIDE,
+    SLOT_SPAN,
     Badge,
     Keepouts,
     Spot,
+    clear_of,
     overlaps,
     pushed,
 )
 from paperroute.core.strip_vehicles import hop_marker
 
 STEP: Final[float] = 22.0  # two plain badges' centres, one under another
-BESIDE: Final[float] = 30 + DISC_SPAN  # first slot beside a disc at x 30
+BESIDE: Final[float] = 30 + SLOT_SPAN  # beside a badge on a disc at x 30
 
 
 def badge(*, x: float, y: float, low: float, high: float,
@@ -204,8 +204,8 @@ def test_pushed_moves_a_badge_up_its_own_hop_before_folding() -> None:
     assert found == [('M1', 30, 140), ('M2', 30, 162), ('S', 46, 118)]
 
 
-def test_pushed_lines_up_vehicles_at_the_from_beside_its_disc() -> None:
-    """Trains at FROM stay on its row, beside the disc, then a count."""
+def test_pushed_lines_up_vehicles_at_the_from_on_its_disc() -> None:
+    """Trains at FROM sit on its disc, then beside it, then a count."""
     spots = {'A': Spot(x=30, y=100), 'C': Spot(x=30, y=136)}
     discs = (spots['C'],)
     pair = shown(
@@ -216,7 +216,7 @@ def test_pushed_lines_up_vehicles_at_the_from_beside_its_disc() -> None:
         spots=spots,
         discs=discs,
     )
-    assert pair == [('A', BESIDE, 136), ('B', BESIDE + 2 * HALF_WIDE, 136)]
+    assert pair == [('A', 30, 136), ('B', BESIDE, 136)]
     crowd = shown(
         badges=[
             badge(x=30, y=136 + i, low=136, high=172, route=f'T{i}')
@@ -225,7 +225,7 @@ def test_pushed_lines_up_vehicles_at_the_from_beside_its_disc() -> None:
         spots=spots,
         discs=discs,
     )
-    assert crowd == [('T0', BESIDE, 136), ('+3', BESIDE + 2 * HALF_WIDE, 136)]
+    assert crowd == [('T0', 30, 136), ('+3', BESIDE, 136)]
 
 
 def test_pushed_keeps_wedges_and_tabs_off_the_disc() -> None:
@@ -252,7 +252,7 @@ def test_badge_at_a_disc_on_the_top_row_stays_level_with_it() -> None:
         discs=(spots['P'],),
         top=80,
     )
-    assert found == [('T1', BESIDE, 98)]
+    assert found == [('T1', 30, 98)]
 
 
 def test_counted_badge_drops_its_wedge() -> None:
@@ -282,7 +282,7 @@ def test_badge_near_the_from_but_not_at_it_stays_on_its_hop() -> None:
         spots=spots,
         discs=discs,
     )
-    assert at == [('T1', BESIDE, 136)]
+    assert at == [('T1', 30, 136)]
 
 
 def test_badge_between_two_neighbouring_discs_goes_beside_one() -> None:
@@ -293,7 +293,7 @@ def test_badge_between_two_neighbouring_discs_goes_beside_one() -> None:
         spots=spots,
         discs=tuple(spots.values()),
     )
-    assert found == [('T1', BESIDE, 100)]
+    assert found == [('T1', 30, 100)]
 
 
 def test_badge_with_no_room_is_drawn_on_its_own_hop() -> None:
@@ -388,8 +388,8 @@ def test_one_count_beside_a_disc() -> None:
     assert found == [
         ('V', 30, 100),
         ('U', 30, 105),
-        ('T0', BESIDE, 136),
-        ('+3', BESIDE + 2 * HALF_WIDE, 136),
+        ('T0', 30, 136),
+        ('+3', BESIDE, 136),
     ]
 
 
@@ -416,3 +416,84 @@ def test_a_count_is_placed_again_at_its_own_size() -> None:
         for index, one in enumerate(markers)
         for other in markers[index + 1:]
     )
+
+
+def test_first_train_at_from_sits_on_disc() -> None:
+    """One train at the From is centred on its disc."""
+    spots = {'A': Spot(x=30, y=100), 'C': Spot(x=30, y=136)}
+    found = shown(
+        badges=[badge(x=30, y=130, low=100, high=136)],
+        spots=spots,
+        discs=(spots['C'],),
+    )
+    assert found == [('T1', 30, 136)]
+
+
+def test_second_train_at_from_lines_up_beside() -> None:
+    """A second train at the From sits in the first slot beside it."""
+    spots = {'C': Spot(x=30, y=136)}
+    found = shown(
+        badges=[
+            badge(x=30, y=136, low=136, high=172, route='A'),
+            badge(x=30, y=140, low=136, high=172, route='B'),
+        ],
+        spots=spots,
+        discs=(spots['C'],),
+    )
+    assert found == [('A', 30, 136), ('B', BESIDE, 136)]
+
+
+def test_first_train_at_destination_sits_on_disc() -> None:
+    """The same rule holds at the Destination's disc."""
+    spots = {
+        'C': Spot(x=30, y=100), 'X': Spot(x=30, y=136),
+        'D': Spot(x=30, y=172),
+    }
+    found = shown(
+        badges=[badge(x=30, y=168, low=136, high=172)],
+        spots=spots,
+        discs=(spots['C'], spots['D']),
+    )
+    assert found == [('T1', 30, 172)]
+
+
+def test_train_elsewhere_never_sits_on_disc() -> None:
+    """A train at another station is never placed on a disc."""
+    spots = {
+        'C': Spot(x=30, y=100), 'X': Spot(x=30, y=136),
+        'Y': Spot(x=30, y=172), 'D': Spot(x=30, y=208),
+    }
+    discs = (spots['C'], spots['D'])
+    found = pushed(
+        badges=[badge(x=30, y=136, low=136, high=172)],
+        keep=Keepouts(spots=spots, discs=discs),
+    )
+    assert all(
+        (each.marker.x, each.marker.y) != (disc.x, disc.y)
+        for each in found
+        for disc in discs
+    )
+
+
+def test_in_transit_badge_still_keeps_off_disc() -> None:
+    """Half way from the From to the next row a badge clears the disc."""
+    spots = {'C': Spot(x=30, y=100), 'X': Spot(x=30, y=136)}
+    (found,) = pushed(
+        badges=[badge(x=30, y=118, low=100, high=136, bearing=0.0)],
+        keep=Keepouts(spots=spots, discs=(spots['C'],)),
+    )
+    assert clear_of(marker=found.marker, disc=spots['C'])
+
+
+def test_spur_badge_never_moves_and_others_keep_off_it() -> None:
+    """A spur badge stays put; a badge on its hop moves off it."""
+    spots = {
+        'main': Spot(x=30, y=100), 'off': Spot(x=77, y=136, exit=True),
+    }
+    spur = replace(badge(x=77, y=136, low=100, high=136), spur=True)
+    other = badge(x=30, y=136, low=100, high=136, route='S')
+    found = pushed(badges=[other, spur], keep=Keepouts(spots=spots))
+    (kept,) = [each for each in found if each.spur]
+    (moved,) = [each for each in found if not each.spur]
+    assert (kept.marker.x, kept.marker.y) == (77, 136)
+    assert not overlaps(one=moved.marker, other=kept.marker)

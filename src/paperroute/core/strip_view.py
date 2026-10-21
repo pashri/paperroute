@@ -15,7 +15,11 @@ from paperroute.core.strip_badges import (
     Spot,
     level_with,
 )
-from paperroute.core.strip_follow import followed_text, origin_of
+from paperroute.core.strip_follow import (
+    followed_note,
+    followed_text,
+    origin_of,
+)
 from paperroute.core.strip_model import (
     ALL_TAG,
     BANNER_ROWS,
@@ -37,6 +41,7 @@ from paperroute.core.strip_model import (
     STRIP_TOP,
     TRACK_X,
     Band,
+    CarryNote,
     Marks,
     StripInputs,
     StripPane,
@@ -226,7 +231,13 @@ def row_times(
     ))
     if reach.trip is not None:
         times = {i: text for i, text in times.items() if i < origin}
-        times.update(followed_text(trips=trips, reach=reach))
+        times.update(followed_text(
+            trips=trips,
+            reach=reach,
+            target=destination_station(
+                reach=reach, destination=inputs.destination,
+            ),
+        ))
     leaves = next_departure(
         trips=trips,
         origin=station,
@@ -270,7 +281,38 @@ def marks_of(*, inputs: StripInputs, reach: Reach) -> Marks:
         ),
         cursor=inputs.cursor,
         picking=inputs.picking,
-        note=carry_note(trips=trips_of(inputs=inputs), reach=reach),
+        note=note_of(inputs=inputs, reach=reach),
+    )
+
+
+def note_of(*, inputs: StripInputs, reach: Reach
+            ) -> tuple[int, CarryNote] | None:
+    """
+    Place the strip's carry-on note.
+
+    Parameters
+    ----------
+    inputs : StripInputs
+        The view's inputs.
+    reach : Reach
+        The reach.
+
+    Returns
+    -------
+    tuple[int, CarryNote] | None
+        On rows below the From laid out along the next trains, the
+        change of the train whose time a row shows; else the next strip
+        run's change. None when there is none.
+    """
+    trips = trips_of(inputs=inputs)
+    if reach.trip is None:
+        return carry_note(trips=trips, reach=reach)
+    return followed_note(
+        trips=trips,
+        reach=reach,
+        target=destination_station(
+            reach=reach, destination=inputs.destination,
+        ),
     )
 
 

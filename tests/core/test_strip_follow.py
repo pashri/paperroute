@@ -32,7 +32,14 @@ from tests.core.factories import (
     live,
     train,
 )
-from tests.core.strip_factories import KEY, PIN, long_reach, on_view, turn
+from tests.core.strip_factories import (
+    KEY,
+    PIN,
+    long_reach,
+    on_view,
+    trains,
+    turn,
+)
 
 FIXED: Final[tuple[str, ...]] = ('SP', 'ER', 'MV', 'CE', 'TH', 'WY', 'CQ')
 CITY: Final[tuple[str, ...]] = (
@@ -240,10 +247,11 @@ def test_a_direct_pin_follows_its_train_past_the_destination() -> None:
     ]
 
 
-def test_no_destination_follows_the_next_departure() -> None:
-    """With no To the next train at all is followed."""
+def test_no_destination_merges_the_next_departures() -> None:
+    """With no To the next trains run on past the first one's end."""
     assert below(reach=followed(inputs=sydenham(destination=None)).reach) == [
-        'SP', 'ER', '>X',
+        'SP', 'ER', '>X', 'MV', 'CE', 'MU', 'SJ', 'CQ', 'WY', 'TH', 'CE',
+        'RF', 'LW',
     ]
 
 
@@ -290,7 +298,9 @@ def test_a_train_leaving_up_the_strip_is_not_followed() -> None:
 def test_the_shown_reach_follows_the_next_train() -> None:
     """The Strip's reach in state follows the next train once loaded."""
     state, _ = on_view(
-        view=LiveView.STRIP, pin=replace(PIN, destination=None),
+        view=LiveView.STRIP,
+        pin=replace(PIN, destination=None),
+        departures=trains(count=6),
     )
     state = replace(
         state,
@@ -351,8 +361,8 @@ def line_state(*, scroll: int) -> State:
     Returns
     -------
     State
-        Trains from C at 8:05 all stops to L29, 8:10 express to L29 and
-        8:15 all stops again, at 8:00, scrolled.
+        Trains from C five minutes apart from 8:05: all stops to L29,
+        four expresses to L29, then all stops again; at 8:00, scrolled.
     """
     line = tuple(f'L{k}' for k in range(30))
     places = {
@@ -366,7 +376,9 @@ def line_state(*, scroll: int) -> State:
         station_of={key: key for key in places},
     ))
     state, _ = on_view(
-        view=LiveView.STRIP, pin=replace(PIN, destination=None),
+        view=LiveView.STRIP,
+        pin=replace(PIN, destination=None),
+        departures=trains(count=6),
     )
     state = replace(
         state,
@@ -375,11 +387,15 @@ def line_state(*, scroll: int) -> State:
             'train-0': line_pattern(
                 trip_id='train-0', stations=('C', *line), minutes=5,
             ),
-            'train-1': line_pattern(
-                trip_id='train-1', stations=('C', 'L29'), minutes=10,
-            ),
-            'train-2': line_pattern(
-                trip_id='train-2', stations=('C', *line), minutes=15,
+            **{
+                f'train-{k}': line_pattern(
+                    trip_id=f'train-{k}', stations=('C', 'L29'),
+                    minutes=5 + 5 * k,
+                )
+                for k in range(1, 5)
+            },
+            'train-5': line_pattern(
+                trip_id='train-5', stations=('C', *line), minutes=30,
             ),
         }),
     )
@@ -394,7 +410,7 @@ def test_a_scroll_survives_the_followed_train_changing() -> None:
     assert state.strip.scroll == 6
     state, _ = step(state, Tick(now=START + timedelta(minutes=6)))
     assert state.strip.scroll < 6
-    state, _ = step(state, Tick(now=START + timedelta(minutes=11)))
+    state, _ = step(state, Tick(now=START + timedelta(minutes=26)))
     assert state.strip.scroll == 6
 
 
@@ -449,7 +465,7 @@ def test_an_overshoot_is_kept_to_the_rows_shown() -> None:
     state, _ = step(state, turn(steps=20))
     assert state.strip.asked == state.strip.scroll >= shown
     held = state.strip.asked
-    state, _ = step(state, Tick(now=START + timedelta(minutes=11)))
+    state, _ = step(state, Tick(now=START + timedelta(minutes=26)))
     assert state.strip.scroll == held
 
 
@@ -466,3 +482,141 @@ def test_a_turn_before_the_rows_load_is_kept() -> None:
     ), map=loaded.map)
     state, _ = step(state, Tick(now=START))
     assert state.strip.scroll == 3
+
+
+WEST_LINE: Final[tuple[str, ...]] = (
+    'HP', 'GR', 'AU', 'LI', 'FL', 'HB', 'SF', 'RF', 'CE',
+)
+EXPRESS: Final[tuple[str, ...]] = ('PA', 'SF', 'RF', 'CE', 'TH')
+ALL_STOPS: Final[tuple[str, ...]] = ('PA', *WEST_LINE, 'MU')
+
+
+def parramatta(*, express: int, stopping: int,
+               destination: str | None = 'CE') -> StripInputs:
+    """
+    Make inputs for Parramatta with a T1 express and a T2 all stops.
+
+    Parameters
+    ----------
+    express : int
+        Minutes after 8:00 the express 'x' leaves, to Town Hall.
+    stopping : int
+        Minutes after 8:00 the all-stops 'y' leaves, to Museum.
+    destination : str | None
+        The Destination.
+
+    Returns
+    -------
+    StripInputs
+        The inputs on a strip whose fixed line is the all-stops one.
+    """
+    keys = (*ALL_STOPS, 'TH')
+    places = {
+        key: StopPlace(stop_id=key, name=key, point=None) for key in keys
+    }
+    reach = build_reach(data=ReachInput(
+        origin=places['PA'],
+        tails=(RunTail(before=(), after=ALL_STOPS[1:], trips=5),),
+        places=places,
+        station_of={key: key for key in keys},
+    ))
+    return inputs_of(
+        reach=reach,
+        departures=[
+            live(item=train(minutes=express, trip_id='x')),
+            live(item=train(minutes=stopping, trip_id='y')),
+        ],
+        patterns={
+            'x': line_pattern(trip_id='x', stations=EXPRESS, minutes=express),
+            'y': line_pattern(
+                trip_id='y', stations=ALL_STOPS, minutes=stopping,
+            ),
+        },
+        destination=destination,
+    )
+
+
+def row_times(*, inputs: StripInputs) -> list[tuple[str, str]]:
+    """
+    Read the stations and times of the rows below the From.
+
+    Parameters
+    ----------
+    inputs : StripInputs
+        The inputs, rows not yet laid out.
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        Station and time of each line row below the From.
+    """
+    laid = followed(inputs=inputs)
+    reach = laid.reach
+    assert reach is not None
+    origin = origin_of(reach=reach)
+    assert origin is not None
+    shown = marks_of(inputs=laid, reach=reach).times
+    return [
+        (row.place.stop_id, shown.get(index, ''))
+        for index, row in enumerate(reach.rows)
+        if index > origin and row.kind is RowKind.MAIN
+    ]
+
+
+def test_rows_merge_an_express_and_an_all_stops_train() -> None:
+    """With the express next only its stops have times."""
+    assert row_times(inputs=parramatta(express=1, stopping=3))[:9] == [
+        ('HP', ''), ('GR', ''), ('AU', ''), ('LI', ''), ('FL', ''),
+        ('HB', ''), ('SF', '8:04'), ('RF', '8:07'), ('CE', '8:10'),
+    ]
+
+
+def test_every_row_is_timed_once_the_express_has_gone() -> None:
+    """After the express leaves the all-stops train times every row."""
+    inputs = parramatta(express=1, stopping=3)
+    gone = replace(inputs, now=START + timedelta(minutes=2))
+    found = row_times(inputs=gone)
+    assert all(time for _, time in found)
+    assert [s for s, _ in found][:9] == [
+        s for s, _ in row_times(inputs=inputs)
+    ][:9]
+
+
+def test_rows_stay_put_whichever_train_is_next() -> None:
+    """The layout is the same with the express or the all stops first."""
+    first = followed(inputs=parramatta(express=1, stopping=3))
+    second = followed(inputs=parramatta(express=3, stopping=1))
+    assert below(reach=first.reach)[:-1] == below(reach=second.reach)[:-1]
+
+
+def test_rows_past_the_destination_follow_the_next_train() -> None:
+    """Past Central the rows go the next train's way only."""
+    assert below(reach=followed(
+        inputs=parramatta(express=1, stopping=3),
+    ).reach)[-1] == 'TH'
+    assert below(reach=followed(
+        inputs=parramatta(express=3, stopping=1),
+    ).reach)[-1] == 'MU'
+
+
+def test_the_note_is_the_next_trains_own() -> None:
+    """The express's change shows; the all-stops one's does not."""
+    inputs = parramatta(express=1, stopping=3)
+    express, stopping = inputs.departures
+    patterns = dict(inputs.patterns)
+    patterns['y'] = line_pattern(
+        trip_id='y', stations=ALL_STOPS[:-1], minutes=3,
+    )
+    late = followed(inputs=replace(
+        inputs, departures=(express, carrying(item=stopping)),
+        patterns=patterns,
+    ))
+    assert late.reach is not None
+    assert marks_of(inputs=late, reach=late.reach).note is None
+    early = followed(inputs=replace(
+        inputs, departures=(carrying(item=express), stopping),
+    ))
+    reach = early.reach
+    assert reach is not None
+    note = marks_of(inputs=early, reach=reach).note
+    assert note is not None and reach.rows[note[0]].place.stop_id == 'TH'

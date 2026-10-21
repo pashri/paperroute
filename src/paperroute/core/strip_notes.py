@@ -33,8 +33,7 @@ def change_row(
     int | None
         The main or branch row of its pattern's last station; None when
         it is cancelled, doesn't carry on, has no loaded pattern or ends
-        on no such row. Rows below the From that follow a train are
-        searched from the From down.
+        on no such row.
     """
     departure = item.departure
     found = trips.patterns.get(departure.trip_id)
@@ -44,18 +43,11 @@ def change_row(
         return None
     last = found.stops[-1].station
     station = reach.station_of.get(last, last)
-    start = 0 if reach.trip is None else next(
-        index
-        for index, row in enumerate(reach.rows)
-        if row.kind is RowKind.ORIGIN
-    )
     return next(
         (
             index
             for index, row in enumerate(reach.rows)
-            if index >= start
-            and row.place.stop_id == station
-            and row.kind in NOTE_KINDS
+            if row.place.stop_id == station and row.kind in NOTE_KINDS
         ),
         None,
     )
@@ -79,17 +71,9 @@ def carry_note(
     tuple[int, CarryNote] | None
         The change row and note of the first departure, in live order,
         not yet gone and not cancelled, whose loaded run ends on a main
-        or branch row and carries on; None when there is none. With
-        rows that follow a train, only that train's note, if any.
+        or branch row and carries on; None when there is none.
     """
     coming = not_departed(departures=live_strip(trips=trips), now=trips.now)
-    if reach.trip is not None:
-        coming = [
-            item
-            for item in coming
-            if item.departure.trip_id == reach.trip
-            and item.departure.service_day == reach.day
-        ]
     for item in coming:
         row = change_row(item=item, trips=trips, reach=reach)
         then = item.departure.facts.then

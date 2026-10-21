@@ -6,13 +6,16 @@ from collections.abc import Awaitable, Callable
 from typing import Final
 
 TFNSW_STARTS_PER_S: Final[float] = 4.0
+MARGIN_S: Final[float] = 0.01  # keeps a closed one-second window to the limit
 
 
 class StartLimiter:
     """
     Hands out request start slots, first come first served.
 
-    Each slot is at least ``1 / per_second`` after the one before.
+    Each slot is ``1 / per_second`` plus a small margin after the one
+    before, so no closed one-second window holds more than ``per_second``
+    starts.
     Callers are never dropped; they wait for their slot.
 
     Parameters
@@ -32,7 +35,7 @@ class StartLimiter:
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
-        self.interval = 1 / per_second
+        self.interval = 1 / per_second + MARGIN_S
         self.clock = clock
         self.sleep = sleep
         self.next_at = 0.0

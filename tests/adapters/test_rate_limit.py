@@ -2,6 +2,8 @@
 
 import asyncio
 
+import pytest
+
 from paperroute.adapters.rate_limit import StartLimiter
 
 
@@ -37,12 +39,23 @@ class FakeTime:
 
 
 async def test_starts_are_spaced() -> None:
-    """Eight calls at once get slots a quarter second apart."""
+    """Eight calls at once get slots just over a quarter second apart."""
     fake = FakeTime()
     limiter = StartLimiter(clock=fake.clock, sleep=fake.sleep)
     for _ in range(8):
         await limiter.wait()
-    assert fake.slept_until == [i * 0.25 for i in range(8)]
+    assert fake.slept_until == pytest.approx([i * 0.26 for i in range(8)])
+
+
+async def test_no_closed_second_holds_five_starts() -> None:
+    """Any window of one second, ends included, holds at most four starts."""
+    fake = FakeTime()
+    limiter = StartLimiter(clock=fake.clock, sleep=fake.sleep)
+    for _ in range(40):
+        await limiter.wait()
+    starts = fake.slept_until
+    for first in starts:
+        assert sum(first <= s <= first + 1 for s in starts) <= 4
 
 
 async def test_idle_limiter_does_not_wait() -> None:
@@ -79,4 +92,4 @@ async def test_cancelled_waiter_leaves_later_slots_alone() -> None:
     assert isinstance(results[1], asyncio.CancelledError)
     assert results[0] is None
     assert results[2] is None
-    assert fake.slept_until == [0.0, 0.5]
+    assert fake.slept_until == pytest.approx([0.0, 0.52])

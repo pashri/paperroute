@@ -138,8 +138,7 @@ unplug the data cable.
 ### Pins and refresh
 
 Make pins with the route chooser on the device or on its web page, and hold
-to pin. On the web page, hold is the Hold button, or the bottom knob's
-press button held for about 0.8 s. The pins live in
+to pin. On the web page, double-click a Press button, or hold it for about 0.8 s. The pins live in
 `/var/lib/paperroute/state.json`. A new device starts on Town Hall's map.
 
 The timetable refreshes nightly at 03:30 Sydney time.

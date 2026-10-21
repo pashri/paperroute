@@ -19,7 +19,10 @@ globalThis.fetch = async (url, init) => {
 };
 globalThis.EventSource = class { addEventListener() {} };
 globalThis.setInterval = () => 0;
-globalThis.setTimeout = (fn) => timers.push(fn) - 1;
+globalThis.setTimeout = (fn, ms) => {
+  fn.ms = ms;
+  return timers.push(fn) - 1;
+};
 globalThis.clearTimeout = (id) => { if (id !== null) timers[id] = null; };
 const pointer = {};
 const button = {
@@ -62,16 +65,33 @@ pointer.pointerdown({ button: 2 });
 pointer.pointerup({ button: 2 });
 fire();
 results.rightClick = sent.splice(0);
-pointer.pointerdown({ button: 0 });
-pointer.pointerup({ button: 0 });
-results.pointerTap = sent.splice(0);
+const click = (detail) => pointer.click({ detail });
+const down = () => pointer.pointerdown({ button: 0 });
+const up = () => pointer.pointerup({ button: 0 });
+down(); up(); click(1);
+results.buttonTap = sent.splice(0);
+fire();
+results.buttonTapTimed = sent.splice(0);
+down(); up(); click(1); down(); up(); click(2);
+fire();
+results.buttonDouble = sent.splice(0);
+down();
+const delays = timers.map((fn) => fn.ms);
+fire();
+up(); click(1);
+fire();
+results.buttonLong = sent.splice(0);
+click(0);
+results.keyboardClick = sent.splice(0);
+results.keyboardTimers = timers.filter(Boolean).length;
+results.delays = delays;
 console.log(JSON.stringify(results));
 """
 
 
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_page_hold_timer_in_node(tmp_path: Path) -> None:
-    """Tap presses, hold holds once, and modifiers or blur cannot strand one."""
+    """Keys and Press button: click presses, double or long holds, and modifiers or blur cannot strand one."""
     web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'live.mjs'
     script.write_text(
@@ -89,5 +109,7 @@ def test_page_hold_timer_in_node(tmp_path: Path) -> None:
     assert done.stdout.strip() == (
         '{"tap":["press"],"hold":["hold"],'
         '"modifier":["press"],"blur":[],'
-        '"rightClick":[],"pointerTap":["press"]}'
+        '"rightClick":[],"buttonTap":[],"buttonTapTimed":["press"],'
+        '"buttonDouble":["hold"],"buttonLong":["hold"],'
+        '"keyboardClick":["press"],"keyboardTimers":0,"delays":[800]}'
     )

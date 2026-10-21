@@ -366,20 +366,14 @@ def test_hold_action_posts_knob_held() -> None:
     assert event == KnobHeld(knob=Knob.BOTTOM)
 
 
-def test_page_has_hold_button() -> None:
-    """The bottom knob has a Hold button after Press, and the hint says so."""
+def test_page_has_no_hold_buttons() -> None:
+    """The page has two Press buttons, no Hold buttons, and the new hint."""
     web_dir = files('paperroute') / 'assets' / 'web'
     html = (web_dir / 'live.html').read_text(encoding='utf-8')
-    hold = (
-        '<button type="button" data-knob="bottom" data-action="hold"'
-        ' aria-label="Bottom knob, hold">Hold</button>'
-    )
-    flat = ' '.join(html.split())
-    assert hold in flat
-    bottom = flat[flat.index('id="bottom-knob"'):]
-    assert bottom.index('Bottom knob, press') < bottom.index(hold)
-    plain = re.sub(r'<[^>]+>', '', flat)
-    assert 'hold K or Press to pin' in plain
+    assert 'data-action="hold"' not in html
+    assert html.count('data-action="press"') == 2
+    plain = re.sub(r'<[^>]+>', '', ' '.join(html.split()))
+    assert 'hold K, or double-click or hold Press, to pin.' in plain
 
 
 def test_page_click_handler_only_for_keyboard() -> None:
@@ -389,3 +383,4 @@ def test_page_click_handler_only_for_keyboard() -> None:
     assert "addEventListener('click'" in script
     assert 'event.detail === 0' in script
     assert 'HOLD_MS = 800' in script
+    assert 'DOUBLE_MS = 300' in script

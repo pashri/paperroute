@@ -8,6 +8,7 @@ const KEYS = {
   l: ['bottom', 'right'],
 };
 const HOLD_MS = 800;
+const DOUBLE_MS = 300;
 const EDITABLE = 'input, textarea, select, [contenteditable]';
 const STATUS_MS = 10000;
 
@@ -148,22 +149,48 @@ function cancelAll() {
 }
 
 /**
- * Wire a Press button to press on tap and hold on long-press.
+ * Wire a Press button: click presses, double click or long press holds.
  * @param {HTMLButtonElement} button A `press` button.
  * @returns {void}
  */
 function wirePress(button) {
-  const holder = holders[button.dataset.knob];
-  button.addEventListener('pointerdown', (event) => {
-    if (event.button === 0) holder.start();
-  });
-  button.addEventListener('pointerup', holder.finish);
-  button.addEventListener('pointercancel', holder.cancel);
-  button.addEventListener('pointerleave', holder.cancel);
+  const knob = button.dataset.knob;
+  let holdTimer = null;
+  let clickTimer = null;
+  let held = false;
+  const stopHold = () => {
+    clearTimeout(holdTimer);
+    holdTimer = null;
+  };
+  const onDown = (event) => {
+    if (event.button !== 0) return;
+    held = false;
+    holdTimer = setTimeout(() => {
+      holdTimer = null;
+      held = true;
+      sendKnob(knob, 'hold');
+    }, HOLD_MS);
+  };
+  const onClick = (event) => {
+    if (held) held = false;
+    else if (event.detail === 0) sendKnob(knob, 'press');
+    else if (clickTimer !== null) {
+      clearTimeout(clickTimer);
+      clickTimer = null;
+      sendKnob(knob, 'hold');
+    } else {
+      clickTimer = setTimeout(() => {
+        clickTimer = null;
+        sendKnob(knob, 'press');
+      }, DOUBLE_MS);
+    }
+  };
+  button.addEventListener('pointerdown', onDown);
+  button.addEventListener('pointerup', stopHold);
+  button.addEventListener('pointercancel', stopHold);
+  button.addEventListener('pointerleave', stopHold);
   button.addEventListener('contextmenu', (e) => e.preventDefault());
-  button.addEventListener('click', (event) => {
-    if (event.detail === 0) sendKnob(button.dataset.knob, 'press');
-  });
+  button.addEventListener('click', onClick);
 }
 
 new EventSource('/events').addEventListener('frame', (event) => {

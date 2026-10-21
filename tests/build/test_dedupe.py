@@ -4,6 +4,7 @@ import sqlite3
 from contextlib import closing
 from datetime import date
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -328,7 +329,7 @@ def test_merge_skips_partial_duplicate_on_covered_dates(
             "SELECT agency_id FROM trips WHERE trip_id = 'NT31-feed'"
         )
         assert agency.fetchall() == [('711',)]
-    assert report == MergeReport(dropped=0, partial=1)
+    assert report == MergeReport(dropped=0, partial=1, overnight=0)
     assert trip_ids(db=db) == {'NT31-bundle', 'NT31-feed'}
 
 
@@ -481,3 +482,175 @@ def test_relabel_ignores_non_service() -> None:
         assert conn.execute(
             "SELECT short_name FROM routes WHERE route_id = 'b446'",
         ).fetchall() == [('446',)]
+
+
+BUNDLE_NT34: Final[tuple[str, str, int, str, int]] = (
+    'Casino', '2026-10-21', 70200, 'Central', 110460,
+)
+FEED_NT34: Final[tuple[str, str, int, str, int]] = (
+    'Casino', '2026-10-22', 7380, 'Central', 24090,
+)
+
+
+def add_trip(
+    *,
+    conn: sqlite3.Connection,
+    trip_id: str,
+    source: str,
+    calls: tuple[str, str, int, str, int],
+) -> None:
+    """
+    Add a one-date rail trip with two calls.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable.
+    trip_id : str
+        Trip ID, also its route and service ID.
+    source : str
+        Feed name.
+    calls : tuple[str, str, int, str, int]
+        First station, date, departure, last station and arrival.
+    """
+    first, day, dep, last, arr = calls
+    conn.execute(
+        'INSERT INTO routes VALUES (?, ?, ?, 2, NULL, NULL, ?, ?)',
+        (trip_id, 'NT', 'North Coast', 'NSWTrains', source),
+    )
+    conn.execute(
+        "INSERT INTO trips VALUES (?, ?, ?, '', NULL, NULL, NULL, ?, "
+        'NULL, 1)',
+        (trip_id, trip_id, trip_id, source),
+    )
+    conn.execute('INSERT INTO services VALUES (?, ?)', (trip_id, day))
+    for seq, (station, time) in enumerate(((first, dep), (last, arr))):
+        conn.execute(
+            "INSERT OR IGNORE INTO stops VALUES (?, ?, NULL, 0, 0, '')",
+            (station, station),
+        )
+        conn.execute(
+            'INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, 0, 0)',
+            (trip_id, seq, station, time, time),
+        )
+
+
+def twin_merge(
+    *,
+    bundle: tuple[str, str, int, str, int],
+    feed: tuple[str, str, int, str, int],
+    service: int = 1,
+) -> tuple[MergeReport, set[str], list[tuple[str, str]]]:
+    """
+    Merge a timetable of one bundle trip and one Sydney Trains trip.
+
+    Parameters
+    ----------
+    bundle : tuple[str, str, int, str, int]
+        The bundle trip's calls, as for add_trip.
+    feed : tuple[str, str, int, str, int]
+        The feed trip's calls.
+    service : int
+        The feed trip's service flag.
+
+    Returns
+    -------
+    tuple[MergeReport, set[str], list[tuple[str, str]]]
+        The report, the trips left and the aliases.
+    """
+    with closing(sqlite3.connect(':memory:')) as conn:
+        create_schema(conn=conn)
+        add_trip(conn=conn, trip_id='NT34-b', source='bundle', calls=bundle)
+        add_trip(
+            conn=conn, trip_id='NT34-f', source='sydneytrains', calls=feed,
+        )
+        conn.execute('UPDATE trips SET service = ? WHERE trip_id = ?',
+                     (service, 'NT34-f'))
+        conn.commit()
+        report = merge_rail(conn=conn)
+        trips = {row[0] for row in conn.execute('SELECT trip_id FROM trips')}
+        aliases = conn.execute(
+            'SELECT alias_id, trip_id FROM trip_aliases',
+        ).fetchall()
+    return report, trips, aliases
+
+
+UNCHANGED: Final[tuple[set[str], list[tuple[str, str]]]] = (
+    {'NT34-b', 'NT34-f'}, [],
+)
+
+
+def test_overnight_twin_keeps_bundle() -> None:
+    """A feed trip arriving with the bundle's next morning is dropped."""
+    report, trips, aliases = twin_merge(bundle=BUNDLE_NT34, feed=FEED_NT34)
+    assert report == MergeReport(dropped=0, partial=0, overnight=1)
+    assert trips == {'NT34-b'}
+    assert aliases == [('NT34-f', 'NT34-b')]
+
+
+def test_overnight_twin_skipped_on_matched_date_only() -> None:
+    """A feed trip running on an unmatched date too is only skipped."""
+    with closing(sqlite3.connect(':memory:')) as conn:
+        create_schema(conn=conn)
+        add_trip(
+            conn=conn, trip_id='NT34-b', source='bundle', calls=BUNDLE_NT34,
+        )
+        add_trip(
+            conn=conn, trip_id='NT34-f', source='sydneytrains',
+            calls=FEED_NT34,
+        )
+        conn.execute("INSERT INTO services VALUES ('NT34-f', '2026-10-25')")
+        report = merge_rail(conn=conn)
+        skips = conn.execute('SELECT trip_id, date FROM trip_skip')
+        assert skips.fetchall() == [('NT34-f', '2026-10-22')]
+    assert report.overnight == 1
+
+
+def test_overnight_twin_needs_same_ends() -> None:
+    """A different last station is a different train."""
+    feed = ('Casino', '2026-10-22', 7380, 'Strathfield', 24090)
+    _, trips, aliases = twin_merge(bundle=BUNDLE_NT34, feed=feed)
+    assert (trips, aliases) == UNCHANGED
+
+
+def test_overnight_twin_needs_close_arrival() -> None:
+    """Arrivals two minutes apart don't match."""
+    feed = ('Casino', '2026-10-22', 7380, 'Central', 24180)
+    _, trips, aliases = twin_merge(bundle=BUNDLE_NT34, feed=feed)
+    assert (trips, aliases) == UNCHANGED
+
+
+def test_overnight_twin_only_next_day() -> None:
+    """A feed trip two days on is not a twin."""
+    feed = ('Casino', '2026-10-23', 7380, 'Central', 24090)
+    _, trips, aliases = twin_merge(bundle=BUNDLE_NT34, feed=feed)
+    assert (trips, aliases) == UNCHANGED
+
+
+def test_overnight_twin_ignores_service_zero() -> None:
+    """An out-of-service feed trip is left alone."""
+    _, trips, aliases = twin_merge(
+        bundle=BUNDLE_NT34, feed=FEED_NT34, service=0,
+    )
+    assert (trips, aliases) == UNCHANGED
+
+
+def test_retimed_twin_left_alone() -> None:
+    """Same ends but both times 36 minutes apart on one date: no change."""
+    bundle = ('Casino', '2026-10-21', 70200, 'Central', 80000)
+    feed = ('Casino', '2026-10-21', 72360, 'Central', 82160)
+    report, trips, aliases = twin_merge(bundle=bundle, feed=feed)
+    assert report == MergeReport(dropped=0, partial=0, overnight=0)
+    assert (trips, aliases) == UNCHANGED
+
+
+def test_first_departure_rule_unchanged(tmp_path: Path) -> None:
+    """A same-date first-departure duplicate still drops the bundle copy."""
+    db = rail_db(
+        tmp_path=tmp_path, trains=sydneytrains_feed(path=tmp_path / 's.zip')
+    )
+    with closing(sqlite3.connect(db)) as conn:
+        report = merge_rail(conn=conn)
+    assert report == MergeReport(dropped=1, partial=0, overnight=0)
+    assert 'B-0835' not in trip_ids(db=db)
+    assert 'S-0835' in trip_ids(db=db)

@@ -710,7 +710,8 @@ def build_timetable(*, sources: list[Source], window: Window,
     if handoff is not None:
         hand_over(handoff=handoff, record=HandoffRecord(
             scratch=scratch, out=out, dropped=report.dropped,
-            partial=report.partial, peak_mb=max_rss_mb(), tail=handoff.tail,
+            partial=report.partial, overnight=report.overnight,
+            peak_mb=max_rss_mb(), tail=handoff.tail,
         ))
     build_extras(path=scratch)
     os.replace(scratch, out)

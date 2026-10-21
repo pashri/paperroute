@@ -22,7 +22,10 @@ SELECT t.trip_id, t.source, t.service_id, r.short_name, r.agency_id,
   (SELECT COALESCE(s.parent_station, s.stop_id) FROM stop_times st
      JOIN stops s ON s.stop_id = st.stop_id
      WHERE st.trip_id = t.trip_id AND (st.pickup <> 1 OR st.dropoff <> 1)
-     ORDER BY st.seq DESC LIMIT 1) AS last_station
+     ORDER BY st.seq DESC LIMIT 1) AS last_station,
+  (SELECT st.arr FROM stop_times st WHERE st.trip_id = t.trip_id
+     AND (st.pickup <> 1 OR st.dropoff <> 1)
+     ORDER BY st.seq DESC LIMIT 1) AS last_arr
 FROM trips t JOIN routes r ON r.route_id = t.route_id
 WHERE r.type IN (2, 106, 401) AND t.service = 1;
 """
@@ -47,6 +50,36 @@ SELECT b.trip_id AS dup_id, COUNT(DISTINCT pair.date) AS covered,
 FROM pair JOIN trip_key b ON b.trip_id = pair.dup_id
 GROUP BY b.trip_id;
 """
+OVERNIGHT: Final[str] = """
+CREATE TEMP TABLE late AS
+SELECT p.trip_id AS feed_id, b.trip_id AS bundle_id, ps.date AS date,
+  ROW_NUMBER() OVER (PARTITION BY p.trip_id, ps.date
+    ORDER BY ABS((julianday(ps.date) - julianday(bs.date)) * 86400
+      + p.last_arr - b.last_arr), b.trip_id) AS rank
+FROM trip_key b
+JOIN trip_key p ON p.source <> 'bundle' AND p.first_station = b.first_station
+  AND p.last_station = b.last_station
+  AND (ABS(p.last_arr - b.last_arr) <= 60
+    OR ABS(p.last_arr + 86400 - b.last_arr) <= 60)
+JOIN services bs ON bs.service_id = b.service_id
+JOIN services ps ON ps.service_id = p.service_id
+  AND julianday(ps.date) - julianday(bs.date) IN (0, 1)
+  AND ABS((julianday(ps.date) - julianday(bs.date)) * 86400
+    + p.last_arr - b.last_arr) <= 60
+WHERE b.source = 'bundle'
+  AND NOT (ps.date = bs.date AND ABS(p.first_dep - b.first_dep) <= 60)
+  AND NOT EXISTS (SELECT 1 FROM pair
+    WHERE pair.dup_id = b.trip_id AND pair.date = bs.date)
+  AND NOT EXISTS (SELECT 1 FROM pair
+    WHERE pair.keep_id = p.trip_id AND pair.date = ps.date);
+CREATE TEMP TABLE twin AS
+SELECT feed_id, bundle_id, date FROM late WHERE rank = 1;
+CREATE TEMP TABLE twin_match AS
+SELECT p.trip_id AS feed_id, COUNT(DISTINCT twin.date) AS covered,
+  (SELECT COUNT(*) FROM services x WHERE x.service_id = p.service_id) AS runs
+FROM twin JOIN trip_key p ON p.trip_id = twin.feed_id
+GROUP BY p.trip_id;
+"""
 APPLY: Final[str] = """
 BEGIN;
 INSERT INTO trip_aliases (alias_id, trip_id)
@@ -63,12 +96,24 @@ DELETE FROM stop_times WHERE trip_id IN
   (SELECT dup_id FROM match WHERE covered = runs);
 DELETE FROM trips WHERE trip_id IN
   (SELECT dup_id FROM match WHERE covered = runs);
+INSERT INTO trip_aliases (alias_id, trip_id)
+  SELECT DISTINCT feed_id, bundle_id FROM twin;
+INSERT INTO trip_skip (trip_id, date)
+  SELECT feed_id, date FROM twin
+  WHERE feed_id IN (SELECT feed_id FROM twin_match WHERE covered < runs);
+DELETE FROM stop_times WHERE trip_id IN
+  (SELECT feed_id FROM twin_match WHERE covered = runs);
+DELETE FROM trips WHERE trip_id IN
+  (SELECT feed_id FROM twin_match WHERE covered = runs);
 COMMIT;
 """
 CLEANUP: Final[str] = """
 DROP TABLE candidate;
 DROP TABLE pair;
 DROP TABLE match;
+DROP TABLE late;
+DROP TABLE twin;
+DROP TABLE twin_match;
 DROP TABLE trip_key;
 """
 
@@ -79,6 +124,7 @@ class MergeReport:
 
     dropped: int
     partial: int
+    overnight: int
 
 
 def merge_rail(*, conn: sqlite3.Connection) -> MergeReport:
@@ -104,6 +150,15 @@ def merge_rail(*, conn: sqlite3.Connection) -> MergeReport:
     the Sydney Trains feed stays Regional and is matched in the nswtrains
     feed.
 
+    A non-bundle trip is an overnight twin of a bundle trip when both have
+    the same first and last calling station and arrive at the last within
+    a minute, the feed trip on the same date or the next one, and the
+    first-departure rule has not already paired them. The feed copy can
+    run on different times outside its own network, so here the bundle
+    copy is kept: the feed trip is skipped on each matched date, or
+    dropped when every date it runs matches, and its ID becomes an alias
+    of the bundle trip.
+
     The changes are applied in one transaction and committed before
     returning.
 
@@ -115,19 +170,25 @@ def merge_rail(*, conn: sqlite3.Connection) -> MergeReport:
     Returns
     -------
     MergeReport
-        Trips dropped, and bundle trips matched on only some dates.
+        Bundle trips dropped, bundle trips matched on only some dates,
+        and feed trips dropped or skipped as overnight twins.
     """
-    conn.executescript(KEYS + MATCHES)
+    conn.executescript(KEYS + MATCHES + OVERNIGHT)
     dropped, partial = conn.execute(
         'SELECT SUM(covered = runs), SUM(covered < runs) FROM match'
     ).fetchone()
+    overnight = conn.execute('SELECT COUNT(*) FROM twin_match').fetchone()
     try:
         conn.executescript(APPLY)
     except sqlite3.Error:
         conn.rollback()
         raise
     conn.executescript(CLEANUP)
-    return MergeReport(dropped=int(dropped or 0), partial=int(partial or 0))
+    return MergeReport(
+        dropped=int(dropped or 0),
+        partial=int(partial or 0),
+        overnight=int(overnight[0]),
+    )
 
 
 STATIONS_OF_ROUTES: Final[str] = """

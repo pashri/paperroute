@@ -151,7 +151,7 @@ def test_extras_never_import_numpy(
     handed.mkdir()
     record = HandoffRecord(
         scratch=handed / 'timetable.new', out=handed / 'timetable.db',
-        dropped=0, partial=0, peak_mb=1.0, tail=None,
+        dropped=0, partial=0, overnight=0, peak_mb=1.0, tail=None,
     )
     shutil.copy(db, record.scratch)
     write_handoff(path=handed / 'handoff.json', record=record)

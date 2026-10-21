@@ -159,7 +159,7 @@ def refresh_record(*, data_dir: Path, lock_fd: int) -> HandoffRecord:
     work = data_dir / 'work'
     return HandoffRecord(
         scratch=work / 'timetable.new', out=work / 'timetable.db',
-        dropped=2, partial=1, peak_mb=99.5,
+        dropped=2, partial=1, overnight=3, peak_mb=99.5,
         tail=RefreshTail(
             data_dir=data_dir,
             fetched=Fetched(
@@ -183,7 +183,8 @@ def test_handoff_round_trip(data_dir: Path) -> None:
     assert read_handoff(path=path) == record
     raw = json.loads(path.read_text(encoding='utf-8'))
     assert set(raw) == {
-        'scratch', 'out', 'dropped', 'partial', 'peak_mb', 'tail',
+        'scratch', 'out', 'dropped', 'partial', 'overnight', 'peak_mb',
+        'tail',
     }
     assert set(raw['tail']) == {
         'data_dir', 'states', 'downloaded', 'changed', 'started',
@@ -317,7 +318,7 @@ def test_plain_build_hand_over_replaces_out(
     out = tmp_path / 'timetable.db'
     record = HandoffRecord(
         scratch=tmp_path / 'timetable.new', out=out, dropped=4, partial=0,
-        peak_mb=1.0, tail=None,
+        overnight=0, peak_mb=1.0, tail=None,
     )
     shutil.copy(loaded, record.scratch)
     handoff = tmp_path / 'timetable.handoff.json'
@@ -331,7 +332,7 @@ def test_plain_build_hand_over_replaces_out(
     with closing(sqlite3.connect(out)) as conn:
         assert conn.execute('SELECT count(*) FROM runs').fetchone()[0] > 0
     lines = capsys.readouterr().out.splitlines()
-    assert lines[-1] == 'progress done dropped=4 partial=0'
+    assert lines[-1] == 'progress done dropped=4 partial=0 overnight=0'
 
 
 def test_holds_lock_needs_the_lock_file_itself(

@@ -212,7 +212,7 @@ def test_gtfs_execs_into_the_extras(tmp_path: Path) -> None:
     )
     assert result.returncode == 0, result.stderr
     lines = result.stdout.splitlines()
-    assert lines[-1] == 'progress done dropped=0 partial=0'
+    assert lines[-1] == 'progress done dropped=0 partial=0 overnight=0'
     assert lines[-2].startswith('progress extras peak ')
     assert sorted(path.name for path in tmp_path.iterdir()) == [
         'network.zip', 'timetable.db',

@@ -341,7 +341,8 @@ def complete_build(
     finally:
         path.unlink(missing_ok=True)
     print(
-        f'progress done dropped={record.dropped} partial={record.partial}',
+        f'progress done dropped={record.dropped} partial={record.partial}'
+        f' overnight={record.overnight}',
         flush=True,
     )
     return 0

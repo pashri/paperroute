@@ -79,6 +79,8 @@ class HandoffRecord:
         Rail trips the merge dropped.
     partial : int
         Rail trips the merge dropped on some dates.
+    overnight : int
+        Feed trips the merge dropped or skipped as overnight twins.
     peak_mb : float
         Peak memory of the load, before the exec.
     tail : RefreshTail | None
@@ -89,6 +91,7 @@ class HandoffRecord:
     out: Path
     dropped: int
     partial: int
+    overnight: int
     peak_mb: float
     tail: RefreshTail | None
 
@@ -277,6 +280,7 @@ def record_json(*, record: HandoffRecord) -> dict[str, object]:
         'out': str(record.out),
         'dropped': record.dropped,
         'partial': record.partial,
+        'overnight': record.overnight,
         'peak_mb': record.peak_mb,
         'tail': None if record.tail is None else tail_json(tail=record.tail),
     }
@@ -302,6 +306,7 @@ def record_of(*, raw: dict[str, object]) -> HandoffRecord:
         out=Path(field_of(raw=raw, key='out', kind=str)),
         dropped=field_of(raw=raw, key='dropped', kind=int),
         partial=field_of(raw=raw, key='partial', kind=int),
+        overnight=field_of(raw=raw, key='overnight', kind=int),
         peak_mb=field_of(raw=raw, key='peak_mb', kind=float),
         tail=(
             None

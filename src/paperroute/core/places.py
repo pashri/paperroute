@@ -169,7 +169,7 @@ def with_place(
         },
         last_fetch=None,
         scroll=0,
-        strip=replace(state.strip, scroll=0),
+        strip=replace(state.strip, scroll=0, asked=0),
         map=MapState(
             zoom=old.zoom,
             centre=shown(state=state).origin.point,

@@ -340,6 +340,21 @@ def test_direct_row_uses_first_destination_call(chain_db: Path) -> None:
     assert loop.arrives == datetime(2026, 10, 6, 3, 10, tzinfo=SYDNEY)
 
 
+def test_stop_count_skips_another_from_platform(chain_db: Path) -> None:
+    """A trip moving to a second E2 platform first doesn't count it."""
+    change(db=chain_db, sql="""
+        INSERT INTO stops SELECT 'E2_2', name, 'E2', lat, lon, '2'
+          FROM stops WHERE stop_id = 'E2_1';
+    """)
+    add_loop(db=chain_db, trip='cplat', calls="""
+        (1, 'E2_1', 0, 0, 0), (2, 'E2_2', 2, 0, 0), (3, 'E1_1', 5, 0, 0),
+        (4, 'C_1', 10, 0, 0)
+    """)
+    found = [d for d in chain_departures(db=chain_db, dest='C')
+             if d.trip_id == 'cplat']
+    assert [d.stops for d in found] == [2]
+
+
 def test_carry_on_uses_first_destination_call(chain_db: Path) -> None:
     """Staying on into a trip reaching C twice arrives at the first C."""
     add_loop(db=chain_db, trip='cloop', calls="""

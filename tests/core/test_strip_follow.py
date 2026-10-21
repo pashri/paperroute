@@ -1,9 +1,11 @@
 """Tests for laying the rows below a strip's From along a followed train."""
 
 from dataclasses import replace
+from datetime import timedelta
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
+from paperroute.core.messages import Tick
 from paperroute.core.model import StopPlace
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import (
@@ -15,19 +17,22 @@ from paperroute.core.reach import (
 )
 from paperroute.core.reach_layout import LineExit
 from paperroute.core.saved import LiveView
+from paperroute.core.state import step
+from paperroute.core.state_model import State
 from paperroute.core.strip_follow import followed_reach, origin_of
 from paperroute.core.strip_model import StripInputs
 from paperroute.core.strip_state import shown_reach
 from paperroute.core.strip_view import build_strip_view, marks_of, trips_of
 from tests.core.factories import (
     EAST,
+    START,
     example_reach,
     inputs_of,
     line_pattern,
     live,
     train,
 )
-from tests.core.strip_factories import KEY, PIN, long_reach, on_view
+from tests.core.strip_factories import KEY, PIN, long_reach, on_view, turn
 
 FIXED: Final[tuple[str, ...]] = ('SP', 'ER', 'MV', 'CE', 'TH', 'WY', 'CQ')
 CITY: Final[tuple[str, ...]] = (
@@ -319,3 +324,74 @@ def test_no_times_below_the_from_once_the_train_is_gone() -> None:
     assert origin is not None
     shown = marks_of(inputs=gone, reach=reach).times
     assert not [index for index in shown if index > origin]
+
+
+def test_rows_skip_run_through_calls_and_repeat_platforms() -> None:
+    """A call with no stopping, or a second platform, gets no row."""
+    base = joined(trip_id='a', stations=T8, minutes=3, next_trip=None)
+    stops = list(base.stops)
+    stops[3] = replace(stops[3], passes=True)
+    stops.insert(5, replace(stops[4], station='CE'))
+    stops.insert(1, replace(stops[0], station='SY'))
+    inputs = sydenham(patterns={'a': replace(base, stops=tuple(stops))})
+    assert below(reach=followed(inputs=inputs).reach) == [
+        'SP', 'ER', '>X', 'CE', 'MU', 'SJ', 'CQ', 'WY', 'TH',
+    ]
+
+
+def line_state(*, scroll: int) -> State:
+    """
+    Make a Strip state on a long line, an all-stops train first.
+
+    Parameters
+    ----------
+    scroll : int
+        Detents the knob turns.
+
+    Returns
+    -------
+    State
+        Trains from C at 8:05 all stops to L29, 8:10 express to L29 and
+        8:15 all stops again, at 8:00, scrolled.
+    """
+    line = tuple(f'L{k}' for k in range(30))
+    places = {
+        key: StopPlace(stop_id=key, name=key, point=None)
+        for key in ('C', *line)
+    }
+    reach = build_reach(data=ReachInput(
+        origin=places['C'],
+        tails=(RunTail(before=(), after=line, trips=5),),
+        places=places,
+        station_of={key: key for key in places},
+    ))
+    state, _ = on_view(
+        view=LiveView.STRIP, pin=replace(PIN, destination=None),
+    )
+    state = replace(
+        state,
+        strip=replace(state.strip, reaches={KEY: reach}),
+        map=replace(state.map, patterns={
+            'train-0': line_pattern(
+                trip_id='train-0', stations=('C', *line), minutes=5,
+            ),
+            'train-1': line_pattern(
+                trip_id='train-1', stations=('C', 'L29'), minutes=10,
+            ),
+            'train-2': line_pattern(
+                trip_id='train-2', stations=('C', *line), minutes=15,
+            ),
+        }),
+    )
+    state, _ = step(state, turn(steps=scroll))
+    return state
+
+
+def test_a_scroll_survives_the_followed_train_changing() -> None:
+    """An express's short rows hold the scroll back, not lose it."""
+    state = line_state(scroll=6)
+    assert state.strip.scroll == 6
+    state, _ = step(state, Tick(now=START + timedelta(minutes=6)))
+    assert state.strip.scroll < 6
+    state, _ = step(state, Tick(now=START + timedelta(minutes=11)))
+    assert state.strip.scroll == 6

@@ -2,6 +2,7 @@
 
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass, replace
+from datetime import date
 from enum import StrEnum
 from itertools import takewhile
 from typing import Final
@@ -250,12 +251,15 @@ class Reach:
     trip : str | None
         The trip whose calls are the rows below the From, in calling
         order; None when they are the strip's fixed line.
+    day : date | None
+        That trip's service date; None with no trip.
     """
 
     rows: tuple[ReachRow, ...]
     stations: int
     station_of: Mapping[str, str]
     trip: str | None = None
+    day: date | None = None
 
 
 def approach_rows(*, tails: Sequence[RunTail], placed: set[str]

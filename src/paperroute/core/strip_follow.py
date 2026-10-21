@@ -2,6 +2,7 @@
 
 from collections.abc import Collection, Iterator, Mapping, Sequence
 from dataclasses import replace
+from datetime import datetime
 
 from paperroute.core.live import LiveDeparture
 from paperroute.core.model import StopPlace
@@ -10,13 +11,43 @@ from paperroute.core.reach import Reach, ReachRow, RowKind
 from paperroute.core.stop_view import clock_text, not_departed
 from paperroute.core.strip_times import (
     TripInputs,
-    arrivals_after,
     boardable,
     live_strip,
     stops_after,
 )
 
 type Call = tuple[str, PatternStop]
+
+
+def served_after(*, item: LiveDeparture, trips: TripInputs, origin: str
+                 ) -> Iterator[tuple[str, PatternStop, datetime]]:
+    """
+    List the stations a departure stops at after the From.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+    trips : TripInputs
+        The strip's loaded patterns and station map.
+    origin : str
+        The From station ID.
+
+    Yields
+    ------
+    tuple[str, PatternStop, datetime]
+        The calls of `stops_after`, without those run through with no
+        pick-up or set-down, and with neighbouring calls at one station,
+        the From's included, kept once, at the first.
+    """
+    before = origin
+    for station, stop, moment in stops_after(
+        item=item, trips=trips, origin=origin,
+    ):
+        if not stop.passes and station != before:
+            yield station, stop, moment
+        if not stop.passes:
+            before = station
 
 
 def origin_of(*, reach: Reach) -> int | None:
@@ -124,7 +155,7 @@ def followed_item(
     """
     for item in boardable_items(trips=trips, origin=origin, target=target):
         first = next(
-            iter(arrivals_after(item=item, trips=trips, origin=origin)),
+            iter(served_after(item=item, trips=trips, origin=origin)),
             None,
         )
         if first is None:
@@ -287,7 +318,7 @@ def followed_reach(*, reach: Reach, trips: TripInputs,
     )
     calls = [] if item is None else [
         (place, stop)
-        for place, stop, _ in stops_after(
+        for place, stop, _ in served_after(
             item=item, trips=trips, origin=station,
         )
     ]
@@ -301,6 +332,7 @@ def followed_reach(*, reach: Reach, trips: TripInputs,
         ),
         station_of=reach.station_of,
         trip=item.departure.trip_id,
+        day=item.departure.service_day,
     )
 
 
@@ -327,6 +359,7 @@ def followed_text(*, trips: TripInputs, reach: Reach) -> dict[int, str]:
             each
             for each in live_strip(trips=trips)
             if each.departure.trip_id == reach.trip
+            and each.departure.service_day == reach.day
         ),
         None,
     )
@@ -337,10 +370,10 @@ def followed_text(*, trips: TripInputs, reach: Reach) -> dict[int, str]:
         for index in range(origin + 1, len(reach.rows))
         if reach.rows[index].kind is RowKind.MAIN
     ]
-    calls = arrivals_after(
+    calls = served_after(
         item=item, trips=trips, origin=reach.rows[origin].place.stop_id,
     )
     return {
         index: clock_text(moment=moment)
-        for index, (_, moment) in zip(rows, calls)
+        for index, (_, _, moment) in zip(rows, calls)
     }

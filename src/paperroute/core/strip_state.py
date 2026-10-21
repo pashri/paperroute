@@ -385,14 +385,15 @@ def clamped(*, state: State, banner: bool) -> State:
     Returns
     -------
     State
-        State with the scroll clamped to `scroll_range`.
+        State with the scroll set to the one last asked for, clamped to
+        `scroll_range`.
     """
     low, high = scroll_range(
         reach=shown_reach(state=state),
         destination=destination_id(state=state),
         banner=banner,
     )
-    scroll = min(max(state.strip.scroll, low), high)
+    scroll = min(max(state.strip.asked, low), high)
     return replace(state, strip=replace(state.strip, scroll=scroll))
 
 

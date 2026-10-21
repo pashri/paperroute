@@ -76,6 +76,7 @@ def refolded(*, state: State) -> State:
         opened=frozenset(),
         context=context,
         scroll=0 if strip.opened else strip.scroll,
+        asked=0 if strip.opened else strip.asked,
     ))
 
 
@@ -218,7 +219,10 @@ def rescrolled(*, state: State, first: int, rows: int) -> State:
     home = 0 if reach is None else home_of(
         reach=reach, destination=destination_id(state=state), rows=rows,
     )
-    return replace(state, strip=replace(state.strip, scroll=first - home))
+    scroll = first - home
+    return replace(
+        state, strip=replace(state.strip, scroll=scroll, asked=scroll),
+    )
 
 
 def pane_opened(state: State, banner: bool) -> State | None:

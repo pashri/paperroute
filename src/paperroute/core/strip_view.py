@@ -127,17 +127,21 @@ def target_of(*, reach: Reach, destination: str | None) -> int | None:
     Returns
     -------
     int | None
-        The index of the station's row past the From, or None when there
-        is no destination or it isn't on the strip.
+        The index of the station's first row below the From, else its
+        first row above; None when there is no destination or it isn't
+        on the strip.
     """
     station = destination_station(reach=reach, destination=destination)
+    origin = origin_of(reach=reach)
+    after = 0 if origin is None else origin + 1
+    order = (*range(after, len(reach.rows)), *range(after))
     return next(
         (
             index
-            for index, row in enumerate(reach.rows)
+            for index in order
             if station is not None
-            and row.place.stop_id == station
-            and row.kind in (RowKind.MAIN, RowKind.BRANCH)
+            and reach.rows[index].place.stop_id == station
+            and reach.rows[index].kind in (RowKind.MAIN, RowKind.BRANCH)
         ),
         None,
     )
@@ -438,13 +442,17 @@ def home_of(*, reach: Reach, destination: str | None, rows: int) -> int:
         The row that puts the From in the third slot. With a Destination
         on the strip, moved the least that shows the ride from the From
         to it when the ride fits; otherwise the From in the top slot for
-        a ride down the strip, the bottom slot for one up it. 0 with no
+        a ride down the strip, the bottom slot for one up it. Rows
+        below the From that follow a train keep the From in the third
+        slot, so the window stays put as the train changes. 0 with no
         From.
     """
     origin = origin_of(reach=reach)
     if origin is None:
         return 0
     start = origin - PANE_FROM_ROW
+    if reach.trip is not None:
+        return start
     target = target_of(reach=reach, destination=destination)
     ride = ride_of(reach=reach, target=target)
     if not ride:

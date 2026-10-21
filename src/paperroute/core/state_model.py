@@ -193,6 +193,9 @@ class StripState:
         When a reach last failed to build, or None.
     scroll : int
         The Strip's scroll, in rows from the default; may be negative.
+    asked : int
+        The scroll last set, which `scroll` keeps to as far as the rows
+        allow, so rows that shrink for a while don't lose it.
     opened : frozenset[str]
         Keys of the folds opened on the strip on screen.
     context : FoldContext | None
@@ -204,6 +207,7 @@ class StripState:
     pending: frozenset[StripKey] = frozenset()
     failed_at: datetime | None = None
     scroll: int = 0
+    asked: int = 0
     opened: frozenset[str] = frozenset()
     context: FoldContext | None = None
 

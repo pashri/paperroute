@@ -30,7 +30,8 @@ def stop_count(*, trip: str, after: str, upto: str | None = None) -> str:
     Make SQL counting the stations a trip stops at within a seq range.
 
     Calls that neither pick up nor set down are passed through and not
-    counted. Neighbouring calls at the same station count once.
+    counted. Neighbouring calls at the same station count once, and a
+    call at the station of the call the range starts after not at all.
 
     Parameters
     ----------
@@ -49,7 +50,11 @@ def stop_count(*, trip: str, after: str, upto: str | None = None) -> str:
     end = '' if upto is None else f' AND c.seq <= {upto}'
     return f"""(SELECT COUNT(*) FROM (
   SELECT {STATION_OF} AS here,
-    LAG({STATION_OF}) OVER (ORDER BY c.seq) AS before
+    LAG({STATION_OF}, 1, (
+      SELECT {STATION_OF} FROM stop_times f
+      JOIN stops s ON s.stop_id = f.stop_id
+      WHERE f.trip_id = {trip} AND f.seq = {after}
+    )) OVER (ORDER BY c.seq) AS before
   FROM stop_times c JOIN stops s ON s.stop_id = c.stop_id
   WHERE c.trip_id = {trip} AND c.seq > {after}{end}
     AND NOT (c.pickup = 1 AND c.dropoff = 1))

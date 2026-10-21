@@ -49,7 +49,8 @@ def bottom_turned(*, state: State, steps: int) -> State:
         case LiveView.STOP:
             return replace(state, scroll=max(0, state.scroll + steps))
         case LiveView.STRIP:
-            strip = replace(state.strip, scroll=state.strip.scroll + steps)
+            scroll = state.strip.scroll + steps
+            strip = replace(state.strip, scroll=scroll, asked=scroll)
             return replace(state, strip=strip)
     return replace(state, map=zoomed(map_state=state.map, steps=steps))
 

@@ -31,6 +31,9 @@ class PatternStop:
         The stop's parent station, or the stop itself when it has none.
     name : str
         That station's name; empty when not known.
+    passes : bool
+        True when the trip runs through without picking up or setting
+        down.
     """
 
     arrives: int
@@ -38,6 +41,7 @@ class PatternStop:
     point: Point | None
     station: str = ''
     name: str = ''
+    passes: bool = False
 
 
 @dataclass(frozen=True)

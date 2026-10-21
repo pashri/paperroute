@@ -25,6 +25,7 @@ from paperroute.core.strip_model import (
     TRACK_X,
     hook_straight,
 )
+from paperroute.core.strip_vehicles import hop_marker
 from paperroute.render.canvas import Box, Face, font
 from paperroute.render.markers import (
     badge_box,
@@ -473,6 +474,31 @@ def hop_badge(*, rows: Sequence[Spot], start: int, end: int,
     )
 
 
+def junctions(*, kinds: Sequence[int]) -> dict[int, int]:
+    """
+    Choose which rows are exits and the station each one leaves.
+
+    Parameters
+    ----------
+    kinds : Sequence[int]
+        Per row: 0 a station, 1 an exit off the row above, 2 an exit off
+        the row below.
+
+    Returns
+    -------
+    dict[int, int]
+        Each exit row's junction row; an exit whose neighbour is not a
+        station is a station instead.
+    """
+    found: dict[int, int] = {}
+    for slot, kind in enumerate(kinds):
+        if kind == 2 and slot + 1 < len(kinds) and kinds[slot + 1] == 0:
+            found[slot] = slot + 1
+        elif kind == 1 and slot and slot - 1 not in found:
+            found[slot] = slot - 1
+    return found
+
+
 @st.composite
 def strip_cases(draw: st.DrawFn) -> tuple[
     dict[str, Spot], list[Badge], list[Spot],
@@ -480,9 +506,10 @@ def strip_cases(draw: st.DrawFn) -> tuple[
     """
     Draw rows one per slot, badges on hops between them, and discs.
 
-    A row after a non-exit row may be an exit off it, reached only by
-    the hop from that row; no hop leaves an exit. Discs are on non-exit
-    rows.
+    A row next to a station row may be an exit off it, below or above
+    it, so a junction can have one exit each way. An exit is reached
+    only by the hop from its junction; no hop leaves an exit. Discs are
+    on station rows.
 
     Parameters
     ----------
@@ -494,17 +521,23 @@ def strip_cases(draw: st.DrawFn) -> tuple[
     tuple[dict[str, Spot], list[Badge], list[Spot]]
         Spots, badges with wide labels, wedges and tabs, and discs.
     """
-    depths = draw(st.lists(
-        st.tuples(st.integers(0, 3), st.booleans()), min_size=2, max_size=11,
+    drawn_rows = draw(st.lists(
+        st.tuples(st.integers(0, 3), st.integers(0, 2)),
+        min_size=2,
+        max_size=11,
     ))
-    rows: list[Spot] = []
-    for slot, (depth, off) in enumerate(depths):
-        y = 62 + 36 * slot
-        rows.append(
-            exit_spot(junction=rows[-1], y=y)
-            if off and rows and not rows[-1].exit
-            else Spot(x=TRACK_X + 16 * depth, y=y)
+    junction = junctions(kinds=[kind for _, kind in drawn_rows])
+    stations = {
+        slot: Spot(x=TRACK_X + 16 * depth, y=62 + 36 * slot)
+        for slot, (depth, _) in enumerate(drawn_rows)
+        if slot not in junction
+    }
+    rows = [
+        stations[slot] if slot in stations else exit_spot(
+            junction=stations[junction[slot]], y=62 + 36 * slot,
         )
+        for slot in range(len(drawn_rows))
+    ]
     hops = st.tuples(
         st.integers(0, len(rows) - 1),
         st.integers(0, len(rows) - 1),
@@ -513,8 +546,8 @@ def strip_cases(draw: st.DrawFn) -> tuple[
         st.sampled_from(LABELS),
     ).filter(
         lambda hop: hop[0] != hop[1]
-        and not rows[hop[0]].exit
-        and (not rows[hop[1]].exit or hop[0] == hop[1] - 1),
+        and hop[0] in stations
+        and junction.get(hop[1], hop[0]) == hop[0],
     )
     badges = [
         hop_badge(
@@ -525,8 +558,7 @@ def strip_cases(draw: st.DrawFn) -> tuple[
             st.lists(hops, max_size=12),
         )
     ]
-    stations = [index for index, row in enumerate(rows) if not row.exit]
-    marked = draw(st.lists(st.sampled_from(stations), max_size=2))
+    marked = draw(st.lists(st.sampled_from(list(stations)), max_size=2))
     spots = {f'S{slot}': row for slot, row in enumerate(rows)}
     return spots, badges, [rows[index] for index in set(marked)]
 
@@ -694,6 +726,20 @@ def test_badges_as_drawn_stay_on_their_hops_and_clear(
                     other=drawn(marker=other.marker),
                 )
             )
+
+
+@pytest.mark.parametrize('end', [0, 2])
+def test_hop_badge_agrees_with_hop_marker_on_spurs(end: int) -> None:
+    """The property's spur badges, above or below, are hop_marker's."""
+    junction = Spot(x=TRACK_X, y=98)
+    rows = [exit_spot(junction=junction, y=62), junction]
+    rows.append(exit_spot(junction=junction, y=134))
+    assert hop_badge(
+        rows=rows, start=1, end=end, share=0.9, kind=0.0, label='T1',
+    ) == hop_marker(
+        route='T1', ends=(junction, rows[end]), fraction=0.9, age=None,
+        live=True,
+    )
 
 
 def test_counts_stay_on_their_own_hops() -> None:

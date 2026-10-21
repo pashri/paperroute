@@ -278,7 +278,8 @@ def hop_marker(
         when that row is lower and up otherwise, if live; None unless the
         hop has two ends that are both visible rows. Bound for an exit row, it
         rides the earlier row's track until within a row of the exit,
-        then sits on the exit's stub end as a spur badge.
+        then sits on the exit's spot, on its centre line, as a spur
+        badge.
     """
     if len(ends) != 2:
         return None
@@ -291,7 +292,7 @@ def hop_marker(
         marker=Marker(
             route=route,
             x=start.x if end.exit and not spur else end.x,
-            y=y,
+            y=end.y if spur else y,
             bearing=(180.0 if end.y > start.y else 0.0) if live else None,
             live=live,
             pinned=True,

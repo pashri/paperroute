@@ -7,7 +7,16 @@ from typing import Final
 
 from paperroute.core.map_view import Marker
 from paperroute.core.reach import RowKind
-from paperroute.core.strip_model import INDENT, ROW_H, Band, StripRow
+from paperroute.core.strip_model import (
+    HOOK_GAP,
+    HOOK_LENGTH,
+    HOOK_RADIUS,
+    HOOK_TIP,
+    INDENT,
+    ROW_H,
+    Band,
+    StripRow,
+)
 from paperroute.render.canvas import INK, PAPER, Canvas, Face
 from paperroute.render.chrome import ARROW_WIDTH, arrow
 from paperroute.render.markers import draw_hollow, draw_live
@@ -37,7 +46,8 @@ BAND_INSET: Final[float] = 3.0  # pixels inside the row slot
 BAND_ARROW: Final[float] = 14.0  # arrow x from the band's left
 BAND_TEXT: Final[float] = 30.0  # text x from the band's left
 EXIT_FACE: Final[Face] = Face(weight=700, px=13)
-EXIT_ARROW: Final[float] = 16.0  # an exit arrow's width, gap included
+HOOK_STEPS: Final[int] = 6  # points along a hook's quarter circle
+HOOK_HALF: Final[float] = 6.0  # the exit arrow's half height
 NOTE_FACE: Final[Face] = Face(weight=700, px=12)
 NOTE_MAX: Final[float] = 190.0  # a carry-on note box's widest
 NOTE_OUTLINE: Final[float] = 2.0
@@ -74,9 +84,9 @@ def track_points(*, row: StripRow, parent_y: float, track_x: int
     Give the points of the track from a row's parent to the row.
 
     A change of depth bends half a row from the parent, then runs
-    straight down or up to the row. An exit's stub runs down or up its
-    junction's track to a quarter row short of the row, then
-    diagonally one indent right to the row.
+    straight down or up to the row. An exit's hook runs down or up its
+    junction's track, turns right in a quarter circle onto the row's
+    centre line, then runs straight to where its arrow starts.
 
     Parameters
     ----------
@@ -93,13 +103,48 @@ def track_points(*, row: StripRow, parent_y: float, track_x: int
         Points from the parent to the row.
     """
     start = (track_x + INDENT * row.parent_depth, parent_y)
-    x = track_x + INDENT * row.depth
     if row.kind is RowKind.EXIT:
-        knee = row.y - math.copysign(ROW_H / 4, row.y - parent_y)
-        return [start, (x, knee), (x + INDENT, row.y)]
+        return [start, *hook_points(x=start[0], y=row.y, parent_y=parent_y)]
+    x = track_x + INDENT * row.depth
     bend = math.copysign(ROW_H / 2, row.y - parent_y)
     elbow = [] if start[0] == x else [(x, parent_y + bend)]
     return [start, *elbow, (x, row.y)]
+
+
+def hook_points(*, x: float, y: float, parent_y: float
+                ) -> list[tuple[float, float]]:
+    """
+    Give an exit hook's points after the junction.
+
+    Parameters
+    ----------
+    x : float
+        The junction's track x.
+    y : float
+        The exit row's centre line.
+    parent_y : float
+        The junction's centre line.
+
+    Returns
+    -------
+    list[tuple[float, float]]
+        The bend's start, points round the quarter circle, and the
+        straight's right end.
+    """
+    sign = math.copysign(1.0, y - parent_y)
+    centre_y = y - sign * HOOK_RADIUS
+    arc = [
+        (
+            x + HOOK_RADIUS - HOOK_RADIUS * math.cos(angle),
+            centre_y + sign * HOOK_RADIUS * math.sin(angle),
+        )
+        for angle in (
+            math.pi / 2 * step / HOOK_STEPS
+            for step in range(HOOK_STEPS + 1)
+        )
+    ]
+    arc[-1] = (x + HOOK_RADIUS, y)
+    return [*arc, (x + HOOK_LENGTH, y)]
 
 
 def draw_track(canvas: Canvas, *, row: StripRow, track_x: int) -> None:
@@ -340,38 +385,29 @@ def draw_end(canvas: Canvas, *, row: StripRow, columns: Columns) -> float:
     return edge
 
 
-def exit_arrow(canvas: Canvas, *, x: float, y: float, up: bool) -> float:
+def hook_arrow(canvas: Canvas, *, x: float, y: float) -> float:
     """
-    Draw an up-right or down-right arrow as shapes.
+    Draw an exit hook's filled arrow pointing right.
 
     Parameters
     ----------
     canvas : Canvas
         Target.
     x : float
-        Left end.
+        The arrow's base.
     y : float
         Centre line.
-    up : bool
-        Point up and right when True, down and right when False.
 
     Returns
     -------
     float
-        Width used, the gap before the text included.
+        Width used, the gap before the label included.
     """
-    sign = -1 if up else 1
-    canvas.line(
-        points=[(x + 2, y - sign * 6), (x + 10, y + sign * 2)],
-        width=2,
-        grey=INK,
-    )
     canvas.polygon(
-        points=[(x + 13, y + sign * 5), (x + 13, y - sign * 3),
-                (x + 5, y + sign * 5)],
+        points=[(x, y - HOOK_HALF), (x + HOOK_TIP, y), (x, y + HOOK_HALF)],
         grey=INK,
     )
-    return EXIT_ARROW
+    return HOOK_TIP + HOOK_GAP
 
 
 def name_start(canvas: Canvas, *, row: StripRow, columns: Columns
@@ -392,15 +428,15 @@ def name_start(canvas: Canvas, *, row: StripRow, columns: Columns
     -------
     tuple[float, Face]
         The name's x, at its `name_after` when that is further right,
-        and its face. An exit's arrow goes at its stub's name place, or
-        at its `name_after`, and its text after the arrow.
+        and its face. An exit's arrow goes at its hook's end and its
+        label after the arrow, or at its `name_after` if further right.
     """
     if row.kind is not RowKind.EXIT:
         left = columns.name_x + INDENT * row.depth
         return max(left, row.name_after or left), name_face(row=row)
-    x = max(columns.name_x + INDENT * (row.depth + 1), row.name_after or 0.0)
-    up = row.parent_y is not None and row.parent_y > row.y
-    return x + exit_arrow(canvas, x=x, y=row.y, up=up), EXIT_FACE
+    x = columns.track_x + INDENT * row.parent_depth + HOOK_LENGTH
+    label = x + hook_arrow(canvas, x=x, y=row.y)
+    return max(label, row.name_after or label), EXIT_FACE
 
 
 def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:

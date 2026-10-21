@@ -28,6 +28,7 @@ from paperroute.core.strip_model import (
     TRACK_X,
     StripInputs,
     StripRow,
+    hook_straight,
 )
 from paperroute.core.strip_times import strip_trips
 from paperroute.core.strip_view import (
@@ -793,12 +794,26 @@ def test_bound_vehicle_rides_the_exit_stub() -> None:
     (marker,) = late.markers
     assert riding.x == TRACK_X
     assert junction.y - ROW_H < riding.y < junction.y
-    assert marker.x == TRACK_X + INDENT * (junction.depth + 1)
-    assert stub.y < marker.y < stub.y + ROW_H
+    assert marker.x > TRACK_X + INDENT * junction.depth
+    assert marker.y == stub.y
     for row in late.rows:
         if abs(row.y - marker.y) < ROW_H / 2:
             assert row.name_after is not None
             assert row.name_after >= marker.x + HALF_WIDE
+
+
+def test_exit_spot_is_hook_middle() -> None:
+    """A train leaving by W1 sits mid-way along W1's hook straight."""
+    view = build_strip_view(inputs=west_inputs(
+        now=START + timedelta(minutes=5, seconds=15),
+    ))
+    junction = row_named(rows=view.rows, name='J')
+    (marker,) = view.markers
+    left, right = hook_straight(
+        track_x=TRACK_X + INDENT * junction.depth,
+    )
+    assert marker.x == (left + right) / 2
+    assert marker.y == row_named(rows=view.rows, name='W1 · T1').y
 
 
 def test_vehicle_past_the_exit_station_is_gone() -> None:

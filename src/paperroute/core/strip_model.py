@@ -18,6 +18,10 @@ STRIP_ROWS: Final[int] = 12
 TRACK_X: Final[int] = 30
 INDENT: Final[int] = 16
 PANE_TRACK_X: Final[int] = 500
+HOOK_RADIUS: Final[float] = 12.0  # an exit hook's bend radius
+HOOK_LENGTH: Final[float] = 82.0  # junction track to the arrow's base
+HOOK_TIP: Final[float] = 11.0  # the exit arrow's length
+HOOK_GAP: Final[float] = 7.0  # pixels between the arrow tip and label
 PANE_ROWS: Final[int] = 12
 PANE_FROM_ROW: Final[int] = 2
 PANEL_ROWS: Final[int] = 4
@@ -45,6 +49,23 @@ EMPTY_STOP_VIEW: Final[StopView] = StopView(
     empty=None,
     scroll=0,
 )
+
+
+def hook_straight(*, track_x: float) -> tuple[float, float]:
+    """
+    Give the left and right x of an exit hook's straight.
+
+    Parameters
+    ----------
+    track_x : float
+        The junction's track x.
+
+    Returns
+    -------
+    tuple[float, float]
+        Where the bend ends and where the arrow's base starts.
+    """
+    return track_x + HOOK_RADIUS, track_x + HOOK_LENGTH
 
 
 @dataclass(frozen=True)

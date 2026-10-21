@@ -1,5 +1,6 @@
 """Facts about the drawn strip rows, band and vehicles (no golden images)."""
 
+import math
 from dataclasses import replace
 
 import numpy as np
@@ -8,6 +9,10 @@ from numpy.typing import NDArray
 from paperroute.core.map_view import Marker
 from paperroute.core.reach import RowKind
 from paperroute.core.strip_model import (
+    HOOK_GAP,
+    HOOK_LENGTH,
+    HOOK_RADIUS,
+    HOOK_TIP,
     INDENT,
     ROW_H,
     STRIP_ROWS,
@@ -27,6 +32,8 @@ from paperroute.render.strip import (
     draw_band,
     draw_rows,
     draw_strip_markers,
+    hook_arrow,
+    track_points,
 )
 
 NAME_X = 52
@@ -272,56 +279,83 @@ def ink_in(*, frame: NDArray[np.uint8], left: float, top: float,
     return int(np.count_nonzero(box < 128))
 
 
-def test_exit_row_draws_a_stub_and_no_ring() -> None:
-    """The stub runs from J's track diagonally to its end, ringless."""
+def test_exit_track_turns_right_at_once() -> None:
+    """Down the junction's track, a quarter circle, then the straight."""
+    row = exit_row(y=FROM_Y + ROW_H, parent_y=FROM_Y)
+    points = track_points(row=row, parent_y=FROM_Y, track_x=TRACK_X)
+    centre = (TRACK_X + HOOK_RADIUS, row.y - HOOK_RADIUS)
+    assert points[0] == (TRACK_X, FROM_Y)
+    assert len(points) >= 6
+    for x, y in points[:-1]:
+        on_arc = math.isclose(
+            math.dist((x, y), centre), HOOK_RADIUS, abs_tol=1e-9,
+        )
+        assert x == TRACK_X or (on_arc and y >= centre[1])
+    assert [y for _, y in points[-2:]] == [row.y, row.y]
+    assert points[-1][0] == TRACK_X + HOOK_LENGTH
+
+
+def test_hooks_above_and_below_bend_their_own_way() -> None:
+    """An exit above its junction mirrors one below it."""
+    below, above = (
+        track_points(
+            row=exit_row(y=FROM_Y + offset, parent_y=FROM_Y),
+            parent_y=FROM_Y,
+            track_x=TRACK_X,
+        )
+        for offset in (ROW_H, -ROW_H)
+    )
+    assert [x for x, _ in below] == [x for x, _ in above]
+    for (_, low), (_, high) in zip(below, above):
+        assert math.isclose(low - FROM_Y, FROM_Y - high)
+
+
+def test_hook_arrow_points_right() -> None:
+    """The arrow's ink sits right of its base and narrows to the tip."""
+    canvas = Canvas()
+    x, y = 40.0, 20.0
+    used = hook_arrow(canvas, x=x, y=y)
+    frame = canvas.grey()
+    assert used == HOOK_TIP + HOOK_GAP
+    assert np.count_nonzero(frame[:, :int(x) - 1] < 128) == 0
+    tip = np.count_nonzero(frame[:, int(x + HOOK_TIP) - 1] < 128)
+    base = np.count_nonzero(frame[:, int(x) + 1] < 128)
+    assert tip < base
+
+
+def test_exit_label_follows_the_arrow() -> None:
+    """The label's ink all lies past the arrow's tip."""
+    row = exit_row(y=FROM_Y + ROW_H, parent_y=FROM_Y)
+    bare = drawn(rows=(strip_row(y=FROM_Y, name='J'),))
+    frame = drawn(rows=(strip_row(y=FROM_Y, name='J'), row))
+    tip = TRACK_X + HOOK_LENGTH + HOOK_TIP
+    top, bottom = int(row.y - ROW_H / 2) + 1, int(row.y + ROW_H / 2)
+    label = (frame[top:bottom] < 128) & ~(bare[top:bottom] < 128)
+    columns = np.flatnonzero(label[:, int(tip) + 1:].any(axis=0))
+    assert columns.size > 0
+    first = int(tip) + 1 + int(columns[0])
+    assert first >= tip + HOOK_GAP - 1
+
+
+def test_exit_row_draws_no_ring() -> None:
+    """An exit row has no station mark at its junction's track."""
     y = FROM_Y + ROW_H
     frame = drawn(rows=(
         strip_row(y=FROM_Y, name='J'), exit_row(y=y, parent_y=FROM_Y),
     ))
-    end = TRACK_X + INDENT
-    assert TRACK_X in ink_columns(frame=frame, y=y - 12, left=0, right=60)
-    middle = ink_columns(frame=frame, y=y - 4, left=0, right=60)
-    assert any(TRACK_X < x < end for x in middle)
-    assert any(
-        end - 2 <= x <= end + 1
-        for x in ink_columns(frame=frame, y=y, left=0, right=60)
-    )
-    assert frame[int(y) - 6, end] == PAPER
-    assert frame[int(y), end + 6] == PAPER
-    assert frame[int(y) + 6, end] == PAPER
+    assert frame[int(y), TRACK_X + 4] == PAPER
+    assert frame[int(y) + 6, TRACK_X] == PAPER
 
 
-def test_exit_arrow_points_away_from_the_junction() -> None:
-    """Below its junction the arrow points down-right; above, up-right."""
-    arrow_x = NAME_X + INDENT
-    below = drawn(rows=(
-        strip_row(y=FROM_Y, name='J'),
-        exit_row(y=FROM_Y + ROW_H, parent_y=FROM_Y),
-    ))
-    above = drawn(rows=(
-        strip_row(y=FROM_Y, name='J'),
-        exit_row(y=FROM_Y - ROW_H, parent_y=FROM_Y),
-    ))
-    for frame, y, down in (
-        (below, FROM_Y + ROW_H, True), (above, FROM_Y - ROW_H, False),
-    ):
-        upper = ink_in(frame=frame, left=arrow_x + 8, top=y - 8, size=8)
-        lower = ink_in(frame=frame, left=arrow_x + 8, top=y, size=8)
-        assert (lower > upper) is down
-        assert ink_in(frame=frame, left=arrow_x, top=y - 8, size=16) > 0
-
-
-def test_three_exits_draw_three_stubs() -> None:
-    """Each of three exit rows below J has ink at its own stub end."""
+def test_three_exits_draw_three_hooks() -> None:
+    """Each of three exit rows below J has ink along its own straight."""
     exits = tuple(
         exit_row(y=FROM_Y + k * ROW_H, parent_y=FROM_Y) for k in (1, 2, 3)
     )
     frame = drawn(rows=(strip_row(y=FROM_Y, name='J'), *exits))
     for row in exits:
-        assert any(
-            TRACK_X + INDENT - 2 <= x <= TRACK_X + INDENT + 1
-            for x in ink_columns(frame=frame, y=row.y, left=0, right=60)
-        )
+        middle = int(TRACK_X + HOOK_LENGTH / 2)
+        assert frame[int(row.y), middle] == INK
 
 
 def test_from_row_shows_its_time_without_a_box() -> None:

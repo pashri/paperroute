@@ -43,6 +43,7 @@ from paperroute.core.strip_model import (
     StripRow,
     StripView,
     Window,
+    hook_straight,
 )
 from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_times import (
@@ -626,6 +627,29 @@ def trips_of(*, inputs: StripInputs) -> TripInputs:
     )
 
 
+def spot_of(*, row: StripRow, track_x: int) -> Spot:
+    """
+    Give where a row's vehicles sit.
+
+    Parameters
+    ----------
+    row : StripRow
+        The row.
+    track_x : int
+        Track x at depth 0.
+
+    Returns
+    -------
+    Spot
+        On the row's track, or for an exit mid-way along its hook's
+        straight.
+    """
+    if row.kind is not RowKind.EXIT:
+        return Spot(x=track_x + INDENT * row.depth, y=row.y)
+    left, right = hook_straight(track_x=track_x + INDENT * row.parent_depth)
+    return Spot(x=(left + right) / 2, y=row.y, exit=True)
+
+
 def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
                   track_x: int) -> tuple[Marker, ...]:
     """
@@ -647,11 +671,7 @@ def strip_markers(*, inputs: StripInputs, rows: Sequence[StripRow],
         off the names, the From and Destination discs and each other.
     """
     spots = {
-        row.station: Spot(
-            x=track_x + INDENT * (row.depth + (row.kind is RowKind.EXIT)),
-            y=row.y,
-            exit=row.kind is RowKind.EXIT,
-        )
+        row.station: spot_of(row=row, track_x=track_x)
         for row in rows
     }
     return vehicle_markers(

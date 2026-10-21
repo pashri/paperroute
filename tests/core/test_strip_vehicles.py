@@ -8,7 +8,13 @@ import pytest
 from paperroute.core.map_view import Marker
 from paperroute.core.positions import VehiclePosition
 from paperroute.core.strip_badges import Spot
-from paperroute.core.strip_model import INDENT, ROW_H, TRACK_X, StripRow
+from paperroute.core.strip_model import (
+    INDENT,
+    ROW_H,
+    TRACK_X,
+    StripRow,
+    hook_straight,
+)
 from paperroute.core.strip_vehicles import hop_marker
 from paperroute.core.strip_view import build_strip_view
 from tests.core.factories import (
@@ -104,14 +110,17 @@ def test_next_trip_without_pattern_ends_at_the_change() -> None:
 
 
 def test_next_route_off_the_line_rides_the_exit() -> None:
-    """With D an exit off C, the T2 badge at 8:13 is on C's stub."""
+    """With D an exit off C, the T2 badge at 8:13 is on D's hook."""
     marker, rows = badge_at(minutes=13, off=True)
     junction = rows['C']
     stub = row_named(rows=list(rows.values()), name='D · T2')
     assert marker is not None
     assert marker.route == 'T2'
-    assert marker.x == TRACK_X + INDENT * (junction.depth + 1)
-    assert abs(stub.y - marker.y) < ROW_H
+    left, right = hook_straight(
+        track_x=TRACK_X + INDENT * junction.depth,
+    )
+    assert marker.x == (left + right) / 2
+    assert marker.y == stub.y
 
 
 def test_next_trip_on_the_strip_keeps_one_badge() -> None:

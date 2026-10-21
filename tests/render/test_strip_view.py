@@ -31,8 +31,8 @@ from paperroute.core.strip_model import (
     StripView,
 )
 from paperroute.core.strip_view import build_strip_view
-from paperroute.render.canvas import INK, PAPER, Canvas
-from paperroute.render.chrome import BANNER, HEADER
+from paperroute.render.canvas import INK, PAPER, Canvas, Face
+from paperroute.render.chrome import BANNER, HEADER, badge
 from paperroute.render.markers import badge_box
 from paperroute.render.strip_view import (
     NAME_X,
@@ -41,6 +41,7 @@ from paperroute.render.strip_view import (
     draw_strip_view,
     paint_strip_view,
 )
+from paperroute.render.strip_view import panel_row as paint_panel_row
 from paperroute.render.tile_codec import GREYS
 from tests.core.factories import START, east_inputs
 from tests.render.factories import STRIP_PANEL as PANEL
@@ -98,11 +99,13 @@ def test_strip_frame_draws_rows_on_the_track() -> None:
 def test_panel_draws_carry_on_second_line() -> None:
     """A departure that runs on gets a second line under it."""
     then = CarryOn(route='T9', headsign='Hornsby')
-    plain = draw_strip_view(view=VIEW)
+    plain = draw_strip_view(view=replace(
+        VIEW, panel=replace(PANEL, rows=(panel_row(),)),
+    ))
     carried = draw_strip_view(view=replace(
         VIEW, panel=replace(PANEL, rows=(panel_row(then=then),)),
     ))
-    line = (slice(PANEL_TOP + 52, PANEL_TOP + 66), slice(460, 786))
+    line = (slice(PANEL_TOP + 52, PANEL_TOP + 66), slice(660, 786))
     assert (plain[line] == PAPER).all()
     assert (carried[line] == INK).any()
 
@@ -378,3 +381,79 @@ def test_trains_at_the_from_sit_on_its_disc_and_leave_its_name_whole(
         name = (slice(y - 9, y + 10), slice(int(home.name_after), 300))
         assert np.array_equal(drawn[name], bare[name])
         assert (bare[name] == INK).any()
+
+
+MIDDLE = slice(556, 786)
+FIRST_LINE = slice(PANEL_TOP + 24, PANEL_TOP + 48)
+SECOND_LINE = slice(PANEL_TOP + 50, PANEL_TOP + 68)
+
+
+def drawn_row(
+    *, destination: str = 'Emu Plains', then: CarryOn | None = None,
+    whole: bool = False,
+) -> NDArray[np.uint8]:
+    """
+    Paint one panel row and read it back.
+
+    Parameters
+    ----------
+    destination : str
+        The row's destination.
+    then : CarryOn | None
+        Where the vehicle runs on to.
+    whole : bool
+        True for a whole-stop row.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The grey frame.
+    """
+    canvas = Canvas()
+    row = replace(panel_row(then=then), destination=destination)
+    paint_panel_row(canvas, row=row, top=PANEL_TOP, whole=whole)
+    return canvas.grey()
+
+
+def test_destination_row_has_badge_and_destination() -> None:
+    """With a destination the middle shows the badge and the name."""
+    row = drawn_row()
+    bare = drawn_row(destination='')
+    badge_part = (FIRST_LINE, slice(556, 590))
+    assert (row[badge_part] == bare[badge_part]).all()
+    assert (row[badge_part] == INK).any()
+    assert (row[FIRST_LINE, 600:700] == INK).any()
+    assert (bare[FIRST_LINE, 600:700] == PAPER).all()
+
+
+def test_destination_row_arrival_on_second_line() -> None:
+    """The arrival sits on the second line, not in the first."""
+    row = drawn_row()
+    assert (row[SECOND_LINE, MIDDLE] == INK).any()
+    whole = drawn_row(whole=True)
+    assert (whole[SECOND_LINE, MIDDLE] == PAPER).all()
+    assert (row[FIRST_LINE, 556:680] == whole[FIRST_LINE, 556:680]).all()
+
+
+def test_destination_row_carry_on_after_arrival() -> None:
+    """A carry-on extends the second line's ink to the right."""
+    then = CarryOn(route='T9', headsign='Hornsby')
+
+    def right_edge(frame: NDArray[np.uint8]) -> int:
+        ink = (frame[SECOND_LINE, MIDDLE] == INK).any(0)
+        return int(np.nonzero(ink)[0].max())
+
+    assert right_edge(drawn_row(then=then)) > right_edge(drawn_row()) + 10
+
+
+def test_whole_stop_row_unchanged() -> None:
+    """A whole-stop row is the badge and headsign, with no arrival."""
+    canvas = Canvas()
+    width = badge(canvas, x=556, y=PANEL_TOP + 34, route='T1', px=14)
+    face = Face(weight=400, px=14)
+    canvas.text(at=(556 + width + 8, PANEL_TOP + 40), text='Emu Plains',
+                face=face, grey=INK)
+    expected = canvas.grey()[FIRST_LINE, 556:680]
+    row = drawn_row(whole=True)
+    assert (row[FIRST_LINE, 556:680] == expected).all()
+    assert (row[SECOND_LINE, MIDDLE] == PAPER).all()

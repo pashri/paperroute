@@ -59,6 +59,7 @@ TIME_DROP: Final[int] = 44  # baseline below the row's rule
 SECOND_DROP: Final[int] = 62  # carry-on baseline below the row's rule
 MIDDLE_X: Final[int] = 556  # arrive arrow, badge and carry-on line
 BADGE_PX: Final[int] = 14
+CARRY_GAP: Final[int] = 10  # pixels between the arrival and a carry-on
 BADGE_DROP: Final[int] = 34  # badge centre below the row's rule
 COUNTDOWN_ROOM: Final[int] = 84  # pixels kept for the countdown
 CANCELLED_LEFT: Final[int] = 684
@@ -73,9 +74,9 @@ HINT_FACE: Final[Face] = Face(weight=700, px=14)
 HINT_PAD: Final[int] = 6  # pixels each side of the hint text
 
 
-def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> None:
+def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
     """
-    Draw a departure's arrival, or its route badge and headsign.
+    Draw a departure's route badge and headsign, and its arrival if any.
 
     Parameters
     ----------
@@ -86,15 +87,13 @@ def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> None:
     top : int
         The row's rule.
     whole : bool
-        True on the whole-stop board, which shows the badge and headsign.
+        True on the whole-stop board, which shows no arrival.
+
+    Returns
+    -------
+    int
+        Where a carry-on line starts.
     """
-    if not whole:
-        x = MIDDLE_X + arrow(canvas, x=MIDDLE_X, y=top + 34, grey=INK)
-        canvas.text(
-            at=(x, top + 40), text=row.arrives_at, face=ARRIVES_FACE,
-            grey=INK,
-        )
-        return
     x = MIDDLE_X + badge(
         canvas, x=MIDDLE_X, y=top + BADGE_DROP, route=row.route, px=BADGE_PX,
     ) + 8
@@ -108,6 +107,13 @@ def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> None:
         face=HEADSIGN_FACE,
         grey=INK,
     )
+    if whole:
+        return MIDDLE_X
+    arrival = canvas.text(
+        at=(MIDDLE_X, top + SECOND_DROP), text=f'arr {row.arrives_at}',
+        face=TAG_FACE, grey=INK,
+    )
+    return MIDDLE_X + round(arrival) + CARRY_GAP
 
 
 def row_countdown(canvas: Canvas, *, row: Row, top: int) -> None:
@@ -140,7 +146,7 @@ def row_countdown(canvas: Canvas, *, row: Row, top: int) -> None:
     )
 
 
-def carry_on(canvas: Canvas, *, row: Row, top: int) -> None:
+def carry_on(canvas: Canvas, *, row: Row, top: int, left: int) -> None:
     """
     Draw where the vehicle runs on to, on a second line.
 
@@ -152,13 +158,15 @@ def carry_on(canvas: Canvas, *, row: Row, top: int) -> None:
         Departure; nothing is drawn when it doesn't run on.
     top : int
         The row's rule.
+    left : int
+        Where the line starts.
     """
     then = row.then
     if then is None:
         return
     baseline = top + SECOND_DROP
-    arrow(canvas, x=MIDDLE_X, y=baseline - 4, grey=INK)
-    x = MIDDLE_X + ARROW_WIDTH + 4
+    arrow(canvas, x=left, y=baseline - 4, grey=INK)
+    x = left + ARROW_WIDTH + 4
     canvas.text(
         at=(x, baseline),
         text=canvas.fit(
@@ -191,9 +199,9 @@ def panel_row(canvas: Canvas, *, row: Row, top: int, whole: bool) -> None:
         at=(TEXT_LEFT, top + TIME_DROP), text=row.leaves_at,
         face=LEAVES_FACE, grey=INK,
     )
-    row_middle(canvas, row=row, top=top, whole=whole)
+    left = row_middle(canvas, row=row, top=top, whole=whole)
     row_countdown(canvas, row=row, top=top)
-    carry_on(canvas, row=row, top=top)
+    carry_on(canvas, row=row, top=top, left=left)
 
 
 def panel_heading(canvas: Canvas, *, panel: StripPanel, drop: int) -> None:

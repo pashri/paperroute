@@ -4,6 +4,7 @@ import json
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import replace
 from itertools import groupby
+from operator import itemgetter
 from typing import Final, Protocol
 
 from paperroute.adapters.timetable_db import to_point
@@ -45,18 +46,28 @@ UNION
 SELECT station_id FROM line_aliases WHERE kept_id IN (SELECT * FROM own)
 """
 PASSES: Final[str] = """
-SELECT DISTINCT r.run_id, r.stations
+SELECT DISTINCT r.run_id, r.stations, '[]', '[]'
 FROM run_stops s JOIN runs r ON r.run_id = s.run_id
 WHERE s.station_id IN (SELECT value FROM json_each(:stations))
   AND r.kind = :kind
 """
 STOPS: Final[str] = """
-SELECT DISTINCT c.run_id, c.stops
+SELECT DISTINCT c.run_id, c.stops, '[]', '[]'
 FROM run_stops s JOIN runs r ON r.run_id = s.run_id
   JOIN run_calls c ON c.run_id = r.run_id
 WHERE s.station_id IN (SELECT value FROM json_each(:stations))
   AND r.kind = :kind
 """
+STOPS_ONE_WAY: Final[str] = """
+SELECT DISTINCT c.run_id, c.stops, c.no_board, c.no_alight
+FROM run_stops s JOIN runs r ON r.run_id = s.run_id
+  JOIN run_calls c ON c.run_id = r.run_id
+WHERE s.station_id IN (SELECT value FROM json_each(:stations))
+  AND r.kind = :kind
+"""
+HAS_ONE_WAY: Final[str] = (
+    "SELECT 1 FROM pragma_table_info('run_calls') WHERE name = 'no_board'"
+)
 FROM_TAG: Final[str] = 'ALL'
 type Row = tuple[object, ...]
 
@@ -180,23 +191,66 @@ def to_choice(
     return choice if choice.key in reached else replace(choice, dim=True)
 
 
+def kept_calls(
+    *, row: Row, aliases: Mapping[str, str],
+) -> list[tuple[str, bool, bool]]:
+    """
+    Map a run's calls to kept stations and say what each one allows.
+
+    Back-to-back calls at one kept station are made one, which allows
+    boarding (or alighting) if any of its calls does.
+
+    Parameters
+    ----------
+    row : Row
+        Run ID, stations as JSON, and positions with no pickup and with
+        no drop-off as JSON.
+    aliases : Mapping[str, str]
+        Kept station by merged station ID.
+
+    Returns
+    -------
+    list[tuple[str, bool, bool]]
+        Kept station, whether boarding is allowed and whether alighting
+        is, in call order.
+    """
+    _, stations, no_board, no_alight = row
+    shut = set(json.loads(str(no_board))), set(json.loads(str(no_alight)))
+    calls = (
+        (aliases.get(call, call), pos not in shut[0], pos not in shut[1])
+        for pos, call in enumerate(json.loads(str(stations)))
+    )
+    return [
+        (
+            station,
+            any(call[1] for call in group),
+            any(call[2] for call in group),
+        )
+        for station, group in (
+            (key, list(found))
+            for key, found in groupby(calls, key=itemgetter(0))
+        )
+    ]
+
+
 def later_stops(
     *, rows: Iterable[Row], origin: str, aliases: Mapping[str, str],
 ) -> frozenset[str]:
     """
-    Collect the stations runs stop at after a stop at the From.
+    Collect the stations runs let people off at after boarding at the From.
 
     Stations are first mapped to the station kept for them, with
-    back-to-back calls at one kept station made one. Each pass is then
-    cut, as a strip's tails are, before the first station the run would
-    call at again, so a run that turns back reaches nothing past the
-    turn.
+    back-to-back calls at one kept station made one (see kept_calls).
+    Each pass is then cut, as a strip's tails are, before the first
+    station the run would call at again, so a run that turns back reaches
+    nothing past the turn.
 
     Parameters
     ----------
     rows : Iterable[Row]
-        Run ID and stations as JSON of each run through the From: the
-        stations it stops at, or every station it passes on a file
+        Run ID, stations as JSON, and positions with no pickup and with
+        no drop-off as JSON, of each run through the From. The stations
+        are the ones it stops at, or every station it passes on a file
         without run_calls.
     origin : str
         The From's kept station ID.
@@ -206,19 +260,21 @@ def later_stops(
     Returns
     -------
     frozenset[str]
-        Kept stations after the From on some pass.
+        Kept stations after a boarding at the From on some pass, where
+        alighting is allowed.
     """
     reached: set[str] = set()
-    for _, stations in rows:
-        calls = [
-            station
-            for station, _ in groupby(
-                aliases.get(call, call) for call in json.loads(str(stations))
-            )
-        ]
-        for pos, station in enumerate(calls):
-            if station == origin:
-                reached.update(until_revisit(stations=calls[pos:])[1:])
+    for row in rows:
+        calls = kept_calls(row=row, aliases=aliases)
+        stations = [station for station, _, _ in calls]
+        for pos, (station, board, _) in enumerate(calls):
+            if station == origin and board:
+                ahead = len(until_revisit(stations=stations[pos:]))
+                reached.update(
+                    later
+                    for later, _, alight in calls[pos + 1:pos + ahead]
+                    if alight
+                )
     return frozenset(reached)
 
 
@@ -289,7 +345,9 @@ class LineTables:
             when the From is not on the line. A file without run_calls
             counts stations runs pass through as stops. A station merged
             into another by line_aliases counts as the station kept for
-            it, both as the From and as a later stop.
+            it, both as the From and as a later stop. On a file whose
+            run_calls has one-way positions, the From must allow boarding
+            and a later stop alighting; otherwise every stop allows both.
         """
         aliases = {
             str(merged): str(kept)
@@ -300,8 +358,7 @@ class LineTables:
         if origin not in {choice.key for choice in stations}:
             return None
         merged = [origin, *(m for m, k in aliases.items() if k == origin)]
-        stops = self.has_tables(tables=STOP_TABLES)
-        rows = self.fetch(sql=STOPS if stops else PASSES, params={
+        rows = self.fetch(sql=self.runs_sql(), params={
             'stations': json.dumps(merged), 'kind': str(kind),
         })
         reached = later_stops(rows=rows, origin=origin, aliases=aliases)
@@ -309,6 +366,21 @@ class LineTables:
             to_choice(choice=choice, origin=origin, reached=reached)
             for choice in stations
         ))
+
+    def runs_sql(self) -> str:
+        """
+        Pick the query for the runs through a From.
+
+        Returns
+        -------
+        str
+            STOPS_ONE_WAY when run_calls has one-way positions; else
+            STOPS, or PASSES without run_calls, both giving empty lists.
+        """
+        if not self.has_tables(tables=STOP_TABLES):
+            return PASSES
+        one_way = self.fetch(sql=HAS_ONE_WAY, params=())
+        return STOPS_ONE_WAY if one_way else STOPS
 
     def line_of(self, *, key: StripKey) -> frozenset[str]:
         """

@@ -22,7 +22,7 @@ from paperroute.core.model import (
 RAIL_TYPES: Final[frozenset[int]] = frozenset({2, 401, 900})
 CALLS: Final[str] = """
 SELECT st.trip_id, COALESCE(NULLIF(s.parent_station, ''), s.stop_id),
-  st.arr, st.dep, st.pickup <> 1 OR st.dropoff <> 1
+  st.arr, st.dep, st.pickup <> 1, st.dropoff <> 1
 FROM stop_times st JOIN stops s USING (stop_id)
 ORDER BY st.trip_id, st.seq
 """
@@ -38,7 +38,8 @@ CREATE TABLE runs (run_id INTEGER PRIMARY KEY, kind TEXT NOT NULL,
   route TEXT NOT NULL, stations TEXT NOT NULL, trips INTEGER NOT NULL);
 CREATE TABLE run_stops (station_id TEXT NOT NULL, run_id INTEGER NOT NULL,
   pos INTEGER NOT NULL);
-CREATE TABLE run_calls (run_id INTEGER NOT NULL, stops TEXT NOT NULL);
+CREATE TABLE run_calls (run_id INTEGER NOT NULL, stops TEXT NOT NULL,
+  no_board TEXT NOT NULL, no_alight TEXT NOT NULL);
 CREATE TABLE trip_runs (trip_id TEXT PRIMARY KEY, run_id INTEGER NOT NULL)
   WITHOUT ROWID;
 CREATE TABLE trip_next (trip_id TEXT PRIMARY KEY, route TEXT NOT NULL,
@@ -52,7 +53,7 @@ RUN_STOPS_INDEX: Final[str] = (
 RUN_CALLS_INDEX: Final[str] = (
     'CREATE INDEX run_calls_run ON run_calls (run_id)'
 )
-type CallRow = tuple[str, str, int, int, int]
+type CallRow = tuple[str, str, int, int, int, int]
 type TripRow = tuple[
     str, str, str, int, str | None, str, str | None, str, int,
 ]
@@ -66,7 +67,9 @@ class TripCalls:
     Hidden trips (out of service, or on a route with no kind) are
     kept so they still break block chains; check ``shown`` before offering
     a trip. ``passes`` holds the positions in ``stations`` the trip runs
-    through without stopping.
+    through without stopping; ``no_board`` and ``no_alight`` the
+    positions where no call allows pickup, or drop-off. ``passes`` are the
+    positions in both.
     """
 
     trip_id: str
@@ -82,6 +85,8 @@ class TripCalls:
     rail: bool
     passes: tuple[int, ...] = ()
     revenue: bool = True
+    no_board: tuple[int, ...] = ()
+    no_alight: tuple[int, ...] = ()
 
     @property
     def shown(self) -> bool:
@@ -120,9 +125,11 @@ def collapsed(*, stations: Iterable[str]) -> tuple[str, ...]:
     )
 
 
-def passes_of(*, calls: Iterable[CallRow]) -> tuple[int, ...]:
+def one_way_of(
+    *, calls: Iterable[CallRow],
+) -> tuple[tuple[int, ...], tuple[int, ...]]:
     """
-    Find the stations a trip runs through without stopping.
+    Find the stations a trip can't be boarded at, or left at.
 
     Parameters
     ----------
@@ -131,15 +138,41 @@ def passes_of(*, calls: Iterable[CallRow]) -> tuple[int, ...]:
 
     Returns
     -------
-    tuple[int, ...]
+    tuple[tuple[int, ...], tuple[int, ...]]
         Positions, among the stations with consecutive repeats dropped,
-        where no call has a pickup or drop-off.
+        where no call has a pickup, and those where no call has a
+        drop-off.
     """
-    return tuple(
-        pos
-        for pos, (_, group) in enumerate(groupby(calls, key=itemgetter(1)))
-        if not any(call[4] for call in group)
-    )
+    no_board: list[int] = []
+    no_alight: list[int] = []
+    groups = groupby(calls, key=itemgetter(1))
+    for pos, group in enumerate(list(rows) for _, rows in groups):
+        if not any(call[4] for call in group):
+            no_board.append(pos)
+        if not any(call[5] for call in group):
+            no_alight.append(pos)
+    return tuple(no_board), tuple(no_alight)
+
+
+def passes_of(
+    *, no_board: Collection[int], no_alight: Collection[int],
+) -> tuple[int, ...]:
+    """
+    Find the stations a trip runs through without stopping.
+
+    Parameters
+    ----------
+    no_board : Collection[int]
+        Positions with no pickup, from one_way_of.
+    no_alight : Collection[int]
+        Positions with no drop-off, from one_way_of.
+
+    Returns
+    -------
+    tuple[int, ...]
+        Positions with neither a pickup nor a drop-off, in order.
+    """
+    return tuple(sorted(set(no_board) & set(no_alight)))
 
 
 def stopping(
@@ -193,6 +226,7 @@ def trip_from_rows(
         trip_id, route_id, route, route_type, agency, headsign, block,
         service, revenue,
     ) = trip
+    no_board, no_alight = one_way_of(calls=calls)
     return TripCalls(
         trip_id=trip_id, route_id=sys.intern(route_id),
         kind=kind_for(
@@ -202,8 +236,9 @@ def trip_from_rows(
         block=block, service=sys.intern(service),
         first_dep=calls[0][3], last_arr=calls[-1][2],
         stations=collapsed(stations=(call[1] for call in calls)),
-        rail=route_type in RAIL_TYPES, passes=passes_of(calls=calls),
-        revenue=bool(revenue),
+        rail=route_type in RAIL_TYPES,
+        passes=passes_of(no_board=no_board, no_alight=no_alight),
+        revenue=bool(revenue), no_board=no_board, no_alight=no_alight,
     )
 
 
@@ -353,9 +388,65 @@ def joined_passes(
     return kept | {at + pos for pos in after.passes if pos}
 
 
+def joined_flags(
+    *, no_board: set[int], no_alight: set[int], at: int, after: TripCalls,
+) -> tuple[set[int], set[int]]:
+    """
+    Add the next trip's one-way positions to a run's.
+
+    Boarding where the trips meet boards the later trip, so that flag
+    comes from its first call; alighting there leaves the earlier trip,
+    so that flag stays as the run had it.
+
+    Parameters
+    ----------
+    no_board : set[int]
+        Positions of the run so far with no pickup.
+    no_alight : set[int]
+        Positions of the run so far with no drop-off.
+    at : int
+        Position of the run's last station, where after starts.
+    after : TripCalls
+        Trip joining the run.
+
+    Returns
+    -------
+    tuple[set[int], set[int]]
+        The joined run's positions with no pickup, and with no drop-off.
+    """
+    return (
+        (no_board - {at}) | {at + pos for pos in after.no_board},
+        no_alight | {at + pos for pos in after.no_alight if pos},
+    )
+
+
+@dataclass(frozen=True)
+class RunCalls:
+    """
+    A run's stations and the calls its trips make there.
+
+    Attributes
+    ----------
+    stations : tuple[str, ...]
+        Stations of the run.
+    stops : tuple[str, ...]
+        Those of them the run stops at.
+    no_board : tuple[int, ...]
+        Positions in stops with no pickup.
+    no_alight : tuple[int, ...]
+        Positions in stops with no drop-off.
+    """
+
+    stations: tuple[str, ...]
+    stops: tuple[str, ...]
+    no_board: tuple[int, ...] = ()
+    no_alight: tuple[int, ...] = ()
+
+
 def cut_run(
     *, run: Sequence[str], passes: Collection[int],
-) -> tuple[tuple[str, ...], tuple[str, ...]]:
+    no_board: Collection[int] = (), no_alight: Collection[int] = (),
+) -> RunCalls:
     """
     Cut a run before its first repeated hop.
 
@@ -365,19 +456,33 @@ def cut_run(
         Stations of the run.
     passes : Collection[int]
         Positions in run that are not stopped at.
+    no_board : Collection[int]
+        Positions in run with no pickup.
+    no_alight : Collection[int]
+        Positions in run with no drop-off.
 
     Returns
     -------
-    tuple[tuple[str, ...], tuple[str, ...]]
-        The cut stations, and those of them the run stops at.
+    RunCalls
+        The cut stations, those of them the run stops at, and the
+        one-way positions among the stops.
     """
     cut = until_repeated_hop(stations=run)
-    return cut, stopping(stations=cut, passes=passes)
+    kept = [pos for pos in range(len(cut)) if pos not in passes]
+    return RunCalls(
+        stations=cut, stops=stopping(stations=cut, passes=passes),
+        no_board=tuple(i for i, pos in enumerate(kept) if pos in no_board),
+        no_alight=tuple(
+            i
+            for i, pos in enumerate(kept)
+            if pos in no_alight
+        ),
+    )
 
 
 def run_calls_of(
     *, trip: TripCalls, nexts: dict[str, TripCalls],
-) -> tuple[tuple[str, ...], tuple[str, ...]]:
+) -> RunCalls:
     """
     Follow one trip along its block, cut before the first repeated hop.
 
@@ -393,11 +498,13 @@ def run_calls_of(
 
     Returns
     -------
-    tuple[tuple[str, ...], tuple[str, ...]]
-        Stations of the run, and those of them it stops at.
+    RunCalls
+        Stations of the run, those of them it stops at and its one-way
+        positions.
     """
     run = list(trip.stations)
     passes = set(trip.passes)
+    flags = set(trip.no_board), set(trip.no_alight)
     joined = {trip.trip_id}
     current = trip
     while runs_on(
@@ -405,11 +512,17 @@ def run_calls_of(
     ):
         current = nexts[current.trip_id]
         passes = joined_passes(passes=passes, at=len(run) - 1, after=current)
+        flags = joined_flags(
+            no_board=flags[0], no_alight=flags[1], at=len(run) - 1,
+            after=current,
+        )
         run.extend(current.stations[1:])
         if len(until_repeated_hop(stations=run)) < len(run):
-            return cut_run(run=run, passes=passes)
+            break
         joined.add(current.trip_id)
-    return cut_run(run=run, passes=passes)
+    return cut_run(
+        run=run, passes=passes, no_board=flags[0], no_alight=flags[1],
+    )
 
 
 def run_of(
@@ -430,7 +543,7 @@ def run_of(
     tuple[str, ...]
         Stations of the run, from run_calls_of.
     """
-    return run_calls_of(trip=trip, nexts=nexts)[0]
+    return run_calls_of(trip=trip, nexts=nexts).stations
 
 
 def chained(
@@ -552,14 +665,13 @@ class RunTable:
     patterns: Counter[tuple[str, str, tuple[str, ...]]] = field(
         default_factory=Counter,
     )
-    calls: dict[tuple[int, tuple[str, ...]], None] = field(
-        default_factory=dict,
-    )
+    calls: dict[
+        tuple[int, tuple[str, ...], tuple[int, ...], tuple[int, ...]], None,
+    ] = field(default_factory=dict)
     mapped: int = 0
 
     def add(
-        self, *, trip: TripCalls, run: tuple[str, ...],
-        pattern: tuple[str, ...], stops: tuple[str, ...],
+        self, *, trip: TripCalls, calls: RunCalls, pattern: tuple[str, ...],
     ) -> int | None:
         """
         Add a trip's trip-days to its run and count its pattern.
@@ -568,13 +680,11 @@ class RunTable:
         ----------
         trip : TripCalls
             A trip.
-        run : tuple[str, ...]
-            Stations of its run.
+        calls : RunCalls
+            Its run: the stations, those the trip and the trips it runs
+            on as stop at, and the one-way positions among them.
         pattern : tuple[str, ...]
             Its own stations, cut by until_repeated_hop.
-        stops : tuple[str, ...]
-            The stations of run the trip and the trips it runs on as stop
-            at.
 
         Returns
         -------
@@ -585,11 +695,13 @@ class RunTable:
         weight = self.days.get(trip.service, 0) - self.skips[trip.trip_id]
         if not trip.shown or weight <= 0:
             return None
-        key = (str(trip.kind), trip.route, run)
+        key = (str(trip.kind), trip.route, calls.stations)
         run_id = self.ids.setdefault(key, len(self.ids) + 1)
         self.trips[run_id] += weight
         self.patterns[(trip.route_id, trip.headsign, pattern)] += 1
-        self.calls[(run_id, stops)] = None
+        self.calls[(run_id, calls.stops, calls.no_board, calls.no_alight)] = (
+            None
+        )
         self.mapped += 1
         return run_id
 
@@ -625,16 +737,21 @@ class RunTable:
         """
         Give the rows of the run_calls table, one per stopping pattern.
 
-        Trips sharing a run can stop at different stations of it, so a run
-        has a row for each distinct set of stations its trips stop at.
+        Trips sharing a run can stop at different stations of it, or
+        allow only boarding or alighting at some, so a run has a row for
+        each distinct set of stations and one-way positions.
 
         Yields
         ------
         tuple[object, ...]
-            Run ID and stopping stations as JSON.
+            Run ID, and stopping stations, positions with no pickup and
+            positions with no drop-off as JSON.
         """
-        for run_id, stops in self.calls:
-            yield run_id, json.dumps(stops)
+        for run_id, stops, no_board, no_alight in self.calls:
+            yield (
+                run_id, json.dumps(stops), json.dumps(no_board),
+                json.dumps(no_alight),
+            )
 
     def pattern_rows(self) -> Iterator[tuple[object, ...]]:
         """
@@ -655,8 +772,8 @@ def plain_trip_runs(
     """
     Give each trip outside a block its run, setting block trips aside.
 
-    Block trips with the same stations or pass-throughs are given one
-    shared tuple.
+    Block trips with the same stations, pass-throughs or one-way
+    positions are given one shared tuple.
 
     Parameters
     ----------
@@ -679,10 +796,15 @@ def plain_trip_runs(
             blocks.append(dataclasses.replace(
                 trip, stations=shared.setdefault(trip.stations, trip.stations),
                 passes=skipped.setdefault(trip.passes, trip.passes),
+                no_board=skipped.setdefault(trip.no_board, trip.no_board),
+                no_alight=skipped.setdefault(trip.no_alight, trip.no_alight),
             ))
             continue
-        cut, stops = cut_run(run=trip.stations, passes=trip.passes)
-        run_id = table.add(trip=trip, run=cut, pattern=cut, stops=stops)
+        calls = cut_run(
+            run=trip.stations, passes=trip.passes, no_board=trip.no_board,
+            no_alight=trip.no_alight,
+        )
+        run_id = table.add(trip=trip, calls=calls, pattern=calls.stations)
         if run_id is not None:
             yield trip.trip_id, run_id
 
@@ -709,9 +831,8 @@ def block_trip_runs(
         Trip ID and run ID, for trips with a run.
     """
     for trip in trips:
-        run, stops = run_calls_of(trip=trip, nexts=nexts)
         run_id = table.add(
-            trip=trip, run=run, stops=stops,
+            trip=trip, calls=run_calls_of(trip=trip, nexts=nexts),
             pattern=until_repeated_hop(stations=trip.stations),
         )
         if run_id is not None:
@@ -773,7 +894,7 @@ def load_runs(*, conn: sqlite3.Connection) -> RunReport:
     insert_many(conn=conn, sql='INSERT INTO run_stops VALUES (?, ?, ?)',
                 rows=table.stop_rows())
     conn.execute(RUN_STOPS_INDEX)
-    insert_many(conn=conn, sql='INSERT INTO run_calls VALUES (?, ?)',
+    insert_many(conn=conn, sql='INSERT INTO run_calls VALUES (?, ?, ?, ?)',
                 rows=table.call_rows())
     conn.execute(RUN_CALLS_INDEX)
     insert_many(conn=conn,

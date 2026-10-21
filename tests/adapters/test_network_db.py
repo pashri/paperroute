@@ -227,8 +227,10 @@ def set_runs(*, path: Path, runs: Sequence[tuple[str, int]]) -> None:
         Timetable file, changed in place.
     runs : Sequence[tuple[str, int]]
         Space-separated stations and trip-days of each run; a station
-        written '~X' is passed through without stopping. The run_calls
-        rows are written only on a file with that table.
+        written '~X' is passed through without stopping, '+X' only
+        boarded at and '-X' only left at. The run_calls rows are written
+        only on a file with that table, with the one-way positions only
+        on a file with those columns.
     """
     with closing(sqlite3.connect(path)) as conn:
         conn.execute('DELETE FROM runs')
@@ -236,19 +238,35 @@ def set_runs(*, path: Path, runs: Sequence[tuple[str, int]]) -> None:
         stopping = bool(conn.execute(
             "SELECT 1 FROM sqlite_master WHERE name = 'run_calls'",
         ).fetchall())
+        one_way = bool(conn.execute(
+            "SELECT 1 FROM pragma_table_info('run_calls') "
+            "WHERE name = 'no_board'",
+        ).fetchall())
         if stopping:
             conn.execute('DELETE FROM run_calls')
         for run_id, (stations, trips) in enumerate(runs, start=1):
-            calls = [call.lstrip('~') for call in stations.split()]
+            calls = [call.lstrip('~+-') for call in stations.split()]
             stops = [call for call in stations.split() if call[0] != '~']
             conn.execute(
                 "INSERT INTO runs VALUES (?, 'train', 'T1', ?, ?)",
                 (run_id, json.dumps(calls), trips),
             )
+            row = (
+                run_id, json.dumps([call.lstrip('+-') for call in stops]),
+                *(
+                    json.dumps([
+                        pos
+                        for pos, call in enumerate(stops)
+                        if call[0] == mark
+                    ])
+                    for mark in '-+'
+                ),
+            )
             if stopping:
                 conn.execute(
-                    'INSERT INTO run_calls VALUES (?, ?)',
-                    (run_id, json.dumps(stops)),
+                    'INSERT INTO run_calls VALUES (?, ?, ?, ?)'
+                    if one_way else 'INSERT INTO run_calls VALUES (?, ?)',
+                    row if one_way else row[:2],
                 )
             conn.executemany(
                 'INSERT INTO run_stops VALUES (?, ?, ?)',
@@ -506,7 +524,7 @@ def test_to_column_keeps_one_trip_stopping_patterns_apart(
     set_runs(path=copy, runs=[('W2 W1 J C ~E1 E2', 4)])
     with closing(sqlite3.connect(copy)) as conn:
         conn.execute(
-            'INSERT INTO run_calls VALUES (1, ?)',
+            "INSERT INTO run_calls VALUES (1, ?, '[]', '[]')",
             (json.dumps(['W2', 'W1', 'J', 'E1', 'E2']),),
         )
         conn.commit()

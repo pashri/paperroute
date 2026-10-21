@@ -121,3 +121,29 @@ def schema_four(*, path: Path) -> None:
             "UPDATE meta SET value = '4' WHERE key = 'schema_version'",
         )
         conn.commit()
+
+
+def schema_five(*, path: Path) -> None:
+    """
+    Turn a built timetable back into a schema-5 file.
+
+    run_calls is made again without its one-way columns, trip_joins is
+    dropped if there, and the schema version set to '5'.
+
+    Parameters
+    ----------
+    path : Path
+        Timetable file, changed in place.
+    """
+    with closing(sqlite3.connect(path)) as conn:
+        conn.executescript(
+            'CREATE TABLE old_calls (run_id INTEGER NOT NULL, '
+            'stops TEXT NOT NULL);'
+            'INSERT INTO old_calls SELECT run_id, stops FROM run_calls;'
+            'DROP TABLE run_calls;'
+            'ALTER TABLE old_calls RENAME TO run_calls;'
+            'CREATE INDEX run_calls_run ON run_calls (run_id);'
+            'DROP TABLE IF EXISTS trip_joins;'
+            "UPDATE meta SET value = '5' WHERE key = 'schema_version';",
+        )
+        conn.commit()

@@ -19,7 +19,11 @@ from paperroute.core.reach_layout import LineExit
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
-from paperroute.core.strip_follow import followed_reach, origin_of
+from paperroute.core.strip_follow import (
+    common_pairs,
+    followed_reach,
+    origin_of,
+)
 from paperroute.core.strip_model import StripInputs
 from paperroute.core.strip_state import shown_reach
 from paperroute.core.strip_view import build_strip_view, marks_of, trips_of
@@ -620,3 +624,29 @@ def test_the_note_is_the_next_trains_own() -> None:
     assert reach is not None
     note = marks_of(inputs=early, reach=reach).note
     assert note is not None and reach.rows[note[0]].place.stop_id == 'TH'
+
+
+def test_a_stop_only_a_skipping_train_shares_falls_in_place() -> None:
+    """A third train stopping only at Granville and Central keeps the
+    line's order, with the express next."""
+    inputs = parramatta(express=1, stopping=3)
+    skipping = live(item=train(minutes=2, trip_id='z'))
+    inputs = replace(
+        inputs,
+        departures=(*inputs.departures, skipping),
+        patterns={
+            **inputs.patterns,
+            'z': line_pattern(
+                trip_id='z', stations=('PA', 'GR', 'CE'), minutes=2,
+            ),
+        },
+    )
+    assert below(reach=followed(inputs=inputs).reach) == [
+        *WEST_LINE, 'TH',
+    ]
+
+
+def test_common_pairs_keep_both_orders() -> None:
+    """Shared stations are matched in order, either side skipping."""
+    assert common_pairs(first='ABCE', second='XBYE') == [(1, 1), (3, 3)]
+    assert common_pairs(first='AE', second='BCDE') == [(1, 3)]

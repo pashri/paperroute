@@ -22,6 +22,7 @@ FOLLOWED: Final[int] = 4  # next trains the rows below the From come from
 type Call = tuple[str, PatternStop]
 type Served = list[tuple[str, PatternStop, datetime]]
 type Timed = tuple[datetime, int]
+type Row = tuple[str, PatternStop, list[Timed]]
 
 
 @dataclass(frozen=True)
@@ -192,48 +193,109 @@ def followed_runs(
     return found
 
 
-def merge_into(*, rows: list[Call], times: list[list[Timed]],
-               served: Served, train: int) -> None:
+def common_pairs(*, first: Sequence[str], second: Sequence[str]
+                 ) -> list[tuple[int, int]]:
     """
-    Add one train's stops to rows built from earlier trains.
+    Match up two station sequences, keeping each one's order.
 
     Parameters
     ----------
-    rows : list[Call]
-        Stations and calls in order; extended in place.
-    times : list[list[Timed]]
-        Each row's times and the trains they are of; extended in place.
+    first : Sequence[str]
+        Stations in order.
+    second : Sequence[str]
+        Stations in order.
+
+    Returns
+    -------
+    list[tuple[int, int]]
+        Index pairs of a longest run of stations both share in order.
+    """
+    longest = [[0] * (len(second) + 1) for _ in range(len(first) + 1)]
+    for i in reversed(range(len(first))):
+        for j in reversed(range(len(second))):
+            longest[i][j] = (
+                longest[i + 1][j + 1] + 1
+                if first[i] == second[j]
+                else max(longest[i + 1][j], longest[i][j + 1])
+            )
+    pairs: list[tuple[int, int]] = []
+    i = j = 0
+    while i < len(first) and j < len(second):
+        if first[i] == second[j]:
+            pairs.append((i, j))
+            i, j = i + 1, j + 1
+        elif longest[i + 1][j] >= longest[i][j + 1]:
+            i += 1
+        else:
+            j += 1
+    return pairs
+
+
+def merge_into(*, rows: Sequence[Row], served: Served, train: int
+               ) -> list[Row]:
+    """
+    Add one train's stops to rows built from other trains.
+
+    Parameters
+    ----------
+    rows : Sequence[Row]
+        Stations, calls and times so far, in order.
     served : Served
         The train's stops.
     train : int
         The train's index.
 
-    Notes
-    -----
-    Each stop is matched to the next row at its station. Stops between
-    two matched ones are put in before the second. Stops after the last
-    match run on past the rows' end when that match is the last row;
-    otherwise they are on a branch the rows don't follow, and are left
-    out.
+    Returns
+    -------
+    list[Row]
+        The rows with the train's time on each shared station, and its
+        other stops put in where they fall; between two shared stations,
+        the rows' own stops come first.
     """
-    at = -1
-    pending: Served = []
-    for station, stop, moment in served:
-        match = next(
-            (j for j in range(at + 1, len(rows)) if rows[j][0] == station),
-            None,
+    pairs = common_pairs(
+        first=[row[0] for row in rows],
+        second=[station for station, _, _ in served],
+    )
+    merged: list[Row] = []
+    at, back = 0, 0
+    for i, j in [*pairs, (len(rows), len(served))]:
+        merged.extend(rows[at:i])
+        merged.extend(
+            (station, stop, [(moment, train)])
+            for station, stop, moment in served[back:j]
         )
-        if match is None:
-            pending.append((station, stop, moment))
-            continue
-        rows[match:match] = [(each, call) for each, call, _ in pending]
-        times[match:match] = [[(when, train)] for _, _, when in pending]
-        at = match + len(pending)
-        times[at].append((moment, train))
-        pending = []
-    if at == len(rows) - 1:
-        rows.extend((each, call) for each, call, _ in pending)
-        times.extend([(when, train)] for _, _, when in pending)
+        if i < len(rows):
+            station, stop, timed = rows[i]
+            merged.append((station, stop, [*timed, (served[j][2], train)]))
+        at, back = i + 1, j + 1
+    return merged
+
+
+def on_branch(*, served: Served, first: Served) -> Served:
+    """
+    Cut a train's stops where it leaves the next train's way.
+
+    Parameters
+    ----------
+    served : Served
+        A train's stops.
+    first : Served
+        The next train's stops.
+
+    Returns
+    -------
+    Served
+        The stops up to the last one the next train also makes, or all
+        of them when that is the next train's last stop.
+    """
+    shared = {station for station, _, _ in first}
+    last = max(
+        (k for k, (station, _, _) in enumerate(served) if station in shared),
+        default=-1,
+    )
+    if last >= 0 and served[last][0] == first[-1][0]:
+        return served
+    return served[:last + 1]
 
 
 def steady_of(*, reach: Reach, trips: TripInputs, target: str | None
@@ -253,9 +315,11 @@ def steady_of(*, reach: Reach, trips: TripInputs, target: str | None
     Returns
     -------
     Steady | None
-        The trains, rows in calling order and each row's times; the
-        first train's stops in order, with the stops later trains make
-        between them added. None with no From or no train to build on.
+        The trains, rows in calling order and each row's times. Each
+        train's stops are cut where it leaves the next train's way (see
+        `on_branch`), then merged, the most stops first, so stops a
+        train skips fall between their neighbours. None with no From or
+        no train to build on.
     """
     origin = origin_of(reach=reach)
     if origin is None:
@@ -268,12 +332,20 @@ def steady_of(*, reach: Reach, trips: TripInputs, target: str | None
     )
     if not runs:
         return None
-    rows = [(station, stop) for station, stop, _ in runs[0][1]]
-    times = [[(moment, 0)] for _, _, moment in runs[0][1]]
-    for train, (_, served) in enumerate(runs[1:], start=1):
-        merge_into(rows=rows, times=times, served=served, train=train)
+    parts = sorted(
+        (
+            (on_branch(served=served, first=runs[0][1]), train)
+            for train, (_, served) in enumerate(runs)
+        ),
+        key=lambda part: (-len(part[0]), part[1]),
+    )
+    rows: list[Row] = []
+    for served, train in parts:
+        rows = merge_into(rows=rows, served=served, train=train)
     return Steady(
-        items=tuple(item for item, _ in runs), rows=rows, times=times,
+        items=tuple(item for item, _ in runs),
+        rows=[(station, stop) for station, stop, _ in rows],
+        times=[timed for _, _, timed in rows],
     )
 
 

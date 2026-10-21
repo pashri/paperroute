@@ -1,5 +1,7 @@
 """Tests for the request start limiter, on a fake clock."""
 
+import asyncio
+
 from paperroute.adapters.rate_limit import StartLimiter
 
 
@@ -57,3 +59,24 @@ async def test_idle_limiter_does_not_wait() -> None:
     fake.now += 2
     await limiter.wait()
     assert seconds[-1] == 0
+
+
+async def test_cancelled_waiter_leaves_later_slots_alone() -> None:
+    """Cancelling one queued waiter holds nobody up and skips no slot."""
+    fake = FakeTime()
+    release = asyncio.Event()
+
+    async def sleep(delay: float) -> None:
+        await release.wait()
+        await fake.sleep(delay)
+
+    limiter = StartLimiter(clock=fake.clock, sleep=sleep)
+    tasks = [asyncio.create_task(limiter.wait()) for _ in range(3)]
+    await asyncio.sleep(0)
+    tasks[1].cancel()
+    release.set()
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+    assert isinstance(results[1], asyncio.CancelledError)
+    assert results[0] is None
+    assert results[2] is None
+    assert fake.slept_until == [0.0, 0.5]

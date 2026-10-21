@@ -644,6 +644,16 @@ def test_retimed_twin_left_alone() -> None:
     assert (trips, aliases) == UNCHANGED
 
 
+def test_same_date_twin_matched_on_arrival_only() -> None:
+    """Same date, arrivals within a minute, departures far apart: bundle kept."""
+    bundle = ('Casino', '2026-10-21', 70200, 'Central', 80000)
+    feed = ('Casino', '2026-10-21', 72360, 'Central', 80030)
+    report, trips, aliases = twin_merge(bundle=bundle, feed=feed)
+    assert report == MergeReport(dropped=0, partial=0, overnight=1)
+    assert trips == {'NT34-b'}
+    assert aliases == [('NT34-f', 'NT34-b')]
+
+
 def test_first_departure_rule_unchanged(tmp_path: Path) -> None:
     """A same-date first-departure duplicate still drops the bundle copy."""
     db = rail_db(

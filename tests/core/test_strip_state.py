@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.core.feeds import FeedKind
+from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.map_view import DEFAULT_ZOOM, MapView
 from paperroute.core.messages import (
     DeparturesLoaded,
@@ -342,6 +342,16 @@ def test_strip_polls_positions_for_departure_modes() -> None:
     assert all(fetch.feed != BUS_POSITIONS for fetch in fetches)
     assert not kinds(effects=effects, kind=LoadModes)
     assert not kinds(effects=effects, kind=LoadShapes)
+
+
+def test_strip_map_polls_every_position_feed_until_modes_known() -> None:
+    """Strip + map polls all position feeds while area modes are unknown."""
+    _, effects = on_view(view=LiveView.STRIP_MAP, departures=trains())
+    fetches = kinds(effects=effects, kind=FetchFeed)
+    assert {fetch.feed for fetch in fetches} >= {
+        *position_feeds(modes=ALL_POSITION_MODES),
+    }
+    assert kinds(effects=effects, kind=LoadModes)
 
 
 def test_strip_trips_patterns_requested() -> None:

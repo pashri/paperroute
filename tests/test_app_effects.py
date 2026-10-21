@@ -14,6 +14,7 @@ from paperroute.adapters.tiles_db import NullTiles
 from paperroute.app import MapRenderer, run, ticker
 from paperroute.app_effects import VersionWatch
 from paperroute.core.chooser import Column, Level
+from paperroute.core.geo import MetreBox
 from paperroute.core.map_state import area_box
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
@@ -38,7 +39,7 @@ from paperroute.core.messages import (
     StripLoaded,
     TimetableSeen,
 )
-from paperroute.core.model import RouteKind, StopPlace
+from paperroute.core.model import Mode, RouteKind, StopPlace
 from paperroute.core.reach import ReachInput, RunTail, StripKey, build_reach
 from paperroute.core.saved import Saved, seeded
 from paperroute.render.chooser import draw_chooser_view
@@ -237,6 +238,46 @@ async def test_modes_load_logged(
     [record] = [r for r in caplog.records if r.message == 'modes near']
     assert record.__dict__['mpp'] == 8
     assert record.__dict__['modes'] == []
+
+
+@dataclass
+class MixedModesTimetable(EmptyPlacedTimetable):
+    """A placed timetable with trains and buses near everywhere."""
+
+    def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
+        """
+        Find a train and a bus.
+
+        Parameters
+        ----------
+        box : MetreBox
+            Ignored.
+
+        Returns
+        -------
+        frozenset[Mode]
+            Trains and buses.
+        """
+        return frozenset({Mode.TRAIN, Mode.BUS})
+
+
+async def test_modes_load_logs_modes_sorted(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A non-empty modes set is logged as a sorted list."""
+    box = area_box(centre=STOP_POINT, mpp=8)
+    with caplog.at_level(logging.INFO):
+        posted = await posted_by(
+            ports=ports_of(timetable=MixedModesTimetable()),
+            effects=[LoadModes(mpp=8, box=box)],
+        )
+    assert posted == [
+        ModesLoaded(
+            mpp=8, box=box, modes=frozenset({Mode.TRAIN, Mode.BUS}),
+        ),
+    ]
+    [record] = [r for r in caplog.records if r.message == 'modes near']
+    assert record.__dict__['modes'] == ['bus', 'train']
 
 
 async def test_load_strip_failure_posts_strip_failed() -> None:

@@ -158,7 +158,7 @@ JITTER_S: Final[float] = 0.1
 
 
 async def test_burst_is_spaced_and_complete() -> None:
-    """A burst all returns in call order, five starts spanning a second."""
+    """A burst all returns, started in call order, no more than four a second."""
     starts: list[tuple[float, int]] = []
 
     async def handler(request: web.Request) -> web.Response:

@@ -583,3 +583,20 @@ async def test_power_page_rejects_unknown(client: Client) -> None:
     """The confirm page needs a known action."""
     response = await client.get('/settings/power?action=halt')
     assert response.status == HTTPStatus.BAD_REQUEST
+
+
+@pytest.mark.parametrize('path', ['/power', '/settings/power'])
+async def test_post_with_null_origin_is_refused(
+    display: WebDisplay, client: Client, path: str,
+) -> None:
+    """A sandboxed page sends Origin: null; it can't reach the power routes."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        path,
+        data={'action': 'poweroff'},
+        headers={'Origin': 'null'},
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.FORBIDDEN
+    assert not posted

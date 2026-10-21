@@ -7,7 +7,12 @@ from hypothesis import strategies as st
 
 from paperroute.core.model import StopPlace
 from paperroute.core.reach import Reach, RowKind, RunTail
-from paperroute.core.reach_exits import exit_name, found_exits
+from paperroute.core.reach_exits import (
+    exit_leads,
+    exit_name,
+    found_exits,
+    grouped_exits,
+)
 from paperroute.core.reach_layout import LineExit
 from tests.core.reach_factories import ids, random_tails, reach_of, tail
 
@@ -216,3 +221,36 @@ def test_exit_row_name() -> None:
         'North Strathfield · T9 CCN'
     )
     assert exit_name(place=place, lines=()) == 'North Strathfield'
+
+
+def test_one_turnoff_makes_one_exit() -> None:
+    """At Strathfield, expresses to Rhodes and Epping hook at N Strathfield."""
+    tails = [
+        tail('NS CW RH EP', 20),
+        tail('RH EP', 6),
+        tail('EP', 4),
+        tail('J', 30),
+    ]
+    line = frozenset({'SF', 'J'})
+    leads = exit_leads(tails=tails, line=line, origin='SF')
+    assert leads == {('SF', 'RH'): ('SF', 'NS'), ('SF', 'EP'): ('SF', 'NS')}
+    exits = grouped_exits(
+        exits=[
+            LineExit(junction='SF', off='EP', lines=('CCN',), trips=4),
+            LineExit(junction='SF', off='NS', lines=('T2', 'T9'), trips=20),
+            LineExit(junction='SF', off='RH', lines=('T9', 'NRC'), trips=6),
+        ],
+        leads=leads,
+    )
+    assert exits == (
+        LineExit(
+            junction='SF', off='NS', lines=('T2', 'T9', 'NRC', 'CCN'),
+            trips=30,
+        ),
+    )
+
+
+def test_separate_turnoffs_stay_apart() -> None:
+    """Ways off whose trains never meet keep their own exits."""
+    tails = [tail('J W1 W2', 5), tail('J R1', 3)]
+    assert not exit_leads(tails=tails, line=LINE, origin='C')

@@ -11,7 +11,7 @@ from paperroute.adapters.timetable_db import to_point
 from paperroute.core.chooser import Choice, Column, Level
 from paperroute.core.model import RouteKind, StopPlace, until_revisit
 from paperroute.core.reach import RunTail, StripKey, line_key_of
-from paperroute.core.reach_exits import found_exits
+from paperroute.core.reach_exits import exit_leads, found_exits, grouped_exits
 from paperroute.core.reach_layout import LineExit
 
 LINE_TABLES: Final[tuple[str, ...]] = ('line_stations', 'line_aliases')
@@ -431,8 +431,9 @@ class LineTables:
         -------
         tuple[LineExit, ...]
             Exits by junction and off station, each with the lines the
-            file lists for its hop, or none; empty without a line or
-            without the line_exits table.
+            file lists for its hop, or none; ways off that make one
+            turnoff are merged (see `exit_leads`). Empty without a line
+            or without the line_exits table.
         """
         line_key = line_key_of(key=key)
         if not line or line_key is None or not self.has_tables(
@@ -442,12 +443,15 @@ class LineTables:
         rows = self.fetch(sql=LINE_EXITS, params=(line_key,))
         named = {(str(at), str(off)): str(lines) for at, off, lines in rows}
         found = found_exits(tails=tails, line=line, origin=origin)
-        return tuple(
-            LineExit(
-                junction=at,
-                off=off,
-                lines=tuple(named.get((at, off), '').split()),
-                trips=trips,
-            )
-            for (at, off), trips in sorted(found.items())
+        return grouped_exits(
+            exits=[
+                LineExit(
+                    junction=at,
+                    off=off,
+                    lines=tuple(named.get((at, off), '').split()),
+                    trips=trips,
+                )
+                for (at, off), trips in sorted(found.items())
+            ],
+            leads=exit_leads(tails=tails, line=line, origin=origin),
         )

@@ -85,13 +85,20 @@ click(0);
 results.keyboardClick = sent.splice(0);
 results.keyboardTimers = timers.filter(Boolean).length;
 results.delays = delays;
+down(); fire(); pointer.pointerleave();
+click(0);
+results.leave = sent.splice(0);
+down(); up(); click(1);
+listeners.blur();
+fire();
+results.blurClick = sent.splice(0);
 console.log(JSON.stringify(results));
 """
 
 
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_page_hold_timer_in_node(tmp_path: Path) -> None:
-    """Keys and Press button: click presses, double or long holds, and modifiers or blur cannot strand one."""
+    """Keys and Press: click presses, double or long holds, none stranded."""
     web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'live.mjs'
     script.write_text(
@@ -111,5 +118,6 @@ def test_page_hold_timer_in_node(tmp_path: Path) -> None:
         '"modifier":["press"],"blur":[],'
         '"rightClick":[],"buttonTap":[],"buttonTapTimed":["press"],'
         '"buttonDouble":["hold"],"buttonLong":["hold"],'
-        '"keyboardClick":["press"],"keyboardTimers":0,"delays":[800]}'
+        '"keyboardClick":["press"],"keyboardTimers":0,"delays":[800],'
+        '"leave":["hold","press"],"blurClick":[]}'
     )

@@ -110,6 +110,7 @@ const holders = {
 };
 
 const downKeys = new Set();
+const pressCancels = [];
 
 /**
  * Act on a key going down, ignoring repeats, typing and chords.
@@ -146,6 +147,7 @@ function onKeyUp(event) {
 function cancelAll() {
   downKeys.clear();
   Object.values(holders).forEach((holder) => holder.cancel());
+  pressCancels.forEach((cancel) => cancel());
 }
 
 /**
@@ -162,6 +164,16 @@ function wirePress(button) {
     clearTimeout(holdTimer);
     holdTimer = null;
   };
+  const abandon = () => {
+    stopHold();
+    held = false;
+  };
+  const cancel = () => {
+    abandon();
+    clearTimeout(clickTimer);
+    clickTimer = null;
+  };
+  pressCancels.push(cancel);
   const onDown = (event) => {
     if (event.button !== 0) return;
     held = false;
@@ -187,8 +199,8 @@ function wirePress(button) {
   };
   button.addEventListener('pointerdown', onDown);
   button.addEventListener('pointerup', stopHold);
-  button.addEventListener('pointercancel', stopHold);
-  button.addEventListener('pointerleave', stopHold);
+  button.addEventListener('pointercancel', abandon);
+  button.addEventListener('pointerleave', abandon);
   button.addEventListener('contextmenu', (e) => e.preventDefault());
   button.addEventListener('click', onClick);
 }

@@ -21,7 +21,8 @@
           <button type="button" data-knob="top" data-action="left"
                   aria-label="Top knob, turn left">&#x27F2; Left</button>
           <button type="button" data-knob="top" data-action="press"
-                  aria-label="Top knob, press">Press</button>
+                  aria-label="Top knob, press"
+                  aria-describedby="hint">Press</button>
           <button type="button" data-knob="top" data-action="right"
                   aria-label="Top knob, turn right">Right &#x27F3;</button>
         </div>
@@ -32,13 +33,14 @@
           <button type="button" data-knob="bottom" data-action="left"
                   aria-label="Bottom knob, turn left">&#x27F2; Left</button>
           <button type="button" data-knob="bottom" data-action="press"
-                  aria-label="Bottom knob, press">Press</button>
+                  aria-label="Bottom knob, press"
+                  aria-describedby="hint">Press</button>
           <button type="button" data-knob="bottom" data-action="right"
                   aria-label="Bottom knob, turn right">Right &#x27F3;</button>
         </div>
       </section>
     </div>
-    <p class="hint">
+    <p id="hint" class="hint">
       Keys: <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> for the top knob,
       <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> for the bottom knob;
       hold <kbd>K</kbd>, or double-click or hold Press, to pin.

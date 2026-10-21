@@ -371,13 +371,15 @@ def test_page_has_no_hold_buttons() -> None:
     web_dir = files('paperroute') / 'assets' / 'web'
     html = (web_dir / 'live.html').read_text(encoding='utf-8')
     assert 'data-action="hold"' not in html
+    assert html.count('aria-describedby="hint"') == 2
+    assert 'id="hint"' in html
     assert html.count('data-action="press"') == 2
     plain = re.sub(r'<[^>]+>', '', ' '.join(html.split()))
     assert 'hold K, or double-click or hold Press, to pin.' in plain
 
 
-def test_page_click_handler_only_for_keyboard() -> None:
-    """The click listener sends a press only when detail is zero."""
+def test_page_click_handler_constants() -> None:
+    """The script has a click listener, a zero-detail check and the timings."""
     web_dir = files('paperroute') / 'assets' / 'web'
     script = (web_dir / 'live.js').read_text(encoding='utf-8')
     assert "addEventListener('click'" in script

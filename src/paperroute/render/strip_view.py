@@ -47,7 +47,7 @@ TITLE_FACE: Final[Face] = Face(weight=700, px=20)
 TITLE_Y: Final[int] = 80
 SUBTITLE_FACE: Final[Face] = Face(weight=400, px=15)
 SUBTITLE_Y: Final[int] = 104
-ROWS_TOP: Final[int] = 160
+ROWS_TOP: Final[int] = 128
 ROW_STEP: Final[int] = 70
 LEAVES_FACE: Final[Face] = Face(weight=800, px=30)
 ARRIVES_FACE: Final[Face] = Face(weight=400, px=16)
@@ -63,7 +63,7 @@ COUNTDOWN_ROOM: Final[int] = 84  # pixels kept for the countdown
 CANCELLED_LEFT: Final[int] = 684
 CANCELLED_TEXT: Final[str] = 'CANCELLED'
 EMPTY_FACE: Final[Face] = Face(weight=700, px=15)
-EMPTY_Y: Final[int] = 190
+EMPTY_Y: Final[int] = 158
 EMPTY_LEADING: Final[int] = 20
 STRIP_EMPTY_FACE: Final[Face] = Face(weight=700, px=18)
 STRIP_EMPTY_Y: Final[int] = 250

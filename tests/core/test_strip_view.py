@@ -346,13 +346,13 @@ def test_whole_stop_buses_never_crowd_out_train_markers() -> None:
         now=START,
     )
     panel = build_strip_view(inputs=inputs).panel
-    assert panel.rows == inputs.stop_view.head_rows[:4]
+    assert panel.rows == inputs.stop_view.head_rows[:5]
     assert {row.route for row in panel.rows} == {'606'}
 
 
-def test_no_destination_panel_has_four_departures_and_no_destination_line(
+def test_no_destination_panel_has_five_departures_and_no_destination_line(
 ) -> None:
-    """With no destination the panel shows four of the whole stop."""
+    """With no destination the panel shows five of the whole stop."""
     inputs = inputs_of(
         reach=example_reach(),
         departures=[
@@ -362,7 +362,7 @@ def test_no_destination_panel_has_four_departures_and_no_destination_line(
     panel = build_strip_view(inputs=inputs).panel
     assert panel.destination is None
     assert panel.no_destination
-    assert len(panel.rows) == 4
+    assert len(panel.rows) == 5
     assert panel.title == 'C Station'
     assert panel.hint is None
 
@@ -390,8 +390,8 @@ def test_panel_row_carries_on() -> None:
     assert build_strip_view(inputs=inputs).panel.rows[0].then == then
 
 
-def test_hint_leaves_three_panel_rows() -> None:
-    """While picking TO the hint shows and only three rows fit."""
+def test_hint_leaves_four_panel_rows() -> None:
+    """While picking TO the hint shows and only four rows fit."""
     inputs = inputs_of(
         reach=example_reach(),
         departures=[
@@ -402,7 +402,7 @@ def test_hint_leaves_three_panel_rows() -> None:
         inputs=replace(inputs, picking='TO', cursor=7),
     ).panel
     assert panel.hint == 'Press: set TO · press FROM: all departures'
-    assert len(panel.rows) == 3
+    assert len(panel.rows) == 4
 
 
 def only_marker(*, inputs: StripInputs) -> Marker:
@@ -850,3 +850,21 @@ def test_approach_row_shows_its_time() -> None:
     )
     shown = times(inputs=inputs)
     assert (shown['P2'], shown['P1'], shown['C']) == ('8:00', '8:03', '8:06')
+
+
+def test_banner_and_hint_leave_three_panel_rows() -> None:
+    """Under a live data banner, picking TO leaves room for three rows."""
+    inputs = inputs_of(
+        reach=example_reach(),
+        departures=[
+            live(item=train(minutes=i, trip_id=f't{i}')) for i in range(6)
+        ],
+    )
+    inputs = replace(
+        inputs,
+        stop_view=replace(inputs.stop_view, banner='No live data yet'),
+    )
+    panel = build_strip_view(
+        inputs=replace(inputs, picking='TO', cursor=7),
+    ).panel
+    assert len(panel.rows) == 3

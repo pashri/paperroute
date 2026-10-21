@@ -50,7 +50,7 @@ from tests.render.factories import STRIP_VIEW as VIEW
 from tests.render.factories import panel_row
 
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
-PANEL_TOP = 160
+PANEL_TOP = 128
 PANEL_STEP = 70
 
 
@@ -520,3 +520,25 @@ def test_panel_heading_has_no_station_count() -> None:
     """Nothing is drawn between the Destination line and the first row."""
     frame = draw_strip_view(view=VIEW)
     assert (frame[112:PANEL_TOP - 4, 460:784] == PAPER).all()
+
+
+def test_fullest_panels_end_on_screen_and_above_the_hint() -> None:
+    """Five rows, or four under a banner or above the hint, all fit."""
+    full = [
+        draw_strip_view(view=replace(
+            VIEW,
+            banner=banner,
+            panel=replace(PANEL, rows=(panel_row(),) * rows, hint=hint),
+        ))
+        for banner, rows, hint in (
+            (None, 5, None),
+            ('No live data yet', 4, None),
+            (None, 4, 'Press: set TO'),
+            ('No live data yet', 3, 'Press: set TO'),
+        )
+    ]
+    for frame in full:
+        assert (frame[PANEL_TOP:476, 456:786] == INK).any()
+        assert (frame[476:480, 456:786] == PAPER).all()
+    for frame in full[2:]:
+        assert (frame[412:420, 456:786] == PAPER).all()

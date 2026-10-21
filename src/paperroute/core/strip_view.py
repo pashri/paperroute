@@ -789,15 +789,16 @@ def strip_panel(*, inputs: StripInputs) -> StripPanel:
     Returns
     -------
     StripPanel
-        The From, its Destination line and the first departures: four,
-        three under a hint, none while picking a From; the Stop view's
-        empty text when there are none to list.
+        The From, its Destination line and the first departures: five,
+        one fewer under a hint and one fewer under a banner, none while
+        picking a From; the Stop view's empty text when there are none
+        to list.
     """
     stop = inputs.stop_view
     hint = OPEN_HINT if on_fold(inputs=inputs) else (
         None if inputs.picking is None else HINTS.get(inputs.picking)
     )
-    shown = PANEL_ROWS - (hint is not None)
+    shown = PANEL_ROWS - (hint is not None) - (stop.banner is not None)
     return StripPanel(
         title=stop.origin,
         destination=stop.destination,

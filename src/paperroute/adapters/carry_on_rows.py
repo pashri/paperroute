@@ -3,7 +3,7 @@ Departures that reach the Destination by staying on as another trip.
 
 Leaving at the station where two trips meet means leaving the earlier
 one, so a joined trip's first call never counts as reaching the
-Destination.
+Destination, nor as a stop of its own.
 """
 
 from collections.abc import Sequence
@@ -11,7 +11,11 @@ from dataclasses import replace
 from datetime import date
 from typing import Final
 
-from paperroute.adapters.departure_rows import STILL_AT_FROM, to_departure
+from paperroute.adapters.departure_rows import (
+    STILL_AT_FROM,
+    stop_count,
+    to_departure,
+)
 from paperroute.core.model import CarryOn, Departure
 
 MAX_HOPS: Final[int] = 6
@@ -39,10 +43,12 @@ WITH RECURSIVE boarded(trip_id, seq) AS (
                     WHERE x.trip_id = o.trip_id AND x.seq > o.seq
                       AND x.dropoff <> 1 AND x.stop_id IN """ + AT_DEST + """)
 """ + STILL_AT_FROM + """),
-chain(trip_id, seq, onto, hops, reached) AS (
-  SELECT b.trip_id, b.seq, b.trip_id, 0, 0 FROM boarded b
+chain(trip_id, seq, onto, hops, reached, after, counted) AS (
+  SELECT b.trip_id, b.seq, b.trip_id, 0, 0, b.seq, 0 FROM boarded b
   UNION ALL
-  SELECT c.trip_id, c.seq, j.next_trip, c.hops + 1, """ + REACHES + """
+  SELECT c.trip_id, c.seq, j.next_trip, c.hops + 1, """ + REACHES + """,
+    (SELECT MIN(f.seq) FROM stop_times f WHERE f.trip_id = j.next_trip),
+    c.counted + """ + stop_count(trip='c.onto', after='c.after') + """
   FROM chain c
   JOIN trip_joins j ON j.trip_id = c.onto
   JOIN trips n ON n.trip_id = j.next_trip
@@ -57,7 +63,10 @@ SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
   o.seq, o.stop_id, l.seq, l.stop_id, o.dep, MIN(d.arr),
   (SELECT group_concat(a.alias_id, ' ') FROM trip_aliases a
      WHERE a.trip_id = t.trip_id),
-  {shape}, nr.short_name, n.headsign, n.trip_id
+  {shape}, nr.short_name, n.headsign, n.trip_id,
+  c.counted + """ + stop_count(
+    trip='c.onto', after='c.after', upto='d.seq',
+) + """
 FROM chain c
 JOIN stop_times d ON d.trip_id = c.onto AND d.dropoff <> 1
   AND d.stop_id IN """ + AT_DEST + AFTER_JOIN.format(call='d') + """
@@ -81,7 +90,8 @@ def carry_on_departure(*, row: tuple[object, ...], day: date) -> Departure:
 
     The departure is the boarded trip's, running to its last call, so
     realtime for the boarded trip moves its arrival. Only ``arrives`` is
-    the Destination arrival on the trip the vehicle becomes.
+    the Destination arrival on the trip the vehicle becomes, and
+    ``stops`` counts across every trip in the chain.
 
     Parameters
     ----------
@@ -96,7 +106,10 @@ def carry_on_departure(*, row: tuple[object, ...], day: date) -> Departure:
         The departure, with ``facts.onto`` naming the trip it becomes.
     """
     onto, onto_to, onto_trip = row[14:17]
-    departure = to_departure(row=(*row[:14], None, None, None), day=day)
+    departure = to_departure(
+        row=(*row[:14], None, None, None, row[17]),
+        day=day,
+    )
     return replace(
         departure,
         facts=replace(

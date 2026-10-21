@@ -495,6 +495,27 @@ def test_long_route_pair_leaves_the_countdown_clear() -> None:
     assert (frame[rows, 701:int(784 - count) - 2] == PAPER).all()
 
 
+def test_panel_arrival_with_stops_leaves_the_countdown_clear() -> None:
+    """'arr 8:47 · 12 stops' is drawn whole and ends before the time."""
+    frames = [
+        draw_strip_view(view=replace(
+            VIEW,
+            panel=replace(
+                PANEL, rows=(replace(panel_row(), stops=stops),),
+            ),
+        ))
+        for stops in (None, 12)
+    ]
+    count = Canvas().length(text='99 min', face=Face(weight=700, px=22))
+    band = (slice(PANEL_TOP + 48, PANEL_TOP + 64), slice(556, 784))
+    ends = [
+        np.flatnonzero((frame[band] == INK).any(axis=0))[-1]
+        for frame in frames
+    ]
+    assert ends[1] > ends[0] + 40
+    assert ends[1] + 556 < 784 - count - 4
+
+
 def test_panel_heading_has_no_station_count() -> None:
     """Nothing is drawn between the Destination line and the first row."""
     frame = draw_strip_view(view=VIEW)

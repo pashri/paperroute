@@ -582,3 +582,27 @@ def test_carry_on_sidebar_row_stays_inside_and_clear_of_the_time() -> None:
     assert ends[1] > ends[0] + 30
     assert ends[1] + 538 < start - 4
     assert not np.any(frames[1][top - 14 : top + 13, 785:] == INK)
+
+
+def test_sidebar_arrival_with_stops_stays_clear_of_the_pill() -> None:
+    """'arr 8:45 · 12 stops' is drawn whole and ends before FASTER."""
+    top = ROW_TOPS[0]
+    frames = [
+        draw_map_view(
+            view=replace(
+                VIEW,
+                sidebar=(
+                    replace(row(pill=Pill.FASTER), stops=stops),
+                ) * 5,
+            ),
+            base=paper(),
+        )
+        for stops in (None, 12)
+    ]
+    band = (slice(top + 14, top + 28), slice(SIDEBAR_TEXT, 706))
+    ends = [
+        np.flatnonzero((frame[band] == INK).any(axis=0))[-1]
+        for frame in frames
+    ]
+    assert ends[1] > ends[0] + 40
+    assert ends[1] + SIDEBAR_TEXT < 700

@@ -27,7 +27,12 @@ class Pill(StrEnum):
 
 @dataclass(frozen=True)
 class Row:
-    """One departure as shown; `far` when its countdown is a clock time."""
+    """
+    One departure as shown.
+
+    `far` when its countdown is a clock time; `stops` counts the stations
+    stopped at up to the Destination, None without one.
+    """
 
     route: str
     mode: Mode
@@ -42,6 +47,43 @@ class Row:
     then: CarryOn | None = None
     far: bool = False
     onto: str | None = None
+    stops: int | None = None
+
+
+def stops_text(*, stops: int) -> str:
+    """
+    Say how many stops a ride makes.
+
+    Parameters
+    ----------
+    stops : int
+        Stations stopped at.
+
+    Returns
+    -------
+    str
+        Such as '1 stop' or '6 stops'.
+    """
+    return f'{stops} stop' if stops == 1 else f'{stops} stops'
+
+
+def arrival_line(*, row: Row) -> str:
+    """
+    Make a row's small arrival line.
+
+    Parameters
+    ----------
+    row : Row
+        Departure.
+
+    Returns
+    -------
+    str
+        Such as 'arr 8:30', with the stop count after a dot when known.
+    """
+    if row.stops is None:
+        return f'arr {row.arrives_at}'
+    return f'arr {row.arrives_at}{DOT}{stops_text(stops=row.stops)}'
 
 
 @dataclass(frozen=True)
@@ -242,6 +284,7 @@ def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
         then=dep.facts.then,
         far=is_far(departs=item.departs, now=now),
         onto=onto.route if onto and onto.route != dep.route else None,
+        stops=dep.stops,
     )
 
 

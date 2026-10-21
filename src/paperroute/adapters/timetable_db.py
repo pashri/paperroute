@@ -14,7 +14,11 @@ from paperroute.adapters.carry_on_rows import (
     carry_on_departure,
     first_to_arrive,
 )
-from paperroute.adapters.departure_rows import STILL_AT_FROM, to_departure
+from paperroute.adapters.departure_rows import (
+    STILL_AT_FROM,
+    stop_count,
+    to_departure,
+)
 from paperroute.adapters.sqlite_ro import (
     Identity,
     ReadOnlyDatabase,
@@ -132,7 +136,8 @@ SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
   o.seq, o.stop_id, MIN(d.seq), d.stop_id, o.dep, d.arr,
   (SELECT group_concat(a.alias_id, ' ') FROM trip_aliases a
      WHERE a.trip_id = t.trip_id),
-  {shape}, {then}
+  {shape}, {then},
+  """ + stop_count(trip='o.trip_id', after='o.seq', upto='d.seq') + """
 FROM stop_times o
 JOIN trips t ON t.trip_id = o.trip_id
 JOIN services sv ON sv.service_id = t.service_id AND sv.date = :day

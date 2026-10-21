@@ -326,7 +326,9 @@ class Departure:
     One direct service leaving a pin's From.
 
     With a Destination it runs to that Destination; without one, to the
-    trip's last stop.
+    trip's last stop. `stops` counts the stations it stops at after the
+    From up to and including the Destination, across any carry-on; None
+    without a Destination or when not known.
     """
 
     trip_id: str
@@ -344,6 +346,7 @@ class Departure:
     service_day: date
     shape_id: str | None = None
     facts: TripFacts = NO_FACTS
+    stops: int | None = None
 
 
 def service_epoch(*, day: date) -> datetime:

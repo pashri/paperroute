@@ -11,7 +11,7 @@ from paperroute.core.map_view import (
     MapView,
     screen_point,
 )
-from paperroute.core.stop_view import Pill, Row
+from paperroute.core.stop_view import Pill, Row, arrival_line
 from paperroute.render.canvas import (
     HEIGHT,
     INK,
@@ -254,7 +254,7 @@ def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
     row_time(canvas, row=row, y=y)
     canvas.text(
         at=(SIDEBAR_TEXT, y + ARRIVES_DROP),
-        text=f'arr {row.arrives_at}',
+        text=arrival_line(row=row),
         face=ARRIVES_FACE,
         grey=INK,
     )

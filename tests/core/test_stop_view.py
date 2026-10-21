@@ -14,6 +14,7 @@ from paperroute.core.stop_view import (
     Row,
     StopInputs,
     StopView,
+    arrival_line,
     build_stop_view,
     clock_text,
     pin_tag,
@@ -595,3 +596,22 @@ def test_row_for_carry_on() -> None:
     )
     assert row.onto is None
     assert row.destination == 'Revesby'
+
+
+def test_arrival_line_counts_stops() -> None:
+    """The small line adds the stop count, singular for one."""
+    dep = replace(departure(departs=START), stops=6)
+    row = to_row(
+        item=LiveDeparture(
+            departure=dep, departs=dep.departs, arrives=dep.arrives,
+            live=False, cancelled=False,
+        ),
+        now=START,
+        pill=None,
+    )
+    assert row.stops == 6
+    assert arrival_line(row=row) == f'arr {row.arrives_at} \u00b7 6 stops'
+    assert arrival_line(row=replace(row, stops=1)).endswith(' \u00b7 1 stop')
+    assert arrival_line(row=replace(row, stops=None)) == (
+        f'arr {row.arrives_at}'
+    )

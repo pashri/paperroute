@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.core.model import Mode
-from paperroute.core.stop_view import DOT, Pill, Row, StopView
+from paperroute.core.stop_view import DOT, Pill, Row, StopView, stops_text
 from paperroute.render.canvas import HEIGHT, INK, WIDTH, Canvas, Face
 from paperroute.render.chrome import (
     ARROW_GAP,
@@ -115,7 +115,12 @@ def hero_footer(canvas: Canvas, *, row: Row, top: int) -> None:
     bay = BAY.get(row.mode, 'platform')
     where = f'{DOT}{bay} {row.platform}' if row.platform else ''
     ride = Face(weight=400, px=15)
-    text = f'{row.ride_minutes} min on the {VEHICLE[row.mode]}{where}'
+    count = (
+        '' if row.stops is None else f'{DOT}{stops_text(stops=row.stops)}'
+    )
+    text = (
+        f'{row.ride_minutes} min on the {VEHICLE[row.mode]}{where}{count}'
+    )
     canvas.text(
         at=(18, top + 240), text=canvas.fit(text=text, face=ride, width=400),
         face=ride, grey=INK)

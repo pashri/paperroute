@@ -22,6 +22,38 @@ STILL_AT_FROM: Final[str] = """
                                       WHERE stop_id = :origin
                                         OR parent_station = :origin))
 """
+STATION_OF: Final[str] = "COALESCE(NULLIF(s.parent_station, ''), s.stop_id)"
+
+
+def stop_count(*, trip: str, after: str, upto: str | None = None) -> str:
+    """
+    Make SQL counting the stations a trip stops at within a seq range.
+
+    Calls that neither pick up nor set down are passed through and not
+    counted. Neighbouring calls at the same station count once.
+
+    Parameters
+    ----------
+    trip : str
+        SQL for the trip ID.
+    after : str
+        SQL for the seq the range starts after.
+    upto : str | None
+        SQL for the last seq in the range, or None for the trip's end.
+
+    Returns
+    -------
+    str
+        A bracketed scalar subquery.
+    """
+    end = '' if upto is None else f' AND c.seq <= {upto}'
+    return f"""(SELECT COUNT(*) FROM (
+  SELECT {STATION_OF} AS here,
+    LAG({STATION_OF}) OVER (ORDER BY c.seq) AS before
+  FROM stop_times c JOIN stops s ON s.stop_id = c.stop_id
+  WHERE c.trip_id = {trip} AND c.seq > {after}{end}
+    AND NOT (c.pickup = 1 AND c.dropoff = 1))
+ WHERE before IS NULL OR here <> before)"""
 
 
 def to_departure(*, row: tuple[object, ...], day: date) -> Departure:
@@ -61,6 +93,7 @@ def to_departure(*, row: tuple[object, ...], day: date) -> Departure:
         service_day=day,
         shape_id=str(row[13]) if row[13] else None,
         facts=facts_of(row=row),
+        stops=int(str(row[17])) if len(row) > 17 else None,
     )
 
 

@@ -275,3 +275,13 @@ def test_carry_on_pill_follows_boarded_trip() -> None:
     )
     assert (draw_stop_view(view=shown)[band] == INK).mean() < 0.2
     assert (draw_stop_view(view=cancelled)[band] == INK).mean() > 0.5
+
+
+def test_hero_ride_line_adds_the_stop_count() -> None:
+    """The hero's ride line gains the stop count and stays on screen."""
+    counted = replace(BASE, hero=replace(row(), stops=12))
+    plain = draw_stop_view(view=BASE)
+    drawn = draw_stop_view(view=counted)
+    band = (slice(HEADER + 226, HEADER + 244), slice(0, 438))
+    assert (drawn[band] != plain[band]).any()
+    assert (drawn[band][:, 419:] == PAPER).all()

@@ -285,3 +285,73 @@ def test_first_to_arrive_drops_beaten_carry_ons() -> None:
     assert [d.trip_id for d in found] == [
         'quick', later.trip_id, earlier.trip_id,
     ]
+
+
+def add_loop(*, db: Path, trip: str, calls: str) -> None:
+    """
+    Add a C_2 platform and a daily trip calling at C twice.
+
+    Parameters
+    ----------
+    db : Path
+        Timetable.
+    trip : str
+        Trip ID.
+    calls : str
+        SQL ``VALUES`` rows of (seq, stop, minutes after FIRST, pickup,
+        dropoff).
+    """
+    change(db=db, sql=f"""
+        INSERT INTO stops SELECT 'C_2', name, 'C', lat, lon, '2'
+          FROM stops WHERE stop_id = 'C_1';
+        INSERT INTO trips VALUES ('{trip}', 'sydneytrains:T2',
+          'sydneytrains:daily', 'C', 0, 'loop', NULL, 'sydneytrains',
+          NULL, 1);
+        WITH c(seq, stop, minutes, pickup, dropoff) AS (VALUES {calls})
+        INSERT INTO stop_times SELECT '{trip}', seq, stop,
+          {FIRST} + minutes * 60, {FIRST} + minutes * 60, pickup, dropoff
+          FROM c;
+    """)
+
+
+def test_carry_on_counts_stops_once_at_the_join(
+    to_c: list[Departure],
+) -> None:
+    """E2 to C on c1 then c2 stops at E1 and C: E1 is not counted twice."""
+    departure, = to_c
+    assert departure.stops == 2
+
+
+def test_carry_on_counts_stops_over_many_hops(chain_db: Path) -> None:
+    """E2 to W2 stays on through four joins and stops five times."""
+    departure, = chain_departures(db=chain_db, dest='W2')
+    assert departure.stops == 5
+
+
+def test_direct_row_uses_first_destination_call(chain_db: Path) -> None:
+    """A trip reaching C twice arrives, and counts stops, at the first C."""
+    add_loop(db=chain_db, trip='cloop', calls="""
+        (1, 'E2_1', 0, 0, 0), (2, 'E1_1', 5, 0, 0), (3, 'W1_1', 7, 1, 1),
+        (4, 'C_1', 10, 0, 0), (5, 'J_1', 15, 0, 0), (6, 'C_2', 20, 0, 0)
+    """)
+    loop, = [d for d in chain_departures(db=chain_db, dest='C')
+             if d.trip_id == 'cloop']
+    assert (loop.destination_stop, loop.stops) == ('C_1', 2)
+    assert loop.arrives == datetime(2026, 10, 6, 3, 10, tzinfo=SYDNEY)
+
+
+def test_carry_on_uses_first_destination_call(chain_db: Path) -> None:
+    """Staying on into a trip reaching C twice arrives at the first C."""
+    add_loop(db=chain_db, trip='cloop', calls="""
+        (1, 'E1_1', 5, 0, 0), (2, 'C_1', 10, 0, 0),
+        (3, 'J_1', 15, 0, 0), (4, 'C_2', 20, 0, 0)
+    """)
+    change(db=chain_db, sql="""
+        DELETE FROM trip_joins;
+        INSERT INTO trip_joins VALUES ('c1', 'cloop');
+    """)
+    departure, = chain_departures(db=chain_db, dest='C')
+    assert departure.facts.onto is not None
+    assert departure.facts.onto.trip_id == 'cloop'
+    assert departure.stops == 2
+    assert departure.arrives == datetime(2026, 10, 6, 3, 10, tzinfo=SYDNEY)

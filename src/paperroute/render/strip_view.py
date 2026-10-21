@@ -5,7 +5,7 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.stop_view import Pill, Row
+from paperroute.core.stop_view import Pill, Row, arrival_line
 from paperroute.core.strip_badges import HALF_WIDE
 from paperroute.core.strip_model import (
     PANE_TRACK_X,
@@ -113,7 +113,7 @@ def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
     if whole:
         return MIDDLE_X
     arrival = canvas.text(
-        at=(MIDDLE_X, top + SECOND_DROP), text=f'arr {row.arrives_at}',
+        at=(MIDDLE_X, top + SECOND_DROP), text=arrival_line(row=row),
         face=TAG_FACE, grey=INK,
     )
     return MIDDLE_X + round(arrival) + CARRY_GAP

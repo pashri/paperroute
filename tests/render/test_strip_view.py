@@ -32,7 +32,7 @@ from paperroute.core.strip_model import (
 )
 from paperroute.core.strip_view import build_strip_view
 from paperroute.render.canvas import INK, PAPER, Canvas, Face
-from paperroute.render.chrome import BANNER, HEADER, badge
+from paperroute.render.chrome import BANNER, HEADER, badge, route_pair
 from paperroute.render.markers import badge_box
 from paperroute.render.strip_view import (
     NAME_X,
@@ -460,17 +460,36 @@ def test_whole_stop_row_unchanged() -> None:
 
 
 def test_strip_panel_row_draws_both_badges() -> None:
-    """A carry-on panel row's badges reach right, before its destination."""
-    band = (slice(PANEL_TOP + 25, PANEL_TOP + 28), slice(556, 786))
+    """A carry-on panel row's destination starts after the pair."""
+    rows = slice(PANEL_TOP + 30, PANEL_TOP + 43)
+    pair_width = route_pair(
+        Canvas(), x=556, y=0, route='T1', onto='T2', px=14,
+    )
+    plain_width = badge(Canvas(), x=556, y=0, route='T1', px=14)
     frames = [
         draw_strip_view(view=replace(
             VIEW, panel=replace(PANEL, rows=(panel_row(onto=onto),)),
         ))
         for onto in (None, 'T2')
     ]
+    edge = int(556 + pair_width)
+    gap = np.s_[rows, edge + 1:edge + 8]
+    assert (frames[1][gap] == PAPER).all()
+    plain_edge = int(556 + plain_width)
+    assert (frames[0][rows, plain_edge + 8:plain_edge + 12] == INK).any()
+    assert (frames[1][rows, edge + 8:edge + 80] == INK).any()
 
-    extents = [
-        np.flatnonzero((frame[band] == INK).any(axis=0))[-1]
-        for frame in frames
-    ]
-    assert extents[1] > extents[0] + 30
+
+def test_long_route_pair_leaves_the_countdown_clear() -> None:
+    """A BMT to CCN pair and a long destination stop before the time."""
+    long = replace(
+        panel_row(onto='CCN'), route='BMT', destination='Somewhere ' * 9,
+    )
+    frame = draw_strip_view(view=replace(
+        VIEW, panel=replace(PANEL, rows=(long,)),
+    ))
+    count = Canvas().length(
+        text='6 min', face=Face(weight=700, px=22),
+    )
+    rows = slice(PANEL_TOP + 30, PANEL_TOP + 43)
+    assert (frame[rows, 701:int(784 - count) - 2] == PAPER).all()

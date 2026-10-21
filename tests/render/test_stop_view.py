@@ -7,7 +7,7 @@ import numpy as np
 from paperroute.core.model import CarryOn, Mode
 from paperroute.core.stop_view import Pill
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
-from paperroute.render.chrome import HEADER, badge
+from paperroute.render.chrome import HEADER, badge, route_pair
 from paperroute.render.stop_view import (
     BOARD_RIGHT,
     LIST_LEFT,
@@ -211,16 +211,58 @@ def test_list_row_draws_both_badges() -> None:
     ) + 30
 
 
+def _first_ink(
+    *, frame: np.ndarray, rows: slice, start: int, stop: int,
+) -> int | None:
+    """Return the first column in [start, stop) with ink in the rows."""
+    ink = np.flatnonzero((frame[rows, start:stop] == INK).any(axis=0))
+    return int(ink[0]) + start if ink.size else None
+
+
 def test_hero_destination_starts_after_both_badges() -> None:
-    """The hero's destination moves right to clear the second badge."""
-    top = HEADER
-    band = (slice(top + 40, top + 66), slice(0, 438))
-    plain = draw_stop_view(view=replace(BASE, hero=row()))
-    pair = draw_stop_view(view=replace(BASE, hero=row(onto='T2')))
-    assert _ink_extent(frame=pair, band=band) != _ink_extent(
-        frame=plain, band=band,
+    """The hero's destination starts past the pair's right edge."""
+    rows = slice(HEADER + 40, HEADER + 60)
+    pair_width = route_pair(
+        Canvas(), x=18, y=0, route='606', onto='T2', px=20,
     )
-    assert (pair[band][:, :18] == PAPER).all()
+    plain_width = badge(Canvas(), x=18, y=0, route='606', px=20)
+    pair = draw_stop_view(view=replace(BASE, hero=row(onto='T2')))
+    plain = draw_stop_view(view=replace(BASE, hero=row()))
+    edge = int(18 + pair_width)
+    start = _first_ink(frame=pair, rows=rows, start=edge + 1, stop=438)
+    assert start is not None
+    assert start >= edge + 12
+    assert (pair[rows, edge + 1:start] == PAPER).all()
+    plain_start = _first_ink(
+        frame=plain, rows=rows, start=int(18 + plain_width) + 1, stop=438,
+    )
+    assert plain_start is not None
+    assert plain_start < start
+
+
+def test_long_route_pair_fits_every_row_style() -> None:
+    """A BMT to CCN pair stays clear of the pill and the countdown."""
+    long = replace(
+        row(onto='CCN', destination='Somewhere ' * 9),
+        route='BMT',
+        countdown='99',
+    )
+    top = HEADER + 30
+    list_view = replace(BASE, hero=None, rows=(long,))
+    frame = draw_stop_view(view=list_view)
+    badges = (slice(top + 6, top + 9), slice(440, 640))
+    count = Canvas().length(text='99 min', face=Face(weight=800, px=28))
+    end = _first_ink(frame=frame, rows=badges[0], start=440, stop=640)
+    assert end is not None
+    ink = np.flatnonzero((frame[badges] == INK).any(axis=0))
+    assert ink[-1] + 440 < min(PILL_LEFT, 640 - count)
+    hero = draw_stop_view(view=replace(BASE, hero=long))
+    assert (hero[HEADER + 40:HEADER + 60, 426:437] == PAPER).all()
+    board = draw_stop_view(
+        view=replace(BASE, destination=None, hero=None, rows=(long,)),
+    )
+    gap = np.s_[HEADER:HEADER + 48, BOARD_RIGHT + 4:PILL_LEFT - 2]
+    assert (board[gap] == PAPER).all()
 
 
 def test_carry_on_pill_follows_boarded_trip() -> None:

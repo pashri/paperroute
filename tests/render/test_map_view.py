@@ -560,17 +560,20 @@ def test_sidebar_minute_countdown_clears_a_wide_badge() -> None:
 def test_carry_on_sidebar_row_stays_inside_and_clear_of_the_time() -> None:
     """Both badges fit the sidebar and end before the countdown starts."""
     top = ROW_TOPS[0]
-    count = Canvas().length(text='12 min', face=Face(weight=800, px=34))
+    count = Canvas().length(text='99 min', face=Face(weight=800, px=34))
     start = int(784 - count)
     band = (slice(top - 8, top - 4), slice(538, start - 2))
     frames = [
         draw_map_view(
             view=replace(
-                VIEW, sidebar=(row(onto=onto, countdown='12'),) * 5,
+                VIEW,
+                sidebar=(
+                    row(route='BMT', onto=onto, countdown='99'),
+                ) * 5,
             ),
             base=paper(),
         )
-        for onto in (None, 'T2')
+        for onto in (None, 'CCN')
     ]
     ends = [
         np.flatnonzero((frame[band] == INK).any(axis=0))[-1]

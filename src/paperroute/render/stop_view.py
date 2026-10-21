@@ -33,6 +33,7 @@ VEHICLE: Final[dict[Mode, str]] = {
     Mode.REGIONAL: 'service', Mode.OTHER: 'service'}
 LIST_LEFT: Final[int] = 456
 LIST_WIDTH: Final[int] = 140
+LIST_PAIR_ROOM: Final[int] = 92  # clear of a '99 min' countdown
 FASTER_LEFT: Final[int] = 712
 PILL_LEFT: Final[int] = 600
 TAGGED_WIDTH: Final[int] = FASTER_LEFT - LIST_LEFT - 16
@@ -208,7 +209,13 @@ def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
         Row top.
     """
     route_pair(
-        canvas, x=LIST_LEFT, y=y + 14, route=row.route, onto=row.onto, px=14,
+        canvas,
+        x=LIST_LEFT,
+        y=y + 14,
+        route=row.route,
+        onto=row.onto,
+        px=14,
+        room=LIST_PAIR_ROOM,
     )
     headline(
         canvas,

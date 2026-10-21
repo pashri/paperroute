@@ -10,6 +10,7 @@ from paperroute.render.canvas import INK, PAPER, WIDTH, Box, Canvas, Face
 HEADER: Final[int] = 40
 ARROW_WIDTH: Final[float] = 22.0
 ARROW_GAP: Final[int] = 4
+MIN_PAIR_PX: Final[int] = 9
 BANNER: Final[int] = 34
 FASTER: Final[str] = 'FASTER'
 TAG_GAP: Final[int] = 8
@@ -309,12 +310,70 @@ def badge(canvas: Canvas, *, x: float, y: float, route: str,
     """
     face = Face(weight=800, px=px)
     route = canvas.fit(text=route, face=face, width=px * 4)
-    width = max(canvas.length(text=route, face=face) + 12, px * 2.4)
+    width = badge_width(canvas, route=route, px=px)
     canvas.rect(box=(x, y - px * 0.65, x + width, y + px * 0.65), grey=INK)
     canvas.text(
         at=(x + width / 2, y + 1), text=route, face=face, grey=PAPER,
         anchor='mm')
     return width
+
+
+def badge_width(canvas: Canvas, *, route: str, px: int) -> float:
+    """
+    Measure a route badge.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    route : str
+        Route label.
+    px : int
+        Text size.
+
+    Returns
+    -------
+    float
+        Badge width.
+    """
+    face = Face(weight=800, px=px)
+    route = canvas.fit(text=route, face=face, width=px * 4)
+    return max(canvas.length(text=route, face=face) + 12, px * 2.4)
+
+
+def pair_px(
+    canvas: Canvas, *, route: str, onto: str, px: int, room: float,
+) -> int:
+    """
+    Choose the largest text size, up to px, at which a pair fits a room.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    route : str
+        Route label of the boarded trip.
+    onto : str
+        Route label of the trip it becomes.
+    px : int
+        Largest text size.
+    room : float
+        Width available.
+
+    Returns
+    -------
+    int
+        Text size, never below MIN_PAIR_PX.
+    """
+    while px > MIN_PAIR_PX:
+        width = 2 * ARROW_GAP + ARROW_WIDTH + sum(
+            badge_width(canvas, route=label, px=px)
+            for label in (route, onto)
+        )
+        if width <= room:
+            break
+        px -= 1
+    return px
 
 
 def route_pair(
@@ -325,6 +384,7 @@ def route_pair(
     route: str,
     onto: str | None,
     px: int,
+    room: float | None = None,
 ) -> float:
     """
     Draw a route badge, and for a carry-on an arrow and the onto badge.
@@ -343,12 +403,17 @@ def route_pair(
         Route label of the trip it becomes, or None.
     px : int
         Text size.
+    room : float | None
+        Width the pair must fit; the text shrinks to fit it, down to
+        MIN_PAIR_PX. None means no limit.
 
     Returns
     -------
     float
         Total width.
     """
+    if onto is not None and room is not None:
+        px = pair_px(canvas, route=route, onto=onto, px=px, room=room)
     width = badge(canvas, x=x, y=y, route=route, px=px)
     if onto is None:
         return width

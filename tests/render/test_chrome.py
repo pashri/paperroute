@@ -275,3 +275,26 @@ def test_route_pair_wider_with_onto() -> None:
     pair = route_pair(canvas, x=10, y=20, route='T8', onto='T2', px=14)
     assert plain == alone
     assert pair > 2 * alone
+
+
+def test_route_pair_second_badge_starts_after_the_arrow() -> None:
+    """The onto badge's block of ink begins past the arrow's gap."""
+    canvas = Canvas()
+    first = badge(Canvas(), x=10, y=20, route='T8', px=14)
+    pair = route_pair(canvas, x=10, y=20, route='T8', onto='T2', px=14)
+    full = (canvas.grey()[:, :] == INK).sum(axis=0) >= 15
+    blocks = np.flatnonzero(full)
+    second = blocks[blocks > 10 + first + 4][0]
+    assert second >= 10 + first + 4 + 22 + 4
+    assert blocks[-1] < 10 + pair
+
+
+def test_route_pair_shrinks_to_its_room() -> None:
+    """A pair given less room than it needs shrinks to fit it."""
+    canvas = Canvas()
+    natural = route_pair(canvas, x=0, y=20, route='BMT', onto='CCN', px=14)
+    fitted = route_pair(
+        Canvas(), x=0, y=20, route='BMT', onto='CCN', px=14, room=92,
+    )
+    assert natural > 92
+    assert fitted <= 92

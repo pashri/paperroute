@@ -268,3 +268,11 @@ def test_smooth_halo_differs_from_aliased_halo() -> None:
     aliased = drawn_at_4x(smooth=False, ground=INK, grey=PAPER)
     assert (smooth == PAPER).any()
     assert not np.array_equal(smooth, aliased)
+
+
+def test_fit_draws_nothing_when_not_even_the_ellipsis_fits() -> None:
+    """A zero or negative width gives empty text, not a stray ellipsis."""
+    canvas = Canvas()
+    face = Face(weight=400, px=14)
+    assert canvas.fit(text='Redfern', face=face, width=0) == ''
+    assert canvas.fit(text='Redfern', face=face, width=-30) == ''

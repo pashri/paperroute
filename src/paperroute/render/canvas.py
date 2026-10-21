@@ -519,10 +519,13 @@ class Canvas:
         Returns
         -------
         str
-            The text, or a shortened copy ending in '...'.
+            The text, or a shortened copy ending in '...', or '' when
+            not even that fits.
         """
         if self.length(text=text, face=face) <= width:
             return text
+        if self.length(text=ELLIPSIS, face=face) > width:
+            return ''
         cut = text
         while cut and self.length(text=cut + ELLIPSIS, face=face) > width:
             cut = cut[:-1]

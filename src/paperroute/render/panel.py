@@ -8,6 +8,9 @@ from numpy.typing import NDArray
 
 from paperroute.core.device_model import WifiPhase
 from paperroute.core.panel_views import (
+    CANCEL_LINE,
+    MENU_VISIBLE,
+    TIMEOUT_LINE,
     ConfirmView,
     DeviceView,
     MenuView,
@@ -22,7 +25,6 @@ from paperroute.render.qr import qr_image
 from paperroute.render.stop_view import finish
 
 ROW_H: Final[int] = 46
-MENU_VISIBLE: Final[int] = 7
 QR_PX: Final[int] = 8
 MENU_TOP: Final[int] = HEADER + 24
 CUE_H: Final[int] = 18
@@ -52,7 +54,7 @@ MENU_FOOTER: Final[str] = (
 DEVICE_FOOTER: Final[str] = f'Full details on {LOCAL_NAME}{DOT}top press: back'
 PHONE_FOOTER: Final[str] = 'Top press: back'
 CANCEL_FOOTER: Final[str] = 'Top press: cancel'
-CONFIRM_FOOTER: Final[str] = 'Cancels by itself after 60 s'
+CONFIRM_FOOTER: Final[str] = TIMEOUT_LINE
 CONFIRM_BOX: Final[tuple[int, int, int, int]] = (32, 290, 392, 354)
 CANCEL_BOX: Final[tuple[int, int, int, int]] = (420, 290, 760, 354)
 BUTTON_EDGE: Final[int] = 3
@@ -344,7 +346,11 @@ def phone_lines(*, view: PhoneView) -> tuple[str, ...]:
     """
     network = f' ({view.network})' if view.network else ''
     return (
-        *(f'or http://{address}' for address in view.addresses[:2]),
+        *(
+            f'or {address}'
+            for address in view.addresses[:2]
+            if address != LOCAL_NAME
+        ),
         f'Your phone must be on the same Wi-Fi{network}.',
     )
 
@@ -582,9 +588,14 @@ def draw_confirm(*, view: ConfirmView) -> NDArray[np.uint8]:
         width=width,
         face=QUESTION_FACE,
     )
-    lines(canvas, texts=view.lines[:2], top=190, width=width)
+    body = tuple(
+        line
+        for line in view.lines
+        if line not in (CANCEL_LINE, TIMEOUT_LINE)
+    )
+    lines(canvas, texts=body[:2], top=190, width=width)
     button(canvas, box=CONFIRM_BOX, text=view.confirm, filled=True)
-    button(canvas, box=CANCEL_BOX, text='Top press: cancel', filled=False)
+    button(canvas, box=CANCEL_BOX, text=CANCEL_LINE, filled=False)
     footer(canvas, text=CONFIRM_FOOTER)
     return finish(canvas)
 

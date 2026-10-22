@@ -1,9 +1,48 @@
 """What the panel's settings screens and the sleep screen show."""
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
+from typing import Final
 
-from paperroute.core.device_model import WifiPhase
+from paperroute.core.device_model import (
+    Confirm,
+    ConfirmAction,
+    Origin,
+    WifiPhase,
+)
 from paperroute.core.map_view import MapView
+
+MENU_VISIBLE: Final[int] = 7
+PHONE_ASKED: Final[str] = 'Asked for from a phone on your Wi-Fi.'
+CANCEL_LINE: Final[str] = 'Top press: cancel'
+TIMEOUT_LINE: Final[str] = 'Cancels by itself after 60 s'
+CONFIRM_COPY: Final[dict[ConfirmAction, tuple[str, str, str, str]]] = {
+    ConfirmAction.RESTART: ('Restart?', 'Restart paperroute?', '', 'restart'),
+    ConfirmAction.SHUT_DOWN: (
+        'Shut down?',
+        'Shut down paperroute?',
+        "The screen will say when it's safe to unplug.",
+        'shut down',
+    ),
+    ConfirmAction.RESET_SETTINGS: (
+        'Reset settings?',
+        'Reset settings?',
+        'Clears pins, settings, Wi-Fi and the key.'
+        ' The timetable and map stay.',
+        'reset',
+    ),
+    ConfirmAction.ERASE: (
+        'Erase everything?',
+        'Erase everything?',
+        'Also deletes the timetable and map.',
+        'erase',
+    ),
+    ConfirmAction.JOIN_WIFI: (
+        'Join another network?',
+        'Start Wi-Fi setup?',
+        'paperroute leaves its Wi-Fi while you set up the new one.',
+        'start',
+    ),
+}
 
 
 @dataclass(frozen=True)
@@ -162,3 +201,47 @@ class SleepView:
 
 
 PanelView = MenuView | DeviceView | PhoneView | WifiSetupView | ConfirmView
+
+
+def confirm_view(*, confirm: Confirm) -> ConfirmView:
+    """
+    Build the screen asking to confirm an action.
+
+    Parameters
+    ----------
+    confirm : Confirm
+        The question.
+
+    Returns
+    -------
+    ConfirmView
+        The title, question, the lines under it and the button label;
+        a phone's ask says so first.
+    """
+    title, question, note, verb = CONFIRM_COPY[confirm.action]
+    asked = (PHONE_ASKED,) if confirm.origin is Origin.PHONE else ()
+    noted = (note,) if note else ()
+    return ConfirmView(
+        title=title,
+        question=question,
+        lines=(*asked, *noted, CANCEL_LINE, TIMEOUT_LINE),
+        confirm=f'Bottom press: {verb}',
+    )
+
+
+def sleep_map(*, view: MapView) -> MapView:
+    """
+    Strip a Map view to what the sleep screen draws.
+
+    Parameters
+    ----------
+    view : MapView
+        The shown pin's Map view.
+
+    Returns
+    -------
+    MapView
+        The view with no clock, sidebar, markers or banner, so it stays
+        the same while time passes.
+    """
+    return replace(view, clock='', sidebar=(), markers=(), banner=None)

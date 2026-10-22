@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
+from typing import Final
 
 
 @dataclass(frozen=True)
@@ -113,6 +114,84 @@ class DeviceFacts:
     key_set: bool
 
 
+class MenuRow(StrEnum):
+    """The Settings menu's rows, top to bottom."""
+
+    WIFI = 'Wi-Fi'
+    DEVICE = 'Device'
+    PHONE = 'Open on your phone'
+    SLEEP = 'Sleep now'
+    REBUILD = 'Rebuild timetable now'
+    RESTART = 'Restart'
+    SHUT_DOWN = 'Shut down'
+    RESET = 'Reset settings'
+
+
+MENU_ROWS: Final[tuple[MenuRow, ...]] = tuple(MenuRow)
+
+
+class PanelScreen(StrEnum):
+    """The screens the Settings menu shows."""
+
+    MENU = 'menu'
+    DEVICE = 'device'
+    PHONE = 'phone'
+
+
+@dataclass(frozen=True)
+class Menu:
+    """
+    The open Settings menu.
+
+    Attributes
+    ----------
+    screen : PanelScreen
+        The screen shown.
+    cursor : int
+        Index into `MENU_ROWS` of the chosen row.
+    """
+
+    screen: PanelScreen = PanelScreen.MENU
+    cursor: int = 0
+
+
+class ConfirmAction(StrEnum):
+    """What a confirm on the panel does once accepted."""
+
+    RESTART = 'restart'
+    SHUT_DOWN = 'shut_down'
+    RESET_SETTINGS = 'reset_settings'
+    ERASE = 'erase'
+    JOIN_WIFI = 'join_wifi'
+
+
+class Origin(StrEnum):
+    """Where a confirm was asked for."""
+
+    PANEL = 'panel'
+    PHONE = 'phone'
+
+
+@dataclass(frozen=True)
+class Confirm:
+    """
+    A question waiting for a knob press.
+
+    Attributes
+    ----------
+    action : ConfirmAction
+        What a bottom press does.
+    origin : Origin
+        Where it was asked for.
+    asked_at : datetime
+        When it was asked for.
+    """
+
+    action: ConfirmAction
+    origin: Origin
+    asked_at: datetime
+
+
 @dataclass(frozen=True)
 class DeviceStatus:
     """
@@ -134,6 +213,8 @@ class DeviceStatus:
         Whether a TfNSW API key is set; None until known.
     facts : DeviceFacts | None
         The latest probe, or None before the first.
+    asked : ConfirmAction | None
+        What a phone asked for that waits on the panel, or None.
     """
 
     timetable: str | None
@@ -143,6 +224,7 @@ class DeviceStatus:
     calls_today: int
     key_set: bool | None
     facts: DeviceFacts | None
+    asked: ConfirmAction | None = None
 
 
 class ResetKind(StrEnum):
@@ -167,12 +249,18 @@ class Panel:
         When a probe was last asked for, or None.
     resetting : ResetKind | None
         The reset under way, or None.
+    menu : Menu | None
+        The open Settings menu, or None.
+    confirm : Confirm | None
+        The question shown, or None.
     """
 
     key_set: bool | None = None
     facts: DeviceFacts | None = None
     probed_at: datetime | None = None
     resetting: ResetKind | None = None
+    menu: Menu | None = None
+    confirm: Confirm | None = None
 
 
 class JoinOutcome(StrEnum):

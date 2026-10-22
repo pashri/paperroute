@@ -13,6 +13,8 @@ from paperroute.core.map_requests import (
 )
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapView, build_map_view
 from paperroute.core.messages import Effect, Render
+from paperroute.core.panel_screens import panel_view
+from paperroute.core.panel_views import PanelView
 from paperroute.core.places import shown, shown_index
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state_model import State
@@ -160,7 +162,9 @@ def shown_strip(*, state: State, stop_view: StopView) -> StripInputs:
 
 def current_view(
     *, state: State, stop_view: StopView
-) -> StopView | MapView | StripView | StripMapView | ChooserView:
+) -> (
+    StopView | MapView | StripView | StripMapView | ChooserView | PanelView
+):
     """
     Build the view for the current state.
 
@@ -173,10 +177,14 @@ def current_view(
 
     Returns
     -------
-    StopView | MapView | StripView | StripMapView | ChooserView
-        The open chooser's screen, else the Live view shown; the Strip +
-        map's map at its own width.
+    StopView | MapView | StripView | StripMapView | ChooserView | PanelView
+        The confirm or open menu's screen, else the open chooser's
+        screen, else the Live view shown; the Strip + map's map at its
+        own width.
     """
+    panel = panel_view(state=state)
+    if panel is not None:
+        return panel
     if state.chooser is not None:
         return chooser_view(state=state, chooser=state.chooser)
     match state.view:

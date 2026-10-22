@@ -20,6 +20,13 @@ from paperroute.core.device import (
 from paperroute.core.knobs import knob_moved
 from paperroute.core.map_requests import map_feeds, shows_vehicles
 from paperroute.core.map_state import MapState, failed, with_patterns
+from paperroute.core.menu import (
+    confirm_expired,
+    confirm_knob,
+    menu_knob,
+    on_asked,
+    opened,
+)
 from paperroute.core.messages import (
     ApiKeyChanged,
     ChooserDeparturesFailed,
@@ -27,6 +34,7 @@ from paperroute.core.messages import (
     ChooserEvent,
     ColumnFailed,
     ColumnLoaded,
+    ConfirmAsked,
     DeparturesFailed,
     DeparturesLoaded,
     DeviceProbed,
@@ -41,6 +49,7 @@ from paperroute.core.messages import (
     KnobHeld,
     KnobHeldTurned,
     KnobPressed,
+    KnobsHeld,
     KnobTurned,
     LineFailed,
     LineLoaded,
@@ -444,6 +453,60 @@ def on_knob(
     return reloaded(before=state, after=after, effects=effects)
 
 
+def on_touch(
+    *, state: State, event: KnobEvent | KnobsHeld | ConfirmAsked
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Hand a touch or a phone's ask to the confirm, menu or Live view.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    event : KnobEvent | KnobsHeld | ConfirmAsked
+        What happened.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        A phone's ask shows a confirm; a touch answers the confirm shown,
+        else works the open menu, else holding both knobs opens it, else
+        it acts on the Live view.
+    """
+    if isinstance(event, ConfirmAsked):
+        return on_asked(state=state, event=event)
+    if state.panel.confirm is not None:
+        return confirm_knob(state=state, event=event)
+    if state.panel.menu is not None:
+        return menu_knob(state=state, event=event)
+    if isinstance(event, KnobsHeld):
+        return opened(state=state)
+    return on_knob(state=state, event=event)
+
+
+def on_ticked(
+    *, state: State, event: Tick
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Advance time, rebuild when due, and cancel a confirm left alone.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    event : Tick
+        Tick.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        New state and effects.
+    """
+    state, effects = with_rebuild(result=on_tick(state=state, event=event))
+    state, expired = confirm_expired(state=state)
+    return state, (*effects, *expired)
+
+
 def reloaded(
     *, before: State, after: State, effects: tuple[Effect, ...] = ()
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -744,16 +807,22 @@ def dispatched(
     result: tuple[State, tuple[Effect, ...]] = (state, ())
     if is_stale(state=state, event=event):
         return result
-    # KnobsHeld opens the menu once it exists; until then it is dropped.
     match event:
         case Tick():
-            result = with_rebuild(result=on_tick(state=state, event=event))
+            result = on_ticked(state=state, event=event)
         case DeparturesLoaded():
             result = on_loaded(state=state, event=event)
         case DeparturesFailed() | FeedFetched() | FeedFailed():
             result = on_feed(state=state, event=event)
-        case KnobTurned() | KnobPressed() | KnobHeld() | KnobHeldTurned():
-            result = on_knob(state=state, event=event)
+        case (
+            KnobTurned()
+            | KnobPressed()
+            | KnobHeld()
+            | KnobHeldTurned()
+            | KnobsHeld()
+            | ConfirmAsked()
+        ):
+            result = on_touch(state=state, event=event)
         case QuitRequested():
             result = on_quit(state=state)
         case TimetableSeen() | TimetableRebuilt():

@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.chooser_view import ChooserView
-from paperroute.core.device_model import DeviceFacts, ResetKind
+from paperroute.core.device_model import ConfirmAction, DeviceFacts, ResetKind
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.map_view import MapView
@@ -288,6 +288,13 @@ class KnobHeld:
 @dataclass(frozen=True)
 class KnobsHeld:
     """Both knobs were held down together for the hold time."""
+
+
+@dataclass(frozen=True)
+class ConfirmAsked:
+    """A phone asked for something the panel must confirm."""
+
+    action: ConfirmAction
 
 
 @dataclass(frozen=True)
@@ -613,6 +620,7 @@ Event = (
     | KnobHeld
     | KnobHeldTurned
     | KnobsHeld
+    | ConfirmAsked
     | QuitRequested
     | TimetableSeen
     | TimetableRebuilt

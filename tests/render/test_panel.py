@@ -6,6 +6,7 @@ from numpy.typing import NDArray
 
 from paperroute.core.device_model import WifiPhase
 from paperroute.core.panel_views import (
+    MENU_VISIBLE,
     ConfirmView,
     DeviceView,
     InfoRow,
@@ -19,7 +20,6 @@ from paperroute.render.panel import (
     CUE_H,
     FOOTER_Y,
     MENU_TOP,
-    MENU_VISIBLE,
     QR_PX,
     ROW_H,
     draw_panel_view,

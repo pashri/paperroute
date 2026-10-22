@@ -2411,12 +2411,6 @@ def test_top_hold_does_nothing(view: LiveView) -> None:
     assert step(state, KnobHeld(knob=Knob.TOP)) == (state, ())
 
 
-def test_both_knobs_held_does_nothing_yet() -> None:
-    """KnobsHeld is accepted and changes nothing until the menu exists."""
-    state = pinned(unpinned=ELSEWHERE, view=LiveView.STRIP)
-    assert step(state, KnobsHeld()) == (state, ())
-
-
 def test_bottom_press_cycles_four_views() -> None:
     """Presses go Stop, Map, Strip, Strip + map and back to Stop."""
     state, _ = step(fresh(centre=CENTRE), Tick(now=START))

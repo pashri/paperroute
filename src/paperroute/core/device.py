@@ -5,7 +5,13 @@ from datetime import timedelta
 from typing import Final
 
 from paperroute.core.banners import feeds_held
-from paperroute.core.device_model import DeviceStatus, ResetKind
+from paperroute.core.device_model import (
+    ConfirmAction,
+    DeviceStatus,
+    Origin,
+    PanelScreen,
+    ResetKind,
+)
 from paperroute.core.messages import (
     ApiKeyChanged,
     ControlPower,
@@ -320,10 +326,14 @@ def probe_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     -------
     tuple[State, tuple[Effect, ...]]
         State with the probe time noted, and a ProbeDevice, on the first
-        tick and once `PROBE_EVERY` has passed; unchanged otherwise.
+        tick, once `PROBE_EVERY` has passed, and on every tick while the
+        Device screen shows; unchanged otherwise.
     """
     probed_at = state.panel.probed_at
-    if probed_at is not None and state.now - probed_at < PROBE_EVERY:
+    menu = state.panel.menu
+    watched = menu is not None and menu.screen is PanelScreen.DEVICE
+    recent = probed_at is not None and state.now - probed_at < PROBE_EVERY
+    if recent and not watched:
         return state, ()
     panel = replace(state.panel, probed_at=state.now)
     return replace(state, panel=panel), (ProbeDevice(),)
@@ -369,7 +379,8 @@ def device_status(*, state: State) -> DeviceStatus:
     Returns
     -------
     DeviceStatus
-        The timetable, rebuild, calls today, key and latest facts.
+        The timetable, rebuild, calls today, key, latest facts and what
+        a phone asked for that waits on the panel.
     """
     return DeviceStatus(
         timetable=state.saving.timetable,
@@ -379,4 +390,25 @@ def device_status(*, state: State) -> DeviceStatus:
         calls_today=calls_today(quota=state.quota, day=state.now.date()),
         key_set=state.panel.key_set,
         facts=state.panel.facts,
+        asked=phone_asked(state=state),
     )
+
+
+def phone_asked(*, state: State) -> ConfirmAction | None:
+    """
+    Say what a phone asked for that waits on the panel.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    ConfirmAction | None
+        The action of a confirm a phone asked for, or None.
+    """
+    confirm = state.panel.confirm
+    if confirm is None or confirm.origin is not Origin.PHONE:
+        return None
+    return confirm.action

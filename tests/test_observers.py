@@ -152,6 +152,7 @@ def test_status_json_has_no_facts() -> None:
         'rebuild_failed': True,
         'calls_today': 12,
         'key_set': True,
+        'asked': None,
     }
     assert 'facts' not in str(snap)
     assert 'secret' not in str(snap)

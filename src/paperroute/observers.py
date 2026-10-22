@@ -201,7 +201,8 @@ def device_snapshot(*, status: DeviceStatus) -> dict[str, object]:
     Returns
     -------
     dict[str, object]
-        Timetable, schema, rebuild state, calls today and the key state.
+        Timetable, schema, rebuild state, calls today, the key state and
+        what a phone asked for that waits on the panel.
     """
     return {
         'timetable': status.timetable,
@@ -210,6 +211,7 @@ def device_snapshot(*, status: DeviceStatus) -> dict[str, object]:
         'rebuild_failed': status.rebuild_failed,
         'calls_today': status.calls_today,
         'key_set': status.key_set,
+        'asked': None if status.asked is None else status.asked.value,
     }
 
 

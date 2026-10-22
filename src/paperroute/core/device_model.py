@@ -253,6 +253,10 @@ class Panel:
         The open Settings menu, or None.
     confirm : Confirm | None
         The question shown, or None.
+    touched_at : datetime | None
+        When a knob last touched the open menu, or None.
+    probing : bool
+        Whether a probe asked for has not answered yet.
     """
 
     key_set: bool | None = None
@@ -261,6 +265,8 @@ class Panel:
     resetting: ResetKind | None = None
     menu: Menu | None = None
     confirm: Confirm | None = None
+    touched_at: datetime | None = None
+    probing: bool = False
 
 
 class JoinOutcome(StrEnum):

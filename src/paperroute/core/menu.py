@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
-from paperroute.core.device import on_power, on_reset
+from paperroute.core.device import on_power, on_reset, probe_effects
 from paperroute.core.device_model import (
     MENU_ROWS,
     Confirm,
@@ -25,12 +25,19 @@ from paperroute.core.messages import (
     KnobTurned,
     PowerAction,
     PowerRequested,
-    ProbeDevice,
 )
 from paperroute.core.state_model import State
 from paperroute.core.state_views import settled
 
 CONFIRM_WAIT: Final[timedelta] = timedelta(seconds=60)
+MENU_IDLE: Final[timedelta] = timedelta(minutes=2)
+PHONE_ASKS: Final[frozenset[ConfirmAction]] = frozenset(
+    {
+        ConfirmAction.RESET_SETTINGS,
+        ConfirmAction.ERASE,
+        ConfirmAction.JOIN_WIFI,
+    },
+)
 CONFIRM_FOR: Final[dict[MenuRow, ConfirmAction]] = {
     MenuRow.RESTART: ConfirmAction.RESTART,
     MenuRow.SHUT_DOWN: ConfirmAction.SHUT_DOWN,
@@ -186,7 +193,8 @@ def row_chosen(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        The Device screen with a probe, the phone screen, or a confirm;
+        The Device screen with a probe when one is due, the phone
+        screen, or a confirm;
         unchanged for the rows not built yet.
     """
     menu = state.panel.menu or Menu()
@@ -197,24 +205,31 @@ def row_chosen(
         return settled(state=with_confirm(state=state, confirm=confirm))
     if row is MenuRow.DEVICE:
         menu = replace(menu, screen=PanelScreen.DEVICE)
-        panel = replace(state.panel, menu=menu, probed_at=state.now)
-        return settled(state=replace(state, panel=panel), effects=(
-            ProbeDevice(),
-        ))
+        state, probes = probe_effects(
+            state=with_menu(state=state, menu=menu),
+        )
+        return settled(state=state, effects=probes)
     if row is MenuRow.PHONE:
         menu = replace(menu, screen=PanelScreen.PHONE)
         return settled(state=with_menu(state=state, menu=menu))
     return state, ()
 
 
-def accepted(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+def accepted(
+    *, state: State, confirm: Confirm
+) -> tuple[State, tuple[Effect, ...]]:
     """
-    Do what the confirm shown asked.
+    Do what a confirm asked.
+
+    Join another network only closes the confirm and menu until Wi-Fi
+    setup from the panel exists (Task 11 wires it).
 
     Parameters
     ----------
     state : State
-        State, with a confirm shown.
+        State, with the confirm shown.
+    confirm : Confirm
+        The confirm accepted.
 
     Returns
     -------
@@ -222,7 +237,7 @@ def accepted(*, state: State) -> tuple[State, tuple[Effect, ...]]:
         State with the confirm and menu gone, and the restart, shutdown
         or reset under way.
     """
-    action = state.panel.confirm.action if state.panel.confirm else None
+    action = confirm.action
     state = with_menu(state=with_confirm(state=state, confirm=None), menu=None)
     if action in POWER_FOR:
         request = PowerRequested(action=POWER_FOR[action])
@@ -251,8 +266,9 @@ def confirm_knob(
         A bottom press accepts, a top press cancels back to what was
         under it; anything else does nothing.
     """
-    if event == BOTTOM_PRESS:
-        return accepted(state=state)
+    confirm = state.panel.confirm
+    if confirm is not None and event == BOTTOM_PRESS:
+        return accepted(state=state, confirm=confirm)
     if event == TOP_PRESS:
         return settled(state=with_confirm(state=state, confirm=None))
     return state, ()
@@ -274,11 +290,14 @@ def on_asked(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the confirm shown, and its redraw; unchanged while
-        another confirm shows or a power action or reset is under way.
+        State with the confirm shown, and its redraw; unchanged for an
+        action outside `PHONE_ASKS`, or while another confirm shows or
+        a power action or reset is under way.
     """
     busy = state.power is not None or state.panel.resetting is not None
     if busy or state.panel.confirm is not None:
+        return state, ()
+    if event.action not in PHONE_ASKS:
         return state, ()
     confirm = Confirm(
         action=event.action, origin=Origin.PHONE, asked_at=state.now,
@@ -286,7 +305,7 @@ def on_asked(
     return settled(state=with_confirm(state=state, confirm=confirm))
 
 
-def confirm_expired(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+def confirm_expired(*, state: State) -> State:
     """
     Cancel a confirm left alone for `CONFIRM_WAIT`.
 
@@ -297,10 +316,55 @@ def confirm_expired(*, state: State) -> tuple[State, tuple[Effect, ...]]:
 
     Returns
     -------
-    tuple[State, tuple[Effect, ...]]
-        State with the confirm gone, and the redraw; unchanged otherwise.
+    State
+        State with the confirm gone; unchanged otherwise. The caller
+        redraws.
     """
     confirm = state.panel.confirm
     if confirm is None or state.now - confirm.asked_at < CONFIRM_WAIT:
-        return state, ()
-    return settled(state=with_confirm(state=state, confirm=None))
+        return state
+    return with_confirm(state=state, confirm=None)
+
+
+def touched(*, state: State) -> State:
+    """
+    Note a knob touch while the menu is open.
+
+    Parameters
+    ----------
+    state : State
+        State after the touch.
+
+    Returns
+    -------
+    State
+        State with the touch time noted; unchanged with the menu closed.
+    """
+    if state.panel.menu is None:
+        return state
+    return replace(state, panel=replace(state.panel, touched_at=state.now))
+
+
+def menu_idle(*, state: State) -> State:
+    """
+    Close the menu left alone for `MENU_IDLE`.
+
+    A confirm shown keeps the menu open; it has its own wait.
+
+    Parameters
+    ----------
+    state : State
+        State at the tick's time.
+
+    Returns
+    -------
+    State
+        State with the menu closed; unchanged otherwise. The caller
+        redraws.
+    """
+    panel = state.panel
+    if panel.menu is None or panel.confirm is not None:
+        return state
+    if panel.touched_at and state.now - panel.touched_at < MENU_IDLE:
+        return state
+    return with_menu(state=state, menu=None)

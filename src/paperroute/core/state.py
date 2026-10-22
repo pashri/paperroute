@@ -23,9 +23,11 @@ from paperroute.core.map_state import MapState, failed, with_patterns
 from paperroute.core.menu import (
     confirm_expired,
     confirm_knob,
+    menu_idle,
     menu_knob,
     on_asked,
     opened,
+    touched,
 )
 from paperroute.core.messages import (
     ApiKeyChanged,
@@ -471,24 +473,27 @@ def on_touch(
     tuple[State, tuple[Effect, ...]]
         A phone's ask shows a confirm; a touch answers the confirm shown,
         else works the open menu, else holding both knobs opens it, else
-        it acts on the Live view.
+        it acts on the Live view. A touch while the menu is open is
+        noted, so the menu stays open.
     """
     if isinstance(event, ConfirmAsked):
         return on_asked(state=state, event=event)
     if state.panel.confirm is not None:
-        return confirm_knob(state=state, event=event)
-    if state.panel.menu is not None:
-        return menu_knob(state=state, event=event)
-    if isinstance(event, KnobsHeld):
-        return opened(state=state)
-    return on_knob(state=state, event=event)
+        after, effects = confirm_knob(state=state, event=event)
+    elif state.panel.menu is not None:
+        after, effects = menu_knob(state=state, event=event)
+    elif isinstance(event, KnobsHeld):
+        after, effects = opened(state=state)
+    else:
+        return on_knob(state=state, event=event)
+    return touched(state=after), effects
 
 
 def on_ticked(
     *, state: State, event: Tick
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Advance time, rebuild when due, and cancel a confirm left alone.
+    Advance time, rebuild when due, and close what was left alone.
 
     Parameters
     ----------
@@ -502,9 +507,9 @@ def on_ticked(
     tuple[State, tuple[Effect, ...]]
         New state and effects.
     """
-    state, effects = with_rebuild(result=on_tick(state=state, event=event))
-    state, expired = confirm_expired(state=state)
-    return state, (*effects, *expired)
+    state = replace(state, now=event.now)
+    state = menu_idle(state=confirm_expired(state=state))
+    return with_rebuild(result=on_tick(state=state, event=event))
 
 
 def reloaded(

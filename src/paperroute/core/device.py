@@ -47,6 +47,7 @@ RESET_NOTICE: Final[dict[ResetKind, str]] = {
 }
 RESET_DETAIL: Final[str] = 'paperroute starts again by itself'
 PROBE_EVERY: Final[timedelta] = timedelta(seconds=30)
+WATCH_EVERY: Final[timedelta] = timedelta(seconds=5)
 
 
 def on_settings(
@@ -313,6 +314,33 @@ def quiet_guard(
     return after, kept
 
 
+def probe_due(*, state: State) -> bool:
+    """
+    Say whether the device's facts should be asked for now.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    bool
+        True on the first tick, once `PROBE_EVERY` has passed, or once
+        `WATCH_EVERY` has passed while the Device screen shows; never
+        while a probe younger than `PROBE_EVERY` has not answered.
+    """
+    panel = state.panel
+    if panel.probed_at is None:
+        return True
+    since = state.now - panel.probed_at
+    if panel.probing and since < PROBE_EVERY:
+        return False
+    menu = panel.menu
+    watched = menu is not None and menu.screen is PanelScreen.DEVICE
+    return since >= (WATCH_EVERY if watched else PROBE_EVERY)
+
+
 def probe_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
     Ask for the device's facts when a probe is due.
@@ -325,17 +353,12 @@ def probe_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the probe time noted, and a ProbeDevice, on the first
-        tick, once `PROBE_EVERY` has passed, and on every tick while the
-        Device screen shows; unchanged otherwise.
+        State with the probe time noted and marked running, and a
+        ProbeDevice, when `probe_due`; unchanged otherwise.
     """
-    probed_at = state.panel.probed_at
-    menu = state.panel.menu
-    watched = menu is not None and menu.screen is PanelScreen.DEVICE
-    recent = probed_at is not None and state.now - probed_at < PROBE_EVERY
-    if recent and not watched:
+    if not probe_due(state=state):
         return state, ()
-    panel = replace(state.panel, probed_at=state.now)
+    panel = replace(state.panel, probed_at=state.now, probing=True)
     return replace(state, panel=panel), (ProbeDevice(),)
 
 
@@ -356,8 +379,9 @@ def on_probed(
     -------
     tuple[State, tuple[Effect, ...]]
         State with the facts and key state, settled as a key change is;
-        unchanged when the probe failed.
+        only marked answered when the probe failed.
     """
+    state = replace(state, panel=replace(state.panel, probing=False))
     if isinstance(event, DeviceProbeFailed):
         return state, ()
     panel = replace(state.panel, facts=event.facts)

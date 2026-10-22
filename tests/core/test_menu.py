@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
+import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
@@ -17,10 +18,11 @@ from paperroute.core.device_model import (
     PanelScreen,
     ResetKind,
 )
-from paperroute.core.menu import CONFIRM_WAIT
+from paperroute.core.menu import CONFIRM_WAIT, MENU_IDLE
 from paperroute.core.messages import (
     ConfirmAsked,
     ControlPower,
+    DeviceProbed,
     Effect,
     Event,
     Knob,
@@ -184,13 +186,98 @@ def test_bottom_hold_still_pins_with_menu_closed() -> None:
     assert after.places != before.places
 
 
+def answered(*, seconds: int) -> State:
+    """
+    Answer the first tick's probe, then open the menu on Device.
+
+    Parameters
+    ----------
+    seconds : int
+        Seconds after START the menu opens.
+
+    Returns
+    -------
+    State
+        The state with the cursor on Device.
+    """
+    state, _ = run(
+        state=pinned(),
+        events=(
+            DeviceProbed(facts=device_facts()),
+            Tick(now=START + timedelta(seconds=seconds)),
+            BOTH,
+            turn(steps=1),
+        ),
+    )
+    return state
+
+
 def test_device_row_opens_device_screen_and_probes() -> None:
     """The Device row opens its screen and asks for the facts."""
-    state, effects = step(opened_at(row=MenuRow.DEVICE), DOWN)
+    state, effects = step(answered(seconds=5), DOWN)
     assert state.panel.menu == Menu(screen=PanelScreen.DEVICE, cursor=1)
     assert ProbeDevice() in effects
     state, _ = step(state, UP)
     assert state.panel.menu == Menu(cursor=1)
+
+
+def probes(*, effects: tuple[Effect, ...]) -> int:
+    """
+    Count the probes asked for.
+
+    Parameters
+    ----------
+    effects : tuple[Effect, ...]
+        Effects.
+
+    Returns
+    -------
+    int
+        How many ProbeDevice effects there are.
+    """
+    return sum(isinstance(effect, ProbeDevice) for effect in effects)
+
+
+def test_device_screen_probes_every_5s_one_at_a_time() -> None:
+    """The Device screen probes every 5 s, never over a running probe."""
+    state, effects = step(answered(seconds=5), DOWN)
+    assert probes(effects=effects) == 1
+    state, effects = step(state, Tick(now=START + timedelta(seconds=9)))
+    assert probes(effects=effects) == 0
+    state, effects = step(state, Tick(now=START + timedelta(seconds=10)))
+    assert probes(effects=effects) == 0
+    state, _ = step(state, DeviceProbed(facts=device_facts()))
+    state, effects = step(state, Tick(now=START + timedelta(seconds=10)))
+    assert probes(effects=effects) == 1
+
+
+def test_menu_closes_after_two_idle_minutes() -> None:
+    """The menu closes to Live after 2 minutes with no knob input."""
+    state, _ = run(state=pinned(), events=(BOTH, turn(steps=2), DOWN))
+    state, _ = step(state, Tick(now=START + MENU_IDLE - timedelta(seconds=1)))
+    assert state.panel.menu is not None
+    state, effects = step(state, Tick(now=START + MENU_IDLE))
+    assert state.panel.menu is None
+    assert isinstance(renders(effects=effects)[0], StopView)
+
+
+def test_join_wifi_accept_only_closes() -> None:
+    """Accepting Join another network closes it and does nothing else."""
+    asked = ConfirmAsked(action=ConfirmAction.JOIN_WIFI)
+    state, _ = step(pinned(), asked)
+    state, effects = step(state, DOWN)
+    assert state.panel.confirm is None
+    assert state.panel.menu is None
+    assert [type(effect) for effect in effects] == [Render]
+
+
+@pytest.mark.parametrize(
+    'action', [ConfirmAction.RESTART, ConfirmAction.SHUT_DOWN],
+)
+def test_phone_power_not_asked_on_panel(action: ConfirmAction) -> None:
+    """Restart and Shut down from a phone never show a confirm."""
+    state = pinned()
+    assert step(state, ConfirmAsked(action=action)) == (state, ())
 
 
 def test_phone_row_shows_addresses() -> None:
@@ -305,6 +392,12 @@ KNOB_EVENTS = st.one_of(
         knob=st.sampled_from(Knob),
         steps=st.integers(min_value=-9, max_value=9),
     ),
+    st.builds(
+        KnobHeldTurned,
+        knob=st.sampled_from(Knob),
+        steps=st.integers(min_value=-9, max_value=9),
+    ),
+    st.builds(ConfirmAsked, action=st.sampled_from(ConfirmAction)),
     st.builds(
         Tick,
         now=st.integers(min_value=0, max_value=200).map(

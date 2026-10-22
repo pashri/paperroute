@@ -214,7 +214,7 @@ def test_probed_facts_are_kept_with_the_key() -> None:
     assert state.panel.facts == facts
     assert state.panel.key_set is False
     after, effects = step(state, DeviceProbeFailed())
-    assert after is state
+    assert after == state
     assert not effects
 
 

@@ -77,7 +77,7 @@ APP_SERVICE: Final[dict[str, str]] = {
         ' --tiles /var/lib/paperroute/tiles.db'
         ' --state /var/lib/paperroute/state.json'
         ' --error-log /var/lib/paperroute/log/errors.jsonl'
-        ' --rebuild --power'
+        ' --rebuild --power --wifi'
     ),
     'ExecStopPost': '+/usr/local/bin/paperroute-led boot',
     'Restart': 'always',
@@ -572,7 +572,7 @@ def test_service_unit_passes_rebuild() -> None:
     """The app rebuilds an outdated timetable; the nightly timer stays."""
     service = read_unit(name='paperroute.service')['Service']
     timer = read_unit(name='paperroute-timetable.timer')['Timer']
-    assert service['ExecStart'].endswith(' --rebuild --power')
+    assert service['ExecStart'].endswith(' --rebuild --power --wifi')
     assert timer['OnCalendar'] == '*-*-* 03:30:00 Australia/Sydney'
 
 
@@ -1625,7 +1625,8 @@ def test_provision_installs_install_tiles() -> None:
     assert commands(path=BIN / 'provision-device', word='install-tiles') == [
         'for need in bin/install-files bin/install-release'
         ' bin/install-tiles bin/paperroute-led sudoers/paperroute-deploy'
-        ' polkit/50-paperroute-power.rules; do',
+        ' polkit/50-paperroute-power.rules'
+        ' polkit/51-paperroute-network.rules; do',
         'install -m 0755 -o root -g root "$SHARE/deploy/bin/install-tiles"'
         ' /usr/local/sbin/paperroute-install-tiles',
     ]
@@ -1663,32 +1664,83 @@ POWER_ACTIONS: Final[frozenset[str]] = frozenset({
 })
 
 
-def test_polkit_rule_allows_only_power() -> None:
-    """The rule says YES to the four power actions for paperroute only."""
-    text = script_text(path=POLKIT_RULE)
-    code = '\n'.join(
+def rule_code(*, path: Path) -> str:
+    """
+    Read a polkit rule without its comment lines.
+
+    Parameters
+    ----------
+    path : Path
+        Rule file.
+
+    Returns
+    -------
+    str
+        The code lines.
+    """
+    text = script_text(path=path)
+    return '\n'.join(
         line for line in text.splitlines()
         if not line.lstrip().startswith('//')
     )
+
+
+def assert_rule_allows_only(*, path: Path, actions: frozenset[str]) -> None:
+    """
+    Check a rule says YES to exactly these actions for paperroute only.
+
+    Parameters
+    ----------
+    path : Path
+        Rule file.
+    actions : frozenset[str]
+        The action IDs it may allow.
+    """
+    code = rule_code(path=path)
     compared = re.findall(pattern=r'action\.id == "([^"]+)"', string=code)
     named = re.findall(pattern=r'org\.freedesktop\.[\w.-]+', string=code)
-    assert sorted(compared) == sorted(POWER_ACTIONS)
-    assert set(named) == POWER_ACTIONS
+    assert sorted(compared) == sorted(actions)
+    assert set(named) == actions
     assert 'subject.user != "paperroute"' in code
     assert code.count('polkit.Result.YES') == 1
     assert code.count('polkit.Result') == 1
-    assert 'action.id' in code
     for banned in ('indexOf', 'startsWith', 'match(', 'test(', 'RegExp'):
         assert banned not in code
     assert re.findall(pattern=r'action\.id\s*[^=\s]', string=code) == []
 
 
-def test_install_files_installs_polkit_rule() -> None:
-    """The rule file alone is installed root-owned; the directory is left."""
+def test_polkit_rule_allows_only_power() -> None:
+    """The rule says YES to the four power actions for paperroute only."""
+    assert_rule_allows_only(path=POLKIT_RULE, actions=POWER_ACTIONS)
+
+
+NETWORK_RULE: Final[Path] = DEPLOY / 'polkit' / '51-paperroute-network.rules'
+NETWORK_ACTIONS: Final[frozenset[str]] = frozenset({
+    'org.freedesktop.NetworkManager.network-control',
+    'org.freedesktop.NetworkManager.settings.modify.system',
+    'org.freedesktop.NetworkManager.wifi.scan',
+    'org.freedesktop.NetworkManager.enable-disable-wifi',
+    'org.freedesktop.NetworkManager.wifi.share.protected',
+})
+
+
+def test_network_polkit_rule_allows_only_nm_actions() -> None:
+    """The rule says YES to five NetworkManager actions for paperroute."""
+    assert_rule_allows_only(path=NETWORK_RULE, actions=NETWORK_ACTIONS)
+    assert script_text(path=NETWORK_RULE).startswith(
+        '// Installed as /etc/polkit-1/rules.d/51-paperroute-network.rules',
+    )
+
+
+def test_install_files_installs_polkit_rules() -> None:
+    """Both rule files are installed root-owned, power first."""
     assert commands(path=BIN / 'install-files', word='polkit') == [
         'install -D -m 0644 -o root -g root'
         ' "$SRC/polkit/50-paperroute-power.rules"'
         ' /etc/polkit-1/rules.d/50-paperroute-power.rules',
+        'install -D -m 0644 -o root -g root'
+        ' "$SRC/polkit/51-paperroute-network.rules"'
+        ' /etc/polkit-1/rules.d/51-paperroute-network.rules',
     ]
 
 
@@ -1699,7 +1751,22 @@ def test_provision_installs_polkitd() -> None:
     needed = commands(path=BIN / 'provision-device', word='polkit')
     assert any(
         line.startswith('for need in') and line.endswith(
-            ' polkit/50-paperroute-power.rules; do',
+            ' polkit/51-paperroute-network.rules; do',
+        )
+        for line in needed
+    )
+
+
+def test_provision_installs_network_manager() -> None:
+    """provision installs NetworkManager and needs the network rule."""
+    installs = commands(path=BIN / 'provision-device', word='apt-get')
+    words = installs[-1].split()
+    assert {'network-manager', 'dnsmasq-base', 'polkitd'} <= set(words)
+    needed = commands(path=BIN / 'provision-device', word='polkit')
+    assert any(
+        line.startswith('for need in') and line.endswith(
+            ' polkit/50-paperroute-power.rules'
+            ' polkit/51-paperroute-network.rules; do',
         )
         for line in needed
     )

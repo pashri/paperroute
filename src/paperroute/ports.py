@@ -9,6 +9,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.core.chooser import ChooserPath, Column
+from paperroute.core.device_model import (
+    JoinOutcome,
+    JoinRequest,
+    WifiNetwork,
+    WifiStatus,
+)
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.messages import PowerAction
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
@@ -314,6 +320,67 @@ class PowerControl(Protocol):
         bool
             True when the action was accepted.
         """
+
+
+class WifiControl(Protocol):
+    """Scans for, joins and shares Wi-Fi."""
+
+    async def status(self) -> WifiStatus:
+        """
+        Report the Wi-Fi link.
+
+        Returns
+        -------
+        WifiStatus
+            The joined network, signal and address; not managed when
+            Wi-Fi can't be controlled.
+        """
+
+    async def scan(self) -> tuple[WifiNetwork, ...]:
+        """
+        List the networks in range.
+
+        Returns
+        -------
+        tuple[WifiNetwork, ...]
+            Strongest first.
+        """
+
+    async def start_hotspot(self, *, password: str) -> bool:
+        """
+        Start the setup hotspot.
+
+        Parameters
+        ----------
+        password : str
+            WPA2 password for the hotspot.
+
+        Returns
+        -------
+        bool
+            True when the hotspot started.
+        """
+
+    async def stop_hotspot(self) -> None:
+        """Stop the setup hotspot and remove its profile."""
+
+    async def join(self, *, request: JoinRequest) -> JoinOutcome:
+        """
+        Join a network, keeping its profile only when it worked.
+
+        Parameters
+        ----------
+        request : JoinRequest
+            Network name, password and whether it is hidden.
+
+        Returns
+        -------
+        JoinOutcome
+            How the attempt ended.
+        """
+
+    async def forget_all(self) -> None:
+        """Delete every saved Wi-Fi profile."""
 
 
 class FeedsClient(Protocol):

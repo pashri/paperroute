@@ -35,6 +35,8 @@ udevadm trigger --action=add --subsystem-match=leds
 
 install -D -m 0644 -o root -g root "$SRC/polkit/50-paperroute-power.rules" \
     /etc/polkit-1/rules.d/50-paperroute-power.rules
+install -D -m 0644 -o root -g root "$SRC/polkit/51-paperroute-network.rules" \
+    /etc/polkit-1/rules.d/51-paperroute-network.rules
 
 install -d -m 0755 -o root -g root /etc/systemd/journald.conf.d
 install -m 0644 -o root -g root "$SRC/conf/journald.conf" \

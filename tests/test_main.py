@@ -31,6 +31,7 @@ from paperroute.__main__ import (
     serve_web,
     tiles_for,
     web_main,
+    wifi_for,
 )
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
@@ -39,6 +40,7 @@ from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
+from paperroute.adapters.wifi import NmcliWifi, NullWifi
 from paperroute.app import Ports
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
@@ -198,6 +200,12 @@ def test_power_for_acts_only_when_asked() -> None:
     assert isinstance(on, SystemctlPower)
     assert on.systemctl == '/usr/bin/systemctl'
     assert isinstance(off, NullPower)
+
+
+def test_wifi_for_uses_nmcli_only_when_asked() -> None:
+    """--wifi drives NetworkManager; without it Wi-Fi is left alone."""
+    assert isinstance(wifi_for(args=argparse.Namespace(wifi=True)), NmcliWifi)
+    assert isinstance(wifi_for(args=argparse.Namespace(wifi=False)), NullWifi)
 
 
 def test_builder_for_rebuilds_only_when_asked(tmp_path: Path) -> None:

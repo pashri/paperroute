@@ -34,6 +34,7 @@ from paperroute.adapters.tfnsw import AiohttpFeedsClient
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
+from paperroute.adapters.wifi import NmcliWifi, NullWifi
 from paperroute.app import Ports, run
 from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin, StopPlace
@@ -46,6 +47,7 @@ from paperroute.ports import (
     PowerControl,
     TileRepository,
     TimetableBuilder,
+    WifiControl,
 )
 
 if TYPE_CHECKING:
@@ -198,6 +200,11 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='let the Settings page shut down and restart the device',
     )
+    runner.add_argument(
+        '--wifi',
+        action='store_true',
+        help='scan, join and share Wi-Fi through NetworkManager',
+    )
     args = parser.parse_args()
     require_both_or_neither(args=args)
     return args
@@ -264,6 +271,25 @@ def power_for(*, args: argparse.Namespace) -> PowerControl:
     if args.power:
         return SystemctlPower()
     return NullPower()
+
+
+def wifi_for(*, args: argparse.Namespace) -> WifiControl:
+    """
+    Choose how Wi-Fi is controlled.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+
+    Returns
+    -------
+    WifiControl
+        The nmcli control with --wifi; otherwise one that never acts.
+    """
+    if args.wifi:
+        return NmcliWifi()
+    return NullWifi()
 
 
 def feeds_client(*, choice: str) -> FeedsClient:

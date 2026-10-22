@@ -172,6 +172,35 @@ async def test_reset_stops_rebuild_before_deleting(tmp_path: Path) -> None:
     assert not timetable.exists()
 
 
+
+async def test_reset_waits_for_join_in_flight(tmp_path: Path) -> None:
+    """A reset waits for a join holding the radio, then forgets it."""
+    wifi = FakeWifi(outcome=JoinOutcome.JOINED)
+    resets = FileResets(
+        data_dir=tmp_path,
+        state=tmp_path / 'state.json',
+        key=FakeKeys(),
+        wifi=wifi,
+        timetable=tmp_path / 'timetable.db',
+    )
+    ports = DevicePorts(resets=resets, wifi=wifi)
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    async with ports.radio:
+        work, _ = device_work(
+            ports=ports,
+            effect=ResetDevice(kind=ResetKind.ERASE),
+            queue=queue,
+            builder=FakeBuilder(),
+        )
+        task = asyncio.ensure_future(work)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert wifi.forgotten == 0
+        await wifi.join(request=REQUEST)
+    await task
+    assert wifi.joined == [REQUEST]
+    assert wifi.forgotten == 1
+
 HOME = WifiNetwork(ssid='Home', signal=80, secured=True, enterprise=False)
 REQUEST = JoinRequest(ssid='Home', password='hunter22')
 

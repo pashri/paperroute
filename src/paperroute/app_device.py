@@ -139,9 +139,12 @@ async def reset(
         Event queue.
     builder : TimetableBuilder
         Rebuilds the timetable; stopped before any file is deleted.
+        The reset holds the radio lock, so it waits for a join or a
+        hotspot stop to finish.
     """
     await builder.stop()
-    await ports.resets.reset(kind=effect.kind)
+    async with ports.radio:
+        await ports.resets.reset(kind=effect.kind)
     await queue.put(ResetDone(kind=effect.kind))
 
 

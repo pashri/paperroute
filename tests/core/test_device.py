@@ -14,6 +14,8 @@ from paperroute.core.messages import (
     DeviceProbeFailed,
     FetchFeed,
     Knob,
+    KnobPressed,
+    KnobsHeld,
     KnobTurned,
     NoticeView,
     PowerAction,
@@ -100,6 +102,20 @@ def test_no_redraw_while_powering() -> None:
     _, effects = step(state, QuitRequested())
     assert not [e for e in effects if isinstance(e, Render)]
     assert isinstance(effects[-1], Stop)
+
+
+
+def test_touch_while_powering_changes_nothing() -> None:
+    """A touch during a power action leaves the Live state alone."""
+    state = powering(action=PowerAction.RESTART)
+    for event in (
+        KnobTurned(knob=Knob.BOTTOM, steps=1),
+        KnobPressed(knob=Knob.TOP),
+        KnobsHeld(),
+    ):
+        after, effects = step(state, event)
+        assert after == state
+        assert not effects
 
 
 def test_second_power_request_ignored() -> None:

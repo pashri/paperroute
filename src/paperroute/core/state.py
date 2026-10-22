@@ -433,12 +433,15 @@ def on_touch(
         both knobs opens it, else it acts on the Live view; the Building
         screen ignores it. A touch while the menu is open is noted, so
         the menu stays open.
-        While asleep the first touch only wakes the screen.
+        While asleep the first touch only wakes the screen. A touch
+        during a power action or a reset does nothing.
     """
     if state.panel.asleep:
         return woken(state=state, event=event)
     if isinstance(event, ConfirmAsked):
         return on_asked(state=state, event=event)
+    if state.power is not None or state.panel.resetting is not None:
+        return state, ()
     if state.panel.confirm is not None:
         after, effects = confirm_knob(state=state, event=event)
     elif state.panel.wifi is not None:

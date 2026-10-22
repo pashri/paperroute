@@ -18,6 +18,10 @@ class FeedError(Exception):
     """A feed couldn't be fetched."""
 
 
+class NoApiKey(Exception):
+    """The key file is missing, blank or unreadable."""
+
+
 def key_path_from_env() -> Path:
     """
     Name the key file from PAPERROUTE_API_KEY_FILE.
@@ -48,8 +52,21 @@ def api_key_from_env() -> str:
     -------
     str
         The key.
+
+    Raises
+    ------
+    NoApiKey
+        When the file is missing, blank or unreadable. The message names
+        the file, never its contents.
     """
-    return key_path_from_env().read_text(encoding='utf-8').strip()
+    path = key_path_from_env()
+    try:
+        key = path.read_text(encoding='utf-8').strip()
+    except (OSError, UnicodeDecodeError) as error:
+        raise NoApiKey(f'No TfNSW API key in {path}') from error
+    if not key:
+        raise NoApiKey(f'No TfNSW API key in {path}')
+    return key
 
 
 class AiohttpFeedsClient:

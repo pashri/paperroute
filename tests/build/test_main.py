@@ -129,7 +129,9 @@ def test_refresh_logs_a_missing_key_file_to_the_error_log(
     assert info.value.code == 1
     lines = error_log.read_text(encoding='utf-8').splitlines()
     assert len(lines) == 1
-    assert json.loads(lines[0])['level'] == 'ERROR'
+    record = json.loads(lines[0])
+    assert record['level'] == 'ERROR'
+    assert f'No TfNSW API key in {key_file}' in record['exc_info']
 
 
 def tiles_argv(*, tmp_path: Path, osm: Path) -> list[str]:

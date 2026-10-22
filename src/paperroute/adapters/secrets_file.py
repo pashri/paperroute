@@ -1,5 +1,6 @@
 """The file holding the TfNSW API key, read again whenever it changes."""
 
+import logging
 import re
 from pathlib import Path
 from typing import Final
@@ -12,6 +13,8 @@ __all__ = ['KEY_PATTERN', 'SecretsFile', 'key_path_from_env']
 KEY_PATTERN: Final[re.Pattern[str]] = re.compile(r'[\x21-\x7e]{16,4096}')
 SECRETS_MODE: Final[int] = 0o600
 SECRETS_PREFIX: Final[str] = '.secrets.'
+
+logger = logging.getLogger(__name__)
 
 
 class SecretsFile:
@@ -36,7 +39,8 @@ class SecretsFile:
         Returns
         -------
         str | None
-            The key, stripped; None when the file is missing or blank.
+            The key, stripped; None when the file is missing, blank or
+            unreadable.
         """
         try:
             stat = self.path.stat()
@@ -45,9 +49,24 @@ class SecretsFile:
             return None
         seen = (stat.st_mtime_ns, stat.st_size)
         if seen != self.seen:
-            text = self.path.read_text(encoding='utf-8').strip()
-            self.seen, self.key = seen, text or None
+            self.seen, self.key = seen, self.load()
         return self.key
+
+    def load(self) -> str | None:
+        """
+        Read the file; a failure is logged by file name only.
+
+        Returns
+        -------
+        str | None
+            The key, or None when blank or unreadable.
+        """
+        try:
+            text = self.path.read_text(encoding='utf-8').strip()
+        except (OSError, UnicodeDecodeError):
+            logger.warning('%s unreadable, treating as no key', self.path)
+            return None
+        return text or None
 
     def present(self) -> bool:
         """

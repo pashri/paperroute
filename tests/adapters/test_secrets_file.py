@@ -106,3 +106,19 @@ def test_key_path_from_env(
     monkeypatch.delenv('PAPERROUTE_API_KEY_FILE')
     with pytest.raises(SystemExit, match='PAPERROUTE_API_KEY_FILE'):
         key_path_from_env()
+
+
+@pytest.mark.parametrize('kind', ['undecodable', 'directory'])
+def test_unreadable_key_reads_none(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, kind: str
+) -> None:
+    """A file that cannot be read or decoded means no key, with a warning."""
+    path = tmp_path / 'secrets'
+    if kind == 'directory':
+        path.mkdir()
+    else:
+        path.write_bytes(b'fake-key-\xff\xfe0123456789')
+    assert SecretsFile(path=path).read() is None
+    assert [r.levelname for r in caplog.records] == ['WARNING']
+    assert 'secrets' in caplog.records[0].getMessage()
+    assert 'fake-key' not in caplog.text

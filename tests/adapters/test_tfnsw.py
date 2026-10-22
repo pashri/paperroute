@@ -16,6 +16,7 @@ from paperroute.adapters.rate_limit import StartLimiter
 from paperroute.adapters.tfnsw import (
     AiohttpFeedsClient,
     FeedError,
+    NoApiKey,
     api_key_from_env,
 )
 
@@ -286,3 +287,19 @@ async def recording_server(*, seen: list[str | None]) -> TestServer:
     server = TestServer(app)
     await server.start_server()
     return server
+
+
+@pytest.mark.parametrize('contents', [None, b'', b'  \n', b'\xff\xfe'])
+def test_api_key_from_env_refuses_no_key(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    contents: bytes | None,
+) -> None:
+    """A missing, blank or unreadable key file names the file, not a key."""
+    key_file = tmp_path / 'secrets'
+    if contents is not None:
+        key_file.write_bytes(contents)
+    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(key_file))
+    with pytest.raises(NoApiKey) as caught:
+        api_key_from_env()
+    assert str(caught.value) == f'No TfNSW API key in {key_file}'

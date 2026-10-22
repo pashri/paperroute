@@ -4,6 +4,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
+from typing import Final
 
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.chooser_view import ChooserView
@@ -41,6 +42,11 @@ class PowerAction(StrEnum):
 
     OFF = 'poweroff'
     RESTART = 'reboot'
+
+
+POWER_ACTIONS: Final[dict[str, PowerAction]] = {
+    action.value: action for action in PowerAction
+}
 
 
 class MapData(StrEnum):

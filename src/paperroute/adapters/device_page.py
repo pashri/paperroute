@@ -5,14 +5,13 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Final
 
-from paperroute.adapters.web_display import POWER_ACTIONS
 from paperroute.core.device_model import (
     ConfirmAction,
     DeviceFacts,
     DeviceStatus,
 )
 from paperroute.core.feeds import feed_label
-from paperroute.core.messages import PowerAction
+from paperroute.core.messages import POWER_ACTIONS, PowerAction
 from paperroute.core.model import SYDNEY
 from paperroute.core.panel_screens import (
     LOCAL_NAME,

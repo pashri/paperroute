@@ -16,6 +16,7 @@ from aiohttp import web
 from numpy.typing import NDArray
 
 from paperroute.core.messages import (
+    POWER_ACTIONS,
     Event,
     Knob,
     KnobHeld,
@@ -42,9 +43,6 @@ HELD_ACTIONS: Final[dict[str, int]] = {'hold-left': -1, 'hold-right': 1}
 HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
 SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
 CHECKED_MARK: Final[str] = '{{auto_rebuild}}'
-POWER_ACTIONS: Final[dict[str, PowerAction]] = {
-    action.value: action for action in PowerAction
-}
 CONFIRM: Final[dict[PowerAction, tuple[str, str]]] = {
     PowerAction.OFF: (
         "Shut down now? The screen will say when it's safe to unplug.",

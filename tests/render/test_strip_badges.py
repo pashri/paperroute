@@ -14,7 +14,13 @@ from hypothesis import example, given
 from hypothesis import strategies as st
 
 from paperroute.core.map_view import Marker
-from paperroute.core.strip_badges import Badge, Keepouts, Spot, pushed
+from paperroute.core.strip_badges import (
+    Badge,
+    Keepouts,
+    Spot,
+    overlaps,
+    pushed,
+)
 from paperroute.core.strip_extents import half_width, tab_half
 from paperroute.core.strip_model import (
     HOOK_GAP,
@@ -359,13 +365,16 @@ def has_room(*, badge: Badge, others: Sequence[Marker],
         True when, from every x in `tracks`, some place on its hop,
         every `STEP` pixels, keeps it clear once moved left off the
         names level with it. A badge leaves its vehicle's track only to
-        clear names, so a place at another x doesn't count.
+        clear names, so a place at another x doesn't count. The place
+        must also keep off the others by the rounded-up widths `pushed`
+        places with, which may see a sub-pixel overlap the drawings
+        don't have.
     """
     steps = int((badge.high - badge.low) / STEP)
     return all(
         any(
-            clear(
-                marker=moved(
+            fits_at(
+                place=moved(
                     marker=badge.marker,
                     x=track,
                     y=badge.low + step * STEP,
@@ -381,6 +390,35 @@ def has_room(*, badge: Badge, others: Sequence[Marker],
         for track in tracks
     )
 
+
+def fits_at(*, place: Marker, others: Sequence[Marker],
+            spots: Sequence[Spot], discs: Sequence[Spot],
+            spur: bool) -> bool:
+    """
+    Say whether a badge fits at a place, as drawn and as `pushed` sees it.
+
+    Parameters
+    ----------
+    place : Marker
+        Badge where it would go.
+    others : Sequence[Marker]
+        The other badges.
+    spots : Sequence[Spot]
+        Visible rows.
+    discs : Sequence[Spot]
+        The discs.
+    spur : bool
+        True for a badge fixed on an exit hook.
+
+    Returns
+    -------
+    bool
+        True when it is `clear` and its rounded-up extent overlaps no
+        other badge's.
+    """
+    return clear(
+        marker=place, others=others, spots=spots, discs=discs, spur=spur,
+    ) and not any(overlaps(one=place, other=other) for other in others)
 
 def moved(*, marker: Marker, x: float, y: float,
           spots: Sequence[Spot]) -> Marker:
@@ -672,12 +710,31 @@ NARROW_TAB: Final[tuple[dict[str, Spot], list[Badge], list[Spot]]] = (
     ],
     [Spot(x=30, y=350)],
 )  # a '1m' tab narrower than the widest one
+ROUNDED_UP_GAP: Final[tuple[dict[str, Spot], list[Badge], list[Spot]]] = (
+    {
+        'S0': Spot(x=30, y=62),
+        'S1': Spot(x=77.0, y=98, exit=True),
+        'S2': Spot(x=30, y=134),
+        'S3': Spot(x=77.0, y=170, exit=True),
+        'S4': Spot(x=30, y=206),
+    },
+    [
+        Badge(marker=plain(route='T1', x=30, y=134.0), low=62, high=206),
+        Badge(marker=plain(route='SH100', x=30, y=134.0), low=134, high=206),
+        Badge(
+            marker=plain(route='320', x=77.0, y=170), low=170, high=206,
+            spur=True,
+        ),
+    ],
+    [Spot(x=30, y=206)],
+)  # a gap beside a spur the drawings leave but rounded-up widths don't
 
 
 @given(case=strip_cases())
 @example(case=CROWD_BESIDE_DISC)
 @example(case=FACING_AT_DISCS)
 @example(case=NARROW_TAB)
+@example(case=ROUNDED_UP_GAP)
 def test_badges_as_drawn_stay_on_their_hops_and_clear(
     case: tuple[dict[str, Spot], list[Badge], list[Spot]],
 ) -> None:

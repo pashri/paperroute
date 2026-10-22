@@ -94,8 +94,8 @@ def knob_moved(*, state: State, event: KnobEvent) -> State:
     its press moves to the next Live view, its hold pins or unpins and a
     turn while held picks a train in the Strip's panel. Changing the pin
     or the view drops the pick. The top press, which opens the chooser,
-    is handled with the chooser's knobs, and the top hold is kept for
-    settings.
+    is handled with the chooser's knobs. The top hold does nothing, and
+    holding both knobs, which opens Settings, is a separate event.
 
     Parameters
     ----------

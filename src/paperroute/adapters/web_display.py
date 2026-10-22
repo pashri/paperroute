@@ -21,6 +21,7 @@ from paperroute.core.messages import (
     KnobHeld,
     KnobHeldTurned,
     KnobPressed,
+    KnobsHeld,
     KnobTurned,
     PowerAction,
     PowerRequested,
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 PING_S: Final[float] = 15  # seconds of quiet before an SSE comment
 ACTIONS: Final[dict[str, int]] = {'left': -1, 'right': 1}
+BOTH: Final[str] = 'both'  # the knob name for both knobs together
 HELD_ACTIONS: Final[dict[str, int]] = {'hold-left': -1, 'hold-right': 1}
 HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
 SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
@@ -63,7 +65,7 @@ def knob_event(*, knob: str, action: str) -> Event | None:
     Parameters
     ----------
     knob : str
-        `top` or `bottom`.
+        `top`, `bottom`, or `both`, which only takes `hold`.
     action : str
         `left`, `right`, `press`, `hold`, or `hold-left` or `hold-right`
         for a turn while held.
@@ -73,16 +75,37 @@ def knob_event(*, knob: str, action: str) -> Event | None:
     Event | None
         The event, or None if either value is not recognised.
     """
+    if knob == BOTH:
+        return KnobsHeld() if action == 'hold' else None
     if knob not in {member.value for member in Knob}:
         return None
+    return member_event(knob=Knob(knob), action=action)
+
+
+def member_event(*, knob: Knob, action: str) -> Event | None:
+    """
+    Turn an action on one knob into an event.
+
+    Parameters
+    ----------
+    knob : Knob
+        The knob.
+    action : str
+        `left`, `right`, `press`, `hold`, `hold-left` or `hold-right`.
+
+    Returns
+    -------
+    Event | None
+        The event, or None if the action is not recognised.
+    """
     if action == 'press':
-        return KnobPressed(knob=Knob(knob))
+        return KnobPressed(knob=knob)
     if action == 'hold':
-        return KnobHeld(knob=Knob(knob))
+        return KnobHeld(knob=knob)
     if action in HELD_ACTIONS:
-        return KnobHeldTurned(knob=Knob(knob), steps=HELD_ACTIONS[action])
+        return KnobHeldTurned(knob=knob, steps=HELD_ACTIONS[action])
     if action in ACTIONS:
-        return KnobTurned(knob=Knob(knob), steps=ACTIONS[action])
+        return KnobTurned(knob=knob, steps=ACTIONS[action])
     return None
 
 

@@ -692,6 +692,7 @@ def dispatched(
     result: tuple[State, tuple[Effect, ...]] = (state, ())
     if is_stale(state=state, event=event):
         return result
+    # KnobsHeld opens the menu once it exists; until then it is dropped.
     match event:
         case Tick():
             result = with_rebuild(result=on_tick(state=state, event=event))

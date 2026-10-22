@@ -43,6 +43,7 @@ from paperroute.core.messages import (
     KnobHeld,
     KnobHeldTurned,
     KnobPressed,
+    KnobsHeld,
     KnobTurned,
     LineFailed,
     LineLoaded,
@@ -2387,9 +2388,15 @@ def test_flip_and_hold_on_the_strip_views(view: LiveView) -> None:
 
 @pytest.mark.parametrize('view', list(LiveView))
 def test_top_hold_does_nothing(view: LiveView) -> None:
-    """Holding the top knob is kept for settings, on every Live view."""
+    """Holding the top knob alone does nothing, on every Live view."""
     state = pinned(unpinned=ELSEWHERE, view=view)
     assert step(state, KnobHeld(knob=Knob.TOP)) == (state, ())
+
+
+def test_both_knobs_held_does_nothing_yet() -> None:
+    """KnobsHeld is accepted and changes nothing until the menu exists."""
+    state = pinned(unpinned=ELSEWHERE, view=LiveView.STRIP)
+    assert step(state, KnobsHeld()) == (state, ())
 
 
 def test_bottom_press_cycles_four_views() -> None:

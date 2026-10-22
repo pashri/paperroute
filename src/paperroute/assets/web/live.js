@@ -82,16 +82,26 @@ async function refreshStatus() {
  * it is held, which send `hold-left` or `hold-right` and stop the hold.
  * @param {string} knob `top` or `bottom`.
  * @returns {{start: () => void, turn: (direction: string) => boolean,
- *   finish: () => (string | null), cancel: () => void}}
+ *   finish: () => (string | null), cancel: () => void,
+ *   absorb: () => void, isDown: () => boolean}}
  *   `start` on down; `turn` sends a turn while held and says whether it
- *   did; `finish` on up gives `press`, `hold`, `turned` or null when
- *   not down; `cancel` forgets the press.
+ *   did; `finish` on up gives `press`, `hold`, `turned`, `chord` after
+ *   an absorb, or null when not down; `cancel` forgets the press;
+ *   `absorb` drops the pending hold, leaving the press down until it
+ *   is released; `isDown` says whether the press is down.
  */
 function holdable(knob) {
-  const press = { timer: null, down: false, long: false, turned: false };
+  const press = {
+    timer: null, down: false, long: false, turned: false, absorbed: false,
+  };
   const cancel = () => {
     clearTimeout(press.timer);
-    Object.assign(press, { timer: null, down: false });
+    Object.assign(press, { timer: null, down: false, absorbed: false });
+  };
+  const absorb = () => {
+    if (!press.down) return;
+    clearTimeout(press.timer);
+    Object.assign(press, { timer: null, absorbed: true });
   };
   const start = () => {
     if (press.down) return;
@@ -101,18 +111,21 @@ function holdable(knob) {
     }, HOLD_MS);
   };
   const turn = (direction) => {
-    if (!press.down) return false;
+    if (!press.down || press.absorbed) return false;
     press.turned = true;
     sendKnob(knob, `hold-${direction}`);
     return true;
   };
   const finish = () => {
     if (!press.down) return null;
+    const absorbed = press.absorbed;
     cancel();
+    if (absorbed) return 'chord';
     if (press.turned) return 'turned';
     return press.long ? 'hold' : 'press';
   };
-  return { start, turn, finish, cancel };
+  const isDown = () => press.down;
+  return { start, turn, finish, cancel, absorb, isDown };
 }
 
 const holders = {
@@ -120,8 +133,38 @@ const holders = {
   bottom: holdable('bottom'),
 };
 
+const chord = { timer: null };
 const downKeys = new Set();
 const pressCancels = [];
+
+/**
+ * Start the Settings chord when both knobs are down: both presses are
+ * absorbed and a `HOLD_MS` timer sends the `both` hold.
+ * @returns {void}
+ */
+function startChord() {
+  if (!holders.top.isDown() || !holders.bottom.isDown()) return;
+  if (chord.timer !== null) return;
+  Object.values(holders).forEach((holder) => holder.absorb());
+  chord.timer = setTimeout(() => {
+    chord.timer = null;
+    sendKnob('both', 'hold');
+  }, HOLD_MS);
+}
+
+/**
+ * Finish a knob's press, ending the chord if it was part of one.
+ * @param {string} knob `top` or `bottom`.
+ * @returns {string | null} The holder's outcome.
+ */
+function finishKnob(knob) {
+  const outcome = holders[knob].finish();
+  if (outcome === 'chord') {
+    clearTimeout(chord.timer);
+    chord.timer = null;
+  }
+  return outcome;
+}
 
 /**
  * Turn a knob, as a turn while held when its press is down.
@@ -147,6 +190,7 @@ function onKeyDown(event) {
   else if (!downKeys.has(key)) {
     downKeys.add(key);
     holders[target[0]].start();
+    startChord();
   }
 }
 
@@ -159,7 +203,7 @@ function onKeyUp(event) {
   const key = event.key.toLowerCase();
   if (!downKeys.delete(key)) return;
   const knob = KEYS[key][0];
-  const outcome = holders[knob].finish();
+  const outcome = finishKnob(knob);
   if (outcome === 'press' || outcome === 'hold') sendKnob(knob, outcome);
 }
 
@@ -170,6 +214,8 @@ function onKeyUp(event) {
 function cancelAll() {
   downKeys.clear();
   Object.values(holders).forEach((holder) => holder.cancel());
+  clearTimeout(chord.timer);
+  chord.timer = null;
   pressCancels.forEach((cancel) => cancel());
 }
 
@@ -194,11 +240,12 @@ function wirePress(button) {
     if (event.button !== 0) return;
     swallow = false;
     holder.start();
+    startChord();
   };
   const onUp = () => {
-    const outcome = holder.finish();
+    const outcome = finishKnob(knob);
     if (outcome === 'hold') sendKnob(knob, 'hold');
-    if (outcome === 'hold' || outcome === 'turned') swallow = true;
+    if (outcome !== 'press' && outcome !== null) swallow = true;
   };
   const onClick = (event) => {
     if (event.detail === 0) {

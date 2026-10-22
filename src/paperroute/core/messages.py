@@ -253,6 +253,11 @@ class KnobHeld:
 
 
 @dataclass(frozen=True)
+class KnobsHeld:
+    """Both knobs were held down together for the hold time."""
+
+
+@dataclass(frozen=True)
 class KnobHeldTurned:
     """A knob turned by some detents while held down."""
 
@@ -534,6 +539,7 @@ Event = (
     | KnobPressed
     | KnobHeld
     | KnobHeldTurned
+    | KnobsHeld
     | QuitRequested
     | TimetableSeen
     | TimetableRebuilt

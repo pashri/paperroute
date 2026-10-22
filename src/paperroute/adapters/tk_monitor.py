@@ -15,6 +15,7 @@ from paperroute.core.messages import (
     KnobHeld,
     KnobHeldTurned,
     KnobPressed,
+    KnobsHeld,
     KnobTurned,
     QuitRequested,
 )
@@ -23,7 +24,6 @@ from paperroute.render.canvas import HEIGHT, WIDTH, encode_png
 KEYS: Final[dict[str, Event]] = {
     'a': KnobTurned(knob=Knob.TOP, steps=-1),
     'd': KnobTurned(knob=Knob.TOP, steps=1),
-    's': KnobPressed(knob=Knob.TOP),
     'j': KnobTurned(knob=Knob.BOTTOM, steps=-1),
     'l': KnobTurned(knob=Knob.BOTTOM, steps=1),
     'q': QuitRequested(),
@@ -31,24 +31,48 @@ KEYS: Final[dict[str, Event]] = {
 }
 HOLD_S: Final[float] = 0.8  # seconds a key is held to count as a hold
 REPEAT_GAP_S: Final[float] = 0.05  # seconds between an autorepeat up and down
-HOLD_KEY: Final[str] = 'k'
+HOLD_KEYS: Final[dict[str, Knob]] = {'s': Knob.TOP, 'k': Knob.BOTTOM}
 
 
 class HoldKey:
     """
-    Tells a tap, a hold and a turn while held apart on the bottom knob.
+    Tells a tap, a hold and a turn while held apart on one knob's key.
 
     X11 autorepeat sends a release then a press for each repeat, so a
     release only counts once no press follows it within `REPEAT_GAP_S`.
     The hold is settled on release: a turn while the key is down makes
     it a turn while held, with no hold after. The caller passes the
     current time and calls `poll` regularly.
+
+    Parameters
+    ----------
+    knob : Knob
+        The knob this key plays.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, knob: Knob) -> None:
+        self.knob = knob
         self._down_at: float | None = None
         self._up_at: float | None = None
         self._turned = False
+        self._absorbed = False
+
+    @property
+    def is_down(self) -> bool:
+        """
+        Whether the key is down and no release has settled.
+
+        Returns
+        -------
+        bool
+            True while the key is held, autorepeat gaps included.
+        """
+        return self._down_at is not None
+
+    def absorb(self) -> None:
+        """Forget the press and ignore the key until its release settles."""
+        if self._down_at is not None:
+            self._absorbed = True
 
     def down(self, now: float) -> Event | None:
         """
@@ -65,7 +89,7 @@ class HoldKey:
             The event for an earlier release this press settles, if any.
         """
         event = self.poll(now)
-        if self._down_at is None:
+        if self._down_at is None and not self._absorbed:
             self._down_at = now
             self._turned = False
         self._up_at = None
@@ -87,10 +111,11 @@ class HoldKey:
         """Forget a pending press or hold without posting anything."""
         self._down_at = self._up_at = None
         self._turned = False
+        self._absorbed = False
 
     def steered(self, event: Event | None) -> Event | None:
         """
-        Make a bottom turn a turn while held when the key is down.
+        Make this knob's turn a turn while held when the key is down.
 
         Parameters
         ----------
@@ -100,15 +125,15 @@ class HoldKey:
         Returns
         -------
         Event | None
-            `KnobHeldTurned` for a bottom turn while held, which also
+            `KnobHeldTurned` for this knob's turn while held, which also
             stops the hold; else the event as it is.
         """
-        if self._down_at is None or not isinstance(event, KnobTurned):
+        if self._down_at is None or self._absorbed:
             return event
-        if event.knob is not Knob.BOTTOM:
+        if not isinstance(event, KnobTurned) or event.knob is not self.knob:
             return event
         self._turned = True
-        return KnobHeldTurned(knob=Knob.BOTTOM, steps=event.steps)
+        return KnobHeldTurned(knob=self.knob, steps=event.steps)
 
     def poll(self, now: float) -> Event | None:
         """
@@ -128,13 +153,77 @@ class HoldKey:
         down, up = self._down_at, self._up_at
         if down is None or up is None or now - up < REPEAT_GAP_S:
             return None
-        turned = self._turned
+        quiet = self._turned or self._absorbed
         self.cancel()
-        if turned:
+        if quiet:
             return None
         if up - down >= HOLD_S:
-            return KnobHeld(knob=Knob.BOTTOM)
-        return KnobPressed(knob=Knob.BOTTOM)
+            return KnobHeld(knob=self.knob)
+        return KnobPressed(knob=self.knob)
+
+
+class Chord:
+    """
+    Spots both knob keys held down together for `HOLD_S`.
+
+    When the second key goes down, both keys are absorbed so neither
+    sends its own press or hold. A release before the hold time drops
+    the chord and sends nothing.
+
+    Parameters
+    ----------
+    top : HoldKey
+        The top knob's key.
+    bottom : HoldKey
+        The bottom knob's key.
+    """
+
+    def __init__(self, *, top: HoldKey, bottom: HoldKey) -> None:
+        self.top = top
+        self.bottom = bottom
+        self._started_at: float | None = None
+        self._sent = False
+
+    def down(self, *, now: float) -> None:
+        """
+        Start the chord if both keys are down; call after a key's down.
+
+        Parameters
+        ----------
+        now : float
+            Current time in seconds.
+        """
+        if not (self.top.is_down and self.bottom.is_down):
+            return
+        self.top.absorb()
+        self.bottom.absorb()
+        if self._started_at is None:
+            self._started_at = now
+
+    def poll(self, *, now: float) -> Event | None:
+        """
+        Send `KnobsHeld` once when both keys have stayed down.
+
+        Parameters
+        ----------
+        now : float
+            Current time in seconds.
+
+        Returns
+        -------
+        Event | None
+            `KnobsHeld` the first time the hold time passes, else None.
+        """
+        if self._started_at is None:
+            return None
+        if not (self.top.is_down and self.bottom.is_down):
+            self._started_at = None
+            self._sent = False
+            return None
+        if self._sent or now - self._started_at < HOLD_S:
+            return None
+        self._sent = True
+        return KnobsHeld()
 
 
 def key_event(*, keysym: str) -> Event | None:
@@ -159,7 +248,12 @@ class TkMonitor:
 
     def __init__(self) -> None:
         self.post: Callable[[Event], None] | None = None
-        self.hold = HoldKey()
+        self.holds = {
+            key: HoldKey(knob=knob) for key, knob in HOLD_KEYS.items()
+        }
+        self.chord = Chord(
+            top=self.holds['s'], bottom=self.holds['k'],
+        )
         self.root = tkinter.Tk()
         self.root.title('paperroute')
         self.root.protocol('WM_DELETE_WINDOW', self.on_close)
@@ -205,28 +299,34 @@ class TkMonitor:
         key : tkinter.Event[tkinter.Misc]
             Tk key event.
         """
-        if key.keysym.lower() == HOLD_KEY:
-            event = self.hold.down(time.monotonic())
+        now = time.monotonic()
+        hold = self.holds.get(key.keysym.lower())
+        if hold is not None:
+            event = hold.down(now)
+            self.chord.down(now=now)
         else:
-            event = self.hold.steered(key_event(keysym=key.keysym))
+            event = key_event(keysym=key.keysym)
+            for held in self.holds.values():
+                event = held.steered(event)
         if event is not None and self.post is not None:
             self.post(event)
 
     def on_key_release(self, key: 'tkinter.Event[tkinter.Misc]') -> None:
         """
-        Note the release of the hold key.
+        Note the release of a hold key.
 
         Parameters
         ----------
         key : tkinter.Event[tkinter.Misc]
             Tk key event.
         """
-        if key.keysym.lower() == HOLD_KEY:
-            self.hold.up(time.monotonic())
+        hold = self.holds.get(key.keysym.lower())
+        if hold is not None:
+            hold.up(time.monotonic())
 
     def on_focus_out(self, key: 'tkinter.Event[tkinter.Misc]') -> None:
         """
-        Drop a pending hold when the window loses focus.
+        Drop pending holds when the window loses focus.
 
         Parameters
         ----------
@@ -234,7 +334,8 @@ class TkMonitor:
             Tk focus event.
         """
         del key
-        self.hold.cancel()
+        for hold in self.holds.values():
+            hold.cancel()
 
     def on_close(self) -> None:
         """Post QuitRequested when the window's close button is pressed."""
@@ -244,9 +345,12 @@ class TkMonitor:
     def pump(self) -> None:
         """Process pending window events."""
         self.root.update()
-        event = self.hold.poll(time.monotonic())
-        if event is not None and self.post is not None:
-            self.post(event)
+        now = time.monotonic()
+        events = [self.chord.poll(now=now)]
+        events += [hold.poll(now) for hold in self.holds.values()]
+        for event in events:
+            if event is not None and self.post is not None:
+                self.post(event)
 
     def close(self) -> None:
         """Close the window; does nothing if it is already gone."""

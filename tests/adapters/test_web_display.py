@@ -20,6 +20,7 @@ from paperroute.core.messages import (
     KnobHeld,
     KnobHeldTurned,
     KnobPressed,
+    KnobsHeld,
     KnobTurned,
     PowerAction,
     PowerRequested,
@@ -83,6 +84,8 @@ async def _read_event(*, response: ClientResponse) -> tuple[str, str]:
     ('bottom', 'right', KnobTurned(knob=Knob.BOTTOM, steps=1)),
     ('bottom', 'press', KnobPressed(knob=Knob.BOTTOM)),
     ('bottom', 'hold', KnobHeld(knob=Knob.BOTTOM)),
+    ('both', 'hold', KnobsHeld()),
+    ('both', 'press', None),
     ('middle', 'left', None),
     ('top', 'spin', None),
 ])
@@ -165,6 +168,23 @@ async def test_knob_post_posts_event(
         KnobTurned(knob=Knob.BOTTOM, steps=1),
         KnobPressed(knob=Knob.TOP),
     ]
+
+
+async def test_knob_both_hold_posts_knobs_held(
+    display: WebDisplay, client: Client
+) -> None:
+    """Both-knob hold posts KnobsHeld; any other both action is a 400."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        '/knob', data={'knob': 'both', 'action': 'hold'},
+    )
+    assert response.status == HTTPStatus.NO_CONTENT
+    response = await client.post(
+        '/knob', data={'knob': 'both', 'action': 'press'},
+    )
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert posted == [KnobsHeld()]
 
 
 @pytest.mark.parametrize('payload', [
@@ -613,3 +633,14 @@ async def test_post_with_null_origin_is_refused(
     )
     assert response.status == HTTPStatus.FORBIDDEN
     assert not posted
+
+
+def test_page_hint_names_settings_chord() -> None:
+    """The hint says how to open Settings from the page."""
+    web_dir = files('paperroute') / 'assets' / 'web'
+    html = (web_dir / 'live.html').read_text(encoding='utf-8')
+    plain = re.sub(r'<[^>]+>', '', ' '.join(html.split()))
+    assert (
+        'Hold S and K together, or both Press buttons, for Settings.'
+        in plain
+    )

@@ -34,30 +34,9 @@ const nodes = {
   '#auto-rebuild': element(),
   '#timetable-save': element(),
   '#settings-status': element(),
-  '#device-status': element(),
 };
-const forms = [];
-const dialogs = [];
-for (const action of ['reboot', 'poweroff']) {
-  const form = { ...on(), dataset: { power: action } };
-  const dialog = {
-    ...on(), dataset: { power: action }, open: false, returnValue: 'x',
-    showModal() { this.open = true; },
-  };
-  dialog.close = (value) => {
-    dialog.open = false;
-    dialog.returnValue = value;
-    dialog.listeners.close({ currentTarget: dialog });
-  };
-  forms.push(form);
-  dialogs.push(dialog);
-  nodes[`#${action}-dialog`] = dialog;
-}
 globalThis.document = {
   querySelector: (selector) => nodes[selector],
-  querySelectorAll: (selector) => (
-    selector.startsWith('form') ? forms : dialogs
-  ),
 };
 await import(pathToFileURL(process.argv[2]).href);
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -77,30 +56,13 @@ replies.push('throw');
 box.checked = true;
 await box.listeners.change();
 results.network = [line.textContent, box.checked];
-sent.splice(0);
-const off = forms[1];
-const offDialog = dialogs[1];
-let prevented = false;
-off.listeners.submit({
-  preventDefault: () => { prevented = true; }, currentTarget: off,
-});
-results.opened = [prevented, offDialog.open, offDialog.returnValue];
-results.sentOnOpen = sent.splice(0);
-offDialog.close('cancel');
-await tick();
-results.sentOnCancel = sent.splice(0);
-off.listeners.submit({ preventDefault() {}, currentTarget: off });
-offDialog.close('confirm');
-await tick();
-results.sentOnConfirm = sent.splice(0);
-results.deviceStatus = nodes['#device-status'].textContent;
 console.log(JSON.stringify(results));
 """
 
 
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_settings_script_in_node(tmp_path: Path) -> None:
-    """Toggles stick, failures say why, and power waits for the dialog."""
+    """Toggles stick and failures say why."""
     web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'settings.mjs'
     script.write_text(
@@ -119,9 +81,4 @@ def test_settings_script_in_node(tmp_path: Path) -> None:
         'loadKeepsToggle': False,
         'refused': ['Not saved', False],
         'network': ['Not saved: network error', False],
-        'opened': [True, True, ''],
-        'sentOnOpen': [],
-        'sentOnCancel': [],
-        'sentOnConfirm': [['/power', {'action': 'poweroff'}]],
-        'deviceStatus': 'Shutting down...',
     }

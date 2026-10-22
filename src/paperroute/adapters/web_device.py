@@ -1,7 +1,8 @@
-"""Serve the device's own pages: Wi-Fi setup from a phone."""
+"""Serve the device's own pages: Wi-Fi setup and the Device page."""
 
 import html
 import logging
+import time
 from collections.abc import Callable, Mapping
 from http import HTTPStatus
 from pathlib import Path
@@ -9,15 +10,33 @@ from typing import Final
 
 from aiohttp import web
 
+from paperroute.adapters.device_page import (
+    KEY_REFUSED,
+    RESETS,
+    data_rows,
+    device_notice,
+    feed_rows,
+    key_text,
+    network_rows,
+    notice,
+    power_status,
+    system_rows,
+)
 from paperroute.adapters.web_display import asset, form_fields
 from paperroute.adapters.wifi import valid_password, valid_ssid
 from paperroute.core.device_model import (
+    ConfirmAction,
     DeviceStatus,
     JoinRequest,
     WifiNetwork,
     WifiPhase,
 )
-from paperroute.core.messages import ApiKeyChanged, Event, JoinAsked
+from paperroute.core.messages import (
+    ApiKeyChanged,
+    ConfirmAsked,
+    Event,
+    JoinAsked,
+)
 from paperroute.ports import KeyStore
 
 logger = logging.getLogger(__name__)
@@ -193,29 +212,9 @@ def join_request(
     return JoinRequest(ssid=ssid, password=password, hidden=hidden)
 
 
-def notice(*, text: str, alert: bool = False) -> str:
-    """
-    Draw a line of news for the top of the page.
-
-    Parameters
-    ----------
-    text : str
-        The words; escaped here.
-    alert : bool
-        Whether it reports a refusal, so screen readers say it at once.
-
-    Returns
-    -------
-    str
-        A paragraph.
-    """
-    role = ' role="alert"' if alert else ''
-    return f'<p class="notice"{role}>{html.escape(text)}</p>'
-
-
 class DevicePages:
     """
-    The pages a phone uses to set the device up.
+    The pages a phone uses to set the device up and look after it.
 
     Nothing posted here is logged or drawn back into a page, and
     passwords and the key travel only in POST bodies.
@@ -234,6 +233,8 @@ class DevicePages:
         The error log, if any.
     state_file : Path | None
         The saved state, if any.
+    clock : Callable[[], float]
+        The wall-clock time, as `time.time` gives it.
     """
 
     def __init__(
@@ -245,6 +246,7 @@ class DevicePages:
         post: Callable[[Event], None],
         error_log: Path | None,
         state_file: Path | None,
+        clock: Callable[[], float] = time.time,
     ) -> None:
         self._status = status
         self._feeds = feeds
@@ -252,6 +254,7 @@ class DevicePages:
         self._post = post
         self._error_log = error_log
         self._state_file = state_file
+        self._clock = clock
 
     def routes(self) -> list[web.RouteDef]:
         """
@@ -260,12 +263,20 @@ class DevicePages:
         Returns
         -------
         list[web.RouteDef]
-            The setup page, its script and its form post.
+            The setup page, the Device page, their scripts, form posts
+            and downloads.
         """
         return [
             web.get('/setup', self._setup_page),
             web.get('/setup.js', self._setup_js),
             web.post('/setup', self._setup),
+            web.get('/device', self._device_page),
+            web.get('/device.js', self._device_js),
+            web.post('/device/wifi', self._join_other),
+            web.post('/device/reset', self._reset),
+            web.post('/device/key', self._replace_key),
+            web.get('/device/errors.jsonl', self._download),
+            web.get('/device/state.json', self._download),
         ]
 
     def _hotspot(self) -> DeviceStatus | None:
@@ -440,3 +451,190 @@ class DevicePages:
             )
         self._post(ApiKeyChanged(present=True))
         return None
+
+    def _device(
+        self, *, news: str = '', power: str = '',
+        status: HTTPStatus = HTTPStatus.OK,
+    ) -> web.Response:
+        """
+        Draw the Device page from the latest status and live facts.
+
+        Parameters
+        ----------
+        news : str
+            HTML for the top of the page.
+        power : str
+            The power action under way, or empty.
+        status : HTTPStatus
+            The response status.
+
+        Returns
+        -------
+        web.Response
+            The page; the key itself is never drawn.
+        """
+        device, now = self._status(), self._clock()
+        feeds = self._feeds()
+        facts = None if device is None else device.facts
+        marks = {
+            NOTICE_MARK: news,
+            '{{network}}': network_rows(facts=facts),
+            '{{data}}': data_rows(status=device),
+            '{{feeds}}': feed_rows(feeds=feeds, now=now),
+            '{{system}}': system_rows(facts=facts),
+            '{{key_status}}': html.escape(key_text(
+                present=self._key.present(),
+                last_used=max(feeds.values(), default=None),
+                now=now,
+            )),
+            '{{device_status}}': html.escape(power),
+        }
+        page = asset(name='device.html')
+        for mark, value in marks.items():
+            page = page.replace(mark, value)
+        return web.Response(
+            text=page, content_type='text/html', status=status,
+        )
+
+    async def _device_page(self, request: web.Request) -> web.Response:
+        """
+        Serve the Device page.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; `asked`, `key` or `power` after a post.
+
+        Returns
+        -------
+        web.Response
+            The page.
+        """
+        return self._device(
+            news=device_notice(query=request.query),
+            power=power_status(query=request.query),
+        )
+
+    async def _device_js(self, request: web.Request) -> web.Response:
+        """
+        Serve the Device page's script.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request.
+
+        Returns
+        -------
+        web.Response
+            The response.
+        """
+        del request
+        return web.Response(
+            text=asset(name='device.js'),
+            content_type='text/javascript',
+        )
+
+    async def _join_other(self, request: web.Request) -> web.Response:
+        """
+        Ask the panel to start Wi-Fi setup.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request.
+
+        Returns
+        -------
+        web.Response
+            Never returns; 303 to the page saying to confirm.
+        """
+        del request
+        self._post(ConfirmAsked(action=ConfirmAction.JOIN_WIFI))
+        raise web.HTTPSeeOther(
+            location=f'/device?asked={ConfirmAction.JOIN_WIFI.value}',
+        )
+
+    async def _reset(self, request: web.Request) -> web.Response:
+        """
+        Ask the panel to reset settings or erase everything.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; `kind` is `settings` or `erase`.
+
+        Returns
+        -------
+        web.Response
+            400 for an unknown kind, else 303 to the page saying to
+            confirm.
+        """
+        fields = await form_fields(request=request)
+        action = RESETS.get(fields.get('kind', ''))
+        if action is None:
+            return web.Response(status=HTTPStatus.BAD_REQUEST)
+        self._post(ConfirmAsked(action=action))
+        raise web.HTTPSeeOther(location=f'/device?asked={action.value}')
+
+    async def _replace_key(self, request: web.Request) -> web.Response:
+        """
+        Store a posted key in place of any old one.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; `api_key` in the form.
+
+        Returns
+        -------
+        web.Response
+            400 for a bad key, 500 when it can't be saved, otherwise
+            303 to the page saying it was saved.
+        """
+        fields = await form_fields(request=request)
+        key = fields.get('api_key', '').strip()
+        try:
+            if not key:
+                raise ValueError('no key given')
+            self._key.write(key=key)
+        except ValueError:
+            return self._device(
+                news=notice(text=KEY_REFUSED, alert=True),
+                status=HTTPStatus.BAD_REQUEST,
+            )
+        except OSError:
+            logger.exception('could not save the API key file')
+            return self._device(
+                news=notice(text=KEY_NOT_SAVED, alert=True),
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
+        self._post(ApiKeyChanged(present=True))
+        raise web.HTTPSeeOther(location='/device?key=saved')
+
+    async def _download(self, request: web.Request) -> web.StreamResponse:
+        """
+        Serve the error log or the saved state as a download.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; its last path part names the file.
+
+        Returns
+        -------
+        web.StreamResponse
+            The file as an attachment, never cached; 404 when there is
+            none.
+        """
+        name = request.path.rsplit('/', maxsplit=1)[-1]
+        path = {
+            'errors.jsonl': self._error_log,
+            'state.json': self._state_file,
+        }[name]
+        if path is None or not path.is_file():
+            return web.Response(status=HTTPStatus.NOT_FOUND)
+        return web.FileResponse(path, headers={
+            'Content-Disposition': f'attachment; filename="{name}"',
+            'Cache-Control': 'no-store',
+        })

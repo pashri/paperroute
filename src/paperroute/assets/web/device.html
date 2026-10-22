@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Device - paperroute</title>
+  <link rel="stylesheet" href="/live.css">
+  <script type="module" src="/device.js"></script>
+</head>
+<body>
+  <header>
+    <h1>paperroute</h1>
+    <nav aria-label="Pages">
+      <ul class="pages">
+        <li><a href="/">Live</a></li>
+        <li><a href="/settings">Settings</a></li>
+        <li><a href="/device" aria-current="page">Device</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main>
+    {{notice}}
+    <section class="setting" aria-labelledby="network">
+      <h2 id="network">Network</h2>
+      <dl class="facts">
+{{network}}
+      </dl>
+      <form method="post" action="/device/wifi">
+        <button type="submit" aria-describedby="wifi-hint">Join another network&hellip;</button>
+      </form>
+      <p id="wifi-hint" class="hint">Confirm on the device. Hidden networks and a show-password toggle are on the setup page.</p>
+    </section>
+    <section class="setting" aria-labelledby="data">
+      <h2 id="data">Data</h2>
+      <dl class="facts">
+{{data}}
+      </dl>
+      <div class="table">
+        <table>
+          <caption>Feeds</caption>
+          <thead>
+            <tr><th scope="col">Feed</th><th scope="col">Last ok</th><th scope="col">Age</th></tr>
+          </thead>
+          <tbody>
+{{feeds}}
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="setting" aria-labelledby="system">
+      <h2 id="system">System</h2>
+      <dl class="facts">
+{{system}}
+      </dl>
+      <ul class="downloads">
+        <li><a href="/device/errors.jsonl">Download error log</a></li>
+        <li><a href="/device/state.json">Download state</a></li>
+      </ul>
+      <p class="hint">No secrets in either file.</p>
+    </section>
+    <section class="setting" aria-labelledby="api-key-heading">
+      <h2 id="api-key-heading">TfNSW API key</h2>
+      <p>{{key_status}}</p>
+      <form method="post" action="/device/key">
+        <label for="api-key">New key</label>
+        <input id="api-key" name="api_key" type="password" autocomplete="off"
+               autocapitalize="off" spellcheck="false" required>
+        <button type="submit">Save key</button>
+      </form>
+    </section>
+    <section class="setting" aria-labelledby="device">
+      <h2 id="device">Device</h2>
+      <div class="buttons">
+        <form method="post" action="/device/power?action=reboot"
+              data-power="reboot">
+          <button type="submit">Restart</button>
+        </form>
+        <form method="post" action="/device/power?action=poweroff"
+              data-power="poweroff">
+          <button type="submit">Shut down</button>
+        </form>
+      </div>
+      <p class="hint">These ask on this page first, then act.</p>
+      <p id="device-status" class="hint" aria-live="polite">{{device_status}}</p>
+      <dialog id="reboot-dialog" data-power="reboot"
+              aria-labelledby="reboot-question">
+        <form method="dialog">
+          <p id="reboot-question">Restart now?</p>
+          <div class="buttons">
+            <button value="cancel" autofocus>Cancel</button>
+            <button value="confirm">Restart</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="poweroff-dialog" data-power="poweroff"
+              aria-labelledby="poweroff-question">
+        <form method="dialog">
+          <p id="poweroff-question">Shut down now? The screen will say when it's safe to unplug.</p>
+          <div class="buttons">
+            <button value="cancel" autofocus>Cancel</button>
+            <button value="confirm">Shut down</button>
+          </div>
+        </form>
+      </dialog>
+    </section>
+    <section class="setting" aria-labelledby="reset">
+      <h2 id="reset">Reset</h2>
+      <div class="buttons">
+        <form method="post" action="/device/reset">
+          <input type="hidden" name="kind" value="settings">
+          <button type="submit">Reset settings</button>
+        </form>
+        <form method="post" action="/device/reset">
+          <input type="hidden" name="kind" value="erase">
+          <button type="submit">Erase everything</button>
+        </form>
+      </div>
+      <p class="hint">Reset settings clears pins, settings, Wi-Fi and the key. Erase everything also deletes the timetable. The map is kept. Both are confirmed on the device.</p>
+    </section>
+  </main>
+</body>
+</html>

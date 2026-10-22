@@ -78,7 +78,7 @@ def test_pin_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_device_pages_only_for_live_feeds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Live feeds get the setup pages; replayed feeds get none."""
+    """Live feeds get the setup and Device pages; replayed feeds none."""
     monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
     timings = Timings()
     display = WebDisplay(status=timings.snapshot)
@@ -87,7 +87,7 @@ def test_device_pages_only_for_live_feeds(
     )
     pages = device_pages_for(args=args, timings=timings, display=display)
     assert pages is not None
-    assert len(pages.routes()) == 3
+    assert len(pages.routes()) == 10
     args.feeds = str(tmp_path)
     assert device_pages_for(
         args=args, timings=timings, display=display,

@@ -42,7 +42,6 @@ HELD_ACTIONS: Final[dict[str, int]] = {'hold-left': -1, 'hold-right': 1}
 HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
 SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
 CHECKED_MARK: Final[str] = '{{auto_rebuild}}'
-DEVICE_STATUS_MARK: Final[str] = '{{device_status}}'
 POWER_ACTIONS: Final[dict[str, PowerAction]] = {
     action.value: action for action in PowerAction
 }
@@ -52,10 +51,6 @@ CONFIRM: Final[dict[PowerAction, tuple[str, str]]] = {
         'Shut down',
     ),
     PowerAction.RESTART: ('Restart now?', 'Restart'),
-}
-POWER_STATUS: Final[dict[PowerAction, str]] = {
-    PowerAction.OFF: 'Shutting down...',
-    PowerAction.RESTART: 'Restarting...',
 }
 
 Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
@@ -395,8 +390,8 @@ class WebDisplay:
             web.get('/settings', self._settings_page),
             web.get('/settings.js', self._settings_js),
             web.post('/settings', self._settings),
-            web.get('/settings/power', self._power_page),
-            web.post('/settings/power', self._power_page),
+            web.get('/device/power', self._power_page),
+            web.post('/device/power', self._power_page),
             web.post('/power', self._power),
             web.get('/status', self._status_json),
         ])
@@ -615,13 +610,11 @@ class WebDisplay:
             The response.
         """
         status = self._status() if self._status else {}
-        query = request.query
-        on = auto_rebuild_of(status=status, saved=query.get('saved'))
-        action = POWER_ACTIONS.get(query.get('power', ''))
+        on = auto_rebuild_of(
+            status=status, saved=request.query.get('saved'),
+        )
         page = asset(name='settings.html').replace(
             CHECKED_MARK, ' checked' if on else '',
-        ).replace(
-            DEVICE_STATUS_MARK, '' if action is None else POWER_STATUS[action],
         )
         return web.Response(text=page, content_type='text/html')
 
@@ -705,7 +698,7 @@ class WebDisplay:
         -------
         web.Response
             400 for an unknown action; otherwise 204 to the script's
-            JSON, or 303 back to the Settings page for a plain form.
+            JSON, or 303 to the Device page for a plain form.
         """
         fields = await form_fields(request=request)
         action = POWER_ACTIONS.get(fields.get('action', ''))
@@ -714,7 +707,7 @@ class WebDisplay:
         self._post(PowerRequested(action=action))
         if request.content_type == 'application/json':
             return web.Response(status=HTTPStatus.NO_CONTENT)
-        raise web.HTTPSeeOther(location=f'/settings?power={action.value}')
+        raise web.HTTPSeeOther(location=f'/device?power={action.value}')
 
     async def _status_json(self, request: web.Request) -> web.Response:
         """

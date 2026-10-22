@@ -1,19 +1,10 @@
-/** Save Settings changes in place and confirm Device actions in a dialog. */
+/** Save Settings changes in place. */
 const autoRebuild = document.querySelector('#auto-rebuild');
 const saveButton = document.querySelector('#timetable-save');
 const statusLine = document.querySelector('#settings-status');
-const deviceStatus = document.querySelector('#device-status');
 const NOT_SAVED = {
   refused: 'Not saved',
   network: 'Not saved: network error',
-};
-const NOT_SENT = {
-  refused: 'Not sent',
-  network: 'Not sent: network error',
-};
-const POWER_STATUS = {
-  poweroff: 'Shutting down...',
-  reboot: 'Restarting...',
 };
 let touched = false;
 
@@ -65,39 +56,6 @@ async function saveAutoRebuild() {
   statusLine.textContent = NOT_SAVED[outcome];
 }
 
-/**
- * Open a Device button's confirm dialog instead of the confirm page.
- * @param {SubmitEvent} event - The Device form's submit.
- * @returns {void}
- */
-function askFirst(event) {
-  event.preventDefault();
-  const action = event.currentTarget.dataset.power;
-  const dialog = document.querySelector(`#${action}-dialog`);
-  dialog.returnValue = '';
-  dialog.showModal();
-}
-
-/**
- * Send the power action when its dialog closes confirmed.
- * @param {Event} event - The dialog's close.
- * @returns {Promise<void>}
- */
-async function confirmPower(event) {
-  const dialog = event.currentTarget;
-  if (dialog.returnValue !== 'confirm') return;
-  const action = dialog.dataset.power;
-  const outcome = await postJson('/power', { action });
-  deviceStatus.textContent =
-    outcome === 'ok' ? POWER_STATUS[action] : NOT_SENT[outcome];
-}
-
 saveButton.hidden = true;
 autoRebuild.addEventListener('change', saveAutoRebuild);
-for (const form of document.querySelectorAll('form[data-power]')) {
-  form.addEventListener('submit', askFirst);
-}
-for (const dialog of document.querySelectorAll('dialog[data-power]')) {
-  dialog.addEventListener('close', confirmPower);
-}
 loadSettings();

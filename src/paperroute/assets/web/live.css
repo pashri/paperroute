@@ -219,3 +219,73 @@ dialog {
   margin: 0;
   overflow-wrap: anywhere;
 }
+
+.facts {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0.25rem 1rem;
+  margin: 0;
+}
+
+.facts div {
+  display: contents;
+}
+
+.facts dt {
+  color: var(--muted);
+}
+
+.facts dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.table table {
+  border-collapse: collapse;
+}
+
+.table caption {
+  text-align: start;
+  font-weight: 600;
+}
+
+.table th,
+.table td {
+  padding: 0.25rem 1rem 0.25rem 0;
+  text-align: start;
+  white-space: nowrap;
+}
+
+.table th[scope='row'] {
+  font-weight: normal;
+}
+
+.downloads {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.setting input[type='password'] {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  border: 1px solid var(--button-border);
+  border-radius: 0.375rem;
+  background: var(--button-bg);
+  color: inherit;
+  font: inherit;
+}
+
+main > .notice {
+  font-weight: 600;
+}

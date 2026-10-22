@@ -10,6 +10,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.device_page import ago_text
 from paperroute.adapters.web_device import DevicePages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.device_model import (
@@ -243,9 +244,22 @@ async def test_device_page_feed_table(client: Client) -> None:
     ) in text
 
 
+
+@pytest.mark.parametrize(('seconds', 'shown'), [
+    (-5.0, '0 s'),
+    (59.9, '59 s'),
+    (60.0, '1 min'),
+    (3_599.0, '59 min'),
+    (7_300.0, '2 h'),
+])
+def test_ago_text_units(seconds: float, shown: str) -> None:
+    """Ages clamp at 0 and grow from seconds to minutes to hours."""
+    assert ago_text(seconds=seconds) == shown
+
 @pytest.mark.parametrize(('key', 'feeds', 'shown'), [
     (KEY, {}, 'Key set · not used yet'),
     (None, {}, 'No key set'),
+    (KEY, {TRAINS: NOW - 300}, 'Key set · last used 5 min ago'),
 ])
 async def test_device_page_key_states(
     device: Device,

@@ -1,6 +1,7 @@
 """The Live views, and what the device keeps between restarts."""
 
 from dataclasses import dataclass, field
+from datetime import date
 from enum import StrEnum
 from typing import Final
 
@@ -41,6 +42,23 @@ class Settings:
 
 
 @dataclass(frozen=True)
+class Quota:
+    """
+    The API calls made on one Sydney day.
+
+    Attributes
+    ----------
+    day : date | None
+        The day the calls were made, or None before any were counted.
+    calls : int
+        The calls made that day.
+    """
+
+    day: date | None = None
+    calls: int = 0
+
+
+@dataclass(frozen=True)
 class Saved:
     """
     The pins, the place shown, the Live view, the zoom and settings.
@@ -59,6 +77,8 @@ class Saved:
         The map zoom, an index into `ZOOMS`.
     settings : Settings
         The choices made on the Settings page.
+    quota : Quota
+        The API calls counted today.
     """
 
     pins: tuple[Pin, ...]
@@ -67,6 +87,7 @@ class Saved:
     view: LiveView
     zoom: int
     settings: Settings = field(default_factory=Settings)
+    quota: Quota = field(default_factory=Quota)
 
 
 TOWN_HALL: Final[StopPlace] = StopPlace(

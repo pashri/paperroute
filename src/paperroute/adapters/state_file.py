@@ -7,20 +7,27 @@ import os
 import tempfile
 import time
 from collections.abc import Callable
+from datetime import date
 from pathlib import Path
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from paperroute.core.model import TRAINLINK, Pin, RouteKind, StopPlace
-from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved, Settings
+from paperroute.core.saved import (
+    DEFAULT_SAVED,
+    LiveView,
+    Quota,
+    Saved,
+    Settings,
+)
 from paperroute.core.tiles import ZOOMS
 from paperroute.ports import Loaded
 
 logger = logging.getLogger(__name__)
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/state.json')
-SCHEMA_VERSION: Final[int] = 3
+SCHEMA_VERSION: Final[int] = 4
 TEMP_PREFIX: Final[str] = '.state.json.'
 BAD_PREFIX: Final[str] = 'state.json.bad-'
 BAD_KEPT: Final[int] = 2
@@ -57,6 +64,15 @@ class SettingsModel(BaseModel):
     auto_rebuild: bool
 
 
+class QuotaModel(BaseModel):
+    """The API calls counted on one day, as stored."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    day: date | None
+    calls: int = Field(ge=0)
+
+
 class StateModel(BaseModel):
     """The whole file."""
 
@@ -69,6 +85,7 @@ class StateModel(BaseModel):
     view: LiveView
     zoom: int = Field(ge=0, le=len(ZOOMS) - 1)
     settings: SettingsModel
+    quota: QuotaModel
 
 
 def stop_to_model(*, place: StopPlace) -> StopModel:
@@ -191,6 +208,7 @@ def to_model(*, saved: Saved) -> StateModel:
         view=saved.view,
         zoom=saved.zoom,
         settings=SettingsModel(auto_rebuild=saved.settings.auto_rebuild),
+        quota=QuotaModel(day=saved.quota.day, calls=saved.quota.calls),
     )
 
 
@@ -224,6 +242,7 @@ def from_model(*, model: StateModel) -> Saved:
         view=model.view,
         zoom=model.zoom,
         settings=Settings(auto_rebuild=model.settings.auto_rebuild),
+        quota=Quota(day=model.quota.day, calls=model.quota.calls),
     )
 
 
@@ -296,9 +315,26 @@ def add_settings(data: dict[str, object]) -> dict[str, object]:
     return {**data, 'settings': {'auto_rebuild': True}}
 
 
+def add_quota(data: dict[str, object]) -> dict[str, object]:
+    """
+    Add the quota, with no calls counted.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Version 3 data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with an empty quota.
+    """
+    return {**data, 'quota': {'day': None, 'calls': 0}}
+
+
 MIGRATIONS: Final[
     dict[int, Callable[[dict[str, object]], dict[str, object]]]
-] = {1: regional_to_coach, 2: add_settings}
+] = {1: regional_to_coach, 2: add_settings, 3: add_quota}
 
 
 def migrate(*, data: dict[str, object]) -> dict[str, object]:

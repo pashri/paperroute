@@ -85,6 +85,7 @@ from paperroute.core.model import (
     shifted,
 )
 from paperroute.core.places import shown, stops_to_match
+from paperroute.core.quota import quota_only
 from paperroute.core.reach import (
     Reach,
     ReachInput,
@@ -1459,7 +1460,8 @@ def check_selection(*, before: State, after: State, event: Event) -> None:
     if isinstance(event, KnobHeldTurned):
         assert after.chooser == before.chooser
     if isinstance(event, KnobHeldTurned) and event.knob is Knob.BOTTOM:
-        assert saved_of(state=after) == saved_of(state=before)
+        counted = replace(saved_of(state=after), quota=before.quota)
+        assert counted == saved_of(state=before)
         if before.view is not LiveView.STRIP:
             assert after.strip.selected == before.strip.selected
 
@@ -1489,7 +1491,8 @@ def check_chooser(
     commit = event == PRESS and after.chooser is None
     if before.chooser is not None and not commit:
         if not isinstance(event, PlacesMatched):
-            assert saved_of(state=after) == saved_of(state=before)
+            counted = replace(saved_of(state=after), quota=before.quota)
+            assert counted == saved_of(state=before)
     swapped = (
         isinstance(event, TimetableSeen)
         and event.version != before.saving.timetable
@@ -1772,7 +1775,7 @@ def check_saves(
     last: Saved | None,
 ) -> Saved | None:
     """
-    Assert every save carries the state, differs from the last one and,
+    Assert every save carries the state (its quota may lag a tick), differs from the last one and,
     unless quitting or nothing was stored, waits SAVE_AFTER.
 
     Parameters
@@ -1793,10 +1796,14 @@ def check_saves(
     """
     changed_at = before.saving.changed_at
     for save in effects_of(effects=effects, kind=SaveState):
-        assert save.saved == saved_of(state=after)
+        counted = replace(save.saved, quota=after.quota)
+        assert counted == saved_of(state=after)
         assert save.saved != last
         last = save.saved
-        if Stop() in effects or before.saving.saved is None:
+        written = before.saving.saved
+        if Stop() in effects or written is None:
+            continue
+        if quota_only(before=written, after=save.saved):
             continue
         if changed_at is not None:
             waited = after.now.timestamp() - changed_at.timestamp()
@@ -2576,13 +2583,15 @@ def test_first_tick_saves_when_never_stored() -> None:
 
 
 def test_no_save_without_change() -> None:
-    """Ticks, scrolling, loads and a full round of views save nothing."""
+    """Ticks, scrolling, loads and views save only the call count."""
     state, _ = turned(state=loaded(state=pinned(), count=20), steps=2)
     for _ in LIVE_VIEWS:
         state, _ = step(state, PRESS)
+    base = saved_of(state=state)
     for seconds in range(0, 3600, 5):
         state, effects = step(state, at(seconds=seconds))
-        assert not saves(effects=effects)
+        for save in saves(effects=effects):
+            assert replace(save.saved, quota=base.quota) == base
 
 
 def test_quit_saves_unsaved_changes_first() -> None:

@@ -11,7 +11,7 @@ from paperroute.core.messages import PowerAction, ScreenView
 from paperroute.core.model import Departure, Pin, shifted
 from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
-from paperroute.core.saved import LiveView, Saved, Settings
+from paperroute.core.saved import LiveView, Quota, Saved, Settings
 from paperroute.core.stop_view import HORIZON
 from paperroute.core.strip_model import TripDay
 
@@ -145,12 +145,15 @@ class Saving:
     match_failed_at : datetime | None
         When matching the places last failed, or None when no retry is
         due.
+    quota_at : datetime | None
+        When a quota was last written, or None since start.
     """
 
     saved: Saved | None = None
     changed_at: datetime | None = None
     timetable: str | None = None
     match_failed_at: datetime | None = None
+    quota_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -264,6 +267,8 @@ class State:
         The choices made on the Settings page.
     power : PowerAction | None
         The power action under way; while set, nothing is redrawn.
+    quota : Quota
+        The API calls counted today.
     """
 
     now: datetime
@@ -283,3 +288,4 @@ class State:
     rebuild: Rebuild = field(default_factory=Rebuild)
     settings: Settings = field(default_factory=Settings)
     power: PowerAction | None = None
+    quota: Quota = field(default_factory=Quota)

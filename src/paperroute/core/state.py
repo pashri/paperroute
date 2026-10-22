@@ -69,6 +69,7 @@ from paperroute.core.places import (
     shown,
     with_place,
 )
+from paperroute.core.quota import QUOTA_SAVE_EVERY, quota_only, with_calls
 from paperroute.core.rebuild import rebuild_effects, rebuilt, seen_schema
 from paperroute.core.saved import Saved
 from paperroute.core.state_model import (
@@ -113,8 +114,12 @@ def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
         now=now,
         places=places_of(saved=saved),
         view=saved.view,
-        saving=Saving(saved=saved if stored else None),
+        saving=Saving(
+            saved=saved if stored else None,
+            quota_at=now,
+        ),
         settings=saved.settings,
+        quota=saved.quota,
     )
     centre = shown(state=state).origin.point
     zoom = min(max(saved.zoom, 0), len(ZOOMS) - 1)
@@ -248,6 +253,40 @@ def idle_dropped(*, state: State) -> State:
     return replace(state, map=map_state)
 
 
+def save_waits(*, state: State, current: Saved) -> bool:
+    """
+    Say whether a change to the saved state is too new to write.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    current : Saved
+        The saved state, which differs from what was last written.
+
+    Returns
+    -------
+    bool
+        True when something was written before and the change is younger
+        than `SAVE_AFTER`, or a change in the quota alone is younger than
+        `QUOTA_SAVE_EVERY`.
+    """
+    saving = state.saving
+    if saving.saved is None:
+        return False
+    if quota_only(before=saving.saved, after=current):
+        return not elapsed(
+            since=saving.quota_at,
+            now=state.now,
+            span=QUOTA_SAVE_EVERY,
+        )
+    return not elapsed(
+        since=saving.changed_at,
+        now=state.now,
+        span=SAVE_AFTER,
+    )
+
+
 def saved_effects(
     *, state: State, wait: bool = True
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -259,8 +298,9 @@ def saved_effects(
     state : State
         State.
     wait : bool
-        Hold the save until `SAVE_AFTER` after the last change, unless
-        nothing was ever written.
+        Hold the save until `SAVE_AFTER` after the last change, or a
+        quota-only change until `QUOTA_SAVE_EVERY` after the last quota
+        was written, unless nothing was ever written.
 
     Returns
     -------
@@ -270,14 +310,14 @@ def saved_effects(
     """
     saving = state.saving
     current = saved_of(state=state)
-    settled_long = elapsed(
-        since=saving.changed_at, now=state.now, span=SAVE_AFTER
-    )
     if current == saving.saved:
         return state, ()
-    if wait and saving.saved is not None and not settled_long:
+    if wait and save_waits(state=state, current=current):
         return state, ()
-    saving = replace(saving, saved=current)
+    quota_at = saving.quota_at
+    if saving.saved is None or saving.saved.quota != current.quota:
+        quota_at = state.now
+    saving = replace(saving, saved=current, quota_at=quota_at)
     return replace(state, saving=saving), (SaveState(saved=current),)
 
 
@@ -597,7 +637,9 @@ def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
         Next state and the effects to perform.
     """
     after, effects = dispatched(state=state, event=event)
-    if after is state or saved_of(state=after) == saved_of(state=state):
+    after = with_calls(state=after, effects=effects)
+    before, now = saved_of(state=state), saved_of(state=after)
+    if before == now or quota_only(before=before, after=now):
         return after, effects
     saving = replace(after.saving, changed_at=after.now)
     return replace(after, saving=saving), effects

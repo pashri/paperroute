@@ -7,6 +7,7 @@ import stat
 import tempfile
 from collections.abc import Iterator
 from dataclasses import replace
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -20,7 +21,13 @@ from paperroute.adapters.state_file import (
     write_atomic,
 )
 from paperroute.core.model import Pin, RouteKind, StopPlace
-from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved, Settings
+from paperroute.core.saved import (
+    DEFAULT_SAVED,
+    LiveView,
+    Quota,
+    Saved,
+    Settings,
+)
 from paperroute.core.tiles import ZOOMS
 
 NAMES = st.text(
@@ -284,6 +291,7 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
         'view',
         'zoom',
         'settings',
+        'quota',
     }
     assert set(data['pins'][0]) == {
         'origin',
@@ -294,10 +302,10 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
 
 
 def test_written_json_shape(path: Path) -> None:
-    """The version is 3 and stops carry their metre coordinates."""
+    """The version is 4 and stops carry their metre coordinates."""
     JsonStateRepository(path=path).save(saved=sample())
     data = json.loads(path.read_text())
-    assert data['schema_version'] == 3
+    assert data['schema_version'] == 4
     assert data['settings'] == {'auto_rebuild': True}
     assert data['pins'][0]['origin'] == {
         'stop_id': 'a',
@@ -449,7 +457,7 @@ def test_regional_to_coach_leaves_a_malformed_pin_list_alone() -> None:
 
 
 def test_migrates_v2_to_v3_with_auto_rebuild(path: Path) -> None:
-    """A version 2 file loads with the rebuild on and saves as 3."""
+    """A version 2 file loads with the rebuild on and saves as the current version."""
     repository = JsonStateRepository(path=path)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
@@ -461,7 +469,7 @@ def test_migrates_v2_to_v3_with_auto_rebuild(path: Path) -> None:
     assert loaded.saved == sample()
     assert loaded.saved.settings.auto_rebuild is True
     repository.save(saved=loaded.saved)
-    assert json.loads(path.read_text())['schema_version'] == 3
+    assert json.loads(path.read_text())['schema_version'] == SCHEMA_VERSION
 
 
 def test_round_trips_settings(path: Path) -> None:
@@ -470,3 +478,53 @@ def test_round_trips_settings(path: Path) -> None:
     saved = replace(sample(), settings=Settings(auto_rebuild=False))
     repository.save(saved=saved)
     assert repository.load().saved.settings.auto_rebuild is False
+
+
+def test_migrates_v3_to_v4_with_empty_quota(path: Path) -> None:
+    """A version 3 file loads with no calls counted and saves as 4."""
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=sample())
+    data = json.loads(path.read_text())
+    del data['quota']
+    data['schema_version'] = 3
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved == sample()
+    assert loaded.saved.quota == Quota(day=None, calls=0)
+    repository.save(saved=loaded.saved)
+    stored = json.loads(path.read_text())
+    assert stored['schema_version'] == 4
+    assert stored['quota'] == {'day': None, 'calls': 0}
+
+
+def test_round_trips_quota(path: Path) -> None:
+    """The day and the calls counted survive a save and a load."""
+    repository = JsonStateRepository(path=path)
+    quota = Quota(day=date(2026, 10, 21), calls=1234)
+    repository.save(saved=replace(sample(), quota=quota))
+    assert json.loads(path.read_text())['quota'] == {
+        'day': '2026-10-21',
+        'calls': 1234,
+    }
+    assert repository.load().saved.quota == quota
+
+
+def test_negative_calls_fall_back(path: Path) -> None:
+    """A count below zero makes the file unusable."""
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=sample())
+    data = json.loads(path.read_text())
+    data['quota']['calls'] = -1
+    path.write_text(json.dumps(data))
+    assert repository.load().saved == DEFAULT_SAVED
+
+
+def test_schema_five_falls_back(path: Path) -> None:
+    """A version 5 file is from a newer app and is not guessed at."""
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=sample())
+    data = json.loads(path.read_text())
+    data['schema_version'] = 5
+    path.write_text(json.dumps(data))
+    assert repository.load().saved == DEFAULT_SAVED

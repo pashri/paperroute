@@ -50,6 +50,7 @@ def saved_of(*, state: State) -> Saved:
         view=state.view,
         zoom=state.map.zoom,
         settings=state.settings,
+        quota=state.quota,
     )
 
 

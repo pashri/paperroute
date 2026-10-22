@@ -26,6 +26,14 @@ POSITION_FEEDS: Final[dict[Mode, tuple[str, ...]]] = {
     ),
 }
 ALL_POSITION_MODES: Final[frozenset[Mode]] = frozenset(POSITION_FEEDS)
+MODE_NAMES: Final[dict[Mode, str]] = {
+    Mode.BUS: 'Buses',
+    Mode.TRAIN: 'Sydney Trains',
+    Mode.METRO: 'Metro',
+    Mode.REGIONAL: 'NSW TrainLink',
+    Mode.FERRY: 'Ferries',
+    Mode.LIGHT_RAIL: 'Light rail',
+}
 
 
 class FeedKind(StrEnum):
@@ -94,3 +102,31 @@ def feed_kind(*, feed: str) -> FeedKind:
     if '/vehiclepos/' in feed:
         return FeedKind.POSITIONS
     return FeedKind.TRIPS
+
+
+def feed_label(*, feed: str) -> str:
+    """
+    Name a feed path for people.
+
+    Parameters
+    ----------
+    feed : str
+        Feed path.
+
+    Returns
+    -------
+    str
+        The mode's name and what the feed carries, with the line for a
+        light rail positions feed; an unknown path as it is.
+    """
+    for mode, path in FEEDS.items():
+        if path == feed:
+            return f'{MODE_NAMES[mode]} trip updates'
+    for mode, paths in POSITION_FEEDS.items():
+        if feed not in paths:
+            continue
+        label = f'{MODE_NAMES[mode]} positions'
+        if mode is Mode.LIGHT_RAIL:
+            return f"{label} ({feed.rsplit('/', maxsplit=1)[-1]})"
+        return label
+    return feed

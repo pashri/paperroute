@@ -1,21 +1,8 @@
 """What the device knows about itself."""
 
 from dataclasses import dataclass, field
+from datetime import datetime
 from enum import StrEnum
-
-
-@dataclass(frozen=True)
-class Panel:
-    """
-    The device's own state.
-
-    Attributes
-    ----------
-    key_set : bool | None
-        Whether a TfNSW API key is set; None until known.
-    """
-
-    key_set: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -82,6 +69,100 @@ class JoinRequest:
     ssid: str
     password: str = field(default='', repr=False)
     hidden: bool = False
+
+
+@dataclass(frozen=True)
+# pylint: disable-next=too-many-instance-attributes
+class DeviceFacts:
+    """
+    What the device found out about itself in one probe.
+
+    Attributes
+    ----------
+    wifi : WifiStatus
+        The Wi-Fi link.
+    clock_synced : bool | None
+        Whether the clock is set from the network; None when unknown.
+    uptime_s : float | None
+        Seconds since boot.
+    cpu_c : float | None
+        CPU temperature in degrees Celsius.
+    disk_free : int | None
+        Bytes free on the data disk.
+    mem_free : int | None
+        Bytes of memory available.
+    version : str
+        The release installed, or 'dev'.
+    last_error : str | None
+        The latest error logged, with its time.
+    tiles_built : str | None
+        When the map tiles were built, or None with no tiles.
+    key_set : bool
+        Whether a TfNSW API key is set.
+    """
+
+    wifi: WifiStatus
+    clock_synced: bool | None
+    uptime_s: float | None
+    cpu_c: float | None
+    disk_free: int | None
+    mem_free: int | None
+    version: str
+    last_error: str | None
+    tiles_built: str | None
+    key_set: bool
+
+
+@dataclass(frozen=True)
+class DeviceStatus:
+    """
+    What the device reports about itself to observers.
+
+    Attributes
+    ----------
+    timetable : str | None
+        The timetable version in use.
+    schema : str | None
+        The timetable's schema version.
+    rebuilding : bool
+        Whether a timetable rebuild runs.
+    rebuild_failed : bool
+        Whether the last timetable rebuild failed.
+    calls_today : int
+        API calls made this Sydney day.
+    key_set : bool | None
+        Whether a TfNSW API key is set; None until known.
+    facts : DeviceFacts | None
+        The latest probe, or None before the first.
+    """
+
+    timetable: str | None
+    schema: str | None
+    rebuilding: bool
+    rebuild_failed: bool
+    calls_today: int
+    key_set: bool | None
+    facts: DeviceFacts | None
+
+
+@dataclass(frozen=True)
+class Panel:
+    """
+    The device's own state.
+
+    Attributes
+    ----------
+    key_set : bool | None
+        Whether a TfNSW API key is set; None until known.
+    facts : DeviceFacts | None
+        The latest probe, or None before the first.
+    probed_at : datetime | None
+        When a probe was last asked for, or None.
+    """
+
+    key_set: bool | None = None
+    facts: DeviceFacts | None = None
+    probed_at: datetime | None = None
 
 
 class JoinOutcome(StrEnum):

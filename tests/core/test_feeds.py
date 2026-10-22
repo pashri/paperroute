@@ -1,6 +1,12 @@
 """Tests for feed selection by mode."""
 
-from paperroute.core.feeds import FeedKind, feed_for, feed_kind, position_feeds
+from paperroute.core.feeds import (
+    FeedKind,
+    feed_for,
+    feed_kind,
+    feed_label,
+    position_feeds,
+)
 from paperroute.core.model import Mode
 
 
@@ -43,3 +49,19 @@ def test_feed_kind() -> None:
     """Only paths with /vehiclepos/ are position feeds."""
     assert feed_kind(feed='v1/gtfs/vehiclepos/buses') == FeedKind.POSITIONS
     assert feed_kind(feed='v1/gtfs/realtime/buses') == FeedKind.TRIPS
+
+
+def test_feed_label() -> None:
+    """Feed paths get names a person reads."""
+    assert feed_label(feed='v1/gtfs/realtime/buses') == 'Buses trip updates'
+    assert feed_label(feed='v2/gtfs/realtime/sydneytrains') == (
+        'Sydney Trains trip updates'
+    )
+    assert feed_label(feed='v2/gtfs/vehiclepos/metro') == 'Metro positions'
+    assert feed_label(feed='v1/gtfs/vehiclepos/ferries/sydneyferries') == (
+        'Ferries positions'
+    )
+    assert feed_label(
+        feed='v2/gtfs/vehiclepos/lightrail/innerwest',
+    ) == 'Light rail positions (innerwest)'
+    assert feed_label(feed='v9/other') == 'v9/other'

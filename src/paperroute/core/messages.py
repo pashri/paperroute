@@ -7,6 +7,7 @@ from enum import StrEnum
 
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.chooser_view import ChooserView
+from paperroute.core.device_model import DeviceFacts
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.map_view import MapView
@@ -162,6 +163,11 @@ class ControlPower:
 
 
 @dataclass(frozen=True)
+class ProbeDevice:
+    """Gather the device's facts in the background."""
+
+
+@dataclass(frozen=True)
 class MatchPlaces:
     """Look some places up in the timetable, tagged with its version."""
 
@@ -184,6 +190,7 @@ Effect = (
     | MatchPlaces
     | RebuildTimetable
     | ControlPower
+    | ProbeDevice
     | ChooserLoad
 )
 
@@ -320,6 +327,25 @@ class ApiKeyChanged:
     """
 
     present: bool
+
+
+@dataclass(frozen=True)
+class DeviceProbed:
+    """
+    The device's facts were gathered.
+
+    Attributes
+    ----------
+    facts : DeviceFacts
+        What was found.
+    """
+
+    facts: DeviceFacts
+
+
+@dataclass(frozen=True)
+class DeviceProbeFailed:
+    """Gathering the device's facts failed."""
 
 
 @dataclass(frozen=True)
@@ -559,6 +585,8 @@ Event = (
     | TimetableRebuilt
     | SettingsChanged
     | ApiKeyChanged
+    | DeviceProbed
+    | DeviceProbeFailed
     | PowerRequested
     | PowerFailed
     | PlacesMatched

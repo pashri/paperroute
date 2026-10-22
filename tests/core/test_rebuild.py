@@ -229,7 +229,11 @@ def test_chooser_works_while_outdated() -> None:
     current = step(pinned(), TimetableSeen(version='v', schema='6'))[0]
     outdated = step(pinned(), OLD)[0]
     assert outdated.rebuild == Rebuild(
-        outdated=True, running=True, failures=0, retry_at=None,
+        outdated=True,
+        running=True,
+        failures=0,
+        retry_at=None,
+        schema='4',
     )
     _, expected = run_events(state=current, events=walk)
     _, effects = run_events(state=outdated, events=walk)

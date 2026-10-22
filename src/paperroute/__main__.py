@@ -16,6 +16,7 @@ from aiohttp import web
 
 from paperroute.adapters.act_led import ActLed
 from paperroute.adapters.clocks import ReplayClock, SystemClock
+from paperroute.adapters.device_probe import SystemProbe
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.power import NullPower, SystemctlPower
@@ -36,10 +37,11 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.wifi import NmcliWifi, NullWifi
 from paperroute.app import Ports, run
+from paperroute.app_device import DevicePorts
 from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin, StopPlace
 from paperroute.core.tiles import TileVariant
-from paperroute.logs import configure_logging
+from paperroute.logs import LastError, configure_logging
 from paperroute.observers import ObserverGroup, Timings
 from paperroute.ports import (
     Clock,
@@ -205,6 +207,11 @@ def parse_args() -> argparse.Namespace:
         action='store_true',
         help='scan, join and share Wi-Fi through NetworkManager',
     )
+    runner.add_argument(
+        '--version-file',
+        type=Path,
+        help='file holding the release installed (default: dev)',
+    )
     args = parser.parse_args()
     require_both_or_neither(args=args)
     return args
@@ -290,6 +297,45 @@ def wifi_for(*, args: argparse.Namespace) -> WifiControl:
     if args.wifi:
         return NmcliWifi()
     return NullWifi()
+
+
+def device_for(
+    *,
+    args: argparse.Namespace,
+    tiles: TileRepository,
+    last_error: LastError,
+) -> DevicePorts:
+    """
+    Make the device's own adapters.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+    tiles : TileRepository
+        The map tiles, whose build time is reported.
+    last_error : LastError
+        Holds the latest error logged.
+
+    Returns
+    -------
+    DevicePorts
+        Wi-Fi, the system probe and the key store; replayed feeds need
+        no key, so they get Wi-Fi alone and no facts.
+    """
+    wifi = wifi_for(args=args)
+    if args.feeds != 'live':
+        return DevicePorts(wifi=wifi)
+    key = SecretsFile(path=key_path_from_env())
+    probe = SystemProbe(
+        wifi=wifi,
+        key=key,
+        tiles=tiles,
+        last_error=last_error,
+        data_dir=args.state.parent,
+        version_file=args.version_file,
+    )
+    return DevicePorts(wifi=wifi, probe=probe, key=key)
 
 
 def feeds_client(*, choice: str) -> FeedsClient:
@@ -601,7 +647,12 @@ async def show(
         await ports.feeds.close()
 
 
-def tk_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
+def tk_main(
+    *,
+    args: argparse.Namespace,
+    feeds: FeedsClient,
+    last_error: LastError | None = None,
+) -> None:
     """
     Run the device software in a Tkinter window.
 
@@ -611,6 +662,8 @@ def tk_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
         Parsed arguments.
     feeds : FeedsClient
         Feeds client.
+    last_error : LastError | None
+        Holds the latest error logged; a new one by default.
     """
     from paperroute.adapters.tk_monitor import (  # pylint: disable=C0415
         TkMonitor,
@@ -633,6 +686,11 @@ def tk_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
                 tiles=tiles,
                 builder=builder_for(args=args),
                 power=power_for(args=args),
+                device=device_for(
+                    args=args,
+                    tiles=tiles,
+                    last_error=last_error or LastError(),
+                ),
             )
             asyncio.run(
                 show(
@@ -676,7 +734,12 @@ def serve_or_exit(
         sys.exit(1)
 
 
-def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
+def web_main(
+    *,
+    args: argparse.Namespace,
+    feeds: FeedsClient,
+    last_error: LastError | None = None,
+) -> None:
     """
     Serve the device software to browsers.
 
@@ -686,6 +749,8 @@ def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
         Parsed arguments.
     feeds : FeedsClient
         Feeds client.
+    last_error : LastError | None
+        Holds the latest error logged; a new one by default.
     """
     timings = Timings()
     display = WebDisplay(status=timings.snapshot)
@@ -712,6 +777,11 @@ def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
             tiles=tiles,
             builder=builder_for(args=args),
             power=power_for(args=args),
+            device=device_for(
+                args=args,
+                tiles=tiles,
+                last_error=last_error or LastError(),
+            ),
         )
         serve_or_exit(args=args, ports=ports, display=display)
 
@@ -719,13 +789,14 @@ def web_main(*, args: argparse.Namespace, feeds: FeedsClient) -> None:
 def main() -> None:
     """Run the device software in a window or in browsers."""
     args = parse_args()
-    configure_logging(error_file=args.error_log)
+    last_error = LastError()
+    configure_logging(error_file=args.error_log, last_error=last_error)
     try:
         feeds = feeds_client(choice=args.feeds)
         if args.display == 'web':
-            web_main(args=args, feeds=feeds)
+            web_main(args=args, feeds=feeds, last_error=last_error)
         else:
-            tk_main(args=args, feeds=feeds)
+            tk_main(args=args, feeds=feeds, last_error=last_error)
     except Exception:
         logger.exception('paperroute crashed')
         raise

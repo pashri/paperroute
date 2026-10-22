@@ -78,6 +78,7 @@ APP_SERVICE: Final[dict[str, str]] = {
         ' --state /var/lib/paperroute/state.json'
         ' --error-log /var/lib/paperroute/log/errors.jsonl'
         ' --rebuild --power --wifi'
+        ' --version-file /opt/paperroute/current/VERSION'
     ),
     'ExecStopPost': '+/usr/local/bin/paperroute-led boot',
     'Restart': 'always',
@@ -572,7 +573,10 @@ def test_service_unit_passes_rebuild() -> None:
     """The app rebuilds an outdated timetable; the nightly timer stays."""
     service = read_unit(name='paperroute.service')['Service']
     timer = read_unit(name='paperroute-timetable.timer')['Timer']
-    assert service['ExecStart'].endswith(' --rebuild --power --wifi')
+    assert service['ExecStart'].endswith(
+        ' --rebuild --power --wifi'
+        ' --version-file /opt/paperroute/current/VERSION'
+    )
     assert timer['OnCalendar'] == '*-*-* 03:30:00 Australia/Sydney'
 
 
@@ -1114,6 +1118,17 @@ def test_provision_runs_service_user_detached() -> None:
         ' </dev/null >/dev/null 2>&1; then',
         f'if ! {SECRETS_LINE} </dev/null >/dev/null 2>&1; then',
     ]
+
+
+def test_install_release_writes_version() -> None:
+    """take_over writes the SHA to VERSION before making the tree root's."""
+    text = script_text(path=BIN / 'install-release')
+    body = text[text.index('take_over() {'):]
+    body = body[:body.index('\n}\n')]
+    line = '    printf \'%s\\n\' "$SHA" >"$INCOMING/tree/VERSION"\n'
+    assert body.count(line) == 1
+    changed = body.index('the staged tree changed')
+    assert changed < body.index(line) < body.index('chown -hR')
 
 
 def test_install_release_closes_lock_for_owner() -> None:

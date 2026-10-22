@@ -4,6 +4,7 @@ import logging
 import os
 import socket
 
+from paperroute.core.device_model import DeviceStatus
 from paperroute.core.saved import Settings
 
 logger = logging.getLogger(__name__)
@@ -133,4 +134,14 @@ class SystemdNotifier:
         ----------
         settings : Settings
             The settings.
+        """
+
+    def status_seen(self, *, status: DeviceStatus) -> None:
+        """
+        Ignore the device status.
+
+        Parameters
+        ----------
+        status : DeviceStatus
+            The status.
         """

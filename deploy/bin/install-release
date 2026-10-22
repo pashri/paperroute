@@ -70,6 +70,7 @@ take_over() {
         printf 'install-release: the staged tree changed\n' >&2
         exit 1
     fi
+    printf '%s\n' "$SHA" >"$INCOMING/tree/VERSION"
     chown -hR root:root "$INCOMING/tree"
     chmod -R go-w,ug-s "$INCOMING/tree"
     bad=$(find "$INCOMING/tree" \( ! -user root -o ! -group root \) \

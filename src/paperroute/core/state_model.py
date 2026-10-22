@@ -172,12 +172,15 @@ class Rebuild:
         Rebuilds failed in a row.
     retry_at : datetime | None
         The earliest time for the next rebuild, or None for now.
+    schema : str | None
+        The schema version of the timetable seen last.
     """
 
     outdated: bool = False
     running: bool = False
     failures: int = 0
     retry_at: datetime | None = None
+    schema: str | None = None
 
 
 type FoldContext = tuple[str, StripKey | None, str | None]

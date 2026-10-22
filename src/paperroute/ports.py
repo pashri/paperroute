@@ -10,6 +10,8 @@ from numpy.typing import NDArray
 
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.device_model import (
+    DeviceFacts,
+    DeviceStatus,
     JoinOutcome,
     JoinRequest,
     WifiNetwork,
@@ -383,6 +385,20 @@ class WifiControl(Protocol):
         """Delete every saved Wi-Fi profile."""
 
 
+class DeviceProbe(Protocol):
+    """Finds out the device's facts."""
+
+    async def probe(self) -> DeviceFacts:
+        """
+        Gather the device's facts.
+
+        Returns
+        -------
+        DeviceFacts
+            What was found; a fact that can't be read is None.
+        """
+
+
 class FeedsClient(Protocol):
     """Fetches GTFS-realtime feeds."""
 
@@ -475,6 +491,16 @@ class Observer(Protocol):
         ----------
         settings : Settings
             The settings, at start and after each change.
+        """
+
+    def status_seen(self, *, status: DeviceStatus) -> None:
+        """
+        Record the device status.
+
+        Parameters
+        ----------
+        status : DeviceStatus
+            The status, at start and after each change.
         """
 
 

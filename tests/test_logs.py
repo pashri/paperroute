@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.logs import configure_logging
+from paperroute.logs import LastError, configure_logging
 
 
 @pytest.fixture(autouse=True)
@@ -96,3 +96,36 @@ def test_error_file_rotates(
     for _ in range(1200):
         logger.warning('x' * 1000)
     assert path.with_name('errors.jsonl.1').exists()
+
+
+def test_last_error_keeps_latest_error() -> None:
+    """Only ERROR records count, and the latest is kept with its time."""
+    last = LastError()
+    assert last.text() is None
+    log = logging.getLogger('paperroute.last')
+    log.addHandler(last)
+    try:
+        log.warning('just a warning')
+        assert last.text() is None
+        log.error('first')
+        log.error('second %s', 'x' * 100)
+    finally:
+        log.removeHandler(last)
+    text = last.text()
+    assert text is not None
+    assert len(text) == 80
+    assert text[2] == ':'
+    assert text[5:].startswith(' second x')
+
+
+def test_configure_logging_attaches_last_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The handler given sees errors logged anywhere."""
+    monkeypatch.setattr('sys.stderr', io.StringIO())
+    last = LastError()
+    configure_logging(last_error=last)
+    logging.getLogger('paperroute.t').error('boom')
+    text = last.text()
+    assert text is not None
+    assert text.endswith(' boom')

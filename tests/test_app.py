@@ -27,16 +27,19 @@ from paperroute.app import (
     stop,
     ticker,
 )
+from paperroute.app_device import DevicePorts
 from paperroute.app_effects import StateSaver, loaded_patterns
 from paperroute.build.gtfs_files import Source
 from paperroute.build.map_style import LIGHT
 from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.device import NOTICE
+from paperroute.core.device_model import DeviceStatus
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import Point, Shape, make_shape
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
 from paperroute.core.messages import (
+    ApiKeyChanged,
     Event,
     FeedFailed,
     FetchFeed,
@@ -97,6 +100,7 @@ from tests.fakes import (
     BrokenTimetable,
     EmptyPlacedTimetable,
     FakeBuilder,
+    FakeKeys,
     FakeNetwork,
     FakePower,
     FixedClock,
@@ -390,14 +394,31 @@ class RaisingObserver:
         """
         raise RuntimeError(f'settings {settings}')
 
+    def status_seen(self, *, status: DeviceStatus) -> None:
+        """
+        Fail.
+
+        Parameters
+        ----------
+        status : DeviceStatus
+            Ignored.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        raise RuntimeError(f'status {status}')
+
 
 @dataclass
 class CallRecorder:
-    """An observer that counts feeds and ticks and keeps the settings."""
+    """An observer that counts feeds and ticks, keeping settings and status."""
 
     feeds: int = 0
     ticks: int = 0
     settings: list[Settings] = field(default_factory=list)
+    statuses: list[DeviceStatus] = field(default_factory=list)
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """
@@ -443,6 +464,17 @@ class CallRecorder:
         """
         self.settings.append(settings)
 
+    def status_seen(self, *, status: DeviceStatus) -> None:
+        """
+        Keep the device status.
+
+        Parameters
+        ----------
+        status : DeviceStatus
+            The status.
+        """
+        self.statuses.append(status)
+
 
 async def test_app_reports_settings() -> None:
     """The observer sees the start settings, then each change."""
@@ -471,6 +503,45 @@ async def test_app_reports_settings() -> None:
         Settings(auto_rebuild=True),
         Settings(auto_rebuild=False),
     ]
+
+
+async def test_app_reports_status() -> None:
+    """The observer sees the start status, and again after a key change."""
+    recorder = CallRecorder()
+    ports = replace(ports_of(), observer=recorder)
+
+    def post_change(post: Callable[[Event], None]) -> None:
+        """
+        Post a missing key before anything else.
+
+        Parameters
+        ----------
+        post : Callable[[Event], None]
+            Posts an event.
+        """
+        post(ApiKeyChanged(present=False))
+
+    await run(
+        ports=ports,
+        seed=PIN,
+        tick_every=60,
+        post_hook=post_change,
+        max_events=1,
+    )
+    assert [status.key_set for status in recorder.statuses] == [None, False]
+
+
+async def test_run_reads_the_key_before_the_first_tick() -> None:
+    """With a key store, the key is known before any feed is fetched."""
+    recorder = CallRecorder()
+    ports = replace(
+        ports_of(),
+        observer=recorder,
+        device=DevicePorts(key=FakeKeys(key='k')),
+    )
+    state = await run(ports=ports, seed=PIN, tick_every=60, max_events=1)
+    assert state.panel.key_set is True
+    assert recorder.statuses[-1].key_set is True
 
 
 def _build_db(tmp_path: Path) -> Path:

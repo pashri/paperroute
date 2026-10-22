@@ -1,11 +1,24 @@
 """Tests for the observers."""
 
 import logging
+import time
 
 import pytest
 
+from paperroute.core.device_model import DeviceStatus
 from paperroute.core.saved import Settings
 from paperroute.observers import NullObserver, ObserverGroup, Timings
+from tests.fakes import device_facts
+
+STATUS: DeviceStatus = DeviceStatus(
+    timetable='2026-10-21',
+    schema='6',
+    rebuilding=False,
+    rebuild_failed=True,
+    calls_today=12,
+    key_set=True,
+    facts=device_facts(),
+)
 
 
 class _Failing:
@@ -29,6 +42,10 @@ class _Failing:
         """Raise."""
         raise RuntimeError(settings)
 
+    def status_seen(self, *, status: DeviceStatus) -> None:
+        """Raise."""
+        raise RuntimeError(status)
+
 
 def test_timings_records_frames_and_max() -> None:
     """Two frames give a count, the last time and the maximum."""
@@ -49,7 +66,12 @@ def test_timings_records_feed() -> None:
     timings.feed_parsed(feed='v1/x', fetch_ms=1.0, parse_ms=2.0, trips=7)
     feeds = timings.snapshot()['feeds']
     assert isinstance(feeds, dict)
-    assert feeds['v1/x'] == {'fetch_ms': 1.0, 'parse_ms': 2.0, 'trips': 7}
+    entry = feeds['v1/x']
+    assert (entry['fetch_ms'], entry['parse_ms'], entry['trips']) == (
+        1.0,
+        2.0,
+        7,
+    )
 
 
 def test_timings_records_tick() -> None:
@@ -103,3 +125,41 @@ def test_observer_group_isolates_a_failing_observer(
     assert snap['tick_age_s'] is not None
     assert snap['settings'] == {'auto_rebuild': False}
     assert len(caplog.records) == 4
+
+
+def test_timings_feed_last_ok() -> None:
+    """A parsed feed records when it last worked and how long ago."""
+    timings = Timings()
+    before = time.time()
+    timings.feed_parsed(feed='f', fetch_ms=1.0, parse_ms=2.0, trips=3)
+    feeds = timings.snapshot()['feeds']
+    assert isinstance(feeds, dict)
+    entry = feeds['f']
+    assert before <= entry['last_ok'] <= time.time()
+    assert 0 <= entry['age_s'] < 5
+
+
+def test_status_json_has_no_facts() -> None:
+    """The device status is reported without the device facts."""
+    timings = Timings()
+    assert 'device' not in timings.snapshot()
+    timings.status_seen(status=STATUS)
+    snap = timings.snapshot()
+    assert snap['device'] == {
+        'timetable': '2026-10-21',
+        'schema': '6',
+        'rebuilding': False,
+        'rebuild_failed': True,
+        'calls_today': 12,
+        'key_set': True,
+    }
+    assert 'facts' not in str(snap)
+    assert 'secret' not in str(snap)
+
+
+def test_null_and_group_take_status() -> None:
+    """Both pass on or ignore a status without failing."""
+    NullObserver().status_seen(status=STATUS)
+    timings = Timings()
+    ObserverGroup(observers=[_Failing(), timings]).status_seen(status=STATUS)
+    assert timings.device == STATUS

@@ -338,6 +338,9 @@ def test_web_main_logs_a_bind_failure(
         state=tmp_path / 'state.json',
         rebuild=False,
         power=False,
+        wifi=False,
+        version_file=None,
+        feeds=str(REAL),
     )
     build_db(path=args.timetable)
     with socket.socket() as held:
@@ -501,6 +504,9 @@ def test_tk_main_passes_the_tiles_variant(
         state=tmp_path / 'state.json',
         rebuild=False,
         power=False,
+        wifi=False,
+        version_file=None,
+        feeds=str(REAL),
     )
     cli.tk_main(args=args, feeds=FileFeedsClient(directory=REAL))
     assert seen == [TileVariant.BITS]

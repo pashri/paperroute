@@ -5,9 +5,13 @@ from datetime import timedelta
 import pytest
 
 from paperroute.core.banners import NO_KEY
+from paperroute.core.device import PROBE_EVERY, device_status
+from paperroute.core.device_model import DeviceStatus
 from paperroute.core.messages import (
     ApiKeyChanged,
     ControlPower,
+    DeviceProbed,
+    DeviceProbeFailed,
     FetchFeed,
     Knob,
     KnobTurned,
@@ -15,6 +19,7 @@ from paperroute.core.messages import (
     PowerAction,
     PowerFailed,
     PowerRequested,
+    ProbeDevice,
     QuitRequested,
     Render,
     SaveState,
@@ -29,6 +34,7 @@ from paperroute.core.stop_view import StopView
 from tests.core.factories import START
 from tests.core.test_rebuild import pinned
 from tests.core.test_state import at, fresh, loaded
+from tests.fakes import device_facts
 
 
 def test_settings_change_is_saved() -> None:
@@ -162,3 +168,65 @@ def test_unknown_key_state_polls() -> None:
     assert state.panel.key_set is None
     _, effects = step(state, at(seconds=30))
     assert fetches(effects=effects)
+
+
+def probes(*, effects: tuple[object, ...]) -> int:
+    """
+    Count the ProbeDevice effects.
+
+    Parameters
+    ----------
+    effects : tuple[object, ...]
+        Effects.
+
+    Returns
+    -------
+    int
+        How many probe the device.
+    """
+    return sum(isinstance(effect, ProbeDevice) for effect in effects)
+
+
+def test_first_tick_probes() -> None:
+    """The first tick asks for the device facts."""
+    state, effects = step(fresh(), at(seconds=1))
+    assert probes(effects=effects) == 1
+    assert state.panel.probed_at == START + timedelta(seconds=1)
+
+
+def test_probe_every_thirty_seconds() -> None:
+    """Later ticks probe again once PROBE_EVERY has passed."""
+    assert PROBE_EVERY == timedelta(seconds=30)
+    state, _ = step(fresh(), at(seconds=0))
+    state, effects = step(state, at(seconds=29))
+    assert not probes(effects=effects)
+    _, effects = step(state, at(seconds=30))
+    assert probes(effects=effects) == 1
+
+
+def test_probed_facts_are_kept_with_the_key() -> None:
+    """Facts are stored and their key state copied to the panel."""
+    facts = device_facts(key_set=False)
+    state, _ = step(loaded(state=fresh()), DeviceProbed(facts=facts))
+    assert state.panel.facts == facts
+    assert state.panel.key_set is False
+    after, effects = step(state, DeviceProbeFailed())
+    assert after is state
+    assert not effects
+
+
+def test_device_status() -> None:
+    """The status gathers the timetable, rebuild, calls and facts."""
+    state, _ = step(loaded(state=fresh()), at(seconds=30))
+    state, _ = step(state, DeviceProbed(facts=device_facts()))
+    status = device_status(state=state)
+    assert status == DeviceStatus(
+        timetable=state.saving.timetable,
+        schema=None,
+        rebuilding=False,
+        rebuild_failed=False,
+        calls_today=state.quota.calls,
+        key_set=True,
+        facts=device_facts(),
+    )
+    assert status.calls_today > 0

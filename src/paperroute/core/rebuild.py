@@ -134,10 +134,14 @@ def seen_schema(*, state: State, schema: str | None) -> State:
     Returns
     -------
     State
-        State with `rebuild.outdated` set from the schema.
+        State with the schema noted and `rebuild.outdated` set from it.
     """
-    outdated = is_outdated(schema=schema)
-    return replace(state, rebuild=replace(state.rebuild, outdated=outdated))
+    rebuild = replace(
+        state.rebuild,
+        outdated=is_outdated(schema=schema),
+        schema=schema,
+    )
+    return replace(state, rebuild=rebuild)
 
 
 def rebuilt(*, state: State, ok: bool) -> State:

@@ -11,7 +11,12 @@ from paperroute.core.chooser_steps import (
     picked_reloads,
     trip_feeds,
 )
-from paperroute.core.device import on_device_event, power_guard, quiet_guard
+from paperroute.core.device import (
+    on_device_event,
+    power_guard,
+    probe_effects,
+    quiet_guard,
+)
 from paperroute.core.knobs import knob_moved
 from paperroute.core.map_requests import map_feeds, shows_vehicles
 from paperroute.core.map_state import MapState, failed, with_patterns
@@ -24,6 +29,8 @@ from paperroute.core.messages import (
     ColumnLoaded,
     DeparturesFailed,
     DeparturesLoaded,
+    DeviceProbed,
+    DeviceProbeFailed,
     Effect,
     Event,
     FeedFailed,
@@ -346,9 +353,10 @@ def on_tick(
     state, fetches = poll_effects(state=state)
     state, saves = saved_effects(state=state)
     state, matches = rematch_effects(state=state)
+    state, probes = probe_effects(state=state)
     return settled(
         state=state,
-        effects=(*loads, *picked, *fetches, *saves, *matches),
+        effects=(*loads, *picked, *fetches, *saves, *matches, *probes),
     )
 
 
@@ -754,6 +762,8 @@ def dispatched(
             | PowerRequested()
             | PowerFailed()
             | ApiKeyChanged()
+            | DeviceProbed()
+            | DeviceProbeFailed()
         ):
             return on_device_event(state=state, event=event)
         case PlacesMatched() | PlacesFailed():

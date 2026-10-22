@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
+from paperroute.core.device_model import DeviceStatus
 from paperroute.core.saved import Settings
 from paperroute.ports import Observer
 
@@ -69,6 +70,10 @@ class Timings:
         `time.monotonic()` at the latest app loop tick.
     settings : Settings | None
         The settings in force, or None before the app reports them.
+    last_ok : dict[str, float]
+        Wall-clock time of each feed's latest parse.
+    device : DeviceStatus | None
+        The device status, or None before the app reports it.
     """
 
     frames: int = 0
@@ -78,6 +83,8 @@ class Timings:
     feeds: dict[str, FeedTiming] = field(default_factory=dict)
     last_tick_monotonic: float | None = None
     settings: Settings | None = None
+    last_ok: dict[str, float] = field(default_factory=dict)
+    device: DeviceStatus | None = None
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """
@@ -115,6 +122,7 @@ class Timings:
             parse_ms=parse_ms,
             trips=trips,
         )
+        self.last_ok[feed] = time.time()
 
     def ticked(self) -> None:
         """Record an app loop tick."""
@@ -131,6 +139,17 @@ class Timings:
         """
         self.settings = settings
 
+    def status_seen(self, *, status: DeviceStatus) -> None:
+        """
+        Record the device status.
+
+        Parameters
+        ----------
+        status : DeviceStatus
+            The status.
+        """
+        self.device = status
+
     def snapshot(self) -> dict[str, object]:
         """
         Current timings in a JSON-ready form.
@@ -139,9 +158,11 @@ class Timings:
         -------
         dict[str, object]
             Frame counts and times, ages in seconds (None before the
-            first frame or tick), the latest timing per feed, and the
-            settings once reported.
+            first frame or tick), the latest timing per feed with when
+            it last worked, and the settings and device status once
+            reported. The device facts are left out.
         """
+        now = time.time()
         snapshot: dict[str, object] = {
             'frames': self.frames,
             'last_render_ms': self.last_render_ms,
@@ -153,6 +174,8 @@ class Timings:
                     'fetch_ms': timing.fetch_ms,
                     'parse_ms': timing.parse_ms,
                     'trips': timing.trips,
+                    'last_ok': self.last_ok[name],
+                    'age_s': now - self.last_ok[name],
                 }
                 for name, timing in self.feeds.items()
             },
@@ -161,7 +184,33 @@ class Timings:
             snapshot['settings'] = {
                 'auto_rebuild': self.settings.auto_rebuild,
             }
+        if self.device is not None:
+            snapshot['device'] = device_snapshot(status=self.device)
         return snapshot
+
+
+def device_snapshot(*, status: DeviceStatus) -> dict[str, object]:
+    """
+    Give the device status in a JSON-ready form, without its facts.
+
+    Parameters
+    ----------
+    status : DeviceStatus
+        The status.
+
+    Returns
+    -------
+    dict[str, object]
+        Timetable, schema, rebuild state, calls today and the key state.
+    """
+    return {
+        'timetable': status.timetable,
+        'schema': status.schema,
+        'rebuilding': status.rebuilding,
+        'rebuild_failed': status.rebuild_failed,
+        'calls_today': status.calls_today,
+        'key_set': status.key_set,
+    }
 
 
 class NullObserver:
@@ -206,6 +255,16 @@ class NullObserver:
         ----------
         settings : Settings
             The settings.
+        """
+
+    def status_seen(self, *, status: DeviceStatus) -> None:
+        """
+        Ignore the device status.
+
+        Parameters
+        ----------
+        status : DeviceStatus
+            The status.
         """
 
 
@@ -288,3 +347,14 @@ class ObserverGroup:
             The settings.
         """
         self._each(call=lambda o: o.settings_seen(settings=settings))
+
+    def status_seen(self, *, status: DeviceStatus) -> None:
+        """
+        Pass on the device status.
+
+        Parameters
+        ----------
+        status : DeviceStatus
+            The status.
+        """
+        self._each(call=lambda o: o.status_seen(status=status))

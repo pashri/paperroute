@@ -15,6 +15,14 @@ from paperroute.adapters.power import NullPower
 from paperroute.adapters.rebuild import NullBuilder
 from paperroute.adapters.tfnsw import FeedError
 from paperroute.adapters.tiles_db import NullTiles
+from paperroute.app_device import (
+    DeviceEffect,
+    DevicePorts,
+    Reported,
+    device_work,
+    key_known,
+    report_status,
+)
 from paperroute.app_effects import (
     StateSaver,
     VersionWatch,
@@ -44,6 +52,7 @@ from paperroute.core.messages import (
     NoticeView,
     PowerAction,
     PowerFailed,
+    ProbeDevice,
     QuitRequested,
     RebuildTimetable,
     Render,
@@ -104,6 +113,7 @@ class Ports:
     measures: StopMeasures = field(default_factory=StopMeasures)
     builder: TimetableBuilder = field(default_factory=NullBuilder)
     power: PowerControl = field(default_factory=NullPower)
+    device: DevicePorts = field(default_factory=DevicePorts)
 
 
 class MapRenderer:
@@ -412,6 +422,7 @@ def background(
         | MapRequest
         | RebuildTimetable
         | ControlPower
+        | DeviceEffect
         | WorkerEffect
     ),
     queue: asyncio.Queue[Event],
@@ -424,7 +435,7 @@ def background(
     ports : Ports
         Adapters.
     effect : LoadDepartures | FetchFeed | MapRequest | RebuildTimetable
-        | ControlPower | WorkerEffect
+        | ControlPower | DeviceEffect | WorkerEffect
         Effect.
     queue : asyncio.Queue[Event]
         Event queue.
@@ -458,6 +469,34 @@ def background(
                 power_control(ports=ports, action=action, queue=queue),
                 PowerFailed(action=action),
             )
+    return other_work(ports=ports, effect=effect, queue=queue)
+
+
+def other_work(
+    *,
+    ports: Ports,
+    effect: DeviceEffect | WorkerEffect,
+    queue: asyncio.Queue[Event],
+) -> tuple[Coroutine[Any, Any, None], Event]:
+    """
+    Make the work for a device or worker-thread effect.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters.
+    effect : DeviceEffect | WorkerEffect
+        Effect.
+    queue : asyncio.Queue[Event]
+        Event queue.
+
+    Returns
+    -------
+    tuple[Coroutine[Any, Any, None], Event]
+        The work, and the event that lets the app recover if it crashes.
+    """
+    if isinstance(effect, ProbeDevice):
+        return device_work(ports=ports.device, effect=effect, queue=queue)
     call, fallback = work_for(
         timetable=ports.timetable, network=ports.network, effect=effect
     )
@@ -694,11 +733,14 @@ class Outputs:
         Writes the saved state.
     pending : PendingView
         The view waiting to be drawn.
+    reported : Reported
+        The device status reported last.
     """
 
     maps: MapRenderer
     saver: StateSaver
     pending: PendingView = field(default_factory=PendingView)
+    reported: Reported = field(default_factory=Reported)
 
 
 async def draw_pending(*, ports: Ports, outputs: Outputs) -> None:
@@ -803,6 +845,9 @@ async def handle(
     state, effects = step(state, event)
     if state.settings != before:
         ports.observer.settings_seen(settings=state.settings)
+    report_status(
+        observer=ports.observer, state=state, reported=outputs.reported,
+    )
     await carry_out(
         effects=effects,
         ports=ports,
@@ -867,6 +912,12 @@ async def run(
         maps=MapRenderer(tiles=ports.tiles, variant=tiles_variant),
         saver=StateSaver(states=ports.states),
     )
+    report_status(
+        observer=ports.observer, state=state, reported=outputs.reported,
+    )
+    known = key_known(ports=ports.device)
+    if known is not None:
+        queue.put_nowait(known)
     tasks: set[asyncio.Task[None]] = set()
     clock = asyncio.create_task(
         ticker(ports=ports, queue=queue, every=tick_every, pump=pump)

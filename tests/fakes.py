@@ -9,6 +9,13 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.core.chooser import ChooserPath, Column
+from paperroute.core.device_model import (
+    DeviceFacts,
+    JoinOutcome,
+    JoinRequest,
+    WifiNetwork,
+    WifiStatus,
+)
 from paperroute.core.geo import MetreBox, Point, Shape, to_metres
 from paperroute.core.messages import PowerAction
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
@@ -475,3 +482,191 @@ class FakePower:
         shown = 0 if self.display is None else len(self.display.frames)
         self.calls.append((action, shown))
         return self.result
+
+
+@dataclass
+class FakeWifi:
+    """
+    A Wi-Fi control with a fixed link that joins nothing.
+
+    Attributes
+    ----------
+    link : WifiStatus
+        What `status` reports.
+    """
+
+    link: WifiStatus = field(default_factory=WifiStatus)
+
+    async def status(self) -> WifiStatus:
+        """
+        Give the fixed link.
+
+        Returns
+        -------
+        WifiStatus
+            `link`.
+        """
+        return self.link
+
+    async def scan(self) -> tuple[WifiNetwork, ...]:
+        """
+        Find nothing.
+
+        Returns
+        -------
+        tuple[WifiNetwork, ...]
+            Empty.
+        """
+        return ()
+
+    async def start_hotspot(self, *, password: str) -> bool:
+        """
+        Refuse.
+
+        Parameters
+        ----------
+        password : str
+            Ignored.
+
+        Returns
+        -------
+        bool
+            False.
+        """
+        return False
+
+    async def stop_hotspot(self) -> None:
+        """Do nothing."""
+
+    async def join(self, *, request: JoinRequest) -> JoinOutcome:
+        """
+        Fail to join.
+
+        Parameters
+        ----------
+        request : JoinRequest
+            Ignored.
+
+        Returns
+        -------
+        JoinOutcome
+            FAILED.
+        """
+        return JoinOutcome.FAILED
+
+    async def forget_all(self) -> None:
+        """Do nothing."""
+
+
+def device_facts(*, key_set: bool = True) -> DeviceFacts:
+    """
+    Make facts for a device on no network.
+
+    Parameters
+    ----------
+    key_set : bool
+        Whether a key is set.
+
+    Returns
+    -------
+    DeviceFacts
+        The facts.
+    """
+    return DeviceFacts(
+        wifi=WifiStatus(),
+        clock_synced=True,
+        uptime_s=60.0,
+        cpu_c=45.0,
+        disk_free=1_000_000,
+        mem_free=2_000_000,
+        version='dev',
+        last_error=None,
+        tiles_built=None,
+        key_set=key_set,
+    )
+
+
+@dataclass
+class FakeProbe:
+    """
+    A device probe that gives fixed facts, or raises.
+
+    Attributes
+    ----------
+    facts : DeviceFacts
+        What `probe` gives.
+    error : Exception | None
+        Raised by `probe` when set.
+    """
+
+    facts: DeviceFacts = field(default_factory=device_facts)
+    error: Exception | None = None
+
+    async def probe(self) -> DeviceFacts:
+        """
+        Give the fixed facts.
+
+        Returns
+        -------
+        DeviceFacts
+            `facts`.
+
+        Raises
+        ------
+        Exception
+            `error`, when set.
+        """
+        if self.error is not None:
+            raise self.error
+        return self.facts
+
+
+@dataclass
+class FakeKeys:
+    """
+    A key store holding a key or not.
+
+    Attributes
+    ----------
+    key : str | None
+        The key held.
+    """
+
+    key: str | None = field(default=None, repr=False)
+
+    def read(self) -> str | None:
+        """
+        Give the key.
+
+        Returns
+        -------
+        str | None
+            `key`.
+        """
+        return self.key
+
+    def present(self) -> bool:
+        """
+        Say whether a key is held.
+
+        Returns
+        -------
+        bool
+            True when `key` is set.
+        """
+        return self.key is not None
+
+    def write(self, *, key: str) -> None:
+        """
+        Hold a key.
+
+        Parameters
+        ----------
+        key : str
+            The key.
+        """
+        self.key = key
+
+    def clear(self) -> None:
+        """Drop the key."""
+        self.key = None

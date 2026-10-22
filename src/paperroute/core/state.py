@@ -11,11 +11,12 @@ from paperroute.core.chooser_steps import (
     picked_reloads,
     trip_feeds,
 )
-from paperroute.core.device import on_device_event, power_guard
+from paperroute.core.device import on_device_event, power_guard, quiet_guard
 from paperroute.core.knobs import knob_moved
 from paperroute.core.map_requests import map_feeds, shows_vehicles
 from paperroute.core.map_state import MapState, failed, with_patterns
 from paperroute.core.messages import (
+    ApiKeyChanged,
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
     ChooserEvent,
@@ -748,7 +749,12 @@ def dispatched(
             result = on_quit(state=state)
         case TimetableSeen() | TimetableRebuilt():
             result = on_timetable_file(state=state, event=event)
-        case SettingsChanged() | PowerRequested() | PowerFailed():
+        case (
+            SettingsChanged()
+            | PowerRequested()
+            | PowerFailed()
+            | ApiKeyChanged()
+        ):
             return on_device_event(state=state, event=event)
         case PlacesMatched() | PlacesFailed():
             result = on_matched(state=state, event=event)
@@ -771,4 +777,4 @@ def dispatched(
             | MapDataFailed()
         ):
             result = on_map_event(state=state, event=event)
-    return power_guard(state=state, result=result)
+    return quiet_guard(result=power_guard(state=state, result=result))

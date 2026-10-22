@@ -359,7 +359,7 @@ def _restored_logging() -> Iterator[None]:
 def test_main_logs_a_startup_crash_to_the_error_log(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A missing key file reaches errors.jsonl, then still propagates."""
+    """A missing timetable reaches errors.jsonl, then still propagates."""
     key_file = tmp_path / 'no-such-key'
     error_log = tmp_path / 'log' / 'errors.jsonl'
     monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(key_file))
@@ -372,13 +372,13 @@ def test_main_logs_a_startup_crash_to_the_error_log(
             '--error-log', str(error_log),
         ],
     )
-    with pytest.raises(FileNotFoundError):
+    with pytest.raises(sqlite3.OperationalError):
         main()
     lines = error_log.read_text(encoding='utf-8').splitlines()
     assert len(lines) == 1
     record = json.loads(lines[0])
     assert record['level'] == 'ERROR'
-    assert 'FileNotFoundError' in record['exc_info']
+    assert 'OperationalError' in record['exc_info']
 
 
 async def test_serve_web_passes_the_tiles_variant_to_run(

@@ -103,10 +103,8 @@ unplug the data cable.
 
        scripts/provision <user>@paperroute.local --reboot
 
-2. Put the TfNSW API key on the Pi without printing it.
-
-       ssh <user>@paperroute.local 'umask 077; cat > ~/tfnsw_api_key.tmp' < ~/tfnsw_api_key
-       ssh -t <user>@paperroute.local 'sudo install -m 600 -o paperroute -g paperroute ~/tfnsw_api_key.tmp /var/lib/paperroute/secrets && rm ~/tfnsw_api_key.tmp'
+2. Set the TfNSW API key at `http://paperroute.local/device` under
+   "TfNSW API key" (or on the phone during Wi-Fi setup).
 
 3. Deploy. It never prompts.
 

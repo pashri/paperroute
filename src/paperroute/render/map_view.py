@@ -365,5 +365,5 @@ def draw_map_view(
     view_header(canvas, view=view, active='Map')
     draw_sidebar(canvas, view=view)
     if view.banner:
-        banner(canvas, text=view.banner)
+        banner(canvas, text=view.banner, warning=view.warning)
     return snap(grey=canvas.grey(), width=view.base.width)

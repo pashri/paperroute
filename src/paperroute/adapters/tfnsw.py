@@ -2,6 +2,7 @@
 
 import os
 import sys
+from collections.abc import Callable
 from http import HTTPStatus
 from pathlib import Path
 from typing import Final
@@ -17,6 +18,26 @@ class FeedError(Exception):
     """A feed couldn't be fetched."""
 
 
+def key_path_from_env() -> Path:
+    """
+    Name the key file from PAPERROUTE_API_KEY_FILE.
+
+    Exits with a message when the variable is unset.
+
+    Returns
+    -------
+    Path
+        The key file, which may not exist yet.
+    """
+    key_file = os.getenv('PAPERROUTE_API_KEY_FILE')
+    if not key_file:
+        sys.exit(
+            'Set PAPERROUTE_API_KEY_FILE to the file holding the '
+            'TfNSW API key.'
+        )
+    return Path(key_file).expanduser()
+
+
 def api_key_from_env() -> str:
     """
     Read the TfNSW key from the file named by PAPERROUTE_API_KEY_FILE.
@@ -28,13 +49,7 @@ def api_key_from_env() -> str:
     str
         The key.
     """
-    key_file = os.getenv('PAPERROUTE_API_KEY_FILE')
-    if not key_file:
-        sys.exit(
-            'Set PAPERROUTE_API_KEY_FILE to the file holding the '
-            'TfNSW API key.'
-        )
-    return Path(key_file).expanduser().read_text(encoding='utf-8').strip()
+    return key_path_from_env().read_text(encoding='utf-8').strip()
 
 
 class AiohttpFeedsClient:
@@ -43,8 +58,9 @@ class AiohttpFeedsClient:
 
     Parameters
     ----------
-    api_key : str
-        TfNSW Open Data API key.
+    key : Callable[[], str | None]
+        Gives the TfNSW Open Data API key at each fetch, or None when
+        there is none.
     session : aiohttp.ClientSession | None
         Session to use; one is made on first fetch otherwise.
     base_url : str
@@ -59,13 +75,13 @@ class AiohttpFeedsClient:
     def __init__(
         self,
         *,
-        api_key: str,
+        key: Callable[[], str | None],
         session: aiohttp.ClientSession | None = None,
         base_url: str = BASE_URL,
         timeout_s: float = 10.0,
         limiter: StartLimiter | None = None,
     ) -> None:
-        self.api_key = api_key
+        self.key = key
         self.session = session
         self.owns_session = session is None
         self.base_url = base_url
@@ -89,11 +105,15 @@ class AiohttpFeedsClient:
         Raises
         ------
         FeedError
-            On a non-200 status, a timeout or a connection error.
+            With no key, on a non-200 status, a timeout or a connection
+            error. With no key nothing is sent.
         """
+        key = self.key()
+        if key is None:
+            raise FeedError(f'{feed}: no API key')
         self.session = self.session or aiohttp.ClientSession()
         headers = {
-            'Authorization': f'apikey {self.api_key}',
+            'Authorization': f'apikey {key}',
             'Accept': 'application/x-google-protobuf',
         }
         if self.limiter:

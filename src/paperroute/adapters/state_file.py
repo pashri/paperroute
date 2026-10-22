@@ -398,11 +398,11 @@ def write_atomic(
     path: Path,
     text: str,
     sync: Callable[[Path], None] | None = None,
+    mode: int = FILE_MODE,
+    prefix: str = TEMP_PREFIX,
 ) -> None:
     """
     Replace a file so a reader sees the old text or the new, never a mix.
-
-    The file is readable by everyone.
 
     Parameters
     ----------
@@ -414,6 +414,10 @@ def write_atomic(
         Flushes the directory after the rename; `sync_directory` when None.
         A failure here is logged, not raised, since the new file is
         already in place.
+    mode : int
+        Permission bits of the new file; readable by everyone by default.
+    prefix : str
+        Name prefix of the temp file written beside it.
 
     Raises
     ------
@@ -421,12 +425,12 @@ def write_atomic(
         When writing or renaming fails; the temp file is removed.
     """
     descriptor, temp_name = tempfile.mkstemp(
-        prefix=TEMP_PREFIX,
+        prefix=prefix,
         dir=path.parent,
     )
     try:
         with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
-            os.fchmod(handle.fileno(), FILE_MODE)
+            os.fchmod(handle.fileno(), mode)
             handle.write(text)
             handle.flush()
             os.fsync(handle.fileno())
@@ -438,7 +442,7 @@ def write_atomic(
     try:
         (sync or sync_directory)(path.parent)
     except OSError:
-        logger.warning('state.json directory not synced', exc_info=True)
+        logger.warning('%s directory not synced', path.name, exc_info=True)
 
 
 def sync_directory(directory: Path) -> None:

@@ -130,6 +130,8 @@ class StopView:
         most `SIDEBAR_ROWS` in all. They do not depend on `scroll`.
     head_departures : tuple[Departure, ...]
         The departures behind `head_rows`, in the same order.
+    warning : bool
+        True when the banner is a device warning, drawn inverted.
     """
 
     origin: str
@@ -143,6 +145,7 @@ class StopView:
     tag: PinTag = NOT_PINNED
     head_rows: tuple[Row, ...] = ()
     head_departures: tuple[Departure, ...] = ()
+    warning: bool = False
 
 
 @dataclass(frozen=True)
@@ -174,6 +177,9 @@ class StopInputs:
         The header's pin tag.
     missing : bool
         Whether the timetable no longer knows the place.
+    notice : str | None
+        A device warning that takes the banner ahead of any about live
+        data, or None.
     """
 
     origin: str
@@ -186,6 +192,7 @@ class StopInputs:
     loaded: bool = True
     tag: PinTag = NOT_PINNED
     missing: bool = False
+    notice: str | None = None
 
 
 def clock_text(*, moment: datetime) -> str:
@@ -473,8 +480,8 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     -------
     StopView
         View-model, with scroll clamped to the rows that fit under any
-        banner. With no destination there is no hero: every departure is
-        a row.
+        banner. A notice takes the banner ahead of the live data one.
+        With no destination there is no hero: every departure is a row.
     """
     now = inputs.now
     upcoming = in_view(departures=inputs.departures, now=now)
@@ -501,7 +508,7 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     if lead is not None:
         order.insert(0, lead)
     head = order[:SIDEBAR_ROWS]
-    text = banner(
+    text = inputs.notice or banner(
         live_since=inputs.live_since, now=now, has_feed=inputs.has_feed
     )
     shown = ROWS_UNDER_BANNER if text else VISIBLE_ROWS
@@ -522,4 +529,5 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         tag=inputs.tag,
         head_rows=tuple(rows[i] for i in head),
         head_departures=tuple(upcoming[i].departure for i in head),
+        warning=inputs.notice is not None,
     )

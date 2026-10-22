@@ -309,6 +309,20 @@ class SettingsChanged:
 
 
 @dataclass(frozen=True)
+class ApiKeyChanged:
+    """
+    The TfNSW API key was found set or not set.
+
+    Attributes
+    ----------
+    present : bool
+        Whether a key is set.
+    """
+
+    present: bool
+
+
+@dataclass(frozen=True)
 class PowerRequested:
     """Shutting down or restarting was asked for."""
 
@@ -544,6 +558,7 @@ Event = (
     | TimetableSeen
     | TimetableRebuilt
     | SettingsChanged
+    | ApiKeyChanged
     | PowerRequested
     | PowerFailed
     | PlacesMatched

@@ -455,3 +455,45 @@ class StateRepository(Protocol):
         OSError
             When it can't be written.
         """
+
+
+class KeyStore(Protocol):
+    """Holds the TfNSW API key."""
+
+    def read(self) -> str | None:
+        """
+        Read the key.
+
+        Returns
+        -------
+        str | None
+            The key, or None when none is set.
+        """
+
+    def present(self) -> bool:
+        """
+        Say whether a key is set.
+
+        Returns
+        -------
+        bool
+            True when there is a key.
+        """
+
+    def write(self, *, key: str) -> None:
+        """
+        Store a key.
+
+        Parameters
+        ----------
+        key : str
+            The key.
+
+        Raises
+        ------
+        ValueError
+            When it is not a valid key.
+        """
+
+    def clear(self) -> None:
+        """Remove the key."""

@@ -3,9 +3,12 @@
 from dataclasses import replace
 from typing import Final
 
+from paperroute.core.banners import feeds_held
 from paperroute.core.messages import (
+    ApiKeyChanged,
     ControlPower,
     Effect,
+    FetchFeed,
     NoticeView,
     PowerAction,
     PowerFailed,
@@ -108,28 +111,36 @@ def on_power_failed(
 
 
 def on_device_event(
-    *, state: State, event: SettingsChanged | PowerRequested | PowerFailed
+    *,
+    state: State,
+    event: SettingsChanged | PowerRequested | PowerFailed | ApiKeyChanged,
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Store a setting, start a power action, or give up on a failed one.
+    Store a setting or the key's state, or handle a power action.
 
     Parameters
     ----------
     state : State
         State.
-    event : SettingsChanged | PowerRequested | PowerFailed
+    event : SettingsChanged | PowerRequested | PowerFailed | ApiKeyChanged
         What happened.
 
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        New state and effects.
+        New state and effects; a key change is held by `power_guard` and
+        `quiet_guard` like any redraw.
     """
     match event:
         case SettingsChanged():
             return on_settings(state=state, event=event)
         case PowerFailed():
             return on_power_failed(state=state, event=event)
+        case ApiKeyChanged():
+            result = on_key(state=state, event=event)
+            return quiet_guard(
+                result=power_guard(state=state, result=result),
+            )
     return on_power(state=state, event=event)
 
 
@@ -159,3 +170,58 @@ def power_guard(
         effect for effect in effects if not isinstance(effect, Render)
     )
     return replace(after, last_view=state.last_view), kept
+
+
+def on_key(
+    *, state: State, event: ApiKeyChanged
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Store whether an API key is set, and redraw.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    event : ApiKeyChanged
+        Whether a key is set.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with the key noted, and the redraw if the view changed. A
+        key that was missing and is now set makes the next tick poll.
+    """
+    if event.present and state.panel.key_set is False:
+        state = replace(
+            state,
+            last_fetch=None,
+            map=replace(state.map, fetched_at={}),
+        )
+    panel = replace(state.panel, key_set=event.present)
+    return settled(state=replace(state, panel=panel))
+
+
+def quiet_guard(
+    *, result: tuple[State, tuple[Effect, ...]]
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Drop every FetchFeed from a result while the feeds are held.
+
+    Parameters
+    ----------
+    result : tuple[State, tuple[Effect, ...]]
+        The handler's state and effects.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        The result, without FetchFeeds when `feeds_held` says so for the
+        state after the event.
+    """
+    after, effects = result
+    if not feeds_held(state=after):
+        return result
+    kept = tuple(
+        effect for effect in effects if not isinstance(effect, FetchFeed)
+    )
+    return after, kept

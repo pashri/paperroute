@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 
+from paperroute.core.banners import device_banner
 from paperroute.core.chooser_steps import chooser_view
 from paperroute.core.chooser_view import ChooserView
 from paperroute.core.live import LiveDeparture, live_since, resolved
@@ -104,6 +105,7 @@ def stop_view_of(*, state: State) -> StopView:
             has_feed=bool(state.feeds) or not state.board.departures,
             loaded=state.board.loaded_until is not None,
             missing=pin.missing,
+            notice=device_banner(state=state),
             tag=pin_tag(
                 index=shown_index(state=state),
                 total=len(state.places.pins),

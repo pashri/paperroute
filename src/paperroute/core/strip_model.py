@@ -244,6 +244,8 @@ class StripView:
         Why there is no strip, or None.
     banner : str | None
         Live data banner, or None.
+    warning : bool
+        True when the banner is a device warning, drawn inverted.
     """
 
     origin: str
@@ -257,6 +259,7 @@ class StripView:
     panel: StripPanel
     empty: str | None
     banner: str | None
+    warning: bool = False
 
 
 @dataclass(frozen=True)

@@ -12,6 +12,7 @@ ARROW_WIDTH: Final[float] = 22.0
 ARROW_GAP: Final[int] = 4
 MIN_PAIR_PX: Final[int] = 9
 BANNER: Final[int] = 34
+WARNING_SIDE: Final[int] = 18  # warning triangle side, in pixels
 FASTER: Final[str] = 'FASTER'
 TAG_GAP: Final[int] = 8
 TABS: Final[tuple[str, ...]] = ('Stop', 'Map', 'Strip', 'Strip + map')
@@ -266,9 +267,11 @@ def view_header(
     )
 
 
-def banner(canvas: Canvas, *, text: str) -> None:
+def banner(
+    canvas: Canvas, *, text: str, warning: bool = False
+) -> None:
     """
-    Draw the bordered banner under the header.
+    Draw the banner under the header.
 
     Parameters
     ----------
@@ -276,13 +279,50 @@ def banner(canvas: Canvas, *, text: str) -> None:
         Target.
     text : str
         Banner text.
+    warning : bool
+        Draw a device warning: a solid ink band with paper text after a
+        paper warning triangle. Otherwise a bordered paper band.
     """
+    face = Face(weight=700, px=15)
     canvas.rect(box=(0, HEADER, WIDTH, HEADER + BANNER), grey=INK)
+    if warning:
+        warning_triangle(canvas, x=16, y=HEADER + BANNER / 2, grey=PAPER)
+        fitted = canvas.fit(text=text, face=face, width=WIDTH - 60)
+        canvas.text(at=(44, HEADER + 23), text=fitted, face=face, grey=PAPER)
+        return
     canvas.rect(
         box=(3, HEADER + 3, WIDTH - 3, HEADER + BANNER - 3), grey=PAPER)
-    face = Face(weight=700, px=15)
     fitted = canvas.fit(text=text, face=face, width=WIDTH - 32)
     canvas.text(at=(16, HEADER + 23), text=fitted, face=face, grey=INK)
+
+
+def warning_triangle(
+    canvas: Canvas, *, x: float, y: float, grey: int
+) -> None:
+    """
+    Draw a warning triangle with a cut-out exclamation mark.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    x : float
+        Left edge.
+    y : float
+        Vertical centre.
+    grey : int
+        Triangle grey; the mark is cut out in ink.
+    """
+    side = WARNING_SIDE
+    height = side * 3 ** 0.5 / 2
+    top, bottom = y - height / 2, y + height / 2
+    canvas.polygon(
+        points=[(x, bottom), (x + side / 2, top), (x + side, bottom)],
+        grey=grey,
+    )
+    middle = x + side / 2
+    canvas.rect(box=(middle - 1, top + 5, middle + 1, bottom - 5), grey=INK)
+    canvas.rect(box=(middle - 1, bottom - 3, middle + 1, bottom - 1), grey=INK)
 
 
 def badge(canvas: Canvas, *, x: float, y: float, route: str,

@@ -344,7 +344,7 @@ def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
     view_header(canvas, view=view, active='Stop')
     top = HEADER
     if view.banner:
-        banner(canvas, text=view.banner)
+        banner(canvas, text=view.banner, warning=view.warning)
         top += BANNER
     if view.empty:
         face = Face(weight=700, px=22)

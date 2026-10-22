@@ -35,6 +35,11 @@ SUDOERS_RULE: Final[str] = (
     '/usr/local/sbin/paperroute-install-files "", '
     '/usr/local/sbin/paperroute-install-tiles ""'
 )
+SECRETS_LINE: Final[str] = (
+    "setsid -w runuser -u paperroute -- sh -c 'umask 077 && "
+    "{ [ -e /var/lib/paperroute/secrets ] || "
+    ": >/var/lib/paperroute/secrets; }'"
+)
 BAD_SHAS: Final[tuple[str, ...]] = (
     '',
     'ABCDEF1',
@@ -864,7 +869,11 @@ def test_shell_script_parses(path: Path) -> None:
 @pytest.mark.parametrize('path', SHELL_SCRIPTS, ids=lambda path: path.name)
 def test_shell_script_never_names_the_key(path: Path) -> None:
     """No script names the key file, so none can handle or echo the key."""
-    text = script_text(path=path)
+    text = (
+        script_text(path=path)
+        .replace(SECRETS_LINE, '')
+        .replace('make_secrets', '')
+    )
     assert 'tfnsw_api_key' not in text
     assert 'secrets' not in text
 
@@ -1103,6 +1112,7 @@ def test_provision_runs_service_user_detached() -> None:
     assert commands(path=BIN / 'provision-device', word='runuser') == [
         'if ! setsid -w runuser -u paperroute -- install -d -m 0750 "$1"'
         ' </dev/null >/dev/null 2>&1; then',
+        f'if ! {SECRETS_LINE} </dev/null >/dev/null 2>&1; then',
     ]
 
 
@@ -1699,3 +1709,13 @@ def test_service_keeps_no_new_privileges() -> None:
     """Power goes through polkit, so the unit still forbids new privileges."""
     service = read_unit(name='paperroute.service')['Service']
     assert service['NoNewPrivileges'] == 'yes'
+
+
+def test_provision_creates_empty_secrets() -> None:
+    """The service user makes an empty private secrets file, keeping a key."""
+    lines = script_text(path=BIN / 'provision-device').splitlines()
+    start = lines.index('make_secrets() {')
+    body = lines[start:lines.index('}', start)]
+    assert any(SECRETS_LINE in line for line in body)
+    log = lines.index('make_service_dir /var/lib/paperroute/log')
+    assert lines[log + 1] == 'make_secrets'

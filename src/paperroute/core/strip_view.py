@@ -938,6 +938,7 @@ def build_strip_view(*, inputs: StripInputs) -> StripView:
         panel=strip_panel(inputs=inputs),
         empty=empty_of(inputs=inputs),
         banner=stop.banner,
+        warning=stop.warning,
     )
 
 

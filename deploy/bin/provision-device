@@ -65,6 +65,15 @@ make_service_dir() {
     fi
 }
 
+# An empty key file the app can rewrite; an existing key is kept.
+make_secrets() {
+    if ! setsid -w runuser -u paperroute -- sh -c 'umask 077 && { [ -e /var/lib/paperroute/secrets ] || : >/var/lib/paperroute/secrets; }' \
+        </dev/null >/dev/null 2>&1; then
+        printf 'provision-device: paperroute could not create the key file\n' >&2
+        exit 1
+    fi
+}
+
 install_uv() {
     local tmp
     case $(uv --version 2>/dev/null || true) in
@@ -145,6 +154,7 @@ make_dir paperroute 0750 /var/lib/paperroute
 make_service_dir /var/lib/paperroute/sources
 make_service_dir /var/lib/paperroute/work
 make_service_dir /var/lib/paperroute/log
+make_secrets
 make_dir pashri 0700 /var/cache/paperroute-stage
 
 install_uv

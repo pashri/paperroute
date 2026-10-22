@@ -26,10 +26,11 @@ from paperroute.adapters.rebuild import (
     refresh_command,
     refresh_env,
 )
+from paperroute.adapters.secrets_file import SecretsFile, key_path_from_env
 from paperroute.adapters.state_file import DEFAULT_PATH as STATE_PATH
 from paperroute.adapters.state_file import JsonStateRepository
 from paperroute.adapters.systemd import SystemdNotifier
-from paperroute.adapters.tfnsw import AiohttpFeedsClient, api_key_from_env
+from paperroute.adapters.tfnsw import AiohttpFeedsClient
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
@@ -267,7 +268,10 @@ def power_for(*, args: argparse.Namespace) -> PowerControl:
 
 def feeds_client(*, choice: str) -> FeedsClient:
     """
-    Make the live client (key from PAPERROUTE_API_KEY_FILE) or a replay one.
+    Make the live client or a replay one.
+
+    The live client reads the key from PAPERROUTE_API_KEY_FILE at each
+    fetch, so a changed key is used without a restart.
 
     Parameters
     ----------
@@ -282,7 +286,8 @@ def feeds_client(*, choice: str) -> FeedsClient:
     if choice != 'live':
         return FileFeedsClient(directory=Path(choice))
     return AiohttpFeedsClient(
-        api_key=api_key_from_env(), limiter=StartLimiter(),
+        key=SecretsFile(path=key_path_from_env()).read,
+        limiter=StartLimiter(),
     )
 
 

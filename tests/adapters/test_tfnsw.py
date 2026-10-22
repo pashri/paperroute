@@ -60,7 +60,7 @@ async def _server() -> AsyncIterator[TestServer]:
 async def test_fetch_sends_key_and_returns_body(server: TestServer) -> None:
     """The client sends the apikey header and returns the body."""
     client = AiohttpFeedsClient(
-        api_key='secret', base_url=str(server.make_url('/'))
+        key=lambda: 'secret', base_url=str(server.make_url('/'))
     )
     try:
         assert await client.fetch(feed='v1/gtfs/realtime/buses') == b'payload'
@@ -71,7 +71,7 @@ async def test_fetch_sends_key_and_returns_body(server: TestServer) -> None:
 async def test_fetch_raises_feed_error_on_429(server: TestServer) -> None:
     """Non-200 answers raise FeedError without the key in the message."""
     client = AiohttpFeedsClient(
-        api_key='wrong', base_url=str(server.make_url('/'))
+        key=lambda: 'wrong', base_url=str(server.make_url('/'))
     )
     try:
         with pytest.raises(FeedError) as caught:
@@ -86,7 +86,7 @@ async def test_close_leaves_injected_session_open(server: TestServer) -> None:
     """A session passed in stays open; the caller closes it."""
     async with aiohttp.ClientSession() as session:
         client = AiohttpFeedsClient(
-            api_key='secret',
+            key=lambda: 'secret',
             session=session,
             base_url=str(server.make_url('/')),
         )
@@ -120,7 +120,7 @@ async def test_fetch_raises_feed_error_on_timeout() -> None:
     server = TestServer(app)
     await server.start_server()
     client = AiohttpFeedsClient(
-        api_key='secret',
+        key=lambda: 'secret',
         base_url=str(server.make_url('/')),
         timeout_s=0.05,
     )
@@ -171,7 +171,7 @@ async def test_burst_is_spaced_and_complete() -> None:
     server = TestServer(app)
     await server.start_server()
     client = AiohttpFeedsClient(
-        api_key='secret',
+        key=lambda: 'secret',
         base_url=str(server.make_url('/')),
         limiter=StartLimiter(),
     )
@@ -206,7 +206,7 @@ async def test_failure_does_not_stall_queue() -> None:
     server = TestServer(app)
     await server.start_server()
     client = AiohttpFeedsClient(
-        api_key='secret',
+        key=lambda: 'secret',
         base_url=str(server.make_url('/')),
         limiter=StartLimiter(per_second=100),
     )
@@ -224,3 +224,65 @@ async def test_failure_does_not_stall_queue() -> None:
     assert isinstance(results[2], FeedError)
     assert '429' in str(results[2])
     assert [r for i, r in enumerate(results) if i != 2] == [b'payload'] * 4
+
+
+async def test_fetch_without_key_sends_nothing() -> None:
+    """With no key no request is made, and the error says so."""
+    seen: list[str | None] = []
+    server = await recording_server(seen=seen)
+    client = AiohttpFeedsClient(
+        key=lambda: None,
+        base_url=str(server.make_url('/')),
+    )
+    try:
+        with pytest.raises(FeedError, match='no API key'):
+            await client.fetch(feed='v1/gtfs/realtime/buses')
+        assert not seen
+    finally:
+        await client.close()
+        await server.close()
+
+
+async def test_fetch_uses_the_current_key() -> None:
+    """Each fetch sends the key the callable gives at that moment."""
+    seen: list[str | None] = []
+    keys = ['fake-key-one']
+    server = await recording_server(seen=seen)
+    client = AiohttpFeedsClient(
+        key=lambda: keys[0],
+        base_url=str(server.make_url('/')),
+    )
+    try:
+        await client.fetch(feed='v1/gtfs/realtime/buses')
+        keys[0] = 'fake-key-two'
+        await client.fetch(feed='v1/gtfs/realtime/buses')
+        assert seen == ['apikey fake-key-one', 'apikey fake-key-two']
+    finally:
+        await client.close()
+        await server.close()
+
+
+async def recording_server(*, seen: list[str | None]) -> TestServer:
+    """
+    Start a feed server that records each Authorization header.
+
+    Parameters
+    ----------
+    seen : list[str | None]
+        Gets one header per request.
+
+    Returns
+    -------
+    TestServer
+        Running server; the caller closes it.
+    """
+
+    async def handler(request: web.Request) -> web.Response:
+        seen.append(request.headers.get('Authorization'))
+        return web.Response(body=b'payload')
+
+    app = web.Application()
+    app.router.add_get('/v1/gtfs/realtime/buses', handler)
+    server = TestServer(app)
+    await server.start_server()
+    return server

@@ -19,8 +19,11 @@ from paperroute.render.canvas import (
     text_width,
 )
 from paperroute.render.chrome import (
+    BANNER,
+    HEADER,
     TABS,
     badge,
+    banner,
     countdown_slot,
     header,
     header_tabs,
@@ -298,3 +301,14 @@ def test_route_pair_shrinks_to_its_room() -> None:
     )
     assert natural > 92
     assert fitted <= 92
+
+
+def test_warning_banner_is_inverted() -> None:
+    """A warning band is mostly ink; the plain band stays mostly paper."""
+    warned = Canvas()
+    banner(warned, text='No API key', warning=True)
+    plain = Canvas()
+    banner(plain, text='No API key')
+    band = (slice(HEADER, HEADER + BANNER), slice(0, WIDTH))
+    assert (warned.grey()[band] == INK).mean() > 0.8
+    assert (plain.grey()[band] == PAPER).mean() > 0.8

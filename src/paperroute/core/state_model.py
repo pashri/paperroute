@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.core.chooser import ChooserState
+from paperroute.core.device_model import Panel
 from paperroute.core.map_state import MapState
 from paperroute.core.messages import PowerAction, ScreenView
 from paperroute.core.model import Departure, Pin, shifted
@@ -269,6 +270,8 @@ class State:
         The power action under way; while set, nothing is redrawn.
     quota : Quota
         The API calls counted today.
+    panel : Panel
+        The device's own state.
     """
 
     now: datetime
@@ -289,3 +292,4 @@ class State:
     settings: Settings = field(default_factory=Settings)
     power: PowerAction | None = None
     quota: Quota = field(default_factory=Quota)
+    panel: Panel = field(default_factory=Panel)

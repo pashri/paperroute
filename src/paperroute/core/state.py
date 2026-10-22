@@ -428,11 +428,7 @@ def on_touch(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        A phone's ask shows a confirm; a touch answers the confirm shown,
-        else works Wi-Fi setup, else works the open menu, else holding
-        both knobs opens it, else it acts on the Live view; the Building
-        screen ignores it. A touch while the menu is open is noted, so
-        the menu stays open.
+        A phone's ask shows a confirm; a touch goes to `panel_touch`.
         While asleep the first touch only wakes the screen. A touch
         during a power action or a reset does nothing.
     """
@@ -442,6 +438,30 @@ def on_touch(
         return on_asked(state=state, event=event)
     if state.power is not None or state.panel.resetting is not None:
         return state, ()
+    return panel_touch(state=state, event=event)
+
+
+def panel_touch(
+    *, state: State, event: KnobEvent | KnobsHeld
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Hand a touch to the confirm, Wi-Fi setup, menu or Live view.
+
+    Parameters
+    ----------
+    state : State
+        State, awake.
+    event : KnobEvent | KnobsHeld
+        What happened.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        A touch answers the confirm shown, else works Wi-Fi setup, else
+        works the open menu, else holding both knobs opens it, else it
+        acts on the Live view; the Building screen ignores it. A touch
+        while the menu is open is noted, so the menu stays open.
+    """
     if state.panel.confirm is not None:
         after, effects = confirm_knob(state=state, event=event)
     elif state.panel.wifi is not None:

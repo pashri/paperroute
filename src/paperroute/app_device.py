@@ -93,6 +93,9 @@ async def probe(*, ports: DevicePorts, queue: asyncio.Queue[Event]) -> None:
     """
     Gather the device's facts and post them.
 
+    The probe holds the radio lock, so it never reads Wi-Fi while setup
+    is changing it.
+
     Parameters
     ----------
     ports : DevicePorts
@@ -104,10 +107,11 @@ async def probe(*, ports: DevicePorts, queue: asyncio.Queue[Event]) -> None:
         await queue.put(DeviceProbeFailed())
         return
     try:
-        facts = await asyncio.wait_for(
-            ports.probe.probe(),
-            timeout=PROBE_TIMEOUT,
-        )
+        async with ports.radio:
+            facts = await asyncio.wait_for(
+                ports.probe.probe(),
+                timeout=PROBE_TIMEOUT,
+            )
     except TimeoutError:
         logger.error('device probe timed out')
         await queue.put(DeviceProbeFailed())

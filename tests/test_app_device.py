@@ -106,6 +106,25 @@ async def test_hanging_probe_posts_failed(
     assert posted == [DeviceProbeFailed()]
 
 
+async def test_probe_waits_for_the_radio() -> None:
+    """A probe does not read the device while the radio is held."""
+    ports = DevicePorts(probe=FakeProbe())
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    async with ports.radio:
+        work, _ = device_work(
+            ports=ports,
+            effect=ProbeDevice(),
+            queue=queue,
+            builder=FakeBuilder(),
+        )
+        task = asyncio.ensure_future(work)
+        for _ in range(5):
+            await asyncio.sleep(0)
+        assert queue.empty()
+    await task
+    assert queue.get_nowait() == DeviceProbed(facts=device_facts())
+
+
 def test_status_ignores_changing_readings() -> None:
     """Probes differing only in uptime, CPU, memory and disk report once."""
     timings = Timings()

@@ -25,6 +25,8 @@ ROW_H: Final[int] = 46
 MENU_VISIBLE: Final[int] = 7
 QR_PX: Final[int] = 8
 MENU_TOP: Final[int] = HEADER + 24
+CUE_H: Final[int] = 18
+DEVICE_ROWS: Final[int] = 7
 MARGIN: Final[int] = 32
 FOOTER_Y: Final[int] = 456
 VALUE_X: Final[int] = 250
@@ -61,6 +63,7 @@ SETUP_STEPS: Final[tuple[str, ...]] = (
     '2. Pick your Wi-Fi and type its password.',
     '3. paperroute connects and this screen closes.',
 )
+FAILED_TITLE: Final[str] = "Couldn't join"
 SCANNING_TITLE: Final[str] = 'Looking for Wi-Fi networks...'
 JOINING_DETAIL: Final[str] = 'This screen closes once it has joined.'
 
@@ -205,6 +208,33 @@ def menu_row(canvas: Canvas, *, text: str, top: float, chosen: bool) -> None:
     )
 
 
+def scroll_cues(canvas: Canvas, *, view: MenuView) -> None:
+    """
+    Draw an up or down triangle where menu rows are hidden.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    view : MenuView
+        The menu.
+    """
+    x = WIDTH - 30
+    half = CUE_H / 2
+    if view.first > 0:
+        tip = MENU_TOP - CUE_H + 2
+        canvas.polygon(
+            points=((x - half, tip + half), (x + half, tip + half), (x, tip)),
+            grey=INK,
+        )
+    if view.first + MENU_VISIBLE < len(view.rows):
+        top = MENU_TOP + MENU_VISIBLE * ROW_H + 4
+        canvas.polygon(
+            points=((x - half, top), (x + half, top), (x, top + half)),
+            grey=INK,
+        )
+
+
 def draw_menu(*, view: MenuView) -> NDArray[np.uint8]:
     """
     Draw the Settings menu, the visible rows from ``first``.
@@ -229,6 +259,7 @@ def draw_menu(*, view: MenuView) -> NDArray[np.uint8]:
             top=MENU_TOP + slot * ROW_H,
             chosen=view.first + slot == view.cursor,
         )
+    scroll_cues(canvas, view=view)
     footer(canvas, text=MENU_FOOTER)
     return finish(canvas)
 
@@ -249,7 +280,7 @@ def draw_device(*, view: DeviceView) -> NDArray[np.uint8]:
     """
     canvas = Canvas()
     panel_header(canvas, title='Device', clock=view.clock)
-    for index, row in enumerate(view.rows):
+    for index, row in enumerate(view.rows[:DEVICE_ROWS]):
         y = INFO_TOP + index * INFO_PITCH
         canvas.text(at=(MARGIN, y), text=row.label, face=LABEL_FACE, grey=INK)
         canvas.text(
@@ -281,9 +312,16 @@ def place_qr(canvas: Canvas, *, text: str) -> int:
     -------
     int
         The code's left edge, quiet zone included.
+
+    Raises
+    ------
+    ValueError
+        When the code is too big for the right half.
     """
     image = qr_image(text=text, module_px=QR_PX)
     size = int(image.shape[0])
+    if size > min(WIDTH // 2, QR_BOTTOM - HEADER):
+        raise ValueError(f'QR code of {size} px does not fit its half')
     left = WIDTH - MARGIN - size
     top = HEADER + (QR_BOTTOM - HEADER - size) // 2
     canvas.image(grey=image, at=(left, top))
@@ -386,6 +424,23 @@ def setup_lines(*, view: WifiSetupView) -> tuple[str, ...]:
     )
 
 
+def failed_line(*, view: WifiSetupView) -> str:
+    """
+    Say why the last join failed.
+
+    Parameters
+    ----------
+    view : WifiSetupView
+        The screen, in the failed phase.
+
+    Returns
+    -------
+    str
+        The error, else the network's name, else empty.
+    """
+    return view.error or view.ssid or ''
+
+
 def draw_hotspot(canvas: Canvas, *, view: WifiSetupView) -> None:
     """
     Draw the hotspot's code, steps and timeout.
@@ -398,9 +453,17 @@ def draw_hotspot(canvas: Canvas, *, view: WifiSetupView) -> None:
         The screen, in the hotspot or failed phase.
     """
     width = place_qr(canvas, text=view.qr) - MARGIN
-    title = view.error if view.error else SETUP_TITLE
+    failed = view.phase is WifiPhase.FAILED
+    title = FAILED_TITLE if failed else SETUP_TITLE
     lines(canvas, texts=(title,), top=110, width=width, face=TITLE_FACE)
-    lines(canvas, texts=setup_lines(view=view), top=160, width=width)
+    if failed:
+        lines(canvas, texts=(failed_line(view=view),), top=150, width=width)
+    lines(
+        canvas,
+        texts=setup_lines(view=view),
+        top=190 if failed else 160,
+        width=width,
+    )
     footer(
         canvas,
         text=(

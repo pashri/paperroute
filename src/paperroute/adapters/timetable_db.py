@@ -259,6 +259,7 @@ class SqliteTimetableRepository:
             connection=connection,
             probe='SELECT 1 FROM stops LIMIT 1',
             label='timetable',
+            allow_missing=True,
         )
         self.schema: tuple[Identity | None, Features] | None = None
         self.labels: dict[str, str] = {}

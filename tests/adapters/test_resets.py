@@ -57,7 +57,6 @@ def resets_in(
         key=keys,
         wifi=wifi,
         timetable=folder / 'timetable.db',
-        tiles=folder / 'tiles.db',
     )
 
 
@@ -115,7 +114,6 @@ async def test_file_resets_refuse_paths_outside_data_dir(
         key=FakeKeys(),
         wifi=FakeWifi(),
         timetable=outside,
-        tiles=data / 'tiles.db',
     )
     with caplog.at_level(logging.ERROR):
         await resets.reset(kind=ResetKind.ERASE)
@@ -136,3 +134,24 @@ async def test_null_resets_log_once(
     assert [r.getMessage() for r in caplog.records] == [
         'reset not enabled',
     ]
+
+
+async def test_file_resets_refuse_a_linked_directory(
+    tmp_path: Path,
+) -> None:
+    """A file under a linked directory that leads outside is kept."""
+    data, elsewhere = tmp_path / 'data', tmp_path / 'elsewhere'
+    data.mkdir()
+    elsewhere.mkdir()
+    (data / 'sub').symlink_to(elsewhere, target_is_directory=True)
+    outside = elsewhere / 'timetable.db'
+    outside.write_text('x', encoding='utf-8')
+    resets = FileResets(
+        data_dir=data,
+        state=data / 'state.json',
+        key=FakeKeys(),
+        wifi=FakeWifi(),
+        timetable=data / 'sub' / 'timetable.db',
+    )
+    await resets.reset(kind=ResetKind.ERASE)
+    assert outside.exists()

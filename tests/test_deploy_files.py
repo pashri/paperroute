@@ -125,7 +125,6 @@ UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
             'Description': 'paperroute',
             'After': 'network-online.target time-sync.target',
             'Wants': 'network-online.target time-sync.target',
-            'ConditionPathExists': '/var/lib/paperroute/timetable.db',
         },
         'Service': APP_SERVICE,
         'Install': {'WantedBy': 'multi-user.target'},

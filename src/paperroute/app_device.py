@@ -25,6 +25,7 @@ from paperroute.ports import (
     KeyStore,
     Observer,
     Resets,
+    TimetableBuilder,
     WifiControl,
 )
 
@@ -89,10 +90,14 @@ async def probe(*, ports: DevicePorts, queue: asyncio.Queue[Event]) -> None:
 
 
 async def reset(
-    *, ports: DevicePorts, effect: ResetDevice, queue: asyncio.Queue[Event]
+    *,
+    ports: DevicePorts,
+    effect: ResetDevice,
+    queue: asyncio.Queue[Event],
+    builder: TimetableBuilder,
 ) -> None:
     """
-    Carry out a reset and post that it is done.
+    Stop any timetable rebuild, carry out a reset and post that it is done.
 
     Parameters
     ----------
@@ -102,7 +107,10 @@ async def reset(
         The reset asked for.
     queue : asyncio.Queue[Event]
         Event queue.
+    builder : TimetableBuilder
+        Rebuilds the timetable; stopped before any file is deleted.
     """
+    await builder.stop()
     await ports.resets.reset(kind=effect.kind)
     await queue.put(ResetDone(kind=effect.kind))
 
@@ -112,6 +120,7 @@ def device_work(
     ports: DevicePorts,
     effect: DeviceEffect,
     queue: asyncio.Queue[Event],
+    builder: TimetableBuilder,
 ) -> tuple[Coroutine[Any, Any, None], Event]:
     """
     Make the work for a device effect done in the background.
@@ -124,6 +133,8 @@ def device_work(
         Effect.
     queue : asyncio.Queue[Event]
         Event queue.
+    builder : TimetableBuilder
+        Rebuilds the timetable; a reset stops it first.
 
     Returns
     -------
@@ -135,7 +146,9 @@ def device_work(
             return probe(ports=ports, queue=queue), DeviceProbeFailed()
         case ResetDevice(kind=kind):
             return (
-                reset(ports=ports, effect=effect, queue=queue),
+                reset(
+                    ports=ports, effect=effect, queue=queue, builder=builder,
+                ),
                 ResetDone(kind=kind),
             )
 

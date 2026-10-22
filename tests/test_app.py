@@ -14,6 +14,7 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.resets import FileResets
 from paperroute.adapters.state_file import JsonStateRepository
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
@@ -1704,7 +1705,6 @@ async def test_app_reset_leaves_no_state_file(tmp_path: Path) -> None:
         key=FakeKeys(key='k' * 32),
         wifi=FakeWifi(),
         timetable=tmp_path / 'timetable.db',
-        tiles=tmp_path / 'tiles.db',
     )
     ports = replace(
         ports_of(),
@@ -1764,3 +1764,20 @@ def next_of[T](*, queue: asyncio.Queue[Event], kind: type[T]) -> T:
         event = queue.get_nowait()
         if isinstance(event, kind):
             return event
+
+
+async def test_app_starts_without_a_timetable(tmp_path: Path) -> None:
+    """With no timetable file the app runs and ticks without crashing."""
+    missing = tmp_path / 'timetable.db'
+    timetable = SqliteTimetableRepository(path=missing)
+    network = SqliteNetworkRepository(path=missing)
+    ports = replace(ports_of(), timetable=timetable, network=network)
+    try:
+        state = await run(
+            ports=ports, seed=PIN, tick_every=0.01, max_events=5,
+        )
+    finally:
+        timetable.close()
+        network.close()
+    assert state.running
+    assert not missing.exists()

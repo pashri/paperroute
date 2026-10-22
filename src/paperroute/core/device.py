@@ -18,6 +18,7 @@ from paperroute.core.messages import (
     PowerFailed,
     PowerRequested,
     ProbeDevice,
+    RebuildTimetable,
     Render,
     ResetDevice,
     ResetDone,
@@ -222,8 +223,8 @@ def power_guard(
     """
     Drop Renders while a power action or reset is under way.
 
-    While a reset is under way every SaveState is dropped too, so the
-    state file it deletes is never written again.
+    While a reset is under way every SaveState and RebuildTimetable is
+    dropped too, so the files it deletes are never written again.
 
     Parameters
     ----------
@@ -242,7 +243,9 @@ def power_guard(
     resetting = state.panel.resetting is not None
     if state.power is None and not resetting:
         return result
-    dropped = (Render, SaveState) if resetting else (Render,)
+    dropped: tuple[type[Effect], ...] = (Render,)
+    if resetting:
+        dropped = (Render, SaveState, RebuildTimetable)
     kept = tuple(
         effect for effect in effects if not isinstance(effect, dropped)
     )

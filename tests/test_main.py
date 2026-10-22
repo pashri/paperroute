@@ -217,7 +217,7 @@ def test_resets_for_without_power_is_null(tmp_path: Path) -> None:
     on = resets_for(args=args, key=FakeKeys(), wifi=FakeWifi())
     assert isinstance(off, NullResets)
     assert isinstance(on, FileResets)
-    assert on.data_dir == tmp_path
+    assert on.data_dir == Path('/var/lib/paperroute')
 
 
 def test_wifi_for_uses_nmcli_only_when_asked() -> None:
@@ -384,14 +384,32 @@ def _restored_logging() -> Iterator[None]:
     root.setLevel(level)
 
 
+def unopenable(*, path: Path) -> SqliteTimetableRepository:
+    """
+    Fail to open a timetable.
+
+    Parameters
+    ----------
+    path : Path
+        Ignored.
+
+    Raises
+    ------
+    sqlite3.OperationalError
+        Always.
+    """
+    raise sqlite3.OperationalError(f'unable to open {path.name}')
+
+
 @pytest.mark.usefixtures('restored_logging')
 def test_main_logs_a_startup_crash_to_the_error_log(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A missing timetable reaches errors.jsonl, then still propagates."""
+    """A crash opening the timetable reaches errors.jsonl, then propagates."""
     key_file = tmp_path / 'no-such-key'
     error_log = tmp_path / 'log' / 'errors.jsonl'
     monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(key_file))
+    monkeypatch.setattr(cli, 'SqliteTimetableRepository', unopenable)
     monkeypatch.setattr(
         sys,
         'argv',

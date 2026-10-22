@@ -251,7 +251,12 @@ def other_work(
         The work, and the event that lets the app recover if it crashes.
     """
     if isinstance(effect, ProbeDevice | ResetDevice):
-        return device_work(ports=ports.device, effect=effect, queue=queue)
+        return device_work(
+            ports=ports.device,
+            effect=effect,
+            queue=queue,
+            builder=ports.builder,
+        )
     call, fallback = work_for(
         timetable=ports.timetable, network=ports.network, effect=effect
     )

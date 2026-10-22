@@ -69,8 +69,6 @@ class FileResets:
         Forgets the saved Wi-Fi networks.
     timetable : Path
         The timetable file.
-    tiles : Path | None
-        The map tiles file, which is kept.
     """
 
     def __init__(
@@ -81,14 +79,12 @@ class FileResets:
         key: KeyStore,
         wifi: WifiControl,
         timetable: Path,
-        tiles: Path | None,
     ) -> None:
         self.data_dir = data_dir
         self.state = state
         self.key = key
         self.wifi = wifi
         self.timetable = timetable
-        self.tiles = tiles
 
     def doomed(self, *, kind: ResetKind) -> list[Path]:
         """
@@ -103,7 +99,7 @@ class FileResets:
         -------
         list[Path]
             The state file, the ones moved aside, and for ERASE the
-            timetable.
+            timetable. The map tiles are never listed.
         """
         aside = sorted(self.state.parent.glob(f'{self.state.name}.bad-*'))
         paths = [self.state, *aside]
@@ -129,7 +125,9 @@ class FileResets:
         try:
             path.unlink(missing_ok=True)
         except OSError:
-            logger.exception('reset could not delete a file')
+            logger.exception(
+                'reset could not delete a file', extra={'path': str(path)},
+            )
 
     async def reset(self, *, kind: ResetKind) -> None:
         """

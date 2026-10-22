@@ -2,10 +2,12 @@
 
 import asyncio
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from paperroute import app_device
+from paperroute.adapters.resets import FileResets
 from paperroute.app_device import (
     DevicePorts,
     Reported,
@@ -24,7 +26,16 @@ from paperroute.core.messages import (
 from paperroute.core.state import step
 from paperroute.observers import Timings
 from tests.core.test_state import fresh, loaded
-from tests.fakes import FakeProbe, HangingProbe, RecordingResets, device_facts
+from tests.fakes import (
+    FakeBuilder,
+    FakeKeys,
+    FakeProbe,
+    FakeWifi,
+    HangingProbe,
+    RecordingResets,
+    WatchingBuilder,
+    device_facts,
+)
 
 
 async def worked(*, ports: DevicePorts) -> tuple[list[Event], Event]:
@@ -43,7 +54,7 @@ async def worked(*, ports: DevicePorts) -> tuple[list[Event], Event]:
     """
     queue: asyncio.Queue[Event] = asyncio.Queue()
     work, fallback = device_work(
-        ports=ports, effect=ProbeDevice(), queue=queue,
+        ports=ports, effect=ProbeDevice(), queue=queue, builder=FakeBuilder(),
     )
     await work
     posted: list[Event] = []
@@ -115,8 +126,33 @@ async def test_reset_work_posts_done() -> None:
         ports=DevicePorts(resets=resets),
         effect=ResetDevice(kind=ResetKind.ERASE),
         queue=queue,
+        builder=FakeBuilder(),
     )
     await work
     assert resets.kinds == [ResetKind.ERASE]
     assert queue.get_nowait() == ResetDone(kind=ResetKind.ERASE)
     assert fallback == ResetDone(kind=ResetKind.ERASE)
+
+
+async def test_reset_stops_rebuild_before_deleting(tmp_path: Path) -> None:
+    """A running rebuild is stopped before the timetable is deleted."""
+    timetable = tmp_path / 'timetable.db'
+    timetable.write_text('x', encoding='utf-8')
+    builder = WatchingBuilder(watched=timetable)
+    resets = FileResets(
+        data_dir=tmp_path,
+        state=tmp_path / 'state.json',
+        key=FakeKeys(),
+        wifi=FakeWifi(),
+        timetable=timetable,
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    work, _ = device_work(
+        ports=DevicePorts(resets=resets),
+        effect=ResetDevice(kind=ResetKind.ERASE),
+        queue=queue,
+        builder=builder,
+    )
+    await work
+    assert builder.existed == [True]
+    assert not timetable.exists()

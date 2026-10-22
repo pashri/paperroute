@@ -64,6 +64,7 @@ STOP_SIGNALS: Final[tuple[signal.Signals, ...]] = (
     signal.SIGTERM,
     signal.SIGINT,
 )
+DATA_DIR: Final[Path] = Path('/var/lib/paperroute')
 
 
 def add_pin_arguments(parser: argparse.ArgumentParser) -> None:
@@ -303,7 +304,11 @@ def wifi_for(*, args: argparse.Namespace) -> WifiControl:
 
 
 def resets_for(
-    *, args: argparse.Namespace, key: KeyStore, wifi: WifiControl
+    *,
+    args: argparse.Namespace,
+    key: KeyStore,
+    wifi: WifiControl,
+    data_dir: Path = DATA_DIR,
 ) -> Resets:
     """
     Choose how the settings are reset and everything erased.
@@ -316,22 +321,23 @@ def resets_for(
         Holds the API key.
     wifi : WifiControl
         Forgets the saved Wi-Fi networks.
+    data_dir : Path
+        The only directory a reset deletes files from.
 
     Returns
     -------
     Resets
-        Resets over the state file's directory with --power; otherwise
+        Resets over the data directory with --power; otherwise
         resets that never act, so a development run keeps its data.
     """
     if not args.power:
         return NullResets()
     return FileResets(
-        data_dir=args.state.parent,
+        data_dir=data_dir,
         state=args.state,
         key=key,
         wifi=wifi,
         timetable=args.timetable,
-        tiles=args.tiles,
     )
 
 

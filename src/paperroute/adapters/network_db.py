@@ -282,6 +282,7 @@ class SqliteNetworkRepository:
             connection=connection,
             probe='SELECT 1 FROM stops LIMIT 1',
             label='network',
+            allow_missing=True,
         )
         self.schema: dict[
             tuple[str, ...], tuple[Identity | None, bool]

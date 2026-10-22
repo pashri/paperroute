@@ -21,6 +21,7 @@ from paperroute.core.messages import (
     PowerRequested,
     ProbeDevice,
     QuitRequested,
+    RebuildTimetable,
     Render,
     ResetDevice,
     ResetDone,
@@ -34,7 +35,7 @@ from paperroute.core.state_model import State
 from paperroute.core.state_views import stop_view_of
 from paperroute.core.stop_view import StopView
 from tests.core.factories import START
-from tests.core.test_rebuild import pinned
+from tests.core.test_rebuild import failed_at, pinned
 from tests.core.test_state import at, fresh, loaded
 from tests.fakes import device_facts
 
@@ -301,3 +302,13 @@ def test_reset_ignored_while_powering() -> None:
     after, effects = on_reset(state=state, kind=ResetKind.ERASE)
     assert after is state
     assert not effects
+
+
+def test_no_rebuild_while_resetting() -> None:
+    """A tick during a reset starts no timetable rebuild."""
+    tick = Tick(now=START + timedelta(minutes=61))
+    _, due = step(failed_at(minutes=0), tick)
+    state, _ = on_reset(state=failed_at(minutes=0), kind=ResetKind.ERASE)
+    _, effects = step(state, tick)
+    assert [type(e) for e in due].count(RebuildTimetable) == 1
+    assert not [e for e in effects if isinstance(e, RebuildTimetable)]

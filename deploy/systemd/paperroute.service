@@ -2,7 +2,6 @@
 Description=paperroute
 After=network-online.target time-sync.target
 Wants=network-online.target time-sync.target
-ConditionPathExists=/var/lib/paperroute/timetable.db
 
 [Service]
 Type=notify

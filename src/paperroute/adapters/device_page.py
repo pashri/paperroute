@@ -236,6 +236,29 @@ def uptime_text(*, seconds: float | None) -> str:
     return f'{hours} h {minutes} min' if hours else f'{minutes} min'
 
 
+
+def ago_text(*, seconds: float) -> str:
+    """
+    Write an age in whole seconds, minutes or hours.
+
+    Parameters
+    ----------
+    seconds : float
+        Seconds since; a negative age, from a clock step, counts as 0.
+
+    Returns
+    -------
+    str
+        For example ``12 s``, ``4 min`` or ``3 h``.
+    """
+    whole = max(0, int(seconds))
+    if whole < 60:
+        return f'{whole} s'
+    if whole < 3_600:
+        return f'{whole // 60} min'
+    return f'{whole // 3_600} h'
+
+
 def free_text(*, facts: DeviceFacts | None) -> str:
     """
     Give the free disk and memory.
@@ -370,7 +393,7 @@ def feed_rows(*, feeds: Mapping[str, float], now: float) -> str:
         FEED_ROW.format(
             label=html.escape(label),
             last=f'{datetime.fromtimestamp(last, tz=SYDNEY):%H:%M:%S}',
-            age=f'{int(now - last)} s',
+            age=ago_text(seconds=now - last),
         )
         for label, last in rows
     )
@@ -398,7 +421,7 @@ def key_text(*, present: bool, last_used: float | None, now: float) -> str:
         return 'No key set'
     if last_used is None:
         return f'Key set{DOT}not used yet'
-    return f'Key set{DOT}last used {int(now - last_used)} s ago'
+    return f'Key set{DOT}last used {ago_text(seconds=now - last_used)} ago'
 
 
 def device_notice(*, query: Mapping[str, str]) -> str:

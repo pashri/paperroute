@@ -376,7 +376,9 @@ class WebDisplay:
         Returns
         -------
         web.Application
-            The routes, behind the local-network check.
+            The routes, behind the local-network check. Power and the
+            device's own pages are served only when there are device
+            pages.
         """
         app = web.Application(middlewares=[self._guard])
         app.on_shutdown.append(self._close)
@@ -390,12 +392,14 @@ class WebDisplay:
             web.get('/settings', self._settings_page),
             web.get('/settings.js', self._settings_js),
             web.post('/settings', self._settings),
-            web.get('/device/power', self._power_page),
-            web.post('/device/power', self._power_page),
-            web.post('/power', self._power),
             web.get('/status', self._status_json),
         ])
         if self.device is not None:
+            app.add_routes([
+                web.get('/device/power', self._power_page),
+                web.post('/device/power', self._power_page),
+                web.post('/power', self._power),
+            ])
             app.add_routes(self.device.routes())
         return app
 

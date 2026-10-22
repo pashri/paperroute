@@ -26,9 +26,15 @@ from paperroute.core.messages import (
     PowerRequested,
     SettingsChanged,
 )
+from tests.adapters.test_web_device import Device
 
 Client = TestClient[web.Request, web.Application]
 FRAME = np.full((480, 800), 255, dtype=np.uint8)
+POWER_ROUTES = [
+    ('GET', '/device/power'),
+    ('POST', '/device/power'),
+    ('POST', '/power'),
+]
 ROUTES = [
     ('GET', '/'),
     ('GET', '/live.css'),
@@ -40,9 +46,7 @@ ROUTES = [
     ('GET', '/settings'),
     ('GET', '/settings.js'),
     ('POST', '/settings'),
-    ('GET', '/device/power'),
-    ('POST', '/device/power'),
-    ('POST', '/power'),
+    *POWER_ROUTES,
 ]
 
 
@@ -55,8 +59,8 @@ async def _client(*, display: WebDisplay) -> Client:
 
 @pytest.fixture(name='display')
 def _display() -> WebDisplay:
-    """A display that has shown nothing yet."""
-    return WebDisplay()
+    """A display with device pages that has shown nothing yet."""
+    return WebDisplay(device=Device().pages())
 
 
 @pytest.fixture(name='client')
@@ -217,7 +221,10 @@ async def test_public_address_is_refused_on_every_route(
     method: str, path: str, remote: str | None
 ) -> None:
     """Only private and loopback peers are served."""
-    display = WebDisplay(remote_of=lambda request: remote)
+    display = WebDisplay(
+        remote_of=lambda request: remote,
+        device=Device().pages(),
+    )
     client = await _client(display=display)
     try:
         response = await client.request(method, path)
@@ -235,7 +242,10 @@ async def test_public_address_is_refused_on_every_route(
 ])
 async def test_private_address_is_allowed(remote: str) -> None:
     """Private and loopback peers are served."""
-    display = WebDisplay(remote_of=lambda request: remote)
+    display = WebDisplay(
+        remote_of=lambda request: remote,
+        device=Device().pages(),
+    )
     client = await _client(display=display)
     try:
         response = await client.get('/status')
@@ -624,3 +634,14 @@ def test_page_hint_names_settings_chord() -> None:
         'Hold S and K together, or both Press buttons, for Settings.'
         in plain
     )
+
+
+@pytest.mark.parametrize(('method', 'path'), POWER_ROUTES)
+async def test_no_power_without_device_pages(method: str, path: str) -> None:
+    """Without device pages, as in replay, power is not served."""
+    client = await _client(display=WebDisplay())
+    try:
+        response = await client.request(method, path)
+        assert response.status == HTTPStatus.NOT_FOUND
+    finally:
+        await client.close()

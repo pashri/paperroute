@@ -12,6 +12,7 @@ from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.map_view import MapView
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
+from paperroute.core.panel_views import PanelView, SleepView
 from paperroute.core.patterns import TripPattern
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.reach import Reach, StripKey
@@ -121,13 +122,30 @@ class LoadChooserDepartures:
 
 @dataclass(frozen=True)
 class NoticeView:
-    """A screen showing one line of text, such as the shutdown notice."""
+    """
+    A screen showing a title and an optional line under it.
+
+    Attributes
+    ----------
+    title : str
+        The main line, such as the shutdown notice.
+    detail : str
+        A smaller line under the title, or empty.
+    """
 
     title: str
+    detail: str = ''
 
 
 ScreenView = (
-    StopView | MapView | StripView | StripMapView | ChooserView | NoticeView
+    StopView
+    | MapView
+    | StripView
+    | StripMapView
+    | ChooserView
+    | NoticeView
+    | PanelView
+    | SleepView
 )
 
 

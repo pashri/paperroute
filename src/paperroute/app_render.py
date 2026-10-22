@@ -14,6 +14,14 @@ from paperroute.app_effects import timed_async
 from paperroute.app_ports import Ports
 from paperroute.core.map_view import MapBase, MapView
 from paperroute.core.messages import NoticeView, ScreenView
+from paperroute.core.panel_views import (
+    ConfirmView,
+    DeviceView,
+    MenuView,
+    PhoneView,
+    SleepView,
+    WifiSetupView,
+)
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
 from paperroute.core.tiles import TileVariant
@@ -22,6 +30,8 @@ from paperroute.render.chooser import draw_chooser_view
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_view import draw_map_view
 from paperroute.render.notice import draw_notice_view
+from paperroute.render.panel import draw_panel_view
+from paperroute.render.sleep import with_sleep_band
 from paperroute.render.stop_view import draw_stop_view
 from paperroute.render.strip_view import draw_strip_map_view, draw_strip_view
 
@@ -161,6 +171,53 @@ class MapRenderer:
         )
 
 
+def sleep_frame(*, view: SleepView, maps: MapRenderer) -> Frame:
+    """
+    Draw the sleep screen: the map under the sleep band.
+
+    Parameters
+    ----------
+    view : SleepView
+        The sleep screen.
+    maps : MapRenderer
+        Draws the map.
+
+    Returns
+    -------
+    Frame
+        480 by 800 pixels, 0 or 255.
+    """
+    return with_sleep_band(frame=maps.frame(view=view.map), band=view.band)
+
+
+def map_drawing(
+    *,
+    view: MapView | StripMapView | SleepView,
+    maps: MapRenderer,
+) -> Callable[[], Frame]:
+    """
+    Pick the drawing for a view with a map.
+
+    Parameters
+    ----------
+    view : MapView | StripMapView | SleepView
+        View to draw.
+    maps : MapRenderer
+        Draws the map.
+
+    Returns
+    -------
+    Callable[[], Frame]
+        Draws the frame when called.
+    """
+    match view:
+        case MapView():
+            return functools.partial(maps.frame, view=view)
+        case StripMapView():
+            return functools.partial(maps.strip_map_frame, view=view)
+    return functools.partial(sleep_frame, view=view, maps=maps)
+
+
 def drawing(*, view: View, maps: MapRenderer) -> Callable[[], Frame]:
     """
     Pick the drawing for a view.
@@ -178,16 +235,22 @@ def drawing(*, view: View, maps: MapRenderer) -> Callable[[], Frame]:
         Draws the frame when called.
     """
     match view:
+        case MapView() | StripMapView() | SleepView():
+            return map_drawing(view=view, maps=maps)
         case StopView():
             return functools.partial(draw_stop_view, view=view)
-        case MapView():
-            return functools.partial(maps.frame, view=view)
         case StripView():
             return functools.partial(draw_strip_view, view=view)
-        case StripMapView():
-            return functools.partial(maps.strip_map_frame, view=view)
         case NoticeView():
             return functools.partial(draw_notice_view, view=view)
+        case (
+            MenuView()
+            | DeviceView()
+            | PhoneView()
+            | WifiSetupView()
+            | ConfirmView()
+        ):
+            return functools.partial(draw_panel_view, view=view)
     return functools.partial(draw_chooser_view, view=view)
 
 

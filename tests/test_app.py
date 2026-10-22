@@ -29,6 +29,7 @@ from paperroute.app import (
 )
 from paperroute.app_device import DevicePorts
 from paperroute.app_effects import StateSaver, loaded_patterns
+from paperroute.app_render import drawing
 from paperroute.build.gtfs_files import Source
 from paperroute.build.map_style import LIGHT
 from paperroute.build.tile_store import TileWriter
@@ -62,6 +63,7 @@ from paperroute.core.messages import (
     TimetableSeen,
 )
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
+from paperroute.core.panel_views import MenuView, SleepView
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.places import shown
 from paperroute.core.saved import (
@@ -83,6 +85,8 @@ from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
 from paperroute.render.chrome import HEADER
 from paperroute.render.notice import draw_notice_view
+from paperroute.render.panel import draw_panel_view
+from paperroute.render.sleep import with_sleep_band
 from paperroute.render.tile_codec import pack_bits, pack_grey
 from tests.app_factories import (
     AT,
@@ -965,6 +969,20 @@ def test_map_base_is_cached_between_overlay_frames() -> None:
     maps.frame(view=map_view(markers=(bus,)))
     assert once > 0
     assert tiles.reads == once
+
+
+def test_drawing_picks_panel_and_sleep() -> None:
+    """Panel views draw as panel screens; sleep bands a plain map."""
+    maps = MapRenderer(tiles=CountingTiles())
+    menu = MenuView(clock='9:00', rows=('Wi-Fi',), cursor=0, first=0)
+    panel = drawing(view=menu, maps=maps)()
+    assert (panel == draw_panel_view(view=menu)).all()
+    asleep = drawing(
+        view=SleepView(map=map_view(), band='Asleep'),
+        maps=maps,
+    )()
+    banded = with_sleep_band(frame=maps.frame(view=map_view()), band='Asleep')
+    assert (asleep == banded).all()
 
 
 def test_tiles_replaced_rebuilds_base() -> None:

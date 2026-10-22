@@ -172,3 +172,12 @@ class JoinOutcome(StrEnum):
     WRONG_PASSWORD = 'wrong_password'
     NOT_FOUND = 'not_found'
     FAILED = 'failed'
+
+
+class WifiPhase(StrEnum):
+    """Where Wi-Fi setup from the panel has got to."""
+
+    SCANNING = 'scanning'
+    HOTSPOT = 'hotspot'
+    JOINING = 'joining'
+    FAILED = 'failed'

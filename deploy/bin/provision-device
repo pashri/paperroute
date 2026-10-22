@@ -139,6 +139,11 @@ bad=$(find "$DIR" ! -type f ! -type d -print -quit) || fail 'cannot read DIR'
 apt-get update
 apt-get install -y rsync curl sqlite3 avahi-daemon libegl1 libgl1 polkitd \
     network-manager dnsmasq-base
+systemctl start NetworkManager
+for _ in {1..10}; do
+    systemctl is-active --quiet NetworkManager && break
+    sleep 1
+done
 systemctl is-active --quiet NetworkManager || fail 'NetworkManager is not running'
 
 timedatectl set-timezone UTC

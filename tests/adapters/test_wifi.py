@@ -1,5 +1,6 @@
 """Tests for driving Wi-Fi through nmcli."""
 
+import asyncio
 import secrets
 from collections.abc import Mapping, Sequence
 from pathlib import Path
@@ -135,6 +136,10 @@ async def test_stop_hotspot_downs_and_deletes(tmp_path: Path) -> None:
 
 
 PROFILES = ['-t', '-f', 'UUID,TYPE', 'connection', 'show']
+ACTIVE = [
+    '-t', '-f', 'ACTIVE,SSID', 'device', 'wifi', 'list', '--rescan', 'no',
+]
+ADDRESS = ['-g', 'IP4.ADDRESS', 'device', 'show', 'wlan0']
 CONNECT_HOME = [
     '--wait', '30', 'device', 'wifi', 'connect', 'Home',
     'password', 'hunter22', 'ifname', 'wlan0',
@@ -204,7 +209,10 @@ async def test_failed_retry_keeps_saved_wifi_profile(
 
 async def test_join_hidden_and_open_argv(tmp_path: Path) -> None:
     """An open network has no password words; a hidden one says so."""
-    wifi, log = wifi_on(tmp_path=tmp_path)
+    wifi, log = wifi_on(
+        tmp_path=tmp_path,
+        replies={'-t -f ACTIVE,SSID': (0, 'yes:Back room\n')},
+    )
     outcome = await wifi.join(
         request=JoinRequest(ssid='Back room', hidden=True),
     )
@@ -215,6 +223,72 @@ async def test_join_hidden_and_open_argv(tmp_path: Path) -> None:
             '--wait', '30', 'device', 'wifi', 'connect', 'Back room',
             'ifname', 'wlan0', 'hidden', 'yes',
         ],
+        ACTIVE,
+        ADDRESS,
+    ]
+
+
+@pytest.mark.parametrize('active', ['', 'yes:Other\n', 'no:Home\n'])
+async def test_join_unconfirmed_by_status_fails(
+    tmp_path: Path, active: str,
+) -> None:
+    """An exit 0 without Home active is a failure, and is cleaned up."""
+    wifi, log = wifi_on(
+        tmp_path=tmp_path,
+        replies={
+            '-t -f ACTIVE,SSID': (0, active),
+            '-t -f UUID,TYPE': [(0, ''), (0, 'u-new:802-11-wireless\n')],
+        },
+    )
+    outcome = await wifi.join(
+        request=JoinRequest(ssid='Home', password='hunter22'),
+    )
+    assert outcome is JoinOutcome.FAILED
+    assert calls(log=log)[-1] == ['connection', 'delete', 'uuid', 'u-new']
+
+
+async def test_cancelled_join_still_cleans_up(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A join cancelled mid-connect deletes the new profile, then raises."""
+    wifi, log = wifi_on(
+        tmp_path=tmp_path,
+        replies={
+            '-t -f UUID,TYPE': [(0, ''), (0, 'u-new:802-11-wireless\n')],
+        },
+    )
+    real_run = wifi.run
+
+    async def cancelling_run(*args: str, verb: str) -> tuple[int, str] | None:
+        """
+        Raise CancelledError for the connect; run anything else.
+
+        Parameters
+        ----------
+        *args : str
+            nmcli arguments.
+        verb : str
+            What the run is for.
+
+        Returns
+        -------
+        tuple[int, str] | None
+            The real run's result.
+
+        Raises
+        ------
+        asyncio.CancelledError
+            For the connect.
+        """
+        if verb == 'join':
+            raise asyncio.CancelledError
+        return await real_run(*args, verb=verb)
+
+    monkeypatch.setattr(wifi, 'run', cancelling_run)
+    with pytest.raises(asyncio.CancelledError):
+        await wifi.join(request=JoinRequest(ssid='Home', password='hunter22'))
+    assert calls(log=log) == [
+        PROFILES, PROFILES, ['connection', 'delete', 'uuid', 'u-new'],
     ]
 
 
@@ -251,7 +325,9 @@ async def test_join_accepts_wpa_passwords(
     tmp_path: Path, password: str,
 ) -> None:
     """Printable ASCII of 8 to 63 characters, or 64 hex digits."""
-    wifi, _ = wifi_on(tmp_path=tmp_path)
+    wifi, _ = wifi_on(
+        tmp_path=tmp_path, replies={'-t -f ACTIVE,SSID': (0, 'yes:Home\n')},
+    )
     outcome = await wifi.join(
         request=JoinRequest(ssid='Home', password=password),
     )

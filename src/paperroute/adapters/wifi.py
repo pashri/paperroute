@@ -579,29 +579,75 @@ class NmcliWifi:
         Returns
         -------
         JoinOutcome
-            FAILED without running nmcli for an SSID or password nmcli
-            can't take.
+            JOINED only once the status shows the SSID active; FAILED
+            without running nmcli for an SSID or password nmcli can't
+            take.
+
+        Raises
+        ------
+        asyncio.CancelledError
+            When cancelled, after the new profile is deleted.
         """
         if not valid_request(request=request):
             logger.warning('wifi join refused: bad ssid or password')
             return JoinOutcome.FAILED
+        # Callers serialise joins and hotspot starts; the diff assumes it.
         before = await self.profiles()
-        ran = await self.run(
-            *connect_argv(request=request, iface=self.iface), verb='join',
-        )
-        outcome = (
-            JoinOutcome.FAILED
-            if ran is None
-            else join_outcome(code=ran[0], output=ran[1])
-        )
+        try:
+            outcome = await self.connect(request=request)
+        except asyncio.CancelledError:
+            await asyncio.shield(self.clean_up(before=before))
+            raise
         logger.info(
             'wifi join', extra={'ssid': request.ssid, 'outcome': outcome},
         )
-        if outcome is not JoinOutcome.JOINED and before is not None:
-            after = await self.profiles()
-            for uuid in sorted((after or frozenset()) - before):
-                await self.delete(uuid=uuid)
+        if outcome is not JoinOutcome.JOINED:
+            await self.clean_up(before=before)
         return outcome
+
+    async def connect(self, *, request: JoinRequest) -> JoinOutcome:
+        """
+        Run the connect and confirm it by the status.
+
+        nmcli exits 0 for some arguments it reads as options or help,
+        so a success counts only when the SSID is then active.
+
+        Parameters
+        ----------
+        request : JoinRequest
+            A valid request.
+
+        Returns
+        -------
+        JoinOutcome
+            How the attempt ended.
+        """
+        ran = await self.run(
+            *connect_argv(request=request, iface=self.iface), verb='join',
+        )
+        if ran is None:
+            return JoinOutcome.FAILED
+        outcome = join_outcome(code=ran[0], output=ran[1])
+        if outcome is JoinOutcome.JOINED:
+            status = await self.status()
+            if status.ssid != request.ssid:
+                return JoinOutcome.FAILED
+        return outcome
+
+    async def clean_up(self, *, before: frozenset[str] | None) -> None:
+        """
+        Delete the Wi-Fi profiles made since a listing.
+
+        Parameters
+        ----------
+        before : frozenset[str] | None
+            UUIDs listed before; None deletes nothing.
+        """
+        if before is None:
+            return
+        after = await self.profiles()
+        for uuid in sorted((after or frozenset()) - before):
+            await self.delete(uuid=uuid)
 
     async def profiles(self) -> frozenset[str] | None:
         """

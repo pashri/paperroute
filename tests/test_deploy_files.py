@@ -1758,16 +1758,21 @@ def test_provision_installs_polkitd() -> None:
 
 
 def test_provision_requires_network_manager_running() -> None:
-    """provision stops unless NetworkManager runs after the install."""
-    path = BIN / 'provision-device'
-    assert commands(path=path, word='is-active') == [
+    """provision starts NetworkManager and waits up to 10 s for it."""
+    lines = [
+        line.strip()
+        for line in script_text(path=BIN / 'provision-device').splitlines()
+    ]
+    install = lines.index('network-manager dnsmasq-base')
+    assert lines[install + 1:install + 7] == [
+        'systemctl start NetworkManager',
+        'for _ in {1..10}; do',
+        'systemctl is-active --quiet NetworkManager && break',
+        'sleep 1',
+        'done',
         'systemctl is-active --quiet NetworkManager'
         " || fail 'NetworkManager is not running'",
     ]
-    text = script_text(path=path)
-    assert text.index('network-manager dnsmasq-base') < text.index(
-        'is-active --quiet NetworkManager',
-    )
 
 
 def test_provision_installs_network_manager() -> None:

@@ -45,7 +45,6 @@ from paperroute.core.messages import (
     Event,
     FeedFailed,
     FeedFetched,
-    FetchFeed,
     Knob,
     KnobEvent,
     KnobHeld,
@@ -89,13 +88,12 @@ from paperroute.core.places import (
     shown,
     with_place,
 )
+from paperroute.core.polling import poll_effects, woken
 from paperroute.core.quota import QUOTA_SAVE_EVERY, quota_only, with_calls
 from paperroute.core.rebuild import rebuild_effects, rebuilt, seen_schema
 from paperroute.core.saved import Saved
-from paperroute.core.sleep import awake
 from paperroute.core.state_model import (
     FEED_IDLE,
-    POLL_EVERY,
     Board,
     Saving,
     State,
@@ -168,32 +166,6 @@ def needed_feeds(*, state: State) -> tuple[str, ...]:
     return (*trips, *map_feeds(state=state))
 
 
-def poll_due(*, state: State, now: datetime) -> bool:
-    """
-    Say whether the trip-updates feeds should be fetched again.
-
-    Positions feeds keep their own clocks in `MapState.fetched_at`.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    now : datetime
-        Current time.
-
-    Returns
-    -------
-    bool
-        True when there are feeds to poll and POLL_EVERY of real time has
-        passed since the last fetch.
-    """
-    return bool(trip_feeds(state=state)) and elapsed(
-        since=state.last_fetch,
-        now=now,
-        span=POLL_EVERY,
-    )
-
-
 def reload_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
     Load departures when they run short and no load is in flight.
@@ -221,29 +193,6 @@ def reload_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     )
     board = replace(state.board, loading=True)
     return replace(state, board=board), (load,)
-
-
-def poll_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Fetch the trip-updates feeds when a poll is due.
-
-    Parameters
-    ----------
-    state : State
-        State at the tick's time.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State with the fetch time recorded, and a FetchFeed for each feed;
-        unchanged when no poll is due.
-    """
-    if not poll_due(state=state, now=state.now):
-        return state, ()
-    fetches = tuple(
-        FetchFeed(feed=feed) for feed in trip_feeds(state=state)
-    )
-    return replace(state, last_fetch=state.now), fetches
 
 
 def idle_dropped(*, state: State) -> State:
@@ -454,36 +403,6 @@ def on_knob(
     if after is state:
         return state, ()
     return reloaded(before=state, after=after, effects=effects)
-
-
-def woken(
-    *, state: State, event: KnobEvent | KnobsHeld | ConfirmAsked
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Wake the screen, polling the feeds at once.
-
-    The touch that wakes is not acted on. A phone's ask is the
-    exception: it wakes the screen and shows its confirm, in one redraw.
-
-    Parameters
-    ----------
-    state : State
-        State, asleep.
-    event : KnobEvent | KnobsHeld | ConfirmAsked
-        What woke it.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State awake and the fetches, with the Live view drawn, or the
-        confirm when the event was an ask the panel shows.
-    """
-    state, polls = poll_effects(state=awake(state=state))
-    if isinstance(event, ConfirmAsked):
-        asked, effects = on_asked(state=state, event=event)
-        if effects:
-            return asked, (*polls, *effects)
-    return settled(state=state, effects=polls)
 
 
 def on_touch(

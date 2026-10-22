@@ -355,12 +355,13 @@ async def test_downloads_serve_files(
     device.state_file.write_text('{"schema": 4}', encoding='utf-8')
     client, _ = await _start(device=device)
     try:
-        for name, body in (
-            ('errors.jsonl', '{"message": "x"}\n'),
-            ('state.json', '{"schema": 4}'),
+        for name, body, kind in (
+            ('errors.jsonl', '{"message": "x"}\n', 'application/x-ndjson'),
+            ('state.json', '{"schema": 4}', 'application/json'),
         ):
             response = await client.get(f'/device/{name}')
             assert response.status == HTTPStatus.OK
+            assert response.content_type == kind
             assert await response.text() == body
             assert response.headers['Content-Disposition'] == (
                 f'attachment; filename="{name}"'

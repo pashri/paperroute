@@ -46,6 +46,10 @@ STRONG: Final[int] = 67  # signal percent at or above which it is strong
 GOOD: Final[int] = 34  # signal percent at or above which it is good
 NOTICE_MARK: Final[str] = '{{notice}}'
 FORM_MARK: Final[str] = '{{form}}'
+DOWNLOAD_TYPES: Final[dict[str, str]] = {
+    'errors.jsonl': 'application/x-ndjson',
+    'state.json': 'application/json',
+}
 NOT_RUNNING: Final[str] = (
     "Wi-Fi setup isn't running. On the device, hold both knobs, then "
     'choose Wi-Fi.'
@@ -635,6 +639,7 @@ class DevicePages:
         if path is None or not path.is_file():
             return web.Response(status=HTTPStatus.NOT_FOUND)
         return web.FileResponse(path, headers={
+            'Content-Type': DOWNLOAD_TYPES[name],
             'Content-Disposition': f'attachment; filename="{name}"',
             'Cache-Control': 'no-store',
         })

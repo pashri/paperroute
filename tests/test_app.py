@@ -14,6 +14,8 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.resets import FileResets
+from paperroute.adapters.state_file import JsonStateRepository
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app import (
@@ -29,13 +31,14 @@ from paperroute.app import (
 )
 from paperroute.app_device import DevicePorts
 from paperroute.app_effects import StateSaver, loaded_patterns
+from paperroute.app_outputs import carry_out
 from paperroute.app_render import drawing
 from paperroute.build.gtfs_files import Source
 from paperroute.build.map_style import LIGHT
 from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.device import NOTICE
-from paperroute.core.device_model import DeviceStatus
+from paperroute.core.device import NOTICE, on_reset
+from paperroute.core.device_model import DeviceStatus, ResetKind
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import Point, Shape, make_shape
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
@@ -57,6 +60,7 @@ from paperroute.core.messages import (
     PowerRequested,
     QuitRequested,
     RebuildTimetable,
+    ResetDone,
     SettingsChanged,
     Tick,
     TimetableRebuilt,
@@ -73,6 +77,7 @@ from paperroute.core.saved import (
     Settings,
     seeded,
 )
+from paperroute.core.state import SAVE_AFTER
 from paperroute.core.tiles import (
     TILE,
     StreetLabel,
@@ -107,6 +112,7 @@ from tests.fakes import (
     FakeKeys,
     FakeNetwork,
     FakePower,
+    FakeWifi,
     FixedClock,
     FrameRecorder,
     MemoryStates,
@@ -1686,6 +1692,55 @@ async def test_app_draws_notice_before_power() -> None:
     )
     assert state.power is None
     assert not np.array_equal(display.frames[-1], notice)
+    await stop(tasks=tasks)
+
+
+async def test_app_reset_leaves_no_state_file(tmp_path: Path) -> None:
+    """A reset deletes state.json, nothing writes it again, and it stops."""
+    path = tmp_path / 'state.json'
+    resets = FileResets(
+        data_dir=tmp_path,
+        state=path,
+        key=FakeKeys(key='k' * 32),
+        wifi=FakeWifi(),
+        timetable=tmp_path / 'timetable.db',
+        tiles=tmp_path / 'tiles.db',
+    )
+    ports = replace(
+        ports_of(),
+        states=JsonStateRepository(path=path),
+        device=DevicePorts(resets=resets),
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    outputs = Outputs(
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    state = starting_state(ports=ports, seed=PIN)
+    for event in (Tick(now=AT), SettingsChanged(auto_rebuild=False)):
+        state = await handle(
+            state=state, event=event, ports=ports, queue=queue,
+            tasks=tasks, outputs=outputs,
+        )
+    assert path.exists()
+    state, effects = on_reset(state=state, kind=ResetKind.SETTINGS)
+    await carry_out(
+        effects=effects, ports=ports, queue=queue, tasks=tasks,
+        outputs=outputs,
+    )
+    await asyncio.gather(*tasks)
+    after: tuple[Event, ...] = (
+        Tick(now=AT + SAVE_AFTER * 2),
+        next_of(queue=queue, kind=ResetDone),
+    )
+    for later in after:
+        state = await handle(
+            state=state, event=later, ports=ports, queue=queue,
+            tasks=tasks, outputs=outputs,
+        )
+    assert not state.running
+    assert not path.exists()
     await stop(tasks=tasks)
 
 

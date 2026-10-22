@@ -55,6 +55,7 @@ from paperroute.core.messages import (
     PowerFailed,
     PowerRequested,
     QuitRequested,
+    ResetDone,
     SaveState,
     SettingsChanged,
     ShapesLoaded,
@@ -764,6 +765,7 @@ def dispatched(
             | ApiKeyChanged()
             | DeviceProbed()
             | DeviceProbeFailed()
+            | ResetDone()
         ):
             return on_device_event(state=state, event=event)
         case PlacesMatched() | PlacesFailed():

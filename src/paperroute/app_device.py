@@ -6,6 +6,7 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field, replace
 from typing import Any, Final
 
+from paperroute.adapters.resets import NullResets
 from paperroute.adapters.wifi import NullWifi
 from paperroute.core.device import device_status
 from paperroute.core.device_model import DeviceStatus
@@ -15,13 +16,21 @@ from paperroute.core.messages import (
     DeviceProbeFailed,
     Event,
     ProbeDevice,
+    ResetDevice,
+    ResetDone,
 )
 from paperroute.core.state_model import State
-from paperroute.ports import DeviceProbe, KeyStore, Observer, WifiControl
+from paperroute.ports import (
+    DeviceProbe,
+    KeyStore,
+    Observer,
+    Resets,
+    WifiControl,
+)
 
 logger = logging.getLogger(__name__)
 
-type DeviceEffect = ProbeDevice
+type DeviceEffect = ProbeDevice | ResetDevice
 
 PROBE_TIMEOUT: Final[float] = 10  # seconds
 
@@ -39,11 +48,14 @@ class DevicePorts:
         Gathers the device's facts; None where there is nothing to read.
     key : KeyStore | None
         Holds the API key; None when the app doesn't manage it.
+    resets : Resets
+        Resets the settings or erases everything.
     """
 
     wifi: WifiControl = field(default_factory=NullWifi)
     probe: DeviceProbe | None = None
     key: KeyStore | None = None
+    resets: Resets = field(default_factory=NullResets)
 
 
 async def probe(*, ports: DevicePorts, queue: asyncio.Queue[Event]) -> None:
@@ -76,6 +88,25 @@ async def probe(*, ports: DevicePorts, queue: asyncio.Queue[Event]) -> None:
     await queue.put(DeviceProbed(facts=facts))
 
 
+async def reset(
+    *, ports: DevicePorts, effect: ResetDevice, queue: asyncio.Queue[Event]
+) -> None:
+    """
+    Carry out a reset and post that it is done.
+
+    Parameters
+    ----------
+    ports : DevicePorts
+        Device adapters.
+    effect : ResetDevice
+        The reset asked for.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    """
+    await ports.resets.reset(kind=effect.kind)
+    await queue.put(ResetDone(kind=effect.kind))
+
+
 def device_work(
     *,
     ports: DevicePorts,
@@ -102,6 +133,11 @@ def device_work(
     match effect:
         case ProbeDevice():
             return probe(ports=ports, queue=queue), DeviceProbeFailed()
+        case ResetDevice(kind=kind):
+            return (
+                reset(ports=ports, effect=effect, queue=queue),
+                ResetDone(kind=kind),
+            )
 
 
 def key_known(*, ports: DevicePorts) -> ApiKeyChanged | None:

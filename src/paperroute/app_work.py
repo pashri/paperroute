@@ -39,6 +39,7 @@ from paperroute.core.messages import (
     ProbeDevice,
     RebuildTimetable,
     Render,
+    ResetDevice,
     SaveState,
     Stop,
     TimetableRebuilt,
@@ -249,7 +250,7 @@ def other_work(
     tuple[Coroutine[Any, Any, None], Event]
         The work, and the event that lets the app recover if it crashes.
     """
-    if isinstance(effect, ProbeDevice):
+    if isinstance(effect, ProbeDevice | ResetDevice):
         return device_work(ports=ports.device, effect=effect, queue=queue)
     call, fallback = work_for(
         timetable=ports.timetable, network=ports.network, effect=effect

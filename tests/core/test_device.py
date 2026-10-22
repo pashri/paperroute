@@ -5,8 +5,8 @@ from datetime import timedelta
 import pytest
 
 from paperroute.core.banners import NO_KEY
-from paperroute.core.device import PROBE_EVERY, device_status
-from paperroute.core.device_model import DeviceStatus
+from paperroute.core.device import PROBE_EVERY, device_status, on_reset
+from paperroute.core.device_model import DeviceStatus, ResetKind
 from paperroute.core.messages import (
     ApiKeyChanged,
     ControlPower,
@@ -22,6 +22,8 @@ from paperroute.core.messages import (
     ProbeDevice,
     QuitRequested,
     Render,
+    ResetDevice,
+    ResetDone,
     SaveState,
     SettingsChanged,
     Stop,
@@ -230,3 +232,72 @@ def test_device_status() -> None:
         facts=device_facts(),
     )
     assert status.calls_today > 0
+
+
+def resetting(*, kind: ResetKind) -> State:
+    """
+    Return a pinned, drawn state with a reset under way.
+
+    Parameters
+    ----------
+    kind : ResetKind
+        The reset asked for.
+
+    Returns
+    -------
+    State
+        The state after the reset was asked for.
+    """
+    state, _ = on_reset(state=pinned(), kind=kind)
+    return state
+
+
+def test_reset_draws_notice_then_resets() -> None:
+    """A reset draws its notice, then resets, and saves nothing."""
+    state, effects = on_reset(state=pinned(), kind=ResetKind.SETTINGS)
+    notice = NoticeView(
+        title='Resetting settings',
+        detail='paperroute starts again by itself',
+    )
+    assert effects == (
+        Render(view=notice),
+        ResetDevice(kind=ResetKind.SETTINGS),
+    )
+    assert state.panel.resetting is ResetKind.SETTINGS
+    assert state.last_view == notice
+
+
+def test_no_save_after_reset_asked() -> None:
+    """After a reset is asked for, nothing saves; a quit still stops."""
+    state, _ = step(pinned(), SettingsChanged(auto_rebuild=False))
+    state, _ = on_reset(state=state, kind=ResetKind.ERASE)
+    for seconds in (1, 10, 60):
+        tick = Tick(now=START + SAVE_AFTER + timedelta(seconds=seconds))
+        state, effects = step(state, tick)
+        assert not [e for e in effects if isinstance(e, SaveState | Render)]
+    _, effects = step(state, QuitRequested())
+    assert effects == (Stop(),)
+
+
+def test_reset_done_stops() -> None:
+    """A finished reset stops the app without saving."""
+    state = resetting(kind=ResetKind.ERASE)
+    state, effects = step(state, ResetDone(kind=ResetKind.ERASE))
+    assert not state.running
+    assert effects == (Stop(),)
+
+
+def test_second_reset_ignored() -> None:
+    """A second reset while one is under way does nothing."""
+    state = resetting(kind=ResetKind.SETTINGS)
+    after, effects = on_reset(state=state, kind=ResetKind.ERASE)
+    assert after is state
+    assert not effects
+
+
+def test_reset_ignored_while_powering() -> None:
+    """A reset while a power action is under way does nothing."""
+    state = powering(action=PowerAction.OFF)
+    after, effects = on_reset(state=state, kind=ResetKind.ERASE)
+    assert after is state
+    assert not effects

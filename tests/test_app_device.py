@@ -12,17 +12,19 @@ from paperroute.app_device import (
     device_work,
     report_status,
 )
-from paperroute.core.device_model import DeviceStatus
+from paperroute.core.device_model import DeviceStatus, ResetKind
 from paperroute.core.messages import (
     DeviceProbed,
     DeviceProbeFailed,
     Event,
     ProbeDevice,
+    ResetDevice,
+    ResetDone,
 )
 from paperroute.core.state import step
 from paperroute.observers import Timings
 from tests.core.test_state import fresh, loaded
-from tests.fakes import FakeProbe, HangingProbe, device_facts
+from tests.fakes import FakeProbe, HangingProbe, RecordingResets, device_facts
 
 
 async def worked(*, ports: DevicePorts) -> tuple[list[Event], Event]:
@@ -103,3 +105,18 @@ def test_unchanged_probe_does_not_redraw() -> None:
     state, _ = step(loaded(state=fresh()), DeviceProbed(facts=device_facts()))
     _, effects = step(state, DeviceProbed(facts=device_facts()))
     assert not effects
+
+
+async def test_reset_work_posts_done() -> None:
+    """A reset runs the resets, then posts that it is done."""
+    resets = RecordingResets()
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    work, fallback = device_work(
+        ports=DevicePorts(resets=resets),
+        effect=ResetDevice(kind=ResetKind.ERASE),
+        queue=queue,
+    )
+    await work
+    assert resets.kinds == [ResetKind.ERASE]
+    assert queue.get_nowait() == ResetDone(kind=ResetKind.ERASE)
+    assert fallback == ResetDone(kind=ResetKind.ERASE)

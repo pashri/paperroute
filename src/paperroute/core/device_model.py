@@ -145,6 +145,13 @@ class DeviceStatus:
     facts: DeviceFacts | None
 
 
+class ResetKind(StrEnum):
+    """What a reset clears."""
+
+    SETTINGS = 'settings'
+    ERASE = 'erase'
+
+
 @dataclass(frozen=True)
 class Panel:
     """
@@ -158,11 +165,14 @@ class Panel:
         The latest probe, or None before the first.
     probed_at : datetime | None
         When a probe was last asked for, or None.
+    resetting : ResetKind | None
+        The reset under way, or None.
     """
 
     key_set: bool | None = None
     facts: DeviceFacts | None = None
     probed_at: datetime | None = None
+    resetting: ResetKind | None = None
 
 
 class JoinOutcome(StrEnum):

@@ -5,7 +5,7 @@ from datetime import timedelta
 from typing import Final
 
 from paperroute.core.banners import feeds_held
-from paperroute.core.device_model import DeviceStatus
+from paperroute.core.device_model import DeviceStatus, ResetKind
 from paperroute.core.messages import (
     ApiKeyChanged,
     ControlPower,
@@ -19,8 +19,11 @@ from paperroute.core.messages import (
     PowerRequested,
     ProbeDevice,
     Render,
+    ResetDevice,
+    ResetDone,
     SaveState,
     SettingsChanged,
+    Stop,
 )
 from paperroute.core.quota import calls_today
 from paperroute.core.saved import Settings
@@ -31,6 +34,11 @@ NOTICE: Final[dict[PowerAction, str]] = {
     PowerAction.OFF: 'Shut down - safe to unplug',
     PowerAction.RESTART: 'Restarting',
 }
+RESET_NOTICE: Final[dict[ResetKind, str]] = {
+    ResetKind.SETTINGS: 'Resetting settings',
+    ResetKind.ERASE: 'Erasing everything',
+}
+RESET_DETAIL: Final[str] = 'paperroute starts again by itself'
 PROBE_EVERY: Final[timedelta] = timedelta(seconds=30)
 
 
@@ -74,9 +82,9 @@ def on_power(
     tuple[State, tuple[Effect, ...]]
         State with the action under way, and a SaveState, a Render of the
         notice and a ControlPower, in that order; nothing when an action
-        is already under way.
+        or a reset is already under way.
     """
-    if state.power is not None:
+    if state.power is not None or state.panel.resetting is not None:
         return state, ()
     saved = saved_of(state=state)
     view = NoticeView(title=NOTICE[event.action])
@@ -117,6 +125,51 @@ def on_power_failed(
     return settled(state=replace(state, power=None))
 
 
+def on_reset(
+    *, state: State, kind: ResetKind
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Draw the reset notice, then reset; nothing is saved from here on.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    kind : ResetKind
+        The reset asked for.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with the reset under way, and a Render of the notice and a
+        ResetDevice, in that order; nothing while a power action or a
+        reset is under way.
+    """
+    if state.power is not None or state.panel.resetting is not None:
+        return state, ()
+    view = NoticeView(title=RESET_NOTICE[kind], detail=RESET_DETAIL)
+    panel = replace(state.panel, resetting=kind)
+    state = replace(state, panel=panel, last_view=view)
+    return state, (Render(view=view), ResetDevice(kind=kind))
+
+
+def on_reset_done(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Stop once a reset has finished, so the app starts again fresh.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        Stopped state, and a Stop.
+    """
+    return replace(state, running=False), (Stop(),)
+
+
 type DeviceEvent = (
     SettingsChanged
     | PowerRequested
@@ -124,6 +177,7 @@ type DeviceEvent = (
     | ApiKeyChanged
     | DeviceProbed
     | DeviceProbeFailed
+    | ResetDone
 )
 
 
@@ -155,6 +209,8 @@ def on_device_event(
             return on_power(state=state, event=event)
         case ApiKeyChanged():
             result = on_key(state=state, event=event)
+        case ResetDone():
+            result = on_reset_done(state=state)
         case _:
             result = on_probed(state=state, event=event)
     return quiet_guard(result=power_guard(state=state, result=result))
@@ -164,7 +220,10 @@ def power_guard(
     *, state: State, result: tuple[State, tuple[Effect, ...]]
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Drop every Render from a result while a power action is under way.
+    Drop Renders while a power action or reset is under way.
+
+    While a reset is under way every SaveState is dropped too, so the
+    state file it deletes is never written again.
 
     Parameters
     ----------
@@ -176,14 +235,16 @@ def power_guard(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        The result, without Renders when an action is under way, and with
-        the notice kept as the view last drawn.
+        The result, without the dropped effects when an action or reset
+        is under way, and with the notice kept as the view last drawn.
     """
     after, effects = result
-    if state.power is None:
+    resetting = state.panel.resetting is not None
+    if state.power is None and not resetting:
         return result
+    dropped = (Render, SaveState) if resetting else (Render,)
     kept = tuple(
-        effect for effect in effects if not isinstance(effect, Render)
+        effect for effect in effects if not isinstance(effect, dropped)
     )
     return replace(after, last_view=state.last_view), kept
 

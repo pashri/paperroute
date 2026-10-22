@@ -14,6 +14,7 @@ from paperroute.core.device_model import (
     DeviceFacts,
     JoinOutcome,
     JoinRequest,
+    ResetKind,
     WifiNetwork,
     WifiStatus,
 )
@@ -494,9 +495,12 @@ class FakeWifi:
     ----------
     link : WifiStatus
         What `status` reports.
+    forgotten : int
+        How many times `forget_all` was called.
     """
 
     link: WifiStatus = field(default_factory=WifiStatus)
+    forgotten: int = 0
 
     async def status(self) -> WifiStatus:
         """
@@ -556,7 +560,8 @@ class FakeWifi:
         return JoinOutcome.FAILED
 
     async def forget_all(self) -> None:
-        """Do nothing."""
+        """Count the call."""
+        self.forgotten += 1
 
 
 def device_facts(*, key_set: bool = True) -> DeviceFacts:
@@ -637,6 +642,31 @@ class HangingProbe:
         """
         await asyncio.Event().wait()
         return device_facts()
+
+
+@dataclass
+class RecordingResets:
+    """
+    Resets that note each kind asked for and touch nothing.
+
+    Attributes
+    ----------
+    kinds : list[ResetKind]
+        Each reset asked for.
+    """
+
+    kinds: list[ResetKind] = field(default_factory=list)
+
+    async def reset(self, *, kind: ResetKind) -> None:
+        """
+        Note the reset.
+
+        Parameters
+        ----------
+        kind : ResetKind
+            The reset asked for.
+        """
+        self.kinds.append(kind)
 
 
 @dataclass

@@ -14,6 +14,7 @@ from paperroute.core.device_model import (
     DeviceStatus,
     JoinOutcome,
     JoinRequest,
+    ResetKind,
     WifiNetwork,
     WifiStatus,
 )
@@ -383,6 +384,20 @@ class WifiControl(Protocol):
 
     async def forget_all(self) -> None:
         """Delete every saved Wi-Fi profile."""
+
+
+class Resets(Protocol):
+    """Resets the settings or erases everything."""
+
+    async def reset(self, *, kind: ResetKind) -> None:
+        """
+        Carry out a reset; a part that fails is logged, not raised.
+
+        Parameters
+        ----------
+        kind : ResetKind
+            The reset asked for.
+        """
 
 
 class DeviceProbe(Protocol):

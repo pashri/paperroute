@@ -7,7 +7,7 @@ from enum import StrEnum
 
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.chooser_view import ChooserView
-from paperroute.core.device_model import DeviceFacts
+from paperroute.core.device_model import DeviceFacts, ResetKind
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.map_view import MapView
@@ -186,6 +186,13 @@ class ProbeDevice:
 
 
 @dataclass(frozen=True)
+class ResetDevice:
+    """Reset the settings or erase everything, in the background."""
+
+    kind: ResetKind
+
+
+@dataclass(frozen=True)
 class MatchPlaces:
     """Look some places up in the timetable, tagged with its version."""
 
@@ -209,6 +216,7 @@ Effect = (
     | RebuildTimetable
     | ControlPower
     | ProbeDevice
+    | ResetDevice
     | ChooserLoad
 )
 
@@ -378,6 +386,13 @@ class PowerFailed:
     """Shutting down or restarting didn't happen."""
 
     action: PowerAction
+
+
+@dataclass(frozen=True)
+class ResetDone:
+    """A reset has finished, whether or not every part of it worked."""
+
+    kind: ResetKind
 
 
 @dataclass(frozen=True)
@@ -607,6 +622,7 @@ Event = (
     | DeviceProbeFailed
     | PowerRequested
     | PowerFailed
+    | ResetDone
     | PlacesMatched
     | PlacesFailed
     | StripLoaded

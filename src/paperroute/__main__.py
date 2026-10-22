@@ -27,6 +27,7 @@ from paperroute.adapters.rebuild import (
     refresh_command,
     refresh_env,
 )
+from paperroute.adapters.resets import FileResets, NullResets
 from paperroute.adapters.secrets_file import SecretsFile, key_path_from_env
 from paperroute.adapters.state_file import DEFAULT_PATH as STATE_PATH
 from paperroute.adapters.state_file import JsonStateRepository
@@ -46,7 +47,9 @@ from paperroute.observers import ObserverGroup, Timings
 from paperroute.ports import (
     Clock,
     FeedsClient,
+    KeyStore,
     PowerControl,
+    Resets,
     TileRepository,
     TimetableBuilder,
     WifiControl,
@@ -299,6 +302,39 @@ def wifi_for(*, args: argparse.Namespace) -> WifiControl:
     return NullWifi()
 
 
+def resets_for(
+    *, args: argparse.Namespace, key: KeyStore, wifi: WifiControl
+) -> Resets:
+    """
+    Choose how the settings are reset and everything erased.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+    key : KeyStore
+        Holds the API key.
+    wifi : WifiControl
+        Forgets the saved Wi-Fi networks.
+
+    Returns
+    -------
+    Resets
+        Resets over the state file's directory with --power; otherwise
+        resets that never act, so a development run keeps its data.
+    """
+    if not args.power:
+        return NullResets()
+    return FileResets(
+        data_dir=args.state.parent,
+        state=args.state,
+        key=key,
+        wifi=wifi,
+        timetable=args.timetable,
+        tiles=args.tiles,
+    )
+
+
 def device_for(
     *,
     args: argparse.Namespace,
@@ -320,8 +356,9 @@ def device_for(
     Returns
     -------
     DevicePorts
-        Wi-Fi, the system probe and the key store; replayed feeds need
-        no key, so they get Wi-Fi alone and no facts.
+        Wi-Fi, the system probe, the key store and the resets; replayed
+        feeds need no key, so they get Wi-Fi alone, no facts and no
+        resets.
     """
     wifi = wifi_for(args=args)
     if args.feeds != 'live':
@@ -335,7 +372,8 @@ def device_for(
         data_dir=args.state.parent,
         version_file=args.version_file,
     )
-    return DevicePorts(wifi=wifi, probe=probe, key=key)
+    resets = resets_for(args=args, key=key, wifi=wifi)
+    return DevicePorts(wifi=wifi, probe=probe, key=key, resets=resets)
 
 
 def feeds_client(*, choice: str) -> FeedsClient:

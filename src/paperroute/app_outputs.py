@@ -9,7 +9,13 @@ from paperroute.app_effects import StateSaver
 from paperroute.app_ports import Ports
 from paperroute.app_render import MapRenderer, View, render
 from paperroute.app_work import perform
-from paperroute.core.messages import ControlPower, Effect, Event, Render
+from paperroute.core.messages import (
+    ControlPower,
+    Effect,
+    Event,
+    Render,
+    ResetDevice,
+)
 
 
 @dataclass
@@ -78,8 +84,8 @@ async def carry_out(
     """
     Perform an event's effects in order, keeping its view to draw later.
 
-    A ControlPower draws the waiting view first, so the notice is on
-    screen before the device goes down.
+    A ControlPower or ResetDevice draws the waiting view first, so the
+    notice is on screen before the device goes down or is reset.
 
     Parameters
     ----------
@@ -98,7 +104,7 @@ async def carry_out(
         if isinstance(effect, Render):
             outputs.pending.view = effect.view
             continue
-        if isinstance(effect, ControlPower):
+        if isinstance(effect, ControlPower | ResetDevice):
             await draw_pending(ports=ports, outputs=outputs)
         await perform(
             ports=ports,

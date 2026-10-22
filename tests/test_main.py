@@ -26,6 +26,7 @@ from paperroute.__main__ import (
     main,
     parse_args,
     power_for,
+    resets_for,
     seed_for,
     serve_or_exit,
     serve_web,
@@ -37,6 +38,7 @@ from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.power import NullPower, SystemctlPower
 from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
+from paperroute.adapters.resets import FileResets, NullResets
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
@@ -49,7 +51,7 @@ from paperroute.core.model import SYDNEY
 from paperroute.core.tiles import TileVariant
 from paperroute.observers import Timings
 from tests.core.factories import pin_of
-from tests.fakes import FakeNetwork, MemoryStates
+from tests.fakes import FakeKeys, FakeNetwork, FakeWifi, MemoryStates
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor
@@ -200,6 +202,22 @@ def test_power_for_acts_only_when_asked() -> None:
     assert isinstance(on, SystemctlPower)
     assert on.systemctl == '/usr/bin/systemctl'
     assert isinstance(off, NullPower)
+
+
+def test_resets_for_without_power_is_null(tmp_path: Path) -> None:
+    """Only --power resets for real, so a Mac run never deletes data."""
+    args = argparse.Namespace(
+        power=False,
+        state=tmp_path / 'state.json',
+        timetable=tmp_path / 'timetable.db',
+        tiles=tmp_path / 'tiles.db',
+    )
+    off = resets_for(args=args, key=FakeKeys(), wifi=FakeWifi())
+    args.power = True
+    on = resets_for(args=args, key=FakeKeys(), wifi=FakeWifi())
+    assert isinstance(off, NullResets)
+    assert isinstance(on, FileResets)
+    assert on.data_dir == tmp_path
 
 
 def test_wifi_for_uses_nmcli_only_when_asked() -> None:

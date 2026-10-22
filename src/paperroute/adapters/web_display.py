@@ -8,7 +8,7 @@ import time
 from collections.abc import Awaitable, Callable, Mapping
 from http import HTTPStatus
 from importlib.resources import files
-from typing import Final
+from typing import TYPE_CHECKING, Final
 from urllib.parse import urlsplit
 
 import numpy as np
@@ -29,6 +29,9 @@ from paperroute.core.messages import (
 )
 from paperroute.render.canvas import encode_png
 from paperroute.rss import max_rss_mb
+
+if TYPE_CHECKING:
+    from paperroute.adapters.web_device import DevicePages
 
 logger = logging.getLogger(__name__)
 
@@ -243,7 +246,7 @@ def _cross_site(*, request: web.Request) -> bool:
     return urlsplit(origin).netloc != request.host
 
 
-def _asset(*, name: str) -> str:
+def asset(*, name: str) -> str:
     """
     Read one of the packaged page files.
 
@@ -261,9 +264,9 @@ def _asset(*, name: str) -> str:
     return path.read_text(encoding='utf-8')
 
 
-async def _fields(*, request: web.Request) -> dict[str, str]:
+async def form_fields(*, request: web.Request) -> dict[str, str]:
     """
-    Read the knob and action from a form or JSON body.
+    Read the string fields of a form or JSON body.
 
     Parameters
     ----------
@@ -302,9 +305,13 @@ class WebDisplay:
         Extra fields for the status page.
     remote_of : Callable[[web.BaseRequest], str | None]
         Finds the peer address of a request.
+    device : DevicePages | None
+        The device's own pages, such as Wi-Fi setup, or None.
 
     Attributes
     ----------
+    device : DevicePages | None
+        The device's own pages; set before `app` is called.
     boot : str
         Hex start time of this server, so a restart changes event data.
     version : int
@@ -318,8 +325,10 @@ class WebDisplay:
         *,
         status: Callable[[], dict[str, object]] | None = None,
         remote_of: Callable[[web.BaseRequest], str | None] = peer_address,
+        device: 'DevicePages | None' = None,
     ) -> None:
         self._status = status
+        self.device = device
         self._remote_of = remote_of
         self._post: Callable[[Event], None] = lambda event: None
         self._png: bytes | None = None
@@ -354,6 +363,17 @@ class WebDisplay:
         """
         self._post = post
 
+    def send(self, event: Event) -> None:
+        """
+        Send an event to wherever `bind` last pointed.
+
+        Parameters
+        ----------
+        event : Event
+            The event.
+        """
+        self._post(event)
+
     def app(self) -> web.Application:
         """
         Build the web application.
@@ -380,6 +400,8 @@ class WebDisplay:
             web.post('/power', self._power),
             web.get('/status', self._status_json),
         ])
+        if self.device is not None:
+            app.add_routes(self.device.routes())
         return app
 
     async def _close(self, app: web.Application) -> None:
@@ -438,7 +460,7 @@ class WebDisplay:
         """
         del request
         return web.Response(
-            text=_asset(name='live.html'),
+            text=asset(name='live.html'),
             content_type='text/html',
         )
 
@@ -458,7 +480,7 @@ class WebDisplay:
         """
         del request
         return web.Response(
-            text=_asset(name='live.css'),
+            text=asset(name='live.css'),
             content_type='text/css',
         )
 
@@ -478,7 +500,7 @@ class WebDisplay:
         """
         del request
         return web.Response(
-            text=_asset(name='live.js'),
+            text=asset(name='live.js'),
             content_type='text/javascript',
         )
 
@@ -568,7 +590,7 @@ class WebDisplay:
         web.Response
             The response.
         """
-        fields = await _fields(request=request)
+        fields = await form_fields(request=request)
         event = knob_event(
             knob=fields.get('knob', ''),
             action=fields.get('action', ''),
@@ -596,7 +618,7 @@ class WebDisplay:
         query = request.query
         on = auto_rebuild_of(status=status, saved=query.get('saved'))
         action = POWER_ACTIONS.get(query.get('power', ''))
-        page = _asset(name='settings.html').replace(
+        page = asset(name='settings.html').replace(
             CHECKED_MARK, ' checked' if on else '',
         ).replace(
             DEVICE_STATUS_MARK, '' if action is None else POWER_STATUS[action],
@@ -619,7 +641,7 @@ class WebDisplay:
         """
         del request
         return web.Response(
-            text=_asset(name='settings.js'),
+            text=asset(name='settings.js'),
             content_type='text/javascript',
         )
 
@@ -638,7 +660,7 @@ class WebDisplay:
             400 for an unknown value; otherwise 204 to the script's JSON,
             or 303 back to the page for a plain form.
         """
-        event = settings_event(fields=await _fields(request=request))
+        event = settings_event(fields=await form_fields(request=request))
         if event is None:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         self._post(event)
@@ -665,7 +687,7 @@ class WebDisplay:
         if action is None:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         question, confirm = CONFIRM[action]
-        page = _asset(name='power.html').replace(
+        page = asset(name='power.html').replace(
             '{{question}}', question,
         ).replace('{{action}}', action.value).replace('{{confirm}}', confirm)
         return web.Response(text=page, content_type='text/html')
@@ -685,7 +707,7 @@ class WebDisplay:
             400 for an unknown action; otherwise 204 to the script's
             JSON, or 303 back to the Settings page for a plain form.
         """
-        fields = await _fields(request=request)
+        fields = await form_fields(request=request)
         action = POWER_ACTIONS.get(fields.get('action', ''))
         if action is None:
             return web.Response(status=HTTPStatus.BAD_REQUEST)

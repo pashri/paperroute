@@ -23,6 +23,7 @@ import paperroute.__main__ as cli
 import paperroute.adapters.tk_monitor as tk_monitor
 from paperroute.__main__ import (
     builder_for,
+    device_pages_for,
     main,
     parse_args,
     power_for,
@@ -72,6 +73,25 @@ def test_pin_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     )
     args = parse_args()
     assert (args.origin, args.destination) == ('215020', '200060')
+
+
+def test_device_pages_only_for_live_feeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Live feeds get the setup pages; replayed feeds get none."""
+    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    timings = Timings()
+    display = WebDisplay(status=timings.snapshot)
+    args = argparse.Namespace(
+        feeds='live', error_log=None, state=tmp_path / 'state.json',
+    )
+    pages = device_pages_for(args=args, timings=timings, display=display)
+    assert pages is not None
+    assert len(pages.routes()) == 3
+    args.feeds = str(tmp_path)
+    assert device_pages_for(
+        args=args, timings=timings, display=display,
+    ) is None
 
 
 def test_seed_for_builds_bare_places() -> None:

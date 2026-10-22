@@ -35,6 +35,7 @@ from paperroute.adapters.systemd import SystemdNotifier
 from paperroute.adapters.tfnsw import AiohttpFeedsClient
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
+from paperroute.adapters.web_device import DevicePages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.wifi import NmcliWifi, NullWifi
 from paperroute.app import Ports, run
@@ -778,6 +779,38 @@ def serve_or_exit(
         sys.exit(1)
 
 
+def device_pages_for(
+    *, args: argparse.Namespace, timings: Timings, display: WebDisplay
+) -> DevicePages | None:
+    """
+    Build the phone setup pages for a device on live feeds.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed arguments.
+    timings : Timings
+        Holds the latest device status and feed times.
+    display : WebDisplay
+        Sends the pages' events on to the app.
+
+    Returns
+    -------
+    DevicePages | None
+        The pages; None for replayed feeds, which have no key file.
+    """
+    if args.feeds != 'live':
+        return None
+    return DevicePages(
+        status=lambda: timings.device,
+        feeds=lambda: timings.last_ok,
+        key=SecretsFile(path=key_path_from_env()),
+        post=display.send,
+        error_log=args.error_log,
+        state_file=args.state,
+    )
+
+
 def web_main(
     *,
     args: argparse.Namespace,
@@ -798,6 +831,9 @@ def web_main(
     """
     timings = Timings()
     display = WebDisplay(status=timings.snapshot)
+    display.device = device_pages_for(
+        args=args, timings=timings, display=display,
+    )
     observer = ObserverGroup(
         observers=[
             timings,

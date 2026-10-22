@@ -215,6 +215,8 @@ def rendered(
     """
     Add a Render effect when the view changed.
 
+    While the sleep screen is shown nothing redraws; it is drawn once.
+
     Parameters
     ----------
     state : State
@@ -230,6 +232,8 @@ def rendered(
         State with the view recorded, the scroll too on the Stop view,
         and effects.
     """
+    if state.panel.asleep and isinstance(state.last_view, SleepView):
+        return state, effects
     view = current_view(state=state, stop_view=stop_view)
     if isinstance(view, StopView) and state.view is LiveView.STOP:
         state = replace(state, scroll=view.scroll)

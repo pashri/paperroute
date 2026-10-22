@@ -5,8 +5,12 @@ from datetime import timedelta
 from paperroute.core.device_model import ConfirmAction, MenuRow
 from paperroute.core.map_view import MapView
 from paperroute.core.messages import (
+    ApiKeyChanged,
     ConfirmAsked,
+    DeparturesLoaded,
+    DeviceProbed,
     Effect,
+    Event,
     FetchFeed,
     Knob,
     KnobHeld,
@@ -15,15 +19,17 @@ from paperroute.core.messages import (
     KnobTurned,
     Render,
     Tick,
+    TimetableSeen,
 )
 from paperroute.core.panel_views import ConfirmView, SleepView
 from paperroute.core.sleep import SLEEP_BAND
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
-from tests.core.factories import START
+from tests.core.factories import START, departure
 from tests.core.test_menu import BOTH, DOWN, run, turn
 from tests.core.test_state import BUSES, fresh, loaded
+from tests.fakes import device_facts
 
 
 def asleep() -> State:
@@ -141,3 +147,31 @@ def test_ignored_ask_while_asleep_still_wakes() -> None:
     assert not state.panel.asleep
     assert isinstance(renders(effects=effects)[0], StopView)
 
+
+
+def test_sleep_screen_is_drawn_once() -> None:
+    """Events that change the board, key or facts draw nothing asleep."""
+    state = asleep()
+    for count in (1, 5):
+        deps = tuple(
+            departure(departs=START + timedelta(minutes=3 * (i + 1)))
+            for i in range(count)
+        )
+        events: tuple[Event, ...] = (
+            DeparturesLoaded(
+                pin=state.places.pins[0],
+                departures=deps,
+                until=START + timedelta(hours=2),
+            ),
+            DeviceProbed(facts=device_facts(key_set=count == 5)),
+            TimetableSeen(version=f'v{count}'),
+            ApiKeyChanged(present=count == 1),
+            Tick(now=START + timedelta(minutes=count)),
+            Tick(now=START + timedelta(minutes=count, seconds=40)),
+        )
+        for event in events:
+            state, effects = step(state, event)
+            assert not renders(effects=effects)
+    assert state.panel.asleep
+    state, effects = step(state, KnobPressed(knob=Knob.BOTTOM))
+    assert isinstance(renders(effects=effects)[0], StopView)

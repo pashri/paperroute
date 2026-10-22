@@ -110,7 +110,10 @@ def knob_moved(*, state: State, event: KnobEvent) -> State:
         New state; the same object when the event does nothing.
     """
     match event:
-        case KnobTurned(knob=Knob.TOP, steps=steps):
+        case (
+            KnobTurned(knob=Knob.TOP, steps=steps)
+            | KnobHeldTurned(knob=Knob.TOP, steps=steps)
+        ):
             after = flipped(state=state, steps=steps)
             return moved_off(before=state, after=after)
         case KnobTurned(knob=Knob.BOTTOM, steps=steps):

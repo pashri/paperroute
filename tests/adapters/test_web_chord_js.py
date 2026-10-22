@@ -60,6 +60,12 @@ const release = (button) => {
 };
 press(top); press(bottom); fire(); release(top); release(bottom); fire();
 results.bothButtons = sent.splice(0);
+press(top); press(bottom); fire(); press(bottom); fire();
+release(top); release(bottom); fire();
+results.rePress = sent.splice(0);
+press(top); press(bottom); fire(); release(top); release(bottom); fire();
+press(top); press(bottom); fire(); release(top); release(bottom); fire();
+results.twice = sent.splice(0);
 down('s'); up('s'); fire();
 results.topTap = sent.splice(0);
 console.log(JSON.stringify(results));
@@ -89,5 +95,7 @@ def test_page_chord_in_node(tmp_path: Path) -> None:
         'bothEarly': [],
         'kHeldThenS': both,
         'bothButtons': both,
+        'rePress': both,
+        'twice': both + both,
         'topTap': [['top', 'press']],
     }

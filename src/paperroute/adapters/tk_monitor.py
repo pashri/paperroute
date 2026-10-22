@@ -89,7 +89,7 @@ class HoldKey:
             The event for an earlier release this press settles, if any.
         """
         event = self.poll(now)
-        if self._down_at is None and not self._absorbed:
+        if self._down_at is None:
             self._down_at = now
             self._turned = False
         self._up_at = None

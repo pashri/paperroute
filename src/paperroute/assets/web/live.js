@@ -133,21 +133,22 @@ const holders = {
   bottom: holdable('bottom'),
 };
 
-const chord = { timer: null };
+const chord = { timer: null, fired: false };
 const downKeys = new Set();
 const pressCancels = [];
 
 /**
  * Start the Settings chord when both knobs are down: both presses are
- * absorbed and a `HOLD_MS` timer sends the `both` hold.
+ * absorbed and a `HOLD_MS` timer sends the `both` hold, once for as
+ * long as either knob stays down.
  * @returns {void}
  */
 function startChord() {
   if (!holders.top.isDown() || !holders.bottom.isDown()) return;
-  if (chord.timer !== null) return;
   Object.values(holders).forEach((holder) => holder.absorb());
+  if (chord.timer !== null || chord.fired) return;
   chord.timer = setTimeout(() => {
-    chord.timer = null;
+    Object.assign(chord, { timer: null, fired: true });
     sendKnob('both', 'hold');
   }, HOLD_MS);
 }
@@ -162,6 +163,9 @@ function finishKnob(knob) {
   if (outcome === 'chord') {
     clearTimeout(chord.timer);
     chord.timer = null;
+  }
+  if (!holders.top.isDown() && !holders.bottom.isDown()) {
+    chord.fired = false;
   }
   return outcome;
 }
@@ -215,7 +219,7 @@ function cancelAll() {
   downKeys.clear();
   Object.values(holders).forEach((holder) => holder.cancel());
   clearTimeout(chord.timer);
-  chord.timer = null;
+  Object.assign(chord, { timer: null, fired: false });
   pressCancels.forEach((cancel) => cancel());
 }
 

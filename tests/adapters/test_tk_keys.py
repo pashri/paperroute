@@ -2,7 +2,7 @@
 
 import pytest
 
-from paperroute.adapters.tk_monitor import Chord, HoldKey, key_event
+from paperroute.adapters.tk_monitor import HOLD_S, Chord, HoldKey, key_event
 from paperroute.core.messages import (
     Event,
     Knob,
@@ -137,14 +137,18 @@ def _keys() -> tuple[HoldKey, HoldKey, Chord]:
     return top, bottom, Chord(top=top, bottom=bottom)
 
 
-def _poll(*, keys: tuple[HoldKey, HoldKey, Chord], now: float) -> list[Event]:
+def _poll(
+    *, keys: tuple[HoldKey, HoldKey, Chord], now: float
+) -> list[Event]:
     """What the monitor posts on a pump: the chord, then each key."""
     top, bottom, chord = keys
     events = [chord.poll(now=now), top.poll(now), bottom.poll(now)]
     return [event for event in events if event is not None]
 
 
-def _down(*, keys: tuple[HoldKey, HoldKey, Chord], key: HoldKey, now: float) -> None:
+def _down(
+    *, keys: tuple[HoldKey, HoldKey, Chord], key: HoldKey, now: float
+) -> None:
     """Press a key and tell the chord, as the monitor does."""
     key.down(now)
     keys[2].down(now=now)
@@ -163,13 +167,13 @@ def test_both_keys_held_open_settings() -> None:
     keys = _keys()
     _down(keys=keys, key=keys[0], now=0.0)
     _down(keys=keys, key=keys[1], now=0.1)
-    assert _poll(keys=keys, now=0.85) == []
-    assert _poll(keys=keys, now=0.9) == [KnobsHeld()]
-    assert _poll(keys=keys, now=1.0) == []
-    keys[0].up(1.2)
-    keys[1].up(1.2)
-    assert _poll(keys=keys, now=1.3) == []
-    assert _poll(keys=keys, now=1.4) == []
+    assert _poll(keys=keys, now=0.1 + HOLD_S - 0.05) == []
+    assert _poll(keys=keys, now=0.1 + HOLD_S + 0.05) == [KnobsHeld()]
+    assert _poll(keys=keys, now=2.0) == []
+    keys[0].up(2.2)
+    keys[1].up(2.2)
+    assert _poll(keys=keys, now=2.3) == []
+    assert _poll(keys=keys, now=2.4) == []
 
 
 def test_held_k_joined_by_s_is_settings_only() -> None:
@@ -177,7 +181,7 @@ def test_held_k_joined_by_s_is_settings_only() -> None:
     keys = _keys()
     _down(keys=keys, key=keys[1], now=0.0)
     _down(keys=keys, key=keys[0], now=0.9)
-    assert _poll(keys=keys, now=1.75) == [KnobsHeld()]
+    assert _poll(keys=keys, now=0.9 + HOLD_S + 0.05) == [KnobsHeld()]
     keys[0].up(2.0)
     keys[1].up(2.0)
     assert _poll(keys=keys, now=2.1) == []
@@ -206,15 +210,17 @@ def test_chord_ignores_autorepeat() -> None:
         _down(keys=keys, key=keys[0], now=now + 0.01)
         _down(keys=keys, key=keys[1], now=now + 0.01)
         assert _poll(keys=keys, now=now + 0.02) == []
-    assert _poll(keys=keys, now=0.9) == [KnobsHeld()]
+    assert _poll(keys=keys, now=0.1 + HOLD_S + 0.05) == [KnobsHeld()]
 
 
 def test_top_hold_alone_is_top_hold() -> None:
     """S held alone sends KnobHeld(TOP), which does nothing."""
     keys = _keys()
     _down(keys=keys, key=keys[0], now=0.0)
-    keys[0].up(1.0)
-    assert _poll(keys=keys, now=1.1) == [KnobHeld(knob=Knob.TOP)]
+    keys[0].up(HOLD_S + 0.2)
+    assert _poll(keys=keys, now=HOLD_S + 0.3) == [
+        KnobHeld(knob=Knob.TOP)
+    ]
 
 
 def test_top_key_steers_only_top_turns() -> None:

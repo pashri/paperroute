@@ -1457,9 +1457,10 @@ def check_selection(*, before: State, after: State, event: Event) -> None:
         trains = panel_trains(stop_view=live_stop_view(state=after))
         assert selected in {trip_day(departure=train) for train in trains}
     if isinstance(event, KnobHeldTurned):
-        assert saved_of(state=after) == saved_of(state=before)
         assert after.chooser == before.chooser
-        if event.knob is Knob.TOP or before.view is not LiveView.STRIP:
+    if isinstance(event, KnobHeldTurned) and event.knob is Knob.BOTTOM:
+        assert saved_of(state=after) == saved_of(state=before)
+        if before.view is not LiveView.STRIP:
             assert after.strip.selected == before.strip.selected
 
 
@@ -2384,6 +2385,15 @@ def test_flip_and_hold_on_the_strip_views(view: LiveView) -> None:
     state, _ = step(state, HOLD)
     assert state.places.pins == (PINS[0], PINS[2])
     assert (state.view, state.places.unpinned) == (view, PINS[1])
+
+
+@pytest.mark.parametrize('view', [LiveView.STRIP, LiveView.STRIP_MAP])
+def test_top_turn_while_held_is_a_plain_top_turn(view: LiveView) -> None:
+    """A top turn while the top knob is held switches pin as a turn."""
+    state = pinned(view=view)
+    held = KnobHeldTurned(knob=Knob.TOP, steps=1)
+    assert step(state, held) == step(state, top(steps=1))
+    assert shown(state=step(state, held)[0]) == PINS[1]
 
 
 @pytest.mark.parametrize('view', list(LiveView))

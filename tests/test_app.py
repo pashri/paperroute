@@ -1888,7 +1888,6 @@ async def test_app_runs_with_no_timetable(tmp_path: Path) -> None:
             KnobPressed(knob=Knob.TOP),
             Tick(now=AT),
             KnobsHeld(),
-            KnobPressed(knob=Knob.BOTTOM),
             Tick(now=AT),
         ),
     )

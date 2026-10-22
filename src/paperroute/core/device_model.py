@@ -192,6 +192,54 @@ class Confirm:
     asked_at: datetime
 
 
+class JoinOutcome(StrEnum):
+    """How an attempt to join a network ended."""
+
+    JOINED = 'joined'
+    WRONG_PASSWORD = 'wrong_password'
+    NOT_FOUND = 'not_found'
+    FAILED = 'failed'
+
+
+class WifiPhase(StrEnum):
+    """Where Wi-Fi setup from the panel has got to."""
+
+    SCANNING = 'scanning'
+    HOTSPOT = 'hotspot'
+    JOINING = 'joining'
+    FAILED = 'failed'
+
+
+@dataclass(frozen=True)
+class WifiSetup:
+    """
+    Wi-Fi setup open on the panel.
+
+    Attributes
+    ----------
+    phase : WifiPhase
+        Where setup has got to.
+    password : str
+        The hotspot password, or empty before it starts. Kept out of
+        the repr.
+    networks : tuple[WifiNetwork, ...]
+        The networks the scan found.
+    until : datetime | None
+        When the hotspot closes by itself, or None before it starts.
+    ssid : str | None
+        The network being joined, or None.
+    error : str | None
+        Why the hotspot or the last join failed, or None.
+    """
+
+    phase: WifiPhase
+    password: str = field(default='', repr=False)
+    networks: tuple[WifiNetwork, ...] = ()
+    until: datetime | None = None
+    ssid: str | None = None
+    error: str | None = None
+
+
 @dataclass(frozen=True)
 class DeviceStatus:
     """
@@ -215,6 +263,8 @@ class DeviceStatus:
         The latest probe, or None before the first.
     asked : ConfirmAction | None
         What a phone asked for that waits on the panel, or None.
+    setup : WifiSetup | None
+        Wi-Fi setup open on the panel, or None.
     """
 
     timetable: str | None
@@ -225,6 +275,7 @@ class DeviceStatus:
     key_set: bool | None
     facts: DeviceFacts | None
     asked: ConfirmAction | None = None
+    setup: WifiSetup | None = None
 
 
 class ResetKind(StrEnum):
@@ -259,6 +310,8 @@ class Panel:
         Whether a probe asked for has not answered yet.
     asleep : bool
         Whether the screen is asleep.
+    wifi : WifiSetup | None
+        Wi-Fi setup open, or None.
     """
 
     key_set: bool | None = None
@@ -270,21 +323,4 @@ class Panel:
     touched_at: datetime | None = None
     probing: bool = False
     asleep: bool = False
-
-
-class JoinOutcome(StrEnum):
-    """How an attempt to join a network ended."""
-
-    JOINED = 'joined'
-    WRONG_PASSWORD = 'wrong_password'
-    NOT_FOUND = 'not_found'
-    FAILED = 'failed'
-
-
-class WifiPhase(StrEnum):
-    """Where Wi-Fi setup from the panel has got to."""
-
-    SCANNING = 'scanning'
-    HOTSPOT = 'hotspot'
-    JOINING = 'joining'
-    FAILED = 'failed'
+    wifi: WifiSetup | None = None

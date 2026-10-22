@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Final
 
-from paperroute.app_device import key_known, report_status
+from paperroute.app_device import key_known, leftover_stopped, report_status
 from paperroute.app_effects import StateSaver, VersionWatch, filled
 from paperroute.app_outputs import Outputs, carry_out, draw_pending
 from paperroute.app_ports import Ports
@@ -241,6 +241,7 @@ async def run(
     report_status(
         observer=ports.observer, state=state, reported=outputs.reported,
     )
+    await leftover_stopped(ports=ports.device)
     known = key_known(ports=ports.device)
     if known is not None:
         queue.put_nowait(known)
@@ -267,6 +268,7 @@ async def run(
     finally:
         await stop(tasks={clock, *tasks})
         await ports.builder.stop()
+        await leftover_stopped(ports=ports.device)
     return state
 
 

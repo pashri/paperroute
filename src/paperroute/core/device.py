@@ -31,11 +31,13 @@ from paperroute.core.messages import (
     SaveState,
     SettingsChanged,
     Stop,
+    WifiEvent,
 )
 from paperroute.core.quota import calls_today
 from paperroute.core.saved import Settings
 from paperroute.core.state_model import State
 from paperroute.core.state_views import saved_of, settled
+from paperroute.core.wifi import on_wifi_event, setup_closed
 
 NOTICE: Final[dict[PowerAction, str]] = {
     PowerAction.OFF: 'Shut down - safe to unplug',
@@ -89,11 +91,13 @@ def on_power(
     -------
     tuple[State, tuple[Effect, ...]]
         State with the action under way, and a SaveState, a Render of the
-        notice and a ControlPower, in that order; nothing when an action
-        or a reset is already under way.
+        notice and a ControlPower, in that order, after any Wi-Fi setup
+        is stopped; nothing when an action or a reset is already under
+        way.
     """
     if state.power is not None or state.panel.resetting is not None:
         return state, ()
+    state, stops = setup_closed(state=state)
     saved = saved_of(state=state)
     view = NoticeView(title=NOTICE[event.action])
     state = replace(
@@ -103,6 +107,7 @@ def on_power(
         saving=replace(state.saving, saved=saved),
     )
     return state, (
+        *stops,
         SaveState(saved=saved),
         Render(view=view),
         ControlPower(action=event.action),
@@ -150,15 +155,16 @@ def on_reset(
     -------
     tuple[State, tuple[Effect, ...]]
         State with the reset under way, and a Render of the notice and a
-        ResetDevice, in that order; nothing while a power action or a
-        reset is under way.
+        ResetDevice, in that order, after any Wi-Fi setup is stopped;
+        nothing while a power action or a reset is under way.
     """
     if state.power is not None or state.panel.resetting is not None:
         return state, ()
+    state, stops = setup_closed(state=state)
     view = NoticeView(title=RESET_NOTICE[kind], detail=RESET_DETAIL)
     panel = replace(state.panel, resetting=kind)
     state = replace(state, panel=panel, last_view=view)
-    return state, (Render(view=view), ResetDevice(kind=kind))
+    return state, (*stops, Render(view=view), ResetDevice(kind=kind))
 
 
 def on_reset_done(*, state: State) -> tuple[State, tuple[Effect, ...]]:
@@ -186,6 +192,7 @@ type DeviceEvent = (
     | DeviceProbed
     | DeviceProbeFailed
     | ResetDone
+    | WifiEvent
 )
 
 
@@ -193,7 +200,7 @@ def on_device_event(
     *, state: State, event: DeviceEvent
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Store a setting, the key's state or the facts, or handle power.
+    Store a setting, key state or facts; handle power or Wi-Fi setup.
 
     Parameters
     ----------
@@ -219,8 +226,11 @@ def on_device_event(
             result = on_key(state=state, event=event)
         case ResetDone():
             result = on_reset_done(state=state)
-        case _:
+        case DeviceProbed() | DeviceProbeFailed():
             result = on_probed(state=state, event=event)
+        case _:
+            after, effects = on_wifi_event(state=state, event=event)
+            result = settled(state=after, effects=effects)
     return quiet_guard(result=power_guard(state=state, result=result))
 
 
@@ -403,8 +413,8 @@ def device_status(*, state: State) -> DeviceStatus:
     Returns
     -------
     DeviceStatus
-        The timetable, rebuild, calls today, key, latest facts and what
-        a phone asked for that waits on the panel.
+        The timetable, rebuild, calls today, key, latest facts, what
+        a phone asked for that waits on the panel and Wi-Fi setup.
     """
     return DeviceStatus(
         timetable=state.saving.timetable,
@@ -415,6 +425,7 @@ def device_status(*, state: State) -> DeviceStatus:
         key_set=state.panel.key_set,
         facts=state.panel.facts,
         asked=phone_asked(state=state),
+        setup=state.panel.wifi,
     )
 
 

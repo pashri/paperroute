@@ -2,10 +2,11 @@
 
 import logging
 import time
+from dataclasses import replace
 
 import pytest
 
-from paperroute.core.device_model import DeviceStatus
+from paperroute.core.device_model import DeviceStatus, WifiPhase, WifiSetup
 from paperroute.core.saved import Settings
 from paperroute.observers import NullObserver, ObserverGroup, Timings
 from tests.fakes import device_facts
@@ -153,6 +154,7 @@ def test_status_json_has_no_facts() -> None:
         'calls_today': 12,
         'key_set': True,
         'asked': None,
+        'setup_phase': None,
     }
     assert 'facts' not in str(snap)
     assert 'secret' not in str(snap)
@@ -164,3 +166,13 @@ def test_null_and_group_take_status() -> None:
     timings = Timings()
     ObserverGroup(observers=[_Failing(), timings]).status_seen(status=STATUS)
     assert timings.device == STATUS
+
+
+def test_status_json_has_no_password() -> None:
+    """A setup's phase is reported, never its hotspot password."""
+    setup = WifiSetup(phase=WifiPhase.HOTSPOT, password='7Q4K9W2M')
+    timings = Timings()
+    timings.status_seen(status=replace(STATUS, setup=setup))
+    snap = timings.snapshot()
+    assert snap['device']['setup_phase'] == 'hotspot'  # type: ignore[index]
+    assert '7Q4K' not in str(snap)

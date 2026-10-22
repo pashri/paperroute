@@ -202,8 +202,10 @@ def device_snapshot(*, status: DeviceStatus) -> dict[str, object]:
     -------
     dict[str, object]
         Timetable, schema, rebuild state, calls today, the key state and
-        what a phone asked for that waits on the panel.
+        what a phone asked for that waits on the panel, and Wi-Fi
+        setup's phase; never its password.
     """
+    setup = status.setup
     return {
         'timetable': status.timetable,
         'schema': status.schema,
@@ -212,6 +214,7 @@ def device_snapshot(*, status: DeviceStatus) -> dict[str, object]:
         'calls_today': status.calls_today,
         'key_set': status.key_set,
         'asked': None if status.asked is None else status.asked.value,
+        'setup_phase': None if setup is None else setup.phase.value,
     }
 
 

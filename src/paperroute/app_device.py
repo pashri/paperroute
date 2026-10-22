@@ -7,17 +7,25 @@ from dataclasses import dataclass, field, replace
 from typing import Any, Final
 
 from paperroute.adapters.resets import NullResets
-from paperroute.adapters.wifi import NullWifi
+from paperroute.adapters.wifi import NullWifi, hotspot_password
 from paperroute.core.device import device_status
-from paperroute.core.device_model import DeviceStatus
+from paperroute.core.device_model import DeviceStatus, JoinOutcome
 from paperroute.core.messages import (
     ApiKeyChanged,
     DeviceProbed,
     DeviceProbeFailed,
     Event,
+    HotspotFailed,
+    HotspotStarted,
+    JoinWifi,
     ProbeDevice,
     ResetDevice,
     ResetDone,
+    StartWifiSetup,
+    StopWifiSetup,
+    WifiJoined,
+    WifiJoinFailed,
+    WifiSetupStopped,
 )
 from paperroute.core.state_model import State
 from paperroute.ports import (
@@ -31,7 +39,8 @@ from paperroute.ports import (
 
 logger = logging.getLogger(__name__)
 
-type DeviceEffect = ProbeDevice | ResetDevice
+type SetupEffect = StartWifiSetup | JoinWifi | StopWifiSetup
+type DeviceEffect = ProbeDevice | ResetDevice | SetupEffect
 
 PROBE_TIMEOUT: Final[float] = 10  # seconds
 
@@ -51,12 +60,16 @@ class DevicePorts:
         Holds the API key; None when the app doesn't manage it.
     resets : Resets
         Resets the settings or erases everything.
+    radio : asyncio.Lock
+        Held while Wi-Fi setup drives the radio, so its steps never
+        overlap.
     """
 
     wifi: WifiControl = field(default_factory=NullWifi)
     probe: DeviceProbe | None = None
     key: KeyStore | None = None
     resets: Resets = field(default_factory=NullResets)
+    radio: asyncio.Lock = field(default_factory=asyncio.Lock)
 
 
 async def probe(*, ports: DevicePorts, queue: asyncio.Queue[Event]) -> None:
@@ -115,6 +128,122 @@ async def reset(
     await queue.put(ResetDone(kind=effect.kind))
 
 
+async def setup_started(
+    *, ports: DevicePorts, queue: asyncio.Queue[Event]
+) -> None:
+    """
+    Scan, then start the setup hotspot with a new password.
+
+    The scan runs first because the radio can't scan while it shares a
+    hotspot. The password is posted for the panel and never logged.
+
+    Parameters
+    ----------
+    ports : DevicePorts
+        Device adapters.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    """
+    async with ports.radio:
+        networks = await ports.wifi.scan()
+        password = hotspot_password()
+        started = await ports.wifi.start_hotspot(password=password)
+    if not started:
+        await queue.put(HotspotFailed())
+        return
+    await queue.put(HotspotStarted(networks=networks, password=password))
+
+
+async def setup_join(
+    *, ports: DevicePorts, effect: JoinWifi, queue: asyncio.Queue[Event]
+) -> None:
+    """
+    Leave the hotspot and join a network; on failure start it again.
+
+    Parameters
+    ----------
+    ports : DevicePorts
+        Device adapters.
+    effect : JoinWifi
+        The network, and the hotspot password to start it again with.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    """
+    ssid = effect.request.ssid
+    async with ports.radio:
+        await ports.wifi.stop_hotspot()
+        outcome = await ports.wifi.join(request=effect.request)
+        if outcome is JoinOutcome.JOINED:
+            await queue.put(WifiJoined(ssid=ssid))
+            return
+        back = await ports.wifi.start_hotspot(password=effect.hotspot)
+    logger.info('wifi join failed: %s', outcome.value)
+    await queue.put(WifiJoinFailed(ssid=ssid, outcome=outcome, hotspot=back))
+
+
+async def setup_stopped(
+    *, ports: DevicePorts, queue: asyncio.Queue[Event]
+) -> None:
+    """
+    Take the setup hotspot down and say so.
+
+    Parameters
+    ----------
+    ports : DevicePorts
+        Device adapters.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    """
+    await leftover_stopped(ports=ports)
+    await queue.put(WifiSetupStopped())
+
+
+async def leftover_stopped(*, ports: DevicePorts) -> None:
+    """
+    Take down any setup hotspot, such as one a crashed run left up.
+
+    Parameters
+    ----------
+    ports : DevicePorts
+        Device adapters.
+    """
+    async with ports.radio:
+        await ports.wifi.stop_hotspot()
+
+
+def setup_work(
+    *, ports: DevicePorts, effect: SetupEffect, queue: asyncio.Queue[Event]
+) -> tuple[Coroutine[Any, Any, None], Event]:
+    """
+    Make the work for a Wi-Fi setup effect.
+
+    Parameters
+    ----------
+    ports : DevicePorts
+        Device adapters.
+    effect : SetupEffect
+        Effect.
+    queue : asyncio.Queue[Event]
+        Event queue.
+
+    Returns
+    -------
+    tuple[Coroutine[Any, Any, None], Event]
+        The work, and the event that lets the app recover if it crashes.
+    """
+    match effect:
+        case StartWifiSetup():
+            return setup_started(ports=ports, queue=queue), HotspotFailed()
+        case JoinWifi(request=request):
+            failed = WifiJoinFailed(
+                ssid=request.ssid, outcome=JoinOutcome.FAILED, hotspot=False,
+            )
+            work = setup_join(ports=ports, effect=effect, queue=queue)
+            return work, failed
+        case StopWifiSetup():
+            return setup_stopped(ports=ports, queue=queue), WifiSetupStopped()
+
+
 def device_work(
     *,
     ports: DevicePorts,
@@ -151,6 +280,7 @@ def device_work(
                 ),
                 ResetDone(kind=kind),
             )
+    return setup_work(ports=ports, effect=effect, queue=queue)
 
 
 def key_known(*, ports: DevicePorts) -> ApiKeyChanged | None:

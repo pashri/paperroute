@@ -261,16 +261,6 @@ def test_menu_closes_after_two_idle_minutes() -> None:
     assert isinstance(renders(effects=effects)[0], StopView)
 
 
-def test_join_wifi_accept_only_closes() -> None:
-    """Accepting Join another network closes it and does nothing else."""
-    asked = ConfirmAsked(action=ConfirmAction.JOIN_WIFI)
-    state, _ = step(pinned(), asked)
-    state, effects = step(state, DOWN)
-    assert state.panel.confirm is None
-    assert state.panel.menu is None
-    assert [type(effect) for effect in effects] == [Render]
-
-
 @pytest.mark.parametrize(
     'action', [ConfirmAction.RESTART, ConfirmAction.SHUT_DOWN],
 )

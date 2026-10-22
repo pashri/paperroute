@@ -1,13 +1,20 @@
 """The events the reducer takes and the effects it asks for."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
 
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.chooser_view import ChooserView
-from paperroute.core.device_model import ConfirmAction, DeviceFacts, ResetKind
+from paperroute.core.device_model import (
+    ConfirmAction,
+    DeviceFacts,
+    JoinOutcome,
+    JoinRequest,
+    ResetKind,
+    WifiNetwork,
+)
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.map_view import MapView
@@ -202,6 +209,34 @@ class ResetDevice:
 
 
 @dataclass(frozen=True)
+class StartWifiSetup:
+    """Scan for networks, then start the setup hotspot, in the background."""
+
+
+@dataclass(frozen=True)
+class JoinWifi:
+    """
+    Leave the hotspot and join a network, in the background.
+
+    Attributes
+    ----------
+    request : JoinRequest
+        The network to join.
+    hotspot : str
+        The hotspot password, to start it again if the join fails. Kept
+        out of the repr.
+    """
+
+    request: JoinRequest
+    hotspot: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class StopWifiSetup:
+    """Take the setup hotspot down, in the background."""
+
+
+@dataclass(frozen=True)
 class MatchPlaces:
     """Look some places up in the timetable, tagged with its version."""
 
@@ -226,6 +261,9 @@ Effect = (
     | ControlPower
     | ProbeDevice
     | ResetDevice
+    | StartWifiSetup
+    | JoinWifi
+    | StopWifiSetup
     | ChooserLoad
 )
 
@@ -409,6 +447,67 @@ class ResetDone:
     """A reset has finished, whether or not every part of it worked."""
 
     kind: ResetKind
+
+
+@dataclass(frozen=True)
+class HotspotStarted:
+    """
+    The setup hotspot is up.
+
+    Attributes
+    ----------
+    networks : tuple[WifiNetwork, ...]
+        The networks the scan before it found.
+    password : str
+        The hotspot password. Kept out of the repr.
+    """
+
+    networks: tuple[WifiNetwork, ...]
+    password: str = field(repr=False)
+
+
+@dataclass(frozen=True)
+class HotspotFailed:
+    """The setup hotspot did not start."""
+
+
+@dataclass(frozen=True)
+class JoinAsked:
+    """A phone on the setup hotspot asked to join a network."""
+
+    request: JoinRequest
+
+
+@dataclass(frozen=True)
+class WifiJoined:
+    """The device joined a network from Wi-Fi setup."""
+
+    ssid: str
+
+
+@dataclass(frozen=True)
+class WifiJoinFailed:
+    """
+    Joining a network from Wi-Fi setup failed.
+
+    Attributes
+    ----------
+    ssid : str
+        The network asked for.
+    outcome : JoinOutcome
+        How the join ended.
+    hotspot : bool
+        Whether the setup hotspot is back up.
+    """
+
+    ssid: str
+    outcome: JoinOutcome
+    hotspot: bool
+
+
+@dataclass(frozen=True)
+class WifiSetupStopped:
+    """The setup hotspot was taken down."""
 
 
 @dataclass(frozen=True)
@@ -611,6 +710,14 @@ ChooserEvent = (
     | ChooserDeparturesFailed
 )
 KnobEvent = KnobTurned | KnobPressed | KnobHeld | KnobHeldTurned
+WifiEvent = (
+    HotspotStarted
+    | HotspotFailed
+    | JoinAsked
+    | WifiJoined
+    | WifiJoinFailed
+    | WifiSetupStopped
+)
 MapEvent = (
     ShapesLoaded
     | PatternsLoaded
@@ -644,6 +751,7 @@ Event = (
     | PlacesFailed
     | StripLoaded
     | StripFailed
+    | WifiEvent
     | MapEvent
     | ChooserEvent
 )

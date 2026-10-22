@@ -529,9 +529,10 @@ class FakePower:
 
 
 @dataclass
+# pylint: disable-next=too-many-instance-attributes
 class FakeWifi:
     """
-    A Wi-Fi control with a fixed link that joins nothing.
+    A Wi-Fi control with fixed answers that records what it was asked.
 
     Attributes
     ----------
@@ -539,10 +540,28 @@ class FakeWifi:
         What `status` reports.
     forgotten : int
         How many times `forget_all` was called.
+    networks : tuple[WifiNetwork, ...]
+        What `scan` finds.
+    hotspot_ok : bool
+        What `start_hotspot` answers.
+    outcome : JoinOutcome
+        What `join` answers.
+    calls : list[str]
+        Each action asked for, in order.
+    passwords : list[str]
+        Each hotspot password started with.
+    joined : list[JoinRequest]
+        Each join asked for.
     """
 
     link: WifiStatus = field(default_factory=WifiStatus)
     forgotten: int = 0
+    networks: tuple[WifiNetwork, ...] = ()
+    hotspot_ok: bool = False
+    outcome: JoinOutcome = JoinOutcome.FAILED
+    calls: list[str] = field(default_factory=list)
+    passwords: list[str] = field(default_factory=list)
+    joined: list[JoinRequest] = field(default_factory=list)
 
     async def status(self) -> WifiStatus:
         """
@@ -557,49 +576,55 @@ class FakeWifi:
 
     async def scan(self) -> tuple[WifiNetwork, ...]:
         """
-        Find nothing.
+        Find the fixed networks.
 
         Returns
         -------
         tuple[WifiNetwork, ...]
-            Empty.
+            `networks`.
         """
-        return ()
+        self.calls.append('scan')
+        return self.networks
 
     async def start_hotspot(self, *, password: str) -> bool:
         """
-        Refuse.
+        Record the start and give the fixed answer.
 
         Parameters
         ----------
         password : str
-            Ignored.
+            Hotspot password; recorded.
 
         Returns
         -------
         bool
-            False.
+            `hotspot_ok`.
         """
-        return False
+        self.calls.append('start')
+        self.passwords.append(password)
+        return self.hotspot_ok
 
     async def stop_hotspot(self) -> None:
-        """Do nothing."""
+        """Record the stop."""
+        self.calls.append('stop')
 
     async def join(self, *, request: JoinRequest) -> JoinOutcome:
         """
-        Fail to join.
+        Record the join and give the fixed outcome.
 
         Parameters
         ----------
         request : JoinRequest
-            Ignored.
+            Network asked for; recorded.
 
         Returns
         -------
         JoinOutcome
-            FAILED.
+            `outcome`.
         """
-        return JoinOutcome.FAILED
+        self.calls.append('join')
+        self.joined.append(request)
+        return self.outcome
 
     async def forget_all(self) -> None:
         """Count the call."""

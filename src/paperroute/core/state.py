@@ -45,6 +45,9 @@ from paperroute.core.messages import (
     Event,
     FeedFailed,
     FeedFetched,
+    HotspotFailed,
+    HotspotStarted,
+    JoinAsked,
     Knob,
     KnobEvent,
     KnobHeld,
@@ -75,6 +78,9 @@ from paperroute.core.messages import (
     Tick,
     TimetableRebuilt,
     TimetableSeen,
+    WifiJoined,
+    WifiJoinFailed,
+    WifiSetupStopped,
 )
 from paperroute.core.model import same_place
 from paperroute.core.places import (
@@ -104,6 +110,7 @@ from paperroute.core.state_model import (
 from paperroute.core.state_views import saved_of, settled
 from paperroute.core.strip_state import strip_failed, strip_loaded
 from paperroute.core.tiles import ZOOMS
+from paperroute.core.wifi import setup_expired, setup_knob
 
 SAVE_AFTER: Final[timedelta] = timedelta(seconds=3)
 
@@ -422,9 +429,10 @@ def on_touch(
     -------
     tuple[State, tuple[Effect, ...]]
         A phone's ask shows a confirm; a touch answers the confirm shown,
-        else works the open menu, else holding both knobs opens it, else
-        it acts on the Live view; the Building screen ignores it. A
-        touch while the menu is open is noted, so the menu stays open.
+        else works Wi-Fi setup, else works the open menu, else holding
+        both knobs opens it, else it acts on the Live view; the Building
+        screen ignores it. A touch while the menu is open is noted, so
+        the menu stays open.
         While asleep the first touch only wakes the screen.
     """
     if state.panel.asleep:
@@ -433,6 +441,11 @@ def on_touch(
         return on_asked(state=state, event=event)
     if state.panel.confirm is not None:
         after, effects = confirm_knob(state=state, event=event)
+    elif state.panel.wifi is not None:
+        after, effects = setup_knob(state=state, event=event)
+        if after is state:
+            return state, ()
+        after, effects = settled(state=after, effects=effects)
     elif state.panel.menu is not None:
         after, effects = menu_knob(state=state, event=event)
     elif isinstance(event, KnobsHeld):
@@ -448,7 +461,7 @@ def on_ticked(
     *, state: State, event: Tick
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Advance time, rebuild when due, and close what was left alone.
+    Advance time, rebuild when due, and close what timed out.
 
     Parameters
     ----------
@@ -463,8 +476,10 @@ def on_ticked(
         New state and effects.
     """
     state = replace(state, now=event.now)
+    state, stops = setup_expired(state=state)
     state = menu_idle(state=confirm_expired(state=state))
-    return with_rebuild(result=on_tick(state=state, event=event))
+    state, effects = with_rebuild(result=on_tick(state=state, event=event))
+    return state, (*stops, *effects)
 
 
 def reloaded(
@@ -803,6 +818,12 @@ def dispatched(
             | DeviceProbed()
             | DeviceProbeFailed()
             | ResetDone()
+            | HotspotStarted()
+            | HotspotFailed()
+            | JoinAsked()
+            | WifiJoined()
+            | WifiJoinFailed()
+            | WifiSetupStopped()
         ):
             return on_device_event(state=state, event=event)
         case PlacesMatched() | PlacesFailed():

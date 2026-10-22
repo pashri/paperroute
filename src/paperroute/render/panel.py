@@ -19,8 +19,17 @@ from paperroute.core.panel_views import (
     WifiSetupView,
 )
 from paperroute.core.stop_view import DOT
+from paperroute.core.wifi import (
+    SCANNING_LINE,
+    SETUP_STEPS,
+    START_FAILED,
+    joining_line,
+    no_camera_line,
+    setup_footer,
+)
 from paperroute.render.canvas import INK, PAPER, WIDTH, Canvas, Face
 from paperroute.render.chrome import HEADER
+from paperroute.render.map_view import wrap
 from paperroute.render.qr import qr_image
 from paperroute.render.stop_view import finish
 
@@ -35,6 +44,8 @@ VALUE_X: Final[int] = 250
 INFO_TOP: Final[int] = 96
 INFO_PITCH: Final[int] = 48
 LINE_PITCH: Final[int] = 36
+WRAP_PITCH: Final[int] = 26
+PARAGRAPH_GAP: Final[int] = 8
 QR_BOTTOM: Final[int] = 436
 HEADER_FACE: Final[Face] = Face(weight=700, px=20)
 FOOTER_FACE: Final[Face] = Face(weight=400, px=20)
@@ -47,26 +58,16 @@ NAME_FACE: Final[Face] = Face(weight=700, px=28)
 QUESTION_FACE: Final[Face] = Face(weight=700, px=30)
 BUTTON_FACE: Final[Face] = Face(weight=700, px=24)
 LOCAL_NAME: Final[str] = 'paperroute.local'
-SETUP_NETWORK: Final[str] = 'paperroute-setup'
 MENU_FOOTER: Final[str] = (
     f'Bottom: turn to choose, press to open{DOT}top press: back'
 )
 DEVICE_FOOTER: Final[str] = f'Full details on {LOCAL_NAME}{DOT}top press: back'
 PHONE_FOOTER: Final[str] = 'Top press: back'
-CANCEL_FOOTER: Final[str] = 'Top press: cancel'
 CONFIRM_FOOTER: Final[str] = TIMEOUT_LINE
 CONFIRM_BOX: Final[tuple[int, int, int, int]] = (32, 290, 392, 354)
 CANCEL_BOX: Final[tuple[int, int, int, int]] = (420, 290, 760, 354)
 BUTTON_EDGE: Final[int] = 3
 SETUP_TITLE: Final[str] = 'Join a Wi-Fi network'
-SETUP_STEPS: Final[tuple[str, ...]] = (
-    '1. Scan the code with your phone.',
-    f'    It joins the network {SETUP_NETWORK}.',
-    '2. Pick your Wi-Fi and type its password.',
-    '3. paperroute connects and this screen closes.',
-)
-FAILED_TITLE: Final[str] = "Couldn't join"
-SCANNING_TITLE: Final[str] = 'Looking for Wi-Fi networks...'
 JOINING_DETAIL: Final[str] = 'This screen closes once it has joined.'
 
 
@@ -388,95 +389,92 @@ def draw_phone(*, view: PhoneView) -> NDArray[np.uint8]:
     return finish(canvas)
 
 
-def spaced(password: str) -> str:
+def draw_wrapped(
+    canvas: Canvas,
+    *,
+    texts: Sequence[str],
+    top: float,
+    width: float,
+) -> float:
     """
-    Split a password into groups of four to read it out.
+    Draw paragraphs wrapped to a width, a gap after each.
 
     Parameters
     ----------
-    password : str
-        The password.
+    canvas : Canvas
+        Target.
+    texts : Sequence[str]
+        The paragraphs.
+    top : float
+        Baseline of the first line.
+    width : float
+        Widest a line may be.
 
     Returns
     -------
-    str
-        Groups of four characters joined by spaces.
+    float
+        Baseline of the line after the last paragraph's gap.
     """
-    return ' '.join(
-        password[start:start + 4]
-        for start in range(0, len(password), 4)
-    )
-
-
-def setup_lines(*, view: WifiSetupView) -> tuple[str, ...]:
-    """
-    Say the hotspot steps and the no-camera fallback.
-
-    Parameters
-    ----------
-    view : WifiSetupView
-        The screen.
-
-    Returns
-    -------
-    tuple[str, ...]
-        The lines, a blank line before the fallback.
-    """
-    return (
-        *SETUP_STEPS,
-        '',
-        f'No camera? Join {SETUP_NETWORK},',
-        f'password {spaced(view.password)}, open {view.address}',
-    )
-
-
-def failed_line(*, view: WifiSetupView) -> str:
-    """
-    Say why the last join failed.
-
-    Parameters
-    ----------
-    view : WifiSetupView
-        The screen, in the failed phase.
-
-    Returns
-    -------
-    str
-        The error, else the network's name, else empty.
-    """
-    return view.error or view.ssid or ''
+    for text in texts:
+        wrapped = wrap(text=text, face=BODY_FACE, width=width)
+        for index, line in enumerate(wrapped):
+            canvas.text(
+                at=(MARGIN, top + index * WRAP_PITCH),
+                text=line,
+                face=BODY_FACE,
+                grey=INK,
+            )
+        top += len(wrapped) * WRAP_PITCH + PARAGRAPH_GAP
+    return top
 
 
 def draw_hotspot(canvas: Canvas, *, view: WifiSetupView) -> None:
     """
-    Draw the hotspot's code, steps and timeout.
+    Draw the hotspot's code, any error, the steps and the timeout.
 
     Parameters
     ----------
     canvas : Canvas
         Target.
     view : WifiSetupView
-        The screen, in the hotspot or failed phase.
+        The screen, in the hotspot phase.
     """
-    width = place_qr(canvas, text=view.qr) - MARGIN
-    failed = view.phase is WifiPhase.FAILED
-    title = FAILED_TITLE if failed else SETUP_TITLE
-    lines(canvas, texts=(title,), top=110, width=width, face=TITLE_FACE)
-    if failed:
-        lines(canvas, texts=(failed_line(view=view),), top=150, width=width)
-    lines(
+    width = place_qr(canvas, text=view.qr) - 2 * MARGIN
+    lines(canvas, texts=(SETUP_TITLE,), top=104, width=width, face=TITLE_FACE)
+    top = 144.0
+    if view.error:
+        lines(
+            canvas,
+            texts=(view.error,),
+            top=top,
+            width=width,
+            face=LABEL_FACE,
+        )
+        top += LINE_PITCH
+    draw_wrapped(
         canvas,
-        texts=setup_lines(view=view),
-        top=190 if failed else 160,
+        texts=(*SETUP_STEPS, no_camera_line(password=view.password)),
+        top=top,
         width=width,
     )
-    footer(
-        canvas,
-        text=(
-            f'New password each time{DOT}closes in {view.minutes_left} min'
-            f'{DOT}top press: cancel'
-        ),
-    )
+    footer(canvas, text=setup_footer(minutes_left=view.minutes_left))
+
+
+def draw_failed(canvas: Canvas, *, view: WifiSetupView) -> None:
+    """
+    Draw why setup has no hotspot, and the timeout.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    view : WifiSetupView
+        The screen, in the failed phase.
+    """
+    width = WIDTH - 2 * MARGIN
+    title = view.error or START_FAILED
+    lines(canvas, texts=(title,), top=110, width=width, face=TITLE_FACE)
+    footer(canvas, text=setup_footer(minutes_left=view.minutes_left))
 
 
 def draw_waiting(canvas: Canvas, *, view: WifiSetupView) -> None:
@@ -492,15 +490,10 @@ def draw_waiting(canvas: Canvas, *, view: WifiSetupView) -> None:
     """
     width = WIDTH - 2 * MARGIN
     joining = view.phase is WifiPhase.JOINING
-    title = (
-        f'Joining {view.ssid or "the network"}...'
-        if joining
-        else SCANNING_TITLE
-    )
+    title = joining_line(ssid=view.ssid) if joining else SCANNING_LINE
     lines(canvas, texts=(title,), top=110, width=width, face=TITLE_FACE)
     if joining:
         lines(canvas, texts=(JOINING_DETAIL,), top=160, width=width)
-    footer(canvas, text=CANCEL_FOOTER)
 
 
 def draw_wifi_setup(*, view: WifiSetupView) -> NDArray[np.uint8]:
@@ -519,8 +512,10 @@ def draw_wifi_setup(*, view: WifiSetupView) -> NDArray[np.uint8]:
     """
     canvas = Canvas()
     panel_header(canvas, title='Wi-Fi setup', clock=view.clock)
-    if view.phase in (WifiPhase.HOTSPOT, WifiPhase.FAILED):
+    if view.phase is WifiPhase.HOTSPOT:
         draw_hotspot(canvas, view=view)
+    elif view.phase is WifiPhase.FAILED:
+        draw_failed(canvas, view=view)
     else:
         draw_waiting(canvas, view=view)
     return finish(canvas)

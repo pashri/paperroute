@@ -22,6 +22,7 @@ from paperroute.core.panel_views import (
 from paperroute.core.quota import calls_today
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import DOT, clock_text
+from paperroute.core.wifi import wifi_setup_view
 
 LOCAL_NAME: Final[str] = 'paperroute.local'
 UNKNOWN: Final[str] = '-'
@@ -316,10 +317,13 @@ def panel_view(*, state: State) -> PanelView | None:
     Returns
     -------
     PanelView | None
-        The confirm, else the open menu's screen; None with neither.
+        The confirm, else Wi-Fi setup, else the open menu's screen;
+        None with none of them.
     """
     if state.panel.confirm is not None:
         return confirm_view(confirm=state.panel.confirm)
+    if state.panel.wifi is not None:
+        return wifi_setup_view(state=state)
     menu = state.panel.menu
     if menu is None:
         return None

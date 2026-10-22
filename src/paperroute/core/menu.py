@@ -30,6 +30,7 @@ from paperroute.core.rebuild import forced
 from paperroute.core.sleep import slept
 from paperroute.core.state_model import State
 from paperroute.core.state_views import settled
+from paperroute.core.wifi import setup_started
 
 CONFIRM_WAIT: Final[timedelta] = timedelta(seconds=60)
 MENU_IDLE: Final[timedelta] = timedelta(minutes=2)
@@ -196,8 +197,8 @@ def row_chosen(
     -------
     tuple[State, tuple[Effect, ...]]
         The Device screen with a probe when one is due and a forced
-        rebuild for its row, the phone screen, a confirm, or the sleep screen;
-        unchanged for the rows not built yet.
+        rebuild for its row, the phone screen, a confirm, the sleep
+        screen, or Wi-Fi setup scanning.
     """
     menu = state.panel.menu or Menu()
     if row in CONFIRM_FOR:
@@ -212,7 +213,8 @@ def row_chosen(
         return settled(state=with_menu(state=state, menu=menu))
     if row is MenuRow.SLEEP:
         return settled(state=slept(state=state))
-    return state, ()
+    state, effects = setup_started(state=state)
+    return settled(state=state, effects=effects)
 
 
 def device_shown(
@@ -250,9 +252,6 @@ def accepted(
     """
     Do what a confirm asked.
 
-    Join another network only closes the confirm and menu until Wi-Fi
-    setup from the panel exists (Task 11 wires it).
-
     Parameters
     ----------
     state : State
@@ -263,8 +262,8 @@ def accepted(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the confirm and menu gone, and the restart, shutdown
-        or reset under way.
+        State with the confirm and menu gone, and the restart, shutdown,
+        reset or Wi-Fi setup under way.
     """
     action = confirm.action
     state = with_menu(state=with_confirm(state=state, confirm=None), menu=None)
@@ -273,7 +272,8 @@ def accepted(
         return on_power(state=state, event=request)
     if action in RESET_FOR:
         return on_reset(state=state, kind=RESET_FOR[action])
-    return settled(state=state)
+    state, effects = setup_started(state=state)
+    return settled(state=state, effects=effects)
 
 
 def confirm_knob(

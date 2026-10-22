@@ -14,14 +14,28 @@ from paperroute.app_device import (
     device_work,
     report_status,
 )
-from paperroute.core.device_model import DeviceStatus, ResetKind
+from paperroute.core.device_model import (
+    DeviceStatus,
+    JoinOutcome,
+    JoinRequest,
+    ResetKind,
+    WifiNetwork,
+)
 from paperroute.core.messages import (
     DeviceProbed,
     DeviceProbeFailed,
     Event,
+    HotspotFailed,
+    HotspotStarted,
+    JoinWifi,
     ProbeDevice,
     ResetDevice,
     ResetDone,
+    StartWifiSetup,
+    StopWifiSetup,
+    WifiJoined,
+    WifiJoinFailed,
+    WifiSetupStopped,
 )
 from paperroute.core.state import step
 from paperroute.observers import Timings
@@ -156,3 +170,102 @@ async def test_reset_stops_rebuild_before_deleting(tmp_path: Path) -> None:
     await work
     assert builder.existed == [True]
     assert not timetable.exists()
+
+
+HOME = WifiNetwork(ssid='Home', signal=80, secured=True, enterprise=False)
+REQUEST = JoinRequest(ssid='Home', password='hunter22')
+
+
+async def setup_work(
+    *, wifi: FakeWifi, effect: StartWifiSetup | JoinWifi | StopWifiSetup
+) -> tuple[list[Event], Event]:
+    """
+    Run a Wi-Fi setup effect on a fake and give what it posted.
+
+    Parameters
+    ----------
+    wifi : FakeWifi
+        The Wi-Fi control.
+    effect : StartWifiSetup | JoinWifi | StopWifiSetup
+        The effect.
+
+    Returns
+    -------
+    tuple[list[Event], Event]
+        The events posted, and the event posted if the work crashes.
+    """
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    work, fallback = device_work(
+        ports=DevicePorts(wifi=wifi),
+        effect=effect,
+        queue=queue,
+        builder=FakeBuilder(),
+    )
+    await work
+    posted: list[Event] = []
+    while not queue.empty():
+        posted.append(queue.get_nowait())
+    return posted, fallback
+
+
+async def test_start_setup_posts_networks_and_password() -> None:
+    """Start scans, then starts the hotspot with a new password."""
+    wifi = FakeWifi(networks=(HOME,), hotspot_ok=True)
+    posted, fallback = await setup_work(wifi=wifi, effect=StartWifiSetup())
+    assert wifi.calls == ['scan', 'start']
+    assert len(wifi.passwords[0]) == 8
+    assert posted == [
+        HotspotStarted(networks=(HOME,), password=wifi.passwords[0]),
+    ]
+    assert fallback == HotspotFailed()
+    await setup_work(wifi=wifi, effect=StartWifiSetup())
+    assert wifi.passwords[0] != wifi.passwords[1]
+
+
+async def test_start_setup_failed_hotspot() -> None:
+    """A hotspot that won't start posts HotspotFailed."""
+    posted, _ = await setup_work(wifi=FakeWifi(), effect=StartWifiSetup())
+    assert posted == [HotspotFailed()]
+
+
+async def test_failed_join_restarts_hotspot_same_password() -> None:
+    """A failed join brings the hotspot back with the same password."""
+    wifi = FakeWifi(outcome=JoinOutcome.WRONG_PASSWORD, hotspot_ok=True)
+    effect = JoinWifi(request=REQUEST, hotspot='7Q4K9W2M')
+    posted, fallback = await setup_work(wifi=wifi, effect=effect)
+    assert wifi.calls == ['stop', 'join', 'start']
+    assert wifi.passwords == ['7Q4K9W2M']
+    assert posted == [
+        WifiJoinFailed(
+            ssid='Home', outcome=JoinOutcome.WRONG_PASSWORD, hotspot=True,
+        ),
+    ]
+    assert fallback == WifiJoinFailed(
+        ssid='Home', outcome=JoinOutcome.FAILED, hotspot=False,
+    )
+
+
+async def test_join_success_posts_joined() -> None:
+    """A join that works leaves the hotspot down and says so."""
+    wifi = FakeWifi(outcome=JoinOutcome.JOINED)
+    effect = JoinWifi(request=REQUEST, hotspot='7Q4K9W2M')
+    posted, _ = await setup_work(wifi=wifi, effect=effect)
+    assert wifi.calls == ['stop', 'join']
+    assert wifi.joined == [REQUEST]
+    assert posted == [WifiJoined(ssid='Home')]
+
+
+async def test_stop_setup_stops_hotspot() -> None:
+    """Stop takes the hotspot down and says so."""
+    wifi = FakeWifi()
+    posted, fallback = await setup_work(wifi=wifi, effect=StopWifiSetup())
+    assert wifi.calls == ['stop']
+    assert posted == [WifiSetupStopped()]
+    assert fallback == WifiSetupStopped()
+
+
+async def test_leftover_hotspot_stopped() -> None:
+    """Start-up stops a hotspot a crashed run left behind."""
+    wifi = FakeWifi()
+    await app_device.leftover_stopped(ports=DevicePorts(wifi=wifi))
+    assert wifi.calls == ['stop']

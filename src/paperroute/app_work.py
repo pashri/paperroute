@@ -28,6 +28,7 @@ from paperroute.core.messages import (
     Event,
     FeedFailed,
     FetchFeed,
+    JoinWifi,
     LoadDepartures,
     LoadModes,
     LoadPatterns,
@@ -41,7 +42,9 @@ from paperroute.core.messages import (
     Render,
     ResetDevice,
     SaveState,
+    StartWifiSetup,
     Stop,
+    StopWifiSetup,
     TimetableRebuilt,
 )
 
@@ -251,7 +254,10 @@ def other_work(
     tuple[Coroutine[Any, Any, None], Event]
         The work, and the event that lets the app recover if it crashes.
     """
-    if isinstance(effect, ProbeDevice | ResetDevice):
+    device = (
+        ProbeDevice | ResetDevice | StartWifiSetup | JoinWifi | StopWifiSetup
+    )
+    if isinstance(effect, device):
         return device_work(
             ports=ports.device,
             effect=effect,

@@ -229,26 +229,23 @@ def test_device_draws_seven_rows() -> None:
     ).all()
 
 
-def test_wifi_failed_fits_long_ssid() -> None:
-    """A failed join says so shortly and fits a long network name."""
+def test_wifi_failed_has_no_qr() -> None:
+    """With no hotspot up there is no code to scan, only the reason."""
     ssid = 'A' * 32
     frame = draw_panel_view(
         view=WifiSetupView(
             clock='21:52',
             phase=WifiPhase.FAILED,
             qr=WIFI_QR,
-            password='7Q4K9W2M',
+            password='7Q4K 9W2M',
             address='10.42.0.1',
             minutes_left=10,
             ssid=ssid,
-            error=f'Wrong password for {ssid}',
+            error=f"Couldn't join {ssid}: not found",
         ),
     )
-    assert finder_run(frame)
-    size = qr_image(text=WIFI_QR, module_px=QR_PX).shape[0]
-    quiet_left = WIDTH - 32 - size
-    gap = frame[HEADER:FOOTER_Y - 30, quiet_left:quiet_left + 32]
-    assert not (gap == INK).any()
+    assert not finder_run(frame)
+    assert (frame[HEADER:FOOTER_Y - 30] == INK).any()
 
 
 def test_qr_too_big_raises() -> None:

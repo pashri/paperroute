@@ -6,6 +6,9 @@ from paperroute.core.state_model import State
 from paperroute.core.stop_view import DOT
 
 NO_KEY: Final[str] = f'No API key{DOT}set it on your phone'
+NO_WIFI: Final[str] = (
+    f'No Wi-Fi{DOT}timetable times{DOT}hold both knobs, then Wi-Fi'
+)
 
 
 def device_banner(*, state: State) -> str | None:
@@ -20,8 +23,11 @@ def device_banner(*, state: State) -> str | None:
     Returns
     -------
     str | None
-        `NO_KEY` when no API key is set, else None.
+        `NO_WIFI` while offline, else `NO_KEY` when no API key is set,
+        else None.
     """
+    if offline(state=state):
+        return NO_WIFI
     if state.panel.key_set is False:
         return NO_KEY
     return None
@@ -39,11 +45,12 @@ def feeds_held(*, state: State) -> bool:
     Returns
     -------
     bool
-        True when the screen is asleep, no API key is set or there is
-        no timetable. An unknown key polls.
+        True when the screen is asleep, offline, no API key is set or
+        there is no timetable. An unknown key polls.
     """
     no_key = state.panel.key_set is False
-    return state.panel.asleep or no_key or state.rebuild.missing
+    asleep = state.panel.asleep or offline(state=state)
+    return asleep or no_key or state.rebuild.missing
 
 
 def offline(*, state: State) -> bool:
@@ -59,9 +66,12 @@ def offline(*, state: State) -> bool:
     -------
     bool
         True when the latest facts say NetworkManager manages Wi-Fi and
-        no network is joined; False without facts or NetworkManager.
+        no network is joined; False without facts or NetworkManager,
+        and while Wi-Fi setup is open.
     """
     facts = state.panel.facts
     if facts is None or not facts.wifi.managed:
+        return False
+    if state.panel.wifi is not None:
         return False
     return facts.wifi.ssid is None

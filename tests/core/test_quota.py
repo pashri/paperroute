@@ -74,6 +74,18 @@ def test_quota_rolls_over_at_sydney_midnight() -> None:
     assert state.quota == Quota(day=NEXT_DAY, calls=1)
 
 
+def test_quota_rolls_over_on_a_daylight_saving_day() -> None:
+    """Midnight after the clocks go forward still starts a new day."""
+    late = datetime(2026, 10, 4, 23, 59, tzinfo=SYDNEY)
+    early = datetime(2026, 10, 5, 0, 0, tzinfo=SYDNEY)
+    state = loaded(state=fresh(now=late))
+    state = replace(state, quota=Quota(day=date(2026, 10, 4), calls=9))
+    state, _ = step(state, Tick(now=late))
+    assert state.quota == Quota(day=date(2026, 10, 4), calls=10)
+    state, _ = step(fetching(state=state), Tick(now=early))
+    assert state.quota == Quota(day=date(2026, 10, 5), calls=1)
+
+
 def test_calls_today_is_zero_on_a_new_day() -> None:
     """Calls made on another day do not count."""
     quota = Quota(day=DAY, calls=7)

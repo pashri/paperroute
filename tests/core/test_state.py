@@ -85,7 +85,7 @@ from paperroute.core.model import (
     shifted,
 )
 from paperroute.core.places import shown, stops_to_match
-from paperroute.core.quota import quota_only
+from paperroute.core.quota import QUOTA_SAVE_EVERY, quota_only
 from paperroute.core.reach import (
     Reach,
     ReachInput,
@@ -1775,8 +1775,9 @@ def check_saves(
     last: Saved | None,
 ) -> Saved | None:
     """
-    Assert every save carries the state (its quota may lag a tick), differs from the last one and,
-    unless quitting or nothing was stored, waits SAVE_AFTER.
+    Assert every save carries the state (its quota may lag a tick), differs
+    from the last one and, unless quitting or nothing was stored, waits
+    SAVE_AFTER, or QUOTA_SAVE_EVERY when only the quota changed.
 
     Parameters
     ----------
@@ -1804,6 +1805,9 @@ def check_saves(
         if Stop() in effects or written is None:
             continue
         if quota_only(before=written, after=save.saved):
+            quota_at = before.saving.quota_at
+            assert quota_at is not None
+            assert after.now - quota_at >= QUOTA_SAVE_EVERY
             continue
         if changed_at is not None:
             waited = after.now.timestamp() - changed_at.timestamp()
@@ -2588,10 +2592,14 @@ def test_no_save_without_change() -> None:
     for _ in LIVE_VIEWS:
         state, _ = step(state, PRESS)
     base = saved_of(state=state)
+    writes: list[SaveState] = []
     for seconds in range(0, 3600, 5):
         state, effects = step(state, at(seconds=seconds))
-        for save in saves(effects=effects):
-            assert replace(save.saved, quota=base.quota) == base
+        writes.extend(saves(effects=effects))
+    assert writes
+    assert len(writes) <= 6
+    for save in writes:
+        assert replace(save.saved, quota=base.quota) == base
 
 
 def test_quit_saves_unsaved_changes_first() -> None:

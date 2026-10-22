@@ -11,7 +11,7 @@ from datetime import date
 from pathlib import Path
 from typing import Final
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from paperroute.core.model import TRAINLINK, Pin, RouteKind, StopPlace
 from paperroute.core.saved import (
@@ -371,6 +371,28 @@ def migrate(*, data: dict[str, object]) -> dict[str, object]:
     return data
 
 
+def repaired_quota(*, data: dict[str, object]) -> dict[str, object]:
+    """
+    Reset a quota that cannot be read, so the pins are kept.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Migrated data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data; with no calls counted when its quota is not valid.
+    """
+    try:
+        QuotaModel.model_validate(data.get('quota'))
+    except ValidationError:
+        logger.warning('state.json quota unusable, resetting it')
+        return {**data, 'quota': {'day': None, 'calls': 0}}
+    return data
+
+
 def write_atomic(
     *,
     path: Path,
@@ -488,7 +510,8 @@ class JsonStateRepository:
             data = json.loads(text)
             if not isinstance(data, dict):
                 raise ValueError('state.json is not an object')
-            model = StateModel.model_validate(migrate(data=data))
+            migrated = repaired_quota(data=migrate(data=data))
+            model = StateModel.model_validate(migrated)
         except (ValueError, RecursionError):
             return self.defaults_after_error()
         return Loaded(saved=from_model(model=model), stored=True)

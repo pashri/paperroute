@@ -456,8 +456,8 @@ def test_regional_to_coach_leaves_a_malformed_pin_list_alone() -> None:
     assert regional_to_coach(data) == data
 
 
-def test_migrates_v2_to_v3_with_auto_rebuild(path: Path) -> None:
-    """A version 2 file loads with the rebuild on and saves as the current version."""
+def test_migrates_v2_with_auto_rebuild_on(path: Path) -> None:
+    """A version 2 file loads with the rebuild on and saves as current."""
     repository = JsonStateRepository(path=path)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
@@ -510,14 +510,20 @@ def test_round_trips_quota(path: Path) -> None:
     assert repository.load().saved.quota == quota
 
 
-def test_negative_calls_fall_back(path: Path) -> None:
-    """A count below zero makes the file unusable."""
+def test_negative_calls_reset_the_quota_only(
+    path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A count below zero resets the quota and keeps the pins."""
     repository = JsonStateRepository(path=path)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
     data['quota']['calls'] = -1
     path.write_text(json.dumps(data))
-    assert repository.load().saved == DEFAULT_SAVED
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved == sample()
+    assert loaded.saved.quota == Quota()
+    assert caplog.records
 
 
 def test_schema_five_falls_back(path: Path) -> None:

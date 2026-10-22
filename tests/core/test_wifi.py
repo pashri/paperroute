@@ -35,6 +35,7 @@ from paperroute.core.messages import (
     WifiSetupStopped,
 )
 from paperroute.core.panel_views import WifiSetupView
+from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import stop_view_of
@@ -283,3 +284,19 @@ def test_no_probe_while_setup_open() -> None:
         tick = Tick(now=START + timedelta(minutes=minutes))
         state, effects = step(state, tick)
         assert ProbeDevice() not in effects
+
+
+
+def test_setup_holds_the_feeds() -> None:
+    """No feed is fetched while setup is open; closing it polls at once."""
+    setup = WifiSetup(phase=WifiPhase.HOTSPOT, until=START + SETUP_FOR)
+    state = replace(pinned(), view=LiveView.MAP)
+    state = replace(state, panel=replace(state.panel, wifi=setup))
+    for seconds in range(30, 300, 30):
+        state, effects = step(
+            state, Tick(now=START + timedelta(seconds=seconds)),
+        )
+        assert not [e for e in effects if isinstance(e, FetchFeed)]
+    state = replace(state, panel=replace(state.panel, wifi=None))
+    state, effects = step(state, Tick(now=state.now + timedelta(seconds=1)))
+    assert [e for e in effects if isinstance(e, FetchFeed)]

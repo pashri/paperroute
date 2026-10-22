@@ -313,7 +313,8 @@ def quiet_guard(
     -------
     tuple[State, tuple[Effect, ...]]
         The result, without FetchFeeds when `feeds_held` says so for the
-        state after the event.
+        state after the event. Held feeds also have their poll clocks
+        cleared, so they poll at once when they are let go.
     """
     after, effects = result
     if not feeds_held(state=after):
@@ -321,7 +322,12 @@ def quiet_guard(
     kept = tuple(
         effect for effect in effects if not isinstance(effect, FetchFeed)
     )
-    return after, kept
+    cleared = replace(
+        after,
+        last_fetch=None,
+        map=replace(after.map, fetched_at={}),
+    )
+    return cleared, kept
 
 
 def probe_due(*, state: State) -> bool:

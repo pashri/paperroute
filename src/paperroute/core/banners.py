@@ -39,10 +39,11 @@ def feeds_held(*, state: State) -> bool:
     Returns
     -------
     bool
-        True when the screen is asleep or no API key is set. An unknown
-        key polls.
+        True when the screen is asleep, no API key is set or there is
+        no timetable. An unknown key polls.
     """
-    return state.panel.asleep or state.panel.key_set is False
+    no_key = state.panel.key_set is False
+    return state.panel.asleep or no_key or state.rebuild.missing
 
 
 def offline(*, state: State) -> bool:

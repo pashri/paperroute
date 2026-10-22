@@ -1720,7 +1720,8 @@ def check_fetch(
     *, before: State, after: State, event: Event, effect: FetchFeed
 ) -> None:
     """
-    Assert a fetch is needed and due on its own clock.
+    Assert a fetch is needed and due on its own clock; a timetable
+    arriving makes every needed feed due at once.
 
     Parameters
     ----------
@@ -1733,13 +1734,14 @@ def check_fetch(
     effect : FetchFeed
         The fetch.
     """
+    arrived = before.rebuild.missing and not after.rebuild.missing
     if effect.kind is FeedKind.TRIPS:
         assert effect.feed in trip_feeds(state=after)
-        assert polled(before=before, event=event)
+        assert arrived or polled(before=before, event=event)
         return
     assert effect.feed in needed_feeds(state=after)
     last = before.map.fetched_at.get(effect.feed)
-    if last is not None:
+    if last is not None and not arrived:
         gap = after.now.timestamp() - last.timestamp()
         assert gap >= POLL_EVERY.total_seconds()
 

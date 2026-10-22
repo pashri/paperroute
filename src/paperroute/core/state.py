@@ -706,7 +706,7 @@ def on_timetable_file(
     Note a timetable seen or a rebuild finished, rebuilding when due.
 
     Both redraw: the Building and Device screens show the timetable's
-    state.
+    state. A timetable arriving makes every feed due at once.
 
     Parameters
     ----------
@@ -723,6 +723,10 @@ def on_timetable_file(
     if isinstance(event, TimetableRebuilt):
         return settled(state=rebuilt(state=state, ok=event.ok))
     seen = seen_schema(state=state, seen=event)
+    if state.rebuild.missing and not seen.rebuild.missing:
+        seen = replace(
+            seen, map=replace(seen.map, fetched_at={}), last_fetch=None,
+        )
     after, effects = on_timetable(state=seen, event=event)
     return with_rebuild(result=settled(state=after, effects=effects))
 

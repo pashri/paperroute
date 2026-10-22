@@ -410,7 +410,7 @@ def device_status(*, state: State) -> DeviceStatus:
         timetable=state.saving.timetable,
         schema=state.rebuild.schema,
         rebuilding=state.rebuild.running,
-        rebuild_failed=state.rebuild.failures > 0,
+        rebuild_failed=state.rebuild.failed,
         calls_today=calls_today(quota=state.quota, day=state.now.date()),
         key_set=state.panel.key_set,
         facts=state.panel.facts,

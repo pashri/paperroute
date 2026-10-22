@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 import pytest
 
@@ -20,6 +20,7 @@ from paperroute.core.messages import (
     DeviceProbed,
     Effect,
     Event,
+    FetchFeed,
     Knob,
     KnobPressed,
     KnobsHeld,
@@ -331,23 +332,9 @@ def test_missing_timetable_waits_for_wifi() -> None:
     assert rebuilds(effects=effects) == 0
 
 
-def building(
-    *,
-    running: bool = False,
-    failures: int = 0,
-    retry_at: datetime | None = None,
-) -> State:
+def building() -> State:
     """
     A state with no timetable and the switch off.
-
-    Parameters
-    ----------
-    running : bool
-        Whether a rebuild runs.
-    failures : int
-        Rebuilds failed in a row.
-    retry_at : datetime | None
-        When the next rebuild may start.
 
     Returns
     -------
@@ -358,21 +345,27 @@ def building(
         state=pinned(),
         events=[SettingsChanged(auto_rebuild=False), MISSING],
     )
-    rebuild = replace(
-        state.rebuild, running=running, failures=failures, retry_at=retry_at,
-    )
-    return replace(state, rebuild=rebuild)
+    return state
 
 
 def test_building_screen_details() -> None:
     """The line under the title gives the first reason that applies."""
-    idle = building()
-    running = building(running=True)
+    switched_off = building()
+    idle = replace(
+        switched_off,
+        settings=replace(switched_off.settings, auto_rebuild=True),
+    )
+    running = replace(idle, rebuild=replace(idle.rebuild, running=True))
     no_key = replace(idle, panel=replace(idle.panel, key_set=False))
     facts = replace(device_facts(), wifi=WifiStatus(managed=True))
     offline = replace(no_key, panel=replace(no_key.panel, facts=facts))
-    failed = building(
-        failures=1, retry_at=START + timedelta(hours=1, minutes=5),
+    failed = replace(
+        idle,
+        rebuild=replace(
+            idle.rebuild,
+            failures=1,
+            retry_at=START + timedelta(hours=1, minutes=5),
+        ),
     )
     details = [
         building_view(state=state).detail
@@ -429,3 +422,58 @@ def test_rebuild_row_starts_and_shows_device_screen() -> None:
     state, _ = step(state, TimetableRebuilt(ok=False))
     rows = {row.label: row.value for row in device_rows(state=state)}
     assert rows['Timetable'] == 'last build failed'
+
+
+def test_feeds_held_until_there_is_a_timetable() -> None:
+    """No feed is fetched or counted without a timetable; one arriving polls."""
+    state, effects = run_events(
+        state=step(replace(pinned(), view=LiveView.MAP), MISSING)[0],
+        events=[
+            Tick(now=START + timedelta(seconds=seconds))
+            for seconds in range(30, 300, 30)
+        ],
+    )
+    assert not [e for e in effects if isinstance(e, FetchFeed)]
+    assert state.quota.calls == 0
+    state, effects = run_events(
+        state=state,
+        events=[CURRENT, Tick(now=state.now + timedelta(seconds=1))],
+    )
+    assert [e for e in effects if isinstance(e, FetchFeed)]
+    views = [e.view for e in effects if isinstance(e, Render)]
+    assert not any(isinstance(view, NoticeView) for view in views)
+    assert not isinstance(state.last_view, NoticeView)
+
+
+def test_building_screen_says_rebuild_is_off() -> None:
+    """With the switch off it says how to start a rebuild by hand."""
+    assert building_view(state=building()).detail == (
+        'Rebuild is off \u00b7 hold both knobs, then Rebuild timetable now'
+    )
+
+
+def test_device_row_keeps_the_build_after_a_failure() -> None:
+    """A failed rebuild still shows the timetable built before."""
+    state, _ = run_events(
+        state=pinned(),
+        events=[
+            TimetableSeen(version='2026-10-16T03:30:00+11:00', schema='6'),
+            TimetableRebuilt(ok=False),
+        ],
+    )
+    state, _ = step(forced(state=state)[0], TimetableRebuilt(ok=False))
+    rows = {row.label: row.value for row in device_rows(state=state)}
+    assert rows['Timetable'].startswith('last build failed \u00b7 16 Oct')
+    assert rows['Timetable'].endswith('version 6')
+
+
+def test_forced_failure_keeps_the_backoff() -> None:
+    """A manual rebuild's failure leaves failures and the wait alone."""
+    state = failed_at(minutes=0)
+    before = state.rebuild
+    state, _ = step(forced(state=state)[0], TimetableRebuilt(ok=False))
+    assert (state.rebuild.failures, state.rebuild.retry_at) == (
+        before.failures,
+        before.retry_at,
+    )
+    assert not state.rebuild.running

@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+import shutil
 import sqlite3
 from collections.abc import Callable, Collection
 from contextlib import closing
@@ -1913,3 +1914,66 @@ async def test_app_runs_with_no_timetable(tmp_path: Path) -> None:
     first = frame_index(frames=display.frames, frame=building)
     assert 0 <= first < frame_index(frames=display.frames, frame=menu)
     assert state.rebuild.missing
+
+
+@dataclass
+class ArrivingDisplay(FrameRecorder):
+    """
+    A display that puts a timetable in place once a frame is shown.
+
+    Attributes
+    ----------
+    source : Path | None
+        The built timetable copied in, once.
+    target : Path | None
+        Where it goes.
+    """
+
+    source: Path | None = None
+    target: Path | None = None
+
+    def show(self, *, frame: NDArray[np.uint8]) -> None:
+        """
+        Keep a frame; after the first, copy the timetable in.
+
+        Parameters
+        ----------
+        frame : NDArray[np.uint8]
+            Frame.
+        """
+        super().show(frame=frame)
+        if self.source is not None and self.target is not None:
+            shutil.copyfile(self.source, self.target)
+            self.source = None
+
+
+async def test_app_goes_live_when_the_timetable_arrives(
+    tmp_path: Path,
+) -> None:
+    """A timetable built while running ends the Building screen."""
+    (tmp_path / 'built').mkdir()
+    built = _build_db(tmp_path / 'built')
+    target = tmp_path / 'timetable.db'
+    timetable = SqliteTimetableRepository(path=target)
+    network = SqliteNetworkRepository(path=target)
+    display = ArrivingDisplay(source=built, target=target)
+    feeds = RecordingFeeds(directory=REAL)
+    ports = replace(
+        ports_of(),
+        timetable=timetable,
+        network=network,
+        feeds=feeds,
+        display=display,
+        builder=FakeBuilder(result=True),
+    )
+    try:
+        state = await run(
+            ports=ports, seed=PIN, tick_every=0.01, max_events=60,
+        )
+    finally:
+        timetable.close()
+        network.close()
+    assert not state.rebuild.missing
+    assert state.board.departures
+    assert feeds.fetched
+    assert not isinstance(state.last_view, NoticeView)

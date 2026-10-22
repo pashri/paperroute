@@ -176,6 +176,10 @@ class Rebuild:
         The schema version of the timetable seen last.
     missing : bool
         True when there is no timetable.
+    forced : bool
+        True while the rebuild running was asked for by hand.
+    failed : bool
+        True when the last rebuild failed.
     """
 
     outdated: bool = False
@@ -184,6 +188,8 @@ class Rebuild:
     retry_at: datetime | None = None
     schema: str | None = None
     missing: bool = False
+    forced: bool = False
+    failed: bool = False
 
 
 type FoldContext = tuple[str, StripKey | None, str | None]

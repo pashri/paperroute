@@ -20,6 +20,9 @@ SETTINGS_HINT: Final[str] = 'Hold both knobs for Settings'
 WAITING_WIFI: Final[str] = (
     f'Waiting for Wi-Fi{DOT}hold both knobs, then Wi-Fi'
 )
+REBUILD_OFF: Final[str] = (
+    f'Rebuild is off{DOT}hold both knobs, then Rebuild timetable now'
+)
 WAITING_KEY: Final[str] = (
     f'Waiting for the API key{DOT}set it on your phone'
 )
@@ -89,6 +92,8 @@ def finished(*, rebuild: Rebuild, ok: bool, now: datetime) -> Rebuild:
     """
     Record a finished rebuild and when the next may start.
 
+    A failed rebuild asked for by hand leaves the count and wait alone.
+
     Parameters
     ----------
     rebuild : Rebuild
@@ -105,11 +110,13 @@ def finished(*, rebuild: Rebuild, ok: bool, now: datetime) -> Rebuild:
         and a wait of `BACKOFF_FIRST`, doubled for each failure in a row
         up to `BACKOFF_MAX`.
     """
+    was_forced = rebuild.forced
+    rebuild = replace(rebuild, running=False, forced=False, failed=not ok)
+    if was_forced and not ok:
+        return rebuild
     failures = 0 if ok else rebuild.failures + 1
     wait = min(BACKOFF_FIRST * 2 ** max(failures - 1, 0), BACKOFF_MAX)
-    return replace(
-        rebuild, running=False, failures=failures, retry_at=now + wait,
-    )
+    return replace(rebuild, failures=failures, retry_at=now + wait)
 
 
 def held(*, state: State) -> bool:
@@ -169,7 +176,7 @@ def forced(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
     if state.rebuild.running:
         return state, ()
-    rebuild = started(rebuild=state.rebuild)
+    rebuild = replace(started(rebuild=state.rebuild), forced=True)
     return replace(state, rebuild=rebuild), (RebuildTimetable(force=True),)
 
 
@@ -212,8 +219,8 @@ def building_detail(*, state: State) -> str:
     -------
     str
         How to reach Settings while it builds; else what it waits for:
-        Wi-Fi, an API key, or the retry after a failure; else how to
-        reach Settings.
+        Wi-Fi, an API key, a rebuild by hand with the switch off, or the
+        retry after a failure; else how to reach Settings.
     """
     rebuild = state.rebuild
     if rebuild.running:
@@ -222,6 +229,8 @@ def building_detail(*, state: State) -> str:
         return WAITING_WIFI
     if state.panel.key_set is False:
         return WAITING_KEY
+    if not state.settings.auto_rebuild:
+        return REBUILD_OFF
     retry_at = rebuild.retry_at
     if rebuild.failures and retry_at is not None and state.now < retry_at:
         retry = clock_text(moment=retry_at)

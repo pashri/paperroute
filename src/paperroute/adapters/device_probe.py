@@ -5,7 +5,7 @@ import shutil
 from pathlib import Path
 from typing import Final
 
-from paperroute.core.device_model import DeviceFacts
+from paperroute.core.device_model import DeviceFacts, WifiStatus
 from paperroute.logs import LastError
 from paperroute.ports import KeyStore, TileRepository, WifiControl
 
@@ -192,9 +192,14 @@ class SystemProbe:
             return None
         return (directory / 'synchronized').exists()
 
-    async def probe(self) -> DeviceFacts:
+    def read(self, *, wifi: WifiStatus) -> DeviceFacts:
         """
-        Gather the device's facts.
+        Read the device's facts from files, blocking.
+
+        Parameters
+        ----------
+        wifi : WifiStatus
+            The Wi-Fi link, found already.
 
         Returns
         -------
@@ -203,7 +208,7 @@ class SystemProbe:
         """
         meminfo = read_text(path=self._root / MEMINFO) or ''
         return DeviceFacts(
-            wifi=await self._wifi.status(),
+            wifi=wifi,
             clock_synced=self.clock_synced(),
             uptime_s=uptime(text=read_text(path=self._root / UPTIME)),
             cpu_c=temperature(text=read_text(path=self._root / TEMPERATURE)),
@@ -211,6 +216,18 @@ class SystemProbe:
             mem_free=mem_available(meminfo=meminfo),
             version=self.version(),
             last_error=self._last_error.text(),
-            tiles_built=await asyncio.to_thread(self._tiles.version),
+            tiles_built=self._tiles.version(),
             key_set=self._key.present(),
         )
+
+    async def probe(self) -> DeviceFacts:
+        """
+        Gather the device's facts, reading files off the event loop.
+
+        Returns
+        -------
+        DeviceFacts
+            What was found; a file that can't be read gives None.
+        """
+        wifi = await self._wifi.status()
+        return await asyncio.to_thread(self.read, wifi=wifi)

@@ -3,8 +3,8 @@
 import asyncio
 import logging
 from collections.abc import Coroutine
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass, field, replace
+from typing import Any, Final
 
 from paperroute.adapters.wifi import NullWifi
 from paperroute.core.device import device_status
@@ -22,6 +22,8 @@ from paperroute.ports import DeviceProbe, KeyStore, Observer, WifiControl
 logger = logging.getLogger(__name__)
 
 type DeviceEffect = ProbeDevice
+
+PROBE_TIMEOUT: Final[float] = 10  # seconds
 
 
 @dataclass(frozen=True)
@@ -59,7 +61,14 @@ async def probe(*, ports: DevicePorts, queue: asyncio.Queue[Event]) -> None:
         await queue.put(DeviceProbeFailed())
         return
     try:
-        facts = await ports.probe.probe()
+        facts = await asyncio.wait_for(
+            ports.probe.probe(),
+            timeout=PROBE_TIMEOUT,
+        )
+    except TimeoutError:
+        logger.error('device probe timed out')
+        await queue.put(DeviceProbeFailed())
+        return
     except Exception:  # pylint: disable=broad-exception-caught
         logger.exception('device probe failed')
         await queue.put(DeviceProbeFailed())
@@ -122,10 +131,38 @@ class Reported:
     Attributes
     ----------
     status : DeviceStatus | None
-        The status, or None before the first report.
+        The status, without its changing readings, or None before the
+        first report.
     """
 
     status: DeviceStatus | None = None
+
+
+def steady(*, status: DeviceStatus) -> DeviceStatus:
+    """
+    Drop the readings that change on every probe from a status.
+
+    Parameters
+    ----------
+    status : DeviceStatus
+        The status.
+
+    Returns
+    -------
+    DeviceStatus
+        The status with no uptime, CPU temperature, free memory or free
+        disk.
+    """
+    if status.facts is None:
+        return status
+    facts = replace(
+        status.facts,
+        uptime_s=None,
+        cpu_c=None,
+        mem_free=None,
+        disk_free=None,
+    )
+    return replace(status, facts=facts)
 
 
 def report_status(
@@ -133,6 +170,9 @@ def report_status(
 ) -> None:
     """
     Report the device status when it differs from the last one reported.
+
+    Uptime, CPU temperature, free memory and free disk are reported but
+    a change in them alone is not.
 
     Parameters
     ----------
@@ -144,6 +184,7 @@ def report_status(
         The status reported last; updated when a new one is reported.
     """
     status = device_status(state=state)
-    if status != reported.status:
+    kept = steady(status=status)
+    if kept != reported.status:
         observer.status_seen(status=status)
-        reported.status = status
+        reported.status = kept

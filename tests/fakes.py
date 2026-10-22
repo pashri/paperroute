@@ -1,5 +1,6 @@
 """Hand-written stand-ins for the app's ports."""
 
+import asyncio
 import sqlite3
 from collections.abc import Collection
 from dataclasses import dataclass, field
@@ -619,6 +620,23 @@ class FakeProbe:
         if self.error is not None:
             raise self.error
         return self.facts
+
+
+@dataclass
+class HangingProbe:
+    """A device probe that never answers."""
+
+    async def probe(self) -> DeviceFacts:
+        """
+        Wait for ever.
+
+        Returns
+        -------
+        DeviceFacts
+            Never.
+        """
+        await asyncio.Event().wait()
+        return device_facts()
 
 
 @dataclass

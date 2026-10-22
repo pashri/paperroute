@@ -4,10 +4,25 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.core.messages import Effect, RebuildTimetable
+from paperroute.core.banners import offline
+from paperroute.core.messages import (
+    Effect,
+    NoticeView,
+    RebuildTimetable,
+    TimetableSeen,
+)
 from paperroute.core.model import TIMETABLE_SCHEMA
 from paperroute.core.state_model import Rebuild, State
+from paperroute.core.stop_view import DOT, clock_text
 
+BUILDING: Final[str] = 'Building the timetable'
+SETTINGS_HINT: Final[str] = 'Hold both knobs for Settings'
+WAITING_WIFI: Final[str] = (
+    f'Waiting for Wi-Fi{DOT}hold both knobs, then Wi-Fi'
+)
+WAITING_KEY: Final[str] = (
+    f'Waiting for the API key{DOT}set it on your phone'
+)
 BACKOFF_FIRST: Final[timedelta] = timedelta(hours=1)
 BACKOFF_MAX: Final[timedelta] = timedelta(hours=24)
 
@@ -46,10 +61,11 @@ def due(*, rebuild: Rebuild, now: datetime) -> bool:
     Returns
     -------
     bool
-        True when outdated, not running and past any wait.
+        True when outdated or missing, not running and past any wait.
     """
     waiting = rebuild.retry_at is not None and now < rebuild.retry_at
-    return rebuild.outdated and not rebuild.running and not waiting
+    wanted = rebuild.outdated or rebuild.missing
+    return wanted and not rebuild.running and not waiting
 
 
 def started(*, rebuild: Rebuild) -> Rebuild:
@@ -96,6 +112,24 @@ def finished(*, rebuild: Rebuild, ok: bool, now: datetime) -> Rebuild:
     )
 
 
+def held(*, state: State) -> bool:
+    """
+    Say whether an automatic rebuild must wait.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    bool
+        True with the setting off, while offline or with no API key.
+    """
+    no_key = state.panel.key_set is False
+    return not state.settings.auto_rebuild or no_key or offline(state=state)
+
+
 def rebuild_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
     Start a rebuild when one is due.
@@ -109,39 +143,107 @@ def rebuild_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     -------
     tuple[State, tuple[Effect, ...]]
         State with the rebuild marked running and a RebuildTimetable
-        when one is due and the setting allows it; otherwise the state
+        when one is due and nothing holds it; otherwise the state
         unchanged and no effects.
     """
-    if not state.settings.auto_rebuild:
-        return state, ()
-    if not due(rebuild=state.rebuild, now=state.now):
+    if held(state=state) or not due(rebuild=state.rebuild, now=state.now):
         return state, ()
     rebuild = started(rebuild=state.rebuild)
     return replace(state, rebuild=rebuild), (RebuildTimetable(),)
 
 
-def seen_schema(*, state: State, schema: str | None) -> State:
+def forced(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
-    Record whether the timetable seen is outdated.
+    Start a rebuild now, whatever the version, wait or setting.
 
     Parameters
     ----------
     state : State
         State.
-    schema : str | None
-        The file's schema version.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with the rebuild marked running and a forced
+        RebuildTimetable; unchanged with no effects while one runs.
+    """
+    if state.rebuild.running:
+        return state, ()
+    rebuild = started(rebuild=state.rebuild)
+    return replace(state, rebuild=rebuild), (RebuildTimetable(force=True),)
+
+
+def seen_schema(*, state: State, seen: TimetableSeen) -> State:
+    """
+    Record whether the timetable seen is outdated or missing.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    seen : TimetableSeen
+        The file's version and schema.
 
     Returns
     -------
     State
-        State with the schema noted and `rebuild.outdated` set from it.
+        State with the schema noted and `rebuild.outdated` and
+        `rebuild.missing` set from it.
     """
     rebuild = replace(
         state.rebuild,
-        outdated=is_outdated(schema=schema),
-        schema=schema,
+        outdated=is_outdated(schema=seen.schema),
+        schema=seen.schema,
+        missing=seen.version is None,
     )
     return replace(state, rebuild=rebuild)
+
+
+def building_detail(*, state: State) -> str:
+    """
+    Say why the timetable is not built yet, first reason first.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    str
+        How to reach Settings while it builds; else what it waits for:
+        Wi-Fi, an API key, or the retry after a failure; else how to
+        reach Settings.
+    """
+    rebuild = state.rebuild
+    if rebuild.running:
+        return SETTINGS_HINT
+    if offline(state=state):
+        return WAITING_WIFI
+    if state.panel.key_set is False:
+        return WAITING_KEY
+    retry_at = rebuild.retry_at
+    if rebuild.failures and retry_at is not None and state.now < retry_at:
+        retry = clock_text(moment=retry_at)
+        return f'Last try failed{DOT}trying again at {retry}'
+    return SETTINGS_HINT
+
+
+def building_view(*, state: State) -> NoticeView:
+    """
+    Build the screen shown while there is no timetable.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    NoticeView
+        The title, and the line from `building_detail`.
+    """
+    return NoticeView(title=BUILDING, detail=building_detail(state=state))
 
 
 def rebuilt(*, state: State, ok: bool) -> State:

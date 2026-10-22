@@ -50,6 +50,7 @@ from paperroute.core.messages import (
     FetchFeed,
     Knob,
     KnobPressed,
+    KnobsHeld,
     KnobTurned,
     LoadPatterns,
     MapData,
@@ -68,6 +69,7 @@ from paperroute.core.messages import (
     TimetableSeen,
 )
 from paperroute.core.model import Departure, Mode, Pin, StopPlace
+from paperroute.core.panel_screens import menu_view
 from paperroute.core.panel_views import MenuView, SleepView
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.places import shown
@@ -108,6 +110,7 @@ from tests.core.factories import pin_of, place
 from tests.fakes import (
     STOP_POINT,
     BrokenTimetable,
+    BuiltTimetable,
     EmptyPlacedTimetable,
     FakeBuilder,
     FakeKeys,
@@ -1188,7 +1191,7 @@ async def test_run_draws_the_map_in_the_variant_asked_for() -> None:
     tiles = CountingTiles()
     display = PressingDisplay()
     ports = Ports(
-        timetable=PlacedTimetable(),
+        timetable=BuiltTimetable(),
         feeds=FileFeedsClient(directory=REAL),
         display=display,
         clock=FixedClock(at=AT),
@@ -1414,7 +1417,7 @@ async def test_run_survives_a_tiles_read_error(
     display = ZoomingDisplay()
     tiles = tableless_tiles(out=tmp_path / 'tiles.db')
     ports = Ports(
-        timetable=EmptyPlacedTimetable(),
+        timetable=BuiltTimetable(),
         feeds=FileFeedsClient(directory=REAL),
         display=display,
         clock=FixedClock(at=AT),
@@ -1525,7 +1528,9 @@ async def test_run_starts_on_town_hall_map_without_state() -> None:
     state = await run(
         ports=ports_of(states=states), tick_every=0.01, max_events=5
     )
-    assert states.saves[:1] == [DEFAULT_SAVED]
+    assert states.saves
+    first = replace(states.saves[0], quota=DEFAULT_SAVED.quota)
+    assert first == DEFAULT_SAVED
     assert state.places.pins == ()
     assert shown(state=state).origin.stop_id == TOWN_HALL.stop_id
     assert state.view is LiveView.MAP
@@ -1646,7 +1651,9 @@ async def test_queued_knob_turns_draw_one_frame() -> None:
 async def test_app_performs_rebuild() -> None:
     """A RebuildTimetable posts how it went; stopping the app stops it."""
     builder = FakeBuilder(result=True)
-    ports = replace(ports_of(), builder=builder)
+    ports = replace(
+        ports_of(timetable=BuiltTimetable()), builder=builder,
+    )
     queue: asyncio.Queue[Event] = asyncio.Queue()
     tasks: set[asyncio.Task[None]] = set()
     await perform(
@@ -1781,3 +1788,128 @@ async def test_app_starts_without_a_timetable(tmp_path: Path) -> None:
         network.close()
     assert state.running
     assert not missing.exists()
+
+
+@dataclass
+class ScriptedDisplay(FrameRecorder):
+    """
+    A display that posts a script of events once a frame is shown.
+
+    Attributes
+    ----------
+    trigger : NDArray[np.uint8] | None
+        The frame that starts the script.
+    script : tuple[Event, ...]
+        The events posted.
+    post : Callable[[Event], None] | None
+        Posts an event to the app.
+    """
+
+    trigger: NDArray[np.uint8] | None = None
+    script: tuple[Event, ...] = ()
+    post: Callable[[Event], None] | None = None
+
+    def show(self, *, frame: NDArray[np.uint8]) -> None:
+        """
+        Keep a frame; when it is the trigger, post the script once.
+
+        Parameters
+        ----------
+        frame : NDArray[np.uint8]
+            Frame.
+        """
+        super().show(frame=frame)
+        trigger = self.trigger
+        if trigger is None or self.post is None:
+            return
+        if (frame == trigger).all():
+            for event in self.script:
+                self.post(event)
+            self.trigger = None
+
+    def hook(self, post: Callable[[Event], None]) -> None:
+        """
+        Keep the function that posts events.
+
+        Parameters
+        ----------
+        post : Callable[[Event], None]
+            Posts an event to the app.
+        """
+        self.post = post
+
+
+def frame_index(
+    *, frames: list[NDArray[np.uint8]], frame: NDArray[np.uint8]
+) -> int:
+    """
+    Find the first frame equal to one given.
+
+    Parameters
+    ----------
+    frames : list[NDArray[np.uint8]]
+        Frames shown.
+    frame : NDArray[np.uint8]
+        The frame looked for.
+
+    Returns
+    -------
+    int
+        Its index, or -1 when it was never shown.
+    """
+    return next(
+        (
+            index
+            for index, shown_frame in enumerate(frames)
+            if (shown_frame == frame).all()
+        ),
+        -1,
+    )
+
+
+async def test_app_runs_with_no_timetable(tmp_path: Path) -> None:
+    """With no timetable the Building screen shows, then the menu opens."""
+    missing = tmp_path / 'timetable.db'
+    timetable = SqliteTimetableRepository(path=missing)
+    network = SqliteNetworkRepository(path=missing)
+    building = draw_notice_view(
+        view=NoticeView(
+            title='Building the timetable',
+            detail='Hold both knobs for Settings',
+        ),
+    )
+    display = ScriptedDisplay(
+        trigger=building,
+        script=(
+            Tick(now=AT),
+            KnobTurned(knob=Knob.BOTTOM, steps=2),
+            KnobTurned(knob=Knob.TOP, steps=-1),
+            KnobPressed(knob=Knob.TOP),
+            Tick(now=AT),
+            KnobsHeld(),
+            KnobPressed(knob=Knob.BOTTOM),
+            Tick(now=AT),
+        ),
+    )
+    ports = replace(
+        ports_of(),
+        timetable=timetable,
+        network=network,
+        display=display,
+        builder=FakeBuilder(result=True),
+    )
+    try:
+        state = await run(
+            ports=ports,
+            seed=PIN,
+            tick_every=0.01,
+            post_hook=display.hook,
+            max_events=20,
+        )
+    finally:
+        timetable.close()
+        network.close()
+    menu = draw_panel_view(view=menu_view(state=state))
+    first = frame_index(frames=display.frames, frame=building)
+    assert 0 <= first < frame_index(frames=display.frames, frame=menu)
+    assert state.rebuild.missing

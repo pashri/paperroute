@@ -171,8 +171,14 @@ def timetable_value(*, state: State) -> str:
     Returns
     -------
     str
-        Its day, build time and schema; a dash when unknown.
+        'rebuilding' while a rebuild runs, 'last build failed' after a
+        failure, else its day, build time and schema; a dash when
+        unknown.
     """
+    if state.rebuild.running:
+        return 'rebuilding'
+    if state.rebuild.failures:
+        return 'last build failed'
     built = local_time(stamp=state.saving.timetable)
     if built is None:
         return UNKNOWN

@@ -1,30 +1,56 @@
 """Tests for when an outdated timetable is rebuilt."""
 
 from collections.abc import Sequence
-from datetime import timedelta
+from dataclasses import replace
+from datetime import datetime, timedelta
 
 import pytest
 
+from paperroute.core.device_model import (
+    MENU_ROWS,
+    Menu,
+    MenuRow,
+    PanelScreen,
+    WifiStatus,
+)
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import (
+    ApiKeyChanged,
     ColumnLoaded,
+    DeviceProbed,
     Effect,
     Event,
+    Knob,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
     LoadColumn,
+    NoticeView,
     RebuildTimetable,
+    Render,
     SettingsChanged,
     Tick,
     TimetableRebuilt,
     TimetableSeen,
 )
-from paperroute.core.rebuild import BACKOFF_MAX, is_outdated
+from paperroute.core.panel_screens import device_rows
+from paperroute.core.panel_views import MenuView
+from paperroute.core.rebuild import (
+    BACKOFF_MAX,
+    building_view,
+    forced,
+    is_outdated,
+)
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import Rebuild, State
 from tests.core.chooser_walks import DOWN, KINDS, NEXT, OPEN
 from tests.core.factories import START, pin_at
+from tests.fakes import device_facts
 
 OLD = TimetableSeen(version='v', schema='4')
+CURRENT = TimetableSeen(version='v', schema='6')
+MISSING = TimetableSeen(version=None)
 
 
 def pinned() -> State:
@@ -242,3 +268,164 @@ def test_chooser_works_while_outdated() -> None:
     assert loads == [
         effect for effect in expected if isinstance(effect, LoadColumn)
     ]
+
+
+def test_rebuild_now_ignores_version_and_backoff() -> None:
+    """Up to date, waiting and switched off, Rebuild now still starts."""
+    state, _ = run_events(
+        state=pinned(),
+        events=[SettingsChanged(auto_rebuild=False), CURRENT],
+    )
+    later = START + timedelta(hours=1)
+    state = replace(
+        state, rebuild=replace(state.rebuild, failures=1, retry_at=later),
+    )
+    state, effects = forced(state=state)
+    assert effects == (RebuildTimetable(force=True),)
+    assert state.rebuild.running
+
+
+def test_rebuild_now_while_running_does_nothing() -> None:
+    """A rebuild already running is not started again."""
+    running, _ = step(pinned(), OLD)
+    assert forced(state=running) == (running, ())
+
+
+def test_missing_timetable_is_due() -> None:
+    """With no timetable, online and a key set, a rebuild starts."""
+    state, effects = run_events(
+        state=pinned(), events=[ApiKeyChanged(present=True), MISSING],
+    )
+    assert RebuildTimetable(force=False) in effects
+    assert state.rebuild.missing and state.rebuild.running
+
+
+def test_missing_timetable_waits_for_key() -> None:
+    """With no key the rebuild waits; setting one starts it."""
+    state, effects = run_events(
+        state=pinned(),
+        events=[
+            ApiKeyChanged(present=False),
+            MISSING,
+            Tick(now=START + timedelta(minutes=1)),
+        ],
+    )
+    assert rebuilds(effects=effects) == 0
+    _, effects = run_events(
+        state=state,
+        events=[
+            ApiKeyChanged(present=True),
+            Tick(now=START + timedelta(minutes=2)),
+        ],
+    )
+    assert rebuilds(effects=effects) == 1
+
+
+def test_missing_timetable_waits_for_wifi() -> None:
+    """Facts saying Wi-Fi is managed but joined to nothing hold it."""
+    offline = replace(device_facts(), wifi=WifiStatus(managed=True))
+    _, effects = run_events(
+        state=pinned(),
+        events=[DeviceProbed(facts=offline), MISSING],
+    )
+    assert rebuilds(effects=effects) == 0
+
+
+def building(
+    *,
+    running: bool = False,
+    failures: int = 0,
+    retry_at: datetime | None = None,
+) -> State:
+    """
+    A state with no timetable and the switch off.
+
+    Parameters
+    ----------
+    running : bool
+        Whether a rebuild runs.
+    failures : int
+        Rebuilds failed in a row.
+    retry_at : datetime | None
+        When the next rebuild may start.
+
+    Returns
+    -------
+    State
+        The state.
+    """
+    state, _ = run_events(
+        state=pinned(),
+        events=[SettingsChanged(auto_rebuild=False), MISSING],
+    )
+    rebuild = replace(
+        state.rebuild, running=running, failures=failures, retry_at=retry_at,
+    )
+    return replace(state, rebuild=rebuild)
+
+
+def test_building_screen_details() -> None:
+    """The line under the title gives the first reason that applies."""
+    idle = building()
+    running = building(running=True)
+    no_key = replace(idle, panel=replace(idle.panel, key_set=False))
+    facts = replace(device_facts(), wifi=WifiStatus(managed=True))
+    offline = replace(no_key, panel=replace(no_key.panel, facts=facts))
+    failed = building(
+        failures=1, retry_at=START + timedelta(hours=1, minutes=5),
+    )
+    details = [
+        building_view(state=state).detail
+        for state in (running, offline, no_key, failed, idle)
+    ]
+    assert details == [
+        'Hold both knobs for Settings',
+        'Waiting for Wi-Fi \u00b7 hold both knobs, then Wi-Fi',
+        'Waiting for the API key \u00b7 set it on your phone',
+        'Last try failed \u00b7 trying again at 9:05',
+        'Hold both knobs for Settings',
+    ]
+    assert building_view(state=idle).title == 'Building the timetable'
+
+
+def test_missing_timetable_shows_building_screen() -> None:
+    """With no timetable the Building screen is drawn."""
+    _, effects = step(pinned(), MISSING)
+    views = [effect.view for effect in effects if isinstance(effect, Render)]
+    assert isinstance(views[-1], NoticeView)
+    assert views[-1].title == 'Building the timetable'
+
+
+def test_menu_works_on_building_screen() -> None:
+    """Knobs do nothing on the Building screen, but the menu opens."""
+    state = building()
+    for event in (
+        KnobPressed(knob=Knob.TOP),
+        KnobTurned(knob=Knob.BOTTOM, steps=1),
+    ):
+        assert step(state, event) == (state, ())
+    state, effects = step(state, KnobsHeld())
+    assert isinstance(effects[-1], Render)
+    assert isinstance(effects[-1].view, MenuView)
+    state, effects = step(state, KnobPressed(knob=Knob.TOP))
+    assert isinstance(effects[-1], Render)
+    assert isinstance(effects[-1].view, NoticeView)
+
+
+def test_rebuild_row_starts_and_shows_device_screen() -> None:
+    """The row forces a rebuild and the Device screen says it runs."""
+    state = building()
+    cursor = MENU_ROWS.index(MenuRow.REBUILD)
+    state = replace(
+        state, panel=replace(state.panel, menu=Menu(cursor=cursor)),
+    )
+    state, effects = step(state, KnobPressed(knob=Knob.BOTTOM))
+    assert RebuildTimetable(force=True) in effects
+    assert state.panel.menu == Menu(
+        screen=PanelScreen.DEVICE, cursor=cursor,
+    )
+    rows = {row.label: row.value for row in device_rows(state=state)}
+    assert rows['Timetable'] == 'rebuilding'
+    state, _ = step(state, TimetableRebuilt(ok=False))
+    rows = {row.label: row.value for row in device_rows(state=state)}
+    assert rows['Timetable'] == 'last build failed'

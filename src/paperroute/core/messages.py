@@ -170,7 +170,16 @@ class SaveState:
 
 @dataclass(frozen=True)
 class RebuildTimetable:
-    """Rebuild the timetable in the background."""
+    """
+    Rebuild the timetable in the background.
+
+    Attributes
+    ----------
+    force : bool
+        Whether to build even when the timetable is up to date.
+    """
+
+    force: bool = False
 
 
 @dataclass(frozen=True)

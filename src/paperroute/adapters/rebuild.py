@@ -138,9 +138,14 @@ class NullBuilder:
     def __init__(self) -> None:
         self.logged = False
 
-    async def rebuild(self) -> bool:
+    async def rebuild(self, *, force: bool = False) -> bool:
         """
         Refuse at once, saying so the first time.
+
+        Parameters
+        ----------
+        force : bool
+            Ignored.
 
         Returns
         -------
@@ -148,7 +153,10 @@ class NullBuilder:
             Always False.
         """
         if not self.logged:
-            logger.info('timetable outdated; rebuild not enabled')
+            logger.info(
+                'timetable rebuild asked for; not enabled',
+                extra={'force': force},
+            )
             self.logged = True
         return False
 
@@ -185,9 +193,14 @@ class ChildRebuilder:
         self.available = available
         self.process: asyncio.subprocess.Process | None = None
 
-    async def rebuild(self) -> bool:
+    async def rebuild(self, *, force: bool = False) -> bool:
         """
         Run the command and wait for it, unless memory is short.
+
+        Parameters
+        ----------
+        force : bool
+            Add `--force` to the command.
 
         Returns
         -------
@@ -199,10 +212,11 @@ class ChildRebuilder:
         if available is not None and available < REBUILD_MIN_AVAILABLE:
             logger.warning('timetable rebuild skipped: memory low')
             return False
-        logger.info('timetable rebuild started')
+        logger.info('timetable rebuild started', extra={'force': force})
+        command = (*self.command, '--force') if force else self.command
         try:
             self.process = await asyncio.create_subprocess_exec(
-                *idle_io(command=self.command),
+                *idle_io(command=command),
                 stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE,
                 env=self.env,

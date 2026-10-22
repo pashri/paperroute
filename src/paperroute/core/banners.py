@@ -43,3 +43,24 @@ def feeds_held(*, state: State) -> bool:
         key polls.
     """
     return state.panel.asleep or state.panel.key_set is False
+
+
+def offline(*, state: State) -> bool:
+    """
+    Say whether the device knows it has joined no Wi-Fi network.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    bool
+        True when the latest facts say NetworkManager manages Wi-Fi and
+        no network is joined; False without facts or NetworkManager.
+    """
+    facts = state.panel.facts
+    if facts is None or not facts.wifi.managed:
+        return False
+    return facts.wifi.ssid is None

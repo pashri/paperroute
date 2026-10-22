@@ -12,7 +12,6 @@ STAGE=/var/cache/paperroute-stage
 R=/opt/paperroute/releases
 OPT=/opt/paperroute
 CURRENT=$OPT/current
-DATA=/var/lib/paperroute
 LOCK=/run/paperroute-install.lock
 KEEP=3
 HEALTH_WAIT=90
@@ -163,13 +162,6 @@ fi
 prev=$(readlink -- "$CURRENT" || true)
 switch_to "$R/$SHA"
 
-if [[ ! -e $DATA/timetable.db ]]; then
-    printf 'No timetable yet: the first refresh will start the app\n'
-    printf 'Start it: sudo systemctl start --no-block paperroute-timetable\n'
-    printf 'Then follow it with: journalctl -fu paperroute-timetable\n'
-    prune
-    exit 0
-fi
 if ! systemctl restart paperroute || ! healthy; then
     roll_back
 fi

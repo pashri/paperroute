@@ -26,6 +26,7 @@ from paperroute.core.messages import (
     PowerAction,
     PowerRequested,
 )
+from paperroute.core.rebuild import forced
 from paperroute.core.sleep import slept
 from paperroute.core.state_model import State
 from paperroute.core.state_views import settled
@@ -194,8 +195,8 @@ def row_chosen(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        The Device screen with a probe when one is due, the phone
-        screen, a confirm, or the sleep screen;
+        The Device screen with a probe when one is due and a forced
+        rebuild for its row, the phone screen, a confirm, or the sleep screen;
         unchanged for the rows not built yet.
     """
     menu = state.panel.menu or Menu()
@@ -204,18 +205,43 @@ def row_chosen(
             action=CONFIRM_FOR[row], origin=Origin.PANEL, asked_at=state.now,
         )
         return settled(state=with_confirm(state=state, confirm=confirm))
-    if row is MenuRow.DEVICE:
-        menu = replace(menu, screen=PanelScreen.DEVICE)
-        state, probes = probe_effects(
-            state=with_menu(state=state, menu=menu),
-        )
-        return settled(state=state, effects=probes)
+    if row in (MenuRow.DEVICE, MenuRow.REBUILD):
+        return device_shown(state=state, menu=menu, row=row)
     if row is MenuRow.PHONE:
         menu = replace(menu, screen=PanelScreen.PHONE)
         return settled(state=with_menu(state=state, menu=menu))
     if row is MenuRow.SLEEP:
         return settled(state=slept(state=state))
     return state, ()
+
+
+def device_shown(
+    *, state: State, menu: Menu, row: MenuRow
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Show the Device screen, rebuilding the timetable first if asked.
+
+    Parameters
+    ----------
+    state : State
+        State, with the menu open.
+    menu : Menu
+        The open menu.
+    row : MenuRow
+        Device, or Rebuild timetable now.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State on the Device screen, a forced rebuild for its row unless
+        one runs, a probe when one is due, and the redraw.
+    """
+    rebuilds: tuple[Effect, ...] = ()
+    if row is MenuRow.REBUILD:
+        state, rebuilds = forced(state=state)
+    menu = replace(menu, screen=PanelScreen.DEVICE)
+    state, probes = probe_effects(state=with_menu(state=state, menu=menu))
+    return settled(state=state, effects=(*rebuilds, *probes))
 
 
 def accepted(

@@ -596,7 +596,7 @@ def placed(*, timetable: TimetableRepository, place: StopPlace) -> StopPlace:
     """
     try:
         return timetable.stop(stop_id=place.stop_id)
-    except (KeyError, sqlite3.Error):
+    except (LookupError, sqlite3.Error):
         logger.warning('stop %s not in the timetable', place.stop_id)
         return place
 

@@ -423,9 +423,9 @@ def on_touch(
     tuple[State, tuple[Effect, ...]]
         A phone's ask shows a confirm; a touch answers the confirm shown,
         else works the open menu, else holding both knobs opens it, else
-        it acts on the Live view. A touch while the menu is open is
-        noted, so the menu stays open. While asleep the first touch only
-        wakes the screen.
+        it acts on the Live view; the Building screen ignores it. A
+        touch while the menu is open is noted, so the menu stays open.
+        While asleep the first touch only wakes the screen.
     """
     if state.panel.asleep:
         return woken(state=state, event=event)
@@ -437,6 +437,8 @@ def on_touch(
         after, effects = menu_knob(state=state, event=event)
     elif isinstance(event, KnobsHeld):
         after, effects = opened(state=state)
+    elif state.rebuild.missing:
+        return state, ()
     else:
         return on_knob(state=state, event=event)
     return touched(state=after), effects
@@ -703,6 +705,9 @@ def on_timetable_file(
     """
     Note a timetable seen or a rebuild finished, rebuilding when due.
 
+    Both redraw: the Building and Device screens show the timetable's
+    state.
+
     Parameters
     ----------
     state : State
@@ -716,9 +721,10 @@ def on_timetable_file(
         New state and effects.
     """
     if isinstance(event, TimetableRebuilt):
-        return rebuilt(state=state, ok=event.ok), ()
-    seen = seen_schema(state=state, schema=event.schema)
-    return with_rebuild(result=on_timetable(state=seen, event=event))
+        return settled(state=rebuilt(state=state, ok=event.ok))
+    seen = seen_schema(state=state, seen=event)
+    after, effects = on_timetable(state=seen, event=event)
+    return with_rebuild(result=settled(state=after, effects=effects))
 
 
 def on_strip(

@@ -149,6 +149,31 @@ def test_refresh_command_shape() -> None:
     )
 
 
+async def test_child_rebuilder_force_flag(tmp_path: Path) -> None:
+    """A forced rebuild runs the command with --force on the end."""
+    out = tmp_path / 'argv'
+    rebuilder = ChildRebuilder(
+        command=(
+            sys.executable,
+            '-c',
+            'import sys, pathlib; '
+            'pathlib.Path(sys.argv[1]).write_text(" ".join(sys.argv))',
+            str(out),
+        ),
+        env=dict(os.environ),
+        available=lambda: None,
+    )
+    assert await rebuilder.rebuild(force=True)
+    assert out.read_text().split()[-1] == '--force'
+    assert await rebuilder.rebuild()
+    assert out.read_text().split()[-1] == str(out)
+
+
+async def test_null_builder_ignores_force() -> None:
+    """Without --rebuild a forced rebuild fails too."""
+    assert await NullBuilder().rebuild(force=True) is False
+
+
 async def test_null_builder_refuses_and_says_so_once(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

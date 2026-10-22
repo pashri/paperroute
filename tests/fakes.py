@@ -414,6 +414,38 @@ class EmptyPlacedTimetable(PlacedTimetable):
 
 
 @dataclass
+class BuiltTimetable(EmptyPlacedTimetable):
+    """A placed timetable with no departures, built as 'v1'."""
+
+    def version(self) -> str | None:
+        """
+        Name the build.
+
+        Returns
+        -------
+        str | None
+            Always 'v1'.
+        """
+        return 'v1'
+
+    def match_stop(self, *, place: StopPlace) -> StopPlace | None:
+        """
+        Find any place at the test point.
+
+        Parameters
+        ----------
+        place : StopPlace
+            Place to find.
+
+        Returns
+        -------
+        StopPlace | None
+            The place's stop.
+        """
+        return self.stop(stop_id=place.stop_id)
+
+
+@dataclass
 class FakeBuilder:
     """
     A timetable builder that answers at once and counts its calls.
@@ -426,15 +458,23 @@ class FakeBuilder:
         How many rebuilds were asked for.
     stops : int
         How many times it was stopped.
+    forced : list[bool]
+        Whether each rebuild was forced.
     """
 
     result: bool = True
     rebuilds: int = 0
     stops: int = 0
+    forced: list[bool] = field(default_factory=list)
 
-    async def rebuild(self) -> bool:
+    async def rebuild(self, *, force: bool = False) -> bool:
         """
         Count the rebuild and give the set result.
+
+        Parameters
+        ----------
+        force : bool
+            Noted in `forced`.
 
         Returns
         -------
@@ -442,6 +482,7 @@ class FakeBuilder:
             `result`.
         """
         self.rebuilds += 1
+        self.forced.append(force)
         return self.result
 
     async def stop(self) -> None:

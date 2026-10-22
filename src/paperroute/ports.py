@@ -292,9 +292,14 @@ class TileRepository(Protocol):
 class TimetableBuilder(Protocol):
     """Rebuilds the timetable file in the background."""
 
-    async def rebuild(self) -> bool:
+    async def rebuild(self, *, force: bool = False) -> bool:
         """
         Rebuild the timetable and wait for it to finish.
+
+        Parameters
+        ----------
+        force : bool
+            Build even when the timetable is up to date.
 
         Returns
         -------

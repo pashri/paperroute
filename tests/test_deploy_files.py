@@ -1144,11 +1144,21 @@ def test_install_release_builds_with_copied_files() -> None:
     assert ' UV_LINK_MODE=copy ' in found[0]
 
 
-def test_install_release_hint_starts_the_refresh_without_blocking() -> None:
-    """The first-refresh hint doesn't hold the terminal for the build."""
+def test_install_release_starts_without_timetable() -> None:
+    """The app starts and is checked whether or not a timetable exists."""
     text = script_text(path=BIN / 'install-release')
-    assert 'sudo systemctl start --no-block paperroute-timetable' in text
-    assert 'journalctl -fu paperroute-timetable' in text
+    assert 'timetable.db' not in text
+    assert 'paperroute-timetable' not in text
+    lines = text.splitlines()
+    last = max(
+        index
+        for index, line in enumerate(lines)
+        if 'systemctl restart paperroute' in line
+    )
+    assert lines[last] == (
+        'if ! systemctl restart paperroute || ! healthy; then'
+    )
+    assert 'exit 0' not in lines[:last]
 
 
 TILES_SCRIPT: Final[Path] = BIN / 'install-tiles'

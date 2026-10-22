@@ -174,6 +174,8 @@ class Rebuild:
         The earliest time for the next rebuild, or None for now.
     schema : str | None
         The schema version of the timetable seen last.
+    missing : bool
+        True when there is no timetable.
     """
 
     outdated: bool = False
@@ -181,6 +183,7 @@ class Rebuild:
     failures: int = 0
     retry_at: datetime | None = None
     schema: str | None = None
+    missing: bool = False
 
 
 type FoldContext = tuple[str, StripKey | None, str | None]

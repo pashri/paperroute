@@ -216,9 +216,10 @@ def background(
                 load_map(ports=ports, effect=effect, queue=queue),
                 MapDataFailed(request=effect),
             )
-        case RebuildTimetable():
+        case RebuildTimetable(force=force):
             failed_rebuild = TimetableRebuilt(ok=False)
-            return rebuild(ports=ports, queue=queue), failed_rebuild
+            work = rebuild(ports=ports, queue=queue, force=force)
+            return work, failed_rebuild
         case ControlPower(action=action):
             return (
                 power_control(ports=ports, action=action, queue=queue),
@@ -263,7 +264,9 @@ def other_work(
     return worked(call=call, failed=fallback, queue=queue), fallback
 
 
-async def rebuild(*, ports: Ports, queue: asyncio.Queue[Event]) -> None:
+async def rebuild(
+    *, ports: Ports, queue: asyncio.Queue[Event], force: bool = False
+) -> None:
     """
     Rebuild the timetable and post how it went.
 
@@ -273,8 +276,10 @@ async def rebuild(*, ports: Ports, queue: asyncio.Queue[Event]) -> None:
         Adapters.
     queue : asyncio.Queue[Event]
         Event queue.
+    force : bool
+        Build even when the timetable is up to date.
     """
-    ok = await ports.builder.rebuild()
+    ok = await ports.builder.rebuild(force=force)
     await queue.put(TimetableRebuilt(ok=ok))
 
 

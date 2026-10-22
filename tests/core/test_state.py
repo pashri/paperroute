@@ -95,6 +95,7 @@ from paperroute.core.reach import (
     build_reach,
 )
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
+from paperroute.core.rebuild import building_view
 from paperroute.core.saved import (
     DEFAULT_SAVED,
     LIVE_VIEWS,
@@ -1652,9 +1653,9 @@ def check_render(
     view: ScreenView,
 ) -> None:
     """
-    Assert a rendered view is the chooser's stage or the Live view shown
-    and fits the screen, and the Strip's stored scroll is within its
-    reach.
+    Assert a rendered view is the Building screen with no timetable,
+    else the chooser's stage or the Live view shown, and fits the
+    screen, and the Strip's stored scroll is within its reach.
 
     Parameters
     ----------
@@ -1664,7 +1665,9 @@ def check_render(
         The view drawn.
     """
     chooser = state.chooser
-    if chooser is not None:
+    if state.rebuild.missing:
+        assert view == building_view(state=state)
+    elif chooser is not None:
         assert type(view) is STAGE_TYPES[chooser.stage]
     else:
         assert type(view) is VIEW_TYPES[state.view]
@@ -2686,7 +2689,7 @@ def test_no_timetable_matches_nothing() -> None:
     """With no timetable there is nothing to match against."""
     state, _ = step(pinned(), TimetableSeen(version='v1'))
     state, effects = step(state, TimetableSeen(version=None))
-    assert effects == ()
+    assert not effects_of(effects=effects, kind=MatchPlaces)
     assert state.saving.timetable is None
 
 

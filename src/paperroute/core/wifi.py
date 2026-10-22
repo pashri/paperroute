@@ -434,13 +434,25 @@ def joined(*, state: State) -> Result:
     Result
         State with no setup or menu, marked probing, and a ProbeDevice.
     """
-    panel = replace(
-        state.panel,
-        wifi=None,
-        menu=None,
-        probed_at=state.now,
-        probing=True,
-    )
+    panel = replace(state.panel, wifi=None, menu=None)
+    return probed(state=replace(state, panel=panel))
+
+
+def probed(*, state: State) -> Result:
+    """
+    Ask for the device's facts now that setup has let go of the radio.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    Result
+        State marked probing, and a ProbeDevice.
+    """
+    panel = replace(state.panel, probed_at=state.now, probing=True)
     return replace(state, panel=panel), (ProbeDevice(),)
 
 
@@ -458,7 +470,8 @@ def on_wifi_event(*, state: State, event: WifiEvent) -> Result:
     Returns
     -------
     Result
-        New state and effects. The caller redraws.
+        New state and effects; WifiSetupStopped probes the device. The
+        caller redraws.
     """
     match event:
         case HotspotStarted():
@@ -471,4 +484,4 @@ def on_wifi_event(*, state: State, event: WifiEvent) -> Result:
             return joined(state=state)
         case WifiJoinFailed():
             return join_failed(state=state, event=event)
-    return state, ()
+    return probed(state=state)

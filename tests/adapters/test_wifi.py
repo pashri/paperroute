@@ -453,3 +453,42 @@ async def test_null_wifi() -> None:
     outcome = await wifi.join(request=JoinRequest(ssid='Home'))
     assert outcome is JoinOutcome.FAILED
     await wifi.forget_all()
+
+
+async def test_active_wifi_uuid(tmp_path: Path) -> None:
+    """The active Wi-Fi connection on wlan0 is found by UUID."""
+    listing = 'u-eth:802-3-ethernet:eth0\nu-home:802-11-wireless:wlan0\n'
+    wifi, log = wifi_on(
+        tmp_path=tmp_path, replies={'-t -f UUID,TYPE,DEVICE': (0, listing)},
+    )
+    assert await wifi.active_wifi() == 'u-home'
+    assert calls(log=log) == [[
+        '-t', '-f', 'UUID,TYPE,DEVICE', 'connection', 'show', '--active',
+    ]]
+    none, _ = wifi_on(
+        tmp_path=tmp_path, replies={'-t -f UUID,TYPE,DEVICE': (0, '')},
+    )
+    assert await none.active_wifi() is None
+
+
+async def test_reconnect_argv(tmp_path: Path) -> None:
+    """Reconnecting brings a connection up by UUID; failure is logged."""
+    wifi, log = wifi_on(
+        tmp_path=tmp_path, replies={'connection up': (4, 'no')},
+    )
+    await wifi.reconnect(uuid='u-home')
+    assert calls(log=log) == [['connection', 'up', 'uuid', 'u-home']]
+
+
+async def test_hotspot_saved(tmp_path: Path) -> None:
+    """The setup profile is looked for by name."""
+    names = 'Home\npaperroute-setup\n'
+    wifi, log = wifi_on(
+        tmp_path=tmp_path, replies={'-t -f NAME': (0, names)},
+    )
+    assert await wifi.hotspot_saved()
+    assert calls(log=log) == [['-t', '-f', 'NAME', 'connection', 'show']]
+    other, _ = wifi_on(
+        tmp_path=tmp_path, replies={'-t -f NAME': (0, 'Home\n')},
+    )
+    assert not await other.hotspot_saved()

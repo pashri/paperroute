@@ -338,9 +338,12 @@ def probe_due(*, state: State) -> bool:
     bool
         True on the first tick, once `PROBE_EVERY` has passed, or once
         `WATCH_EVERY` has passed while the Device screen shows; never
-        while a probe younger than `PROBE_EVERY` has not answered.
+        while a probe younger than `PROBE_EVERY` has not answered, nor
+        while Wi-Fi setup is open.
     """
     panel = state.panel
+    if panel.wifi is not None:
+        return False
     if panel.probed_at is None:
         return True
     since = state.now - panel.probed_at

@@ -212,7 +212,7 @@ async def test_start_setup_posts_networks_and_password() -> None:
     """Start scans, then starts the hotspot with a new password."""
     wifi = FakeWifi(networks=(HOME,), hotspot_ok=True)
     posted, fallback = await setup_work(wifi=wifi, effect=StartWifiSetup())
-    assert wifi.calls == ['scan', 'start']
+    assert wifi.calls == ['active', 'scan', 'start']
     assert len(wifi.passwords[0]) == 8
     assert posted == [
         HotspotStarted(networks=(HOME,), password=wifi.passwords[0]),
@@ -255,17 +255,37 @@ async def test_join_success_posts_joined() -> None:
     assert posted == [WifiJoined(ssid='Home')]
 
 
-async def test_stop_setup_stops_hotspot() -> None:
-    """Stop takes the hotspot down and says so."""
+async def test_stop_setup_brings_home_wifi_back() -> None:
+    """Stop takes the hotspot down, then rejoins the network it left."""
+    wifi = FakeWifi(active='u-home', networks=(HOME,), hotspot_ok=True)
+    ports = DevicePorts(wifi=wifi)
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    for effect in (StartWifiSetup(), StopWifiSetup()):
+        work, fallback = device_work(
+            ports=ports, effect=effect, queue=queue, builder=FakeBuilder(),
+        )
+        await work
+    assert wifi.calls == ['active', 'scan', 'start', 'stop', 'up u-home']
+    assert queue.get_nowait() == HotspotStarted(
+        networks=(HOME,), password=wifi.passwords[0],
+    )
+    assert queue.get_nowait() == WifiSetupStopped()
+    assert fallback == WifiSetupStopped()
+
+
+async def test_stop_setup_without_home_wifi() -> None:
+    """With no network to go back to, stop only takes the hotspot down."""
     wifi = FakeWifi()
-    posted, fallback = await setup_work(wifi=wifi, effect=StopWifiSetup())
+    posted, _ = await setup_work(wifi=wifi, effect=StopWifiSetup())
     assert wifi.calls == ['stop']
     assert posted == [WifiSetupStopped()]
-    assert fallback == WifiSetupStopped()
 
 
 async def test_leftover_hotspot_stopped() -> None:
     """Start-up stops a hotspot a crashed run left behind."""
-    wifi = FakeWifi()
+    wifi = FakeWifi(saved=True)
     await app_device.leftover_stopped(ports=DevicePorts(wifi=wifi))
-    assert wifi.calls == ['stop']
+    assert wifi.calls == ['saved', 'stop']
+    clean = FakeWifi()
+    await app_device.leftover_stopped(ports=DevicePorts(wifi=clean))
+    assert clean.calls == ['saved']

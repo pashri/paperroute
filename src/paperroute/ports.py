@@ -390,6 +390,36 @@ class WifiControl(Protocol):
     async def forget_all(self) -> None:
         """Delete every saved Wi-Fi profile."""
 
+    async def active_wifi(self) -> str | None:
+        """
+        Find the Wi-Fi connection in use.
+
+        Returns
+        -------
+        str | None
+            Its UUID, or None with none in use.
+        """
+
+    async def reconnect(self, *, uuid: str) -> None:
+        """
+        Bring a saved connection up again.
+
+        Parameters
+        ----------
+        uuid : str
+            The connection's UUID.
+        """
+
+    async def hotspot_saved(self) -> bool:
+        """
+        Say whether a setup hotspot profile exists.
+
+        Returns
+        -------
+        bool
+            True when one does.
+        """
+
 
 class Resets(Protocol):
     """Resets the settings or erases everything."""

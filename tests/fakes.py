@@ -552,6 +552,10 @@ class FakeWifi:
         Each hotspot password started with.
     joined : list[JoinRequest]
         Each join asked for.
+    active : str | None
+        What `active_wifi` answers.
+    saved : bool
+        What `hotspot_saved` answers.
     """
 
     link: WifiStatus = field(default_factory=WifiStatus)
@@ -562,6 +566,8 @@ class FakeWifi:
     calls: list[str] = field(default_factory=list)
     passwords: list[str] = field(default_factory=list)
     joined: list[JoinRequest] = field(default_factory=list)
+    active: str | None = None
+    saved: bool = False
 
     async def status(self) -> WifiStatus:
         """
@@ -629,6 +635,41 @@ class FakeWifi:
     async def forget_all(self) -> None:
         """Count the call."""
         self.forgotten += 1
+
+    async def active_wifi(self) -> str | None:
+        """
+        Record the call and give the fixed connection.
+
+        Returns
+        -------
+        str | None
+            `active`.
+        """
+        self.calls.append('active')
+        return self.active
+
+    async def reconnect(self, *, uuid: str) -> None:
+        """
+        Record the reconnect.
+
+        Parameters
+        ----------
+        uuid : str
+            The connection; recorded.
+        """
+        self.calls.append(f'up {uuid}')
+
+    async def hotspot_saved(self) -> bool:
+        """
+        Record the call and give the fixed answer.
+
+        Returns
+        -------
+        bool
+            `saved`.
+        """
+        self.calls.append('saved')
+        return self.saved
 
 
 def device_facts(*, key_set: bool = True) -> DeviceFacts:

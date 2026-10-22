@@ -32,6 +32,7 @@ from paperroute.core.messages import (
     Tick,
     WifiJoined,
     WifiJoinFailed,
+    WifiSetupStopped,
 )
 from paperroute.core.panel_views import WifiSetupView
 from paperroute.core.state import step
@@ -265,3 +266,20 @@ def test_late_hotspot_is_stopped() -> None:
     _, effects = step(pinned(), back)
     assert StopWifiSetup() in effects
     assert step(pinned(), HotspotFailed()) == (pinned(), ())
+
+
+def test_stopped_setup_probes() -> None:
+    """Once the hotspot is down the device's facts are asked for again."""
+    state, _ = step(hotspot(), UP)
+    state, effects = step(state, WifiSetupStopped())
+    assert ProbeDevice() in effects
+    assert state.panel.probing
+
+
+def test_no_probe_while_setup_open() -> None:
+    """The radio is not probed while setup drives it."""
+    state = hotspot()
+    for minutes in range(1, 4):
+        tick = Tick(now=START + timedelta(minutes=minutes))
+        state, effects = step(state, tick)
+        assert ProbeDevice() not in effects

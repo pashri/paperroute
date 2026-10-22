@@ -396,6 +396,39 @@ class NullWifi:
     async def forget_all(self) -> None:
         """Do nothing."""
 
+    async def active_wifi(self) -> str | None:
+        """
+        Find nothing.
+
+        Returns
+        -------
+        str | None
+            None.
+        """
+        return None
+
+    async def reconnect(self, *, uuid: str) -> None:
+        """
+        Do nothing.
+
+        Parameters
+        ----------
+        uuid : str
+            Ignored.
+        """
+        del uuid
+
+    async def hotspot_saved(self) -> bool:
+        """
+        Find nothing.
+
+        Returns
+        -------
+        bool
+            False.
+        """
+        return False
+
 
 class NmcliWifi:
     """
@@ -685,3 +718,58 @@ class NmcliWifi:
         """Delete every saved Wi-Fi profile, keeping wired ones."""
         for uuid in sorted(await self.profiles() or ()):
             await self.delete(uuid=uuid)
+
+    async def active_wifi(self) -> str | None:
+        """
+        Find the Wi-Fi connection active on the interface.
+
+        Returns
+        -------
+        str | None
+            Its UUID; None with none active or when nmcli fails.
+        """
+        shown = await self.run(
+            '-t', '-f', 'UUID,TYPE,DEVICE', 'connection', 'show', '--active',
+            verb='active',
+        )
+        if shown is None or shown[0] != 0:
+            return None
+        rows = [split_terse(line=line) for line in shown[1].splitlines()]
+        return next(
+            (
+                row[0]
+                for row in rows
+                if len(row) == 3 and row[1:] == [WIFI_TYPE, self.iface]
+            ),
+            None,
+        )
+
+    async def reconnect(self, *, uuid: str) -> None:
+        """
+        Bring a saved connection up again; a failure is only logged.
+
+        Parameters
+        ----------
+        uuid : str
+            The connection's UUID.
+        """
+        ran = await self.run('connection', 'up', 'uuid', uuid, verb='up')
+        if ran is None or ran[0] != 0:
+            logger.info('wifi reconnect failed', extra={'uuid': uuid})
+
+    async def hotspot_saved(self) -> bool:
+        """
+        Say whether a profile named HOTSPOT_NAME exists.
+
+        Returns
+        -------
+        bool
+            True when one is listed; False when nmcli fails.
+        """
+        shown = await self.run(
+            '-t', '-f', 'NAME', 'connection', 'show', verb='saved',
+        )
+        if shown is None or shown[0] != 0:
+            return False
+        names = [split_terse(line=line) for line in shown[1].splitlines()]
+        return [HOTSPOT_NAME] in names

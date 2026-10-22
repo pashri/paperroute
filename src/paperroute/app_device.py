@@ -45,6 +45,20 @@ type DeviceEffect = ProbeDevice | ResetDevice | SetupEffect
 PROBE_TIMEOUT: Final[float] = 10  # seconds
 
 
+@dataclass
+class HomeWifi:
+    """
+    The Wi-Fi connection in use when setup started.
+
+    Attributes
+    ----------
+    uuid : str | None
+        Its UUID, or None.
+    """
+
+    uuid: str | None = None
+
+
 @dataclass(frozen=True)
 class DevicePorts:
     """
@@ -63,6 +77,8 @@ class DevicePorts:
     radio : asyncio.Lock
         Held while Wi-Fi setup drives the radio, so its steps never
         overlap.
+    home : HomeWifi
+        The connection to go back to when setup ends without a join.
     """
 
     wifi: WifiControl = field(default_factory=NullWifi)
@@ -70,6 +86,7 @@ class DevicePorts:
     key: KeyStore | None = None
     resets: Resets = field(default_factory=NullResets)
     radio: asyncio.Lock = field(default_factory=asyncio.Lock)
+    home: HomeWifi = field(default_factory=HomeWifi)
 
 
 async def probe(*, ports: DevicePorts, queue: asyncio.Queue[Event]) -> None:
@@ -145,6 +162,7 @@ async def setup_started(
         Event queue.
     """
     async with ports.radio:
+        ports.home.uuid = await ports.wifi.active_wifi()
         networks = await ports.wifi.scan()
         password = hotspot_password()
         started = await ports.wifi.start_hotspot(password=password)
@@ -174,6 +192,7 @@ async def setup_join(
         await ports.wifi.stop_hotspot()
         outcome = await ports.wifi.join(request=effect.request)
         if outcome is JoinOutcome.JOINED:
+            ports.home.uuid = None
             await queue.put(WifiJoined(ssid=ssid))
             return
         back = await ports.wifi.start_hotspot(password=effect.hotspot)
@@ -185,7 +204,7 @@ async def setup_stopped(
     *, ports: DevicePorts, queue: asyncio.Queue[Event]
 ) -> None:
     """
-    Take the setup hotspot down and say so.
+    Take the setup hotspot down, rejoin the network it left, say so.
 
     Parameters
     ----------
@@ -194,7 +213,11 @@ async def setup_stopped(
     queue : asyncio.Queue[Event]
         Event queue.
     """
-    await leftover_stopped(ports=ports)
+    async with ports.radio:
+        await ports.wifi.stop_hotspot()
+        home, ports.home.uuid = ports.home.uuid, None
+        if home is not None:
+            await ports.wifi.reconnect(uuid=home)
     await queue.put(WifiSetupStopped())
 
 
@@ -208,6 +231,9 @@ async def leftover_stopped(*, ports: DevicePorts) -> None:
         Device adapters.
     """
     async with ports.radio:
+        if not await ports.wifi.hotspot_saved():
+            logger.debug('no setup hotspot left over')
+            return
         await ports.wifi.stop_hotspot()
 
 
@@ -235,6 +261,7 @@ def setup_work(
         case StartWifiSetup():
             return setup_started(ports=ports, queue=queue), HotspotFailed()
         case JoinWifi(request=request):
+            # Hotspot state unknown; timeout or cancel still stops it.
             failed = WifiJoinFailed(
                 ssid=request.ssid, outcome=JoinOutcome.FAILED, hotspot=False,
             )

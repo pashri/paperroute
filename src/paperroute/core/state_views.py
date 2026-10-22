@@ -4,19 +4,19 @@ from dataclasses import replace
 
 from paperroute.core.banners import device_banner
 from paperroute.core.chooser_steps import chooser_view
-from paperroute.core.chooser_view import ChooserView
 from paperroute.core.live import LiveDeparture, live_since, resolved
 from paperroute.core.map_requests import (
     map_effects,
     map_inputs,
     polled_positions,
 )
-from paperroute.core.map_view import STRIP_MAP_WIDTH, MapView, build_map_view
-from paperroute.core.messages import Effect, Render
+from paperroute.core.map_view import STRIP_MAP_WIDTH, build_map_view
+from paperroute.core.messages import Effect, Render, ScreenView
 from paperroute.core.panel_screens import panel_view
-from paperroute.core.panel_views import PanelView
+from paperroute.core.panel_views import PanelView, SleepView
 from paperroute.core.places import shown, shown_index
 from paperroute.core.saved import LiveView, Saved
+from paperroute.core.sleep import sleep_view
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import (
     StopInputs,
@@ -24,7 +24,7 @@ from paperroute.core.stop_view import (
     build_stop_view,
     pin_tag,
 )
-from paperroute.core.strip_model import StripInputs, StripMapView, StripView
+from paperroute.core.strip_model import StripInputs, StripMapView
 from paperroute.core.strip_opening import with_folds
 from paperroute.core.strip_select import kept_selection
 from paperroute.core.strip_state import clamped, request_strips, strip_inputs
@@ -162,9 +162,7 @@ def shown_strip(*, state: State, stop_view: StopView) -> StripInputs:
 
 def current_view(
     *, state: State, stop_view: StopView
-) -> (
-    StopView | MapView | StripView | StripMapView | ChooserView | PanelView
-):
+) -> ScreenView:
     """
     Build the view for the current state.
 
@@ -177,14 +175,16 @@ def current_view(
 
     Returns
     -------
-    StopView | MapView | StripView | StripMapView | ChooserView | PanelView
-        The confirm or open menu's screen, else the open chooser's
-        screen, else the Live view shown; the Strip + map's map at its
-        own width.
+    ScreenView
+        The confirm or open menu's screen, else the sleep screen, else
+        the open chooser's screen, else the Live view shown; the
+        Strip + map's map at its own width.
     """
-    panel = panel_view(state=state)
-    if panel is not None:
-        return panel
+    overlay: PanelView | SleepView | None = panel_view(state=state)
+    if overlay is None and state.panel.asleep:
+        overlay = sleep_view(state=state, stop_view=stop_view)
+    if overlay is not None:
+        return overlay
     if state.chooser is not None:
         return chooser_view(state=state, chooser=state.chooser)
     match state.view:

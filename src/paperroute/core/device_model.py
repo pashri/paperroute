@@ -257,6 +257,8 @@ class Panel:
         When a knob last touched the open menu, or None.
     probing : bool
         Whether a probe asked for has not answered yet.
+    asleep : bool
+        Whether the screen is asleep.
     """
 
     key_set: bool | None = None
@@ -267,6 +269,7 @@ class Panel:
     confirm: Confirm | None = None
     touched_at: datetime | None = None
     probing: bool = False
+    asleep: bool = False
 
 
 class JoinOutcome(StrEnum):

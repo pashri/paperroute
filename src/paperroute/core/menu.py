@@ -26,6 +26,7 @@ from paperroute.core.messages import (
     PowerAction,
     PowerRequested,
 )
+from paperroute.core.sleep import slept
 from paperroute.core.state_model import State
 from paperroute.core.state_views import settled
 
@@ -194,7 +195,7 @@ def row_chosen(
     -------
     tuple[State, tuple[Effect, ...]]
         The Device screen with a probe when one is due, the phone
-        screen, or a confirm;
+        screen, a confirm, or the sleep screen;
         unchanged for the rows not built yet.
     """
     menu = state.panel.menu or Menu()
@@ -212,6 +213,8 @@ def row_chosen(
     if row is MenuRow.PHONE:
         menu = replace(menu, screen=PanelScreen.PHONE)
         return settled(state=with_menu(state=state, menu=menu))
+    if row is MenuRow.SLEEP:
+        return settled(state=slept(state=state))
     return state, ()
 
 

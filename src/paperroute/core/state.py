@@ -92,6 +92,7 @@ from paperroute.core.places import (
 from paperroute.core.quota import QUOTA_SAVE_EVERY, quota_only, with_calls
 from paperroute.core.rebuild import rebuild_effects, rebuilt, seen_schema
 from paperroute.core.saved import Saved
+from paperroute.core.sleep import awake
 from paperroute.core.state_model import (
     FEED_IDLE,
     POLL_EVERY,
@@ -455,6 +456,36 @@ def on_knob(
     return reloaded(before=state, after=after, effects=effects)
 
 
+def woken(
+    *, state: State, event: KnobEvent | KnobsHeld | ConfirmAsked
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Wake the screen, polling the feeds at once.
+
+    The touch that wakes is not acted on. A phone's ask is the
+    exception: it wakes the screen and shows its confirm, in one redraw.
+
+    Parameters
+    ----------
+    state : State
+        State, asleep.
+    event : KnobEvent | KnobsHeld | ConfirmAsked
+        What woke it.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State awake and the fetches, with the Live view drawn, or the
+        confirm when the event was an ask the panel shows.
+    """
+    state, polls = poll_effects(state=awake(state=state))
+    if isinstance(event, ConfirmAsked):
+        asked, effects = on_asked(state=state, event=event)
+        if effects:
+            return asked, (*polls, *effects)
+    return settled(state=state, effects=polls)
+
+
 def on_touch(
     *, state: State, event: KnobEvent | KnobsHeld | ConfirmAsked
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -474,8 +505,11 @@ def on_touch(
         A phone's ask shows a confirm; a touch answers the confirm shown,
         else works the open menu, else holding both knobs opens it, else
         it acts on the Live view. A touch while the menu is open is
-        noted, so the menu stays open.
+        noted, so the menu stays open. While asleep the first touch only
+        wakes the screen.
     """
+    if state.panel.asleep:
+        return woken(state=state, event=event)
     if isinstance(event, ConfirmAsked):
         return on_asked(state=state, event=event)
     if state.panel.confirm is not None:

@@ -1,6 +1,7 @@
 """Serve the device's own pages: Wi-Fi setup from a phone."""
 
 import html
+import logging
 from collections.abc import Callable, Mapping
 from http import HTTPStatus
 from pathlib import Path
@@ -18,6 +19,8 @@ from paperroute.core.device_model import (
 )
 from paperroute.core.messages import ApiKeyChanged, Event, JoinAsked
 from paperroute.ports import KeyStore
+
+logger = logging.getLogger(__name__)
 
 HIDDEN: Final[str] = '__hidden__'  # the radio value for a hidden network
 STRONG: Final[int] = 67  # signal percent at or above which it is strong
@@ -39,6 +42,8 @@ BAD_SSID: Final[str] = (
 )
 BAD_PASSWORD: Final[str] = 'Wi-Fi passwords are 8 to 63 characters.'
 BAD_KEY: Final[str] = "That doesn't look like a TfNSW API key."
+UNSUPPORTED: Final[str] = 'That network is not supported.'
+KEY_NOT_SAVED: Final[str] = "Couldn't save the key on the device. Try again."
 KEY_FIELD: Final[str] = """
       <label for="api-key">TfNSW API key</label>
       <input id="api-key" name="api_key" type="text" autocomplete="off"
@@ -48,7 +53,7 @@ FORM: Final[str] = """<form method="post" action="/setup">
         <legend>Your Wi-Fi</legend>
 {networks}
         <label>
-          <input type="radio" name="network" value="__hidden__">
+          <input type="radio" name="network" value="__hidden__" required>
           Hidden network
         </label>
         <label for="hidden-ssid">Hidden network name</label>
@@ -65,7 +70,7 @@ FORM: Final[str] = """<form method="post" action="/setup">
       <button type="submit">Join</button>
     </form>"""
 RADIO: Final[str] = """        <label>
-          <input type="radio" name="network" value="{ssid}"{disabled}>
+          <input type="radio" name="network" value="{ssid}" required{disabled}>
           {label}
         </label>"""
 
@@ -156,7 +161,9 @@ def setup_form(*, status: DeviceStatus) -> str:
     )
 
 
-def join_request(*, fields: Mapping[str, str]) -> JoinRequest | str:
+def join_request(
+    *, fields: Mapping[str, str], networks: tuple[WifiNetwork, ...] = ()
+) -> JoinRequest | str:
     """
     Read the network asked for from the posted form.
 
@@ -164,6 +171,8 @@ def join_request(*, fields: Mapping[str, str]) -> JoinRequest | str:
     ----------
     fields : Mapping[str, str]
         `network`, `hidden_ssid` and `password`.
+    networks : tuple[WifiNetwork, ...]
+        The scanned networks; enterprise ones are refused.
 
     Returns
     -------
@@ -175,6 +184,10 @@ def join_request(*, fields: Mapping[str, str]) -> JoinRequest | str:
     password = fields.get('password', '')
     if not valid_ssid(ssid=ssid):
         return BAD_SSID
+    if not hidden and any(
+        network.enterprise and network.ssid == ssid for network in networks
+    ):
+        return UNSUPPORTED
     if not valid_password(password=password):
         return BAD_PASSWORD
     return JoinRequest(ssid=ssid, password=password, hidden=hidden)
@@ -234,11 +247,11 @@ class DevicePages:
         state_file: Path | None,
     ) -> None:
         self._status = status
-        self.feeds = feeds
+        self._feeds = feeds
         self._key = key
         self._post = post
-        self.error_log = error_log
-        self.state_file = state_file
+        self._error_log = error_log
+        self._state_file = state_file
 
     def routes(self) -> list[web.RouteDef]:
         """
@@ -357,21 +370,30 @@ class DevicePages:
         -------
         web.Response
             409 when the hotspot is not up, 400 with the reason for a
-            bad network, password or key, otherwise 303 to the joining
-            page.
+            bad network, password or key, 500 when the key can't be
+            saved, otherwise 303 to the joining page. A key is taken
+            only on a device without one.
         """
-        if self._hotspot() is None:
+        device = self._hotspot()
+        if device is None or device.setup is None:
             return self._page(status=HTTPStatus.CONFLICT)
         fields = await form_fields(request=request)
-        asked = join_request(fields=fields)
+        asked = join_request(fields=fields, networks=device.setup.networks)
         if isinstance(asked, str):
             return self._refuse(reason=asked)
-        if not self._store_key(key=fields.get('api_key', '').strip()):
-            return self._refuse(reason=BAD_KEY)
+        key = fields.get('api_key', '').strip()
+        refusal = self._store_key(key=key if device.key_set is False else '')
+        if refusal is not None:
+            return refusal
         self._post(JoinAsked(request=asked))
         raise web.HTTPSeeOther(location='/setup?joining=1')
 
-    def _refuse(self, *, reason: str) -> web.Response:
+    def _refuse(
+        self,
+        *,
+        reason: str,
+        status: HTTPStatus = HTTPStatus.BAD_REQUEST,
+    ) -> web.Response:
         """
         Draw the page again with why the post was refused.
 
@@ -379,18 +401,17 @@ class DevicePages:
         ----------
         reason : str
             The refusal.
+        status : HTTPStatus
+            The response status.
 
         Returns
         -------
         web.Response
-            A 400 page with an empty form.
+            The page with an empty form.
         """
-        return self._page(
-            news=notice(text=reason, alert=True),
-            status=HTTPStatus.BAD_REQUEST,
-        )
+        return self._page(news=notice(text=reason, alert=True), status=status)
 
-    def _store_key(self, *, key: str) -> bool:
+    def _store_key(self, *, key: str) -> web.Response | None:
         """
         Store a posted key and tell the app.
 
@@ -401,14 +422,21 @@ class DevicePages:
 
         Returns
         -------
-        bool
-            False when the store refused the key.
+        web.Response | None
+            A refusal page when the key is invalid or can't be saved,
+            else None.
         """
         if not key:
-            return True
+            return None
         try:
             self._key.write(key=key)
         except ValueError:
-            return False
+            return self._refuse(reason=BAD_KEY)
+        except OSError:
+            logger.exception('could not save the API key file')
+            return self._refuse(
+                reason=KEY_NOT_SAVED,
+                status=HTTPStatus.INTERNAL_SERVER_ERROR,
+            )
         self._post(ApiKeyChanged(present=True))
-        return True
+        return None

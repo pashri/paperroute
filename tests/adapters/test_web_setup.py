@@ -1,6 +1,7 @@
 """Tests for the phone setup page."""
 
 import html
+import re
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from http import HTTPStatus
@@ -117,7 +118,7 @@ async def test_setup_page_lists_networks(client: Client) -> None:
     assert 'Home (strong)' in page
     assert 'Cafe:Wi-Fi (good) (open)' in page
     assert 'Corp (weak) (not supported)' in page
-    assert 'value="Corp" disabled' in page
+    assert 'value="Corp" required disabled' in page
     assert 'value="__hidden__"' in page
     assert 'Hidden network' in page
     assert 'name="hidden_ssid"' in page
@@ -253,6 +254,8 @@ async def test_setup_post_writes_key_first(
     setup: Setup, client: Client
 ) -> None:
     """A given key is stored and announced before the join."""
+    assert setup.status is not None
+    setup.status = replace(setup.status, key_set=False)
     response = await _post(client=client, data={
         'network': 'Home', 'password': 'pw12345678', 'api_key': GOOD_KEY,
     })
@@ -268,6 +271,8 @@ async def test_setup_post_bad_key_no_join(
     setup: Setup, client: Client
 ) -> None:
     """A key the store refuses stops the join."""
+    assert setup.status is not None
+    setup.status = replace(setup.status, key_set=False)
 
     def refuse(*, key: str) -> None:
         del key
@@ -361,3 +366,55 @@ async def test_setup_refuses_public_address(
         assert not setup.posted
     finally:
         await client.close()
+
+
+async def test_setup_post_keeps_existing_key(
+    setup: Setup, client: Client
+) -> None:
+    """A key posted to a device that has one is ignored."""
+    response = await _post(client=client, data={
+        'network': 'Home', 'password': 'pw12345678', 'api_key': GOOD_KEY,
+    })
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert setup.keys.key == 'already-set-key-123'
+    assert [type(event) for event in setup.posted] == [JoinAsked]
+
+
+async def test_setup_post_refuses_enterprise(
+    setup: Setup, client: Client
+) -> None:
+    """A scanned enterprise network is refused like its label says."""
+    response = await _post(
+        client=client, data={'network': 'Corp', 'password': 'pw12345678'},
+    )
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert 'That network is not supported.' in await response.text()
+    assert not setup.posted
+
+
+async def test_setup_post_key_save_fails(
+    setup: Setup, client: Client
+) -> None:
+    """A key that can't be written is a 500 and no join."""
+
+    def fail(*, key: str) -> None:
+        del key
+        raise OSError('disk full')
+
+    assert setup.status is not None
+    setup.status = replace(setup.status, key_set=False)
+    setup.keys.write = fail  # type: ignore[method-assign]
+    response = await _post(client=client, data={
+        'network': 'Home', 'password': 'pw12345678', 'api_key': GOOD_KEY,
+    })
+    assert response.status == HTTPStatus.INTERNAL_SERVER_ERROR
+    assert "Couldn&#x27;t save the key on the device. Try again." in (
+        await response.text()
+    )
+    assert not setup.posted
+
+
+async def test_setup_radios_required(client: Client) -> None:
+    """The browser asks for a network before posting."""
+    page = await (await client.get('/setup')).text()
+    assert len(re.findall(r'name="network" value="[^"]*" required', page)) == 4

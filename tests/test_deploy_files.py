@@ -1757,6 +1757,19 @@ def test_provision_installs_polkitd() -> None:
     )
 
 
+def test_provision_requires_network_manager_running() -> None:
+    """provision stops unless NetworkManager runs after the install."""
+    path = BIN / 'provision-device'
+    assert commands(path=path, word='is-active') == [
+        'systemctl is-active --quiet NetworkManager'
+        " || fail 'NetworkManager is not running'",
+    ]
+    text = script_text(path=path)
+    assert text.index('network-manager dnsmasq-base') < text.index(
+        'is-active --quiet NetworkManager',
+    )
+
+
 def test_provision_installs_network_manager() -> None:
     """provision installs NetworkManager and needs the network rule."""
     installs = commands(path=BIN / 'provision-device', word='apt-get')

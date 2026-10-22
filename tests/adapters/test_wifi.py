@@ -1,6 +1,7 @@
 """Tests for driving Wi-Fi through nmcli."""
 
 import secrets
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 import pytest
@@ -21,7 +22,7 @@ from paperroute.core.device_model import (
     WifiNetwork,
     WifiStatus,
 )
-from tests.adapters.fake_nmcli import calls, make_nmcli
+from tests.adapters.fake_nmcli import Reply, calls, make_nmcli
 
 WRONG_PASSWORD_REPLY = (
     4,
@@ -31,7 +32,9 @@ WRONG_PASSWORD_REPLY = (
 
 
 def wifi_on(
-    *, tmp_path: Path, replies: dict[str, tuple[int, str]] | None = None,
+    *,
+    tmp_path: Path,
+    replies: Mapping[str, Reply | Sequence[Reply]] | None = None,
 ) -> tuple[NmcliWifi, Path]:
     """
     Make an adapter running the stand-in.
@@ -40,7 +43,7 @@ def wifi_on(
     ----------
     tmp_path : Path
         Test folder.
-    replies : dict[str, tuple[int, str]] | None
+    replies : Mapping[str, Reply | Sequence[Reply]] | None
         Stand-in replies by argument prefix.
 
     Returns
@@ -131,22 +134,72 @@ async def test_stop_hotspot_downs_and_deletes(tmp_path: Path) -> None:
     ]
 
 
+PROFILES = ['-t', '-f', 'UUID,TYPE', 'connection', 'show']
+CONNECT_HOME = [
+    '--wait', '30', 'device', 'wifi', 'connect', 'Home',
+    'password', 'hunter22', 'ifname', 'wlan0',
+]
+
+
 async def test_join_wrong_password(tmp_path: Path) -> None:
-    """A refused password is reported and its profile deleted."""
+    """A refused password is reported and only the new profile deleted."""
     wifi, log = wifi_on(
-        tmp_path=tmp_path, replies={'--wait': WRONG_PASSWORD_REPLY},
+        tmp_path=tmp_path,
+        replies={
+            '--wait': WRONG_PASSWORD_REPLY,
+            '-t -f UUID,TYPE': [
+                (0, 'u-old:802-11-wireless\n'),
+                (0, 'u-old:802-11-wireless\nu-new:802-11-wireless\n'),
+            ],
+        },
     )
     outcome = await wifi.join(
         request=JoinRequest(ssid='Home', password='hunter22'),
     )
     assert outcome is JoinOutcome.WRONG_PASSWORD
     assert calls(log=log) == [
-        [
-            '--wait', '30', 'device', 'wifi', 'connect', 'Home',
-            'password', 'hunter22', 'ifname', 'wlan0',
-        ],
-        ['connection', 'delete', 'id', 'Home'],
+        PROFILES,
+        CONNECT_HOME,
+        PROFILES,
+        ['connection', 'delete', 'uuid', 'u-new'],
     ]
+
+
+async def test_failed_join_keeps_wired_profile_named_like_ssid(
+    tmp_path: Path,
+) -> None:
+    """A wired profile that shares the SSID's name is never deleted."""
+    wifi, log = wifi_on(
+        tmp_path=tmp_path,
+        replies={
+            '--wait': (10, 'Error: No network with SSID Home'),
+            '-t -f UUID,TYPE': (0, 'u-wired:802-3-ethernet\n'),
+        },
+    )
+    outcome = await wifi.join(
+        request=JoinRequest(ssid='Home', password='hunter22'),
+    )
+    assert outcome is JoinOutcome.NOT_FOUND
+    assert calls(log=log) == [PROFILES, CONNECT_HOME, PROFILES]
+
+
+async def test_failed_retry_keeps_saved_wifi_profile(
+    tmp_path: Path,
+) -> None:
+    """A wrong password for a saved network leaves its profile."""
+    wifi, log = wifi_on(
+        tmp_path=tmp_path,
+        replies={
+            '--wait': WRONG_PASSWORD_REPLY,
+            '-t -f UUID,TYPE': (0, 'u-home:802-11-wireless\n'),
+        },
+    )
+    outcome = await wifi.join(
+        request=JoinRequest(ssid='Home', password='hunter22'),
+    )
+    assert outcome is JoinOutcome.WRONG_PASSWORD
+    assert ['connection', 'delete', 'uuid', 'u-home'] not in calls(log=log)
+    assert calls(log=log)[-1] == PROFILES
 
 
 async def test_join_hidden_and_open_argv(tmp_path: Path) -> None:
@@ -156,13 +209,19 @@ async def test_join_hidden_and_open_argv(tmp_path: Path) -> None:
         request=JoinRequest(ssid='Back room', hidden=True),
     )
     assert outcome is JoinOutcome.JOINED
-    assert calls(log=log) == [[
-        '--wait', '30', 'device', 'wifi', 'connect', 'Back room',
-        'ifname', 'wlan0', 'hidden', 'yes',
-    ]]
+    assert calls(log=log) == [
+        PROFILES,
+        [
+            '--wait', '30', 'device', 'wifi', 'connect', 'Back room',
+            'ifname', 'wlan0', 'hidden', 'yes',
+        ],
+    ]
 
 
-@pytest.mark.parametrize('ssid', ['', 'a' * 33, 'a\nb', 'a\x00b'])
+@pytest.mark.parametrize(
+    'ssid',
+    ['', 'a' * 33, 'a\nb', 'a\x00b', 'help', 'HELP', '-h', '--help', '-Help'],
+)
 async def test_join_refuses_bad_ssid(tmp_path: Path, ssid: str) -> None:
     """A bad SSID fails without running nmcli."""
     wifi, log = wifi_on(tmp_path=tmp_path)
@@ -171,7 +230,10 @@ async def test_join_refuses_bad_ssid(tmp_path: Path, ssid: str) -> None:
     assert calls(log=log) == []
 
 
-@pytest.mark.parametrize('password', ['short', 'a' * 64, 'abcdefgh\n'])
+@pytest.mark.parametrize(
+    'password',
+    ['short', 'a' * 65, 'g' * 64, 'abcdefgh\n', 'caf\u00e9abcd', 'abc\tdefg'],
+)
 async def test_join_refuses_bad_password(
     tmp_path: Path, password: str,
 ) -> None:
@@ -182,6 +244,18 @@ async def test_join_refuses_bad_password(
     )
     assert outcome is JoinOutcome.FAILED
     assert calls(log=log) == []
+
+
+@pytest.mark.parametrize('password', ['a' * 8, ' ~' * 31 + 'x', 'aF09' * 16])
+async def test_join_accepts_wpa_passwords(
+    tmp_path: Path, password: str,
+) -> None:
+    """Printable ASCII of 8 to 63 characters, or 64 hex digits."""
+    wifi, _ = wifi_on(tmp_path=tmp_path)
+    outcome = await wifi.join(
+        request=JoinRequest(ssid='Home', password=password),
+    )
+    assert outcome is JoinOutcome.JOINED
 
 
 async def test_scan(tmp_path: Path) -> None:
@@ -204,15 +278,15 @@ async def test_forget_all_deletes_only_wifi(tmp_path: Path) -> None:
     wifi, log = wifi_on(
         tmp_path=tmp_path,
         replies={
-            '-t -f NAME,TYPE': (
-                0, 'Home:802-11-wireless\nWired 1:802-3-ethernet\n',
+            '-t -f UUID,TYPE': (
+                0, 'u-home:802-11-wireless\nu-wired:802-3-ethernet\n',
             ),
         },
     )
     await wifi.forget_all()
     assert calls(log=log) == [
-        ['-t', '-f', 'NAME,TYPE', 'connection', 'show'],
-        ['connection', 'delete', 'id', 'Home'],
+        PROFILES,
+        ['connection', 'delete', 'uuid', 'u-home'],
     ]
 
 
@@ -247,6 +321,14 @@ async def test_status_without_link(tmp_path: Path) -> None:
     """Managed but not joined: no SSID, address or signal."""
     wifi, _ = wifi_on(tmp_path=tmp_path)
     assert await wifi.status() == WifiStatus(managed=True)
+
+
+async def test_failing_nmcli_is_unmanaged(tmp_path: Path) -> None:
+    """An nmcli that runs but fails doesn't count as managed."""
+    wifi, _ = wifi_on(
+        tmp_path=tmp_path, replies={'-t -f ACTIVE,SSID': (8, 'not running')},
+    )
+    assert await wifi.status() == WifiStatus(managed=False)
 
 
 async def test_missing_nmcli_is_unmanaged(tmp_path: Path) -> None:

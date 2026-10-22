@@ -29,6 +29,11 @@ WPA_MIN: Final[int] = 8
 WPA_MAX: Final[int] = 63
 FORBIDDEN: Final[frozenset[str]] = frozenset({'\x00', '\n', '\r'})
 WIFI_TYPE: Final[str] = '802-11-wireless'
+PSK_HEX_LENGTH: Final[int] = 64
+HEX_DIGITS: Final[frozenset[str]] = frozenset('0123456789abcdefABCDEF')
+HELP_WORDS: Final[frozenset[str]] = frozenset(
+    {'help', '-h', '--help', '-help'},
+)
 
 
 def hotspot_password(
@@ -179,6 +184,54 @@ def valid_text(*, text: str) -> bool:
     return not FORBIDDEN & set(text)
 
 
+def valid_ssid(*, ssid: str) -> bool:
+    """
+    Check an SSID can be passed to nmcli.
+
+    nmcli reads a lone ``help`` or ``-h`` as a request for help and
+    exits 0, which would look like a join.
+
+    Parameters
+    ----------
+    ssid : str
+        Network name.
+
+    Returns
+    -------
+    bool
+        True for 1 to 32 bytes without NUL or line breaks that isn't a
+        help word.
+    """
+    return (
+        0 < len(ssid.encode()) <= SSID_MAX_BYTES
+        and valid_text(text=ssid)
+        and ssid.lower() not in HELP_WORDS
+    )
+
+
+def valid_password(*, password: str) -> bool:
+    """
+    Check a password is one WPA2 takes.
+
+    Parameters
+    ----------
+    password : str
+        Password; empty for an open network.
+
+    Returns
+    -------
+    bool
+        True when empty, 8 to 63 printable ASCII characters, or 64 hex
+        digits.
+    """
+    if len(password) == PSK_HEX_LENGTH:
+        return set(password) <= HEX_DIGITS
+    return not password or (
+        WPA_MIN <= len(password) <= WPA_MAX
+        and all(' ' <= char <= '~' for char in password)
+    )
+
+
 def valid_request(*, request: JoinRequest) -> bool:
     """
     Check an SSID and password can be passed to nmcli.
@@ -191,16 +244,30 @@ def valid_request(*, request: JoinRequest) -> bool:
     Returns
     -------
     bool
-        True for a 1 to 32 byte SSID and an empty or 8 to 63 character
-        password, neither holding NUL or line breaks.
+        True when both the SSID and the password are valid.
     """
-    size = len(request.ssid.encode())
-    password = request.password
-    return (
-        0 < size <= SSID_MAX_BYTES
-        and (not password or WPA_MIN <= len(password) <= WPA_MAX)
-        and valid_text(text=request.ssid)
-        and valid_text(text=password)
+    return valid_ssid(ssid=request.ssid) and valid_password(
+        password=request.password,
+    )
+
+
+def wifi_uuids(*, text: str) -> frozenset[str]:
+    """
+    Pick the Wi-Fi profiles out of a UUID,TYPE listing.
+
+    Parameters
+    ----------
+    text : str
+        ``nmcli -t -f UUID,TYPE connection show`` output.
+
+    Returns
+    -------
+    frozenset[str]
+        UUIDs of the 802-11-wireless profiles.
+    """
+    rows = [split_terse(line=line) for line in text.splitlines()]
+    return frozenset(
+        row[0] for row in rows if len(row) == 2 and row[1] == WIFI_TYPE
     )
 
 
@@ -373,7 +440,7 @@ class NmcliWifi:
         -------
         tuple[int, str] | None
             Exit code and combined output; None when nmcli could not
-            start or ran out of time.
+            start or ran out of time. A cancelled run kills nmcli.
         """
         try:
             process = await asyncio.create_subprocess_exec(
@@ -391,10 +458,12 @@ class NmcliWifi:
                 process.communicate(), timeout=COMMAND_TIMEOUT_S,
             )
         except TimeoutError:
-            process.kill()
-            await process.wait()
             logger.error('nmcli timed out', extra={'verb': verb})
             return None
+        finally:
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
         return process.returncode or 0, output.decode(errors='replace')
 
     async def status(self) -> WifiStatus:
@@ -404,14 +473,14 @@ class NmcliWifi:
         Returns
         -------
         WifiStatus
-            Not managed when nmcli can't run.
+            Not managed when nmcli can't run or fails.
         """
         listed = await self.run(
             '-t', '-f', 'ACTIVE,SSID', 'device', 'wifi', 'list',
             '--rescan', 'no',
             verb='status',
         )
-        if listed is None:
+        if listed is None or listed[0] != 0:
             return WifiStatus(managed=False)
         rows = [split_terse(line=line) for line in listed[1].splitlines()]
         ssid = next(
@@ -498,7 +567,9 @@ class NmcliWifi:
 
     async def join(self, *, request: JoinRequest) -> JoinOutcome:
         """
-        Join a network; delete its profile unless it joined.
+        Join a network; delete the profile it made unless it joined.
+
+        Profiles that were there before are kept, whatever their name.
 
         Parameters
         ----------
@@ -514,6 +585,7 @@ class NmcliWifi:
         if not valid_request(request=request):
             logger.warning('wifi join refused: bad ssid or password')
             return JoinOutcome.FAILED
+        before = await self.profiles()
         ran = await self.run(
             *connect_argv(request=request, iface=self.iface), verb='join',
         )
@@ -525,32 +597,45 @@ class NmcliWifi:
         logger.info(
             'wifi join', extra={'ssid': request.ssid, 'outcome': outcome},
         )
-        if outcome is not JoinOutcome.JOINED:
-            await self.delete(name=request.ssid)
+        if outcome is not JoinOutcome.JOINED and before is not None:
+            after = await self.profiles()
+            for uuid in sorted((after or frozenset()) - before):
+                await self.delete(uuid=uuid)
         return outcome
 
-    async def delete(self, *, name: str) -> None:
+    async def profiles(self) -> frozenset[str] | None:
         """
-        Delete a connection profile by name.
+        List the saved Wi-Fi profiles.
 
-        Parameters
-        ----------
-        name : str
-            Profile name.
+        Returns
+        -------
+        frozenset[str] | None
+            Their UUIDs; None when they could not be listed.
         """
-        ran = await self.run('connection', 'delete', 'id', name, verb='forget')
-        if ran is None or ran[0] != 0:
-            logger.info('profile delete failed', extra={'ssid': name})
-
-    async def forget_all(self) -> None:
-        """Delete every saved Wi-Fi profile, keeping wired ones."""
         shown = await self.run(
-            '-t', '-f', 'NAME,TYPE', 'connection', 'show', verb='profiles',
+            '-t', '-f', 'UUID,TYPE', 'connection', 'show', verb='profiles',
         )
         if shown is None or shown[0] != 0:
             logger.error('wifi profiles could not be listed')
-            return
-        for line in shown[1].splitlines():
-            fields = split_terse(line=line)
-            if len(fields) == 2 and fields[1] == WIFI_TYPE:
-                await self.delete(name=fields[0])
+            return None
+        return wifi_uuids(text=shown[1])
+
+    async def delete(self, *, uuid: str) -> None:
+        """
+        Delete a connection profile.
+
+        Parameters
+        ----------
+        uuid : str
+            Profile UUID.
+        """
+        ran = await self.run(
+            'connection', 'delete', 'uuid', uuid, verb='forget',
+        )
+        if ran is None or ran[0] != 0:
+            logger.info('profile delete failed', extra={'uuid': uuid})
+
+    async def forget_all(self) -> None:
+        """Delete every saved Wi-Fi profile, keeping wired ones."""
+        for uuid in sorted(await self.profiles() or ()):
+            await self.delete(uuid=uuid)

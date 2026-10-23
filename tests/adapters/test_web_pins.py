@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from html.parser import HTMLParser
 from http import HTTPStatus
 
@@ -13,13 +14,23 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_pins import (
     SEEN_POLL_S,
     SEEN_WAIT_S,
+    draft_of,
     pin_label,
     pin_line,
 )
-from paperroute.core.messages import Event, PinDeleted, PinMoved, PinsOrdered
-from paperroute.core.model import Pin, StopPlace, pin_ref
+from paperroute.core.chooser import Choice
+from paperroute.core.messages import (
+    Event,
+    PinDeleted,
+    PinMoved,
+    PinSaved,
+    PinsOrdered,
+)
+from paperroute.core.model import Pin, RouteKind, StopPlace, pin_ref
+from paperroute.core.pin_choices import StopMatch
 from paperroute.observers import PinsSeen
 from tests.adapters.test_web_device import Device
+from tests.fake_pins import FakePinOptions
 
 Client = TestClient[web.Request, web.Application]
 
@@ -81,9 +92,13 @@ class Pins:
                 )
 
 
-async def _client(*, pins: Pins) -> Client:
+async def _client(
+    *, pins: Pins, options: FakePinOptions | None = None,
+) -> Client:
     """Start a client of a display wired to the fake pins."""
-    display = WebDisplay(device=Device().pages(), pins=pins.get)
+    display = WebDisplay(
+        device=Device().pages(), pins=pins.get, options=options,
+    )
     display.bind(post=pins.posted.append)
     display.pins_sleep = pins.sleep
     client = TestClient(TestServer(display.app()))
@@ -390,3 +405,231 @@ async def test_page_works_without_script(client: Client) -> None:
     parser = Controls()
     parser.feed(await (await client.get('/pins')).text())
     assert parser.loose == 0
+
+
+CENTRAL = StopPlace(stop_id='C', name='Central', point=None)
+JUNCTION = StopPlace(stop_id='J', name='Bondi Junction', point=None)
+REDFERN = StopPlace(stop_id='R', name='Redfern', point=None)
+BUS_STOP = StopPlace(stop_id='B2', name='Oxford St', point=None)
+TOWN_HALL = StopPlace(stop_id='TH', name='Town Hall', point=None)
+SAVED = Pin(
+    origin=BUS_STOP,
+    destination=TOWN_HALL,
+    kind=RouteKind.BUS,
+    routes=('811',),
+    nickname='Shops',
+)
+LOST = Pin(
+    origin=StopPlace(stop_id='OLD', name='Old Stop', point=(1.0, 2.0)),
+    kind=RouteKind.BUS,
+    routes=('809',),
+    missing=True,
+)
+
+
+def _options() -> FakePinOptions:
+    """C on T1/T2 and B2 on 809/811."""
+    return FakePinOptions(
+        places={place.stop_id: place for place in (
+            CENTRAL, JUNCTION, REDFERN, BUS_STOP, TOWN_HALL,
+        )},
+        lines={
+            ('C', RouteKind.TRAIN): (
+                Choice(key='T1', label='North Shore', badge='T1'),
+                Choice(key='T2', label='Leppington', badge='T2'),
+            ),
+            ('B2', RouteKind.BUS): (
+                Choice(key='809', label='809', badge='809'),
+                Choice(key='811', label='811', badge='811'),
+            ),
+        },
+        to={
+            ('C', 'T1'): (JUNCTION, REDFERN),
+            ('B2', '811'): (TOWN_HALL,),
+        },
+        only={
+            ('C', RouteKind.TRAIN): ('T1', 'T2'),
+            ('B2', RouteKind.BUS): ('809', '811'),
+        },
+        near=(BUS_STOP,),
+        found=(
+            StopMatch(
+                place=CENTRAL, kinds=(RouteKind.TRAIN,), routes=('T1', 'T2'),
+            ),
+        ),
+    )
+
+
+@pytest.fixture(name='editor')
+async def _editor(pins: Pins) -> AsyncIterator[Client]:
+    """A client whose display has the fake timetable."""
+    pins.seen = PinsSeen(pins=(SAVED, LOST), shown=0, revision=3)
+    client = await _client(pins=pins, options=_options())
+    yield client
+    await client.close()
+
+
+FULL: dict[str, str | list[str]] = {
+    'stop': 'C', 'kind': 'train', 'route': 'T1', 'to': 'J',
+    'only': ['T2'], 'nickname': 'Home',
+}
+
+
+def _form(fields: dict[str, str | list[str]]) -> list[tuple[str, str]]:
+    """Flatten form fields, repeating list values."""
+    return [
+        (name, item)
+        for name, value in fields.items()
+        for item in ([value] if isinstance(value, str) else value)
+    ]
+
+
+def test_draft_of_reads_fields() -> None:
+    """Fields are read and an unknown kind is dropped."""
+    draft = draft_of(
+        query={'stop': 'C', 'kind': 'boat', 'ref': 'x'}, only=['T1'],
+    )
+    assert (draft.stop, draft.kind, draft.ref) == ('C', None, 'x')
+    assert draft.only == ('T1',)
+    assert draft_of(query={'kind': 'train'}, only=[]).kind is RouteKind.TRAIN
+
+
+async def test_search_lists_matches(editor: Client) -> None:
+    """A match links to its editor with its kinds and routes."""
+    text = await (await editor.get('/pins/new?q=c%20st')).text()
+    assert 'href="/pins/edit?stop=C"' in text
+    assert 'Train · T1 T2' in text
+
+
+async def test_search_too_short(editor: Client) -> None:
+    """One letter is not enough."""
+    text = await (await editor.get('/pins/new?q=c')).text()
+    assert 'Type at least 2 letters.' in text
+
+
+async def test_search_without_hits(pins: Pins) -> None:
+    """No hits says so, quoting the text."""
+    client = await _client(pins=pins, options=FakePinOptions())
+    text = await (await client.get('/pins/new?q=zz%3C')).text()
+    await client.close()
+    assert 'No stop or station matches “zz&lt;”.' in text
+
+
+async def test_editor_offers_valid_choices(editor: Client) -> None:
+    """Only the fake's To places and filters are offered."""
+    response = await editor.get('/pins/edit?stop=C&kind=train&route=T1')
+    text = await response.text()
+    assert re.findall(r'<option value="(\w*)"', text) == [
+        '', 'T1', 'T2', '', 'J', 'R',
+    ]
+    assert re.findall(r'name="only" value="(\w+)"', text) == ['T1', 'T2']
+    assert 'Leave all unticked to show every route.' in text
+    assert 'maxlength="24"' in text
+    assert 'formaction="/pins/save"' in text
+    assert '<legend>Mode</legend>' in text
+    assert '>Line<' in text
+
+
+async def test_editor_without_line_has_no_save(editor: Client) -> None:
+    """Save waits for a line."""
+    text = await (await editor.get('/pins/edit?stop=C')).text()
+    assert 'formaction="/pins/save"' not in text
+    assert 'Show choices' in text
+
+
+async def test_editor_drops_unoffered_to(editor: Client) -> None:
+    """A To not offered falls back to every departure."""
+    response = await editor.get(
+        '/pins/edit?stop=C&kind=train&route=T1&to=ZZ',
+    )
+    text = await response.text()
+    assert '<option value="" selected>None: every departure</option>' in text
+
+
+async def test_save_posts_pin(pins: Pins, editor: Client) -> None:
+    """A full form saves the pin and returns to the list."""
+    response = await editor.post(
+        '/pins/save', data=_form(FULL), allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert response.headers['Location'] == '/pins?seen=3&done=saved'
+    assert pins.posted == [PinSaved(ref=None, pin=Pin(
+        origin=CENTRAL,
+        destination=JUNCTION,
+        kind=RouteKind.TRAIN,
+        routes=('T1',),
+        only=('T2',),
+        nickname='Home',
+    ))]
+
+
+async def test_save_refuses_unoffered_to(
+    pins: Pins, editor: Client,
+) -> None:
+    """A To not offered is refused."""
+    response = await editor.post(
+        '/pins/save', data=_form({**FULL, 'to': 'ZZ'}),
+    )
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert "Those choices don't fit together. Pick again." in (
+        await response.text()
+    )
+    assert not pins.posted
+
+
+async def test_save_refuses_route_not_at_stop(
+    pins: Pins, editor: Client,
+) -> None:
+    """A train line at a bus stop is refused."""
+    response = await editor.post('/pins/save', data=_form({
+        'stop': 'B2', 'kind': 'train', 'route': 'T1',
+    }))
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert not pins.posted
+
+
+async def test_save_of_duplicate_says_so(
+    pins: Pins, editor: Client,
+) -> None:
+    """A new pin the same as another is not saved."""
+    response = await editor.post('/pins/save', data=_form({
+        'stop': 'B2', 'kind': 'bus', 'route': '811', 'to': 'TH',
+    }), allow_redirects=False)
+    assert response.headers['Location'] == '/pins?done=duplicate'
+    assert not pins.posted
+
+
+async def test_edit_existing_prefills(pins: Pins, editor: Client) -> None:
+    """A pin's editor starts from it and saves over it."""
+    ref = pin_ref(pin=SAVED)
+    text = await (await editor.get(f'/pins/edit?ref={ref}')).text()
+    assert 'value="bus" checked' in text
+    assert '<option value="811" selected>' in text
+    assert '<option value="TH" selected>' in text
+    assert 'value="Shops"' in text
+    assert f'name="ref" value="{ref}"' in text
+    response = await editor.post('/pins/save', data=_form({
+        'ref': ref, 'stop': 'B2', 'kind': 'bus', 'route': '811',
+        'to': 'TH', 'nickname': 'Shopping',
+    }), allow_redirects=False)
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert pins.posted == [
+        PinSaved(ref=ref, pin=replace(SAVED, nickname='Shopping')),
+    ]
+
+
+async def test_edit_of_unknown_ref_is_gone(editor: Client) -> None:
+    """An unknown ref goes back to the list."""
+    response = await editor.get(
+        '/pins/edit?ref=nope', allow_redirects=False,
+    )
+    assert response.headers['Location'] == '/pins?done=gone'
+
+
+async def test_missing_pin_lists_nearby(editor: Client) -> None:
+    """A missing pin's editor links to stops nearby with its ref."""
+    ref = pin_ref(pin=LOST)
+    text = await (await editor.get(f'/pins/edit?ref={ref}')).text()
+    assert 'Stops nearby' in text
+    assert f'href="/pins/edit?ref={ref}&amp;stop=B2"' in text
+    assert 'Old Stop' in text

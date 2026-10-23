@@ -8,11 +8,36 @@ from typing import Final
 
 from aiohttp import web
 
+from paperroute.adapters.pin_editor import edited
 from paperroute.adapters.web_common import asset, form_fields
-from paperroute.core.messages import Event, PinDeleted, PinMoved, PinsOrdered
-from paperroute.core.model import Pin, pin_ref
+from paperroute.adapters.web_pin_edit import (
+    MISFIT,
+    draft_of,
+    edit_page,
+    editor_form,
+    origin_name,
+    search_results,
+)
+from paperroute.core.messages import (
+    Event,
+    PinDeleted,
+    PinMoved,
+    PinSaved,
+    PinsOrdered,
+)
+from paperroute.core.model import Pin, pin_ref, same_place
+from paperroute.core.pin_choices import PinDraft, PinEditor
 from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
+
+__all__ = [
+    'PinsPages',
+    'draft_of',
+    'editor_form',
+    'pin_label',
+    'pin_line',
+    'search_results',
+]
 
 SEEN_WAIT_S: Final[float] = 1.0  # longest a page waits for a new report
 SEEN_POLL_S: Final[float] = 0.05  # gap between looks for a new report
@@ -226,6 +251,102 @@ def page_html(*, notice: str, body: str) -> str:
     )
 
 
+def pin_draft(*, pin: Pin, ref: str) -> PinDraft:
+    """
+    Start an editor's choices from a saved pin.
+
+    Parameters
+    ----------
+    pin : Pin
+        The pin.
+    ref : str
+        Its ref.
+
+    Returns
+    -------
+    PinDraft
+        The pin's choices.
+    """
+    return PinDraft(
+        stop=pin.origin.stop_id,
+        kind=pin.kind,
+        route=pin.routes[0] if pin.routes else '',
+        to='' if pin.destination is None else pin.destination.stop_id,
+        only=pin.only,
+        nickname=pin.nickname,
+        ref=ref,
+    )
+
+
+def survived(*, draft: PinDraft, editor: PinEditor) -> bool:
+    """
+    Say whether every choice made makes a pin unchanged.
+
+    Parameters
+    ----------
+    draft : PinDraft
+        The choices submitted.
+    editor : PinEditor
+        The editor after checking them.
+
+    Returns
+    -------
+    bool
+        True when there is a pin and no choice was dropped or changed.
+    """
+    checked = editor.draft
+    fields = (draft.stop, draft.kind, draft.route, draft.to)
+    return (
+        editor.pin is not None
+        and fields == (checked.stop, checked.kind, checked.route, checked.to)
+        and set(draft.only) == set(checked.only)
+    )
+
+
+def duplicate(*, seen: PinsSeen, pin: Pin, ref: str | None) -> bool:
+    """
+    Say whether a pin is the same place as another pin.
+
+    Parameters
+    ----------
+    seen : PinsSeen
+        The pins the app reported.
+    pin : Pin
+        The pin to save.
+    ref : str | None
+        The ref of the pin it replaces, or None for a new pin.
+
+    Returns
+    -------
+    bool
+        True when another pin shows the same services.
+    """
+    return any(
+        same_place(first=pin, second=other)
+        for other in seen.pins
+        if pin_ref(pin=other) != ref
+    )
+
+
+def html_page(*, text: str, status: int = HTTPStatus.OK) -> web.Response:
+    """
+    Answer with a page.
+
+    Parameters
+    ----------
+    text : str
+        The page.
+    status : int
+        HTTP status.
+
+    Returns
+    -------
+    web.Response
+        The response.
+    """
+    return web.Response(text=text, status=status, content_type='text/html')
+
+
 def notice_html(*, done: str | None) -> str:
     """
     Draw the notice for an outcome.
@@ -290,6 +411,9 @@ class PinsPages:
             web.post('/pins/move', self._move),
             web.post('/pins/order', self._order),
             web.post('/pins/delete', self._delete),
+            web.get('/pins/new', self._search),
+            web.get('/pins/edit', self._edit),
+            web.post('/pins/save', self._save),
         ]
 
     async def _wait(self, *, seen: str | None) -> None:
@@ -493,4 +617,167 @@ class PinsPages:
             event=PinDeleted(ref=ref),
             revision=latest.revision,
             done='deleted',
+        )
+
+    async def _search(self, request: web.Request) -> web.Response:
+        """
+        Search for a stop or station.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; `q` in the query.
+
+        Returns
+        -------
+        web.Response
+            The results page.
+        """
+        text = request.query.get('q', '')
+        if self.options is None:
+            return html_page(text=edit_page(
+                title='Add a pin', notice='', body=STARTING,
+            ))
+        found = self.options.search(text=text)
+        return html_page(text=edit_page(
+            title='Add a pin',
+            notice='',
+            body=search_results(text=text, found=found),
+        ))
+
+    def _editor(
+        self, *, draft: PinDraft, notice: str = '',
+        status: int = HTTPStatus.OK,
+    ) -> web.Response:
+        """
+        Draw the editor for some choices.
+
+        Parameters
+        ----------
+        draft : PinDraft
+            The choices made.
+        notice : str
+            The notice's HTML, or an empty string.
+        status : int
+            HTTP status.
+
+        Returns
+        -------
+        web.Response
+            The editor page; a 303 to the gone notice when the ref is
+            not a pin.
+        """
+        found = None if draft.ref is None else self._find(ref=draft.ref)
+        if draft.ref is not None and found is None:
+            raise web.HTTPSeeOther(location='/pins?done=gone')
+        pin = None if found is None else found[1]
+        if pin is not None and draft.ref and not draft.stop:
+            draft = pin_draft(pin=pin, ref=draft.ref)
+        body = self._editor_body(draft=draft, pin=pin)
+        title = 'Add a pin' if draft.ref is None else 'Edit pin'
+        return html_page(
+            text=edit_page(title=title, notice=notice, body=body),
+            status=status,
+        )
+
+    def _editor_body(self, *, draft: PinDraft, pin: Pin | None) -> str:
+        """
+        Draw the editor form for some choices.
+
+        Parameters
+        ----------
+        draft : PinDraft
+            The choices made.
+        pin : Pin | None
+            The pin being edited, or None for a new pin.
+
+        Returns
+        -------
+        str
+            The form's HTML, or a line saying the timetable is not
+            ready.
+        """
+        if self.options is None:
+            return STARTING
+        missing = pin if pin is not None and pin.missing else None
+        editor = edited(options=self.options, draft=draft, missing=missing)
+        return editor_form(editor=editor, origin=origin_name(
+            editor=editor, fallback=None if pin is None else pin.origin,
+        ))
+
+    async def _edit(self, request: web.Request) -> web.Response:
+        """
+        Serve the editor.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; the choices in the query.
+
+        Returns
+        -------
+        web.Response
+            The editor page, or a 303 when the pin has gone.
+        """
+        draft = draft_of(
+            query=request.query, only=request.query.getall('only', []),
+        )
+        return self._editor(draft=draft)
+
+    async def _save(self, request: web.Request) -> web.Response:
+        """
+        Save a pin.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming form post; the choices.
+
+        Returns
+        -------
+        web.Response
+            400 with the editor when a choice is not offered; otherwise
+            a 303 back to the list.
+        """
+        body = await request.post()
+        fields = {k: v for k, v in body.items() if isinstance(v, str)}
+        only = [v for v in body.getall('only', []) if isinstance(v, str)]
+        draft = draft_of(query=fields, only=only)
+        latest = self._pins()
+        if latest is None or self.options is None:
+            raise web.HTTPSeeOther(location='/pins')
+        editor = edited(options=self.options, draft=draft)
+        if not survived(draft=draft, editor=editor) or editor.pin is None:
+            notice = f'<p class="notice" role="alert">{MISFIT}</p>'
+            return self._editor(
+                draft=draft, notice=notice, status=HTTPStatus.BAD_REQUEST,
+            )
+        raise self._saved(seen=latest, ref=draft.ref, pin=editor.pin)
+
+    def _saved(
+        self, *, seen: PinsSeen, ref: str | None, pin: Pin,
+    ) -> web.HTTPSeeOther:
+        """
+        Post a checked pin unless it is gone or a duplicate.
+
+        Parameters
+        ----------
+        seen : PinsSeen
+            The pins the app last reported.
+        ref : str | None
+            The ref of the pin it replaces, or None for a new pin.
+        pin : Pin
+            The pin.
+
+        Returns
+        -------
+        web.HTTPSeeOther
+            A redirect to the list with the outcome.
+        """
+        if duplicate(seen=seen, pin=pin, ref=ref):
+            return web.HTTPSeeOther(location='/pins?done=duplicate')
+        gone = ref is not None and self._find(ref=ref) is None
+        event = None if gone else PinSaved(ref=ref, pin=pin)
+        return self._finish(
+            event=event, revision=seen.revision, done='saved',
         )

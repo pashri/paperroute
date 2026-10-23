@@ -604,6 +604,44 @@ async def test_settings_cross_site_403(
     assert not posted
 
 
+async def test_slot_two_save_overlay_clears() -> None:
+    """Only Afternoon filled: the app reports it as the first slot."""
+    status: dict[str, object] = {'settings': {'peak_1_start': '06:30'}}
+    display = WebDisplay(status=lambda: status)
+    client = await _client(display=display)
+    fields = {
+        'peak_1_start': '', 'peak_1_end': '',
+        'peak_2_start': '15:00', 'peak_2_end': '19:00',
+    }
+    try:
+        await client.post('/settings', data=fields)
+        shown = await (await client.get('/settings')).text()
+        assert 'name="peak_1_start" value="15:00"' in shown
+        status['settings'] = {
+            'peak_1_start': '15:00', 'peak_1_end': '19:00',
+            'peak_2_start': '', 'peak_2_end': '',
+        }
+        await client.get('/settings')
+    finally:
+        await client.close()
+    assert not display._posted  # pylint: disable=protected-access
+
+
+async def test_later_panel_change_shows_on_page() -> None:
+    """A change at the panel after a save is not hidden by the overlay."""
+    status: dict[str, object] = {'settings': {'rotate': 'off'}}
+    display = WebDisplay(status=lambda: status)
+    client = await _client(display=display)
+    try:
+        await client.post('/settings', data={'rotate': 'on'})
+        status['settings'] = {'rotate': 'off', 'larger_text': 'on'}
+        text = await (await client.get('/settings')).text()
+    finally:
+        await client.close()
+    assert re.search(r'name="rotate"\s+value="on">', text)
+    assert re.search(r'name="larger_text"\s+value="on" checked>', text)
+
+
 async def test_page_shows_posted_before_status() -> None:
     """The posted value wins until the status reports it."""
     status: dict[str, object] = {'settings': {'rotate': 'off'}}

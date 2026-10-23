@@ -21,6 +21,7 @@ from paperroute.adapters.settings_form import (
     changed_from,
     form_values,
     page_text,
+    posted_values,
 )
 from paperroute.core.messages import (
     POWER_ACTIONS,
@@ -308,6 +309,7 @@ class WebDisplay:
         self._remote_of = remote_of
         self._post: Callable[[Event], None] = lambda event: None
         self._posted: dict[str, str] = {}
+        self._before: dict[str, str] = {}
         self._png: bytes | None = None
         self._started = time.monotonic()
         self._closing = False
@@ -611,7 +613,7 @@ class WebDisplay:
         status = status_settings(
             status=self._status() if self._status else {},
         )
-        if self._posted.items() <= status.items():
+        if self._posted.items() <= status.items() or status != self._before:
             self._posted = {}
         page = page_text(
             template=asset(name='settings.html'),
@@ -665,7 +667,10 @@ class WebDisplay:
             raise web.HTTPSeeOther(
                 location=f'/settings?error={error.section}',
             ) from error
-        self._posted = fields
+        self._before = status_settings(
+            status=self._status() if self._status else {},
+        )
+        self._posted = posted_values(fields=fields, event=event)
         self._post(event)
         if request.content_type == 'application/json':
             return web.Response(status=HTTPStatus.NO_CONTENT)

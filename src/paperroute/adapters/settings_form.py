@@ -2,6 +2,7 @@
 
 import re
 from collections.abc import Mapping
+from dataclasses import replace
 from datetime import time
 from enum import StrEnum
 from html import escape
@@ -23,7 +24,7 @@ CLOCK: Final[re.Pattern[str]] = re.compile(r'(\d\d):(\d\d)')
 ERRORS: Final[dict[str, str]] = {
     'peak': (
         'Peak hours not saved: each start must be before its end, '
-        'as HH:MM.'
+        'as HH:MM. Windows must not overlap.'
     ),
     'quiet': 'Quiet hours not saved: use HH:MM times.',
 }
@@ -294,24 +295,87 @@ def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged:
     BadInput
         If a time is not `HH:MM` or a peak window is unusable.
     """
-    extra: dict[str, object] = dict(switches_of(fields=fields))
-    for name, kind in (('peak_rate', Rate), ('offpeak_rate', Rate)):
-        if name in fields:
-            extra[name] = enum_of(kind=kind, text=fields[name])
-    if 'quiet_mode' in fields:
-        extra['quiet_mode'] = enum_of(
-            kind=QuietMode, text=fields['quiet_mode'],
-        )
-    if any(f'{slot}_start' in fields for slot in SLOTS):
-        extra['peak_windows'] = peak_windows_of(fields=fields)
-    hours = window_of(
-        start=fields.get('quiet_start', ''),
-        end=fields.get('quiet_end', ''),
-        section=Section.QUIET,
+    switches = switches_of(fields=fields)
+    return SettingsChanged(
+        auto_rebuild=switches.get('auto_rebuild'),
+        peak_rate=optional_enum(kind=Rate, fields=fields, name='peak_rate'),
+        offpeak_rate=optional_enum(
+            kind=Rate, fields=fields, name='offpeak_rate',
+        ),
+        peak_windows=(
+            peak_windows_of(fields=fields)
+            if any(f'{slot}_start' in fields for slot in SLOTS)
+            else None
+        ),
+        quiet_mode=optional_enum(
+            kind=QuietMode, fields=fields, name='quiet_mode',
+        ),
+        my_hours=window_of(
+            start=fields.get('quiet_start', ''),
+            end=fields.get('quiet_end', ''),
+            section=Section.QUIET,
+        ),
+        rotate=switches.get('rotate'),
+        larger_text=switches.get('larger_text'),
+        inverted_lists=switches.get('inverted_lists'),
     )
-    if hours is not None:
-        extra['my_hours'] = hours
-    return SettingsChanged(**extra)  # type: ignore[arg-type]
+
+
+def optional_enum[E: StrEnum](
+    *, kind: type[E], fields: Mapping[str, str], name: str
+) -> E | None:
+    """
+    Read an enumeration field if it was posted.
+
+    Parameters
+    ----------
+    kind : type[E]
+        The enumeration.
+    fields : Mapping[str, str]
+        The posted fields.
+    name : str
+        The field.
+
+    Returns
+    -------
+    E | None
+        The member, or None when the field is absent.
+
+    Raises
+    ------
+    UnknownValue
+        If the field holds an unknown value.
+    """
+    if name not in fields:
+        return None
+    return enum_of(kind=kind, text=fields[name])
+
+
+def posted_values(
+    *, fields: Mapping[str, str], event: SettingsChanged
+) -> dict[str, str]:
+    """
+    Write the posted fields the way the app will report them.
+
+    Parameters
+    ----------
+    fields : Mapping[str, str]
+        The posted fields.
+    event : SettingsChanged
+        The change read from them.
+
+    Returns
+    -------
+    dict[str, str]
+        The form values of the posted fields; a posted peak slot or
+        quiet pair is written for every slot, as the app keeps them.
+    """
+    given = {k: v for k, v in vars(event).items() if v is not None}
+    full = form_values(settings=replace(Settings(), **given))
+    keys = set(fields)
+    if event.peak_windows is not None:
+        keys |= {f'{slot}_{end}' for slot in SLOTS for end in ('start', 'end')}
+    return {key: full[key] for key in keys if key in full}
 
 
 def page_text(

@@ -1731,7 +1731,7 @@ def check_fetch(
 ) -> None:
     """
     Assert a fetch is needed and due on its own clock; a timetable
-    arriving makes every needed feed due at once.
+    arriving or the panel waking makes every needed feed due at once.
 
     Parameters
     ----------
@@ -1744,7 +1744,9 @@ def check_fetch(
     effect : FetchFeed
         The fetch.
     """
-    arrived = before.rebuild.missing and not after.rebuild.missing
+    arrived = (
+        before.rebuild.missing and not after.rebuild.missing
+    ) or (before.panel.asleep and not after.panel.asleep)
     if effect.kind is FeedKind.TRIPS:
         assert effect.feed in trip_feeds(state=after)
         assert arrived or polled(before=before, event=event)

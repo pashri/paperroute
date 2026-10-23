@@ -7,12 +7,13 @@ import numpy as np
 from paperroute.core.model import CarryOn, Mode
 from paperroute.core.stop_view import Pill
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
-from paperroute.render.chrome import HEADER, badge, route_pair
+from paperroute.render.chrome import BANNER, HEADER, badge, route_pair
 from paperroute.render.stop_view import (
     BOARD_RIGHT,
     LARGE_ROW_H,
     LIST_LEFT,
     PILL_LEFT,
+    ROW_H,
     SPLIT,
     draw_stop_view,
 )
@@ -315,12 +316,10 @@ def test_large_rows_are_taller() -> None:
     assert _last_rule(frame=large) > _last_rule(frame=small)
     assert LARGE_ROW_H == 64
     top = HEADER + 30
-    destination = (slice(top + 32, top + 46), slice(456, 560))
-    destination_large = (slice(top + 40, top + 60), slice(456, 560))
-    assert (small[destination] == INK).sum() > 0
-    assert (large[destination_large] == INK).sum() > (
-        small[destination] == INK
-    ).sum()
+    band = slice(456, 786)
+    ink_small = (small[top:top + ROW_H - 2, band] == INK).sum()
+    ink_large = (large[top:top + LARGE_ROW_H - 2, band] == INK).sum()
+    assert ink_large > ink_small
 
 
 def test_inverted_list_is_white_on_black() -> None:
@@ -342,3 +341,42 @@ def test_inverted_board_whole_width() -> None:
     turned = draw_stop_view(view=replace(view, inverted=True))
     assert (turned[HEADER:] == INK).mean() > 0.8
     assert (turned[:HEADER] == plain[:HEADER]).all()
+
+
+def test_inverted_empty_message_is_fully_inverted() -> None:
+    """With a destination but no hero, the whole area turns, left too."""
+    view = replace(
+        BASE, hero=None, rows=(), empty='No direct services to X')
+    plain = draw_stop_view(view=view)
+    turned = draw_stop_view(view=replace(view, inverted=True))
+    assert (turned[HEADER:] == 255 - plain[HEADER:]).all()
+    assert (turned[:HEADER] == plain[:HEADER]).all()
+
+
+def test_inverted_without_a_hero_starts_at_the_left_edge() -> None:
+    """Rows with a destination but no hero invert from x=0."""
+    view = replace(BASE, hero=None, rows=(row(),) * 3)
+    plain = draw_stop_view(view=view)
+    turned = draw_stop_view(view=replace(view, inverted=True))
+    assert (turned[HEADER:, :SPLIT] == 255 - plain[HEADER:, :SPLIT]).all()
+
+
+def test_large_and_inverted_together() -> None:
+    """Both flags apply: taller rows, and the list area inverted."""
+    rows = (row(),) * 5
+    large = draw_stop_view(view=replace(BASE, rows=rows, large=True))
+    both = draw_stop_view(
+        view=replace(BASE, rows=rows, large=True, inverted=True))
+    area = (slice(HEADER, None), slice(SPLIT + 3, None))
+    assert (both[area] == 255 - large[area]).all()
+    assert (both[HEADER:, :SPLIT] == large[HEADER:, :SPLIT]).all()
+
+
+def test_inverted_box_sits_below_the_banner() -> None:
+    """A banner keeps its pixels; the list under it turns."""
+    view = replace(BASE, banner='No live data since 7:56', rows=(row(),) * 3)
+    plain = draw_stop_view(view=view)
+    turned = draw_stop_view(view=replace(view, inverted=True))
+    top = HEADER + BANNER
+    assert (turned[:top] == plain[:top]).all()
+    assert (turned[top:, SPLIT + 3:] == 255 - plain[top:, SPLIT + 3:]).all()

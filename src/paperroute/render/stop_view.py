@@ -472,7 +472,7 @@ def finish_view(
     frame = finish(canvas)
     if not view.inverted:
         return frame
-    left = 0 if board else SPLIT + 3
+    left = SPLIT + 3 if view.hero else 0
     return inverted_area(frame=frame, box=(left, top, WIDTH, HEIGHT))
 
 

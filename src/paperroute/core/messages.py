@@ -171,9 +171,20 @@ ScreenView = (
 
 @dataclass(frozen=True)
 class Render:
-    """Draw a view."""
+    """
+    Draw a view.
+
+    Attributes
+    ----------
+    view : ScreenView
+        The view.
+    full : bool
+        Whether the panel should do a full refresh rather than a partial
+        one.
+    """
 
     view: ScreenView
+    full: bool = False
 
 
 @dataclass(frozen=True)

@@ -174,11 +174,19 @@ class MemoryStates:
 
 @dataclass
 class FrameRecorder:
-    """A display that keeps every frame."""
+    """A display that keeps every frame and how it was asked for."""
 
     frames: list[NDArray[np.uint8]] = field(default_factory=list)
+    fulls: list[bool] = field(default_factory=list)
+    turns: list[bool] = field(default_factory=list)
 
-    def show(self, *, frame: NDArray[np.uint8]) -> None:
+    def show(
+        self,
+        *,
+        frame: NDArray[np.uint8],
+        full: bool = False,
+        turned: bool = False,
+    ) -> None:
         """
         Keep a frame.
 
@@ -186,8 +194,14 @@ class FrameRecorder:
         ----------
         frame : NDArray[np.uint8]
             Frame.
+        full : bool
+            Whether a full refresh was asked for.
+        turned : bool
+            Whether the frame is turned upside down.
         """
         self.frames.append(frame)
+        self.fulls.append(full)
+        self.turns.append(turned)
 
 
 @dataclass(frozen=True)

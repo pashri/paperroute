@@ -26,6 +26,7 @@ from paperroute.core.messages import (
     PowerRequested,
     SettingsChanged,
 )
+from paperroute.render.canvas import encode_png
 from tests.adapters.test_web_device import Device
 
 Client = TestClient[web.Request, web.Application]
@@ -112,6 +113,17 @@ async def test_frame_png_503_before_first_frame(
     assert response.content_type == 'image/png'
     assert response.headers['Cache-Control'] == 'no-store'
     assert (await response.read()).startswith(b'\x89PNG')
+
+
+async def test_web_copy_stays_upright(
+    display: WebDisplay, client: Client
+) -> None:
+    """A turned frame is served as drawn, the right way up."""
+    frame = FRAME.copy()
+    frame[0, 0] = 0
+    display.show(frame=frame, full=True, turned=True)
+    response = await client.get('/frame.png')
+    assert await response.read() == encode_png(grey=frame)
 
 
 async def test_events_sends_current_frame_version_on_connect(

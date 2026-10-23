@@ -331,15 +331,28 @@ class WebDisplay:
         self.version = 0
         self.changed = asyncio.Event()
 
-    def show(self, *, frame: NDArray[np.uint8]) -> None:
+    def show(
+        self,
+        *,
+        frame: NDArray[np.uint8],
+        full: bool = False,
+        turned: bool = False,
+    ) -> None:
         """
         Store a frame and wake the event streams.
+
+        The copy is always kept the right way up.
 
         Parameters
         ----------
         frame : NDArray[np.uint8]
             480 by 800 grey pixels.
+        full : bool
+            Ignored.
+        turned : bool
+            Ignored.
         """
+        del full, turned
         self._png = encode_png(grey=frame)
         self.version += 1
         self.changed.set()

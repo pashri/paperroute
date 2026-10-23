@@ -33,7 +33,7 @@ from paperroute.app import (
 )
 from paperroute.app_device import DevicePorts
 from paperroute.app_effects import StateSaver, loaded_patterns
-from paperroute.app_outputs import carry_out
+from paperroute.app_outputs import carry_out, draw_pending
 from paperroute.app_render import drawing
 from paperroute.build.gtfs_files import Source
 from paperroute.build.map_style import LIGHT
@@ -63,6 +63,7 @@ from paperroute.core.messages import (
     PowerRequested,
     QuitRequested,
     RebuildTimetable,
+    Render,
     ResetDone,
     SettingsChanged,
     Tick,
@@ -815,7 +816,13 @@ class PressingDisplay(FrameRecorder):
 
     post: Callable[[Event], None] | None = None
 
-    def show(self, *, frame: NDArray[np.uint8]) -> None:
+    def show(
+        self,
+        *,
+        frame: NDArray[np.uint8],
+        full: bool = False,
+        turned: bool = False,
+    ) -> None:
         """
         Keep a frame; after the first, press the bottom knob.
 
@@ -823,10 +830,14 @@ class PressingDisplay(FrameRecorder):
         ----------
         frame : NDArray[np.uint8]
             Frame.
+        full : bool
+            Whether a full refresh was asked for.
+        turned : bool
+            Whether the frame is turned upside down.
         """
         if not self.frames and self.post is not None:
             self.post(KnobPressed(knob=Knob.BOTTOM))
-        super().show(frame=frame)
+        super().show(frame=frame, full=full, turned=turned)
 
     def hook(self, post: Callable[[Event], None]) -> None:
         """
@@ -1388,7 +1399,13 @@ def tableless_tiles(*, out: Path) -> SqliteTileRepository:
 class ZoomingDisplay(PressingDisplay):
     """A display that shows the Map, then zooms in on the next frames."""
 
-    def show(self, *, frame: NDArray[np.uint8]) -> None:
+    def show(
+        self,
+        *,
+        frame: NDArray[np.uint8],
+        full: bool = False,
+        turned: bool = False,
+    ) -> None:
         """
         Keep a frame; press the bottom knob, then turn it twice.
 
@@ -1396,10 +1413,14 @@ class ZoomingDisplay(PressingDisplay):
         ----------
         frame : NDArray[np.uint8]
             Frame.
+        full : bool
+            Whether a full refresh was asked for.
+        turned : bool
+            Whether the frame is turned upside down.
         """
         if self.post is not None and 1 <= len(self.frames) <= 2:
             self.post(KnobTurned(knob=Knob.BOTTOM, steps=-1))
-        super().show(frame=frame)
+        super().show(frame=frame, full=full, turned=turned)
 
 
 def test_tiles_read_error_draws_map_not_installed(tmp_path: Path) -> None:
@@ -1649,6 +1670,42 @@ async def test_queued_knob_turns_draw_one_frame() -> None:
     assert len(display.frames) == 1
 
 
+async def test_app_turns_panel_frames() -> None:
+    """With rotate saved, the panel is asked to turn its frames."""
+    display = FrameRecorder()
+    saved = replace(DEFAULT_SAVED, settings=Settings(rotate=True))
+    ports = ports_of(display=display, states=MemoryStates(stored=saved))
+
+    def hook(post: Callable[[Event], None]) -> None:
+        post(Tick(now=AT))
+
+    async with asyncio.timeout(5):
+        await run(ports=ports, post_hook=hook, max_events=1)
+    assert display.turns[-1] is True
+
+
+async def test_full_survives_burst() -> None:
+    """A full render replaced by a partial one is still drawn full."""
+    display = FrameRecorder()
+    ports = ports_of(display=display)
+    tasks: set[asyncio.Task[None]] = set()
+    outputs = Outputs(
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    effects = (
+        Render(view=NoticeView(title='One'), full=True),
+        Render(view=NoticeView(title='Two')),
+    )
+    await carry_out(
+        effects=effects, ports=ports, queue=asyncio.Queue(), tasks=tasks,
+        outputs=outputs,
+    )
+    await draw_pending(ports=ports, outputs=outputs)
+    assert display.fulls == [True]
+    assert outputs.pending.full is False
+
+
 async def test_app_performs_rebuild() -> None:
     """A RebuildTimetable posts how it went; stopping the app stops it."""
     builder = FakeBuilder(result=True)
@@ -1810,7 +1867,13 @@ class ScriptedDisplay(FrameRecorder):
     script: tuple[Event, ...] = ()
     post: Callable[[Event], None] | None = None
 
-    def show(self, *, frame: NDArray[np.uint8]) -> None:
+    def show(
+        self,
+        *,
+        frame: NDArray[np.uint8],
+        full: bool = False,
+        turned: bool = False,
+    ) -> None:
         """
         Keep a frame; when it is the trigger, post the script once.
 
@@ -1818,8 +1881,12 @@ class ScriptedDisplay(FrameRecorder):
         ----------
         frame : NDArray[np.uint8]
             Frame.
+        full : bool
+            Whether a full refresh was asked for.
+        turned : bool
+            Whether the frame is turned upside down.
         """
-        super().show(frame=frame)
+        super().show(frame=frame, full=full, turned=turned)
         trigger = self.trigger
         if trigger is None or self.post is None:
             return
@@ -1931,7 +1998,13 @@ class ArrivingDisplay(FrameRecorder):
     source: Path | None = None
     target: Path | None = None
 
-    def show(self, *, frame: NDArray[np.uint8]) -> None:
+    def show(
+        self,
+        *,
+        frame: NDArray[np.uint8],
+        full: bool = False,
+        turned: bool = False,
+    ) -> None:
         """
         Keep a frame; after the first, copy the timetable in.
 
@@ -1939,8 +2012,12 @@ class ArrivingDisplay(FrameRecorder):
         ----------
         frame : NDArray[np.uint8]
             Frame.
+        full : bool
+            Whether a full refresh was asked for.
+        turned : bool
+            Whether the frame is turned upside down.
         """
-        super().show(frame=frame)
+        super().show(frame=frame, full=full, turned=turned)
         if self.source is not None and self.target is not None:
             shutil.copyfile(self.source, self.target)
             self.source = None

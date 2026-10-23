@@ -57,6 +57,8 @@ def on_settings(
     """
     Store the settings given; the next tick saves them.
 
+    A change to rotate redraws the last view with a full refresh.
+
     Parameters
     ----------
     state : State
@@ -67,7 +69,8 @@ def on_settings(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the settings stored, and no effects.
+        State with the settings stored, and a full Render of the last
+        view when rotate changed and a view has been drawn.
     """
     given = {
         item.name: getattr(event, item.name)
@@ -75,7 +78,11 @@ def on_settings(
         if getattr(event, item.name) is not None
     }
     settings = replace(state.settings, **given)
-    return replace(state, settings=settings), ()
+    turned = settings.rotate != state.settings.rotate
+    after = replace(state, settings=settings)
+    if not turned or state.last_view is None:
+        return after, ()
+    return after, (Render(view=state.last_view, full=True),)
 
 
 def on_power(

@@ -46,8 +46,10 @@ from tests.fakes import device_facts
 def test_settings_change_is_saved() -> None:
     """A changed setting is saved once the save delay has passed."""
     event = SettingsChanged(auto_rebuild=False, rotate=True)
-    state, effects = step(pinned(), event)
-    assert not effects
+    before = pinned()
+    assert before.last_view is not None
+    state, effects = step(before, event)
+    assert effects == (Render(view=before.last_view, full=True),)
     _, effects = step(state, Tick(now=START + SAVE_AFTER * 2))
     saves = [effect for effect in effects if isinstance(effect, SaveState)]
     assert len(saves) == 1
@@ -63,6 +65,18 @@ def test_settings_change_merges() -> None:
     unchanged, effects = step(state, SettingsChanged())
     assert not effects
     assert unchanged.settings == state.settings
+
+
+def test_rotate_change_redraws_full() -> None:
+    """Turning the frame redraws in full; an unchanged rotate does not."""
+    before = pinned()
+    assert before.last_view is not None
+    state, effects = step(before, SettingsChanged(rotate=True))
+    assert effects == (Render(view=before.last_view, full=True),)
+    _, effects = step(before, SettingsChanged(rotate=False))
+    assert not effects
+    _, effects = step(state, SettingsChanged(rotate=True))
+    assert not effects
 
 
 def powering(*, action: PowerAction) -> State:

@@ -169,6 +169,7 @@ async def handle(
         ports.observer.ticked()
     before = state.settings
     state, effects = step(state, event)
+    outputs.pending.turned = state.settings.rotate
     if state.settings != before:
         ports.observer.settings_seen(settings=state.settings)
     report_status(

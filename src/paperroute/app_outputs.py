@@ -27,9 +27,15 @@ class PendingView:
     ----------
     view : View | None
         The view, or None when the screen is up to date.
+    full : bool
+        Whether any render since the last frame asked for a full refresh.
+    turned : bool
+        Whether frames are shown upside down.
     """
 
     view: View | None = None
+    full: bool = False
+    turned: bool = False
 
 
 @dataclass(frozen=True)
@@ -66,11 +72,18 @@ async def draw_pending(*, ports: Ports, outputs: Outputs) -> None:
     outputs : Outputs
         What effects draw and write through.
     """
-    view = outputs.pending.view
+    pending = outputs.pending
+    view, full = pending.view, pending.full
     if view is None:
         return
-    outputs.pending.view = None
-    await render(ports=ports, view=view, maps=outputs.maps)
+    pending.view, pending.full = None, False
+    await render(
+        ports=ports,
+        view=view,
+        maps=outputs.maps,
+        full=full,
+        turned=pending.turned,
+    )
 
 
 async def carry_out(
@@ -84,7 +97,8 @@ async def carry_out(
     """
     Perform an event's effects in order, keeping its view to draw later.
 
-    A ControlPower or ResetDevice draws the waiting view first, so the
+    A full Render stays full when a later one in the burst replaces its
+    view. A ControlPower or ResetDevice draws the waiting view first, so the
     notice is on screen before the device goes down or is reset.
 
     Parameters
@@ -103,6 +117,7 @@ async def carry_out(
     for effect in effects:
         if isinstance(effect, Render):
             outputs.pending.view = effect.view
+            outputs.pending.full = outputs.pending.full or effect.full
             continue
         if isinstance(effect, ControlPower | ResetDevice):
             await draw_pending(ports=ports, outputs=outputs)

@@ -243,6 +243,27 @@ def key_event(*, keysym: str) -> Event | None:
     return KEYS.get(keysym)
 
 
+def turned_frame(
+    *, frame: NDArray[np.uint8], turned: bool
+) -> NDArray[np.uint8]:
+    """
+    Turn a frame upside down, or leave it.
+
+    Parameters
+    ----------
+    frame : NDArray[np.uint8]
+        Grey pixels.
+    turned : bool
+        Whether to turn it.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The frame rotated 180 degrees when turned, else the frame.
+    """
+    return np.rot90(frame, 2) if turned else frame
+
+
 class TkMonitor:
     """An 800x480 window showing frames; keys post knob events."""
 
@@ -263,16 +284,28 @@ class TkMonitor:
         self.label.pack()
         self.image: tkinter.PhotoImage | None = None
 
-    def show(self, *, frame: NDArray[np.uint8]) -> None:
+    def show(
+        self,
+        *,
+        frame: NDArray[np.uint8],
+        full: bool = False,
+        turned: bool = False,
+    ) -> None:
         """
-        Show a frame.
+        Show a frame, upside down when turned.
 
         Parameters
         ----------
         frame : NDArray[np.uint8]
             480 by 800 grey pixels.
+        full : bool
+            Ignored; the window has no ghosting to clear.
+        turned : bool
+            Whether to show the frame upside down.
         """
-        data = base64.b64encode(encode_png(grey=frame)).decode('ascii')
+        del full
+        shown = turned_frame(frame=frame, turned=turned)
+        data = base64.b64encode(encode_png(grey=shown)).decode('ascii')
         self.image = tkinter.PhotoImage(data=data, format='png')
         self.label.configure(image=self.image)
 

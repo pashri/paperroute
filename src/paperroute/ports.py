@@ -482,16 +482,33 @@ class FeedsClient(Protocol):
 
 
 class Display(Protocol):
-    """Somewhere frames are shown."""
+    """
+    Somewhere frames are shown.
 
-    def show(self, *, frame: NDArray[np.uint8]) -> None:
+    A panel driver must honour ``full`` and ``turned``; a copy shown
+    elsewhere, such as on a phone, may ignore both.
+    """
+
+    def show(
+        self,
+        *,
+        frame: NDArray[np.uint8],
+        full: bool = False,
+        turned: bool = False,
+    ) -> None:
         """
         Show a frame.
 
         Parameters
         ----------
         frame : NDArray[np.uint8]
-            480 by 800 grey pixels.
+            480 by 800 grey pixels, drawn the right way up.
+        full : bool
+            Whether to do a full refresh, clearing ghosting, rather than
+            a partial one.
+        turned : bool
+            Whether to show the frame upside down, for a panel mounted
+            the other way round.
         """
 
 

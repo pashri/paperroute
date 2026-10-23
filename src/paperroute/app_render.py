@@ -254,7 +254,14 @@ def drawing(*, view: View, maps: MapRenderer) -> Callable[[], Frame]:
     return functools.partial(draw_chooser_view, view=view)
 
 
-async def render(*, ports: Ports, view: View, maps: MapRenderer) -> None:
+async def render(
+    *,
+    ports: Ports,
+    view: View,
+    maps: MapRenderer,
+    full: bool = False,
+    turned: bool = False,
+) -> None:
     """
     Draw a view off the event loop, show it and report how long it took.
 
@@ -266,9 +273,15 @@ async def render(*, ports: Ports, view: View, maps: MapRenderer) -> None:
         View to draw.
     maps : MapRenderer
         Draws the views with a map.
+    full : bool
+        Whether to ask for a full refresh.
+    turned : bool
+        Whether to ask for the frame upside down.
     """
     draw = drawing(view=view, maps=maps)
     frame, render_ms = await timed_async(call=asyncio.to_thread(draw))
-    ports.display.show(frame=frame)
-    logger.info('frame drawn', extra={'render_ms': render_ms})
+    ports.display.show(frame=frame, full=full, turned=turned)
+    logger.info(
+        'frame drawn', extra={'render_ms': render_ms, 'full': full}
+    )
     ports.observer.frame_drawn(render_ms=render_ms)

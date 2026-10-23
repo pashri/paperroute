@@ -8,7 +8,7 @@ from typing import Protocol
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.chooser import ChooserPath, Column
+from paperroute.core.chooser import Choice, ChooserPath, Column
 from paperroute.core.device_model import (
     DeviceFacts,
     DeviceStatus,
@@ -20,8 +20,16 @@ from paperroute.core.device_model import (
 )
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.messages import PowerAction
-from paperroute.core.model import Departure, Mode, Pin, ServiceSpan, StopPlace
+from paperroute.core.model import (
+    Departure,
+    Mode,
+    Pin,
+    RouteKind,
+    ServiceSpan,
+    StopPlace,
+)
 from paperroute.core.patterns import TripPattern
+from paperroute.core.pin_choices import StopMatch
 from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.saved import Saved, Settings
 from paperroute.core.tiles import StreetLabel, TileVariant
@@ -259,6 +267,132 @@ class NetworkRepository(Protocol):
         ReachInput | None
             The From's station, its tails, their places and stops; None
             for an old timetable.
+        """
+
+
+class PinOptions(Protocol):
+    """The choices a pin's editor offers, read from the timetable."""
+
+    def search(self, *, text: str) -> tuple[StopMatch, ...]:
+        """
+        Find stops and stations that runs serve by name.
+
+        Parameters
+        ----------
+        text : str
+            Part of a name.
+
+        Returns
+        -------
+        tuple[StopMatch, ...]
+            Matches, best first; empty for text that is too short.
+        """
+
+    def place(self, *, stop_id: str) -> StopPlace | None:
+        """
+        Read a stop or station.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop or station ID.
+
+        Returns
+        -------
+        StopPlace | None
+            The place; None when the timetable does not know it.
+        """
+
+    def kinds_at(self, *, stop_id: str) -> tuple[RouteKind, ...]:
+        """
+        List the kinds of route that have a line or route at a stop.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop or station ID.
+
+        Returns
+        -------
+        tuple[RouteKind, ...]
+            Kinds in display order.
+        """
+
+    def lines_at(self, *, stop_id: str, kind: RouteKind) -> tuple[Choice, ...]:
+        """
+        List the lines or routes of a kind that serve a stop.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop or station ID.
+        kind : RouteKind
+            Kind of route.
+
+        Returns
+        -------
+        tuple[Choice, ...]
+            Choices whose badge is the route number, in chooser order.
+        """
+
+    def destinations(
+        self, *, origin: StopPlace, kind: RouteKind, line: Choice,
+    ) -> tuple[StopPlace, ...]:
+        """
+        List the places the device offers as the To.
+
+        Parameters
+        ----------
+        origin : StopPlace
+            The From.
+        kind : RouteKind
+            Kind of route.
+        line : Choice
+            The line or route, from `lines_at`.
+
+        Returns
+        -------
+        tuple[StopPlace, ...]
+            Places in the device's list order; empty for an old
+            timetable.
+        """
+
+    def filters_at(
+        self, *, stop_id: str, kind: RouteKind,
+    ) -> tuple[str, ...]:
+        """
+        List the route numbers a pin's departures can be limited to.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop or station ID.
+        kind : RouteKind
+            Kind of route.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Route numbers of every run that boards at the stop.
+        """
+
+    def nearby(
+        self, *, place: StopPlace, kind: RouteKind | None,
+    ) -> tuple[StopPlace, ...]:
+        """
+        List stops close to a place that runs of a kind serve.
+
+        Parameters
+        ----------
+        place : StopPlace
+            The place, such as a missing pin's old stop.
+        kind : RouteKind | None
+            Kind of route, or None for any.
+
+        Returns
+        -------
+        tuple[StopPlace, ...]
+            Stops, nearest first; empty when the place has no point.
         """
 
 

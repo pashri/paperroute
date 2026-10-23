@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pins - paperroute</title>
+  <link rel="stylesheet" href="/live.css">
+  <script type="module" src="/pins.js"></script>
+</head>
+<body>
+  <header>
+    <h1>paperroute</h1>
+    <nav aria-label="Pages">
+      <ul class="pages">
+        <li><a href="/">Live</a></li>
+        <li><a href="/pins" aria-current="page">Pins</a></li>
+        <li><a href="/settings">Settings</a></li>
+        <li><a href="/device">Device</a></li>
+      </ul>
+    </nav>
+  </header>
+  <main>
+    <h2>Pins</h2>
+    <form class="search" method="get" action="/pins/new" role="search">
+      <label for="pin-search">Add a pin</label>
+      <input id="pin-search" type="search" name="q"
+             placeholder="Add a pin: search a stop or station">
+      <button type="submit">Search</button>
+    </form>
+    {{notice}}
+    {{pins}}
+    <form id="order-form" method="post" action="/pins/order" hidden>
+      <input type="hidden" name="refs" value="">
+    </form>
+    <dialog id="delete-dialog" aria-labelledby="delete-question">
+      <form method="dialog">
+        <p id="delete-question"></p>
+        <button type="submit" value="cancel">Cancel</button>
+        <button type="submit" value="delete">Delete</button>
+      </form>
+    </dialog>
+  </main>
+</body>
+</html>

@@ -22,7 +22,7 @@ from paperroute.adapters.device_page import (
     power_status,
     system_rows,
 )
-from paperroute.adapters.web_display import asset, form_fields
+from paperroute.adapters.web_common import asset, form_fields
 from paperroute.adapters.wifi import valid_password, valid_ssid
 from paperroute.core.device_model import (
     ConfirmAction,

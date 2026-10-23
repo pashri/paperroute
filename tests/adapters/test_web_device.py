@@ -465,12 +465,15 @@ async def test_cross_site_refused_on_device_posts(
     ('device.html', '/device'),
 ])
 def test_nav_on_every_page(name: str, current: str | None) -> None:
-    """Every page links Live, Settings and Device, marking the open one."""
+    """Every page links Live, Pins, Settings and Device, marking the open one."""
     web_dir = files('paperroute') / 'assets' / 'web'
     text = (web_dir / name).read_text(encoding='utf-8')
     assert '<nav aria-label="Pages">' in text
     for href, label in (
-        ('/', 'Live'), ('/settings', 'Settings'), ('/device', 'Device'),
+        ('/', 'Live'),
+        ('/pins', 'Pins'),
+        ('/settings', 'Settings'),
+        ('/device', 'Device'),
     ):
         mark = ' aria-current="page"' if href == current else ''
         assert f'<li><a href="{href}"{mark}>{label}</a></li>' in text

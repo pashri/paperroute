@@ -2,12 +2,10 @@
 
 import asyncio
 import ipaddress
-import json
 import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from http import HTTPStatus
-from importlib.resources import files
 from typing import TYPE_CHECKING, Final
 from urllib.parse import urlsplit
 
@@ -23,6 +21,8 @@ from paperroute.adapters.settings_form import (
     page_text,
     posted_values,
 )
+from paperroute.adapters.web_common import asset, form_fields
+from paperroute.adapters.web_pins import PinsPages
 from paperroute.core.messages import (
     POWER_ACTIONS,
     Event,
@@ -41,6 +41,8 @@ from paperroute.rss import max_rss_mb
 
 if TYPE_CHECKING:
     from paperroute.adapters.web_device import DevicePages
+    from paperroute.observers import PinsSeen
+    from paperroute.ports import PinOptions
 
 logger = logging.getLogger(__name__)
 
@@ -223,52 +225,6 @@ def _cross_site(*, request: web.Request) -> bool:
     return urlsplit(origin).netloc != request.host
 
 
-def asset(*, name: str) -> str:
-    """
-    Read one of the packaged page files.
-
-    Parameters
-    ----------
-    name : str
-        File name within `assets/web`.
-
-    Returns
-    -------
-    str
-        The file contents.
-    """
-    path = files('paperroute') / 'assets' / 'web' / name
-    return path.read_text(encoding='utf-8')
-
-
-async def form_fields(*, request: web.Request) -> dict[str, str]:
-    """
-    Read the string fields of a form or JSON body.
-
-    Parameters
-    ----------
-    request : web.Request
-        The incoming request.
-
-    Returns
-    -------
-    dict[str, str]
-        The string fields found; empty if the body is not readable. A
-        repeated form field keeps its last value, so a checkbox after a
-        hidden field of the same name wins when ticked.
-    """
-    if request.content_type == 'application/json':
-        try:
-            body = await request.json()
-        except (json.JSONDecodeError, UnicodeDecodeError):
-            return {}
-    else:
-        body = await request.post()
-    if not isinstance(body, Mapping):
-        return {}
-    return {k: v for k, v in body.items() if isinstance(v, str)}
-
-
 class WebDisplay:
     """
     A display that serves the latest frame over HTTP.
@@ -284,11 +240,17 @@ class WebDisplay:
         Finds the peer address of a request.
     device : DevicePages | None
         The device's own pages, such as Wi-Fi setup, or None.
+    pins : Callable[[], PinsSeen | None] | None
+        Gives the pins the app last reported; None until it does.
+    options : PinOptions | None
+        The timetable's choices for the pin editor, or None.
 
     Attributes
     ----------
     device : DevicePages | None
         The device's own pages; set before `app` is called.
+    pins_sleep : Callable[[float], Awaitable[None]]
+        How the Pins page waits for a new report.
     boot : str
         Hex start time of this server, so a restart changes event data.
     version : int
@@ -303,9 +265,14 @@ class WebDisplay:
         status: Callable[[], dict[str, object]] | None = None,
         remote_of: Callable[[web.BaseRequest], str | None] = peer_address,
         device: 'DevicePages | None' = None,
+        pins: Callable[[], 'PinsSeen | None'] | None = None,
+        options: 'PinOptions | None' = None,
     ) -> None:
         self._status = status
         self.device = device
+        self._pins = pins or (lambda: None)
+        self._options = options
+        self.pins_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
         self._remote_of = remote_of
         self._post: Callable[[Event], None] = lambda event: None
         self._posted: dict[str, str] = {}
@@ -391,6 +358,14 @@ class WebDisplay:
             web.post('/settings', self._settings),
             web.get('/status', self._status_json),
         ])
+        app.add_routes(
+            PinsPages(
+                post=self.send,
+                pins=self._pins,
+                options=self._options,
+                sleep=self.pins_sleep,
+            ).routes()
+        )
         if self.device is not None:
             app.add_routes([
                 web.get('/device/power', self._power_page),

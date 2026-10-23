@@ -19,6 +19,7 @@ from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.device_probe import SystemProbe
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.network_db import SqliteNetworkRepository
+from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.adapters.power import NullPower, SystemctlPower
 from paperroute.adapters.rate_limit import StartLimiter
 from paperroute.adapters.rebuild import (
@@ -830,10 +831,6 @@ def web_main(
         Holds the latest error logged; a new one by default.
     """
     timings = Timings()
-    display = WebDisplay(status=timings.snapshot)
-    display.device = device_pages_for(
-        args=args, timings=timings, display=display,
-    )
     observer = ObserverGroup(
         observers=[
             timings,
@@ -846,6 +843,14 @@ def web_main(
         network_for(args=args) as network,
         tiles_for(args=args) as tiles,
     ):
+        display = WebDisplay(
+            status=timings.snapshot,
+            pins=lambda: timings.pins,
+            options=SqlitePinOptions(network=network),
+        )
+        display.device = device_pages_for(
+            args=args, timings=timings, display=display,
+        )
         ports = Ports(
             timetable=timetable,
             feeds=feeds,

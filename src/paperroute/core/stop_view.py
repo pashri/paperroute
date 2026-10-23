@@ -99,7 +99,12 @@ class PinTag:
 NOT_PINNED: Final[PinTag] = PinTag(text='not pinned', pinned=False)
 
 
-def pin_tag(*, index: int | None, total: int) -> PinTag:
+def pin_tag(
+    *,
+    index: int | None,
+    total: int,
+    nickname: str | None = None,
+) -> PinTag:
     """
     Make the header tag for a place.
 
@@ -109,15 +114,20 @@ def pin_tag(*, index: int | None, total: int) -> PinTag:
         Zero-based position among the pins, or None when not pinned.
     total : int
         How many pins there are.
+    nickname : str | None
+        The pin's nickname, shown in place of 'pin'.
 
     Returns
     -------
     PinTag
-        'pin 2/3' style tag when pinned, else NOT_PINNED.
+        'pin 2/3' or 'Work 2/3' style tag when pinned, else NOT_PINNED.
     """
     if index is None:
         return NOT_PINNED
-    return PinTag(text=f'pin {index + 1}/{total}', pinned=True)
+    return PinTag(
+        text=f'{nickname or "pin"} {index + 1}/{total}',
+        pinned=True,
+    )
 
 
 @dataclass(frozen=True)

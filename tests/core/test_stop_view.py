@@ -13,6 +13,7 @@ from paperroute.core.stop_view import (
     ROWS_UNDER_BANNER,
     VISIBLE_ROWS,
     Pill,
+    PinTag,
     Row,
     StopInputs,
     StopView,
@@ -312,6 +313,15 @@ def test_view_without_a_destination_has_none_and_a_plain_empty() -> None:
     assert result.destination is None
     assert result.empty == 'No services in the next 3 hours'
     assert 'direction' not in result.empty
+
+
+def test_tag_with_nickname() -> None:
+    """A nickname replaces 'pin' in a pinned tag; unpinned ignores it."""
+    assert pin_tag(index=1, total=3, nickname='Work') == PinTag(
+        text='Work 2/3', pinned=True,
+    )
+    assert pin_tag(index=1, total=3, nickname=None).text == 'pin 2/3'
+    assert pin_tag(index=None, total=3, nickname='Work') == NOT_PINNED
 
 
 def test_view_carries_its_tag() -> None:

@@ -292,6 +292,19 @@ def test_stop_view_names_the_pins_places() -> None:
     )
 
 
+def test_header_shows_nickname() -> None:
+    """The tag reads '<nickname> n/total'; unpinning drops it."""
+    pins = (replace(PIN, nickname='Home'), PINS[0])
+    saved = replace(seeded(pin=PIN), pins=pins)
+    state = initial_state(saved=saved, now=START, stored=True)
+    state, _ = step(state, Tick(now=START))
+    assert isinstance(state.last_view, StopView)
+    assert state.last_view.tag.text == 'Home 1/2'
+    state, _ = step(state, KnobHeld(knob=Knob.BOTTOM))
+    assert isinstance(state.last_view, StopView)
+    assert state.last_view.tag.text == 'not pinned'
+
+
 def test_stop_view_without_a_destination_names_none() -> None:
     """A pin with no Destination gives the view no destination."""
     saved = seeded(pin=replace(PIN, destination=None))

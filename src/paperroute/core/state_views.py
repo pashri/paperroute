@@ -115,6 +115,7 @@ def stop_view_of(*, state: State) -> StopView:
             tag=pin_tag(
                 index=shown_index(state=state),
                 total=len(state.places.pins),
+                nickname=pin.nickname,
             ),
         ),
     )

@@ -25,6 +25,7 @@ from paperroute.build.gtfs_files import (
     read_rows,
 )
 from paperroute.build.handoff import Handoff, HandoffRecord, hand_over
+from paperroute.build.holidays import holiday_dates
 from paperroute.build.shapes import load_shapes
 from paperroute.build.trainlink import trim_trainlink
 from paperroute.core.model import (
@@ -40,6 +41,7 @@ from paperroute.rss import current_rss_mb, max_rss_mb
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION: Final[str] = TIMETABLE_SCHEMA
+BUNDLE: Final[str] = 'bundle'
 CATEGORIES: Final[str] = 'vehicle_categories.txt'
 SHORT_SUSPECTS: Final[str] = """
 SELECT j.value FROM json_each(:trips) j
@@ -74,6 +76,7 @@ CREATE TABLE shapes (shape_id TEXT PRIMARY KEY, mode TEXT NOT NULL,
   west REAL NOT NULL, south REAL NOT NULL, east REAL NOT NULL,
   north REAL NOT NULL, points BLOB NOT NULL);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TABLE holidays (date TEXT PRIMARY KEY) WITHOUT ROWID;
 """
 SHAPE_MODES: Final[str] = """
 SELECT DISTINCT t.shape_id, r.type, COALESCE(t.agency_id, r.agency_id)
@@ -636,6 +639,32 @@ def write_meta(*, conn: sqlite3.Connection, window: Window) -> None:
         ('built_at', datetime.now(timezone.utc).isoformat())])
 
 
+def load_holidays(*, conn: sqlite3.Connection, archive: Path,
+                  window: Window) -> int:
+    """
+    Record the public holidays a bundle shows inside the window.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable being built.
+    archive : Path
+        The bundle's GTFS zip.
+    window : Window
+        Dates covered.
+
+    Returns
+    -------
+    int
+        Number of rows written.
+    """
+    days = holiday_dates(archive=archive, start=window.start,
+                         days=window.days)
+    conn.executemany('INSERT INTO holidays VALUES (?)',
+                     [(day.isoformat(),) for day in sorted(days)])
+    return len(days)
+
+
 def load_all(*, sources: list[Source], window: Window,
              scratch: Path) -> MergeReport:
     """
@@ -660,6 +689,9 @@ def load_all(*, sources: list[Source], window: Window,
         for source in sources:
             print(f'progress load {source.name}', flush=True)
             load_source(conn=conn, source=source, window=window)
+            if source.name == BUNDLE:
+                load_holidays(conn=conn, archive=source.archive,
+                              window=window)
         print('progress merge', flush=True)
         report = merge_rail(conn=conn)
         trim_trainlink(conn=conn)

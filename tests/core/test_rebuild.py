@@ -50,7 +50,7 @@ from tests.core.factories import START, pin_at
 from tests.fakes import device_facts
 
 OLD = TimetableSeen(version='v', schema='4')
-CURRENT = TimetableSeen(version='v', schema='6')
+CURRENT = TimetableSeen(version='v', schema='7')
 MISSING = TimetableSeen(version=None)
 
 
@@ -140,7 +140,8 @@ def failed_at(*, minutes: int) -> State:
 
 @pytest.mark.parametrize(
     ('schema', 'expected'),
-    [('4', True), ('5', True), ('6', False), ('7', False), (None, False), ('x', False)],
+    [('4', True), ('5', True), ('6', True), ('7', False), ('8', False),
+     (None, False), ('x', False)],
 )
 def test_is_outdated(schema: str | None, expected: bool) -> None:
     """Only a whole-number schema below the app's is outdated."""
@@ -236,13 +237,13 @@ def test_rebuilt_ok_waits_before_any_retry() -> None:
 
 
 def test_current_schema_clears_outdated() -> None:
-    """A later schema-6 file is no longer outdated."""
+    """A later schema-7 file is no longer outdated."""
     state, _ = run_events(
         state=pinned(),
         events=[
             OLD,
             TimetableRebuilt(ok=True),
-            TimetableSeen(version='w', schema='6'),
+            TimetableSeen(version='w', schema='7'),
         ],
     )
     assert not state.rebuild.outdated
@@ -253,7 +254,7 @@ def test_chooser_works_while_outdated() -> None:
     walk: list[Event] = [
         OPEN, ColumnLoaded(path=(), column=KINDS), DOWN, NEXT,
     ]
-    current = step(pinned(), TimetableSeen(version='v', schema='6'))[0]
+    current = step(pinned(), TimetableSeen(version='v', schema='7'))[0]
     outdated = step(pinned(), OLD)[0]
     assert outdated.rebuild == Rebuild(
         outdated=True,
@@ -457,14 +458,14 @@ def test_device_row_keeps_the_build_after_a_failure() -> None:
     state, _ = run_events(
         state=pinned(),
         events=[
-            TimetableSeen(version='2026-10-16T03:30:00+11:00', schema='6'),
+            TimetableSeen(version='2026-10-16T03:30:00+11:00', schema='7'),
             TimetableRebuilt(ok=False),
         ],
     )
     state, _ = step(forced(state=state)[0], TimetableRebuilt(ok=False))
     rows = {row.label: row.value for row in device_rows(state=state)}
     assert rows['Timetable'].startswith('last build failed \u00b7 16 Oct')
-    assert rows['Timetable'].endswith('version 6')
+    assert rows['Timetable'].endswith('version 7')
 
 
 def test_forced_failure_keeps_the_backoff() -> None:

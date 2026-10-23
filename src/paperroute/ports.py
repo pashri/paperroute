@@ -86,6 +86,16 @@ class TimetableRepository(Protocol):
             The schema version, or None when the file records none.
         """
 
+    def holidays(self) -> frozenset[date]:
+        """
+        The public holidays the timetable records.
+
+        Returns
+        -------
+        frozenset[date]
+            The holidays; none for a timetable built without them.
+        """
+
     def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
         """
         Route shapes by ID.

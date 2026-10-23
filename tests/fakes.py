@@ -268,6 +268,17 @@ class BrokenTimetable:
         """
         return None
 
+    def holidays(self) -> frozenset[date]:
+        """
+        Record no holidays.
+
+        Returns
+        -------
+        frozenset[date]
+            Always empty.
+        """
+        return frozenset()
+
     def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
         """
         Know no shapes.

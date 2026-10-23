@@ -8,6 +8,7 @@ import sqlite3
 import threading
 from collections.abc import Iterator
 from contextlib import closing
+from dataclasses import replace
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 from typing import Final
@@ -1824,3 +1825,62 @@ def test_departures_without_trip_joins(
     assert found
     assert all(not onto for _, onto in found)
     assert 'x1' not in [trip for trip, _ in found]
+
+
+def routes_of(
+    *,
+    repo: SqliteTimetableRepository,
+    pin: Pin,
+) -> set[str]:
+    """
+    Route names of a pin's departures on 6 October.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Repository to query.
+    pin : Pin
+        The pin.
+
+    Returns
+    -------
+    set[str]
+        Route short names.
+    """
+    return {
+        departure.route
+        for departure in repo.departures(
+            pin=pin,
+            start=at(hour=0, minute=0, day=6),
+            end=at(hour=23, minute=59, day=6),
+        )
+    }
+
+
+def test_departures_respect_filter(
+    network: SqliteTimetableRepository,
+) -> None:
+    """A route filter narrows the board; an empty one keeps both lines."""
+    pin = Pin(
+        origin=place('C'),
+        kind=RouteKind.TRAIN,
+        routes=('T1',),
+        only=('T2',),
+    )
+    assert routes_of(repo=network, pin=pin) == {'T2'}
+    assert routes_of(repo=network, pin=replace(pin, only=())) == {'T1', 'T2'}
+
+
+def test_filter_with_destination(
+    network: SqliteTimetableRepository,
+) -> None:
+    """From C to J, only T1 is kept though T2 trips reach J."""
+    pin = Pin(
+        origin=place('C'),
+        destination=place('J'),
+        kind=RouteKind.TRAIN,
+        routes=(),
+    )
+    assert 'T2' in routes_of(repo=network, pin=pin)
+    only = replace(pin, only=('T1',))
+    assert routes_of(repo=network, pin=only) <= {'T1'}

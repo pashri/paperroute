@@ -108,6 +108,33 @@ def strip_departures(
     )
 
 
+def filtered(
+    *,
+    departures: Sequence[Departure],
+    only: tuple[str, ...],
+) -> tuple[Departure, ...]:
+    """
+    Keep the departures on the chosen routes.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        Departures to narrow.
+    only : tuple[str, ...]
+        Route short names to keep; empty keeps every departure.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        The kept departures, in their original order.
+    """
+    return tuple(
+        departure
+        for departure in departures
+        if not only or departure.route in only
+    )
+
+
 def board_departures(
     *, departures: Sequence[Departure], kind: RouteKind | None,
 ) -> tuple[Departure, ...]:

@@ -58,7 +58,11 @@ from paperroute.core.model import (
 )
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.reach import StripKey
-from paperroute.core.strip_times import board_departures, strip_departures
+from paperroute.core.strip_times import (
+    board_departures,
+    filtered,
+    strip_departures,
+)
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/timetable.db')
 CHUNK: Final[int] = 500
@@ -789,7 +793,8 @@ class SqliteTimetableRepository:
             From, each running to its last stop. A
             trip calling at the From several times in a row, such as a
             bus moving between two stands, leaves once, from its last call
-            there that takes passengers on.
+            there that takes passengers on. The pin's route filter
+            (`Pin.only`) is applied last.
         """
         destination = pin.destination
         first = start.astimezone(SYDNEY).date()
@@ -820,7 +825,7 @@ class SqliteTimetableRepository:
                 ),
             ))
         return sorted(
-            found,
+            filtered(departures=found, only=pin.only),
             key=lambda departure: (departure.departs, departure.trip_id),
         )
 

@@ -12,6 +12,7 @@ from paperroute.core.strip_times import (
     approach_times,
     arrivals_after,
     board_departures,
+    filtered,
     joined_ids,
     strip_trips,
     trip_ids,
@@ -255,3 +256,18 @@ def test_calls_after_leave_out_stations_run_through() -> None:
             item=item, trips=trips, origin='C',
         )
     ] == ['E']
+
+
+def test_filtered_keeps_only_routes() -> None:
+    """Only the chosen routes stay, in order; no choice keeps all."""
+    found = [
+        departure(
+            departs=START + timedelta(minutes=minutes),
+            trip_id=route,
+            route=route,
+        )
+        for minutes, route in enumerate(('606', '607X', '610'))
+    ]
+    kept = filtered(departures=found, only=('606', '607X'))
+    assert [d.route for d in kept] == ['606', '607X']
+    assert filtered(departures=found, only=()) == tuple(found)

@@ -16,6 +16,7 @@ from paperroute.core.panel_screens import panel_view
 from paperroute.core.panel_views import PanelView, SleepView
 from paperroute.core.places import shown, shown_index
 from paperroute.core.rebuild import building_view
+from paperroute.core.refresh import needs_greys
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.sleep import sleep_view
 from paperroute.core.state_model import State
@@ -221,7 +222,9 @@ def rendered(
     """
     Add a Render effect when the view changed.
 
-    While the sleep screen is shown nothing redraws; it is drawn once.
+    The first frame, the sleep screen and a change into or out of a
+    view with grey tiles are full refreshes. While the sleep screen is
+    shown nothing redraws; it is drawn once.
 
     Parameters
     ----------
@@ -245,7 +248,13 @@ def rendered(
         state = replace(state, scroll=view.scroll)
     if view == state.last_view:
         return state, effects
-    return replace(state, last_view=view), (*effects, Render(view=view))
+    full = (
+        state.last_view is None
+        or isinstance(view, SleepView)
+        or needs_greys(view=view) != needs_greys(view=state.last_view)
+    )
+    render = Render(view=view, full=full)
+    return replace(state, last_view=view), (*effects, render)
 
 
 def settled(

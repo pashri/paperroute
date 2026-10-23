@@ -253,6 +253,23 @@ class Calendar:
 
 
 @dataclass(frozen=True)
+class Refresh:
+    """
+    When the panel was last fully refreshed and last touched.
+
+    Attributes
+    ----------
+    last_full : datetime | None
+        The last full refresh, or None before the first.
+    touched_at : datetime | None
+        The last knob touch, or None before the first.
+    """
+
+    last_full: datetime | None = None
+    touched_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 # pylint: disable-next=too-many-instance-attributes
 class State:
     """
@@ -300,6 +317,8 @@ class State:
         The device's own state.
     calendar : Calendar
         The public holidays, from the timetable.
+    refresh : Refresh
+        The full-refresh schedule.
     """
 
     now: datetime
@@ -322,3 +341,4 @@ class State:
     quota: Quota = field(default_factory=Quota)
     panel: Panel = field(default_factory=Panel)
     calendar: Calendar = field(default_factory=Calendar)
+    refresh: Refresh = field(default_factory=Refresh)

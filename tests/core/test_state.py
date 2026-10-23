@@ -1431,7 +1431,7 @@ def check_effects(
     for effect in effects:
         if isinstance(effect, Render):
             check_render(state=after, view=effect.view)
-            assert effect.view != before.last_view
+            assert effect.full or effect.view != before.last_view
         if isinstance(effect, LoadStrip):
             check_strip_load(
                 before=before, after=after, event=event, effect=effect

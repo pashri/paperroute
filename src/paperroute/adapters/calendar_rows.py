@@ -1,16 +1,67 @@
 """Calendar facts from the timetable file."""
 
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Collection, Sequence
 from datetime import date
 from typing import Final
 
+from paperroute.core.model import Departure, ServiceSpan, service_time
+
 type Fetch = Callable[[str], list[tuple[object, ...]]]
+type FetchIn = Callable[[str, Collection[str]], list[tuple[object, ...]]]
 
 HOLIDAYS: Final[str] = 'SELECT date FROM holidays'
 HAS_HOLIDAYS: Final[str] = (
     "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'holidays'"
 )
+
+TRIP_ENDS: Final[str] = """
+SELECT MIN(first.dep), MAX(last.arr)
+FROM (SELECT trip_id, MIN(seq) AS lo, MAX(seq) AS hi FROM stop_times
+      WHERE trip_id IN ({marks}) GROUP BY trip_id) AS ends
+JOIN stop_times AS first
+  ON first.trip_id = ends.trip_id AND first.seq = ends.lo
+JOIN stop_times AS last
+  ON last.trip_id = ends.trip_id AND last.seq = ends.hi
+"""
+
+
+def service_span(
+    *, departures: Sequence[Departure], day: date, fetch_in: FetchIn
+) -> ServiceSpan | None:
+    """
+    Find when a pin's trips run on a service day.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        The pin's departures around the day.
+    day : date
+        The service day.
+    fetch_in : FetchIn
+        Runs `TRIP_ENDS` for some trip IDs and returns its rows.
+
+    Returns
+    -------
+    ServiceSpan | None
+        From the earliest first-stop departure to the latest last-stop
+        arrival of the departures' trips on the day; None when there
+        are none.
+    """
+    trips = {
+        departure.trip_id
+        for departure in departures
+        if departure.service_day == day
+    }
+    if not trips:
+        return None
+    rows = fetch_in(TRIP_ENDS, trips)
+    first = min(int(str(row[0])) for row in rows)
+    last = max(int(str(row[1])) for row in rows)
+    return ServiceSpan(
+        first_start=service_time(day=day, seconds=first),
+        last_end=service_time(day=day, seconds=last),
+    )
 
 
 def read_holidays(*, fetch: Fetch) -> frozenset[date]:

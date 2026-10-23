@@ -349,6 +349,24 @@ class Departure:
     stops: int | None = None
 
 
+
+@dataclass(frozen=True)
+class ServiceSpan:
+    """
+    When a pin's trips run on one service day.
+
+    Attributes
+    ----------
+    first_start : datetime
+        When the earliest of its trips leaves its first stop.
+    last_end : datetime
+        When the latest of its trips reaches its last stop.
+    """
+
+    first_start: datetime
+    last_end: datetime
+
+
 def service_epoch(*, day: date) -> datetime:
     """
     Find the moment GTFS times on a service day count from.

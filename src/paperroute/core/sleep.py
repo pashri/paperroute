@@ -1,6 +1,7 @@
 """Sleeping the screen: the state it leaves and the screen it shows."""
 
 from dataclasses import replace
+from datetime import timedelta
 from typing import Final
 
 from paperroute.core.map_requests import map_inputs
@@ -10,9 +11,10 @@ from paperroute.core.state_model import State
 from paperroute.core.stop_view import DOT, StopView
 
 SLEEP_BAND: Final[str] = f'Asleep{DOT}turn or press a knob to wake'
+WAKE_FOR: Final[timedelta] = timedelta(minutes=5)
 
 
-def slept(*, state: State) -> State:
+def slept(*, state: State, by_quiet: bool = False) -> State:
     """
     Put the screen to sleep.
 
@@ -20,13 +22,40 @@ def slept(*, state: State) -> State:
     ----------
     state : State
         State.
+    by_quiet : bool
+        Whether quiet hours sleep it, so a tick can end the sleep.
 
     Returns
     -------
     State
-        State with the screen asleep and the menu closed.
+        State with the screen asleep, the menu closed and no wake
+        running.
     """
-    panel = replace(state.panel, asleep=True, menu=None)
+    panel = replace(
+        state.panel,
+        asleep=True,
+        menu=None,
+        by_quiet=by_quiet,
+        awake_until=None,
+    )
+    return replace(state, panel=panel)
+
+
+def held_awake(*, state: State) -> State:
+    """
+    Keep the screen awake for `WAKE_FOR` from now.
+
+    Parameters
+    ----------
+    state : State
+        State, awake.
+
+    Returns
+    -------
+    State
+        State whose wake ends `WAKE_FOR` after now.
+    """
+    panel = replace(state.panel, awake_until=state.now + WAKE_FOR)
     return replace(state, panel=panel)
 
 
@@ -44,7 +73,7 @@ def awake(*, state: State) -> State:
     State
         State awake, with every feed due at once.
     """
-    panel = replace(state.panel, asleep=False)
+    panel = replace(state.panel, asleep=False, by_quiet=False)
     map_state = replace(state.map, fetched_at={})
     return replace(state, panel=panel, map=map_state, last_fetch=None)
 

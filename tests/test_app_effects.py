@@ -30,6 +30,7 @@ from paperroute.core.messages import (
     LoadHolidays,
     LoadLine,
     LoadModes,
+    LoadServiceSpan,
     LoadStrip,
     MatchPlaces,
     ModesLoaded,
@@ -37,11 +38,12 @@ from paperroute.core.messages import (
     PlacesMatched,
     Render,
     SaveState,
+    ServiceSpanLoaded,
     StripFailed,
     StripLoaded,
     TimetableSeen,
 )
-from paperroute.core.model import Mode, RouteKind, StopPlace
+from paperroute.core.model import Mode, Pin, RouteKind, ServiceSpan, StopPlace
 from paperroute.core.reach import ReachInput, RunTail, StripKey, build_reach
 from paperroute.core.saved import Saved, seeded
 from paperroute.render.chooser import draw_chooser_view
@@ -55,7 +57,7 @@ from tests.app_factories import (
     posted_by,
     strip_map_view,
 )
-from tests.core.factories import place
+from tests.core.factories import pin_of, place
 from tests.fakes import (
     STOP_POINT,
     BrokenTimetable,
@@ -558,5 +560,66 @@ async def test_holidays_read_failure_is_empty(
             effects=[LoadHolidays(timetable='v1')],
         )
     assert posted == [HolidaysLoaded(dates=frozenset(), timetable='v1')]
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(errors) == 1
+
+
+@dataclass
+class SpanFailingTimetable(EmptyPlacedTimetable):
+    """A timetable whose service spans can't be read."""
+
+    def service_span(self, *, pin: Pin, day: date) -> ServiceSpan | None:
+        """
+        Fail like a damaged database file.
+
+        Parameters
+        ----------
+        pin : Pin
+            Ignored.
+        day : date
+            Ignored.
+
+        Returns
+        -------
+        ServiceSpan | None
+            Never returns.
+
+        Raises
+        ------
+        sqlite3.Error
+            Always.
+        """
+        raise sqlite3.OperationalError('disk I/O error')
+
+
+async def test_service_span_read() -> None:
+    """A span read posts the timetable's answer for the pin and day."""
+    pin = pin_of('2145615', None)
+    posted = await posted_by(
+        ports=ports_of(timetable=EmptyPlacedTimetable()),
+        effects=[LoadServiceSpan(pin=pin, day=date(2026, 10, 16))],
+    )
+    assert posted == [
+        ServiceSpanLoaded(pin=pin, day=date(2026, 10, 16), span=None),
+    ]
+
+
+async def test_service_span_failure_is_none(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failed span read posts no span and logs one error."""
+    pin = pin_of('2145615', None)
+    with caplog.at_level(logging.ERROR):
+        posted = await posted_by(
+            ports=ports_of(timetable=SpanFailingTimetable()),
+            effects=[
+                LoadServiceSpan(pin=pin, day=date(2026, 10, 16), timetable='v'),
+            ],
+        )
+    assert posted == [
+        ServiceSpanLoaded(
+            pin=pin, day=date(2026, 10, 16), span=None, timetable='v',
+        ),
+    ]
     errors = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert len(errors) == 1

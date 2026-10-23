@@ -88,6 +88,7 @@ from paperroute.core.model import (
     same_place,
     shifted,
 )
+from paperroute.core.panel_views import SleepView
 from paperroute.core.places import shown, stops_to_match
 from paperroute.core.quota import QUOTA_SAVE_EVERY, quota_only
 from paperroute.core.reach import (
@@ -171,7 +172,7 @@ from tests.core.factories import (
     snapshot,
     vehicle,
 )
-from tests.core.steps import step_untouched
+from tests.core.steps import step_untouched, wakeful
 
 PIN = Pin(
     origin=place('2145615', name='Hollis St'),
@@ -328,7 +329,7 @@ def test_poll_interval_counts_real_seconds_on_fall_back_night() -> None:
     first = datetime(2026, 4, 5, 2, 30, tzinfo=SYDNEY)
     second = datetime(2026, 4, 5, 2, 30, 10, tzinfo=SYDNEY, fold=1)
     assert second.timestamp() - first.timestamp() == 3610
-    state = replace(loaded(state=fresh()), last_fetch=first)
+    state = replace(wakeful(state=loaded(state=fresh())), last_fetch=first)
     _, effects = step(state, Tick(now=second))
     assert FetchFeed(feed=BUSES) in effects
 
@@ -1660,8 +1661,8 @@ def check_render(
     view: ScreenView,
 ) -> None:
     """
-    Assert a rendered view is the Building screen with no timetable,
-    else the chooser's stage or the Live view shown, and fits the
+    Assert a rendered view is the sleep screen while asleep, else the
+    Building screen with no timetable, else the chooser's stage or the Live view shown, and fits the
     screen, and the Strip's stored scroll is within its reach.
 
     Parameters
@@ -1672,7 +1673,9 @@ def check_render(
         The view drawn.
     """
     chooser = state.chooser
-    if state.rebuild.missing:
+    if state.panel.asleep:
+        assert isinstance(view, SleepView)
+    elif state.rebuild.missing:
         assert view == building_view(state=state)
     elif chooser is not None:
         assert type(view) is STAGE_TYPES[chooser.stage]

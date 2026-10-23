@@ -23,6 +23,7 @@ from paperroute.core.saved import Quota
 from paperroute.core.state import SAVE_AFTER, step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import saved_of
+from tests.core.steps import wakeful
 from tests.core.test_state import BUSES, HOLD, at, fresh, loaded, pinned, saves
 
 DAY = date(2026, 10, 21)
@@ -66,7 +67,7 @@ def test_quota_rolls_over_at_sydney_midnight() -> None:
     """The count restarts on the first call of the next Sydney day."""
     late = datetime(2026, 10, 21, 23, 59, 59, tzinfo=SYDNEY)
     early = datetime(2026, 10, 22, 0, 0, 5, tzinfo=SYDNEY)
-    state = loaded(state=fresh(now=late))
+    state = wakeful(state=loaded(state=fresh(now=late)))
     state = replace(state, quota=Quota(day=DAY, calls=500))
     state, _ = step(state, Tick(now=late))
     assert state.quota == Quota(day=DAY, calls=501)
@@ -78,7 +79,7 @@ def test_quota_rolls_over_on_a_daylight_saving_day() -> None:
     """Midnight after the clocks go forward still starts a new day."""
     late = datetime(2026, 10, 4, 23, 59, tzinfo=SYDNEY)
     early = datetime(2026, 10, 5, 0, 0, tzinfo=SYDNEY)
-    state = loaded(state=fresh(now=late))
+    state = wakeful(state=loaded(state=fresh(now=late)))
     state = replace(state, quota=Quota(day=date(2026, 10, 4), calls=9))
     state, _ = step(state, Tick(now=late))
     assert state.quota == Quota(day=date(2026, 10, 4), calls=10)

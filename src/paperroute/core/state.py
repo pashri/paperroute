@@ -72,6 +72,7 @@ from paperroute.core.messages import (
     QuitRequested,
     ResetDone,
     SaveState,
+    ServiceSpanLoaded,
     SettingsChanged,
     ShapesLoaded,
     Stop,
@@ -97,11 +98,13 @@ from paperroute.core.places import (
     with_place,
 )
 from paperroute.core.polling import poll_effects, woken
+from paperroute.core.quiet import span_loaded, span_requests, with_quiet
 from paperroute.core.quota import QUOTA_SAVE_EVERY, quota_only, with_calls
 from paperroute.core.rebuild import rebuild_effects, rebuilt, seen_schema
 from paperroute.core.refresh import noted, with_full
 from paperroute.core.rhythm import holidays_loaded
 from paperroute.core.saved import Saved
+from paperroute.core.sleep import held_awake
 from paperroute.core.state_model import (
     FEED_IDLE,
     Board,
@@ -308,6 +311,8 @@ def on_tick(
     """
     Advance time: reload, poll, ask for map data and redraw as needed.
 
+    Quiet hours then sleep or wake the screen.
+
     Parameters
     ----------
     state : State
@@ -321,6 +326,7 @@ def on_tick(
         New state and effects.
     """
     state = idle_dropped(state=replace(state, now=event.now))
+    state, spans = span_requests(state=state)
     state, loads = reload_effects(state=state)
     state, picked = picked_reloads(state=state)
     state, fetches = poll_effects(state=state)
@@ -329,9 +335,11 @@ def on_tick(
     state, probes = probe_effects(state=state)
     state, effects = settled(
         state=state,
-        effects=(*loads, *picked, *fetches, *saves, *matches, *probes),
+        effects=(
+            *spans, *loads, *picked, *fetches, *saves, *matches, *probes,
+        ),
     )
-    return with_full(state=state, effects=effects)
+    return with_quiet(result=with_full(state=state, effects=effects))
 
 
 def on_loaded(
@@ -434,16 +442,21 @@ def on_touch(
     -------
     tuple[State, tuple[Effect, ...]]
         A phone's ask shows a confirm; a touch goes to `panel_touch`.
-        While asleep the first touch only wakes the screen. A touch
+        While asleep the first touch only wakes the screen, for
+        `WAKE_FOR`; a knob touch during a wake moves its end on. A touch
         during a power action or a reset does nothing.
     """
     if state.panel.asleep:
-        return woken(state=state, event=event)
+        after, effects = woken(state=state, event=event)
+        return held_awake(state=after), effects
     if isinstance(event, ConfirmAsked):
         return on_asked(state=state, event=event)
     if state.power is not None or state.panel.resetting is not None:
         return state, ()
-    return panel_touch(state=state, event=event)
+    after, effects = panel_touch(state=state, event=event)
+    if state.panel.awake_until is None:
+        return after, effects
+    return held_awake(state=after), effects
 
 
 def panel_touch(
@@ -751,10 +764,12 @@ def with_rebuild(
 def on_timetable_file(
     *,
     state: State,
-    event: TimetableSeen | TimetableRebuilt | HolidaysLoaded,
+    event: (
+        TimetableSeen | TimetableRebuilt | HolidaysLoaded | ServiceSpanLoaded
+    ),
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Note a timetable seen, a rebuild finished or holidays read.
+    Note a timetable seen, a rebuild finished, holidays or a span read.
 
     A timetable seen or rebuilt rebuilds when due.
 
@@ -766,6 +781,7 @@ def on_timetable_file(
     state : State
         State.
     event : TimetableSeen | TimetableRebuilt | HolidaysLoaded
+        | ServiceSpanLoaded
         What happened.
 
     Returns
@@ -775,6 +791,8 @@ def on_timetable_file(
     """
     if isinstance(event, HolidaysLoaded):
         return holidays_loaded(state=state, event=event), ()
+    if isinstance(event, ServiceSpanLoaded):
+        return span_loaded(state=state, event=event), ()
     if isinstance(event, TimetableRebuilt):
         return settled(state=rebuilt(state=state, ok=event.ok))
     seen = seen_schema(state=state, seen=event)
@@ -848,7 +866,12 @@ def dispatched(
             result = on_touch(state=state, event=event)
         case QuitRequested():
             result = on_quit(state=state)
-        case TimetableSeen() | TimetableRebuilt() | HolidaysLoaded():
+        case (
+            TimetableSeen()
+            | TimetableRebuilt()
+            | HolidaysLoaded()
+            | ServiceSpanLoaded()
+        ):
             result = on_timetable_file(state=state, event=event)
         case (
             SettingsChanged()

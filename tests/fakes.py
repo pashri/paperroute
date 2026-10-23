@@ -21,7 +21,7 @@ from paperroute.core.device_model import (
 )
 from paperroute.core.geo import MetreBox, Point, Shape, to_metres
 from paperroute.core.messages import PowerAction
-from paperroute.core.model import Departure, Mode, Pin, StopPlace
+from paperroute.core.model import Departure, Mode, Pin, ServiceSpan, StopPlace
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.saved import DEFAULT_SAVED, Saved
@@ -292,6 +292,24 @@ class BrokenTimetable:
             Always empty.
         """
         return frozenset()
+
+    def service_span(self, *, pin: Pin, day: date) -> ServiceSpan | None:
+        """
+        Record no trips.
+
+        Parameters
+        ----------
+        pin : Pin
+            Ignored.
+        day : date
+            Ignored.
+
+        Returns
+        -------
+        ServiceSpan | None
+            Always None.
+        """
+        return None
 
     def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:
         """

@@ -1,10 +1,13 @@
 """Tests for reading public holidays from a timetable file."""
 
 import sqlite3
+from collections.abc import Iterator
 from contextlib import closing
-from datetime import date
+from datetime import date, timedelta
 from pathlib import Path
 from typing import Final
+
+import pytest
 
 from paperroute.adapters.calendar_rows import (
     HAS_HOLIDAYS,
@@ -14,10 +17,14 @@ from paperroute.adapters.calendar_rows import (
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
-from tests.build.feeds import bus_files
+from paperroute.core.model import service_epoch, service_time
+from tests.build.feeds import build_db, bus_files
+from tests.core.factories import pin_of
 from tests.helpers import write_feed
 
 HOLIDAY: Final[date] = date(2026, 10, 16)
+REAL: Final[Path] = Path(__file__).parent.parent / 'fixtures' / 'real'
+SERVICE: Final[date] = date(2026, 10, 16)
 WEEKDAYS: Final[dict[str, str]] = {
     'monday': '1', 'tuesday': '1', 'wednesday': '1', 'thursday': '1',
     'friday': '1', 'saturday': '0', 'sunday': '0',
@@ -93,3 +100,63 @@ def test_holidays_query_error_is_none() -> None:
         raise sqlite3.OperationalError('no such table: holidays')
 
     assert read_holidays(fetch=vanishing) == frozenset()
+
+
+@pytest.fixture(name='bundle_repo', scope='module')
+def _bundle_repo(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[SqliteTimetableRepository]:
+    """
+    A repository over the real bus slice, built for one service day.
+
+    Parameters
+    ----------
+    tmp_path_factory : pytest.TempPathFactory
+        Makes the working directory.
+
+    Yields
+    ------
+    SqliteTimetableRepository
+        Repository, closed after the tests.
+    """
+    db = build_db(
+        tmp_path=tmp_path_factory.mktemp('bundle'),
+        sources=[Source(name='bundle', archive=REAL / 'bundle.zip')],
+        start=SERVICE,
+        days=1,
+    )
+    with closing(SqliteTimetableRepository(path=db)) as repo:
+        yield repo
+
+
+def test_service_span_reads_trip_ends(
+    bundle_repo: SqliteTimetableRepository,
+) -> None:
+    """A span runs from the first trip's start to the last trip's end."""
+    pin = pin_of('2145615', '215020')
+    trips = {
+        found.trip_id
+        for found in bundle_repo.departures(
+            pin=pin,
+            start=service_epoch(day=SERVICE),
+            end=service_epoch(day=SERVICE + timedelta(days=1)),
+        )
+        if found.service_day == SERVICE
+    }
+    assert trips
+    marks = ','.join('?' * len(trips))
+    ((first, last),) = bundle_repo.fetch(
+        sql=(
+            'SELECT MIN(dep), MAX(arr) FROM stop_times s WHERE trip_id IN '
+            f'({marks}) AND (seq = (SELECT MIN(seq) FROM stop_times '
+            'WHERE trip_id = s.trip_id) OR seq = (SELECT MAX(seq) FROM '
+            'stop_times WHERE trip_id = s.trip_id))'
+        ),
+        params=tuple(sorted(trips)),
+    )
+    span = bundle_repo.service_span(pin=pin, day=SERVICE)
+    assert span is not None
+    assert span.first_start == service_time(day=SERVICE, seconds=int(str(first)))
+    assert span.last_end == service_time(day=SERVICE, seconds=int(str(last)))
+    after = SERVICE + timedelta(days=5)
+    assert bundle_repo.service_span(pin=pin, day=after) is None

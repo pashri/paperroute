@@ -9,7 +9,7 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.adapters.calendar_rows import read_holidays
+from paperroute.adapters.calendar_rows import read_holidays, service_span
 from paperroute.adapters.carry_on_rows import (
     CARRY_ONS,
     carry_on_departure,
@@ -40,7 +40,9 @@ from paperroute.core.model import (
     Departure,
     Mode,
     Pin,
+    ServiceSpan,
     StopPlace,
+    service_epoch,
     service_seconds,
 )
 from paperroute.core.patterns import PatternStop, TripPattern
@@ -433,6 +435,34 @@ class SqliteTimetableRepository:
         """
         return read_holidays(
             fetch=lambda sql: self.fetch(sql=sql, params=()),
+        )
+
+    def service_span(self, *, pin: Pin, day: date) -> ServiceSpan | None:
+        """
+        When a pin's trips run on a service day.
+
+        Parameters
+        ----------
+        pin : Pin
+            From and Destination.
+        day : date
+            Service day.
+
+        Returns
+        -------
+        ServiceSpan | None
+            The span of the trips `departures` lists that day; None when
+            there are none.
+        """
+        found = self.departures(
+            pin=pin,
+            start=service_epoch(day=day),
+            end=service_epoch(day=day + timedelta(days=1)),
+        )
+        return service_span(
+            departures=found,
+            day=day,
+            fetch_in=lambda sql, ids: self.fetch_in(sql=sql, ids=ids),
         )
 
     def stop(self, *, stop_id: str) -> StopPlace:

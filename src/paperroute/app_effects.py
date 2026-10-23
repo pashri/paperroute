@@ -29,6 +29,7 @@ from paperroute.core.messages import (
     LoadLine,
     LoadModes,
     LoadPatterns,
+    LoadServiceSpan,
     LoadShapes,
     LoadStrip,
     MapRequest,
@@ -39,6 +40,7 @@ from paperroute.core.messages import (
     PlacesMatched,
     PositionsFetched,
     SaveState,
+    ServiceSpanLoaded,
     ShapesLoaded,
     StripFailed,
     StripLoaded,
@@ -65,6 +67,7 @@ WorkerEffect = (
     | LoadLine
     | LoadChooserDepartures
     | LoadHolidays
+    | LoadServiceSpan
 )
 
 
@@ -329,6 +332,83 @@ def holidays_read(
     return HolidaysLoaded(dates=timetable.holidays(), timetable=version)
 
 
+def span_read(
+    *, timetable: TimetableRepository, effect: LoadServiceSpan
+) -> ServiceSpanLoaded:
+    """
+    Read when a pin's trips run on a service day.
+
+    Parameters
+    ----------
+    timetable : TimetableRepository
+        Timetable.
+    effect : LoadServiceSpan
+        Request, echoed back.
+
+    Returns
+    -------
+    ServiceSpanLoaded
+        The span.
+    """
+    return ServiceSpanLoaded(
+        pin=effect.pin,
+        day=effect.day,
+        span=timetable.service_span(pin=effect.pin, day=effect.day),
+        timetable=effect.timetable,
+    )
+
+
+def calendar_read(
+    *,
+    timetable: TimetableRepository,
+    effect: LoadHolidays | LoadServiceSpan,
+) -> Callable[[], Event]:
+    """
+    Give the read a calendar request asks for.
+
+    Parameters
+    ----------
+    timetable : TimetableRepository
+        Timetable.
+    effect : LoadHolidays | LoadServiceSpan
+        Request.
+
+    Returns
+    -------
+    Callable[[], Event]
+        The read, giving its result event.
+    """
+    if isinstance(effect, LoadServiceSpan):
+        return functools.partial(span_read, timetable=timetable, effect=effect)
+    return functools.partial(
+        holidays_read, timetable=timetable, version=effect.timetable
+    )
+
+
+def calendar_failure(*, effect: LoadHolidays | LoadServiceSpan) -> Event:
+    """
+    Give the event posted when a calendar read fails.
+
+    Parameters
+    ----------
+    effect : LoadHolidays | LoadServiceSpan
+        Request.
+
+    Returns
+    -------
+    Event
+        No holidays, or no span, tagged with the request's timetable.
+    """
+    if isinstance(effect, LoadServiceSpan):
+        return ServiceSpanLoaded(
+            pin=effect.pin,
+            day=effect.day,
+            span=None,
+            timetable=effect.timetable,
+        )
+    return HolidaysLoaded(dates=frozenset(), timetable=effect.timetable)
+
+
 def read_for(
     *,
     timetable: TimetableRepository,
@@ -369,10 +449,8 @@ def read_for(
             return functools.partial(
                 line_loaded, network=network, effect=effect
             )
-        case LoadHolidays(timetable=version):
-            return functools.partial(
-                holidays_read, timetable=timetable, version=version
-            )
+        case LoadHolidays() | LoadServiceSpan():
+            return calendar_read(timetable=timetable, effect=effect)
     return functools.partial(
         chooser_departures, timetable=timetable, effect=effect
     )
@@ -401,8 +479,8 @@ def failure_of(*, effect: WorkerEffect) -> Event:
             return ColumnFailed(path=path, timetable=version)
         case LoadLine(towards=towards, timetable=version):
             return LineFailed(towards=towards, timetable=version)
-        case LoadHolidays(timetable=version):
-            return HolidaysLoaded(dates=frozenset(), timetable=version)
+        case LoadHolidays() | LoadServiceSpan():
+            return calendar_failure(effect=effect)
     return ChooserDeparturesFailed(pin=effect.pin, timetable=effect.timetable)
 
 

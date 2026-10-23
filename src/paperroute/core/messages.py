@@ -19,7 +19,7 @@ from paperroute.core.device_model import (
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.map_view import MapView
-from paperroute.core.model import Departure, Mode, Pin, StopPlace
+from paperroute.core.model import Departure, Mode, Pin, ServiceSpan, StopPlace
 from paperroute.core.panel_views import PanelView, SleepView
 from paperroute.core.patterns import TripPattern
 from paperroute.core.positions import PositionsSnapshot
@@ -137,6 +137,15 @@ class LoadChooserDepartures:
 class LoadHolidays:
     """Ask for the public holidays a timetable version records."""
 
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class LoadServiceSpan:
+    """Ask when a pin's trips run on a service day, tagged likewise."""
+
+    pin: Pin
+    day: date
     timetable: str | None = None
 
 
@@ -290,6 +299,7 @@ Effect = (
     | StopWifiSetup
     | ChooserLoad
     | LoadHolidays
+    | LoadServiceSpan
 )
 
 
@@ -413,6 +423,29 @@ class HolidaysLoaded:
     """
 
     dates: frozenset[date]
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class ServiceSpanLoaded:
+    """
+    When a pin's trips run on a service day; none when the read failed.
+
+    Attributes
+    ----------
+    pin : Pin
+        The pin asked about.
+    day : date
+        The service day.
+    span : ServiceSpan | None
+        The span, or None for no trips or a failed read.
+    timetable : str | None
+        The timetable version it was read from.
+    """
+
+    pin: Pin
+    day: date
+    span: ServiceSpan | None
     timetable: str | None = None
 
 
@@ -807,6 +840,7 @@ Event = (
     | TimetableSeen
     | TimetableRebuilt
     | HolidaysLoaded
+    | ServiceSpanLoaded
     | SettingsChanged
     | ApiKeyChanged
     | DeviceProbed

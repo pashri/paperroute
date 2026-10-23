@@ -9,7 +9,7 @@ from paperroute.core.chooser import ChooserState
 from paperroute.core.device_model import Panel
 from paperroute.core.map_state import MapState
 from paperroute.core.messages import PowerAction, ScreenView
-from paperroute.core.model import Departure, Pin, shifted
+from paperroute.core.model import Departure, Pin, ServiceSpan, shifted
 from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import LiveView, Quota, Saved, Settings
@@ -247,9 +247,19 @@ class Calendar:
     ----------
     holidays : frozenset[date]
         The public holidays the timetable records.
+    spans : Mapping[date, ServiceSpan | None]
+        When the shown pin's trips run, by service day; None for a day
+        with no trips or a failed read.
+    pending : frozenset[date]
+        Service days whose spans are being read.
+    spans_for : tuple[Pin, str | None] | None
+        The pin and timetable version the spans are for, or None.
     """
 
     holidays: frozenset[date] = frozenset()
+    spans: Mapping[date, ServiceSpan | None] = field(default_factory=dict)
+    pending: frozenset[date] = frozenset()
+    spans_for: tuple[Pin, str | None] | None = None
 
 
 @dataclass(frozen=True)

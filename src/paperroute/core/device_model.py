@@ -312,6 +312,10 @@ class Panel:
         Whether the screen is asleep.
     wifi : WifiSetup | None
         Wi-Fi setup open, or None.
+    awake_until : datetime | None
+        When a wake in quiet hours ends, or None.
+    by_quiet : bool
+        Whether the sleep is quiet hours', which a tick can end.
     """
 
     key_set: bool | None = None
@@ -324,3 +328,5 @@ class Panel:
     probing: bool = False
     asleep: bool = False
     wifi: WifiSetup | None = None
+    awake_until: datetime | None = None
+    by_quiet: bool = False

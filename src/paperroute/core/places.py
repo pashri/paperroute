@@ -23,6 +23,7 @@ from paperroute.core.messages import (
     MatchPlaces,
     ModesLoaded,
     PlacesFailed,
+    ServiceSpanLoaded,
     StripFailed,
     StripLoaded,
 )
@@ -374,15 +375,17 @@ def is_stale(*, state: State, event: Event) -> bool:
     Returns
     -------
     bool
-        True for departures loaded or failed for another place or another
-        timetable version, for a reach, a chooser load, a failed place
-        look-up or holidays from another timetable version, and for area
-        modes loaded or failed for another map area.
+        True for departures loaded or failed, or a service span read, for
+        another place or another timetable version, for a reach, a
+        chooser load, a failed place look-up or holidays from another
+        timetable version, and for area modes loaded or failed for
+        another map area.
     """
     match event:
         case (
             DeparturesLoaded(pin=pin, timetable=timetable)
             | DeparturesFailed(pin=pin, timetable=timetable)
+            | ServiceSpanLoaded(pin=pin, timetable=timetable)
         ):
             return timetable != state.saving.timetable or not same_place(
                 first=pin, second=shown(state=state)

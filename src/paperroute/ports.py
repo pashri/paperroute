@@ -20,7 +20,7 @@ from paperroute.core.device_model import (
 )
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.messages import PowerAction
-from paperroute.core.model import Departure, Mode, Pin, StopPlace
+from paperroute.core.model import Departure, Mode, Pin, ServiceSpan, StopPlace
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.saved import Saved, Settings
@@ -94,6 +94,25 @@ class TimetableRepository(Protocol):
         -------
         frozenset[date]
             The holidays; none for a timetable built without them.
+        """
+
+    def service_span(self, *, pin: Pin, day: date) -> ServiceSpan | None:
+        """
+        When a pin's trips run on a service day.
+
+        Parameters
+        ----------
+        pin : Pin
+            From and Destination.
+        day : date
+            Service day.
+
+        Returns
+        -------
+        ServiceSpan | None
+            From the earliest first-stop departure to the latest
+            last-stop arrival of the pin's trips that day; None when
+            there are none.
         """
 
     def shapes(self, *, shape_ids: Collection[str]) -> dict[str, Shape]:

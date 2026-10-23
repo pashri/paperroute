@@ -1,0 +1,427 @@
+"""Tests for sleeping through quiet hours and the five-minute wake."""
+
+from collections.abc import Iterable
+from dataclasses import replace
+from datetime import date, datetime, time, timedelta
+from typing import Final
+
+from paperroute.core.device_model import ConfirmAction, MenuRow
+from paperroute.core.messages import (
+    ConfirmAsked,
+    DeparturesLoaded,
+    Effect,
+    Event,
+    FetchFeed,
+    Knob,
+    KnobsHeld,
+    KnobTurned,
+    LoadServiceSpan,
+    PowerAction,
+    Render,
+    ServiceSpanLoaded,
+    Tick,
+)
+from paperroute.core.model import SYDNEY, ServiceSpan
+from paperroute.core.panel_views import SleepView
+from paperroute.core.places import shown
+from paperroute.core.saved import QuietMode, Rate, Window
+from paperroute.core.sleep import WAKE_FOR
+from paperroute.core.state import step
+from paperroute.core.state_model import Places, State
+from paperroute.core.stop_view import StopView
+from tests.core.factories import START, departure
+from tests.core.test_menu import DOWN, run, turn
+from tests.core.test_state import BUSES, PINS, fresh
+
+DAY: Final[date] = START.date()
+HALF_MINUTE: Final[timedelta] = timedelta(seconds=30)
+BOTTOM: Final[KnobTurned] = KnobTurned(knob=Knob.BOTTOM, steps=1)
+
+
+def at(hour: int, minute: int = 0, *, days: int = 0) -> datetime:
+    """
+    A Sydney time on the test day or a day after it.
+
+    Parameters
+    ----------
+    hour : int
+        Hour.
+    minute : int
+        Minute.
+    days : int
+        Days after the test day.
+
+    Returns
+    -------
+    datetime
+        Aware Sydney time.
+    """
+    return datetime.combine(
+        DAY + timedelta(days=days), time(hour, minute), tzinfo=SYDNEY,
+    )
+
+
+def boarded(*, state: State) -> State:
+    """
+    Load twenty bus departures, three minutes apart, from the state's time.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    State
+        State with the departures loaded.
+    """
+    deps = tuple(
+        departure(departs=state.now + timedelta(minutes=3 * (i + 1)))
+        for i in range(20)
+    )
+    event = DeparturesLoaded(
+        pin=shown(state=state),
+        departures=deps,
+        until=state.now + timedelta(hours=3),
+    )
+    return step(state, event)[0]
+
+
+def evening(*, mode: QuietMode = QuietMode.MY_HOURS) -> State:
+    """
+    An awake state at 22:59 with departures loaded.
+
+    Parameters
+    ----------
+    mode : QuietMode
+        How quiet hours are chosen.
+
+    Returns
+    -------
+    State
+        State after a tick at 22:59.
+    """
+    state = fresh(now=at(22, 59))
+    settings = replace(state.settings, quiet_mode=mode)
+    state = boarded(state=replace(state, settings=settings))
+    return step(state, Tick(now=at(22, 59)))[0]
+
+
+def ticked(*, state: State, times: Iterable[datetime]) -> State:
+    """
+    Tick through several times.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    times : Iterable[datetime]
+        Tick times, in order.
+
+    Returns
+    -------
+    State
+        State after the last tick.
+    """
+    for now in times:
+        state = step(state, Tick(now=now))[0]
+    return state
+
+
+def asleep_at_one() -> State:
+    """
+    A state asleep in quiet hours at 01:00, with departures loaded.
+
+    Returns
+    -------
+    State
+        State after the 01:00 tick.
+    """
+    state = ticked(state=evening(), times=(at(23), at(0, 50, days=1)))
+    return ticked(state=boarded(state=state), times=(at(1, days=1),))
+
+
+def renders(*, effects: tuple[Effect, ...]) -> list[Render]:
+    """
+    List the Renders.
+
+    Parameters
+    ----------
+    effects : tuple[Effect, ...]
+        Effects.
+
+    Returns
+    -------
+    list[Render]
+        Each Render.
+    """
+    return [effect for effect in effects if isinstance(effect, Render)]
+
+
+def fetches(*, effects: tuple[Effect, ...]) -> list[FetchFeed]:
+    """
+    List the FetchFeeds.
+
+    Parameters
+    ----------
+    effects : tuple[Effect, ...]
+        Effects.
+
+    Returns
+    -------
+    list[FetchFeed]
+        Each FetchFeed.
+    """
+    return [effect for effect in effects if isinstance(effect, FetchFeed)]
+
+
+def span_loads(*, effects: tuple[Effect, ...]) -> list[LoadServiceSpan]:
+    """
+    List the LoadServiceSpans.
+
+    Parameters
+    ----------
+    effects : tuple[Effect, ...]
+        Effects.
+
+    Returns
+    -------
+    list[LoadServiceSpan]
+        Each LoadServiceSpan.
+    """
+    return [
+        effect for effect in effects if isinstance(effect, LoadServiceSpan)
+    ]
+
+
+def test_my_hours_wrap_midnight() -> None:
+    """The default hours sleep at 23:00 and wake at 05:30."""
+    state = evening()
+    assert not state.panel.asleep
+    state, effects = step(state, Tick(now=at(23)))
+    assert state.panel.asleep
+    assert state.panel.by_quiet
+    (render,) = renders(effects=effects)
+    assert render.full
+    assert isinstance(render.view, SleepView)
+    state, effects = step(state, Tick(now=at(0, 10, days=1)))
+    assert state.panel.asleep
+    assert not fetches(effects=effects)
+    state, effects = step(state, Tick(now=at(5, 30, days=1)))
+    assert not state.panel.asleep
+    assert isinstance(renders(effects=effects)[-1].view, StopView)
+
+
+def test_equal_hours_never_sleep() -> None:
+    """Quiet hours that start and end together never sleep."""
+    state = evening()
+    settings = replace(state.settings, my_hours=Window(time(0), time(0)))
+    state = replace(state, settings=settings)
+    for hour in (23, 0, 3, 5):
+        state = step(state, Tick(now=at(hour, days=hour < 12)))[0]
+        assert not state.panel.asleep
+
+
+def test_first_touch_only_wakes() -> None:
+    """A bottom turn wakes without scrolling; the next one scrolls."""
+    state = asleep_at_one()
+    scroll = state.scroll
+    state, _ = step(state, BOTTOM)
+    assert not state.panel.asleep
+    assert state.scroll == scroll
+    assert state.panel.awake_until == at(1, days=1) + WAKE_FOR
+    state, _ = step(state, BOTTOM)
+    assert state.scroll != scroll
+
+
+def test_touch_keeps_awake_longer() -> None:
+    """Each touch while awake moves the wake's end five minutes on."""
+    state, _ = step(asleep_at_one(), BOTTOM)
+    state = ticked(state=state, times=(at(1, 3, days=1),))
+    state, _ = step(state, BOTTOM)
+    assert state.panel.awake_until == at(1, 8, days=1)
+    state = ticked(state=state, times=(at(1, 6, days=1),))
+    assert not state.panel.asleep
+
+
+def test_back_to_sleep_after_wake_for() -> None:
+    """A wake in quiet hours lasts five minutes."""
+    state, _ = step(asleep_at_one(), BOTTOM)
+    state = ticked(state=state, times=(at(1, 4, days=1),))
+    assert not state.panel.asleep
+    state, effects = step(state, Tick(now=at(1, 5, days=1)))
+    assert state.panel.asleep
+    assert state.panel.by_quiet
+    assert isinstance(renders(effects=effects)[0].view, SleepView)
+
+
+def test_wake_near_end_stays_awake() -> None:
+    """A wake that runs past the end of quiet hours stays awake."""
+    state = ticked(state=asleep_at_one(), times=(at(5, 28, days=1),))
+    state, _ = step(state, BOTTOM)
+    state = ticked(state=state, times=(at(5, 30, days=1),))
+    assert not state.panel.asleep
+    state = ticked(state=state, times=(at(5, 33, days=1),))
+    assert not state.panel.asleep
+    assert state.panel.awake_until is None
+
+
+def test_sleep_now_not_ended_by_tick() -> None:
+    """Sleep now in the afternoon lasts until a touch."""
+    state = boarded(state=fresh(now=at(14)))
+    state, _ = step(state, Tick(now=at(14)))
+    index = tuple(MenuRow).index(MenuRow.SLEEP)
+    state, _ = run(state=state, events=(KnobsHeld(), turn(steps=index)))
+    state, _ = step(state, DOWN)
+    assert state.panel.asleep
+    assert not state.panel.by_quiet
+    state = ticked(
+        state=state, times=(at(14, minute) for minute in range(1, 31)),
+    )
+    assert state.panel.asleep
+
+
+def test_quiet_waits_for_open_menu() -> None:
+    """An open menu holds off quiet sleep until it closes."""
+    state, _ = step(evening(), KnobsHeld())
+    state = ticked(state=state, times=(at(23),))
+    assert state.panel.menu is not None
+    assert not state.panel.asleep
+    later = (at(23, minute) for minute in range(1, 6))
+    state = ticked(state=state, times=later)
+    assert state.panel.menu is None
+    assert state.panel.asleep
+
+
+def test_quiet_waits_for_phone_confirm() -> None:
+    """A phone's confirm holds off quiet sleep."""
+    state = ticked(state=evening(), times=(at(22, 59) + HALF_MINUTE,))
+    event = ConfirmAsked(action=ConfirmAction.RESET_SETTINGS)
+    state, _ = step(state, event)
+    state = ticked(state=state, times=(at(23),))
+    assert state.panel.confirm is not None
+    assert not state.panel.asleep
+
+
+def test_awake_polls_at_rate() -> None:
+    """A wake polls at once, then at the off-peak rate."""
+    state = asleep_at_one()
+    settings = replace(state.settings, offpeak_rate=Rate.SLOW)
+    state, effects = step(replace(state, settings=settings), DOWN)
+    assert FetchFeed(feed=BUSES) in effects
+    state, effects = step(state, Tick(now=at(1, 1, days=1)))
+    assert FetchFeed(feed=BUSES) not in effects
+    state, effects = step(state, Tick(now=at(1, 2, days=1)))
+    assert FetchFeed(feed=BUSES) in effects
+
+
+def followed(*, spans: dict[int, ServiceSpan | None]) -> State:
+    """
+    Follow the timetable at 22:59, with spans loaded.
+
+    Parameters
+    ----------
+    spans : dict[int, ServiceSpan | None]
+        Each span by days after the test day.
+
+    Returns
+    -------
+    State
+        State with the spans answered.
+    """
+    state = evening(mode=QuietMode.TIMETABLE)
+    for days, span in spans.items():
+        event = ServiceSpanLoaded(
+            pin=shown(state=state),
+            day=DAY + timedelta(days=days),
+            span=span,
+        )
+        state = step(state, event)[0]
+    return state
+
+
+def test_follow_asks_for_three_days() -> None:
+    """Following the timetable asks for yesterday, today and tomorrow."""
+    state = fresh(now=at(22, 59))
+    settings = replace(state.settings, quiet_mode=QuietMode.TIMETABLE)
+    state, effects = step(
+        replace(state, settings=settings), Tick(now=at(22, 59)),
+    )
+    days = [load.day for load in span_loads(effects=effects)]
+    assert days == [DAY + timedelta(days=d) for d in (-1, 0, 1)]
+    _, effects = step(state, Tick(now=at(23)))
+    assert not span_loads(effects=effects)
+
+
+def test_follow_sleeps_between_spans() -> None:
+    """Asleep from 30 min after the last trip to 30 min before the first."""
+    state = followed(spans={
+        -1: None,
+        0: ServiceSpan(first_start=at(5), last_end=at(0, 40, days=1)),
+        1: ServiceSpan(
+            first_start=at(5, 10, days=1), last_end=at(0, 40, days=2),
+        ),
+        2: None,
+    })
+    state = ticked(state=state, times=(at(23), at(1, 9, days=1)))
+    assert not state.panel.asleep
+    state = ticked(state=state, times=(at(1, 10, days=1),))
+    assert state.panel.asleep
+    state = ticked(state=state, times=(at(4, 39, days=1),))
+    assert state.panel.asleep
+    state = ticked(state=state, times=(at(4, 40, days=1),))
+    assert not state.panel.asleep
+
+
+def test_follow_no_trips_next_day_stays_awake() -> None:
+    """With no trips the next day, the night stays awake."""
+    state = followed(spans={
+        -1: None,
+        0: ServiceSpan(first_start=at(5), last_end=at(0, 40, days=1)),
+        1: None,
+    })
+    for hour in (23, 1, 3, 5):
+        state = step(state, Tick(now=at(hour, days=hour < 12)))[0]
+        assert not state.panel.asleep
+
+
+def test_follow_reloads_on_pin_change() -> None:
+    """A top turn to another pin forgets the spans and asks again."""
+    state = evening(mode=QuietMode.TIMETABLE)
+    state = replace(state, places=Places(pins=PINS))
+    state, _ = step(state, Tick(now=at(23)))
+    for days in (-1, 0, 1):
+        event = ServiceSpanLoaded(
+            pin=PINS[0], day=DAY + timedelta(days=days), span=None,
+        )
+        state = step(state, event)[0]
+    assert len(state.calendar.spans) == 3
+    state, _ = step(state, KnobTurned(knob=Knob.TOP, steps=1))
+    state, effects = step(state, Tick(now=at(23, 1)))
+    loads = span_loads(effects=effects)
+    assert [load.pin for load in loads] == [PINS[1]] * 3
+    assert not state.calendar.spans
+
+
+def test_stale_span_is_ignored() -> None:
+    """A span for a pin no longer shown is dropped."""
+    state = evening(mode=QuietMode.TIMETABLE)
+    event: Event = ServiceSpanLoaded(pin=PINS[2], day=DAY, span=None)
+    after, _ = step(state, event)
+    assert after.calendar.spans == state.calendar.spans
+
+
+def test_quiet_waits_for_power() -> None:
+    """A power action under way holds off quiet sleep."""
+    state = replace(evening(), power=PowerAction.OFF)
+    state = ticked(state=state, times=(at(23),))
+    assert not state.panel.asleep
+
+
+def test_quiet_wakes_from_a_tick_only_when_by_quiet() -> None:
+    """A quiet sleep ends at the end of the hours with a fetch."""
+    state = ticked(state=asleep_at_one(), times=(at(5, 29, days=1),))
+    state, effects = step(state, Tick(now=at(5, 30, days=1)))
+    assert not state.panel.asleep
+    assert FetchFeed(feed=BUSES) in effects
+    assert len(renders(effects=effects)) == 1

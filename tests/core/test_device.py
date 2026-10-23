@@ -38,6 +38,7 @@ from paperroute.core.state_model import State
 from paperroute.core.state_views import stop_view_of
 from paperroute.core.stop_view import StopView
 from tests.core.factories import START
+from tests.core.steps import step_untouched
 from tests.core.test_rebuild import failed_at, pinned
 from tests.core.test_state import at, fresh, loaded
 from tests.fakes import device_facts
@@ -140,7 +141,7 @@ def test_touch_while_powering_changes_nothing() -> None:
         KnobPressed(knob=Knob.TOP),
         KnobsHeld(),
     ):
-        after, effects = step(state, event)
+        after, effects = step_untouched(state=state, event=event)
         assert after == state
         assert not effects
 

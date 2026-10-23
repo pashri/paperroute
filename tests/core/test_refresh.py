@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from paperroute.core.device_model import ResetKind
 from paperroute.core.messages import (
     Effect,
     Knob,
@@ -11,6 +12,7 @@ from paperroute.core.messages import (
     Render,
     Tick,
 )
+from paperroute.core.panel_views import SleepView
 from paperroute.core.refresh import Refresh
 from paperroute.core.saved import LiveView, Rate, Settings
 from paperroute.core.state import step
@@ -172,21 +174,37 @@ def test_map_change_is_full() -> None:
 
 
 def test_touch_is_noted() -> None:
-    """A knob event notes its time; an ignored one is not noted."""
+    """A knob event notes its time, even one that is ignored."""
     state = drawn(last_full=START)
-    after, _ = step(state, PRESS)
-    assert after.refresh.touched_at == START
-    assert step(after, IGNORED)[0] is after
+    for event in (PRESS, IGNORED):
+        after, _ = step(state, event)
+        assert after.refresh.touched_at == START
+
+
+def test_waking_is_full() -> None:
+    """The first frame after the sleep screen is a full refresh."""
+    state = drawn(last_full=START)
+    asleep, _ = ticked(
+        state=replace(state, panel=replace(state.panel, asleep=True)),
+        after=timedelta(),
+    )
+    _, effects = step(asleep, PRESS)
+    [render] = effects_of(effects=effects, kind=Render)
+    assert render.full
+    assert not isinstance(render.view, SleepView)
 
 
 def test_no_full_while_asleep_or_powering() -> None:
-    """No full refresh is scheduled while asleep or powering off."""
+    """No full refresh is scheduled asleep, powering off or resetting."""
     state = drawn(last_full=START - timedelta(minutes=20))
     asleep, _ = ticked(
         state=replace(state, panel=replace(state.panel, asleep=True)),
         after=timedelta(),
     )
     powering = replace(state, power=PowerAction.OFF)
-    for held in (asleep, powering):
+    resetting = replace(
+        state, panel=replace(state.panel, resetting=ResetKind.SETTINGS),
+    )
+    for held in (asleep, powering, resetting):
         _, renders = ticked(state=held, after=timedelta(minutes=10))
         assert not renders

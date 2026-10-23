@@ -702,9 +702,6 @@ def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
     """
     Apply one event, noting when the saved state changed.
 
-    An event that changes nothing, such as an ignored touch, is not
-    noted as a touch.
-
     Parameters
     ----------
     state : State
@@ -718,8 +715,6 @@ def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
         Next state and the effects to perform.
     """
     after, effects = dispatched(state=state, event=event)
-    if not effects and after == state:
-        return state, ()
     after = noted(
         state=with_calls(state=after, effects=effects),
         event=event,

@@ -97,10 +97,10 @@ def full_refresh_effects(
         State and a full Render of the last view when due, else no
         effects.
     """
-    if not full_due(state=state):
+    view = state.last_view
+    if view is None or not full_due(state=state):
         return state, ()
-    assert state.last_view is not None
-    return state, (Render(view=state.last_view, full=True),)
+    return state, (Render(view=view, full=True),)
 
 
 def with_full(

@@ -222,9 +222,9 @@ def rendered(
     """
     Add a Render effect when the view changed.
 
-    The first frame, the sleep screen and a change into or out of a
-    view with grey tiles are full refreshes. While the sleep screen is
-    shown nothing redraws; it is drawn once.
+    The first frame, the sleep screen, the first frame after it and a
+    change into or out of a view with grey tiles are full refreshes.
+    While the sleep screen is shown nothing redraws; it is drawn once.
 
     Parameters
     ----------
@@ -251,6 +251,7 @@ def rendered(
     full = (
         state.last_view is None
         or isinstance(view, SleepView)
+        or isinstance(state.last_view, SleepView)
         or needs_greys(view=view) != needs_greys(view=state.last_view)
     )
     render = Render(view=view, full=full)

@@ -171,6 +171,7 @@ from tests.core.factories import (
     snapshot,
     vehicle,
 )
+from tests.core.steps import step_untouched
 
 PIN = Pin(
     origin=place('2145615', name='Hollis St'),
@@ -1431,7 +1432,9 @@ def check_effects(
     for effect in effects:
         if isinstance(effect, Render):
             check_render(state=after, view=effect.view)
-            assert effect.full or effect.view != before.last_view
+            assert effect.view != before.last_view or (
+                effect.full and isinstance(event, Tick)
+            )
         if isinstance(effect, LoadStrip):
             check_strip_load(
                 before=before, after=after, event=event, effect=effect
@@ -2357,7 +2360,7 @@ def test_top_turn_without_pins_does_nothing() -> None:
         initial_state(saved=DEFAULT_SAVED, now=START, stored=True),
         Tick(now=START),
     )
-    assert step(state, top(steps=1)) == (state, ())
+    assert step_untouched(state=state, event=top(steps=1)) == (state, ())
 
 
 def test_hold_pins_unpinned_at_the_end() -> None:
@@ -2410,14 +2413,16 @@ def test_top_turn_while_held_does_nothing(view: LiveView) -> None:
     """A top turn while the top knob is held is left unassigned."""
     state = pinned(view=view)
     held = KnobHeldTurned(knob=Knob.TOP, steps=1)
-    assert step(state, held) == (state, ())
+    assert step_untouched(state=state, event=held) == (state, ())
 
 
 @pytest.mark.parametrize('view', list(LiveView))
 def test_top_hold_does_nothing(view: LiveView) -> None:
     """Holding the top knob alone does nothing, on every Live view."""
     state = pinned(unpinned=ELSEWHERE, view=view)
-    assert step(state, KnobHeld(knob=Knob.TOP)) == (state, ())
+    assert step_untouched(
+        state=state, event=KnobHeld(knob=Knob.TOP),
+    ) == (state, ())
 
 
 def test_bottom_press_cycles_four_views() -> None:

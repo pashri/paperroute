@@ -47,6 +47,7 @@ from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import Rebuild, State
 from tests.core.chooser_walks import DOWN, KINDS, NEXT, OPEN
 from tests.core.factories import START, pin_at
+from tests.core.steps import step_untouched
 from tests.fakes import device_facts
 
 OLD = TimetableSeen(version='v', schema='4')
@@ -397,7 +398,7 @@ def test_menu_works_on_building_screen() -> None:
         KnobPressed(knob=Knob.TOP),
         KnobTurned(knob=Knob.BOTTOM, steps=1),
     ):
-        assert step(state, event) == (state, ())
+        assert step_untouched(state=state, event=event) == (state, ())
     state, effects = step(state, KnobsHeld())
     assert isinstance(effects[-1], Render)
     assert isinstance(effects[-1].view, MenuView)

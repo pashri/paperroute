@@ -632,6 +632,54 @@ class PlacesFailed:
 
 
 @dataclass(frozen=True)
+class PinSaved:
+    """
+    A pin was added or edited.
+
+    Attributes
+    ----------
+    ref : str | None
+        The ref of the pin to replace, or None to add a pin.
+    pin : Pin
+        The pin to keep.
+    """
+
+    ref: str | None
+    pin: Pin
+
+
+@dataclass(frozen=True)
+class PinDeleted:
+    """A pin was deleted, named by its ref."""
+
+    ref: str
+
+
+@dataclass(frozen=True)
+class PinMoved:
+    """
+    A pin was moved along the knob order.
+
+    Attributes
+    ----------
+    ref : str
+        The pin's ref.
+    steps : int
+        How far to move it; negative is earlier.
+    """
+
+    ref: str
+    steps: int
+
+
+@dataclass(frozen=True)
+class PinsOrdered:
+    """The pins were put in a new order, named by their refs."""
+
+    refs: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class ShapesLoaded:
     """Shapes arrived from the timetable."""
 
@@ -824,6 +872,7 @@ MapEvent = (
     | PositionsFetched
     | MapDataFailed
 )
+PinEdit = PinSaved | PinDeleted | PinMoved | PinsOrdered
 Event = (
     Tick
     | DeparturesLoaded
@@ -855,4 +904,5 @@ Event = (
     | WifiEvent
     | MapEvent
     | ChooserEvent
+    | PinEdit
 )

@@ -64,6 +64,11 @@ from paperroute.core.messages import (
     MapEvent,
     ModesLoaded,
     PatternsLoaded,
+    PinDeleted,
+    PinEdit,
+    PinMoved,
+    PinSaved,
+    PinsOrdered,
     PlacesFailed,
     PlacesMatched,
     PositionsFetched,
@@ -86,6 +91,7 @@ from paperroute.core.messages import (
     WifiSetupStopped,
 )
 from paperroute.core.model import same_place
+from paperroute.core.pin_edits import on_pin_edit
 from paperroute.core.places import (
     feeds_of,
     is_stale,
@@ -827,6 +833,32 @@ def on_strip(
     return settled(state=strip_loaded(state=state, event=event))
 
 
+def on_places(
+    *, state: State, event: PinEdit | PlacesMatched | PlacesFailed
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Apply a pin edit or a timetable look-up of the places.
+
+    Parameters
+    ----------
+    state : State
+        Current state.
+    event : PinEdit | PlacesMatched | PlacesFailed
+        A pin saved, deleted or moved, the pins ordered, or a look-up.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        New state and effects. A refused edit changes nothing.
+    """
+    if isinstance(event, PlacesMatched | PlacesFailed):
+        return on_matched(state=state, event=event)
+    after = on_pin_edit(state=state, event=event)
+    if after is state:
+        return state, ()
+    return reloaded(before=state, after=after)
+
+
 def dispatched(
     *, state: State, event: Event
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -889,8 +921,15 @@ def dispatched(
             | WifiSetupStopped()
         ):
             return on_device_event(state=state, event=event)
-        case PlacesMatched() | PlacesFailed():
-            result = on_matched(state=state, event=event)
+        case (
+            PinSaved()
+            | PinDeleted()
+            | PinMoved()
+            | PinsOrdered()
+            | PlacesMatched()
+            | PlacesFailed()
+        ):
+            result = on_places(state=state, event=event)
         case StripLoaded() | StripFailed():
             result = on_strip(state=state, event=event)
         case (

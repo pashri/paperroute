@@ -8,8 +8,10 @@ import pytest
 
 from paperroute.adapters.settings_form import form_values
 from paperroute.core.device_model import DeviceStatus, WifiPhase, WifiSetup
+from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
 from paperroute.observers import NullObserver, ObserverGroup, Timings
+from tests.core.factories import pin_of
 from tests.fakes import device_facts
 
 STATUS: DeviceStatus = DeviceStatus(
@@ -21,6 +23,8 @@ STATUS: DeviceStatus = DeviceStatus(
     key_set=True,
     facts=device_facts(),
 )
+
+PINS: tuple[Pin, ...] = (pin_of('215020', '200060'),)
 
 
 class _Failing:
@@ -47,6 +51,10 @@ class _Failing:
     def status_seen(self, *, status: DeviceStatus) -> None:
         """Raise."""
         raise RuntimeError(status)
+
+    def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
+        """Raise."""
+        raise RuntimeError(pins, shown)
 
 
 def test_timings_records_frames_and_max() -> None:
@@ -181,3 +189,26 @@ def test_status_json_has_no_password() -> None:
     snap = timings.snapshot()
     assert snap['device']['setup_phase'] == 'hotspot'  # type: ignore[index]
     assert '7Q4K' not in str(snap)
+
+
+def test_timings_count_pin_revisions() -> None:
+    """Each report of the pins raises the revision by one."""
+    timings = Timings()
+    assert timings.pins is None
+    timings.pins_seen(pins=(), shown=None)
+    assert timings.pins is not None
+    assert timings.pins.revision == 1
+    timings.pins_seen(pins=PINS, shown=0)
+    assert timings.pins.revision == 2
+    assert timings.pins.pins == PINS
+    assert timings.pins.shown == 0
+
+
+def test_group_passes_pins_on() -> None:
+    """A group forwards the pins past an observer that fails."""
+    timings = Timings()
+    group = ObserverGroup(observers=[_Failing(), timings])
+    group.pins_seen(pins=PINS, shown=None)
+    NullObserver().pins_seen(pins=PINS, shown=None)
+    assert timings.pins is not None
+    assert timings.pins.pins == PINS

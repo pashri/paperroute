@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 
 from paperroute.adapters.settings_form import form_values
 from paperroute.core.device_model import DeviceStatus
+from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
 from paperroute.ports import Observer
 
@@ -50,6 +51,26 @@ def _age(*, since: float | None) -> float | None:
     return None if since is None else time.monotonic() - since
 
 
+@dataclass(frozen=True)
+class PinsSeen:
+    """
+    The pins as the app last reported them.
+
+    Attributes
+    ----------
+    pins : tuple[Pin, ...]
+        The pins, in knob order.
+    shown : int | None
+        Index of the pin on screen, or None when the unpinned place is.
+    revision : int
+        How many times the pins have been reported; 1 for the first.
+    """
+
+    pins: tuple[Pin, ...]
+    shown: int | None
+    revision: int
+
+
 @dataclass
 class Timings:
     """
@@ -75,6 +96,8 @@ class Timings:
         Wall-clock time of each feed's latest parse.
     device : DeviceStatus | None
         The device status, or None before the app reports it.
+    pins : PinsSeen | None
+        The pins, or None before the app reports them.
     """
 
     frames: int = 0
@@ -86,6 +109,7 @@ class Timings:
     settings: Settings | None = None
     last_ok: dict[str, float] = field(default_factory=dict)
     device: DeviceStatus | None = None
+    pins: PinsSeen | None = None
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """
@@ -150,6 +174,20 @@ class Timings:
             The status.
         """
         self.device = status
+
+    def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
+        """
+        Record the pins under the next revision.
+
+        Parameters
+        ----------
+        pins : tuple[Pin, ...]
+            The pins.
+        shown : int | None
+            Index of the pin on screen, or None.
+        """
+        revision = 1 if self.pins is None else self.pins.revision + 1
+        self.pins = PinsSeen(pins=pins, shown=shown, revision=revision)
 
     def snapshot(self) -> dict[str, object]:
         """
@@ -271,6 +309,18 @@ class NullObserver:
             The status.
         """
 
+    def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
+        """
+        Ignore the pins.
+
+        Parameters
+        ----------
+        pins : tuple[Pin, ...]
+            The pins.
+        shown : int | None
+            Index of the pin on screen, or None.
+        """
+
 
 class ObserverGroup:
     """
@@ -362,3 +412,16 @@ class ObserverGroup:
             The status.
         """
         self._each(call=lambda o: o.status_seen(status=status))
+
+    def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
+        """
+        Pass on the pins.
+
+        Parameters
+        ----------
+        pins : tuple[Pin, ...]
+            The pins.
+        shown : int | None
+            Index of the pin on screen, or None.
+        """
+        self._each(call=lambda o: o.pins_seen(pins=pins, shown=shown))

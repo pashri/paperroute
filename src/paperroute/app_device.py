@@ -18,6 +18,7 @@ from paperroute.core.messages import (
     HotspotFailed,
     HotspotStarted,
     JoinWifi,
+    PinEdit,
     ProbeDevice,
     ResetDevice,
     ResetDone,
@@ -27,7 +28,7 @@ from paperroute.core.messages import (
     WifiJoinFailed,
     WifiSetupStopped,
 )
-from paperroute.core.state_model import State
+from paperroute.core.state_model import Places, State
 from paperroute.ports import (
     DeviceProbe,
     KeyStore,
@@ -401,3 +402,46 @@ def report_status(
     if kept != reported.status:
         observer.status_seen(status=status)
         reported.status = kept
+
+
+def report_pins(
+    *, observer: Observer, before: Places, state: State, event: Event
+) -> None:
+    """
+    Report the pins when the places changed or a pin was edited.
+
+    An edit the reducer refused is reported too, so a page waiting on
+    it is released.
+
+    Parameters
+    ----------
+    observer : Observer
+        Receives the pins.
+    before : Places
+        The places before the event.
+    state : State
+        State after the event.
+    event : Event
+        The event handled.
+    """
+    places = state.places
+    if places != before or isinstance(event, PinEdit):
+        pins_shown(observer=observer, places=places)
+
+
+def pins_shown(*, observer: Observer, places: Places) -> None:
+    """
+    Report the pins and which one is on screen.
+
+    Parameters
+    ----------
+    observer : Observer
+        Receives the pins.
+    places : Places
+        The pins and which place is shown.
+    """
+    on_screen = places.unpinned is None and bool(places.pins)
+    observer.pins_seen(
+        pins=places.pins,
+        shown=places.current if on_screen else None,
+    )

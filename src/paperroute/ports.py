@@ -599,6 +599,19 @@ class Observer(Protocol):
             The status, at start and after each change.
         """
 
+    def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
+        """
+        Record the pins.
+
+        Parameters
+        ----------
+        pins : tuple[Pin, ...]
+            The pins, in knob order, at start and after each change.
+        shown : int | None
+            Index of the pin on screen, or None when the unpinned place
+            is.
+        """
+
 
 @dataclass(frozen=True)
 class Loaded:

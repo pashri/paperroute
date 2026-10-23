@@ -5,6 +5,7 @@ import os
 import socket
 
 from paperroute.core.device_model import DeviceStatus
+from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
 
 logger = logging.getLogger(__name__)
@@ -144,4 +145,16 @@ class SystemdNotifier:
         ----------
         status : DeviceStatus
             The status.
+        """
+
+    def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
+        """
+        Ignore the pins.
+
+        Parameters
+        ----------
+        pins : tuple[Pin, ...]
+            The pins.
+        shown : int | None
+            Index of the pin on screen, or None.
         """

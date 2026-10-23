@@ -50,6 +50,7 @@ from paperroute.core.messages import (
     FeedFailed,
     FetchFeed,
     Knob,
+    KnobHeld,
     KnobPressed,
     KnobsHeld,
     KnobTurned,
@@ -57,6 +58,7 @@ from paperroute.core.messages import (
     MapData,
     MapDataFailed,
     NoticeView,
+    PinDeleted,
     PositionsFetched,
     PowerAction,
     PowerFailed,
@@ -426,6 +428,24 @@ class RaisingObserver:
         """
         raise RuntimeError(f'status {status}')
 
+    def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
+        """
+        Fail.
+
+        Parameters
+        ----------
+        pins : tuple[Pin, ...]
+            Ignored.
+        shown : int | None
+            Ignored.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        raise RuntimeError(f'pins {pins} {shown}')
+
 
 @dataclass
 class CallRecorder:
@@ -435,6 +455,9 @@ class CallRecorder:
     ticks: int = 0
     settings: list[Settings] = field(default_factory=list)
     statuses: list[DeviceStatus] = field(default_factory=list)
+    pins: list[tuple[tuple[Pin, ...], int | None]] = field(
+        default_factory=list
+    )
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """
@@ -491,6 +514,19 @@ class CallRecorder:
         """
         self.statuses.append(status)
 
+    def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
+        """
+        Keep the pins and which one is shown.
+
+        Parameters
+        ----------
+        pins : tuple[Pin, ...]
+            The pins.
+        shown : int | None
+            Index of the pin shown, or None when the unpinned place is.
+        """
+        self.pins.append((pins, shown))
+
 
 async def test_app_reports_settings() -> None:
     """The observer sees the start settings, then each change."""
@@ -545,6 +581,42 @@ async def test_app_reports_status() -> None:
         max_events=1,
     )
     assert [status.key_set for status in recorder.statuses] == [None, False]
+
+
+async def test_app_reports_pins() -> None:
+    """The pins are reported at start, on a change and on a refused edit."""
+    recorder = CallRecorder()
+    unpinned = replace(MAP_PIN, nickname=None)
+    saved = replace(seeded(pin=PIN), unpinned=unpinned)
+    ports = replace(
+        ports_of(states=MemoryStates(stored=saved)), observer=recorder
+    )
+
+    def post_events(post: Callable[[Event], None]) -> None:
+        """
+        Post a bottom hold, then a delete of a pin that is not there.
+
+        Parameters
+        ----------
+        post : Callable[[Event], None]
+            Posts an event.
+        """
+        post(KnobHeld(knob=Knob.BOTTOM))
+        post(PinDeleted(ref='000000000000'))
+
+    await run(
+        ports=ports,
+        tick_every=60,
+        post_hook=post_events,
+        max_events=2,
+    )
+    pins = (PIN, unpinned)
+    assert [shown for _, shown in recorder.pins] == [None, 1, 1]
+    assert recorder.pins[0][0] == (PIN,)
+    assert recorder.pins[1][0] == recorder.pins[2][0]
+    assert [pin.origin for pin in recorder.pins[1][0]] == [
+        pin.origin for pin in pins
+    ]
 
 
 async def test_run_reads_the_key_before_the_first_tick() -> None:

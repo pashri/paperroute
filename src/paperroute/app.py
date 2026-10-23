@@ -7,7 +7,13 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Final
 
-from paperroute.app_device import key_known, leftover_stopped, report_status
+from paperroute.app_device import (
+    key_known,
+    leftover_stopped,
+    pins_shown,
+    report_pins,
+    report_status,
+)
 from paperroute.app_effects import StateSaver, VersionWatch, filled
 from paperroute.app_outputs import Outputs, carry_out, draw_pending
 from paperroute.app_ports import Ports
@@ -168,10 +174,14 @@ async def handle(
     if isinstance(event, Tick):
         ports.observer.ticked()
     before = state.settings
+    places = state.places
     state, effects = step(state, event)
     outputs.pending.turned = state.settings.rotate
     if state.settings != before:
         ports.observer.settings_seen(settings=state.settings)
+    report_pins(
+        observer=ports.observer, before=places, state=state, event=event,
+    )
     report_status(
         observer=ports.observer, state=state, reported=outputs.reported,
     )
@@ -235,6 +245,7 @@ async def run(
         post_hook(queue.put_nowait)
     state = starting_state(ports=ports, seed=seed)
     ports.observer.settings_seen(settings=state.settings)
+    pins_shown(observer=ports.observer, places=state.places)
     outputs = Outputs(
         maps=MapRenderer(tiles=ports.tiles, variant=tiles_variant),
         saver=StateSaver(states=ports.states),

@@ -11,7 +11,13 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Final
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+)
 
 from paperroute.core.model import TRAINLINK, Pin, RouteKind, StopPlace
 from paperroute.core.saved import (
@@ -87,6 +93,39 @@ class SettingsModel(BaseModel):
     rotate: bool
     larger_text: bool
     inverted_lists: bool
+
+    @field_validator('peak_windows')
+    @classmethod
+    def check_peak_windows(
+        cls, windows: tuple[WindowModel, ...]
+    ) -> tuple[WindowModel, ...]:
+        """
+        Refuse peak windows that wrap midnight, are empty or overlap.
+
+        Parameters
+        ----------
+        windows : tuple[WindowModel, ...]
+            The stored peak windows.
+
+        Returns
+        -------
+        tuple[WindowModel, ...]
+            The windows, unchanged.
+
+        Raises
+        ------
+        ValueError
+            When a window doesn't end after it starts, or two overlap.
+        """
+        ordered = sorted(windows, key=lambda window: window.start)
+        if any(window.start >= window.end for window in ordered):
+            raise ValueError('a peak window must end after it starts')
+        if any(
+            earlier.end > later.start
+            for earlier, later in zip(ordered, ordered[1:])
+        ):
+            raise ValueError('peak windows must not overlap')
+        return windows
 
 
 class QuotaModel(BaseModel):
@@ -568,7 +607,8 @@ def repaired_settings(*, data: dict[str, object]) -> dict[str, object]:
     -------
     dict[str, object]
         The data with each bad setting at its default and unknown ones
-        dropped; all defaults when the settings are not an object.
+        dropped; all defaults when the settings are not an object. The
+        peak windows are reset as a whole when any of them is bad.
     """
     settings = data.get('settings')
     if not isinstance(settings, dict):

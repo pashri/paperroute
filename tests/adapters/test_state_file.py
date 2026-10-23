@@ -54,6 +54,73 @@ PINS = st.builds(
 )
 
 
+MINUTES = st.integers(0, 24 * 60 - 1)
+
+
+def clock(*, minute: int) -> time:
+    """
+    Give the time of day a minute count stands for.
+
+    Parameters
+    ----------
+    minute : int
+        Minutes after midnight.
+
+    Returns
+    -------
+    time
+        The time of day.
+    """
+    return time(minute // 60, minute % 60)
+
+
+@st.composite
+def settings_values(draw: st.DrawFn) -> Settings:
+    """
+    Draw settings the Settings page could store.
+
+    Parameters
+    ----------
+    draw : st.DrawFn
+        Hypothesis draw function.
+
+    Returns
+    -------
+    Settings
+        Any rates, mode and switches; 0-2 separate peak windows; any
+        My hours, wrapping or empty.
+    """
+    count = draw(st.integers(0, 2))
+    ends = sorted(
+        draw(
+            st.lists(
+                MINUTES,
+                min_size=count * 2,
+                max_size=count * 2,
+                unique=True,
+            ),
+        ),
+    )
+    peak = tuple(
+        Window(start=clock(minute=start), end=clock(minute=end))
+        for start, end in zip(ends[::2], ends[1::2])
+    )
+    return Settings(
+        auto_rebuild=draw(st.booleans()),
+        peak_rate=draw(st.sampled_from(Rate)),
+        offpeak_rate=draw(st.sampled_from(Rate)),
+        peak_windows=peak,
+        quiet_mode=draw(st.sampled_from(QuietMode)),
+        my_hours=Window(
+            start=clock(minute=draw(MINUTES)),
+            end=clock(minute=draw(MINUTES)),
+        ),
+        rotate=draw(st.booleans()),
+        larger_text=draw(st.booleans()),
+        inverted_lists=draw(st.booleans()),
+    )
+
+
 @st.composite
 def saved_values(draw: st.DrawFn) -> Saved:
     """
@@ -77,7 +144,7 @@ def saved_values(draw: st.DrawFn) -> Saved:
         unpinned=unpinned,
         view=draw(st.sampled_from(LiveView)),
         zoom=draw(st.integers(0, len(ZOOMS) - 1)),
-        settings=Settings(auto_rebuild=draw(st.booleans())),
+        settings=draw(settings_values()),
     )
 
 
@@ -606,3 +673,101 @@ def test_bad_time_falls_back(
     assert loaded.saved.pins == sample().pins
     assert loaded.saved.settings == Settings(rotate=True)
     assert caplog.records
+
+
+def load_with_settings(
+    *, path: Path, changes: dict[str, object]
+) -> Saved:
+    """
+    Save the sample with rotate on, change its stored settings and load.
+
+    Parameters
+    ----------
+    path : Path
+        The state file.
+    changes : dict[str, object]
+        Stored settings fields to overwrite.
+
+    Returns
+    -------
+    Saved
+        The loaded state, which must still be stored.
+    """
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=replace(sample(), settings=Settings(rotate=True)))
+    data = json.loads(path.read_text())
+    data['settings'].update(changes)
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved.pins == sample().pins
+    return loaded.saved
+
+
+@pytest.mark.parametrize(
+    'windows',
+    [
+        [{'start': '22:00', 'end': '02:00'}],
+        [{'start': '08:00', 'end': '08:00'}],
+        [
+            {'start': '06:00', 'end': '10:00'},
+            {'start': '09:00', 'end': '11:00'},
+        ],
+    ],
+    ids=['wrapped', 'empty', 'overlapping'],
+)
+def test_bad_peak_windows_reset_only_them(
+    path: Path, caplog: pytest.LogCaptureFixture, windows: list[object]
+) -> None:
+    """Wrapping, empty or overlapping peak windows reset to the default."""
+    saved = load_with_settings(path=path, changes={'peak_windows': windows})
+    assert saved.settings == Settings(rotate=True)
+    assert saved.settings.my_hours == Window(
+        start=time(23),
+        end=time(5, 30),
+    )
+    assert caplog.records
+
+
+@pytest.mark.parametrize(
+    'hours',
+    [
+        {'start': '23:00', 'end': '05:30'},
+        {'start': '04:00', 'end': '04:00'},
+    ],
+    ids=['wrapping', 'equal'],
+)
+def test_my_hours_may_wrap_or_be_empty(
+    path: Path, caplog: pytest.LogCaptureFixture, hours: dict[str, str]
+) -> None:
+    """My hours load unchanged when they wrap midnight or are empty."""
+    saved = load_with_settings(path=path, changes={'my_hours': hours})
+    start = time.fromisoformat(hours['start'])
+    end = time.fromisoformat(hours['end'])
+    assert saved.settings.my_hours == Window(start=start, end=end)
+    assert not caplog.records
+
+
+@pytest.mark.parametrize(
+    ('changes', 'expected'),
+    [
+        (
+            {'peak_rate': '10s', 'offpeak_rate': '60s'},
+            Settings(rotate=True, offpeak_rate=Rate.STEADY),
+        ),
+        (
+            {
+                'my_hours': {'start': '7am', 'end': '05:30'},
+                'larger_text': True,
+            },
+            Settings(rotate=True, larger_text=True),
+        ),
+    ],
+    ids=['bad-rate', 'bad-my-hours'],
+)
+def test_bad_setting_resets_only_itself(
+    path: Path, changes: dict[str, object], expected: Settings
+) -> None:
+    """A bad rate or My hours resets that field; the others survive."""
+    saved = load_with_settings(path=path, changes=changes)
+    assert saved.settings == expected

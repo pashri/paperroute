@@ -1874,13 +1874,25 @@ def test_departures_respect_filter(
 def test_filter_with_destination(
     network: SqliteTimetableRepository,
 ) -> None:
-    """From C to J, only T1 is kept though T2 trips reach J."""
+    """From C to J, the filter keeps only the chosen line."""
     pin = Pin(
         origin=place('C'),
         destination=place('J'),
         kind=RouteKind.TRAIN,
         routes=(),
     )
-    assert 'T2' in routes_of(repo=network, pin=pin)
+    assert routes_of(repo=network, pin=pin) == {'T1', 'T2'}
     only = replace(pin, only=('T1',))
-    assert routes_of(repo=network, pin=only) <= {'T1'}
+    assert routes_of(repo=network, pin=only) == {'T1'}
+
+
+def test_filter_matches_carry_on_by_boarding_route(
+    network: SqliteTimetableRepository,
+) -> None:
+    """The 809 carrying on as the 811 is kept by 809, dropped by 811."""
+    pin = pin_of('B1', 'B2')
+    assert routes_of(repo=network, pin=pin) == {'809'}
+    kept = replace(pin, only=('809',))
+    assert routes_of(repo=network, pin=kept) == {'809'}
+    dropped = replace(pin, only=('811',))
+    assert routes_of(repo=network, pin=dropped) == set()

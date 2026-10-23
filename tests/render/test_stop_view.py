@@ -10,8 +10,10 @@ from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.chrome import HEADER, badge, route_pair
 from paperroute.render.stop_view import (
     BOARD_RIGHT,
+    LARGE_ROW_H,
     LIST_LEFT,
     PILL_LEFT,
+    SPLIT,
     draw_stop_view,
 )
 from tests.render.factories import STOP_VIEW as BASE
@@ -285,3 +287,58 @@ def test_hero_ride_line_adds_the_stop_count() -> None:
     band = (slice(HEADER + 226, HEADER + 244), slice(0, 438))
     assert (drawn[band] != plain[band]).any()
     assert (drawn[band][:, 419:] == PAPER).all()
+
+
+def _last_rule(*, frame: np.ndarray) -> int:
+    """
+    The lowest y whose pixels are inked across the whole list column.
+
+    Parameters
+    ----------
+    frame : np.ndarray
+        Frame.
+
+    Returns
+    -------
+    int
+        Row index.
+    """
+    ruled = (frame[:, 460:780] == INK).all(axis=1)
+    return int(np.flatnonzero(ruled).max())
+
+
+def test_large_rows_are_taller() -> None:
+    """Larger rows put the last rule lower and the text taller."""
+    rows = (row(),) * 5
+    small = draw_stop_view(view=replace(BASE, rows=rows))
+    large = draw_stop_view(view=replace(BASE, rows=rows, large=True))
+    assert _last_rule(frame=large) > _last_rule(frame=small)
+    assert LARGE_ROW_H == 64
+    top = HEADER + 30
+    destination = (slice(top + 32, top + 46), slice(456, 560))
+    destination_large = (slice(top + 40, top + 60), slice(456, 560))
+    assert (small[destination] == INK).sum() > 0
+    assert (large[destination_large] == INK).sum() > (
+        small[destination] == INK
+    ).sum()
+
+
+def test_inverted_list_is_white_on_black() -> None:
+    """The list turns mostly ink; the hero keeps its pixels."""
+    rows = (row(),) * 5
+    plain = draw_stop_view(view=replace(BASE, rows=rows))
+    turned = draw_stop_view(view=replace(BASE, rows=rows, inverted=True))
+    area = turned[HEADER + 30:, SPLIT + 3:]
+    assert (area == INK).mean() > 0.8
+    assert (turned[HEADER:, :SPLIT] == plain[HEADER:, :SPLIT]).all()
+    assert (turned[:HEADER] == plain[:HEADER]).all()
+
+
+def test_inverted_board_whole_width() -> None:
+    """With no destination the whole area under the header turns."""
+    view = replace(
+        BASE, destination=None, hero=None, rows=(row(), row(then=None)))
+    plain = draw_stop_view(view=view)
+    turned = draw_stop_view(view=replace(view, inverted=True))
+    assert (turned[HEADER:] == INK).mean() > 0.8
+    assert (turned[:HEADER] == plain[:HEADER]).all()

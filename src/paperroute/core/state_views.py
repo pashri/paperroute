@@ -110,6 +110,8 @@ def stop_view_of(*, state: State) -> StopView:
             loaded=state.board.loaded_until is not None,
             missing=pin.missing,
             notice=device_banner(state=state),
+            large=state.settings.larger_text,
+            inverted=state.settings.inverted_lists,
             tag=pin_tag(
                 index=shown_index(state=state),
                 total=len(state.places.pins),

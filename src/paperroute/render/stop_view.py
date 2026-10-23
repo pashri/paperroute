@@ -1,5 +1,6 @@
 """Draw the Stop view in the round 5 layout."""
 
+from dataclasses import dataclass
 from typing import Final
 
 import numpy as np
@@ -26,6 +27,8 @@ from paperroute.render.chrome import (
 
 SPLIT: Final[int] = 438
 ROW_H: Final[int] = 50
+LARGE_ROW_H: Final[int] = 64
+LARGE_SCALE: Final[float] = 1.25
 LIST_TOP: Final[int] = 30
 VEHICLE: Final[dict[Mode, str]] = {
     Mode.BUS: 'bus', Mode.TRAIN: 'train', Mode.METRO: 'metro',
@@ -200,7 +203,75 @@ def headline(
     )
 
 
-def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
+@dataclass(frozen=True)
+class Scale:
+    """
+    Scales a row's offsets and type sizes for larger text.
+
+    Attributes
+    ----------
+    large : bool
+        Whether larger text is on; if not, every value is unchanged.
+    """
+
+    large: bool = False
+
+    def y(self, offset: int) -> int:
+        """
+        Scale a vertical offset within a row.
+
+        Parameters
+        ----------
+        offset : int
+            Pixels from the row top.
+
+        Returns
+        -------
+        int
+            The offset for this row height.
+        """
+        if not self.large:
+            return offset
+        return round(offset * LARGE_ROW_H / ROW_H)
+
+    def face(self, *, weight: int, px: int) -> Face:
+        """
+        A face at the scaled size.
+
+        Parameters
+        ----------
+        weight : int
+            Font weight.
+        px : int
+            Size in pixels before scaling.
+
+        Returns
+        -------
+        Face
+            The face.
+        """
+        return Face(weight=weight, px=self.px(px))
+
+    def px(self, size: int) -> int:
+        """
+        Scale a type size.
+
+        Parameters
+        ----------
+        size : int
+            Size in pixels before scaling.
+
+        Returns
+        -------
+        int
+            The size for this row height.
+        """
+        return round(size * LARGE_SCALE) if self.large else size
+
+
+def list_row(
+    canvas: Canvas, *, row: Row, y: int, large: bool = False
+) -> None:
     """
     Draw one list row.
 
@@ -212,49 +283,54 @@ def list_row(canvas: Canvas, *, row: Row, y: int) -> None:
         Departure.
     y : int
         Row top.
+    large : bool
+        Whether to draw larger text in a taller row.
     """
+    k = Scale(large=large)
     route_pair(
         canvas,
         x=LIST_LEFT,
-        y=y + 14,
+        y=y + k.y(14),
         route=row.route,
         onto=row.onto,
-        px=14,
+        px=k.px(14),
         room=LIST_PAIR_ROOM,
     )
     headline(
         canvas,
         row=row,
-        at=(LIST_LEFT, y + 42),
+        at=(LIST_LEFT, y + k.y(42)),
         text=row.destination,
-        face=Face(weight=400, px=13),
+        face=k.face(weight=400, px=13),
         width=LIST_WIDTH if row.then is None else TAGGED_WIDTH,
     )
     if row.pill is Pill.CANCELLED:
         pill(
             canvas,
-            box=(PILL_LEFT, y + 10, 786, y + 38),
+            box=(PILL_LEFT, y + k.y(10), 786, y + k.y(38)),
             text=cancelled(row=row),
-            px=15,
+            px=k.px(15),
         )
     else:
         canvas.text(
-            at=(640, y + 30), text=leaves(row=row),
-            face=Face(weight=800, px=28), grey=INK, anchor='rs')
+            at=(640, y + k.y(30)), text=leaves(row=row),
+            face=k.face(weight=800, px=28), grey=INK, anchor='rs')
         canvas.text(
-            at=(786, y + 24), text=row.arrives_at,
-            face=Face(weight=800, px=20), grey=INK, anchor='rs')
+            at=(786, y + k.y(24)), text=row.arrives_at,
+            face=k.face(weight=800, px=20), grey=INK, anchor='rs')
     if row.pill is Pill.FASTER:
         pill(
             canvas,
-            box=(FASTER_LEFT, y + 30, 786, y + 45),
+            box=(FASTER_LEFT, y + k.y(30), 786, y + k.y(45)),
             text=FASTER,
-            px=11,
+            px=k.px(11),
         )
-    canvas.rect(box=(452, y + 49, 786, y + 50), grey=INK)
+    canvas.rect(box=(452, y + k.y(49), 786, y + k.y(50)), grey=INK)
 
 
-def board_row(canvas: Canvas, *, row: Row, y: int) -> None:
+def board_row(
+    canvas: Canvas, *, row: Row, y: int, large: bool = False
+) -> None:
     """
     Draw one full-width row of the board with no destination.
 
@@ -266,46 +342,49 @@ def board_row(canvas: Canvas, *, row: Row, y: int) -> None:
         Departure.
     y : int
         Row top.
+    large : bool
+        Whether to draw larger text in a taller row.
     """
+    k = Scale(large=large)
     canvas.text(
-        at=(18, y + 33), text=row.leaves_at,
-        face=Face(weight=800, px=22), grey=INK)
+        at=(18, y + k.y(33)), text=row.leaves_at,
+        face=k.face(weight=800, px=22), grey=INK)
     width = route_pair(
         canvas,
         x=BOARD_BADGE_X,
-        y=y + 25,
+        y=y + k.y(25),
         route=row.route,
         onto=row.onto,
-        px=16,
+        px=k.px(16),
     )
     left = BOARD_BADGE_X + width + 14
     headline(
         canvas,
         row=row,
-        at=(left, y + 31),
+        at=(left, y + k.y(31)),
         text=f'to {row.destination}',
-        face=Face(weight=400, px=17),
+        face=k.face(weight=400, px=17),
         width=BOARD_RIGHT - left,
     )
     if row.pill is Pill.CANCELLED:
         pill(
             canvas,
-            box=(PILL_LEFT, y + 10, 786, y + 38),
+            box=(PILL_LEFT, y + k.y(10), 786, y + k.y(38)),
             text=cancelled(row=row),
-            px=15,
+            px=k.px(15),
         )
     else:
         canvas.text(
-            at=(786, y + 33), text=countdown_slot(row=row),
-            face=Face(weight=800, px=28), grey=INK, anchor='rs')
+            at=(786, y + k.y(33)), text=countdown_slot(row=row),
+            face=k.face(weight=800, px=28), grey=INK, anchor='rs')
     if row.pill is Pill.FASTER:
         pill(
             canvas,
-            box=(PILL_LEFT, y + 17, PILL_LEFT + 74, y + 32),
+            box=(PILL_LEFT, y + k.y(17), PILL_LEFT + 74, y + k.y(32)),
             text=FASTER,
-            px=11,
+            px=k.px(11),
         )
-    canvas.rect(box=(0, y + 49, WIDTH, y + 50), grey=INK)
+    canvas.rect(box=(0, y + k.y(49), WIDTH, y + k.y(50)), grey=INK)
 
 
 def finish(canvas: Canvas) -> NDArray[np.uint8]:
@@ -361,11 +440,61 @@ def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
         canvas.text(
             at=(786, top + 22), text='ARRIVES',
             face=Face(weight=700, px=11), grey=INK, anchor='rs')
-    if view.destination is None:
-        for index, item in enumerate(view.rows[:(HEIGHT - top) // ROW_H]):
-            board_row(canvas, row=item, y=top + index * ROW_H)
-        return finish(canvas)
-    fits = (HEIGHT - top - LIST_TOP) // ROW_H
-    for index, item in enumerate(view.rows[:fits]):
-        list_row(canvas, row=item, y=top + LIST_TOP + index * ROW_H)
-    return finish(canvas)
+    return finish_view(canvas, view=view, top=top)
+
+
+def finish_view(
+    canvas: Canvas, *, view: StopView, top: int
+) -> NDArray[np.uint8]:
+    """
+    Draw the departure rows, then threshold and invert the list if asked.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Canvas with the header, banner and hero drawn.
+    view : StopView
+        View-model.
+    top : int
+        Top of the content below the header and any banner.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        480 by 800 pixels, 0 or 255.
+    """
+    height = LARGE_ROW_H if view.large else ROW_H
+    board = view.destination is None
+    first = top if board else top + LIST_TOP
+    for index, item in enumerate(view.rows[:(HEIGHT - first) // height]):
+        draw = board_row if board else list_row
+        draw(canvas, row=item, y=first + index * height, large=view.large)
+    frame = finish(canvas)
+    if not view.inverted:
+        return frame
+    left = 0 if board else SPLIT + 3
+    return inverted_area(frame=frame, box=(left, top, WIDTH, HEIGHT))
+
+
+def inverted_area(
+    *, frame: NDArray[np.uint8], box: tuple[int, int, int, int]
+) -> NDArray[np.uint8]:
+    """
+    Turn the pixels inside a box white on black.
+
+    Parameters
+    ----------
+    frame : NDArray[np.uint8]
+        A 1-bit frame.
+    box : tuple[int, int, int, int]
+        Left, top, right and bottom of the area to invert.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        A copy of the frame with the box inverted.
+    """
+    left, top, right, bottom = box
+    turned = frame.copy()
+    turned[top:bottom, left:right] = 255 - frame[top:bottom, left:right]
+    return turned

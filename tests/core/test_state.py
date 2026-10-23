@@ -2778,3 +2778,16 @@ def test_timetable_seen_loads_holidays() -> None:
     assert step(state, other) == (state, ())
     state, _ = step(state, HolidaysLoaded(dates=holidays, timetable='v'))
     assert state.calendar.holidays == holidays
+
+
+def test_settings_reach_stop_view() -> None:
+    """Larger text and inverted lists show in the redrawn Stop view."""
+    state, _ = step(pinned(), SettingsChanged(larger_text=True))
+    state, _ = step(state, Tick(now=START + timedelta(seconds=5)))
+    assert isinstance(state.last_view, StopView)
+    assert state.last_view.large
+    assert not state.last_view.inverted
+    state, _ = step(state, SettingsChanged(inverted_lists=True))
+    state, _ = step(state, Tick(now=START + timedelta(seconds=10)))
+    assert isinstance(state.last_view, StopView)
+    assert state.last_view.inverted

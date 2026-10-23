@@ -7,6 +7,8 @@ from paperroute.core.live import LiveDeparture
 from paperroute.core.model import SYDNEY, CarryOn, Mode, TripFacts
 from paperroute.core.stop_view import (
     HORIZON,
+    LARGE_ROWS_UNDER_BANNER,
+    LARGE_VISIBLE_ROWS,
     NOT_PINNED,
     ROWS_UNDER_BANNER,
     VISIBLE_ROWS,
@@ -83,6 +85,7 @@ def view(
     age: timedelta | None = timedelta(seconds=5),
     has_feed: bool = True,
     destination: str | None = 'Parramatta Station',
+    large: bool = False,
 ) -> StopView:
     """
     Build a view with fixed names and time.
@@ -99,6 +102,8 @@ def view(
         Whether the pin has a live feed.
     destination : str | None
         Destination name, or None for none.
+    large : bool
+        Whether rows use larger text.
 
     Returns
     -------
@@ -114,6 +119,7 @@ def view(
             scroll=scroll,
             live_since=None if age is None else START - age,
             has_feed=has_feed,
+            large=large,
         ),
     )
 
@@ -615,3 +621,16 @@ def test_arrival_line_counts_stops() -> None:
     assert arrival_line(row=replace(row, stops=None)) == (
         f'arr {row.arrives_at}'
     )
+
+
+def test_large_shows_six_rows() -> None:
+    """Larger text fits six rows, five under a banner, and clamps."""
+    items = tuple(live(minutes=minute) for minute in range(0, 60, 5))
+    assert len(items) == 12
+    plain = view(departures=items, destination=None, large=True)
+    assert len(plain.rows) == LARGE_VISIBLE_ROWS == 6
+    banner = view(departures=items, destination=None, large=True, age=None)
+    assert len(banner.rows) == LARGE_ROWS_UNDER_BANNER == 5
+    far = view(departures=items, destination=None, large=True, scroll=99)
+    assert far.scroll == len(items) - 6
+    assert far.large

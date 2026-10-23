@@ -11,6 +11,8 @@ from paperroute.core.model import SYDNEY, CarryOn, Departure, Mode, shifted
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
+LARGE_VISIBLE_ROWS: Final[int] = 6
+LARGE_ROWS_UNDER_BANNER: Final[int] = 5
 SIDEBAR_ROWS: Final[int] = 5
 FAR_MINUTES: Final[int] = 100  # from here a countdown shows the clock time
 HORIZON: Final[timedelta] = timedelta(hours=3)
@@ -132,6 +134,10 @@ class StopView:
         The departures behind `head_rows`, in the same order.
     warning : bool
         True when the banner is a device warning, drawn inverted.
+    large : bool
+        Whether the departure rows use larger text.
+    inverted : bool
+        Whether the departure list is drawn white on black.
     """
 
     origin: str
@@ -146,6 +152,8 @@ class StopView:
     head_rows: tuple[Row, ...] = ()
     head_departures: tuple[Departure, ...] = ()
     warning: bool = False
+    large: bool = False
+    inverted: bool = False
 
 
 @dataclass(frozen=True)
@@ -180,6 +188,10 @@ class StopInputs:
     notice : str | None
         A device warning that takes the banner ahead of any about live
         data, or None.
+    large : bool
+        Whether the departure rows use larger text.
+    inverted : bool
+        Whether the departure list is drawn white on black.
     """
 
     origin: str
@@ -193,6 +205,8 @@ class StopInputs:
     tag: PinTag = NOT_PINNED
     missing: bool = False
     notice: str | None = None
+    large: bool = False
+    inverted: bool = False
 
 
 def clock_text(*, moment: datetime) -> str:
@@ -467,6 +481,27 @@ def empty_text(
     return f'No direct services to {destination} in {HORIZON_TEXT}'
 
 
+def row_count(*, large: bool, under_banner: bool) -> int:
+    """
+    How many list rows fit.
+
+    Parameters
+    ----------
+    large : bool
+        Whether rows use larger text.
+    under_banner : bool
+        Whether a banner takes a row's height.
+
+    Returns
+    -------
+    int
+        Rows shown.
+    """
+    if large:
+        return LARGE_ROWS_UNDER_BANNER if under_banner else LARGE_VISIBLE_ROWS
+    return ROWS_UNDER_BANNER if under_banner else VISIBLE_ROWS
+
+
 def build_stop_view(*, inputs: StopInputs) -> StopView:
     """
     Build the Stop view from resolved departures.
@@ -511,7 +546,7 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     text = inputs.notice or banner(
         live_since=inputs.live_since, now=now, has_feed=inputs.has_feed
     )
-    shown = ROWS_UNDER_BANNER if text else VISIBLE_ROWS
+    shown = row_count(large=inputs.large, under_banner=text is not None)
     offset = max(0, min(inputs.scroll, len(rest) - shown))
     return StopView(
         origin=inputs.origin,
@@ -530,4 +565,6 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         head_rows=tuple(rows[i] for i in head),
         head_departures=tuple(upcoming[i].departure for i in head),
         warning=inputs.notice is not None,
+        large=inputs.large,
+        inverted=inputs.inverted,
     )

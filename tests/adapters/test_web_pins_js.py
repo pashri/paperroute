@@ -64,6 +64,17 @@ c.listeners.pointermove({ clientX: 0, clientY: 0 });
 c.listeners.pointerup({ pointerId: 1 });
 results.noMove = [form.refs.value, submits.length];
 
+document.elementFromPoint = () => a;
+c.listeners.pointerdown({ pointerId: 1 });
+c.listeners.pointermove({ clientX: 0, clientY: 0 });
+const mid = items.map((item) => item.dataset.ref).join();
+c.listeners.pointercancel({ pointerId: 1 });
+c.listeners.lostpointercapture({ pointerId: 1 });
+results.cancel = [
+  mid, items.map((item) => item.dataset.ref).join(),
+  submits.length, c.attrs['aria-grabbed'] ?? null,
+];
+
 const editorSubmits = [];
 const handlers = {};
 const editor = {
@@ -87,7 +98,10 @@ const dialogListeners = {};
 const dialog = {
   opened: 0, returnValue: '',
   querySelector: () => question,
-  showModal: () => { dialog.opened += 1; },
+  showModal: () => {
+    dialog.opened += 1;
+    dialog.valueAtOpen = dialog.returnValue;
+  },
   addEventListener: (name, fn) => { dialogListeners[name] = fn; },
 };
 document.querySelectorAll = () => [
@@ -102,6 +116,9 @@ results.delete = [
 dialog.returnValue = 'delete';
 dialogListeners.close();
 results.confirmed = [deleteForm.submitted, deleteForm.html];
+deleteForm.listeners.submit({ preventDefault() {} });
+dialogListeners.close();
+results.cancelled = [deleteForm.submitted, dialog.valueAtOpen];
 console.log(JSON.stringify(results));
 """
 
@@ -128,6 +145,8 @@ def test_pins_script_in_node(tmp_path: Path) -> None:
         'grabbed': 'true',
         'drag': ['c,a,b', 1, None],
         'noMove': ['', 0],
+        'cancel': ['a,c,b', 'c,a,b', 0, None],
+        'cancelled': [1, ''],
         'editor': 2,
         'delete': [1, 0, 1, 'Delete “Work”?'],
         'confirmed': [

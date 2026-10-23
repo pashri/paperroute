@@ -22,27 +22,38 @@ function refsOf(list) {
 }
 
 /**
- * Move the dragged item next to the item under the pointer.
+ * Find an item's index among the list's items.
+ * @param {Element} list The ordered list of pins.
+ * @param {Element} item One of the items.
+ * @returns {number} Its index.
+ */
+function indexIn(list, item) {
+  return [...list.querySelectorAll('li')].indexOf(item);
+}
+
+/**
+ * Put the dragged item at an index among the list's items.
  * @param {Element} list The ordered list of pins.
  * @param {Element} item The item being dragged.
- * @param {Element | null} over The item under the pointer.
+ * @param {number} index Where it should sit once the others are in place.
  * @returns {void}
  */
-function dragOver(list, item, over) {
-  if (!over || over === item) return;
-  const items = [...list.querySelectorAll('li')];
-  if (items.indexOf(over) > items.indexOf(item)) over.after(item);
-  else over.before(item);
+function place(list, item, index) {
+  const others = [...list.querySelectorAll('li')].filter((li) => li !== item);
+  if (index >= others.length) others[others.length - 1].after(item);
+  else others[index].before(item);
 }
 
 /**
  * Submit the new order when a drop changed it.
  * @param {HTMLFormElement} form The order form.
  * @param {string[]} before The refs when the drag began.
- * @param {string[]} after The refs now.
+ * @param {number} from The dragged item's index when the drag began.
+ * @param {number} to The dragged item's index now.
  * @returns {void}
  */
-function drop(form, before, after) {
+function drop(form, before, from, to) {
+  const after = movedOrder(before, from, to);
   if (before.join() === after.join()) return;
   form.refs.value = after.join(',');
   form.requestSubmit();
@@ -57,23 +68,36 @@ function drop(form, before, after) {
  */
 function wireGrip(list, form, grip) {
   const item = grip.closest('li');
-  let before = null;
+  let drag = null;
+  const end = () => {
+    item.removeAttribute('aria-grabbed');
+    drag = null;
+  };
   grip.addEventListener('pointerdown', (event) => {
     grip.setPointerCapture(event.pointerId);
     item.setAttribute('aria-grabbed', 'true');
-    before = refsOf(list);
+    const before = refsOf(list);
+    drag = { before, from: before.indexOf(item.dataset.ref) };
   });
   grip.addEventListener('pointermove', (event) => {
-    if (!before) return;
+    if (!drag) return;
     const under = document.elementFromPoint(event.clientX, event.clientY);
-    dragOver(list, item, under && under.closest('li'));
+    const over = under && under.closest('li');
+    if (over && over !== item) place(list, item, indexIn(list, over));
   });
   grip.addEventListener('pointerup', () => {
-    if (!before) return;
-    item.removeAttribute('aria-grabbed');
-    drop(form, before, refsOf(list));
-    before = null;
+    if (!drag) return;
+    const { before, from } = drag;
+    end();
+    drop(form, before, from, indexIn(list, item));
   });
+  const cancel = () => {
+    if (!drag) return;
+    place(list, item, drag.from);
+    end();
+  };
+  grip.addEventListener('pointercancel', cancel);
+  grip.addEventListener('lostpointercapture', cancel);
 }
 
 /**
@@ -111,7 +135,7 @@ export function wireEditor(form) {
 function askToDelete(dialog, form, label) {
   const question = dialog.querySelector('#delete-question');
   question.textContent = `Delete “${label}”?`;
-  dialog.returnValue = 'cancel';
+  dialog.returnValue = '';
   dialog.addEventListener('close', () => {
     if (dialog.returnValue !== 'delete') return;
     form.insertAdjacentHTML(

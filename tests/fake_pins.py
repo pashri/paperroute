@@ -1,0 +1,172 @@
+"""A hand-written stand-in for the pin editor's timetable choices."""
+
+from dataclasses import dataclass, field
+
+from paperroute.core.chooser import Choice
+from paperroute.core.model import RouteKind, StopPlace
+from paperroute.core.pin_choices import KIND_NAMES, StopMatch
+
+
+@dataclass
+class FakePinOptions:
+    """
+    Pin options that give fixed answers.
+
+    Attributes
+    ----------
+    places : dict[str, StopPlace]
+        The places that exist, by ID.
+    lines : dict[tuple[str, RouteKind], tuple[Choice, ...]]
+        The lines at a stop, by stop ID and kind.
+    to : dict[tuple[str, str], tuple[StopPlace, ...]]
+        The To places, by stop ID and line key.
+    only : dict[tuple[str, RouteKind], tuple[str, ...]]
+        The route filter, by stop ID and kind.
+    near : tuple[StopPlace, ...]
+        What `nearby` gives.
+    found : tuple[StopMatch, ...]
+        What `search` gives.
+    """
+
+    places: dict[str, StopPlace] = field(default_factory=dict)
+    lines: dict[tuple[str, RouteKind], tuple[Choice, ...]] = field(
+        default_factory=dict,
+    )
+    to: dict[tuple[str, str], tuple[StopPlace, ...]] = field(
+        default_factory=dict,
+    )
+    only: dict[tuple[str, RouteKind], tuple[str, ...]] = field(
+        default_factory=dict,
+    )
+    near: tuple[StopPlace, ...] = ()
+    found: tuple[StopMatch, ...] = ()
+
+    def search(self, *, text: str) -> tuple[StopMatch, ...]:
+        """
+        Give the fixed matches.
+
+        Parameters
+        ----------
+        text : str
+            Ignored.
+
+        Returns
+        -------
+        tuple[StopMatch, ...]
+            The matches.
+        """
+        return self.found
+
+    def place(self, *, stop_id: str) -> StopPlace | None:
+        """
+        Give a known place.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop ID.
+
+        Returns
+        -------
+        StopPlace | None
+            The place, or None when it is not known.
+        """
+        return self.places.get(stop_id)
+
+    def kinds_at(self, *, stop_id: str) -> tuple[RouteKind, ...]:
+        """
+        Give the kinds that have lines at a stop.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop ID.
+
+        Returns
+        -------
+        tuple[RouteKind, ...]
+            Kinds in display order.
+        """
+        return tuple(
+            kind for kind in KIND_NAMES if self.lines.get((stop_id, kind))
+        )
+
+    def lines_at(self, *, stop_id: str, kind: RouteKind) -> tuple[Choice, ...]:
+        """
+        Give the fixed lines of a stop and kind.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop ID.
+        kind : RouteKind
+            Kind of route.
+
+        Returns
+        -------
+        tuple[Choice, ...]
+            The lines.
+        """
+        return self.lines.get((stop_id, kind), ())
+
+    def destinations(
+        self, *, origin: StopPlace, kind: RouteKind, line: Choice,
+    ) -> tuple[StopPlace, ...]:
+        """
+        Give the fixed To places of a stop and line.
+
+        Parameters
+        ----------
+        origin : StopPlace
+            The From.
+        kind : RouteKind
+            Ignored.
+        line : Choice
+            The line.
+
+        Returns
+        -------
+        tuple[StopPlace, ...]
+            The places.
+        """
+        return self.to.get((origin.stop_id, line.key), ())
+
+    def filters_at(
+        self, *, stop_id: str, kind: RouteKind,
+    ) -> tuple[str, ...]:
+        """
+        Give the fixed route filter of a stop and kind.
+
+        Parameters
+        ----------
+        stop_id : str
+            Stop ID.
+        kind : RouteKind
+            Kind of route.
+
+        Returns
+        -------
+        tuple[str, ...]
+            The route numbers.
+        """
+        return self.only.get((stop_id, kind), ())
+
+    def nearby(
+        self, *, place: StopPlace, kind: RouteKind | None,
+    ) -> tuple[StopPlace, ...]:
+        """
+        Give the fixed nearby stops.
+
+        Parameters
+        ----------
+        place : StopPlace
+            Ignored.
+        kind : RouteKind | None
+            Ignored.
+
+        Returns
+        -------
+        tuple[StopPlace, ...]
+            The stops.
+        """
+        return self.near

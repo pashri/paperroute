@@ -270,7 +270,16 @@ def edited(
     origin = options.place(stop_id=draft.stop) if draft.stop else None
     if origin is None:
         clean = PinDraft(nickname=draft.nickname, ref=draft.ref)
-        return PinEditor(clean, None, (), (), (), (), near, None)
+        return PinEditor(
+            draft=clean,
+            origin=None,
+            kinds=(),
+            lines=(),
+            destinations=(),
+            filters=(),
+            nearby=near,
+            pin=None,
+        )
     return replace(
         with_origin(options=options, draft=draft, origin=origin),
         nearby=near,

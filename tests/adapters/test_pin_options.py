@@ -277,3 +277,18 @@ def test_nearby_without_a_point(options: SqlitePinOptions) -> None:
     """A place with no point has nothing near it."""
     place = StopPlace(stop_id='C', name='C Stop', point=None)
     assert options.nearby(place=place, kind=None) == ()
+
+
+def test_old_file_offers_nothing(built: Path, tmp_path: Path) -> None:
+    """A file without the run and chooser tables has no choices."""
+    copy = Path(shutil.copy(built, tmp_path / 'timetable.db'))
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute('DROP TABLE chooser_routes')
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy)) as network:
+        old = SqlitePinOptions(network=network)
+        centre = StopPlace(stop_id='C', name='C', point=(0.0, 0.0))
+        assert old.search(text='stop') == ()
+        assert old.lines_at(stop_id='C', kind=RouteKind.TRAIN) == ()
+        assert old.filters_at(stop_id='C', kind=RouteKind.TRAIN) == ()
+        assert old.nearby(place=centre, kind=None) == ()

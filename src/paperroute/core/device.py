@@ -1,6 +1,6 @@
 """Handlers for the device's own settings and power."""
 
-from dataclasses import replace
+from dataclasses import fields, replace
 from datetime import timedelta
 from typing import Final
 
@@ -34,7 +34,6 @@ from paperroute.core.messages import (
     WifiEvent,
 )
 from paperroute.core.quota import calls_today
-from paperroute.core.saved import Settings
 from paperroute.core.state_model import State
 from paperroute.core.state_views import saved_of, settled
 from paperroute.core.wifi import on_wifi_event, setup_closed
@@ -56,21 +55,26 @@ def on_settings(
     *, state: State, event: SettingsChanged
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Store a changed setting; the next tick saves it.
+    Store the settings given; the next tick saves them.
 
     Parameters
     ----------
     state : State
         State.
     event : SettingsChanged
-        The new setting.
+        The new settings; a None field is left as it is.
 
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the setting stored, and no effects.
+        State with the settings stored, and no effects.
     """
-    settings = Settings(auto_rebuild=event.auto_rebuild)
+    given = {
+        item.name: getattr(event, item.name)
+        for item in fields(event)
+        if getattr(event, item.name) is not None
+    }
+    settings = replace(state.settings, **given)
     return replace(state, settings=settings), ()
 
 

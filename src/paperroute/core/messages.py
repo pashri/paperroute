@@ -25,7 +25,7 @@ from paperroute.core.patterns import TripPattern
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
-from paperroute.core.saved import Saved
+from paperroute.core.saved import QuietMode, Rate, Saved, Window
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
 
@@ -388,17 +388,41 @@ class TimetableRebuilt:
 
 
 @dataclass(frozen=True)
-class SettingsChanged:
+class SettingsChanged:  # pylint: disable=too-many-instance-attributes
     """
-    A setting was changed on the Settings page.
+    Settings were changed on the Settings page; None leaves one as it is.
 
     Attributes
     ----------
-    auto_rebuild : bool
+    auto_rebuild : bool | None
         Whether an outdated timetable is rebuilt on the device.
+    peak_rate : Rate | None
+        The rate inside peak hours.
+    offpeak_rate : Rate | None
+        The rate outside peak hours.
+    peak_windows : tuple[Window, ...] | None
+        The weekday peak windows.
+    quiet_mode : QuietMode | None
+        How quiet hours are chosen.
+    my_hours : Window | None
+        The quiet hours chosen by hand.
+    rotate : bool | None
+        Whether the panel is turned 180 degrees.
+    larger_text : bool | None
+        Whether departure rows use larger text.
+    inverted_lists : bool | None
+        Whether departure rows are white on black.
     """
 
-    auto_rebuild: bool
+    auto_rebuild: bool | None = None
+    peak_rate: Rate | None = None
+    offpeak_rate: Rate | None = None
+    peak_windows: tuple[Window, ...] | None = None
+    quiet_mode: QuietMode | None = None
+    my_hours: Window | None = None
+    rotate: bool | None = None
+    larger_text: bool | None = None
+    inverted_lists: bool | None = None
 
 
 @dataclass(frozen=True)

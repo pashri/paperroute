@@ -1,7 +1,7 @@
 """The Live views, and what the device keeps between restarts."""
 
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, time
 from enum import StrEnum
 from typing import Final
 
@@ -27,8 +27,47 @@ LIVE_VIEWS: Final[tuple[LiveView, ...]] = (
 )
 
 
+class Rate(StrEnum):
+    """How often the feeds are polled and the panel fully refreshed."""
+
+    FAST = '30s'
+    STEADY = '60s'
+    SLOW = '2min'
+
+
+@dataclass(frozen=True, order=True)
+class Window:
+    """
+    A daily stretch of Sydney local time, from start up to end.
+
+    Attributes
+    ----------
+    start : time
+        The first moment inside.
+    end : time
+        The first moment after.
+    """
+
+    start: time
+    end: time
+
+
+class QuietMode(StrEnum):
+    """How quiet hours are chosen."""
+
+    MY_HOURS = 'my_hours'
+    TIMETABLE = 'timetable'
+
+
+PEAK_WINDOWS: Final[tuple[Window, ...]] = (
+    Window(start=time(6, 30), end=time(10)),
+    Window(start=time(15), end=time(19)),
+)
+MY_HOURS: Final[Window] = Window(start=time(23), end=time(5, 30))
+
+
 @dataclass(frozen=True)
-class Settings:
+class Settings:  # pylint: disable=too-many-instance-attributes
     """
     The choices made on the Settings page.
 
@@ -36,9 +75,33 @@ class Settings:
     ----------
     auto_rebuild : bool
         Whether an outdated timetable is rebuilt on the device.
+    peak_rate : Rate
+        The rate inside peak hours.
+    offpeak_rate : Rate
+        The rate outside peak hours.
+    peak_windows : tuple[Window, ...]
+        The weekday peak windows; none of them wraps midnight.
+    quiet_mode : QuietMode
+        How quiet hours are chosen.
+    my_hours : Window
+        The quiet hours chosen by hand; may wrap midnight.
+    rotate : bool
+        Whether the panel is turned 180 degrees.
+    larger_text : bool
+        Whether departure rows use larger text.
+    inverted_lists : bool
+        Whether departure rows are white on black.
     """
 
     auto_rebuild: bool = True
+    peak_rate: Rate = Rate.FAST
+    offpeak_rate: Rate = Rate.SLOW
+    peak_windows: tuple[Window, ...] = PEAK_WINDOWS
+    quiet_mode: QuietMode = QuietMode.MY_HOURS
+    my_hours: Window = MY_HOURS
+    rotate: bool = False
+    larger_text: bool = False
+    inverted_lists: bool = False
 
 
 @dataclass(frozen=True)

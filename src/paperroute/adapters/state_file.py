@@ -7,7 +7,7 @@ import os
 import tempfile
 import time
 from collections.abc import Callable
-from datetime import date
+from datetime import date, datetime
 from pathlib import Path
 from typing import Final
 
@@ -17,9 +17,12 @@ from paperroute.core.model import TRAINLINK, Pin, RouteKind, StopPlace
 from paperroute.core.saved import (
     DEFAULT_SAVED,
     LiveView,
+    QuietMode,
     Quota,
+    Rate,
     Saved,
     Settings,
+    Window,
 )
 from paperroute.core.tiles import ZOOMS
 from paperroute.ports import Loaded
@@ -27,11 +30,14 @@ from paperroute.ports import Loaded
 logger = logging.getLogger(__name__)
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/state.json')
-SCHEMA_VERSION: Final[int] = 4
+SCHEMA_VERSION: Final[int] = 5
 TEMP_PREFIX: Final[str] = '.state.json.'
 BAD_PREFIX: Final[str] = 'state.json.bad-'
 BAD_KEPT: Final[int] = 2
 FILE_MODE: Final[int] = 0o644
+CLOCK: Final[str] = r'^([01]\d|2[0-3]):[0-5]\d$'
+CLOCK_FORMAT: Final[str] = '%H:%M'
+MAX_PEAK_WINDOWS: Final[int] = 2
 
 
 class StopModel(BaseModel):
@@ -56,12 +62,31 @@ class PinModel(BaseModel):
     routes: tuple[str, ...]
 
 
+class WindowModel(BaseModel):
+    """A daily window as stored, each end as ``HH:MM``."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    start: str = Field(pattern=CLOCK)
+    end: str = Field(pattern=CLOCK)
+
+
 class SettingsModel(BaseModel):
     """The Settings page's choices as stored."""
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
     auto_rebuild: bool
+    peak_rate: Rate
+    offpeak_rate: Rate
+    peak_windows: tuple[WindowModel, ...] = Field(
+        max_length=MAX_PEAK_WINDOWS,
+    )
+    quiet_mode: QuietMode
+    my_hours: WindowModel
+    rotate: bool
+    larger_text: bool
+    inverted_lists: bool
 
 
 class QuotaModel(BaseModel):
@@ -185,6 +210,117 @@ def pin_from_model(*, model: PinModel) -> Pin:
     )
 
 
+def window_to_model(*, window: Window) -> WindowModel:
+    """
+    Convert a window to its stored form.
+
+    Parameters
+    ----------
+    window : Window
+        The window.
+
+    Returns
+    -------
+    WindowModel
+        The window with each end as ``HH:MM``.
+    """
+    return WindowModel(
+        start=window.start.strftime(CLOCK_FORMAT),
+        end=window.end.strftime(CLOCK_FORMAT),
+    )
+
+
+def window_from_model(*, model: WindowModel) -> Window:
+    """
+    Convert a stored window back.
+
+    Parameters
+    ----------
+    model : WindowModel
+        The stored window.
+
+    Returns
+    -------
+    Window
+        The window.
+    """
+    return Window(
+        start=datetime.strptime(model.start, CLOCK_FORMAT).time(),
+        end=datetime.strptime(model.end, CLOCK_FORMAT).time(),
+    )
+
+
+def settings_to_model(*, settings: Settings) -> SettingsModel:
+    """
+    Convert the settings to their stored form.
+
+    Parameters
+    ----------
+    settings : Settings
+        The settings.
+
+    Returns
+    -------
+    SettingsModel
+        The stored settings.
+    """
+    return SettingsModel(
+        auto_rebuild=settings.auto_rebuild,
+        peak_rate=settings.peak_rate,
+        offpeak_rate=settings.offpeak_rate,
+        peak_windows=tuple(
+            window_to_model(window=window)
+            for window in settings.peak_windows
+        ),
+        quiet_mode=settings.quiet_mode,
+        my_hours=window_to_model(window=settings.my_hours),
+        rotate=settings.rotate,
+        larger_text=settings.larger_text,
+        inverted_lists=settings.inverted_lists,
+    )
+
+
+def settings_from_model(*, model: SettingsModel) -> Settings:
+    """
+    Convert stored settings back.
+
+    Parameters
+    ----------
+    model : SettingsModel
+        The stored settings.
+
+    Returns
+    -------
+    Settings
+        The settings.
+    """
+    return Settings(
+        auto_rebuild=model.auto_rebuild,
+        peak_rate=model.peak_rate,
+        offpeak_rate=model.offpeak_rate,
+        peak_windows=tuple(
+            window_from_model(model=window) for window in model.peak_windows
+        ),
+        quiet_mode=model.quiet_mode,
+        my_hours=window_from_model(model=model.my_hours),
+        rotate=model.rotate,
+        larger_text=model.larger_text,
+        inverted_lists=model.inverted_lists,
+    )
+
+
+def default_settings() -> dict[str, object]:
+    """
+    Give the default settings as stored.
+
+    Returns
+    -------
+    dict[str, object]
+        The default settings as JSON data.
+    """
+    return settings_to_model(settings=Settings()).model_dump(mode='json')
+
+
 def to_model(*, saved: Saved) -> StateModel:
     """
     Convert the saved state to its stored form.
@@ -207,7 +343,7 @@ def to_model(*, saved: Saved) -> StateModel:
         unpinned=None if unpinned is None else pin_to_model(pin=unpinned),
         view=saved.view,
         zoom=saved.zoom,
-        settings=SettingsModel(auto_rebuild=saved.settings.auto_rebuild),
+        settings=settings_to_model(settings=saved.settings),
         quota=QuotaModel(day=saved.quota.day, calls=saved.quota.calls),
     )
 
@@ -241,7 +377,7 @@ def from_model(*, model: StateModel) -> Saved:
         unpinned=unpinned,
         view=model.view,
         zoom=model.zoom,
-        settings=Settings(auto_rebuild=model.settings.auto_rebuild),
+        settings=settings_from_model(model=model.settings),
         quota=Quota(day=model.quota.day, calls=model.quota.calls),
     )
 
@@ -332,9 +468,35 @@ def add_quota(data: dict[str, object]) -> dict[str, object]:
     return {**data, 'quota': {'day': None, 'calls': 0}}
 
 
+def add_display_settings(data: dict[str, object]) -> dict[str, object]:
+    """
+    Add the rate, quiet-hours and display settings at their defaults.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Version 4 data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with every new setting at its default; settings that
+        are not an object are left for validation to fail.
+    """
+    settings = data.get('settings')
+    if not isinstance(settings, dict):
+        return data
+    return {**data, 'settings': {**default_settings(), **settings}}
+
+
 MIGRATIONS: Final[
     dict[int, Callable[[dict[str, object]], dict[str, object]]]
-] = {1: regional_to_coach, 2: add_settings, 3: add_quota}
+] = {
+    1: regional_to_coach,
+    2: add_settings,
+    3: add_quota,
+    4: add_display_settings,
+}
 
 
 def migrate(*, data: dict[str, object]) -> dict[str, object]:
@@ -390,6 +552,40 @@ def repaired_quota(*, data: dict[str, object]) -> dict[str, object]:
     except ValidationError:
         logger.warning('state.json quota unusable, resetting it')
         return {**data, 'quota': {'day': None, 'calls': 0}}
+    return data
+
+
+def repaired_settings(*, data: dict[str, object]) -> dict[str, object]:
+    """
+    Reset each setting that cannot be read, so the rest are kept.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Migrated data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with each bad setting at its default and unknown ones
+        dropped; all defaults when the settings are not an object.
+    """
+    settings = data.get('settings')
+    if not isinstance(settings, dict):
+        logger.warning('state.json settings unusable, resetting them')
+        return {**data, 'settings': default_settings()}
+    try:
+        SettingsModel.model_validate(settings)
+    except ValidationError as error:
+        bad = {item['loc'][0] for item in error.errors() if item['loc']}
+        logger.warning('state.json settings %s unusable, resetting', bad)
+        defaults = default_settings()
+        kept = {
+            name: value
+            for name, value in settings.items()
+            if name in defaults and name not in bad
+        }
+        return {**data, 'settings': {**defaults, **kept}}
     return data
 
 
@@ -514,7 +710,9 @@ class JsonStateRepository:
             data = json.loads(text)
             if not isinstance(data, dict):
                 raise ValueError('state.json is not an object')
-            migrated = repaired_quota(data=migrate(data=data))
+            migrated = repaired_settings(
+                data=repaired_quota(data=migrate(data=data)),
+            )
             model = StateModel.model_validate(migrated)
         except (ValueError, RecursionError):
             return self.defaults_after_error()

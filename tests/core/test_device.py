@@ -32,6 +32,7 @@ from paperroute.core.messages import (
     Stop,
     Tick,
 )
+from paperroute.core.saved import Rate, Settings
 from paperroute.core.state import SAVE_AFTER, step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import stop_view_of
@@ -43,13 +44,25 @@ from tests.fakes import device_facts
 
 
 def test_settings_change_is_saved() -> None:
-    """A switched-off rebuild is saved once the save delay has passed."""
-    state, effects = step(pinned(), SettingsChanged(auto_rebuild=False))
+    """A changed setting is saved once the save delay has passed."""
+    event = SettingsChanged(auto_rebuild=False, rotate=True)
+    state, effects = step(pinned(), event)
     assert not effects
     _, effects = step(state, Tick(now=START + SAVE_AFTER * 2))
     saves = [effect for effect in effects if isinstance(effect, SaveState)]
     assert len(saves) == 1
     assert saves[0].saved.settings.auto_rebuild is False
+    assert saves[0].saved.settings.rotate is True
+
+
+def test_settings_change_merges() -> None:
+    """Only the fields given change; an empty change changes nothing."""
+    state, effects = step(pinned(), SettingsChanged(peak_rate=Rate.STEADY))
+    assert not effects
+    assert state.settings == Settings(peak_rate=Rate.STEADY)
+    unchanged, effects = step(state, SettingsChanged())
+    assert not effects
+    assert unchanged.settings == state.settings
 
 
 def powering(*, action: PowerAction) -> State:

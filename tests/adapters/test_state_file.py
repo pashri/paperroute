@@ -7,7 +7,7 @@ import stat
 import tempfile
 from collections.abc import Iterator
 from dataclasses import replace
-from datetime import date
+from datetime import date, time
 from pathlib import Path
 
 import pytest
@@ -24,9 +24,12 @@ from paperroute.core.model import Pin, RouteKind, StopPlace
 from paperroute.core.saved import (
     DEFAULT_SAVED,
     LiveView,
+    QuietMode,
     Quota,
+    Rate,
     Saved,
     Settings,
+    Window,
 )
 from paperroute.core.tiles import ZOOMS
 
@@ -302,11 +305,11 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
 
 
 def test_written_json_shape(path: Path) -> None:
-    """The version is 4 and stops carry their metre coordinates."""
+    """The version is 5 and stops carry their metre coordinates."""
     JsonStateRepository(path=path).save(saved=sample())
     data = json.loads(path.read_text())
-    assert data['schema_version'] == 4
-    assert data['settings'] == {'auto_rebuild': True}
+    assert data['schema_version'] == 5
+    assert data['settings']['auto_rebuild'] is True
     assert data['pins'][0]['origin'] == {
         'stop_id': 'a',
         'name': 'A',
@@ -481,7 +484,7 @@ def test_round_trips_settings(path: Path) -> None:
 
 
 def test_migrates_v3_to_v4_with_empty_quota(path: Path) -> None:
-    """A version 3 file loads with no calls counted and saves as 4."""
+    """A version 3 file loads with no calls counted and saves as current."""
     repository = JsonStateRepository(path=path)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
@@ -494,7 +497,7 @@ def test_migrates_v3_to_v4_with_empty_quota(path: Path) -> None:
     assert loaded.saved.quota == Quota(day=None, calls=0)
     repository.save(saved=loaded.saved)
     stored = json.loads(path.read_text())
-    assert stored['schema_version'] == 4
+    assert stored['schema_version'] == SCHEMA_VERSION
     assert stored['quota'] == {'day': None, 'calls': 0}
 
 
@@ -526,11 +529,80 @@ def test_negative_calls_reset_the_quota_only(
     assert caplog.records
 
 
-def test_schema_five_falls_back(path: Path) -> None:
-    """A version 5 file is from a newer app and is not guessed at."""
+def test_schema_six_falls_back(path: Path) -> None:
+    """A version 6 file is from a newer app and is not guessed at."""
     repository = JsonStateRepository(path=path)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
-    data['schema_version'] = 5
+    data['schema_version'] = 6
     path.write_text(json.dumps(data))
     assert repository.load().saved == DEFAULT_SAVED
+
+
+def write_v4(*, path: Path, auto_rebuild: bool) -> None:
+    """
+    Save the sample and rewrite it as a version 4 file.
+
+    Parameters
+    ----------
+    path : Path
+        The state file.
+    auto_rebuild : bool
+        The stored rebuild setting.
+    """
+    JsonStateRepository(path=path).save(saved=sample())
+    data = json.loads(path.read_text())
+    data['schema_version'] = 4
+    data['settings'] = {'auto_rebuild': auto_rebuild}
+    path.write_text(json.dumps(data))
+
+
+def test_migrates_v4_to_v5_with_defaults(path: Path) -> None:
+    """A version 4 file keeps its rebuild setting and saves as 5."""
+    write_v4(path=path, auto_rebuild=False)
+    repository = JsonStateRepository(path=path)
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved.settings == Settings(auto_rebuild=False)
+    assert loaded.saved.pins == sample().pins
+    repository.save(saved=loaded.saved)
+    stored = json.loads(path.read_text())
+    assert stored['schema_version'] == 5
+    assert stored['settings']['peak_windows'] == [
+        {'start': '06:30', 'end': '10:00'},
+        {'start': '15:00', 'end': '19:00'},
+    ]
+
+
+def test_round_trips_all_settings(path: Path) -> None:
+    """Every setting off its default survives a save and a load."""
+    changed = Settings(
+        auto_rebuild=False,
+        peak_rate=Rate.SLOW,
+        offpeak_rate=Rate.STEADY,
+        peak_windows=(Window(start=time(7), end=time(9)),),
+        quiet_mode=QuietMode.TIMETABLE,
+        my_hours=Window(start=time(22, 15), end=time(6)),
+        rotate=True,
+        larger_text=True,
+        inverted_lists=True,
+    )
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=replace(sample(), settings=changed))
+    assert repository.load().saved.settings == changed
+
+
+def test_bad_time_falls_back(
+    path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A time that can't be read resets that setting and keeps the pins."""
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=replace(sample(), settings=Settings(rotate=True)))
+    data = json.loads(path.read_text())
+    data['settings']['peak_windows'][0]['start'] = '25:00'
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved.pins == sample().pins
+    assert loaded.saved.settings == Settings(rotate=True)
+    assert caplog.records

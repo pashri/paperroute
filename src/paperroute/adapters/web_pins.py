@@ -746,13 +746,56 @@ class PinsPages:
         latest = self._pins()
         if latest is None or self.options is None:
             raise web.HTTPSeeOther(location='/pins')
-        editor = edited(options=self.options, draft=draft)
+        editor = edited(
+            options=self.options, draft=draft,
+            missing=self._missing(ref=draft.ref),
+        )
         if not survived(draft=draft, editor=editor) or editor.pin is None:
-            notice = f'<p class="notice" role="alert">{MISFIT}</p>'
-            return self._editor(
-                draft=draft, notice=notice, status=HTTPStatus.BAD_REQUEST,
-            )
+            return self._refused(draft=draft, editor=editor)
         raise self._saved(seen=latest, ref=draft.ref, pin=editor.pin)
+
+    def _missing(self, *, ref: str | None) -> Pin | None:
+        """
+        Find a pin the timetable no longer knows.
+
+        Parameters
+        ----------
+        ref : str | None
+            A pin ref, or None.
+
+        Returns
+        -------
+        Pin | None
+            The pin when it has the ref and is missing; otherwise None.
+        """
+        found = None if ref is None else self._find(ref=ref)
+        return found[1] if found is not None and found[1].missing else None
+
+    def _refused(
+        self, *, draft: PinDraft, editor: PinEditor,
+    ) -> web.Response:
+        """
+        Answer a save whose choices do not make a pin.
+
+        Parameters
+        ----------
+        draft : PinDraft
+            The choices submitted.
+        editor : PinEditor
+            The editor after checking them.
+
+        Returns
+        -------
+        web.Response
+            The editor with its stops nearby when a missing pin has
+            some; otherwise 400 with the editor and a notice.
+        """
+        if editor.nearby and editor.pin is None:
+            return self._editor(draft=draft)
+        notice = f'<p class="notice" role="alert">{MISFIT}</p>'
+        return self._editor(
+            draft=draft, notice=notice, status=HTTPStatus.BAD_REQUEST,
+        )
 
     def _saved(
         self, *, seen: PinsSeen, ref: str | None, pin: Pin,
@@ -774,9 +817,9 @@ class PinsPages:
         web.HTTPSeeOther
             A redirect to the list with the outcome.
         """
-        if duplicate(seen=seen, pin=pin, ref=ref):
-            return web.HTTPSeeOther(location='/pins?done=duplicate')
         gone = ref is not None and self._find(ref=ref) is None
+        if not gone and duplicate(seen=seen, pin=pin, ref=ref):
+            return web.HTTPSeeOther(location='/pins?done=duplicate')
         event = None if gone else PinSaved(ref=ref, pin=pin)
         return self._finish(
             event=event, revision=seen.revision, done='saved',

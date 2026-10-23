@@ -21,12 +21,13 @@ NO_MATCH: Final[str] = 'No stop or station matches “{text}”.'
 MISFIT: Final[str] = "Those choices don't fit together. Pick again."
 NO_TO: Final[str] = 'None: every departure'
 FILTER_HINT: Final[str] = 'Leave all unticked to show every route.'
-SEARCH_FORM: Final[str] = """<form class="search" method="get"
-          action="/pins/new" role="search">
+SEARCH_FORM: Final[str] = """<search>
+    <form class="search" method="get" action="/pins/new">
       <label for="pin-search">Search a stop or station</label>
       <input id="pin-search" type="search" name="q" value="{text}">
       <button type="submit">Search</button>
-    </form>"""
+    </form>
+    </search>"""
 EDITOR: Final[str] = """<form class="editor" method="get" action="/pins/edit">
       <input type="hidden" name="ref" value="{ref}">
       <input type="hidden" name="stop" value="{stop}">

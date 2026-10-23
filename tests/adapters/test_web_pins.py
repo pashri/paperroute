@@ -633,3 +633,22 @@ async def test_missing_pin_lists_nearby(editor: Client) -> None:
     assert 'Stops nearby' in text
     assert f'href="/pins/edit?ref={ref}&amp;stop=B2"' in text
     assert 'Old Stop' in text
+
+
+async def test_resave_of_missing_pin_lists_nearby(
+    pins: Pins, editor: Client,
+) -> None:
+    """Saving a missing pin as it was offers stops nearby, not a 400."""
+    ref = pin_ref(pin=LOST)
+    response = await editor.post('/pins/save', data=_form({
+        'ref': ref, 'stop': 'OLD', 'kind': 'bus', 'route': '809',
+    }))
+    assert response.status == HTTPStatus.OK
+    assert 'Stops nearby' in await response.text()
+    assert not pins.posted
+
+
+async def test_search_form_is_a_search_landmark(editor: Client) -> None:
+    """The search form sits in a search element."""
+    text = await (await editor.get('/pins/new?q=c')).text()
+    assert '<search>' in text

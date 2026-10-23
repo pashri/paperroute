@@ -316,17 +316,16 @@ def test_warning_banner_is_inverted() -> None:
 
 def test_long_nickname_tag_keeps_titles() -> None:
     """A 24-character tag still leaves the origin title drawn."""
-    tag = PinTag(text=f'{"W" * 20} 2/3', pinned=True)
     canvas = Canvas()
-    right = header_tabs(canvas, clock='8:41', active='Map')
-    left = pin_tag(canvas, right=right, tag=tag)
     header(
         canvas,
         origin='Hollis St',
         destination=None,
         clock='8:41',
         active='Map',
-        tag=tag,
+        tag=PinTag(text=f'{"W" * 20} 2/3', pinned=True),
     )
     grey = canvas.grey()
-    assert int(grey[12:30, 12:int(left)].max()) == PAPER
+    left = int(np.flatnonzero(grey[11] == PAPER).min())
+    assert int(grey[12:30, 12:left].max()) == PAPER
+    assert int(grey[12:30, left - 8:left].max()) == INK

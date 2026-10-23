@@ -2,7 +2,7 @@
 
 import sqlite3
 from collections.abc import Callable, Collection, Sequence
-from datetime import date
+from datetime import date, timedelta
 from typing import Final
 
 from paperroute.core.model import Departure, ServiceSpan, service_time
@@ -15,6 +15,7 @@ HAS_HOLIDAYS: Final[str] = (
     "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'holidays'"
 )
 
+SERVICE_DAY_LENGTH: Final[timedelta] = timedelta(hours=30)
 TRIP_ENDS: Final[str] = """
 SELECT MIN(first.dep), MAX(last.arr)
 FROM (SELECT trip_id, MIN(seq) AS lo, MAX(seq) AS hi FROM stop_times

@@ -85,11 +85,14 @@ def may_sleep(*, state: State) -> bool:
     Returns
     -------
     bool
-        True when awake with no wake running, no confirm, menu or
-        Wi-Fi setup open, and no power action or reset under way.
+        True when awake with no wake running, no confirm, menu, route
+        chooser or Wi-Fi setup open, and no power action or reset under
+        way.
     """
     panel = state.panel
     if panel.asleep or state.power is not None:
+        return False
+    if state.chooser is not None:
         return False
     if panel.awake_until is not None and panel.awake_until > state.now:
         return False

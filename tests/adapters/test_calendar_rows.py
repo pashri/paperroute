@@ -17,7 +17,7 @@ from paperroute.adapters.calendar_rows import (
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.model import service_epoch, service_time
+from paperroute.core.model import ServiceSpan, service_epoch, service_time
 from tests.build.feeds import build_db, bus_files
 from tests.core.factories import pin_of
 from tests.helpers import write_feed
@@ -160,3 +160,20 @@ def test_service_span_reads_trip_ends(
     assert span.last_end == service_time(day=SERVICE, seconds=int(str(last)))
     after = SERVICE + timedelta(days=5)
     assert bundle_repo.service_span(pin=pin, day=after) is None
+
+
+def test_service_span_counts_trips_after_midnight(tmp_path: Path) -> None:
+    """A trip leaving after 24:00 on the service day ends the span."""
+    archive = write_feed(path=tmp_path / 'bundle.zip', files=bus_files())
+    out = tmp_path / 'timetable.db'
+    build_timetable(
+        sources=[Source(name='bundle', archive=archive)],
+        window=Window(start=SERVICE, days=3),
+        out=out,
+    )
+    with closing(SqliteTimetableRepository(path=out)) as repo:
+        span = repo.service_span(pin=pin_of('2145615', '215020'), day=SERVICE)
+    assert span == ServiceSpan(
+        first_start=service_time(day=SERVICE, seconds=8 * 3600 + 3 * 60),
+        last_end=service_time(day=SERVICE, seconds=25 * 3600 + 40 * 60),
+    )

@@ -5,7 +5,13 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
-from paperroute.core.device_model import ConfirmAction, MenuRow
+from paperroute.core.device_model import (
+    ConfirmAction,
+    MenuRow,
+    ResetKind,
+    WifiPhase,
+    WifiSetup,
+)
 from paperroute.core.messages import (
     ConfirmAsked,
     DeparturesLoaded,
@@ -13,6 +19,7 @@ from paperroute.core.messages import (
     Event,
     FetchFeed,
     Knob,
+    KnobPressed,
     KnobsHeld,
     KnobTurned,
     LoadServiceSpan,
@@ -425,3 +432,44 @@ def test_quiet_wakes_from_a_tick_only_when_by_quiet() -> None:
     assert not state.panel.asleep
     assert FetchFeed(feed=BUSES) in effects
     assert len(renders(effects=effects)) == 1
+
+
+def test_quiet_waits_for_chooser() -> None:
+    """An open route chooser holds off quiet sleep."""
+    state, _ = step(evening(), KnobPressed(knob=Knob.TOP))
+    assert state.chooser is not None
+    state = ticked(state=state, times=(at(23),))
+    assert not state.panel.asleep
+
+
+def test_quiet_waits_for_wifi_setup() -> None:
+    """Wi-Fi setup open on the panel holds off quiet sleep."""
+    state = evening()
+    panel = replace(state.panel, wifi=WifiSetup(phase=WifiPhase.SCANNING))
+    state = ticked(state=replace(state, panel=panel), times=(at(23),))
+    assert not state.panel.asleep
+
+
+def test_quiet_waits_for_reset() -> None:
+    """A reset under way holds off quiet sleep."""
+    state = evening()
+    panel = replace(state.panel, resetting=ResetKind.SETTINGS)
+    state = ticked(state=replace(state, panel=panel), times=(at(23),))
+    assert not state.panel.asleep
+
+
+def test_sleep_now_woken_in_quiet_hours_sleeps_again() -> None:
+    """A touch ending a Sleep now in quiet hours wakes for five minutes."""
+    state = evening()
+    index = tuple(MenuRow).index(MenuRow.SLEEP)
+    state, _ = run(state=state, events=(KnobsHeld(), turn(steps=index)))
+    state, _ = step(state, DOWN)
+    assert not state.panel.by_quiet
+    state = ticked(state=state, times=(at(23),))
+    state, _ = step(state, BOTTOM)
+    assert not state.panel.asleep
+    state = ticked(state=state, times=(at(23, 4),))
+    assert not state.panel.asleep
+    state = ticked(state=state, times=(at(23, 5),))
+    assert state.panel.asleep
+    assert state.panel.by_quiet

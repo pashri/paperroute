@@ -9,7 +9,11 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.adapters.calendar_rows import read_holidays, service_span
+from paperroute.adapters.calendar_rows import (
+    SERVICE_DAY_LENGTH,
+    read_holidays,
+    service_span,
+)
 from paperroute.adapters.carry_on_rows import (
     CARRY_ONS,
     carry_on_departure,
@@ -378,13 +382,13 @@ class SqliteTimetableRepository:
         Returns
         -------
         ServiceSpan | None
-            The span of the trips `departures` lists that day; None when
-            there are none.
+            The span of the trips `departures` lists that day, up to
+            `SERVICE_DAY_LENGTH` after its start; None when there are
+            none.
         """
+        start = service_epoch(day=day)
         found = self.departures(
-            pin=pin,
-            start=service_epoch(day=day),
-            end=service_epoch(day=day + timedelta(days=1)),
+            pin=pin, start=start, end=start + SERVICE_DAY_LENGTH,
         )
         return service_span(
             departures=found,

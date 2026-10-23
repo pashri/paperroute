@@ -4,6 +4,8 @@ import asyncio
 import re
 import time
 from collections.abc import AsyncIterator
+from datetime import time as clock
+from html.parser import HTMLParser
 from http import HTTPStatus
 from importlib.resources import files
 
@@ -26,6 +28,7 @@ from paperroute.core.messages import (
     PowerRequested,
     SettingsChanged,
 )
+from paperroute.core.saved import Rate, Window
 from paperroute.render.canvas import encode_png
 from tests.adapters.test_web_device import Device
 
@@ -471,32 +474,10 @@ async def test_settings_post_posts_event(
     assert posted == [SettingsChanged(auto_rebuild=False)]
 
 
-@pytest.mark.parametrize(('fields', 'expected'), [
-    ([('auto_rebuild', 'off')], False),
-    ([('auto_rebuild', 'off'), ('auto_rebuild', 'on')], True),
-])
-async def test_settings_form_redirects_back(
-    display: WebDisplay,
-    client: Client,
-    fields: list[tuple[str, str]],
-    expected: bool,
-) -> None:
-    """A plain form post is answered with 303 back to the page."""
-    posted: list[Event] = []
-    display.bind(post=posted.append)
-    response = await client.post(
-        '/settings', data=fields, allow_redirects=False,
-    )
-    assert response.status == HTTPStatus.SEE_OTHER
-    saved = 'on' if expected else 'off'
-    assert response.headers['Location'] == f'/settings?saved={saved}'
-    assert posted == [SettingsChanged(auto_rebuild=expected)]
-
-
 @pytest.mark.parametrize(('status', 'checked'), [
     ({}, True),
-    ({'settings': {'auto_rebuild': True}}, True),
-    ({'settings': {'auto_rebuild': False}}, False),
+    ({'settings': {'auto_rebuild': 'on'}}, True),
+    ({'settings': {'auto_rebuild': 'off'}}, False),
 ])
 async def test_settings_page_served(
     status: dict[str, object], checked: bool
@@ -512,10 +493,6 @@ async def test_settings_page_served(
         await client.close()
     assert page.content_type == 'text/html'
     assert 'Rebuild timetable automatically' in text
-    assert (
-        'Rebuilds an outdated timetable on the device when a new version'
-        in text
-    )
     assert '<a href="/">Live</a>' in text
     assert ('aria-describedby="auto-rebuild-hint" checked>' in text) is (
         checked
@@ -533,25 +510,186 @@ def test_live_page_links_to_settings() -> None:
     assert '<a href="/settings">Settings</a>' in html
 
 
-@pytest.mark.parametrize(('query', 'checked'), [
-    ('?saved=on', True),
-    ('?saved=off', False),
-    ('?saved=maybe', True),
-])
-async def test_settings_page_prefers_the_saved_value(
-    query: str, checked: bool
+DISPLAY_FORM = [
+    ('peak_rate', '60s'),
+    ('offpeak_rate', '2min'),
+    ('peak_1_start', '07:00'),
+    ('peak_1_end', '09:00'),
+    ('peak_2_start', ''),
+    ('peak_2_end', ''),
+    ('rotate', 'off'),
+    ('rotate', 'on'),
+    ('larger_text', 'off'),
+    ('inverted_lists', 'off'),
+]
+
+
+async def test_display_form_posts_event(
+    display: WebDisplay, client: Client
 ) -> None:
-    """After a form save the switch shows the posted value, not the old."""
-    status: dict[str, object] = {'settings': {'auto_rebuild': True}}
+    """A form post of the Display section posts one event and redirects."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        '/settings', data=DISPLAY_FORM, allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert response.headers['Location'] == '/settings'
+    assert posted == [SettingsChanged(
+        peak_rate=Rate.STEADY,
+        offpeak_rate=Rate.SLOW,
+        peak_windows=(Window(start=clock(7), end=clock(9)),),
+        rotate=True,
+        larger_text=False,
+        inverted_lists=False,
+    )]
+
+
+async def test_json_post_answers_no_content(
+    display: WebDisplay, client: Client
+) -> None:
+    """A JSON post is answered 204."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post('/settings', json={'rotate': 'on'})
+    assert response.status == HTTPStatus.NO_CONTENT
+    assert posted == [SettingsChanged(rotate=True)]
+
+
+async def test_bad_peak_redirects_with_error(
+    display: WebDisplay, client: Client
+) -> None:
+    """A window ending before it starts posts nothing and shows an error."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        '/settings',
+        data={'peak_1_start': '10:00', 'peak_1_end': '09:00'},
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert response.headers['Location'] == '/settings?error=peak'
+    assert not posted
+    page = await client.get('/settings?error=peak')
+    text = await page.text()
+    assert 'Peak hours not saved: each start must be before' in text
+    assert 'Quiet hours not saved' not in text
+    plain = await (await client.get('/settings')).text()
+    assert 'not saved' not in plain
+
+
+async def test_unknown_value_is_400(
+    display: WebDisplay, client: Client
+) -> None:
+    """A rate the page never sends is refused."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post('/settings', data={'peak_rate': '1s'})
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert not posted
+
+
+async def test_settings_cross_site_403(
+    display: WebDisplay, client: Client
+) -> None:
+    """A post from another site is refused."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        '/settings',
+        data={'rotate': 'on'},
+        headers={'Origin': 'http://evil.example'},
+    )
+    assert response.status == HTTPStatus.FORBIDDEN
+    assert not posted
+
+
+async def test_page_shows_posted_before_status() -> None:
+    """The posted value wins until the status reports it."""
+    status: dict[str, object] = {'settings': {'rotate': 'off'}}
     display = WebDisplay(status=lambda: status)
     client = await _client(display=display)
+    rotate = re.compile(r'name="rotate"\s+value="on" checked>')
     try:
-        text = await (await client.get(f'/settings{query}')).text()
+        await client.post('/settings', data={'rotate': 'on'})
+        shown = await (await client.get('/settings')).text()
+        assert rotate.search(shown)
+        assert display._posted == {'rotate': 'on'}  # pylint: disable=protected-access
+        status['settings'] = {'rotate': 'on'}
+        later = await (await client.get('/settings')).text()
     finally:
         await client.close()
-    assert ('aria-describedby="auto-rebuild-hint" checked>' in text) is (
-        checked
-    )
+    assert rotate.search(later)
+    assert not display._posted  # pylint: disable=protected-access
+
+
+class _Controls(HTMLParser):
+    """Collect the controls outside forms and the unlabelled ones."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.in_form = False
+        self.loose: list[str] = []
+        self.forms: list[dict[str, str | None]] = []
+        self.submits: list[int] = []
+        self.label_depth = 0
+        self.unlabelled: list[str] = []
+        self.for_ids: set[str] = set()
+        self.control_ids: list[tuple[str, str | None]] = []
+
+    def handle_starttag(
+        self, tag: str, attrs: list[tuple[str, str | None]]
+    ) -> None:
+        """Track forms, labels and controls."""
+        found = dict(attrs)
+        if tag == 'form':
+            self.in_form = True
+            self.forms.append(found)
+            self.submits.append(0)
+        elif tag == 'label':
+            self.label_depth += 1
+            if found.get('for'):
+                self.for_ids.add(str(found['for']))
+        elif tag in {'input', 'select', 'button'}:
+            self._control(tag=tag, found=found)
+
+    def _control(self, *, tag: str, found: dict[str, str | None]) -> None:
+        """Record one control."""
+        kind = found.get('type')
+        if tag == 'input' and kind == 'hidden':
+            return
+        if not self.in_form:
+            self.loose.append(tag)
+        if tag == 'button' and kind == 'submit':
+            self.submits[-1] += 1
+        if tag != 'button' and not self.label_depth:
+            self.control_ids.append((tag, found.get('id')))
+
+    def handle_endtag(self, tag: str) -> None:
+        """Close forms and labels."""
+        if tag == 'form':
+            self.in_form = False
+        elif tag == 'label':
+            self.label_depth -= 1
+
+
+async def test_page_works_without_script() -> None:
+    """Every control is in a post form with Save; each has a label."""
+    display = WebDisplay()
+    client = await _client(display=display)
+    try:
+        text = await (await client.get('/settings')).text()
+    finally:
+        await client.close()
+    parser = _Controls()
+    parser.feed(text)
+    assert not parser.loose
+    assert len(parser.forms) == 3
+    assert all(form['method'] == 'post' for form in parser.forms)
+    assert all(form['action'] == '/settings' for form in parser.forms)
+    assert all(count >= 1 for count in parser.submits)
+    for tag, ident in parser.control_ids:
+        assert ident in parser.for_ids, tag
 
 
 async def test_power_post_posts_event(

@@ -1,0 +1,388 @@
+"""Read and write the Settings page's form fields."""
+
+import re
+from collections.abc import Mapping
+from datetime import time
+from enum import StrEnum
+from html import escape
+from typing import Final
+
+from paperroute.core.messages import SettingsChanged
+from paperroute.core.saved import QuietMode, Rate, Settings, Window
+
+SWITCHES: Final[tuple[str, ...]] = (
+    'auto_rebuild',
+    'rotate',
+    'larger_text',
+    'inverted_lists',
+)
+SLOTS: Final[tuple[str, ...]] = ('peak_1', 'peak_2')
+CHOICES: Final[frozenset[str]] = frozenset({'peak_rate', 'offpeak_rate'})
+SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
+CLOCK: Final[re.Pattern[str]] = re.compile(r'(\d\d):(\d\d)')
+ERRORS: Final[dict[str, str]] = {
+    'peak': (
+        'Peak hours not saved: each start must be before its end, '
+        'as HH:MM.'
+    ),
+    'quiet': 'Quiet hours not saved: use HH:MM times.',
+}
+
+
+class Section(StrEnum):
+    """The parts of the page whose input can be refused."""
+
+    PEAK = 'peak'
+    QUIET = 'quiet'
+
+
+class UnknownValue(ValueError):
+    """A field held a value the page never sends."""
+
+
+class BadInput(ValueError):
+    """
+    A time or window the user typed was not usable.
+
+    Parameters
+    ----------
+    section : str
+        `peak` or `quiet`, the part of the page to show the error in.
+
+    Attributes
+    ----------
+    section : str
+        `peak` or `quiet`.
+    """
+
+    def __init__(self, section: str) -> None:
+        super().__init__(section)
+        self.section = section
+
+
+def clock_text(*, moment: time) -> str:
+    """
+    Write a time as `HH:MM`.
+
+    Parameters
+    ----------
+    moment : time
+        The time.
+
+    Returns
+    -------
+    str
+        The time to the minute.
+    """
+    return f'{moment.hour:02d}:{moment.minute:02d}'
+
+
+def form_values(*, settings: Settings) -> dict[str, str]:
+    """
+    Write the settings as the strings the page's controls hold.
+
+    Parameters
+    ----------
+    settings : Settings
+        The settings.
+
+    Returns
+    -------
+    dict[str, str]
+        `on` or `off` for each switch, the rate and mode values, and
+        `HH:MM` times; an unused peak slot holds empty strings.
+    """
+    values = {
+        name: 'on' if getattr(settings, name) else 'off'
+        for name in SWITCHES
+    }
+    values['peak_rate'] = settings.peak_rate.value
+    values['offpeak_rate'] = settings.offpeak_rate.value
+    values['quiet_mode'] = settings.quiet_mode.value
+    values['quiet_start'] = clock_text(moment=settings.my_hours.start)
+    values['quiet_end'] = clock_text(moment=settings.my_hours.end)
+    for index, slot in enumerate(SLOTS):
+        window = settings.peak_windows[index:index + 1]
+        values[f'{slot}_start'] = (
+            clock_text(moment=window[0].start) if window else ''
+        )
+        values[f'{slot}_end'] = (
+            clock_text(moment=window[0].end) if window else ''
+        )
+    return values
+
+
+def clock_of(*, text: str, section: str) -> time:
+    """
+    Read an `HH:MM` time.
+
+    Parameters
+    ----------
+    text : str
+        The text.
+    section : str
+        The section to blame when the text is not a time.
+
+    Returns
+    -------
+    time
+        The time.
+
+    Raises
+    ------
+    BadInput
+        If the text is not a real `HH:MM` time.
+    """
+    found = CLOCK.fullmatch(text)
+    if found is None:
+        raise BadInput(section)
+    try:
+        return time(int(found[1]), int(found[2]))
+    except ValueError as error:
+        raise BadInput(section) from error
+
+
+def window_of(
+    *, start: str, end: str, section: str
+) -> Window | None:
+    """
+    Read a pair of times.
+
+    Parameters
+    ----------
+    start : str
+        The first time, or empty.
+    end : str
+        The second time, or empty.
+    section : str
+        The section to blame for bad input.
+
+    Returns
+    -------
+    Window | None
+        The window, or None when both are empty.
+
+    Raises
+    ------
+    BadInput
+        If only one is empty or either is not a time.
+    """
+    if not start and not end:
+        return None
+    if not start or not end:
+        raise BadInput(section)
+    return Window(
+        start=clock_of(text=start, section=section),
+        end=clock_of(text=end, section=section),
+    )
+
+
+def peak_windows_of(*, fields: Mapping[str, str]) -> tuple[Window, ...]:
+    """
+    Read the peak slots.
+
+    Parameters
+    ----------
+    fields : Mapping[str, str]
+        The posted fields.
+
+    Returns
+    -------
+    tuple[Window, ...]
+        The windows of the filled slots.
+
+    Raises
+    ------
+    BadInput
+        If a slot is half empty, a start is not before its end, or
+        two windows overlap.
+    """
+    windows = [
+        window
+        for slot in SLOTS
+        if (
+            window := window_of(
+                start=fields.get(f'{slot}_start', ''),
+                end=fields.get(f'{slot}_end', ''),
+                section=Section.PEAK,
+            )
+        )
+    ]
+    ordered = sorted(windows)
+    if any(window.start >= window.end for window in windows) or any(
+        first.end > second.start
+        for first, second in zip(ordered, ordered[1:])
+    ):
+        raise BadInput(Section.PEAK)
+    return tuple(windows)
+
+
+def enum_of[E: StrEnum](*, kind: type[E], text: str) -> E:
+    """
+    Read one of an enumeration's values.
+
+    Parameters
+    ----------
+    kind : type[E]
+        The enumeration.
+    text : str
+        The posted value.
+
+    Returns
+    -------
+    E
+        The member.
+
+    Raises
+    ------
+    UnknownValue
+        If the text is not a value of the enumeration.
+    """
+    try:
+        return kind(text)
+    except ValueError as error:
+        raise UnknownValue(text) from error
+
+
+def switches_of(*, fields: Mapping[str, str]) -> dict[str, bool]:
+    """
+    Read the switches that were posted.
+
+    Parameters
+    ----------
+    fields : Mapping[str, str]
+        The posted fields.
+
+    Returns
+    -------
+    dict[str, bool]
+        Each posted switch by name.
+
+    Raises
+    ------
+    UnknownValue
+        If a switch is neither `on` nor `off`.
+    """
+    found = {}
+    for name in SWITCHES:
+        if name not in fields:
+            continue
+        if fields[name] not in SWITCH:
+            raise UnknownValue(fields[name])
+        found[name] = SWITCH[fields[name]]
+    return found
+
+
+def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged:
+    """
+    Turn posted fields into a settings change.
+
+    Parameters
+    ----------
+    fields : Mapping[str, str]
+        The posted fields; only those present are read.
+
+    Returns
+    -------
+    SettingsChanged
+        The change; settings with no field are left as they are.
+
+    Raises
+    ------
+    UnknownValue
+        If a switch, rate or mode holds an unknown value.
+    BadInput
+        If a time is not `HH:MM` or a peak window is unusable.
+    """
+    extra: dict[str, object] = dict(switches_of(fields=fields))
+    for name, kind in (('peak_rate', Rate), ('offpeak_rate', Rate)):
+        if name in fields:
+            extra[name] = enum_of(kind=kind, text=fields[name])
+    if 'quiet_mode' in fields:
+        extra['quiet_mode'] = enum_of(
+            kind=QuietMode, text=fields['quiet_mode'],
+        )
+    if any(f'{slot}_start' in fields for slot in SLOTS):
+        extra['peak_windows'] = peak_windows_of(fields=fields)
+    hours = window_of(
+        start=fields.get('quiet_start', ''),
+        end=fields.get('quiet_end', ''),
+        section=Section.QUIET,
+    )
+    if hours is not None:
+        extra['my_hours'] = hours
+    return SettingsChanged(**extra)  # type: ignore[arg-type]
+
+
+def page_text(
+    *, template: str, values: Mapping[str, str], error: str | None
+) -> str:
+    """
+    Fill the Settings page's marks.
+
+    Parameters
+    ----------
+    template : str
+        The page with `{{field}}` marks. A switch mark becomes
+        ` checked` when on; `{{field:choice}}` becomes ` selected` (a
+        rate) or ` checked` (a radio) when the field holds that choice;
+        any other becomes the value.
+        `{{error_peak}}` and `{{error_quiet}}` become a message.
+    values : Mapping[str, str]
+        The form values.
+    error : str | None
+        The section to show an error for, if any.
+
+    Returns
+    -------
+    str
+        The page.
+    """
+    def fill(found: re.Match[str]) -> str:
+        """
+        Give the text for one mark.
+
+        Parameters
+        ----------
+        found : re.Match[str]
+            The mark's match.
+
+        Returns
+        -------
+        str
+            What replaces the mark.
+        """
+        name, _, choice = found[1].partition(':')
+        if name.startswith('error_'):
+            section = name.removeprefix('error_')
+            return error_line(shown=error == section, section=section)
+        value = values.get(name, '')
+        if choice:
+            mark = ' selected' if name in CHOICES else ' checked'
+            return mark if value == choice else ''
+        if name in SWITCHES:
+            return ' checked' if value == 'on' else ''
+        return escape(value)
+
+    return re.sub(r'\{\{([a-z0-9_:]+)\}\}', fill, template)
+
+
+def error_line(*, shown: bool, section: str) -> str:
+    """
+    Write a section's error paragraph.
+
+    Parameters
+    ----------
+    shown : bool
+        Whether the section has an error.
+    section : str
+        `peak` or `quiet`.
+
+    Returns
+    -------
+    str
+        The paragraph, or an empty string.
+    """
+    if not shown:
+        return ''
+    return f'<p class="error" role="alert">{ERRORS[section]}</p>'

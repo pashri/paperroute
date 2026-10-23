@@ -41,11 +41,20 @@ globalThis.document = {
 await import(pathToFileURL(process.argv[2]).href);
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 const results = {};
+if (process.argv[3] === 'load') {
+  const switchBox = nodes['#auto-rebuild'];
+  statusReply({
+    json: async () => ({ settings: { auto_rebuild: process.argv[4] } }),
+  });
+  await tick();
+  console.log(JSON.stringify(switchBox.checked));
+  process.exit(0);
+}
 const box = nodes['#auto-rebuild'];
 const line = nodes['#settings-status'];
 box.checked = false;
 await box.listeners.change();
-statusReply({ json: async () => ({ settings: { auto_rebuild: true } }) });
+statusReply({ json: async () => ({ settings: { auto_rebuild: 'on' } }) });
 await tick();
 results.loadKeepsToggle = box.checked;
 replies.push({ ok: false, status: 403 });
@@ -82,3 +91,29 @@ def test_settings_script_in_node(tmp_path: Path) -> None:
         'refused': ['Not saved', False],
         'network': ['Not saved: network error', False],
     }
+
+
+@pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
+@pytest.mark.parametrize(('reported', 'checked'), [
+    ('off', False),
+    ('on', True),
+])
+def test_settings_script_loads_switch_from_status(
+    tmp_path: Path, reported: str, checked: bool
+) -> None:
+    """The untouched switch follows the status's `on` or `off`."""
+    web_dir = files('paperroute') / 'assets' / 'web'
+    script = tmp_path / 'settings.mjs'
+    script.write_text(
+        (web_dir / 'settings.js').read_text(encoding='utf-8'),
+        encoding='utf-8',
+    )
+    harness = tmp_path / 'harness.mjs'
+    harness.write_text(HARNESS, encoding='utf-8')
+    done = subprocess.run(
+        ['node', str(harness), str(script), 'load', reported],
+        capture_output=True,
+        check=True,
+        text=True,
+    )
+    assert json.loads(done.stdout) is checked

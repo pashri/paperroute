@@ -36,7 +36,9 @@ async function loadSettings() {
   try {
     const reply = await fetch('/status');
     const settings = (await reply.json()).settings;
-    if (settings && !touched) autoRebuild.checked = settings.auto_rebuild;
+    if (settings && !touched) {
+      autoRebuild.checked = settings.auto_rebuild === 'on';
+    }
   } catch {
     // The server-drawn state stays.
   }

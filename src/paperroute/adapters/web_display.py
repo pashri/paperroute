@@ -15,6 +15,13 @@ import numpy as np
 from aiohttp import web
 from numpy.typing import NDArray
 
+from paperroute.adapters.settings_form import (
+    BadInput,
+    UnknownValue,
+    changed_from,
+    form_values,
+    page_text,
+)
 from paperroute.core.messages import (
     POWER_ACTIONS,
     Event,
@@ -26,8 +33,8 @@ from paperroute.core.messages import (
     KnobTurned,
     PowerAction,
     PowerRequested,
-    SettingsChanged,
 )
+from paperroute.core.saved import Settings
 from paperroute.render.canvas import encode_png
 from paperroute.rss import max_rss_mb
 
@@ -41,8 +48,6 @@ ACTIONS: Final[dict[str, int]] = {'left': -1, 'right': 1}
 BOTH: Final[str] = 'both'  # the knob name for both knobs together
 HELD_ACTIONS: Final[dict[str, int]] = {'hold-left': -1, 'hold-right': 1}
 HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
-SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
-CHECKED_MARK: Final[str] = '{{auto_rebuild}}'
 CONFIRM: Final[dict[PowerAction, tuple[str, str]]] = {
     PowerAction.OFF: (
         "Shut down now? The screen will say when it's safe to unplug.",
@@ -105,51 +110,29 @@ def member_event(*, knob: Knob, action: str) -> Event | None:
     return None
 
 
-def settings_event(
-    *, fields: Mapping[str, str]
-) -> SettingsChanged | None:
+def status_settings(*, status: Mapping[str, object]) -> dict[str, str]:
     """
-    Turn the Settings form's fields into an event.
-
-    Parameters
-    ----------
-    fields : Mapping[str, str]
-        The posted fields; `auto_rebuild` is `on` or `off`.
-
-    Returns
-    -------
-    SettingsChanged | None
-        The event, or None if the value is not recognised.
-    """
-    value = SWITCH.get(fields.get('auto_rebuild', ''))
-    return None if value is None else SettingsChanged(auto_rebuild=value)
-
-
-def auto_rebuild_of(
-    *, status: Mapping[str, object], saved: str | None = None
-) -> bool:
-    """
-    Read the rebuild switch from a value just saved, else the status.
+    Read the settings fields the app reported, over the defaults.
 
     Parameters
     ----------
     status : Mapping[str, object]
         The status page's extra fields.
-    saved : str | None
-        `on` or `off` when the form was just saved; the app may not have
-        handled it yet, so it wins over the status.
 
     Returns
     -------
-    bool
-        The switch; True, the default, until the app reports it.
+    dict[str, str]
+        The form values; the defaults until the app reports.
     """
-    if saved in SWITCH:
-        return SWITCH[saved]
-    settings = status.get('settings')
-    if not isinstance(settings, Mapping):
-        return True
-    return settings.get('auto_rebuild') is not False
+    values = form_values(settings=Settings())
+    reported = status.get('settings')
+    if isinstance(reported, Mapping):
+        values.update({
+            key: value
+            for key, value in reported.items()
+            if isinstance(value, str)
+        })
+    return values
 
 
 def peer_address(request: web.BaseRequest) -> str | None:
@@ -324,6 +307,7 @@ class WebDisplay:
         self.device = device
         self._remote_of = remote_of
         self._post: Callable[[Event], None] = lambda event: None
+        self._posted: dict[str, str] = {}
         self._png: bytes | None = None
         self._started = time.monotonic()
         self._closing = False
@@ -612,7 +596,7 @@ class WebDisplay:
 
     async def _settings_page(self, request: web.Request) -> web.Response:
         """
-        Serve the Settings page, its switch drawn as just saved or reported.
+        Serve the Settings page, drawn as just saved or else as reported.
 
         Parameters
         ----------
@@ -624,12 +608,15 @@ class WebDisplay:
         web.Response
             The response.
         """
-        status = self._status() if self._status else {}
-        on = auto_rebuild_of(
-            status=status, saved=request.query.get('saved'),
+        status = status_settings(
+            status=self._status() if self._status else {},
         )
-        page = asset(name='settings.html').replace(
-            CHECKED_MARK, ' checked' if on else '',
+        if self._posted.items() <= status.items():
+            self._posted = {}
+        page = page_text(
+            template=asset(name='settings.html'),
+            values={**status, **self._posted},
+            error=request.query.get('error'),
         )
         return web.Response(text=page, content_type='text/html')
 
@@ -665,17 +652,24 @@ class WebDisplay:
         Returns
         -------
         web.Response
-            400 for an unknown value; otherwise 204 to the script's JSON,
+            400 for an unknown value; 303 to the page's error line for a
+            time that is not usable; otherwise 204 to the script's JSON,
             or 303 back to the page for a plain form.
         """
-        event = settings_event(fields=await form_fields(request=request))
-        if event is None:
+        fields = await form_fields(request=request)
+        try:
+            event = changed_from(fields=fields)
+        except UnknownValue:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
+        except BadInput as error:
+            raise web.HTTPSeeOther(
+                location=f'/settings?error={error.section}',
+            ) from error
+        self._posted = fields
         self._post(event)
         if request.content_type == 'application/json':
             return web.Response(status=HTTPStatus.NO_CONTENT)
-        saved = 'on' if event.auto_rebuild else 'off'
-        raise web.HTTPSeeOther(location=f'/settings?saved={saved}')
+        raise web.HTTPSeeOther(location='/settings')
 
     async def _power_page(self, request: web.Request) -> web.Response:
         """

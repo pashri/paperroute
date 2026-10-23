@@ -6,6 +6,7 @@ from dataclasses import replace
 
 import pytest
 
+from paperroute.adapters.settings_form import form_values
 from paperroute.core.device_model import DeviceStatus, WifiPhase, WifiSetup
 from paperroute.core.saved import Settings
 from paperroute.observers import NullObserver, ObserverGroup, Timings
@@ -87,7 +88,9 @@ def test_timings_report_settings() -> None:
     timings = Timings()
     assert 'settings' not in timings.snapshot()
     timings.settings_seen(settings=Settings(auto_rebuild=False))
-    assert timings.snapshot()['settings'] == {'auto_rebuild': False}
+    assert timings.snapshot()['settings'] == form_values(
+        settings=Settings(auto_rebuild=False),
+    )
 
 
 def test_null_observer_does_nothing() -> None:
@@ -124,7 +127,9 @@ def test_observer_group_isolates_a_failing_observer(
     assert snap['frames'] == 1
     assert 'f' in snap['feeds']  # type: ignore[operator]
     assert snap['tick_age_s'] is not None
-    assert snap['settings'] == {'auto_rebuild': False}
+    assert snap['settings'] == form_values(
+        settings=Settings(auto_rebuild=False),
+    )
     assert len(caplog.records) == 4
 
 

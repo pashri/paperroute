@@ -5,6 +5,7 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
+from paperroute.adapters.settings_form import form_values
 from paperroute.core.device_model import DeviceStatus
 from paperroute.core.saved import Settings
 from paperroute.ports import Observer
@@ -181,9 +182,7 @@ class Timings:
             },
         }
         if self.settings is not None:
-            snapshot['settings'] = {
-                'auto_rebuild': self.settings.auto_rebuild,
-            }
+            snapshot['settings'] = form_values(settings=self.settings)
         if self.device is not None:
             snapshot['device'] = device_snapshot(status=self.device)
         return snapshot

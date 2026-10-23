@@ -19,6 +19,97 @@
     </nav>
   </header>
   <main>
+    <section class="setting" aria-labelledby="display">
+      <h2 id="display">Display</h2>
+      <form id="display-form" method="post" action="/settings">
+        <label>Peak rate
+          <select name="peak_rate">
+            <option value="30s"{{peak_rate:30s}}>Every 30 s &middot; full refresh 5 min</option>
+            <option value="60s"{{peak_rate:60s}}>Every 60 s &middot; full refresh 10 min</option>
+            <option value="2min"{{peak_rate:2min}}>Every 2 min &middot; full refresh 15 min</option>
+          </select>
+        </label>
+        <label>Off-peak rate
+          <select name="offpeak_rate">
+            <option value="30s"{{offpeak_rate:30s}}>Every 30 s &middot; full refresh 5 min</option>
+            <option value="60s"{{offpeak_rate:60s}}>Every 60 s &middot; full refresh 10 min</option>
+            <option value="2min"{{offpeak_rate:2min}}>Every 2 min &middot; full refresh 15 min</option>
+          </select>
+        </label>
+        <fieldset aria-describedby="peak-hint">
+          <legend>Peak hours</legend>
+          <p id="peak-hint" class="hint">
+            Weekdays, not public holidays. Leave a pair empty to drop it.
+          </p>
+          <div class="times">
+            <label>Morning from
+              <input type="time" name="peak_1_start" value="{{peak_1_start}}">
+            </label>
+            <label>to
+              <input type="time" name="peak_1_end" value="{{peak_1_end}}">
+            </label>
+          </div>
+          <div class="times">
+            <label>Afternoon from
+              <input type="time" name="peak_2_start" value="{{peak_2_start}}">
+            </label>
+            <label>to
+              <input type="time" name="peak_2_end" value="{{peak_2_end}}">
+            </label>
+          </div>
+          {{error_peak}}
+        </fieldset>
+        <input type="hidden" name="rotate" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="rotate"
+                 value="on"{{rotate}}>
+          Rotate 180&deg;
+        </label>
+        <input type="hidden" name="larger_text" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="larger_text"
+                 value="on"{{larger_text}}>
+          Larger text
+        </label>
+        <input type="hidden" name="inverted_lists" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="inverted_lists"
+                 value="on"{{inverted_lists}}>
+          White on black lists
+        </label>
+        <button type="submit">Save</button>
+      </form>
+    </section>
+    <section class="setting" aria-labelledby="quiet">
+      <h2 id="quiet">Quiet hours</h2>
+      <form id="quiet-form" method="post" action="/settings">
+        <fieldset>
+          <legend>When the screen sleeps</legend>
+          <label class="switch">
+            <input type="radio" name="quiet_mode" value="my_hours"{{quiet_mode:my_hours}}>
+            My hours
+          </label>
+          <div class="times">
+            <label>from
+              <input type="time" name="quiet_start" value="{{quiet_start}}" required>
+            </label>
+            <label>to
+              <input type="time" name="quiet_end" value="{{quiet_end}}" required>
+            </label>
+          </div>
+          <label class="switch">
+            <input type="radio" name="quiet_mode" value="timetable"{{quiet_mode:timetable}}>
+            Follow the timetable
+          </label>
+        </fieldset>
+        <p class="hint">
+          The screen sleeps and stops polling. The first touch only wakes it
+          (it isn't acted on); each touch keeps it awake 5 more minutes.
+        </p>
+        {{error_quiet}}
+        <button type="submit">Save</button>
+      </form>
+    </section>
     <section class="setting" aria-labelledby="timetable">
       <h2 id="timetable">Timetable</h2>
       <form id="timetable-form" method="post" action="/settings">

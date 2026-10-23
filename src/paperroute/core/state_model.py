@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Final
 
 from paperroute.core.chooser import ChooserState
@@ -239,6 +239,20 @@ class StripState:
 
 
 @dataclass(frozen=True)
+class Calendar:
+    """
+    What the timetable says about the days ahead.
+
+    Attributes
+    ----------
+    holidays : frozenset[date]
+        The public holidays the timetable records.
+    """
+
+    holidays: frozenset[date] = frozenset()
+
+
+@dataclass(frozen=True)
 # pylint: disable-next=too-many-instance-attributes
 class State:
     """
@@ -284,6 +298,8 @@ class State:
         The API calls counted today.
     panel : Panel
         The device's own state.
+    calendar : Calendar
+        The public holidays, from the timetable.
     """
 
     now: datetime
@@ -305,3 +321,4 @@ class State:
     power: PowerAction | None = None
     quota: Quota = field(default_factory=Quota)
     panel: Panel = field(default_factory=Panel)
+    calendar: Calendar = field(default_factory=Calendar)

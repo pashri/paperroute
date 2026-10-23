@@ -45,6 +45,7 @@ from paperroute.core.messages import (
     Event,
     FeedFailed,
     FeedFetched,
+    HolidaysLoaded,
     HotspotFailed,
     HotspotStarted,
     JoinAsked,
@@ -58,6 +59,7 @@ from paperroute.core.messages import (
     LineFailed,
     LineLoaded,
     LoadDepartures,
+    LoadHolidays,
     MapDataFailed,
     MapEvent,
     ModesLoaded,
@@ -97,6 +99,7 @@ from paperroute.core.places import (
 from paperroute.core.polling import poll_effects, woken
 from paperroute.core.quota import QUOTA_SAVE_EVERY, quota_only, with_calls
 from paperroute.core.rebuild import rebuild_effects, rebuilt, seen_schema
+from paperroute.core.rhythm import holidays_loaded
 from paperroute.core.saved import Saved
 from paperroute.core.state_model import (
     FEED_IDLE,
@@ -550,8 +553,9 @@ def on_timetable(
         State with the version recorded, the departures due to reload
         (a load in flight is forgotten, its reply now stale), no reaches
         built or pending, no fold open, the chooser carried over,
-        redrawn with the new reach asked for, and a MatchPlaces when
-        there is a timetable; unchanged for the version already seen.
+        redrawn with the new reach asked for, and a MatchPlaces and a
+        LoadHolidays when there is a timetable; unchanged for the version
+        already seen.
     """
     if event.version == state.saving.timetable:
         return state, ()
@@ -573,7 +577,8 @@ def on_timetable(
     if event.version is None:
         return settled(state=state, effects=asks)
     state, matches = rematch(state=state)
-    return settled(state=state, effects=(*asks, *matches))
+    holidays = LoadHolidays(timetable=event.version)
+    return settled(state=state, effects=(*asks, *matches, holidays))
 
 
 def on_matched(
@@ -738,10 +743,14 @@ def with_rebuild(
 
 
 def on_timetable_file(
-    *, state: State, event: TimetableSeen | TimetableRebuilt
+    *,
+    state: State,
+    event: TimetableSeen | TimetableRebuilt | HolidaysLoaded,
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Note a timetable seen or a rebuild finished, rebuilding when due.
+    Note a timetable seen, a rebuild finished or holidays read.
+
+    A timetable seen or rebuilt rebuilds when due.
 
     Both redraw: the Building and Device screens show the timetable's
     state. A timetable arriving makes every feed due at once.
@@ -750,7 +759,7 @@ def on_timetable_file(
     ----------
     state : State
         State.
-    event : TimetableSeen | TimetableRebuilt
+    event : TimetableSeen | TimetableRebuilt | HolidaysLoaded
         What happened.
 
     Returns
@@ -758,6 +767,8 @@ def on_timetable_file(
     tuple[State, tuple[Effect, ...]]
         New state and effects.
     """
+    if isinstance(event, HolidaysLoaded):
+        return holidays_loaded(state=state, event=event), ()
     if isinstance(event, TimetableRebuilt):
         return settled(state=rebuilt(state=state, ok=event.ok))
     seen = seen_schema(state=state, seen=event)
@@ -831,7 +842,7 @@ def dispatched(
             result = on_touch(state=state, event=event)
         case QuitRequested():
             result = on_quit(state=state)
-        case TimetableSeen() | TimetableRebuilt():
+        case TimetableSeen() | TimetableRebuilt() | HolidaysLoaded():
             result = on_timetable_file(state=state, event=event)
         case (
             SettingsChanged()

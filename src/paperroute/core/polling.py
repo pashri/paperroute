@@ -12,8 +12,9 @@ from paperroute.core.messages import (
     KnobEvent,
     KnobsHeld,
 )
+from paperroute.core.rhythm import poll_every
 from paperroute.core.sleep import awake
-from paperroute.core.state_model import POLL_EVERY, State, elapsed
+from paperroute.core.state_model import State, elapsed
 from paperroute.core.state_views import settled
 
 
@@ -33,13 +34,13 @@ def poll_due(*, state: State, now: datetime) -> bool:
     Returns
     -------
     bool
-        True when there are feeds to poll and POLL_EVERY of real time has
-        passed since the last fetch.
+        True when there are feeds to poll and the poll interval of real
+        time has passed since the last fetch.
     """
     return bool(trip_feeds(state=state)) and elapsed(
         since=state.last_fetch,
         now=now,
-        span=POLL_EVERY,
+        span=poll_every(state=state),
     )
 
 

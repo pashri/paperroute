@@ -1,13 +1,14 @@
 """Tests for the positions feeds the Map and Strip poll."""
 
-from datetime import timedelta
+from dataclasses import replace
+from datetime import datetime, timedelta
 
 from paperroute.core.feeds import ALL_POSITION_MODES, position_feeds
 from paperroute.core.geo import Point
-from paperroute.core.map_requests import map_feeds
+from paperroute.core.map_requests import map_feeds, request_positions
 from paperroute.core.map_state import area_box
 from paperroute.core.messages import LoadModes, MapDataFailed, ModesLoaded
-from paperroute.core.model import Departure, Mode
+from paperroute.core.model import SYDNEY, Departure, Mode
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
@@ -109,3 +110,15 @@ def test_strip_feeds_unchanged() -> None:
         view=LiveView.STRIP, departures=(*bus_pin(), *trains()),
     )
     assert map_feeds(state=state) == position_feeds(modes={Mode.TRAIN})
+
+
+def test_positions_follow_rate() -> None:
+    """Off-peak, the Map's positions are due two minutes after a fetch."""
+    noon = datetime(2026, 10, 16, 12, 0, tzinfo=SYDNEY)
+    state = replace(on_map(), now=noon)
+    for ago, due in ((60, False), (120, True)):
+        fetched = noon - timedelta(seconds=ago)
+        fetched_at = dict.fromkeys(map_feeds(state=state), fetched)
+        stale = replace(state, map=replace(state.map, fetched_at=fetched_at))
+        _, effects = request_positions(state=stale)
+        assert bool(effects) is due

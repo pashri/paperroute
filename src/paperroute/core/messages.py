@@ -134,6 +134,13 @@ class LoadChooserDepartures:
 
 
 @dataclass(frozen=True)
+class LoadHolidays:
+    """Ask for the public holidays a timetable version records."""
+
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
 class NoticeView:
     """
     A screen showing a title and an optional line under it.
@@ -271,6 +278,7 @@ Effect = (
     | JoinWifi
     | StopWifiSetup
     | ChooserLoad
+    | LoadHolidays
 )
 
 
@@ -378,6 +386,23 @@ class TimetableSeen:
 
     version: str | None
     schema: str | None = None
+
+
+@dataclass(frozen=True)
+class HolidaysLoaded:
+    """
+    The public holidays a timetable records; none when the read failed.
+
+    Attributes
+    ----------
+    dates : frozenset[date]
+        The holidays.
+    timetable : str | None
+        The timetable version they were read from.
+    """
+
+    dates: frozenset[date]
+    timetable: str | None = None
 
 
 @dataclass(frozen=True)
@@ -770,6 +795,7 @@ Event = (
     | QuitRequested
     | TimetableSeen
     | TimetableRebuilt
+    | HolidaysLoaded
     | SettingsChanged
     | ApiKeyChanged
     | DeviceProbed

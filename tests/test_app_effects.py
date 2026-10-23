@@ -5,7 +5,7 @@ import errno
 import logging
 import sqlite3
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import date, timedelta
 
 import numpy as np
 import pytest
@@ -22,10 +22,12 @@ from paperroute.core.messages import (
     ColumnFailed,
     ColumnLoaded,
     Event,
+    HolidaysLoaded,
     LineFailed,
     LineLoaded,
     LoadChooserDepartures,
     LoadColumn,
+    LoadHolidays,
     LoadLine,
     LoadModes,
     LoadStrip,
@@ -523,3 +525,38 @@ async def test_version_watch_reports_schema() -> None:
         TimetableSeen(version='v1', schema='5'),
         None,
     )
+
+
+@dataclass
+class HolidaysFailingTimetable(EmptyPlacedTimetable):
+    """A timetable whose holidays can't be read."""
+
+    def holidays(self) -> frozenset[date]:
+        """
+        Fail like a damaged database file.
+
+        Returns
+        -------
+        frozenset[date]
+            Never returns.
+
+        Raises
+        ------
+        sqlite3.Error
+            Always.
+        """
+        raise sqlite3.OperationalError('disk I/O error')
+
+
+async def test_holidays_read_failure_is_empty(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failed holidays read posts no holidays and logs one error."""
+    with caplog.at_level(logging.ERROR):
+        posted = await posted_by(
+            ports=ports_of(timetable=HolidaysFailingTimetable()),
+            effects=[LoadHolidays(timetable='v1')],
+        )
+    assert posted == [HolidaysLoaded(dates=frozenset(), timetable='v1')]
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(errors) == 1

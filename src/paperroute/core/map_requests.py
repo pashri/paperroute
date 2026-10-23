@@ -22,8 +22,9 @@ from paperroute.core.messages import (
 )
 from paperroute.core.model import SYDNEY, Departure
 from paperroute.core.positions import PositionsSnapshot
+from paperroute.core.rhythm import poll_every
 from paperroute.core.saved import LiveView
-from paperroute.core.state_model import POLL_EVERY, RETRY_AFTER, State, elapsed
+from paperroute.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_state import (
     picked_window,
@@ -240,13 +241,14 @@ def request_positions(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     -------
     tuple[State, tuple[Effect, ...]]
         State with the fetch times recorded, and a FetchFeed for each feed
-        never fetched or last fetched `POLL_EVERY` or more ago.
+        never fetched or last fetched a poll interval or more ago.
     """
     fetched_at = state.map.fetched_at
+    every = poll_every(state=state)
     due = [
         feed
         for feed in map_feeds(state=state)
-        if elapsed(since=fetched_at.get(feed), now=state.now, span=POLL_EVERY)
+        if elapsed(since=fetched_at.get(feed), now=state.now, span=every)
     ]
     fetched_at = {**fetched_at, **dict.fromkeys(due, state.now)}
     fetches = (FetchFeed(feed=feed, kind=FeedKind.POSITIONS) for feed in due)

@@ -15,6 +15,7 @@ from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
     Event,
+    HolidaysLoaded,
     LineFailed,
     LineLoaded,
     LoadModes,
@@ -374,9 +375,9 @@ def is_stale(*, state: State, event: Event) -> bool:
     -------
     bool
         True for departures loaded or failed for another place or another
-        timetable version, for a reach, a chooser load or a failed place
-        look-up from another timetable version, and for area modes loaded
-        or failed for another map area.
+        timetable version, for a reach, a chooser load, a failed place
+        look-up or holidays from another timetable version, and for area
+        modes loaded or failed for another map area.
     """
     match event:
         case (
@@ -396,6 +397,7 @@ def is_stale(*, state: State, event: Event) -> bool:
             | ChooserDeparturesLoaded(timetable=timetable)
             | ChooserDeparturesFailed(timetable=timetable)
             | PlacesFailed(timetable=timetable)
+            | HolidaysLoaded(timetable=timetable)
         ):
             return timetable != state.saving.timetable
         case (

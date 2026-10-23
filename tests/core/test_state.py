@@ -39,6 +39,7 @@ from paperroute.core.messages import (
     FeedFailed,
     FeedFetched,
     FetchFeed,
+    HolidaysLoaded,
     Knob,
     KnobHeld,
     KnobHeldTurned,
@@ -50,6 +51,7 @@ from paperroute.core.messages import (
     LoadChooserDepartures,
     LoadColumn,
     LoadDepartures,
+    LoadHolidays,
     LoadModes,
     LoadPatterns,
     LoadShapes,
@@ -68,6 +70,7 @@ from paperroute.core.messages import (
     Render,
     SaveState,
     ScreenView,
+    SettingsChanged,
     ShapesLoaded,
     Stop,
     StripFailed,
@@ -101,6 +104,7 @@ from paperroute.core.saved import (
     LIVE_VIEWS,
     TOWN_HALL,
     LiveView,
+    Rate,
     Saved,
     seeded,
 )
@@ -2715,3 +2719,54 @@ def test_load_from_the_old_timetable_is_dropped(failed: bool) -> None:
     _, effects = step(state, at(seconds=10))
     [load] = effects_of(effects=effects, kind=LoadDepartures)
     assert load.timetable == 'v2'
+
+
+NOON = datetime(2026, 10, 16, 12, 0, tzinfo=SYDNEY)
+
+
+def fetches_at(*, state: State, now: datetime) -> list[Effect]:
+    """
+    Give the trip-updates fetches a Tick asks for.
+
+    Parameters
+    ----------
+    state : State
+        State before the Tick.
+    now : datetime
+        The Tick's time.
+
+    Returns
+    -------
+    list[Effect]
+        The FetchFeed effects.
+    """
+    _, effects = step(state, Tick(now=now))
+    return [effect for effect in effects if isinstance(effect, FetchFeed)]
+
+
+def test_faster_rate_applies_next_tick() -> None:
+    """A faster off-peak rate fetches on the next Tick past it."""
+    state, _ = step(loaded(state=fresh(now=NOON)), Tick(now=NOON))
+    later = NOON + timedelta(seconds=40)
+    assert not fetches_at(state=state, now=later)
+    state, _ = step(state, SettingsChanged(offpeak_rate=Rate.FAST))
+    assert fetches_at(state=state, now=later) == [FetchFeed(feed=BUSES)]
+
+
+def test_off_peak_waits_two_minutes() -> None:
+    """Off-peak, a weekday polls every two minutes."""
+    eleven = NOON - timedelta(hours=1)
+    state, _ = step(loaded(state=fresh(now=eleven)), Tick(now=eleven))
+    assert not fetches_at(state=state, now=eleven + timedelta(seconds=60))
+    assert fetches_at(state=state, now=eleven + timedelta(seconds=120))
+
+
+def test_timetable_seen_loads_holidays() -> None:
+    """A new timetable asks for its holidays; another version's are stale."""
+    state, effects = step(pinned(), TimetableSeen(version='v'))
+    assert LoadHolidays(timetable='v') in effects
+    holidays = frozenset({date(2026, 1, 26)})
+    other = HolidaysLoaded(dates=holidays, timetable='w')
+    assert step(state, other) == (state, ())
+    state, _ = step(state, HolidaysLoaded(dates=holidays, timetable='v'))
+    assert state.calendar.holidays == holidays

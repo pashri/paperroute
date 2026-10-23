@@ -20,10 +20,12 @@ from paperroute.core.messages import (
     Event,
     FeedFetched,
     FetchFeed,
+    HolidaysLoaded,
     LineFailed,
     LineLoaded,
     LoadChooserDepartures,
     LoadColumn,
+    LoadHolidays,
     LoadLine,
     LoadModes,
     LoadPatterns,
@@ -57,7 +59,12 @@ logger = logging.getLogger(__name__)
 MS_PER_SECOND: Final[float] = 1000.0
 
 WorkerEffect = (
-    MatchPlaces | LoadStrip | LoadColumn | LoadLine | LoadChooserDepartures
+    MatchPlaces
+    | LoadStrip
+    | LoadColumn
+    | LoadLine
+    | LoadChooserDepartures
+    | LoadHolidays
 )
 
 
@@ -301,6 +308,27 @@ def line_loaded(*, network: NetworkRepository, effect: LoadLine) -> LineLoaded:
     )
 
 
+def holidays_read(
+    *, timetable: TimetableRepository, version: str | None
+) -> HolidaysLoaded:
+    """
+    Read the public holidays a timetable records.
+
+    Parameters
+    ----------
+    timetable : TimetableRepository
+        Timetable.
+    version : str | None
+        The version asked for, echoed back.
+
+    Returns
+    -------
+    HolidaysLoaded
+        The holidays.
+    """
+    return HolidaysLoaded(dates=timetable.holidays(), timetable=version)
+
+
 def read_for(
     *,
     timetable: TimetableRepository,
@@ -341,6 +369,10 @@ def read_for(
             return functools.partial(
                 line_loaded, network=network, effect=effect
             )
+        case LoadHolidays(timetable=version):
+            return functools.partial(
+                holidays_read, timetable=timetable, version=version
+            )
     return functools.partial(
         chooser_departures, timetable=timetable, effect=effect
     )
@@ -369,6 +401,8 @@ def failure_of(*, effect: WorkerEffect) -> Event:
             return ColumnFailed(path=path, timetable=version)
         case LoadLine(towards=towards, timetable=version):
             return LineFailed(towards=towards, timetable=version)
+        case LoadHolidays(timetable=version):
+            return HolidaysLoaded(dates=frozenset(), timetable=version)
     return ChooserDeparturesFailed(pin=effect.pin, timetable=effect.timetable)
 
 

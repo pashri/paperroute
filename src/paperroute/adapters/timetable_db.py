@@ -9,11 +9,7 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.adapters.calendar_rows import (
-    HAS_HOLIDAYS,
-    HOLIDAYS,
-    to_holidays,
-)
+from paperroute.adapters.calendar_rows import read_holidays
 from paperroute.adapters.carry_on_rows import (
     CARRY_ONS,
     carry_on_departure,
@@ -435,9 +431,9 @@ class SqliteTimetableRepository:
         frozenset[date]
             The holidays; none for a file built without them.
         """
-        if not self.fetch(sql=HAS_HOLIDAYS, params=()):
-            return frozenset()
-        return to_holidays(rows=self.fetch(sql=HOLIDAYS, params=()))
+        return read_holidays(
+            fetch=lambda sql: self.fetch(sql=sql, params=()),
+        )
 
     def stop(self, *, stop_id: str) -> StopPlace:
         """

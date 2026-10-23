@@ -1,9 +1,11 @@
 """Calendar facts from the timetable file."""
 
 import sqlite3
-from collections.abc import Iterable
+from collections.abc import Callable
 from datetime import date
 from typing import Final
+
+type Fetch = Callable[[str], list[tuple[object, ...]]]
 
 HOLIDAYS: Final[str] = 'SELECT date FROM holidays'
 HAS_HOLIDAYS: Final[str] = (
@@ -11,26 +13,33 @@ HAS_HOLIDAYS: Final[str] = (
 )
 
 
-def to_holidays(*, rows: Iterable[tuple[object, ...]]) -> frozenset[date]:
+def read_holidays(*, fetch: Fetch) -> frozenset[date]:
     """
-    Turn holidays rows into dates.
+    Read the public holidays the timetable records.
 
     Parameters
     ----------
-    rows : Iterable[tuple[object, ...]]
-        Rows of HOLIDAYS.
+    fetch : Fetch
+        Runs one query against the timetable file and returns its rows.
 
     Returns
     -------
     frozenset[date]
-        The holidays.
+        The holidays; empty when the file has no holidays table, including
+        when the file is replaced by one without it between the queries.
     """
+    try:
+        if not fetch(HAS_HOLIDAYS):
+            return frozenset()
+        rows = fetch(HOLIDAYS)
+    except sqlite3.OperationalError:
+        return frozenset()
     return frozenset(date.fromisoformat(str(row[0])) for row in rows)
 
 
-def read_holidays(*, conn: sqlite3.Connection) -> frozenset[date]:
+def connection_fetch(*, conn: sqlite3.Connection) -> Fetch:
     """
-    Read the public holidays the timetable records.
+    Make a fetch that queries an open connection.
 
     Parameters
     ----------
@@ -39,9 +48,7 @@ def read_holidays(*, conn: sqlite3.Connection) -> frozenset[date]:
 
     Returns
     -------
-    frozenset[date]
-        The holidays; empty when the file has no holidays table.
+    Fetch
+        Runs a query on conn.
     """
-    if conn.execute(HAS_HOLIDAYS).fetchone() is None:
-        return frozenset()
-    return to_holidays(rows=conn.execute(HOLIDAYS))
+    return lambda sql: conn.execute(sql).fetchall()

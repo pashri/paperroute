@@ -6,7 +6,11 @@ from datetime import date
 from pathlib import Path
 from typing import Final
 
-from paperroute.adapters.calendar_rows import read_holidays
+from paperroute.adapters.calendar_rows import (
+    HAS_HOLIDAYS,
+    connection_fetch,
+    read_holidays,
+)
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
@@ -58,7 +62,7 @@ def test_holidays_round_trip(tmp_path: Path) -> None:
     """A built file's holidays read back, directly and from the repo."""
     db = holiday_db(tmp_path=tmp_path)
     with closing(sqlite3.connect(db)) as conn:
-        assert read_holidays(conn=conn) == {HOLIDAY}
+        assert read_holidays(fetch=connection_fetch(conn=conn)) == {HOLIDAY}
     repo = SqliteTimetableRepository(path=db)
     try:
         assert repo.holidays() == {HOLIDAY}
@@ -72,9 +76,20 @@ def test_holidays_absent_table(tmp_path: Path) -> None:
     with closing(sqlite3.connect(db)) as conn:
         conn.execute('DROP TABLE holidays')
         conn.commit()
-        assert read_holidays(conn=conn) == frozenset()
+        assert read_holidays(fetch=connection_fetch(conn=conn)) == frozenset()
     repo = SqliteTimetableRepository(path=db)
     try:
         assert repo.holidays() == frozenset()
     finally:
         repo.close()
+
+
+def test_holidays_query_error_is_none() -> None:
+    """A table that vanishes between the check and the read gives none."""
+
+    def vanishing(sql: str) -> list[tuple[object, ...]]:
+        if sql == HAS_HOLIDAYS:
+            return [(1,)]
+        raise sqlite3.OperationalError('no such table: holidays')
+
+    assert read_holidays(fetch=vanishing) == frozenset()

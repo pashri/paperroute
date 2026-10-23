@@ -22,6 +22,7 @@ def bundle(
     removed: int,
     day: date = AUSTRALIA_DAY,
     saturday: str = '0',
+    repeats: int = 1,
 ) -> Path:
     """
     Write a bundle of weekday services with some removed on one day.
@@ -38,6 +39,8 @@ def bundle(
         The day services are removed on.
     saturday : str
         The services' saturday flag.
+    repeats : int
+        How many times each removal row is written.
 
     Returns
     -------
@@ -57,6 +60,7 @@ def bundle(
                 'exception_type': '2',
             }
             for service in ids[:removed]
+            for _ in range(repeats)
         ],
     })
 
@@ -123,4 +127,10 @@ def test_outside_window_ignored(tmp_path: Path) -> None:
     archive = bundle(
         tmp_path=tmp_path, services=12, removed=12, day=date(2026, 2, 16),
     )
+    assert found(archive=archive) == frozenset()
+
+
+def test_repeated_removal_counts_once(tmp_path: Path) -> None:
+    """A removal row written twice still counts as one service."""
+    archive = bundle(tmp_path=tmp_path, services=12, removed=5, repeats=2)
     assert found(archive=archive) == frozenset()

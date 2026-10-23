@@ -57,7 +57,7 @@ def removed_counts(
     *, archive: Path, services: dict[str, tuple[date, date]]
 ) -> Counter[date]:
     """
-    Count the removals of the given services on each date.
+    Count the distinct given services removed on each date.
 
     Parameters
     ----------
@@ -72,14 +72,14 @@ def removed_counts(
         Date to the number of the services removed on it, counting only
         removals inside a service's own dates.
     """
-    counts: Counter[date] = Counter()
+    removals: set[tuple[date, str]] = set()
     for row in read_rows(archive=archive, member='calendar_dates.txt'):
         span = services.get(row['service_id'])
         day = date.fromisoformat(row['date'])
         removed = row['exception_type'] == '2'
         if removed and span and span[0] <= day <= span[1]:
-            counts[day] += 1
-    return counts
+            removals.add((day, row['service_id']))
+    return Counter(day for day, _ in removals)
 
 
 def holiday_dates(*, archive: Path, start: date, days: int) -> frozenset[date]:

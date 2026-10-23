@@ -20,6 +20,7 @@ from pydantic import (
 )
 
 from paperroute.core.model import TRAINLINK, Pin, RouteKind, StopPlace
+from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
     LiveView,
@@ -66,7 +67,7 @@ class PinModel(BaseModel):
     destination: StopModel | None
     kind: RouteKind | None
     routes: tuple[str, ...]
-    nickname: str | None
+    nickname: str | None = Field(max_length=NICKNAME_MAX)
     only: tuple[str, ...]
 
 
@@ -671,6 +672,78 @@ def repaired_settings(*, data: dict[str, object]) -> dict[str, object]:
     return data
 
 
+def repaired_pin(*, pin: object) -> dict[str, object] | None:
+    """
+    Repair one stored pin's nickname and route filter.
+
+    Parameters
+    ----------
+    pin : object
+        The stored pin.
+
+    Returns
+    -------
+    dict[str, object] | None
+        The pin with a bad nickname reset to None (a long one is
+        cleaned) and a bad filter reset to empty; None when the pin is
+        still not valid.
+    """
+    if not isinstance(pin, dict):
+        return None
+    nickname = pin.get('nickname')
+    only = pin.get('only')
+    fixed = {
+        **pin,
+        'nickname': (
+            clean_nickname(text=nickname)
+            if isinstance(nickname, str)
+            else None
+        ),
+        'only': (
+            only
+            if isinstance(only, list)
+            and all(isinstance(route, str) for route in only)
+            else []
+        ),
+    }
+    try:
+        PinModel.model_validate(fixed)
+    except ValidationError:
+        logger.warning('state.json pin unusable, dropping it')
+        return None
+    return fixed
+
+
+def repaired_pins(*, data: dict[str, object]) -> dict[str, object]:
+    """
+    Repair each pin, dropping only the ones that cannot be read.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Migrated data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with each pin repaired and unusable pins dropped, and
+        the unpinned place None when it is unusable. Data whose pins are
+        not a list is left for validation to fail.
+    """
+    pins = data.get('pins')
+    if not isinstance(pins, list):
+        return data
+    kept = [repaired_pin(pin=pin) for pin in pins]
+    unpinned = data.get('unpinned')
+    return {
+        **data,
+        'pins': [pin for pin in kept if pin is not None],
+        'unpinned': (
+            None if unpinned is None else repaired_pin(pin=unpinned)
+        ),
+    }
+
+
 def write_atomic(
     *,
     path: Path,
@@ -792,8 +865,10 @@ class JsonStateRepository:
             data = json.loads(text)
             if not isinstance(data, dict):
                 raise ValueError('state.json is not an object')
-            migrated = repaired_settings(
-                data=repaired_quota(data=migrate(data=data)),
+            migrated = repaired_pins(
+                data=repaired_settings(
+                    data=repaired_quota(data=migrate(data=data)),
+                ),
             )
             model = StateModel.model_validate(migrated)
         except (ValueError, RecursionError):

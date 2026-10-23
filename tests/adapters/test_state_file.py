@@ -9,6 +9,7 @@ from collections.abc import Iterator
 from dataclasses import replace
 from datetime import date, time
 from pathlib import Path
+from typing import Any
 
 import pytest
 from hypothesis import given, settings
@@ -21,6 +22,7 @@ from paperroute.adapters.state_file import (
     write_atomic,
 )
 from paperroute.core.model import Pin, RouteKind, StopPlace
+from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
     LiveView,
@@ -51,7 +53,7 @@ PINS = st.builds(
     destination=st.none() | PLACES,
     kind=st.none() | st.sampled_from(RouteKind),
     routes=st.lists(st.text(max_size=5), max_size=3).map(tuple),
-    nickname=st.none() | NAMES,
+    nickname=NAMES.map(lambda text: clean_nickname(text=text)),
     only=st.lists(st.text(max_size=5), max_size=3).map(tuple),
 )
 
@@ -810,3 +812,81 @@ def test_round_trips_nickname_and_filter(path: Path) -> None:
     repository = JsonStateRepository(path=path)
     repository.save(saved=saved)
     assert repository.load().saved.pins == (pin,)
+
+
+def stored_with(*, path: Path, pin_fields: dict[str, object]) -> dict[str, Any]:
+    """
+    Save the sample, then overwrite fields on its second pin.
+
+    Parameters
+    ----------
+    path : Path
+        The state file.
+    pin_fields : dict[str, object]
+        Fields to set on the second stored pin.
+
+    Returns
+    -------
+    dict[str, Any]
+        The rewritten file's data.
+    """
+    JsonStateRepository(path=path).save(saved=sample())
+    data: dict[str, Any] = json.loads(path.read_text())
+    data['pins'][1].update(pin_fields)
+    path.write_text(json.dumps(data))
+    return data
+
+
+@pytest.mark.parametrize('bad', [5, ['x'], {}])
+def test_bad_nickname_resets_only_itself(path: Path, bad: object) -> None:
+    """An unreadable nickname becomes None; the pin keeps the rest."""
+    stored_with(path=path, pin_fields={'nickname': bad, 'only': ['1']})
+    pins = JsonStateRepository(path=path).load().saved.pins
+    assert pins[1] == replace(sample().pins[1], only=('1',))
+    assert pins[0] == sample().pins[0]
+
+
+def test_long_nickname_is_trimmed(path: Path) -> None:
+    """A nickname over the limit is cleaned and cut."""
+    stored_with(path=path, pin_fields={'nickname': ' ' + 'a' * 40})
+    pin = JsonStateRepository(path=path).load().saved.pins[1]
+    assert pin.nickname == 'a' * 24
+
+
+@pytest.mark.parametrize('bad', [5, 'ab', [1], None])
+def test_bad_only_resets_only_itself(path: Path, bad: object) -> None:
+    """An unreadable route filter becomes empty; the nickname stays."""
+    stored_with(path=path, pin_fields={'nickname': 'Work', 'only': bad})
+    pin = JsonStateRepository(path=path).load().saved.pins[1]
+    assert pin.only == ()
+    assert pin.nickname == 'Work'
+
+
+def test_broken_pin_is_dropped_and_the_rest_kept(path: Path) -> None:
+    """A pin that stays invalid is dropped on its own."""
+    stored_with(path=path, pin_fields={'kind': 'spaceship'})
+    loaded = JsonStateRepository(path=path).load()
+    assert loaded.stored
+    assert loaded.saved.pins == (sample().pins[0],)
+
+
+def test_broken_unpinned_place_is_dropped(path: Path) -> None:
+    """An unusable unpinned place goes; the pins stay."""
+    data = stored_with(path=path, pin_fields={})
+    data['unpinned'] = {'origin': 5}
+    path.write_text(json.dumps(data))
+    loaded = JsonStateRepository(path=path).load()
+    assert loaded.saved.pins == sample().pins
+
+
+def test_v5_pin_with_fields_survives_migration(path: Path) -> None:
+    """A version 5 pin that already has the new fields keeps them."""
+    stored_with(
+        path=path,
+        pin_fields={'nickname': 'Work', 'only': ['606']},
+    )
+    data = json.loads(path.read_text())
+    data['schema_version'] = 5
+    path.write_text(json.dumps(data))
+    pin = JsonStateRepository(path=path).load().saved.pins[1]
+    assert (pin.nickname, pin.only) == ('Work', ('606',))

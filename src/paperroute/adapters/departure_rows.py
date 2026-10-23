@@ -135,3 +135,55 @@ def facts_of(*, row: tuple[object, ...]) -> TripFacts:
             )
         ),
     )
+
+
+DEPARTURES: Final[str] = """
+SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
+  t.headsign, os.platform,
+  o.seq, o.stop_id, MIN(d.seq), d.stop_id, o.dep, d.arr,
+  (SELECT group_concat(a.alias_id, ' ') FROM trip_aliases a
+     WHERE a.trip_id = t.trip_id),
+  {shape}, {then},
+  """ + stop_count(trip='o.trip_id', after='o.seq', upto='d.seq') + """
+FROM stop_times o
+JOIN trips t ON t.trip_id = o.trip_id
+JOIN services sv ON sv.service_id = t.service_id AND sv.date = :day
+JOIN routes r ON r.route_id = t.route_id
+JOIN stops os ON os.stop_id = o.stop_id
+JOIN stop_times d ON d.trip_id = o.trip_id AND d.seq > o.seq
+{next_join}
+WHERE o.stop_id IN (SELECT stop_id FROM stops
+                    WHERE stop_id = :origin OR parent_station = :origin)
+  AND d.stop_id IN (SELECT stop_id FROM stops
+                    WHERE stop_id = :dest OR parent_station = :dest)
+  AND o.dep BETWEEN :lo AND :hi AND o.pickup <> 1 AND d.dropoff <> 1
+  AND NOT EXISTS (SELECT 1 FROM trip_skip k
+                  WHERE k.trip_id = t.trip_id AND k.date = :day)
+  {service}
+""" + STILL_AT_FROM + """
+GROUP BY o.trip_id, o.seq
+"""
+WHOLE_STOP: Final[str] = """
+SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
+  t.headsign, os.platform,
+  o.seq, o.stop_id, d.seq, d.stop_id, o.dep, d.arr,
+  (SELECT group_concat(a.alias_id, ' ') FROM trip_aliases a
+     WHERE a.trip_id = t.trip_id),
+  {shape}, {then}
+FROM stop_times o
+JOIN trips t ON t.trip_id = o.trip_id
+JOIN services sv ON sv.service_id = t.service_id AND sv.date = :day
+JOIN routes r ON r.route_id = t.route_id
+JOIN stops os ON os.stop_id = o.stop_id
+JOIN stop_times d ON d.trip_id = o.trip_id
+  AND d.seq = (SELECT MAX(l.seq) FROM stop_times l
+               WHERE l.trip_id = o.trip_id)
+{next_join}
+WHERE o.stop_id IN (SELECT stop_id FROM stops
+                    WHERE stop_id = :origin OR parent_station = :origin)
+  AND d.seq > o.seq
+  AND o.dep BETWEEN :lo AND :hi AND o.pickup <> 1
+  AND NOT EXISTS (SELECT 1 FROM trip_skip k
+                  WHERE k.trip_id = t.trip_id AND k.date = :day)
+  {service}
+""" + STILL_AT_FROM

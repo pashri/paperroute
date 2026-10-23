@@ -16,11 +16,18 @@ from paperroute.adapters.carry_on_rows import (
     first_to_arrive,
 )
 from paperroute.adapters.departure_rows import (
-    STILL_AT_FROM,
-    stop_count,
+    DEPARTURES,
+    WHOLE_STOP,
     to_departure,
 )
-from paperroute.adapters.pattern_rows import JOINED_TRIPS, pattern_of
+from paperroute.adapters.pattern_rows import (
+    JOINED_TRIPS,
+    LABELS_BY_ALIAS,
+    LABELS_BY_TRIP,
+    PATTERN_STOPS,
+    RUNNING_DAYS,
+    pattern_of,
+)
 from paperroute.adapters.sqlite_ro import (
     Identity,
     ReadOnlyDatabase,
@@ -97,36 +104,6 @@ WHERE a.alias_id IN ({marks})
 ORDER BY a.alias_id, t.trip_id
 """
 )
-LABELS_BY_TRIP: Final[str] = """
-SELECT t.trip_id, r.short_name FROM trips t
-JOIN routes r ON r.route_id = t.route_id
-WHERE t.trip_id IN ({marks})
-"""
-LABELS_BY_ALIAS: Final[str] = """
-SELECT a.alias_id, r.short_name FROM trip_aliases a
-JOIN trips t ON t.trip_id = a.trip_id
-JOIN routes r ON r.route_id = t.route_id
-WHERE a.alias_id IN ({marks})
-ORDER BY a.alias_id, t.trip_id
-"""
-RUNNING_DAYS: Final[str] = """
-SELECT t.trip_id, sv.date FROM trips t
-JOIN services sv ON sv.service_id = t.service_id
-WHERE sv.date IN (?, ?) AND t.trip_id IN ({marks})
-  AND NOT EXISTS (SELECT 1 FROM trip_skip k
-                  WHERE k.trip_id = t.trip_id AND k.date = sv.date)
-ORDER BY t.trip_id, sv.date
-"""
-PATTERN_STOPS: Final[str] = """
-SELECT st.trip_id, st.arr, st.dep, s.lon, s.lat,
-  COALESCE(NULLIF(s.parent_station, ''), s.stop_id),
-  COALESCE(p.name, s.name), st.pickup = 1 AND st.dropoff = 1
-FROM stop_times st
-JOIN stops s ON s.stop_id = st.stop_id
-LEFT JOIN stops p ON p.stop_id = NULLIF(s.parent_station, '')
-WHERE st.trip_id IN ({marks})
-ORDER BY st.trip_id, st.seq
-"""
 SHAPES_BY_ID: Final[str] = (
     'SELECT shape_id, points FROM shapes WHERE shape_id IN ({marks})'
 )
@@ -135,56 +112,6 @@ SELECT DISTINCT mode FROM shapes
 WHERE west <= :east AND east >= :west
   AND south <= :north AND north >= :south
 """
-DEPARTURES: Final[str] = """
-SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
-  t.headsign, os.platform,
-  o.seq, o.stop_id, MIN(d.seq), d.stop_id, o.dep, d.arr,
-  (SELECT group_concat(a.alias_id, ' ') FROM trip_aliases a
-     WHERE a.trip_id = t.trip_id),
-  {shape}, {then},
-  """ + stop_count(trip='o.trip_id', after='o.seq', upto='d.seq') + """
-FROM stop_times o
-JOIN trips t ON t.trip_id = o.trip_id
-JOIN services sv ON sv.service_id = t.service_id AND sv.date = :day
-JOIN routes r ON r.route_id = t.route_id
-JOIN stops os ON os.stop_id = o.stop_id
-JOIN stop_times d ON d.trip_id = o.trip_id AND d.seq > o.seq
-{next_join}
-WHERE o.stop_id IN (SELECT stop_id FROM stops
-                    WHERE stop_id = :origin OR parent_station = :origin)
-  AND d.stop_id IN (SELECT stop_id FROM stops
-                    WHERE stop_id = :dest OR parent_station = :dest)
-  AND o.dep BETWEEN :lo AND :hi AND o.pickup <> 1 AND d.dropoff <> 1
-  AND NOT EXISTS (SELECT 1 FROM trip_skip k
-                  WHERE k.trip_id = t.trip_id AND k.date = :day)
-  {service}
-""" + STILL_AT_FROM + """
-GROUP BY o.trip_id, o.seq
-"""
-WHOLE_STOP: Final[str] = """
-SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
-  t.headsign, os.platform,
-  o.seq, o.stop_id, d.seq, d.stop_id, o.dep, d.arr,
-  (SELECT group_concat(a.alias_id, ' ') FROM trip_aliases a
-     WHERE a.trip_id = t.trip_id),
-  {shape}, {then}
-FROM stop_times o
-JOIN trips t ON t.trip_id = o.trip_id
-JOIN services sv ON sv.service_id = t.service_id AND sv.date = :day
-JOIN routes r ON r.route_id = t.route_id
-JOIN stops os ON os.stop_id = o.stop_id
-JOIN stop_times d ON d.trip_id = o.trip_id
-  AND d.seq = (SELECT MAX(l.seq) FROM stop_times l
-               WHERE l.trip_id = o.trip_id)
-{next_join}
-WHERE o.stop_id IN (SELECT stop_id FROM stops
-                    WHERE stop_id = :origin OR parent_station = :origin)
-  AND d.seq > o.seq
-  AND o.dep BETWEEN :lo AND :hi AND o.pickup <> 1
-  AND NOT EXISTS (SELECT 1 FROM trip_skip k
-                  WHERE k.trip_id = t.trip_id AND k.date = :day)
-  {service}
-""" + STILL_AT_FROM
 
 
 @dataclass(frozen=True)

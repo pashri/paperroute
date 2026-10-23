@@ -51,6 +51,8 @@ PINS = st.builds(
     destination=st.none() | PLACES,
     kind=st.none() | st.sampled_from(RouteKind),
     routes=st.lists(st.text(max_size=5), max_size=3).map(tuple),
+    nickname=st.none() | NAMES,
+    only=st.lists(st.text(max_size=5), max_size=3).map(tuple),
 )
 
 
@@ -368,14 +370,16 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
         'destination',
         'kind',
         'routes',
+        'nickname',
+        'only',
     }
 
 
 def test_written_json_shape(path: Path) -> None:
-    """The version is 5 and stops carry their metre coordinates."""
+    """The version is current and stops carry their metre coordinates."""
     JsonStateRepository(path=path).save(saved=sample())
     data = json.loads(path.read_text())
-    assert data['schema_version'] == 5
+    assert data['schema_version'] == SCHEMA_VERSION
     assert data['settings']['auto_rebuild'] is True
     assert data['pins'][0]['origin'] == {
         'stop_id': 'a',
@@ -596,12 +600,12 @@ def test_negative_calls_reset_the_quota_only(
     assert caplog.records
 
 
-def test_schema_six_falls_back(path: Path) -> None:
-    """A version 6 file is from a newer app and is not guessed at."""
+def test_future_schema_is_not_guessed_at(path: Path) -> None:
+    """A file newer than this app is not guessed at."""
     repository = JsonStateRepository(path=path)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
-    data['schema_version'] = 6
+    data['schema_version'] = SCHEMA_VERSION + 1
     path.write_text(json.dumps(data))
     assert repository.load().saved == DEFAULT_SAVED
 
@@ -625,7 +629,7 @@ def write_v4(*, path: Path, auto_rebuild: bool) -> None:
 
 
 def test_migrates_v4_to_v5_with_defaults(path: Path) -> None:
-    """A version 4 file keeps its rebuild setting and saves as 5."""
+    """A version 4 file keeps its rebuild setting and saves as current."""
     write_v4(path=path, auto_rebuild=False)
     repository = JsonStateRepository(path=path)
     loaded = repository.load()
@@ -634,7 +638,7 @@ def test_migrates_v4_to_v5_with_defaults(path: Path) -> None:
     assert loaded.saved.pins == sample().pins
     repository.save(saved=loaded.saved)
     stored = json.loads(path.read_text())
-    assert stored['schema_version'] == 5
+    assert stored['schema_version'] == SCHEMA_VERSION
     assert stored['settings']['peak_windows'] == [
         {'start': '06:30', 'end': '10:00'},
         {'start': '15:00', 'end': '19:00'},
@@ -771,3 +775,38 @@ def test_bad_setting_resets_only_itself(
     """A bad rate or My hours resets that field; the others survive."""
     saved = load_with_settings(path=path, changes=changes)
     assert saved.settings == expected
+
+
+def test_migrates_to_pin_fields(path: Path) -> None:
+    """A version 5 file gains an empty nickname and filter."""
+    repository = JsonStateRepository(path=path)
+    saved = replace(sample(), unpinned=sample().pins[0])
+    repository.save(saved=saved)
+    data = json.loads(path.read_text())
+    data['schema_version'] = 5
+    for pin in [*data['pins'], data['unpinned']]:
+        del pin['nickname']
+        del pin['only']
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved.unpinned is not None
+    for pin in (*loaded.saved.pins, loaded.saved.unpinned):
+        assert pin.nickname is None
+        assert pin.only == ()
+    repository.save(saved=loaded.saved)
+    stored = json.loads(path.read_text())
+    assert stored['schema_version'] == SCHEMA_VERSION
+
+
+def test_round_trips_nickname_and_filter(path: Path) -> None:
+    """A nickname and route filter survive a save and a load."""
+    pin = Pin(
+        origin=StopPlace(stop_id='a', name='A', point=None),
+        nickname='Work',
+        only=('606', '607X'),
+    )
+    saved = replace(DEFAULT_SAVED, pins=(pin,), unpinned=pin)
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=saved)
+    assert repository.load().saved.pins == (pin,)

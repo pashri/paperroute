@@ -1,5 +1,7 @@
 """Places, services and departures."""
 
+import hashlib
+import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
@@ -219,6 +221,10 @@ class Pin:
         Kind of route chosen, or None for any.
     routes : tuple[str, ...]
         Route short names chosen; empty for all.
+    nickname : str | None
+        Name the owner gave the pin, or None.
+    only : tuple[str, ...]
+        Route short names whose departures are kept; empty for all.
     missing : bool
         True when the timetable no longer knows a place.
     """
@@ -227,6 +233,8 @@ class Pin:
     destination: StopPlace | None = None
     kind: RouteKind | None = None
     routes: tuple[str, ...] = ()
+    nickname: str | None = None
+    only: tuple[str, ...] = ()
     missing: bool = False
 
 
@@ -246,14 +254,17 @@ def same_place(*, first: Pin, second: Pin) -> bool:
     Returns
     -------
     bool
-        True when the stop IDs, kind and routes all match.
+        True when the stop IDs, kind, routes and route filter all
+        match; the nickname is ignored.
     """
     return pin_key(pin=first) == pin_key(pin=second)
 
 
 def pin_key(
     *, pin: Pin
-) -> tuple[str, str | None, RouteKind | None, tuple[str, ...]]:
+) -> tuple[
+    str, str | None, RouteKind | None, tuple[str, ...], tuple[str, ...]
+]:
     """
     Reduce a pin to what says which services it shows.
 
@@ -264,8 +275,9 @@ def pin_key(
 
     Returns
     -------
-    tuple[str, str | None, RouteKind | None, tuple[str, ...]]
-        From stop ID, Destination stop ID or None, kind and routes.
+    tuple[str, str | None, RouteKind | None, tuple[str, ...], tuple[str, ...]]
+        From stop ID, Destination stop ID or None, kind, routes and
+        route filter.
     """
     destination = pin.destination
     return (
@@ -273,7 +285,28 @@ def pin_key(
         None if destination is None else destination.stop_id,
         pin.kind,
         pin.routes,
+        pin.only,
     )
+
+
+def pin_ref(*, pin: Pin) -> str:
+    """
+    Give a short, stable name for a pin.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+
+    Returns
+    -------
+    str
+        Twelve lowercase hex digits taken from the pin's identity, so
+        two pins that are the same place share a ref.
+    """
+    origin, destination, kind, routes, only = pin_key(pin=pin)
+    text = json.dumps([origin, destination, kind, list(routes), list(only)])
+    return hashlib.sha1(text.encode()).hexdigest()[:12]
 
 
 @dataclass(frozen=True)

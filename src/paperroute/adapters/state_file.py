@@ -36,7 +36,7 @@ from paperroute.ports import Loaded
 logger = logging.getLogger(__name__)
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/state.json')
-SCHEMA_VERSION: Final[int] = 5
+SCHEMA_VERSION: Final[int] = 6
 TEMP_PREFIX: Final[str] = '.state.json.'
 BAD_PREFIX: Final[str] = 'state.json.bad-'
 BAD_KEPT: Final[int] = 2
@@ -66,6 +66,8 @@ class PinModel(BaseModel):
     destination: StopModel | None
     kind: RouteKind | None
     routes: tuple[str, ...]
+    nickname: str | None
+    only: tuple[str, ...]
 
 
 class WindowModel(BaseModel):
@@ -219,6 +221,8 @@ def pin_to_model(*, pin: Pin) -> PinModel:
         ),
         kind=pin.kind,
         routes=pin.routes,
+        nickname=pin.nickname,
+        only=pin.only,
     )
 
 
@@ -246,6 +250,8 @@ def pin_from_model(*, model: PinModel) -> Pin:
         ),
         kind=model.kind,
         routes=model.routes,
+        nickname=model.nickname,
+        only=model.only,
     )
 
 
@@ -528,6 +534,41 @@ def add_display_settings(data: dict[str, object]) -> dict[str, object]:
     return {**data, 'settings': {**default_settings(), **settings}}
 
 
+def add_pin_fields(data: dict[str, object]) -> dict[str, object]:
+    """
+    Give every pin an empty nickname and route filter.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Version 5 data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with `nickname` None and `only` empty on each pin and
+        on the unpinned place; anything that is not an object is left
+        for validation to fail.
+    """
+    fields: dict[str, object] = {'nickname': None, 'only': []}
+    pins = data.get('pins')
+    unpinned = data.get('unpinned')
+    return {
+        **data,
+        'pins': (
+            [
+                {**fields, **pin} if isinstance(pin, dict) else pin
+                for pin in pins
+            ]
+            if isinstance(pins, list)
+            else pins
+        ),
+        'unpinned': (
+            {**fields, **unpinned} if isinstance(unpinned, dict) else unpinned
+        ),
+    }
+
+
 MIGRATIONS: Final[
     dict[int, Callable[[dict[str, object]], dict[str, object]]]
 ] = {
@@ -535,6 +576,7 @@ MIGRATIONS: Final[
     2: add_settings,
     3: add_quota,
     4: add_display_settings,
+    5: add_pin_fields,
 }
 
 

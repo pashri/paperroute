@@ -10,6 +10,7 @@ from paperroute.core.model import Mode, Pin
 from paperroute.core.places import (
     flipped,
     matched,
+    rematched,
     shown,
     shown_index,
     toggled,
@@ -225,3 +226,17 @@ def test_matched_partial_answer_keeps_missing() -> None:
     )
     state = matched(state=state, found={'first': renamed, 'far': far})
     assert not state.places.pins[0].missing
+
+
+def test_rematch_keeps_nickname_and_filter() -> None:
+    """A new ID for the From keeps the nickname and route filter."""
+    pin = Pin(
+        origin=place('old'),
+        nickname='Work',
+        only=('606',),
+    )
+    fresh = place('new', name='New St')
+    result = rematched(pin=pin, found={'old': fresh})
+    assert result.origin == fresh
+    assert result.nickname == 'Work'
+    assert result.only == ('606',)

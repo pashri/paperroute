@@ -1,5 +1,7 @@
 """Tests for the domain model."""
 
+import re
+from dataclasses import replace
 from datetime import UTC, date, datetime
 
 import pytest
@@ -13,6 +15,7 @@ from paperroute.core.model import (
     RouteKind,
     kind_for,
     mode_for,
+    pin_ref,
     same_place,
     service_epoch,
     service_seconds,
@@ -20,6 +23,7 @@ from paperroute.core.model import (
     until_repeated_hop,
     until_revisit,
 )
+from paperroute.core.saved import TOWN_HALL
 from tests.core.factories import pin_of, place
 
 
@@ -192,3 +196,21 @@ def test_kind_order_is_bus_train_metro_lr_ferry_school_coach() -> None:
     )
     assert KIND_LABELS[RouteKind.COACH] == 'Coach'
     assert KIND_LETTERS[RouteKind.COACH] == 'C'
+
+
+def test_pin_key_includes_filter_not_nickname() -> None:
+    """The route filter makes a different place; a nickname does not."""
+    base = Pin(origin=place('A'), destination=place('B'))
+    filtered = replace(base, only=('606',))
+    named = replace(base, nickname='Work')
+    assert not same_place(first=base, second=filtered)
+    assert same_place(first=base, second=named)
+
+
+def test_pin_ref_is_stable_and_short() -> None:
+    """A ref is twelve hex digits that change with the filter."""
+    pin = Pin(origin=TOWN_HALL, kind=RouteKind.TRAIN, routes=('T1',))
+    ref = pin_ref(pin=pin)
+    assert re.fullmatch('[0-9a-f]{12}', ref)
+    assert ref == pin_ref(pin=pin)
+    assert ref != pin_ref(pin=replace(pin, only=('T2',)))

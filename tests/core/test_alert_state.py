@@ -468,3 +468,13 @@ def test_platform_pin_matches_sibling_platform() -> None:
     event = BetweenLoaded(pin=pin, names=frozenset(), families=families)
     state, _ = step(state, event)
     assert listed_ids(state=state) == [sibling.alert_id]
+
+
+def test_kindless_pin_asked_again_once_trips_load() -> None:
+    """A pin of any kind with a To is asked again once trips load."""
+    pin = replace(STRATHFIELD_TOWN_HALL, kind=None)
+    state, _ = loaded_with(state=started(pins=(pin,)), modes=())
+    _, effects = loaded_with(state=state)
+    assert [
+        e.trip_ids for e in effects if isinstance(e, LoadBetween)
+    ] == [frozenset({'trip-0'})]

@@ -106,14 +106,17 @@ def between_requests(*, state: State) -> tuple[State, tuple[Effect, ...]]:
         State noting the question, and a LoadBetween. Its trips are the
         first `BETWEEN_TRIPS` departures' for a pin with a To matched by
         name, else none. A pin asked about before its trips were known
-        is asked again once they are; otherwise nothing is asked twice.
+        is asked again once they are, as is a kind-less pin with a To,
+        whose need for them shows only then; otherwise nothing is asked
+        twice.
     """
     pin = shown(state=state)
     departures = state.board.departures[:BETWEEN_TRIPS]
     wants = pin.destination is not None and is_name_pin(
         pin=pin, departures=departures,
     )
-    known = not wants or bool(departures)
+    unsure = pin.kind is None and pin.destination is not None
+    known = bool(departures) or not (wants or unsure)
     if was_asked(state=state, pin=pin, known=known):
         return state, ()
     load = LoadBetween(

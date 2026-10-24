@@ -939,6 +939,8 @@ def build_strip_view(*, inputs: StripInputs) -> StripView:
         empty=empty_of(inputs=inputs),
         banner=stop.banner,
         warning=stop.warning,
+        more=stop.more,
+        planned=stop.planned,
     )
 
 

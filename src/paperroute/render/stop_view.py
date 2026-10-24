@@ -16,12 +16,12 @@ from paperroute.render.chrome import (
     FASTER,
     HEADER,
     arrow,
-    banner,
     cancelled,
     countdown_slot,
     leaves,
     pill,
     route_pair,
+    view_banner,
     view_header,
 )
 
@@ -422,8 +422,8 @@ def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
     canvas = Canvas()
     view_header(canvas, view=view, active='Stop')
     top = HEADER
+    view_banner(canvas, view=view)
     if view.banner:
-        banner(canvas, text=view.banner, warning=view.warning)
         top += BANNER
     if view.empty:
         face = Face(weight=700, px=22)

@@ -93,6 +93,8 @@ class MapView:
     empty: str | None
     tag: PinTag = NOT_PINNED
     warning: bool = False
+    more: int = 0
+    planned: bool = False
 
 
 @dataclass(frozen=True)
@@ -824,4 +826,6 @@ def build_map_view(*, inputs: MapInputs) -> MapView:
         empty=NO_LOCATION if centre is None else stop.empty,
         tag=stop.tag,
         warning=stop.warning,
+        more=stop.more,
+        planned=stop.planned,
     )

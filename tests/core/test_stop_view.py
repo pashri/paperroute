@@ -2,10 +2,14 @@
 
 from dataclasses import replace
 from datetime import UTC, datetime, timedelta
+from typing import Final
 
+from paperroute.core.alert_model import AlertBanner
+from paperroute.core.banners import NO_WIFI
 from paperroute.core.live import LiveDeparture
 from paperroute.core.model import SYDNEY, CarryOn, Mode, TripFacts
 from paperroute.core.stop_view import (
+    DOT,
     HORIZON,
     LARGE_ROWS_UNDER_BANNER,
     LARGE_VISIBLE_ROWS,
@@ -23,6 +27,7 @@ from paperroute.core.stop_view import (
     pin_tag,
     to_row,
 )
+from tests.core.alert_factories import WESTERN, XPLORER
 from tests.core.factories import START, departure
 
 
@@ -87,6 +92,8 @@ def view(
     has_feed: bool = True,
     destination: str | None = 'Parramatta Station',
     large: bool = False,
+    alert: AlertBanner | None = None,
+    notice: str | None = None,
 ) -> StopView:
     """
     Build a view with fixed names and time.
@@ -105,6 +112,10 @@ def view(
         Destination name, or None for none.
     large : bool
         Whether rows use larger text.
+    alert : AlertBanner | None
+        The pin's alert line, if any.
+    notice : str | None
+        A device warning, if any.
 
     Returns
     -------
@@ -121,6 +132,8 @@ def view(
             live_since=None if age is None else START - age,
             has_feed=has_feed,
             large=large,
+            alert=alert,
+            notice=notice,
         ),
     )
 
@@ -643,3 +656,72 @@ def test_large_shows_six_rows() -> None:
     far = view(departures=items, destination=None, large=True, scroll=99)
     assert far.scroll == len(items) - 6
     assert far.large
+
+
+ACTIVE: Final[AlertBanner] = AlertBanner(
+    text=WESTERN.header, active=True, more=2,
+)
+COMING: Final[AlertBanner] = AlertBanner(
+    text=f'From Sat 6:00{DOT}{XPLORER.header}', active=False, more=0,
+)
+NO_FEED: Final[str] = f'Timetable times{DOT}no live feed for this service'
+
+
+def test_device_warning_beats_alert() -> None:
+    """A device warning keeps the banner, and no pill shows."""
+    result = view(departures=(live(minutes=5),), notice=NO_WIFI, alert=ACTIVE)
+    assert result.banner == NO_WIFI
+    assert result.more == 0
+    assert not result.planned
+
+
+def test_stale_line_beats_alert() -> None:
+    """Live data three minutes old outranks an alert."""
+    result = view(
+        departures=(live(minutes=5),),
+        age=timedelta(minutes=3),
+        alert=ACTIVE,
+    )
+    assert result.banner is not None
+    assert result.banner.startswith('No live data since')
+    assert result.more == 0
+
+
+def test_alert_beats_no_live_feed_line() -> None:
+    """The permanent no-feed line gives way to an alert, but not to none."""
+    result = view(
+        departures=(live(minutes=5),), has_feed=False, alert=ACTIVE,
+    )
+    assert result.banner == WESTERN.header
+    assert result.warning
+    result = view(departures=(live(minutes=5),), has_feed=False)
+    assert result.banner == NO_FEED
+
+
+def test_no_live_data_yet_beats_alert() -> None:
+    """With no live data fetched yet, that line outranks an alert."""
+    result = view(departures=(live(minutes=5),), age=None, alert=ACTIVE)
+    assert result.banner == f'Timetable times{DOT}no live data yet'
+
+
+def test_active_alert_banner() -> None:
+    """An active alert is a warning banner with its pill count."""
+    result = view(departures=(live(minutes=5),), alert=ACTIVE)
+    assert result.banner == WESTERN.header
+    assert result.warning
+    assert result.more == 2
+    assert not result.planned
+
+
+def test_coming_alert_outlined() -> None:
+    """A coming alert is outlined, not a warning."""
+    result = view(departures=(live(minutes=5),), alert=COMING)
+    assert result.banner == COMING.text
+    assert result.planned
+    assert not result.warning
+
+
+def test_alert_banner_shortens_list() -> None:
+    """An alert banner takes a row's height."""
+    result = view(departures=many(), alert=ACTIVE)
+    assert len(result.rows) == ROWS_UNDER_BANNER

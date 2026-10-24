@@ -314,6 +314,59 @@ def test_warning_banner_is_inverted() -> None:
     assert (plain.grey()[band] == PAPER).mean() > 0.8
 
 
+def banner_grey(**kwargs: Any) -> Any:
+    """
+    Draw a banner on a fresh canvas.
+
+    Parameters
+    ----------
+    **kwargs : Any
+        Arguments for `banner`.
+
+    Returns
+    -------
+    Any
+        The canvas's greys.
+    """
+    canvas = Canvas()
+    banner(canvas, **kwargs)
+    return canvas.grey()
+
+
+def test_planned_banner_has_outlined_mark() -> None:
+    """A coming alert is a paper band with an outlined triangle."""
+    middle = slice(HEADER + 4, HEADER + BANNER - 4)
+    mark = (middle, slice(16, 34))
+    planned = banner_grey(text=' ', planned=True)
+    band = (slice(HEADER + 4, HEADER + BANNER - 4), slice(4, WIDTH - 4))
+    assert (planned[band] == PAPER).mean() > 0.8
+    assert (planned[mark] == INK).any()
+    plain = banner_grey(text=' ')
+    assert (plain[mark] == PAPER).all()
+
+
+def test_more_pill_drawn() -> None:
+    """The pill shows at the band's right end in the opposite grey."""
+    rows = slice(HEADER + 5, HEADER + BANNER - 5)
+    end = (rows, slice(WIDTH - 90, WIDTH - 5))
+    inverted = banner_grey(text='Alert', warning=True, more=2)
+    assert (inverted[end] == PAPER).any()
+    bare = banner_grey(text='Alert', warning=True)
+    assert not (bare[end] == PAPER).any()
+    outlined = banner_grey(text='Alert', planned=True, more=2)
+    assert (outlined[end] == INK).any()
+    assert not (banner_grey(text='Alert', planned=True)[end] == INK).any()
+
+
+def test_more_pill_leaves_room_for_text() -> None:
+    """Long text is fitted left of the pill."""
+    canvas = Recording()
+    banner(canvas, text='Trains run to a changed timetable ' * 4, more=12)
+    face = Face(weight=700, px=15)
+    shown = max(canvas.drawn, key=len)
+    assert text_width(text=shown, face=face) < WIDTH - 16 - 60 - 10
+
+
 def test_long_nickname_tag_keeps_titles() -> None:
     """A 24-character tag still leaves the origin title drawn."""
     canvas = Canvas()

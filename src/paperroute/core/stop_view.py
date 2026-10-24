@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Final
 
+from paperroute.core.alert_model import AlertBanner
 from paperroute.core.live import STALE_AFTER, LiveDeparture
 from paperroute.core.model import SYDNEY, CarryOn, Departure, Mode, shifted
 
@@ -143,7 +144,13 @@ class StopView:
     head_departures : tuple[Departure, ...]
         The departures behind `head_rows`, in the same order.
     warning : bool
-        True when the banner is a device warning, drawn inverted.
+        True when the banner is a device warning or an active alert,
+        drawn inverted.
+    more : int
+        Other alerts that could have taken the banner, when an alert
+        line is the one shown.
+    planned : bool
+        True when the banner is a coming alert, drawn outlined.
     large : bool
         Whether the departure rows use larger text.
     inverted : bool
@@ -164,6 +171,8 @@ class StopView:
     warning: bool = False
     large: bool = False
     inverted: bool = False
+    more: int = 0
+    planned: bool = False
 
 
 @dataclass(frozen=True)
@@ -202,6 +211,9 @@ class StopInputs:
         Whether the departure rows use larger text.
     inverted : bool
         Whether the departure list is drawn white on black.
+    alert : AlertBanner | None
+        The pin's alert line, which takes the banner ahead of the
+        no-feed line only.
     """
 
     origin: str
@@ -217,6 +229,7 @@ class StopInputs:
     notice: str | None = None
     large: bool = False
     inverted: bool = False
+    alert: AlertBanner | None = None
 
 
 def clock_text(*, moment: datetime) -> str:
@@ -358,34 +371,48 @@ def pills(
     return result
 
 
-def banner(
-    *, live_since: datetime | None, now: datetime, has_feed: bool
-) -> str | None:
+def live_line(*, live_since: datetime | None, now: datetime) -> str | None:
     """
-    Choose the banner about live data, if one is needed.
+    Choose the banner about live data going missing, if one is needed.
 
     Parameters
     ----------
     live_since : datetime | None
-        Fetch time of the oldest needed snapshot, or None when one is missing.
+        Fetch time of the oldest needed snapshot, or None when one is
+        missing.
     now : datetime
         Current time.
-    has_feed : bool
-        Whether the pin's services have a live feed.
 
     Returns
     -------
     str | None
         Banner text.
     """
-    if not has_feed:
-        return f'Timetable times{DOT}no live feed for this service'
     if live_since is None:
         return f'Timetable times{DOT}no live data yet'
     age = now.timestamp() - live_since.timestamp()
     if age > STALE_AFTER.total_seconds():
         return f'No live data since {clock_text(moment=live_since)}'
     return None
+
+
+def no_feed_line(*, has_feed: bool) -> str | None:
+    """
+    Say when the pin's services have no live feed.
+
+    Parameters
+    ----------
+    has_feed : bool
+        Whether the pin's services have a live feed.
+
+    Returns
+    -------
+    str | None
+        Banner text, or None when there is a feed.
+    """
+    if has_feed:
+        return None
+    return f'Timetable times{DOT}no live feed for this service'
 
 
 def not_departed(
@@ -512,6 +539,59 @@ def row_count(*, large: bool, under_banner: bool) -> int:
     return ROWS_UNDER_BANNER if under_banner else VISIBLE_ROWS
 
 
+def alert_shown(*, inputs: StopInputs) -> AlertBanner | None:
+    """
+    Pick the alert line when nothing outranks it.
+
+    Parameters
+    ----------
+    inputs : StopInputs
+        The view's inputs.
+
+    Returns
+    -------
+    AlertBanner | None
+        The alert, or None when there is none or a device warning or a
+        live data line takes the banner.
+    """
+    if inputs.notice is not None or inputs.alert is None:
+        return None
+    if inputs.has_feed and live_line(
+        live_since=inputs.live_since, now=inputs.now,
+    ):
+        return None
+    return inputs.alert
+
+
+def banner_text(*, inputs: StopInputs) -> str | None:
+    """
+    Choose the banner text.
+
+    The order is a device warning, the live data line, an alert, then
+    the no-feed line.
+
+    Parameters
+    ----------
+    inputs : StopInputs
+        The view's inputs.
+
+    Returns
+    -------
+    str | None
+        Banner text, or None.
+    """
+    if inputs.notice:
+        return inputs.notice
+    if inputs.has_feed:
+        line = live_line(live_since=inputs.live_since, now=inputs.now)
+        if line:
+            return line
+    alert = alert_shown(inputs=inputs)
+    if alert is not None:
+        return alert.text
+    return no_feed_line(has_feed=inputs.has_feed)
+
+
 def build_stop_view(*, inputs: StopInputs) -> StopView:
     """
     Build the Stop view from resolved departures.
@@ -553,9 +633,8 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     if lead is not None:
         order.insert(0, lead)
     head = order[:SIDEBAR_ROWS]
-    text = inputs.notice or banner(
-        live_since=inputs.live_since, now=now, has_feed=inputs.has_feed
-    )
+    text = banner_text(inputs=inputs)
+    alert = alert_shown(inputs=inputs)
     shown = row_count(large=inputs.large, under_banner=text is not None)
     offset = max(0, min(inputs.scroll, len(rest) - shown))
     return StopView(
@@ -574,7 +653,10 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         tag=inputs.tag,
         head_rows=tuple(rows[i] for i in head),
         head_departures=tuple(upcoming[i].departure for i in head),
-        warning=inputs.notice is not None,
+        warning=inputs.notice is not None
+        or (alert is not None and alert.active),
         large=inputs.large,
         inverted=inputs.inverted,
+        more=0 if alert is None else alert.more,
+        planned=alert is not None and not alert.active,
     )

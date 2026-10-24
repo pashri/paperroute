@@ -15,9 +15,11 @@ from paperroute.core.alert_model import (
 )
 from paperroute.core.alert_state import shown_alerts
 from paperroute.core.feeds import FeedKind
+from paperroute.core.map_view import MapView
 from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
+    FeedFetched,
     FetchFeed,
     Knob,
     KnobTurned,
@@ -26,11 +28,21 @@ from paperroute.core.messages import (
 )
 from paperroute.core.model import Mode, Pin, RouteKind
 from paperroute.core.places import shown
-from paperroute.core.saved import seeded
+from paperroute.core.realtime import RealtimeSnapshot
+from paperroute.core.saved import LiveView, seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import RELOAD_BEFORE, State
+from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.stop_view import HORIZON
-from tests.core.alert_factories import RHODES, WESTERN, station_pin, sydney
+from paperroute.core.strip_model import StripMapView, StripView
+from tests.core.alert_factories import (
+    RHODES,
+    STRATHFIELD_UPDATE,
+    WESTERN,
+    XPLORER,
+    station_pin,
+    sydney,
+)
 from tests.core.factories import departure
 from tests.core.steps import wakeful
 from tests.core.test_quiet import asleep_at_one, at, evening, ticked
@@ -324,3 +336,63 @@ def test_asleep_clocks_cleared() -> None:
     state = ticked(state=evening(), times=(at(23),))
     assert state.panel.asleep
     assert not state.alerts.fetched_at
+
+
+def fresh_with(
+    *, state: State, alerts: tuple[Alert, ...], feed: str = TRAINS,
+) -> State:
+    """
+    Give a loaded state fresh live data and some alerts.
+
+    Parameters
+    ----------
+    state : State
+        State with departures loaded.
+    alerts : tuple[Alert, ...]
+        Alerts for the feed.
+    feed : str
+        The alerts feed.
+
+    Returns
+    -------
+    State
+        The state at `NOW`.
+    """
+    for name in state.feeds:
+        snapshot = RealtimeSnapshot(fetched_at=NOW, trips={})
+        state, _ = step(state, FeedFetched(feed=name, snapshot=snapshot))
+    state, _ = step(state, fetched(feed=feed, alerts=alerts))
+    return state
+
+
+def test_alert_banner_on_map_and_strip() -> None:
+    """The Map and Strip views carry the Stop view's alert banner."""
+    state, _ = loaded_with(state=started())
+    state = fresh_with(state=state, alerts=(XPLORER,))
+    stop = live_stop_view(state=state)
+    assert stop.banner == XPLORER.header
+    assert stop.warning
+    views = {}
+    for live in (LiveView.MAP, LiveView.STRIP, LiveView.STRIP_MAP):
+        shown_state = replace(state, view=live)
+        views[live] = current_view(state=shown_state, stop_view=stop)
+    map_view = views[LiveView.MAP]
+    strip = views[LiveView.STRIP]
+    both = views[LiveView.STRIP_MAP]
+    assert isinstance(map_view, MapView)
+    assert isinstance(strip, StripView)
+    assert isinstance(both, StripMapView)
+    for carried in (map_view, strip, both.map):
+        assert carried.banner == XPLORER.header
+        assert carried.warning
+        assert carried.more == 0
+        assert not carried.planned
+
+
+def test_list_only_alert_no_banner() -> None:
+    """Route alerts not naming a place and open-ended ones stay listed."""
+    pin = STRATHFIELD_TOWN_HALL
+    state, _ = loaded_with(state=started(pins=(pin,)))
+    state = fresh_with(state=state, alerts=(WESTERN, STRATHFIELD_UPDATE))
+    assert len(shown_alerts(state=state)) == 2
+    assert live_stop_view(state=state).banner is None

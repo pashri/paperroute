@@ -24,11 +24,11 @@ from paperroute.render.chrome import (
     BANNER,
     FASTER,
     HEADER,
-    banner,
     cancelled,
     leaves,
     pill,
     route_pair,
+    view_banner,
     view_header,
 )
 from paperroute.render.map_base import HALO, NOT_INSTALLED_DROP, draw_stop
@@ -364,6 +364,5 @@ def draw_map_view(
     draw_overlay(canvas, view=view)
     view_header(canvas, view=view, active='Map')
     draw_sidebar(canvas, view=view)
-    if view.banner:
-        banner(canvas, text=view.banner, warning=view.warning)
+    view_banner(canvas, view=view)
     return snap(grey=canvas.grey(), width=view.base.width)

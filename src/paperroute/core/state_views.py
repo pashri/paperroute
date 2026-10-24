@@ -2,6 +2,8 @@
 
 from dataclasses import replace
 
+from paperroute.core.alert_match import alert_banner
+from paperroute.core.alert_state import shown_alerts
 from paperroute.core.banners import device_banner
 from paperroute.core.chooser_steps import chooser_view
 from paperroute.core.live import LiveDeparture, live_since, resolved
@@ -110,6 +112,9 @@ def stop_view_of(*, state: State) -> StopView:
             loaded=state.board.loaded_until is not None,
             missing=pin.missing,
             notice=device_banner(state=state),
+            alert=alert_banner(
+                listed=shown_alerts(state=state), now=state.now,
+            ),
             large=state.settings.larger_text,
             inverted=state.settings.inverted_lists,
             tag=pin_tag(

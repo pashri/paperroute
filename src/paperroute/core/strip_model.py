@@ -260,6 +260,8 @@ class StripView:
     empty: str | None
     banner: str | None
     warning: bool = False
+    more: int = 0
+    planned: bool = False
 
 
 @dataclass(frozen=True)

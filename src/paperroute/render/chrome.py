@@ -5,7 +5,15 @@ from typing import Final, Protocol
 
 from paperroute.core.stop_view import DOT, PinTag, Row
 from paperroute.core.strip_model import PICK_FROM
-from paperroute.render.canvas import INK, PAPER, WIDTH, Box, Canvas, Face
+from paperroute.render.canvas import (
+    INK,
+    PAPER,
+    WIDTH,
+    Box,
+    Canvas,
+    Face,
+    text_width,
+)
 
 HEADER: Final[int] = 40
 ARROW_WIDTH: Final[float] = 22.0
@@ -268,7 +276,12 @@ def view_header(
 
 
 def banner(
-    canvas: Canvas, *, text: str, warning: bool = False
+    canvas: Canvas,
+    *,
+    text: str,
+    warning: bool = False,
+    more: int = 0,
+    planned: bool = False,
 ) -> None:
     """
     Draw the banner under the header.
@@ -280,20 +293,158 @@ def banner(
     text : str
         Banner text.
     warning : bool
-        Draw a device warning: a solid ink band with paper text after a
-        paper warning triangle. Otherwise a bordered paper band.
+        Draw a device warning or active alert: a solid ink band with
+        paper text after a paper warning triangle. Otherwise a bordered
+        paper band.
+    more : int
+        Other alerts; when positive a `+N more` pill sits at the right
+        end.
+    planned : bool
+        Put an outlined warning triangle before the text of a bordered
+        band.
     """
     face = Face(weight=700, px=15)
     canvas.rect(box=(0, HEADER, WIDTH, HEADER + BANNER), grey=INK)
     if warning:
         warning_triangle(canvas, x=16, y=HEADER + BANNER / 2, grey=PAPER)
-        fitted = canvas.fit(text=text, face=face, width=WIDTH - 60)
-        canvas.text(at=(44, HEADER + 23), text=fitted, face=face, grey=PAPER)
-        return
+    else:
+        canvas.rect(
+            box=(3, HEADER + 3, WIDTH - 3, HEADER + BANNER - 3), grey=PAPER,
+        )
+    if planned and not warning:
+        outlined_triangle(canvas, x=16, y=HEADER + BANNER / 2)
+    left = 44 if warning or planned else 16
+    right: float = WIDTH - 16
+    if more > 0:
+        right = more_pill(canvas, more=more, inverted=warning) - 8
+    fitted = canvas.fit(text=text, face=face, width=right - left)
+    canvas.text(
+        at=(left, HEADER + 23),
+        text=fitted,
+        face=face,
+        grey=PAPER if warning else INK,
+    )
+
+
+class Bannered(Protocol):
+    """A view with the fields the banner shows."""
+
+    @property
+    def banner(self) -> str | None:
+        """The banner text, or None."""
+
+    @property
+    def warning(self) -> bool:
+        """Whether the banner is inverted."""
+
+    @property
+    def more(self) -> int:
+        """Other alerts behind the banner."""
+
+    @property
+    def planned(self) -> bool:
+        """Whether the banner is a coming alert."""
+
+
+def view_banner(canvas: Canvas, *, view: Bannered) -> None:
+    """
+    Draw a view's banner, if it has one.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    view : Bannered
+        View-model.
+    """
+    if view.banner:
+        banner(
+            canvas,
+            text=view.banner,
+            warning=view.warning,
+            more=view.more,
+            planned=view.planned,
+        )
+
+
+def more_pill(canvas: Canvas, *, more: int, inverted: bool) -> float:
+    """
+    Draw the `+N more` pill at the banner's right end.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    more : int
+        How many other alerts.
+    inverted : bool
+        True on the ink band: paper pill, ink text. Otherwise an ink
+        pill with paper text.
+
+    Returns
+    -------
+    float
+        The pill's left edge.
+    """
+    face = Face(weight=700, px=12)
+    label = f'+{more} more'
+    width = text_width(text=label, face=face) + 12
+    left = WIDTH - 10 - width
+    middle = HEADER + BANNER / 2
     canvas.rect(
-        box=(3, HEADER + 3, WIDTH - 3, HEADER + BANNER - 3), grey=PAPER)
-    fitted = canvas.fit(text=text, face=face, width=WIDTH - 32)
-    canvas.text(at=(16, HEADER + 23), text=fitted, face=face, grey=INK)
+        box=(left, middle - 9, WIDTH - 10, middle + 9),
+        grey=PAPER if inverted else INK,
+    )
+    canvas.text(
+        at=(left + width / 2, middle + 1),
+        text=label,
+        face=face,
+        grey=INK if inverted else PAPER,
+        anchor='mm',
+    )
+    return left
+
+
+def outlined_triangle(canvas: Canvas, *, x: float, y: float) -> None:
+    """
+    Draw a warning triangle as an outline with a small mark inside.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    x : float
+        Left edge.
+    y : float
+        Vertical centre.
+    """
+    side = WARNING_SIDE
+    height = side * 3 ** 0.5 / 2
+    bottom = y + height / 2
+    inner = side - 9
+    inner_height = inner * 3 ** 0.5 / 2
+    inner_bottom = bottom - 2.5
+    middle = x + side / 2
+    canvas.polygon(
+        points=[(x, bottom), (middle, y - height / 2), (x + side, bottom)],
+        grey=INK,
+    )
+    canvas.polygon(
+        points=[
+            (middle - inner / 2, inner_bottom),
+            (middle, inner_bottom - inner_height),
+            (middle + inner / 2, inner_bottom),
+        ],
+        grey=PAPER,
+    )
+    top = inner_bottom - inner_height
+    canvas.rect(
+        box=(middle - 1, top + 3, middle + 1, inner_bottom - 4), grey=INK,
+    )
+    canvas.rect(
+        box=(middle - 1, inner_bottom - 2.5, middle + 1, inner_bottom - 1),
+        grey=INK,
+    )
 
 
 def warning_triangle(

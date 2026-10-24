@@ -20,10 +20,10 @@ from paperroute.render.chrome import (
     BANNER,
     HEADER,
     arrow,
-    banner,
     countdown_slot,
     pill,
     route_pair,
+    view_banner,
     view_header,
 )
 from paperroute.render.map_view import draw_overlay, snap, wrap
@@ -375,8 +375,7 @@ def paint_strip_view(canvas: Canvas, *, view: StripView) -> None:
     )
     draw_panel(canvas, panel=view.panel, drop=BANNER if view.banner else 0)
     view_header(canvas, view=view, active='Strip', picking=view.picking)
-    if view.banner:
-        banner(canvas, text=view.banner, warning=view.warning)
+    view_banner(canvas, view=view)
 
 
 def draw_strip_view(*, view: StripView) -> NDArray[np.uint8]:
@@ -449,8 +448,5 @@ def draw_strip_map_view(
     draw_overlay(canvas, view=view.map)
     draw_pane(canvas, view=view)
     view_header(canvas, view=view.map, active='Strip + map')
-    if view.map.banner:
-        banner(
-            canvas, text=view.map.banner, warning=view.map.warning,
-        )
+    view_banner(canvas, view=view.map)
     return snap(grey=canvas.grey(), width=view.map.base.width)

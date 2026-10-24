@@ -6,7 +6,11 @@ from datetime import date, datetime
 from enum import StrEnum
 from typing import Final
 
-from paperroute.core.alert_model import AlertsFetched
+from paperroute.core.alert_model import (
+    AlertsFetched,
+    BetweenLoaded,
+    LoadBetween,
+)
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.chooser_view import ChooserView
 from paperroute.core.device_model import (
@@ -301,6 +305,7 @@ Effect = (
     | ChooserLoad
     | LoadHolidays
     | LoadServiceSpan
+    | LoadBetween
 )
 
 
@@ -884,6 +889,7 @@ Event = (
     | FeedFetched
     | FeedFailed
     | AlertsFetched
+    | BetweenLoaded
     | KnobTurned
     | KnobPressed
     | KnobHeld

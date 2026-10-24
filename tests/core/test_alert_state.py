@@ -1,0 +1,326 @@
+"""Tests for polling alert feeds and matching them to the shown pin."""
+
+from dataclasses import replace
+from datetime import datetime, timedelta
+from typing import Final
+
+from paperroute.core.alert_model import (
+    Alert,
+    AlertsFetched,
+    AlertsSnapshot,
+    AlertTie,
+    BetweenLoaded,
+    LoadBetween,
+    Matched,
+)
+from paperroute.core.alert_state import shown_alerts
+from paperroute.core.feeds import FeedKind
+from paperroute.core.messages import (
+    DeparturesLoaded,
+    Effect,
+    FetchFeed,
+    Knob,
+    KnobTurned,
+    Render,
+    Tick,
+)
+from paperroute.core.model import Mode, Pin, RouteKind
+from paperroute.core.places import shown
+from paperroute.core.saved import seeded
+from paperroute.core.state import initial_state, step
+from paperroute.core.state_model import RELOAD_BEFORE, State
+from paperroute.core.stop_view import HORIZON
+from tests.core.alert_factories import RHODES, WESTERN, station_pin, sydney
+from tests.core.factories import departure
+from tests.core.steps import wakeful
+from tests.core.test_quiet import asleep_at_one, at, evening, ticked
+
+NOW: Final[datetime] = sydney(day=24, hour=9, minute=39)
+TRAINS: Final[str] = 'v2/gtfs/alerts/sydneytrains'
+BUSES: Final[str] = 'v2/gtfs/alerts/buses'
+PARRAMATTA_CENTRAL: Final[Pin] = station_pin(
+    origin='2150',
+    origin_name='Parramatta Station',
+    destination='200060',
+    destination_name='Central Station',
+)
+STRATHFIELD_TOWN_HALL: Final[Pin] = station_pin(
+    origin='213510',
+    origin_name='Strathfield Station',
+    destination='2000',
+    destination_name='Town Hall Station',
+)
+BUS_PIN: Final[Pin] = station_pin(
+    origin='213460',
+    origin_name='Rhodes Station, Walker St',
+    kind=RouteKind.BUS,
+)
+
+
+def started(*, pins: tuple[Pin, ...] = (PARRAMATTA_CENTRAL,)) -> State:
+    """
+    An awake state showing the first of some pins, nothing loaded.
+
+    Parameters
+    ----------
+    pins : tuple[Pin, ...]
+        The pins.
+
+    Returns
+    -------
+    State
+        The state at `NOW`.
+    """
+    saved = replace(seeded(pin=pins[0]), pins=pins)
+    return wakeful(state=initial_state(saved=saved, now=NOW, stored=True))
+
+
+def loaded_with(
+    *,
+    state: State,
+    modes: tuple[Mode, ...] = (Mode.TRAIN,),
+    route: str = 'T1',
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Load one departure of each mode for the shown pin.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    modes : tuple[Mode, ...]
+        Each departure's mode.
+    route : str
+        Their route.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State and effects after the load.
+    """
+    departures = tuple(
+        departure(
+            departs=NOW + timedelta(minutes=3 * (index + 1)),
+            mode=mode,
+            route=route,
+            trip_id=f'trip-{index}',
+        )
+        for index, mode in enumerate(modes)
+    )
+    event = DeparturesLoaded(
+        pin=shown(state=state),
+        departures=departures,
+        until=NOW + HORIZON + RELOAD_BEFORE,
+    )
+    return step(state, event)
+
+
+def alert_fetches(*, effects: tuple[Effect, ...]) -> list[FetchFeed]:
+    """
+    List the alert feed fetches.
+
+    Parameters
+    ----------
+    effects : tuple[Effect, ...]
+        Effects.
+
+    Returns
+    -------
+    list[FetchFeed]
+        Each FetchFeed of kind ALERTS.
+    """
+    return [
+        effect
+        for effect in effects
+        if isinstance(effect, FetchFeed) and effect.kind == FeedKind.ALERTS
+    ]
+
+
+def fetched(*, feed: str, alerts: tuple[Alert, ...]) -> AlertsFetched:
+    """
+    An alert feed's download.
+
+    Parameters
+    ----------
+    feed : str
+        Feed path.
+    alerts : tuple[Alert, ...]
+        Its alerts.
+
+    Returns
+    -------
+    AlertsFetched
+        The event.
+    """
+    snapshot = AlertsSnapshot(feed=feed, fetched_at=NOW, alerts=alerts)
+    return AlertsFetched(feed=feed, snapshot=snapshot)
+
+
+def tick_at(
+    *, state: State, after: timedelta,
+) -> tuple[State, list[FetchFeed]]:
+    """
+    Tick some time after `NOW`.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    after : timedelta
+        Time after `NOW`.
+
+    Returns
+    -------
+    tuple[State, list[FetchFeed]]
+        State after and the alert fetches.
+    """
+    state, effects = step(state, Tick(now=NOW + after))
+    return state, alert_fetches(effects=effects)
+
+
+def test_alerts_polled_for_pin_modes() -> None:
+    """A train pin fetches the trains alerts every five minutes."""
+    state, _ = loaded_with(state=started())
+    state, fetches = tick_at(state=state, after=timedelta())
+    assert fetches == [FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS)]
+    state, fetches = tick_at(
+        state=state, after=timedelta(minutes=4, seconds=55),
+    )
+    assert not fetches
+    _, fetches = tick_at(state=state, after=timedelta(minutes=5))
+    assert fetches == [FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS)]
+
+
+def test_two_modes_poll_each_feed() -> None:
+    """Bus and train departures fetch each alerts feed once a poll."""
+    state, _ = loaded_with(state=started(), modes=(Mode.BUS, Mode.TRAIN))
+    wanted = [
+        FetchFeed(feed=BUSES, kind=FeedKind.ALERTS),
+        FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS),
+    ]
+    state, fetches = tick_at(state=state, after=timedelta())
+    assert fetches == wanted
+    state, fetches = tick_at(state=state, after=timedelta(minutes=1))
+    assert not fetches
+    _, fetches = tick_at(state=state, after=timedelta(minutes=5))
+    assert fetches == wanted
+
+
+def test_ferry_pin_polls_no_alerts() -> None:
+    """Ferries have no alerts feed, so a ferry pin fetches none."""
+    state, _ = loaded_with(state=started(), modes=(Mode.FERRY,))
+    _, fetches = tick_at(state=state, after=timedelta())
+    assert not fetches
+
+
+def test_no_departures_no_alert_polls() -> None:
+    """Until departures load there are no modes to fetch alerts for."""
+    _, fetches = tick_at(state=started(), after=timedelta())
+    assert not fetches
+
+
+def test_no_alert_polls_while_asleep() -> None:
+    """Ticks through quiet hours fetch no alerts."""
+    state = evening()
+    for minutes in range(0, 6 * 60 + 1, 5):
+        moment = at(23) + timedelta(minutes=minutes)
+        state, effects = step(state, Tick(now=moment))
+        assert not alert_fetches(effects=effects)
+
+
+def test_wake_fetches_alerts_at_once() -> None:
+    """A touch at 01:00 while asleep fetches the alerts in that step."""
+    state = asleep_at_one()
+    state, effects = step(state, KnobTurned(knob=Knob.BOTTOM, steps=1))
+    assert not state.panel.asleep
+    assert alert_fetches(effects=effects) == [
+        FetchFeed(feed=BUSES, kind=FeedKind.ALERTS),
+    ]
+
+
+def test_alerts_never_wake() -> None:
+    """Alerts arriving while asleep neither wake nor redraw."""
+    state = asleep_at_one()
+    state, effects = step(state, fetched(feed=BUSES, alerts=(RHODES,)))
+    assert state.panel.asleep
+    assert not [effect for effect in effects if isinstance(effect, Render)]
+
+
+def test_alerts_fetched_rematched() -> None:
+    """A trains download is matched to the shown train pin at once."""
+    state, _ = loaded_with(state=started())
+    state, _ = step(state, fetched(feed=TRAINS, alerts=(WESTERN,)))
+    assert state.alerts.matched == (
+        PARRAMATTA_CENTRAL,
+        (Matched(alert=WESTERN, tie=AlertTie.ROUTE, names_place=True),),
+    )
+    assert [
+        item.matched.alert for item in shown_alerts(state=state)
+    ] == [WESTERN]
+
+
+def test_pin_flip_uses_new_pin() -> None:
+    """After a pin flip nothing is shown until the new departures load."""
+    state, _ = loaded_with(state=started(pins=(PARRAMATTA_CENTRAL, BUS_PIN)))
+    state, _ = step(state, fetched(feed=BUSES, alerts=(RHODES,)))
+    state, _ = step(state, fetched(feed=TRAINS, alerts=(WESTERN,)))
+    state, _ = step(state, KnobTurned(knob=Knob.TOP, steps=1))
+    assert shown(state=state) == BUS_PIN
+    assert not shown_alerts(state=state)
+    state, _ = loaded_with(state=state, modes=(Mode.BUS,), route='526')
+    assert [
+        item.matched.alert for item in shown_alerts(state=state)
+    ] == [RHODES]
+
+
+def test_between_requested_for_rail_pin() -> None:
+    """A rail pin with a To asks once for the stations between."""
+    state, effects = loaded_with(state=started(pins=(STRATHFIELD_TOWN_HALL,)))
+    asks = [effect for effect in effects if isinstance(effect, LoadBetween)]
+    assert asks == [
+        LoadBetween(
+            pin=STRATHFIELD_TOWN_HALL,
+            trip_ids=frozenset({'trip-0'}),
+            day=NOW.date(),
+        ),
+    ]
+    _, effects = loaded_with(state=state)
+    assert not [e for e in effects if isinstance(e, LoadBetween)]
+    alone = replace(STRATHFIELD_TOWN_HALL, destination=None)
+    for pin, mode in ((BUS_PIN, Mode.BUS), (alone, Mode.TRAIN)):
+        _, effects = loaded_with(state=started(pins=(pin,)), modes=(mode,))
+        assert not [e for e in effects if isinstance(e, LoadBetween)]
+
+
+def test_between_stored_and_rematched() -> None:
+    """Stations between are kept for the pin and used in matching."""
+    state, _ = loaded_with(state=started(pins=(STRATHFIELD_TOWN_HALL,)))
+    state, _ = step(state, fetched(feed=TRAINS, alerts=(WESTERN,)))
+    assert state.alerts.matched is not None
+    assert not state.alerts.matched[1][0].names_place
+    names = frozenset({'Burwood', 'Redfern', 'Central'})
+    event = BetweenLoaded(pin=STRATHFIELD_TOWN_HALL, names=names)
+    state, _ = step(state, event)
+    assert state.alerts.between == (STRATHFIELD_TOWN_HALL, names)
+    assert state.alerts.matched is not None
+    assert state.alerts.matched[1][0].names_place
+
+
+def test_stale_between_dropped() -> None:
+    """Stations between for another pin or timetable change nothing."""
+    state, _ = loaded_with(state=started(pins=(STRATHFIELD_TOWN_HALL,)))
+    names = frozenset({'Burwood'})
+    for event in (
+        BetweenLoaded(pin=PARRAMATTA_CENTRAL, names=names),
+        BetweenLoaded(
+            pin=STRATHFIELD_TOWN_HALL, names=names, timetable='other',
+        ),
+    ):
+        assert step(state, event) == (state, ())
+
+
+def test_asleep_clocks_cleared() -> None:
+    """Quiet hours clear the alert clocks so waking polls at once."""
+    state = ticked(state=evening(), times=(at(23),))
+    assert state.panel.asleep
+    assert not state.alerts.fetched_at

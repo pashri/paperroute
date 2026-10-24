@@ -12,11 +12,14 @@ from typing import Final
 
 from paperroute.adapters.gtfs_alerts import parse_alerts
 from paperroute.adapters.gtfs_rt import parse_positions, parse_trip_updates
+from paperroute.core.alert_match import between_names
 from paperroute.core.alert_model import (
     AlertPlaces,
     AlertsFetched,
     AlertsSnapshot,
+    BetweenLoaded,
     Informed,
+    LoadBetween,
 )
 from paperroute.core.feeds import ALERT_FEEDS, FeedKind
 from paperroute.core.messages import (
@@ -75,6 +78,7 @@ WorkerEffect = (
     | LoadChooserDepartures
     | LoadHolidays
     | LoadServiceSpan
+    | LoadBetween
 )
 
 
@@ -416,6 +420,88 @@ def calendar_failure(*, effect: LoadHolidays | LoadServiceSpan) -> Event:
     return HolidaysLoaded(dates=frozenset(), timetable=effect.timetable)
 
 
+def between_read(
+    *, timetable: TimetableRepository, effect: LoadBetween
+) -> BetweenLoaded:
+    """
+    Read the place names of the stations between a pin's From and To.
+
+    A pin's From or To may be a platform, so their stop families are read
+    too and each is found through its station.
+
+    Parameters
+    ----------
+    timetable : TimetableRepository
+        Timetable.
+    effect : LoadBetween
+        Request, echoed back.
+
+    Returns
+    -------
+    BetweenLoaded
+        The names.
+    """
+    pin = effect.pin
+    ends = [pin.origin.stop_id]
+    if pin.destination is not None:
+        ends.append(pin.destination.stop_id)
+    families = timetable.alert_places(route_ids=(), stop_ids=ends).stops
+    patterns = timetable.patterns(trip_ids=effect.trip_ids, around=effect.day)
+    names = between_names(pin=pin, patterns=patterns, families=families)
+    return BetweenLoaded(pin=pin, names=names, timetable=effect.timetable)
+
+
+def timetable_read(
+    *,
+    timetable: TimetableRepository,
+    effect: LoadHolidays | LoadServiceSpan | LoadBetween,
+) -> Callable[[], Event]:
+    """
+    Give the read a calendar or stations-between request asks for.
+
+    Parameters
+    ----------
+    timetable : TimetableRepository
+        Timetable.
+    effect : LoadHolidays | LoadServiceSpan | LoadBetween
+        Request.
+
+    Returns
+    -------
+    Callable[[], Event]
+        The read, giving its result event.
+    """
+    if isinstance(effect, LoadBetween):
+        return functools.partial(
+            between_read, timetable=timetable, effect=effect
+        )
+    return calendar_read(timetable=timetable, effect=effect)
+
+
+def timetable_failure(
+    *, effect: LoadHolidays | LoadServiceSpan | LoadBetween
+) -> Event:
+    """
+    Give the event posted when a calendar or stations-between read fails.
+
+    Parameters
+    ----------
+    effect : LoadHolidays | LoadServiceSpan | LoadBetween
+        Request.
+
+    Returns
+    -------
+    Event
+        No holidays, no span or no names, tagged with the request's
+        timetable.
+    """
+    if isinstance(effect, LoadBetween):
+        return BetweenLoaded(
+            pin=effect.pin, names=frozenset(), timetable=effect.timetable
+        )
+    return calendar_failure(effect=effect)
+
+
 def read_for(
     *,
     timetable: TimetableRepository,
@@ -456,8 +542,8 @@ def read_for(
             return functools.partial(
                 line_loaded, network=network, effect=effect
             )
-        case LoadHolidays() | LoadServiceSpan():
-            return calendar_read(timetable=timetable, effect=effect)
+        case LoadHolidays() | LoadServiceSpan() | LoadBetween():
+            return timetable_read(timetable=timetable, effect=effect)
     return functools.partial(
         chooser_departures, timetable=timetable, effect=effect
     )
@@ -486,8 +572,8 @@ def failure_of(*, effect: WorkerEffect) -> Event:
             return ColumnFailed(path=path, timetable=version)
         case LoadLine(towards=towards, timetable=version):
             return LineFailed(towards=towards, timetable=version)
-        case LoadHolidays() | LoadServiceSpan():
-            return calendar_failure(effect=effect)
+        case LoadHolidays() | LoadServiceSpan() | LoadBetween():
+            return timetable_failure(effect=effect)
     return ChooserDeparturesFailed(pin=effect.pin, timetable=effect.timetable)
 
 

@@ -519,6 +519,22 @@ def test_between_names() -> None:
     assert between_names(pin=alone, patterns=patterns) == frozenset()
 
 
+def test_between_names_from_a_platform() -> None:
+    """A From or To on a platform is found through its station."""
+    pin = station_pin(
+        origin='a1', origin_name='A', destination='d1', destination_name='D',
+    )
+    patterns = {'one': line(trip_id='one', stations='ABCDE')}
+    assert between_names(pin=pin, patterns=patterns) == frozenset()
+    families = {
+        'a1': frozenset({'a1', 'A'}),
+        'd1': frozenset({'d1', 'D'}),
+    }
+    assert between_names(
+        pin=pin, patterns=patterns, families=families,
+    ) == {'B', 'C'}
+
+
 def test_pin_facts_name_pin_by_modes() -> None:
     """A pin of any kind is a name pin when every departure is rail."""
     pin = replace(PARRAMATTA_CENTRAL, kind=None)

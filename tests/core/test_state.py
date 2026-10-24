@@ -179,6 +179,7 @@ PIN = Pin(
     destination=place('215020', name='Parramatta'),
 )
 BUSES = 'v1/gtfs/realtime/buses'
+ALERTS: Final[str] = 'v2/gtfs/alerts/buses'
 BUS_POSITIONS: Final[str] = 'v1/gtfs/vehiclepos/buses'
 FERRY_POSITIONS: Final[str] = 'v1/gtfs/vehiclepos/ferries/sydneyferries'
 CENTRE: Final[Point] = (-17_000.0, 1_000.0)
@@ -454,7 +455,11 @@ def test_mixed_modes_fetch_each_needed_feed_once() -> None:
     )
     state, _ = step(fresh(), event)
     _, effects = step(state, Tick(now=START))
-    fetched = [e.feed for e in effects if isinstance(e, FetchFeed)]
+    fetched = [
+        e.feed
+        for e in effects
+        if isinstance(e, FetchFeed) and e.kind == FeedKind.TRIPS
+    ]
     assert sorted(fetched) == [
         'v1/gtfs/realtime/buses',
         'v1/gtfs/realtime/nswtrains',
@@ -611,7 +616,9 @@ def test_stop_view_never_polls_positions() -> None:
         now = START + timedelta(seconds=seconds)
         state, effects = step(state, Tick(now=now))
         fetched = effects_of(effects=effects, kind=FetchFeed)
-        assert fetched == [FetchFeed(feed=BUSES)]
+        assert [
+            each for each in fetched if each.kind != FeedKind.ALERTS
+        ] == [FetchFeed(feed=BUSES)]
     assert needed_feeds(state=state) == (BUSES,)
 
 
@@ -2806,3 +2813,12 @@ def test_settings_reach_stop_view() -> None:
     state, _ = step(state, Tick(now=START + timedelta(seconds=10)))
     assert isinstance(state.last_view, StopView)
     assert state.last_view.inverted
+
+
+def test_alerts_counted_in_quota() -> None:
+    """The alert fetches of a tick count against the day's quota."""
+    state = loaded(state=fresh())
+    after, effects = step(state, Tick(now=START))
+    fetches = [e for e in effects if isinstance(e, FetchFeed)]
+    assert FetchFeed(feed=ALERTS, kind=FeedKind.ALERTS) in fetches
+    assert after.quota.calls - state.quota.calls == len(fetches)

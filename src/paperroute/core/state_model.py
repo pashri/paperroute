@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from typing import Final
 
+from paperroute.core.alert_model import AlertsState
 from paperroute.core.chooser import ChooserState
 from paperroute.core.device_model import Panel
 from paperroute.core.map_state import MapState
@@ -329,6 +330,8 @@ class State:
         The public holidays, from the timetable.
     refresh : Refresh
         The full-refresh schedule.
+    alerts : AlertsState
+        The alerts and their ties to the shown pin.
     """
 
     now: datetime
@@ -352,3 +355,4 @@ class State:
     panel: Panel = field(default_factory=Panel)
     calendar: Calendar = field(default_factory=Calendar)
     refresh: Refresh = field(default_factory=Refresh)
+    alerts: AlertsState = field(default_factory=AlertsState)

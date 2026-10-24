@@ -55,12 +55,12 @@ def test_constants() -> None:
 
 
 def test_fetches_are_counted() -> None:
-    """A tick that fetches two feeds counts two calls."""
+    """A tick fetching two trip feeds and one alerts feed counts three."""
     now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY)
     state = replace(loaded(state=fresh(now=now)), feeds=TWO_FEEDS)
     state, effects = step(state, Tick(now=now))
-    assert sum(isinstance(e, FetchFeed) for e in effects) == 2
-    assert state.quota == Quota(day=DAY, calls=2)
+    assert sum(isinstance(e, FetchFeed) for e in effects) == 3
+    assert state.quota == Quota(day=DAY, calls=3)
 
 
 def test_quota_rolls_over_at_sydney_midnight() -> None:
@@ -70,7 +70,7 @@ def test_quota_rolls_over_at_sydney_midnight() -> None:
     state = wakeful(state=loaded(state=fresh(now=late)))
     state = replace(state, quota=Quota(day=DAY, calls=500))
     state, _ = step(state, Tick(now=late))
-    assert state.quota == Quota(day=DAY, calls=501)
+    assert state.quota == Quota(day=DAY, calls=502)
     state, _ = step(fetching(state=state), Tick(now=early))
     assert state.quota == Quota(day=NEXT_DAY, calls=1)
 
@@ -82,7 +82,7 @@ def test_quota_rolls_over_on_a_daylight_saving_day() -> None:
     state = wakeful(state=loaded(state=fresh(now=late)))
     state = replace(state, quota=Quota(day=date(2026, 10, 4), calls=9))
     state, _ = step(state, Tick(now=late))
-    assert state.quota == Quota(day=date(2026, 10, 4), calls=10)
+    assert state.quota == Quota(day=date(2026, 10, 4), calls=11)
     state, _ = step(fetching(state=state), Tick(now=early))
     assert state.quota == Quota(day=date(2026, 10, 5), calls=1)
 

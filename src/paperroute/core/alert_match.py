@@ -239,7 +239,10 @@ def pin_facts(
 
 
 def between_names(
-    *, pin: Pin, patterns: Mapping[str, TripPattern],
+    *,
+    pin: Pin,
+    patterns: Mapping[str, TripPattern],
+    families: Mapping[str, frozenset[str]] | None = None,
 ) -> frozenset[str]:
     """
     Place names of stations strictly between a pin's From and To.
@@ -250,6 +253,10 @@ def between_names(
         The pin.
     patterns : Mapping[str, TripPattern]
         Patterns of some of its trips.
+    families : Mapping[str, frozenset[str]] | None
+        Stop families of From and To. A pin end on a platform is found
+        through its parent station here; an end with no family must be
+        a station itself.
 
     Returns
     -------
@@ -258,20 +265,59 @@ def between_names(
     """
     if pin.destination is None:
         return frozenset()
+    known = families or {}
+    ends = [
+        known.get(place.stop_id, frozenset({place.stop_id}))
+        for place in (pin.origin, pin.destination)
+    ]
     names: set[str] = set()
     for pattern in patterns.values():
-        stations = [stop.station for stop in pattern.stops]
-        if pin.origin.stop_id not in stations:
-            continue
-        start = stations.index(pin.origin.stop_id)
-        if pin.destination.stop_id not in stations[start + 1:]:
-            continue
-        end = stations.index(pin.destination.stop_id, start + 1)
-        names.update(
-            place_name(name=stop.name)
-            for stop in pattern.stops[start + 1:end]
-        )
+        span = end_indexes(pattern=pattern, start=ends[0], end=ends[1])
+        if span is not None:
+            names.update(
+                place_name(name=stop.name)
+                for stop in pattern.stops[span[0] + 1:span[1]]
+            )
     return frozenset(names)
+
+
+def end_indexes(
+    *, pattern: TripPattern, start: frozenset[str], end: frozenset[str],
+) -> tuple[int, int] | None:
+    """
+    Find where a trip calls at one station and later at another.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The trip.
+    start : frozenset[str]
+        IDs the first station may have.
+    end : frozenset[str]
+        IDs the later station may have.
+
+    Returns
+    -------
+    tuple[int, int] | None
+        Indexes of the first call at `start` and the next call at `end`
+        after it, or None when the trip doesn't make both.
+    """
+    stations = [stop.station for stop in pattern.stops]
+    first = next(
+        (index for index, station in enumerate(stations) if station in start),
+        None,
+    )
+    if first is None:
+        return None
+    later = next(
+        (
+            index
+            for index, station in enumerate(stations)
+            if index > first and station in end
+        ),
+        None,
+    )
+    return None if later is None else (first, later)
 
 
 def tie_of(*, alert: Alert, facts: PinFacts) -> AlertTie | None:

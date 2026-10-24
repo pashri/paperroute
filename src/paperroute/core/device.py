@@ -4,6 +4,7 @@ from dataclasses import fields, replace
 from datetime import timedelta
 from typing import Final
 
+from paperroute.core.alert_state import alert_clocks_cleared
 from paperroute.core.banners import feeds_held
 from paperroute.core.device_model import (
     ConfirmAction,
@@ -333,10 +334,12 @@ def quiet_guard(
     kept = tuple(
         effect for effect in effects if not isinstance(effect, FetchFeed)
     )
-    cleared = replace(
-        after,
-        last_fetch=None,
-        map=replace(after.map, fetched_at={}),
+    cleared = alert_clocks_cleared(
+        state=replace(
+            after,
+            last_fetch=None,
+            map=replace(after.map, fetched_at={}),
+        ),
     )
     return cleared, kept
 

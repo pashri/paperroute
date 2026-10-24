@@ -3,6 +3,7 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
+from paperroute.core.alert_model import BetweenLoaded
 from paperroute.core.feeds import feed_for
 from paperroute.core.geo import MetreBox
 from paperroute.core.map_state import MapState, area_box
@@ -375,17 +376,18 @@ def is_stale(*, state: State, event: Event) -> bool:
     Returns
     -------
     bool
-        True for departures loaded or failed, or a service span read, for
-        another place or another timetable version, for a reach, a
-        chooser load, a failed place look-up or holidays from another
-        timetable version, and for area modes loaded or failed for
-        another map area.
+        True for departures loaded or failed, a service span read, or
+        stations between read, for another place or another timetable
+        version, for a reach, a chooser load, a failed place look-up or
+        holidays from another timetable version, and for area modes
+        loaded or failed for another map area.
     """
     match event:
         case (
             DeparturesLoaded(pin=pin, timetable=timetable)
             | DeparturesFailed(pin=pin, timetable=timetable)
             | ServiceSpanLoaded(pin=pin, timetable=timetable)
+            | BetweenLoaded(pin=pin, timetable=timetable)
         ):
             return timetable != state.saving.timetable or not same_place(
                 first=pin, second=shown(state=state)

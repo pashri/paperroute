@@ -1,9 +1,11 @@
 """Service alerts, as plain data."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass
-from datetime import datetime
+from dataclasses import dataclass, field
+from datetime import date, datetime
 from enum import IntEnum
+
+from paperroute.core.model import Pin
 
 
 @dataclass(frozen=True)
@@ -120,3 +122,79 @@ class AlertBanner:
     text: str
     active: bool
     more: int
+
+
+@dataclass(frozen=True)
+class LoadBetween:
+    """
+    Ask the timetable for the stations between a pin's From and To.
+
+    Attributes
+    ----------
+    pin : Pin
+        The pin.
+    trip_ids : frozenset[str]
+        Some of its trips.
+    day : date
+        Service day of the first of them.
+    timetable : str | None
+        Timetable version, echoed back.
+    """
+
+    pin: Pin
+    trip_ids: frozenset[str]
+    day: date
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class BetweenLoaded:
+    """
+    Place names of the stations between a pin's From and To.
+
+    Attributes
+    ----------
+    pin : Pin
+        The pin asked about.
+    names : frozenset[str]
+        The names; empty when the read failed.
+    timetable : str | None
+        Timetable version asked of.
+    """
+
+    pin: Pin
+    names: frozenset[str]
+    timetable: str | None = None
+
+
+@dataclass(frozen=True)
+class AlertsState:
+    """
+    The alerts known and how they tie to the shown pin.
+
+    Attributes
+    ----------
+    snapshots : Mapping[str, AlertsSnapshot]
+        The latest download of each alert feed.
+    fetched_at : Mapping[str, datetime]
+        When each alert feed was last asked for.
+    between : tuple[Pin, frozenset[str]] | None
+        A pin and the place names between its From and To.
+    asked : tuple[Pin, str | None] | None
+        The pin and timetable version stations between were last asked
+        for.
+    matched : tuple[Pin, tuple[Matched, ...]] | None
+        A pin and the alerts tied to it.
+    selected : str | None
+        ID of the alert selected in the list.
+    page : int
+        Page of the selected alert's text.
+    """
+
+    snapshots: Mapping[str, AlertsSnapshot] = field(default_factory=dict)
+    fetched_at: Mapping[str, datetime] = field(default_factory=dict)
+    between: tuple[Pin, frozenset[str]] | None = None
+    asked: tuple[Pin, str | None] | None = None
+    matched: tuple[Pin, tuple[Matched, ...]] | None = None
+    selected: str | None = None
+    page: int = 0

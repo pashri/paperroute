@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime
 
+from paperroute.core.alert_state import alert_polls
 from paperroute.core.chooser_steps import trip_feeds
 from paperroute.core.menu import on_asked
 from paperroute.core.messages import (
@@ -88,10 +89,13 @@ def woken(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State awake and the fetches, with the Live view drawn, or the
-        confirm when the event was an ask the panel shows.
+        State awake and the trip-updates and alert fetches, with the Live
+        view drawn, or the confirm when the event was an ask the panel
+        shows.
     """
     state, polls = poll_effects(state=awake(state=state))
+    state, alerts = alert_polls(state=state)
+    polls = (*polls, *alerts)
     if isinstance(event, ConfirmAsked):
         asked, effects = on_asked(state=state, event=event)
         if effects:

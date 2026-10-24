@@ -4,6 +4,13 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute.core.alert_model import AlertsFetched, BetweenLoaded
+from paperroute.core.alert_state import (
+    alert_polls,
+    between_requests,
+    on_alerts,
+    rematched,
+)
 from paperroute.core.chooser_steps import (
     chooser_event,
     chooser_knob,
@@ -336,13 +343,15 @@ def on_tick(
     state, loads = reload_effects(state=state)
     state, picked = picked_reloads(state=state)
     state, fetches = poll_effects(state=state)
+    state, alerts = alert_polls(state=state)
     state, saves = saved_effects(state=state)
     state, matches = rematch_effects(state=state)
     state, probes = probe_effects(state=state)
     state, effects = settled(
         state=state,
         effects=(
-            *spans, *loads, *picked, *fetches, *saves, *matches, *probes,
+            *spans, *loads, *picked, *fetches, *alerts, *saves, *matches,
+            *probes,
         ),
     )
     return with_quiet(result=with_full(state=state, effects=effects))
@@ -368,7 +377,9 @@ def on_loaded(
     """
     board = Board(departures=event.departures, loaded_until=event.until)
     feeds = feeds_of(departures=event.departures)
-    return settled(state=replace(state, board=board, feeds=feeds))
+    state = rematched(state=replace(state, board=board, feeds=feeds))
+    state, asks = between_requests(state=state)
+    return settled(state=state, effects=asks)
 
 
 def on_feed(
@@ -859,6 +870,7 @@ def on_places(
     return reloaded(before=state, after=after)
 
 
+# pylint: disable-next=too-many-branches
 def dispatched(
     *, state: State, event: Event
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -887,6 +899,8 @@ def dispatched(
             result = on_loaded(state=state, event=event)
         case DeparturesFailed() | FeedFetched() | FeedFailed():
             result = on_feed(state=state, event=event)
+        case AlertsFetched() | BetweenLoaded():
+            result = settled(state=on_alerts(state=state, event=event))
         case (
             KnobTurned()
             | KnobPressed()

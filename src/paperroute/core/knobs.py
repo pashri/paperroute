@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 
+from paperroute.core.alert_state import has_alerts
 from paperroute.core.map_state import zoomed
 from paperroute.core.messages import (
     Knob,
@@ -30,8 +31,15 @@ def switched(*, state: State) -> State:
     Returns
     -------
     State
-        State showing the view after the current one in `LIVE_VIEWS`.
+        State showing the view after the current one in `LIVE_VIEWS`;
+        after Strip + map, the Alerts view while the pin has alerts
+        listed, and the Stop view after the Alerts view.
     """
+    match state.view:
+        case LiveView.STRIP_MAP if has_alerts(state=state):
+            return replace(state, view=LiveView.ALERTS)
+        case LiveView.ALERTS:
+            return replace(state, view=LiveView.STOP)
     index = LIVE_VIEWS.index(state.view)
     return replace(state, view=LIVE_VIEWS[(index + 1) % len(LIVE_VIEWS)])
 
@@ -52,9 +60,11 @@ def bottom_turned(*, state: State, steps: int) -> State:
     State
         State scrolled on the Stop view or the Strip, each its own
         scroll, or zoomed on the Map and Strip + map. The Strip's scroll
-        stays within the rows last shown.
+        stays within the rows last shown. Unchanged on the Alerts view.
     """
     match state.view:
+        case LiveView.ALERTS:
+            return state
         case LiveView.STOP:
             return replace(state, scroll=max(0, state.scroll + steps))
         case LiveView.STRIP:

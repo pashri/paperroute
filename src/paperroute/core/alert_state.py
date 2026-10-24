@@ -18,10 +18,17 @@ from paperroute.core.alert_model import (
     LoadBetween,
 )
 from paperroute.core.feeds import FeedKind, alert_feeds_for
-from paperroute.core.messages import Effect, FetchFeed
+from paperroute.core.messages import (
+    Effect,
+    FetchFeed,
+    Knob,
+    KnobEvent,
+    KnobPressed,
+    KnobTurned,
+)
 from paperroute.core.model import Pin, same_place
 from paperroute.core.places import shown
-from paperroute.core.saved import LOOKAHEAD
+from paperroute.core.saved import LOOKAHEAD, LiveView
 from paperroute.core.state_model import State, elapsed
 
 ALERT_EVERY: Final[timedelta] = timedelta(minutes=5)
@@ -243,3 +250,126 @@ def alert_clocks_cleared(*, state: State) -> State:
         State with no alert fetch times.
     """
     return replace(state, alerts=replace(state.alerts, fetched_at={}))
+
+
+def has_alerts(*, state: State) -> bool:
+    """
+    Say whether the shown pin has alerts listed.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    bool
+        True when at least one is listed.
+    """
+    return bool(shown_alerts(state=state))
+
+
+def listed_ids(*, state: State) -> list[str]:
+    """
+    The IDs of the shown pin's listed alerts, in order.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    list[str]
+        Alert IDs.
+    """
+    return [item.matched.alert.alert_id for item in shown_alerts(state=state)]
+
+
+def selection_moved(*, state: State, steps: int) -> State:
+    """
+    Move the selection through the listed alerts, clamped.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    steps : int
+        Detents; clockwise (positive) moves down the list.
+
+    Returns
+    -------
+    State
+        State with the new selection on page 0.
+    """
+    ids = listed_ids(state=state)
+    if not ids:
+        return state
+    selected = state.alerts.selected
+    index = ids.index(selected) if selected in ids else 0
+    index = min(max(index + steps, 0), len(ids) - 1)
+    alerts = replace(state.alerts, selected=ids[index], page=0)
+    return replace(state, alerts=alerts)
+
+
+def alerts_knob(*, state: State, event: KnobEvent) -> State | None:
+    """
+    Apply a knob event on the Alerts view.
+
+    The top turn selects an alert and the top press pages its text; the
+    bottom turn does nothing.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    event : KnobEvent
+        Knob event.
+
+    Returns
+    -------
+    State | None
+        New state, the same state for a bottom turn, or None when the
+        event is handled as on the other Live views, the Alerts view
+        isn't shown or the chooser is open.
+    """
+    if state.view is not LiveView.ALERTS or state.chooser is not None:
+        return None
+    match event:
+        case KnobTurned(knob=Knob.TOP, steps=steps):
+            return selection_moved(state=state, steps=steps)
+        case KnobPressed(knob=Knob.TOP):
+            page = state.alerts.page + 1
+            return replace(state, alerts=replace(state.alerts, page=page))
+        case KnobTurned(knob=Knob.BOTTOM):
+            return state
+    return None
+
+
+def alerts_left(*, state: State) -> State:
+    """
+    Leave the Alerts view when its list empties, and keep the selection.
+
+    Parameters
+    ----------
+    state : State
+        State after an event.
+
+    Returns
+    -------
+    State
+        On the Alerts view with nothing listed, the Stop view. Otherwise
+        a selection no longer listed becomes the first listed alert, on
+        page 0; with none selected yet, the first is, on its page.
+    """
+    ids = listed_ids(state=state)
+    if not ids:
+        if state.view is LiveView.ALERTS:
+            return replace(state, view=LiveView.STOP)
+        return state
+    selected = state.alerts.selected
+    if selected in ids:
+        return state
+    page = state.alerts.page if selected is None else 0
+    alerts = replace(state.alerts, selected=ids[0], page=page)
+    return replace(state, alerts=alerts)

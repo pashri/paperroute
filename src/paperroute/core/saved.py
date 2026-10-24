@@ -17,6 +17,7 @@ class LiveView(StrEnum):
     MAP = 'map'
     STRIP = 'strip'
     STRIP_MAP = 'strip_map'
+    ALERTS = 'alerts'
 
 
 LIVE_VIEWS: Final[tuple[LiveView, ...]] = (

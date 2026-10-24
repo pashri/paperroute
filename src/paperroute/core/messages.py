@@ -11,6 +11,7 @@ from paperroute.core.alert_model import (
     BetweenLoaded,
     LoadBetween,
 )
+from paperroute.core.alerts_view import AlertsView
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.chooser_view import ChooserView
 from paperroute.core.device_model import (
@@ -176,6 +177,7 @@ ScreenView = (
     | MapView
     | StripView
     | StripMapView
+    | AlertsView
     | ChooserView
     | NoticeView
     | PanelView

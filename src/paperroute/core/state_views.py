@@ -3,7 +3,8 @@
 from dataclasses import replace
 
 from paperroute.core.alert_match import alert_banner
-from paperroute.core.alert_state import shown_alerts
+from paperroute.core.alert_state import alerts_left, shown_alerts
+from paperroute.core.alerts_view import build_alerts_view
 from paperroute.core.banners import device_banner
 from paperroute.core.chooser_steps import chooser_view
 from paperroute.core.live import LiveDeparture, live_since, resolved
@@ -47,14 +48,17 @@ def saved_of(*, state: State) -> Saved:
     Returns
     -------
     Saved
-        The pins, the place shown, the Live view, the zoom and settings.
+        The pins, the place shown, the Live view, the zoom and settings;
+        the Stop view in place of the Alerts view, which needs alerts
+        not kept.
     """
     places = state.places
+    view = LiveView.STOP if state.view is LiveView.ALERTS else state.view
     return Saved(
         pins=places.pins,
         current=places.current,
         unpinned=places.unpinned,
-        view=state.view,
+        view=view,
         zoom=state.map.zoom,
         settings=state.settings,
         quota=state.quota,
@@ -188,8 +192,7 @@ def current_view(
     ScreenView
         The confirm or open menu's screen, else the sleep screen, else
         the Building screen with no timetable, else the open chooser's
-        screen, else the Live view shown; the
-        Strip + map's map at its own width.
+        screen, else the Live view shown.
     """
     overlay: PanelView | SleepView | NoticeView | None = panel_view(
         state=state,
@@ -202,6 +205,26 @@ def current_view(
         return overlay
     if state.chooser is not None:
         return chooser_view(state=state, chooser=state.chooser)
+    return live_view(state=state, stop_view=stop_view)
+
+
+def live_view(*, state: State, stop_view: StopView) -> ScreenView:
+    """
+    Build the Live view shown.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    stop_view : StopView
+        The state's Stop view, from `live_stop_view`.
+
+    Returns
+    -------
+    ScreenView
+        The Live view; the Strip + map's map at its own width, and the
+        Stop view for the Alerts view with nothing listed.
+    """
     match state.view:
         case LiveView.MAP:
             inputs = map_inputs(state=state, stop_view=stop_view)
@@ -217,6 +240,14 @@ def current_view(
                     inputs=replace(inputs, width=STRIP_MAP_WIDTH),
                 ),
                 pane=build_strip_pane(inputs=strip),
+            )
+        case LiveView.ALERTS if listed := shown_alerts(state=state):
+            return build_alerts_view(
+                listed=listed,
+                selected=state.alerts.selected,
+                page=state.alerts.page,
+                stop_view=stop_view,
+                now=state.now,
             )
     return stop_view
 
@@ -274,7 +305,8 @@ def settled(
 
     The Stop view is built once, the folds the strip on screen shows are
     opened, the Strip's scroll is clamped to its reach and a picked train
-    no longer in its panel is dropped first.
+    no longer in its panel is dropped first; before that the Alerts
+    view falls back to Stop when its list empties.
 
     Parameters
     ----------
@@ -288,6 +320,7 @@ def settled(
     tuple[State, tuple[Effect, ...]]
         New state and effects.
     """
+    state = alerts_left(state=state)
     stop_view = live_stop_view(state=state)
     banner = stop_view.banner is not None
     state = kept_selection(

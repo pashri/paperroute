@@ -7,6 +7,7 @@ from typing import Final
 from paperroute.core.alert_model import AlertsFetched, BetweenLoaded
 from paperroute.core.alert_state import (
     alert_polls,
+    alerts_knob,
     between_requests,
     on_alerts,
     rematched,
@@ -418,7 +419,7 @@ def on_knob(
     Apply a knob event, loading departures when the place changed.
 
     While the chooser is open every knob event goes to it, and the top
-    press opens it.
+    press opens it; on the Alerts view the alerts take the top knob.
 
     Parameters
     ----------
@@ -433,9 +434,11 @@ def on_knob(
         New state and effects; none when the event does nothing.
     """
     effects: tuple[Effect, ...] = ()
-    if state.chooser is not None or event == KnobPressed(knob=Knob.TOP):
+    after = alerts_knob(state=state, event=event)
+    top_press = event == KnobPressed(knob=Knob.TOP)
+    if after is None and (state.chooser is not None or top_press):
         after, effects = chooser_knob(state=state, event=event)
-    else:
+    elif after is None:
         after = knob_moved(state=state, event=event)
     if after is state:
         return state, ()

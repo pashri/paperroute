@@ -12,6 +12,7 @@ from numpy.typing import NDArray
 from paperroute.adapters.tiles_db import NullTiles
 from paperroute.app_effects import timed_async
 from paperroute.app_ports import Ports
+from paperroute.core.alerts_view import AlertsView
 from paperroute.core.map_view import MapBase, MapView
 from paperroute.core.messages import NoticeView, ScreenView
 from paperroute.core.panel_views import (
@@ -241,8 +242,13 @@ def drawing(*, view: View, maps: MapRenderer) -> Callable[[], Frame]:
             return functools.partial(draw_stop_view, view=view)
         case StripView():
             return functools.partial(draw_strip_view, view=view)
-        case NoticeView():
-            return functools.partial(draw_notice_view, view=view)
+        case NoticeView() | AlertsView():
+            notice = (
+                view
+                if isinstance(view, NoticeView)
+                else NoticeView(title=view.text.title)
+            )
+            return functools.partial(draw_notice_view, view=notice)
         case (
             MenuView()
             | DeviceView()

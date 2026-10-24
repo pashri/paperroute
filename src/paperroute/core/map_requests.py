@@ -460,11 +460,11 @@ def shows_vehicles(*, state: State) -> bool:
     -------
     bool
         True while the chooser picks a Destination, and with the chooser
-        closed on every view but the Stop view.
+        closed on every view but the Stop and Alerts views.
     """
     if state.chooser is not None:
         return picking_to(state=state) is not None
-    return state.view is not LiveView.STOP
+    return state.view not in {LiveView.STOP, LiveView.ALERTS}
 
 
 def map_effects(

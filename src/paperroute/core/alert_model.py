@@ -3,6 +3,7 @@
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
+from enum import IntEnum
 
 
 @dataclass(frozen=True)
@@ -71,3 +72,51 @@ class AlertsFetched:
 
     feed: str
     snapshot: AlertsSnapshot
+
+
+class AlertTie(IntEnum):
+    """How an alert is tied to a pin; lower ties rank first."""
+
+    TRIP = 0
+    STOP = 1
+    ROUTE = 2
+
+
+@dataclass(frozen=True)
+class Matched:
+    """
+    An alert tied to the shown pin.
+
+    Attributes
+    ----------
+    alert : Alert
+        The alert.
+    tie : AlertTie
+        How it is tied to the pin.
+    names_place : bool
+        True when a route alert's text names one of the pin's places.
+    """
+
+    alert: Alert
+    tie: AlertTie
+    names_place: bool
+
+
+@dataclass(frozen=True)
+class AlertBanner:
+    """
+    The alert line shown in the banner.
+
+    Attributes
+    ----------
+    text : str
+        Line text.
+    active : bool
+        True when the alert applies now, False when it is coming.
+    more : int
+        How many other alerts could have taken the banner.
+    """
+
+    text: str
+    active: bool
+    more: int

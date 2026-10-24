@@ -496,7 +496,9 @@ def is_listed(
     )
 
 
-def rank_key(listed: Listed) -> tuple[bool, int, bool, datetime, str, str]:
+def rank_key(
+    listed: Listed,
+) -> tuple[bool, bool, int, bool, datetime, str, str]:
     """
     Sort key for the list.
 
@@ -507,11 +509,13 @@ def rank_key(listed: Listed) -> tuple[bool, int, bool, datetime, str, str]:
 
     Returns
     -------
-    tuple[bool, int, bool, datetime, str, str]
-        Coming after active, then tie, start, header and ID.
+    tuple[bool, bool, int, bool, datetime, str, str]
+        Open-ended after dated, coming after active, then tie, start,
+        header and ID.
     """
     alert = listed.matched.alert
     return (
+        listed.timing.window.end is None,
         not listed.timing.active,
         listed.matched.tie,
         *window_key(listed.timing.window),
@@ -541,8 +545,8 @@ def listed_alerts(
     Returns
     -------
     tuple[Listed, ...]
-        Active before coming, then trip, stop and route ties, then by
-        start, header and ID.
+        Dated before open-ended, active before coming, then trip, stop
+        and route ties, then by start, header and ID.
     """
     found = []
     for item in matched:

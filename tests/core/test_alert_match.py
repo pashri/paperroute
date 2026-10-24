@@ -391,12 +391,13 @@ RANKED = (
     Matched(alert=WESTERN, tie=AlertTie.ROUTE, names_place=True),
     Matched(alert=RHODES, tie=AlertTie.STOP, names_place=False),
     Matched(alert=PENRITH_CENTRAL, tie=AlertTie.STOP, names_place=False),
+    Matched(alert=STRATHFIELD_UPDATE, tie=AlertTie.TRIP, names_place=False),
 )
 
 
 @given(order=st.permutations(RANKED))
 def test_rank_order(order: list[Matched]) -> None:
-    """Active before coming, then by tie, then soonest first."""
+    """Dated before open-ended, active before coming, then by tie, soonest."""
     listed = listed_alerts(
         matched=order, now=sydney(day=24, hour=9), lookahead=None,
     )

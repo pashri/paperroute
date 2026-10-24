@@ -427,7 +427,8 @@ def between_read(
     Read the place names of the stations between a pin's From and To.
 
     A pin's From or To may be a platform, so their stop families are read
-    too and each is found through its station.
+    too and each is found through its station. With no trips asked
+    about, only the families are read.
 
     Parameters
     ----------
@@ -446,9 +447,18 @@ def between_read(
     if pin.destination is not None:
         ends.append(pin.destination.stop_id)
     families = timetable.alert_places(route_ids=(), stop_ids=ends).stops
-    patterns = timetable.patterns(trip_ids=effect.trip_ids, around=effect.day)
+    patterns = (
+        timetable.patterns(trip_ids=effect.trip_ids, around=effect.day)
+        if effect.trip_ids
+        else {}
+    )
     names = between_names(pin=pin, patterns=patterns, families=families)
-    return BetweenLoaded(pin=pin, names=names, timetable=effect.timetable)
+    return BetweenLoaded(
+        pin=pin,
+        names=names,
+        timetable=effect.timetable,
+        families=families,
+    )
 
 
 def timetable_read(

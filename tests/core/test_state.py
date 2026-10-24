@@ -10,6 +10,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from paperroute.core.alert_state import alert_feeds
 from paperroute.core.chooser import (
     ChooserPath,
     ChooserState,
@@ -1770,6 +1771,9 @@ def check_fetch(
     if effect.kind is FeedKind.TRIPS:
         assert effect.feed in trip_feeds(state=after)
         assert arrived or polled(before=before, event=event)
+        return
+    if effect.kind is FeedKind.ALERTS:
+        assert effect.feed in alert_feeds(state=after)
         return
     assert effect.feed in needed_feeds(state=after)
     last = before.map.fetched_at.get(effect.feed)

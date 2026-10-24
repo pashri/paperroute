@@ -10,10 +10,11 @@ from paperroute.core.alert_model import (
     AlertsSnapshot,
     AlertTie,
     BetweenLoaded,
+    Informed,
     LoadBetween,
     Matched,
 )
-from paperroute.core.alert_state import shown_alerts
+from paperroute.core.alert_state import listed_ids, shown_alerts
 from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import MapView
 from paperroute.core.messages import (
@@ -50,6 +51,7 @@ from tests.core.test_quiet import asleep_at_one, at, evening, ticked
 NOW: Final[datetime] = sydney(day=24, hour=9, minute=39)
 TRAINS: Final[str] = 'v2/gtfs/alerts/sydneytrains'
 BUSES: Final[str] = 'v2/gtfs/alerts/buses'
+REGIONAL: Final[str] = 'v2/gtfs/alerts/nswtrains'
 PARRAMATTA_CENTRAL: Final[Pin] = station_pin(
     origin='2150',
     origin_name='Parramatta Station',
@@ -220,14 +222,16 @@ def test_two_modes_poll_each_feed() -> None:
 
 def test_ferry_pin_polls_no_alerts() -> None:
     """Ferries have no alerts feed, so a ferry pin fetches none."""
-    state, _ = loaded_with(state=started(), modes=(Mode.FERRY,))
+    pin = replace(PARRAMATTA_CENTRAL, kind=RouteKind.FERRY)
+    state, _ = loaded_with(state=started(pins=(pin,)), modes=(Mode.FERRY,))
     _, fetches = tick_at(state=state, after=timedelta())
     assert not fetches
 
 
 def test_no_departures_no_alert_polls() -> None:
-    """Until departures load there are no modes to fetch alerts for."""
-    _, fetches = tick_at(state=started(), after=timedelta())
+    """A pin of any kind polls nothing until departures load."""
+    pin = replace(PARRAMATTA_CENTRAL, kind=None)
+    _, fetches = tick_at(state=started(pins=(pin,)), after=timedelta())
     assert not fetches
 
 
@@ -301,7 +305,27 @@ def test_between_requested_for_rail_pin() -> None:
     alone = replace(STRATHFIELD_TOWN_HALL, destination=None)
     for pin, mode in ((BUS_PIN, Mode.BUS), (alone, Mode.TRAIN)):
         _, effects = loaded_with(state=started(pins=(pin,)), modes=(mode,))
-        assert not [e for e in effects if isinstance(e, LoadBetween)]
+        assert [e for e in effects if isinstance(e, LoadBetween)] == [
+            LoadBetween(pin=pin, trip_ids=frozenset(), day=NOW.date()),
+        ]
+
+
+def test_between_asked_again_once_trips_known() -> None:
+    """A rail pin asked about before its trips is asked once more."""
+    state, effects = loaded_with(
+        state=started(pins=(STRATHFIELD_TOWN_HALL,)), modes=(),
+    )
+    assert [e for e in effects if isinstance(e, LoadBetween)] == [
+        LoadBetween(
+            pin=STRATHFIELD_TOWN_HALL, trip_ids=frozenset(), day=NOW.date(),
+        ),
+    ]
+    state, effects = loaded_with(state=state, modes=())
+    assert not [e for e in effects if isinstance(e, LoadBetween)]
+    _, effects = loaded_with(state=state)
+    assert [
+        e.trip_ids for e in effects if isinstance(e, LoadBetween)
+    ] == [frozenset({'trip-0'})]
 
 
 def test_between_stored_and_rematched() -> None:
@@ -396,3 +420,51 @@ def test_list_only_alert_no_banner() -> None:
     state = fresh_with(state=state, alerts=(WESTERN, STRATHFIELD_UPDATE))
     assert len(shown_alerts(state=state)) == 2
     assert live_stop_view(state=state).banner is None
+
+
+def test_alert_in_two_feeds_listed_once() -> None:
+    """An alert in two feeds is listed, counted and passed once."""
+    state, _ = loaded_with(
+        state=started(), modes=(Mode.TRAIN, Mode.REGIONAL),
+    )
+    second = replace(XPLORER, alert_id='second', header='Second')
+    state = fresh_with(state=state, alerts=(XPLORER, second))
+    state, _ = step(state, fetched(feed=REGIONAL, alerts=(XPLORER,)))
+    assert listed_ids(state=state) == [XPLORER.alert_id, 'second']
+    assert live_stop_view(state=state).more == 1
+    state, _ = step(
+        replace(state, view=LiveView.ALERTS),
+        KnobTurned(knob=Knob.TOP, steps=1),
+    )
+    assert state.alerts.selected == 'second'
+
+
+def test_closure_listed_with_no_departures() -> None:
+    """With every train replaced, a pin still gets its feeds' alerts."""
+    pin = replace(PARRAMATTA_CENTRAL, only=('T1',))
+    state, fetches = tick_at(
+        state=started(pins=(pin,)), after=timedelta(),
+    )
+    assert not state.board.departures
+    assert fetches == [FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS)]
+    state, _ = step(state, fetched(feed=TRAINS, alerts=(WESTERN, XPLORER)))
+    assert listed_ids(state=state) == [XPLORER.alert_id, WESTERN.alert_id]
+
+
+def test_platform_pin_matches_sibling_platform() -> None:
+    """A platform pin is tied to an alert on another platform there."""
+    pin = station_pin(origin='2150142', origin_name='Parramatta Platform 2')
+    state, effects = loaded_with(state=started(pins=(pin,)))
+    assert [e for e in effects if isinstance(e, LoadBetween)] == [
+        LoadBetween(pin=pin, trip_ids=frozenset(), day=NOW.date()),
+    ]
+    sibling = replace(
+        STRATHFIELD_UPDATE,
+        informed=(Informed(stops=frozenset({'2150141', '2150'})),),
+    )
+    state, _ = step(state, fetched(feed=TRAINS, alerts=(sibling,)))
+    assert not listed_ids(state=state)
+    families = {'2150142': frozenset({'2150142', '2150'})}
+    event = BetweenLoaded(pin=pin, names=frozenset(), families=families)
+    state, _ = step(state, event)
+    assert listed_ids(state=state) == [sibling.alert_id]

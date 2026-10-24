@@ -203,7 +203,11 @@ def pin_names(*, pin: Pin, between: frozenset[str]) -> frozenset[str]:
 
 
 def pin_facts(
-    *, pin: Pin, departures: Sequence[Departure], between: frozenset[str],
+    *,
+    pin: Pin,
+    departures: Sequence[Departure],
+    between: frozenset[str],
+    families: Mapping[str, frozenset[str]] | None = None,
 ) -> PinFacts:
     """
     Gather what alerts can name about a pin.
@@ -213,27 +217,39 @@ def pin_facts(
     pin : Pin
         The shown pin.
     departures : Sequence[Departure]
-        Its loaded departures.
+        Its loaded departures; may be empty.
     between : frozenset[str]
         Place names of stations between From and To.
+    families : Mapping[str, frozenset[str]] | None
+        Stop families of From and To, so a platform pin also matches its
+        station and sibling platforms; None for none known.
 
     Returns
     -------
     PinFacts
-        The facts.
+        The facts; routes come from the pin's chosen routes and filter
+        as well as from its departures.
     """
-    stops = {pin.origin.stop_id}
-    if pin.destination is not None:
-        stops.add(pin.destination.stop_id)
+    ends = [pin.origin] + ([] if pin.destination is None else [
+        pin.destination,
+    ])
     named = is_name_pin(pin=pin, departures=departures)
+    known = families or {}
     return PinFacts(
         trips=frozenset(
             trip
             for item in departures
             for trip in (item.trip_id, *item.aliases)
         ),
-        stops=frozenset(stops),
-        routes=frozenset(pin.routes) | {item.route for item in departures},
+        stops=frozenset(
+            stop
+            for end in ends
+            for stop in known.get(end.stop_id, {end.stop_id})
+        ),
+        routes=(
+            frozenset((*pin.routes, *pin.only))
+            | {item.route for item in departures}
+        ),
         names=pin_names(pin=pin, between=between) if named else frozenset(),
     )
 

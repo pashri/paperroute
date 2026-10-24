@@ -160,11 +160,14 @@ class BetweenLoaded:
         The names; empty when the read failed.
     timetable : str | None
         Timetable version asked of.
+    families : Mapping[str, frozenset[str]]
+        Stop families of From and To; empty when the read failed.
     """
 
     pin: Pin
     names: frozenset[str]
     timetable: str | None = None
+    families: Mapping[str, frozenset[str]] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -180,9 +183,11 @@ class AlertsState:
         When each alert feed was last asked for.
     between : tuple[Pin, frozenset[str]] | None
         A pin and the place names between its From and To.
-    asked : tuple[Pin, str | None] | None
+    families : Mapping[str, frozenset[str]]
+        Stop families of the `between` pin's From and To.
+    asked : tuple[Pin, str | None, bool] | None
         The pin and timetable version stations between were last asked
-        for.
+        for, and whether its trips were known then.
     matched : tuple[Pin, tuple[Matched, ...]] | None
         A pin and the alerts tied to it.
     selected : str | None
@@ -194,7 +199,8 @@ class AlertsState:
     snapshots: Mapping[str, AlertsSnapshot] = field(default_factory=dict)
     fetched_at: Mapping[str, datetime] = field(default_factory=dict)
     between: tuple[Pin, frozenset[str]] | None = None
-    asked: tuple[Pin, str | None] | None = None
+    families: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    asked: tuple[Pin, str | None, bool] | None = None
     matched: tuple[Pin, tuple[Matched, ...]] | None = None
     selected: str | None = None
     page: int = 0

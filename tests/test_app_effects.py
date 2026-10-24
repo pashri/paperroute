@@ -924,7 +924,15 @@ async def test_between_from_a_platform() -> None:
             ),
         ],
     )
-    assert posted == [BetweenLoaded(pin=pin, names=frozenset({'B', 'C'}))]
+    assert posted == [
+        BetweenLoaded(
+            pin=pin,
+            names=frozenset({'B', 'C'}),
+            families={
+                STRATHFIELD_PLATFORM: frozenset({STRATHFIELD_PLATFORM, 'S'}),
+            },
+        ),
+    ]
 
 
 async def test_between_read_failure_is_empty(

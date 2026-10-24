@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from enum import StrEnum
 from typing import Final
 
-from paperroute.core.model import Mode
+from paperroute.core.model import Mode, RouteKind
 
 FEEDS: Final[dict[Mode, str]] = {
     Mode.BUS: 'v1/gtfs/realtime/buses',
@@ -31,6 +31,16 @@ POSITION_FEEDS: Final[dict[Mode, tuple[str, ...]]] = {
         'v1/gtfs/vehiclepos/lightrail/parramatta',
         'v1/gtfs/vehiclepos/lightrail/newcastle',
     ),
+}
+KIND_MODES: Final[dict[RouteKind, frozenset[Mode]]] = {
+    RouteKind.BUS: frozenset({Mode.BUS}),
+    RouteKind.SCHOOL: frozenset({Mode.BUS}),
+    RouteKind.REPLACEMENT: frozenset({Mode.BUS}),
+    RouteKind.TRAIN: frozenset({Mode.TRAIN}),
+    RouteKind.METRO: frozenset({Mode.METRO}),
+    RouteKind.LIGHT_RAIL: frozenset({Mode.LIGHT_RAIL}),
+    RouteKind.FERRY: frozenset({Mode.FERRY}),
+    RouteKind.COACH: frozenset({Mode.COACH}),
 }
 ALL_POSITION_MODES: Final[frozenset[Mode]] = frozenset(POSITION_FEEDS)
 MODE_NAMES: Final[dict[Mode, str]] = {

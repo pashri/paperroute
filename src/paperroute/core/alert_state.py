@@ -1,7 +1,7 @@
 """Polling the shown pin's alert feeds and tying their alerts to it."""
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import date, datetime, timedelta
 from typing import Final
 
 from paperroute.core.alert_match import (
@@ -13,11 +13,12 @@ from paperroute.core.alert_match import (
     pin_facts,
 )
 from paperroute.core.alert_model import (
+    Alert,
     AlertsFetched,
     BetweenLoaded,
     LoadBetween,
 )
-from paperroute.core.feeds import FeedKind, alert_feeds_for
+from paperroute.core.feeds import KIND_MODES, FeedKind, alert_feeds_for
 from paperroute.core.messages import (
     Effect,
     FetchFeed,
@@ -26,7 +27,7 @@ from paperroute.core.messages import (
     KnobPressed,
     KnobTurned,
 )
-from paperroute.core.model import Pin, same_place
+from paperroute.core.model import SYDNEY, Pin, same_place
 from paperroute.core.places import shown
 from paperroute.core.saved import LOOKAHEAD, LiveView
 from paperroute.core.state_model import State, elapsed
@@ -46,11 +47,13 @@ def alert_feeds(*, state: State) -> tuple[str, ...]:
     Returns
     -------
     tuple[str, ...]
-        Feed paths of the loaded departures' modes, sorted; empty before
-        departures load.
+        Feed paths of the pin's kind's modes and its loaded departures'
+        modes, sorted.
     """
+    kind = shown(state=state).kind
+    kind_modes = frozenset() if kind is None else KIND_MODES[kind]
     return alert_feeds_for(
-        modes=(item.mode for item in state.board.departures),
+        modes={*kind_modes, *(item.mode for item in state.board.departures)},
     )
 
 
@@ -90,43 +93,61 @@ def alert_polls(*, state: State) -> tuple[State, tuple[Effect, ...]]:
 
 def between_requests(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
-    Ask once per pin and timetable for the stations between From and To.
+    Ask once per pin and timetable for its stop families and stations.
 
     Parameters
     ----------
     state : State
-        State with the shown pin's departures loaded.
+        State.
 
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State noting the question, and a LoadBetween for the first
-        `BETWEEN_TRIPS` departures' trips; unchanged for a pin with no
-        To, one not matched by name, or one already asked about.
+        State noting the question, and a LoadBetween. Its trips are the
+        first `BETWEEN_TRIPS` departures' for a pin with a To matched by
+        name, else none. A pin asked about before its trips were known
+        is asked again once they are; otherwise nothing is asked twice.
     """
     pin = shown(state=state)
     departures = state.board.departures[:BETWEEN_TRIPS]
-    timetable = state.saving.timetable
-    if (
-        pin.destination is None
-        or not departures
-        or not is_name_pin(pin=pin, departures=departures)
-        or was_asked(state=state, pin=pin)
-    ):
+    wants = pin.destination is not None and is_name_pin(
+        pin=pin, departures=departures,
+    )
+    known = not wants or bool(departures)
+    if was_asked(state=state, pin=pin, known=known):
         return state, ()
     load = LoadBetween(
         pin=pin,
-        trip_ids=frozenset(item.trip_id for item in departures),
-        day=departures[0].service_day,
-        timetable=timetable,
+        trip_ids=frozenset(item.trip_id for item in departures if wants),
+        day=departures[0].service_day if departures else service_date(
+            moment=state.now,
+        ),
+        timetable=state.saving.timetable,
     )
-    alerts = replace(state.alerts, asked=(pin, timetable))
-    return replace(state, alerts=alerts), (load,)
+    asked = (pin, state.saving.timetable, known)
+    return replace(state, alerts=replace(state.alerts, asked=asked)), (load,)
 
 
-def was_asked(*, state: State, pin: Pin) -> bool:
+def service_date(*, moment: datetime) -> date:
     """
-    Say whether a pin's stations between were asked of this timetable.
+    The Sydney calendar date of a moment.
+
+    Parameters
+    ----------
+    moment : datetime
+        The moment.
+
+    Returns
+    -------
+    date
+        Its date in Sydney.
+    """
+    return moment.astimezone(SYDNEY).date()
+
+
+def was_asked(*, state: State, pin: Pin, known: bool) -> bool:
+    """
+    Say whether a pin was asked about of this timetable already.
 
     Parameters
     ----------
@@ -134,18 +155,47 @@ def was_asked(*, state: State, pin: Pin) -> bool:
         State.
     pin : Pin
         The pin.
+    known : bool
+        True when its trips are known now, or not needed.
 
     Returns
     -------
     bool
-        True when they were.
+        True when it was, and asking now would add nothing.
     """
     asked = state.alerts.asked
     return (
         asked is not None
         and asked[1] == state.saving.timetable
         and same_place(first=asked[0], second=pin)
+        and (asked[2] or not known)
     )
+
+
+def feed_alerts(*, state: State) -> tuple[Alert, ...]:
+    """
+    The alerts of the shown pin's feeds, one per alert ID.
+
+    Feeds share alerts, so the first copy of each ID is kept.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[Alert, ...]
+        The alerts, by feed then feed order.
+    """
+    snapshots = state.alerts.snapshots
+    unique = {
+        alert.alert_id: alert
+        for feed in reversed(alert_feeds(state=state))
+        if feed in snapshots
+        for alert in reversed(snapshots[feed].alerts)
+    }
+    return tuple(reversed(unique.values()))
 
 
 def rematched(*, state: State) -> State:
@@ -160,27 +210,21 @@ def rematched(*, state: State) -> State:
     Returns
     -------
     State
-        State with the ties stored for the shown pin; none are stored
-        before its departures load.
+        State with the ties stored for the shown pin; with no departures
+        loaded, alerts are tied by stop and route only.
     """
     pin = shown(state=state)
-    departures = state.board.departures
-    if not departures:
-        return replace(state, alerts=replace(state.alerts, matched=None))
-    between = state.alerts.between
-    names = frozenset[str]()
-    if between is not None and same_place(first=between[0], second=pin):
-        names = between[1]
-    facts = pin_facts(pin=pin, departures=departures, between=names)
-    snapshots = state.alerts.snapshots
-    alerts = (
-        alert
-        for feed in alert_feeds(state=state)
-        if feed in snapshots
-        for alert in snapshots[feed].alerts
+    alerts = state.alerts
+    between = alerts.between
+    known = between is not None and same_place(first=between[0], second=pin)
+    facts = pin_facts(
+        pin=pin,
+        departures=state.board.departures,
+        between=between[1] if between is not None and known else frozenset(),
+        families=alerts.families if known else {},
     )
-    found = matched_alerts(alerts=alerts, facts=facts)
-    return replace(state, alerts=replace(state.alerts, matched=(pin, found)))
+    found = matched_alerts(alerts=feed_alerts(state=state), facts=facts)
+    return replace(state, alerts=replace(alerts, matched=(pin, found)))
 
 
 def on_alerts(*, state: State, event: AlertsFetched | BetweenLoaded) -> State:
@@ -204,7 +248,11 @@ def on_alerts(*, state: State, event: AlertsFetched | BetweenLoaded) -> State:
         snapshots = {**alerts.snapshots, event.feed: event.snapshot}
         alerts = replace(alerts, snapshots=snapshots)
     else:
-        alerts = replace(alerts, between=(event.pin, event.names))
+        alerts = replace(
+            alerts,
+            between=(event.pin, event.names),
+            families=event.families,
+        )
     return rematched(state=replace(state, alerts=alerts))
 
 
@@ -367,6 +415,25 @@ def alerts_left(*, state: State) -> State:
         if state.view is LiveView.ALERTS:
             return replace(state, view=LiveView.STOP)
         return state
+    return selection_kept(state=state, ids=ids)
+
+
+def selection_kept(*, state: State, ids: list[str]) -> State:
+    """
+    Select the first listed alert when the selection isn't listed.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    ids : list[str]
+        Listed alert IDs; not empty.
+
+    Returns
+    -------
+    State
+        State with a listed selection.
+    """
     selected = state.alerts.selected
     if selected in ids:
         return state

@@ -69,20 +69,7 @@ def read_routes(
         that, to the text after its last underscore when some route has
         that short name. Other IDs are absent.
     """
-    candidates = [
-        prefix + route_id
-        for route_id in route_ids
-        for prefix in ROUTE_PREFIXES
-    ]
-    names = {
-        str(row[0]): str(row[1]) for row in fetch_in(ROUTE_NAMES, candidates)
-    }
-    found: dict[str, str] = {}
-    for route_id in route_ids:
-        for prefix in ROUTE_PREFIXES:
-            if prefix + route_id in names:
-                found[route_id] = names[prefix + route_id]
-                break
+    found = prefixed_routes(route_ids=route_ids, fetch_in=fetch_in)
     rest = {
         route_id: suffix
         for route_id in route_ids
@@ -95,6 +82,44 @@ def read_routes(
         route_id: suffix
         for route_id, suffix in rest.items()
         if suffix in known
+    }
+
+
+def prefixed_routes(
+    *, route_ids: Collection[str], fetch_in: FetchIn
+) -> dict[str, str]:
+    """
+    Resolve feed route IDs through their prefixed forms.
+
+    Parameters
+    ----------
+    route_ids : Collection[str]
+        Route IDs from a feed.
+    fetch_in : FetchIn
+        Runs a query with an IN list and returns its rows.
+
+    Returns
+    -------
+    dict[str, str]
+        Short name by feed ID, from the first of its sydneytrains, metro
+        and bundle forms that is a route; other IDs are absent.
+    """
+    candidates = [
+        prefix + route_id
+        for route_id in route_ids
+        for prefix in ROUTE_PREFIXES
+    ]
+    names = {
+        str(row[0]): str(row[1]) for row in fetch_in(ROUTE_NAMES, candidates)
+    }
+    return {
+        route_id: next(
+            names[prefix + route_id]
+            for prefix in ROUTE_PREFIXES
+            if prefix + route_id in names
+        )
+        for route_id in route_ids
+        if any(prefix + route_id in names for prefix in ROUTE_PREFIXES)
     }
 
 

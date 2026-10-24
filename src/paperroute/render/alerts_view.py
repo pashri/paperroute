@@ -179,6 +179,29 @@ def mark(canvas: Canvas, *, y: float, active: bool) -> None:
         )
 
 
+def headline_lines(*, headline: str, width: float) -> list[str]:
+    """
+    Wrap a headline into at most `HEADLINE_LINES` lines.
+
+    Parameters
+    ----------
+    headline : str
+        Headline text.
+    width : float
+        Line width.
+
+    Returns
+    -------
+    list[str]
+        The lines; the last holds all the rest, to be cut to fit.
+    """
+    lines = list(wrap(text=headline, face=HEADLINE_FACE, width=width))
+    if len(lines) <= HEADLINE_LINES:
+        return lines
+    rest = ' '.join(lines[HEADLINE_LINES - 1:])
+    return [*lines[:HEADLINE_LINES - 1], rest]
+
+
 def draw_row(canvas: Canvas, *, row: AlertRow, top: int) -> None:
     """
     Draw one list row: the mark, up to two headline lines, the time.
@@ -194,10 +217,7 @@ def draw_row(canvas: Canvas, *, row: AlertRow, top: int) -> None:
     """
     mark(canvas, y=top + 24, active=row.active)
     room = ALERT_SPLIT - HEADLINE_LEFT - 8
-    lines = list(wrap(text=row.headline, face=HEADLINE_FACE, width=room))
-    if len(lines) > HEADLINE_LINES:
-        rest = ' '.join(lines[HEADLINE_LINES - 1:])
-        lines = [*lines[:HEADLINE_LINES - 1], rest]
+    lines = headline_lines(headline=row.headline, width=room)
     for index, line in enumerate(lines):
         shown = canvas.fit(text=line, face=HEADLINE_FACE, width=room)
         canvas.text(

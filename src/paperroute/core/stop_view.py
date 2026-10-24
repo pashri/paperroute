@@ -592,6 +592,52 @@ def banner_text(*, inputs: StopInputs) -> str | None:
     return no_feed_line(has_feed=inputs.has_feed)
 
 
+def lead_index(*, rows: Sequence[Row], hero: bool) -> int | None:
+    """
+    Find the row shown as the hero.
+
+    Parameters
+    ----------
+    rows : Sequence[Row]
+        Rows in departure order.
+    hero : bool
+        True when the view has a hero, which it does with a destination.
+
+    Returns
+    -------
+    int | None
+        Index of the first row not cancelled, or None.
+    """
+    if not hero:
+        return None
+    return next(
+        (i for i, row in enumerate(rows) if row.pill is not Pill.CANCELLED),
+        None,
+    )
+
+
+def head_indexes(*, count: int, lead: int | None) -> list[int]:
+    """
+    List the indexes of the sidebar rows, the hero first.
+
+    Parameters
+    ----------
+    count : int
+        How many rows there are.
+    lead : int | None
+        Index of the hero row, or None.
+
+    Returns
+    -------
+    list[int]
+        Up to `SIDEBAR_ROWS` indexes.
+    """
+    order = [i for i in range(count) if i != lead]
+    if lead is not None:
+        order.insert(0, lead)
+    return order[:SIDEBAR_ROWS]
+
+
 def build_stop_view(*, inputs: StopInputs) -> StopView:
     """
     Build the Stop view from resolved departures.
@@ -608,31 +654,18 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         banner. A notice takes the banner ahead of the live data one.
         With no destination there is no hero: every departure is a row.
     """
-    now = inputs.now
-    upcoming = in_view(departures=inputs.departures, now=now)
+    upcoming = in_view(departures=inputs.departures, now=inputs.now)
     rows = [
-        to_row(item=item, now=now, pill=pill)
+        to_row(item=item, now=inputs.now, pill=pill)
         for item, pill in zip(
             upcoming,
             pills(items=upcoming, faster=inputs.destination is not None),
             strict=True,
         )
     ]
-    lead = None
-    if inputs.destination is not None:
-        lead = next(
-            (
-                i
-                for i, row in enumerate(rows)
-                if row.pill is not Pill.CANCELLED
-            ),
-            None,
-        )
+    lead = lead_index(rows=rows, hero=inputs.destination is not None)
     rest = [row for i, row in enumerate(rows) if i != lead]
-    order = [i for i in range(len(rows)) if i != lead]
-    if lead is not None:
-        order.insert(0, lead)
-    head = order[:SIDEBAR_ROWS]
+    head = head_indexes(count=len(rows), lead=lead)
     text = banner_text(inputs=inputs)
     alert = alert_shown(inputs=inputs)
     shown = row_count(large=inputs.large, under_banner=text is not None)
@@ -640,7 +673,7 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     return StopView(
         origin=inputs.origin,
         destination=inputs.destination,
-        clock=clock_text(moment=now),
+        clock=clock_text(moment=inputs.now),
         hero=None if lead is None else rows[lead],
         rows=tuple(rest[offset : offset + shown]),
         banner=text,

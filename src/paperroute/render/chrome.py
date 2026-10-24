@@ -320,15 +320,7 @@ def banner(
         band.
     """
     face = Face(weight=700, px=15)
-    canvas.rect(box=(0, HEADER, WIDTH, HEADER + BANNER), grey=INK)
-    if warning:
-        warning_triangle(canvas, x=16, y=HEADER + BANNER / 2, grey=PAPER)
-    else:
-        canvas.rect(
-            box=(3, HEADER + 3, WIDTH - 3, HEADER + BANNER - 3), grey=PAPER,
-        )
-    if planned and not warning:
-        outlined_triangle(canvas, x=16, y=HEADER + BANNER / 2)
+    banner_band(canvas, warning=warning, planned=planned)
     left = 44 if warning or planned else 16
     right: float = WIDTH - 16
     if more > 0:
@@ -340,6 +332,31 @@ def banner(
         face=face,
         grey=PAPER if warning else INK,
     )
+
+
+def banner_band(canvas: Canvas, *, warning: bool, planned: bool) -> None:
+    """
+    Draw the banner's band and its triangle, without the text.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    warning : bool
+        Draw a solid ink band with a paper triangle; otherwise a paper
+        band inside an ink border.
+    planned : bool
+        Put an outlined triangle on a bordered band.
+    """
+    canvas.rect(box=(0, HEADER, WIDTH, HEADER + BANNER), grey=INK)
+    if warning:
+        warning_triangle(canvas, x=16, y=HEADER + BANNER / 2, grey=PAPER)
+        return
+    canvas.rect(
+        box=(3, HEADER + 3, WIDTH - 3, HEADER + BANNER - 3), grey=PAPER,
+    )
+    if planned:
+        outlined_triangle(canvas, x=16, y=HEADER + BANNER / 2)
 
 
 class Bannered(Protocol):
@@ -453,13 +470,32 @@ def outlined_triangle(canvas: Canvas, *, x: float, y: float) -> None:
         ],
         grey=PAPER,
     )
-    top = inner_bottom - inner_height
-    canvas.rect(
-        box=(middle - 1, top + 3, middle + 1, inner_bottom - 4), grey=INK,
+    exclamation(
+        canvas, middle=middle, top=inner_bottom - inner_height,
+        bottom=inner_bottom,
     )
+
+
+def exclamation(
+    canvas: Canvas, *, middle: float, top: float, bottom: float
+) -> None:
+    """
+    Draw a small ink exclamation mark inside a triangle.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    middle : float
+        Horizontal centre.
+    top : float
+        Top of the triangle's inside.
+    bottom : float
+        Bottom of the triangle's inside.
+    """
+    canvas.rect(box=(middle - 1, top + 3, middle + 1, bottom - 4), grey=INK)
     canvas.rect(
-        box=(middle - 1, inner_bottom - 2.5, middle + 1, inner_bottom - 1),
-        grey=INK,
+        box=(middle - 1, bottom - 2.5, middle + 1, bottom - 1), grey=INK,
     )
 
 

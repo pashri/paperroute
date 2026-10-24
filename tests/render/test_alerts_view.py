@@ -1,6 +1,6 @@
 """Tests for the Alerts view drawing."""
 
-from dataclasses import replace
+from typing import Final
 
 import numpy as np
 
@@ -9,6 +9,10 @@ from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.render.alerts_view import (
     ALERT_SPLIT,
+    BODY_PITCH,
+    TEXT_HEIGHT,
+    TEXT_LEFT,
+    TEXT_RIGHT,
     draw_alerts_view,
     pages_of,
 )
@@ -17,6 +21,7 @@ from paperroute.render.chrome import HEADER
 from tests.core.alert_factories import STRATHFIELD_UPDATE, WESTERN
 
 ROW_H = 70
+TEXT_WIDTH: Final[int] = TEXT_RIGHT - TEXT_LEFT
 LONG = 'This is a long description. ' * 60
 
 
@@ -147,7 +152,7 @@ def test_active_and_planned_marks() -> None:
 def test_long_text_pages_and_marker() -> None:
     """Long text gives pages, a later page differs and shows n/m."""
     text = text_of(found=WESTERN, body=WESTERN.description * 3)
-    pages = pages_of(text=text, width=439, height=380)
+    pages = pages_of(text=text, width=TEXT_WIDTH, height=TEXT_HEIGHT)
     assert len(pages) > 1
     first = draw_alerts_view(view=view_of(text=text, page=0))
     second = draw_alerts_view(view=view_of(text=text, page=1))
@@ -158,7 +163,7 @@ def test_long_text_pages_and_marker() -> None:
 def test_page_wraps() -> None:
     """A page counter past the last page draws the first page."""
     text = text_of(found=WESTERN, body=WESTERN.description * 3)
-    pages = pages_of(text=text, width=439, height=380)
+    pages = pages_of(text=text, width=TEXT_WIDTH, height=TEXT_HEIGHT)
     first = draw_alerts_view(view=view_of(text=text, page=0))
     wrapped = draw_alerts_view(view=view_of(text=text, page=len(pages)))
     assert np.array_equal(first, wrapped)
@@ -167,7 +172,7 @@ def test_page_wraps() -> None:
 def test_short_text_no_marker() -> None:
     """One page draws no marker."""
     text = text_of(found=STRATHFIELD_UPDATE)
-    pages = pages_of(text=text, width=439, height=380)
+    pages = pages_of(text=text, width=TEXT_WIDTH, height=TEXT_HEIGHT)
     assert len(pages) == 1
     frame = draw_alerts_view(view=view_of(text=text))
     assert (frame[452:, 730:] == PAPER).all()
@@ -176,9 +181,9 @@ def test_short_text_no_marker() -> None:
 def test_pages_fit_their_height() -> None:
     """No page holds more lines than the height allows."""
     text = text_of(found=WESTERN, body=LONG)
-    pages = pages_of(text=text, width=439, height=380)
+    pages = pages_of(text=text, width=TEXT_WIDTH, height=TEXT_HEIGHT)
     assert all(pages)
-    assert max(len(page) for page in pages) <= 380 // 21
+    assert max(len(page) for page in pages) <= TEXT_HEIGHT // BODY_PITCH
 
 
 def test_alerts_tab_active() -> None:
@@ -190,7 +195,4 @@ def test_alerts_tab_active() -> None:
     right = WIDTH - 12 - clock - 4
     middle = int(right - width / 2)
     assert (frame[12, middle - 5:middle + 5] == PAPER).all()
-    other = draw_alerts_view(
-        view=replace(view_of(text=text), clock='23:59'),
-    )
-    assert not np.array_equal(frame[:HEADER], other[:HEADER])
+    assert (frame[11:30, int(right - width) + 1:int(right)] == INK).any()

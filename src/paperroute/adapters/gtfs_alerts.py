@@ -159,6 +159,34 @@ def parse_alerts(
     FeedError
         When the body is empty or yields no entity at all.
     """
+    alerts, skipped = readable_alerts(data=data)
+    if skipped:
+        logger.warning('skipped %d unreadable alerts in %s', skipped, feed)
+    return AlertsSnapshot(
+        feed=feed, fetched_at=fetched_at, alerts=tuple(alerts)
+    )
+
+
+def readable_alerts(*, data: bytes) -> tuple[list[Alert], int]:
+    """
+    Read every alert entity of a feed body that can be read.
+
+    Parameters
+    ----------
+    data : bytes
+        Feed body.
+
+    Returns
+    -------
+    tuple[list[Alert], int]
+        The alerts in feed order, and how many were skipped as
+        unreadable.
+
+    Raises
+    ------
+    FeedError
+        When the body is empty or yields no entity at all.
+    """
     alerts: list[Alert] = []
     skipped = 0
     for entity in feed_entities(data=data):
@@ -168,8 +196,4 @@ def parse_alerts(
             alerts.append(to_alert(entity=entity))
         except (ValueError, OverflowError, OSError):
             skipped += 1
-    if skipped:
-        logger.warning('skipped %d unreadable alerts in %s', skipped, feed)
-    return AlertsSnapshot(
-        feed=feed, fetched_at=fetched_at, alerts=tuple(alerts)
-    )
+    return alerts, skipped

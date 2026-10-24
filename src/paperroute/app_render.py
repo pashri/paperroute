@@ -13,6 +13,7 @@ from paperroute.adapters.tiles_db import NullTiles
 from paperroute.app_effects import timed_async
 from paperroute.app_ports import Ports
 from paperroute.core.alerts_view import AlertsView
+from paperroute.core.chooser_view import ChooserView
 from paperroute.core.map_view import MapBase, MapView
 from paperroute.core.messages import NoticeView, ScreenView
 from paperroute.core.panel_views import (
@@ -27,6 +28,7 @@ from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
 from paperroute.core.tiles import TileVariant
 from paperroute.ports import TileRepository
+from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.chooser import draw_chooser_view
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_view import draw_map_view
@@ -43,6 +45,20 @@ type View = ScreenView
 
 
 type Frame = NDArray[np.uint8]
+
+
+type PlainView = (
+    StopView
+    | StripView
+    | AlertsView
+    | ChooserView
+    | NoticeView
+    | MenuView
+    | DeviceView
+    | PhoneView
+    | WifiSetupView
+    | ConfirmView
+)
 
 
 class MapRenderer:
@@ -238,17 +254,32 @@ def drawing(*, view: View, maps: MapRenderer) -> Callable[[], Frame]:
     match view:
         case MapView() | StripMapView() | SleepView():
             return map_drawing(view=view, maps=maps)
+    return plain_drawing(view=view)
+
+
+def plain_drawing(*, view: PlainView) -> Callable[[], Frame]:
+    """
+    Pick the drawing for a view without a map.
+
+    Parameters
+    ----------
+    view : View
+        View to draw.
+
+    Returns
+    -------
+    Callable[[], Frame]
+        Draws the frame when called.
+    """
+    match view:
         case StopView():
             return functools.partial(draw_stop_view, view=view)
         case StripView():
             return functools.partial(draw_strip_view, view=view)
-        case NoticeView() | AlertsView():
-            notice = (
-                view
-                if isinstance(view, NoticeView)
-                else NoticeView(title=view.text.title)
-            )
-            return functools.partial(draw_notice_view, view=notice)
+        case AlertsView():
+            return functools.partial(draw_alerts_view, view=view)
+        case NoticeView():
+            return functools.partial(draw_notice_view, view=view)
         case (
             MenuView()
             | DeviceView()

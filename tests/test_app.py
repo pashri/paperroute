@@ -40,6 +40,7 @@ from paperroute.build.map_style import LIGHT
 from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.alert_model import AlertsFetched
+from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
 from paperroute.core.device import NOTICE, on_reset
 from paperroute.core.device_model import DeviceStatus, ResetKind
 from paperroute.core.feeds import FeedKind
@@ -86,6 +87,7 @@ from paperroute.core.saved import (
     seeded,
 )
 from paperroute.core.state import SAVE_AFTER
+from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.tiles import (
     TILE,
     StreetLabel,
@@ -96,6 +98,7 @@ from paperroute.core.tiles import (
 from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
+from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.chrome import HEADER
 from paperroute.render.notice import draw_notice_view
 from paperroute.render.panel import draw_panel_view
@@ -2149,3 +2152,35 @@ async def test_alert_fetch_uses_feeds_port() -> None:
     posted = queue.get_nowait()
     assert isinstance(posted, AlertsFetched)
     assert len(posted.snapshot.alerts) == 5
+
+
+async def test_app_draws_alerts_view() -> None:
+    """A Render of an AlertsView reaches the display as a full frame."""
+    display = FrameRecorder()
+    ports = replace(ports_of(timetable=BuiltTimetable()), display=display)
+    view = AlertsView(
+        origin='Strathfield',
+        destination=None,
+        clock='09:39',
+        tag=NOT_PINNED,
+        rows=(AlertRow(headline='One', when='Ongoing', active=True),),
+        selected=0,
+        text=AlertText(title='One', when='Ongoing', body='Text', also=()),
+        page=0,
+    )
+    tasks: set[asyncio.Task[None]] = set()
+    outputs = Outputs(
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    await carry_out(
+        effects=(Render(view=view, full=True),),
+        ports=ports,
+        queue=asyncio.Queue(),
+        tasks=tasks,
+        outputs=outputs,
+    )
+    await draw_pending(ports=ports, outputs=outputs)
+    [frame] = display.frames
+    assert frame.shape == (480, 800)
+    assert np.array_equal(frame, draw_alerts_view(view=view))

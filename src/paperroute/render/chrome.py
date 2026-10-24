@@ -24,6 +24,7 @@ WARNING_SIDE: Final[int] = 18  # warning triangle side, in pixels
 FASTER: Final[str] = 'FASTER'
 TAG_GAP: Final[int] = 8
 TABS: Final[tuple[str, ...]] = ('Stop', 'Map', 'Strip', 'Strip + map')
+ALERT_TABS: Final[tuple[str, ...]] = (*TABS, 'Alerts')
 ONE_TITLE_PICKS: Final[frozenset[str]] = frozenset({PICK_FROM})
 
 
@@ -53,7 +54,13 @@ def arrow(canvas: Canvas, *, x: float, y: float, grey: int) -> float:
     return ARROW_WIDTH
 
 
-def header_tabs(canvas: Canvas, *, clock: str, active: str) -> float:
+def header_tabs(
+    canvas: Canvas,
+    *,
+    clock: str,
+    active: str,
+    tabs: tuple[str, ...] = TABS,
+) -> float:
     """
     Draw the clock and the tabs on the right of the header.
 
@@ -65,6 +72,8 @@ def header_tabs(canvas: Canvas, *, clock: str, active: str) -> float:
         Clock text.
     active : str
         Name of the highlighted tab.
+    tabs : tuple[str, ...]
+        Tab names, left to right.
 
     Returns
     -------
@@ -75,7 +84,7 @@ def header_tabs(canvas: Canvas, *, clock: str, active: str) -> float:
     right = WIDTH - 12 - canvas.text(
         at=(WIDTH - 12, 20), text=clock, face=big, grey=PAPER,
         anchor='rm')
-    for tab in reversed(TABS):
+    for tab in reversed(tabs):
         width = canvas.length(text=tab, face=Face(weight=700, px=12)) + 10
         right -= width + 4
         if tab == active:
@@ -190,6 +199,7 @@ def header(
     active: str,
     tag: PinTag,
     picking: str | None = None,
+    tabs: tuple[str, ...] = TABS,
 ) -> None:
     """
     Draw the black header: titles, pin tag, tabs, clock.
@@ -210,9 +220,11 @@ def header(
         The pin tag.
     picking : str | None
         What is being picked; the title reads '<origin> -> pick <it>'.
+    tabs : tuple[str, ...]
+        Tab names, left to right.
     """
     canvas.rect(box=(0, 0, WIDTH, HEADER), grey=INK)
-    right = header_tabs(canvas, clock=clock, active=active)
+    right = header_tabs(canvas, clock=clock, active=active, tabs=tabs)
     left = pin_tag(canvas, right=right, tag=tag)
     header_titles(
         canvas,
@@ -249,6 +261,7 @@ def view_header(
     view: Titled,
     active: str,
     picking: str | None = None,
+    tabs: tuple[str, ...] = TABS,
 ) -> None:
     """
     Draw the header for a view.
@@ -263,6 +276,8 @@ def view_header(
         Name of the highlighted tab.
     picking : str | None
         What is being picked; the title reads '<origin> -> pick <it>'.
+    tabs : tuple[str, ...]
+        Tab names, left to right.
     """
     header(
         canvas,
@@ -272,6 +287,7 @@ def view_header(
         active=active,
         tag=view.tag,
         picking=picking,
+        tabs=tabs,
     )
 
 

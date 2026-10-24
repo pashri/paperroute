@@ -28,7 +28,7 @@ from paperroute.core.messages import (
     PowerRequested,
     SettingsChanged,
 )
-from paperroute.core.saved import Rate, Window
+from paperroute.core.saved import Lookahead, Rate, Window
 from paperroute.render.canvas import encode_png
 from tests.adapters.test_web_device import Device
 
@@ -589,6 +589,35 @@ async def test_unknown_value_is_400(
     assert not posted
 
 
+async def test_unknown_lookahead_is_400(
+    display: WebDisplay, client: Client
+) -> None:
+    """A lookahead the page never sends is refused."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        '/settings', data={'alert_lookahead': '2w'},
+    )
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert not posted
+
+
+async def test_alerts_section_posts_event(
+    display: WebDisplay, client: Client
+) -> None:
+    """A form post of the Alerts section posts one event and redirects."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        '/settings',
+        data=[('alert_lookahead', 'all')],
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert response.headers['Location'] == '/settings'
+    assert posted == [SettingsChanged(alert_lookahead=Lookahead.ALL)]
+
+
 async def test_settings_cross_site_403(
     display: WebDisplay, client: Client
 ) -> None:
@@ -722,7 +751,7 @@ async def test_page_works_without_script() -> None:
     parser = _Controls()
     parser.feed(text)
     assert not parser.loose
-    assert len(parser.forms) == 3
+    assert len(parser.forms) == 4
     assert all(form['method'] == 'post' for form in parser.forms)
     assert all(form['action'] == '/settings' for form in parser.forms)
     assert all(count >= 1 for count in parser.submits)

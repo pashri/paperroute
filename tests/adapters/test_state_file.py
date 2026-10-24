@@ -26,6 +26,7 @@ from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
     LiveView,
+    Lookahead,
     QuietMode,
     Quota,
     Rate,
@@ -799,6 +800,45 @@ def test_migrates_to_pin_fields(path: Path) -> None:
     repository.save(saved=loaded.saved)
     stored = json.loads(path.read_text())
     assert stored['schema_version'] == SCHEMA_VERSION
+
+
+def test_migrates_v6_to_v7_with_lookahead(path: Path) -> None:
+    """A version 6 file keeps its settings and gains the lookahead."""
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=replace(sample(), settings=Settings(rotate=True)))
+    data = json.loads(path.read_text())
+    data['schema_version'] = 6
+    del data['settings']['alert_lookahead']
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved.pins == sample().pins
+    assert loaded.saved.settings.rotate is True
+    assert loaded.saved.settings.alert_lookahead == Lookahead.WEEK
+    repository.save(saved=loaded.saved)
+    assert json.loads(path.read_text())['schema_version'] == 7
+
+
+def test_bad_lookahead_repaired_alone(
+    path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A lookahead nobody offers resets itself; the rest survive."""
+    saved = load_with_settings(
+        path=path, changes={'alert_lookahead': '2w'},
+    )
+    assert saved.settings == Settings(rotate=True)
+    assert saved.settings.alert_lookahead == Lookahead.WEEK
+    assert any(
+        record.levelno == logging.WARNING for record in caplog.records
+    )
+
+
+def test_round_trips_lookahead(path: Path) -> None:
+    """The longest lookahead survives a save and a load."""
+    settings = Settings(alert_lookahead=Lookahead.ALL)
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=replace(sample(), settings=settings))
+    assert repository.load().saved.settings == settings
 
 
 def test_round_trips_nickname_and_filter(path: Path) -> None:

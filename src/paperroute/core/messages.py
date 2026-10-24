@@ -26,7 +26,7 @@ from paperroute.core.patterns import TripPattern
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
-from paperroute.core.saved import QuietMode, Rate, Saved, Window
+from paperroute.core.saved import Lookahead, QuietMode, Rate, Saved, Window
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
 
@@ -482,6 +482,8 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
         Whether departure rows use larger text.
     inverted_lists : bool | None
         Whether departure rows are white on black.
+    alert_lookahead : Lookahead | None
+        How far ahead planned alerts are listed.
     """
 
     auto_rebuild: bool | None = None
@@ -493,6 +495,7 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
     rotate: bool | None = None
     larger_text: bool | None = None
     inverted_lists: bool | None = None
+    alert_lookahead: Lookahead | None = None
 
 
 @dataclass(frozen=True)

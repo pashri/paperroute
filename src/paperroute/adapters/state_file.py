@@ -24,6 +24,7 @@ from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
     LiveView,
+    Lookahead,
     QuietMode,
     Quota,
     Rate,
@@ -37,7 +38,7 @@ from paperroute.ports import Loaded
 logger = logging.getLogger(__name__)
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/state.json')
-SCHEMA_VERSION: Final[int] = 6
+SCHEMA_VERSION: Final[int] = 7
 TEMP_PREFIX: Final[str] = '.state.json.'
 BAD_PREFIX: Final[str] = 'state.json.bad-'
 BAD_KEPT: Final[int] = 2
@@ -96,6 +97,7 @@ class SettingsModel(BaseModel):
     rotate: bool
     larger_text: bool
     inverted_lists: bool
+    alert_lookahead: Lookahead
 
     @field_validator('peak_windows')
     @classmethod
@@ -323,6 +325,7 @@ def settings_to_model(*, settings: Settings) -> SettingsModel:
         rotate=settings.rotate,
         larger_text=settings.larger_text,
         inverted_lists=settings.inverted_lists,
+        alert_lookahead=settings.alert_lookahead,
     )
 
 
@@ -352,6 +355,7 @@ def settings_from_model(*, model: SettingsModel) -> Settings:
         rotate=model.rotate,
         larger_text=model.larger_text,
         inverted_lists=model.inverted_lists,
+        alert_lookahead=model.alert_lookahead,
     )
 
 
@@ -570,6 +574,24 @@ def add_pin_fields(data: dict[str, object]) -> dict[str, object]:
     }
 
 
+def add_alert_settings(data: dict[str, object]) -> dict[str, object]:
+    """
+    Add the alert lookahead at its default.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Version 6 data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with every new setting at its default; settings that
+        are not an object are left for validation to fail.
+    """
+    return add_display_settings(data)
+
+
 MIGRATIONS: Final[
     dict[int, Callable[[dict[str, object]], dict[str, object]]]
 ] = {
@@ -578,6 +600,7 @@ MIGRATIONS: Final[
     3: add_quota,
     4: add_display_settings,
     5: add_pin_fields,
+    6: add_alert_settings,
 }
 
 

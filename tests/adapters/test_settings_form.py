@@ -13,7 +13,7 @@ from paperroute.adapters.settings_form import (
     page_text,
 )
 from paperroute.core.messages import SettingsChanged
-from paperroute.core.saved import QuietMode, Rate, Settings, Window
+from paperroute.core.saved import Lookahead, QuietMode, Rate, Settings, Window
 
 ODD = Settings(
     auto_rebuild=False,
@@ -25,6 +25,7 @@ ODD = Settings(
     rotate=True,
     larger_text=True,
     inverted_lists=True,
+    alert_lookahead=Lookahead.THREE_DAYS,
 )
 PEAK = {
     'peak_1_start': '06:30',
@@ -57,6 +58,16 @@ def test_form_values_spell_out_each_field() -> None:
     assert values['peak_2_start'] == ''
     assert values['quiet_mode'] == 'timetable'
     assert values['quiet_start'] == '22:45'
+
+
+def test_lookahead_form_round_trip() -> None:
+    """The lookahead is written as its value and read back alone."""
+    values = form_values(
+        settings=Settings(alert_lookahead=Lookahead.THREE_DAYS),
+    )
+    assert values['alert_lookahead'] == '3d'
+    event = changed_from(fields={'alert_lookahead': '3d'})
+    assert event == SettingsChanged(alert_lookahead=Lookahead.THREE_DAYS)
 
 
 def test_changed_from_reads_only_present_fields() -> None:

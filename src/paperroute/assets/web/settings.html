@@ -111,6 +111,24 @@
         <button type="submit">Save</button>
       </form>
     </section>
+    <section class="setting" aria-labelledby="alerts">
+      <h2 id="alerts">Alerts</h2>
+      <form id="alerts-form" method="post" action="/settings">
+        <label>Show planned alerts up to
+          <select name="alert_lookahead">
+            <option value="1d"{{alert_lookahead:1d}}>1 day</option>
+            <option value="3d"{{alert_lookahead:3d}}>3 days</option>
+            <option value="7d"{{alert_lookahead:7d}}>7 days</option>
+            <option value="all"{{alert_lookahead:all}}>Everything</option>
+          </select>
+        </label>
+        <p class="hint">
+          Alerts already in force always show. The banner shows planned
+          alerts from a day before they start.
+        </p>
+        <button type="submit">Save</button>
+      </form>
+    </section>
     <section class="setting" aria-labelledby="timetable">
       <h2 id="timetable">Timetable</h2>
       <form id="timetable-form" method="post" action="/settings">

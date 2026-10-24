@@ -9,7 +9,7 @@ from html import escape
 from typing import Final
 
 from paperroute.core.messages import SettingsChanged
-from paperroute.core.saved import QuietMode, Rate, Settings, Window
+from paperroute.core.saved import Lookahead, QuietMode, Rate, Settings, Window
 
 SWITCHES: Final[tuple[str, ...]] = (
     'auto_rebuild',
@@ -18,7 +18,9 @@ SWITCHES: Final[tuple[str, ...]] = (
     'inverted_lists',
 )
 SLOTS: Final[tuple[str, ...]] = ('peak_1', 'peak_2')
-CHOICES: Final[frozenset[str]] = frozenset({'peak_rate', 'offpeak_rate'})
+CHOICES: Final[frozenset[str]] = frozenset(
+    {'peak_rate', 'offpeak_rate', 'alert_lookahead'}
+)
 SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
 CLOCK: Final[re.Pattern[str]] = re.compile(r'(\d\d):(\d\d)')
 ERRORS: Final[dict[str, str]] = {
@@ -90,7 +92,7 @@ def form_values(*, settings: Settings) -> dict[str, str]:
     Returns
     -------
     dict[str, str]
-        `on` or `off` for each switch, the rate and mode values, and
+        `on` or `off` for each switch, the rate, mode and lookahead values, and
         `HH:MM` times; an unused peak slot holds empty strings.
     """
     values = {
@@ -100,6 +102,7 @@ def form_values(*, settings: Settings) -> dict[str, str]:
     values['peak_rate'] = settings.peak_rate.value
     values['offpeak_rate'] = settings.offpeak_rate.value
     values['quiet_mode'] = settings.quiet_mode.value
+    values['alert_lookahead'] = settings.alert_lookahead.value
     values['quiet_start'] = clock_text(moment=settings.my_hours.start)
     values['quiet_end'] = clock_text(moment=settings.my_hours.end)
     for index, slot in enumerate(SLOTS):
@@ -291,7 +294,7 @@ def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged:
     Raises
     ------
     UnknownValue
-        If a switch, rate or mode holds an unknown value.
+        If a switch, rate, mode or lookahead holds an unknown value.
     BadInput
         If a time is not `HH:MM` or a peak window is unusable.
     """
@@ -318,6 +321,9 @@ def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged:
         rotate=switches.get('rotate'),
         larger_text=switches.get('larger_text'),
         inverted_lists=switches.get('inverted_lists'),
+        alert_lookahead=optional_enum(
+            kind=Lookahead, fields=fields, name='alert_lookahead',
+        ),
     )
 
 
@@ -389,7 +395,8 @@ def page_text(
     template : str
         The page with `{{field}}` marks. A switch mark becomes
         ` checked` when on; `{{field:choice}}` becomes ` selected` (a
-        rate) or ` checked` (a radio) when the field holds that choice;
+        rate or lookahead) or ` checked` (a radio) when the field holds
+        that choice;
         any other becomes the value.
         `{{error_peak}}` and `{{error_quiet}}` become a message.
     values : Mapping[str, str]

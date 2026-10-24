@@ -1,7 +1,7 @@
 """The Live views, and what the device keeps between restarts."""
 
 from dataclasses import dataclass, field
-from datetime import date, time
+from datetime import date, time, timedelta
 from enum import StrEnum
 from typing import Final
 
@@ -59,6 +59,21 @@ class QuietMode(StrEnum):
     TIMETABLE = 'timetable'
 
 
+class Lookahead(StrEnum):
+    """How far ahead planned alerts are listed."""
+
+    DAY = '1d'
+    THREE_DAYS = '3d'
+    WEEK = '7d'
+    ALL = 'all'
+
+
+LOOKAHEAD: Final[dict[Lookahead, timedelta | None]] = {
+    Lookahead.DAY: timedelta(days=1),
+    Lookahead.THREE_DAYS: timedelta(days=3),
+    Lookahead.WEEK: timedelta(days=7),
+    Lookahead.ALL: None,
+}
 PEAK_WINDOWS: Final[tuple[Window, ...]] = (
     Window(start=time(6, 30), end=time(10)),
     Window(start=time(15), end=time(19)),
@@ -91,6 +106,8 @@ class Settings:  # pylint: disable=too-many-instance-attributes
         Whether departure rows use larger text.
     inverted_lists : bool
         Whether departure rows are white on black.
+    alert_lookahead : Lookahead
+        How far ahead planned alerts are listed.
     """
 
     auto_rebuild: bool = True
@@ -102,6 +119,7 @@ class Settings:  # pylint: disable=too-many-instance-attributes
     rotate: bool = False
     larger_text: bool = False
     inverted_lists: bool = False
+    alert_lookahead: Lookahead = Lookahead.WEEK
 
 
 @dataclass(frozen=True)

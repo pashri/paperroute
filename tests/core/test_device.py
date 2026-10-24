@@ -32,7 +32,7 @@ from paperroute.core.messages import (
     Stop,
     Tick,
 )
-from paperroute.core.saved import Rate, Settings
+from paperroute.core.saved import Lookahead, Rate, Settings
 from paperroute.core.state import SAVE_AFTER, step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import stop_view_of
@@ -66,6 +66,18 @@ def test_settings_change_merges() -> None:
     unchanged, effects = step(state, SettingsChanged())
     assert not effects
     assert unchanged.settings == state.settings
+
+
+def test_lookahead_change_merges() -> None:
+    """A lookahead change sets it and keeps every other setting."""
+    before, _ = step(pinned(), SettingsChanged(rotate=True))
+    state, effects = step(
+        before, SettingsChanged(alert_lookahead=Lookahead.DAY),
+    )
+    assert not effects
+    assert state.settings == Settings(
+        rotate=True, alert_lookahead=Lookahead.DAY,
+    )
 
 
 def test_rotate_change_redraws_full() -> None:

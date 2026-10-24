@@ -9,6 +9,7 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
+from paperroute.adapters.alert_rows import alert_places
 from paperroute.adapters.calendar_rows import (
     SERVICE_DAY_LENGTH,
     read_holidays,
@@ -37,6 +38,7 @@ from paperroute.adapters.sqlite_ro import (
     ReadOnlyDatabase,
     file_identity,
 )
+from paperroute.core.alert_model import AlertPlaces
 from paperroute.core.geo import (
     MetreBox,
     Point,
@@ -764,6 +766,32 @@ class SqliteTimetableRepository:
         ):
             found.setdefault(str(alias), str(label))
         return found
+
+    def alert_places(
+        self, *, route_ids: Collection[str], stop_ids: Collection[str]
+    ) -> AlertPlaces:
+        """
+        Look up the routes and stops an alert feed names.
+
+        Parameters
+        ----------
+        route_ids : Collection[str]
+            Route IDs from the feed.
+        stop_ids : Collection[str]
+            Stop IDs from the feed.
+
+        Returns
+        -------
+        AlertPlaces
+            Route short names, stop families and the metro line; unknown
+            IDs are absent.
+        """
+        return alert_places(
+            route_ids=route_ids,
+            stop_ids=stop_ids,
+            fetch=lambda sql: self.fetch(sql=sql, params=()),
+            fetch_in=lambda sql, ids: self.fetch_in(sql=sql, ids=ids),
+        )
 
     def departures(
         self, *, pin: Pin, start: datetime, end: datetime

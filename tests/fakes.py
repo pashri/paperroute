@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute.core.alert_model import AlertPlaces
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.device_model import (
     DeviceFacts,
@@ -369,6 +370,26 @@ class BrokenTimetable:
             Nothing.
         """
         return {}
+
+    def alert_places(
+        self, *, route_ids: Collection[str], stop_ids: Collection[str]
+    ) -> AlertPlaces:
+        """
+        Know no routes or stops.
+
+        Parameters
+        ----------
+        route_ids : Collection[str]
+            Ignored.
+        stop_ids : Collection[str]
+            Ignored.
+
+        Returns
+        -------
+        AlertPlaces
+            Nothing.
+        """
+        return AlertPlaces(routes={}, stops={})
 
     def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
         """

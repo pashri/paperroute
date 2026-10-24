@@ -12,6 +12,13 @@ FEEDS: Final[dict[Mode, str]] = {
     Mode.METRO: 'v2/gtfs/realtime/metro',
     Mode.REGIONAL: 'v1/gtfs/realtime/nswtrains',
 }
+ALERT_FEEDS: Final[dict[Mode, str]] = {
+    Mode.BUS: 'v2/gtfs/alerts/buses',
+    Mode.TRAIN: 'v2/gtfs/alerts/sydneytrains',
+    Mode.METRO: 'v2/gtfs/alerts/metro',
+    Mode.LIGHT_RAIL: 'v2/gtfs/alerts/lightrail',
+    Mode.REGIONAL: 'v2/gtfs/alerts/nswtrains',
+}
 POSITION_FEEDS: Final[dict[Mode, tuple[str, ...]]] = {
     Mode.BUS: ('v1/gtfs/vehiclepos/buses',),
     Mode.TRAIN: ('v2/gtfs/vehiclepos/sydneytrains',),
@@ -41,6 +48,7 @@ class FeedKind(StrEnum):
 
     TRIPS = 'trips'
     POSITIONS = 'positions'
+    ALERTS = 'alerts'
 
 
 def feed_for(*, mode: Mode) -> str | None:
@@ -85,9 +93,29 @@ def position_feeds(*, modes: Iterable[Mode]) -> tuple[str, ...]:
     )
 
 
+def alert_feeds_for(*, modes: Iterable[Mode]) -> tuple[str, ...]:
+    """
+    List the alert feeds for some modes.
+
+    Parameters
+    ----------
+    modes : Iterable[Mode]
+        Modes.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Feed paths, sorted and unique; modes with no alert feed add
+        nothing.
+    """
+    return tuple(
+        sorted({ALERT_FEEDS[mode] for mode in modes if mode in ALERT_FEEDS})
+    )
+
+
 def feed_kind(*, feed: str) -> FeedKind:
     """
-    Tell a positions feed from a trip-updates feed.
+    Tell what a feed path carries.
 
     Parameters
     ----------
@@ -97,8 +125,11 @@ def feed_kind(*, feed: str) -> FeedKind:
     Returns
     -------
     FeedKind
-        POSITIONS for any path containing '/vehiclepos/', else TRIPS.
+        POSITIONS for any path containing '/vehiclepos/', ALERTS for any
+        containing '/alerts/', else TRIPS.
     """
+    if '/alerts/' in feed:
+        return FeedKind.ALERTS
     if '/vehiclepos/' in feed:
         return FeedKind.POSITIONS
     return FeedKind.TRIPS
@@ -122,6 +153,9 @@ def feed_label(*, feed: str) -> str:
     for mode, path in FEEDS.items():
         if path == feed:
             return f'{MODE_NAMES[mode]} trip updates'
+    for mode, path in ALERT_FEEDS.items():
+        if path == feed:
+            return f'{MODE_NAMES[mode]} alerts'
     for mode, paths in POSITION_FEEDS.items():
         if feed not in paths:
             continue

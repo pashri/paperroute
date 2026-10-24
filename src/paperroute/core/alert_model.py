@@ -1,5 +1,6 @@
 """Service alerts, as plain data."""
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -46,3 +47,27 @@ class AlertsSnapshot:
     feed: str
     fetched_at: datetime
     alerts: tuple[Alert, ...]
+
+
+@dataclass(frozen=True)
+class AlertPlaces:
+    """
+    What the timetable knows about the IDs an alert feed names.
+
+    ``routes`` maps a feed route ID to a route short name and ``stops``
+    maps a feed stop ID to its family: the stop, its parent station and
+    its child stops. Unknown IDs are absent. ``metro`` is the short name
+    of the timetable's only metro route, or None.
+    """
+
+    routes: Mapping[str, str]
+    stops: Mapping[str, frozenset[str]]
+    metro: str | None = None
+
+
+@dataclass(frozen=True)
+class AlertsFetched:
+    """One alert feed was downloaded and parsed."""
+
+    feed: str
+    snapshot: AlertsSnapshot

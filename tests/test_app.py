@@ -39,6 +39,7 @@ from paperroute.build.gtfs_files import Source
 from paperroute.build.map_style import LIGHT
 from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.core.alert_model import AlertsFetched
 from paperroute.core.device import NOTICE, on_reset
 from paperroute.core.device_model import DeviceStatus, ResetKind
 from paperroute.core.feeds import FeedKind
@@ -2125,3 +2126,26 @@ async def test_app_goes_live_when_the_timetable_arrives(
     assert state.board.departures
     assert feeds.fetched
     assert not isinstance(state.last_view, NoticeView)
+
+
+async def test_alert_fetch_uses_feeds_port() -> None:
+    """An alerts fetch goes through the feeds port once and posts alerts."""
+    feeds = RecordingFeeds(directory=REAL)
+    ports = replace(ports_of(), feeds=feeds)
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    await perform(
+        ports=ports,
+        effect=FetchFeed(
+            feed='v2/gtfs/alerts/sydneytrains', kind=FeedKind.ALERTS
+        ),
+        queue=queue,
+        tasks=tasks,
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    await asyncio.gather(*tasks)
+    assert feeds.fetched == ['v2/gtfs/alerts/sydneytrains']
+    posted = queue.get_nowait()
+    assert isinstance(posted, AlertsFetched)
+    assert len(posted.snapshot.alerts) == 5

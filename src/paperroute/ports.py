@@ -8,6 +8,7 @@ from typing import Protocol
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute.core.alert_model import AlertPlaces
 from paperroute.core.chooser import Choice, ChooserPath, Column
 from paperroute.core.device_model import (
     DeviceFacts,
@@ -170,6 +171,26 @@ class TimetableRepository(Protocol):
         -------
         dict[str, str]
             Short name by ID; unknown IDs are absent.
+        """
+
+    def alert_places(
+        self, *, route_ids: Collection[str], stop_ids: Collection[str]
+    ) -> AlertPlaces:
+        """
+        Look up the routes and stops an alert feed names.
+
+        Parameters
+        ----------
+        route_ids : Collection[str]
+            Route IDs from the feed.
+        stop_ids : Collection[str]
+            Stop IDs from the feed.
+
+        Returns
+        -------
+        AlertPlaces
+            Route short names, stop families and the metro line; unknown
+            IDs are absent.
         """
 
     def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:

@@ -10,8 +10,15 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Final
 
+from paperroute.adapters.gtfs_alerts import parse_alerts
 from paperroute.adapters.gtfs_rt import parse_positions, parse_trip_updates
-from paperroute.core.feeds import FeedKind
+from paperroute.core.alert_model import (
+    AlertPlaces,
+    AlertsFetched,
+    AlertsSnapshot,
+    Informed,
+)
+from paperroute.core.feeds import ALERT_FEEDS, FeedKind
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
@@ -46,7 +53,7 @@ from paperroute.core.messages import (
     StripLoaded,
     TimetableSeen,
 )
-from paperroute.core.model import Pin, StopPlace
+from paperroute.core.model import Mode, Pin, StopPlace
 from paperroute.core.positions import PositionsSnapshot, with_labels
 from paperroute.core.reach import build_reach
 from paperroute.measures import StopMeasures
@@ -568,13 +575,94 @@ def labelled_positions(
     return with_labels(snapshot=snapshot, labels=labels)
 
 
+def informed_with(
+    *, item: Informed, places: AlertPlaces, metro: bool
+) -> Informed:
+    """
+    Fill in an informed entity's route and stops.
+
+    Parameters
+    ----------
+    item : Informed
+        The entity as the feed gave it.
+    places : AlertPlaces
+        What the timetable knows about the feed's IDs.
+    metro : bool
+        True for an entity of the metro feed, whose routes are all the
+        one metro line when the timetable has exactly one.
+
+    Returns
+    -------
+    Informed
+        The entity with its route short name and stop family, where
+        known.
+    """
+    route = places.routes.get(item.route_id or '')
+    if metro and item.route_id and places.metro:
+        route = places.metro
+    return replace(
+        item,
+        route=route,
+        stops=places.stops.get(item.stop_id or '', frozenset()),
+    )
+
+
+def labelled_alerts(
+    *,
+    timetable: TimetableRepository,
+    data: bytes,
+    feed: str,
+    fetched_at: datetime,
+) -> AlertsSnapshot:
+    """
+    Parse an alerts feed and fill in its routes and stops.
+
+    Parameters
+    ----------
+    timetable : TimetableRepository
+        Where route short names and stop families come from.
+    data : bytes
+        Feed body.
+    feed : str
+        Feed path.
+    fetched_at : datetime
+        When it was downloaded.
+
+    Returns
+    -------
+    AlertsSnapshot
+        The alerts, each entity carrying its route short name and stop
+        family where the timetable knows them.
+    """
+    snapshot = parse_alerts(data=data, feed=feed, fetched_at=fetched_at)
+    entities = [item for alert in snapshot.alerts for item in alert.informed]
+    places = timetable.alert_places(
+        route_ids={item.route_id for item in entities if item.route_id},
+        stop_ids={item.stop_id for item in entities if item.stop_id},
+    )
+    metro = feed == ALERT_FEEDS[Mode.METRO]
+    return replace(
+        snapshot,
+        alerts=tuple(
+            replace(
+                alert,
+                informed=tuple(
+                    informed_with(item=item, places=places, metro=metro)
+                    for item in alert.informed
+                ),
+            )
+            for alert in snapshot.alerts
+        ),
+    )
+
+
 def parse_feed(
     *,
     timetable: TimetableRepository,
     effect: FetchFeed,
     data: bytes,
     fetched_at: datetime,
-) -> tuple[FeedFetched | PositionsFetched, int]:
+) -> tuple[FeedFetched | PositionsFetched | AlertsFetched, int]:
     """
     Parse a downloaded feed into the event that carries it.
 
@@ -591,9 +679,19 @@ def parse_feed(
 
     Returns
     -------
-    tuple[FeedFetched | PositionsFetched, int]
-        The event, and how many trips or vehicles it holds.
+    tuple[FeedFetched | PositionsFetched | AlertsFetched, int]
+        The event, and how many trips, vehicles or alerts it holds.
     """
+    if effect.kind is FeedKind.ALERTS:
+        alerts = labelled_alerts(
+            timetable=timetable,
+            data=data,
+            feed=effect.feed,
+            fetched_at=fetched_at,
+        )
+        return AlertsFetched(feed=effect.feed, snapshot=alerts), len(
+            alerts.alerts
+        )
     if effect.kind is FeedKind.POSITIONS:
         positions = labelled_positions(
             timetable=timetable, data=data, fetched_at=fetched_at

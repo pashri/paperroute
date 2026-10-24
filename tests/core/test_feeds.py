@@ -2,6 +2,7 @@
 
 from paperroute.core.feeds import (
     FeedKind,
+    alert_feeds_for,
     feed_for,
     feed_kind,
     feed_label,
@@ -65,3 +66,26 @@ def test_feed_label() -> None:
         feed='v2/gtfs/vehiclepos/lightrail/innerwest',
     ) == 'Light rail positions (innerwest)'
     assert feed_label(feed='v9/other') == 'v9/other'
+
+
+def test_alert_feeds_for_modes() -> None:
+    """Alert feeds are sorted and unique; ferries have none."""
+    assert alert_feeds_for(modes=[Mode.TRAIN, Mode.BUS, Mode.BUS]) == (
+        'v2/gtfs/alerts/buses',
+        'v2/gtfs/alerts/sydneytrains',
+    )
+    assert alert_feeds_for(modes=[Mode.FERRY]) == ()
+
+
+def test_feed_kind_alerts() -> None:
+    """Paths containing /alerts/ are alert feeds."""
+    assert feed_kind(feed='v2/gtfs/alerts/metro') == FeedKind.ALERTS
+    assert FeedKind.ALERTS.value == 'alerts'
+
+
+def test_feed_label_alerts() -> None:
+    """Alert feeds are named after their mode."""
+    assert feed_label(feed='v2/gtfs/alerts/lightrail') == 'Light rail alerts'
+    assert feed_label(feed='v2/gtfs/alerts/sydneytrains') == (
+        'Sydney Trains alerts'
+    )

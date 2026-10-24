@@ -4,6 +4,7 @@ import asyncio
 import re
 import time
 from collections.abc import AsyncIterator
+from dataclasses import replace
 from datetime import time as clock
 from html.parser import HTMLParser
 from http import HTTPStatus
@@ -28,9 +29,11 @@ from paperroute.core.messages import (
     PowerRequested,
     SettingsChanged,
 )
-from paperroute.core.saved import Lookahead, Rate, Window
+from paperroute.core.saved import LiveView, Lookahead, Rate, Window
+from paperroute.core.state import step
 from paperroute.render.canvas import encode_png
 from tests.adapters.test_web_device import Device
+from tests.core.test_quiet import asleep_at_one
 
 Client = TestClient[web.Request, web.Application]
 FRAME = np.full((480, 800), 255, dtype=np.uint8)
@@ -862,3 +865,23 @@ async def test_no_power_without_device_pages(method: str, path: str) -> None:
         assert response.status == HTTPStatus.NOT_FOUND
     finally:
         await client.close()
+
+
+async def test_web_wake_keeps_the_map_view(
+    display: WebDisplay, client: Client
+) -> None:
+    """The live calls that woke the Pi wake it without leaving the Map."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    turn = {'knob': 'top', 'action': 'turn', 'steps': 0}
+    press = {'knob': 'bottom', 'action': 'press'}
+    rejected = await client.post('/knob', json=turn)
+    pressed = await client.post('/knob', json=press)
+    state = replace(asleep_at_one(), view=LiveView.MAP)
+    for event in posted:
+        state, _ = step(state, event)
+    assert rejected.status == HTTPStatus.BAD_REQUEST
+    assert pressed.status == HTTPStatus.NO_CONTENT
+    assert posted == [KnobPressed(knob=Knob.BOTTOM)]
+    assert not state.panel.asleep
+    assert state.view == LiveView.MAP

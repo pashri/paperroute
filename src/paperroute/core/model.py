@@ -16,6 +16,9 @@ from paperroute.core.geo import Point
 SYDNEY: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 TIMETABLE_SCHEMA: Final[str] = '7'
 REGIONAL_AGENCIES: Final[frozenset[str]] = frozenset({'711'})
+DAY_NAMES: Final[tuple[str, ...]] = (
+    'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun',
+)
 HIDDEN_HEADSIGNS: Final[frozenset[str]] = frozenset(
     {'Empty Train', 'Out Of Service', 'Non Revenue'},
 )
@@ -206,6 +209,27 @@ class StopPlace:
     point: Point | None
 
 
+@dataclass(frozen=True, order=True)
+class AutoWindow:
+    """
+    Times of the week when a pin is shown by itself.
+
+    Attributes
+    ----------
+    days : frozenset[int]
+        Days the window starts on, 0 (Monday) to 6 (Sunday).
+    start : time
+        Sydney wall-clock time it starts.
+    end : time
+        Sydney wall-clock time it ends; before `start` when it runs past
+        midnight.
+    """
+
+    days: frozenset[int]
+    start: time
+    end: time
+
+
 @dataclass(frozen=True)
 class Pin:
     """
@@ -227,6 +251,8 @@ class Pin:
         Route short names whose departures are kept; empty for all.
     missing : bool
         True when the timetable no longer knows a place.
+    windows : tuple[AutoWindow, ...]
+        Times the pin is shown by itself; not part of its identity.
     """
 
     origin: StopPlace
@@ -236,13 +262,14 @@ class Pin:
     nickname: str | None = None
     only: tuple[str, ...] = ()
     missing: bool = False
+    windows: tuple[AutoWindow, ...] = ()
 
 
 def same_place(*, first: Pin, second: Pin) -> bool:
     """
     Say whether two pins show the same services.
 
-    Names, points and whether a place is missing are ignored.
+    Names, points, windows and whether a place is missing are ignored.
 
     Parameters
     ----------

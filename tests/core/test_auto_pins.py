@@ -575,7 +575,7 @@ def test_override_then_chain_reapplies() -> None:
     state = ticked(state=state, times=(at(8),))
     assert is_shown(state=state, pin=gym)
     state = ticked(state=state, times=(at(8, 30),))
-    assert is_shown(state=state, pin=gym)
+    assert is_shown(state=state, pin=HOME)
 
 
 def test_override_not_undone_by_older_window() -> None:
@@ -588,13 +588,26 @@ def test_override_not_undone_by_older_window() -> None:
     assert is_shown(state=state, pin=HOME)
     state = ticked(state=state, times=(at(8),))
     assert is_shown(state=state, pin=gym)
+    assert rule_holds(state=state)
     state = ticked(state=state, times=(at(8, 30),))
-    assert is_shown(state=state, pin=gym)
+    assert is_shown(state=state, pin=HOME)
     assert state.auto.overridden_at == at(7, 45)
     assert state.auto.occurrence is not None
     assert state.auto.occurrence.ref == pin_ref(pin=work)
     state = ticked(state=state, times=(at(10),))
-    assert is_shown(state=state, pin=gym)
+    assert is_shown(state=state, pin=HOME)
+
+
+def test_window_after_override_returns_to_shown() -> None:
+    """A window after an override goes back to the place shown at its start."""
+    work = windowed(name='work', x=200.0, start=time(7), end=time(10))
+    gym = windowed(name='gym', x=400.0, start=time(8), end=time(8, 30))
+    state = started(pins=(OTHER, HOME, work, gym), now=at(6, 59))
+    state = ticked(state=state, times=(at(7), at(7, 45)))
+    state = step(state, TOP_BACK)[0]
+    assert is_shown(state=state, pin=HOME)
+    state = ticked(state=state, times=(at(8), at(8, 30)))
+    assert is_shown(state=state, pin=HOME)
 
 
 def test_turn_outside_window_noop() -> None:

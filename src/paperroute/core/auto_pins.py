@@ -75,6 +75,30 @@ def selected(*, state: State, index: int) -> State:
     return with_place(state=state, pin=None)
 
 
+def overridden(*, auto: AutoState) -> bool:
+    """
+    Say whether the recorded occurrence was overridden.
+
+    Parameters
+    ----------
+    auto : AutoState
+        Auto pin state.
+
+    Returns
+    -------
+    bool
+        True when an override came at or after the recorded occurrence's
+        start. An older override is kept only to stop earlier windows
+        coming back.
+    """
+    occurrence = auto.occurrence
+    return (
+        occurrence is not None
+        and auto.overridden_at is not None
+        and auto.overridden_at >= occurrence.start
+    )
+
+
 def before_of(*, state: State) -> Before:
     """
     Find the place to go back to when a window starts.
@@ -87,11 +111,12 @@ def before_of(*, state: State) -> Before:
     Returns
     -------
     Before
-        The recorded place in a chain, or else the place shown, without
-        its windows.
+        The recorded place in a chain not overridden, or else the place
+        shown, without its windows.
     """
     auto = state.auto
-    if auto.occurrence is not None and auto.before is not None:
+    chained = auto.occurrence is not None and not overridden(auto=auto)
+    if chained and auto.before is not None:
         return auto.before
     return Before(
         place=replace(shown(state=state), windows=()),
@@ -171,7 +196,7 @@ def ended(*, state: State) -> State:
         auto state.
     """
     auto = state.auto
-    if auto.overridden_at is None and auto.before is not None:
+    if auto.before is not None and not overridden(auto=auto):
         state = returned(state=state, before=auto.before)
     return replace(state, auto=AutoState())
 
@@ -191,14 +216,17 @@ def applied(*, state: State, found: Occurrence) -> State:
     -------
     State
         State with it recorded but not shown when it started before an
-        override; unchanged while blocked; otherwise started.
+        override, after going back from a recorded occurrence that was
+        not overridden; unchanged while blocked; otherwise started.
     """
-    overridden_at = state.auto.overridden_at
-    if overridden_at is not None and found.start <= overridden_at:
-        return replace(state, auto=replace(state.auto, occurrence=found))
     if blocked(state=state):
         return state
-    return started(state=state, occurrence=found)
+    overridden_at = state.auto.overridden_at
+    if overridden_at is None or found.start > overridden_at:
+        return started(state=state, occurrence=found)
+    if state.auto.before is not None and not overridden(auto=state.auto):
+        state = returned(state=state, before=state.auto.before)
+    return replace(state, auto=replace(state.auto, occurrence=found))
 
 
 def auto_step(*, state: State) -> State:
@@ -331,7 +359,7 @@ def rule_holds(*, state: State) -> bool:
         pin is shown pinned.
     """
     auto = state.auto
-    if auto.occurrence is None or auto.overridden_at is not None:
+    if auto.occurrence is None or overridden(auto=auto):
         return False
     return state.places.unpinned is None and pin_ref(
         pin=shown(state=state),

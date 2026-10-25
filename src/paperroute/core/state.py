@@ -12,6 +12,7 @@ from paperroute.core.alert_state import (
     on_alerts,
     rematched,
 )
+from paperroute.core.auto_pins import auto_step
 from paperroute.core.chooser_steps import (
     chooser_event,
     chooser_knob,
@@ -340,7 +341,7 @@ def on_tick(
     tuple[State, tuple[Effect, ...]]
         New state and effects.
     """
-    state = idle_dropped(state=replace(state, now=event.now))
+    state = auto_step(state=idle_dropped(state=replace(state, now=event.now)))
     state, spans = span_requests(state=state)
     state, loads = reload_effects(state=state)
     state, picked = picked_reloads(state=state)

@@ -11,9 +11,12 @@ from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
     Knob,
+    KnobHeld,
     KnobPressed,
+    KnobTurned,
     LoadDepartures,
     PinDeleted,
+    StripLoaded,
     Tick,
 )
 from paperroute.core.model import SYDNEY, AutoWindow, Pin, pin_ref
@@ -22,8 +25,10 @@ from paperroute.core.saved import LiveView, Saved, seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import Places, State
 from tests.core.alert_factories import alert
+from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, NEXT, REACH, TO_STAGE
 from tests.core.factories import START, departure, pin_at
 from tests.core.steps import wakeful
+from tests.core.test_chooser_steps import picked, run_events
 from tests.fakes import device_facts
 
 DAY: Final[date] = START.date()
@@ -31,6 +36,8 @@ WEEKDAYS: Final[frozenset[int]] = frozenset(range(5))
 HOME: Final[Pin] = pin_at('home', x=100.0)
 OTHER: Final[Pin] = pin_at('other', x=300.0)
 OPEN: Final[KnobPressed] = KnobPressed(knob=Knob.TOP)
+TOP_BACK: Final[KnobTurned] = KnobTurned(knob=Knob.TOP, steps=-1)
+BOTTOM_TURN: Final[KnobTurned] = KnobTurned(knob=Knob.BOTTOM, steps=1)
 
 
 def at(
@@ -482,3 +489,115 @@ def test_places_unchanged_without_windows() -> None:
     after = ticked(state=state, times=(at(7, 30),))
     assert after.places == Places(pins=(HOME, OTHER), current=0)
     assert after.auto == AutoState()
+
+
+def in_window(*, pins: tuple[Pin, ...] = (HOME, WORK)) -> State:
+    """
+    A state with `WORK` shown by the rules at 07:30.
+
+    Parameters
+    ----------
+    pins : tuple[Pin, ...]
+        Pins.
+
+    Returns
+    -------
+    State
+        State after the 07:30 tick.
+    """
+    return ticked(state=started(pins=pins), times=(at(7, 30),))
+
+
+def test_top_turn_overrides() -> None:
+    """A top turn away overrides the window until its next start."""
+    state = step(in_window(), TOP_BACK)[0]
+    assert is_shown(state=state, pin=HOME)
+    assert state.auto.overridden_at == at(7, 30)
+    state = ticked(state=state, times=(at(9),))
+    assert is_shown(state=state, pin=HOME)
+    assert state.auto == AutoState()
+    state = ticked(state=state, times=(at(7, 30, days=3),))
+    assert is_shown(state=state, pin=WORK)
+    assert state.auto.overridden_at is None
+
+
+def test_unpin_auto_pin_overrides() -> None:
+    """Unpinning the auto pin with a bottom hold overrides it."""
+    state = step(in_window(), KnobHeld(knob=Knob.BOTTOM))[0]
+    assert state.places.unpinned is not None
+    assert state.auto.overridden_at == at(7, 30)
+
+
+def test_view_scroll_chooser_do_not_override() -> None:
+    """Views, scrolling and the chooser are not overrides."""
+    state = in_window()
+    for event in (KnobPressed(knob=Knob.BOTTOM), BOTTOM_TURN):
+        state = step(state, event)[0]
+        assert state.auto.overridden_at is None
+    state, _ = run_events(
+        state=state,
+        events=[
+            *TO_STAGE,
+            StripLoaded(key=CHOSEN_KEY, reach=REACH),
+            picked(),
+            NEXT,
+        ],
+    )
+    assert state.chooser is None
+    assert state.places.unpinned == CHOSEN
+    assert state.auto.overridden_at is None
+    state = ticked(state=state, times=(at(9),))
+    assert is_shown(state=state, pin=HOME)
+
+
+def test_alerts_top_turn_not_override() -> None:
+    """A top turn on the Alerts view moves the selection only."""
+    state = home_alerted(state=started(current=1))
+    state = ticked(state=state, times=(at(7, 30),))
+    matched = state.alerts.matched
+    assert matched is not None
+    alerts = replace(state.alerts, matched=(WORK, matched[1]))
+    state = replace(state, alerts=alerts, view=LiveView.ALERTS)
+    state = step(state, TOP_BACK)[0]
+    assert state.view is LiveView.ALERTS
+    assert is_shown(state=state, pin=WORK)
+    assert state.auto.overridden_at is None
+
+
+def test_override_then_chain_reapplies() -> None:
+    """A later window still applies after an override, then stays."""
+    work = windowed(name='work', x=200.0, start=time(7, 30), end=time(8))
+    gym = windowed(name='gym', x=400.0, start=time(8), end=time(8, 30))
+    state = ticked(state=in_window(pins=(HOME, work, gym)), times=(at(7, 40),))
+    state = step(state, TOP_BACK)[0]
+    assert state.auto.overridden_at == at(7, 40)
+    state = ticked(state=state, times=(at(8),))
+    assert is_shown(state=state, pin=gym)
+    state = ticked(state=state, times=(at(8, 30),))
+    assert is_shown(state=state, pin=gym)
+
+
+def test_override_not_undone_by_older_window() -> None:
+    """An older window resuming after an override takes nothing back."""
+    work = windowed(name='work', x=200.0, start=time(7), end=time(10))
+    gym = windowed(name='gym', x=400.0, start=time(8), end=time(8, 30))
+    state = started(pins=(HOME, work, gym), now=at(6, 59))
+    state = ticked(state=state, times=(at(7), at(7, 45)))
+    state = step(state, TOP_BACK)[0]
+    assert is_shown(state=state, pin=HOME)
+    state = ticked(state=state, times=(at(8),))
+    assert is_shown(state=state, pin=gym)
+    state = ticked(state=state, times=(at(8, 30),))
+    assert is_shown(state=state, pin=gym)
+    assert state.auto.overridden_at == at(7, 45)
+    assert state.auto.occurrence is not None
+    assert state.auto.occurrence.ref == pin_ref(pin=work)
+    state = ticked(state=state, times=(at(10),))
+    assert is_shown(state=state, pin=gym)
+
+
+def test_turn_outside_window_noop() -> None:
+    """A top turn with nothing recorded is no override."""
+    state = step(started(), KnobTurned(knob=Knob.TOP, steps=1))[0]
+    assert is_shown(state=state, pin=WORK)
+    assert state.auto == AutoState()

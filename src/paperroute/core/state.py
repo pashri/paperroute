@@ -12,7 +12,7 @@ from paperroute.core.alert_state import (
     on_alerts,
     rematched,
 )
-from paperroute.core.auto_pins import auto_step
+from paperroute.core.auto_pins import auto_step, with_override
 from paperroute.core.chooser_steps import (
     chooser_event,
     chooser_knob,
@@ -444,7 +444,11 @@ def on_knob(
         after = knob_moved(state=state, event=event)
     if after is state:
         return state, ()
-    return reloaded(before=state, after=after, effects=effects)
+    return reloaded(
+        before=state,
+        after=with_override(before=state, after=after, event=event),
+        effects=effects,
+    )
 
 
 def on_touch(

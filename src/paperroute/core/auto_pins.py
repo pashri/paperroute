@@ -3,7 +3,8 @@
 from dataclasses import replace
 
 from paperroute.core.auto_model import AutoState, Before, Occurrence, running
-from paperroute.core.model import pin_ref
+from paperroute.core.messages import Knob, KnobEvent, KnobHeld, KnobTurned
+from paperroute.core.model import pin_ref, same_place
 from paperroute.core.places import committed, pin_index, shown, with_place
 from paperroute.core.sleep import awake
 from paperroute.core.state_model import State
@@ -225,3 +226,90 @@ def auto_step(*, state: State) -> State:
     if found == state.auto.occurrence:
         return state
     return applied(state=state, found=found)
+
+
+def turned_away(*, before: State, after: State, event: KnobEvent) -> bool:
+    """
+    Say whether a top turn changed the place shown.
+
+    Parameters
+    ----------
+    before : State
+        State before the event.
+    after : State
+        State after it.
+    event : KnobEvent
+        Knob event.
+
+    Returns
+    -------
+    bool
+        True for a top turn outside the chooser that shows another place.
+    """
+    if not isinstance(event, KnobTurned) or event.knob is not Knob.TOP:
+        return False
+    return before.chooser is None and not same_place(
+        first=shown(state=before), second=shown(state=after),
+    )
+
+
+def unpinned_auto(*, before: State, after: State, event: KnobEvent) -> bool:
+    """
+    Say whether a bottom hold unpinned the auto pin.
+
+    Parameters
+    ----------
+    before : State
+        State before the event.
+    after : State
+        State after it.
+    event : KnobEvent
+        Knob event.
+
+    Returns
+    -------
+    bool
+        True when a bottom hold outside the chooser unpinned the shown
+        pin of the recorded occurrence.
+    """
+    occurrence = before.auto.occurrence
+    if event != KnobHeld(knob=Knob.BOTTOM) or occurrence is None:
+        return False
+    if before.chooser is not None or before.places.unpinned is not None:
+        return False
+    return after.places.unpinned is not None and pin_ref(
+        pin=shown(state=before),
+    ) == occurrence.ref
+
+
+def with_override(
+    *, before: State, after: State, event: KnobEvent,
+) -> State:
+    """
+    Record an override of the auto pin.
+
+    Parameters
+    ----------
+    before : State
+        State before the knob event.
+    after : State
+        State after it.
+    event : KnobEvent
+        Knob event.
+
+    Returns
+    -------
+    State
+        `after` with `overridden_at` set to now when an occurrence is
+        recorded and the event turned away from it or unpinned it;
+        otherwise `after` itself.
+    """
+    if after.auto.occurrence is None:
+        return after
+    moved = turned_away(before=before, after=after, event=event)
+    if not moved and not unpinned_auto(
+        before=before, after=after, event=event,
+    ):
+        return after
+    auto = replace(after.auto, overridden_at=after.now)
+    return replace(after, auto=auto)

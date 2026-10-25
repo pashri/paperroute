@@ -18,7 +18,8 @@ SAME_TIME: Final[str] = "A window can't start and end at the same time."
 NO_ROWS: Final[str] = """
         <p>Not shown automatically.</p>"""
 DEFAULT_BUTTON: Final[str] = (
-    '<button type="submit" class="default-submit" tabindex="-1">'
+    '<button type="submit" class="default-submit" tabindex="-1" '
+    'aria-hidden="true">'
     'Show choices</button>'
 )
 ROW: Final[str] = """

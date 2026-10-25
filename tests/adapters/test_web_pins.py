@@ -733,3 +733,4 @@ async def test_enter_uses_default_button(editor: Client) -> None:
     assert first is not None
     assert 'class="default-submit"' in first.group(0)
     assert 'tabindex="-1"' in first.group(0)
+    assert 'aria-hidden="true"' in first.group(0)

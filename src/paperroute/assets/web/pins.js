@@ -202,8 +202,11 @@ function renumberRow(row, index) {
   }
 }
 
+const NO_ROWS = '<p>Not shown automatically.</p>';
+
 /**
- * Renumber every row and update the row count.
+ * Renumber every row and update the row count, saying so when none are
+ * left.
  * @param {Element} fieldset The Show automatically fieldset.
  * @returns {void}
  */
@@ -211,6 +214,8 @@ function renumberAll(fieldset) {
   const rows = [...fieldset.querySelectorAll('fieldset.window')];
   rows.forEach((row, index) => renumberRow(row, index));
   fieldset.querySelector('[name="wn"]').value = String(rows.length);
+  if (rows.length > 0) return;
+  fieldset.querySelector('legend').insertAdjacentHTML('afterend', NO_ROWS);
 }
 
 /**

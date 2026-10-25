@@ -161,9 +161,14 @@ const count = { value: '2' };
 const add = { name: 'add_window' };
 add.closest = () => add;
 const windowHandlers = {};
+const outerLegend = {
+  inserted: [],
+  insertAdjacentHTML(where, html) { this.inserted.push([where, html]); },
+};
 const windowsSet = {
   querySelectorAll: () => [...rows],
-  querySelector: () => count,
+  querySelector: (selector) =>
+    selector === 'legend' ? outerLegend : count,
   addEventListener: (name, fn) => { windowHandlers[name] = fn; },
 };
 mod.wireWindows(windowsSet);
@@ -185,6 +190,12 @@ results.added = [
   added.fields[1].attrs.name, windowPrevented,
 ];
 windowHandlers.click({ target: { closest: () => null } });
+const emptyBefore = outerLegend.inserted.length;
+press(rows[1].button);
+press(rows[0].button);
+results.emptied = [
+  rows.length, count.value, emptyBefore, outerLegend.inserted,
+];
 console.log(JSON.stringify(results));
 """
 
@@ -223,4 +234,7 @@ def test_pins_script_in_node(tmp_path: Path) -> None:
             1, '1', 'Window 1', '0', ['w0_day', 'w0_from,w0_from', 'w0_from'],
         ],
         'added': [2, '2', 'Window 2', False, '', 'w1_from', 2],
+        'emptied': [
+            0, '0', 0, [['afterend', '<p>Not shown automatically.</p>']],
+        ],
     }

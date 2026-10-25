@@ -114,7 +114,12 @@ def test_pydantic_only_in_state_file() -> None:
     """Only the state file and its helpers import pydantic."""
     allowed = {
         SRC / 'adapters' / name
-        for name in ('state_file.py', 'state_migrations.py', 'state_auto.py')
+        for name in (
+            'state_file.py',
+            'state_migrations.py',
+            'state_auto.py',
+            'state_settings.py',
+        )
     }
     offenders = [
         str(path)

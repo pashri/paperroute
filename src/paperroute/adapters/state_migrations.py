@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Final
 
 from paperroute.adapters.state_auto import add_auto
+from paperroute.adapters.state_settings import default_settings
 from paperroute.core.model import TRAINLINK
 
 SCHEMA_VERSION: Final[int] = 8
@@ -110,10 +111,6 @@ def add_display_settings(data: dict[str, object]) -> dict[str, object]:
         The data with every new setting at its default; settings that
         are not an object are left for validation to fail.
     """
-    # state_file imports this module, so its defaults come in late.
-    # pylint: disable-next=import-outside-toplevel,cyclic-import
-    from paperroute.adapters.state_file import default_settings
-
     settings = data.get('settings')
     if not isinstance(settings, dict):
         return data

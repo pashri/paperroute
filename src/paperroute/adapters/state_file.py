@@ -7,7 +7,7 @@ import os
 import tempfile
 import time
 from collections.abc import Callable
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 from typing import Final
 
@@ -17,12 +17,9 @@ from pydantic import (
     ConfigDict,
     Field,
     ValidationError,
-    field_validator,
 )
 
 from paperroute.adapters.state_auto import (
-    CLOCK,
-    CLOCK_FORMAT,
     EMPTY_AUTO,
     AutoWindowModel,
     OccurrenceModel,
@@ -37,20 +34,16 @@ from paperroute.adapters.state_auto import (
     window_to_model as auto_window_to_model,
 )
 from paperroute.adapters.state_migrations import SCHEMA_VERSION, migrate
+from paperroute.adapters.state_settings import (
+    SettingsModel,
+    default_settings,
+    settings_from_model,
+    settings_to_model,
+)
 from paperroute.core.auto_model import AutoState, Before
 from paperroute.core.model import SYDNEY, Pin, RouteKind, StopPlace
 from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
-from paperroute.core.saved import (
-    DEFAULT_SAVED,
-    LiveView,
-    Lookahead,
-    QuietMode,
-    Quota,
-    Rate,
-    Saved,
-    Settings,
-    Window,
-)
+from paperroute.core.saved import DEFAULT_SAVED, LiveView, Quota, Saved
 from paperroute.core.tiles import ZOOMS
 from paperroute.ports import Loaded
 
@@ -61,7 +54,6 @@ TEMP_PREFIX: Final[str] = '.state.json.'
 BAD_PREFIX: Final[str] = 'state.json.bad-'
 BAD_KEPT: Final[int] = 2
 FILE_MODE: Final[int] = 0o644
-MAX_PEAK_WINDOWS: Final[int] = 2
 
 
 class StopModel(BaseModel):
@@ -106,67 +98,6 @@ class AutoModel(BaseModel):
     occurrence: OccurrenceModel | None
     before: BeforeModel | None
     overridden_at: AwareDatetime | None
-
-
-class WindowModel(BaseModel):
-    """A daily window as stored, each end as ``HH:MM``."""
-
-    model_config = ConfigDict(extra='forbid', frozen=True)
-
-    start: str = Field(pattern=CLOCK)
-    end: str = Field(pattern=CLOCK)
-
-
-class SettingsModel(BaseModel):
-    """The Settings page's choices as stored."""
-
-    model_config = ConfigDict(extra='forbid', frozen=True)
-
-    auto_rebuild: bool
-    peak_rate: Rate
-    offpeak_rate: Rate
-    peak_windows: tuple[WindowModel, ...] = Field(
-        max_length=MAX_PEAK_WINDOWS,
-    )
-    quiet_mode: QuietMode
-    my_hours: WindowModel
-    rotate: bool
-    larger_text: bool
-    inverted_lists: bool
-    alert_lookahead: Lookahead
-
-    @field_validator('peak_windows')
-    @classmethod
-    def check_peak_windows(
-        cls, windows: tuple[WindowModel, ...]
-    ) -> tuple[WindowModel, ...]:
-        """
-        Refuse peak windows that wrap midnight, are empty or overlap.
-
-        Parameters
-        ----------
-        windows : tuple[WindowModel, ...]
-            The stored peak windows.
-
-        Returns
-        -------
-        tuple[WindowModel, ...]
-            The windows, unchanged.
-
-        Raises
-        ------
-        ValueError
-            When a window doesn't end after it starts, or two overlap.
-        """
-        ordered = sorted(windows, key=lambda window: window.start)
-        if any(window.start >= window.end for window in ordered):
-            raise ValueError('a peak window must end after it starts')
-        if any(
-            earlier.end > later.start
-            for earlier, later in zip(ordered, ordered[1:])
-        ):
-            raise ValueError('peak windows must not overlap')
-        return windows
 
 
 class QuotaModel(BaseModel):
@@ -299,119 +230,6 @@ def pin_from_model(*, model: PinModel) -> Pin:
             auto_window_from_model(model=window) for window in model.windows
         ),
     )
-
-
-def window_to_model(*, window: Window) -> WindowModel:
-    """
-    Convert a window to its stored form.
-
-    Parameters
-    ----------
-    window : Window
-        The window.
-
-    Returns
-    -------
-    WindowModel
-        The window with each end as ``HH:MM``.
-    """
-    return WindowModel(
-        start=window.start.strftime(CLOCK_FORMAT),
-        end=window.end.strftime(CLOCK_FORMAT),
-    )
-
-
-def window_from_model(*, model: WindowModel) -> Window:
-    """
-    Convert a stored window back.
-
-    Parameters
-    ----------
-    model : WindowModel
-        The stored window.
-
-    Returns
-    -------
-    Window
-        The window.
-    """
-    return Window(
-        start=datetime.strptime(model.start, CLOCK_FORMAT).time(),
-        end=datetime.strptime(model.end, CLOCK_FORMAT).time(),
-    )
-
-
-def settings_to_model(*, settings: Settings) -> SettingsModel:
-    """
-    Convert the settings to their stored form.
-
-    Parameters
-    ----------
-    settings : Settings
-        The settings.
-
-    Returns
-    -------
-    SettingsModel
-        The stored settings.
-    """
-    return SettingsModel(
-        auto_rebuild=settings.auto_rebuild,
-        peak_rate=settings.peak_rate,
-        offpeak_rate=settings.offpeak_rate,
-        peak_windows=tuple(
-            window_to_model(window=window)
-            for window in settings.peak_windows
-        ),
-        quiet_mode=settings.quiet_mode,
-        my_hours=window_to_model(window=settings.my_hours),
-        rotate=settings.rotate,
-        larger_text=settings.larger_text,
-        inverted_lists=settings.inverted_lists,
-        alert_lookahead=settings.alert_lookahead,
-    )
-
-
-def settings_from_model(*, model: SettingsModel) -> Settings:
-    """
-    Convert stored settings back.
-
-    Parameters
-    ----------
-    model : SettingsModel
-        The stored settings.
-
-    Returns
-    -------
-    Settings
-        The settings.
-    """
-    return Settings(
-        auto_rebuild=model.auto_rebuild,
-        peak_rate=model.peak_rate,
-        offpeak_rate=model.offpeak_rate,
-        peak_windows=tuple(
-            window_from_model(model=window) for window in model.peak_windows
-        ),
-        quiet_mode=model.quiet_mode,
-        my_hours=window_from_model(model=model.my_hours),
-        rotate=model.rotate,
-        larger_text=model.larger_text,
-        inverted_lists=model.inverted_lists,
-        alert_lookahead=model.alert_lookahead,
-    )
-
-
-def default_settings() -> dict[str, object]:
-    """
-    Give the default settings as stored.
-
-    Returns
-    -------
-    dict[str, object]
-        The default settings as JSON data.
-    """
-    return settings_to_model(settings=Settings()).model_dump(mode='json')
 
 
 def auto_to_model(*, auto: AutoState) -> AutoModel:

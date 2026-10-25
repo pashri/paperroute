@@ -3,12 +3,22 @@
 import asyncio
 import html
 from collections.abc import Awaitable, Callable
+from dataclasses import replace
 from http import HTTPStatus
 from typing import Final
 
 from aiohttp import web
+from multidict import MultiDict
 
 from paperroute.adapters.pin_editor import edited
+from paperroute.adapters.pin_windows import (
+    WindowRow,
+    query_rows,
+    rows_of,
+    start_rows,
+    windows_fieldset,
+    windows_of,
+)
 from paperroute.adapters.web_common import asset, form_fields
 from paperroute.adapters.web_pin_edit import (
     MISFIT,
@@ -326,6 +336,23 @@ def duplicate(*, seen: PinsSeen, pin: Pin, ref: str | None) -> bool:
         for other in seen.pins
         if pin_ref(pin=other) != ref
     )
+
+
+def notice_alert(*, text: str) -> str:
+    """
+    Draw a refusal notice.
+
+    Parameters
+    ----------
+    text : str
+        The message; not escaped.
+
+    Returns
+    -------
+    str
+        A paragraph read out as an alert.
+    """
+    return f'<p class="notice" role="alert">{text}</p>'
 
 
 def html_page(*, text: str, status: int = HTTPStatus.OK) -> web.Response:
@@ -646,8 +673,8 @@ class PinsPages:
         ))
 
     def _editor(
-        self, *, draft: PinDraft, notice: str = '',
-        status: int = HTTPStatus.OK,
+        self, *, draft: PinDraft, rows: tuple[WindowRow, ...] | None,
+        notice: str = '', status: int = HTTPStatus.OK,
     ) -> web.Response:
         """
         Draw the editor for some choices.
@@ -656,6 +683,8 @@ class PinsPages:
         ----------
         draft : PinDraft
             The choices made.
+        rows : tuple[WindowRow, ...] | None
+            The window rows, or None to start from the pin's windows.
         notice : str
             The notice's HTML, or an empty string.
         status : int
@@ -673,14 +702,19 @@ class PinsPages:
         pin = None if found is None else found[1]
         if pin is not None and draft.ref and not draft.stop:
             draft = pin_draft(pin=pin, ref=draft.ref)
-        body = self._editor_body(draft=draft, pin=pin)
+        body = self._editor_body(
+            draft=draft, pin=pin, rows=start_rows(rows=rows, pin=pin),
+        )
         title = 'Add a pin' if draft.ref is None else 'Edit pin'
         return html_page(
             text=edit_page(title=title, notice=notice, body=body),
             status=status,
         )
 
-    def _editor_body(self, *, draft: PinDraft, pin: Pin | None) -> str:
+    def _editor_body(
+        self, *, draft: PinDraft, pin: Pin | None,
+        rows: tuple[WindowRow, ...],
+    ) -> str:
         """
         Draw the editor form for some choices.
 
@@ -690,6 +724,8 @@ class PinsPages:
             The choices made.
         pin : Pin | None
             The pin being edited, or None for a new pin.
+        rows : tuple[WindowRow, ...]
+            The window rows.
 
         Returns
         -------
@@ -701,9 +737,14 @@ class PinsPages:
             return STARTING
         missing = pin if pin is not None and pin.missing else None
         editor = edited(options=self.options, draft=draft, missing=missing)
-        return editor_form(editor=editor, origin=origin_name(
-            editor=editor, fallback=None if pin is None else pin.origin,
-        ))
+        return editor_form(
+            editor=editor,
+            origin=origin_name(
+                editor=editor,
+                fallback=None if pin is None else pin.origin,
+            ),
+            windows=windows_fieldset(rows=rows),
+        )
 
     async def _edit(self, request: web.Request) -> web.Response:
         """
@@ -722,7 +763,9 @@ class PinsPages:
         draft = draft_of(
             query=request.query, only=request.query.getall('only', []),
         )
-        return self._editor(draft=draft)
+        return self._editor(
+            draft=draft, rows=query_rows(fields=request.query),
+        )
 
     async def _save(self, request: web.Request) -> web.Response:
         """
@@ -740,9 +783,38 @@ class PinsPages:
             a 303 back to the list.
         """
         body = await request.post()
-        fields = {k: v for k, v in body.items() if isinstance(v, str)}
-        only = [v for v in body.getall('only', []) if isinstance(v, str)]
-        draft = draft_of(query=fields, only=only)
+        fields = MultiDict(
+            (name, value)
+            for name, value in body.items()
+            if isinstance(value, str)
+        )
+        draft = draft_of(query=fields, only=fields.getall('only', []))
+        return self._checked(draft=draft, rows=rows_of(fields=fields))
+
+    def _checked(
+        self, *, draft: PinDraft, rows: tuple[WindowRow, ...],
+    ) -> web.Response:
+        """
+        Check a pin's choices and windows, then save it.
+
+        Parameters
+        ----------
+        draft : PinDraft
+            The choices submitted.
+        rows : tuple[WindowRow, ...]
+            The window rows submitted.
+
+        Returns
+        -------
+        web.Response
+            400 with the editor when a choice is not offered or a window
+            is refused.
+
+        Raises
+        ------
+        web.HTTPSeeOther
+            Back to the list once saved, or when nothing is known yet.
+        """
         latest = self._pins()
         if latest is None or self.options is None:
             raise web.HTTPSeeOther(location='/pins')
@@ -751,8 +823,15 @@ class PinsPages:
             missing=self._missing(ref=draft.ref),
         )
         if not survived(draft=draft, editor=editor) or editor.pin is None:
-            return self._refused(draft=draft, editor=editor)
-        raise self._saved(seen=latest, ref=draft.ref, pin=editor.pin)
+            return self._refused(draft=draft, editor=editor, rows=rows)
+        windows = windows_of(rows=rows)
+        if isinstance(windows, str):
+            return self._editor(
+                draft=draft, rows=rows, notice=notice_alert(text=windows),
+                status=HTTPStatus.BAD_REQUEST,
+            )
+        pin = replace(editor.pin, windows=windows)
+        raise self._saved(seen=latest, ref=draft.ref, pin=pin)
 
     def _missing(self, *, ref: str | None) -> Pin | None:
         """
@@ -773,6 +852,7 @@ class PinsPages:
 
     def _refused(
         self, *, draft: PinDraft, editor: PinEditor,
+        rows: tuple[WindowRow, ...],
     ) -> web.Response:
         """
         Answer a save whose choices do not make a pin.
@@ -783,6 +863,8 @@ class PinsPages:
             The choices submitted.
         editor : PinEditor
             The editor after checking them.
+        rows : tuple[WindowRow, ...]
+            The window rows submitted.
 
         Returns
         -------
@@ -791,10 +873,10 @@ class PinsPages:
             some; otherwise 400 with the editor and a notice.
         """
         if editor.nearby and editor.pin is None:
-            return self._editor(draft=draft)
-        notice = f'<p class="notice" role="alert">{MISFIT}</p>'
+            return self._editor(draft=draft, rows=rows)
         return self._editor(
-            draft=draft, notice=notice, status=HTTPStatus.BAD_REQUEST,
+            draft=draft, rows=rows, notice=notice_alert(text=MISFIT),
+            status=HTTPStatus.BAD_REQUEST,
         )
 
     def _saved(

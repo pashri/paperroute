@@ -3,6 +3,7 @@
 import re
 from collections.abc import AsyncIterator
 from dataclasses import replace
+from datetime import time
 from html.parser import HTMLParser
 from http import HTTPStatus
 
@@ -26,7 +27,13 @@ from paperroute.core.messages import (
     PinSaved,
     PinsOrdered,
 )
-from paperroute.core.model import Pin, RouteKind, StopPlace, pin_ref
+from paperroute.core.model import (
+    AutoWindow,
+    Pin,
+    RouteKind,
+    StopPlace,
+    pin_ref,
+)
 from paperroute.core.pin_choices import StopMatch
 from paperroute.observers import PinsSeen
 from tests.adapters.test_web_device import Device
@@ -652,3 +659,77 @@ async def test_search_form_is_a_search_landmark(editor: Client) -> None:
     """The search form sits in a search element."""
     text = await (await editor.get('/pins/new?q=c')).text()
     assert '<search>' in text
+
+
+MORNING = AutoWindow(days=frozenset({0}), start=time(7, 30), end=time(9))
+ROW_FIELDS: dict[str, str | list[str]] = {
+    'wn': '1', 'w0_day': 'mon', 'w0_from': '07:30', 'w0_to': '09:00',
+}
+
+
+async def test_editor_shows_pin_windows(
+    pins: Pins, editor: Client,
+) -> None:
+    """A pin's editor starts from its windows."""
+    windowed = replace(SAVED, windows=(MORNING,))
+    pins.seen = PinsSeen(pins=(windowed,), shown=0, revision=3)
+    ref = pin_ref(pin=windowed)
+    text = await (await editor.get(f'/pins/edit?ref={ref}')).text()
+    assert 'name="w0_day" value="mon" checked' in text
+    assert 'name="w0_day" value="tue" checked' not in text
+    assert 'name="w0_from" value="07:30"' in text
+
+
+async def test_save_posts_windows(pins: Pins, editor: Client) -> None:
+    """A save with a row posts the pin with its window."""
+    response = await editor.post(
+        '/pins/save', data=_form({**FULL, **ROW_FIELDS}),
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    saved = pins.posted[0]
+    assert isinstance(saved, PinSaved)
+    assert saved.pin.windows == (MORNING,)
+
+
+async def test_save_refuses_equal_times(
+    pins: Pins, editor: Client,
+) -> None:
+    """Equal times are refused with the row kept."""
+    response = await editor.post('/pins/save', data=_form({
+        **FULL, **ROW_FIELDS, 'w0_to': '07:30',
+    }))
+    text = await response.text()
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert (
+        '<p class="notice" role="alert">'
+        "A window can't start and end at the same time.</p>"
+    ) in text
+    assert 'name="w0_day" value="mon" checked' in text
+    assert 'name="w0_to" value="07:30"' in text
+    assert not pins.posted
+
+
+async def test_add_window_without_js(editor: Client) -> None:
+    """Add window redraws the editor with its fields and one more row."""
+    response = await editor.get('/pins/edit', params=_form({
+        **FULL, **ROW_FIELDS, 'add_window': '1',
+    }))
+    text = await response.text()
+    assert 'name="w0_from" value="07:30"' in text
+    assert 'name="w1_from" value=""' in text
+    assert 'name="wn" value="2"' in text
+    assert 'value="Home"' in text
+    assert '<option value="T1" selected>' in text
+
+
+async def test_enter_uses_default_button(editor: Client) -> None:
+    """The form's first submit button is the off-screen default."""
+    text = await (await editor.get(
+        '/pins/edit?stop=C&kind=train&route=T1',
+    )).text()
+    form = text[text.index('<form class="editor"'):]
+    first = re.search(r'<button type="submit"[^>]*>', form)
+    assert first is not None
+    assert 'class="default-submit"' in first.group(0)
+    assert 'tabindex="-1"' in first.group(0)

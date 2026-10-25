@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 from typing import Final
 from urllib.parse import urlencode
 
+from paperroute.adapters.pin_windows import DEFAULT_BUTTON
 from paperroute.adapters.web_common import asset
 from paperroute.core.model import STATION_FIRST, RouteKind, StopPlace
 from paperroute.core.pin_choices import (
@@ -29,6 +30,7 @@ SEARCH_FORM: Final[str] = """<search>
     </form>
     </search>"""
 EDITOR: Final[str] = """<form class="editor" method="get" action="/pins/edit">
+      {default}
       <input type="hidden" name="ref" value="{ref}">
       <input type="hidden" name="stop" value="{stop}">
       <h3>{origin}</h3>{fields}
@@ -36,7 +38,7 @@ EDITOR: Final[str] = """<form class="editor" method="get" action="/pins/edit">
         <label for="pin-nickname">Nickname</label>
         <input id="pin-nickname" type="text" name="nickname"
                maxlength="{max}" value="{nickname}">
-      </p>
+      </p>{windows}
       <p>
         <button type="submit">Show choices</button>{save}
       </p>
@@ -345,7 +347,7 @@ def nearby_list(*, editor: PinEditor) -> str:
     )
 
 
-def editor_form(*, editor: PinEditor, origin: str) -> str:
+def editor_form(*, editor: PinEditor, origin: str, windows: str) -> str:
     """
     Draw the pin editor.
 
@@ -355,6 +357,8 @@ def editor_form(*, editor: PinEditor, origin: str) -> str:
         The editor.
     origin : str
         The From name for the heading; not escaped.
+    windows : str
+        The Show automatically fieldset's HTML.
 
     Returns
     -------
@@ -368,6 +372,8 @@ def editor_form(*, editor: PinEditor, origin: str) -> str:
         + to_field(editor=editor) + filter_fields(editor=editor)
     )
     return EDITOR.format(
+        default=DEFAULT_BUTTON,
+        windows=windows,
         ref=html.escape(draft.ref or ''),
         stop=html.escape(draft.stop),
         origin=html.escape(origin),

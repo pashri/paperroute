@@ -2,7 +2,7 @@
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 from paperroute.core.model import SYDNEY, AutoWindow, Pin, pin_ref
 
@@ -80,15 +80,17 @@ def occurrence_of(
     Returns
     -------
     tuple[datetime, datetime] | None
-        Sydney start and end, or None when the window doesn't start on
-        that day.
+        Start and end in UTC, or None when the window doesn't start on
+        that day. Datetimes in the same zone compare by wall clock, so
+        UTC keeps a daylight-saving day right: a time in the skipped hour
+        runs an hour later, and one in the repeated hour runs once.
     """
     if day.weekday() not in window.days:
         return None
     end_day = day + timedelta(days=1) if window.end < window.start else day
     return (
-        datetime.combine(day, window.start, tzinfo=SYDNEY),
-        datetime.combine(end_day, window.end, tzinfo=SYDNEY),
+        datetime.combine(day, window.start, tzinfo=SYDNEY).astimezone(UTC),
+        datetime.combine(end_day, window.end, tzinfo=SYDNEY).astimezone(UTC),
     )
 
 

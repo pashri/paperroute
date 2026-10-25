@@ -140,3 +140,26 @@ def test_holds_awake() -> None:
     )
     assert holds_awake(auto=AutoState(occurrence=occurrence))
     assert not holds_awake(auto=AutoState())
+
+
+def test_window_on_spring_forward_day() -> None:
+    """A start in the skipped hour runs from an hour later."""
+    pin = windowed(
+        pin=PIN_A, window=AutoWindow(frozenset({6}), time(2, 30), time(4)),
+    )
+    late = datetime(2026, 10, 4, 3, 30, tzinfo=SYDNEY)
+    early = datetime(2026, 10, 4, 3, tzinfo=SYDNEY)
+    assert running(pins=(pin,), now=early) is None
+    found = running(pins=(pin,), now=late)
+    assert found is not None
+    assert found.start == late
+
+
+def test_window_on_fall_back_day() -> None:
+    """A start in the repeated hour runs once, in the first pass."""
+    pin = windowed(
+        pin=PIN_A, window=AutoWindow(frozenset({6}), time(2), time(2, 45)),
+    )
+    first = datetime(2026, 4, 5, 2, 10, tzinfo=SYDNEY)
+    assert running(pins=(pin,), now=first) is not None
+    assert running(pins=(pin,), now=first.replace(fold=1)) is None

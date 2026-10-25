@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Final
 
 from paperroute.core.alert_model import AlertsState
+from paperroute.core.auto_model import AutoState
 from paperroute.core.chooser import ChooserState
 from paperroute.core.device_model import Panel
 from paperroute.core.map_state import MapState
@@ -332,6 +333,8 @@ class State:
         The full-refresh schedule.
     alerts : AlertsState
         The alerts and their ties to the shown pin.
+    auto : AutoState
+        What the auto pin rules have done.
     """
 
     now: datetime
@@ -356,3 +359,4 @@ class State:
     calendar: Calendar = field(default_factory=Calendar)
     refresh: Refresh = field(default_factory=Refresh)
     alerts: AlertsState = field(default_factory=AlertsState)
+    auto: AutoState = field(default_factory=AutoState)

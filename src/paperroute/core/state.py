@@ -167,6 +167,7 @@ def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
         ),
         settings=saved.settings,
         quota=saved.quota,
+        auto=saved.auto,
     )
     centre = shown(state=state).origin.point
     zoom = min(max(saved.zoom, 0), len(ZOOMS) - 1)

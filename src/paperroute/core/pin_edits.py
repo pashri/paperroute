@@ -150,6 +150,26 @@ def with_saved(*, state: State, ref: str | None, pin: Pin) -> State:
     return after
 
 
+def without_windows(*, places: Places) -> Places:
+    """
+    Drop the windows from the unpinned place.
+
+    Parameters
+    ----------
+    places : Places
+        Places with an unpinned place.
+
+    Returns
+    -------
+    Places
+        The same places, the unpinned one with no windows.
+    """
+    unpinned = places.unpinned
+    if unpinned is None:
+        return places
+    return replace(places, unpinned=replace(unpinned, windows=()))
+
+
 def with_deleted(*, state: State, ref: str) -> State:
     """
     Delete the pin with a ref.
@@ -164,16 +184,17 @@ def with_deleted(*, state: State, ref: str) -> State:
     Returns
     -------
     State
-        State without the pin; the same pin stays shown. When the pin
-        shown is deleted, it becomes the unpinned place. Unchanged when
-        no pin has the ref.
+        State without the pin or its windows; the same pin stays shown.
+        When the pin shown is deleted, it becomes the unpinned place,
+        without windows. Unchanged when no pin has the ref.
     """
     places = state.places
     index = ref_index(places=places, ref=ref)
     if index is None:
         return state
     if index == places.current and places.unpinned is None:
-        return replace(state, places=with_unpinned(places=places))
+        unpinned = with_unpinned(places=places)
+        return replace(state, places=without_windows(places=unpinned))
     pins = (*places.pins[:index], *places.pins[index + 1:])
     current = places.current - (index < places.current)
     current = min(current, max(len(pins) - 1, 0))

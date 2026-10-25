@@ -1,7 +1,7 @@
 """Tests for the pin-edit events."""
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import time, timedelta
 
 from paperroute.core.messages import (
     Effect,
@@ -13,8 +13,9 @@ from paperroute.core.messages import (
     SaveState,
     Tick,
 )
-from paperroute.core.model import Pin, pin_ref
+from paperroute.core.model import AutoWindow, Pin, pin_ref
 from paperroute.core.pin_edits import on_pin_edit
+from paperroute.core.places import toggled
 from paperroute.core.state import step
 from paperroute.core.state_model import Places, State
 from tests.core.factories import START, departure
@@ -128,6 +129,28 @@ def test_delete_shown_pin_unpins_it() -> None:
     assert state.places.pins == (A, C)
     assert state.places.unpinned == B
     assert not effects_of(effects=effects, kind=LoadDepartures)
+
+
+WINDOW = AutoWindow(days=frozenset({0}), start=time(7), end=time(9))
+
+
+def test_delete_drops_windows() -> None:
+    """Deleting a pin deletes its windows too."""
+    timed = replace(B, windows=(WINDOW,))
+    other = replace(A, windows=(WINDOW,))
+    state = state_with(pins=(other, timed, C), current=1)
+    state, _ = step(state, PinDeleted(ref=ref(timed)))
+    assert state.places.unpinned is not None
+    assert state.places.unpinned.windows == ()
+    state, _ = step(state, PinDeleted(ref=ref(other)))
+    assert state.places.pins == (C,)
+
+
+def test_unpin_keeps_windows() -> None:
+    """Unpinning a pin keeps its windows on the unpinned place."""
+    timed = replace(B, windows=(WINDOW,))
+    state = toggled(state=state_with(pins=(A, timed, C), current=1))
+    assert state.places.unpinned == timed
 
 
 def test_move_up_and_clamp() -> None:

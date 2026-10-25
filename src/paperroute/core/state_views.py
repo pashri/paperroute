@@ -48,7 +48,8 @@ def saved_of(*, state: State) -> Saved:
     Returns
     -------
     Saved
-        The pins, the place shown, the Live view, the zoom and settings;
+        The pins, the place shown, the Live view, the zoom, settings and
+        the auto pin state;
         the Stop view in place of the Alerts view, which needs alerts
         not kept.
     """
@@ -62,6 +63,7 @@ def saved_of(*, state: State) -> Saved:
         zoom=state.map.zoom,
         settings=state.settings,
         quota=state.quota,
+        auto=state.auto,
     )
 
 

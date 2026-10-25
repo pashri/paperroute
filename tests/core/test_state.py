@@ -11,6 +11,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from paperroute.core.alert_state import alert_feeds
+from paperroute.core.auto_model import AutoState
 from paperroute.core.chooser import (
     ChooserPath,
     ChooserState,
@@ -2826,3 +2827,12 @@ def test_alerts_counted_in_quota() -> None:
     fetches = [e for e in effects if isinstance(e, FetchFeed)]
     assert FetchFeed(feed=ALERTS, kind=FeedKind.ALERTS) in fetches
     assert after.quota.calls - state.quota.calls == len(fetches)
+
+
+def test_auto_saved_and_restored() -> None:
+    """The auto pin state is saved and comes back at start-up."""
+    auto = AutoState(overridden_at=START)
+    state = fresh()
+    assert saved_of(state=replace(state, auto=auto)).auto == auto
+    saved = replace(seeded(pin=PIN), auto=auto)
+    assert initial_state(saved=saved, now=START, stored=True).auto == auto

@@ -5,6 +5,7 @@ from datetime import date, time, timedelta
 from enum import StrEnum
 from typing import Final
 
+from paperroute.core.auto_model import AutoState
 from paperroute.core.geo import to_metres
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.model import Pin, RouteKind, StopPlace
@@ -161,6 +162,8 @@ class Saved:
         The choices made on the Settings page.
     quota : Quota
         The API calls counted today.
+    auto : AutoState
+        What the auto pin rules have done.
     """
 
     pins: tuple[Pin, ...]
@@ -170,6 +173,7 @@ class Saved:
     zoom: int
     settings: Settings = field(default_factory=Settings)
     quota: Quota = field(default_factory=Quota)
+    auto: AutoState = field(default_factory=AutoState)
 
 
 TOWN_HALL: Final[StopPlace] = StopPlace(

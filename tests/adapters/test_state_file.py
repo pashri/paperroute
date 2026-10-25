@@ -7,7 +7,7 @@ import stat
 import tempfile
 from collections.abc import Iterator
 from dataclasses import replace
-from datetime import date, time
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -20,7 +20,8 @@ from paperroute.adapters.state_migrations import (
     SCHEMA_VERSION,
     regional_to_coach,
 )
-from paperroute.core.model import Pin, RouteKind, StopPlace
+from paperroute.core.auto_model import AutoState, Before, Occurrence
+from paperroute.core.model import SYDNEY, AutoWindow, Pin, RouteKind, StopPlace
 from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
@@ -366,6 +367,7 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
         'zoom',
         'settings',
         'quota',
+        'auto',
     }
     assert set(data['pins'][0]) == {
         'origin',
@@ -374,6 +376,7 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
         'routes',
         'nickname',
         'only',
+        'windows',
     }
 
 
@@ -815,7 +818,7 @@ def test_migrates_v6_to_v7_with_lookahead(path: Path) -> None:
     assert loaded.saved.settings.rotate is True
     assert loaded.saved.settings.alert_lookahead == Lookahead.WEEK
     repository.save(saved=loaded.saved)
-    assert json.loads(path.read_text())['schema_version'] == 7
+    assert json.loads(path.read_text())['schema_version'] == SCHEMA_VERSION
 
 
 def test_bad_lookahead_repaired_alone(
@@ -929,3 +932,101 @@ def test_v5_pin_with_fields_survives_migration(path: Path) -> None:
     path.write_text(json.dumps(data))
     pin = JsonStateRepository(path=path).load().saved.pins[1]
     assert (pin.nickname, pin.only) == ('Work', ('606',))
+
+
+WEEKDAY_WINDOW = AutoWindow(frozenset(range(5)), time(7, 30), time(9))
+GOOD_WINDOW: dict[str, object] = {
+    'days': ['mon'], 'start': '07:00', 'end': '08:00',
+}
+
+
+def test_round_trips_windows_and_auto(path: Path) -> None:
+    """Windows and the auto pin state survive a save and a load."""
+    pin = replace(sample().pins[0], windows=(WEEKDAY_WINDOW,))
+    start = datetime(2026, 10, 16, 7, 30, tzinfo=SYDNEY)
+    auto = AutoState(
+        occurrence=Occurrence(
+            ref='abc', start=start, end=start.replace(hour=9),
+        ),
+        before=Before(place=sample().pins[0], pinned=False),
+        overridden_at=start.replace(minute=45),
+    )
+    saved = replace(sample(), pins=(pin,), current=0, auto=auto)
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=saved)
+    assert repository.load().saved == saved
+    stored = json.loads(path.read_text())['pins'][0]['windows'][0]
+    assert stored['days'] == ['mon', 'tue', 'wed', 'thu', 'fri']
+    assert stored['start'] == '07:30'
+
+
+def test_migrates_v7_to_v8(path: Path) -> None:
+    """A version 7 file gains empty windows and no auto pin state."""
+    saved = replace(sample(), unpinned=sample().pins[0])
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=saved)
+    data = json.loads(path.read_text())
+    data['schema_version'] = 7
+    del data['auto']
+    for pin in (*data['pins'], data['unpinned']):
+        del pin['windows']
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved == saved
+    assert all(pin.windows == () for pin in loaded.saved.pins)
+    assert loaded.saved.auto == AutoState()
+
+
+def test_bad_window_dropped_alone(
+    path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A window that can't be read goes; the rest of the file stays."""
+    settings = Settings(rotate=True)
+    quota = Quota(day=date(2026, 10, 16), calls=3)
+    JsonStateRepository(path=path).save(
+        saved=replace(sample(), settings=settings, quota=quota),
+    )
+    data = json.loads(path.read_text())
+    data['pins'][1]['windows'] = [
+        GOOD_WINDOW,
+        {'days': ['mon'], 'start': '07:00', 'end': '07:00'},
+        {'days': ['funday'], 'start': '07:00', 'end': '08:00'},
+    ]
+    path.write_text(json.dumps(data))
+    caplog.clear()
+    saved = JsonStateRepository(path=path).load().saved
+    assert saved.pins[1].windows == (
+        AutoWindow(frozenset({0}), time(7), time(8)),
+    )
+    assert saved.pins[0] == sample().pins[0]
+    assert (saved.settings, saved.quota) == (settings, quota)
+    warnings = [
+        record for record in caplog.records
+        if record.levelno == logging.WARNING
+    ]
+    assert len(warnings) == 2
+
+
+def test_bad_auto_reset_alone(
+    path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An auto block that can't be read resets; the pins stay."""
+    JsonStateRepository(path=path).save(saved=sample())
+    data = json.loads(path.read_text())
+    data['auto'] = {'occurrence': 3}
+    path.write_text(json.dumps(data))
+    loaded = JsonStateRepository(path=path).load()
+    assert loaded.stored
+    assert loaded.saved.auto == AutoState()
+    assert loaded.saved.pins == sample().pins
+    assert any(
+        record.levelno == logging.WARNING for record in caplog.records
+    )
+
+
+def test_windows_not_a_list(path: Path) -> None:
+    """Windows that are not a list leave the pin with none."""
+    stored_with(path=path, pin_fields={'windows': 'x'})
+    loaded = JsonStateRepository(path=path).load()
+    assert loaded.saved.pins == sample().pins

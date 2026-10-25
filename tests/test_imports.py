@@ -111,11 +111,15 @@ def test_core_imports_only_core() -> None:
 
 
 def test_pydantic_only_in_state_file() -> None:
-    """Only the state file imports pydantic."""
+    """Only the state file and its helpers import pydantic."""
+    allowed = {
+        SRC / 'adapters' / name
+        for name in ('state_file.py', 'state_migrations.py', 'state_auto.py')
+    }
     offenders = [
         str(path)
         for path in sorted(SRC.rglob('*.py'))
-        if path != SRC / 'adapters' / 'state_file.py'
+        if path not in allowed
         and any(
             name.split('.')[0] == 'pydantic'
             for name in imported_names(path=path)

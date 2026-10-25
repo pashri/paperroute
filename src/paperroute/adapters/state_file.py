@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Final
 
 from pydantic import (
+    AwareDatetime,
     BaseModel,
     ConfigDict,
     Field,
@@ -19,8 +20,25 @@ from pydantic import (
     field_validator,
 )
 
+from paperroute.adapters.state_auto import (
+    CLOCK,
+    CLOCK_FORMAT,
+    EMPTY_AUTO,
+    AutoWindowModel,
+    OccurrenceModel,
+    occurrence_from_model,
+    occurrence_to_model,
+    repaired_windows,
+)
+from paperroute.adapters.state_auto import (
+    window_from_model as auto_window_from_model,
+)
+from paperroute.adapters.state_auto import (
+    window_to_model as auto_window_to_model,
+)
 from paperroute.adapters.state_migrations import SCHEMA_VERSION, migrate
-from paperroute.core.model import Pin, RouteKind, StopPlace
+from paperroute.core.auto_model import AutoState, Before
+from paperroute.core.model import SYDNEY, Pin, RouteKind, StopPlace
 from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
@@ -43,8 +61,6 @@ TEMP_PREFIX: Final[str] = '.state.json.'
 BAD_PREFIX: Final[str] = 'state.json.bad-'
 BAD_KEPT: Final[int] = 2
 FILE_MODE: Final[int] = 0o644
-CLOCK: Final[str] = r'^([01]\d|2[0-3]):[0-5]\d$'
-CLOCK_FORMAT: Final[str] = '%H:%M'
 MAX_PEAK_WINDOWS: Final[int] = 2
 
 
@@ -70,6 +86,26 @@ class PinModel(BaseModel):
     routes: tuple[str, ...]
     nickname: str | None = Field(max_length=NICKNAME_MAX)
     only: tuple[str, ...]
+    windows: tuple[AutoWindowModel, ...]
+
+
+class BeforeModel(BaseModel):
+    """The place shown before a window started, as stored."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    place: PinModel
+    pinned: bool
+
+
+class AutoModel(BaseModel):
+    """What the auto pin rules have done, as stored."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    occurrence: OccurrenceModel | None
+    before: BeforeModel | None
+    overridden_at: AwareDatetime | None
 
 
 class WindowModel(BaseModel):
@@ -155,6 +191,7 @@ class StateModel(BaseModel):
     zoom: int = Field(ge=0, le=len(ZOOMS) - 1)
     settings: SettingsModel
     quota: QuotaModel
+    auto: AutoModel
 
 
 def stop_to_model(*, place: StopPlace) -> StopModel:
@@ -226,6 +263,9 @@ def pin_to_model(*, pin: Pin) -> PinModel:
         routes=pin.routes,
         nickname=pin.nickname,
         only=pin.only,
+        windows=tuple(
+            auto_window_to_model(window=window) for window in pin.windows
+        ),
     )
 
 
@@ -255,6 +295,9 @@ def pin_from_model(*, model: PinModel) -> Pin:
         routes=model.routes,
         nickname=model.nickname,
         only=model.only,
+        windows=tuple(
+            auto_window_from_model(model=window) for window in model.windows
+        ),
     )
 
 
@@ -371,6 +414,76 @@ def default_settings() -> dict[str, object]:
     return settings_to_model(settings=Settings()).model_dump(mode='json')
 
 
+def auto_to_model(*, auto: AutoState) -> AutoModel:
+    """
+    Convert the auto pin state to its stored form.
+
+    Parameters
+    ----------
+    auto : AutoState
+        The auto pin state.
+
+    Returns
+    -------
+    AutoModel
+        The stored state.
+    """
+    occurrence = auto.occurrence
+    before = auto.before
+    return AutoModel(
+        occurrence=(
+            None
+            if occurrence is None
+            else occurrence_to_model(occurrence=occurrence)
+        ),
+        before=(
+            None
+            if before is None
+            else BeforeModel(
+                place=pin_to_model(pin=before.place), pinned=before.pinned,
+            )
+        ),
+        overridden_at=auto.overridden_at,
+    )
+
+
+def auto_from_model(*, model: AutoModel) -> AutoState:
+    """
+    Convert a stored auto pin state back.
+
+    Parameters
+    ----------
+    model : AutoModel
+        The stored state.
+
+    Returns
+    -------
+    AutoState
+        The state, its times in Sydney.
+    """
+    occurrence = model.occurrence
+    before = model.before
+    overridden_at = model.overridden_at
+    return AutoState(
+        occurrence=(
+            None
+            if occurrence is None
+            else occurrence_from_model(model=occurrence)
+        ),
+        before=(
+            None
+            if before is None
+            else Before(
+                place=pin_from_model(model=before.place),
+                pinned=before.pinned,
+            )
+        ),
+        overridden_at=(
+            None if overridden_at is None else overridden_at.astimezone(SYDNEY)
+        ),
+    )
+
+
 def to_model(*, saved: Saved) -> StateModel:
     """
     Convert the saved state to its stored form.
@@ -395,6 +508,7 @@ def to_model(*, saved: Saved) -> StateModel:
         zoom=saved.zoom,
         settings=settings_to_model(settings=saved.settings),
         quota=QuotaModel(day=saved.quota.day, calls=saved.quota.calls),
+        auto=auto_to_model(auto=saved.auto),
     )
 
 
@@ -429,6 +543,7 @@ def from_model(*, model: StateModel) -> Saved:
         zoom=model.zoom,
         settings=settings_from_model(model=model.settings),
         quota=Quota(day=model.quota.day, calls=model.quota.calls),
+        auto=auto_from_model(model=model.auto),
     )
 
 
@@ -451,6 +566,29 @@ def repaired_quota(*, data: dict[str, object]) -> dict[str, object]:
     except ValidationError:
         logger.warning('state.json quota unusable, resetting it')
         return {**data, 'quota': {'day': None, 'calls': 0}}
+    return data
+
+
+def repaired_auto(*, data: dict[str, object]) -> dict[str, object]:
+    """
+    Reset an auto block that cannot be read, so the rest is kept.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Migrated data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data; with every auto field None when its auto block is not
+        valid.
+    """
+    try:
+        AutoModel.model_validate(data.get('auto'))
+    except ValidationError:
+        logger.warning('state.json auto pin state unusable, resetting it')
+        return {**data, 'auto': dict(EMPTY_AUTO)}
     return data
 
 
@@ -491,7 +629,7 @@ def repaired_settings(*, data: dict[str, object]) -> dict[str, object]:
 
 def repaired_pin(*, pin: object) -> dict[str, object] | None:
     """
-    Repair one stored pin's nickname and route filter.
+    Repair one stored pin's windows, nickname and route filter.
 
     Parameters
     ----------
@@ -501,12 +639,13 @@ def repaired_pin(*, pin: object) -> dict[str, object] | None:
     Returns
     -------
     dict[str, object] | None
-        The pin with a bad nickname reset to None (a long one is
-        cleaned) and a bad filter reset to empty; None when the pin is
-        still not valid.
+        The pin with bad windows dropped, a bad nickname reset to None
+        (a long one is cleaned) and a bad filter reset to empty; None
+        when the pin is still not valid.
     """
     if not isinstance(pin, dict):
         return None
+    pin = repaired_windows(pin=pin)
     nickname = pin.get('nickname')
     only = pin.get('only')
     fixed = {
@@ -682,9 +821,11 @@ class JsonStateRepository:
             data = json.loads(text)
             if not isinstance(data, dict):
                 raise ValueError('state.json is not an object')
-            migrated = repaired_pins(
-                data=repaired_settings(
-                    data=repaired_quota(data=migrate(data=data)),
+            migrated = repaired_auto(
+                data=repaired_pins(
+                    data=repaired_settings(
+                        data=repaired_quota(data=migrate(data=data)),
+                    ),
                 ),
             )
             model = StateModel.model_validate(migrated)

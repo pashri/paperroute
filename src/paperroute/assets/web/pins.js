@@ -160,6 +160,114 @@ export function wireDelete(dialog) {
   }
 }
 
+const NUMBERED = /^w\d+_/;
+const NUMBERED_ATTRS = ['name', 'id', 'for'];
+const MAX_ROWS = 20;
+
+/**
+ * Give a window row's field name or id a new row number.
+ * @param {string} name A name such as `w3_from`.
+ * @param {number} index The new row index.
+ * @returns {string} `w{index}_{field}`, or the name itself when it is
+ *   not a window row's.
+ */
+export function renumbered(name, index) {
+  return name.replace(NUMBERED, `w${index}_`);
+}
+
+/**
+ * Renumber one field's name, id and label target.
+ * @param {Element} field A field or label in a row.
+ * @param {number} index The row's index.
+ * @returns {void}
+ */
+function renumberField(field, index) {
+  for (const attr of NUMBERED_ATTRS) {
+    const value = field.getAttribute(attr);
+    if (value) field.setAttribute(attr, renumbered(value, index));
+  }
+}
+
+/**
+ * Renumber a row's legend, Remove value and fields.
+ * @param {Element} row A window row.
+ * @param {number} index Its index.
+ * @returns {void}
+ */
+function renumberRow(row, index) {
+  row.querySelector('legend').textContent = `Window ${index + 1}`;
+  row.querySelector('[name="remove_window"]').value = String(index);
+  for (const field of row.querySelectorAll('[name], [id], [for]')) {
+    renumberField(field, index);
+  }
+}
+
+/**
+ * Renumber every row and update the row count.
+ * @param {Element} fieldset The Show automatically fieldset.
+ * @returns {void}
+ */
+function renumberAll(fieldset) {
+  const rows = [...fieldset.querySelectorAll('fieldset.window')];
+  rows.forEach((row, index) => renumberRow(row, index));
+  fieldset.querySelector('[name="wn"]').value = String(rows.length);
+}
+
+/**
+ * Copy a row with its days unticked and its times cleared.
+ * @param {Element} row A window row.
+ * @returns {Element} The blank copy.
+ */
+function blankRow(row) {
+  const copy = row.cloneNode(true);
+  for (const input of copy.querySelectorAll('input')) {
+    if (input.type === 'time') input.value = '';
+    else input.checked = false;
+  }
+  return copy;
+}
+
+/**
+ * Add a blank row after the last one, when there is a row to copy.
+ * @param {Element} fieldset The Show automatically fieldset.
+ * @returns {boolean} Whether a row was added.
+ */
+function addRow(fieldset) {
+  const rows = fieldset.querySelectorAll('fieldset.window');
+  if (rows.length === 0 || rows.length >= MAX_ROWS) return false;
+  rows[rows.length - 1].after(blankRow(rows[0]));
+  return true;
+}
+
+/**
+ * Apply a pressed Remove or Add window button in place.
+ * @param {Element} fieldset The Show automatically fieldset.
+ * @param {HTMLButtonElement} button The button pressed.
+ * @returns {boolean} Whether the rows changed.
+ */
+function changedBy(fieldset, button) {
+  if (button.name === 'remove_window') {
+    button.closest('fieldset.window').remove();
+    return true;
+  }
+  return button.name === 'add_window' && addRow(fieldset);
+}
+
+/**
+ * Add and remove window rows without a round trip, then renumber them.
+ * Without rows to copy, Add window submits as it does without script.
+ * @param {Element} fieldset The Show automatically fieldset.
+ * @returns {void}
+ */
+export function wireWindows(fieldset) {
+  fieldset.addEventListener('click', (event) => {
+    const button = event.target.closest('button');
+    if (!button || !changedBy(fieldset, button)) return;
+    event.preventDefault();
+    renumberAll(fieldset);
+  });
+}
+
 /**
  * Wire whatever this page has.
  * @returns {void}
@@ -170,7 +278,9 @@ function start() {
   const editor = document.querySelector('form.editor');
   const dialog = document.querySelector('#delete-dialog');
   if (list && order) wireDrag(list, order);
+  const windows = document.querySelector('fieldset.windows');
   if (editor) wireEditor(editor);
+  if (windows) wireWindows(windows);
   if (dialog && typeof dialog.showModal === 'function') wireDelete(dialog);
 }
 

@@ -119,13 +119,79 @@ results.confirmed = [deleteForm.submitted, deleteForm.html];
 deleteForm.listeners.submit({ preventDefault() {} });
 dialogListeners.close();
 results.cancelled = [deleteForm.submitted, dialog.valueAtOpen];
+
+results.renumbered = [
+  mod.renumbered('w3_from', 1), mod.renumbered('nickname', 1),
+];
+const rows = [];
+const node = (attrs, extra = {}) => ({
+  attrs: { ...attrs },
+  getAttribute(name) { return this.attrs[name] ?? null; },
+  setAttribute(name, value) { this.attrs[name] = value; },
+  ...extra,
+});
+const makeRow = (index) => {
+  const day = node(
+    { name: `w${index}_day` }, { type: 'checkbox', checked: true },
+  );
+  const from = node(
+    { name: `w${index}_from`, id: `w${index}_from` },
+    { type: 'time', value: '07:30' },
+  );
+  const label = node({ for: `w${index}_from` });
+  const legend = { textContent: `Window ${index + 1}` };
+  const row = { fields: [day, from, label], legend };
+  const remove = node(
+    { name: 'remove_window' },
+    { name: 'remove_window', value: String(index) },
+  );
+  remove.closest = (selector) => (selector === 'button' ? remove : row);
+  row.remove = () => rows.splice(rows.indexOf(row), 1);
+  row.after = (other) => rows.splice(rows.indexOf(row) + 1, 0, other);
+  row.cloneNode = () => makeRow(index);
+  row.querySelector = (selector) =>
+    selector === 'legend' ? legend : remove;
+  row.querySelectorAll = (selector) =>
+    selector === 'input' ? [day, from] : row.fields;
+  row.button = remove;
+  return row;
+};
+rows.push(makeRow(0), makeRow(1));
+const count = { value: '2' };
+const add = { name: 'add_window' };
+add.closest = () => add;
+const windowHandlers = {};
+const windowsSet = {
+  querySelectorAll: () => [...rows],
+  querySelector: () => count,
+  addEventListener: (name, fn) => { windowHandlers[name] = fn; },
+};
+mod.wireWindows(windowsSet);
+let windowPrevented = 0;
+const press = (button) => windowHandlers.click({
+  target: button, preventDefault: () => { windowPrevented += 1; },
+});
+press(rows[0].button);
+const [left] = rows;
+results.removed = [
+  rows.length, count.value, left.legend.textContent, left.button.value,
+  left.fields.map((field) => Object.values(field.attrs).join()),
+];
+press(add);
+const [, added] = rows;
+results.added = [
+  rows.length, count.value, added.legend.textContent,
+  added.fields[0].checked, added.fields[1].value,
+  added.fields[1].attrs.name, windowPrevented,
+];
+windowHandlers.click({ target: { closest: () => null } });
 console.log(JSON.stringify(results));
 """
 
 
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_pins_script_in_node(tmp_path: Path) -> None:
-    """Drag, submit-on-change and the delete dialog behave."""
+    """Drag, submit-on-change, delete dialog and window rows behave."""
     web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'pins.mjs'
     script.write_text(
@@ -152,4 +218,9 @@ def test_pins_script_in_node(tmp_path: Path) -> None:
         'confirmed': [
             1, '<input type="hidden" name="confirm" value="yes">',
         ],
+        'renumbered': ['w1_from', 'nickname'],
+        'removed': [
+            1, '1', 'Window 1', '0', ['w0_day', 'w0_from,w0_from', 'w0_from'],
+        ],
+        'added': [2, '2', 'Window 2', False, '', 'w1_from', 2],
     }

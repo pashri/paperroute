@@ -1,7 +1,7 @@
 """Auto windows and the occurrences they run, as stored in state.json."""
 
 import logging
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Final, Literal, Self
 
 from pydantic import (
@@ -15,7 +15,7 @@ from pydantic import (
 )
 
 from paperroute.core.auto_model import Occurrence
-from paperroute.core.model import DAY_NAMES, SYDNEY, AutoWindow
+from paperroute.core.model import DAY_NAMES, AutoWindow
 
 logger = logging.getLogger(__name__)
 
@@ -165,12 +165,12 @@ def occurrence_from_model(*, model: OccurrenceModel) -> Occurrence:
     Returns
     -------
     Occurrence
-        The occurrence, its times in Sydney.
+        The occurrence, its times in UTC like the rules' own.
     """
     return Occurrence(
         ref=model.ref,
-        start=model.start.astimezone(SYDNEY),
-        end=model.end.astimezone(SYDNEY),
+        start=model.start.astimezone(UTC),
+        end=model.end.astimezone(UTC),
     )
 
 

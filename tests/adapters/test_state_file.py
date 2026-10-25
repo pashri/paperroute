@@ -34,7 +34,11 @@ from paperroute.core.saved import (
     Settings,
     Window,
 )
+from paperroute.core.state import initial_state
+from paperroute.core.state_views import saved_of
 from paperroute.core.tiles import ZOOMS
+from tests.core.factories import pin_at
+from tests.core.test_auto_pins import is_shown, started, ticked, trusted
 
 NAMES = st.text(
     alphabet=st.characters(exclude_categories=['Cs']),
@@ -1030,3 +1034,30 @@ def test_windows_not_a_list(path: Path) -> None:
     stored_with(path=path, pin_fields={'windows': 'x'})
     loaded = JsonStateRepository(path=path).load()
     assert loaded.saved.pins == sample().pins
+
+
+def test_restart_in_repeated_hour_returns(tmp_path: Path) -> None:
+    """A restart mid-window in the repeated hour still goes back."""
+    window = AutoWindow(frozenset({6}), time(2), time(2, 45))
+    early = replace(pin_at('early', x=200.0), windows=(window,))
+    home = pin_at('home', x=100.0)
+    state = started(
+        pins=(home, early), now=datetime(2026, 4, 5, 1, 59, tzinfo=SYDNEY),
+    )
+    state = ticked(
+        state=state, times=(datetime(2026, 4, 5, 2, tzinfo=SYDNEY),),
+    )
+    repository = JsonStateRepository(path=tmp_path / 's.json')
+    repository.save(saved=saved_of(state=state))
+    now = datetime(2026, 4, 5, 2, 10, tzinfo=SYDNEY)
+    state = trusted(state=initial_state(
+        saved=repository.load().saved, now=now, stored=True,
+    ))
+    loaded = state.auto
+    state = ticked(state=state, times=(now,))
+    assert is_shown(state=state, pin=early)
+    assert state.auto == loaded
+    state = ticked(
+        state=state, times=(datetime(2026, 4, 5, 2, 45, tzinfo=SYDNEY),),
+    )
+    assert is_shown(state=state, pin=home)

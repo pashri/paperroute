@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
+from paperroute.core.auto_model import AutoState
 from paperroute.core.device_model import (
     ConfirmAction,
     MenuRow,
@@ -28,21 +29,26 @@ from paperroute.core.messages import (
     ServiceSpanLoaded,
     Tick,
 )
-from paperroute.core.model import SYDNEY, ServiceSpan
+from paperroute.core.model import SYDNEY, AutoWindow, ServiceSpan, pin_ref
 from paperroute.core.panel_views import SleepView
 from paperroute.core.places import shown
 from paperroute.core.saved import QuietMode, Rate, Window
-from paperroute.core.sleep import WAKE_FOR
+from paperroute.core.sleep import WAKE_FOR, slept
 from paperroute.core.state import step
 from paperroute.core.state_model import Places, State
 from paperroute.core.stop_view import StopView
 from tests.core.factories import START, departure
 from tests.core.test_menu import DOWN, run, turn
 from tests.core.test_state import BUSES, PINS, fresh
+from tests.fakes import device_facts
 
 DAY: Final[date] = START.date()
 HALF_MINUTE: Final[timedelta] = timedelta(seconds=30)
 BOTTOM: Final[KnobTurned] = KnobTurned(knob=Knob.BOTTOM, steps=1)
+FRIDAY: Final[frozenset[int]] = frozenset({4})
+EARLY: Final[AutoWindow] = AutoWindow(
+    days=FRIDAY, start=time(5), end=time(6),
+)
 
 
 def at(hour: int, minute: int = 0, *, days: int = 0) -> datetime:
@@ -473,3 +479,176 @@ def test_sleep_now_woken_in_quiet_hours_sleeps_again() -> None:
     state = ticked(state=state, times=(at(23, 5),))
     assert state.panel.asleep
     assert state.panel.by_quiet
+
+
+def windowed(
+    *,
+    now: datetime,
+    window: AutoWindow = EARLY,
+    mode: QuietMode = QuietMode.MY_HOURS,
+) -> State:
+    """
+    A trusted state whose second pin has a window, after a tick.
+
+    Parameters
+    ----------
+    now : datetime
+        Time of the state and its first tick.
+    window : AutoWindow
+        The second pin's window.
+    mode : QuietMode
+        How quiet hours are chosen.
+
+    Returns
+    -------
+    State
+        State showing the first pin, with departures loaded.
+    """
+    state = fresh(now=now)
+    places = Places(pins=(PINS[0], replace(PINS[1], windows=(window,))))
+    state = replace(
+        state,
+        places=places,
+        panel=replace(state.panel, facts=device_facts()),
+        settings=replace(state.settings, quiet_mode=mode),
+    )
+    return step(boarded(state=state), Tick(now=now))[0]
+
+
+def shows_work(*, state: State) -> bool:
+    """
+    Say whether the windowed pin is shown.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    bool
+        True when the second pin is shown.
+    """
+    return pin_ref(pin=shown(state=state)) == pin_ref(pin=PINS[1])
+
+
+def slept_now(*, state: State) -> State:
+    """
+    Choose Sleep now from the Settings menu.
+
+    Parameters
+    ----------
+    state : State
+        State, awake.
+
+    Returns
+    -------
+    State
+        State asleep, not by quiet hours.
+    """
+    index = tuple(MenuRow).index(MenuRow.SLEEP)
+    state, _ = run(state=state, events=(KnobsHeld(), turn(steps=index)))
+    return step(state, DOWN)[0]
+
+
+def test_window_wakes_quiet_sleep() -> None:
+    """A window's start wakes a quiet sleep, which does not come back."""
+    state = ticked(state=windowed(now=at(4, 30)), times=(at(4, 59),))
+    assert state.panel.asleep
+    assert state.panel.by_quiet
+    state = ticked(state=state, times=(at(5),))
+    assert not state.panel.asleep
+    assert shows_work(state=state)
+    state = boarded(state=state)
+    state, effects = step(state, Tick(now=at(5) + HALF_MINUTE))
+    assert not state.panel.asleep
+    assert FetchFeed(feed=BUSES) in fetches(effects=effects)
+
+
+def test_window_wakes_sleep_now() -> None:
+    """A window's start wakes a Sleep now sleep."""
+    state = ticked(state=windowed(now=at(4, 30)), times=(at(4, 59),))
+    state = slept(state=state, by_quiet=False)
+    state = ticked(state=state, times=(at(5),))
+    assert not state.panel.asleep
+    assert shows_work(state=state)
+
+
+def test_sleep_now_in_window_lasts() -> None:
+    """Sleep now in a window lasts until a touch."""
+    state = ticked(state=windowed(now=at(4, 30)), times=(at(5), at(5, 10)))
+    state = slept_now(state=state)
+    assert state.panel.asleep
+    later = (at(5, minute) for minute in range(11, 60))
+    state = ticked(state=state, times=later)
+    assert state.panel.asleep
+    state, _ = step(state, BOTTOM)
+    assert not state.panel.asleep
+
+
+def test_window_end_in_quiet_hours_sleeps() -> None:
+    """A window ending in quiet hours goes back and sleeps, drawn once."""
+    late = AutoWindow(days=FRIDAY, start=time(23), end=time(23, 30))
+    state = windowed(now=at(22, 59), window=late)
+    state = ticked(
+        state=state, times=(at(23, minute) for minute in range(30)),
+    )
+    assert not state.panel.asleep
+    assert shows_work(state=state)
+    state, effects = step(state, Tick(now=at(23, 30)))
+    assert state.panel.asleep
+    assert not shows_work(state=state)
+    assert state.auto == AutoState()
+    drawn = renders(effects=effects)
+    assert len(drawn) == 1
+    assert isinstance(drawn[0].view, SleepView)
+
+
+def night_spans(*, state: State) -> State:
+    """
+    Load spans that say the shown pin's service is over.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    State
+        State with yesterday's and today's spans, asleep from 01:10 to
+        06:30.
+    """
+    spans = {
+        -1: ServiceSpan(first_start=at(5, days=-1), last_end=at(0, 40)),
+        0: ServiceSpan(first_start=at(7), last_end=at(0, 40, days=1)),
+    }
+    for days, span in spans.items():
+        event = ServiceSpanLoaded(
+            pin=shown(state=state), day=DAY + timedelta(days=days), span=span,
+        )
+        state = step(state, event)[0]
+    return state
+
+
+def test_follow_timetable_overridden_too() -> None:
+    """A window's start wakes a sleep by the timetable too."""
+    state = windowed(now=at(4, 30), mode=QuietMode.TIMETABLE)
+    state = ticked(state=night_spans(state=state), times=(at(4, 59),))
+    assert state.panel.asleep
+    state = ticked(state=state, times=(at(5),))
+    assert not state.panel.asleep
+    state = night_spans(state=boarded(state=state))
+    state = ticked(state=state, times=(at(5) + HALF_MINUTE, at(5, 20)))
+    assert not state.panel.asleep
+
+
+def test_overridden_window_still_awake() -> None:
+    """An override leaves the panel awake until the window ends."""
+    state = ticked(state=windowed(now=at(4, 30)), times=(at(5), at(5, 5)))
+    state, _ = step(state, KnobTurned(knob=Knob.TOP, steps=1))
+    auto = replace(state.auto, overridden_at=at(5, 5))
+    state = replace(state, auto=auto)
+    for minute in range(6, 30):
+        state = ticked(state=state, times=(at(5, minute),))
+        assert not state.panel.asleep

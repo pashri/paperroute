@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import date, timedelta
 from typing import Final
 
+from paperroute.core.auto_model import holds_awake
 from paperroute.core.messages import (
     Effect,
     FetchFeed,
@@ -137,9 +138,11 @@ def quiet_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     tuple[State, tuple[Effect, ...]]
         A quiet sleep that is no longer due wakes, polling at once; quiet
         hours sleep a screen that `may_sleep`; a wake run out outside
-        quiet hours is forgotten. A Sleep now sleep is left alone.
+        quiet hours is forgotten. A Sleep now sleep is left alone. Quiet
+        hours are not due while an auto window holds the panel awake.
     """
-    panel, due = state.panel, quiet_due(state=state)
+    panel = state.panel
+    due = quiet_due(state=state) and not holds_awake(auto=state.auto)
     if panel.asleep:
         if panel.by_quiet and not due:
             state, polls = poll_effects(state=awake(state=state))

@@ -15,11 +15,10 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from paperroute.adapters.state_file import (
+from paperroute.adapters.state_file import JsonStateRepository, write_atomic
+from paperroute.adapters.state_migrations import (
     SCHEMA_VERSION,
-    JsonStateRepository,
     regional_to_coach,
-    write_atomic,
 )
 from paperroute.core.model import Pin, RouteKind, StopPlace
 from paperroute.core.pin_choices import clean_nickname

@@ -5,6 +5,7 @@ from dataclasses import replace
 from paperroute.core.alert_match import alert_banner
 from paperroute.core.alert_state import alerts_left, shown_alerts
 from paperroute.core.alerts_view import build_alerts_view
+from paperroute.core.auto_pins import rule_holds
 from paperroute.core.banners import device_banner
 from paperroute.core.chooser_steps import chooser_view
 from paperroute.core.live import LiveDeparture, live_since, resolved
@@ -127,6 +128,7 @@ def stop_view_of(*, state: State) -> StopView:
                 index=shown_index(state=state),
                 total=len(state.places.pins),
                 nickname=pin.nickname,
+                auto=rule_holds(state=state),
             ),
         ),
     )

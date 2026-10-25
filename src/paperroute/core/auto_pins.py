@@ -313,3 +313,26 @@ def with_override(
         return after
     auto = replace(after.auto, overridden_at=after.now)
     return replace(after, auto=auto)
+
+
+def rule_holds(*, state: State) -> bool:
+    """
+    Say whether a rule is showing its pin now.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    bool
+        True while an occurrence is recorded and not overridden, and its
+        pin is shown pinned.
+    """
+    auto = state.auto
+    if auto.occurrence is None or auto.overridden_at is not None:
+        return False
+    return state.places.unpinned is None and pin_ref(
+        pin=shown(state=state),
+    ) == auto.occurrence.ref

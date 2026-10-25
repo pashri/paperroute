@@ -138,6 +138,23 @@ def test_unpinned_tag_is_dashed() -> None:
     assert int(inside) == INK
 
 
+def test_auto_tag_is_inverted() -> None:
+    """An auto tag is an ink box with a paper edge and paper text."""
+    auto = replace(PINNED, auto=True)
+    canvas, left = _tag_box(tag=auto)
+    plain_canvas, plain_left = _tag_box(tag=PINNED)
+    assert left == plain_left
+    x = int(left)
+    grey = canvas.grey()
+    inside = grey[13:28, x + 2:x + 40]
+    assert float((inside == INK).mean()) > 0.5
+    assert int(inside.max()) == PAPER
+    assert int(grey[20, x]) == PAPER
+    assert int(grey[11, x + 10]) == PAPER
+    plain = plain_canvas.grey()[13:28, x + 2:x + 40]
+    assert float((plain == PAPER).mean()) > 0.5
+
+
 def test_unpinned_tag_text_is_paper() -> None:
     """An unpinned tag's text is paper on the ink header."""
     canvas, left = _tag_box(tag=NOT_PINNED)

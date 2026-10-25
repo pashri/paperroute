@@ -725,3 +725,13 @@ def test_alert_banner_shortens_list() -> None:
     """An alert banner takes a row's height."""
     result = view(departures=many(), alert=ACTIVE)
     assert len(result.rows) == ROWS_UNDER_BANNER
+
+
+def test_pin_tag_auto() -> None:
+    """An auto tag keeps its text; an unpinned place stays not pinned."""
+    tag = pin_tag(index=1, total=3, nickname='Work', auto=True)
+    assert tag == PinTag(text='Work 2/3', pinned=True, auto=True)
+    plain = pin_tag(index=1, total=3, nickname='Work')
+    assert plain.text == tag.text
+    assert not plain.auto
+    assert pin_tag(index=None, total=3, auto=True) == NOT_PINNED

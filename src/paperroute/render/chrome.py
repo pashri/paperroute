@@ -99,8 +99,9 @@ def pin_tag(canvas: Canvas, *, right: float, tag: PinTag) -> float:
     """
     Draw the pin tag 8 px left of the tabs.
 
-    A pinned tag is a paper box with ink text; an unpinned one is a
-    dashed paper outline with paper text.
+    A pinned tag is a paper box with ink text; an auto one is an ink box
+    with a paper outline and paper text; an unpinned one is a dashed
+    paper outline with paper text.
 
     Parameters
     ----------
@@ -119,7 +120,8 @@ def pin_tag(canvas: Canvas, *, right: float, tag: PinTag) -> float:
     face = Face(weight=700, px=12)
     width = canvas.length(text=tag.text, face=face) + 10
     left = right - TAG_GAP - width
-    if tag.pinned:
+    boxed = tag.pinned and not tag.auto
+    if boxed:
         canvas.rect(box=(left, 11, left + width, 30), grey=PAPER)
     else:
         canvas.line(
@@ -132,13 +134,13 @@ def pin_tag(canvas: Canvas, *, right: float, tag: PinTag) -> float:
             ],
             width=1,
             grey=PAPER,
-            dash=(3, 2),
+            dash=None if tag.auto else (3, 2),
         )
     canvas.text(
         at=(left + 5, 25),
         text=tag.text,
         face=face,
-        grey=INK if tag.pinned else PAPER,
+        grey=INK if boxed else PAPER,
     )
     return left
 

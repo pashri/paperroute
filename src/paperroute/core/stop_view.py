@@ -91,10 +91,22 @@ def arrival_line(*, row: Row) -> str:
 
 @dataclass(frozen=True)
 class PinTag:
-    """The header's pin tag: its text and whether it marks a pinned place."""
+    """
+    The header's pin tag.
+
+    Attributes
+    ----------
+    text : str
+        The tag's text.
+    pinned : bool
+        Whether it marks a pinned place.
+    auto : bool
+        Whether an auto pin rule is showing the place.
+    """
 
     text: str
     pinned: bool
+    auto: bool = False
 
 
 NOT_PINNED: Final[PinTag] = PinTag(text='not pinned', pinned=False)
@@ -105,6 +117,7 @@ def pin_tag(
     index: int | None,
     total: int,
     nickname: str | None = None,
+    auto: bool = False,
 ) -> PinTag:
     """
     Make the header tag for a place.
@@ -117,6 +130,8 @@ def pin_tag(
         How many pins there are.
     nickname : str | None
         The pin's nickname, shown in place of 'pin'.
+    auto : bool
+        Whether an auto pin rule is showing the pin.
 
     Returns
     -------
@@ -128,6 +143,7 @@ def pin_tag(
     return PinTag(
         text=f'{nickname or "pin"} {index + 1}/{total}',
         pinned=True,
+        auto=auto,
     )
 
 

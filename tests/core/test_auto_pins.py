@@ -7,6 +7,7 @@ from typing import Final
 
 from paperroute.core.alert_model import AlertTie, Matched, Period
 from paperroute.core.auto_model import AutoState, Before, Occurrence
+from paperroute.core.auto_pins import rule_holds
 from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
@@ -601,3 +602,17 @@ def test_turn_outside_window_noop() -> None:
     state = step(started(), KnobTurned(knob=Knob.TOP, steps=1))[0]
     assert is_shown(state=state, pin=WORK)
     assert state.auto == AutoState()
+
+
+def test_rule_holds_follows_rule() -> None:
+    """The rule holds only while it shows its pin, pinned and unturned."""
+    assert rule_holds(state=in_window())
+    assert not rule_holds(state=started())
+    assert not rule_holds(state=step(in_window(), TOP_BACK)[0])
+    assert not rule_holds(
+        state=ticked(state=in_window(), times=(at(9),)),
+    )
+    unpinned = step(in_window(), KnobHeld(knob=Knob.BOTTOM))[0]
+    assert not rule_holds(state=unpinned)
+    plain = replace(unpinned, auto=replace(unpinned.auto, overridden_at=None))
+    assert not rule_holds(state=plain)

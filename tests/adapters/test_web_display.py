@@ -507,6 +507,21 @@ async def test_settings_page_served(
     }
 
 
+async def test_settings_page_has_connection_map() -> None:
+    """The Display form has a labelled connection map select."""
+    client = await _client(display=WebDisplay(status=dict))
+    try:
+        text = await (await client.get('/settings')).text()
+    finally:
+        await client.close()
+    assert re.search(
+        r'<label>Connection map\s*<select name="connection_map">\s*'
+        r'<option value="change" selected>Zoomed on the change</option>\s*'
+        r'<option value="whole">Whole trip</option>\s*</select>\s*</label>',
+        text,
+    )
+
+
 def test_live_page_links_to_settings() -> None:
     """The Live page's header links to Settings."""
     web_dir = files('paperroute') / 'assets' / 'web'

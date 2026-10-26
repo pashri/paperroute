@@ -70,6 +70,13 @@ class Lookahead(StrEnum):
     ALL = 'all'
 
 
+class ConnectionMap(StrEnum):
+    """How the Map shows a connection pin."""
+
+    CHANGE = 'change'
+    WHOLE = 'whole'
+
+
 LOOKAHEAD: Final[dict[Lookahead, timedelta | None]] = {
     Lookahead.DAY: timedelta(days=1),
     Lookahead.THREE_DAYS: timedelta(days=3),
@@ -110,6 +117,8 @@ class Settings:  # pylint: disable=too-many-instance-attributes
         Whether departure rows are white on black.
     alert_lookahead : Lookahead
         How far ahead planned alerts are listed.
+    connection_map : ConnectionMap
+        Whether the Map zooms on a connection's change or shows it whole.
     """
 
     auto_rebuild: bool = True
@@ -122,6 +131,7 @@ class Settings:  # pylint: disable=too-many-instance-attributes
     larger_text: bool = False
     inverted_lists: bool = False
     alert_lookahead: Lookahead = Lookahead.WEEK
+    connection_map: ConnectionMap = ConnectionMap.CHANGE
 
 
 @dataclass(frozen=True)

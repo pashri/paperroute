@@ -9,7 +9,14 @@ from html import escape
 from typing import Final
 
 from paperroute.core.messages import SettingsChanged
-from paperroute.core.saved import Lookahead, QuietMode, Rate, Settings, Window
+from paperroute.core.saved import (
+    ConnectionMap,
+    Lookahead,
+    QuietMode,
+    Rate,
+    Settings,
+    Window,
+)
 
 SWITCHES: Final[tuple[str, ...]] = (
     'auto_rebuild',
@@ -19,7 +26,7 @@ SWITCHES: Final[tuple[str, ...]] = (
 )
 SLOTS: Final[tuple[str, ...]] = ('peak_1', 'peak_2')
 CHOICES: Final[frozenset[str]] = frozenset(
-    {'peak_rate', 'offpeak_rate', 'alert_lookahead'}
+    {'peak_rate', 'offpeak_rate', 'alert_lookahead', 'connection_map'}
 )
 SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
 CLOCK: Final[re.Pattern[str]] = re.compile(r'(\d\d):(\d\d)')
@@ -103,6 +110,7 @@ def form_values(*, settings: Settings) -> dict[str, str]:
     values['offpeak_rate'] = settings.offpeak_rate.value
     values['quiet_mode'] = settings.quiet_mode.value
     values['alert_lookahead'] = settings.alert_lookahead.value
+    values['connection_map'] = settings.connection_map.value
     values['quiet_start'] = clock_text(moment=settings.my_hours.start)
     values['quiet_end'] = clock_text(moment=settings.my_hours.end)
     for index, slot in enumerate(SLOTS):
@@ -323,6 +331,9 @@ def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged:
         inverted_lists=switches.get('inverted_lists'),
         alert_lookahead=optional_enum(
             kind=Lookahead, fields=fields, name='alert_lookahead',
+        ),
+        connection_map=optional_enum(
+            kind=ConnectionMap, fields=fields, name='connection_map',
         ),
     )
 

@@ -6,7 +6,14 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from paperroute.adapters.state_auto import CLOCK, CLOCK_FORMAT
-from paperroute.core.saved import Lookahead, QuietMode, Rate, Settings, Window
+from paperroute.core.saved import (
+    ConnectionMap,
+    Lookahead,
+    QuietMode,
+    Rate,
+    Settings,
+    Window,
+)
 
 MAX_PEAK_WINDOWS: Final[int] = 2
 
@@ -36,6 +43,7 @@ class SettingsModel(BaseModel):
     larger_text: bool
     inverted_lists: bool
     alert_lookahead: Lookahead
+    connection_map: ConnectionMap
 
     @field_validator('peak_windows')
     @classmethod
@@ -139,6 +147,7 @@ def settings_to_model(*, settings: Settings) -> SettingsModel:
         larger_text=settings.larger_text,
         inverted_lists=settings.inverted_lists,
         alert_lookahead=settings.alert_lookahead,
+        connection_map=settings.connection_map,
     )
 
 
@@ -169,6 +178,7 @@ def settings_from_model(*, model: SettingsModel) -> Settings:
         larger_text=model.larger_text,
         inverted_lists=model.inverted_lists,
         alert_lookahead=model.alert_lookahead,
+        connection_map=model.connection_map,
     )
 
 

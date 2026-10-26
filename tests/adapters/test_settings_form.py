@@ -13,7 +13,14 @@ from paperroute.adapters.settings_form import (
     page_text,
 )
 from paperroute.core.messages import SettingsChanged
-from paperroute.core.saved import Lookahead, QuietMode, Rate, Settings, Window
+from paperroute.core.saved import (
+    ConnectionMap,
+    Lookahead,
+    QuietMode,
+    Rate,
+    Settings,
+    Window,
+)
 
 ODD = Settings(
     auto_rebuild=False,
@@ -26,6 +33,7 @@ ODD = Settings(
     larger_text=True,
     inverted_lists=True,
     alert_lookahead=Lookahead.THREE_DAYS,
+    connection_map=ConnectionMap.WHOLE,
 )
 PEAK = {
     'peak_1_start': '06:30',
@@ -152,3 +160,27 @@ def test_page_text_fills_marks() -> None:
     assert 'value="22:45"' in text
     assert 'Peak hours not saved: each start must be before' in text
     assert 'Quiet hours not saved' not in text
+
+
+def test_connection_map_posted() -> None:
+    """The connection map choice is read; an unknown one is refused."""
+    assert changed_from(fields={'connection_map': 'whole'}) == (
+        SettingsChanged(connection_map=ConnectionMap.WHOLE)
+    )
+    with pytest.raises(UnknownValue):
+        changed_from(fields={'connection_map': 'both'})
+
+
+def test_connection_map_selected() -> None:
+    """The stored connection map choice is the selected option."""
+    text = page_text(
+        template=(
+            '<option{{connection_map:change}}>'
+            '<option{{connection_map:whole}}>'
+        ),
+        values=form_values(
+            settings=Settings(connection_map=ConnectionMap.WHOLE),
+        ),
+        error=None,
+    )
+    assert text == '<option><option selected>'

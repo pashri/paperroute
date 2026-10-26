@@ -32,7 +32,7 @@ from paperroute.core.messages import (
     Stop,
     Tick,
 )
-from paperroute.core.saved import Lookahead, Rate, Settings
+from paperroute.core.saved import ConnectionMap, Lookahead, Rate, Settings
 from paperroute.core.state import SAVE_AFTER, step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import stop_view_of
@@ -368,3 +368,11 @@ def test_no_rebuild_while_resetting() -> None:
     _, effects = step(state, tick)
     assert [type(e) for e in due].count(RebuildTimetable) == 1
     assert not [e for e in effects if isinstance(e, RebuildTimetable)]
+
+
+def test_connection_map_changed() -> None:
+    """A connection map change is applied to the settings."""
+    state, _ = step(
+        pinned(), SettingsChanged(connection_map=ConnectionMap.WHOLE),
+    )
+    assert state.settings.connection_map is ConnectionMap.WHOLE

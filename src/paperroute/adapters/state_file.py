@@ -33,6 +33,12 @@ from paperroute.adapters.state_auto import (
 from paperroute.adapters.state_auto import (
     window_to_model as auto_window_to_model,
 )
+from paperroute.adapters.state_change import (
+    ALLOW_MAX,
+    ALLOW_MIN,
+    repaired_change,
+    route_names,
+)
 from paperroute.adapters.state_migrations import SCHEMA_VERSION, migrate
 from paperroute.adapters.state_settings import (
     SettingsModel,
@@ -41,7 +47,7 @@ from paperroute.adapters.state_settings import (
     settings_to_model,
 )
 from paperroute.core.auto_model import AutoState, Before
-from paperroute.core.model import SYDNEY, Pin, RouteKind, StopPlace
+from paperroute.core.model import SYDNEY, Change, Pin, RouteKind, StopPlace
 from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
 from paperroute.core.saved import DEFAULT_SAVED, LiveView, Quota, Saved
 from paperroute.core.tiles import ZOOMS
@@ -67,6 +73,17 @@ class StopModel(BaseModel):
     y: float | None = Field(allow_inf_nan=False)
 
 
+class ChangeModel(BaseModel):
+    """A connection pin's change, as stored."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    alight: StopModel
+    board: StopModel
+    allow: int = Field(ge=ALLOW_MIN, le=ALLOW_MAX)
+    only: tuple[str, ...]
+
+
 class PinModel(BaseModel):
     """A pin as stored."""
 
@@ -79,6 +96,7 @@ class PinModel(BaseModel):
     nickname: str | None = Field(max_length=NICKNAME_MAX)
     only: tuple[str, ...]
     windows: tuple[AutoWindowModel, ...]
+    change: ChangeModel | None
 
 
 class BeforeModel(BaseModel):
@@ -168,6 +186,50 @@ def stop_from_model(*, model: StopModel) -> StopPlace:
     return StopPlace(stop_id=model.stop_id, name=model.name, point=point)
 
 
+def change_to_model(*, change: Change) -> ChangeModel:
+    """
+    Convert a change to its stored form.
+
+    Parameters
+    ----------
+    change : Change
+        The change.
+
+    Returns
+    -------
+    ChangeModel
+        The stored change.
+    """
+    return ChangeModel(
+        alight=stop_to_model(place=change.alight),
+        board=stop_to_model(place=change.board),
+        allow=change.allow,
+        only=change.only,
+    )
+
+
+def change_from_model(*, model: ChangeModel) -> Change:
+    """
+    Convert a stored change back.
+
+    Parameters
+    ----------
+    model : ChangeModel
+        The stored change.
+
+    Returns
+    -------
+    Change
+        The change.
+    """
+    return Change(
+        alight=stop_from_model(model=model.alight),
+        board=stop_from_model(model=model.board),
+        allow=model.allow,
+        only=model.only,
+    )
+
+
 def pin_to_model(*, pin: Pin) -> PinModel:
     """
     Convert a pin to its stored form.
@@ -196,6 +258,9 @@ def pin_to_model(*, pin: Pin) -> PinModel:
         only=pin.only,
         windows=tuple(
             auto_window_to_model(window=window) for window in pin.windows
+        ),
+        change=None if pin.change is None else change_to_model(
+            change=pin.change,
         ),
     )
 
@@ -228,6 +293,9 @@ def pin_from_model(*, model: PinModel) -> Pin:
         only=model.only,
         windows=tuple(
             auto_window_from_model(model=window) for window in model.windows
+        ),
+        change=None if model.change is None else change_from_model(
+            model=model.change,
         ),
     )
 
@@ -458,14 +526,14 @@ def repaired_pin(*, pin: object) -> dict[str, object] | None:
     -------
     dict[str, object] | None
         The pin with bad windows dropped, a bad nickname reset to None
-        (a long one is cleaned) and a bad filter reset to empty; None
+        (a long one is cleaned), a bad filter reset to empty and its
+        change repaired as far as it can be; None
         when the pin is still not valid.
     """
     if not isinstance(pin, dict):
         return None
-    pin = repaired_windows(pin=pin)
+    pin = repaired_change(pin=repaired_windows(pin=pin))
     nickname = pin.get('nickname')
-    only = pin.get('only')
     fixed = {
         **pin,
         'nickname': (
@@ -473,12 +541,7 @@ def repaired_pin(*, pin: object) -> dict[str, object] | None:
             if isinstance(nickname, str)
             else None
         ),
-        'only': (
-            only
-            if isinstance(only, list)
-            and all(isinstance(route, str) for route in only)
-            else []
-        ),
+        'only': route_names(value=pin.get('only')),
     }
     try:
         PinModel.model_validate(fixed)

@@ -25,6 +25,7 @@ from paperroute.core.model import SYDNEY, AutoWindow, Pin, RouteKind, StopPlace
 from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
+    ConnectionMap,
     LiveView,
     Lookahead,
     QuietMode,
@@ -37,6 +38,7 @@ from paperroute.core.saved import (
 from paperroute.core.state import initial_state
 from paperroute.core.state_views import saved_of
 from paperroute.core.tiles import ZOOMS
+from tests.core.connection_factories import WORK
 from tests.core.factories import pin_at
 from tests.core.test_auto_pins import is_shown, started, ticked, trusted
 
@@ -381,6 +383,7 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
         'nickname',
         'only',
         'windows',
+        'change',
     }
 
 
@@ -1061,3 +1064,106 @@ def test_restart_in_repeated_hour_returns(tmp_path: Path) -> None:
         state=state, times=(datetime(2026, 4, 5, 2, 45, tzinfo=SYDNEY),),
     )
     assert is_shown(state=state, pin=home)
+
+
+def test_round_trips_change(path: Path) -> None:
+    """A connection pin saves and loads back equal."""
+    saved = replace(sample(), pins=(WORK,), current=0)
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=saved)
+    assert repository.load().saved == saved
+    change = json.loads(path.read_text())['pins'][0]['change']
+    assert change['allow'] == 7
+    assert change['alight']['stop_id'] == 'G215254'
+
+
+def test_migrates_v8_to_v9(path: Path) -> None:
+    """A version 8 file gains no changes and the default map setting."""
+    before = Before(place=sample().pins[0], pinned=False)
+    saved = replace(
+        sample(),
+        unpinned=sample().pins[0],
+        auto=AutoState(before=before),
+    )
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=saved)
+    data = json.loads(path.read_text())
+    data['schema_version'] = 8
+    del data['settings']['connection_map']
+    for pin in (*data['pins'], data['unpinned'], data['auto']['before']['place']):
+        del pin['change']
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved == saved
+    assert all(pin.change is None for pin in loaded.saved.pins)
+    assert loaded.saved.settings.connection_map is ConnectionMap.CHANGE
+
+
+def stored_change(*, path: Path, change: dict[str, object]) -> None:
+    """
+    Save WORK beside the sample pin, then overwrite WORK's stored change.
+
+    Parameters
+    ----------
+    path : Path
+        The state file.
+    change : dict[str, object]
+        Fields to set on the stored change.
+    """
+    saved = replace(sample(), pins=(sample().pins[0], WORK))
+    JsonStateRepository(path=path).save(saved=saved)
+    data: dict[str, Any] = json.loads(path.read_text())
+    data['pins'][1]['change'].update(change)
+    path.write_text(json.dumps(data))
+
+
+def test_bad_change_drops_pin_alone(
+    path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A change that can't be read drops its pin with one warning."""
+    settings = Settings(rotate=True)
+    JsonStateRepository(path=path).save(
+        saved=replace(sample(), pins=(sample().pins[0], WORK), settings=settings),
+    )
+    data = json.loads(path.read_text())
+    data['pins'][1]['change'] = {'alight': 3}
+    path.write_text(json.dumps(data))
+    caplog.clear()
+    saved = JsonStateRepository(path=path).load().saved
+    assert saved.pins == (sample().pins[0],)
+    assert saved.settings == settings
+    assert saved.auto == AutoState()
+    warnings = [
+        record for record in caplog.records
+        if record.levelno == logging.WARNING
+    ]
+    assert len(warnings) == 1
+
+
+def test_bad_change_only_reset(path: Path) -> None:
+    """A route filter that isn't a list of names becomes empty."""
+    stored_change(path=path, change={'only': '665'})
+    pin = JsonStateRepository(path=path).load().saved.pins[1]
+    assert pin == WORK
+
+
+@pytest.mark.parametrize(('allow', 'kept'), [(0, 1), (90, 60)])
+def test_allow_out_of_range_clamped(
+    path: Path, allow: int, kept: int,
+) -> None:
+    """An allowance outside 1-60 is clamped; the rest is kept."""
+    stored_change(path=path, change={'allow': allow, 'only': ['665']})
+    pin = JsonStateRepository(path=path).load().saved.pins[1]
+    assert WORK.change is not None
+    assert pin == replace(
+        WORK, change=replace(WORK.change, allow=kept, only=('665',)),
+    )
+
+
+def test_allow_not_a_number_drops_pin(path: Path) -> None:
+    """An allowance that is not a number drops that pin alone."""
+    stored_change(path=path, change={'allow': 'x'})
+    assert JsonStateRepository(path=path).load().saved.pins == (
+        sample().pins[0],
+    )

@@ -4,10 +4,11 @@ from collections.abc import Callable
 from typing import Final
 
 from paperroute.adapters.state_auto import add_auto
+from paperroute.adapters.state_change import add_connections
 from paperroute.adapters.state_settings import default_settings
 from paperroute.core.model import TRAINLINK
 
-SCHEMA_VERSION: Final[int] = 8
+SCHEMA_VERSION: Final[int] = 9
 
 
 def coach_pin(*, pin: object) -> object:
@@ -180,6 +181,7 @@ MIGRATIONS: Final[
     5: add_pin_fields,
     6: add_alert_settings,
     7: add_auto,
+    8: add_connections,
 }
 
 

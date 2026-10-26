@@ -87,10 +87,16 @@ main {
   gap: var(--gap);
   min-width: 0;
   padding: var(--gap);
+  padding-block-end: calc(var(--bar) + env(safe-area-inset-bottom, 0px) + 1rem);
+}
+
+main:has(~ footer) {
+  padding-block-end: var(--gap);
 }
 
 body > footer {
-  padding: 0 var(--gap) var(--gap);
+  padding: 0 var(--gap);
+  padding-block-end: calc(var(--bar) + env(safe-area-inset-bottom, 0px) + 1rem);
 }
 
 h1,
@@ -113,11 +119,6 @@ h2 {
 
 header {
   position: relative;
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: var(--gap);
   padding: 0.75rem var(--gap) calc(0.75rem + 4px);
   background: var(--masthead);
   color: #ffffff;
@@ -148,21 +149,122 @@ a {
   outline-offset: 2px;
 }
 
+body > nav {
+  position: fixed;
+  z-index: 1;
+  inset-inline: 0;
+  inset-block-end: 0;
+  min-height: var(--bar);
+  padding-block-end: env(safe-area-inset-bottom, 0px);
+  border-block-start: 1px solid var(--line);
+  background: var(--surface);
+}
+
 .pages {
   display: flex;
-  gap: var(--gap);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 
+.pages li {
+  flex: 1;
+  min-width: 0;
+}
+
 .pages a {
-  color: inherit;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.125rem;
+  min-height: var(--bar);
+  color: var(--muted);
+  font-size: 0.75rem;
+  text-decoration: none;
+  transition: color 150ms;
+}
+
+.pages a:hover {
+  color: var(--current);
+}
+
+.pages span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pages svg {
+  flex: none;
+  width: 1.25rem;
+  height: 1.25rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .pages a[aria-current='page'] {
-  font-weight: 600;
-  text-decoration: none;
+  color: var(--current);
+  font-weight: 700;
+  box-shadow: inset 0 3px 0 var(--red);
+}
+
+@media (min-width: 48em) {
+  body {
+    display: grid;
+    grid-template-rows: auto auto 1fr;
+    grid-template-columns: 12rem minmax(0, 1fr);
+  }
+
+  header {
+    grid-column: 1 / -1;
+  }
+
+  body > nav {
+    position: static;
+    grid-row: 2 / -1;
+    grid-column: 1;
+    padding-block: 0.75rem;
+    border-block-start: 0;
+    border-inline-end: 1px solid var(--line);
+  }
+
+  .pages {
+    position: sticky;
+    inset-block-start: 0.75rem;
+    flex-direction: column;
+    gap: 0.125rem;
+  }
+
+  .pages a {
+    flex-direction: row;
+    justify-content: flex-start;
+    gap: 0.5rem;
+    min-height: 2.75rem;
+    padding: 0.5rem 1rem;
+    font-size: 1rem;
+  }
+
+  .pages a[aria-current='page'] {
+    background: var(--current-bg);
+    box-shadow: inset 3px 0 0 var(--red);
+  }
+
+  main {
+    grid-column: 2;
+    width: 100%;
+    max-width: 40rem;
+    padding-block-end: var(--gap);
+  }
+
+  body > footer {
+    grid-column: 2;
+    max-width: 40rem;
+    padding-block-end: var(--gap);
+  }
 }
 
 .setting,

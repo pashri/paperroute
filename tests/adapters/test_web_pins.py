@@ -38,6 +38,7 @@ from paperroute.core.pin_choices import StopMatch
 from paperroute.observers import PinsSeen
 from tests.adapters.test_web_device import Device
 from tests.fake_pins import FakePinOptions
+from tests.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]
 
@@ -339,18 +340,15 @@ async def test_nav_has_pins_on_every_page(client: Client) -> None:
     for path in ('/', '/settings', '/device', '/setup', '/pins'):
         response = await client.get(path)
         assert response.status == HTTPStatus.OK, path
-        links = re.findall(
-            r'<li><a href="([^"]+)"( aria-current="page")?>(\w+)</a></li>',
-            await response.text(),
-        )
-        assert [(href, name) for href, _, name in links] == [
+        page = parse_page(text=await response.text())
+        assert [(href, name) for href, _, name in page.links] == [
             ('/', 'Live'),
             ('/pins', 'Pins'),
             ('/settings', 'Settings'),
             ('/device', 'Device'),
         ], path
         if path != '/setup':
-            current = [href for href, mark, _ in links if mark]
+            current = [href for href, mark, _ in page.links if mark]
             assert current == [path], path
 
 

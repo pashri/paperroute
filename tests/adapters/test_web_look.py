@@ -12,12 +12,28 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_display import WebDisplay
+from tests.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]
 FONT_SHA256: Final[str] = (
     'c1b6da516e0062e9c2f341b3a51dd2d621d946da72f06c6cfe05fd9d2dd8622d'
 )
 WEB: Final = files('paperroute') / 'assets' / 'web'
+PAGES: Final[list[tuple[str, str | None]]] = [
+    ('live.html', '/'),
+    ('pins.html', '/pins'),
+    ('pin-edit.html', '/pins'),
+    ('settings.html', '/settings'),
+    ('device.html', '/device'),
+    ('power.html', '/device'),
+    ('setup.html', None),
+]
+NAV_LINKS: Final[list[tuple[str, str]]] = [
+    ('/', 'Live'),
+    ('/pins', 'Pins'),
+    ('/settings', 'Settings'),
+    ('/device', 'Device'),
+]
 
 
 def css_text() -> str:
@@ -30,6 +46,89 @@ def css_text() -> str:
         The text of `live.css`.
     """
     return (WEB / 'live.css').read_text(encoding='utf-8')
+
+
+def page_text(*, name: str) -> str:
+    """
+    Read a packaged page.
+
+    Parameters
+    ----------
+    name : str
+        The page's file name.
+
+    Returns
+    -------
+    str
+        The page's HTML.
+    """
+    return (WEB / name).read_text(encoding='utf-8')
+
+
+def nav_html(*, text: str) -> str:
+    """
+    Return a page's nav element.
+
+    Parameters
+    ----------
+    text : str
+        The page's HTML.
+
+    Returns
+    -------
+    str
+        The `<nav>` element, from its opening to its closing tag.
+    """
+    found = re.search(r'<nav\b.*?</nav>', text, flags=re.DOTALL)
+    assert found is not None
+    return found.group(0)
+
+
+def outside_media(*, css: str) -> str:
+    """
+    Remove every `@media` block from a stylesheet.
+
+    Parameters
+    ----------
+    css : str
+        The stylesheet.
+
+    Returns
+    -------
+    str
+        The rules that apply at every width and scheme.
+    """
+    while '@media' in css:
+        start = css.index('@media')
+        body = block_after(css=css, start=start)
+        end = css.index(body, start) + len(body) + 1
+        css = css[:start] + css[end:]
+    return css
+
+
+def rule_body(*, css: str, selector: str) -> str:
+    """
+    Return the body of the rule whose selector list is exactly `selector`.
+
+    Parameters
+    ----------
+    css : str
+        The stylesheet.
+    selector : str
+        The rule's whole selector.
+
+    Returns
+    -------
+    str
+        The text between the rule's braces.
+    """
+    found = re.search(
+        rf'(?:^|}}|;)\s*{re.escape(selector)}\s*{{',
+        css,
+        flags=re.MULTILINE,
+    )
+    assert found is not None, selector
+    return block_after(css=css, start=found.end() - 1)
 
 
 def block_after(*, css: str, start: int) -> str:
@@ -162,3 +261,70 @@ def test_no_framework() -> None:
                 encoding='utf-8',
                 errors='replace',
             ).casefold(), item.name
+
+
+@pytest.mark.parametrize(('name', 'current'), PAGES)
+def test_one_nav_landmark(name: str, current: str | None) -> None:
+    """One labelled nav links the four pages with icons, marking one."""
+    page = parse_page(text=page_text(name=name))
+    assert page.navs == [{'aria-label': 'Pages'}]
+    assert [(href, text) for href, _, text in page.links] == NAV_LINKS
+    marked = [href for href, mark, _ in page.links if mark]
+    assert marked == ([current] if current else [])
+    assert page.nav_icons == 4
+
+
+@pytest.mark.parametrize(('name', 'current'), PAGES)
+def test_nav_is_plain_links(name: str, current: str | None) -> None:
+    """The nav holds only links, with no buttons or click handlers."""
+    del current
+    nav = nav_html(text=page_text(name=name))
+    assert '<button' not in nav
+    assert 'onclick' not in nav
+    assert nav.count('<a href=') == len(NAV_LINKS)
+
+
+@pytest.mark.parametrize(('name', 'current'), PAGES)
+def test_page_basics(name: str, current: str | None) -> None:
+    """Each page has one h1, the stylesheet, no inline style and a lang."""
+    del current
+    text = page_text(name=name)
+    page = parse_page(text=text)
+    assert page.h1 == ['paperroute']
+    assert '/live.css' in page.stylesheets
+    assert page.styled == 0
+    assert '<html lang="en">' in text
+
+
+@pytest.mark.parametrize(('name', 'current'), PAGES)
+def test_navs_match(name: str, current: str | None) -> None:
+    """Every nav is the Live page's nav apart from the current mark."""
+    del current
+    mark = ' aria-current="page"'
+    nav = nav_html(text=page_text(name=name)).replace(mark, '')
+    live = nav_html(text=page_text(name='live.html')).replace(mark, '')
+    assert nav == live
+
+
+def test_main_clears_bottom_bar() -> None:
+    """On phones the page ends above the bottom bar and the safe area."""
+    css = outside_media(css=css_text())
+    main = rule_body(css=css, selector='main')
+    padding = re.search(r'padding-block-end:\s*([^;]+);', main)
+    assert padding is not None
+    assert 'var(--bar)' in padding.group(1)
+    assert 'env(safe-area-inset-bottom' in padding.group(1)
+    nav = rule_body(css=css, selector='body > nav')
+    assert re.search(r'min-height:\s*var\(--bar\)', nav)
+
+
+@pytest.mark.parametrize(('name', 'current'), PAGES)
+def test_viewport_fit_cover(name: str, current: str | None) -> None:
+    """Every page's viewport reaches under the phone's safe areas."""
+    del current
+    found = re.search(
+        r'<meta name="viewport" content="([^"]+)">',
+        page_text(name=name),
+    )
+    assert found is not None
+    assert 'viewport-fit=cover' in found.group(1)

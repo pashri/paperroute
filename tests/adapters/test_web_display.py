@@ -34,6 +34,7 @@ from paperroute.core.state import step
 from paperroute.render.canvas import encode_png
 from tests.adapters.test_web_device import Device
 from tests.core.test_quiet import asleep_at_one
+from tests.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]
 FRAME = np.full((480, 800), 255, dtype=np.uint8)
@@ -496,7 +497,7 @@ async def test_settings_page_served(
         await client.close()
     assert page.content_type == 'text/html'
     assert 'Rebuild timetable automatically' in text
-    assert '<a href="/">Live</a>' in text
+    assert ('/', False, 'Live') in parse_page(text=text).links
     assert ('aria-describedby="auto-rebuild-hint" checked>' in text) is (
         checked
     )
@@ -510,7 +511,7 @@ def test_live_page_links_to_settings() -> None:
     """The Live page's header links to Settings."""
     web_dir = files('paperroute') / 'assets' / 'web'
     html = (web_dir / 'live.html').read_text(encoding='utf-8')
-    assert '<a href="/settings">Settings</a>' in html
+    assert ('/settings', False, 'Settings') in parse_page(text=html).links
 
 
 DISPLAY_FORM = [

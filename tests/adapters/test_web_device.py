@@ -29,6 +29,7 @@ from paperroute.core.messages import (
 )
 from paperroute.core.model import Mode
 from tests.fakes import FakeKeys
+from tests.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]
 KEY = 'already-set-key-123'
@@ -460,20 +461,21 @@ async def test_cross_site_refused_on_device_posts(
 @pytest.mark.parametrize(('name', 'current'), [
     ('live.html', '/'),
     ('settings.html', '/settings'),
-    ('power.html', None),
+    ('power.html', '/device'),
     ('setup.html', None),
     ('device.html', '/device'),
 ])
 def test_nav_on_every_page(name: str, current: str | None) -> None:
     """Every page links Live, Pins, Settings and Device, marking the open one."""
     web_dir = files('paperroute') / 'assets' / 'web'
-    text = (web_dir / name).read_text(encoding='utf-8')
-    assert '<nav aria-label="Pages">' in text
-    for href, label in (
-        ('/', 'Live'),
-        ('/pins', 'Pins'),
-        ('/settings', 'Settings'),
-        ('/device', 'Device'),
-    ):
-        mark = ' aria-current="page"' if href == current else ''
-        assert f'<li><a href="{href}"{mark}>{label}</a></li>' in text
+    page = parse_page(text=(web_dir / name).read_text(encoding='utf-8'))
+    assert page.navs == [{'aria-label': 'Pages'}]
+    assert page.links == [
+        (href, href == current, label)
+        for href, label in (
+            ('/', 'Live'),
+            ('/pins', 'Pins'),
+            ('/settings', 'Settings'),
+            ('/device', 'Device'),
+        )
+    ]

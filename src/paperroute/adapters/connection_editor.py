@@ -7,6 +7,7 @@ from typing import Final
 from multidict import MultiMapping
 
 from paperroute.adapters.pin_editor import edited, with_origin
+from paperroute.adapters.state_change import ALLOW_MAX, ALLOW_MIN
 from paperroute.core.connection_model import default_allow
 from paperroute.core.model import Change, Pin, RouteKind, StopPlace
 from paperroute.core.pin_choices import (
@@ -18,8 +19,6 @@ from paperroute.core.pin_choices import (
 from paperroute.ports import PinOptions
 
 ALLOW_RANGE: Final[str] = 'Allow between 1 and 60 minutes.'
-ALLOW_MIN: Final[int] = 1
-ALLOW_MAX: Final[int] = 60
 
 
 @dataclass(frozen=True)

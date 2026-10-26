@@ -236,3 +236,24 @@ def between_lists(
         (leg, items[:BETWEEN_TRIPS])
         for leg, items in leg_lists(pin=pin, board=board)
     )
+
+
+def selected_trips(*, state: State) -> frozenset[str]:
+    """
+    List the trips of the pair the connection Strip shows.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    frozenset[str]
+        The trip IDs of the pair the scroll selects; empty with no pair.
+    """
+    pairs = live_pairs(state=state)
+    if not pairs:
+        return frozenset()
+    pair = pairs[min(state.scroll, len(pairs) - 1)]
+    return frozenset(item.trip_id for item in pair_legs(pair=pair))

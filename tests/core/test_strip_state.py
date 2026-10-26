@@ -37,7 +37,12 @@ from paperroute.core.strip_model import (
     StripMapView,
     StripView,
 )
-from paperroute.core.strip_state import keys_in_use, request_strips, strip_key
+from paperroute.core.strip_state import (
+    keys_in_use,
+    request_strips,
+    strip_key,
+    strip_patterns,
+)
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.factories import START, departure, place, snapshot, vehicle
 from tests.core.strip_factories import (
@@ -49,6 +54,7 @@ from tests.core.strip_factories import (
     trains,
     turn,
 )
+from tests.core.test_connection_screens import started, with_legs
 
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 TRAIN_POSITIONS: Final[str] = 'v2/gtfs/vehiclepos/sydneytrains'
@@ -508,3 +514,20 @@ def test_to_stage_reuses_reach_after_commit() -> None:
     assert not kinds(effects=effects, kind=LoadStrip)
     assert isinstance(state.last_view, StripView)
     assert state.last_view.rows[1].station == 'S2'
+
+
+def test_connection_strip_requests_selected_pair() -> None:
+    """The connection Strip wants the selected pair's patterns."""
+    state = with_legs(state=started(view=LiveView.STRIP))
+    state, _ = step(state, KnobTurned(knob=Knob.BOTTOM, steps=1))
+    wanted = strip_patterns(state=state)
+    assert {'a0748', 'b0801a'} <= wanted
+    assert 'a0733' not in wanted
+
+
+def test_connection_strip_no_load_strip() -> None:
+    """Switching to the connection Strip builds no reach."""
+    state = with_legs(state=started(view=LiveView.MAP))
+    state, effects = step(state, KnobPressed(knob=Knob.BOTTOM))
+    assert state.view is LiveView.STRIP
+    assert not kinds(effects=effects, kind=LoadStrip)

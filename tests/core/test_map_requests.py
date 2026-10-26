@@ -7,14 +7,22 @@ from paperroute.core.feeds import ALL_POSITION_MODES, position_feeds
 from paperroute.core.geo import Point
 from paperroute.core.map_requests import map_feeds, request_positions
 from paperroute.core.map_state import area_box
-from paperroute.core.messages import LoadModes, MapDataFailed, ModesLoaded
+from paperroute.core.messages import (
+    LoadModes,
+    LoadPatterns,
+    LoadShapes,
+    MapDataFailed,
+    ModesLoaded,
+)
 from paperroute.core.model import SYDNEY, Departure, Mode
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.tiles import ZOOMS
+from tests.core.connection_factories import LEG1, LEG2
 from tests.core.factories import START, departure
 from tests.core.strip_factories import CENTRE, on_view, trains
+from tests.core.test_connection_screens import legs_loaded, started
 
 
 def bus_pin() -> tuple[Departure, ...]:
@@ -122,3 +130,28 @@ def test_positions_follow_rate() -> None:
         stale = replace(state, map=replace(state.map, fetched_at=fetched_at))
         _, effects = request_positions(state=stale)
         assert bool(effects) is due
+
+
+def test_connection_map_requests_both_shapes() -> None:
+    """The connection Map asks for both legs' shapes and patterns."""
+    first = tuple(replace(item, shape_id='s606') for item in LEG1)
+    second = tuple(replace(item, shape_id='s665') for item in LEG2)
+    _, effects = legs_loaded(
+        state=started(view=LiveView.MAP), first=first, second=second,
+    )
+    assert LoadShapes(shape_ids=frozenset({'s606', 's665'})) in effects
+    [load] = [item for item in effects if isinstance(item, LoadPatterns)]
+    assert {'a0733', 'b0746'} <= load.trip_ids
+
+
+def test_connection_positions_union() -> None:
+    """The connection Map polls every leg's positions feed."""
+    second = tuple(replace(item, mode=Mode.TRAIN) for item in LEG2)
+    state, _ = legs_loaded(state=started(view=LiveView.MAP), second=second)
+    mpp = ZOOMS[state.map.zoom]
+    state = replace(state, map=replace(
+        state.map, area_modes={mpp: frozenset({Mode.FERRY})},
+    ))
+    assert set(map_feeds(state=state)) == set(position_feeds(
+        modes={Mode.BUS, Mode.TRAIN, Mode.FERRY},
+    ))

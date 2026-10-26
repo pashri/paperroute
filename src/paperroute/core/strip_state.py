@@ -5,6 +5,7 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute.core.chooser import ChooserState, Stage
+from paperroute.core.connection import selected_trips
 from paperroute.core.live import LiveDeparture, resolved
 from paperroute.core.messages import (
     Effect,
@@ -131,14 +132,15 @@ def strips_shown(*, state: State) -> dict[StripKey, StopPlace]:
     -------
     dict[StripKey, StopPlace]
         Each strip's From by key: the chooser's in the TO stage, else
-        the shown place's on a strip view.
+        the shown place's on a strip view; none for a connection pin.
     """
     picked = chooser_strip(state=state)
     if picked is not None:
         return dict([picked])
-    if state.chooser is not None or state.view not in STRIP_VIEWS:
-        return {}
     pin = shown(state=state)
+    on_strip = state.chooser is None and state.view in STRIP_VIEWS
+    if not on_strip or pin.change is not None:
+        return {}
     return {strip_key(pin=pin): pin.origin}
 
 
@@ -464,10 +466,12 @@ def strip_patterns(*, state: State) -> frozenset[str]:
     frozenset[str]
         The shown strip's trips on a strip view, and the chooser's in
         the TO stage, with the trips their loaded patterns join onto;
-        none elsewhere.
+        the selected pair's trips for a connection pin; none elsewhere.
     """
     wanted = trip_ids(departures=picked_window(state=state))
-    if state.view in STRIP_VIEWS:
+    if state.view in STRIP_VIEWS and shown(state=state).change is not None:
+        wanted |= selected_trips(state=state)
+    elif state.view in STRIP_VIEWS:
         wanted |= strip_trips(
             departures=state.board.departures,
             key=strip_key(pin=shown(state=state)),

@@ -14,7 +14,7 @@ from paperroute.core.connection_view import (
     ConnectionView,
     build_connection_view,
 )
-from paperroute.core.map_requests import map_inputs
+from paperroute.core.map_requests import pin_map_inputs
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapView
 from paperroute.core.model import Pin
 from paperroute.core.places import shown
@@ -50,7 +50,7 @@ def connection_map(
     MapView
         The map, framed by the connection map setting.
     """
-    inputs = map_inputs(state=state, stop_view=stop_view)
+    inputs = pin_map_inputs(state=state, stop_view=stop_view)
     if width is not None:
         inputs = replace(inputs, width=width)
     return build_connection_map(

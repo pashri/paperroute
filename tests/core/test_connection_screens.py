@@ -12,13 +12,14 @@ from paperroute.core.connection_view import ConnectionView
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapView
 from paperroute.core.messages import (
     DeparturesLoaded,
+    Effect,
     Event,
     Knob,
     KnobPressed,
     KnobTurned,
     ScreenView,
 )
-from paperroute.core.model import Pin, RouteKind
+from paperroute.core.model import Departure, Pin, RouteKind
 from paperroute.core.saved import (
     ConnectionMap,
     LiveView,
@@ -76,6 +77,34 @@ def started(
     ))
 
 
+def legs_loaded(
+    *,
+    state: State,
+    first: tuple[Departure, ...] = LEG1,
+    second: tuple[Departure, ...] = LEG2,
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Load the Work pin's legs.
+
+    Parameters
+    ----------
+    state : State
+        State showing the Work pin.
+    first : tuple[Departure, ...]
+        Leg-1 departures.
+    second : tuple[Departure, ...]
+        Leg-2 departures.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State after the load, and its effects.
+    """
+    return step(state, DeparturesLoaded(
+        pin=WORK, departures=first, until=at(10, 30), legs=Legs(second=second),
+    ))
+
+
 def with_legs(*, state: State) -> State:
     """
     Load the Work pin's legs.
@@ -90,9 +119,7 @@ def with_legs(*, state: State) -> State:
     State
         State after the load.
     """
-    state, _ = step(state, DeparturesLoaded(
-        pin=WORK, departures=LEG1, until=at(10, 30), legs=Legs(second=LEG2),
-    ))
+    state, _ = legs_loaded(state=state)
     return state
 
 

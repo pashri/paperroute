@@ -4,6 +4,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Final
 
+from paperroute.core.connection import live_pairs
+from paperroute.core.connection_map import connection_inputs
+from paperroute.core.connection_model import all_departures
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.map_state import area_box
 from paperroute.core.map_view import (
@@ -21,6 +24,7 @@ from paperroute.core.messages import (
     MapData,
 )
 from paperroute.core.model import SYDNEY, Departure
+from paperroute.core.places import shown
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.rhythm import poll_every
 from paperroute.core.saved import LiveView
@@ -77,20 +81,24 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
         While the chooser picks a Destination, the modes of its strip's
         departures. Otherwise, on a map, the feeds for the modes in the
         map area at the current zoom, or for every mode when none are
-        known there (not loaded, failed or none found); on the Strip,
-        the modes of the strip's own departures.
+        known there (not loaded, failed or none found), with every leg's
+        modes for a connection pin; on the Strip, the modes of the
+        strip's own departures.
     """
-    departures = state.board.departures
+    departures = all_departures(
+        departures=state.board.departures, legs=state.board.legs,
+    )
     if state.chooser is not None:
         departures = picked_window(state=state)
     elif state.view is LiveView.STRIP:
         departures = strip_window(state=state)
     modes = frozenset(departure.mode for departure in departures)
     if state.view in MAP_VIEWS and state.chooser is None:
-        modes = (
+        area = (
             state.map.area_modes.get(ZOOMS[state.map.zoom])
             or ALL_POSITION_MODES
         )
+        modes = area | modes if state.board.legs is not None else area
     return position_feeds(modes=modes)
 
 
@@ -143,9 +151,9 @@ def drawn_departures(
     )
 
 
-def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
+def pin_map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     """
-    Gather what a map is built from.
+    Gather what a map is built from, as for a plain pin.
 
     Parameters
     ----------
@@ -169,6 +177,35 @@ def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
         patterns=state.map.patterns,
         shapes=state.map.shapes,
         now=state.now,
+    )
+
+
+def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
+    """
+    Gather what the shown map is built from.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    stop_view : StopView
+        The pin's Stop view.
+
+    Returns
+    -------
+    MapInputs
+        The plain pin's inputs; for a connection pin, framed on the
+        connection with the hero pair's legs as the departures.
+    """
+    inputs = pin_map_inputs(state=state, stop_view=stop_view)
+    pin = shown(state=state)
+    if pin.change is None:
+        return inputs
+    return connection_inputs(
+        inputs=inputs,
+        pin=pin,
+        pairs=live_pairs(state=state),
+        mode=state.settings.connection_map,
     )
 
 

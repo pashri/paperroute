@@ -43,7 +43,8 @@ WEEK_DAYS: Final[int] = 6
 NAME_BEFORE: Final[str] = (
     r'(?<![\w-])(?<!North )(?<!South )(?<!East )(?<!West )'
 )
-NAME_AFTER: Final[str] = r'(?![\w-])(?! +(?!Station\b|Wharf\b)[A-Z])'
+NAME_AFTER: Final[str] = r'(?![\w-])(?! +(?!Station\b)[A-Z])'
+WHARF_AFTER: Final[str] = r'(?![\w-])(?! +(?!Station\b|Wharf\b)[A-Z])'
 
 
 @dataclass(frozen=True)
@@ -62,12 +63,15 @@ class PinFacts:
     names : frozenset[str]
         Place names of From, To and the stations between; empty for a
         pin whose places aren't matched by name.
+    wharf : bool
+        True for a ferry pin, whose names may be followed by 'Wharf'.
     """
 
     trips: frozenset[str]
     stops: frozenset[str]
     routes: frozenset[str]
     names: frozenset[str]
+    wharf: bool = False
 
 
 @dataclass(frozen=True)
@@ -135,14 +139,16 @@ def place_name(*, name: str) -> str:
     return name
 
 
-def names_place(*, text: str, names: Collection[str]) -> bool:
+def names_place(
+    *, text: str, names: Collection[str], wharf: bool = False,
+) -> bool:
     """
     Say whether text names one of the places.
 
     A name counts only as whole words, not before another capitalised
-    word other than 'Station' or 'Wharf' ('Central Coast' is not
-    'Central'), and not after a compass word ('North Strathfield' is not
-    'Strathfield').
+    word other than 'Station', or 'Wharf' when `wharf` is set ('Central
+    Coast' is not 'Central'), and not after a compass word ('North
+    Strathfield' is not 'Strathfield').
 
     Parameters
     ----------
@@ -150,15 +156,18 @@ def names_place(*, text: str, names: Collection[str]) -> bool:
         Alert text.
     names : Collection[str]
         Place names.
+    wharf : bool
+        True to let 'Wharf' follow a name.
 
     Returns
     -------
     bool
         True when one is found.
     """
+    after = WHARF_AFTER if wharf else NAME_AFTER
     return any(
         re.search(
-            pattern=f'{NAME_BEFORE}{re.escape(name)}{NAME_AFTER}',
+            pattern=f'{NAME_BEFORE}{re.escape(name)}{after}',
             string=text,
         )
         for name in names
@@ -186,6 +195,29 @@ def is_name_pin(*, pin: Pin, departures: Sequence[Departure]) -> bool:
         return pin.kind in NAME_KINDS
     return bool(departures) and all(
         item.mode in NAME_MODES for item in departures
+    )
+
+
+def is_ferry_pin(*, pin: Pin, departures: Sequence[Departure]) -> bool:
+    """
+    Say whether a pin is a ferry pin.
+
+    Parameters
+    ----------
+    pin : Pin
+        The pin.
+    departures : Sequence[Departure]
+        Its departures.
+
+    Returns
+    -------
+    bool
+        True for a ferry kind, or for no kind and only ferry departures.
+    """
+    if pin.kind is not None:
+        return pin.kind == RouteKind.FERRY
+    return bool(departures) and all(
+        item.mode == Mode.FERRY for item in departures
     )
 
 
@@ -260,6 +292,7 @@ def pin_facts(
             | {item.route for item in departures}
         ),
         names=pin_names(pin=pin, between=between) if named else frozenset(),
+        wharf=is_ferry_pin(pin=pin, departures=departures),
     )
 
 
@@ -395,7 +428,9 @@ def matched_alerts(
         if tie is None:
             continue
         named = tie == AlertTie.ROUTE and names_place(
-            text=f'{alert.header}\n{alert.description}', names=facts.names,
+            text=f'{alert.header}\n{alert.description}',
+            names=facts.names,
+            wharf=facts.wharf,
         )
         found.append(Matched(alert=alert, tie=tie, names_place=named))
     return tuple(found)

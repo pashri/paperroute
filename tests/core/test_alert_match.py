@@ -191,16 +191,37 @@ def test_numbered_wharf_pin_takes_banner() -> None:
 
 
 def test_wharf_may_follow_name() -> None:
-    """Wharf may follow a name, as Station may."""
+    """For a ferry pin, Wharf may follow a name, as Station may."""
     assert names_place(
-        text='Rose Bay Wharf temporary closure', names={'Rose Bay'},
+        text='Rose Bay Wharf temporary closure',
+        names={'Rose Bay'},
+        wharf=True,
     )
     assert names_place(
+        text='Circular Quay Wharf 5 is closed',
+        names={'Circular Quay'},
+        wharf=True,
+    )
+    assert not names_place(
         text='Circular Quay Wharf 5 is closed', names={'Circular Quay'},
     )
     assert not names_place(
         text='Central Coast trackwork', names={'Central'},
     )
+
+
+def test_train_pin_rejects_trailing_wharf() -> None:
+    """A wharf alert does not name a train pin's station."""
+    pin = station_pin(origin='200020', origin_name='Circular Quay Station')
+    found = alert(
+        alert_id='quay',
+        header='Circular Quay Wharf 5 closed for maintenance',
+        route='T2',
+    )
+    listed = listed_for(
+        pin=pin, found=found, now=SAT_MORNING, departures=trains(route='T2'),
+    )
+    assert not listed[0].matched.names_place
 
 
 def test_ferry_pin_is_name_pin() -> None:

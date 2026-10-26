@@ -231,3 +231,46 @@ RHODES: Final[Alert] = alert(
     ),
     route='526',
 )
+ROSE_BAY_CLOSURE: Final[Alert] = alert(
+    alert_id='30ef7969-2a08-5030-a3f6-624603862126',
+    header='Rose Bay Wharf temporary closure',
+    periods=(
+        Period(
+            start=sydney(month=8, day=31, hour=0, minute=1),
+            end=sydney(month=12, day=4, hour=23, minute=59, second=4),
+        ),
+    ),
+    route='F9',
+    stops=frozenset({'202972'}),
+)
+ROSE_BAY_PEAK: Final[Alert] = alert(
+    alert_id='f689e4d4-e56d-59a3-8be7-d6ff16283a41',
+    header='Rose Bay Wharf maintenance',
+    periods=(
+        Period(
+            start=sydney(month=9, day=17, hour=0, minute=1),
+            end=sydney(month=12, day=4, hour=23, minute=59, second=26),
+        ),
+    ),
+    route='F9',
+)
+F9_ONGOING: Final[Alert] = alert(
+    alert_id='84aad6bc-4dd5-56d0-9989-3104c0539273',
+    header='Reduced weekday and no weekend F9 services at Rose Bay Wharf',
+    periods=(Period(start=sydney(month=9, day=18, hour=16, minute=12)),),
+    route='F9',
+)
+ABBOTSFORD: Final[Alert] = alert(
+    alert_id='9bae874d-8f1e-538a-85b5-3f8dc60fc20a',
+    header='Abbotsford Wharf temporary closure',
+    periods=(
+        Period(
+            start=sydney(day=22, hour=0, minute=1),
+            end=sydney(month=12, day=18, hour=23, minute=59, second=12),
+        ),
+    ),
+    route='F3',
+)
+ROSE_BAY_PIN: Final[Pin] = station_pin(
+    origin='202972', origin_name='Rose Bay Wharf', kind=RouteKind.FERRY,
+)

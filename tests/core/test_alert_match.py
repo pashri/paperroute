@@ -12,6 +12,7 @@ from paperroute.core.alert_match import (
     Timing,
     alert_banner,
     between_names,
+    is_name_pin,
     listed_alerts,
     matched_alerts,
     names_place,
@@ -32,6 +33,7 @@ from paperroute.core.patterns import PatternStop, TripPattern
 from tests.core.alert_factories import (
     PENRITH_CENTRAL,
     RHODES,
+    ROSE_BAY_PIN,
     STRATHFIELD_UPDATE,
     WESTERN,
     XPLORER,
@@ -146,6 +148,33 @@ def test_place_name() -> None:
     assert place_name(name='Central Station') == 'Central'
     assert place_name(name='Olympic Park Station') == 'Olympic Park'
     assert place_name(name='Rhodes Shops') == 'Rhodes Shops'
+
+
+def test_wharf_suffix_dropped() -> None:
+    """A wharf's place name drops the Wharf suffix."""
+    assert place_name(name='Rose Bay Wharf') == 'Rose Bay'
+
+
+def test_wharf_may_follow_name() -> None:
+    """Wharf may follow a name, as Station may."""
+    assert names_place(
+        text='Rose Bay Wharf temporary closure', names={'Rose Bay'},
+    )
+    assert names_place(
+        text='Circular Quay Wharf 5 is closed', names={'Circular Quay'},
+    )
+    assert not names_place(
+        text='Central Coast trackwork', names={'Central'},
+    )
+
+
+def test_ferry_pin_is_name_pin() -> None:
+    """Ferry pins match alert text, by kind or by their departures."""
+    assert is_name_pin(pin=ROSE_BAY_PIN, departures=())
+    kindless = replace(ROSE_BAY_PIN, kind=None)
+    assert is_name_pin(
+        pin=kindless, departures=trains(route='F9', mode=Mode.FERRY),
+    )
 
 
 def test_central_coast_is_not_central() -> None:

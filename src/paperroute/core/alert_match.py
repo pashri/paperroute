@@ -23,24 +23,27 @@ NAME_SUFFIXES: Final[tuple[str, ...]] = (
     ' Metro Station',
     ' Light Rail',
     ' Station',
+    ' Wharf',
 )
 NAME_KINDS: Final[frozenset[RouteKind]] = frozenset({
     RouteKind.TRAIN,
     RouteKind.METRO,
     RouteKind.LIGHT_RAIL,
+    RouteKind.FERRY,
 })
-RAIL_MODES: Final[frozenset[Mode]] = frozenset({
+NAME_MODES: Final[frozenset[Mode]] = frozenset({
     Mode.TRAIN,
     Mode.METRO,
     Mode.LIGHT_RAIL,
     Mode.REGIONAL,
+    Mode.FERRY,
 })
 BETWEEN_TRIPS: Final[int] = 12
 WEEK_DAYS: Final[int] = 6
 NAME_BEFORE: Final[str] = (
     r'(?<![\w-])(?<!North )(?<!South )(?<!East )(?<!West )'
 )
-NAME_AFTER: Final[str] = r'(?![\w-])(?! +(?!Station\b)[A-Z])'
+NAME_AFTER: Final[str] = r'(?![\w-])(?! +(?!Station\b|Wharf\b)[A-Z])'
 
 
 @dataclass(frozen=True)
@@ -109,7 +112,7 @@ class Listed:
 
 def place_name(*, name: str) -> str:
     """
-    A stop name without its station suffix.
+    A stop name without its station or wharf suffix.
 
     Parameters
     ----------
@@ -132,8 +135,9 @@ def names_place(*, text: str, names: Collection[str]) -> bool:
     Say whether text names one of the places.
 
     A name counts only as whole words, not before another capitalised
-    word other than 'Station' ('Central Coast' is not 'Central'), and
-    not after a compass word ('North Strathfield' is not 'Strathfield').
+    word other than 'Station' or 'Wharf' ('Central Coast' is not
+    'Central'), and not after a compass word ('North Strathfield' is not
+    'Strathfield').
 
     Parameters
     ----------
@@ -171,12 +175,12 @@ def is_name_pin(*, pin: Pin, departures: Sequence[Departure]) -> bool:
     Returns
     -------
     bool
-        True for rail, metro and light rail pins.
+        True for rail, metro, light rail and ferry pins.
     """
     if pin.kind is not None:
         return pin.kind in NAME_KINDS
     return bool(departures) and all(
-        item.mode in RAIL_MODES for item in departures
+        item.mode in NAME_MODES for item in departures
     )
 
 

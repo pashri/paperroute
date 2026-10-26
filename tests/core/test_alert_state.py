@@ -34,10 +34,15 @@ from paperroute.core.saved import LiveView, seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import RELOAD_BEFORE, State
 from paperroute.core.state_views import current_view, live_stop_view
-from paperroute.core.stop_view import HORIZON
+from paperroute.core.stop_view import DOT, HORIZON
 from paperroute.core.strip_model import StripMapView, StripView
 from tests.core.alert_factories import (
+    ABBOTSFORD,
+    F9_ONGOING,
     RHODES,
+    ROSE_BAY_CLOSURE,
+    ROSE_BAY_PEAK,
+    ROSE_BAY_PIN,
     STRATHFIELD_UPDATE,
     WESTERN,
     XPLORER,
@@ -479,3 +484,41 @@ def test_kindless_pin_asked_again_once_trips_load() -> None:
     assert [
         e.trip_ids for e in effects if isinstance(e, LoadBetween)
     ] == [frozenset({'trip-0'})]
+
+
+def test_ferry_wharf_alert_takes_banner() -> None:
+    """A wharf closure naming the ferry pin's wharf takes the banner."""
+    state, _ = loaded_with(
+        state=started(pins=(ROSE_BAY_PIN,)), modes=(Mode.FERRY,), route='F9',
+    )
+    state = fresh_with(
+        state=state,
+        alerts=(ROSE_BAY_CLOSURE, ROSE_BAY_PEAK, F9_ONGOING),
+        feed=FERRIES,
+    )
+    listed = listed_ids(state=state)
+    assert listed[0] == ROSE_BAY_CLOSURE.alert_id
+    assert set(listed) == {
+        ROSE_BAY_CLOSURE.alert_id,
+        ROSE_BAY_PEAK.alert_id,
+        F9_ONGOING.alert_id,
+    }
+    stop = live_stop_view(state=state)
+    assert stop.banner == 'Rose Bay Wharf temporary closure'
+    assert stop.warning
+    assert stop.more == 1
+
+
+def test_ferry_alert_naming_other_wharf_listed_only() -> None:
+    """A closure of another wharf on the route is only listed."""
+    pin = station_pin(
+        origin='21501', origin_name='Parramatta Wharf', kind=RouteKind.FERRY,
+    )
+    state, _ = loaded_with(
+        state=started(pins=(pin,)), modes=(Mode.FERRY,), route='F3',
+    )
+    state = fresh_with(state=state, alerts=(ABBOTSFORD,), feed=FERRIES)
+    assert listed_ids(state=state) == [ABBOTSFORD.alert_id]
+    assert live_stop_view(state=state).banner == (
+        f'Timetable times{DOT}no live feed for this service'
+    )

@@ -560,7 +560,7 @@ class PinsPages:
             headers={'Cache-Control': 'no-store'},
         )
 
-    def _find(self, *, ref: str) -> tuple[PinsSeen, Pin] | None:
+    def find(self, *, ref: str) -> tuple[PinsSeen, Pin] | None:
         """
         Find a pin by ref in the latest report.
 
@@ -632,7 +632,7 @@ class PinsPages:
         latest = self._pins()
         if latest is None:
             raise web.HTTPSeeOther(location='/pins')
-        gone = self._find(ref=ref) is None
+        gone = self.find(ref=ref) is None
         event = None if gone else PinMoved(ref=ref, steps=steps)
         raise self._finish(
             event=event, revision=latest.revision, done='moved',
@@ -685,7 +685,7 @@ class PinsPages:
         ref = fields.get('ref')
         if not ref:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
-        found = self._find(ref=ref)
+        found = self.find(ref=ref)
         if found is None:
             raise web.HTTPSeeOther(location='/pins?done=gone')
         latest, pin = found
@@ -753,7 +753,7 @@ class PinsPages:
             The editor page; a 303 to the gone notice when the ref is
             not a pin.
         """
-        found = None if draft.ref is None else self._find(ref=draft.ref)
+        found = None if draft.ref is None else self.find(ref=draft.ref)
         if draft.ref is not None and found is None:
             raise web.HTTPSeeOther(location='/pins?done=gone')
         pin = None if found is None else found[1]
@@ -890,7 +890,7 @@ class PinsPages:
                 status=HTTPStatus.BAD_REQUEST,
             )
         pin = replace(editor.pin, windows=windows)
-        raise self._saved(seen=latest, ref=draft.ref, pin=pin)
+        raise self.saved(seen=latest, ref=draft.ref, pin=pin)
 
     def _missing(self, *, ref: str | None) -> Pin | None:
         """
@@ -906,7 +906,7 @@ class PinsPages:
         Pin | None
             The pin when it has the ref and is missing; otherwise None.
         """
-        found = None if ref is None else self._find(ref=ref)
+        found = None if ref is None else self.find(ref=ref)
         return found[1] if found is not None and found[1].missing else None
 
     def _refused(
@@ -938,7 +938,7 @@ class PinsPages:
             status=HTTPStatus.BAD_REQUEST,
         )
 
-    def _saved(
+    def saved(
         self, *, seen: PinsSeen, ref: str | None, pin: Pin,
     ) -> web.HTTPSeeOther:
         """
@@ -958,7 +958,7 @@ class PinsPages:
         web.HTTPSeeOther
             A redirect to the list with the outcome.
         """
-        gone = ref is not None and self._find(ref=ref) is None
+        gone = ref is not None and self.find(ref=ref) is None
         if not gone and duplicate(seen=seen, pin=pin, ref=ref):
             return web.HTTPSeeOther(location='/pins?done=duplicate')
         event = None if gone else PinSaved(ref=ref, pin=pin)

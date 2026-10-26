@@ -22,6 +22,7 @@ from paperroute.adapters.settings_form import (
     posted_values,
 )
 from paperroute.adapters.web_common import asset, asset_bytes, form_fields
+from paperroute.adapters.web_connection import ConnectionPages
 from paperroute.adapters.web_pins import PinsPages
 from paperroute.core.messages import (
     POWER_ACTIONS,
@@ -359,14 +360,16 @@ class WebDisplay:
             web.post('/settings', self._settings),
             web.get('/status', self._status_json),
         ])
-        app.add_routes(
-            PinsPages(
-                post=self.send,
-                pins=self._pins,
-                options=self._options,
-                sleep=self.pins_sleep,
-            ).routes()
+        pins = PinsPages(
+            post=self.send,
+            pins=self._pins,
+            options=self._options,
+            sleep=self.pins_sleep,
         )
+        app.add_routes(pins.routes())
+        app.add_routes(ConnectionPages(
+            pages=pins, pins=self._pins, options=self._options,
+        ).routes())
         if self.device is not None:
             app.add_routes([
                 web.get('/device/power', self._power_page),

@@ -427,6 +427,7 @@ input[type='text'],
 input[type='search'],
 input[type='password'],
 input[type='time'],
+input[type='number'],
 select {
   min-width: 0;
   max-width: 100%;
@@ -780,11 +781,14 @@ main > .notice {
   min-width: 0;
 }
 
-.editor > p {
+.editor > p,
+.editor fieldset > p {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 0.25rem;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .editor > p.buttons {

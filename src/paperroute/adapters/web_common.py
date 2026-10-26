@@ -25,6 +25,26 @@ def asset(*, name: str) -> str:
     return path.read_text(encoding='utf-8')
 
 
+def asset_bytes(*, name: str) -> bytes:
+    """
+    Read one of the packaged page files as bytes.
+
+    Parameters
+    ----------
+    name : str
+        Path within `assets/web`, such as `fonts/public-sans.woff2`.
+
+    Returns
+    -------
+    bytes
+        The file contents.
+    """
+    path = files('paperroute') / 'assets' / 'web'
+    for part in name.split('/'):
+        path = path / part
+    return path.read_bytes()
+
+
 async def form_fields(*, request: web.Request) -> dict[str, str]:
     """
     Read the string fields of a form or JSON body.

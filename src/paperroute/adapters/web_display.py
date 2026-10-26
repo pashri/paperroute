@@ -21,7 +21,7 @@ from paperroute.adapters.settings_form import (
     page_text,
     posted_values,
 )
-from paperroute.adapters.web_common import asset, form_fields
+from paperroute.adapters.web_common import asset, asset_bytes, form_fields
 from paperroute.adapters.web_pins import PinsPages
 from paperroute.core.messages import (
     POWER_ACTIONS,
@@ -349,6 +349,7 @@ class WebDisplay:
         app.add_routes([
             web.get('/', self._page),
             web.get('/live.css', self._css),
+            web.get('/fonts/public-sans.woff2', self._font),
             web.get('/live.js', self._js),
             web.get('/frame.png', self._frame),
             web.get('/events', self._events),
@@ -453,6 +454,27 @@ class WebDisplay:
         return web.Response(
             text=asset(name='live.css'),
             content_type='text/css',
+        )
+
+    async def _font(self, request: web.Request) -> web.Response:
+        """
+        Serve the page font.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request.
+
+        Returns
+        -------
+        web.Response
+            The woff2 file, cached for a day.
+        """
+        del request
+        return web.Response(
+            body=asset_bytes(name='fonts/public-sans.woff2'),
+            content_type='font/woff2',
+            headers={'Cache-Control': 'max-age=86400'},
         )
 
     async def _js(self, request: web.Request) -> web.Response:

@@ -14,6 +14,11 @@ from paperroute.app_effects import timed_async
 from paperroute.app_ports import Ports
 from paperroute.core.alerts_view import AlertsView
 from paperroute.core.chooser_view import ChooserView
+from paperroute.core.connection_strip import (
+    ConnectionStripMapView,
+    ConnectionStripView,
+)
+from paperroute.core.connection_view import ConnectionView
 from paperroute.core.map_view import MapBase, MapView
 from paperroute.core.messages import NoticeView, ScreenView
 from paperroute.core.panel_views import (
@@ -30,6 +35,9 @@ from paperroute.core.tiles import TileVariant
 from paperroute.ports import TileRepository
 from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.chooser import draw_chooser_view
+from paperroute.render.connection_strip import draw_connection_strip
+from paperroute.render.connection_strip_map import draw_connection_strip_map
+from paperroute.render.connection_view import draw_connection_view
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_view import draw_map_view
 from paperroute.render.notice import draw_notice_view
@@ -49,6 +57,8 @@ type Frame = NDArray[np.uint8]
 
 type PlainView = (
     StopView
+    | ConnectionView
+    | ConnectionStripView
     | StripView
     | AlertsView
     | ChooserView
@@ -118,6 +128,26 @@ class MapRenderer:
             480 by 800 pixels.
         """
         return draw_strip_map_view(
+            view=view, base=self.cached(base=view.map.base),
+        )
+
+    def connection_strip_map_frame(
+        self, *, view: ConnectionStripMapView
+    ) -> NDArray[np.uint8]:
+        """
+        Draw one connection Strip + map frame, sharing the cached map base.
+
+        Parameters
+        ----------
+        view : ConnectionStripMapView
+            View to draw.
+
+        Returns
+        -------
+        NDArray[np.uint8]
+            480 by 800 pixels.
+        """
+        return draw_connection_strip_map(
             view=view, base=self.cached(base=view.map.base),
         )
 
@@ -209,7 +239,7 @@ def sleep_frame(*, view: SleepView, maps: MapRenderer) -> Frame:
 
 def map_drawing(
     *,
-    view: MapView | StripMapView | SleepView,
+    view: MapView | StripMapView | ConnectionStripMapView | SleepView,
     maps: MapRenderer,
 ) -> Callable[[], Frame]:
     """
@@ -217,7 +247,7 @@ def map_drawing(
 
     Parameters
     ----------
-    view : MapView | StripMapView | SleepView
+    view : MapView | StripMapView | ConnectionStripMapView | SleepView
         View to draw.
     maps : MapRenderer
         Draws the map.
@@ -232,6 +262,10 @@ def map_drawing(
             return functools.partial(maps.frame, view=view)
         case StripMapView():
             return functools.partial(maps.strip_map_frame, view=view)
+        case ConnectionStripMapView():
+            return functools.partial(
+                maps.connection_strip_map_frame, view=view,
+            )
     return functools.partial(sleep_frame, view=view, maps=maps)
 
 
@@ -252,9 +286,38 @@ def drawing(*, view: View, maps: MapRenderer) -> Callable[[], Frame]:
         Draws the frame when called.
     """
     match view:
-        case MapView() | StripMapView() | SleepView():
+        case (
+            MapView()
+            | StripMapView()
+            | ConnectionStripMapView()
+            | SleepView()
+        ):
             return map_drawing(view=view, maps=maps)
     return plain_drawing(view=view)
+
+
+def stop_drawing(
+    *, view: StopView | ConnectionView | ConnectionStripView
+) -> Callable[[], Frame]:
+    """
+    Pick the drawing for a Stop view or a connection pin's Strip.
+
+    Parameters
+    ----------
+    view : StopView | ConnectionView | ConnectionStripView
+        View to draw.
+
+    Returns
+    -------
+    Callable[[], Frame]
+        Draws the frame when called.
+    """
+    match view:
+        case StopView():
+            return functools.partial(draw_stop_view, view=view)
+        case ConnectionView():
+            return functools.partial(draw_connection_view, view=view)
+    return functools.partial(draw_connection_strip, view=view)
 
 
 def plain_drawing(*, view: PlainView) -> Callable[[], Frame]:
@@ -272,8 +335,8 @@ def plain_drawing(*, view: PlainView) -> Callable[[], Frame]:
         Draws the frame when called.
     """
     match view:
-        case StopView():
-            return functools.partial(draw_stop_view, view=view)
+        case StopView() | ConnectionView() | ConnectionStripView():
+            return stop_drawing(view=view)
         case StripView():
             return functools.partial(draw_strip_view, view=view)
         case AlertsView():

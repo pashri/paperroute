@@ -8,6 +8,7 @@ from paperroute.core.alerts_view import build_alerts_view
 from paperroute.core.auto_pins import rule_holds
 from paperroute.core.banners import device_banner
 from paperroute.core.chooser_steps import chooser_view
+from paperroute.core.connection_screens import connection_screen
 from paperroute.core.live import LiveDeparture, live_since, resolved
 from paperroute.core.map_requests import (
     map_effects,
@@ -227,8 +228,11 @@ def live_view(*, state: State, stop_view: StopView) -> ScreenView:
     -------
     ScreenView
         The Live view; the Strip + map's map at its own width, and the
-        Stop view for the Alerts view with nothing listed.
+        Stop view for the Alerts view with nothing listed. A connection
+        pin's own view on every view but Alerts.
     """
+    if screen := connection_screen(state=state, stop_view=stop_view):
+        return screen
     match state.view:
         case LiveView.MAP:
             inputs = map_inputs(state=state, stop_view=stop_view)

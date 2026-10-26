@@ -15,6 +15,11 @@ from paperroute.core.alerts_view import AlertsView
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.chooser_view import ChooserView
 from paperroute.core.connection_model import Legs
+from paperroute.core.connection_strip import (
+    ConnectionStripMapView,
+    ConnectionStripView,
+)
+from paperroute.core.connection_view import ConnectionView
 from paperroute.core.device_model import (
     ConfirmAction,
     DeviceFacts,
@@ -185,6 +190,9 @@ ScreenView = (
     | MapView
     | StripView
     | StripMapView
+    | ConnectionView
+    | ConnectionStripView
+    | ConnectionStripMapView
     | AlertsView
     | ChooserView
     | NoticeView

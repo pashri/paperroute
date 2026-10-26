@@ -12,7 +12,7 @@ from paperroute.core.messages import (
     KnobPressed,
     KnobTurned,
 )
-from paperroute.core.places import flipped, toggled
+from paperroute.core.places import flipped, shown, toggled
 from paperroute.core.saved import LIVE_VIEWS, LiveView
 from paperroute.core.state_model import State
 from paperroute.core.state_views import live_stop_view
@@ -60,12 +60,16 @@ def bottom_turned(*, state: State, steps: int) -> State:
     State
         State scrolled on the Stop view or the Strip, each its own
         scroll, or zoomed on the Map and Strip + map. The Strip's scroll
-        stays within the rows last shown. Unchanged on the Alerts view.
+        stays within the rows last shown; a connection pin's Strip turns
+        the pin's scroll, which picks the pair. Unchanged on the Alerts
+        view.
     """
     match state.view:
         case LiveView.ALERTS:
             return state
         case LiveView.STOP:
+            return replace(state, scroll=max(0, state.scroll + steps))
+        case LiveView.STRIP if shown(state=state).change is not None:
             return replace(state, scroll=max(0, state.scroll + steps))
         case LiveView.STRIP:
             scroll = state.strip.scroll + steps

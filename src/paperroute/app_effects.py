@@ -56,7 +56,7 @@ from paperroute.core.messages import (
     StripLoaded,
     TimetableSeen,
 )
-from paperroute.core.model import Mode, Pin, StopPlace
+from paperroute.core.model import Mode, Pin, RouteKind, StopPlace
 from paperroute.core.positions import PositionsSnapshot, with_labels
 from paperroute.core.reach import build_reach
 from paperroute.measures import StopMeasures
@@ -428,8 +428,8 @@ def between_read(
 
     A pin's From or To may be a platform, so their stop families are read
     too and each is found through its station. With no trips asked
-    about, only the families are read. NSW TrainLink is asked about
-    every stop in either end's family.
+    about, only the families are read. For a train pin or one of no
+    kind, NSW TrainLink is asked about every stop in either end's family.
 
     Parameters
     ----------
@@ -462,7 +462,8 @@ def between_read(
         names=names,
         timetable=effect.timetable,
         families=families,
-        trainlink=timetable.serves_trainlink(stop_ids=stop_ids),
+        trainlink=pin.kind in (None, RouteKind.TRAIN)
+        and timetable.serves_trainlink(stop_ids=stop_ids),
     )
 
 

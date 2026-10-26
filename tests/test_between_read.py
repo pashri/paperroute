@@ -10,7 +10,7 @@ from typing import Final
 import pytest
 
 from paperroute.core.alert_model import AlertPlaces, BetweenLoaded, LoadBetween
-from paperroute.core.model import Mode
+from paperroute.core.model import Mode, RouteKind
 from paperroute.core.patterns import PatternStop, TripPattern
 from tests.app_factories import ports_of, posted_by
 from tests.core.factories import pin_of
@@ -208,3 +208,19 @@ async def test_between_read_failure_is_empty(
     ]
     errors = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert len(errors) == 1
+
+
+async def test_bus_pin_skips_trainlink() -> None:
+    """A pin of a kind other than train never asks about TrainLink."""
+    pin = replace(pin_of('S', 'T'), kind=RouteKind.BUS)
+    timetable = BetweenTimetable(trainlink=True)
+    posted = await posted_by(
+        ports=ports_of(timetable=timetable),
+        effects=[
+            LoadBetween(
+                pin=pin, trip_ids=frozenset(), day=date(2026, 10, 24),
+            ),
+        ],
+    )
+    assert posted == [BetweenLoaded(pin=pin, names=frozenset())]
+    assert not timetable.trainlink_asked

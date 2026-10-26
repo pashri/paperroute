@@ -6,6 +6,12 @@ from collections.abc import Collection, Iterable
 from operator import itemgetter
 from typing import Final
 
+from paperroute.adapters.change_rows import (
+    BETWEEN,
+    REACHED,
+    change_box,
+    nearest_changes,
+)
 from paperroute.adapters.network_db import (
     ROUTE_COLUMNS,
     ROUTE_ORDER,
@@ -17,7 +23,7 @@ from paperroute.adapters.timetable_db import to_point
 from paperroute.core.chooser import UNPICKED, Choice, focusable
 from paperroute.core.geo import to_lonlat
 from paperroute.core.model import STATION_FIRST, RouteKind, StopPlace
-from paperroute.core.pin_choices import KIND_NAMES, StopMatch
+from paperroute.core.pin_choices import KIND_NAMES, ChangeStop, StopMatch
 from paperroute.core.reach import RowKind, StripKey, build_reach
 from paperroute.core.route_colours import RouteColour, common_colours
 from paperroute.core.strip_times import BOARD_KINDS
@@ -513,6 +519,83 @@ class SqlitePinOptions:
         return tuple(
             found for dist, _, found in close if dist <= NEARBY_M
         )[:NEARBY_COUNT]
+
+    def change_stops(self, *, place: StopPlace) -> tuple[ChangeStop, ...]:
+        """
+        List the stops a connection can change to from a place.
+
+        Parameters
+        ----------
+        place : StopPlace
+            The place leg 1 is left at.
+
+        Returns
+        -------
+        tuple[ChangeStop, ...]
+            Run-served stops within 500 m, the place included, nearest
+            first; empty when the place has no point.
+        """
+        point = place.point
+        if point is None or not self.network.has_network():
+            return ()
+        rows = self.network.fetch(sql=CLOSE, params=change_box(point=point))
+        return nearest_changes(
+            place=place,
+            point=point,
+            found=(place_of(row=row) for row in rows),
+        )
+
+    def reached_from(self, *, place: StopPlace) -> tuple[StopPlace, ...]:
+        """
+        List the stations a run calls at after a place.
+
+        Parameters
+        ----------
+        place : StopPlace
+            The place leg 2 is joined at.
+
+        Returns
+        -------
+        tuple[StopPlace, ...]
+            Stations after the place's station on any run, without it,
+            by name and then ID.
+        """
+        if not self.network.has_network():
+            return ()
+        rows = self.network.fetch(sql=REACHED, params={
+            'station': self.network.station_for(stop_id=place.stop_id),
+        })
+        return tuple(place_of(row=row) for row in rows)
+
+    def routes_between(
+        self, *, origin: StopPlace, destination: StopPlace,
+    ) -> tuple[str, ...]:
+        """
+        List the routes that run from one place to another.
+
+        Parameters
+        ----------
+        origin : StopPlace
+            Place boarded at.
+        destination : StopPlace
+            Place reached.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Route numbers of runs that list the destination's station
+            after the origin's, in chooser order.
+        """
+        if not self.network.has_network():
+            return ()
+        rows = self.network.fetch(sql=BETWEEN, params={
+            'origin': self.network.station_for(stop_id=origin.stop_id),
+            'destination': self.network.station_for(
+                stop_id=destination.stop_id,
+            ),
+            'last': LAST,
+        })
+        return tuple(str(route) for route, in rows)
 
     def route_colours(
         self, *, names: Collection[str],

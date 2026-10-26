@@ -30,7 +30,7 @@ from paperroute.core.model import (
     StopPlace,
 )
 from paperroute.core.patterns import TripPattern
-from paperroute.core.pin_choices import StopMatch
+from paperroute.core.pin_choices import ChangeStop, StopMatch
 from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.route_colours import RouteColour
 from paperroute.core.saved import Saved, Settings
@@ -430,6 +430,55 @@ class PinOptions(Protocol):
         -------
         tuple[StopPlace, ...]
             Stops, nearest first; empty when the place has no point.
+        """
+
+    def change_stops(self, *, place: StopPlace) -> tuple[ChangeStop, ...]:
+        """
+        List the stops a connection can change to from a place.
+
+        Parameters
+        ----------
+        place : StopPlace
+            The place leg 1 is left at.
+
+        Returns
+        -------
+        tuple[ChangeStop, ...]
+            Stops within 500 m, the place included, nearest first.
+        """
+
+    def reached_from(self, *, place: StopPlace) -> tuple[StopPlace, ...]:
+        """
+        List the stations a run calls at after a place.
+
+        Parameters
+        ----------
+        place : StopPlace
+            The place leg 2 is joined at.
+
+        Returns
+        -------
+        tuple[StopPlace, ...]
+            Stations, by name.
+        """
+
+    def routes_between(
+        self, *, origin: StopPlace, destination: StopPlace,
+    ) -> tuple[str, ...]:
+        """
+        List the routes that run from one place to another.
+
+        Parameters
+        ----------
+        origin : StopPlace
+            Place boarded at.
+        destination : StopPlace
+            Place reached.
+
+        Returns
+        -------
+        tuple[str, ...]
+            Route numbers, in chooser order.
         """
 
     def route_colours(

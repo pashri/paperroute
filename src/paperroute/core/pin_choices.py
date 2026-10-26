@@ -18,6 +18,23 @@ KIND_NAMES: Final[dict[RouteKind, str]] = {
 
 
 @dataclass(frozen=True)
+class ChangeStop:
+    """
+    A stop a connection can change to, with the walk to it.
+
+    Attributes
+    ----------
+    place : StopPlace
+        The stop or station.
+    metres : int
+        Straight-line walk to it, rounded up to the next 10 m.
+    """
+
+    place: StopPlace
+    metres: int
+
+
+@dataclass(frozen=True)
 class StopMatch:
     """
     A stop that a search found.

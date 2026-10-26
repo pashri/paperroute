@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 
 from paperroute.core.chooser import Choice
 from paperroute.core.model import RouteKind, StopPlace
-from paperroute.core.pin_choices import KIND_NAMES, StopMatch
+from paperroute.core.pin_choices import KIND_NAMES, ChangeStop, StopMatch
 from paperroute.core.route_colours import RouteColour
 
 
@@ -30,6 +30,12 @@ class FakePinOptions:
         What `search` gives.
     colours : dict[str, RouteColour]
         Route colours by short name.
+    changes : tuple[ChangeStop, ...]
+        What `change_stops` gives.
+    reached : tuple[StopPlace, ...]
+        What `reached_from` gives.
+    between : tuple[str, ...]
+        What `routes_between` gives.
     """
 
     places: dict[str, StopPlace] = field(default_factory=dict)
@@ -45,6 +51,9 @@ class FakePinOptions:
     near: tuple[StopPlace, ...] = ()
     found: tuple[StopMatch, ...] = ()
     colours: dict[str, RouteColour] = field(default_factory=dict)
+    changes: tuple[ChangeStop, ...] = ()
+    reached: tuple[StopPlace, ...] = ()
+    between: tuple[str, ...] = ()
 
     def search(self, *, text: str) -> tuple[StopMatch, ...]:
         """
@@ -175,6 +184,58 @@ class FakePinOptions:
             The stops.
         """
         return self.near
+
+    def change_stops(self, *, place: StopPlace) -> tuple[ChangeStop, ...]:
+        """
+        Give the fixed change stops.
+
+        Parameters
+        ----------
+        place : StopPlace
+            Ignored.
+
+        Returns
+        -------
+        tuple[ChangeStop, ...]
+            The change stops.
+        """
+        return self.changes
+
+    def reached_from(self, *, place: StopPlace) -> tuple[StopPlace, ...]:
+        """
+        Give the fixed places reached.
+
+        Parameters
+        ----------
+        place : StopPlace
+            Ignored.
+
+        Returns
+        -------
+        tuple[StopPlace, ...]
+            The places.
+        """
+        return self.reached
+
+    def routes_between(
+        self, *, origin: StopPlace, destination: StopPlace,
+    ) -> tuple[str, ...]:
+        """
+        Give the fixed routes between two places.
+
+        Parameters
+        ----------
+        origin : StopPlace
+            Ignored.
+        destination : StopPlace
+            Ignored.
+
+        Returns
+        -------
+        tuple[str, ...]
+            The routes.
+        """
+        return self.between
 
     def route_colours(
         self, *, names: Collection[str],

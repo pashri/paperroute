@@ -155,6 +155,41 @@ def test_wharf_suffix_dropped() -> None:
     assert place_name(name='Rose Bay Wharf') == 'Rose Bay'
 
 
+def test_numbered_wharf_is_its_place() -> None:
+    """A numbered wharf or a wharf side reduces to its place."""
+    assert place_name(name='Circular Quay, Wharf 2, Side A') == (
+        'Circular Quay'
+    )
+    assert place_name(name='Manly, Wharf 1') == 'Manly'
+    assert place_name(name='Balmain East Wharf, Side A') == 'Balmain East'
+
+
+def test_numbered_wharf_pin_takes_banner() -> None:
+    """A Circular Quay alert takes a numbered Circular Quay wharf pin."""
+    pin = station_pin(
+        origin='20003',
+        origin_name='Circular Quay, Wharf 5, Side A',
+        kind=RouteKind.FERRY,
+    )
+    found = alert(
+        alert_id='quay',
+        header='Circular Quay Wharf 5 closed for maintenance',
+        periods=(
+            Period(
+                start=sydney(day=24, hour=5), end=sydney(day=25, hour=5),
+            ),
+        ),
+        route='F1',
+    )
+    listed = listed_for(
+        pin=pin,
+        found=found,
+        now=SAT_MORNING,
+        departures=trains(route='F1', mode=Mode.FERRY),
+    )
+    assert listed[0].banner
+
+
 def test_wharf_may_follow_name() -> None:
     """Wharf may follow a name, as Station may."""
     assert names_place(

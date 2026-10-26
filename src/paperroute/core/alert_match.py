@@ -114,6 +114,9 @@ def place_name(*, name: str) -> str:
     """
     A stop name without its station or wharf suffix.
 
+    A wharf name keeps only the part before its first comma, so
+    'Circular Quay, Wharf 2, Side A' is 'Circular Quay'.
+
     Parameters
     ----------
     name : str
@@ -124,6 +127,8 @@ def place_name(*, name: str) -> str:
     str
         Place name, such as 'Central'.
     """
+    if 'Wharf' in name:
+        name = name.partition(',')[0]
     for suffix in NAME_SUFFIXES:
         if name.endswith(suffix):
             return name.removesuffix(suffix)

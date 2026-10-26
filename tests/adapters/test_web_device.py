@@ -188,8 +188,8 @@ async def test_device_page_sections(client: Client) -> None:
     assert 'These ask on this page first, then act.' in text
     assert 'name="kind" value="settings"' in text
     assert 'name="kind" value="erase"' in text
-    assert '<button type="submit">Reset settings</button>' in text
-    assert '<button type="submit">Erase everything</button>' in text
+    for label in ('Reset settings', 'Erase everything'):
+        assert f'<button type="submit" class="danger">{label}</button>' in text
     assert (
         'Reset settings clears pins, settings, Wi-Fi and the key. Erase '
         'everything also deletes the timetable. The map is kept. Both are '
@@ -422,7 +422,9 @@ async def test_power_lives_on_device(
     confirm = await client.post('/device/power?action=reboot')
     confirm_text = await confirm.text()
     assert '<p>Restart now?</p>' in confirm_text
-    assert '<a class="cancel" href="/device">Cancel</a>' in confirm_text
+    assert (
+        '<a class="button secondary" href="/device">Cancel</a>'
+    ) in confirm_text
     assert not device.posted
     done = await client.post(
         '/power', data={'action': 'reboot'}, allow_redirects=False,

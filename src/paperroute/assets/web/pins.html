@@ -48,23 +48,28 @@
     </ul>
   </nav>
   <main>
-    <h2>Pins</h2>
-    <form class="search" method="get" action="/pins/new" role="search">
-      <label for="pin-search">Add a pin</label>
-      <input id="pin-search" type="search" name="q"
-             placeholder="Add a pin: search a stop or station">
-      <button type="submit">Search</button>
-    </form>
-    {{notice}}
-    {{pins}}
+    <section class="card" aria-labelledby="pins-heading">
+      <h2 id="pins-heading">Your pins</h2>
+      {{notice}}
+      {{pins}}
+      <form class="search" method="get" action="/pins/new" role="search">
+        <label for="pin-search">Add a pin</label>
+        <input id="pin-search" type="search" name="q"
+               placeholder="Add a pin: search a stop or station">
+        <button type="submit">Search</button>
+      </form>
+    </section>
     <form id="order-form" method="post" action="/pins/order" hidden>
       <input type="hidden" name="refs" value="">
     </form>
     <dialog id="delete-dialog" aria-labelledby="delete-question">
       <form method="dialog">
         <p id="delete-question"></p>
-        <button type="submit" value="cancel">Cancel</button>
-        <button type="submit" value="delete">Delete</button>
+        <div class="buttons">
+          <button type="submit" value="cancel"
+                  class="secondary">Cancel</button>
+          <button type="submit" value="delete" class="danger">Delete</button>
+        </div>
       </form>
     </dialog>
   </main>

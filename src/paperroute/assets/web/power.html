@@ -47,14 +47,14 @@
     </ul>
   </nav>
   <main>
-    <section class="setting" aria-labelledby="device">
+    <section class="card setting" aria-labelledby="device">
       <h2 id="device">Device</h2>
       <form method="post" action="/power">
         <p>{{question}}</p>
         <input type="hidden" name="action" value="{{action}}">
         <div class="buttons">
-          <a class="cancel" href="/device">Cancel</a>
-          <button type="submit">{{confirm}}</button>
+          <a class="button secondary" href="/device">Cancel</a>
+          <button type="submit" class="{{tone}}">{{confirm}}</button>
         </div>
       </form>
     </section>

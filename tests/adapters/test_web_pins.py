@@ -271,6 +271,22 @@ async def test_delete_needs_confirm(pins: Pins, client: Client) -> None:
     assert pins.posted == [PinDeleted(ref=ref)]
 
 
+async def test_list_button_tones(client: Client) -> None:
+    """Delete is danger; Up, Down and the Edit link are secondary."""
+    page = parse_page(text=await (await client.get('/pins')).text())
+    tones = {text: classes for text, classes in page.buttons}
+    assert 'danger' in tones['Delete']
+    assert 'secondary' in tones['Up']
+    assert 'secondary' in tones['Down']
+    assert tones['Edit'] == frozenset({'button', 'secondary'})
+    asked = await client.post(
+        '/pins/delete',
+        data={'ref': pin_ref(pin=WORK)},
+    )
+    confirm = parse_page(text=await asked.text())
+    assert ('Delete', frozenset({'danger'})) in confirm.buttons
+
+
 async def test_delete_of_gone_pin_says_so(
     pins: Pins, client: Client
 ) -> None:

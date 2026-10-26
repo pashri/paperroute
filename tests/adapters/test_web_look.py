@@ -12,6 +12,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_display import WebDisplay
+from tests.adapters.test_web_device import Device
 from tests.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]
@@ -27,6 +28,19 @@ PAGES: Final[list[tuple[str, str | None]]] = [
     ('device.html', '/device'),
     ('power.html', '/device'),
     ('setup.html', None),
+]
+DANGER: Final[frozenset[str]] = frozenset(
+    {'Delete', 'Shut down', 'Reset settings', 'Erase everything'},
+)
+SECONDARY: Final[frozenset[str]] = frozenset({
+    'Up', 'Down', 'Edit', 'Cancel', 'Show choices', 'Add window', 'Remove',
+    'Show password', 'Join another network…',
+})
+MAIN: Final[frozenset[str]] = frozenset(
+    {'Search', 'Save', 'Save key', 'Join', 'Press'},
+)
+CARD_PAGES: Final[list[str]] = [
+    name for name, _ in PAGES if name != 'live.html'
 ]
 NAV_LINKS: Final[list[tuple[str, str]]] = [
     ('/', 'Live'),
@@ -328,3 +342,54 @@ def test_viewport_fit_cover(name: str, current: str | None) -> None:
     )
     assert found is not None
     assert 'viewport-fit=cover' in found.group(1)
+
+
+@pytest.mark.parametrize('name', CARD_PAGES)
+def test_every_section_is_a_card(name: str) -> None:
+    """Every section in main is a card with a heading."""
+    page = parse_page(text=page_text(name=name))
+    assert page.sections
+    for classes, headed in page.sections:
+        assert 'card' in classes
+        assert headed
+
+
+@pytest.mark.parametrize('name', CARD_PAGES)
+def test_button_tones(name: str) -> None:
+    """Danger, secondary and main buttons carry the classes Ruling 5 names."""
+    for text, classes in parse_page(text=page_text(name=name)).buttons:
+        assert not {'danger', 'secondary'} <= classes, text
+        if text in DANGER:
+            assert 'danger' in classes, text
+        elif text in SECONDARY:
+            assert 'secondary' in classes, text
+        elif text in MAIN:
+            assert not classes & {'danger', 'secondary'}, text
+
+
+def test_device_restart_tones() -> None:
+    """Restart is secondary on the Device card and main in its dialog."""
+    buttons = parse_page(text=page_text(name='device.html')).buttons
+    restarts = [classes for text, classes in buttons if text == 'Restart']
+    assert restarts == [frozenset({'secondary'}), frozenset()]
+
+
+@pytest.mark.parametrize(('action', 'danger'), [
+    ('poweroff', True),
+    ('reboot', False),
+])
+async def test_power_page_tone(action: str, danger: bool) -> None:
+    """Shutting down asks with a danger button; restarting does not."""
+    display = WebDisplay(device=Device().pages())
+    client = TestClient(TestServer(display.app()))
+    await client.start_server()
+    try:
+        response = await client.get(f'/device/power?action={action}')
+        page = parse_page(text=await response.text())
+    finally:
+        await client.close()
+    confirm = page.buttons[-1][1]
+    assert ('danger' in confirm) is danger
+    assert 'secondary' not in confirm
+    assert ('Cancel', frozenset({'button', 'secondary'})) in page.buttons
+    assert '{{' not in await response.text()

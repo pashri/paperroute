@@ -812,8 +812,8 @@ async def test_power_works_without_script(
     text = await confirm.text()
     assert f'<p>{question}</p>' in text
     assert f'name="action" value="{action}"' in text
-    assert f'<button type="submit">{button}</button>' in text
-    assert '<a class="cancel" href="/device">Cancel</a>' in text
+    assert f'>{button}</button>' in text
+    assert '<a class="button secondary" href="/device">Cancel</a>' in text
     assert '{{' not in text
     assert not posted
     done = await client.post(

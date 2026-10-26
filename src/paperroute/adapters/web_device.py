@@ -87,7 +87,8 @@ FORM: Final[str] = """<form method="post" action="/setup">
       <div class="password">
         <input id="password" name="password" type="password"
                autocomplete="current-password">
-        <button id="show-password" type="button" aria-controls="password"
+        <button id="show-password" type="button" class="secondary"
+                aria-controls="password"
                 aria-pressed="false" hidden>Show password</button>
       </div>{key}
       <button type="submit">Join</button>

@@ -691,9 +691,12 @@ class WebDisplay:
         if action is None:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         question, confirm = CONFIRM[action]
+        tone = 'danger' if action is PowerAction.OFF else ''
         page = asset(name='power.html').replace(
             '{{question}}', question,
-        ).replace('{{action}}', action.value).replace('{{confirm}}', confirm)
+        ).replace('{{action}}', action.value).replace(
+            '{{confirm}}', confirm,
+        ).replace('{{tone}}', tone)
         return web.Response(text=page, content_type='text/html')
 
     async def _power(self, request: web.Request) -> web.Response:

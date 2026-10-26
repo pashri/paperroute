@@ -49,17 +49,18 @@
   </nav>
   <main>
     {{notice}}
-    <section class="setting" aria-labelledby="network">
+    <section class="card setting" aria-labelledby="network">
       <h2 id="network">Network</h2>
       <dl class="facts">
 {{network}}
       </dl>
       <form method="post" action="/device/wifi">
-        <button type="submit" aria-describedby="wifi-hint">Join another network&hellip;</button>
+        <button type="submit" class="secondary"
+                aria-describedby="wifi-hint">Join another network&hellip;</button>
       </form>
       <p id="wifi-hint" class="hint">Confirm on the device. Hidden networks and a show-password toggle are on the setup page.</p>
     </section>
-    <section class="setting" aria-labelledby="data">
+    <section class="card setting" aria-labelledby="data">
       <h2 id="data">Data</h2>
       <dl class="facts">
 {{data}}
@@ -76,7 +77,7 @@
         </table>
       </div>
     </section>
-    <section class="setting" aria-labelledby="system">
+    <section class="card setting" aria-labelledby="system">
       <h2 id="system">System</h2>
       <dl class="facts">
 {{system}}
@@ -87,7 +88,7 @@
       </ul>
       <p class="hint">No secrets in either file.</p>
     </section>
-    <section class="setting" aria-labelledby="api-key-heading">
+    <section class="card setting" aria-labelledby="api-key-heading">
       <h2 id="api-key-heading">TfNSW API key</h2>
       <p>{{key_status}}</p>
       <form method="post" action="/device/key">
@@ -97,16 +98,16 @@
         <button type="submit">Save key</button>
       </form>
     </section>
-    <section class="setting" aria-labelledby="device">
+    <section class="card setting" aria-labelledby="device">
       <h2 id="device">Device</h2>
       <div class="buttons">
         <form method="post" action="/device/power?action=reboot"
               data-power="reboot">
-          <button type="submit">Restart</button>
+          <button type="submit" class="secondary">Restart</button>
         </form>
         <form method="post" action="/device/power?action=poweroff"
               data-power="poweroff">
-          <button type="submit">Shut down</button>
+          <button type="submit" class="danger">Shut down</button>
         </form>
       </div>
       <p class="hint">These ask on this page first, then act.</p>
@@ -116,7 +117,7 @@
         <form method="dialog">
           <p id="reboot-question">Restart now?</p>
           <div class="buttons">
-            <button value="cancel" autofocus>Cancel</button>
+            <button value="cancel" class="secondary" autofocus>Cancel</button>
             <button value="confirm">Restart</button>
           </div>
         </form>
@@ -126,22 +127,22 @@
         <form method="dialog">
           <p id="poweroff-question">Shut down now? The screen will say when it's safe to unplug.</p>
           <div class="buttons">
-            <button value="cancel" autofocus>Cancel</button>
-            <button value="confirm">Shut down</button>
+            <button value="cancel" class="secondary" autofocus>Cancel</button>
+            <button value="confirm" class="danger">Shut down</button>
           </div>
         </form>
       </dialog>
     </section>
-    <section class="setting" aria-labelledby="reset">
+    <section class="card setting" aria-labelledby="reset">
       <h2 id="reset">Reset</h2>
       <div class="buttons">
         <form method="post" action="/device/reset">
           <input type="hidden" name="kind" value="settings">
-          <button type="submit">Reset settings</button>
+          <button type="submit" class="danger">Reset settings</button>
         </form>
         <form method="post" action="/device/reset">
           <input type="hidden" name="kind" value="erase">
-          <button type="submit">Erase everything</button>
+          <button type="submit" class="danger">Erase everything</button>
         </form>
       </div>
       <p class="hint">Reset settings clears pins, settings, Wi-Fi and the key. Erase everything also deletes the timetable. The map is kept. Both are confirmed on the device.</p>

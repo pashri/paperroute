@@ -21,6 +21,7 @@ from paperroute.core.device_model import (
 )
 from paperroute.core.messages import ApiKeyChanged, Event, JoinAsked
 from tests.fakes import FakeKeys
+from tests.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]
 GOOD_KEY = 'abcdefghij0123456789'
@@ -126,6 +127,17 @@ async def test_setup_page_lists_networks(client: Client) -> None:
     assert 'autocomplete="current-password"' in page
     assert 'Show password' in page
     assert '7Q4K9W2M' not in page
+
+
+async def test_setup_page_look(client: Client) -> None:
+    """The setup page is one card with a main Join and secondary toggle."""
+    page = parse_page(text=await (await client.get('/setup')).text())
+    assert page.styled == 0
+    assert [('card' in classes, headed) for classes, headed in page.sections] \
+        == [(True, True)]
+    tones = dict(page.buttons)
+    assert not tones['Join'] & {'danger', 'secondary'}
+    assert 'secondary' in tones['Show password']
 
 
 async def test_setup_escapes_ssid(setup: Setup, client: Client) -> None:

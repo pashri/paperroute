@@ -267,23 +267,36 @@ body > nav {
   }
 }
 
-.setting,
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+  padding: 1rem;
+  border-block-start: 4px solid var(--blue);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
 .setting form {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 0.5rem;
+  gap: 0.75rem;
+  min-width: 0;
 }
 
-.switch {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+p {
+  margin: 0;
 }
 
-.switch input {
-  width: 1.25rem;
-  height: 1.25rem;
+.hint,
+#status,
+#settings-status,
+#device-status {
+  margin: 0;
+  color: var(--muted);
 }
 
 .frame {
@@ -292,7 +305,7 @@ body > nav {
   height: auto;
   image-rendering: pixelated;
   background: #ffffff;
-  border: 1px solid var(--field);
+  border: 1px solid var(--line);
 }
 
 .knobs {
@@ -309,18 +322,61 @@ body > nav {
 
 .buttons {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 0.5rem;
 }
 
-button {
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   min-width: 4.5rem;
   min-height: 2.75rem;
-  padding: 0 0.75rem;
-  border: 1px solid var(--field);
-  border-radius: 0.375rem;
-  background: var(--surface);
-  color: inherit;
+  padding: 0 1rem;
+  border: 2px solid var(--main);
+  border-radius: 4px;
+  background: var(--main);
+  color: var(--main-text);
   font: inherit;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 150ms, border-color 150ms, color 150ms;
+}
+
+button:hover,
+.button:hover {
+  background: color-mix(in srgb, var(--main) 82%, #000000);
+  border-color: color-mix(in srgb, var(--main) 82%, #000000);
+}
+
+.secondary,
+.secondary:hover {
+  border-color: currentColor;
+  color: var(--secondary);
+}
+
+.secondary {
+  background: transparent;
+}
+
+.secondary:hover {
+  background: var(--current-bg);
+}
+
+.danger,
+.danger:hover {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #ffffff;
+}
+
+.danger:hover {
+  background: color-mix(in srgb, var(--danger) 82%, #000000);
 }
 
 button[data-action='press'] {
@@ -329,35 +385,127 @@ button[data-action='press'] {
   -webkit-touch-callout: none;
 }
 
-button:active {
+button:active,
+.button:active {
   transform: translateY(1px);
 }
 
-.buttons .cancel {
-  align-self: center;
+label {
+  overflow-wrap: anywhere;
 }
 
-dialog {
-  border: 1px solid var(--field);
-  border-radius: 0.375rem;
-  background: var(--page);
+label[for],
+label:has(select, input[type='time'], input[type='text']),
+legend {
+  font-weight: 600;
+}
+
+label:has(select, input[type='time'], input[type='text']) {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  min-width: 0;
+  max-width: 100%;
+}
+
+input[type='text'],
+input[type='search'],
+input[type='password'],
+input[type='time'],
+select {
+  min-width: 0;
+  max-width: 100%;
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  border: 2px solid var(--field);
+  border-radius: 4px;
+  background: var(--surface);
   color: var(--text);
+  font: inherit;
+  font-weight: 400;
 }
 
-.hint,
-#status,
-#settings-status,
-#device-status {
+input[type='checkbox'],
+input[type='radio'] {
+  display: inline-grid;
+  flex: none;
+  place-content: center;
+  width: 1.25rem;
+  height: 1.25rem;
   margin: 0;
+  border: 2px solid var(--main);
+  border-radius: 3px;
+  background: var(--surface) center / 100% no-repeat;
+  appearance: none;
+  cursor: pointer;
+}
+
+input[type='checkbox']:checked {
+  background-color: var(--main);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
+
+input[type='radio'] {
+  border-radius: 50%;
+}
+
+input[type='radio']:checked::before {
+  width: 0.625rem;
+  height: 0.625rem;
+  border-radius: 50%;
+  background: var(--main);
+  content: '';
+}
+
+input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+label:has(input:disabled) {
   color: var(--muted);
 }
 
-.setup {
-  align-items: stretch;
+.switch {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 400;
 }
 
-.setup form,
-.setup fieldset {
+fieldset {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 0.5rem 0.75rem 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+
+dialog {
+  max-width: calc(100% - 2rem);
+  border: 0;
+  border-block-start: 4px solid var(--blue);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: var(--shadow);
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 40%);
+}
+
+dialog p {
+  margin-block-end: 0.75rem;
+}
+
+.setup form {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -366,27 +514,18 @@ dialog {
   max-width: 28rem;
 }
 
+.setup fieldset {
+  align-items: stretch;
+}
+
 .setup fieldset label {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  overflow-wrap: anywhere;
 }
 
-.setup input[type='text'],
-.setup input[type='password'] {
-  min-width: 0;
-  min-height: 2.75rem;
-  padding: 0 0.5rem;
-  border: 1px solid var(--field);
-  border-radius: 0.375rem;
-  background: var(--surface);
-  color: inherit;
-  font: inherit;
-}
-
-.setup label:has(input:disabled) {
-  color: var(--muted);
+.setup form > button[type='submit'] {
+  align-self: flex-start;
 }
 
 .password {
@@ -400,13 +539,20 @@ dialog {
 
 .notice {
   margin: 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-inline-start: 4px solid var(--blue);
+  border-radius: 4px;
   overflow-wrap: anywhere;
+}
+
+main > .notice {
+  font-weight: 600;
 }
 
 .facts {
   display: grid;
   grid-template-columns: max-content minmax(0, 1fr);
-  gap: 0.25rem 1rem;
   margin: 0;
 }
 
@@ -414,7 +560,17 @@ dialog {
   display: contents;
 }
 
+.facts dt,
+.facts dd {
+  padding-block: 0.375rem;
+}
+
+.facts div + div > * {
+  border-block-start: 1px solid var(--line);
+}
+
 .facts dt {
+  padding-inline-end: 1rem;
   color: var(--muted);
 }
 
@@ -439,7 +595,8 @@ dialog {
 
 .table th,
 .table td {
-  padding: 0.25rem 1rem 0.25rem 0;
+  padding: 0.375rem 1rem 0.375rem 0;
+  border-block-end: 1px solid var(--line);
   text-align: start;
   white-space: nowrap;
 }
@@ -457,55 +614,6 @@ dialog {
   list-style: none;
 }
 
-.setting input[type='password'] {
-  min-width: 0;
-  max-width: 100%;
-  min-height: 2.75rem;
-  padding: 0 0.5rem;
-  border: 1px solid var(--field);
-  border-radius: 0.375rem;
-  background: var(--surface);
-  color: inherit;
-  font: inherit;
-}
-
-main > .notice {
-  font-weight: 600;
-}
-
-.setting fieldset {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 0.5rem;
-  min-width: 0;
-  max-width: 100%;
-  margin: 0;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--field);
-  border-radius: 0.375rem;
-}
-
-.setting label:has(select, input[type='time']) {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 0.5rem;
-}
-
-.setting select,
-.setting input[type='time'] {
-  min-width: 0;
-  max-width: 100%;
-  min-height: 2.75rem;
-  padding: 0 0.5rem;
-  border: 1px solid var(--field);
-  border-radius: 0.375rem;
-  background: var(--surface);
-  color: inherit;
-  font: inherit;
-}
-
 .times {
   display: flex;
   flex-wrap: wrap;
@@ -514,39 +622,28 @@ main > .notice {
 
 .error {
   margin: 0;
+  color: var(--danger);
   font-weight: 600;
 }
 
 .search {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
+  align-items: flex-end;
   gap: 0.5rem;
 }
 
-.search input {
-  flex: 1 1 14rem;
-  min-width: 0;
-  min-height: 2.75rem;
-  padding: 0 0.5rem;
-  border: 1px solid var(--field);
-  border-radius: 0.375rem;
-  background: var(--surface);
-  color: inherit;
-  font: inherit;
+.search label {
+  flex-basis: 100%;
 }
 
-.notice {
-  margin: 0;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--field);
-  border-radius: 0.375rem;
+.search input {
+  flex: 1 1 12rem;
 }
 
 .pins {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
   margin: 0;
   padding: 0;
   list-style: none;
@@ -557,12 +654,15 @@ main > .notice {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem 0.75rem;
-  padding: 0.5rem 0.75rem;
-  border: 1px solid var(--field);
-  border-radius: 0.375rem;
+  padding-block: 0.75rem;
+}
+
+.pins li + li {
+  border-block-start: 1px solid var(--line);
 }
 
 .pins .grip {
+  order: 1;
   color: var(--muted);
   cursor: grab;
   touch-action: none;
@@ -571,7 +671,7 @@ main > .notice {
 
 .pins .pin {
   display: flex;
-  flex: 1 1 12rem;
+  flex: 1 1 10rem;
   flex-direction: column;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -585,17 +685,19 @@ main > .notice {
 
 .pins .actions {
   display: flex;
+  flex-basis: 100%;
   flex-wrap: wrap;
   align-items: center;
+  order: 2;
   gap: 0.5rem;
+}
+
+.pins .actions form {
+  display: contents;
 }
 
 .pins li.dragging {
   opacity: 0.6;
-}
-
-dialog button {
-  margin-block-start: 0.5rem;
 }
 
 .default-submit {
@@ -604,6 +706,24 @@ dialog button {
   width: 1px;
   height: 1px;
   overflow: hidden;
+}
+
+.editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.editor > p {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+}
+
+.editor > p.buttons {
+  flex-direction: row;
 }
 
 .windows,

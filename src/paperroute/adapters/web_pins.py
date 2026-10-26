@@ -76,10 +76,12 @@ ITEM: Final[str] = """
         <div class="actions">
 {up}
 {down}
-          <a href="/pins/edit?ref={ref}" aria-label="Edit {label}">Edit</a>
+          <a class="button secondary" href="/pins/edit?ref={ref}"
+             aria-label="Edit {label}">Edit</a>
           <form method="post" action="/pins/delete">
             <input type="hidden" name="ref" value="{ref}">
-            <button type="submit" aria-label="Delete {label}"
+            <button type="submit" class="danger"
+                    aria-label="Delete {label}"
                     data-label="{label}">Delete</button>
           </form>
         </div>
@@ -87,15 +89,17 @@ ITEM: Final[str] = """
 MOVE: Final[str] = """          <form method="post" action="/pins/move">
             <input type="hidden" name="ref" value="{ref}">
             <input type="hidden" name="steps" value="{steps}">
-            <button type="submit"
+            <button type="submit" class="secondary"
                     aria-label="Move {label} {name}">{name_cap}</button>
           </form>"""
 CONFIRM: Final[str] = """<form method="post" action="/pins/delete">
       <p>Delete “{label}”?</p>
       <input type="hidden" name="ref" value="{ref}">
       <input type="hidden" name="confirm" value="yes">
-      <a href="/pins">Cancel</a>
-      <button type="submit">Delete</button>
+      <div class="buttons">
+        <a class="button secondary" href="/pins">Cancel</a>
+        <button type="submit" class="danger">Delete</button>
+      </div>
     </form>"""
 
 

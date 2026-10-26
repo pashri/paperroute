@@ -39,8 +39,8 @@ EDITOR: Final[str] = """<form class="editor" method="get" action="/pins/edit">
         <input id="pin-nickname" type="text" name="nickname"
                maxlength="{max}" value="{nickname}">
       </p>{windows}
-      <p>
-        <button type="submit">Show choices</button>{save}
+      <p class="buttons">
+        <button type="submit" class="secondary">Show choices</button>{save}
       </p>
     </form>{nearby}"""
 SAVE: Final[str] = """

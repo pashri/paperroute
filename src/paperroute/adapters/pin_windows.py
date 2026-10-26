@@ -35,13 +35,13 @@ ROW: Final[str] = """
             <input id="w{i}_to" type="time"
                    name="w{i}_to" value="{end}">
           </p>
-          <button type="submit"
+          <button type="submit" class="secondary"
                   name="remove_window" value="{i}">Remove</button>
         </fieldset>"""
 FIELDSET: Final[str] = """
       <fieldset class="windows">
         <legend>Show automatically</legend>{rows}
-        <button type="submit"
+        <button type="submit" class="secondary"
                 name="add_window" value="1">Add window</button>
         <input type="hidden" name="wn" value="{count}">
       </fieldset>"""

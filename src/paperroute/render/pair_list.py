@@ -53,7 +53,9 @@ def draw_pair_row(
     )
     canvas.text(
         at=(routes, y + 50),
-        text=canvas.fit(text=detail, face=DETAIL_FACE, width=room),
+        text=canvas.fit(
+            text=detail, face=DETAIL_FACE, width=right - INSET - routes,
+        ),
         face=DETAIL_FACE,
         grey=INK,
     )

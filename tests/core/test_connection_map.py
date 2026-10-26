@@ -152,7 +152,7 @@ def test_o1_fits_whole_trip() -> None:
         pairs=SHAPED,
         mode=ConnectionMap.WHOLE,
     )
-    assert found.centre == (400.0, -500.0)
+    assert found.centre == (400.0, -596.0)
     assert found.zoom == ZOOMS.index(8)
     assert found.vehicle_trips == frozenset({
         'a0733', 'b0746', 'a0748', 'b0801a', 'a0803', 'b0817', 'a0822',

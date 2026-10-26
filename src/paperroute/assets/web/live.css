@@ -819,6 +819,12 @@ main > .notice {
   gap: 0.25rem;
 }
 
+.editor fieldset > label:has(input[type='checkbox'], input[type='radio']) {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

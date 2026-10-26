@@ -205,7 +205,7 @@ def routes_fieldset(*, editor: ConnectionEditor) -> str:
         f'{html.escape(route)}</label>'
         for route in editor.routes
     )
-    hint = ROUTES_HINT.format(routes=' '.join(editor.routes))
+    hint = ROUTES_HINT.format(routes=', '.join(editor.routes))
     return ROUTES.format(hint=html.escape(hint), boxes=boxes)
 
 

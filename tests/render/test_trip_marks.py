@@ -10,7 +10,12 @@ from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase, TripMarks
 from paperroute.core.tiles import TileVariant
 from paperroute.render.canvas import INK, PAPER, Canvas
 from paperroute.render.map_base import draw_map_base
-from paperroute.render.trip_marks import draw_trip_points
+from paperroute.render.trip_marks import (
+    draw_trip_ends,
+    draw_trip_legs,
+    draw_trip_lines,
+    draw_trip_points,
+)
 
 MPP: Final[int] = 8
 CENTRE: Final[Point] = (0.0, 0.0)
@@ -101,3 +106,14 @@ def test_no_trip_draws_no_from() -> None:
         canvas, base=MapBase(centre=CENTRE, mpp=MPP, route=()),
     )
     assert canvas.grey().min() == PAPER
+
+
+def test_lines_are_legs_then_ends() -> None:
+    """The lines are the legs, drawn before names, then the ends."""
+    base = MapBase(centre=CENTRE, mpp=MPP, route=(), trip=TRIP)
+    whole, split = Canvas(width=MAP_WIDTH), Canvas(width=MAP_WIDTH)
+    window = (0, 0)
+    draw_trip_lines(whole, base=base, window=window)
+    draw_trip_legs(split, base=base, window=window)
+    draw_trip_ends(split, base=base, window=window)
+    assert (whole.grey() == split.grey()).all()

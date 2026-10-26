@@ -23,6 +23,7 @@ from paperroute.core.tiles import ZOOMS
 CHANGE_ZOOM_IN: Final[int] = 1
 FIT_MARGIN: Final[float] = 1.1  # the whole trip's box, plus 10%
 SIDEBAR_PAIRS: Final[int] = 4
+CREDIT_ROOM: Final[int] = 24  # pixels kept clear above the map's bottom
 
 type Line = tuple[Point, ...]
 
@@ -292,7 +293,8 @@ def whole_frame(
     -------
     tuple[Point | None, int]
         The middle of the box around the hero's legs and the four stops,
-        and the finest zoom that holds it; the From and the knob's zoom
+        moved down so the box clears the map's credit, and the finest
+        zoom that holds it with that room; the From and the knob's zoom
         with no point at all.
     """
     hero = pairs[0] if pairs else None
@@ -303,7 +305,13 @@ def whole_frame(
     xs = [x for x, _ in points]
     ys = [y for _, y in points]
     box = ((min(xs), min(ys)), (max(xs), max(ys)))
-    return middle(ends=box), fit_zoom(points=box, width=inputs.width)
+    zoom = fit_zoom(points=box, width=inputs.width)
+    if (box[1][1] - box[0][1]) + CREDIT_ROOM * ZOOMS[zoom] > (
+        MAP_HEIGHT * ZOOMS[zoom]
+    ):
+        zoom = min(zoom + 1, len(ZOOMS) - 1)
+    x, y = middle(ends=box)
+    return (x, y - CREDIT_ROOM * ZOOMS[zoom] / 2), zoom
 
 
 def framed(

@@ -86,9 +86,9 @@ def draw_end(canvas: Canvas, *, at: Point) -> None:
     )
 
 
-def draw_trip_lines(canvas: Canvas, *, base: MapBase, window: Window) -> None:
+def draw_trip_legs(canvas: Canvas, *, base: MapBase, window: Window) -> None:
     """
-    Draw leg 2 dashed on a paper casing, the dotted walk and the ends.
+    Draw leg 2 dashed on a paper casing, and the dotted walk.
 
     Parameters
     ----------
@@ -111,12 +111,47 @@ def draw_trip_lines(canvas: Canvas, *, base: MapBase, window: Window) -> None:
         walk = on_map(points=trip.walk, mpp=base.mpp, window=window)
         canvas.line(points=walk, width=WALK_CASING, grey=PAPER)
         canvas.line(points=walk, width=WALK_WIDTH, grey=INK, dash=WALK_DASH)
+
+
+def draw_trip_ends(canvas: Canvas, *, base: MapBase, window: Window) -> None:
+    """
+    Draw the change as a square and the To as a disc.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target, the map alone.
+    base : MapBase
+        The base map key; nothing is drawn without trip marks.
+    window : Window
+        The map's top-left corner in global pixels.
+    """
+    trip = base.trip
+    if trip is None:
+        return
     if trip.change is not None:
         (change,) = on_map(points=(trip.change,), mpp=base.mpp, window=window)
         draw_change(canvas, at=change)
     if trip.end is not None:
         (end,) = on_map(points=(trip.end,), mpp=base.mpp, window=window)
         draw_end(canvas, at=end)
+
+
+def draw_trip_lines(canvas: Canvas, *, base: MapBase, window: Window) -> None:
+    """
+    Draw leg 2, the walk, the change and the To.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target, the map alone.
+    base : MapBase
+        The base map key; nothing is drawn without trip marks.
+    window : Window
+        The map's top-left corner in global pixels.
+    """
+    draw_trip_legs(canvas, base=base, window=window)
+    draw_trip_ends(canvas, base=base, window=window)
 
 
 def draw_trip_points(canvas: Canvas, *, base: MapBase) -> None:

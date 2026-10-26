@@ -27,7 +27,7 @@ from paperroute.ports import TileRepository
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.map_marks import ROUTE_STYLE, STOP_DISC, draw_stop
 from paperroute.render.tile_codec import THRESHOLD, diffuse, quantise4
-from paperroute.render.trip_marks import draw_trip_lines
+from paperroute.render.trip_marks import draw_trip_ends, draw_trip_legs
 
 Window = tuple[int, int]
 Region = tuple[slice, slice]
@@ -498,7 +498,7 @@ def draw_line_and_names(
     tiles: TileRepository,
 ) -> list[StreetLabel]:
     """
-    Draw the route line, then the street names it runs along.
+    Draw the route line and any trip legs, then the names they run along.
 
     Parameters
     ----------
@@ -525,6 +525,13 @@ def draw_line_and_names(
         width=base.width,
     )
     draw_route(canvas, routes=routes, mpp=base.mpp)
+    second = route_pixels(
+        lines=() if base.trip is None else base.trip.second,
+        centre=centre,
+        mpp=base.mpp,
+        width=base.width,
+    )
+    draw_trip_legs(canvas, base=base, window=window)
     labels = tiles.street_labels(
         zoom=base.mpp,
         box=label_query(window=window, width=base.width),
@@ -532,7 +539,7 @@ def draw_line_and_names(
     return draw_route_names(
         canvas,
         labels=labels,
-        routes=routes,
+        routes=[*routes, *second],
         offset=window,
     )
 
@@ -758,7 +765,7 @@ def draw_map_base(
         window=window,
         tiles=tiles,
     )
-    draw_trip_lines(canvas, base=base, window=window)
+    draw_trip_ends(canvas, base=base, window=window)
     if base.trip is None:
         draw_stop(
             canvas,

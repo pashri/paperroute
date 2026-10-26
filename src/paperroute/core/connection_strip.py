@@ -406,7 +406,7 @@ def leg_section(
     Returns
     -------
     LegSection
-        The section; one not loaded reads `LOADING`.
+        The section; one not loaded, or with no rows, reads `LOADING`.
     """
     departure = leg.item.departure
     return LegSection(
@@ -415,7 +415,7 @@ def leg_section(
         title=f'{leg.start.name} → {leg.end.name}',
         note=leg.note,
         stops=rows,
-        empty=None if loaded else LOADING,
+        empty=LOADING if not loaded or not rows else None,
     )
 
 

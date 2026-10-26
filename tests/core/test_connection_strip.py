@@ -157,6 +157,17 @@ def test_leg_calls_skip_passing() -> None:
     ]
 
 
+def test_rowless_leg_reads_loading() -> None:
+    """A leg whose trip never reaches its end reads the loading text."""
+    trip = pattern(trip_id='b0746', route='665', stops=FIRST_LEG.stops)
+    view = build_connection_strip(
+        stop_view=STOP, pin=WORK, pairs=PAIRS, selected=0,
+        patterns={'a0733': FIRST_LEG, 'b0746': trip},
+    )
+    assert view.sections[1].stops == ()
+    assert view.sections[1].empty == LOADING
+
+
 def test_leg_calls_missing_end() -> None:
     """A trip that never reaches the end gives no calls."""
     calls = leg_calls(

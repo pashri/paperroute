@@ -101,3 +101,18 @@ def test_first_detail_replaces_line() -> None:
         return finish(canvas).tobytes()
 
     assert drawn(None) != drawn('24 min, change at Constitution Hill')
+
+
+def test_pair_detail_uses_full_row() -> None:
+    """A long detail runs under the arrive time, not up to it."""
+    canvas = Canvas()
+    draw_pair_list(
+        canvas,
+        rows=(replace(ROW, detail='24 min · change at Constitution Hill'),),
+        top=0,
+        left=0,
+        right=330,
+        step=72,
+    )
+    grey = canvas.grey()
+    assert grey[38:56, 270:324].min() < 128

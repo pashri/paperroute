@@ -110,7 +110,7 @@ async def test_later_steps_offered(client: Client) -> None:
     assert unlabelled(text=text) == []
     full = '&'.join(f'{name}={value}' for name, value in FULL)
     text = await (await client.get(f'/pins/connect?{full}')).text()
-    assert 'Any route that gets there: 660 665.' in text
+    assert 'Any route that gets there: 660, 665.' in text
     assert 'name="only2" value="665"' in text
     assert 'formaction="/pins/connect/save"' in text
     assert unlabelled(text=text) == []

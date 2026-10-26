@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 from paperroute.core.alert_state import has_alerts
+from paperroute.core.connection import live_pairs
 from paperroute.core.map_state import zoomed
 from paperroute.core.messages import (
     Knob,
@@ -64,12 +65,13 @@ def bottom_turned(*, state: State, steps: int) -> State:
         the pin's scroll, which picks the pair. Unchanged on the Alerts
         view.
     """
+    connection = shown(state=state).change is not None
     match state.view:
         case LiveView.ALERTS:
             return state
+        case LiveView.STOP | LiveView.STRIP if connection:
+            return pair_scrolled(state=state, steps=steps)
         case LiveView.STOP:
-            return replace(state, scroll=max(0, state.scroll + steps))
-        case LiveView.STRIP if shown(state=state).change is not None:
             return replace(state, scroll=max(0, state.scroll + steps))
         case LiveView.STRIP:
             scroll = state.strip.scroll + steps
@@ -79,6 +81,30 @@ def bottom_turned(*, state: State, steps: int) -> State:
             strip = replace(state.strip, scroll=scroll, asked=scroll)
             return replace(state, strip=strip)
     return replace(state, map=zoomed(map_state=state.map, steps=steps))
+
+
+def pair_scrolled(*, state: State, steps: int) -> State:
+    """
+    Scroll a connection pin's pairs.
+
+    Parameters
+    ----------
+    state : State
+        State showing a connection pin on the Stop view or the Strip.
+    steps : int
+        Detents; clockwise (positive) scrolls down.
+
+    Returns
+    -------
+    State
+        State whose scroll stays between 0 and the last pair the view
+        can start at: the last pair on the Strip, the one before it on
+        the Stop view, whose list starts after the hero.
+    """
+    pairs = len(live_pairs(state=state))
+    last = pairs - (2 if state.view is LiveView.STOP else 1)
+    scroll = min(state.scroll + steps, last)
+    return replace(state, scroll=max(0, scroll))
 
 
 def moved_off(*, before: State, after: State) -> State:

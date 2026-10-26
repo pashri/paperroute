@@ -242,3 +242,19 @@ def test_map_mode_whole() -> None:
     centre = view.base.centre
     assert centre is not None
     assert centre[0] == 400.0
+
+
+def test_scroll_capped_at_last_pair() -> None:
+    """Turning past the last pair stops there; one turn back leaves it."""
+    state = with_legs(state=started(view=LiveView.STRIP))
+    state = stepped(state=state, event=KnobTurned(knob=Knob.BOTTOM, steps=9))
+    assert state.scroll == 4
+    state = stepped(state=state, event=KnobTurned(knob=Knob.BOTTOM, steps=-1))
+    view = shown_view(state=state)
+    assert isinstance(view, ConnectionStripView)
+    assert (state.scroll, view.selected) == (3, 3)
+    state = stepped(state=state, event=PRESS)
+    state = stepped(state=state, event=PRESS)
+    assert state.view is LiveView.STOP
+    state = stepped(state=state, event=KnobTurned(knob=Knob.BOTTOM, steps=9))
+    assert state.scroll == 3

@@ -34,7 +34,7 @@ from paperroute.core.pin_choices import ChangeStop, StopMatch
 from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.route_colours import RouteColour
 from paperroute.core.saved import Saved, Settings
-from paperroute.core.tiles import StreetLabel, TileVariant
+from paperroute.core.tiles import LabelKind, StreetLabel, TileVariant
 
 
 class TimetableRepository(Protocol):
@@ -527,7 +527,11 @@ class TileRepository(Protocol):
         """
 
     def street_labels(
-        self, *, zoom: int, box: tuple[float, float, float, float]
+        self,
+        *,
+        zoom: int,
+        box: tuple[float, float, float, float],
+        kind: LabelKind = LabelKind.STREET,
     ) -> list[StreetLabel]:
         """
         Find street labels near a pixel box.
@@ -538,6 +542,8 @@ class TileRepository(Protocol):
             Zoom.
         box : tuple[float, float, float, float]
             Left, top, right and bottom in global pixels.
+        kind : LabelKind
+            Which labels; street names unless asked.
 
         Returns
         -------

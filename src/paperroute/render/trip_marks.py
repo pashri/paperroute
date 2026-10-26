@@ -1,11 +1,14 @@
 """Draw a connection's marks: leg 2, the walk, the change and the ends."""
 
+import math
 from collections.abc import Sequence
 from typing import Final
 
+from paperroute.build.map_style import STATION_FACE
 from paperroute.core.geo import Point
 from paperroute.core.map_view import MapBase, screen_point
-from paperroute.core.tiles import to_pixels
+from paperroute.core.tiles import LabelKind, to_pixels
+from paperroute.ports import TileRepository
 from paperroute.render.canvas import INK, PAPER, Canvas
 from paperroute.render.chrome import HEADER
 from paperroute.render.map_marks import ROUTE_STYLE, draw_stop
@@ -21,6 +24,8 @@ SQUARE: Final[int] = 8  # half the change square's side
 SQUARE_EDGE: Final[int] = 3  # paper round the square
 END_DISC: Final[int] = 8
 END_EDGE: Final[int] = 3  # paper round the To's disc
+NAME_REACH: Final[float] = 20.0  # pixels from the To to its station
+NAME_HALO: Final[int] = 2
 
 
 def on_map(
@@ -135,6 +140,47 @@ def draw_trip_ends(canvas: Canvas, *, base: MapBase, window: Window) -> None:
     if trip.end is not None:
         (end,) = on_map(points=(trip.end,), mpp=base.mpp, window=window)
         draw_end(canvas, at=end)
+
+
+def draw_end_name(
+    canvas: Canvas, *, base: MapBase, window: Window, tiles: TileRepository,
+) -> None:
+    """
+    Draw the To's station name again, over the trip's marks.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target, the map alone.
+    base : MapBase
+        The base map key; nothing is drawn without a To.
+    window : Window
+        The map's top-left corner in global pixels.
+    tiles : TileRepository
+        Where the station labels come from.
+    """
+    trip = base.trip
+    if trip is None or trip.end is None:
+        return
+    x, y = to_pixels(point=trip.end, mpp=base.mpp)
+    near = [
+        label
+        for label in tiles.street_labels(
+            zoom=base.mpp, box=(x, y, x, y), kind=LabelKind.STATION,
+        )
+        if math.dist(label.start, (x, y)) <= NAME_REACH
+    ]
+    if not near:
+        return
+    label = min(near, key=lambda item: math.dist(item.start, (x, y)))
+    canvas.text(
+        at=(label.x - window[0], label.y - window[1]),
+        text=label.name,
+        face=STATION_FACE,
+        grey=INK,
+        anchor='mm',
+        halo=NAME_HALO,
+    )
 
 
 def draw_trip_lines(canvas: Canvas, *, base: MapBase, window: Window) -> None:

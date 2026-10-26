@@ -90,6 +90,7 @@ from paperroute.core.state import SAVE_AFTER
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.tiles import (
     TILE,
+    LabelKind,
     StreetLabel,
     TileVariant,
     tile_of,
@@ -1024,7 +1025,11 @@ class CountingTiles:
         return np.full((TILE, TILE), LIGHT, dtype=np.uint8)
 
     def street_labels(
-        self, *, zoom: int, box: tuple[float, float, float, float]
+        self,
+        *,
+        zoom: int,
+        box: tuple[float, float, float, float],
+        kind: LabelKind = LabelKind.STREET,
     ) -> list[StreetLabel]:
         """
         Know no labels.
@@ -1034,6 +1039,8 @@ class CountingTiles:
         zoom : int
             Ignored.
         box : tuple[float, float, float, float]
+            Ignored.
+        kind : LabelKind
             Ignored.
 
         Returns

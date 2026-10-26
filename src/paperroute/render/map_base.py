@@ -27,7 +27,11 @@ from paperroute.ports import TileRepository
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.map_marks import ROUTE_STYLE, STOP_DISC, draw_stop
 from paperroute.render.tile_codec import THRESHOLD, diffuse, quantise4
-from paperroute.render.trip_marks import draw_trip_ends, draw_trip_legs
+from paperroute.render.trip_marks import (
+    draw_end_name,
+    draw_trip_ends,
+    draw_trip_legs,
+)
 
 Window = tuple[int, int]
 Region = tuple[slice, slice]
@@ -766,6 +770,7 @@ def draw_map_base(
         tiles=tiles,
     )
     draw_trip_ends(canvas, base=base, window=window)
+    draw_end_name(canvas, base=base, window=window, tiles=tiles)
     if base.trip is None:
         draw_stop(
             canvas,

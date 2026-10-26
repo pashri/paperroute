@@ -91,7 +91,11 @@ class SqliteTileRepository:
             raise sqlite3.DatabaseError(message) from error
 
     def street_labels(
-        self, *, zoom: int, box: tuple[float, float, float, float]
+        self,
+        *,
+        zoom: int,
+        box: tuple[float, float, float, float],
+        kind: LabelKind = LabelKind.STREET,
     ) -> list[StreetLabel]:
         """
         Find street labels near a pixel box.
@@ -104,6 +108,8 @@ class SqliteTileRepository:
             Left, top, right and bottom in global pixels. Labels anchored
             up to 200 px beyond the sides and 30 px beyond the top and
             bottom are returned.
+        kind : LabelKind
+            Which labels; street names unless asked.
 
         Returns
         -------
@@ -115,7 +121,7 @@ class SqliteTileRepository:
             sql=STREETS,
             params=(
                 zoom,
-                str(LabelKind.STREET),
+                str(kind),
                 left - GROW_X,
                 right + GROW_X,
                 top - GROW_Y,
@@ -231,7 +237,11 @@ class NullTiles:
         return None
 
     def street_labels(
-        self, *, zoom: int, box: tuple[float, float, float, float]
+        self,
+        *,
+        zoom: int,
+        box: tuple[float, float, float, float],
+        kind: LabelKind = LabelKind.STREET,
     ) -> list[StreetLabel]:
         """
         Find street labels near a pixel box.
@@ -242,6 +252,8 @@ class NullTiles:
             Zoom.
         box : tuple[float, float, float, float]
             Left, top, right and bottom in global pixels.
+        kind : LabelKind
+            Ignored.
 
         Returns
         -------

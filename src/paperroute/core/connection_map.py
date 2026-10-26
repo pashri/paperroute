@@ -24,6 +24,7 @@ CHANGE_ZOOM_IN: Final[int] = 1
 FIT_MARGIN: Final[float] = 1.1  # the whole trip's box, plus 10%
 SIDEBAR_PAIRS: Final[int] = 4
 CREDIT_ROOM: Final[int] = 24  # pixels kept clear above the map's bottom
+BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
 
 type Line = tuple[Point, ...]
 
@@ -274,6 +275,23 @@ def shown_trips(
     return pin_trips(departures=legs[1:] if arrived else legs[:1])
 
 
+def banner_room(*, inputs: MapInputs) -> int:
+    """
+    Say how much of the map's top a banner covers.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+
+    Returns
+    -------
+    int
+        Pixels; 0 with no banner.
+    """
+    return BANNER_ROOM if inputs.stop_view.banner else 0
+
+
 def whole_frame(
     *, inputs: MapInputs, pin: Pin, pairs: Sequence[Pair],
 ) -> tuple[Point | None, int]:
@@ -293,7 +311,7 @@ def whole_frame(
     -------
     tuple[Point | None, int]
         The middle of the box around the hero's legs and the four stops,
-        moved down so the box clears the map's credit, and the finest
+        moved so the box clears the map's credit and any banner, and the finest
         zoom that holds it with that room; the From and the knob's zoom
         with no point at all.
     """
@@ -306,12 +324,13 @@ def whole_frame(
     ys = [y for _, y in points]
     box = ((min(xs), min(ys)), (max(xs), max(ys)))
     zoom = fit_zoom(points=box, width=inputs.width)
-    if (box[1][1] - box[0][1]) + CREDIT_ROOM * ZOOMS[zoom] > (
+    top = banner_room(inputs=inputs)
+    if (box[1][1] - box[0][1]) + (CREDIT_ROOM + top) * ZOOMS[zoom] > (
         MAP_HEIGHT * ZOOMS[zoom]
     ):
         zoom = min(zoom + 1, len(ZOOMS) - 1)
     x, y = middle(ends=box)
-    return (x, y - CREDIT_ROOM * ZOOMS[zoom] / 2), zoom
+    return (x, y + (top - CREDIT_ROOM) * ZOOMS[zoom] / 2), zoom
 
 
 def framed(
@@ -336,13 +355,17 @@ def framed(
     tuple[Point | None, int]
         For the whole trip, the middle of its box at the zoom that holds
         it. Zoomed on the change, the walk's midpoint one zoom finer than
-        the knob's. The From and the knob's zoom when neither applies.
+        the knob's, centred in the map below any banner. The From and
+        the knob's zoom when neither applies.
     """
     if mode is ConnectionMap.WHOLE:
         return whole_frame(inputs=inputs, pin=pin, pairs=pairs)
     walk = walk_of(pin=pin, pair=None)
-    centre = inputs.centre if walk is None else middle(ends=walk)
-    return centre, max(0, inputs.zoom - CHANGE_ZOOM_IN)
+    zoom = max(0, inputs.zoom - CHANGE_ZOOM_IN)
+    if walk is None:
+        return inputs.centre, zoom
+    x, y = middle(ends=walk)
+    return (x, y + banner_room(inputs=inputs) * ZOOMS[zoom] / 2), zoom
 
 
 def connection_inputs(

@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Final
 
 from paperroute.core.connection_map import (
+    BANNER_ROOM,
     build_connection_map,
     connection_inputs,
     fit_zoom,
@@ -276,3 +277,21 @@ def test_no_points_falls_back_to_from() -> None:
     )
     assert view.base.trip is not None
     assert view.base.trip.walk is None
+
+
+def test_banner_keeps_frame_below_it() -> None:
+    """Under a banner both framings move down by half its height."""
+    stop = replace(STOP, banner='Timetable times · no live data yet')
+    inputs = replace(inputs_at(now=at(7, 35)), stop_view=stop)
+    change = connection_inputs(
+        inputs=inputs, pin=WORK, pairs=SHAPED, mode=ConnectionMap.CHANGE,
+    )
+    assert change.centre == (72.0, BANNER_ROOM * ZOOMS[change.zoom] / 2)
+    whole = connection_inputs(
+        inputs=replace(inputs, zoom=0),
+        pin=WORK,
+        pairs=SHAPED,
+        mode=ConnectionMap.WHOLE,
+    )
+    assert whole.zoom == ZOOMS.index(8)
+    assert whole.centre == (400.0, -596.0 + BANNER_ROOM * 8 / 2)

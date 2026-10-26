@@ -1,10 +1,12 @@
 """A hand-written stand-in for the pin editor's timetable choices."""
 
+from collections.abc import Collection
 from dataclasses import dataclass, field
 
 from paperroute.core.chooser import Choice
 from paperroute.core.model import RouteKind, StopPlace
 from paperroute.core.pin_choices import KIND_NAMES, StopMatch
+from paperroute.core.route_colours import RouteColour
 
 
 @dataclass
@@ -26,6 +28,8 @@ class FakePinOptions:
         What `nearby` gives.
     found : tuple[StopMatch, ...]
         What `search` gives.
+    colours : dict[str, RouteColour]
+        Route colours by short name.
     """
 
     places: dict[str, StopPlace] = field(default_factory=dict)
@@ -40,6 +44,7 @@ class FakePinOptions:
     )
     near: tuple[StopPlace, ...] = ()
     found: tuple[StopMatch, ...] = ()
+    colours: dict[str, RouteColour] = field(default_factory=dict)
 
     def search(self, *, text: str) -> tuple[StopMatch, ...]:
         """
@@ -170,3 +175,25 @@ class FakePinOptions:
             The stops.
         """
         return self.near
+
+    def route_colours(
+        self, *, names: Collection[str],
+    ) -> dict[str, RouteColour]:
+        """
+        Give the fixed colours of the names asked for.
+
+        Parameters
+        ----------
+        names : Collection[str]
+            Route short names.
+
+        Returns
+        -------
+        dict[str, RouteColour]
+            The colours of those names that have one.
+        """
+        return {
+            name: colour
+            for name, colour in self.colours.items()
+            if name in names
+        }

@@ -2,7 +2,7 @@
 
 import json
 import math
-from collections.abc import Iterable
+from collections.abc import Collection, Iterable
 from operator import itemgetter
 from typing import Final
 
@@ -19,6 +19,7 @@ from paperroute.core.geo import to_lonlat
 from paperroute.core.model import STATION_FIRST, RouteKind, StopPlace
 from paperroute.core.pin_choices import KIND_NAMES, StopMatch
 from paperroute.core.reach import RowKind, StripKey, build_reach
+from paperroute.core.route_colours import RouteColour, common_colours
 from paperroute.core.strip_times import BOARD_KINDS
 
 SEARCH_LIMIT: Final[int] = 20
@@ -74,6 +75,11 @@ WHERE s.station_id = :station
   AND r.kind IN (SELECT value FROM json_each(:kinds))
 GROUP BY r.route
 ORDER BY MIN(COALESCE(c.sort, :last)), r.route
+"""
+COLOURS: Final[str] = """
+SELECT short_name, color, text_color, COUNT(*) FROM routes
+WHERE short_name IN (SELECT value FROM json_each(:names))
+GROUP BY short_name, color, text_color
 """
 CLOSE: Final[str] = """
 SELECT stop_id, name, lon, lat FROM stops
@@ -220,6 +226,23 @@ def unique_by_badge(*, lines: Iterable[Choice]) -> tuple[Choice, ...]:
     for line in lines:
         seen.setdefault(line.badge, line)
     return tuple(seen.values())
+
+
+def text_or_none(*, value: object) -> str | None:
+    """
+    Read a nullable text column.
+
+    Parameters
+    ----------
+    value : object
+        The column's value.
+
+    Returns
+    -------
+    str | None
+        The text; None for NULL.
+    """
+    return None if value is None else str(value)
 
 
 class SqlitePinOptions:
@@ -490,3 +513,38 @@ class SqlitePinOptions:
         return tuple(
             found for dist, _, found in close if dist <= NEARBY_M
         )[:NEARBY_COUNT]
+
+    def route_colours(
+        self, *, names: Collection[str],
+    ) -> dict[str, RouteColour]:
+        """
+        Read the colours of routes by short name.
+
+        Parameters
+        ----------
+        names : Collection[str]
+            Route short names.
+
+        Returns
+        -------
+        dict[str, RouteColour]
+            Each name's most common valid colours; names without one are
+            left out, and the answer is empty for a file without the
+            network tables.
+        """
+        if not self.network.has_network():
+            return {}
+        rows = self.network.fetch(
+            sql=COLOURS, params={'names': json.dumps(sorted(names))},
+        )
+        return common_colours(
+            rows=(
+                (
+                    str(name),
+                    text_or_none(value=fill),
+                    text_or_none(value=text),
+                    int(str(count)),
+                )
+                for name, fill, text, count in rows
+            ),
+        )

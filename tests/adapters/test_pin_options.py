@@ -14,6 +14,7 @@ from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.core.chooser import UNPICKED, Choice, Level, focusable
 from paperroute.core.model import RouteKind, StopPlace
 from paperroute.core.reach import RowKind, StripKey, build_reach
+from paperroute.core.route_colours import RouteColour
 from tests.adapters.test_network_db import T1, build_network
 
 SCHOOL_RUN: str = (
@@ -292,3 +293,35 @@ def test_old_file_offers_nothing(built: Path, tmp_path: Path) -> None:
         assert old.lines_at(stop_id='C', kind=RouteKind.TRAIN) == ()
         assert old.filters_at(stop_id='C', kind=RouteKind.TRAIN) == ()
         assert old.nearby(place=centre, kind=None) == ()
+
+
+def test_route_colours_reads_timetable(built: Path, tmp_path: Path) -> None:
+    """The most common pair wins; names without a colour are absent."""
+    copy = Path(shutil.copy(built, tmp_path / 'timetable.db'))
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute(
+            "UPDATE routes SET color = 'F99D1C', text_color = '000000'"
+            " WHERE short_name = 'T1'",
+        )
+        conn.executemany(
+            "INSERT INTO routes VALUES (?, 'T1', 'T1', 2, ?, NULL, NULL, 'x')",
+            [('x:1', '0098CD'), ('x:2', 'f99d1c'), ('x:3', 'bad')],
+        )
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy)) as network:
+        found = SqlitePinOptions(network=network).route_colours(
+            names=('T1', 'T2', '809'),
+        )
+    assert found == {'T1': RouteColour(fill='f99d1c', text='000000')}
+
+
+def test_route_colours_without_network(built: Path, tmp_path: Path) -> None:
+    """A file without the network tables has no colours."""
+    copy = Path(shutil.copy(built, tmp_path / 'timetable.db'))
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute("UPDATE routes SET color = 'F99D1C'")
+        conn.execute('DROP TABLE chooser_routes')
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy)) as network:
+        found = SqlitePinOptions(network=network).route_colours(names=('T1',))
+    assert found == {}

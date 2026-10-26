@@ -32,6 +32,7 @@ from paperroute.core.model import (
 from paperroute.core.patterns import TripPattern
 from paperroute.core.pin_choices import StopMatch
 from paperroute.core.reach import ReachInput, StripKey
+from paperroute.core.route_colours import RouteColour
 from paperroute.core.saved import Saved, Settings
 from paperroute.core.tiles import StreetLabel, TileVariant
 
@@ -414,6 +415,24 @@ class PinOptions(Protocol):
         -------
         tuple[StopPlace, ...]
             Stops, nearest first; empty when the place has no point.
+        """
+
+    def route_colours(
+        self, *, names: Collection[str],
+    ) -> dict[str, RouteColour]:
+        """
+        Read the colours of routes by short name.
+
+        Parameters
+        ----------
+        names : Collection[str]
+            Route short names.
+
+        Returns
+        -------
+        dict[str, RouteColour]
+            Colours by name, only for names with a valid colour; empty
+            for an old timetable.
         """
 
 

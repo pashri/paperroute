@@ -1,8 +1,11 @@
 """Tests for the Live views of a connection pin."""
 
+from dataclasses import replace
+from datetime import time
 from typing import Final
 
 from paperroute.core.alert_model import AlertsFetched, AlertsSnapshot
+from paperroute.core.chooser import ChooserState
 from paperroute.core.connection_model import Legs
 from paperroute.core.connection_strip import (
     ConnectionStripMapView,
@@ -17,9 +20,12 @@ from paperroute.core.messages import (
     Knob,
     KnobPressed,
     KnobTurned,
+    LoadDepartures,
     ScreenView,
+    Tick,
 )
-from paperroute.core.model import Departure, Pin, RouteKind
+from paperroute.core.model import AutoWindow, Departure, Pin, RouteKind
+from paperroute.core.places import shown
 from paperroute.core.saved import (
     ConnectionMap,
     LiveView,
@@ -31,9 +37,10 @@ from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import current_view, live_stop_view
 from tests.core.alert_factories import alert
-from tests.core.connection_factories import LEG1, LEG2, WORK, at
+from tests.core.connection_factories import HOLLIS, LEG1, LEG2, WORK, at
 from tests.core.factories import place
 from tests.core.steps import wakeful
+from tests.fakes import device_facts
 
 PLAIN: Final[Pin] = Pin(
     origin=place('200060', name='Central Station'), kind=RouteKind.TRAIN,
@@ -258,3 +265,54 @@ def test_scroll_capped_at_last_pair() -> None:
     assert state.view is LiveView.STOP
     state = stepped(state=state, event=KnobTurned(knob=Knob.BOTTOM, steps=9))
     assert state.scroll == 3
+
+
+def test_top_press_opens_chooser_at_leg_one() -> None:
+    """The chooser opens at leg 1; turning back shows the connection."""
+    state = with_legs(state=started(pins=(WORK, PLAIN)))
+    state = stepped(state=state, event=KnobPressed(knob=Knob.TOP))
+    assert state.chooser == ChooserState(waiting=(), prefer=RouteKind.BUS)
+    assert shown(state=state).origin == HOLLIS
+    state = stepped(state=state, event=KnobPressed(knob=Knob.TOP))
+    assert state.chooser is None
+    state = stepped(state=state, event=KnobTurned(knob=Knob.TOP, steps=1))
+    assert shown(state=state) == PLAIN
+    state, effects = step(state, KnobTurned(knob=Knob.TOP, steps=-1))
+    assert shown(state=state).change == WORK.change
+    assert [
+        effect.pin for effect in effects if isinstance(effect, LoadDepartures)
+    ] == [WORK]
+    assert isinstance(
+        shown_view(state=with_legs(state=state)), ConnectionView,
+    )
+
+
+def test_auto_window_shows_connection() -> None:
+    """A weekday window shows the connection at its start, view kept."""
+    window = AutoWindow(
+        days=frozenset(range(5)), start=time(7, 30), end=time(9),
+    )
+    work = replace(WORK, windows=(window,))
+    saved = replace(
+        seeded(pin=PLAIN), pins=(PLAIN, work), view=LiveView.MAP,
+    )
+    state = initial_state(saved=saved, now=at(7, 29), stored=True)
+    state = replace(state, panel=replace(state.panel, facts=device_facts()))
+    state = stepped(state=wakeful(state=state), event=Tick(now=at(7, 29)))
+    state = stepped(state=state, event=Tick(now=at(7, 30)))
+    assert shown(state=state) == work
+    assert state.view is LiveView.MAP
+
+
+def test_pin_flip_reloads_legs() -> None:
+    """Flipping to the connection loads it and drops the old pin's load."""
+    state = started(pins=(PLAIN, WORK))
+    state, effects = step(state, KnobTurned(knob=Knob.TOP, steps=1))
+    assert [
+        effect.pin for effect in effects if isinstance(effect, LoadDepartures)
+    ] == [WORK]
+    after = stepped(state=state, event=DeparturesLoaded(
+        pin=PLAIN, departures=LEG1, until=at(10, 30),
+    ))
+    assert after.places == state.places
+    assert after.board == state.board

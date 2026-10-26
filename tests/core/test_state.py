@@ -24,6 +24,11 @@ from paperroute.core.chooser import (
 )
 from paperroute.core.chooser_steps import trip_feeds
 from paperroute.core.chooser_view import ChooserView
+from paperroute.core.connection_strip import (
+    ConnectionStripMapView,
+    ConnectionStripView,
+)
+from paperroute.core.connection_view import ConnectionView
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.geo import Point, make_shape
 from paperroute.core.map_requests import map_feeds, shows_vehicles
@@ -165,6 +170,7 @@ from tests.core.chooser_walks import (
     UNTIL,
     chooser_departures,
 )
+from tests.core.connection_factories import WORK
 from tests.core.factories import (
     START,
     departure,
@@ -1696,6 +1702,12 @@ VIEW_TYPES: Final[dict[LiveView, type]] = {
     LiveView.STRIP: StripView,
     LiveView.STRIP_MAP: StripMapView,
 }
+CONNECTION_TYPES: Final[dict[LiveView, type]] = {
+    LiveView.STOP: ConnectionView,
+    LiveView.MAP: MapView,
+    LiveView.STRIP: ConnectionStripView,
+    LiveView.STRIP_MAP: ConnectionStripMapView,
+}
 
 
 def check_render(
@@ -1723,7 +1735,12 @@ def check_render(
     elif chooser is not None:
         assert type(view) is STAGE_TYPES[chooser.stage]
     else:
-        assert type(view) is VIEW_TYPES[state.view]
+        types = (
+            VIEW_TYPES
+            if shown(state=state).change is None
+            else CONNECTION_TYPES
+        )
+        assert type(view) is types[state.view]
     match view:
         case StopView():
             assert len(view.rows) <= VISIBLE_ROWS
@@ -1896,6 +1913,7 @@ def start_saved(draw: st.DrawFn) -> Saved:
     pin = replace(PIN, origin=replace(PIN.origin, point=centre))
     options = [
         seeded(pin=pin),
+        seeded(pin=WORK),
         DEFAULT_SAVED,
         replace(DEFAULT_SAVED, unpinned=None, current=5),
         Saved(

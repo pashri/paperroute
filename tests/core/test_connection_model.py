@@ -242,3 +242,15 @@ def test_change_exactly_allow_is_catchable() -> None:
     )
     assert pairs[0].second is not None
     assert pairs[0].second.departure.trip_id == 'b0751'
+
+
+def test_shared_second_leg_keeps_latest_first() -> None:
+    """Of the leg 1s that catch one leg 2, only the last to leave stays."""
+    pairs = pairs_of(
+        first=lived(LEG1), second=lived(LEG2[-2:]), direct=(), allow=7,
+        now=at(7, 30),
+    )
+    assert [
+        (p.first.departure.trip_id, p.second and p.second.departure.trip_id)
+        for p in pairs
+    ] == [('a0842', 'b0855')]

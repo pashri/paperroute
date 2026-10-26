@@ -289,7 +289,8 @@ def pairs_of(
     tuple[Pair, ...]
         Workable pairs in leg-1 departure order. A direct trip with no
         leg-1 twin is a stay pair. Pairs whose first leg has left or is
-        cancelled are dropped.
+        cancelled are dropped, and of the pairs sharing one leg 2 only the
+        last to leave is kept.
     """
     twins = {trip_key(item=item): item for item in direct}
     known = {trip_key(item=item) for item in first}
@@ -309,4 +310,33 @@ def pairs_of(
         and not pair.first.cancelled
         and pair.first.departs >= now
     ]
-    return tuple(sorted(kept, key=lambda pair: pair.first.departs))
+    return latest_per_second(
+        pairs=sorted(kept, key=lambda pair: pair.first.departs),
+    )
+
+
+def latest_per_second(*, pairs: Sequence[Pair]) -> tuple[Pair, ...]:
+    """
+    Drop pairs that leave earlier for the same leg 2 as a later pair.
+
+    Parameters
+    ----------
+    pairs : Sequence[Pair]
+        Pairs in leg-1 departure order.
+
+    Returns
+    -------
+    tuple[Pair, ...]
+        The pairs, keeping stay pairs and, for each leg 2, the pair whose
+        leg 1 leaves last.
+    """
+    last = {
+        trip_key(item=pair.second): index
+        for index, pair in enumerate(pairs)
+        if pair.second is not None
+    }
+    return tuple(
+        pair
+        for index, pair in enumerate(pairs)
+        if pair.second is None or last[trip_key(item=pair.second)] == index
+    )

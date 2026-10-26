@@ -95,7 +95,7 @@ class PairRow:
     arrives_at : str
         Arrival time at the destination.
     minutes : int
-        Whole minutes from leaving to arriving.
+        Journey time: whole minutes from leg 1 leaving to arriving.
     """
 
     leaves_at: str
@@ -119,9 +119,6 @@ class ConnectionView:
         The pairs after it, scrolled, at most `PAIR_ROWS`.
     empty : str | None
         Why there is no hero, or None.
-    alight_at : tuple[str, ...]
-        Leg 1's arrival times at the change for the listed pairs; empty
-        unless a view needs them.
     """
 
     origin: str
@@ -135,7 +132,6 @@ class ConnectionView:
     warning: bool
     more: int
     planned: bool
-    alight_at: tuple[str, ...] = ()
 
 
 def pair_steps(*, pair: Pair, pin: Pin) -> tuple[str, ...]:

@@ -568,9 +568,9 @@ def alert_shown(*, inputs: StopInputs) -> AlertBanner | None:
     -------
     AlertBanner | None
         The alert, or None when there is none or a device warning or a
-        live data line takes the banner.
+        live data line takes the banner. An empty notice counts as none.
     """
-    if inputs.notice is not None or inputs.alert is None:
+    if inputs.notice or inputs.alert is None:
         return None
     if inputs.has_feed and live_line(
         live_since=inputs.live_since, now=inputs.now,

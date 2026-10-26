@@ -723,9 +723,16 @@ def test_alert_feed_parsed_to_event() -> None:
     assert timetable.asked == 1
 
 
-def metro_alert() -> bytes:
+def metro_alert(
+    *, routes: tuple[str, ...] = ('4T.C.2301', 'SMNW_M1'),
+) -> bytes:
     """
-    Build a metro alerts body naming two route IDs.
+    Build a metro alerts body naming some route IDs.
+
+    Parameters
+    ----------
+    routes : tuple[str, ...]
+        Route IDs of its informed entities.
 
     Returns
     -------
@@ -736,7 +743,7 @@ def metro_alert() -> bytes:
     feed.header.gtfs_realtime_version = '2.0'
     entity = feed.entity.add()
     entity.id = 'metro-1'
-    for route in ('4T.C.2301', 'SMNW_M1'):
+    for route in routes:
         entity.alert.informed_entity.add().route_id = route
     return bytes(feed.SerializeToString())
 
@@ -759,6 +766,22 @@ def test_metro_feed_routes_resolve_to_the_line() -> None:
     assert [item.route for item in trains.snapshot.alerts[0].informed] == [
         None,
         None,
+    ]
+
+
+def test_metro_feed_keeps_resolved_routes() -> None:
+    """A metro-feed route the timetable resolves keeps its own name."""
+    timetable = PlacesTimetable(
+        places=AlertPlaces(routes={'WST_2c': 'T1'}, stops={}, metro='M1')
+    )
+    metro = alert_event(
+        timetable=timetable,
+        feed=METRO_FEED,
+        data=metro_alert(routes=('WST_2c', '4T.C.2301')),
+    )
+    assert [item.route for item in metro.snapshot.alerts[0].informed] == [
+        'T1',
+        'M1',
     ]
 
 

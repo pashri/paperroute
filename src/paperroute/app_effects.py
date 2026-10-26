@@ -689,8 +689,9 @@ def informed_with(
     places : AlertPlaces
         What the timetable knows about the feed's IDs.
     metro : bool
-        True for an entity of the metro feed, whose routes are all the
-        one metro line when the timetable has exactly one.
+        True for an entity of the metro feed. Its routes the timetable
+        does not resolve are the one metro line, when the timetable has
+        exactly one.
 
     Returns
     -------
@@ -699,7 +700,7 @@ def informed_with(
         known.
     """
     route = places.routes.get(item.route_id or '')
-    if metro and item.route_id and places.metro:
+    if route is None and metro and item.route_id:
         route = places.metro
     return replace(
         item,

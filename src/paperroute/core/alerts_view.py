@@ -102,21 +102,25 @@ def also_line(*, window: Period, now: datetime) -> str:
     Parameters
     ----------
     window : Period
-        The window, which has a start.
+        The window, which may lack a start or an end.
     now : datetime
         Current time.
 
     Returns
     -------
     str
-        'Also <start> to <end>', or 'Also from <start>, ongoing'.
+        'Also <start> to <end>' or 'Also from <start>, ongoing'; without
+        a start, 'Also until <end>' or 'Also ongoing'.
     """
-    start = '' if window.start is None else when_text(
-        moment=window.start, now=now,
+    end = None if window.end is None else when_text(
+        moment=window.end, now=now,
     )
-    if window.end is None:
+    if window.start is None:
+        return 'Also ongoing' if end is None else f'Also until {end}'
+    start = when_text(moment=window.start, now=now)
+    if end is None:
         return f'Also from {start}, ongoing'
-    return f'Also {start} to {when_text(moment=window.end, now=now)}'
+    return f'Also {start} to {end}'
 
 
 def alert_text(*, listed: Listed, now: datetime) -> AlertText:

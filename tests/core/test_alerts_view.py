@@ -4,8 +4,13 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from paperroute.core.alert_match import Listed, listed_alerts
-from paperroute.core.alert_model import Alert, AlertTie, Matched
-from paperroute.core.alerts_view import ALERT_ROWS, AlertRow, build_alerts_view
+from paperroute.core.alert_model import Alert, AlertTie, Matched, Period
+from paperroute.core.alerts_view import (
+    ALERT_ROWS,
+    AlertRow,
+    also_line,
+    build_alerts_view,
+)
 from paperroute.core.feeds import FeedKind
 from paperroute.core.messages import (
     FetchFeed,
@@ -326,3 +331,11 @@ def test_no_positions_polled_on_alerts_view() -> None:
             effect.kind for effect in effects if isinstance(effect, FetchFeed)
         ]
     assert FeedKind.POSITIONS not in kinds
+
+
+def test_also_line_without_start() -> None:
+    """A later window with no start is ongoing or runs until its end."""
+    now = sydney(day=26, hour=12)
+    assert also_line(window=Period(), now=now) == 'Also ongoing'
+    window = Period(end=sydney(day=27, hour=1, minute=30))
+    assert also_line(window=window, now=now) == 'Also until Tue 1:30'

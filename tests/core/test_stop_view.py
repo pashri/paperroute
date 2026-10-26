@@ -675,6 +675,14 @@ def test_device_warning_beats_alert() -> None:
     assert not result.planned
 
 
+def test_empty_notice_lets_alert_through() -> None:
+    """An empty notice counts as none, so the alert takes the banner."""
+    result = view(departures=(live(minutes=5),), notice='', alert=ACTIVE)
+    assert result.banner == WESTERN.header
+    assert result.warning
+    assert result.more == 2
+
+
 def test_stale_line_beats_alert() -> None:
     """Live data three minutes old outranks an alert."""
     result = view(

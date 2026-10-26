@@ -13,7 +13,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_display import WebDisplay
 from tests.adapters.test_web_device import Device
-from tests.page_markup import parse_page
+from tests.page_markup import Node, by_id, inside, parse_page, parse_tree
 
 Client = TestClient[web.Request, web.Application]
 FONT_SHA256: Final[str] = (
@@ -39,9 +39,7 @@ SECONDARY: Final[frozenset[str]] = frozenset({
 MAIN: Final[frozenset[str]] = frozenset(
     {'Search', 'Save', 'Save key', 'Join', 'Press'},
 )
-CARD_PAGES: Final[list[str]] = [
-    name for name, _ in PAGES if name != 'live.html'
-]
+CARD_PAGES: Final[list[str]] = [name for name, _ in PAGES]
 NAV_LINKS: Final[list[tuple[str, str]]] = [
     ('/', 'Live'),
     ('/pins', 'Pins'),
@@ -393,3 +391,56 @@ async def test_power_page_tone(action: str, danger: bool) -> None:
     assert 'secondary' not in confirm
     assert ('Cancel', frozenset({'button', 'secondary'})) in page.buttons
     assert '{{' not in await response.text()
+
+
+def knob_group(
+    *, nodes: list[Node], group: Node,
+) -> tuple[str, list[tuple[str, bool]]]:
+    """
+    Read a knob group's label and buttons.
+
+    Parameters
+    ----------
+    nodes : list[Node]
+        Every element of the page.
+    group : Node
+        The group.
+
+    Returns
+    -------
+    tuple[str, list[tuple[str, bool]]]
+        The labelling heading's text, and each button's `data-action`
+        and whether it is secondary.
+    """
+    label = by_id(nodes=nodes, ident=group.attrs['aria-labelledby'])
+    buttons = [
+        node for node in inside(nodes=nodes, outer=group)
+        if node.tag == 'button'
+    ]
+    return label.text.strip(), [
+        (
+            node.attrs.get('data-action') or '',
+            'secondary' in (node.attrs.get('class') or '').split(),
+        )
+        for node in buttons
+    ]
+
+
+def test_live_has_one_knobs_card() -> None:
+    """Live holds the frame, then one Knobs card with Top and Bottom."""
+    nodes = parse_tree(text=page_text(name='live.html'))
+    sections = [node for node in nodes if node.tag == 'section']
+    assert len(sections) == 1
+    card = sections[0]
+    assert set((card.attrs['class'] or '').split()) == {'card', 'knobs'}
+    heading = by_id(nodes=nodes, ident=card.attrs['aria-labelledby'])
+    assert (heading.tag, heading.text.strip()) == ('h2', 'Knobs')
+    held = inside(nodes=nodes, outer=card)
+    groups = [node for node in held if node.attrs.get('role') == 'group']
+    knobs = [knob_group(nodes=nodes, group=group) for group in groups]
+    wanted = [('left', True), ('press', False), ('right', True)]
+    assert knobs == [('Top', wanted), ('Bottom', wanted)]
+    hint = by_id(nodes=nodes, ident='hint')
+    assert hint in held
+    assert hint.index > max(inside(nodes=nodes, outer=groups[-1])).index
+    assert by_id(nodes=nodes, ident='frame').index < card.index

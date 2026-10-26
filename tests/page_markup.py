@@ -243,3 +243,152 @@ def parse_page(*, text: str) -> PageParser:
     parser.feed(text)
     parser.close()
     return parser
+
+
+VOID: Final[frozenset[str]] = frozenset({
+    'area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 'link',
+    'meta', 'source', 'track', 'wbr',
+})
+
+
+@dataclass(order=True)
+class Node:
+    """
+    One element of a page.
+
+    Attributes
+    ----------
+    index : int
+        Its position in document order.
+    tag : str
+        The tag.
+    attrs : dict[str, str | None]
+        Its attributes.
+    parents : tuple[int, ...]
+        The indexes of the elements around it, outermost first.
+    text : str
+        All text inside it.
+    """
+
+    index: int
+    tag: str = field(compare=False)
+    attrs: dict[str, str | None] = field(compare=False)
+    parents: tuple[int, ...] = field(compare=False)
+    text: str = field(default='', compare=False)
+
+
+class TreeParser(HTMLParser):
+    """
+    Collect every element of a page with its ancestors and text.
+
+    Attributes
+    ----------
+    nodes : list[Node]
+        The elements in document order.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.nodes: list[Node] = []
+        self.open: list[int] = []
+
+    def handle_starttag(self, tag: str, attrs: Attrs) -> None:
+        """
+        Note an element.
+
+        Parameters
+        ----------
+        tag : str
+            The tag.
+        attrs : Attrs
+            Its attributes.
+        """
+        index = len(self.nodes)
+        self.nodes.append(Node(
+            index=index, tag=tag, attrs=dict(attrs),
+            parents=tuple(self.open),
+        ))
+        if tag not in VOID:
+            self.open.append(index)
+
+    def handle_endtag(self, tag: str) -> None:
+        """
+        Close the innermost open element of a tag.
+
+        Parameters
+        ----------
+        tag : str
+            The tag.
+        """
+        while self.open:
+            if self.nodes[self.open.pop()].tag == tag:
+                return
+
+    def handle_data(self, data: str) -> None:
+        """
+        Add text to every open element.
+
+        Parameters
+        ----------
+        data : str
+            The text.
+        """
+        for index in self.open:
+            self.nodes[index].text += data
+
+
+def parse_tree(*, text: str) -> list[Node]:
+    """
+    Read every element of a page.
+
+    Parameters
+    ----------
+    text : str
+        The page.
+
+    Returns
+    -------
+    list[Node]
+        The elements in document order.
+    """
+    parser = TreeParser()
+    parser.feed(text)
+    return parser.nodes
+
+
+def by_id(*, nodes: list[Node], ident: str | None) -> Node:
+    """
+    Find the element with an id.
+
+    Parameters
+    ----------
+    nodes : list[Node]
+        Every element of a page.
+    ident : str | None
+        The id.
+
+    Returns
+    -------
+    Node
+        The element.
+    """
+    return next(node for node in nodes if node.attrs.get('id') == ident)
+
+
+def inside(*, nodes: list[Node], outer: Node) -> list[Node]:
+    """
+    List the elements inside another.
+
+    Parameters
+    ----------
+    nodes : list[Node]
+        Every element of a page.
+    outer : Node
+        The outer element.
+
+    Returns
+    -------
+    list[Node]
+        Its descendants in document order.
+    """
+    return [node for node in nodes if outer.index in node.parents]

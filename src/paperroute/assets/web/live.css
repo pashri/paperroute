@@ -308,16 +308,23 @@ p {
   border: 1px solid var(--line);
 }
 
-.knobs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--gap);
+.knob {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
 }
 
-.knob {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.knob h3 {
+  grid-column: 1 / -1;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.knob button {
+  min-width: 0;
 }
 
 .buttons {

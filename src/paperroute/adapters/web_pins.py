@@ -83,10 +83,12 @@ ITEM: Final[str] = """
         </div>
 {up}
 {down}
-        <a class="edit" href="/pins/edit?ref={ref}"
+        <a class="edit" href="{editor}?ref={ref}"
            aria-label="Edit {label}">Edit</a>
         <span class="grip" aria-hidden="true">⋮⋮</span>
       </li>"""
+CONNECT_FIELD: Final[str] = """
+      <input type="hidden" name="connect" value="1">"""
 MOVE: Final[str] = """        <form class="move" method="post"
               action="/pins/move">
           <input type="hidden" name="ref" value="{ref}">
@@ -135,13 +137,17 @@ def pin_line(*, pin: Pin) -> str:
     -------
     str
         The From, then the To after an arrow when there is one, then
-        the routes after a dot; not escaped.
+        the routes after a dot, then a connection's change stop; not
+        escaped.
     """
     line = pin.origin.name
     if pin.destination is not None:
         line += f' → {pin.destination.name}'
     routes = pin.only or pin.routes
-    return f'{line} · {" ".join(routes)}' if routes else line
+    line = f'{line} · {" ".join(routes)}' if routes else line
+    if pin.change is not None:
+        line += f' · change at {pin.change.board.name}'
+    return line
 
 
 def whole_number(*, text: str) -> int | None:
@@ -217,6 +223,7 @@ def pin_item(
     )
     return ITEM.format(
         ref=pin_ref(pin=pin),
+        editor='/pins/edit' if pin.change is None else '/pins/connect',
         chip=chip_html(pin=pin, colour=colour),
         label=html.escape(pin_label(pin=pin)),
         line=html.escape(pin_line(pin=pin)),
@@ -710,7 +717,8 @@ class PinsPages:
         Parameters
         ----------
         request : web.Request
-            The incoming request; `q` in the query.
+            The incoming request; `q` in the query, and `connect=1` for
+            a connection's first stop.
 
         Returns
         -------
@@ -718,6 +726,7 @@ class PinsPages:
             The results page.
         """
         text = request.query.get('q', '')
+        connect = request.query.get('connect') == '1'
         if self.options is None:
             return html_page(text=edit_page(
                 title='Add a pin', notice='', body=STARTING,
@@ -726,7 +735,12 @@ class PinsPages:
         return html_page(text=edit_page(
             title='Add a pin',
             notice='',
-            body=search_results(text=text, found=found),
+            body=search_results(
+                text=text,
+                found=found,
+                target='/pins/connect' if connect else '/pins/edit',
+                extra=CONNECT_FIELD if connect else '',
+            ),
         ))
 
     def _editor(

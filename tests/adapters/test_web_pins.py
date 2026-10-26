@@ -4,6 +4,7 @@ import re
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from datetime import time
+from html import escape
 from html.parser import HTMLParser
 from http import HTTPStatus
 
@@ -38,6 +39,7 @@ from paperroute.core.pin_choices import StopMatch
 from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
 from tests.adapters.test_web_device import Device
+from tests.core.connection_factories import WORK as CONNECTION
 from tests.fake_pins import FakePinOptions
 from tests.page_markup import inside, parse_page, parse_tree
 
@@ -854,3 +856,74 @@ async def test_pins_page_links_colour_sheet(client: Client) -> None:
     """The Pins page links the colour sheet after the main one."""
     page = parse_page(text=await (await client.get('/pins')).text())
     assert page.stylesheets == ['/live.css', '/route-colours.css']
+
+
+def between(*, text: str, start: str) -> str:
+    """
+    Cut a page from some markup to the end of its form.
+
+    Parameters
+    ----------
+    text : str
+        The page.
+    start : str
+        Markup where the cut starts.
+
+    Returns
+    -------
+    str
+        The text from `start` up to the next ``</form>``.
+    """
+    first = text.index(start)
+    return text[first:text.index('</form>', first)]
+
+
+async def test_connection_search_links_to_connect(editor: Client) -> None:
+    """A connection search links each result to the connection editor."""
+    text = await (
+        await editor.get('/pins/new?q=Hollis&connect=1')
+    ).text()
+    assert 'href="/pins/connect?stop=C"' in text
+    assert '/pins/edit?' not in text
+    form = between(text=text, start='<form class="search"')
+    assert '<input type="hidden" name="connect" value="1">' in form
+    assert 'value="Hollis"' in form
+
+
+async def test_plain_search_unchanged(editor: Client) -> None:
+    """Without connect, results still link to the pin editor."""
+    text = await (await editor.get('/pins/new?q=Hollis')).text()
+    assert 'href="/pins/edit?stop=C"' in text
+    assert 'name="connect"' not in text
+
+
+async def test_connection_row_edit_link(pins: Pins) -> None:
+    """A connection pin's row edits it in the connection editor."""
+    pins.seen = PinsSeen(pins=(CONNECTION, HOME), shown=0, revision=3)
+    client = await _client(pins=pins)
+    text = await (await client.get('/pins')).text()
+    await client.close()
+    ref = pin_ref(pin=CONNECTION)
+    assert f'href="/pins/connect?ref={ref}"' in text
+    assert pin_line(pin=CONNECTION).endswith(
+        ' · change at Constitution Hill, North West Twy',
+    )
+    assert escape(pin_line(pin=CONNECTION)) in text
+
+
+async def test_pins_page_has_connection_search(client: Client) -> None:
+    """The pins page has a labelled search for a connection's first stop."""
+    text = await (await client.get('/pins')).text()
+    form = between(text=text, start='<label for="connection-search">')
+    assert (
+        '<form class="search" method="get" action="/pins/new"'
+        ' role="search">\n        <label for="connection-search">'
+    ) in text
+    assert 'Add a connection</label>' in form
+    assert (
+        '<input id="connection-search" type="search" name="q"'
+        in form
+    )
+    assert 'placeholder="Stop or station you leave from"' in form
+    assert '<input type="hidden" name="connect" value="1">' in form
+    assert '<button type="submit">Search</button>' in form

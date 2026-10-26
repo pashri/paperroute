@@ -25,7 +25,7 @@ FILTER_HINT: Final[str] = 'Leave all unticked to show every route.'
 SEARCH_FORM: Final[str] = """<search>
     <form class="search" method="get" action="/pins/new">
       <label for="pin-search">Search a stop or station</label>
-      <input id="pin-search" type="search" name="q" value="{text}">
+      <input id="pin-search" type="search" name="q" value="{text}">{extra}
       <button type="submit">Search</button>
     </form>
     </search>"""
@@ -85,7 +85,7 @@ def draft_of(
     )
 
 
-def match_item(*, match: StopMatch) -> str:
+def match_item(*, match: StopMatch, target: str = '/pins/edit') -> str:
     """
     Draw one search result.
 
@@ -93,6 +93,8 @@ def match_item(*, match: StopMatch) -> str:
     ----------
     match : StopMatch
         The stop found.
+    target : str
+        The editor the result opens.
 
     Returns
     -------
@@ -103,7 +105,7 @@ def match_item(*, match: StopMatch) -> str:
     about = ' · '.join(
         part for part in (kinds, ' '.join(match.routes)) if part
     )
-    link = '/pins/edit?' + urlencode({'stop': match.place.stop_id})
+    link = f'{target}?' + urlencode({'stop': match.place.stop_id})
     return (
         f'\n      <li><a href="{html.escape(link)}">'
         f'<b>{html.escape(match.place.name)}</b> '
@@ -111,7 +113,13 @@ def match_item(*, match: StopMatch) -> str:
     )
 
 
-def search_results(*, text: str, found: Sequence[StopMatch]) -> str:
+def search_results(
+    *,
+    text: str,
+    found: Sequence[StopMatch],
+    target: str = '/pins/edit',
+    extra: str = '',
+) -> str:
     """
     Draw the search form and what it found.
 
@@ -121,19 +129,25 @@ def search_results(*, text: str, found: Sequence[StopMatch]) -> str:
         The text searched for.
     found : Sequence[StopMatch]
         The matches.
+    target : str
+        The editor each result opens.
+    extra : str
+        Markup added to the form, such as hidden inputs; not escaped.
 
     Returns
     -------
     str
         Escaped HTML.
     """
-    form = SEARCH_FORM.format(text=html.escape(text))
+    form = SEARCH_FORM.format(text=html.escape(text), extra=extra)
     if len(text.strip()) < MIN_QUERY:
         return f'{form}\n    <p>{TOO_SHORT}</p>'
     if not found:
         line = NO_MATCH.format(text=html.escape(text.strip()))
         return f'{form}\n    <p>{line}</p>'
-    items = ''.join(match_item(match=match) for match in found)
+    items = ''.join(
+        match_item(match=match, target=target) for match in found
+    )
     return f'{form}\n    <ul class="results">{items}\n    </ul>'
 
 

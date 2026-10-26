@@ -273,7 +273,7 @@ async def test_delete_needs_confirm(pins: Pins, client: Client) -> None:
 
 
 async def test_list_rows_are_one_line(client: Client) -> None:
-    """Each row has Move up, Move down and Edit, and no Delete."""
+    """Each row has named Move up, Move down and Edit, and no Delete."""
     text = await (await client.get('/pins')).text()
     nodes = parse_tree(text=text)
     rows = [
@@ -282,14 +282,15 @@ async def test_list_rows_are_one_line(client: Client) -> None:
         if node.tag == 'li' and 'data-ref' in node.attrs
     ]
     assert len(rows) == 3
-    for row in rows:
+    names_of = ('Work', 'Home Stop', '<b>&')
+    for row, label in zip(rows, names_of, strict=True):
         held = inside(nodes=nodes, outer=row)
         names = [
             node.attrs.get('aria-label')
             for node in held
             if node.tag == 'button'
         ]
-        assert names == ['Move up', 'Move down']
+        assert names == [f'Move {label} up', f'Move {label} down']
         links = [node for node in held if node.tag == 'a']
         assert [link.text.strip() for link in links] == ['Edit']
     assert '/pins/delete' not in text

@@ -92,7 +92,7 @@ MOVE: Final[str] = """        <form class="move" method="post"
           <input type="hidden" name="ref" value="{ref}">
           <input type="hidden" name="steps" value="{steps}">
           <button type="submit" class="secondary"
-                  aria-label="Move {name}">{arrow}</button>
+                  aria-label="Move {label} {name}">{arrow}</button>
         </form>"""
 CONFIRM: Final[str] = """<form method="post" action="/pins/delete">
       <p>Delete “{label}”?</p>
@@ -184,6 +184,7 @@ def move_form(*, pin: Pin, steps: int) -> str:
     return MOVE.format(
         ref=pin_ref(pin=pin),
         steps=steps,
+        label=html.escape(pin_label(pin=pin)),
         name='up' if up else 'down',
         arrow='↑' if up else '↓',
     )

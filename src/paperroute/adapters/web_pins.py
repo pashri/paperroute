@@ -2,7 +2,7 @@
 
 import asyncio
 import html
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from http import HTTPStatus
 from typing import Final
@@ -19,12 +19,7 @@ from paperroute.adapters.pin_windows import (
     windows_fieldset,
     windows_of,
 )
-from paperroute.adapters.route_chips import (
-    chip_colours,
-    chip_html,
-    chip_route,
-    colour_sheet,
-)
+from paperroute.adapters.route_chips import chip_colours, colour_sheet
 from paperroute.adapters.web_common import asset, form_fields
 from paperroute.adapters.web_pin_edit import (
     MISFIT,
@@ -35,6 +30,8 @@ from paperroute.adapters.web_pin_edit import (
     origin_name,
     search_results,
 )
+from paperroute.adapters.web_pin_list import pin_label, pin_line, pins_list
+from paperroute.adapters.web_pin_search import STARTING, search_page
 from paperroute.core.messages import (
     Event,
     PinDeleted,
@@ -66,36 +63,6 @@ NOTICES: Final[dict[str, str]] = {
     'gone': 'That pin changed on the device. Here are the pins now.',
     'duplicate': 'That pin already exists.',
 }
-EMPTY: Final[str] = (
-    '<p>No pins yet. Search for a stop or station to add one.</p>'
-)
-STARTING: Final[str] = '<p>Starting up. Reload in a moment.</p>'
-NOW: Final[str] = '<span class="now">On the screen now</span>'
-MISSING: Final[str] = (
-    '<span class="missing">Stop not in the new timetable</span>'
-)
-ITEM: Final[str] = """
-      <li data-ref="{ref}">
-        {chip}
-        <div class="pin">
-          <b>{label}</b>
-          <small>{line}</small>{flags}
-        </div>
-{up}
-{down}
-        <a class="edit" href="{editor}?ref={ref}"
-           aria-label="Edit {label}">Edit</a>
-        <span class="grip" aria-hidden="true">⋮⋮</span>
-      </li>"""
-CONNECT_FIELD: Final[str] = """
-      <input type="hidden" name="connect" value="1">"""
-MOVE: Final[str] = """        <form class="move" method="post"
-              action="/pins/move">
-          <input type="hidden" name="ref" value="{ref}">
-          <input type="hidden" name="steps" value="{steps}">
-          <button type="submit" class="secondary"
-                  aria-label="Move {label} {name}">{arrow}</button>
-        </form>"""
 CONFIRM: Final[str] = """<form method="post" action="/pins/delete">
       <p>Delete “{label}”?</p>
       <input type="hidden" name="ref" value="{ref}">
@@ -105,49 +72,6 @@ CONFIRM: Final[str] = """<form method="post" action="/pins/delete">
         <button type="submit" class="danger">Delete</button>
       </div>
     </form>"""
-
-
-def pin_label(*, pin: Pin) -> str:
-    """
-    Name a pin for the list.
-
-    Parameters
-    ----------
-    pin : Pin
-        The pin.
-
-    Returns
-    -------
-    str
-        The nickname, else the From name; not escaped.
-    """
-    return pin.nickname or pin.origin.name
-
-
-def pin_line(*, pin: Pin) -> str:
-    """
-    Describe where a pin goes.
-
-    Parameters
-    ----------
-    pin : Pin
-        The pin.
-
-    Returns
-    -------
-    str
-        The From, then the To after an arrow when there is one, then
-        the routes after a dot, then a connection's change stop; not
-        escaped.
-    """
-    line = pin.origin.name
-    if pin.destination is not None:
-        line += f' → {pin.destination.name}'
-    routes = pin.only or pin.routes
-    line = f'{line} · {" ".join(routes)}' if routes else line
-    if pin.change is not None:
-        line += f' · change at {pin.change.board.name}'
-    return line
 
 
 def whole_number(*, text: str) -> int | None:
@@ -168,100 +92,6 @@ def whole_number(*, text: str) -> int | None:
         return int(text)
     except ValueError:
         return None
-
-
-def move_form(*, pin: Pin, steps: int) -> str:
-    """
-    Draw the Up or Down button of a pin.
-
-    Parameters
-    ----------
-    pin : Pin
-        The pin.
-    steps : int
-        -1 for Up, 1 for Down.
-
-    Returns
-    -------
-    str
-        A form that posts the move.
-    """
-    up = steps < 0
-    return MOVE.format(
-        ref=pin_ref(pin=pin),
-        steps=steps,
-        label=html.escape(pin_label(pin=pin)),
-        name='up' if up else 'down',
-        arrow='↑' if up else '↓',
-    )
-
-
-def pin_item(
-    *, pin: Pin, shown: bool, colour: RouteColour | None,
-) -> str:
-    """
-    Draw one pin of the list.
-
-    Parameters
-    ----------
-    pin : Pin
-        The pin.
-    shown : bool
-        Whether the pin is on the screen now.
-    colour : RouteColour | None
-        The colours of the pin's chip route, if the timetable has them.
-
-    Returns
-    -------
-    str
-        An escaped list item.
-    """
-    flags = ''.join(
-        f'\n          {flag}'
-        for flag, on in ((NOW, shown), (MISSING, pin.missing))
-        if on
-    )
-    return ITEM.format(
-        ref=pin_ref(pin=pin),
-        editor='/pins/edit' if pin.change is None else '/pins/connect',
-        chip=chip_html(pin=pin, colour=colour),
-        label=html.escape(pin_label(pin=pin)),
-        line=html.escape(pin_line(pin=pin)),
-        flags=flags,
-        up=move_form(pin=pin, steps=-1),
-        down=move_form(pin=pin, steps=1),
-    )
-
-
-def pins_list(
-    *, seen: PinsSeen, colours: Mapping[str, RouteColour],
-) -> str:
-    """
-    Draw the pins in knob order.
-
-    Parameters
-    ----------
-    seen : PinsSeen
-        The pins the app reported.
-    colours : Mapping[str, RouteColour]
-        Route colours by short name.
-
-    Returns
-    -------
-    str
-        An escaped ordered list, or a line saying there are none.
-    """
-    if not seen.pins:
-        return EMPTY
-    items = ''.join(
-        pin_item(
-            pin=pin,
-            shown=index == seen.shown,
-            colour=colours.get(chip_route(pin=pin) or ''),
-        )
-        for index, pin in enumerate(seen.pins)
-    )
-    return f'<ol class="pins">{items}\n    </ol>'
 
 
 def page_html(*, notice: str, body: str) -> str:
@@ -725,22 +555,8 @@ class PinsPages:
         web.Response
             The results page.
         """
-        text = request.query.get('q', '')
-        connect = request.query.get('connect') == '1'
-        if self.options is None:
-            return html_page(text=edit_page(
-                title='Add a pin', notice='', body=STARTING,
-            ))
-        found = self.options.search(text=text)
-        return html_page(text=edit_page(
-            title='Add a pin',
-            notice='',
-            body=search_results(
-                text=text,
-                found=found,
-                target='/pins/connect' if connect else '/pins/edit',
-                extra=CONNECT_FIELD if connect else '',
-            ),
+        return html_page(text=search_page(
+            options=self.options, query=request.query,
         ))
 
     def _editor(

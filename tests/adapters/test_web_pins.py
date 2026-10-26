@@ -40,6 +40,7 @@ from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
 from tests.adapters.test_web_device import Device
 from tests.core.connection_factories import WORK as CONNECTION
+from tests.core.connection_factories import WORK_CHANGE
 from tests.fake_pins import FakePinOptions
 from tests.page_markup import inside, parse_page, parse_tree
 
@@ -905,10 +906,15 @@ async def test_connection_row_edit_link(pins: Pins) -> None:
     await client.close()
     ref = pin_ref(pin=CONNECTION)
     assert f'href="/pins/connect?ref={ref}"' in text
-    assert pin_line(pin=CONNECTION).endswith(
-        ' · change at Constitution Hill, North West Twy',
+    line = pin_line(pin=CONNECTION)
+    assert line == (
+        '606 → any · Hollis St Opp Constitution Hill Library → Westmead Station'
     )
-    assert escape(pin_line(pin=CONNECTION)) in text
+    assert f'<small class="trip">{escape(line)}</small>' in text
+    only = replace(CONNECTION, change=replace(
+        WORK_CHANGE, only=('665', '664'),
+    ))
+    assert pin_line(pin=only).startswith('606 → 665 664 · ')
 
 
 async def test_pins_page_has_connection_search(client: Client) -> None:
@@ -924,6 +930,16 @@ async def test_pins_page_has_connection_search(client: Client) -> None:
         '<input id="connection-search" type="search" name="q"'
         in form
     )
-    assert 'placeholder="Stop or station you leave from"' in form
+    assert 'placeholder="Leave from"' in form
     assert '<input type="hidden" name="connect" value="1">' in form
     assert '<button type="submit">Search</button>' in form
+
+
+async def test_connection_search_title(editor: Client) -> None:
+    """A connection search page is titled for a connection."""
+    text = await (
+        await editor.get('/pins/new?q=Hollis&connect=1')
+    ).text()
+    assert '<title>Add a connection' in text
+    plain = await (await editor.get('/pins/new?q=Hollis')).text()
+    assert '<title>Add a pin' in plain

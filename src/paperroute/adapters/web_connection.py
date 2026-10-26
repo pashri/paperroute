@@ -35,13 +35,9 @@ from paperroute.adapters.web_pin_edit import (
     option,
     select_field,
 )
-from paperroute.adapters.web_pins import (
-    STARTING,
-    PinsPages,
-    html_page,
-    notice_alert,
-    pin_label,
-)
+from paperroute.adapters.web_pin_list import pin_label
+from paperroute.adapters.web_pin_search import STARTING
+from paperroute.adapters.web_pins import PinsPages, html_page, notice_alert
 from paperroute.core.model import Pin
 from paperroute.core.pin_choices import NICKNAME_MAX
 from paperroute.observers import PinsSeen

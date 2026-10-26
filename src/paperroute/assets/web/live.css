@@ -692,6 +692,12 @@ main > .notice {
   overflow-wrap: anywhere;
 }
 
+.pins .trip {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .pins small,
 .pins .now,
 .pins .missing {

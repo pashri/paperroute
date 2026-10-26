@@ -28,6 +28,7 @@ from paperroute.adapters.pin_windows import (
 )
 from paperroute.adapters.web_pin_edit import (
     MISFIT,
+    SEARCH_FORM,
     delete_form,
     edit_page,
     kind_fields,
@@ -36,7 +37,7 @@ from paperroute.adapters.web_pin_edit import (
     select_field,
 )
 from paperroute.adapters.web_pin_list import pin_label
-from paperroute.adapters.web_pin_search import STARTING
+from paperroute.adapters.web_pin_search import CONNECT_FIELD, STARTING
 from paperroute.adapters.web_pins import PinsPages, html_page, notice_alert
 from paperroute.core.model import Pin
 from paperroute.core.pin_choices import NICKNAME_MAX
@@ -405,10 +406,13 @@ class ConnectionPages:
         Returns
         -------
         str
-            The form, or a line saying the timetable is not ready.
+            The form; the stop search when no From is chosen yet; or a
+            line saying the timetable is not ready.
         """
         if self._options is None:
             return STARTING
+        if not draft.stop and draft.ref is None:
+            return SEARCH_FORM.format(text='', extra=CONNECT_FIELD)
         return connection_form(
             editor=connection_edited(options=self._options, draft=draft),
             windows=windows_fieldset(rows=rows),

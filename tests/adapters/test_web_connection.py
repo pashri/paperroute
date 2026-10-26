@@ -238,3 +238,15 @@ async def test_save_before_timetable(pins: Pins) -> None:
     await client.close()
     assert response.headers['Location'] == '/pins'
     assert pins.posted == []
+
+
+async def test_empty_editor_offers_from_search(client: Client) -> None:
+    """With no From yet, the page offers the stop search, without JS."""
+    text = await (await client.get('/pins/connect')).text()
+    assert '<form class="search" method="get" action="/pins/new">' in text
+    assert '<input type="hidden" name="connect" value="1">' in text
+    assert '<label for="pin-search">Search a stop or station</label>' in text
+    assert '<form class="editor"' not in text
+    assert '<title>Add a connection - paperroute</title>' in text
+    assert unlabelled(text=text) == []
+    assert '<script>' not in text

@@ -51,6 +51,9 @@ class MapState:
         When each positions feed was last asked for.
     failed_at : Mapping[MapData, datetime]
         When each kind of map data last failed to load.
+    frame : tuple[Point, int] | None
+        The centre and zoom a connection map was last drawn at, which
+        differ from `centre` and `zoom`; None for a plain pin's map.
     """
 
     zoom: int = DEFAULT_ZOOM
@@ -64,6 +67,27 @@ class MapState:
     positions: Mapping[str, PositionsSnapshot] = field(default_factory=dict)
     fetched_at: Mapping[str, datetime] = field(default_factory=dict)
     failed_at: Mapping[MapData, datetime] = field(default_factory=dict)
+    frame: tuple[Point, int] | None = None
+
+
+def area_frame(*, map_state: MapState) -> tuple[Point | None, int]:
+    """
+    Give the centre and zoom of the map area on screen.
+
+    Parameters
+    ----------
+    map_state : MapState
+        Map state.
+
+    Returns
+    -------
+    tuple[Point | None, int]
+        The connection map's frame when one is drawn, else the From and
+        the knob's zoom.
+    """
+    if map_state.frame is not None:
+        return map_state.frame
+    return map_state.centre, map_state.zoom
 
 
 def area_box(*, centre: Point, mpp: int) -> MetreBox:

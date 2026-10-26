@@ -8,7 +8,7 @@ from paperroute.core.connection import live_pairs
 from paperroute.core.connection_map import connection_inputs
 from paperroute.core.connection_model import all_departures
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
-from paperroute.core.map_state import area_box
+from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import (
     MapInputs,
     map_departures,
@@ -94,10 +94,10 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
         departures = strip_window(state=state)
     modes = frozenset(departure.mode for departure in departures)
     if state.view in MAP_VIEWS and state.chooser is None:
-        area = (
-            state.map.area_modes.get(ZOOMS[state.map.zoom])
-            or ALL_POSITION_MODES
-        )
+        _, zoom = area_frame(map_state=state.map)
+        area = state.map.area_modes.get(ZOOMS[zoom]) or ALL_POSITION_MODES
+        # A connection's legs can run beyond the area the modes were
+        # read for, so its own modes are polled as well.
         modes = area | modes if state.board.legs is not None else area
     return position_feeds(modes=modes)
 
@@ -211,7 +211,7 @@ def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
 
 def request_modes(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
-    Ask for the modes in the map area once per zoom.
+    Ask for the modes in the map area on screen once per zoom.
 
     Parameters
     ----------
@@ -226,14 +226,15 @@ def request_modes(*, state: State) -> tuple[State, tuple[Effect, ...]]:
         failure backs off.
     """
     map_state = state.map
-    mpp = ZOOMS[map_state.zoom]
+    centre, zoom = area_frame(map_state=map_state)
+    mpp = ZOOMS[zoom]
     known = map_state.area_modes.keys() | map_state.pending_modes
-    if map_state.centre is None or mpp in known:
+    if centre is None or mpp in known:
         return state, ()
     if not may_load(state=state, kind=MapData.MODES):
         return state, ()
     pending = replace(map_state, pending_modes=map_state.pending_modes | {mpp})
-    load = LoadModes(mpp=mpp, box=area_box(centre=map_state.centre, mpp=mpp))
+    load = LoadModes(mpp=mpp, box=area_box(centre=centre, mpp=mpp))
     return replace(state, map=pending), (load,)
 
 
@@ -504,6 +505,32 @@ def shows_vehicles(*, state: State) -> bool:
     return state.view not in {LiveView.STOP, LiveView.ALERTS}
 
 
+def framed_state(*, state: State, inputs: MapInputs | None) -> State:
+    """
+    Record where a connection map is drawn.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    inputs : MapInputs | None
+        The shown map's inputs, or None with no map on screen.
+
+    Returns
+    -------
+    State
+        State with the connection map's centre and zoom as the map's
+        frame; no frame for a plain pin or with no centre.
+    """
+    frame = None
+    if inputs is not None and inputs.centre is not None:
+        if shown(state=state).change is not None:
+            frame = (inputs.centre, inputs.zoom)
+    if frame == state.map.frame:
+        return state
+    return replace(state, map=replace(state.map, frame=frame))
+
+
 def map_effects(
     *, state: State, stop_view: StopView
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -535,6 +562,7 @@ def map_effects(
         else None
     )
     drawn = () if inputs is None else inputs.departures
+    state = framed_state(state=state, inputs=inputs)
     wanted = map_patterns(state=state, inputs=inputs)
     state = pruned(state=state, wanted=wanted, departures=drawn)
     state, area = area_effects(state=state, departures=drawn)

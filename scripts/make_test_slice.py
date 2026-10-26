@@ -20,6 +20,10 @@ STATIONS: Final[set[str]] = {'215020', '200060'}
 REGIONAL_AGENCY: Final[str] = '711'
 REGIONAL_COACHES: Final[int] = 3
 XPT_LINES: Final[set[str]] = {'NRC', 'NRW', 'STH', 'WST'}
+CARRY_ON_TRIPS: Final[set[str]] = {  # a T1 to Central and the trip it becomes
+    '169C.947.173.64.A.8.91436348',
+    '169D.947.173.64.A.8.91436347',
+}
 
 
 def kept_trips(*, archive: Path) -> set[str]:
@@ -322,6 +326,8 @@ def main() -> None:
                 trips=bundle_trips | regional)
     write_slice(source=trains, out=out / 'sydneytrains.zip',
                 trips=train_trips)
+    write_slice(source=trains, out=out / 'carry_on.zip',
+                trips=CARRY_ON_TRIPS)
     add_shapes(source=bundle, fixture=out / 'bundle.zip',
                shape_ids=sample_shapes(archive=out / 'bundle.zip'))
     add_shapes(source=trains, fixture=out / 'sydneytrains.zip')

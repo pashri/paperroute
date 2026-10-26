@@ -700,6 +700,52 @@ main > .notice {
   opacity: 0.6;
 }
 
+.chip {
+  --chip-fill: var(--mode-other);
+  --chip-text: #ffffff;
+  flex: none;
+  width: 3.4em;
+  padding-block: 0.125rem;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--chip-fill);
+  color: var(--chip-text);
+  font-size: 0.875rem;
+  font-weight: 700;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.mode-train {
+  --chip-fill: var(--mode-train);
+  --chip-text: #000000;
+}
+
+.mode-metro {
+  --chip-fill: var(--mode-metro);
+}
+
+.mode-light-rail {
+  --chip-fill: var(--mode-light-rail);
+  --chip-text: #000000;
+}
+
+.mode-bus,
+.mode-school,
+.mode-replacement {
+  --chip-fill: var(--mode-bus);
+  --chip-text: #000000;
+}
+
+.mode-ferry {
+  --chip-fill: var(--mode-ferry);
+  --chip-text: #000000;
+}
+
+.mode-coach {
+  --chip-fill: var(--mode-coach);
+}
+
 .default-submit {
   position: absolute;
   left: -100vw;

@@ -35,6 +35,7 @@ from paperroute.core.model import (
     pin_ref,
 )
 from paperroute.core.pin_choices import StopMatch
+from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
 from tests.adapters.test_web_device import Device
 from tests.fake_pins import FakePinOptions
@@ -748,3 +749,41 @@ async def test_enter_uses_default_button(editor: Client) -> None:
     assert 'class="default-submit"' in first.group(0)
     assert 'tabindex="-1"' in first.group(0)
     assert 'aria-hidden="true"' in first.group(0)
+
+
+async def test_list_has_chips(pins: Pins) -> None:
+    """A pin's chip carries its route's colour class."""
+    colours = {'606': RouteColour(fill='00b5ef', text='000000')}
+    client = await _client(pins=pins, options=FakePinOptions(colours=colours))
+    text = await (await client.get('/pins')).text()
+    await client.close()
+    assert 'class="chip mode-any c-00b5ef-000000"' in text
+
+
+async def test_colour_sheet_is_served(pins: Pins) -> None:
+    """The sheet holds a rule per colour of the pins' chip routes."""
+    colours = {'606': RouteColour(fill='00b5ef', text='000000')}
+    client = await _client(pins=pins, options=FakePinOptions(colours=colours))
+    response = await client.get('/route-colours.css')
+    text = await response.text()
+    await client.close()
+    assert response.content_type == 'text/css'
+    assert response.headers['Cache-Control'] == 'no-store'
+    assert '.chip.c-00b5ef-000000 { background: #00b5ef;' in text
+
+
+async def test_colour_sheet_without_timetable(pins: Pins) -> None:
+    """No report and no colours give an empty sheet."""
+    pins.seen = None
+    client = await _client(pins=pins, options=FakePinOptions())
+    response = await client.get('/route-colours.css')
+    text = await response.text()
+    await client.close()
+    assert response.status == HTTPStatus.OK
+    assert text == ''
+
+
+async def test_pins_page_links_colour_sheet(client: Client) -> None:
+    """The Pins page links the colour sheet after the main one."""
+    page = parse_page(text=await (await client.get('/pins')).text())
+    assert page.stylesheets == ['/live.css', '/route-colours.css']

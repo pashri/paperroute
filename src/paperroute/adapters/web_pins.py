@@ -2,7 +2,7 @@
 
 import asyncio
 import html
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import replace
 from http import HTTPStatus
 from typing import Final
@@ -18,6 +18,12 @@ from paperroute.adapters.pin_windows import (
     start_rows,
     windows_fieldset,
     windows_of,
+)
+from paperroute.adapters.route_chips import (
+    chip_colours,
+    chip_html,
+    chip_route,
+    colour_sheet,
 )
 from paperroute.adapters.web_common import asset, form_fields
 from paperroute.adapters.web_pin_edit import (
@@ -37,6 +43,7 @@ from paperroute.core.messages import (
 )
 from paperroute.core.model import Pin, pin_ref, same_place
 from paperroute.core.pin_choices import PinDraft, PinEditor
+from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
 
@@ -68,6 +75,7 @@ MISSING: Final[str] = (
 )
 ITEM: Final[str] = """
       <li data-ref="{ref}">
+        {chip}
         <span class="grip" aria-hidden="true">⋮⋮</span>
         <div class="pin">
           <b>{label}</b>
@@ -188,7 +196,9 @@ def move_form(*, pin: Pin, steps: int) -> str:
     )
 
 
-def pin_item(*, pin: Pin, shown: bool) -> str:
+def pin_item(
+    *, pin: Pin, shown: bool, colour: RouteColour | None,
+) -> str:
     """
     Draw one pin of the list.
 
@@ -198,6 +208,8 @@ def pin_item(*, pin: Pin, shown: bool) -> str:
         The pin.
     shown : bool
         Whether the pin is on the screen now.
+    colour : RouteColour | None
+        The colours of the pin's chip route, if the timetable has them.
 
     Returns
     -------
@@ -211,6 +223,7 @@ def pin_item(*, pin: Pin, shown: bool) -> str:
     )
     return ITEM.format(
         ref=pin_ref(pin=pin),
+        chip=chip_html(pin=pin, colour=colour),
         label=html.escape(pin_label(pin=pin)),
         line=html.escape(pin_line(pin=pin)),
         flags=flags,
@@ -219,7 +232,9 @@ def pin_item(*, pin: Pin, shown: bool) -> str:
     )
 
 
-def pins_list(*, seen: PinsSeen) -> str:
+def pins_list(
+    *, seen: PinsSeen, colours: Mapping[str, RouteColour],
+) -> str:
     """
     Draw the pins in knob order.
 
@@ -227,6 +242,8 @@ def pins_list(*, seen: PinsSeen) -> str:
     ----------
     seen : PinsSeen
         The pins the app reported.
+    colours : Mapping[str, RouteColour]
+        Route colours by short name.
 
     Returns
     -------
@@ -236,7 +253,11 @@ def pins_list(*, seen: PinsSeen) -> str:
     if not seen.pins:
         return EMPTY
     items = ''.join(
-        pin_item(pin=pin, shown=index == seen.shown)
+        pin_item(
+            pin=pin,
+            shown=index == seen.shown,
+            colour=colours.get(chip_route(pin=pin) or ''),
+        )
         for index, pin in enumerate(seen.pins)
     )
     return f'<ol class="pins">{items}\n    </ol>'
@@ -439,6 +460,7 @@ class PinsPages:
         return [
             web.get('/pins', self._page),
             web.get('/pins.js', self._script),
+            web.get('/route-colours.css', self._sheet),
             web.post('/pins/move', self._move),
             web.post('/pins/order', self._order),
             web.post('/pins/delete', self._delete),
@@ -480,7 +502,11 @@ class PinsPages:
         """
         await self._wait(seen=request.query.get('seen'))
         latest = self._pins()
-        body = STARTING if latest is None else pins_list(seen=latest)
+        body = (
+            STARTING
+            if latest is None
+            else pins_list(seen=latest, colours=self._colours())
+        )
         notice = notice_html(done=request.query.get('done'))
         return web.Response(
             text=page_html(notice=notice, body=body),
@@ -505,6 +531,39 @@ class PinsPages:
         return web.Response(
             text=asset(name='pins.js'),
             content_type='text/javascript',
+        )
+
+    def _colours(self) -> dict[str, RouteColour]:
+        """
+        Read the colours of the reported pins' chip routes.
+
+        Returns
+        -------
+        dict[str, RouteColour]
+            Colours by route name.
+        """
+        return chip_colours(seen=self._pins(), options=self.options)
+
+    async def _sheet(self, request: web.Request) -> web.Response:
+        """
+        Serve the chip colours of the pins on the list.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request.
+
+        Returns
+        -------
+        web.Response
+            A stylesheet, empty when no chip route has a colour.
+        """
+        del request
+        colours = self._colours()
+        return web.Response(
+            text=colour_sheet(colours=colours.values()),
+            content_type='text/css',
+            headers={'Cache-Control': 'no-store'},
         )
 
     def _find(self, *, ref: str) -> tuple[PinsSeen, Pin] | None:

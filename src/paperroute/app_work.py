@@ -8,6 +8,7 @@ from collections.abc import Coroutine
 from typing import Any
 
 from paperroute.adapters.tfnsw import FeedError
+from paperroute.app_connections import departures_read
 from paperroute.app_device import DeviceEffect, device_work
 from paperroute.app_effects import (
     StateSaver,
@@ -23,7 +24,6 @@ from paperroute.app_render import MapRenderer, render
 from paperroute.core.messages import (
     ControlPower,
     DeparturesFailed,
-    DeparturesLoaded,
     Effect,
     Event,
     FeedFailed,
@@ -67,11 +67,8 @@ async def load(
         Event queue.
     """
     try:
-        found = await asyncio.to_thread(
-            ports.timetable.departures,
-            pin=effect.pin,
-            start=effect.start,
-            end=effect.end,
+        event = await asyncio.to_thread(
+            departures_read, timetable=ports.timetable, effect=effect,
         )
     except sqlite3.Error:
         logger.exception('reading departures failed')
@@ -79,14 +76,7 @@ async def load(
             DeparturesFailed(pin=effect.pin, timetable=effect.timetable)
         )
         return
-    await queue.put(
-        DeparturesLoaded(
-            pin=effect.pin,
-            departures=tuple(found),
-            until=effect.end,
-            timetable=effect.timetable,
-        )
-    )
+    await queue.put(event)
 
 
 async def fetch(

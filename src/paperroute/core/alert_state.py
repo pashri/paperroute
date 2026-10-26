@@ -4,20 +4,15 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Final
 
-from paperroute.core.alert_match import (
-    BETWEEN_TRIPS,
-    Listed,
-    is_name_pin,
-    listed_alerts,
-    matched_alerts,
-    pin_facts,
-)
+from paperroute.core.alert_match import Listed, listed_alerts, matched_alerts
 from paperroute.core.alert_model import (
     Alert,
     AlertsFetched,
     BetweenLoaded,
     LoadBetween,
 )
+from paperroute.core.connection import between_lists, board_facts, name_trips
+from paperroute.core.connection_model import all_departures
 from paperroute.core.feeds import KIND_MODES, FeedKind, alert_feeds_for
 from paperroute.core.messages import (
     Effect,
@@ -47,12 +42,16 @@ def alert_feeds(*, state: State) -> tuple[str, ...]:
     Returns
     -------
     tuple[str, ...]
-        Feed paths of the pin's kind's modes and its loaded departures'
-        modes, sorted, with NSW TrainLink's for a train pin it serves.
+        Feed paths of the pin's kind's modes and the modes of every leg's
+        loaded departures, sorted, with NSW TrainLink's for a train pin
+        it serves.
     """
     pin = shown(state=state)
     kind_modes = frozenset() if pin.kind is None else KIND_MODES[pin.kind]
-    modes = {*kind_modes, *(item.mode for item in state.board.departures)}
+    loaded = all_departures(
+        departures=state.board.departures, legs=state.board.legs,
+    )
+    modes = {*kind_modes, *(item.mode for item in loaded)}
     if Mode.TRAIN in modes and trainlink_known(state=state, pin=pin):
         modes.add(Mode.REGIONAL)
     return alert_feeds_for(modes=modes)
@@ -129,24 +128,25 @@ def between_requests(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     -------
     tuple[State, tuple[Effect, ...]]
         State noting the question, and a LoadBetween. Its trips are the
-        first `BETWEEN_TRIPS` departures' for a pin with a To matched by
-        name, else none. A pin asked about before its trips were known
-        is asked again once they are, as is a kind-less pin with a To,
-        whose need for them shows only then; otherwise nothing is asked
-        twice.
+        first `BETWEEN_TRIPS` departures' of each leg with a To matched by
+        name (a plain pin is its own one leg), else none. A pin asked
+        about before its trips were known is asked again once they are,
+        as is a pin with a kind-less leg that has a To, whose need for
+        them shows only then; otherwise nothing is asked twice.
     """
     pin = shown(state=state)
-    departures = state.board.departures[:BETWEEN_TRIPS]
-    wants = pin.destination is not None and is_name_pin(
-        pin=pin, departures=departures,
+    lists = between_lists(pin=pin, board=state.board)
+    departures = [item for _, items in lists for item in items]
+    wants, trip_ids = name_trips(pin=pin, board=state.board)
+    unsure = any(
+        leg.kind is None and leg.destination is not None for leg, _ in lists
     )
-    unsure = pin.kind is None and pin.destination is not None
     known = bool(departures) or not (wants or unsure)
     if was_asked(state=state, pin=pin, known=known):
         return state, ()
     load = LoadBetween(
         pin=pin,
-        trip_ids=frozenset(item.trip_id for item in departures if wants),
+        trip_ids=trip_ids,
         day=departures[0].service_day if departures else service_date(
             moment=state.now,
         ),
@@ -245,9 +245,9 @@ def rematched(*, state: State) -> State:
     alerts = state.alerts
     between = alerts.between
     known = between is not None and same_place(first=between[0], second=pin)
-    facts = pin_facts(
+    facts = board_facts(
         pin=pin,
-        departures=state.board.departures,
+        board=state.board,
         between=between[1] if between is not None and known else frozenset(),
         families=alerts.families if known else {},
     )

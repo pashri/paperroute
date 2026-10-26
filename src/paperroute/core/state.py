@@ -20,6 +20,7 @@ from paperroute.core.chooser_steps import (
     picked_reloads,
     trip_feeds,
 )
+from paperroute.core.connection_model import all_departures
 from paperroute.core.device import (
     on_device_event,
     power_guard,
@@ -378,8 +379,12 @@ def on_loaded(
     tuple[State, tuple[Effect, ...]]
         New state and effects.
     """
-    board = Board(departures=event.departures, loaded_until=event.until)
-    feeds = feeds_of(departures=event.departures)
+    board = Board(
+        departures=event.departures, loaded_until=event.until, legs=event.legs,
+    )
+    feeds = feeds_of(departures=all_departures(
+        departures=event.departures, legs=event.legs,
+    ))
     state = rematched(state=replace(state, board=board, feeds=feeds))
     state, asks = between_requests(state=state)
     return settled(state=state, effects=asks)

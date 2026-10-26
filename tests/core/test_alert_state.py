@@ -15,6 +15,7 @@ from paperroute.core.alert_model import (
     Matched,
 )
 from paperroute.core.alert_state import alert_feeds, listed_ids, shown_alerts
+from paperroute.core.connection_model import Legs
 from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import MapView
 from paperroute.core.messages import (
@@ -27,7 +28,7 @@ from paperroute.core.messages import (
     Render,
     Tick,
 )
-from paperroute.core.model import Mode, Pin, RouteKind
+from paperroute.core.model import Departure, Mode, Pin, RouteKind
 from paperroute.core.places import shown
 from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import LiveView, seeded
@@ -49,6 +50,8 @@ from tests.core.alert_factories import (
     station_pin,
     sydney,
 )
+from tests.core.connection_factories import LEG1, LEG2, WORK
+from tests.core.connection_factories import at as at_connection
 from tests.core.factories import departure
 from tests.core.steps import wakeful
 from tests.core.test_quiet import asleep_at_one, at, evening, ticked
@@ -595,3 +598,48 @@ def test_bus_pin_ignores_trainlink() -> None:
     assert trainlink_fetches(
         pin=BUS_PIN, mode=Mode.BUS, trainlink=True,
     ) == [FetchFeed(feed=BUSES, kind=FeedKind.ALERTS)]
+
+
+def connection_asks(*, second: tuple[Departure, ...]) -> list[LoadBetween]:
+    """
+    Load WORK with some leg-2 departures and give what it asks.
+
+    Parameters
+    ----------
+    second : tuple[Departure, ...]
+        Leg-2 departures.
+
+    Returns
+    -------
+    list[LoadBetween]
+        The stations-between requests made.
+    """
+    now = at_connection(7, 30)
+    state = wakeful(state=initial_state(
+        saved=seeded(pin=WORK), now=now, stored=True,
+    ))
+    _, effects = step(state, DeparturesLoaded(
+        pin=WORK,
+        departures=LEG1,
+        until=now + timedelta(hours=3),
+        legs=Legs(second=second),
+    ))
+    return [effect for effect in effects if isinstance(effect, LoadBetween)]
+
+
+def test_connection_asks_between_per_leg() -> None:
+    """A bus connection asks no trips; a ferry leg 2 asks its own."""
+    assert connection_asks(second=LEG2) == [
+        LoadBetween(pin=WORK, trip_ids=frozenset(), day=LEG1[0].service_day),
+    ]
+    ferry = (
+        departure(
+            departs=at_connection(7, 50),
+            mode=Mode.FERRY,
+            route='F3',
+            trip_id='ferry-1',
+        ),
+    )
+    assert [ask.trip_ids for ask in connection_asks(second=ferry)] == [
+        frozenset({'ferry-1'}),
+    ]

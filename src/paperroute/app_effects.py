@@ -12,7 +12,7 @@ from typing import Final
 
 from paperroute.adapters.gtfs_alerts import parse_alerts
 from paperroute.adapters.gtfs_rt import parse_positions, parse_trip_updates
-from paperroute.core.alert_match import between_names
+from paperroute.app_connections import between_read
 from paperroute.core.alert_model import (
     AlertPlaces,
     AlertsFetched,
@@ -56,7 +56,7 @@ from paperroute.core.messages import (
     StripLoaded,
     TimetableSeen,
 )
-from paperroute.core.model import Mode, Pin, RouteKind, StopPlace
+from paperroute.core.model import Mode, Pin, StopPlace
 from paperroute.core.positions import PositionsSnapshot, with_labels
 from paperroute.core.reach import build_reach
 from paperroute.measures import StopMeasures
@@ -418,53 +418,6 @@ def calendar_failure(*, effect: LoadHolidays | LoadServiceSpan) -> Event:
             timetable=effect.timetable,
         )
     return HolidaysLoaded(dates=frozenset(), timetable=effect.timetable)
-
-
-def between_read(
-    *, timetable: TimetableRepository, effect: LoadBetween
-) -> BetweenLoaded:
-    """
-    Read the place names of the stations between a pin's From and To.
-
-    A pin's From or To may be a platform, so their stop families are read
-    too and each is found through its station. With no trips asked
-    about, only the families are read. For a train pin or one of no
-    kind, NSW TrainLink is asked about every stop in either end's family.
-
-    Parameters
-    ----------
-    timetable : TimetableRepository
-        Timetable.
-    effect : LoadBetween
-        Request, echoed back.
-
-    Returns
-    -------
-    BetweenLoaded
-        The names.
-    """
-    pin = effect.pin
-    ends = [pin.origin.stop_id]
-    if pin.destination is not None:
-        ends.append(pin.destination.stop_id)
-    families = timetable.alert_places(route_ids=(), stop_ids=ends).stops
-    patterns = (
-        timetable.patterns(trip_ids=effect.trip_ids, around=effect.day)
-        if effect.trip_ids
-        else {}
-    )
-    names = between_names(pin=pin, patterns=patterns, families=families)
-    stop_ids = {
-        stop for end in ends for stop in families.get(end, frozenset({end}))
-    }
-    return BetweenLoaded(
-        pin=pin,
-        names=names,
-        timetable=effect.timetable,
-        families=families,
-        trainlink=pin.kind in (None, RouteKind.TRAIN)
-        and timetable.serves_trainlink(stop_ids=stop_ids),
-    )
 
 
 def timetable_read(

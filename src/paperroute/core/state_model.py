@@ -8,6 +8,7 @@ from typing import Final
 from paperroute.core.alert_model import AlertsState
 from paperroute.core.auto_model import AutoState
 from paperroute.core.chooser import ChooserState
+from paperroute.core.connection_model import Legs
 from paperroute.core.device_model import Panel
 from paperroute.core.map_state import MapState
 from paperroute.core.messages import PowerAction, ScreenView
@@ -105,11 +106,14 @@ class Board:
         The end of the loaded window, or None before the first load.
     loading : bool
         True while a load is in flight.
+    legs : Legs | None
+        A connection pin's leg-2 and direct departures; None otherwise.
     """
 
     departures: tuple[Departure, ...] = ()
     loaded_until: datetime | None = None
     loading: bool = False
+    legs: Legs | None = None
 
 
 @dataclass(frozen=True)

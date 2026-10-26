@@ -14,6 +14,7 @@ from paperroute.core.alert_model import (
 from paperroute.core.alerts_view import AlertsView
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.chooser_view import ChooserView
+from paperroute.core.connection_model import Legs
 from paperroute.core.device_model import (
     ConfirmAction,
     DeviceFacts,
@@ -333,6 +334,7 @@ class DeparturesLoaded:
     departures: tuple[Departure, ...]
     until: datetime
     timetable: str | None = None
+    legs: Legs | None = None
 
 
 @dataclass(frozen=True)

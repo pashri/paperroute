@@ -240,15 +240,13 @@ def trip_points(*, pin: Pin, lines: Sequence[Line]) -> tuple[Point, ...]:
 
 
 def shown_trips(
-    *, inputs: MapInputs, pairs: Sequence[Pair], mode: ConnectionMap,
+    *, pairs: Sequence[Pair], mode: ConnectionMap,
 ) -> frozenset[str]:
     """
     Choose the trips whose vehicles are drawn.
 
     Parameters
     ----------
-    inputs : MapInputs
-        The map's inputs.
     pairs : Sequence[Pair]
         Workable pairs.
     mode : ConnectionMap
@@ -258,8 +256,7 @@ def shown_trips(
     -------
     frozenset[str]
         For the whole trip, both legs of the listed pairs. Zoomed on the
-        change, the hero's leg 1 until it reaches the change, then its
-        leg 2.
+        change, both legs of the hero pair.
     """
     if mode is ConnectionMap.WHOLE:
         return pin_trips(departures=[
@@ -269,10 +266,7 @@ def shown_trips(
         ])
     if not pairs:
         return frozenset()
-    hero = pairs[0]
-    legs = pair_legs(pair=hero)
-    arrived = hero.second is not None and inputs.now >= hero.first.arrives
-    return pin_trips(departures=legs[1:] if arrived else legs[:1])
+    return pin_trips(departures=pair_legs(pair=pairs[0]))
 
 
 def banner_room(*, inputs: MapInputs) -> int:
@@ -320,17 +314,57 @@ def whole_frame(
     points = trip_points(pin=pin, lines=(*first, *second))
     if not points:
         return inputs.centre, inputs.zoom
+    box = box_of(points=points)
+    top = banner_room(inputs=inputs)
+    zoom = roomy_zoom(box=box, width=inputs.width, top=top)
+    x, y = middle(ends=box)
+    return (x, y + (top - CREDIT_ROOM) * ZOOMS[zoom] / 2), zoom
+
+
+def box_of(*, points: Sequence[Point]) -> tuple[Point, Point]:
+    """
+    Find the box around some points.
+
+    Parameters
+    ----------
+    points : Sequence[Point]
+        At least one point.
+
+    Returns
+    -------
+    tuple[Point, Point]
+        The smallest and largest corners.
+    """
     xs = [x for x, _ in points]
     ys = [y for _, y in points]
-    box = ((min(xs), min(ys)), (max(xs), max(ys)))
-    zoom = fit_zoom(points=box, width=inputs.width)
-    top = banner_room(inputs=inputs)
+    return (min(xs), min(ys)), (max(xs), max(ys))
+
+
+def roomy_zoom(*, box: tuple[Point, Point], width: int, top: int) -> int:
+    """
+    Find the finest zoom that holds a box and the map's covered edges.
+
+    Parameters
+    ----------
+    box : tuple[Point, Point]
+        Corners in metres.
+    width : int
+        Map width in pixels.
+    top : int
+        Pixels a banner covers at the top.
+
+    Returns
+    -------
+    int
+        The fitted zoom, one wider when the box and the credit and banner
+        rooms do not fit the map's height.
+    """
+    zoom = fit_zoom(points=box, width=width)
     if (box[1][1] - box[0][1]) + (CREDIT_ROOM + top) * ZOOMS[zoom] > (
         MAP_HEIGHT * ZOOMS[zoom]
     ):
         zoom = min(zoom + 1, len(ZOOMS) - 1)
-    x, y = middle(ends=box)
-    return (x, y + (top - CREDIT_ROOM) * ZOOMS[zoom] / 2), zoom
+    return zoom
 
 
 def framed(
@@ -397,7 +431,7 @@ def connection_inputs(
         departures=pair_legs(pair=pairs[0]) if pairs else (),
         centre=centre,
         zoom=zoom,
-        vehicle_trips=shown_trips(inputs=inputs, pairs=pairs, mode=mode),
+        vehicle_trips=shown_trips(pairs=pairs, mode=mode),
     )
 
 

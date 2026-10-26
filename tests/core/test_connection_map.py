@@ -123,22 +123,15 @@ def test_o2_centres_on_change() -> None:
     assert widest.zoom == 0
 
 
-def test_o2_vehicles_switch_at_change() -> None:
-    """O2 shows leg 1's vehicle until it reaches the change."""
-    before = connection_inputs(
-        inputs=inputs_at(now=at(7, 35)),
+def test_o2_shows_hero_pair_vehicles() -> None:
+    """O2 shows the hero pair's leg-1 and leg-2 vehicles together."""
+    framed = connection_inputs(
+        inputs=inputs_at(now=at(7, 30)),
         pin=WORK,
         pairs=SHAPED,
         mode=ConnectionMap.CHANGE,
     )
-    after = connection_inputs(
-        inputs=inputs_at(now=at(7, 40)),
-        pin=WORK,
-        pairs=SHAPED,
-        mode=ConnectionMap.CHANGE,
-    )
-    assert before.vehicle_trips == frozenset({'a0733'})
-    assert after.vehicle_trips == frozenset({'b0746'})
+    assert framed.vehicle_trips == frozenset({'a0733', 'b0746'})
 
 
 def test_o1_fits_whole_trip() -> None:

@@ -24,6 +24,7 @@ from paperroute.core.model import (
     until_revisit,
 )
 from paperroute.core.saved import TOWN_HALL
+from tests.core.connection_factories import WORK, WORK_CHANGE
 from tests.core.factories import pin_of, place
 
 
@@ -214,3 +215,13 @@ def test_pin_ref_is_stable_and_short() -> None:
     assert re.fullmatch('[0-9a-f]{12}', ref)
     assert ref == pin_ref(pin=pin)
     assert ref != pin_ref(pin=replace(pin, only=('T2',)))
+
+
+def test_change_in_identity() -> None:
+    """A change is part of a pin's identity; no change keeps old refs."""
+    plain = replace(WORK, change=None)
+    longer = replace(WORK, change=replace(WORK_CHANGE, allow=9))
+    assert not same_place(first=WORK, second=plain)
+    assert not same_place(first=WORK, second=longer)
+    assert pin_ref(pin=plain) == 'd25f0ddc9fc3'
+    assert pin_ref(pin=WORK) != pin_ref(pin=plain)

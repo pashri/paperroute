@@ -56,23 +56,13 @@
       <form class="search" method="get" action="/pins/new" role="search">
         <label for="pin-search">Add a pin</label>
         <input id="pin-search" type="search" name="q"
-               placeholder="Add a pin: search a stop or station">
+               placeholder="Stop or station">
         <button type="submit">Search</button>
       </form>
     </section>
     <form id="order-form" method="post" action="/pins/order" hidden>
       <input type="hidden" name="refs" value="">
     </form>
-    <dialog id="delete-dialog" aria-labelledby="delete-question">
-      <form method="dialog">
-        <p id="delete-question"></p>
-        <div class="buttons">
-          <button type="submit" value="cancel"
-                  class="secondary">Cancel</button>
-          <button type="submit" value="delete" class="danger">Delete</button>
-        </div>
-      </form>
-    </dialog>
   </main>
 </body>
 </html>

@@ -47,6 +47,13 @@ SAVE: Final[str] = """
         <button type="submit" formmethod="post"
                 formaction="/pins/save">Save</button>"""
 
+DELETE: Final[str] = """
+    <form class="delete" method="post" action="/pins/delete">
+      <input type="hidden" name="ref" value="{ref}">
+      <button type="submit" class="danger"
+              data-label="{label}">Delete</button>
+    </form>"""
+
 
 def draft_of(
     *, query: Mapping[str, str], only: Sequence[str],
@@ -382,6 +389,28 @@ def editor_form(*, editor: PinEditor, origin: str, windows: str) -> str:
         nickname=html.escape(draft.nickname or ''),
         save=SAVE if editor.pin is not None else '',
         nearby=nearby_list(editor=editor),
+    )
+
+
+def delete_form(*, ref: str, label: str) -> str:
+    """
+    Draw the Delete button for a saved pin.
+
+    Parameters
+    ----------
+    ref : str
+        The pin's ref.
+    label : str
+        The pin's name; not escaped.
+
+    Returns
+    -------
+    str
+        A form that posts to the delete confirmation.
+    """
+    return DELETE.format(
+        ref=html.escape(ref),
+        label=html.escape(label),
     )
 
 

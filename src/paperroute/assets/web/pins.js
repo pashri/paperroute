@@ -152,7 +152,9 @@ function askToDelete(dialog, form, label) {
  * @returns {void}
  */
 export function wireDelete(dialog) {
-  for (const button of document.querySelectorAll('.pins [data-label]')) {
+  for (const button of document.querySelectorAll(
+    'form[action="/pins/delete"] [data-label]',
+  )) {
     button.form.addEventListener('submit', (event) => {
       event.preventDefault();
       askToDelete(dialog, button.form, button.dataset.label);

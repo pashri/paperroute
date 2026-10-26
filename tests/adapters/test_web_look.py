@@ -33,11 +33,14 @@ DANGER: Final[frozenset[str]] = frozenset(
     {'Delete', 'Shut down', 'Reset settings', 'Erase everything'},
 )
 SECONDARY: Final[frozenset[str]] = frozenset({
-    'Up', 'Down', 'Edit', 'Cancel', 'Show choices', 'Add window', 'Remove',
-    'Show password', 'Join another network…',
+    '↑', '↓', 'Edit', 'Cancel', 'Show choices', 'Add window', 'Remove',
+    'Show password', 'Join another network…', '⟲ Left', 'Right ⟳',
 })
 MAIN: Final[frozenset[str]] = frozenset(
     {'Search', 'Save', 'Save key', 'Join', 'Press'},
+)
+CHECKED_ELSEWHERE: Final[frozenset[str]] = frozenset(
+    {'Restart', '{{confirm}}'},
 )
 CARD_PAGES: Final[list[str]] = [name for name, _ in PAGES]
 NAV_LINKS: Final[list[tuple[str, str]]] = [
@@ -261,8 +264,15 @@ def test_focus_and_motion() -> None:
     css = css_text()
     focus = block_after(css=css, start=css.index(':focus-visible'))
     assert 'var(--focus)' in focus
-    assert '@media (prefers-reduced-motion: reduce)' in css
-    assert '--navy' in css
+    motion = block_after(
+        css=css,
+        start=css.index('@media (prefers-reduced-motion: reduce)'),
+    )
+    calm = declarations(body=rule_body(
+        css=motion, selector='*,\n  *::before,\n  *::after',
+    ))
+    assert 'transition: none !important' in calm
+    assert 'animation: none !important' in calm
 
 
 def test_no_framework() -> None:
@@ -330,6 +340,32 @@ def test_main_clears_bottom_bar() -> None:
     assert re.search(r'min-height:\s*var\(--bar\)', nav)
 
 
+def test_edges_clear_side_safe_areas() -> None:
+    """Header, main and footer keep off a landscape notch on both sides."""
+    css = css_text()
+    root = declarations(body=block_after(css=css, start=css.index(':root')))
+    assert (
+        '--edge-start: max(var(--gap), env(safe-area-inset-left, 0px))'
+        in root
+    )
+    assert (
+        '--edge-end: max(var(--gap), env(safe-area-inset-right, 0px))'
+        in root
+    )
+    plain = outside_media(css=css)
+    for selector in ('header', 'main', 'body > footer'):
+        body = declarations(body=rule_body(css=plain, selector=selector))
+        assert 'padding-inline: var(--edge-start) var(--edge-end)' in body, (
+            selector
+        )
+    wide = block_after(css=css, start=css.index('@media (min-width: 48em)'))
+    nav = declarations(body=rule_body(css=wide, selector='body > nav'))
+    assert 'padding-inline-start: env(safe-area-inset-left, 0px)' in nav
+    for selector in ('main', 'body > footer'):
+        body = declarations(body=rule_body(css=wide, selector=selector))
+        assert 'padding-inline-start: var(--gap)' in body, selector
+
+
 @pytest.mark.parametrize(('name', 'current'), PAGES)
 def test_viewport_fit_cover(name: str, current: str | None) -> None:
     """Every page's viewport reaches under the phone's safe areas."""
@@ -357,11 +393,14 @@ def test_button_tones(name: str) -> None:
     """Danger, secondary and main buttons carry the classes Ruling 5 names."""
     for text, classes in parse_page(text=page_text(name=name)).buttons:
         assert not {'danger', 'secondary'} <= classes, text
+        if text in CHECKED_ELSEWHERE:
+            continue
         if text in DANGER:
             assert 'danger' in classes, text
         elif text in SECONDARY:
             assert 'secondary' in classes, text
-        elif text in MAIN:
+        else:
+            assert text in MAIN, text
             assert not classes & {'danger', 'secondary'}, text
 
 
@@ -391,6 +430,7 @@ async def test_power_page_tone(action: str, danger: bool) -> None:
     assert 'secondary' not in confirm
     assert ('Cancel', frozenset({'button', 'secondary'})) in page.buttons
     assert '{{' not in await response.text()
+    assert 'class=""' not in await response.text()
 
 
 def knob_group(

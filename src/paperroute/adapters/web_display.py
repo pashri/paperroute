@@ -691,7 +691,7 @@ class WebDisplay:
         if action is None:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         question, confirm = CONFIRM[action]
-        tone = 'danger' if action is PowerAction.OFF else ''
+        tone = ' class="danger"' if action is PowerAction.OFF else ''
         page = asset(name='power.html').replace(
             '{{question}}', question,
         ).replace('{{action}}', action.value).replace(

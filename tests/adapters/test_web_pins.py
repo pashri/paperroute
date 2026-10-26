@@ -39,7 +39,7 @@ from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
 from tests.adapters.test_web_device import Device
 from tests.fake_pins import FakePinOptions
-from tests.page_markup import parse_page
+from tests.page_markup import inside, parse_page, parse_tree
 
 Client = TestClient[web.Request, web.Application]
 
@@ -272,14 +272,43 @@ async def test_delete_needs_confirm(pins: Pins, client: Client) -> None:
     assert pins.posted == [PinDeleted(ref=ref)]
 
 
+async def test_list_rows_are_one_line(client: Client) -> None:
+    """Each row has Move up, Move down and Edit, and no Delete."""
+    text = await (await client.get('/pins')).text()
+    nodes = parse_tree(text=text)
+    rows = [
+        node
+        for node in nodes
+        if node.tag == 'li' and 'data-ref' in node.attrs
+    ]
+    assert len(rows) == 3
+    for row in rows:
+        held = inside(nodes=nodes, outer=row)
+        names = [
+            node.attrs.get('aria-label')
+            for node in held
+            if node.tag == 'button'
+        ]
+        assert names == ['Move up', 'Move down']
+        links = [node for node in held if node.tag == 'a']
+        assert [link.text.strip() for link in links] == ['Edit']
+    assert '/pins/delete' not in text
+    labels = [label for label, _ in parse_page(text=text).buttons]
+    assert 'Delete' not in labels
+
+
+async def test_search_placeholder_is_short(client: Client) -> None:
+    """The placeholder hints at what to type without repeating the label."""
+    text = await (await client.get('/pins')).text()
+    assert 'placeholder="Stop or station"' in text
+
+
 async def test_list_button_tones(client: Client) -> None:
-    """Delete is danger; Up, Down and the Edit link are secondary."""
+    """The move arrows are secondary; the confirm page's Delete is danger."""
     page = parse_page(text=await (await client.get('/pins')).text())
     tones = {text: classes for text, classes in page.buttons}
-    assert 'danger' in tones['Delete']
-    assert 'secondary' in tones['Up']
-    assert 'secondary' in tones['Down']
-    assert tones['Edit'] == frozenset({'button', 'secondary'})
+    assert 'secondary' in tones['↑']
+    assert 'secondary' in tones['↓']
     asked = await client.post(
         '/pins/delete',
         data={'ref': pin_ref(pin=WORK)},
@@ -638,6 +667,43 @@ async def test_edit_existing_prefills(pins: Pins, editor: Client) -> None:
     assert pins.posted == [
         PinSaved(ref=ref, pin=replace(SAVED, nickname='Shopping')),
     ]
+
+
+async def test_edit_page_offers_delete(editor: Client) -> None:
+    """A saved pin's editor ends with a danger Delete for that pin."""
+    ref = pin_ref(pin=SAVED)
+    text = await (await editor.get(f'/pins/edit?ref={ref}')).text()
+    nodes = parse_tree(text=text)
+    form = next(
+        node for node in nodes
+        if node.tag == 'form' and node.attrs.get('action') == '/pins/delete'
+    )
+    held = inside(nodes=nodes, outer=form)
+    field = next(node for node in held if node.attrs.get('name') == 'ref')
+    assert field.attrs['value'] == ref
+    button = next(node for node in held if node.tag == 'button')
+    assert button.text.strip() == 'Delete'
+    assert button.attrs['class'] == 'danger'
+    assert button.attrs['data-label'] == pin_label(pin=SAVED)
+    editor_form = next(
+        node for node in nodes
+        if node.tag == 'form' and 'editor' in (node.attrs.get('class') or '')
+    )
+    assert form.index > max(inside(nodes=nodes, outer=editor_form)).index
+    assert 'id="delete-dialog"' in text
+
+
+async def test_new_pin_editor_has_no_delete(editor: Client) -> None:
+    """A pin not yet saved has nothing to delete."""
+    text = await (await editor.get('/pins/edit?stop=B2')).text()
+    assert '/pins/delete' not in text
+
+
+async def test_delete_confirm_cancels_to_editor(client: Client) -> None:
+    """Cancel on the confirm page goes back to that pin's editor."""
+    ref = pin_ref(pin=WORK)
+    asked = await client.post('/pins/delete', data={'ref': ref})
+    assert f'href="/pins/edit?ref={ref}">Cancel' in await asked.text()
 
 
 async def test_edit_of_unknown_ref_is_gone(editor: Client) -> None:

@@ -42,6 +42,8 @@
   --mode-other: #646974;
   --bar: 3.75rem;
   --gap: 1rem;
+  --edge-start: max(var(--gap), env(safe-area-inset-left, 0px));
+  --edge-end: max(var(--gap), env(safe-area-inset-right, 0px));
 }
 
 @media (prefers-color-scheme: dark) {
@@ -86,7 +88,8 @@ main {
   flex-direction: column;
   gap: var(--gap);
   min-width: 0;
-  padding: var(--gap);
+  padding-block: var(--gap);
+  padding-inline: var(--edge-start) var(--edge-end);
   padding-block-end: calc(var(--bar) + env(safe-area-inset-bottom, 0px) + 1rem);
 }
 
@@ -95,7 +98,7 @@ main:has(~ footer) {
 }
 
 body > footer {
-  padding: 0 var(--gap);
+  padding-inline: var(--edge-start) var(--edge-end);
   padding-block-end: calc(var(--bar) + env(safe-area-inset-bottom, 0px) + 1rem);
 }
 
@@ -119,7 +122,8 @@ h2 {
 
 header {
   position: relative;
-  padding: 0.75rem var(--gap) calc(0.75rem + 4px);
+  padding-block: 0.75rem calc(0.75rem + 4px);
+  padding-inline: var(--edge-start) var(--edge-end);
   background: var(--masthead);
   color: #ffffff;
 }
@@ -228,6 +232,7 @@ body > nav {
     grid-row: 2 / -1;
     grid-column: 1;
     padding-block: 0.75rem;
+    padding-inline-start: env(safe-area-inset-left, 0px);
     border-block-start: 0;
     border-inline-end: 1px solid var(--line);
   }
@@ -257,12 +262,14 @@ body > nav {
     grid-column: 2;
     width: 100%;
     max-width: 40rem;
+    padding-inline-start: var(--gap);
     padding-block-end: var(--gap);
   }
 
   body > footer {
     grid-column: 2;
     max-width: 40rem;
+    padding-inline-start: var(--gap);
     padding-block-end: var(--gap);
   }
 }
@@ -660,7 +667,7 @@ main > .notice {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem 0.75rem;
+  gap: 0.5rem;
   padding-block: 0.75rem;
 }
 
@@ -669,7 +676,7 @@ main > .notice {
 }
 
 .pins .grip {
-  order: 1;
+  flex: none;
   color: var(--muted);
   cursor: grab;
   touch-action: none;
@@ -678,7 +685,7 @@ main > .notice {
 
 .pins .pin {
   display: flex;
-  flex: 1 1 10rem;
+  flex: 1 1 6rem;
   flex-direction: column;
   min-width: 0;
   overflow-wrap: anywhere;
@@ -690,17 +697,22 @@ main > .notice {
   color: var(--muted);
 }
 
-.pins .actions {
-  display: flex;
-  flex-basis: 100%;
-  flex-wrap: wrap;
-  align-items: center;
-  order: 2;
-  gap: 0.5rem;
+.pins .move {
+  display: contents;
 }
 
-.pins .actions form {
-  display: contents;
+.pins .move button {
+  flex: none;
+  min-width: 2.75rem;
+  padding: 0;
+}
+
+.pins .edit {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  min-height: 2.75rem;
+  font-weight: 600;
 }
 
 .pins li.dragging {
@@ -808,6 +820,7 @@ main > .notice {
   *::before,
   *::after {
     transition: none !important;
+    animation: none !important;
   }
 
   button:active {

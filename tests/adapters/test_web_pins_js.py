@@ -104,9 +104,10 @@ const dialog = {
   },
   addEventListener: (name, fn) => { dialogListeners[name] = fn; },
 };
-document.querySelectorAll = () => [
-  { form: deleteForm, dataset: { label: 'Work' } },
-];
+document.querySelectorAll = (selector) => {
+  results.deleteSelector = selector;
+  return [{ form: deleteForm, dataset: { label: 'Work' } }];
+};
 mod.wireDelete(dialog);
 let prevented = 0;
 deleteForm.listeners.submit({ preventDefault: () => { prevented += 1; } });
@@ -226,6 +227,7 @@ def test_pins_script_in_node(tmp_path: Path) -> None:
         'cancelled': [1, ''],
         'editor': 2,
         'delete': [1, 0, 1, 'Delete “Work”?'],
+        'deleteSelector': 'form[action="/pins/delete"] [data-label]',
         'confirmed': [
             1, '<input type="hidden" name="confirm" value="yes">',
         ],

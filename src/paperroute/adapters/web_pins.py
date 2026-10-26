@@ -28,6 +28,7 @@ from paperroute.adapters.route_chips import (
 from paperroute.adapters.web_common import asset, form_fields
 from paperroute.adapters.web_pin_edit import (
     MISFIT,
+    delete_form,
     draft_of,
     edit_page,
     editor_form,
@@ -76,36 +77,29 @@ MISSING: Final[str] = (
 ITEM: Final[str] = """
       <li data-ref="{ref}">
         {chip}
-        <span class="grip" aria-hidden="true">⋮⋮</span>
         <div class="pin">
           <b>{label}</b>
           <small>{line}</small>{flags}
         </div>
-        <div class="actions">
 {up}
 {down}
-          <a class="button secondary" href="/pins/edit?ref={ref}"
-             aria-label="Edit {label}">Edit</a>
-          <form method="post" action="/pins/delete">
-            <input type="hidden" name="ref" value="{ref}">
-            <button type="submit" class="danger"
-                    aria-label="Delete {label}"
-                    data-label="{label}">Delete</button>
-          </form>
-        </div>
+        <a class="edit" href="/pins/edit?ref={ref}"
+           aria-label="Edit {label}">Edit</a>
+        <span class="grip" aria-hidden="true">⋮⋮</span>
       </li>"""
-MOVE: Final[str] = """          <form method="post" action="/pins/move">
-            <input type="hidden" name="ref" value="{ref}">
-            <input type="hidden" name="steps" value="{steps}">
-            <button type="submit" class="secondary"
-                    aria-label="Move {label} {name}">{name_cap}</button>
-          </form>"""
+MOVE: Final[str] = """        <form class="move" method="post"
+              action="/pins/move">
+          <input type="hidden" name="ref" value="{ref}">
+          <input type="hidden" name="steps" value="{steps}">
+          <button type="submit" class="secondary"
+                  aria-label="Move {name}">{arrow}</button>
+        </form>"""
 CONFIRM: Final[str] = """<form method="post" action="/pins/delete">
       <p>Delete “{label}”?</p>
       <input type="hidden" name="ref" value="{ref}">
       <input type="hidden" name="confirm" value="yes">
       <div class="buttons">
-        <a class="button secondary" href="/pins">Cancel</a>
+        <a class="button secondary" href="/pins/edit?ref={ref}">Cancel</a>
         <button type="submit" class="danger">Delete</button>
       </div>
     </form>"""
@@ -186,13 +180,12 @@ def move_form(*, pin: Pin, steps: int) -> str:
     str
         A form that posts the move.
     """
-    name = 'up' if steps < 0 else 'down'
+    up = steps < 0
     return MOVE.format(
         ref=pin_ref(pin=pin),
         steps=steps,
-        label=html.escape(pin_label(pin=pin)),
-        name=name,
-        name_cap=name.capitalize(),
+        name='up' if up else 'down',
+        arrow='↑' if up else '↓',
     )
 
 
@@ -768,6 +761,8 @@ class PinsPages:
         body = self._editor_body(
             draft=draft, pin=pin, rows=start_rows(rows=rows, pin=pin),
         )
+        if pin is not None and draft.ref:
+            body += delete_form(ref=draft.ref, label=pin_label(pin=pin))
         title = 'Add a pin' if draft.ref is None else 'Edit pin'
         return html_page(
             text=edit_page(title=title, notice=notice, body=body),

@@ -7,7 +7,7 @@ from paperroute.build.map_style import (
     SUBURB_ZOOMS,
 )
 from paperroute.core.tiles import ZOOMS
-from paperroute.render.map_base import ROUTE_STYLE
+from paperroute.render.map_marks import ROUTE_STYLE
 
 
 def test_style_tables_cover_the_zooms() -> None:

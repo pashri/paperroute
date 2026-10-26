@@ -25,28 +25,19 @@ from paperroute.core.tiles import (
 )
 from paperroute.ports import TileRepository
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
+from paperroute.render.map_marks import ROUTE_STYLE, STOP_DISC, draw_stop
 from paperroute.render.tile_codec import THRESHOLD, diffuse, quantise4
+from paperroute.render.trip_marks import draw_trip_lines
 
 Window = tuple[int, int]
 Region = tuple[slice, slice]
 
-ROUTE_STYLE: Final[dict[int, tuple[int, int | None]]] = {
-    3: (7, 3),
-    5: (7, 3),
-    8: (7, 3),
-    14: (5, 1),
-    45: (3, None),
-}
 BEAD_DASH: Final[tuple[float, float]] = (2.0, 7.0)
 HALO: Final[int] = 2
 MATCH_POINTS: Final[int] = 9
 MATCH_NEEDED: Final[int] = 6
 MATCH_REACH: Final[float] = 5.0  # pixels
 MATCH_TURN: Final[float] = 25.0  # degrees
-STOP_DISC: Final[float] = 12.0
-STOP_RING: Final[float] = 9.0
-STOP_RING_WIDTH: Final[float] = 3.0
-STOP_DOT: Final[float] = 4.0
 SCALE_STEPS: Final[tuple[int, ...]] = (5000, 2000, 1000, 500, 200, 100)
 SCALE_REACH: Final[float] = 143.0  # pixels
 SCALE_FACE: Final[Face] = Face(weight=400, px=11)
@@ -546,33 +537,6 @@ def draw_line_and_names(
     )
 
 
-def draw_stop(canvas: Canvas, *, at: Point) -> None:
-    """
-    Draw the From stop marker: a paper disc, an ink ring and an ink dot.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    at : Point
-        The stop's centre on the canvas.
-    """
-    x, y = at
-    canvas.ellipse(
-        box=(x - STOP_DISC, y - STOP_DISC, x + STOP_DISC, y + STOP_DISC),
-        grey=PAPER,
-    )
-    canvas.ellipse(
-        box=(x - STOP_RING, y - STOP_RING, x + STOP_RING, y + STOP_RING),
-        grey=INK,
-        stroke=STOP_RING_WIDTH,
-    )
-    canvas.ellipse(
-        box=(x - STOP_DOT, y - STOP_DOT, x + STOP_DOT, y + STOP_DOT),
-        grey=INK,
-    )
-
-
 def scale_metres(*, mpp: int) -> int:
     """
     Pick the scale bar's length.
@@ -755,6 +719,9 @@ def draw_map_base(
     """
     Draw the map under the markers: tiles, route, names, stop and notes.
 
+    With trip marks, they are drawn over the route and the From is left
+    to the overlay.
+
     Parameters
     ----------
     base : MapBase
@@ -791,15 +758,17 @@ def draw_map_base(
         window=window,
         tiles=tiles,
     )
-    draw_stop(
-        canvas,
-        at=screen_point(
-            centre=base.centre,
-            mpp=base.mpp,
-            point=base.centre,
-            width=base.width,
-        ),
-    )
+    draw_trip_lines(canvas, base=base, window=window)
+    if base.trip is None:
+        draw_stop(
+            canvas,
+            at=screen_point(
+                centre=base.centre,
+                mpp=base.mpp,
+                point=base.centre,
+                width=base.width,
+            ),
+        )
     draw_scale(canvas, mpp=base.mpp)
     draw_notes(
         canvas,

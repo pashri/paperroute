@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute.core.connection_view import PairRow
 from paperroute.core.geo import Point, Shape
 from paperroute.core.model import Departure
 from paperroute.core.patterns import TripPattern, timetable_point
@@ -25,6 +26,31 @@ NEARBY_SCALE: Final[int] = 3
 
 
 @dataclass(frozen=True)
+class TripMarks:
+    """The marks a connection draws beyond leg 1's line.
+
+    Attributes
+    ----------
+    origin : Point | None
+        The From, or None without a location.
+    second : tuple[tuple[Point, ...], ...]
+        Leg 2's lines in metres, drawn dashed.
+    walk : tuple[Point, Point] | None
+        Where the walk starts and ends, or None when staying on.
+    change : Point | None
+        The walk's midpoint, or None when staying on.
+    end : Point | None
+        The To, or None without a location.
+    """
+
+    origin: Point | None
+    second: tuple[tuple[Point, ...], ...]
+    walk: tuple[Point, Point] | None
+    change: Point | None
+    end: Point | None
+
+
+@dataclass(frozen=True)
 class MapBase:
     """What the base map is drawn from; it keys the render cache.
 
@@ -38,12 +64,15 @@ class MapBase:
         The pin's route lines in metres.
     width : int
         Map width in pixels.
+    trip : TripMarks | None
+        A connection's other marks, or None for a plain pin.
     """
 
     centre: Point | None
     mpp: int
     route: tuple[tuple[Point, ...], ...]
     width: int = MAP_WIDTH
+    trip: TripMarks | None = None
 
 
 @dataclass(frozen=True)
@@ -95,6 +124,7 @@ class MapView:
     warning: bool = False
     more: int = 0
     planned: bool = False
+    pairs: tuple[PairRow, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -121,6 +151,8 @@ class MapInputs:
         Current time.
     width : int
         Map width in pixels.
+    vehicle_trips : frozenset[str] | None
+        When set, only these trips get vehicle markers.
     """
 
     stop_view: StopView
@@ -132,6 +164,7 @@ class MapInputs:
     shapes: Mapping[str, Shape]
     now: datetime
     width: int = MAP_WIDTH
+    vehicle_trips: frozenset[str] | None = None
 
 
 def map_window(
@@ -646,7 +679,8 @@ def vehicle_markers(
     Returns
     -------
     tuple[tuple[str, Marker], ...]
-        Each drawn vehicle's trip ID and marker.
+        Each drawn vehicle's trip ID and marker; with `vehicle_trips`
+        set, only vehicles on those trips.
     """
     marked = (
         (
@@ -667,6 +701,8 @@ def vehicle_markers(
             ),
         )
         for vehicle, age in heard(inputs=inputs)
+        if inputs.vehicle_trips is None
+        or vehicle.trip_id in inputs.vehicle_trips
     )
     return tuple(
         (trip, marker) for trip, marker in marked if marker is not None

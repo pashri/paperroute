@@ -8,6 +8,7 @@ from numpy.typing import NDArray
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
+    MapBase,
     MapView,
     screen_point,
 )
@@ -16,6 +17,7 @@ from paperroute.render.canvas import (
     HEIGHT,
     INK,
     PAPER,
+    WIDTH,
     Canvas,
     Face,
     text_width,
@@ -31,9 +33,12 @@ from paperroute.render.chrome import (
     view_banner,
     view_header,
 )
-from paperroute.render.map_base import HALO, NOT_INSTALLED_DROP, draw_stop
+from paperroute.render.map_base import HALO, NOT_INSTALLED_DROP
+from paperroute.render.map_marks import draw_stop
 from paperroute.render.markers import draw_markers
+from paperroute.render.pair_list import draw_pair_list
 from paperroute.render.tile_codec import THRESHOLD, quantise4
+from paperroute.render.trip_marks import draw_trip_points
 
 SIDEBAR_LEFT: Final[int] = 520
 RULE_WIDTH: Final[int] = 3
@@ -69,6 +74,10 @@ FASTER_LEFT: Final[int] = 710
 FASTER_TOP: Final[int] = 17  # below the badge centre
 FASTER_BOTTOM: Final[int] = 32  # below the badge centre
 FASTER_PX: Final[int] = 11
+PAIRS_HEAD: Final[str] = 'Connections · leave by'
+PAIRS_HEAD_Y: Final[int] = 70
+PAIRS_TOP: Final[int] = 84
+PAIR_STEP: Final[int] = 72
 
 
 def wrap(*, text: str, face: Face, width: float) -> tuple[str, ...]:
@@ -155,6 +164,30 @@ def draw_empty(canvas: Canvas, *, text: str, width: int) -> None:
         )
 
 
+def stop_at(*, base: MapBase) -> tuple[float, float] | None:
+    """
+    Find where the From stop sits on the map.
+
+    Parameters
+    ----------
+    base : MapBase
+        The base map key.
+
+    Returns
+    -------
+    tuple[float, float] | None
+        Map pixels of the trip's origin when there are trip marks, else of
+        the centre; None without either.
+    """
+    centre = base.centre
+    point = centre if base.trip is None else base.trip.origin
+    if centre is None or point is None:
+        return None
+    return screen_point(
+        centre=centre, mpp=base.mpp, point=point, width=base.width,
+    )
+
+
 def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
     """
     Draw the markers, the empty text and the From stop over the map.
@@ -170,17 +203,7 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
     view : MapView
         View-model.
     """
-    centre = view.base.centre
-    stop = (
-        None
-        if centre is None
-        else screen_point(
-            centre=centre,
-            mpp=view.base.mpp,
-            point=centre,
-            width=view.base.width,
-        )
-    )
+    stop = stop_at(base=view.base)
     with canvas.clipped(box=(0, HEADER, view.base.width, HEIGHT)):
         draw_markers(
             canvas,
@@ -191,7 +214,9 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
         )
         if view.empty:
             draw_empty(canvas, text=view.empty, width=view.base.width)
-        if stop is not None:
+        if view.base.trip is not None:
+            draw_trip_points(canvas, base=view.base)
+        elif stop is not None:
             draw_stop(canvas, at=(stop[0], stop[1] + HEADER))
 
 
@@ -281,6 +306,36 @@ def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
     )
 
 
+def draw_pairs(canvas: Canvas, *, view: MapView, drop: int) -> None:
+    """
+    Draw a connection's pairs in the sidebar, the first inverted.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    view : MapView
+        View-model.
+    drop : int
+        Pixels the banner pushes the sidebar down.
+    """
+    canvas.text(
+        at=(SIDEBAR_TEXT, PAIRS_HEAD_Y + drop),
+        text=PAIRS_HEAD,
+        face=DESTINATION_FACE,
+        grey=INK,
+    )
+    draw_pair_list(
+        canvas,
+        rows=view.pairs,
+        top=PAIRS_TOP + drop,
+        left=SIDEBAR_LEFT + RULE_WIDTH,
+        right=WIDTH,
+        step=PAIR_STEP,
+        selected=0,
+    )
+
+
 def draw_sidebar(canvas: Canvas, *, view: MapView) -> None:
     """
     Draw the rule, the destination and the next departures.
@@ -299,6 +354,9 @@ def draw_sidebar(canvas: Canvas, *, view: MapView) -> None:
         grey=INK,
     )
     drop = BANNER if view.banner else 0
+    if view.pairs:
+        draw_pairs(canvas, view=view, drop=drop)
+        return
     if view.destination is not None:
         canvas.text(
             at=(SIDEBAR_TEXT, DESTINATION_Y + drop),

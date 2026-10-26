@@ -10,6 +10,7 @@ from numpy.typing import NDArray
 
 from paperroute.adapters.tiles_db import SqliteTileRepository
 from paperroute.build.tile_store import TileWriter
+from paperroute.core.connection_view import PairRow
 from paperroute.core.geo import Point, to_metres
 from paperroute.core.map_view import (
     MAP_HEIGHT,
@@ -18,6 +19,7 @@ from paperroute.core.map_view import (
     MapBase,
     MapView,
     Marker,
+    TripMarks,
     screen_point,
 )
 from paperroute.core.model import Mode
@@ -38,6 +40,8 @@ from paperroute.render.map_view import (
     BADGE_PX,
     COUNTDOWN_FACE,
     EMPTY_MARGIN,
+    PAIR_STEP,
+    PAIRS_TOP,
     SIDEBAR_LEFT,
     SIDEBAR_RIGHT,
     SIDEBAR_TEXT,
@@ -606,3 +610,43 @@ def test_sidebar_arrival_with_stops_stays_clear_of_the_pill() -> None:
     ]
     assert ends[1] > ends[0] + 40
     assert ends[1] + SIDEBAR_TEXT < 700
+
+
+PAIR_ROW = PairRow(
+    leaves_at='7:33',
+    route='606',
+    onto='665',
+    detail='24 min · change at Constitution Hill',
+    arrives_at='7:57',
+    minutes=24,
+)
+
+
+def test_pairs_replace_the_sidebar() -> None:
+    """With pairs, the sidebar heads them and inverts the first."""
+    view = replace(VIEW, sidebar=(), pairs=(PAIR_ROW,) * 4)
+    frame = draw_map_view(view=view, base=paper())
+    plain = draw_map_view(view=replace(VIEW, sidebar=()), base=paper())
+    heading = frame[HEADER + 14:HEADER + 36, SIDEBAR_TEXT:SIDEBAR_RIGHT]
+    assert (heading == INK).any()
+    first = frame[PAIRS_TOP + 8:PAIRS_TOP + PAIR_STEP - 8, 600:700]
+    second = frame[
+        PAIRS_TOP + PAIR_STEP + 8:PAIRS_TOP + 2 * PAIR_STEP - 8, 600:700,
+    ]
+    assert (first == INK).mean() > 0.5
+    assert (second == INK).mean() < 0.5
+    before = plain[HEADER + 14:HEADER + 36, SIDEBAR_TEXT:SIDEBAR_RIGHT]
+    assert (heading != before).any()
+
+
+def test_trip_origin_gets_the_stop() -> None:
+    """With trip marks, the From is drawn at the trip's origin."""
+    origin = (CENTRE[0] - 800.0, CENTRE[1])
+    trip = TripMarks(
+        origin=origin, second=(), walk=None, change=None, end=None,
+    )
+    view = replace(VIEW, base=replace(VIEW.base, trip=trip))
+    frame = draw_map_view(view=view, base=paper())
+    x, y = stop_pixel()
+    assert frame[y, x + 9] == PAPER
+    assert frame[y, x - 100 + 9] == INK

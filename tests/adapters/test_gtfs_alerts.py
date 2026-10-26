@@ -20,6 +20,8 @@ FIXTURE = (
     / 'v2_gtfs_alerts_sydneytrains.pb'
 )
 FEED = 'v2/gtfs/alerts/sydneytrains'
+FERRY_FIXTURE = FIXTURE.parent / 'v2_gtfs_alerts_ferries.pb'
+FERRY_FEED = 'v2/gtfs/alerts/ferries'
 WESTERN = '5ef3cb29-30b3-5e60-bd7a-343519598275'
 TWO_WINDOWS = '550a1f97-0e0c-5ea5-bc74-2f2e17e494f7'
 CENTRAL = '7e669567-64e5-5fec-83a2-7332090518c3'
@@ -230,3 +232,20 @@ def test_english_prefers_en_then_plain() -> None:
     html.language = 'en/html'
     html.text = '<b>x</b>'
     assert english(text=only_html) == ''
+
+
+def test_ferry_fixture_parsed() -> None:
+    """The ferry fixture's four alerts, routes, stops and periods are read."""
+    body = FERRY_FIXTURE.read_bytes()
+    result = parse_alerts(data=body, feed=FERRY_FEED, fetched_at=NOW)
+    assert len(result.alerts) == 4
+    found = {item.alert_id[:8]: item for item in result.alerts}
+    closure = found['30ef7969']
+    assert closure.header == 'Rose Bay Wharf temporary closure'
+    assert any(
+        item.route_id == '9-F9-sj2-1' and item.stop_id == '202972'
+        for item in closure.informed
+    )
+    periods = found['84aad6bc'].periods
+    assert len(periods) == 1
+    assert periods[0].end is None

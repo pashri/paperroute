@@ -351,12 +351,12 @@ def test_poll_interval_counts_real_seconds_on_fall_back_night() -> None:
 
 
 def test_step_no_feed_for_ferry_pin() -> None:
-    """A ferry pin never fetches and shows the no-feed banner."""
+    """A ferry pin fetches only alerts and shows the no-feed banner."""
     state, effects = step(
         loaded(state=fresh(), mode=Mode.FERRY), Tick(now=START)
     )
     assert state.feeds == ()
-    assert not any(isinstance(effect, FetchFeed) for effect in effects)
+    assert not trip_fetches(effects=effects)
     assert isinstance(state.last_view, StopView)
     assert state.last_view.banner is not None
     assert 'no live feed' in state.last_view.banner
@@ -509,6 +509,27 @@ def effects_of[T](
     return [effect for effect in effects if isinstance(effect, kind)]
 
 
+def trip_fetches(*, effects: tuple[Effect, ...]) -> list[FetchFeed]:
+    """
+    Pick the feed fetches other than alert fetches.
+
+    Parameters
+    ----------
+    effects : tuple[Effect, ...]
+        Effects.
+
+    Returns
+    -------
+    list[FetchFeed]
+        The trip and position fetches, in order.
+    """
+    return [
+        fetch
+        for fetch in effects_of(effects=effects, kind=FetchFeed)
+        if fetch.kind != FeedKind.ALERTS
+    ]
+
+
 def turned(*, state: State, steps: int) -> tuple[State, tuple[Effect, ...]]:
     """
     Turn the bottom knob.
@@ -639,7 +660,7 @@ def test_map_polls_positions_for_a_ferry_pin() -> None:
     for seconds in (30, 60, 90):
         now = START + timedelta(seconds=seconds)
         state, effects = step(state, Tick(now=now))
-        assert effects_of(effects=effects, kind=FetchFeed) == [fetch]
+        assert trip_fetches(effects=effects) == [fetch]
 
 
 def test_empty_area_modes_fall_back_to_every_mode() -> None:
@@ -769,7 +790,7 @@ def test_positions_are_not_fetched_twice_within_a_poll() -> None:
         every_position_fetch()
     )
     _, effects = step(state, Tick(now=START + timedelta(seconds=1)))
-    assert not effects_of(effects=effects, kind=FetchFeed)
+    assert not trip_fetches(effects=effects)
     state, _ = step(loaded(state=fresh()), Tick(now=START))
     state, _ = step(state, Tick(now=START + timedelta(seconds=29)))
     state, _ = step(state, PRESS)

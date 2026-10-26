@@ -57,29 +57,29 @@ def _slice_repo(
         yield repo
 
 
-def metro_repo(
-    *, tmp_path: Path, lines: list[tuple[str, str]]
+def routes_repo(
+    *, tmp_path: Path, lines: list[tuple[str, str, int]]
 ) -> SqliteTimetableRepository:
     """
-    Make a timetable holding only metro routes.
+    Make a timetable holding only routes.
 
     Parameters
     ----------
     tmp_path : Path
         Directory for the file.
-    lines : list[tuple[str, str]]
-        Route ID and short name of each type-401 route.
+    lines : list[tuple[str, str, int]]
+        Route ID, short name and type of each route.
 
     Returns
     -------
     SqliteTimetableRepository
         Repository over the file; the caller closes it.
     """
-    path = tmp_path / 'metro.db'
+    path = tmp_path / 'routes.db'
     with closing(sqlite3.connect(path)) as conn:
         conn.executescript(SCHEMA)
         conn.executemany(
-            "INSERT INTO routes VALUES (?, ?, '', 401, NULL, NULL, NULL, 'm')",
+            "INSERT INTO routes VALUES (?, ?, '', ?, NULL, NULL, NULL, 'm')",
             lines,
         )
         conn.commit()
@@ -144,13 +144,15 @@ def test_stop_family(slice_repo: SqliteTimetableRepository) -> None:
 def test_metro_route_read_from_timetable(tmp_path: Path) -> None:
     """The one metro route's short name is read; two give None."""
     with closing(
-        metro_repo(tmp_path=tmp_path, lines=[('metro:SMNW_M1', 'M1')])
+        routes_repo(
+            tmp_path=tmp_path, lines=[('metro:SMNW_M1', 'M1', 401)]
+        )
     ) as one:
         assert one.alert_places(route_ids=[], stop_ids=[]).metro == 'M1'
     two_dir = tmp_path / 'two'
     two_dir.mkdir()
-    lines = [('metro:SMNW_M1', 'M1'), ('metro:X_M2', 'M2')]
-    with closing(metro_repo(tmp_path=two_dir, lines=lines)) as two:
+    lines = [('metro:SMNW_M1', 'M1', 401), ('metro:X_M2', 'M2', 401)]
+    with closing(routes_repo(tmp_path=two_dir, lines=lines)) as two:
         assert two.alert_places(route_ids=[], stop_ids=[]).metro is None
 
 
@@ -159,3 +161,11 @@ def test_no_metro_route_gives_none(
 ) -> None:
     """A timetable without a type-401 route has no metro line."""
     assert slice_repo.alert_places(route_ids=[], stop_ids=[]).metro is None
+
+
+def test_ferry_route_resolves_through_bundle(tmp_path: Path) -> None:
+    """A ferry feed route ID resolves through its bundle: form."""
+    lines = [('bundle:9-F9-sj2-1', 'F9', 4)]
+    with closing(routes_repo(tmp_path=tmp_path, lines=lines)) as repo:
+        places = repo.alert_places(route_ids=['9-F9-sj2-1'], stop_ids=[])
+    assert places.routes == {'9-F9-sj2-1': 'F9'}

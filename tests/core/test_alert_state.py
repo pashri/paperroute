@@ -52,6 +52,7 @@ NOW: Final[datetime] = sydney(day=24, hour=9, minute=39)
 TRAINS: Final[str] = 'v2/gtfs/alerts/sydneytrains'
 BUSES: Final[str] = 'v2/gtfs/alerts/buses'
 REGIONAL: Final[str] = 'v2/gtfs/alerts/nswtrains'
+FERRIES: Final[str] = 'v2/gtfs/alerts/ferries'
 PARRAMATTA_CENTRAL: Final[Pin] = station_pin(
     origin='2150',
     origin_name='Parramatta Station',
@@ -220,12 +221,12 @@ def test_two_modes_poll_each_feed() -> None:
     assert fetches == wanted
 
 
-def test_ferry_pin_polls_no_alerts() -> None:
-    """Ferries have no alerts feed, so a ferry pin fetches none."""
+def test_ferry_pin_polls_ferry_alerts() -> None:
+    """A ferry pin fetches the ferry alerts feed."""
     pin = replace(PARRAMATTA_CENTRAL, kind=RouteKind.FERRY)
     state, _ = loaded_with(state=started(pins=(pin,)), modes=(Mode.FERRY,))
     _, fetches = tick_at(state=state, after=timedelta())
-    assert not fetches
+    assert fetches == [FetchFeed(feed=FERRIES, kind=FeedKind.ALERTS)]
 
 
 def test_no_departures_no_alert_polls() -> None:

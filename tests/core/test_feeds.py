@@ -69,12 +69,14 @@ def test_feed_label() -> None:
 
 
 def test_alert_feeds_for_modes() -> None:
-    """Alert feeds are sorted and unique; ferries have none."""
+    """Alert feeds are sorted and unique."""
     assert alert_feeds_for(modes=[Mode.TRAIN, Mode.BUS, Mode.BUS]) == (
         'v2/gtfs/alerts/buses',
         'v2/gtfs/alerts/sydneytrains',
     )
-    assert alert_feeds_for(modes=[Mode.FERRY]) == ()
+    assert alert_feeds_for(modes=[Mode.FERRY]) == (
+        'v2/gtfs/alerts/ferries',
+    )
 
 
 def test_feed_kind_alerts() -> None:
@@ -86,6 +88,7 @@ def test_feed_kind_alerts() -> None:
 def test_feed_label_alerts() -> None:
     """Alert feeds are named after their mode."""
     assert feed_label(feed='v2/gtfs/alerts/lightrail') == 'Light rail alerts'
+    assert feed_label(feed='v2/gtfs/alerts/ferries') == 'Ferries alerts'
     assert feed_label(feed='v2/gtfs/alerts/sydneytrains') == (
         'Sydney Trains alerts'
     )

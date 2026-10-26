@@ -18,6 +18,7 @@ ALERT_FEEDS: Final[dict[Mode, str]] = {
     Mode.METRO: 'v2/gtfs/alerts/metro',
     Mode.LIGHT_RAIL: 'v2/gtfs/alerts/lightrail',
     Mode.REGIONAL: 'v2/gtfs/alerts/nswtrains',
+    Mode.FERRY: 'v2/gtfs/alerts/ferries',
 }
 POSITION_FEEDS: Final[dict[Mode, tuple[str, ...]]] = {
     Mode.BUS: ('v1/gtfs/vehiclepos/buses',),

@@ -9,7 +9,7 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.adapters.alert_rows import alert_places
+from paperroute.adapters.alert_rows import alert_places, read_trainlink
 from paperroute.adapters.calendar_rows import (
     SERVICE_DAY_LENGTH,
     read_holidays,
@@ -790,6 +790,25 @@ class SqliteTimetableRepository:
             route_ids=route_ids,
             stop_ids=stop_ids,
             fetch=lambda sql: self.fetch(sql=sql, params=()),
+            fetch_in=lambda sql, ids: self.fetch_in(sql=sql, ids=ids),
+        )
+
+    def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:
+        """
+        Say whether an NSW TrainLink trip calls at any of some stops.
+
+        Parameters
+        ----------
+        stop_ids : Collection[str]
+            Stop IDs.
+
+        Returns
+        -------
+        bool
+            True when one does.
+        """
+        return read_trainlink(
+            stop_ids=stop_ids,
             fetch_in=lambda sql, ids: self.fetch_in(sql=sql, ids=ids),
         )
 

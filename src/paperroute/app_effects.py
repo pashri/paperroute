@@ -428,7 +428,8 @@ def between_read(
 
     A pin's From or To may be a platform, so their stop families are read
     too and each is found through its station. With no trips asked
-    about, only the families are read.
+    about, only the families are read. NSW TrainLink is asked about
+    every stop in either end's family.
 
     Parameters
     ----------
@@ -453,11 +454,15 @@ def between_read(
         else {}
     )
     names = between_names(pin=pin, patterns=patterns, families=families)
+    stop_ids = {
+        stop for end in ends for stop in families.get(end, frozenset({end}))
+    }
     return BetweenLoaded(
         pin=pin,
         names=names,
         timetable=effect.timetable,
         families=families,
+        trainlink=timetable.serves_trainlink(stop_ids=stop_ids),
     )
 
 

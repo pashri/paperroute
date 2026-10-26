@@ -194,6 +194,21 @@ class TimetableRepository(Protocol):
             IDs are absent.
         """
 
+    def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:
+        """
+        Say whether an NSW TrainLink trip calls at any of some stops.
+
+        Parameters
+        ----------
+        stop_ids : Collection[str]
+            Stop IDs.
+
+        Returns
+        -------
+        bool
+            True when one does.
+        """
+
     def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
         """
         List the modes of the shapes that overlap an area.

@@ -391,6 +391,22 @@ class BrokenTimetable:
         """
         return AlertPlaces(routes={}, stops={})
 
+    def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:
+        """
+        Know no NSW TrainLink trips.
+
+        Parameters
+        ----------
+        stop_ids : Collection[str]
+            Ignored.
+
+        Returns
+        -------
+        bool
+            False.
+        """
+        return False
+
     def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
         """
         Know no shapes.

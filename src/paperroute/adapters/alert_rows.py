@@ -5,6 +5,7 @@ from typing import Final
 
 from paperroute.adapters.calendar_rows import Fetch, FetchIn
 from paperroute.core.alert_model import AlertPlaces
+from paperroute.core.model import REGIONAL_AGENCIES
 
 ROUTE_PREFIXES: Final[tuple[str, ...]] = (
     'sydneytrains:',
@@ -26,6 +27,15 @@ STOP_CHILDREN: Final[str] = (
 )
 METRO_ROUTE: Final[str] = (
     'SELECT DISTINCT short_name FROM routes WHERE type = 401'
+)
+TRAINLINK_STOPS: Final[str] = (
+    'SELECT 1 FROM stop_times st '
+    'JOIN trips t ON t.trip_id = st.trip_id '
+    'JOIN routes r ON r.route_id = t.route_id '
+    'WHERE st.stop_id IN ({marks}) '
+    'AND COALESCE(t.agency_id, r.agency_id) IN ('
+    + ', '.join(f"'{agency}'" for agency in sorted(REGIONAL_AGENCIES))
+    + ') LIMIT 1'
 )
 
 
@@ -168,6 +178,29 @@ def read_metro(*, fetch: Fetch) -> str | None:
     """
     rows = fetch(METRO_ROUTE)
     return str(rows[0][0]) if len(rows) == 1 else None
+
+
+def read_trainlink(*, stop_ids: Collection[str], fetch_in: FetchIn) -> bool:
+    """
+    Say whether an NSW TrainLink trip calls at any of some stops.
+
+    Trains and coaches both count.
+
+    Parameters
+    ----------
+    stop_ids : Collection[str]
+        Stop IDs.
+    fetch_in : FetchIn
+        Runs a query with an IN list and returns its rows.
+
+    Returns
+    -------
+    bool
+        True when one does; False with no stops, without a query.
+    """
+    if not stop_ids:
+        return False
+    return bool(fetch_in(TRAINLINK_STOPS, stop_ids))
 
 
 def alert_places(

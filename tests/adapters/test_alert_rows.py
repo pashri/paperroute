@@ -169,3 +169,36 @@ def test_ferry_route_resolves_through_bundle(tmp_path: Path) -> None:
     with closing(routes_repo(tmp_path=tmp_path, lines=lines)) as repo:
         places = repo.alert_places(route_ids=['9-F9-sj2-1'], stop_ids=[])
     assert places.routes == {'9-F9-sj2-1': 'F9'}
+
+
+def test_trainlink_serves_central(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """NSW TrainLink trips call in Central's stop family."""
+    family = slice_repo.alert_places(route_ids=[], stop_ids=[CENTRAL]).stops
+    assert slice_repo.serves_trainlink(stop_ids=family[CENTRAL])
+
+
+def test_trainlink_skips_bus_stop(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """No NSW TrainLink trip calls at a 606 bus stop."""
+    stop = str(
+        slice_repo.fetch(
+            sql=(
+                'SELECT st.stop_id FROM stop_times st '
+                'JOIN trips t USING (trip_id) '
+                'JOIN routes r USING (route_id) '
+                "WHERE r.short_name = '606' LIMIT 1"
+            ),
+            params=(),
+        )[0][0]
+    )
+    assert not slice_repo.serves_trainlink(stop_ids=[stop])
+
+
+def test_trainlink_no_stops_false(
+    slice_repo: SqliteTimetableRepository,
+) -> None:
+    """No stops are served by nothing."""
+    assert not slice_repo.serves_trainlink(stop_ids=[])

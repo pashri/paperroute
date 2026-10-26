@@ -851,6 +851,25 @@ class BetweenTimetable(EmptyPlacedTimetable):
 
     families: dict[str, frozenset[str]] = field(default_factory=dict)
     error: sqlite3.Error | None = None
+    trainlink: bool = False
+    trainlink_asked: set[str] = field(default_factory=set)
+
+    def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:
+        """
+        Record the stops asked about and give the fixed answer.
+
+        Parameters
+        ----------
+        stop_ids : Collection[str]
+            Stop IDs.
+
+        Returns
+        -------
+        bool
+            The `trainlink` field.
+        """
+        self.trainlink_asked.update(stop_ids)
+        return self.trainlink
 
     def patterns(
         self, *, trip_ids: Collection[str], around: date
@@ -933,6 +952,32 @@ async def test_between_from_a_platform() -> None:
             },
         ),
     ]
+
+
+async def test_between_reads_trainlink() -> None:
+    """The TrainLink answer covers every member of each end's family."""
+    pin = pin_of(STRATHFIELD_PLATFORM, 'T')
+    families = {
+        STRATHFIELD_PLATFORM: frozenset({STRATHFIELD_PLATFORM, 'S'}),
+    }
+    timetable = BetweenTimetable(families=families, trainlink=True)
+    posted = await posted_by(
+        ports=ports_of(timetable=timetable),
+        effects=[
+            LoadBetween(
+                pin=pin, trip_ids=frozenset({'trip-0'}), day=date(2026, 10, 24),
+            ),
+        ],
+    )
+    assert posted == [
+        BetweenLoaded(
+            pin=pin,
+            names=frozenset({'B', 'C'}),
+            families=families,
+            trainlink=True,
+        ),
+    ]
+    assert timetable.trainlink_asked == {STRATHFIELD_PLATFORM, 'S', 'T'}
 
 
 async def test_between_read_failure_is_empty(

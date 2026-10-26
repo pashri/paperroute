@@ -14,7 +14,7 @@ from paperroute.core.alert_model import (
     LoadBetween,
     Matched,
 )
-from paperroute.core.alert_state import listed_ids, shown_alerts
+from paperroute.core.alert_state import alert_feeds, listed_ids, shown_alerts
 from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import MapView
 from paperroute.core.messages import (
@@ -522,3 +522,76 @@ def test_ferry_alert_naming_other_wharf_listed_only() -> None:
     assert live_stop_view(state=state).banner == (
         f'Timetable times{DOT}no live feed for this service'
     )
+
+
+def trainlink_fetches(
+    *, pin: Pin, mode: Mode, trainlink: bool,
+) -> list[FetchFeed]:
+    """
+    Load a pin's departures and TrainLink answer, then tick.
+
+    Parameters
+    ----------
+    pin : Pin
+        The shown pin.
+    mode : Mode
+        Its departures' mode.
+    trainlink : bool
+        The timetable's TrainLink answer.
+
+    Returns
+    -------
+    list[FetchFeed]
+        The alert fetches due at once.
+    """
+    state, _ = loaded_with(state=started(pins=(pin,)), modes=(mode,))
+    event = BetweenLoaded(pin=pin, names=frozenset(), trainlink=trainlink)
+    state, _ = step(state, event)
+    _, fetches = tick_at(state=state, after=timedelta())
+    return fetches
+
+
+def test_trainlink_station_polls_trainlink() -> None:
+    """A train pin TrainLink serves also polls the TrainLink feed."""
+    assert trainlink_fetches(
+        pin=PARRAMATTA_CENTRAL, mode=Mode.TRAIN, trainlink=True,
+    ) == [
+        FetchFeed(feed=REGIONAL, kind=FeedKind.ALERTS),
+        FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS),
+    ]
+    assert trainlink_fetches(
+        pin=PARRAMATTA_CENTRAL, mode=Mode.TRAIN, trainlink=False,
+    ) == [FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS)]
+
+
+def test_trainlink_answer_for_other_pin_ignored() -> None:
+    """A TrainLink answer for another pin adds no feed."""
+    pins = (PARRAMATTA_CENTRAL, STRATHFIELD_TOWN_HALL)
+    state, _ = loaded_with(state=started(pins=pins))
+    event = BetweenLoaded(
+        pin=PARRAMATTA_CENTRAL, names=frozenset(), trainlink=True,
+    )
+    state, _ = step(state, event)
+    state, _ = step(state, KnobTurned(knob=Knob.TOP, steps=1))
+    assert shown(state=state) == STRATHFIELD_TOWN_HALL
+    state, _ = loaded_with(state=state)
+    assert alert_feeds(state=state) == (TRAINS,)
+
+
+def test_kindless_train_pin_polls_trainlink() -> None:
+    """A kind-less pin with train departures polls TrainLink too."""
+    assert trainlink_fetches(
+        pin=replace(PARRAMATTA_CENTRAL, kind=None),
+        mode=Mode.TRAIN,
+        trainlink=True,
+    ) == [
+        FetchFeed(feed=REGIONAL, kind=FeedKind.ALERTS),
+        FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS),
+    ]
+
+
+def test_bus_pin_ignores_trainlink() -> None:
+    """A bus pin never polls TrainLink from the timetable's answer."""
+    assert trainlink_fetches(
+        pin=BUS_PIN, mode=Mode.BUS, trainlink=True,
+    ) == [FetchFeed(feed=BUSES, kind=FeedKind.ALERTS)]

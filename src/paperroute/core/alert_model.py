@@ -162,12 +162,15 @@ class BetweenLoaded:
         Timetable version asked of.
     families : Mapping[str, frozenset[str]]
         Stop families of From and To; empty when the read failed.
+    trainlink : bool
+        True when an NSW TrainLink trip calls at From or To.
     """
 
     pin: Pin
     names: frozenset[str]
     timetable: str | None = None
     families: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    trainlink: bool = False
 
 
 @dataclass(frozen=True)
@@ -185,6 +188,8 @@ class AlertsState:
         A pin and the place names between its From and To.
     families : Mapping[str, frozenset[str]]
         Stop families of the `between` pin's From and To.
+    trainlink : bool
+        The `between` pin's TrainLink answer.
     asked : tuple[Pin, str | None, bool] | None
         The pin and timetable version stations between were last asked
         for, and whether its trips were known then.
@@ -200,6 +205,7 @@ class AlertsState:
     fetched_at: Mapping[str, datetime] = field(default_factory=dict)
     between: tuple[Pin, frozenset[str]] | None = None
     families: Mapping[str, frozenset[str]] = field(default_factory=dict)
+    trainlink: bool = False
     asked: tuple[Pin, str | None, bool] | None = None
     matched: tuple[Pin, tuple[Matched, ...]] | None = None
     selected: str | None = None

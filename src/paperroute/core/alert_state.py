@@ -27,7 +27,7 @@ from paperroute.core.messages import (
     KnobPressed,
     KnobTurned,
 )
-from paperroute.core.model import SYDNEY, Pin, same_place
+from paperroute.core.model import SYDNEY, Mode, Pin, same_place
 from paperroute.core.places import shown
 from paperroute.core.saved import LOOKAHEAD, LiveView
 from paperroute.core.state_model import State, elapsed
@@ -48,12 +48,37 @@ def alert_feeds(*, state: State) -> tuple[str, ...]:
     -------
     tuple[str, ...]
         Feed paths of the pin's kind's modes and its loaded departures'
-        modes, sorted.
+        modes, sorted, with NSW TrainLink's for a train pin it serves.
     """
-    kind = shown(state=state).kind
-    kind_modes = frozenset() if kind is None else KIND_MODES[kind]
-    return alert_feeds_for(
-        modes={*kind_modes, *(item.mode for item in state.board.departures)},
+    pin = shown(state=state)
+    kind_modes = frozenset() if pin.kind is None else KIND_MODES[pin.kind]
+    modes = {*kind_modes, *(item.mode for item in state.board.departures)}
+    if Mode.TRAIN in modes and trainlink_known(state=state, pin=pin):
+        modes.add(Mode.REGIONAL)
+    return alert_feeds_for(modes=modes)
+
+
+def trainlink_known(*, state: State, pin: Pin) -> bool:
+    """
+    Say whether the timetable said NSW TrainLink serves a pin.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    pin : Pin
+        The pin.
+
+    Returns
+    -------
+    bool
+        True when the stored answer is for the pin's place and is yes.
+    """
+    between = state.alerts.between
+    return (
+        between is not None
+        and same_place(first=between[0], second=pin)
+        and state.alerts.trainlink
     )
 
 
@@ -255,6 +280,7 @@ def on_alerts(*, state: State, event: AlertsFetched | BetweenLoaded) -> State:
             alerts,
             between=(event.pin, event.names),
             families=event.families,
+            trainlink=event.trainlink,
         )
     return rematched(state=replace(state, alerts=alerts))
 

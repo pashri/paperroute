@@ -228,3 +228,51 @@ def test_vehicle_trips_filter_markers() -> None:
         inputs=inputs, pin=WORK, pairs=SHAPED, mode=ConnectionMap.CHANGE,
     )
     assert len(view.markers) == 1
+
+
+def test_no_pairs_keeps_framing() -> None:
+    """With no pair, O2 still centres on the change and draws nothing."""
+    found = connection_inputs(
+        inputs=inputs_at(now=at(7, 35)),
+        pin=WORK,
+        pairs=(),
+        mode=ConnectionMap.CHANGE,
+    )
+    assert found.departures == ()
+    assert found.vehicle_trips == frozenset()
+    assert found.centre == (72.0, 0.0)
+    view = build_connection_map(
+        inputs=inputs_at(now=at(7, 35)),
+        pin=WORK,
+        pairs=(),
+        mode=ConnectionMap.CHANGE,
+    )
+    assert view.base.route == ()
+    assert view.pairs == ()
+
+
+def test_no_points_falls_back_to_from() -> None:
+    """Without stop points, both framings keep the From and the knob."""
+    bare = replace(
+        WORK,
+        origin=replace(WORK.origin, point=None),
+        destination=None,
+        change=replace(
+            WORK.change,
+            alight=replace(WORK.change.alight, point=None),
+            board=replace(WORK.change.board, point=None),
+        ) if WORK.change else None,
+    )
+    for mode in ConnectionMap:
+        found = connection_inputs(
+            inputs=inputs_at(now=at(7, 35)), pin=bare, pairs=(), mode=mode,
+        )
+        assert found.centre == (0.0, 900.0)
+    view = build_connection_map(
+        inputs=inputs_at(now=at(7, 35)),
+        pin=bare,
+        pairs=SHAPED,
+        mode=ConnectionMap.CHANGE,
+    )
+    assert view.base.trip is not None
+    assert view.base.trip.walk is None

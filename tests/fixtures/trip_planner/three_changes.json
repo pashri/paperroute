@@ -1,0 +1,105 @@
+{
+  "version": "10.2.1.42",
+  "journeys": [
+    {
+      "legs": [
+        {
+          "origin": {
+            "id": "20001",
+            "coord": [
+              -33.8,
+              151.0
+            ],
+            "departureTimePlanned": "2026-10-26T21:00:00Z"
+          },
+          "destination": {
+            "id": "20002",
+            "coord": [
+              -33.81,
+              151.01
+            ],
+            "arrivalTimePlanned": "2026-10-26T21:10:00Z"
+          },
+          "transportation": {
+            "product": {
+              "class": 5
+            },
+            "disassembledName": "606"
+          }
+        },
+        {
+          "origin": {
+            "id": "20002",
+            "coord": [
+              -33.81,
+              151.01
+            ],
+            "departureTimePlanned": "2026-10-26T21:15:00Z"
+          },
+          "destination": {
+            "id": "20003",
+            "coord": [
+              -33.81,
+              151.02
+            ],
+            "arrivalTimePlanned": "2026-10-26T21:30:00Z"
+          },
+          "transportation": {
+            "product": {
+              "class": 1
+            },
+            "disassembledName": "T1"
+          }
+        },
+        {
+          "origin": {
+            "id": "20003",
+            "coord": [
+              -33.81,
+              151.02
+            ],
+            "departureTimePlanned": "2026-10-26T21:35:00Z"
+          },
+          "destination": {
+            "id": "20004",
+            "coord": [
+              -33.82,
+              151.03
+            ],
+            "arrivalTimePlanned": "2026-10-26T21:50:00Z"
+          },
+          "transportation": {
+            "product": {
+              "class": 4
+            },
+            "disassembledName": "L1"
+          }
+        },
+        {
+          "origin": {
+            "id": "20004",
+            "coord": [
+              -33.82,
+              151.03
+            ],
+            "departureTimePlanned": "2026-10-26T21:55:00Z"
+          },
+          "destination": {
+            "id": "20005",
+            "coord": [
+              -33.83,
+              151.04
+            ],
+            "arrivalTimePlanned": "2026-10-26T22:20:00Z"
+          },
+          "transportation": {
+            "product": {
+              "class": 9
+            },
+            "disassembledName": "F1"
+          }
+        }
+      ]
+    }
+  ]
+}

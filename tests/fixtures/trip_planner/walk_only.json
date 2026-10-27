@@ -1,0 +1,32 @@
+{
+  "version": "10.2.1.42",
+  "journeys": [
+    {
+      "legs": [
+        {
+          "origin": {
+            "id": "20001",
+            "coord": [
+              -33.8,
+              151.0
+            ],
+            "departureTimePlanned": "2026-10-26T21:00:00Z"
+          },
+          "destination": {
+            "id": "20007",
+            "coord": [
+              -33.85,
+              151.06
+            ],
+            "arrivalTimePlanned": "2026-10-26T21:25:00Z"
+          },
+          "transportation": {
+            "product": {
+              "class": 99
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

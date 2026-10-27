@@ -33,6 +33,7 @@ from paperroute.core.model import (
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.saved import DEFAULT_SAVED, Saved
+from paperroute.core.trip_search import Journey, PlannerUnavailable, TripSearch
 from paperroute.ports import Loaded
 
 STOP_POINT: Point = to_metres(lon=151.0036, lat=-33.8170)
@@ -935,3 +936,53 @@ class FakeKeys:
     def clear(self) -> None:
         """Drop the key."""
         self.key = None
+
+
+@dataclass
+class FakeTripPlanner:
+    """
+    A Trip Planner that gives fixed journeys, or fails.
+
+    Attributes
+    ----------
+    journeys : tuple[Journey, ...]
+        What `trips` gives.
+    down : bool
+        True to raise `PlannerUnavailable`.
+    asked : list[tuple[str, str, TripSearch]]
+        The calls made.
+    """
+
+    journeys: tuple[Journey, ...] = ()
+    down: bool = False
+    asked: list[tuple[str, str, TripSearch]] = field(default_factory=list)
+
+    async def trips(
+        self, *, origin_id: str, destination_id: str, search: TripSearch,
+    ) -> tuple[Journey, ...]:
+        """
+        Give the fixed journeys.
+
+        Parameters
+        ----------
+        origin_id : str
+            Recorded.
+        destination_id : str
+            Recorded.
+        search : TripSearch
+            Recorded.
+
+        Returns
+        -------
+        tuple[Journey, ...]
+            The journeys.
+
+        Raises
+        ------
+        PlannerUnavailable
+            When `down` is set.
+        """
+        self.asked.append((origin_id, destination_id, search))
+        if self.down:
+            raise PlannerUnavailable('down')
+        return self.journeys

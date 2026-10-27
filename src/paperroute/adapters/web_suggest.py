@@ -2,7 +2,7 @@
 
 import html
 from collections.abc import Callable
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
@@ -137,8 +137,9 @@ def shifted(*, query: MultiMapping[str], search: TripSearch) -> TripSearch:
     Returns
     -------
     TripSearch
-        One minute before `first` for Earlier, after `last` for Later;
-        else the search unchanged.
+        Earlier arrives by one minute before `first`; Later leaves one
+        minute after `last`; else the search unchanged. Each pages against
+        the direction it moves, so it never asks for the same journeys.
     """
     page = query.get('page', '')
     if page not in PAGES:
@@ -147,8 +148,9 @@ def shifted(*, query: MultiMapping[str], search: TripSearch) -> TripSearch:
         edge = datetime.fromisoformat(query.get(PAGES[page], ''))
     except ValueError:
         return search
-    step = -STEP if page == 'earlier' else STEP
-    return replace(search, when=(edge + step).astimezone(SYDNEY))
+    earlier = page == 'earlier'
+    when = edge - STEP if earlier else edge + STEP
+    return TripSearch(when=when.astimezone(SYDNEY), arrive=earlier)
 
 
 def controls(*, search: TripSearch) -> str:
@@ -285,9 +287,7 @@ def row_html(*, row: SuggestionRow) -> str:
     return PICK.format(pick=html.escape(row.pick), text=text)
 
 
-def list_html(
-    *, options: PinOptions, journeys: tuple[Journey, ...], arrive: bool,
-) -> str:
+def list_html(*, options: PinOptions, journeys: tuple[Journey, ...]) -> str:
     """
     Draw the suggestion list.
 
@@ -297,8 +297,6 @@ def list_html(
         What the timetable offers.
     journeys : tuple[Journey, ...]
         The journeys found.
-    arrive : bool
-        True when the search was arrive-by.
 
     Returns
     -------
@@ -311,13 +309,9 @@ def list_html(
         row_html(row=row_of(options=options, journey=journey))
         for journey in journeys
     )
-    edges = [
-        journey.legs[-1].arrives if arrive else journey.legs[0].departs
-        for journey in journeys
-    ]
-    body = EDGES.format(
-        first=min(edges).isoformat(), last=max(edges).isoformat(),
-    )
+    first = min(journey.legs[-1].arrives for journey in journeys)
+    last = max(journey.legs[0].departs for journey in journeys)
+    body = EDGES.format(first=first.isoformat(), last=last.isoformat())
     body += f'\n          <ol class="journeys">{rows}\n          </ol>'
     return LIST.format(body=body + PAGE_BUTTONS)
 
@@ -464,6 +458,4 @@ class SuggestPages:
             )
         except PlannerUnavailable:
             return failure_html()
-        return list_html(
-            options=options, journeys=journeys, arrive=search.arrive,
-        )
+        return list_html(options=options, journeys=journeys)

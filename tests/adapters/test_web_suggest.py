@@ -194,24 +194,39 @@ async def test_planner_failure_keeps_inputs() -> None:
 
 
 async def test_earlier_later_one_call_each() -> None:
-    """Earlier and Later each make one call, a minute past the edge."""
+    """Earlier asks arrive by a minute before; Later leave at a minute after."""
     planner = FakeTripPlanner(journeys=(GOOD,))
     edges = [('first', '2026-10-27T20:48:00+00:00'),
              ('last', '2026-10-27T20:58:00+00:00')]
-    await fetched(
-        planner=planner, fields=[*SEARCH, *edges, ('page', 'earlier')],
-    )
-    await fetched(
-        planner=planner, fields=[*SEARCH, *edges, ('page', 'later')],
-    )
+    for mode in ('arr', 'dep'):
+        fields = [*SEARCH[:2], ('mode', mode), *SEARCH[3:], *edges]
+        for page in ('earlier', 'later'):
+            await fetched(planner=planner, fields=[*fields, ('page', page)])
     await fetched(
         planner=planner, fields=[*SEARCH, ('first', 'x'), ('page', 'earlier')],
     )
-    assert [search.when for _, _, search in planner.asked] == [
-        datetime(2026, 10, 28, 7, 47, tzinfo=SYDNEY),
-        datetime(2026, 10, 28, 7, 59, tzinfo=SYDNEY),
-        datetime(2026, 10, 28, 7, 30, tzinfo=SYDNEY),
+    earlier = TripSearch(
+        when=datetime(2026, 10, 28, 7, 47, tzinfo=SYDNEY), arrive=True,
+    )
+    later = TripSearch(
+        when=datetime(2026, 10, 28, 7, 59, tzinfo=SYDNEY), arrive=False,
+    )
+    assert [search for _, _, search in planner.asked] == [
+        earlier, later, earlier, later,
+        TripSearch(
+            when=datetime(2026, 10, 28, 7, 30, tzinfo=SYDNEY), arrive=False,
+        ),
     ]
+
+
+async def test_edges_are_first_arrival_and_last_departure() -> None:
+    """The page edges are the earliest arrival and the latest departure."""
+    planner = FakeTripPlanner(journeys=(GOOD, DIRECT))
+    for mode in ('arr', 'dep'):
+        fields = [*SEARCH[:2], ('mode', mode), *SEARCH[3:]]
+        _, text = await fetched(planner=planner, fields=fields)
+        assert 'name="first" value="2026-10-27T21:12:00+00:00"' in text
+        assert 'name="last" value="2026-10-27T20:48:00+00:00"' in text
 
 
 async def test_default_search_on_ways_page() -> None:

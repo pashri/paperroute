@@ -862,9 +862,20 @@ main > .notice {
   box-shadow: none;
 }
 
+.ts-wrapper.full .ts-control,
+.ts-wrapper.single.input-active .ts-control {
+  background: var(--surface);
+}
+
+.ts-wrapper .ts-control .item,
 .ts-wrapper .ts-control input {
   color: var(--text);
   font: inherit;
+  opacity: 1;
+}
+
+.ts-wrapper .ts-control input::placeholder {
+  color: var(--muted);
 }
 
 .ts-wrapper.focus .ts-control {

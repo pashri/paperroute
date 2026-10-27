@@ -172,3 +172,14 @@ async def test_hand_way_carries_unsaved_edits(client: Client) -> None:
     fields = dict(parse_qsl(location.query))
     assert fields['stop'] == 'G2145615'
     assert parse_qsl(fields['back']) == edited
+
+
+async def test_stop_search_reads_as_field_text(client: Client) -> None:
+    """Tom Select's chosen stop uses the page's text and surface tokens."""
+    text = await (await client.get(f'/pins/ways?ref={REF}')).text()
+    sheet = await (await client.get('/live.css')).text()
+    assert text.index('/vendor/tom-select.css') < text.index('/live.css')
+    full = sheet.index('.ts-wrapper.full .ts-control,')
+    assert 'background: var(--surface);' in sheet[full:full + 120]
+    item = sheet.index('.ts-wrapper .ts-control .item,')
+    assert 'color: var(--text);' in sheet[item:item + 120]

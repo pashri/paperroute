@@ -8,8 +8,8 @@ from multidict import MultiMapping
 
 from paperroute.adapters.pin_editor import edited, with_origin
 from paperroute.adapters.state_change import ALLOW_MAX, ALLOW_MIN
-from paperroute.core.connection_model import default_allow
-from paperroute.core.model import Change, Pin, RouteKind, StopPlace
+from paperroute.core.connection_model import default_allow, first_change
+from paperroute.core.model import Change, Pin, RouteKind, StopPlace, Way
 from paperroute.core.pin_choices import (
     ChangeStop,
     PinDraft,
@@ -174,7 +174,7 @@ def connection_draft_of(*, pin: Pin, ref: str) -> ConnectionDraft:
     ConnectionDraft
         The pin's choices; the change fields are empty without a change.
     """
-    change = pin.change
+    change = first_change(pin=pin)
     board = '' if change is None else change.board.stop_id
     return ConnectionDraft(
         stop=pin.origin.stop_id,
@@ -185,7 +185,6 @@ def connection_draft_of(*, pin: Pin, ref: str) -> ConnectionDraft:
         allow='' if change is None else str(change.allow),
         allow_for=board,
         to='' if pin.destination is None else pin.destination.stop_id,
-        only=() if change is None else change.only,
         nickname=pin.nickname,
         ref=ref,
     )
@@ -325,16 +324,13 @@ def connection_pin(
         return None
     if allow is None:
         return None
-    change = Change(
-        alight=alight, board=second.on.place, allow=allow, only=second.only,
-    )
+    change = Change(alight=alight, board=second.on.place, allow=allow)
     return Pin(
         origin=leg.pin.origin,
         destination=second.to,
         kind=leg.pin.kind,
-        routes=leg.pin.routes,
         nickname=clean_nickname(text=draft.nickname or ''),
-        change=change,
+        ways=(Way(changes=(change,)),),
     )
 
 

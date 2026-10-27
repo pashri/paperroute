@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Final
 
-from paperroute.core.connection_model import Pair, walk_metres
+from paperroute.core.connection_model import Pair, first_change, walk_metres
 from paperroute.core.connection_view import PairRow, no_pair_text, pair_rows
 from paperroute.core.live import LiveDeparture
 from paperroute.core.map_view import MapView
@@ -345,7 +345,7 @@ def pair_legs_of(*, pair: Pair, pin: Pin) -> tuple[Leg, ...]:
     tuple[Leg, ...]
         Leg 1 to the change and leg 2 on, or one leg when staying on.
     """
-    change = pin.change
+    change = first_change(pin=pin)
     end = pin.destination or pin.origin
     if pair.second is None or change is None:
         return (Leg(item=pair.first, start=pin.origin, end=end),)

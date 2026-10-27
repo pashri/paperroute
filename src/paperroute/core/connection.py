@@ -8,7 +8,14 @@ from paperroute.core.alert_match import (
     is_name_pin,
     pin_facts,
 )
-from paperroute.core.connection_model import Legs, Pair, leg_pins, pairs_of
+from paperroute.core.connection_model import (
+    Legs,
+    Pair,
+    first_change,
+    pairs_of,
+    stopgap_way,
+    way_legs,
+)
 from paperroute.core.live import resolved
 from paperroute.core.model import Departure, Pin
 from paperroute.core.places import shown
@@ -29,7 +36,7 @@ def live_pairs(*, state: State) -> tuple[Pair, ...]:
     tuple[Pair, ...]
         The workable pairs; empty for a plain pin or with no legs loaded.
     """
-    change = shown(state=state).change
+    change = first_change(pin=shown(state=state))
     legs = state.board.legs
     if change is None or legs is None:
         return ()
@@ -84,10 +91,11 @@ def leg_lists(
     tuple[tuple[Pin, tuple[Departure, ...]], ...]
         The pin itself for a plain pin; leg 1 and leg 2 for a connection.
     """
-    if pin.change is None:
+    way = stopgap_way(pin=pin)
+    if way is None:
         return ((pin, board.departures),)
     legs = board.legs or Legs()
-    first, second, _ = leg_pins(pin=pin)
+    first, second = way_legs(pin=pin, way=way)
     return (first, board.departures), (second, legs.second)
 
 
@@ -121,9 +129,17 @@ def connection_facts(
         Each leg's facts as for a plain pin, merged, plus the direct
         list's trips and routes. Names come only from a leg matched by
         name.
+
+    Raises
+    ------
+    ValueError
+        When the pin has no ticked way.
     """
     legs = legs or Legs()
-    first, second, _ = leg_pins(pin=pin)
+    way = stopgap_way(pin=pin)
+    if way is None:
+        raise ValueError('A pin without a way has no legs.')
+    first, second = way_legs(pin=pin, way=way)
     parts = [
         pin_facts(
             pin=leg, departures=items, between=between, families=families,
@@ -170,7 +186,7 @@ def board_facts(
     PinFacts
         A connection pin's facts over both legs, or a plain pin's own.
     """
-    if pin.change is None:
+    if stopgap_way(pin=pin) is None:
         return pin_facts(
             pin=pin,
             departures=board.departures,

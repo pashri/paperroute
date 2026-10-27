@@ -7,9 +7,9 @@ from typing import Final
 
 from paperroute.app_connections import between_read, departures_read
 from paperroute.core.alert_model import AlertPlaces, LoadBetween
-from paperroute.core.connection_model import Legs, leg_pins
+from paperroute.core.connection_model import Legs, direct_leg, way_legs
 from paperroute.core.messages import LoadDepartures
-from paperroute.core.model import Departure, Pin
+from paperroute.core.model import Departure, Pin, Way
 from tests.core.connection_factories import WORK, WORK_CHANGE, at
 from tests.core.factories import departure, pin_of, place
 from tests.fakes import EmptyPlacedTimetable
@@ -96,7 +96,8 @@ def test_connection_reads_three_legs() -> None:
     timetable = RecordingTimetable()
     effect = LoadDepartures(pin=WORK, start=START, end=END, timetable='v1')
     event = departures_read(timetable=timetable, effect=effect)
-    first, second, direct = leg_pins(pin=WORK)
+    first, second = way_legs(pin=WORK, way=WORK.ways[0])
+    direct = direct_leg(pin=WORK)
     assert timetable.reads == [
         (first, START, END),
         (second, START, END + timedelta(hours=2)),
@@ -113,7 +114,10 @@ def test_connection_reads_three_legs() -> None:
 
 def test_unknown_change_stop_gives_empty_legs() -> None:
     """A change stop the timetable doesn't know gives empty legs."""
-    gone = replace(WORK, change=replace(WORK_CHANGE, alight=place('gone')))
+    gone = replace(
+        WORK,
+        ways=(Way(changes=(replace(WORK_CHANGE, alight=place('gone')),)),),
+    )
     timetable = RecordingTimetable(empty=True)
     effect = LoadDepartures(pin=gone, start=START, end=END)
     event = departures_read(timetable=timetable, effect=effect)

@@ -5,7 +5,13 @@ from dataclasses import replace
 
 from paperroute.core.alert_match import between_names
 from paperroute.core.alert_model import BetweenLoaded, LoadBetween
-from paperroute.core.connection_model import LEG_TWO_EXTRA, Legs, leg_pins
+from paperroute.core.connection_model import (
+    LEG_EXTRA,
+    Legs,
+    direct_leg,
+    stopgap_way,
+    way_legs,
+)
 from paperroute.core.messages import DeparturesLoaded, LoadDepartures
 from paperroute.core.model import RouteKind
 from paperroute.ports import TimetableRepository
@@ -28,7 +34,7 @@ def departures_read(
     -------
     DeparturesLoaded
         Leg 1 (the pin's own departures for a plain pin), with leg 2,
-        read for `LEG_TWO_EXTRA` longer, and the direct list as `legs`.
+        read for `LEG_EXTRA` longer, and the direct list as `legs`.
 
     Raises
     ------
@@ -42,13 +48,15 @@ def departures_read(
         until=effect.end,
         timetable=effect.timetable,
     )
-    if effect.pin.change is None:
+    way = stopgap_way(pin=effect.pin)
+    if way is None:
         found = read(pin=effect.pin, end=effect.end)
         return replace(loaded, departures=tuple(found))
-    first, second, direct = leg_pins(pin=effect.pin)
+    first, second = way_legs(pin=effect.pin, way=way)
+    direct = direct_leg(pin=effect.pin)
     departures = tuple(read(pin=first, end=effect.end))
     legs = Legs(
-        second=tuple(read(pin=second, end=effect.end + LEG_TWO_EXTRA)),
+        second=tuple(read(pin=second, end=effect.end + LEG_EXTRA)),
         direct=tuple(read(pin=direct, end=effect.end)),
     )
     return replace(loaded, departures=departures, legs=legs)
@@ -73,9 +81,10 @@ def between_read(
         The names; for a connection pin, both legs' names and families
         merged, and NSW TrainLink when either leg has it.
     """
-    if effect.pin.change is None:
+    way = stopgap_way(pin=effect.pin)
+    if way is None:
         return leg_between(timetable=timetable, effect=effect)
-    first, second, _ = leg_pins(pin=effect.pin)
+    first, second = way_legs(pin=effect.pin, way=way)
     loaded = [
         leg_between(timetable=timetable, effect=replace(effect, pin=leg))
         for leg in (first, second)

@@ -13,6 +13,7 @@ from paperroute.core.model import (
     Mode,
     Pin,
     RouteKind,
+    is_connection,
     kind_for,
     mode_for,
     pin_ref,
@@ -20,11 +21,18 @@ from paperroute.core.model import (
     service_epoch,
     service_seconds,
     service_time,
+    ticked_ways,
     until_repeated_hop,
     until_revisit,
+    way_key,
 )
 from paperroute.core.saved import TOWN_HALL
-from tests.core.connection_factories import WORK, WORK_CHANGE
+from tests.core.connection_factories import (
+    CAMPBELLTOWN_WAY,
+    TWO_WAY,
+    WORK,
+    WORK_CHANGE,
+)
 from tests.core.factories import pin_of, place
 
 
@@ -149,7 +157,7 @@ def test_same_place_ignores_names_and_points() -> None:
     pin_of('A', 'C'),
     pin_of('C', 'B'),
     Pin(origin=place('A'), destination=place('B'), kind=RouteKind.BUS),
-    Pin(origin=place('A'), destination=place('B'), routes=('606',)),
+    Pin(origin=place('A'), destination=place('B'), never=('606',)),
 ])
 def test_same_place_tells_pins_apart(other: Pin) -> None:
     """A different stop, kind or route list is a different pin."""
@@ -202,6 +210,7 @@ def test_kind_order_is_bus_train_metro_lr_ferry_school_coach() -> None:
 def test_pin_key_includes_filter_not_nickname() -> None:
     """The route filter makes a different place; a nickname does not."""
     base = Pin(origin=place('A'), destination=place('B'))
+    base = Pin(origin=place('A'))
     filtered = replace(base, only=('606',))
     named = replace(base, nickname='Work')
     assert not same_place(first=base, second=filtered)
@@ -217,11 +226,54 @@ def test_pin_ref_is_stable_and_short() -> None:
     assert ref != pin_ref(pin=replace(pin, only=('T2',)))
 
 
-def test_change_in_identity() -> None:
-    """A change is part of a pin's identity; no change keeps old refs."""
-    plain = replace(WORK, change=None)
-    longer = replace(WORK, change=replace(WORK_CHANGE, allow=9))
-    assert not same_place(first=WORK, second=plain)
-    assert not same_place(first=WORK, second=longer)
-    assert pin_ref(pin=plain) == 'd25f0ddc9fc3'
-    assert pin_ref(pin=WORK) != pin_ref(pin=plain)
+def test_way_key_ignores_allow_and_tick() -> None:
+    """A way is named by where it changes, not its allow or tick."""
+    way = WORK.ways[0]
+    longer = replace(way, changes=(replace(WORK_CHANGE, allow=9),))
+    unticked = replace(way, ticked=False)
+    assert way_key(way=way) == (('G215254', '2145648'),)
+    assert way_key(way=longer) == way_key(way=way) == way_key(way=unticked)
+    assert way_key(way=TWO_WAY) != way_key(way=way)
+
+
+def test_identity_ignores_routes_with_destination() -> None:
+    """Routes make a place only when there is no Destination."""
+    base = Pin(origin=place('A'), destination=place('B'))
+    routed = replace(base, routes=('606',), only=('606',))
+    assert same_place(first=base, second=routed)
+    assert pin_ref(pin=base) == pin_ref(pin=routed)
+    open_ended = Pin(origin=place('A'))
+    assert not same_place(
+        first=open_ended, second=replace(open_ended, routes=('606',)),
+    )
+
+
+def test_identity_ignores_ways() -> None:
+    """Editing ways keeps a pin's identity and ref."""
+    plain = replace(WORK, ways=())
+    longer = replace(WORK, ways=(replace(WORK.ways[0], ticked=False),))
+    assert same_place(first=WORK, second=plain)
+    assert same_place(first=WORK, second=longer)
+    assert pin_ref(pin=WORK) == pin_ref(pin=plain)
+
+
+def test_never_in_identity() -> None:
+    """The never list makes a different pin, whatever its order."""
+    base = Pin(origin=place('A'), destination=place('B'))
+    never = replace(base, never=('2', '1'))
+    assert not same_place(first=base, second=never)
+    assert same_place(first=never, second=replace(base, never=('1', '2')))
+    assert pin_ref(pin=base) != pin_ref(pin=never)
+    open_ended = Pin(origin=TOWN_HALL, kind=RouteKind.TRAIN, routes=('T1',))
+    assert pin_ref(pin=open_ended) == pin_ref(
+        pin=replace(open_ended, never=()),
+    )
+
+
+def test_ticked_ways_and_is_connection() -> None:
+    """Only ticked ways are listed; any way makes a connection."""
+    off = replace(CAMPBELLTOWN_WAY, ticked=False)
+    pin = replace(WORK, ways=(WORK.ways[0], off))
+    assert ticked_ways(pin=pin) == (WORK.ways[0],)
+    assert is_connection(pin=replace(WORK, ways=(off,)))
+    assert not is_connection(pin=replace(WORK, ways=()))

@@ -7,14 +7,15 @@ from datetime import timedelta
 import pytest
 
 from paperroute.core.connection_model import (
-    LEG_TWO_EXTRA,
+    LEG_EXTRA,
     Legs,
     Pair,
     all_departures,
     default_allow,
-    leg_pins,
+    direct_leg,
     pairs_of,
     walk_metres,
+    way_legs,
 )
 from paperroute.core.live import LiveDeparture
 from paperroute.core.model import Departure, Pin
@@ -25,9 +26,10 @@ from tests.core.connection_factories import (
     HOLLIS,
     LEG1,
     LEG2,
+    PARRAMATTA,
+    TWO_WAY,
     WESTMEAD,
     WORK,
-    WORK_CHANGE,
     at,
     run,
 )
@@ -197,27 +199,32 @@ def test_walk_and_allow() -> None:
     assert default_allow(metres=0) == 2
 
 
-def test_leg_pins() -> None:
-    """A connection splits into its two legs and the direct pin."""
-    first, second, direct = leg_pins(pin=WORK)
-    assert first == Pin(
-        origin=HOLLIS, destination=HAMMERS, kind=WORK.kind,
-        routes=('606',),
-    )
+def test_way_legs_two_changes() -> None:
+    """Two changes give three chained leg pins of any kind and route."""
+    pin = replace(WORK, destination=PARRAMATTA)
+    first, middle, last = way_legs(pin=pin, way=TWO_WAY)
+    assert all(leg.kind is None and leg.routes == () for leg in (
+        first, middle, last,
+    ))
+    assert (first.origin, first.destination) == (HOLLIS, HAMMERS)
+    assert (middle.origin, middle.destination) == (CONSTITUTION, WESTMEAD)
+    assert (last.origin, last.destination) == (WESTMEAD, PARRAMATTA)
+
+
+def test_way_legs_one_change() -> None:
+    """One change gives two legs ending at the Destination."""
+    first, second = way_legs(pin=WORK, way=WORK.ways[0])
+    assert first == Pin(origin=HOLLIS, destination=HAMMERS, kind=None)
     assert second == Pin(
-        origin=CONSTITUTION, destination=WESTMEAD, kind=None, routes=(),
-        only=WORK_CHANGE.only,
-    )
-    assert direct == Pin(
-        origin=HOLLIS, destination=WESTMEAD, kind=WORK.kind,
-        routes=('606',),
+        origin=CONSTITUTION, destination=WESTMEAD, kind=None,
     )
 
 
-def test_leg_pins_without_change_raises() -> None:
-    """A pin without a change has no legs."""
-    with pytest.raises(ValueError):
-        leg_pins(pin=replace(WORK, change=None))
+def test_direct_leg() -> None:
+    """The direct leg runs From to the Destination on any route."""
+    assert direct_leg(pin=WORK) == Pin(
+        origin=HOLLIS, destination=WESTMEAD, kind=None,
+    )
 
 
 def test_all_departures_in_leg_order() -> None:
@@ -231,7 +238,7 @@ def test_all_departures_in_leg_order() -> None:
 
 def test_leg_two_extra_is_two_hours() -> None:
     """Leg 2 is searched two hours past the window."""
-    assert LEG_TWO_EXTRA == timedelta(hours=2)
+    assert LEG_EXTRA == timedelta(hours=2)
 
 
 def test_change_exactly_allow_is_catchable() -> None:

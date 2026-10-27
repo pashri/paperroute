@@ -16,7 +16,7 @@ from paperroute.core.connection_view import (
 )
 from paperroute.core.map_requests import pin_map_inputs
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapView
-from paperroute.core.model import Pin
+from paperroute.core.model import Pin, is_connection
 from paperroute.core.places import shown
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import State
@@ -112,7 +112,7 @@ def connection_screen(
         plain pin or on the Alerts view.
     """
     pin = shown(state=state)
-    if pin.change is None or state.view is LiveView.ALERTS:
+    if not is_connection(pin=pin) or state.view is LiveView.ALERTS:
         return None
     pairs = live_pairs(state=state)
     match state.view:

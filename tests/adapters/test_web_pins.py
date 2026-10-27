@@ -908,13 +908,10 @@ async def test_connection_row_edit_link(pins: Pins) -> None:
     assert f'href="/pins/connect?ref={ref}"' in text
     line = pin_line(pin=CONNECTION)
     assert line == (
-        '606 → any · Hollis St Opp Constitution Hill Library → Westmead Station'
+        'Hollis St Opp Constitution Hill Library → Westmead Station'
+        ' · via Constitution Hill, North West Twy'
     )
     assert f'<small class="trip">{escape(line)}</small>' in text
-    only = replace(CONNECTION, change=replace(
-        WORK_CHANGE, only=('665', '664'),
-    ))
-    assert pin_line(pin=only).startswith('606 → 665 664 · ')
 
 
 async def test_pins_page_has_connection_search(client: Client) -> None:

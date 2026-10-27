@@ -14,7 +14,7 @@ from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.connection_model import pairs_of
 from paperroute.core.messages import LoadDepartures
-from paperroute.core.model import SYDNEY, Change, Pin, RouteKind
+from paperroute.core.model import SYDNEY, Change, Pin, RouteKind, Way
 from tests.core.factories import live
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
@@ -81,11 +81,16 @@ def test_leg_two_follows_carry_on_to_town_hall(
         origin=stop(stop_id='2145615'),
         destination=stop(stop_id='200070'),
         kind=RouteKind.BUS,
-        routes=('606',),
-        change=Change(
-            alight=stop(stop_id='2150119'),
-            board=stop(stop_id='215020'),
-            allow=5,
+        ways=(
+            Way(
+                changes=(
+                    Change(
+                        alight=stop(stop_id='2150119'),
+                        board=stop(stop_id='215020'),
+                        allow=5,
+                    ),
+                ),
+            ),
         ),
     )
     loaded = departures_read(

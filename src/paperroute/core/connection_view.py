@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
-from paperroute.core.connection_model import Pair, walk_metres
+from paperroute.core.connection_model import Pair, first_change, walk_metres
 from paperroute.core.model import Mode, Pin
 from paperroute.core.stop_view import (
     PinTag,
@@ -150,7 +150,7 @@ def pair_steps(*, pair: Pair, pin: Pin) -> tuple[str, ...]:
     tuple[str, ...]
         The get-off and walk lines, or the stay-on line.
     """
-    change = pin.change
+    change = first_change(pin=pin)
     if pair.second is None or change is None:
         to = '' if pin.destination is None else pin.destination.name
         return (f'stay on to {to}',)

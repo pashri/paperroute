@@ -13,6 +13,7 @@ from paperroute.core.messages import (
     KnobPressed,
     KnobTurned,
 )
+from paperroute.core.model import is_connection
 from paperroute.core.places import flipped, shown, toggled
 from paperroute.core.saved import LIVE_VIEWS, LiveView
 from paperroute.core.state_model import State
@@ -65,7 +66,7 @@ def bottom_turned(*, state: State, steps: int) -> State:
         the pin's scroll, which picks the pair. Unchanged on the Alerts
         view.
     """
-    connection = shown(state=state).change is not None
+    connection = is_connection(pin=shown(state=state))
     match state.view:
         case LiveView.ALERTS:
             return state

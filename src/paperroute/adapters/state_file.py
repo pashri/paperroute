@@ -47,7 +47,15 @@ from paperroute.adapters.state_settings import (
     settings_to_model,
 )
 from paperroute.core.auto_model import AutoState, Before
-from paperroute.core.model import SYDNEY, Change, Pin, RouteKind, StopPlace
+from paperroute.core.connection_model import first_change
+from paperroute.core.model import (
+    SYDNEY,
+    Change,
+    Pin,
+    RouteKind,
+    StopPlace,
+    Way,
+)
 from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
 from paperroute.core.saved import DEFAULT_SAVED, LiveView, Quota, Saved
 from paperroute.core.tiles import ZOOMS
@@ -204,7 +212,7 @@ def change_to_model(*, change: Change) -> ChangeModel:
         alight=stop_to_model(place=change.alight),
         board=stop_to_model(place=change.board),
         allow=change.allow,
-        only=change.only,
+        only=(),
     )
 
 
@@ -226,7 +234,6 @@ def change_from_model(*, model: ChangeModel) -> Change:
         alight=stop_from_model(model=model.alight),
         board=stop_from_model(model=model.board),
         allow=model.allow,
-        only=model.only,
     )
 
 
@@ -245,6 +252,7 @@ def pin_to_model(*, pin: Pin) -> PinModel:
         The stored pin.
     """
     destination = pin.destination
+    change = first_change(pin=pin)
     return PinModel(
         origin=stop_to_model(place=pin.origin),
         destination=(
@@ -259,9 +267,7 @@ def pin_to_model(*, pin: Pin) -> PinModel:
         windows=tuple(
             auto_window_to_model(window=window) for window in pin.windows
         ),
-        change=None if pin.change is None else change_to_model(
-            change=pin.change,
-        ),
+        change=None if change is None else change_to_model(change=change),
     )
 
 
@@ -294,8 +300,8 @@ def pin_from_model(*, model: PinModel) -> Pin:
         windows=tuple(
             auto_window_from_model(model=window) for window in model.windows
         ),
-        change=None if model.change is None else change_from_model(
-            model=model.change,
+        ways=() if model.change is None else (
+            Way(changes=(change_from_model(model=model.change),)),
         ),
     )
 

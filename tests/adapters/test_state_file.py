@@ -21,7 +21,14 @@ from paperroute.adapters.state_migrations import (
     regional_to_coach,
 )
 from paperroute.core.auto_model import AutoState, Before, Occurrence
-from paperroute.core.model import SYDNEY, AutoWindow, Pin, RouteKind, StopPlace
+from paperroute.core.model import (
+    SYDNEY,
+    AutoWindow,
+    Pin,
+    RouteKind,
+    StopPlace,
+    Way,
+)
 from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
@@ -38,7 +45,7 @@ from paperroute.core.saved import (
 from paperroute.core.state import initial_state
 from paperroute.core.state_views import saved_of
 from paperroute.core.tiles import ZOOMS
-from tests.core.connection_factories import WORK
+from tests.core.connection_factories import WORK, WORK_CHANGE
 from tests.core.factories import pin_at
 from tests.core.test_auto_pins import is_shown, started, ticked, trusted
 
@@ -1096,7 +1103,7 @@ def test_migrates_v8_to_v9(path: Path) -> None:
     loaded = repository.load()
     assert loaded.stored
     assert loaded.saved == saved
-    assert all(pin.change is None for pin in loaded.saved.pins)
+    assert all(not pin.ways for pin in loaded.saved.pins)
     assert loaded.saved.settings.connection_map is ConnectionMap.CHANGE
 
 
@@ -1155,9 +1162,8 @@ def test_allow_out_of_range_clamped(
     """An allowance outside 1-60 is clamped; the rest is kept."""
     stored_change(path=path, change={'allow': allow, 'only': ['665']})
     pin = JsonStateRepository(path=path).load().saved.pins[1]
-    assert WORK.change is not None
     assert pin == replace(
-        WORK, change=replace(WORK.change, allow=kept, only=('665',)),
+        WORK, ways=(Way(changes=(replace(WORK_CHANGE, allow=kept),)),),
     )
 
 

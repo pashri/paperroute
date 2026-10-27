@@ -8,7 +8,7 @@ from paperroute.core.alert_model import AlertTie
 from paperroute.core.connection import connection_facts, live_pairs, pair_legs
 from paperroute.core.connection_model import Legs
 from paperroute.core.messages import DeparturesLoaded
-from paperroute.core.model import Change, Departure, Mode, Pin
+from paperroute.core.model import Change, Departure, Mode, Pin, Way
 from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
@@ -21,7 +21,7 @@ from tests.core.steps import wakeful
 FERRY_CHANGE: Final[Change] = replace(
     WORK_CHANGE, board=place('10102027', name='Parramatta Wharf'),
 )
-FERRY_WORK: Final[Pin] = replace(WORK, change=FERRY_CHANGE)
+FERRY_WORK: Final[Pin] = replace(WORK, ways=(Way(changes=(FERRY_CHANGE,)),))
 FERRY_LEG: Final[tuple[Departure, ...]] = (
     departure(
         departs=at(7, 50), route='F3', mode=Mode.FERRY, trip_id='ferry-1',
@@ -82,7 +82,7 @@ def test_live_pairs_from_board() -> None:
         '7:57', '8:12', '8:27', '8:45', '9:04',
     ]
     assert [len(pair_legs(pair=pair)) for pair in pairs] == [2] * 5
-    plain = replace(WORK, change=None)
+    plain = replace(WORK, ways=())
     assert live_pairs(state=loaded(pin=plain)) == ()
 
 

@@ -5,7 +5,8 @@ from collections.abc import Mapping
 from typing import Final
 
 from paperroute.adapters.route_chips import chip_html, chip_route
-from paperroute.core.model import Pin, pin_ref
+from paperroute.core.connection_model import first_change
+from paperroute.core.model import Pin, is_connection, pin_ref
 from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
 
@@ -68,17 +69,17 @@ def pin_line(*, pin: Pin) -> str:
     -------
     str
         The From, then the To after an arrow when there is one, then
-        the routes after a dot; for a connection, each leg's routes
-        first (``any`` for any route on leg 2), then the From and To.
+        the routes after a dot; for a connection, the From and To, then
+        where it changes.
         Not escaped.
     """
     line = pin.origin.name
     if pin.destination is not None:
         line += f' → {pin.destination.name}'
     routes = pin.only or pin.routes
-    if pin.change is not None:
-        onward = ' '.join(pin.change.only) or 'any'
-        return f'{" ".join(routes)} → {onward} · {line}'
+    change = first_change(pin=pin)
+    if change is not None:
+        return f'{line} · via {change.board.name}'
     return f'{line} · {" ".join(routes)}' if routes else line
 
 
@@ -135,11 +136,11 @@ def pin_item(
     )
     return ITEM.format(
         ref=pin_ref(pin=pin),
-        editor='/pins/edit' if pin.change is None else '/pins/connect',
+        editor='/pins/edit' if not is_connection(pin=pin) else '/pins/connect',
         chip=chip_html(pin=pin, colour=colour),
         label=html.escape(pin_label(pin=pin)),
         line=html.escape(pin_line(pin=pin)),
-        trip='' if pin.change is None else ' class="trip"',
+        trip='' if not is_connection(pin=pin) else ' class="trip"',
         flags=flags,
         up=move_form(pin=pin, steps=-1),
         down=move_form(pin=pin, steps=1),

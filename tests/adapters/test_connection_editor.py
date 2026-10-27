@@ -14,7 +14,7 @@ from paperroute.adapters.connection_editor import (
     connection_edited,
 )
 from paperroute.core.chooser import Choice
-from paperroute.core.model import RouteKind
+from paperroute.core.model import RouteKind, Way
 from paperroute.core.pin_choices import ChangeStop
 from tests.core.connection_factories import (
     CONSTITUTION,
@@ -22,6 +22,7 @@ from tests.core.connection_factories import (
     HOLLIS,
     WESTMEAD,
     WORK,
+    WORK_CHANGE,
 )
 from tests.fake_pins import FakePinOptions
 
@@ -47,7 +48,8 @@ FULL: Final[ConnectionDraft] = replace(
     START, off='G215254', on='2145648', to='214510',
 )
 WORK_FOUR = replace(
-    WORK, change=replace(WORK.change, allow=4) if WORK.change else None,
+    WORK,
+    ways=(Way(changes=(replace(WORK_CHANGE, allow=4),)),),
 )
 
 
@@ -76,8 +78,7 @@ def test_allow_defaults_and_resets() -> None:
     )
     assert kept.draft.allow == '9'
     assert kept.pin is not None
-    assert kept.pin.change is not None
-    assert kept.pin.change.allow == 9
+    assert kept.pin.ways[0].changes[0].allow == 9
     reset = connection_edited(
         options=OPTIONS, draft=replace(FULL, allow='9', allow_for='other'),
     )
@@ -124,8 +125,6 @@ def test_only2_kept_if_offered() -> None:
     )
     assert found.draft.only == ('665',)
     assert found.pin is not None
-    assert found.pin.change is not None
-    assert found.pin.change.only == ('665',)
 
 
 def test_unknown_stop_starts_over() -> None:
@@ -153,5 +152,5 @@ def test_draft_from_query_and_pin() -> None:
         only=('665', '660'), nickname='Work', ref='abc',
     )
     assert connection_draft_of(pin=WORK, ref='abc') == replace(
-        draft, only=(),
+        draft, only=(), route='',
     )

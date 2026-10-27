@@ -13,7 +13,7 @@ from paperroute.core.messages import (
     StripFailed,
     StripLoaded,
 )
-from paperroute.core.model import Departure, Pin, StopPlace
+from paperroute.core.model import Departure, Pin, StopPlace, is_connection
 from paperroute.core.places import shown
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.reach import Reach, StripKey
@@ -139,7 +139,7 @@ def strips_shown(*, state: State) -> dict[StripKey, StopPlace]:
         return dict([picked])
     pin = shown(state=state)
     on_strip = state.chooser is None and state.view in STRIP_VIEWS
-    if not on_strip or pin.change is not None:
+    if not on_strip or is_connection(pin=pin):
         return {}
     return {strip_key(pin=pin): pin.origin}
 
@@ -469,7 +469,7 @@ def strip_patterns(*, state: State) -> frozenset[str]:
         the selected pair's trips for a connection pin; none elsewhere.
     """
     wanted = trip_ids(departures=picked_window(state=state))
-    if state.view in STRIP_VIEWS and shown(state=state).change is not None:
+    if state.view in STRIP_VIEWS and is_connection(pin=shown(state=state)):
         wanted |= selected_trips(state=state)
     elif state.view in STRIP_VIEWS:
         wanted |= strip_trips(

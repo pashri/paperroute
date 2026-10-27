@@ -278,7 +278,7 @@ def test_top_press_opens_chooser_at_leg_one() -> None:
     state = stepped(state=state, event=KnobTurned(knob=Knob.TOP, steps=1))
     assert shown(state=state) == PLAIN
     state, effects = step(state, KnobTurned(knob=Knob.TOP, steps=-1))
-    assert shown(state=state).change == WORK.change
+    assert shown(state=state).ways == WORK.ways
     assert [
         effect.pin for effect in effects if isinstance(effect, LoadDepartures)
     ] == [WORK]

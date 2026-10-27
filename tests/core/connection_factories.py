@@ -10,6 +10,7 @@ from paperroute.core.model import (
     Pin,
     RouteKind,
     StopPlace,
+    Way,
 )
 from tests.core.factories import departure, place
 
@@ -47,6 +48,12 @@ CONSTITUTION: Final[StopPlace] = place(
 WESTMEAD: Final[StopPlace] = place(
     '214510', name='Westmead Station', point=(800.0, -1900.0),
 )
+PARRAMATTA: Final[StopPlace] = place(
+    '2150', name='Parramatta Station', point=(2000.0, -2500.0),
+)
+CAMPBELLTOWN: Final[StopPlace] = place(
+    '2560', name='Campbelltown Station', point=(-5000.0, -30000.0),
+)
 WORK_CHANGE: Final[Change] = Change(
     alight=HAMMERS, board=CONSTITUTION, allow=7,
 )
@@ -54,9 +61,17 @@ WORK: Final[Pin] = Pin(
     origin=HOLLIS,
     destination=WESTMEAD,
     kind=RouteKind.BUS,
-    routes=('606',),
     nickname='Work',
-    change=WORK_CHANGE,
+    ways=(Way(changes=(WORK_CHANGE,)),),
+)
+CAMPBELLTOWN_WAY: Final[Way] = Way(
+    changes=(Change(alight=HAMMERS, board=CAMPBELLTOWN, allow=6),),
+)
+TWO_WAY: Final[Way] = Way(
+    changes=(
+        WORK_CHANGE,
+        Change(alight=WESTMEAD, board=WESTMEAD, allow=4),
+    ),
 )
 
 

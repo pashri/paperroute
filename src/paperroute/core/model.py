@@ -230,27 +230,44 @@ class AutoWindow:
     end: time
 
 
+MAX_CHANGES: Final[int] = 2
+
+
 @dataclass(frozen=True)
 class Change:
     """
-    Where a connection pin changes from its first leg to its second.
+    Where a way changes from one leg to the next.
 
     Attributes
     ----------
     alight : StopPlace
-        Station or stop where leg 1 is left.
+        Station or stop where the leg is left.
     board : StopPlace
-        Station or stop where leg 2 is joined.
+        Station or stop where the next leg is joined.
     allow : int
-        Minutes allowed between leg 1 arriving and leg 2 leaving.
-    only : tuple[str, ...]
-        Leg-2 route short names kept; empty for any route.
+        Minutes allowed between the leg arriving and the next leaving.
     """
 
     alight: StopPlace
     board: StopPlace
     allow: int
-    only: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True)
+class Way:
+    """
+    One way to go between a pin's From and Destination.
+
+    Attributes
+    ----------
+    changes : tuple[Change, ...]
+        The changes in order, at most `MAX_CHANGES`.
+    ticked : bool
+        True when the way is used.
+    """
+
+    changes: tuple[Change, ...]
+    ticked: bool = True
 
 
 @dataclass(frozen=True)
@@ -276,8 +293,11 @@ class Pin:
         True when the timetable no longer knows a place.
     windows : tuple[AutoWindow, ...]
         Times the pin is shown by itself; not part of its identity.
-    change : Change | None
-        Where a connection changes legs, or None for a direct pin.
+    ways : tuple[Way, ...]
+        Ways to go from the From to the Destination; empty for a pin
+        that is not a connection. They are not part of its identity.
+    never : tuple[str, ...]
+        Route short names never used on any leg.
     """
 
     origin: StopPlace
@@ -288,7 +308,63 @@ class Pin:
     only: tuple[str, ...] = ()
     missing: bool = False
     windows: tuple[AutoWindow, ...] = ()
-    change: Change | None = None
+    ways: tuple[Way, ...] = ()
+    never: tuple[str, ...] = ()
+
+
+def is_connection(*, pin: Pin) -> bool:
+    """
+    Say whether a pin has any way to go.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+
+    Returns
+    -------
+    bool
+        True when the pin has at least one way, ticked or not.
+    """
+    return bool(pin.ways)
+
+
+def ticked_ways(*, pin: Pin) -> tuple[Way, ...]:
+    """
+    List the ways a pin uses.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+
+    Returns
+    -------
+    tuple[Way, ...]
+        The ticked ways in order.
+    """
+    return tuple(way for way in pin.ways if way.ticked)
+
+
+def way_key(*, way: Way) -> tuple[tuple[str, str], ...]:
+    """
+    Reduce a way to the stops it changes at.
+
+    Parameters
+    ----------
+    way : Way
+        Way.
+
+    Returns
+    -------
+    tuple[tuple[str, str], ...]
+        Alight and board stop IDs of each change; the allows and the
+        tick are not part of it.
+    """
+    return tuple(
+        (change.alight.stop_id, change.board.stop_id)
+        for change in way.changes
+    )
 
 
 def same_place(*, first: Pin, second: Pin) -> bool:
@@ -313,14 +389,13 @@ def same_place(*, first: Pin, second: Pin) -> bool:
     return pin_key(pin=first) == pin_key(pin=second)
 
 
-type ChangeKey = tuple[str, str, int, tuple[str, ...]]
 type PinKey = tuple[
     str,
     str | None,
     RouteKind | None,
     tuple[str, ...],
     tuple[str, ...],
-    ChangeKey | None,
+    tuple[str, ...],
 ]
 
 
@@ -337,27 +412,19 @@ def pin_key(*, pin: Pin) -> PinKey:
     -------
     PinKey
         From stop ID, Destination stop ID or None, kind, routes, route
-        filter, and the change as alight and board stop IDs, allow and
-        leg-2 filter, or None.
+        filter and the sorted never list. A pin with a Destination has
+        no routes or route filter in its identity. Ways are not part of
+        it.
     """
     destination = pin.destination
-    change = pin.change
+    open_ended = destination is None
     return (
         pin.origin.stop_id,
         None if destination is None else destination.stop_id,
         pin.kind,
-        pin.routes,
-        pin.only,
-        (
-            None
-            if change is None
-            else (
-                change.alight.stop_id,
-                change.board.stop_id,
-                change.allow,
-                change.only,
-            )
-        ),
+        pin.routes if open_ended else (),
+        pin.only if open_ended else (),
+        tuple(sorted(pin.never)),
     )
 
 
@@ -375,15 +442,15 @@ def pin_ref(*, pin: Pin) -> str:
     str
         Twelve lowercase hex digits taken from the pin's identity, so
         two pins that are the same place share a ref. A pin without a
-        change hashes as it did before changes existed.
+        Destination and without a never list hashes as it did before
+        ways existed.
     """
-    origin, destination, kind, routes, only, change = pin_key(pin=pin)
+    origin, destination, kind, routes, only, never = pin_key(pin=pin)
     parts: list[object] = [
         origin, destination, kind, list(routes), list(only),
     ]
-    if change is not None:
-        alight, board, allow, change_only = change
-        parts.append([alight, board, allow, list(change_only)])
+    if never:
+        parts.append(list(never))
     text = json.dumps(parts)
     return hashlib.sha1(text.encode()).hexdigest()[:12]
 

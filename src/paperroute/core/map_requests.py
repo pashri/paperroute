@@ -23,7 +23,7 @@ from paperroute.core.messages import (
     LoadShapes,
     MapData,
 )
-from paperroute.core.model import SYDNEY, Departure
+from paperroute.core.model import SYDNEY, Departure, is_connection
 from paperroute.core.places import shown
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.rhythm import poll_every
@@ -199,7 +199,7 @@ def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     """
     inputs = pin_map_inputs(state=state, stop_view=stop_view)
     pin = shown(state=state)
-    if pin.change is None:
+    if not is_connection(pin=pin):
         return inputs
     return connection_inputs(
         inputs=inputs,
@@ -524,7 +524,7 @@ def framed_state(*, state: State, inputs: MapInputs | None) -> State:
     """
     frame = None
     if inputs is not None and inputs.centre is not None:
-        if shown(state=state).change is not None:
+        if is_connection(pin=shown(state=state)):
             frame = (inputs.centre, inputs.zoom)
     if frame == state.map.frame:
         return state

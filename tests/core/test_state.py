@@ -91,6 +91,7 @@ from paperroute.core.model import (
     Mode,
     Pin,
     RouteKind,
+    is_connection,
     pin_key,
     same_place,
     shifted,
@@ -1737,7 +1738,7 @@ def check_render(
     else:
         types = (
             VIEW_TYPES
-            if shown(state=state).change is None
+            if not is_connection(pin=shown(state=state))
             else CONNECTION_TYPES
         )
         assert type(view) is types[state.view]

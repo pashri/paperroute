@@ -5,7 +5,7 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute.core.connection import pair_legs
-from paperroute.core.connection_model import Pair
+from paperroute.core.connection_model import Pair, first_change
 from paperroute.core.connection_view import PairRow, pair_rows
 from paperroute.core.geo import Point, Shape, point_along, stop_distances
 from paperroute.core.map_view import (
@@ -128,7 +128,7 @@ def walk_of(*, pin: Pin, pair: Pair | None) -> tuple[Point, Point] | None:
         The alight and board points; None when staying on or either has
         no point.
     """
-    change = pin.change
+    change = first_change(pin=pin)
     if change is None or (pair is not None and pair.second is None):
         return None
     alight, board = change.alight.point, change.board.point
@@ -187,7 +187,7 @@ def leg_lines(
     tuple[tuple[Line, ...], tuple[Line, ...]]
         Leg 1's line and leg 2's, each empty when not drawn.
     """
-    change = pin.change
+    change = first_change(pin=pin)
     end = pin.destination or pin.origin
     if pair is None or change is None:
         return (), ()
@@ -227,7 +227,7 @@ def trip_points(*, pin: Pin, lines: Sequence[Line]) -> tuple[Point, ...]:
     tuple[Point, ...]
         The lines' points and the four stops' points.
     """
-    change = pin.change
+    change = first_change(pin=pin)
     places = [pin.origin, pin.destination]
     if change is not None:
         places += [change.alight, change.board]
@@ -453,7 +453,8 @@ def sidebar_rows(*, pin: Pin, pairs: Sequence[Pair]) -> tuple[PairRow, ...]:
         where to change, or that you stay on.
     """
     rows = pair_rows(pairs=pairs[:SIDEBAR_PAIRS])
-    board = '' if pin.change is None else pin.change.board.name
+    change = first_change(pin=pin)
+    board = '' if change is None else change.board.name
     return tuple(
         replace(
             row,

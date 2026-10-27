@@ -14,10 +14,11 @@ from paperroute.core.connection_map import (
 from paperroute.core.connection_model import Pair
 from paperroute.core.geo import Shape, make_shape
 from paperroute.core.map_view import DEFAULT_ZOOM, MapInputs
+from paperroute.core.model import Way
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.saved import ConnectionMap
 from paperroute.core.tiles import ZOOMS
-from tests.core.connection_factories import WORK, at
+from tests.core.connection_factories import WORK, WORK_CHANGE, at
 from tests.core.factories import snapshot, vehicle
 from tests.core.test_connection_strip import PAIRS, STOP
 
@@ -251,11 +252,11 @@ def test_no_points_falls_back_to_from() -> None:
         WORK,
         origin=replace(WORK.origin, point=None),
         destination=None,
-        change=replace(
-            WORK.change,
-            alight=replace(WORK.change.alight, point=None),
-            board=replace(WORK.change.board, point=None),
-        ) if WORK.change else None,
+        ways=(Way(changes=(replace(
+            WORK_CHANGE,
+            alight=replace(WORK_CHANGE.alight, point=None),
+            board=replace(WORK_CHANGE.board, point=None),
+        ),)),),
     )
     for mode in ConnectionMap:
         found = connection_inputs(

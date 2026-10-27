@@ -16,6 +16,7 @@ from paperroute.core.chains import (
     leg_key,
     leg_list,
     next_leg,
+    walked,
 )
 from paperroute.core.connection_model import trip_key, way_legs
 from paperroute.core.live import LiveDeparture
@@ -431,6 +432,83 @@ def test_next_leg_stops_past_best_arrival() -> None:
     found = next_leg(after=live(item=LEG1[0]), leg=leg, allow=7)
     assert found is not None
     assert found.departure.trip_id == 'b0746'
+
+
+SKIP_WAY: Final[Way] = Way(
+    changes=(
+        replace(WORK_CHANGE, allow=2),
+        Change(alight=WESTMEAD, board=WESTMEAD, allow=2),
+    ),
+)
+
+
+def trip(trip_id: str, leaves: int, rides: int) -> LiveDeparture:
+    """
+    Make a trip leaving some minutes after 7:00.
+
+    Parameters
+    ----------
+    trip_id : str
+        Trip ID.
+    leaves : int
+        Minutes after 7:00 it leaves.
+    rides : int
+        Minutes it rides.
+
+    Returns
+    -------
+    LiveDeparture
+        The trip, on time.
+    """
+    return live(
+        item=departure(
+            departs=at(7, 0) + timedelta(minutes=leaves),
+            ride=rides,
+            trip_id=trip_id,
+        ),
+    )
+
+
+def walk(*lists: Sequence[LiveDeparture]) -> tuple[LiveDeparture, ...] | None:
+    """
+    Walk SKIP_WAY from the first trip on the first leg.
+
+    Parameters
+    ----------
+    *lists : Sequence[LiveDeparture]
+        Each leg's departures.
+
+    Returns
+    -------
+    tuple[LiveDeparture, ...] | None
+        The finished trips.
+    """
+    legs = [leg_list(items=items, never=()) for items in lists]
+    return walked(
+        taken=(lists[0][0],), index=0, way=SKIP_WAY, legs=legs,
+    )
+
+
+def test_stay_on_never_skips_a_leg() -> None:
+    """A trip on legs 0 and 2 only still gives one trip per leg."""
+    taken = walk(
+        (trip('x', 0, 10),),
+        (trip('b', 20, 10),),
+        (trip('x', 40, 10), trip('c', 40, 20)),
+    )
+    assert taken is not None
+    assert [item.departure.trip_id for item in taken] == ['x', 'b', 'x']
+
+
+def test_stay_on_not_before_alighting() -> None:
+    """A looping trip's earlier pass of the next leg is not stayed on."""
+    taken = walk(
+        (trip('x', 0, 10),),
+        (trip('x', -5, 10), trip('b', 20, 10)),
+        (trip('c', 40, 20),),
+    )
+    assert taken is not None
+    assert [item.departure.trip_id for item in taken] == ['x', 'b', 'c']
 
 
 TIMES = st.lists(

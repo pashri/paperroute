@@ -268,6 +268,27 @@ def best_of(
     )
 
 
+def stayable(*, stay: LiveDeparture, current: LiveDeparture) -> bool:
+    """
+    Tell whether a trip can be stayed on into the next leg.
+
+    Parameters
+    ----------
+    stay : LiveDeparture
+        The same trip on the next leg.
+    current : LiveDeparture
+        The trip as ridden on this leg.
+
+    Returns
+    -------
+    bool
+        True when it runs and leaves the next leg's stop no earlier than
+        it reaches this leg's alight stop; a looping trip can pass the
+        next stop earlier too.
+    """
+    return not stay.cancelled and stay.departs >= current.arrives
+
+
 def walked(
     *,
     taken: tuple[LiveDeparture, ...],
@@ -299,12 +320,11 @@ def walked(
         return taken
     current = taken[-1]
     options = []
-    for later in range(index + 1, len(legs)):
-        stay = legs[later].trips.get(trip_key(item=current))
-        if stay is not None and not stay.cancelled:
-            options.append(
-                walked(taken=(*taken, stay), index=later, way=way, legs=legs),
-            )
+    stay = legs[index + 1].trips.get(trip_key(item=current))
+    if stay is not None and stayable(stay=stay, current=current):
+        options.append(
+            walked(taken=(*taken, stay), index=index + 1, way=way, legs=legs),
+        )
     onward = next_leg(
         after=current, leg=legs[index + 1], allow=way.changes[index].allow,
     )

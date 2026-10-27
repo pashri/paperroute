@@ -12,6 +12,7 @@ from paperroute.adapters.settings_form import (
     form_values,
     page_text,
 )
+from paperroute.adapters.web_common import asset
 from paperroute.core.messages import SettingsChanged
 from paperroute.core.saved import (
     ConnectionMap,
@@ -162,25 +163,41 @@ def test_page_text_fills_marks() -> None:
     assert 'Quiet hours not saved' not in text
 
 
-def test_connection_map_posted() -> None:
-    """The connection map choice is read; an unknown one is refused."""
-    assert changed_from(fields={'connection_map': 'whole'}) == (
-        SettingsChanged(connection_map=ConnectionMap.WHOLE)
-    )
+def test_connection_map_three_choices() -> None:
+    """Each connection map choice is read and marks its own option."""
+    for value, expected in (
+        ('changes', ConnectionMap.CHANGES),
+        ('whole', ConnectionMap.WHOLE),
+        ('first', ConnectionMap.FIRST),
+    ):
+        assert changed_from(fields={'connection_map': value}) == (
+            SettingsChanged(connection_map=expected)
+        )
+        text = page_text(
+            template=(
+                '<a{{connection_map:changes}}><b{{connection_map:whole}}>'
+                '<c{{connection_map:first}}>'
+            ),
+            values=form_values(settings=Settings(connection_map=expected)),
+            error=None,
+        )
+        assert text.count(' selected') == 1
+        assert f'{{{{connection_map:{value}}}}}' not in text
+        assert f'<{"abc"[("changes", "whole", "first").index(value)]} sel' in (
+            text
+        )
+
+
+def test_unknown_value_keeps_setting() -> None:
+    """An unknown choice is refused, so the stored setting stands."""
     with pytest.raises(UnknownValue):
-        changed_from(fields={'connection_map': 'both'})
+        changed_from(fields={'connection_map': 'change'})
+    assert changed_from(fields={}).connection_map is None
 
 
-def test_connection_map_selected() -> None:
-    """The stored connection map choice is the selected option."""
-    text = page_text(
-        template=(
-            '<option{{connection_map:change}}>'
-            '<option{{connection_map:whole}}>'
-        ),
-        values=form_values(
-            settings=Settings(connection_map=ConnectionMap.WHOLE),
-        ),
-        error=None,
-    )
-    assert text == '<option><option selected>'
+def test_settings_page_offers_three_map_choices() -> None:
+    """The page lists the three labels in order, Changes first."""
+    page = asset(name='settings.html')
+    labels = ('>Changes<', '>Whole trip<', '>First change only<')
+    positions = [page.index(label) for label in labels]
+    assert positions == sorted(positions)

@@ -516,8 +516,9 @@ async def test_settings_page_has_connection_map() -> None:
         await client.close()
     assert re.search(
         r'<label>Connection map\s*<select name="connection_map">\s*'
-        r'<option value="changes" selected>Zoomed on the change</option>\s*'
-        r'<option value="whole">Whole trip</option>\s*</select>\s*</label>',
+        r'<option value="changes" selected>Changes</option>\s*'
+        r'<option value="whole">Whole trip</option>\s*'
+        r'<option value="first">First change only</option>\s*</select>\s*</label>',
         text,
     )
 

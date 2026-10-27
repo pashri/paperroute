@@ -120,6 +120,24 @@ def test_search_shows_kinds_and_routes(options: SqlitePinOptions) -> None:
     assert by_id['B2'].routes == ('809', '811')
 
 
+def test_search_lists_routes_naturally(built: Path, tmp_path: Path) -> None:
+    """A stop's routes are in natural order per kind, capped at six."""
+    copy = Path(shutil.copy(built, tmp_path / 'timetable.db'))
+    runs = ['9', '10', '100', '20', '21', '3']
+    with closing(sqlite3.connect(copy)) as conn:
+        for number, route in enumerate(runs, start=92):
+            conn.execute(
+                f"INSERT INTO runs VALUES ({number}, 'bus', '{route}', "
+                "'[\"C\"]', 3)",
+            )
+            conn.execute(f"INSERT INTO run_stops VALUES ('C', {number}, 0)")
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy)) as network:
+        found = SqlitePinOptions(network=network).search(text='c st')
+    assert found[0].routes == ('3', '9', '10', '20', '21', '100')
+    assert found[0].kinds == (RouteKind.BUS, RouteKind.TRAIN)
+
+
 def test_search_escapes_like(options: SqlitePinOptions) -> None:
     """LIKE wildcards and quotes in the text match nothing special."""
     assert options.search(text='%') == ()

@@ -553,7 +553,8 @@ async def test_search_lists_matches(editor: Client) -> None:
     """A match links to its editor with its kinds and routes."""
     text = await (await editor.get('/pins/new?q=c%20st')).text()
     assert 'href="/pins/edit?stop=C"' in text
-    assert 'Train · T1 T2' in text
+    assert '<small>Train</small>' in text
+    assert '<span class="routes">T1 T2</span>' in text
 
 
 async def test_search_too_short(editor: Client) -> None:

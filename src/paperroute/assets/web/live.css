@@ -891,3 +891,23 @@ main > .notice {
   background: var(--current-bg);
   color: var(--text);
 }
+
+.results .routes {
+  display: block;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.ts-dropdown .routes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.ts-dropdown .chip {
+  padding: 0 0.375rem;
+  border-radius: 4px;
+  background: var(--current-bg);
+  color: var(--text);
+  font-size: 0.875rem;
+}

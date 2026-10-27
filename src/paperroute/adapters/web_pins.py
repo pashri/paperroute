@@ -31,7 +31,11 @@ from paperroute.adapters.web_pin_edit import (
     search_results,
 )
 from paperroute.adapters.web_pin_list import pin_label, pin_line, pins_list
-from paperroute.adapters.web_pin_search import STARTING, search_page
+from paperroute.adapters.web_pin_search import (
+    STARTING,
+    search_page,
+    stops_json,
+)
 from paperroute.core.messages import (
     Event,
     PinDeleted,
@@ -296,6 +300,8 @@ class PinsPages:
             web.post('/pins/order', self._order),
             web.post('/pins/delete', self._delete),
             web.get('/pins/new', self._search),
+            web.get('/pins/stops.json', self._stops),
+            web.get('/stop-search.js', self._stop_script),
             web.get('/pins/edit', self._edit),
             web.post('/pins/save', self._save),
         ]
@@ -558,6 +564,44 @@ class PinsPages:
         return html_page(text=search_page(
             options=self.options, query=request.query,
         ))
+
+    async def _stops(self, request: web.Request) -> web.Response:
+        """
+        Search for stops and answer with JSON.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; `q` in the query.
+
+        Returns
+        -------
+        web.Response
+            The matches as a JSON list.
+        """
+        return web.json_response(stops_json(
+            options=self.options, text=request.query.get('q', ''),
+        ))
+
+    async def _stop_script(self, request: web.Request) -> web.Response:
+        """
+        Serve the stop search script.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request.
+
+        Returns
+        -------
+        web.Response
+            The script.
+        """
+        del request
+        return web.Response(
+            text=asset(name='stop-search.js'),
+            content_type='text/javascript',
+        )
 
     def _editor(
         self, *, draft: PinDraft, rows: tuple[WindowRow, ...] | None,

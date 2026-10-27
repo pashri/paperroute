@@ -102,14 +102,16 @@ def match_item(*, match: StopMatch, target: str = '/pins/edit') -> str:
         An escaped list item linking to the stop's editor.
     """
     kinds = ', '.join(KIND_NAMES[kind] for kind in match.kinds)
-    about = ' · '.join(
-        part for part in (kinds, ' '.join(match.routes)) if part
+    routes = (
+        f' <span class="routes">{html.escape(" ".join(match.routes))}</span>'
+        if match.routes
+        else ''
     )
     link = f'{target}?' + urlencode({'stop': match.place.stop_id})
     return (
         f'\n      <li><a href="{html.escape(link)}">'
         f'<b>{html.escape(match.place.name)}</b> '
-        f'<small>{html.escape(about)}</small></a></li>'
+        f'<small>{html.escape(kinds)}</small>{routes}</a></li>'
     )
 
 

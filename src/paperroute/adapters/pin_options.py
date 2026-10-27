@@ -20,6 +20,7 @@ from paperroute.adapters.network_db import (
 )
 from paperroute.adapters.network_lines import Row
 from paperroute.adapters.timetable_db import to_point
+from paperroute.build.catalogue import route_order
 from paperroute.core.chooser import UNPICKED, Choice, focusable
 from paperroute.core.geo import to_lonlat
 from paperroute.core.model import STATION_FIRST, RouteKind, StopPlace
@@ -184,6 +185,25 @@ def served_by(
     return served
 
 
+def call_order(
+    call: tuple[int, int, str],
+) -> tuple[int, tuple[int, tuple[tuple[int, int | str], ...]]]:
+    """
+    Sort a served route by kind, then naturally by route number.
+
+    Parameters
+    ----------
+    call : tuple[int, int, str]
+        Kind position, sort position and route, as `served_by` gives.
+
+    Returns
+    -------
+    tuple[int, tuple[int, tuple[tuple[int, int | str], ...]]]
+        The kind position and the route's `route_order`.
+    """
+    return call[0], route_order(number=call[2])
+
+
 def match_of(
     *, place: StopPlace, calls: Iterable[tuple[int, int, str]],
 ) -> StopMatch:
@@ -201,9 +221,9 @@ def match_of(
     -------
     StopMatch
         The place with its kinds in `KIND_NAMES` order, and up to
-        `SHOWN_ROUTES` route numbers, grouped by kind.
+        `SHOWN_ROUTES` route numbers, grouped by kind and in natural order.
     """
-    ordered = sorted(calls)
+    ordered = sorted(calls, key=call_order)
     kinds = list(KIND_NAMES)
     return StopMatch(
         place=place,

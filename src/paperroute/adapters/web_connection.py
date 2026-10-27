@@ -37,12 +37,13 @@ from paperroute.adapters.web_pin_edit import (
 from paperroute.adapters.web_pin_search import CONNECT_FIELD, STARTING
 from paperroute.adapters.web_pins import html_page, notice_alert
 from paperroute.adapters.web_ways import posted_fields
-from paperroute.core.model import MAX_CHANGES, StopPlace
+from paperroute.core.model import MAX_CHANGES, Pin, StopPlace
 from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
 
 TITLE: Final[str] = 'Add a way by hand'
 PICK_STOP: Final[str] = 'Pick a stop'
+WAY_FIELDS: Final[frozenset[str]] = frozenset({'ways', 'way'})
 ON_HINT: Final[str] = 'Stops within 500 m of where you get off, nearest first.'
 ALLOW_HINT: Final[str] = (
     'Worked out from the {metres} m walk. Change it if you need longer.'
@@ -352,6 +353,41 @@ def back_draft(*, draft: ConnectionDraft) -> WaysDraft:
     return ways_draft(query=MultiDict(parse_qsl(draft.back)))
 
 
+def returned(
+    *, back: str, pin: Pin, ref: str | None,
+) -> list[tuple[str, str]]:
+    """
+    Write the ways page's fields with a way added.
+
+    Parameters
+    ----------
+    back : str
+        The ways page's fields as it was left, URL-encoded; may be empty.
+    pin : Pin
+        The pin with the way added.
+    ref : str | None
+        The saved pin's ref, or None.
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        The page's own fields, unsaved edits and windows among them, with
+        its ways and ticks replaced by the pin's; the pin's fields alone
+        without `back`.
+    """
+    fresh = ways_query(pin=pin, ref=ref)
+    if not back:
+        return fresh
+    kept = [
+        (name, value)
+        for name, value in parse_qsl(back)
+        if name not in WAY_FIELDS
+    ]
+    return kept + [
+        (name, value) for name, value in fresh if name in WAY_FIELDS
+    ]
+
+
 class ConnectionPages:
     """
     The hand way editor and its save.
@@ -506,7 +542,7 @@ class ConnectionPages:
         ):
             return MISFIT
         added = added_way(pin=pin, way=editor.way)
-        fields = ways_query(pin=added, ref=back.ref)
+        fields = returned(back=draft.back, pin=added, ref=back.ref)
         return f'/pins/ways?{urlencode(fields)}'
 
     def _refused(self, *, draft: ConnectionDraft, text: str) -> web.Response:

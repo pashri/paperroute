@@ -168,6 +168,24 @@ async def test_hand_way_two_changes(pins: Pins, client: Client) -> None:
     assert pins.posted == []
 
 
+async def test_hand_way_keeps_back_fields(client: Client) -> None:
+    """Fields the ways page had, windows among them, come back with it."""
+    back = urlencode([('from', 'G2145615'), ('to', '214510'),
+                      ('nickname', 'Office'), ('wn', '1'),
+                      ('w0_day', 'mon'), ('w0_from', '07:00'),
+                      ('w0_to', '09:00')])
+    response = await client.post(
+        '/pins/connect/save', data=[*FULL, ('back', back)],
+        allow_redirects=False,
+    )
+    location = urlsplit(response.headers['Location'])
+    assert parse_qsl(location.query) == [
+        ('from', 'G2145615'), ('to', '214510'), ('nickname', 'Office'),
+        ('wn', '1'), ('w0_day', 'mon'), ('w0_from', '07:00'),
+        ('w0_to', '09:00'), ('ways', 'G215254,2145648,4'), ('way', '0'),
+    ]
+
+
 async def test_new_way_starts_ways_page(client: Client) -> None:
     """Without a ways page to go back to, it starts one for a new pin."""
     response = await client.post(

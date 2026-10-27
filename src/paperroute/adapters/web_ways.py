@@ -26,7 +26,6 @@ from paperroute.adapters.ways_editor import (
     leg_routes,
     never_choices,
     ways_draft,
-    ways_query,
 )
 from paperroute.adapters.web_common import asset
 from paperroute.adapters.web_pin_edit import (
@@ -58,7 +57,8 @@ FORM: Final[str] = """<form class="editor ways" method="get"
       <fieldset>
         <legend>Ways to go</legend>{ways}
       </fieldset>
-      <p><a href="{hand}">Add a way by hand</a></p>
+      <p><button type="submit" name="hand" class="secondary"
+                 formaction="/pins/ways/hand">Add a way by hand</button></p>
       <fieldset>
         <legend>Never use</legend>
         <p class="hint">{never_hint}</p>{never}
@@ -246,25 +246,25 @@ def never_boxes(*, options: PinOptions, pin: Pin) -> str:
     )
 
 
-def hand_link(*, pin: Pin, ref: str | None) -> str:
+def hand_location(*, query: MultiMapping[str]) -> str:
     """
-    Address the hand way editor, coming back to this page.
+    Address the hand way editor, coming back to the page as edited.
 
     Parameters
     ----------
-    pin : Pin
-        The pin.
-    ref : str | None
-        The saved pin's ref, or None.
+    query : MultiMapping[str]
+        The ways page's fields as submitted, with `hand`.
 
     Returns
     -------
     str
-        The escaped address.
+        The editor's address; `back` holds every field but `hand`.
     """
-    back = urlencode(ways_query(pin=pin, ref=ref))
-    query = urlencode([('stop', pin.origin.stop_id), ('back', back)])
-    return html.escape(f'/pins/connect?{query}')
+    back = urlencode([
+        (name, value) for name, value in query.items() if name != 'hand'
+    ])
+    fields = [('stop', query.get('from', '')), ('back', back)]
+    return f'/pins/connect?{urlencode(fields)}'
 
 
 def ways_form(
@@ -300,7 +300,6 @@ def ways_form(
         destination=stop_field(name='to', label='To', place=destination),
         card=card,
         ways=ways_boxes(options=options, pin=pin),
-        hand=hand_link(pin=pin, ref=ref),
         never_hint=html.escape(NEVER_HINT),
         never=never_boxes(options=options, pin=pin),
         nickname=html.escape(pin.nickname or ''),
@@ -368,6 +367,7 @@ class WaysPages:
         return [
             web.get('/pins/ways', self._edit),
             web.post('/pins/ways/save', self._save),
+            web.get('/pins/ways/hand', self._hand),
             web.get('/ways.js', self._script),
         ]
 
@@ -389,6 +389,22 @@ class WaysPages:
         return web.Response(
             text=asset(name='ways.js'), content_type='text/javascript',
         )
+
+    async def _hand(self, request: web.Request) -> web.Response:
+        """
+        Go to the hand way editor with the page's fields as edited.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; the ways page's fields in the query.
+
+        Raises
+        ------
+        web.HTTPSeeOther
+            Always, to the hand way editor.
+        """
+        raise web.HTTPSeeOther(location=hand_location(query=request.query))
 
     async def _edit(self, request: web.Request) -> web.Response:
         """

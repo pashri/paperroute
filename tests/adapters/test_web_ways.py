@@ -3,7 +3,7 @@
 from collections.abc import AsyncIterator
 from dataclasses import replace
 from http import HTTPStatus
-from urllib.parse import urlencode
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 import pytest
 from aiohttp import web
@@ -63,7 +63,8 @@ async def test_page_of_saved_pin(client: Client) -> None:
     assert 'name="way"\n               value="0" checked>' in text
     assert 'via Hammers' not in text
     assert 'via Constitution Hill, North West Twy · 7 min' in text
-    assert '>Add a way by hand</a>' in text
+    assert 'formaction="/pins/ways/hand"' in text
+    assert '>Add a way by hand</button>' in text
     assert '<legend>Never use</legend>' in text
     assert 'Routes ticked here are never used on any leg.' in text
     assert 'value="Work"' in text
@@ -152,3 +153,22 @@ async def test_before_timetable(pins: Pins) -> None:
     assert 'Starting up. Reload in a moment.' in text
     assert response.headers['Location'] == '/pins'
     assert 'export async function nextStep' in script
+
+
+async def test_hand_way_carries_unsaved_edits(client: Client) -> None:
+    """Add a way by hand takes the fields as edited to the hand editor."""
+    edited = [
+        *SAVE[:-2], ('never', '665'), ('nickname', 'Office'),
+        ('wn', '1'), ('w0_day', 'mon'), ('w0_from', '07:00'),
+        ('w0_to', '09:00'),
+    ]
+    response = await client.get(
+        f'/pins/ways/hand?{urlencode([*edited, ("hand", "")])}',
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    location = urlsplit(response.headers['Location'])
+    assert location.path == '/pins/connect'
+    fields = dict(parse_qsl(location.query))
+    assert fields['stop'] == 'G2145615'
+    assert parse_qsl(fields['back']) == edited

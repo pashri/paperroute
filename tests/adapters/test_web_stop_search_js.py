@@ -32,6 +32,8 @@ results.html = mod.renderStop(
 );
 results.wrapped = made.map(([id]) => id);
 const options = made[0][1];
+let cleared = 0;
+const search = { clearOptions: () => { cleared += 1; } };
 results.load = [
   options.shouldLoad('p'), options.shouldLoad(' p '),
   options.shouldLoad('pa'),
@@ -41,16 +43,17 @@ globalThis.fetch = async (url) => {
   return { ok: true, json: async () => [{ id: 'P', name: 'N', routes: [] }] };
 };
 results.loaded = await new Promise((resolve) => {
-  options.load('a&b', resolve);
+  options.load.call(search, 'a&b', resolve);
 });
 globalThis.fetch = async () => ({ ok: false });
 results.failed = await new Promise((resolve) => {
-  options.load('zz', resolve);
+  options.load.call(search, 'zz', resolve);
 });
 globalThis.fetch = async () => { throw new Error('offline'); };
 results.offline = await new Promise((resolve) => {
-  options.load('zz', (rows) => resolve(rows ?? null));
+  options.load.call(search, 'zz', (rows) => resolve(rows ?? null));
 });
+results.cleared = cleared;
 results.item = options.render.item({ text: 'N<' }, escape);
 console.log(JSON.stringify(results));
 """
@@ -58,7 +61,7 @@ console.log(JSON.stringify(results));
 
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_stop_search_script_in_node(tmp_path: Path) -> None:
-    """Options map, rows escape, and every flagged select is wrapped."""
+    """Options map, rows escape, results replace old ones, all wrapped."""
     web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'stop-search.mjs'
     script.write_text(
@@ -89,5 +92,6 @@ def test_stop_search_script_in_node(tmp_path: Path) -> None:
         'loaded': [{'value': 'P', 'text': 'N', 'routes': []}],
         'failed': [],
         'offline': None,
+        'cleared': 2,
         'item': '<div>N&lt;</div>',
     }

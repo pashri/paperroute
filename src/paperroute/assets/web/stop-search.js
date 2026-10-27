@@ -53,9 +53,12 @@ export function attachStopSearch(select) {
     searchField: [],
     maxItems: 1,
     shouldLoad: (query) => query.trim().length >= MIN_QUERY,
-    load: (query, done) => {
+    load(query, done) {
       fetchStops(query)
-        .then((matches) => done(matches.map(stopOption)))
+        .then((matches) => {
+          this.clearOptions();
+          done(matches.map(stopOption));
+        })
         .catch(() => done());
     },
     render: {

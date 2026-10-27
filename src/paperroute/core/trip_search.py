@@ -12,6 +12,10 @@ class PlannerUnavailable(Exception):
     """The Trip Planner didn't give an answer."""
 
 
+class PlannerBusy(PlannerUnavailable):
+    """The Trip Planner refused the request as too many (HTTP 429)."""
+
+
 @dataclass(frozen=True)
 class TripSearch:
     """

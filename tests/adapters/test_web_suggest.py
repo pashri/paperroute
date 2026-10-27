@@ -251,3 +251,12 @@ async def test_shutdown_closes_planner() -> None:
     client = await started(planner=planner)
     await client.close()
     assert planner.closed
+
+
+async def test_busy_planner_says_so() -> None:
+    """A rate-limited planner gets its own line."""
+    _, text = await fetched(
+        planner=FakeTripPlanner(busy=True), fields=SEARCH,
+    )
+    assert 'Trip Planner is busy. Try again in a minute.' in text
+    assert "didn't answer" not in text

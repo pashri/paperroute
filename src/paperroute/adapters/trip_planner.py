@@ -13,6 +13,7 @@ from paperroute.adapters.tfnsw import BASE_URL
 from paperroute.core.trip_search import (
     Journey,
     JourneyLeg,
+    PlannerBusy,
     PlannerUnavailable,
     TripSearch,
 )
@@ -234,9 +235,11 @@ class TfnswTripPlanner:
 
         Raises
         ------
+        PlannerBusy
+            On HTTP 429.
         PlannerUnavailable
-            On a connection error, a timeout, a bad body, HTTP 429 or any
-            status other than 200.
+            On a connection error, a timeout, a bad body or any status
+            other than 200.
         """
         self.session = self.session or self.session_factory()
         if self.limiter:
@@ -248,6 +251,8 @@ class TfnswTripPlanner:
                 headers={'Authorization': f'apikey {self.key}'},
                 timeout=self.timeout,
             ) as response:
+                if response.status == HTTPStatus.TOO_MANY_REQUESTS:
+                    raise PlannerBusy(f'HTTP {response.status}')
                 if response.status != HTTPStatus.OK:
                     raise PlannerUnavailable(f'HTTP {response.status}')
                 return await response.json(content_type=None)

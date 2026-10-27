@@ -15,6 +15,7 @@ from paperroute.adapters.web_ways import SUGGEST, WaysPages
 from paperroute.core.model import MAX_CHANGES, SYDNEY, StopPlace
 from paperroute.core.trip_search import (
     Journey,
+    PlannerBusy,
     PlannerUnavailable,
     TripSearch,
     default_search,
@@ -23,6 +24,7 @@ from paperroute.planner_port import TripPlanner
 from paperroute.ports import PinOptions
 
 FAILURE: Final[str] = "Trip Planner didn't answer. Try again in a minute."
+BUSY: Final[str] = 'Trip Planner is busy. Try again in a minute.'
 NO_TRIPS: Final[str] = 'No trips found.'
 NOT_YET: Final[str] = 'not supported yet'
 ARROW: Final[str] = '\u2192'
@@ -317,16 +319,21 @@ def list_html(*, options: PinOptions, journeys: tuple[Journey, ...]) -> str:
     return LIST.format(body=body + PAGE_BUTTONS)
 
 
-def failure_html() -> str:
+def failure_html(*, line: str = FAILURE) -> str:
     """
     Draw the line shown when the Trip Planner did not answer.
+
+    Parameters
+    ----------
+    line : str
+        The line to show.
 
     Returns
     -------
     str
         The list holding only the failure line.
     """
-    text = html.escape(FAILURE, quote=False)
+    text = html.escape(line, quote=False)
     return LIST.format(body=f'\n          <p class="failure">{text}</p>')
 
 
@@ -457,6 +464,8 @@ class SuggestPages:
                 destination_id=query.get('to', ''),
                 search=search,
             )
+        except PlannerBusy:
+            return failure_html(line=BUSY)
         except PlannerUnavailable:
             return failure_html()
         return list_html(options=options, journeys=journeys)

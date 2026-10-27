@@ -33,7 +33,12 @@ from paperroute.core.model import (
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.saved import DEFAULT_SAVED, Saved
-from paperroute.core.trip_search import Journey, PlannerUnavailable, TripSearch
+from paperroute.core.trip_search import (
+    Journey,
+    PlannerBusy,
+    PlannerUnavailable,
+    TripSearch,
+)
 from paperroute.ports import Loaded
 
 STOP_POINT: Point = to_metres(lon=151.0036, lat=-33.8170)
@@ -953,12 +958,15 @@ class FakeTripPlanner:
         The calls made.
     closed : bool
         True once closed.
+    busy : bool
+        True to raise `PlannerBusy`.
     """
 
     journeys: tuple[Journey, ...] = ()
     down: bool = False
     asked: list[tuple[str, str, TripSearch]] = field(default_factory=list)
     closed: bool = False
+    busy: bool = False
 
     async def close(self) -> None:
         """Note that it was closed."""
@@ -986,10 +994,14 @@ class FakeTripPlanner:
 
         Raises
         ------
+        PlannerBusy
+            When `busy` is set.
         PlannerUnavailable
             When `down` is set.
         """
         self.asked.append((origin_id, destination_id, search))
+        if self.busy:
+            raise PlannerBusy('busy')
         if self.down:
             raise PlannerUnavailable('down')
         return self.journeys

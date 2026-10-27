@@ -20,7 +20,11 @@ from paperroute.adapters.trip_planner import (
     parse_journeys,
     trip_planner_for,
 )
-from paperroute.core.trip_search import PlannerUnavailable, TripSearch
+from paperroute.core.trip_search import (
+    PlannerBusy,
+    PlannerUnavailable,
+    TripSearch,
+)
 from tests.fakes import FakeTripPlanner
 
 FIXTURES: Final[Path] = Path(__file__).parents[1] / 'fixtures' / 'trip_planner'
@@ -240,6 +244,17 @@ async def test_429_unavailable(status: int) -> None:
     async for server in serve(status=status):
         with pytest.raises(PlannerUnavailable):
             await ask(server=server)
+
+
+async def test_429_is_busy() -> None:
+    """A 429 says the planner is busy; another failure does not."""
+    async for server in serve(status=HTTPStatus.TOO_MANY_REQUESTS):
+        with pytest.raises(PlannerBusy):
+            await ask(server=server)
+    async for server in serve(status=HTTPStatus.INTERNAL_SERVER_ERROR):
+        with pytest.raises(PlannerUnavailable) as caught:
+            await ask(server=server)
+        assert not isinstance(caught.value, PlannerBusy)
 
 
 async def test_ok_reply_parses() -> None:

@@ -16,21 +16,27 @@ from paperroute.render.canvas import HEIGHT, INK, PAPER, Canvas
 from paperroute.render.chrome import HEADER
 from paperroute.render.connection_strip import (
     HEAD_FACE,
+    HEAD_GAP,
+    HEAD_STEP,
     NAME_FACE,
     PAIR_STEP,
     PAIRS_LEFT,
     PAIRS_RIGHT,
+    SIDE,
     STRIP_RIGHT,
     draw_connection_strip,
     draw_strip_sections,
     heading_parts,
     name_room,
+    row_step,
 )
-from tests.core.connection_factories import WORK
+from tests.core.connection_factories import WORK, at
 from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
 
 VIEW: Final[ConnectionStripView] = build_connection_strip(
     stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS,
+    positions={},
+    now=at(7, 30),
 )
 LONG: Final[str] = 'Constitution Hill Interchange, North West Transitway ' * 2
 
@@ -118,6 +124,7 @@ def test_pane_cuts_long_names() -> None:
             LegStop(name=LONG, time='7:57', mark=StopMark.LAST),
         ),
         empty=None,
+        vehicle=f'665 3 stops before {LONG}',
     )
     canvas = Canvas()
     draw_strip_sections(canvas, sections=(section,), left=483, right=786)
@@ -145,3 +152,28 @@ def test_fold_row_drawn() -> None:
     below = HEADER + 40
     assert grey[below:below + 30, 10:30].min() < 128
     assert grey[below:below + 30, 40:120].min() < 128
+
+
+def test_three_sections_fit_strip() -> None:
+    """Three folded sections with vehicle notes fit above the bottom."""
+    section = replace(
+        VIEW.sections[0],
+        stops=(
+            LegStop(name='A', time='7:33', mark=StopMark.FIRST),
+            LegStop(name='9 stops', time='', mark=StopMark.FOLD),
+            LegStop(name='B', time='7:50', mark=StopMark.LAST),
+        ),
+        vehicle='606 2 stops before A',
+    )
+    sections = (section,) * 3
+    step = row_step(sections=sections, top=HEADER)
+    used = 3 * (HEAD_STEP + HEAD_GAP) + 12 * step
+    assert HEADER + used <= HEIGHT - SIDE
+    canvas = Canvas()
+    draw_strip_sections(canvas, sections=sections, left=0, right=STRIP_RIGHT)
+    grey = canvas.grey()
+    heads = np.flatnonzero(
+        (grey[HEADER:, 10:STRIP_RIGHT - 10] < 128).mean(axis=1) > 0.6,
+    ).tolist()
+    starts = [y for y in heads if not set(range(y - 6, y)) & set(heads)]
+    assert len(starts) == 3

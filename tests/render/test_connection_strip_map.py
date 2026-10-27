@@ -31,8 +31,7 @@ VIEW: Final[ConnectionStripMapView] = ConnectionStripMapView(
         mode=ConnectionMap.CHANGES,
     ),
     pane=build_connection_strip(
-        stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS,
-    ),
+        stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS, positions={}, now=at(7, 30)),
 )
 BASE: Final[NDArray[np.uint8]] = np.full(
     (MAP_HEIGHT, STRIP_MAP_WIDTH), PAPER, dtype=np.uint8,

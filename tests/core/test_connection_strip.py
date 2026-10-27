@@ -1,22 +1,32 @@
 """Tests for the connection Strip's model."""
 
 from collections.abc import Sequence
+from dataclasses import replace
 from typing import Final
 
 from paperroute.core.chains import Chain
 from paperroute.core.connection_strip import (
-    LegStop,
+    LegCall,
     StopMark,
+    approach_note,
     build_connection_strip,
+    fold_leg,
     leg_calls,
-    shares,
-    trimmed,
 )
+from paperroute.core.live import LiveDeparture
+from paperroute.core.model import StopPlace
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import LOADING
 from tests.core.connection_factories import LEG1, WORK, at, run, work_chains
-from tests.core.factories import live, pattern
+from tests.core.factories import (
+    departure,
+    live,
+    pattern,
+    place,
+    snapshot,
+    vehicle,
+)
 
 STOP: Final[StopView] = StopView(
     origin='Hollis St Opp Constitution Hill Library',
@@ -99,6 +109,8 @@ def test_sections_for_change_pair() -> None:
     """A change pair has one section per leg."""
     view = build_connection_strip(
         stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS,
+        positions={},
+        now=at(7, 30),
     )
     first, second = view.sections
     assert first.title == (
@@ -115,9 +127,8 @@ def test_sections_for_change_pair() -> None:
         assert section.stops[0].mark is StopMark.FIRST
         assert section.stops[-1].mark is StopMark.LAST
         assert section.empty is None
-    assert [stop.time for stop in second.stops] == [
-        '7:46', '7:48', '7:50', '7:52', '7:54', '7:57',
-    ]
+    assert [stop.time for stop in second.stops] == ['7:46', '', '7:57']
+    assert second.stops[1].name == '4 stops'
 
 
 def test_leg_times_follow_delay() -> None:
@@ -128,11 +139,11 @@ def test_leg_times_follow_delay() -> None:
     view = build_connection_strip(
         stop_view=STOP, pin=WORK, chains=(late,), selected=0,
         patterns=PATTERNS,
+        positions={},
+        now=at(7, 30),
     )
     first, second = view.sections
-    assert [stop.time for stop in first.stops] == [
-        '7:36', '7:37', '7:39', '7:40', '7:42',
-    ]
+    assert [stop.time for stop in first.stops] == ['7:36', '', '7:42']
     assert second.stops[0].time == '7:46'
 
 
@@ -159,6 +170,8 @@ def test_rowless_leg_reads_loading() -> None:
     view = build_connection_strip(
         stop_view=STOP, pin=WORK, chains=CHAINS, selected=0,
         patterns={'a0733': FIRST_LEG, 'b0746': trip},
+        positions={},
+        now=at(7, 30),
     )
     assert view.sections[1].stops == ()
     assert view.sections[1].empty == LOADING
@@ -173,24 +186,146 @@ def test_leg_calls_missing_end() -> None:
     assert calls == ()
 
 
-def test_shares_and_fold() -> None:
-    """Rows are shared out, and a long leg folds its middle."""
-    assert shares(counts=(8, 12)) == (4, 7)
-    assert shares(counts=(2, 20)) == (2, 9)
-    assert shares(counts=(20, 2)) == (9, 2)
-    assert shares(counts=(4, 5)) == (4, 5)
-    assert shares(counts=(30,)) == (11,)
-    assert shares(counts=(9, 13)) == (5, 6)
-    calls = [
-        LegStop(name=f'call {index}', time='', mark=StopMark.MIDDLE)
-        for index in range(8)
+def calls_at(*, count: int) -> tuple[LegCall, ...]:
+    """
+    Calls one minute apart from 8:00 at stops named by number.
+
+    Parameters
+    ----------
+    count : int
+        Number of calls.
+
+    Returns
+    -------
+    tuple[LegCall, ...]
+        The calls.
+    """
+    return tuple(
+        (
+            PatternStop(
+                arrives=0, departs=0, point=None, station=f's{index}',
+                name=f'Stop {index}',
+            ),
+            at(8, index),
+        )
+        for index in range(count)
+    )
+
+
+def test_leg_folds_middle() -> None:
+    """A leg shows its first and last stop and folds the rest."""
+    rows = fold_leg(calls=calls_at(count=11))
+    assert [(row.name, row.time) for row in rows] == [
+        ('Stop 0', '8:00'), ('9 stops', ''), ('Stop 10', '8:10'),
     ]
-    kept = trimmed(calls=calls, share=4)
-    assert [stop.name for stop in kept] == [
-        'call 0', 'call 1', '5 stops', 'call 7',
+    assert [row.mark for row in rows] == [
+        StopMark.FIRST, StopMark.FOLD, StopMark.LAST,
     ]
-    assert kept[2].mark is StopMark.FOLD
-    assert trimmed(calls=calls[:3], share=4) == tuple(calls[:3])
+
+
+def test_short_leg_no_fold() -> None:
+    """Two calls need no fold row."""
+    rows = fold_leg(calls=calls_at(count=2))
+    assert [row.name for row in rows] == ['Stop 0', 'Stop 1']
+
+
+def test_one_stop_singular() -> None:
+    """One stop between reads singular."""
+    assert fold_leg(calls=calls_at(count=3))[1].name == '1 stop'
+
+
+LEPPINGTON: Final[StopPlace] = place(
+    'LEP', name='Leppington Station', point=(400.0, 0.0),
+)
+T5: Final[TripPattern] = pattern(
+    trip_id='t5',
+    route='T5',
+    stops=tuple(
+        PatternStop(
+            arrives=28800 + 120 * index,
+            departs=28800 + 120 * index,
+            point=(100.0 * index, 0.0),
+            station=station,
+            name=station,
+        )
+        for index, station in enumerate(('s0', 's1', 's2', 's3', 'LEP'))
+    ),
+)
+T5_LEG: Final[LiveDeparture] = live(item=departure(
+    departs=at(8, 8), ride=10, route='T5', trip_id='t5',
+))
+
+
+def test_vehicle_before_board_note() -> None:
+    """A vehicle short of the boarding stop counts the stops to it."""
+    note = approach_note(
+        leg=T5_LEG,
+        position=vehicle(timestamp=0, trip_id='t5', point=(150.0, 0.0)),
+        board=LEPPINGTON,
+        pattern=T5,
+    )
+    assert note == 'T5 3 stops before Leppington Station'
+    near = approach_note(
+        leg=T5_LEG,
+        position=vehicle(timestamp=0, trip_id='t5', point=(350.0, 0.0)),
+        board=LEPPINGTON,
+        pattern=T5,
+    )
+    assert near == 'T5 1 stop before Leppington Station'
+
+
+def test_no_note_after_boarding() -> None:
+    """Past the boarding stop, or with no position, there is no note."""
+    past = place('s2', name='s2', point=(200.0, 0.0))
+    assert approach_note(
+        leg=T5_LEG,
+        position=vehicle(timestamp=0, trip_id='t5', point=(350.0, 0.0)),
+        board=past,
+        pattern=T5,
+    ) is None
+    assert approach_note(
+        leg=T5_LEG, position=None, board=LEPPINGTON, pattern=T5,
+    ) is None
+    assert approach_note(
+        leg=T5_LEG,
+        position=vehicle(timestamp=0, trip_id='t5', point=(150.0, 0.0)),
+        board=LEPPINGTON,
+        pattern=None,
+    ) is None
+
+
+def test_strip_section_carries_vehicle_note() -> None:
+    """A heard vehicle of a section's trip sets that section's note."""
+    feed = snapshot(
+        fetched_at=at(7, 30),
+        vehicles=(vehicle(
+            timestamp=int(at(7, 30).timestamp()), trip_id='t5',
+            point=(150.0, 0.0),
+        ),),
+    )
+    pin = replace(WORK, origin=LEPPINGTON, ways=())
+    view = build_connection_strip(
+        stop_view=STOP,
+        pin=pin,
+        chains=(Chain(legs=(T5_LEG,), way=None),),
+        selected=0,
+        patterns={'t5': T5},
+        positions={'f': feed},
+        now=at(7, 30),
+    )
+    assert view.sections[0].vehicle == (
+        'T5 3 stops before Leppington Station'
+    )
+    quiet = build_connection_strip(
+        stop_view=STOP,
+        pin=pin,
+        chains=(Chain(legs=(T5_LEG,), way=None),),
+        selected=0,
+        patterns={'t5': T5},
+        positions={'f': feed},
+        now=at(7, 45),
+    )
+    assert quiet.sections[0].vehicle is None
 
 
 def test_stay_pair_one_section() -> None:
@@ -213,6 +348,8 @@ def test_stay_pair_one_section() -> None:
     view = build_connection_strip(
         stop_view=STOP, pin=WORK, chains=(stay,), selected=0,
         patterns={'d0740': trip},
+        positions={},
+        now=at(7, 30),
     )
     (section,) = view.sections
     assert section.route == '609'
@@ -226,6 +363,8 @@ def test_missing_pattern_loading() -> None:
     view = build_connection_strip(
         stop_view=STOP, pin=WORK, chains=CHAINS, selected=0,
         patterns={'a0733': FIRST_LEG},
+        positions={},
+        now=at(7, 30),
     )
     second = view.sections[1]
     assert second.stops == ()
@@ -236,6 +375,8 @@ def test_selected_clamped() -> None:
     """The selected pair is clamped to the last pair."""
     view = build_connection_strip(
         stop_view=STOP, pin=WORK, chains=CHAINS, selected=9, patterns={},
+        positions={},
+        now=at(7, 30),
     )
     assert len(view.pairs) == 5
     assert view.selected == 4
@@ -247,6 +388,8 @@ def test_no_pairs_no_sections() -> None:
     """With no pair there are no sections and the empty text is set."""
     view = build_connection_strip(
         stop_view=STOP, pin=WORK, chains=(), selected=0, patterns={},
+        positions={},
+        now=at(7, 30),
     )
     assert view.sections == ()
     assert view.selected == 0

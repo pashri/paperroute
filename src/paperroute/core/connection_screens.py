@@ -14,7 +14,7 @@ from paperroute.core.connection_view import (
     ConnectionView,
     build_connection_view,
 )
-from paperroute.core.map_requests import pin_map_inputs
+from paperroute.core.map_requests import pin_map_inputs, polled_positions
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapView
 from paperroute.core.model import Pin, is_connection
 from paperroute.core.places import shown
@@ -89,6 +89,8 @@ def connection_strip(
         chains=chains,
         selected=state.scroll,
         patterns=state.map.patterns,
+        positions=polled_positions(state=state),
+        now=state.now,
     )
 
 

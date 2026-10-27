@@ -7,7 +7,6 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.core.connection_strip import (
-    STRIP_STOPS,
     ConnectionStripView,
     LegSection,
     LegStop,
@@ -81,10 +80,31 @@ def row_step(*, sections: Sequence[LegSection], top: int) -> int:
     Returns
     -------
     int
-        Row height, at most `ROW_MAX`.
+        Row height, at most `ROW_MAX`, so every row and vehicle note
+        fits.
     """
     heads = len(sections) * (HEAD_STEP + HEAD_GAP)
-    return min(ROW_MAX, (HEIGHT - top - heads - SIDE) // STRIP_STOPS)
+    rows = sum(section_rows(section=section) for section in sections)
+    return min(ROW_MAX, (HEIGHT - top - heads - SIDE) // max(1, rows))
+
+
+def section_rows(*, section: LegSection) -> int:
+    """
+    Count the rows a section draws under its heading.
+
+    Parameters
+    ----------
+    section : LegSection
+        The section.
+
+    Returns
+    -------
+    int
+        Its stop rows, or one for its empty text, plus one for a vehicle
+        note.
+    """
+    stops = 1 if section.empty is not None else len(section.stops)
+    return stops + (section.vehicle is not None)
 
 
 def heading_parts(*, title: str) -> tuple[str, str | None]:
@@ -295,6 +315,17 @@ def draw_section(
     y += HEAD_GAP
     draw_heading(canvas, section=section, y=y, edges=edges)
     y += HEAD_STEP
+    if section.vehicle is not None:
+        canvas.text(
+            at=(left + NAME_LEFT, y + step / 2 + 5),
+            text=canvas.fit(
+                text=section.vehicle, face=FOLD_FACE,
+                width=right - left - NAME_LEFT - SIDE,
+            ),
+            face=FOLD_FACE,
+            grey=INK,
+        )
+        y += step
     if section.empty is not None:
         canvas.text(
             at=(left + NAME_LEFT, y + step / 2 + 6),

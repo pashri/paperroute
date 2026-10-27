@@ -4,13 +4,12 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
-from typing import Final
 
 from paperroute.core.chains import Chain
 from paperroute.core.connection_model import walk_metres
 from paperroute.core.connection_view import PairRow, chain_rows, no_pair_text
 from paperroute.core.live import LiveDeparture
-from paperroute.core.map_view import MapView
+from paperroute.core.map_view import MapView, is_fresh, position_age
 from paperroute.core.model import (
     Change,
     Mode,
@@ -20,14 +19,12 @@ from paperroute.core.model import (
     service_time,
     shifted,
 )
-from paperroute.core.patterns import PatternStop, TripPattern
+from paperroute.core.patterns import PatternStop, TripPattern, hop_near
+from paperroute.core.positions import PositionsSnapshot, VehiclePosition
 from paperroute.core.rides import rides_of
-from paperroute.core.stop_view import PinTag, StopView, clock_text
+from paperroute.core.stop_view import PinTag, StopView, clock_text, stops_text
 from paperroute.core.strip_model import LOADING
 from paperroute.core.strip_times import from_call
-
-STRIP_STOPS: Final[int] = 11
-MIN_SHARE: Final[int] = 3
 
 type LegCall = tuple[PatternStop, datetime]
 
@@ -77,9 +74,11 @@ class LegSection:
     note : str | None
         The walk and allowance on leg 2, else None.
     stops : tuple[LegStop, ...]
-        The leg's rows, trimmed to its share.
+        The leg's first and last rows, with a fold row between.
     empty : str | None
         Text drawn in place of the rows, or None.
+    vehicle : str | None
+        Where its vehicle is before the boarding stop, or None.
     """
 
     route: str
@@ -88,6 +87,7 @@ class LegSection:
     note: str | None
     stops: tuple[LegStop, ...]
     empty: str | None
+    vehicle: str | None = None
 
 
 @dataclass(frozen=True)
@@ -224,60 +224,108 @@ def leg_calls(
     )
 
 
-def shares(*, counts: tuple[int, ...]) -> tuple[int, ...]:
+def fold_leg(*, calls: Sequence[LegCall]) -> tuple[LegStop, ...]:
     """
-    Share the strip's rows out between legs.
+    Show a leg's first and last calls, folding the stops between.
 
     Parameters
     ----------
-    counts : tuple[int, ...]
-        Calls on each leg.
-
-    Returns
-    -------
-    tuple[int, ...]
-        Rows each leg gets: in proportion to its calls, at least
-        `MIN_SHARE`, never more than it has, and any rows a leg cannot
-        use handed to the others, up to `STRIP_STOPS` in all.
-    """
-    total = sum(counts) or 1
-    given = [
-        min(count, max(MIN_SHARE, round(STRIP_STOPS * count / total)))
-        for count in counts
-    ]
-    while sum(given) > STRIP_STOPS:
-        given[given.index(max(given))] -= 1
-    short = [i for i, count in enumerate(counts) if given[i] < count]
-    while short and sum(given) < STRIP_STOPS:
-        given[short[0]] += 1
-        short = [i for i, count in enumerate(counts) if given[i] < count]
-    return tuple(given)
-
-
-def trimmed(*, calls: Sequence[LegStop], share: int) -> tuple[LegStop, ...]:
-    """
-    Cut a leg's rows to its share, folding the middle.
-
-    Parameters
-    ----------
-    calls : Sequence[LegStop]
-        The leg's rows.
-    share : int
-        Rows it may use.
+    calls : Sequence[LegCall]
+        The leg's calls with their times.
 
     Returns
     -------
     tuple[LegStop, ...]
-        The rows when they fit; else `share // 2` from the start, a fold
-        row '{hidden} stops', and `(share - 1) // 2` from the end.
+        The first call, a fold row '{n} stops' ('1 stop') when any are
+        between, and the last call; empty with no calls.
     """
-    if len(calls) <= share:
-        return tuple(calls)
-    head = share // 2
-    tail = (share - 1) // 2
-    hidden = len(calls) - head - tail
-    fold = LegStop(name=f'{hidden} stops', time='', mark=StopMark.FOLD)
-    return (*calls[:head], fold, *calls[len(calls) - tail:])
+    rows = leg_stops(calls=calls)
+    if len(rows) <= 2:
+        return rows
+    hidden = len(rows) - 2
+    fold = LegStop(
+        name=stops_text(stops=hidden), time='', mark=StopMark.FOLD,
+    )
+    return rows[0], fold, rows[-1]
+
+
+def approach_note(
+    *,
+    leg: LiveDeparture,
+    position: VehiclePosition | None,
+    board: StopPlace,
+    pattern: TripPattern | None,
+) -> str | None:
+    """
+    Say how far a leg's vehicle is from the stop it is boarded at.
+
+    Parameters
+    ----------
+    leg : LiveDeparture
+        The leg.
+    position : VehiclePosition | None
+        Its vehicle's position, or None when not heard.
+    board : StopPlace
+        Where the leg is boarded.
+    pattern : TripPattern | None
+        Its trip, or None while loading.
+
+    Returns
+    -------
+    str | None
+        '{route} {n} stops before {board}' ('1 stop before') while the
+        vehicle is on a hop before the boarding stop; None otherwise.
+    """
+    if position is None or pattern is None:
+        return None
+    start = from_call(
+        departure=leg.departure, pattern=pattern, origin=board.stop_id,
+        stations={},
+    )
+    hop = hop_near(pattern=pattern, point=position.point)
+    if start is None or hop is None or hop[0] >= start:
+        return None
+    count = sum(
+        not stop.passes for stop in pattern.stops[hop[0] + 1 : start + 1]
+    )
+    route = leg.departure.route
+    return f'{route} {count} {"stop" if count == 1 else "stops"} ' + (
+        f'before {board.name}'
+    )
+
+
+def leg_vehicle(
+    *,
+    leg: LiveDeparture,
+    positions: Mapping[str, PositionsSnapshot],
+    now: datetime,
+) -> VehiclePosition | None:
+    """
+    Find a leg's vehicle while its position is fresh.
+
+    Parameters
+    ----------
+    leg : LiveDeparture
+        The leg.
+    positions : Mapping[str, PositionsSnapshot]
+        The latest download of each positions feed.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    VehiclePosition | None
+        The freshest report of its trip, by ID or alias, when fresh.
+    """
+    trips = {leg.departure.trip_id, *leg.departure.aliases}
+    found = [
+        (position_age(vehicle=item, snapshot=feed, now=now), item)
+        for feed in positions.values()
+        for item in feed.vehicles
+        if item.trip_id in trips
+    ]
+    fresh = [pair for pair in found if is_fresh(age=pair[0])]
+    return min(fresh, key=lambda pair: pair[0])[1] if fresh else None
 
 
 def leg_stops(*, calls: Sequence[LegCall]) -> tuple[LegStop, ...]:
@@ -396,7 +444,7 @@ def leg_rows(
     Returns
     -------
     tuple[LegStop, ...]
-        One row per call; empty while loading.
+        The folded rows; empty while loading.
     """
     calls = () if pattern is None else leg_calls(
         item=leg.item,
@@ -404,11 +452,15 @@ def leg_rows(
         start=leg.start.stop_id,
         end=leg.end.stop_id,
     )
-    return leg_stops(calls=calls)
+    return fold_leg(calls=calls)
 
 
 def leg_section(
-    *, leg: Leg, rows: tuple[LegStop, ...], loaded: bool,
+    *,
+    leg: Leg,
+    rows: tuple[LegStop, ...],
+    loaded: bool,
+    vehicle: str | None = None,
 ) -> LegSection:
     """
     Build one leg's section.
@@ -418,9 +470,11 @@ def leg_section(
     leg : Leg
         The leg.
     rows : tuple[LegStop, ...]
-        Its rows, already trimmed.
+        Its rows, already folded.
     loaded : bool
         False while its pattern has not loaded.
+    vehicle : str | None
+        Where its vehicle is before the boarding stop, or None.
 
     Returns
     -------
@@ -435,6 +489,7 @@ def leg_section(
         note=leg.note,
         stops=rows,
         empty=LOADING if not loaded or not rows else None,
+        vehicle=vehicle,
     )
 
 
@@ -443,9 +498,11 @@ def chain_sections(
     chain: Chain,
     pin: Pin,
     patterns: Mapping[str, TripPattern | None],
+    positions: Mapping[str, PositionsSnapshot],
+    now: datetime,
 ) -> tuple[LegSection, ...]:
     """
-    Build a section per leg of a pair, sharing the strip's rows.
+    Build a section per ride of a chain.
 
     Parameters
     ----------
@@ -455,29 +512,32 @@ def chain_sections(
         Connection pin.
     patterns : Mapping[str, TripPattern | None]
         Loaded patterns by trip ID.
+    positions : Mapping[str, PositionsSnapshot]
+        The latest download of each positions feed.
+    now : datetime
+        Current time.
 
     Returns
     -------
     tuple[LegSection, ...]
-        The sections, leg 1 first.
+        The sections, the first ride first.
     """
-    legs = chain_legs_of(chain=chain, pin=pin)
-    found = [patterns.get(leg.item.departure.trip_id) for leg in legs]
-    rows = [
-        leg_rows(leg=leg, pattern=trip)
-        for leg, trip in zip(legs, found, strict=True)
-    ]
-    given = shares(counts=tuple(len(each) for each in rows))
-    return tuple(
-        leg_section(
+    sections = []
+    for leg in chain_legs_of(chain=chain, pin=pin):
+        trip = patterns.get(leg.item.departure.trip_id)
+        note = approach_note(
+            leg=leg.item,
+            position=leg_vehicle(leg=leg.item, positions=positions, now=now),
+            board=leg.start,
+            pattern=trip,
+        )
+        sections.append(leg_section(
             leg=leg,
-            rows=trimmed(calls=each, share=share),
+            rows=leg_rows(leg=leg, pattern=trip),
             loaded=trip is not None,
-        )
-        for leg, trip, each, share in zip(
-            legs, found, rows, given, strict=True,
-        )
-    )
+            vehicle=note,
+        ))
+    return tuple(sections)
 
 
 def build_connection_strip(
@@ -487,6 +547,8 @@ def build_connection_strip(
     chains: Sequence[Chain],
     selected: int,
     patterns: Mapping[str, TripPattern | None],
+    positions: Mapping[str, PositionsSnapshot],
+    now: datetime,
 ) -> ConnectionStripView:
     """
     Build the connection Strip.
@@ -503,6 +565,10 @@ def build_connection_strip(
         Requested chain; clamped to the last.
     patterns : Mapping[str, TripPattern | None]
         Loaded patterns by trip ID.
+    positions : Mapping[str, PositionsSnapshot]
+        The latest download of each positions feed.
+    now : datetime
+        Current time.
 
     Returns
     -------
@@ -511,7 +577,11 @@ def build_connection_strip(
     """
     index = max(0, min(selected, len(chains) - 1))
     sections = () if not chains else chain_sections(
-        chain=chains[index], pin=pin, patterns=patterns,
+        chain=chains[index],
+        pin=pin,
+        patterns=patterns,
+        positions=positions,
+        now=now,
     )
     return ConnectionStripView(
         origin=stop_view.origin,

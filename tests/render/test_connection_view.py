@@ -3,7 +3,6 @@
 from dataclasses import replace
 from typing import Final
 
-from paperroute.core.connection_model import pairs_of
 from paperroute.core.connection_view import (
     NO_PAIRS,
     ConnectionView,
@@ -16,36 +15,30 @@ from paperroute.render.chrome import HEADER
 from paperroute.render.connection_view import FOOTER_RULE, draw_connection_view
 from paperroute.render.pair_list import draw_pair_list
 from paperroute.render.stop_view import SPLIT, finish
-from tests.core.connection_factories import LEG1, LEG2, WORK, at
-from tests.core.factories import live
+from tests.core.connection_factories import WORK, at, work_chains
+from tests.core.test_connection_view import TWO, TWO_CHANGES
 
 ROW: Final[PairRow] = PairRow(
     leaves_at='7:48',
-    route='606',
-    onto='664',
-    detail='change 7:54, bus 8:01',
+    chips=('606', '664'),
+    detail='at Constitution Hill, North West Twy',
     arrives_at='8:12',
     minutes=24,
 )
+VIEW_STOP: Final[StopView] = StopView(
+    origin='Hollis St Opp Constitution Hill Library',
+    destination='Westmead Station',
+    clock='7:30',
+    hero=None,
+    rows=(),
+    banner=None,
+    empty=None,
+    scroll=0,
+)
 VIEW: Final[ConnectionView] = build_connection_view(
-    stop_view=StopView(
-        origin='Hollis St Opp Constitution Hill Library',
-        destination='Westmead Station',
-        clock='7:30',
-        hero=None,
-        rows=(),
-        banner=None,
-        empty=None,
-        scroll=0,
-    ),
+    stop_view=VIEW_STOP,
     pin=WORK,
-    pairs=pairs_of(
-        first=tuple(live(item=item) for item in LEG1),
-        second=tuple(live(item=item) for item in LEG2),
-        direct=(),
-        allow=7,
-        now=at(7, 30),
-    ),
+    chains=work_chains(),
     scroll=0,
     now=at(7, 30),
 )
@@ -116,3 +109,19 @@ def test_pair_detail_uses_full_row() -> None:
     )
     grey = canvas.grey()
     assert grey[38:56, 270:324].min() < 128
+
+
+def test_two_change_hero_fits_above_footer() -> None:
+    """Three badge lines and two change lines stay above the footer."""
+    view = build_connection_view(
+        stop_view=replace(VIEW_STOP, destination='Parramatta Station'),
+        pin=TWO,
+        chains=(TWO_CHANGES,),
+        scroll=0,
+        now=at(7, 30),
+    )
+    frame = draw_connection_view(view=view)
+    rule = HEADER + FOOTER_RULE
+    assert frame[rule, 18:418].max() == 0
+    assert frame[rule - 6:rule, 18:418].min() == 255
+    assert frame[HEADER + 60:rule - 8, 18:60].min() == 0

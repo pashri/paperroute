@@ -6,11 +6,13 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Final
 
-from paperroute.core.connection_model import Pair, first_change, walk_metres
-from paperroute.core.connection_view import PairRow, no_pair_text, pair_rows
+from paperroute.core.chains import Chain
+from paperroute.core.connection_model import walk_metres
+from paperroute.core.connection_view import PairRow, chain_rows, no_pair_text
 from paperroute.core.live import LiveDeparture
 from paperroute.core.map_view import MapView
 from paperroute.core.model import (
+    Change,
     Mode,
     Pin,
     StopPlace,
@@ -19,6 +21,7 @@ from paperroute.core.model import (
     shifted,
 )
 from paperroute.core.patterns import PatternStop, TripPattern
+from paperroute.core.rides import rides_of
 from paperroute.core.stop_view import PinTag, StopView, clock_text
 from paperroute.core.strip_model import LOADING
 from paperroute.core.strip_times import from_call
@@ -329,35 +332,51 @@ class Leg:
     note: str | None = None
 
 
-def pair_legs_of(*, pair: Pair, pin: Pin) -> tuple[Leg, ...]:
+def walk_note(*, change: Change) -> str:
     """
-    Name the legs a pair rides.
+    Say how far a change walks and how long it allows.
 
     Parameters
     ----------
-    pair : Pair
-        The pair.
+    change : Change
+        The change.
+
+    Returns
+    -------
+    str
+        'walk {metres} m, {allow} min'.
+    """
+    metres = walk_metres(alight=change.alight, board=change.board)
+    return f'walk {metres} m, {change.allow} min'
+
+
+def chain_legs_of(*, chain: Chain, pin: Pin) -> tuple[Leg, ...]:
+    """
+    Name the rides a chain takes.
+
+    Parameters
+    ----------
+    chain : Chain
+        The chain.
     pin : Pin
         Connection pin.
 
     Returns
     -------
     tuple[Leg, ...]
-        Leg 1 to the change and leg 2 on, or one leg when staying on.
+        One leg per ride, a stay on folded into one; each after the
+        first notes its walk and allowance.
     """
-    change = first_change(pin=pin)
-    end = pin.destination or pin.origin
-    if pair.second is None or change is None:
-        return (Leg(item=pair.first, start=pin.origin, end=end),)
-    metres = walk_metres(alight=change.alight, board=change.board)
-    return (
-        Leg(item=pair.first, start=pin.origin, end=change.alight),
+    return tuple(
         Leg(
-            item=pair.second,
-            start=change.board,
-            end=end,
-            note=f'walk {metres} m, {change.allow} min',
-        ),
+            item=ride.item,
+            start=ride.start,
+            end=ride.end,
+            note=None if ride.change is None else walk_note(
+                change=ride.change,
+            ),
+        )
+        for ride in rides_of(chain=chain, pin=pin)
     )
 
 
@@ -419,9 +438,9 @@ def leg_section(
     )
 
 
-def pair_sections(
+def chain_sections(
     *,
-    pair: Pair,
+    chain: Chain,
     pin: Pin,
     patterns: Mapping[str, TripPattern | None],
 ) -> tuple[LegSection, ...]:
@@ -430,8 +449,8 @@ def pair_sections(
 
     Parameters
     ----------
-    pair : Pair
-        The selected pair.
+    chain : Chain
+        The selected chain.
     pin : Pin
         Connection pin.
     patterns : Mapping[str, TripPattern | None]
@@ -442,7 +461,7 @@ def pair_sections(
     tuple[LegSection, ...]
         The sections, leg 1 first.
     """
-    legs = pair_legs_of(pair=pair, pin=pin)
+    legs = chain_legs_of(chain=chain, pin=pin)
     found = [patterns.get(leg.item.departure.trip_id) for leg in legs]
     rows = [
         leg_rows(leg=leg, pattern=trip)
@@ -465,7 +484,7 @@ def build_connection_strip(
     *,
     stop_view: StopView,
     pin: Pin,
-    pairs: Sequence[Pair],
+    chains: Sequence[Chain],
     selected: int,
     patterns: Mapping[str, TripPattern | None],
 ) -> ConnectionStripView:
@@ -478,10 +497,10 @@ def build_connection_strip(
         Leg 1's Stop view, for the titles, tag and banner.
     pin : Pin
         Connection pin.
-    pairs : Sequence[Pair]
-        Workable pairs in leg-1 departure order.
+    chains : Sequence[Chain]
+        Workable chains in first-leg departure order.
     selected : int
-        Requested pair; clamped to the last.
+        Requested chain; clamped to the last.
     patterns : Mapping[str, TripPattern | None]
         Loaded patterns by trip ID.
 
@@ -490,9 +509,9 @@ def build_connection_strip(
     ConnectionStripView
         View-model.
     """
-    index = max(0, min(selected, len(pairs) - 1))
-    sections = () if not pairs else pair_sections(
-        pair=pairs[index], pin=pin, patterns=patterns,
+    index = max(0, min(selected, len(chains) - 1))
+    sections = () if not chains else chain_sections(
+        chain=chains[index], pin=pin, patterns=patterns,
     )
     return ConnectionStripView(
         origin=stop_view.origin,
@@ -504,7 +523,7 @@ def build_connection_strip(
         sections=sections,
         more=stop_view.more,
         planned=stop_view.planned,
-        pairs=pair_rows(pairs=pairs),
+        pairs=chain_rows(chains=chains, pin=pin),
         selected=index,
-        empty=no_pair_text(stop_view=stop_view, pairs=pairs),
+        empty=no_pair_text(stop_view=stop_view, chains=chains),
     )

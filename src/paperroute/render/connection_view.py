@@ -1,11 +1,16 @@
-"""Draw a connection pin's Stop view: the next pair, then a pair list."""
+"""Draw a connection pin's Stop view: the next chain, then a list."""
 
 from typing import Final
 
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.connection_view import PAIR_ROWS, ConnectionView, PairHero
+from paperroute.core.connection_view import (
+    PAIR_ROWS,
+    ChainHero,
+    ConnectionView,
+    HeroLine,
+)
 from paperroute.render.canvas import HEIGHT, INK, WIDTH, Canvas, Face
 from paperroute.render.chrome import (
     BANNER,
@@ -22,9 +27,13 @@ HERO_LEFT: Final[int] = 18
 HERO_RIGHT: Final[int] = 418
 LABEL_Y: Final[int] = 24
 COUNT_Y: Final[int] = 112
-LEG_Y: Final[int] = 140  # centre of leg 1's badge line
-STEP_Y: Final[tuple[int, ...]] = (178, 204)
-ONTO_Y: Final[int] = 230  # centre of leg 2's badge line
+FIRST_Y: Final[int] = 140  # centre of the first line
+LAST_Y: Final[int] = 232  # lowest centre of the last line
+PITCH: Final[int] = 32  # most pixels between line centres
+ROOMY_LINES: Final[int] = 4  # lines that fit under the big countdown
+TIGHT_COUNT_Y: Final[int] = 84
+TIGHT_FIRST_Y: Final[int] = 104
+TIGHT_BADGE_PX: Final[int] = 15
 FOOTER_RULE: Final[int] = 252
 ARRIVE_Y: Final[int] = 286
 LIST_HEAD_Y: Final[int] = 22
@@ -37,7 +46,7 @@ STEP_FACE: Final[Face] = Face(weight=400, px=17)
 BADGE_PX: Final[int] = 18
 
 
-def hero_countdown(canvas: Canvas, *, hero: PairHero, top: int) -> None:
+def hero_countdown(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
     """
     Draw the countdown to leg 1 as the Stop view's hero does.
 
@@ -45,8 +54,8 @@ def hero_countdown(canvas: Canvas, *, hero: PairHero, top: int) -> None:
     ----------
     canvas : Canvas
         Target.
-    hero : PairHero
-        Next pair.
+    hero : ChainHero
+        Next chain.
     top : int
         Top of the panel.
     """
@@ -54,20 +63,21 @@ def hero_countdown(canvas: Canvas, *, hero: PairHero, top: int) -> None:
         at=(HERO_LEFT, top + LABEL_Y), text='NEXT CONNECTION',
         face=SMALL_BOLD, grey=INK,
     )
-    big = Face(weight=800, px=88 if hero.live else 68)
+    tight = len(hero.lines) > ROOMY_LINES
+    big = Face(weight=800, px=(88 if hero.live else 68) // (1 + tight))
     shown = hero.countdown if hero.live else hero.leaves_at
-    used = canvas.text(
-        at=(HERO_LEFT, top + COUNT_Y), text=shown, face=big, grey=INK,
-    )
+    y = top + (TIGHT_COUNT_Y if tight else COUNT_Y)
+    used = canvas.text(at=(HERO_LEFT, y), text=shown, face=big, grey=INK)
     if hero.live and shown != 'now' and ':' not in shown:
         canvas.text(
-            at=(HERO_LEFT + 8 + used, top + COUNT_Y), text='min',
-            face=Face(weight=800, px=28), grey=INK,
+            at=(HERO_LEFT + 8 + used, y), text='min',
+            face=Face(weight=800, px=28 // (1 + tight)), grey=INK,
         )
 
 
 def badge_line(
     canvas: Canvas, *, route: str, text: str, y: int, at: str = '',
+    px: int = BADGE_PX,
 ) -> None:
     """
     Draw a route badge, then text, then a time at the right.
@@ -84,8 +94,10 @@ def badge_line(
         Centre line.
     at : str
         Time drawn at the right edge; empty for none.
+    px : int
+        Badge text size.
     """
-    width = badge(canvas, x=HERO_LEFT, y=y, route=route, px=BADGE_PX)
+    width = badge(canvas, x=HERO_LEFT, y=y, route=route, px=px)
     left = HERO_LEFT + width + 10
     room = HERO_RIGHT - left - (canvas.length(text=at, face=LINE_FACE) + 10)
     canvas.text(
@@ -101,40 +113,78 @@ def badge_line(
         )
 
 
-def hero_steps(canvas: Canvas, *, hero: PairHero, top: int) -> None:
+def line_centres(*, count: int) -> tuple[int, ...]:
     """
-    Draw leg 1, the change steps and leg 2.
+    Place the hero's lines below the countdown.
+
+    Parameters
+    ----------
+    count : int
+        Number of lines.
+
+    Returns
+    -------
+    tuple[int, ...]
+        Each line's centre from the panel top: `PITCH` apart, closer
+        when they would pass `LAST_Y`, and starting higher below the
+        smaller countdown of a long hero.
+    """
+    first = TIGHT_FIRST_Y if count > ROOMY_LINES else FIRST_Y
+    pitch = min(PITCH, (LAST_Y - first) // max(1, count - 1))
+    return tuple(first + index * pitch for index in range(count))
+
+
+def hero_line(canvas: Canvas, *, line: HeroLine, y: int, px: int) -> None:
+    """
+    Draw one hero line: a badge line, or a plain step.
 
     Parameters
     ----------
     canvas : Canvas
         Target.
-    hero : PairHero
-        Next pair.
+    line : HeroLine
+        The line.
+    y : int
+        Its centre.
+    px : int
+        Badge text size.
+    """
+    if line.route is not None:
+        badge_line(
+            canvas, route=line.route, text=line.text, y=y, at=line.at,
+            px=px,
+        )
+        return
+    canvas.text(
+        at=(HERO_LEFT, y + 6),
+        text=canvas.fit(
+            text=line.text, face=STEP_FACE, width=HERO_RIGHT - HERO_LEFT,
+        ),
+        face=STEP_FACE,
+        grey=INK,
+    )
+
+
+def hero_steps(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
+    """
+    Draw each ride's badge line and the change lines between.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    hero : ChainHero
+        Next chain.
     top : int
         Top of the panel.
     """
-    badge_line(
-        canvas, route=hero.route, text=hero.headsign, y=top + LEG_Y,
-        at=hero.leaves_at,
-    )
-    for step, y in zip(hero.steps, STEP_Y, strict=False):
-        canvas.text(
-            at=(HERO_LEFT, top + y),
-            text=canvas.fit(
-                text=step, face=STEP_FACE, width=HERO_RIGHT - HERO_LEFT,
-            ),
-            face=STEP_FACE,
-            grey=INK,
-        )
-    if hero.onto is not None:
-        badge_line(
-            canvas, route=hero.onto, text=f'at {hero.onto_at}',
-            y=top + ONTO_Y,
-        )
+    px = TIGHT_BADGE_PX if len(hero.lines) > ROOMY_LINES else BADGE_PX
+    centres = line_centres(count=len(hero.lines))
+    for line, y in zip(hero.lines, centres, strict=True):
+        hero_line(canvas, line=line, y=top + y, px=px)
 
 
-def hero_footer(canvas: Canvas, *, hero: PairHero, top: int) -> None:
+def hero_footer(canvas: Canvas, *, hero: ChainHero, top: int) -> None:
     """
     Draw the rule and the arrival time.
 
@@ -142,8 +192,8 @@ def hero_footer(canvas: Canvas, *, hero: PairHero, top: int) -> None:
     ----------
     canvas : Canvas
         Target.
-    hero : PairHero
-        Next pair.
+    hero : ChainHero
+        Next chain.
     top : int
         Top of the panel.
     """

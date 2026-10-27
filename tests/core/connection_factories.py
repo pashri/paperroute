@@ -4,7 +4,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
-from paperroute.core.chains import Legs, leg_key
+from paperroute.core.chains import Chain, Legs, chains_of, leg_key
 from paperroute.core.connection_model import way_legs
 from paperroute.core.model import (
     SYDNEY,
@@ -15,7 +15,7 @@ from paperroute.core.model import (
     StopPlace,
     Way,
 )
-from tests.core.factories import departure, place
+from tests.core.factories import departure, live, place
 
 
 def at(hour: int, minute: int, *, day: int = 27) -> datetime:
@@ -161,3 +161,32 @@ def work_legs(
         leg_key(leg=one): first,
         leg_key(leg=two): second,
     }))
+
+
+def work_chains(*, pin: Pin = WORK, now: datetime | None = None) -> tuple[
+    Chain, ...,
+]:
+    """
+    Find Work's chains over `LEG1` and `LEG2` without live times.
+
+    Parameters
+    ----------
+    pin : Pin
+        A pin with one one-change way, Work by default.
+    now : datetime | None
+        Current time; 7:30 by default.
+
+    Returns
+    -------
+    tuple[Chain, ...]
+        The workable chains.
+    """
+    return chains_of(
+        pin=pin,
+        lists={
+            key: tuple(live(item=item) for item in items)
+            for key, items in work_legs(pin=pin).lists.items()
+        },
+        direct=(),
+        now=now or at(7, 30),
+    )

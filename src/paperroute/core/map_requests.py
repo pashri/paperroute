@@ -5,7 +5,7 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute.core.chains import all_departures
-from paperroute.core.connection import live_pairs
+from paperroute.core.connection import live_chains
 from paperroute.core.connection_map import connection_inputs
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.map_state import area_box, area_frame
@@ -195,7 +195,7 @@ def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     -------
     MapInputs
         The plain pin's inputs; for a connection pin, framed on the
-        connection with the hero pair's legs as the departures.
+        connection with the hero chain's legs as the departures.
     """
     inputs = pin_map_inputs(state=state, stop_view=stop_view)
     pin = shown(state=state)
@@ -204,7 +204,7 @@ def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     return connection_inputs(
         inputs=inputs,
         pin=pin,
-        pairs=live_pairs(state=state),
+        chains=live_chains(state=state),
         mode=state.settings.connection_map,
     )
 

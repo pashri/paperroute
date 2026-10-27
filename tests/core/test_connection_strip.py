@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from typing import Final
 
-from paperroute.core.connection_model import Pair, pairs_of
+from paperroute.core.chains import Chain
 from paperroute.core.connection_strip import (
     LegStop,
     StopMark,
@@ -15,7 +15,7 @@ from paperroute.core.connection_strip import (
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import LOADING
-from tests.core.connection_factories import LEG1, LEG2, WORK, at, run
+from tests.core.connection_factories import LEG1, WORK, at, run, work_chains
 from tests.core.factories import live, pattern
 
 STOP: Final[StopView] = StopView(
@@ -28,13 +28,7 @@ STOP: Final[StopView] = StopView(
     empty=None,
     scroll=0,
 )
-PAIRS: Final[tuple[Pair, ...]] = pairs_of(
-    first=tuple(live(item=item) for item in LEG1),
-    second=tuple(live(item=item) for item in LEG2),
-    direct=(),
-    allow=7,
-    now=at(7, 30),
-)
+CHAINS: Final[tuple[Chain, ...]] = work_chains()
 NAMES: Final[dict[str, str]] = {
     'G2145615': 'Hollis St Opp Constitution Hill Library',
     'G215254': 'Hammers Rd Opp Sherwood St',
@@ -104,7 +98,7 @@ PATTERNS: Final[dict[str, TripPattern | None]] = {
 def test_sections_for_change_pair() -> None:
     """A change pair has one section per leg."""
     view = build_connection_strip(
-        stop_view=STOP, pin=WORK, pairs=PAIRS, selected=0, patterns=PATTERNS,
+        stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS,
     )
     first, second = view.sections
     assert first.title == (
@@ -128,9 +122,11 @@ def test_sections_for_change_pair() -> None:
 
 def test_leg_times_follow_delay() -> None:
     """A late leg 1 shifts its own rows only."""
-    late = Pair(first=live(item=LEG1[0], late=3), second=PAIRS[0].second)
+    late = Chain(
+        legs=(live(item=LEG1[0], late=3), CHAINS[0].legs[1]), way=0,
+    )
     view = build_connection_strip(
-        stop_view=STOP, pin=WORK, pairs=(late,), selected=0,
+        stop_view=STOP, pin=WORK, chains=(late,), selected=0,
         patterns=PATTERNS,
     )
     first, second = view.sections
@@ -161,7 +157,7 @@ def test_rowless_leg_reads_loading() -> None:
     """A leg whose trip never reaches its end reads the loading text."""
     trip = pattern(trip_id='b0746', route='665', stops=FIRST_LEG.stops)
     view = build_connection_strip(
-        stop_view=STOP, pin=WORK, pairs=PAIRS, selected=0,
+        stop_view=STOP, pin=WORK, chains=CHAINS, selected=0,
         patterns={'a0733': FIRST_LEG, 'b0746': trip},
     )
     assert view.sections[1].stops == ()
@@ -199,11 +195,11 @@ def test_shares_and_fold() -> None:
 
 def test_stay_pair_one_section() -> None:
     """Staying on gives one section running to the destination."""
-    stay = Pair(
-        first=live(item=run(
+    stay = Chain(
+        legs=(live(item=run(
             departs=(7, 40), arrives=(8, 5), route='609', trip_id='d0740',
-        )),
-        second=None,
+        )),),
+        way=None,
     )
     trip = pattern(
         trip_id='d0740',
@@ -215,7 +211,7 @@ def test_stay_pair_one_section() -> None:
         ),
     )
     view = build_connection_strip(
-        stop_view=STOP, pin=WORK, pairs=(stay,), selected=0,
+        stop_view=STOP, pin=WORK, chains=(stay,), selected=0,
         patterns={'d0740': trip},
     )
     (section,) = view.sections
@@ -228,7 +224,7 @@ def test_stay_pair_one_section() -> None:
 def test_missing_pattern_loading() -> None:
     """A leg whose pattern has not loaded shows the loading text."""
     view = build_connection_strip(
-        stop_view=STOP, pin=WORK, pairs=PAIRS, selected=0,
+        stop_view=STOP, pin=WORK, chains=CHAINS, selected=0,
         patterns={'a0733': FIRST_LEG},
     )
     second = view.sections[1]
@@ -239,7 +235,7 @@ def test_missing_pattern_loading() -> None:
 def test_selected_clamped() -> None:
     """The selected pair is clamped to the last pair."""
     view = build_connection_strip(
-        stop_view=STOP, pin=WORK, pairs=PAIRS, selected=9, patterns={},
+        stop_view=STOP, pin=WORK, chains=CHAINS, selected=9, patterns={},
     )
     assert len(view.pairs) == 5
     assert view.selected == 4
@@ -250,7 +246,7 @@ def test_selected_clamped() -> None:
 def test_no_pairs_no_sections() -> None:
     """With no pair there are no sections and the empty text is set."""
     view = build_connection_strip(
-        stop_view=STOP, pin=WORK, pairs=(), selected=0, patterns={},
+        stop_view=STOP, pin=WORK, chains=(), selected=0, patterns={},
     )
     assert view.sections == ()
     assert view.selected == 0

@@ -614,8 +614,7 @@ def test_sidebar_arrival_with_stops_stays_clear_of_the_pill() -> None:
 
 PAIR_ROW = PairRow(
     leaves_at='7:33',
-    route='606',
-    onto='665',
+    chips=('606', '665'),
     detail='24 min · change at Constitution Hill',
     arrives_at='7:57',
     minutes=24,

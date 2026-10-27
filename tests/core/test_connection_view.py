@@ -3,27 +3,33 @@
 from dataclasses import replace
 from typing import Final
 
-from paperroute.core.connection_model import Pair, pairs_of
+from paperroute.core.chains import Chain
 from paperroute.core.connection_view import (
     MODE_NOUNS,
     NO_PAIRS,
     PAIR_ROWS,
+    HeroLine,
     build_connection_view,
-    pair_hero,
-    pair_row,
+    chain_hero,
+    chain_row,
+    route_chips,
+    via_text,
 )
-from paperroute.core.model import Mode
+from paperroute.core.model import Change, Mode, Pin, Way
 from paperroute.core.stop_view import StopView, empty_text
-from tests.core.connection_factories import LEG1, LEG2, WORK, at, run
+from tests.core.connection_factories import (
+    HOLLIS,
+    PARRAMATTA,
+    WESTMEAD,
+    WORK,
+    WORK_CHANGE,
+    at,
+    run,
+    work_chains,
+)
 from tests.core.factories import live
 
-PAIRS: Final[tuple[Pair, ...]] = pairs_of(
-    first=tuple(live(item=item) for item in LEG1),
-    second=tuple(live(item=item) for item in LEG2),
-    direct=(),
-    allow=7,
-    now=at(7, 30),
-)
+CHAINS: Final[tuple[Chain, ...]] = work_chains()
 STOP: Final[StopView] = StopView(
     origin='Hollis St Opp Constitution Hill Library',
     destination='Westmead Station',
@@ -36,104 +42,166 @@ STOP: Final[StopView] = StopView(
     warning=True,
     more=2,
 )
-STAY: Final[Pair] = Pair(
-    first=live(item=run(
+TWO: Final[Pin] = Pin(
+    origin=HOLLIS,
+    destination=PARRAMATTA,
+    kind=None,
+    ways=(Way(changes=(
+        WORK_CHANGE, Change(alight=WESTMEAD, board=WESTMEAD, allow=4),
+    )),),
+)
+A0733: Final = run(departs=(7, 33), arrives=(7, 39), route='606',
+                   trip_id='a0733')
+B0746: Final = run(departs=(7, 46), arrives=(7, 57), route='665',
+                   trip_id='b0746')
+C0805: Final = run(departs=(8, 5), arrives=(8, 20), route='T1',
+                   trip_id='c0805')
+TWO_CHANGES: Final[Chain] = Chain(
+    legs=tuple(live(item=item) for item in (A0733, B0746, C0805)), way=0,
+)
+DIRECT: Final[Chain] = Chain(
+    legs=(live(item=run(
         departs=(7, 40), arrives=(8, 5), route='609', trip_id='d0740',
-    )),
-    second=None,
+    )),),
+    way=None,
+)
+STAY: Final[Chain] = Chain(
+    legs=(live(item=A0733), live(item=replace(A0733, departs=at(7, 39)))),
+    way=0,
 )
 
 
 def test_hero_spells_out_steps() -> None:
-    """The next pair counts down and spells out each step."""
-    hero = pair_hero(pair=PAIRS[0], pin=WORK, now=at(7, 30))
+    """The next chain counts down and spells out each step."""
+    hero = chain_hero(chain=CHAINS[0], pin=WORK, now=at(7, 30))
     assert hero.countdown == '3'
-    assert hero.route == '606'
-    assert hero.mode is Mode.BUS
     assert hero.leaves_at == '7:33'
-    assert hero.steps == (
-        'get off Hammers Rd Opp Sherwood St 7:39',
-        'walk 150 m to Constitution Hill, North West Twy',
-    )
-    assert hero.onto == '665'
-    assert hero.onto_mode is Mode.BUS
-    assert hero.onto_at == '7:46'
+    assert [line.route for line in hero.lines] == ['606', None, None, '665']
+    assert [line.text for line in hero.lines[1:3]] == [
+        'change at Constitution Hill, North West Twy 7:46',
+        'walk 150 m',
+    ]
+    assert hero.lines[0].mode is Mode.BUS
+    assert (hero.lines[0].at, hero.lines[3].at) == ('7:33', '7:46')
     assert hero.arrives_at == '7:57'
     assert not hero.live
 
 
+def test_hero_lists_each_change() -> None:
+    """A two-change chain has three badge lines and two change lines."""
+    hero = chain_hero(chain=TWO_CHANGES, pin=TWO, now=at(7, 30))
+    badges = [line for line in hero.lines if line.route is not None]
+    changes = [
+        line.text for line in hero.lines if line.text.startswith('change')
+    ]
+    assert [line.route for line in badges] == ['606', '665', 'T1']
+    assert changes == [
+        'change at Constitution Hill, North West Twy 7:46',
+        'change at Westmead Station 8:05',
+    ]
+    assert 'walk 150 m' in [line.text for line in hero.lines]
+    assert len(hero.lines) == 6
+    assert hero.arrives_at == '8:20'
+
+
+def test_direct_hero() -> None:
+    """A direct trip says where it goes."""
+    hero = chain_hero(chain=DIRECT, pin=WORK, now=at(7, 30))
+    assert hero.lines[1] == HeroLine(
+        route=None, mode=None, text='direct to Westmead Station', at='',
+    )
+    assert len(hero.lines) == 2
+
+
+def test_stay_on_folds_into_one_leg() -> None:
+    """Two legs on one trip read as one stay-on leg."""
+    hero = chain_hero(chain=STAY, pin=WORK, now=at(7, 30))
+    assert [line.route for line in hero.lines] == ['606', None]
+    assert hero.lines[1].text == 'stay on to Westmead Station'
+    row = chain_row(chain=STAY, pin=WORK)
+    assert row.chips == ('606',)
+    assert row.detail == 'stay on'
+
+
+def test_row_at_one_stop() -> None:
+    """A one-change row says where to change."""
+    row = chain_row(chain=CHAINS[1], pin=WORK)
+    assert row.detail == 'at Constitution Hill, North West Twy'
+    assert row.chips == ('606', '664')
+    assert (row.leaves_at, row.arrives_at, row.minutes) == (
+        '7:48', '8:12', 24,
+    )
+
+
+def test_row_via_two_stops() -> None:
+    """A two-change row lists both boarding stops."""
+    assert via_text(chain=TWO_CHANGES, pin=TWO) == (
+        'via Constitution Hill, North West Twy, Westmead Station'
+    )
+    assert route_chips(chain=TWO_CHANGES, pin=TWO) == ('606', '665', 'T1')
+
+
+def test_direct_row_single_chip() -> None:
+    """A direct row has one chip and says direct."""
+    row = chain_row(chain=DIRECT, pin=WORK)
+    assert row.chips == ('609',)
+    assert row.detail == 'direct'
+
+
 def test_rows_after_hero() -> None:
-    """The list holds the pairs after the hero, scrolled."""
+    """The list holds the chains after the hero, scrolled."""
     view = build_connection_view(
-        stop_view=STOP, pin=WORK, pairs=PAIRS, scroll=0, now=at(7, 30),
+        stop_view=STOP, pin=WORK, chains=CHAINS, scroll=0, now=at(7, 30),
     )
     assert view.hero is not None
     assert [row.leaves_at for row in view.rows] == [
         '7:48', '8:03', '8:22', '8:42',
     ]
-    first = view.rows[0]
-    assert first.detail == 'change 7:54, bus 8:01'
-    assert (first.route, first.onto) == ('606', '664')
-    assert first.arrives_at == '8:12'
-    assert first.minutes == 24
     scrolled = build_connection_view(
-        stop_view=STOP, pin=WORK, pairs=PAIRS, scroll=2, now=at(7, 30),
+        stop_view=STOP, pin=WORK, chains=CHAINS, scroll=2, now=at(7, 30),
     )
     assert scrolled.rows[0].leaves_at == '8:22'
 
 
 def test_rows_capped_and_scroll_clamped() -> None:
     """At most five rows show, and a long scroll keeps one row."""
-    many = PAIRS + PAIRS
     view = build_connection_view(
-        stop_view=STOP, pin=WORK, pairs=many, scroll=0, now=at(7, 30),
+        stop_view=STOP, pin=WORK, chains=CHAINS + CHAINS, scroll=0,
+        now=at(7, 30),
     )
     assert len(view.rows) == PAIR_ROWS
     far = build_connection_view(
-        stop_view=STOP, pin=WORK, pairs=PAIRS, scroll=40, now=at(7, 30),
+        stop_view=STOP, pin=WORK, chains=CHAINS, scroll=40, now=at(7, 30),
     )
     assert [row.leaves_at for row in far.rows] == ['8:42']
 
 
-def test_stay_row_and_hero() -> None:
-    """Staying on reads as one step and one badge."""
-    row = pair_row(pair=STAY)
-    assert row.detail == 'stay on'
-    assert row.onto is None
-    assert row.minutes == 25
-    hero = pair_hero(pair=STAY, pin=WORK, now=at(7, 30))
-    assert hero.steps == ('stay on to Westmead Station',)
-    assert hero.onto is None
-    assert hero.onto_mode is None
-    assert hero.arrives_at == '8:05'
-
-
-def test_no_pairs_text() -> None:
-    """No pair says so, unless the board is still loading."""
+def test_no_chains_text() -> None:
+    """No chain says so, unless the board is still loading."""
     view = build_connection_view(
-        stop_view=STOP, pin=WORK, pairs=(), scroll=0, now=at(7, 30),
+        stop_view=STOP, pin=WORK, chains=(), scroll=0, now=at(7, 30),
     )
     assert view.hero is None
     assert not view.rows
-    assert view.empty == NO_PAIRS
+    assert view.empty == NO_PAIRS == 'No connection in the next 3 hours'
     loading = empty_text(destination='Westmead Station', loaded=False)
     view = build_connection_view(
         stop_view=replace(STOP, empty=loading),
         pin=WORK,
-        pairs=(),
+        chains=(),
         scroll=0,
         now=at(7, 30),
     )
     assert view.empty == loading
 
 
-def test_no_direct_leg_one_still_says_no_pairs() -> None:
-    """Leg 1's own empty text does not replace the no-pair text."""
+def test_no_direct_trip_still_says_no_chains() -> None:
+    """The direct list's own empty text does not replace the no-chain text."""
     direct = empty_text(destination='Hammers Rd', loaded=True)
     view = build_connection_view(
         stop_view=replace(STOP, empty=direct),
         pin=WORK,
-        pairs=(),
+        chains=(),
         scroll=0,
         now=at(7, 30),
     )
@@ -141,9 +209,9 @@ def test_no_direct_leg_one_still_says_no_pairs() -> None:
 
 
 def test_chrome_from_stop_view() -> None:
-    """The banner, warning, pill and titles come from leg 1's view."""
+    """The banner, warning, pill and titles come from the Stop view."""
     view = build_connection_view(
-        stop_view=STOP, pin=WORK, pairs=PAIRS, scroll=0, now=at(7, 30),
+        stop_view=STOP, pin=WORK, chains=CHAINS, scroll=0, now=at(7, 30),
     )
     assert view.banner == 'Lift out of order'
     assert (view.warning, view.more, view.planned) == (True, 2, False)

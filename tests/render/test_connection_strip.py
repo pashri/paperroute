@@ -27,10 +27,10 @@ from paperroute.render.connection_strip import (
     name_room,
 )
 from tests.core.connection_factories import WORK
-from tests.core.test_connection_strip import PAIRS, PATTERNS, STOP
+from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
 
 VIEW: Final[ConnectionStripView] = build_connection_strip(
-    stop_view=STOP, pin=WORK, pairs=PAIRS, selected=0, patterns=PATTERNS,
+    stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS,
 )
 LONG: Final[str] = 'Constitution Hill Interchange, North West Transitway ' * 2
 

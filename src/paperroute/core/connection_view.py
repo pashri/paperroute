@@ -1,12 +1,14 @@
-"""The Stop view of a connection pin: the next pair and the ones after."""
+"""The Stop view of a connection pin: the next chain and the ones after."""
 
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Final
 
-from paperroute.core.connection_model import Pair, first_change, walk_metres
+from paperroute.core.chains import Chain
+from paperroute.core.connection_model import walk_metres
 from paperroute.core.model import Mode, Pin
+from paperroute.core.rides import Ride, rides_of
 from paperroute.core.stop_view import (
     PinTag,
     StopView,
@@ -34,45 +36,51 @@ WAITING: Final[frozenset[str]] = frozenset({
 
 
 @dataclass(frozen=True)
-class PairHero:
+class HeroLine:
     """
-    The next pair, spelled out step by step.
+    One line of the hero: a ride's badge line or a plain step.
+
+    Attributes
+    ----------
+    route : str | None
+        The ride's route, or None for a plain step.
+    mode : Mode | None
+        The ride's mode, or None for a plain step.
+    text : str
+        The ride's headsign, or the step.
+    at : str
+        The ride's departure time; empty for a plain step.
+    """
+
+    route: str | None
+    mode: Mode | None
+    text: str
+    at: str = ''
+
+
+@dataclass(frozen=True)
+class ChainHero:
+    """
+    The next chain, spelled out ride by ride.
 
     Attributes
     ----------
     countdown : str
-        Minutes to leg 1's departure, 'now', or its clock time when far.
-    route : str
-        Leg 1's route.
-    mode : Mode
-        Leg 1's mode.
-    headsign : str
-        Leg 1's headsign.
+        Minutes to the first ride, 'now', or its clock time when far.
     leaves_at : str
-        Leg 1's departure time.
-    steps : tuple[str, ...]
-        The get-off and walk lines, or the stay-on line.
-    onto : str | None
-        Leg 2's route, or None when staying on.
-    onto_mode : Mode | None
-        Leg 2's mode, or None when staying on.
-    onto_at : str
-        Leg 2's departure time; empty when staying on.
+        The first ride's departure time.
+    lines : tuple[HeroLine, ...]
+        Each ride's badge line, with the change and walk lines between,
+        or the direct or stay-on line after a lone ride.
     arrives_at : str
-        Arrival time at the destination.
+        Arrival time at the Destination.
     live : bool
-        True when leg 1 has live times.
+        True when the first ride has live times.
     """
 
     countdown: str
-    route: str
-    mode: Mode
-    headsign: str
     leaves_at: str
-    steps: tuple[str, ...]
-    onto: str | None
-    onto_mode: Mode | None
-    onto_at: str
+    lines: tuple[HeroLine, ...]
     arrives_at: str
     live: bool
 
@@ -80,27 +88,24 @@ class PairHero:
 @dataclass(frozen=True)
 class PairRow:
     """
-    One pair in a list.
+    One chain in a list.
 
     Attributes
     ----------
     leaves_at : str
-        Leg 1's departure time.
-    route : str
-        Leg 1's route.
-    onto : str | None
-        Leg 2's route, or None when staying on.
+        The first ride's departure time.
+    chips : tuple[str, ...]
+        Each ride's route.
     detail : str
-        'change {alight}, {noun} {board}' or 'stay on'.
+        'direct', 'stay on', 'at {stop}' or 'via {stop}, {stop}'.
     arrives_at : str
-        Arrival time at the destination.
+        Arrival time at the Destination.
     minutes : int
-        Journey time: whole minutes from leg 1 leaving to arriving.
+        Journey time: whole minutes from leaving to arriving.
     """
 
     leaves_at: str
-    route: str
-    onto: str | None
+    chips: tuple[str, ...]
     detail: str
     arrives_at: str
     minutes: int
@@ -113,10 +118,10 @@ class ConnectionView:
 
     Attributes
     ----------
-    hero : PairHero | None
-        The next pair, or None with no pair.
+    hero : ChainHero | None
+        The next chain, or None with no chain.
     rows : tuple[PairRow, ...]
-        The pairs after it, scrolled, at most `PAIR_ROWS`.
+        The chains after it, scrolled, at most `PAIR_ROWS`.
     empty : str | None
         Why there is no hero, or None.
     """
@@ -125,7 +130,7 @@ class ConnectionView:
     destination: str | None
     clock: str
     tag: PinTag
-    hero: PairHero | None
+    hero: ChainHero | None
     rows: tuple[PairRow, ...]
     empty: str | None
     banner: str | None
@@ -134,42 +139,97 @@ class ConnectionView:
     planned: bool
 
 
-def pair_steps(*, pair: Pair, pin: Pin) -> tuple[str, ...]:
+def ride_line(*, ride: Ride) -> HeroLine:
     """
-    Spell out what happens between leg 1 and the destination.
+    Make a ride's badge line.
 
     Parameters
     ----------
-    pair : Pair
-        The pair.
+    ride : Ride
+        The ride.
+
+    Returns
+    -------
+    HeroLine
+        Its route, mode, headsign and departure time.
+    """
+    departure = ride.item.departure
+    return HeroLine(
+        route=departure.route,
+        mode=departure.mode,
+        text=departure.headsign,
+        at=clock_text(moment=ride.departs),
+    )
+
+
+def change_lines(*, ride: Ride) -> tuple[HeroLine, ...]:
+    """
+    Spell out the change made to board a ride.
+
+    Parameters
+    ----------
+    ride : Ride
+        A ride after the first.
+
+    Returns
+    -------
+    tuple[HeroLine, ...]
+        'change at {board} {time}', then 'walk {metres} m' when the stop
+        got off at is another stop; nothing for the first ride.
+    """
+    change = ride.change
+    if change is None:
+        return ()
+    at = HeroLine(
+        route=None,
+        mode=None,
+        text=f'change at {change.board.name} '
+        f'{clock_text(moment=ride.departs)}',
+    )
+    if change.alight.stop_id == change.board.stop_id:
+        return (at,)
+    metres = walk_metres(alight=change.alight, board=change.board)
+    return at, HeroLine(route=None, mode=None, text=f'walk {metres} m')
+
+
+def hero_lines(*, chain: Chain, pin: Pin) -> tuple[HeroLine, ...]:
+    """
+    List the hero's lines for a chain.
+
+    Parameters
+    ----------
+    chain : Chain
+        The chain.
     pin : Pin
         Connection pin.
 
     Returns
     -------
-    tuple[str, ...]
-        The get-off and walk lines, or the stay-on line.
+    tuple[HeroLine, ...]
+        Each ride's change lines and badge line; a lone ride adds
+        'direct to {To}' or 'stay on to {To}'.
     """
-    change = first_change(pin=pin)
-    if pair.second is None or change is None:
-        to = '' if pin.destination is None else pin.destination.name
-        return (f'stay on to {to}',)
-    metres = walk_metres(alight=change.alight, board=change.board)
-    return (
-        f'get off {change.alight.name} '
-        f'{clock_text(moment=pair.first.arrives)}',
-        f'walk {metres} m to {change.board.name}',
+    rides = rides_of(chain=chain, pin=pin)
+    lines = tuple(
+        line
+        for ride in rides
+        for line in (*change_lines(ride=ride), ride_line(ride=ride))
     )
+    if len(rides) > 1:
+        return lines
+    to = '' if pin.destination is None else pin.destination.name
+    lead = 'direct' if chain.way is None else 'stay on'
+    return (*lines, HeroLine(route=None, mode=None, text=f'{lead} to {to}'))
 
 
-def pair_hero(*, pair: Pair, pin: Pin, now: datetime) -> PairHero:
+def chain_hero(*, chain: Chain, pin: Pin, now: datetime) -> ChainHero:
     """
-    Spell out the next pair.
+    Spell out the next chain.
 
     Parameters
     ----------
-    pair : Pair
-        The pair.
+    chain : Chain
+        The chain.
     pin : Pin
         Connection pin.
     now : datetime
@@ -177,93 +237,135 @@ def pair_hero(*, pair: Pair, pin: Pin, now: datetime) -> PairHero:
 
     Returns
     -------
-    PairHero
+    ChainHero
         The hero.
     """
-    first = pair.first
-    second = pair.second
-    return PairHero(
-        countdown=countdown(departs=first.departs, now=now),
-        route=first.departure.route,
-        mode=first.departure.mode,
-        headsign=first.departure.headsign,
-        leaves_at=clock_text(moment=first.departs),
-        steps=pair_steps(pair=pair, pin=pin),
-        onto=None if second is None else second.departure.route,
-        onto_mode=None if second is None else second.departure.mode,
-        onto_at='' if second is None else clock_text(moment=second.departs),
-        arrives_at=clock_text(moment=pair.arrives),
-        live=first.live,
+    return ChainHero(
+        countdown=countdown(departs=chain.departs, now=now),
+        leaves_at=clock_text(moment=chain.departs),
+        lines=hero_lines(chain=chain, pin=pin),
+        arrives_at=clock_text(moment=chain.arrives),
+        live=chain.legs[0].live,
     )
 
 
-def pair_row(*, pair: Pair) -> PairRow:
+def route_chips(*, chain: Chain, pin: Pin) -> tuple[str, ...]:
     """
-    Summarise a pair as a list row.
+    List a chain's route chips.
 
     Parameters
     ----------
-    pair : Pair
-        The pair.
+    chain : Chain
+        The chain.
+    pin : Pin
+        Connection pin.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Each ride's route; a stay on is one chip.
+    """
+    return tuple(
+        ride.item.departure.route for ride in rides_of(chain=chain, pin=pin)
+    )
+
+
+def via_text(*, chain: Chain, pin: Pin) -> str:
+    """
+    Say where a chain changes.
+
+    Parameters
+    ----------
+    chain : Chain
+        The chain.
+    pin : Pin
+        Connection pin.
+
+    Returns
+    -------
+    str
+        'direct', 'stay on', 'at {board}' for one change, or
+        'via {board}, {board}' for two.
+    """
+    boards = [
+        ride.change.board.name
+        for ride in rides_of(chain=chain, pin=pin)
+        if ride.change is not None
+    ]
+    if not boards:
+        return 'direct' if chain.way is None else 'stay on'
+    if len(boards) == 1:
+        return f'at {boards[0]}'
+    return 'via ' + ', '.join(boards)
+
+
+def chain_row(*, chain: Chain, pin: Pin) -> PairRow:
+    """
+    Summarise a chain as a list row.
+
+    Parameters
+    ----------
+    chain : Chain
+        The chain.
+    pin : Pin
+        Connection pin.
 
     Returns
     -------
     PairRow
         The row.
     """
-    first = pair.first
-    second = pair.second
-    detail = 'stay on' if second is None else (
-        f'change {clock_text(moment=first.arrives)}, '
-        f'{MODE_NOUNS[second.departure.mode]} '
-        f'{clock_text(moment=second.departs)}'
-    )
-    seconds = pair.arrives.timestamp() - first.departs.timestamp()
+    seconds = chain.arrives.timestamp() - chain.departs.timestamp()
     return PairRow(
-        leaves_at=clock_text(moment=first.departs),
-        route=first.departure.route,
-        onto=None if second is None else second.departure.route,
-        detail=detail,
-        arrives_at=clock_text(moment=pair.arrives),
+        leaves_at=clock_text(moment=chain.departs),
+        chips=route_chips(chain=chain, pin=pin),
+        detail=via_text(chain=chain, pin=pin),
+        arrives_at=clock_text(moment=chain.arrives),
         minutes=int(seconds // 60),
     )
 
 
-def pair_rows(*, pairs: Sequence[Pair]) -> tuple[PairRow, ...]:
+def chain_rows(
+    *, chains: Sequence[Chain], pin: Pin,
+) -> tuple[PairRow, ...]:
     """
-    Summarise pairs as list rows.
+    Summarise chains as list rows.
 
     Parameters
     ----------
-    pairs : Sequence[Pair]
-        The pairs.
+    chains : Sequence[Chain]
+        The chains.
+    pin : Pin
+        Connection pin.
 
     Returns
     -------
     tuple[PairRow, ...]
         One row each, in order.
     """
-    return tuple(pair_row(pair=pair) for pair in pairs)
+    return tuple(chain_row(chain=chain, pin=pin) for chain in chains)
 
 
-def no_pair_text(*, stop_view: StopView, pairs: Sequence[Pair]) -> str | None:
+def no_pair_text(
+    *, stop_view: StopView, chains: Sequence[Chain],
+) -> str | None:
     """
     Say why there is no hero.
 
     Parameters
     ----------
     stop_view : StopView
-        Leg 1's Stop view.
-    pairs : Sequence[Pair]
-        The workable pairs.
+        The direct list's Stop view.
+    chains : Sequence[Chain]
+        The workable chains.
 
     Returns
     -------
     str | None
-        None with a pair; leg 1's text while loading or with a missing
-        stop; otherwise `NO_PAIRS`.
+        None with a chain; the Stop view's text while loading or with a
+        missing stop; otherwise `NO_PAIRS`.
     """
-    if pairs:
+    if chains:
         return None
     if stop_view.empty in WAITING:
         return stop_view.empty
@@ -274,7 +376,7 @@ def build_connection_view(
     *,
     stop_view: StopView,
     pin: Pin,
-    pairs: Sequence[Pair],
+    chains: Sequence[Chain],
     scroll: int,
     now: datetime,
 ) -> ConnectionView:
@@ -284,14 +386,14 @@ def build_connection_view(
     Parameters
     ----------
     stop_view : StopView
-        Leg 1's Stop view, for the titles, tag and banner.
+        The direct list's Stop view, for the titles, tag and banner.
     pin : Pin
         Connection pin.
-    pairs : Sequence[Pair]
-        Workable pairs in leg-1 departure order.
+    chains : Sequence[Chain]
+        Workable chains in first-leg departure order.
     scroll : int
-        Requested scroll; the list starts at pair `1 + scroll`, clamped so
-        the last pair stays listed.
+        Requested scroll; the list starts at chain `1 + scroll`, clamped
+        so the last chain stays listed.
     now : datetime
         Current time.
 
@@ -300,16 +402,18 @@ def build_connection_view(
     ConnectionView
         View-model.
     """
-    rest = pairs[1:]
+    rest = chains[1:]
     start = max(0, min(scroll, len(rest) - 1))
     return ConnectionView(
         origin=stop_view.origin,
         destination=stop_view.destination,
         clock=stop_view.clock,
         tag=stop_view.tag,
-        hero=pair_hero(pair=pairs[0], pin=pin, now=now) if pairs else None,
-        rows=pair_rows(pairs=rest[start : start + PAIR_ROWS]),
-        empty=no_pair_text(stop_view=stop_view, pairs=pairs),
+        hero=(
+            chain_hero(chain=chains[0], pin=pin, now=now) if chains else None
+        ),
+        rows=chain_rows(chains=rest[start : start + PAIR_ROWS], pin=pin),
+        empty=no_pair_text(stop_view=stop_view, chains=chains),
         banner=stop_view.banner,
         warning=stop_view.warning,
         more=stop_view.more,

@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Final
 
+from paperroute.core.chains import Chain
 from paperroute.core.connection_map import (
     BANNER_ROOM,
     build_connection_map,
@@ -11,7 +12,6 @@ from paperroute.core.connection_map import (
     fit_zoom,
     leg_line,
 )
-from paperroute.core.connection_model import Pair
 from paperroute.core.geo import Shape, make_shape
 from paperroute.core.map_view import DEFAULT_ZOOM, MapInputs
 from paperroute.core.model import Way
@@ -20,7 +20,7 @@ from paperroute.core.saved import ConnectionMap
 from paperroute.core.tiles import ZOOMS
 from tests.core.connection_factories import WORK, WORK_CHANGE, at
 from tests.core.factories import snapshot, vehicle
-from tests.core.test_connection_strip import PAIRS, STOP
+from tests.core.test_connection_strip import CHAINS, STOP
 
 LEG_ONE: Final[Shape] = make_shape(
     shape_id='s606', points=((0.0, 900.0), (0.0, 450.0), (0.0, 0.0)),
@@ -31,36 +31,33 @@ LEG_TWO: Final[Shape] = make_shape(
 )
 
 
-def shaped(*, pairs: tuple[Pair, ...]) -> tuple[Pair, ...]:
+def shaped(*, chains: tuple[Chain, ...]) -> tuple[Chain, ...]:
     """
-    Give each pair's legs the test shapes.
+    Give each chain's legs the test shapes.
 
     Parameters
     ----------
-    pairs : tuple[Pair, ...]
-        Pairs.
+    chains : tuple[Chain, ...]
+        Chains.
 
     Returns
     -------
-    tuple[Pair, ...]
-        The pairs with shape IDs set.
+    tuple[Chain, ...]
+        The chains with shape IDs set by leg.
     """
     return tuple(
-        Pair(
-            first=replace(
-                pair.first,
-                departure=replace(pair.first.departure, shape_id='s606'),
-            ),
-            second=None if pair.second is None else replace(
-                pair.second,
-                departure=replace(pair.second.departure, shape_id='s665'),
-            ),
-        )
-        for pair in pairs
+        replace(chain, legs=tuple(
+            replace(
+                item,
+                departure=replace(item.departure, shape_id=shape_id),
+            )
+            for item, shape_id in zip(chain.legs, ('s606', 's665'))
+        ))
+        for chain in chains
     )
 
 
-SHAPED: Final[tuple[Pair, ...]] = shaped(pairs=PAIRS)
+SHAPED: Final[tuple[Chain, ...]] = shaped(chains=CHAINS)
 
 
 def inputs_at(*, now: datetime, zoom: int = DEFAULT_ZOOM) -> MapInputs:
@@ -106,19 +103,18 @@ def test_o2_centres_on_change() -> None:
     found = connection_inputs(
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
-        pairs=SHAPED,
+        chains=SHAPED,
         mode=ConnectionMap.CHANGES,
     )
     assert found.centre == (72.0, 0.0)
     assert found.zoom == 1
-    assert found.departures == (
-        SHAPED[0].first.departure,
-        SHAPED[0].second.departure if SHAPED[0].second else None,
+    assert found.departures == tuple(
+        item.departure for item in SHAPED[0].legs
     )
     widest = connection_inputs(
         inputs=inputs_at(now=at(7, 35), zoom=0),
         pin=WORK,
-        pairs=SHAPED,
+        chains=SHAPED,
         mode=ConnectionMap.CHANGES,
     )
     assert widest.zoom == 0
@@ -129,7 +125,7 @@ def test_o2_shows_hero_pair_vehicles() -> None:
     framed = connection_inputs(
         inputs=inputs_at(now=at(7, 30)),
         pin=WORK,
-        pairs=SHAPED,
+        chains=SHAPED,
         mode=ConnectionMap.CHANGES,
     )
     assert framed.vehicle_trips == frozenset({'a0733', 'b0746'})
@@ -144,7 +140,7 @@ def test_o1_fits_whole_trip() -> None:
     found = connection_inputs(
         inputs=inputs_at(now=at(7, 35), zoom=0),
         pin=WORK,
-        pairs=SHAPED,
+        chains=SHAPED,
         mode=ConnectionMap.WHOLE,
     )
     assert found.centre == (400.0, -596.0)
@@ -160,7 +156,7 @@ def test_connection_map_sidebar() -> None:
     view = build_connection_map(
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
-        pairs=SHAPED,
+        chains=SHAPED,
         mode=ConnectionMap.CHANGES,
     )
     assert len(view.pairs) == 4
@@ -183,17 +179,17 @@ def test_connection_map_sidebar() -> None:
 
 def test_stay_pair_has_no_change() -> None:
     """A stay pair draws one line to the To and no walk."""
-    stay = Pair(first=SHAPED[0].first, second=None)
+    stay = Chain(legs=SHAPED[0].legs[:1], way=None)
     view = build_connection_map(
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
-        pairs=(stay,),
+        chains=(stay,),
         mode=ConnectionMap.CHANGES,
     )
     trip = view.base.trip
     assert trip is not None
     assert (trip.walk, trip.change, trip.second) == (None, None, ())
-    assert view.pairs[0].detail.endswith(' min · stay on')
+    assert view.pairs[0].detail.endswith(' min · direct')
 
 
 def test_no_shape_no_line() -> None:
@@ -201,7 +197,7 @@ def test_no_shape_no_line() -> None:
     view = build_connection_map(
         inputs=replace(inputs_at(now=at(7, 35)), shapes={}),
         pin=WORK,
-        pairs=SHAPED,
+        chains=SHAPED,
         mode=ConnectionMap.CHANGES,
     )
     assert view.base.route == ()
@@ -220,7 +216,7 @@ def test_vehicle_trips_filter_markers() -> None:
     )
     inputs = replace(inputs_at(now=at(7, 35)), positions={'f': feed})
     view = build_connection_map(
-        inputs=inputs, pin=WORK, pairs=SHAPED, mode=ConnectionMap.CHANGES,
+        inputs=inputs, pin=WORK, chains=SHAPED, mode=ConnectionMap.CHANGES,
     )
     assert len(view.markers) == 1
 
@@ -230,7 +226,7 @@ def test_no_pairs_keeps_framing() -> None:
     found = connection_inputs(
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
-        pairs=(),
+        chains=(),
         mode=ConnectionMap.CHANGES,
     )
     assert found.departures == ()
@@ -239,7 +235,7 @@ def test_no_pairs_keeps_framing() -> None:
     view = build_connection_map(
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
-        pairs=(),
+        chains=(),
         mode=ConnectionMap.CHANGES,
     )
     assert view.base.route == ()
@@ -260,13 +256,13 @@ def test_no_points_falls_back_to_from() -> None:
     )
     for mode in ConnectionMap:
         found = connection_inputs(
-            inputs=inputs_at(now=at(7, 35)), pin=bare, pairs=(), mode=mode,
+            inputs=inputs_at(now=at(7, 35)), pin=bare, chains=(), mode=mode,
         )
         assert found.centre == (0.0, 900.0)
     view = build_connection_map(
         inputs=inputs_at(now=at(7, 35)),
         pin=bare,
-        pairs=SHAPED,
+        chains=SHAPED,
         mode=ConnectionMap.CHANGES,
     )
     assert view.base.trip is not None
@@ -278,13 +274,13 @@ def test_banner_keeps_frame_below_it() -> None:
     stop = replace(STOP, banner='Timetable times · no live data yet')
     inputs = replace(inputs_at(now=at(7, 35)), stop_view=stop)
     change = connection_inputs(
-        inputs=inputs, pin=WORK, pairs=SHAPED, mode=ConnectionMap.CHANGES,
+        inputs=inputs, pin=WORK, chains=SHAPED, mode=ConnectionMap.CHANGES,
     )
     assert change.centre == (72.0, BANNER_ROOM * ZOOMS[change.zoom] / 2)
     whole = connection_inputs(
         inputs=replace(inputs, zoom=0),
         pin=WORK,
-        pairs=SHAPED,
+        chains=SHAPED,
         mode=ConnectionMap.WHOLE,
     )
     assert whole.zoom == ZOOMS.index(8)

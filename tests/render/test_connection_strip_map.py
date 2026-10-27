@@ -21,17 +21,17 @@ from paperroute.render.chrome import HEADER
 from paperroute.render.connection_strip_map import draw_connection_strip_map
 from tests.core.connection_factories import WORK, at
 from tests.core.test_connection_map import SHAPED, inputs_at
-from tests.core.test_connection_strip import PAIRS, PATTERNS, STOP
+from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
 
 VIEW: Final[ConnectionStripMapView] = ConnectionStripMapView(
     map=build_connection_map(
         inputs=replace(inputs_at(now=at(7, 35)), width=STRIP_MAP_WIDTH),
         pin=WORK,
-        pairs=SHAPED,
+        chains=SHAPED,
         mode=ConnectionMap.CHANGES,
     ),
     pane=build_connection_strip(
-        stop_view=STOP, pin=WORK, pairs=PAIRS, selected=0, patterns=PATTERNS,
+        stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS,
     ),
 )
 BASE: Final[NDArray[np.uint8]] = np.full(
@@ -70,7 +70,7 @@ def test_drawing_picks_connection_views() -> None:
     maps = MapRenderer(tiles=NullTiles())
     assert drawing(view=VIEW.pane, maps=maps)().shape == (480, 800)
     stop = build_connection_view(
-        stop_view=STOP, pin=WORK, pairs=PAIRS, scroll=0, now=at(7, 30),
+        stop_view=STOP, pin=WORK, chains=CHAINS, scroll=0, now=at(7, 30),
     )
     assert drawing(view=stop, maps=maps)().shape == (480, 800)
     assert maps.key is None

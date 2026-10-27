@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 from paperroute.core.alert_state import has_alerts
-from paperroute.core.connection import live_pairs
+from paperroute.core.connection import live_chains
 from paperroute.core.map_state import zoomed
 from paperroute.core.messages import (
     Knob,
@@ -98,12 +98,12 @@ def pair_scrolled(*, state: State, steps: int) -> State:
     Returns
     -------
     State
-        State whose scroll stays between 0 and the last pair the view
-        can start at: the last pair on the Strip, the one before it on
+        State whose scroll stays between 0 and the last chain the view
+        can start at: the last chain on the Strip, the one before it on
         the Stop view, whose list starts after the hero.
     """
-    pairs = len(live_pairs(state=state))
-    last = pairs - (2 if state.view is LiveView.STOP else 1)
+    chains = len(live_chains(state=state))
+    last = chains - (2 if state.view is LiveView.STOP else 1)
     scroll = min(state.scroll + steps, last)
     return replace(state, scroll=max(0, scroll))
 

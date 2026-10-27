@@ -1,11 +1,18 @@
-"""Draw a list of connection pairs: leave, routes, detail and arrive."""
+"""Draw a list of connection chains: leave, routes, detail and arrive."""
 
 from collections.abc import Sequence
 from typing import Final
 
 from paperroute.core.connection_view import PairRow
 from paperroute.render.canvas import INK, Canvas, Face
-from paperroute.render.chrome import route_pair
+from paperroute.render.chrome import (
+    ARROW_GAP,
+    ARROW_WIDTH,
+    MIN_PAIR_PX,
+    arrow,
+    badge,
+    badge_width,
+)
 
 INSET: Final[int] = 6
 ROUTES_LEFT: Final[int] = 70  # from the list's left edge
@@ -13,6 +20,77 @@ ARRIVE_ROOM: Final[int] = 64
 LEAVE_FACE: Final[Face] = Face(weight=800, px=24)
 ARRIVE_FACE: Final[Face] = Face(weight=800, px=20)
 DETAIL_FACE: Final[Face] = Face(weight=400, px=14)
+CHIP_PX: Final[int] = 14
+
+
+def chips_px(
+    canvas: Canvas, *, chips: Sequence[str], px: int, room: float,
+) -> int:
+    """
+    Choose the largest text size, up to px, at which chips fit a room.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    chips : Sequence[str]
+        Route labels.
+    px : int
+        Largest text size.
+    room : float
+        Width available.
+
+    Returns
+    -------
+    int
+        Text size, never below MIN_PAIR_PX.
+    """
+    gaps = (len(chips) - 1) * (2 * ARROW_GAP + ARROW_WIDTH)
+    while px > MIN_PAIR_PX:
+        width = gaps + sum(
+            badge_width(canvas, route=label, px=px) for label in chips
+        )
+        if width <= room:
+            break
+        px -= 1
+    return px
+
+
+def route_chips(
+    canvas: Canvas, *, x: float, y: float, chips: Sequence[str],
+    room: float, px: int = CHIP_PX,
+) -> float:
+    """
+    Draw route badges with an arrow between each.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    x : float
+        Left edge.
+    y : float
+        Vertical centre.
+    chips : Sequence[str]
+        Route labels in order.
+    room : float
+        Width they must fit; the text shrinks to fit it.
+    px : int
+        Largest text size.
+
+    Returns
+    -------
+    float
+        Total width.
+    """
+    px = chips_px(canvas, chips=chips, px=px, room=room)
+    width = 0.0
+    for index, label in enumerate(chips):
+        if index:
+            width += ARROW_GAP
+            width += arrow(canvas, x=x + width, y=y, grey=INK) + ARROW_GAP
+        width += badge(canvas, x=x + width, y=y, route=label, px=px)
+    return width
 
 
 def draw_pair_row(
@@ -47,10 +125,7 @@ def draw_pair_row(
         at=(left + INSET, y + 32), text=row.leaves_at, face=LEAVE_FACE,
         grey=INK,
     )
-    route_pair(
-        canvas, x=routes, y=y + 20, route=row.route, onto=row.onto, px=14,
-        room=room,
-    )
+    route_chips(canvas, x=routes, y=y + 20, chips=row.chips, room=room)
     canvas.text(
         at=(routes, y + 50),
         text=canvas.fit(

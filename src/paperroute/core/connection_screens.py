@@ -2,9 +2,9 @@
 
 from dataclasses import replace
 
-from paperroute.core.connection import live_pairs
+from paperroute.core.chains import Chain
+from paperroute.core.connection import live_chains
 from paperroute.core.connection_map import build_connection_map
-from paperroute.core.connection_model import Pair
 from paperroute.core.connection_strip import (
     ConnectionStripMapView,
     ConnectionStripView,
@@ -28,7 +28,7 @@ type ConnectionScreen = (
 
 
 def connection_map(
-    *, state: State, stop_view: StopView, pairs: tuple[Pair, ...],
+    *, state: State, stop_view: StopView, chains: tuple[Chain, ...],
     width: int | None = None,
 ) -> MapView:
     """
@@ -39,9 +39,9 @@ def connection_map(
     state : State
         State showing a connection pin.
     stop_view : StopView
-        Leg 1's Stop view.
-    pairs : tuple[Pair, ...]
-        The workable pairs.
+        The direct list's Stop view.
+    chains : tuple[Chain, ...]
+        The workable chains.
     width : int | None
         Map width in pixels, or None for the Map's own.
 
@@ -56,13 +56,13 @@ def connection_map(
     return build_connection_map(
         inputs=inputs,
         pin=shown(state=state),
-        pairs=pairs,
+        chains=chains,
         mode=state.settings.connection_map,
     )
 
 
 def connection_strip(
-    *, state: State, stop_view: StopView, pin: Pin, pairs: tuple[Pair, ...],
+    *, state: State, stop_view: StopView, pin: Pin, chains: tuple[Chain, ...],
 ) -> ConnectionStripView:
     """
     Build the connection Strip the state shows.
@@ -72,21 +72,21 @@ def connection_strip(
     state : State
         State.
     stop_view : StopView
-        Leg 1's Stop view.
+        The direct list's Stop view.
     pin : Pin
         Connection pin.
-    pairs : tuple[Pair, ...]
-        The workable pairs.
+    chains : tuple[Chain, ...]
+        The workable chains.
 
     Returns
     -------
     ConnectionStripView
-        The sections of the pair the scroll selects.
+        The sections of the chain the scroll selects.
     """
     return build_connection_strip(
         stop_view=stop_view,
         pin=pin,
-        pairs=pairs,
+        chains=chains,
         selected=state.scroll,
         patterns=state.map.patterns,
     )
@@ -103,7 +103,7 @@ def connection_screen(
     state : State
         State.
     stop_view : StopView
-        Leg 1's Stop view, from `live_stop_view`.
+        The direct list's Stop view, from `live_stop_view`.
 
     Returns
     -------
@@ -114,32 +114,32 @@ def connection_screen(
     pin = shown(state=state)
     if not is_connection(pin=pin) or state.view is LiveView.ALERTS:
         return None
-    pairs = live_pairs(state=state)
+    chains = live_chains(state=state)
     match state.view:
         case LiveView.MAP:
             return connection_map(
-                state=state, stop_view=stop_view, pairs=pairs,
+                state=state, stop_view=stop_view, chains=chains,
             )
         case LiveView.STRIP:
             return connection_strip(
-                state=state, stop_view=stop_view, pin=pin, pairs=pairs,
+                state=state, stop_view=stop_view, pin=pin, chains=chains,
             )
         case LiveView.STRIP_MAP:
             return ConnectionStripMapView(
                 map=connection_map(
                     state=state,
                     stop_view=stop_view,
-                    pairs=pairs,
+                    chains=chains,
                     width=STRIP_MAP_WIDTH,
                 ),
                 pane=connection_strip(
-                    state=state, stop_view=stop_view, pin=pin, pairs=pairs,
+                    state=state, stop_view=stop_view, pin=pin, chains=chains,
                 ),
             )
     return build_connection_view(
         stop_view=stop_view,
         pin=pin,
-        pairs=pairs,
+        chains=chains,
         scroll=state.scroll,
         now=state.now,
     )

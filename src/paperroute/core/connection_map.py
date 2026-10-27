@@ -4,9 +4,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Final
 
-from paperroute.core.connection import pair_legs
-from paperroute.core.connection_model import Pair, first_change
-from paperroute.core.connection_view import PairRow, pair_rows
+from paperroute.core.chains import Chain
+from paperroute.core.connection import chain_legs
+from paperroute.core.connection_view import PairRow, chain_rows
 from paperroute.core.geo import Point, Shape, point_along, stop_distances
 from paperroute.core.map_view import (
     MAP_HEIGHT,
@@ -16,7 +16,8 @@ from paperroute.core.map_view import (
     build_map_view,
     pin_trips,
 )
-from paperroute.core.model import Departure, Pin, StopPlace
+from paperroute.core.model import Change, Departure, Pin, StopPlace
+from paperroute.core.rides import Ride, rides_of
 from paperroute.core.saved import ConnectionMap
 from paperroute.core.tiles import ZOOMS
 
@@ -111,30 +112,72 @@ def middle(*, ends: tuple[Point, Point]) -> Point:
     return (first[0] + second[0]) / 2, (first[1] + second[1]) / 2
 
 
-def walk_of(*, pin: Pin, pair: Pair | None) -> tuple[Point, Point] | None:
+def walk_ends(*, change: Change) -> tuple[Point, Point] | None:
     """
-    Find the two ends of a pair's walk.
+    Find the two ends of a change's walk.
+
+    Parameters
+    ----------
+    change : Change
+        The change.
+
+    Returns
+    -------
+    tuple[Point, Point] | None
+        The alight and board points; None when either has no point.
+    """
+    alight, board = change.alight.point, change.board.point
+    if alight is None or board is None:
+        return None
+    return alight, board
+
+
+def hero_changes(*, pin: Pin, chain: Chain | None) -> tuple[Change, ...]:
+    """
+    List the changes the hero chain makes.
 
     Parameters
     ----------
     pin : Pin
         Connection pin.
-    pair : Pair | None
-        The hero pair, or None.
+    chain : Chain | None
+        The hero chain, or None.
+
+    Returns
+    -------
+    tuple[Change, ...]
+        The changes between its rides; with no chain, the first ticked
+        way's changes; none for a direct chain or a stay on.
+    """
+    if chain is None:
+        ways = [way for way in pin.ways if way.ticked]
+        return ways[0].changes if ways else ()
+    return tuple(
+        ride.change
+        for ride in rides_of(chain=chain, pin=pin)
+        if ride.change is not None
+    )
+
+
+def walk_of(*, pin: Pin, chain: Chain | None) -> tuple[Point, Point] | None:
+    """
+    Find the two ends of the hero chain's first walk.
+
+    Parameters
+    ----------
+    pin : Pin
+        Connection pin.
+    chain : Chain | None
+        The hero chain, or None.
 
     Returns
     -------
     tuple[Point, Point] | None
-        The alight and board points; None when staying on or either has
-        no point.
+        The alight and board points of its first change; None without a
+        change or a point.
     """
-    change = first_change(pin=pin)
-    if change is None or (pair is not None and pair.second is None):
-        return None
-    alight, board = change.alight.point, change.board.point
-    if alight is None or board is None:
-        return None
-    return alight, board
+    changes = hero_changes(pin=pin, chain=chain)
+    return walk_ends(change=changes[0]) if changes else None
 
 
 def cut_leg(
@@ -167,51 +210,64 @@ def cut_leg(
     return (leg_line(shape=shape, start=start, end=end),)
 
 
+def ride_lines(
+    *, rides: Sequence[Ride], shapes: Mapping[str, Shape],
+) -> tuple[tuple[Line, ...], ...]:
+    """
+    Cut each ride's line from its shape.
+
+    Parameters
+    ----------
+    rides : Sequence[Ride]
+        The rides.
+    shapes : Mapping[str, Shape]
+        Loaded shapes by shape ID.
+
+    Returns
+    -------
+    tuple[tuple[Line, ...], ...]
+        Each ride's lines, empty when not drawn.
+    """
+    return tuple(
+        cut_leg(
+            departure=ride.item.departure,
+            ends=(ride.start, ride.end),
+            shapes=shapes,
+        )
+        for ride in rides
+    )
+
+
 def leg_lines(
-    *, pin: Pin, pair: Pair | None, shapes: Mapping[str, Shape],
+    *, pin: Pin, chain: Chain | None, shapes: Mapping[str, Shape],
 ) -> tuple[tuple[Line, ...], tuple[Line, ...]]:
     """
-    Cut the hero pair's two legs from their shapes.
+    Cut the hero chain's rides from their shapes.
 
     Parameters
     ----------
     pin : Pin
         Connection pin.
-    pair : Pair | None
-        The hero pair, or None.
+    chain : Chain | None
+        The hero chain, or None.
     shapes : Mapping[str, Shape]
         Loaded shapes by shape ID.
 
     Returns
     -------
     tuple[tuple[Line, ...], tuple[Line, ...]]
-        Leg 1's line and leg 2's, each empty when not drawn.
+        The first ride's lines and every later ride's, each empty when
+        not drawn.
     """
-    change = first_change(pin=pin)
-    end = pin.destination or pin.origin
-    if pair is None or change is None:
+    if chain is None:
         return (), ()
-    if pair.second is None:
-        first = cut_leg(
-            departure=pair.first.departure, ends=(pin.origin, end),
-            shapes=shapes,
-        )
-        return first, ()
-    return (
-        cut_leg(
-            departure=pair.first.departure,
-            ends=(pin.origin, change.alight),
-            shapes=shapes,
-        ),
-        cut_leg(
-            departure=pair.second.departure,
-            ends=(change.board, end),
-            shapes=shapes,
-        ),
-    )
+    lines = ride_lines(rides=rides_of(chain=chain, pin=pin), shapes=shapes)
+    return lines[0], tuple(line for each in lines[1:] for line in each)
 
 
-def trip_points(*, pin: Pin, lines: Sequence[Line]) -> tuple[Point, ...]:
+def trip_points(
+    *, pin: Pin, chain: Chain | None, lines: Sequence[Line],
+) -> tuple[Point, ...]:
     """
     Collect every point the whole trip covers.
 
@@ -219,17 +275,18 @@ def trip_points(*, pin: Pin, lines: Sequence[Line]) -> tuple[Point, ...]:
     ----------
     pin : Pin
         Connection pin.
+    chain : Chain | None
+        The hero chain, or None.
     lines : Sequence[Line]
         The legs' lines.
 
     Returns
     -------
     tuple[Point, ...]
-        The lines' points and the four stops' points.
+        The lines' points, the ends and each change's stops.
     """
-    change = first_change(pin=pin)
     places = [pin.origin, pin.destination]
-    if change is not None:
+    for change in hero_changes(pin=pin, chain=chain):
         places += [change.alight, change.board]
     stops = tuple(
         place.point
@@ -240,33 +297,33 @@ def trip_points(*, pin: Pin, lines: Sequence[Line]) -> tuple[Point, ...]:
 
 
 def shown_trips(
-    *, pairs: Sequence[Pair], mode: ConnectionMap,
+    *, chains: Sequence[Chain], mode: ConnectionMap,
 ) -> frozenset[str]:
     """
     Choose the trips whose vehicles are drawn.
 
     Parameters
     ----------
-    pairs : Sequence[Pair]
-        Workable pairs.
+    chains : Sequence[Chain]
+        Workable chains.
     mode : ConnectionMap
         Which framing.
 
     Returns
     -------
     frozenset[str]
-        For the whole trip, both legs of the listed pairs. Zoomed on the
-        change, both legs of the hero pair.
+        For the whole trip, every leg of the listed chains. Zoomed on the
+        changes, every leg of the hero chain.
     """
     if mode is ConnectionMap.WHOLE:
         return pin_trips(departures=[
             departure
-            for pair in pairs[:SIDEBAR_PAIRS]
-            for departure in pair_legs(pair=pair)
+            for chain in chains[:SIDEBAR_PAIRS]
+            for departure in chain_legs(chain=chain)
         ])
-    if not pairs:
+    if not chains:
         return frozenset()
-    return pin_trips(departures=pair_legs(pair=pairs[0]))
+    return pin_trips(departures=chain_legs(chain=chains[0]))
 
 
 def banner_room(*, inputs: MapInputs) -> int:
@@ -287,7 +344,7 @@ def banner_room(*, inputs: MapInputs) -> int:
 
 
 def whole_frame(
-    *, inputs: MapInputs, pin: Pin, pairs: Sequence[Pair],
+    *, inputs: MapInputs, pin: Pin, chains: Sequence[Chain],
 ) -> tuple[Point | None, int]:
     """
     Frame the whole trip.
@@ -298,8 +355,8 @@ def whole_frame(
         The map's inputs.
     pin : Pin
         Connection pin.
-    pairs : Sequence[Pair]
-        Workable pairs.
+    chains : Sequence[Chain]
+        Workable chains.
 
     Returns
     -------
@@ -309,9 +366,9 @@ def whole_frame(
         zoom that holds it with that room; the From and the knob's zoom
         with no point at all.
     """
-    hero = pairs[0] if pairs else None
-    first, second = leg_lines(pin=pin, pair=hero, shapes=inputs.shapes)
-    points = trip_points(pin=pin, lines=(*first, *second))
+    hero = chains[0] if chains else None
+    first, second = leg_lines(pin=pin, chain=hero, shapes=inputs.shapes)
+    points = trip_points(pin=pin, chain=hero, lines=(*first, *second))
     if not points:
         return inputs.centre, inputs.zoom
     box = box_of(points=points)
@@ -368,7 +425,11 @@ def roomy_zoom(*, box: tuple[Point, Point], width: int, top: int) -> int:
 
 
 def framed(
-    *, inputs: MapInputs, pin: Pin, pairs: Sequence[Pair], mode: ConnectionMap,
+    *,
+    inputs: MapInputs,
+    pin: Pin,
+    chains: Sequence[Chain],
+    mode: ConnectionMap,
 ) -> tuple[Point | None, int]:
     """
     Choose the map's centre and zoom.
@@ -379,8 +440,8 @@ def framed(
         The map's inputs.
     pin : Pin
         Connection pin.
-    pairs : Sequence[Pair]
-        Workable pairs.
+    chains : Sequence[Chain]
+        Workable chains.
     mode : ConnectionMap
         Which framing.
 
@@ -393,8 +454,8 @@ def framed(
         the knob's zoom when neither applies.
     """
     if mode is ConnectionMap.WHOLE:
-        return whole_frame(inputs=inputs, pin=pin, pairs=pairs)
-    walk = walk_of(pin=pin, pair=None)
+        return whole_frame(inputs=inputs, pin=pin, chains=chains)
+    walk = walk_of(pin=pin, chain=None)
     zoom = max(0, inputs.zoom - CHANGE_ZOOM_IN)
     if walk is None:
         return inputs.centre, zoom
@@ -403,7 +464,11 @@ def framed(
 
 
 def connection_inputs(
-    *, inputs: MapInputs, pin: Pin, pairs: Sequence[Pair], mode: ConnectionMap,
+    *,
+    inputs: MapInputs,
+    pin: Pin,
+    chains: Sequence[Chain],
+    mode: ConnectionMap,
 ) -> MapInputs:
     """
     Frame the map on a connection.
@@ -414,8 +479,8 @@ def connection_inputs(
         The map's inputs as for a plain pin.
     pin : Pin
         Connection pin.
-    pairs : Sequence[Pair]
-        Workable pairs in leg-1 departure order.
+    chains : Sequence[Chain]
+        Workable chains in first-leg departure order.
     mode : ConnectionMap
         Zoomed on the change, or the whole trip.
 
@@ -425,51 +490,72 @@ def connection_inputs(
         The hero pair's legs as the departures, the framing's centre and
         zoom, and the trips whose vehicles are drawn.
     """
-    centre, zoom = framed(inputs=inputs, pin=pin, pairs=pairs, mode=mode)
+    centre, zoom = framed(
+        inputs=inputs, pin=pin, chains=chains, mode=mode,
+    )
     return replace(
         inputs,
-        departures=pair_legs(pair=pairs[0]) if pairs else (),
+        departures=chain_legs(chain=chains[0]) if chains else (),
         centre=centre,
         zoom=zoom,
-        vehicle_trips=shown_trips(pairs=pairs, mode=mode),
+        vehicle_trips=shown_trips(chains=chains, mode=mode),
     )
 
 
-def sidebar_rows(*, pin: Pin, pairs: Sequence[Pair]) -> tuple[PairRow, ...]:
+def sidebar_rows(
+    *, pin: Pin, chains: Sequence[Chain],
+) -> tuple[PairRow, ...]:
     """
-    Summarise the first pairs for the sidebar.
+    Summarise the first chains for the sidebar.
 
     Parameters
     ----------
     pin : Pin
         Connection pin.
-    pairs : Sequence[Pair]
-        Workable pairs.
+    chains : Sequence[Chain]
+        Workable chains.
 
     Returns
     -------
     tuple[PairRow, ...]
         Up to four rows whose detail is the journey time; the first adds
-        where to change, or that you stay on.
+        where it changes, or that it is direct or stays on.
     """
-    rows = pair_rows(pairs=pairs[:SIDEBAR_PAIRS])
-    change = first_change(pin=pin)
-    board = '' if change is None else change.board.name
+    rows = chain_rows(chains=chains[:SIDEBAR_PAIRS], pin=pin)
     return tuple(
         replace(
             row,
             detail=f'{row.minutes} min' if index else (
-                f'{row.minutes} min · stay on'
-                if row.onto is None
-                else f'{row.minutes} min · change at {board}'
+                f'{row.minutes} min · {sidebar_detail(detail=row.detail)}'
             ),
         )
         for index, row in enumerate(rows)
     )
 
 
+def sidebar_detail(*, detail: str) -> str:
+    """
+    Word a row's detail for the sidebar's first row.
+
+    Parameters
+    ----------
+    detail : str
+        The row's detail.
+
+    Returns
+    -------
+    str
+        'change at {stop}' for one change; the detail otherwise.
+    """
+    return f'change {detail}' if detail.startswith('at ') else detail
+
+
 def build_connection_map(
-    *, inputs: MapInputs, pin: Pin, pairs: Sequence[Pair], mode: ConnectionMap,
+    *,
+    inputs: MapInputs,
+    pin: Pin,
+    chains: Sequence[Chain],
+    mode: ConnectionMap,
 ) -> MapView:
     """
     Build the connection Map.
@@ -480,8 +566,8 @@ def build_connection_map(
         The map's inputs as for a plain pin.
     pin : Pin
         Connection pin.
-    pairs : Sequence[Pair]
-        Workable pairs in leg-1 departure order.
+    chains : Sequence[Chain]
+        Workable chains in first-leg departure order.
     mode : ConnectionMap
         Zoomed on the change, or the whole trip.
 
@@ -492,11 +578,11 @@ def build_connection_map(
         trip marks, and the pairs in the sidebar.
     """
     view = build_map_view(inputs=connection_inputs(
-        inputs=inputs, pin=pin, pairs=pairs, mode=mode,
+        inputs=inputs, pin=pin, chains=chains, mode=mode,
     ))
-    hero = pairs[0] if pairs else None
-    first, second = leg_lines(pin=pin, pair=hero, shapes=inputs.shapes)
-    walk = walk_of(pin=pin, pair=hero)
+    hero = chains[0] if chains else None
+    first, second = leg_lines(pin=pin, chain=hero, shapes=inputs.shapes)
+    walk = walk_of(pin=pin, chain=hero)
     end = pin.destination
     trip = TripMarks(
         origin=pin.origin.point,
@@ -509,5 +595,5 @@ def build_connection_map(
         view,
         base=replace(view.base, route=first, trip=trip),
         sidebar=(),
-        pairs=sidebar_rows(pin=pin, pairs=pairs),
+        pairs=sidebar_rows(pin=pin, chains=chains),
     )

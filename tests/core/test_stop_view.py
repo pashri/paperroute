@@ -743,3 +743,20 @@ def test_pin_tag_auto() -> None:
     assert plain.text == tag.text
     assert not plain.auto
     assert pin_tag(index=None, total=3, auto=True) == NOT_PINNED
+
+
+def test_destination_pin_rows_show_chip() -> None:
+    """Rows of a pin with a To each carry their own route chip."""
+    routes = ('711', '606', '711')
+    result = view(departures=tuple(
+        replace(
+            live(minutes=minutes),
+            departure=departure(
+                departs=START + timedelta(minutes=minutes), route=route,
+            ),
+        )
+        for minutes, route in zip((5, 8, 12), routes, strict=True)
+    ))
+    assert result.hero is not None
+    assert result.hero.route == '711'
+    assert [row.route for row in result.rows] == ['606', '711']

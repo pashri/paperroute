@@ -9,7 +9,6 @@ from paperroute.core.connection import (
     chain_legs,
     connection_facts,
     live_chains,
-    live_pairs,
 )
 from paperroute.core.messages import DeparturesLoaded
 from paperroute.core.model import Change, Departure, Mode, Pin, Way
@@ -131,15 +130,6 @@ def test_live_chains_from_board() -> None:
     assert [len(chain_legs(chain=chain)) for chain in chains] == [2] * 5
     plain = replace(WORK, ways=())
     assert live_chains(state=loaded(pin=plain)) == ()
-
-
-def test_live_pairs_stopgap() -> None:
-    """Each chain gives a pair of its first and last legs."""
-    pairs = live_pairs(state=loaded())
-    chains = live_chains(state=loaded())
-    assert [pair.second for pair in pairs] == [
-        chain.legs[-1] for chain in chains
-    ]
 
 
 def test_direct_list_competes() -> None:

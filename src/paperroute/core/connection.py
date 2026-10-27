@@ -9,7 +9,7 @@ from paperroute.core.alert_match import (
     pin_facts,
 )
 from paperroute.core.chains import Chain, Legs, chains_of, open_legs
-from paperroute.core.connection_model import Pair, direct_leg
+from paperroute.core.connection_model import direct_leg
 from paperroute.core.live import LiveDeparture, resolved
 from paperroute.core.model import Departure, Pin, is_connection
 from paperroute.core.places import shown
@@ -84,49 +84,6 @@ def chain_legs(*, chain: Chain) -> tuple[Departure, ...]:
         Each leg's departure in order.
     """
     return tuple(item.departure for item in chain.legs)
-
-
-def live_pairs(*, state: State) -> tuple[Pair, ...]:
-    """
-    Give the shown pin's chains as first and last legs.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    tuple[Pair, ...]
-        One pair per chain: a direct chain alone, otherwise its first and
-        last legs.
-    """
-    return tuple(
-        Pair(
-            first=chain.legs[0],
-            second=chain.legs[-1] if len(chain.legs) > 1 else None,
-        )
-        for chain in live_chains(state=state)
-    )
-
-
-def pair_legs(*, pair: Pair) -> tuple[Departure, ...]:
-    """
-    List the scheduled departures a pair rides.
-
-    Parameters
-    ----------
-    pair : Pair
-        The pair.
-
-    Returns
-    -------
-    tuple[Departure, ...]
-        Leg 1 then leg 2, or the one departure when staying on.
-    """
-    if pair.second is None:
-        return (pair.first.departure,)
-    return pair.first.departure, pair.second.departure
 
 
 def leg_lists(

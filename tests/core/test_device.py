@@ -87,6 +87,8 @@ def test_school_switch_reloads_departures() -> None:
     state, _ = step(before, SettingsChanged(skip_school_buses=False))
     assert state.board.loaded_until is None
     assert not state.board.loading
+    assert before.board.departures
+    assert not state.board.departures
     same, _ = step(before, SettingsChanged(skip_school_buses=True))
     assert same.board == before.board
 

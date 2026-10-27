@@ -59,8 +59,8 @@ def on_settings(
     Store the settings given; the next tick saves them.
 
     A change to rotate redraws the last view with a full refresh; a
-    change to the school switch drops the loaded departures, so the next
-    tick reads them again.
+    change to the school switch clears the board, so the next tick reads
+    the departures again.
 
     Parameters
     ----------
@@ -86,7 +86,12 @@ def on_settings(
     if settings.skip_school_buses != state.settings.skip_school_buses:
         after = replace(
             after,
-            board=replace(after.board, loaded_until=None, loading=False),
+            board=replace(
+                after.board,
+                departures=(),
+                loaded_until=None,
+                loading=False,
+            ),
         )
     if not turned or state.last_view is None:
         return after, ()

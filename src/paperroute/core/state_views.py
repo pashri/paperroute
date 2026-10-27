@@ -271,7 +271,8 @@ def rendered(
 
     The first frame, the sleep screen, the first frame after it and a
     change into or out of a view with grey tiles are full refreshes.
-    While the sleep screen is shown nothing redraws; it is drawn once.
+    While the sleep screen is shown nothing redraws; it is drawn once,
+    and once more when it was drawn before departures loaded.
 
     Parameters
     ----------
@@ -288,7 +289,8 @@ def rendered(
         State with the view recorded, the scroll too on the Stop view,
         and effects.
     """
-    if state.panel.asleep and isinstance(state.last_view, SleepView):
+    last = state.last_view
+    if state.panel.asleep and isinstance(last, SleepView) and not last.loading:
         return state, effects
     view = current_view(state=state, stop_view=stop_view)
     if isinstance(view, StopView) and state.view is LiveView.STOP:

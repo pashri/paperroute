@@ -194,10 +194,13 @@ class SleepView:
         The map drawn.
     band : str
         The text in the band.
+    loading : bool
+        Whether it was drawn before the shown pin's departures loaded.
     """
 
     map: MapView
     band: str
+    loading: bool = False
 
 
 PanelView = MenuView | DeviceView | PhoneView | WifiSetupView | ConfirmView

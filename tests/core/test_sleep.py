@@ -175,3 +175,25 @@ def test_sleep_screen_is_drawn_once() -> None:
     assert state.panel.asleep
     state, effects = step(state, KnobPressed(knob=Knob.BOTTOM))
     assert isinstance(renders(effects=effects)[0], StopView)
+
+
+def test_sleep_screen_redrawn_once_departures_load() -> None:
+    """A sleep screen drawn while loading is drawn again once, loaded."""
+    state, _ = step(fresh(), Tick(now=START))
+    index = tuple(MenuRow).index(MenuRow.SLEEP)
+    state, _ = run(state=state, events=(BOTH, turn(steps=index)))
+    state, effects = step(state, DOWN)
+    (first,) = renders(effects=effects)
+    assert isinstance(first, SleepView)
+    assert first.loading
+    event = DeparturesLoaded(
+        pin=state.places.pins[0],
+        departures=(departure(departs=START + timedelta(minutes=3)),),
+        until=START + timedelta(hours=2),
+    )
+    state, effects = step(state, event)
+    (second,) = renders(effects=effects)
+    assert isinstance(second, SleepView)
+    assert not second.loading
+    _, effects = step(state, event)
+    assert not renders(effects=effects)

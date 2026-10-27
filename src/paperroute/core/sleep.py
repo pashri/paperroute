@@ -93,9 +93,12 @@ def sleep_view(*, state: State, stop_view: StopView) -> SleepView:
     -------
     SleepView
         The shown pin's map with no vehicles, sidebar, banner or clock,
-        under the sleep band. It does not change as time passes.
+        under the sleep band, marked loading until departures load. It
+        does not change as time passes.
     """
     inputs = map_inputs(state=state, stop_view=stop_view)
     return SleepView(
-        map=sleep_map(view=build_map_view(inputs=inputs)), band=SLEEP_BAND,
+        map=sleep_map(view=build_map_view(inputs=inputs)),
+        band=SLEEP_BAND,
+        loading=state.board.loaded_until is None,
     )

@@ -113,7 +113,7 @@ async def test_pick_adds_way_and_new_pin(client: Client) -> None:
         ('from', 'G2145615'), ('to', '214510'), ('pick', 'G215254,2560'),
     ])
     text = await (await client.get(f'/pins/ways?{query}')).text()
-    assert '<title>Add a pin - paperroute</title>' in text
+    assert '<title>Add a connection - paperroute</title>' in text
     assert 'value="G215254,2560,' in text
     assert 'action="/pins/delete"' not in text
 
@@ -135,7 +135,11 @@ async def test_refusals(pins: Pins, client: Client) -> None:
     gone = await client.get('/pins/ways?ref=none', allow_redirects=False)
     assert gone.headers['Location'] == '/pins?done=gone'
     start = await (await client.get('/pins/ways')).text()
-    assert '<form class="search"' in start
+    assert '<form class="search"' not in start
+    assert 'placeholder="Pick a stop">' in start
+    assert unlabelled(text=start) == []
+    unknown = await (await client.get('/pins/ways?from_q=Nowhere')).text()
+    assert 'No stop or station matches “Nowhere”.' in unknown
     assert pins.posted == []
 
 

@@ -41,6 +41,7 @@ DANGER: Final[frozenset[str]] = frozenset(
 SECONDARY: Final[frozenset[str]] = frozenset({
     '↑', '↓', 'Edit', 'Cancel', 'Show choices', 'Add window', 'Remove',
     'Show password', 'Join another network…', '⟲ Left', 'Right ⟳',
+    'Add a connection',
 })
 MAIN: Final[frozenset[str]] = frozenset(
     {'Search', 'Save', 'Save key', 'Join', 'Press'},

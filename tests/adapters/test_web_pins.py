@@ -889,16 +889,12 @@ def between(*, text: str, start: str) -> str:
     return text[first:text.index('</form>', first)]
 
 
-async def test_connection_search_links_to_connect(editor: Client) -> None:
-    """A connection search links each result to the connection editor."""
-    text = await (
-        await editor.get('/pins/new?q=Hollis&connect=1')
-    ).text()
-    assert 'href="/pins/connect?stop=C"' in text
-    assert '/pins/edit?' not in text
-    form = between(text=text, start='<form class="search"')
-    assert '<input type="hidden" name="connect" value="1">' in form
-    assert 'value="Hollis"' in form
+async def test_connection_search_goes_to_ways_page(editor: Client) -> None:
+    """An old connection search opens the ways page searching its From."""
+    response = await editor.get(
+        '/pins/new?q=Hollis&connect=1', allow_redirects=False,
+    )
+    assert response.headers['Location'] == '/pins/ways?from_q=Hollis'
 
 
 async def test_plain_search_unchanged(editor: Client) -> None:
@@ -924,29 +920,17 @@ async def test_connection_row_edit_link(pins: Pins) -> None:
     assert f'<small class="trip">{escape(line)}</small>' in text
 
 
-async def test_pins_page_has_connection_search(client: Client) -> None:
-    """The pins page has a labelled search for a connection's first stop."""
+async def test_pins_page_adds_connection(client: Client) -> None:
+    """The pins page opens the ways page for a new connection."""
     text = await (await client.get('/pins')).text()
-    form = between(text=text, start='<label for="connection-search">')
+    form = between(text=text, start='<form method="get" action="/pins/ways">')
     assert (
-        '<form class="search" method="get" action="/pins/new"'
-        ' role="search">\n        <label for="connection-search">'
-    ) in text
-    assert 'Add a connection</label>' in form
-    assert (
-        '<input id="connection-search" type="search" name="q"'
+        '<button type="submit" class="secondary">Add a connection</button>'
         in form
     )
-    assert 'placeholder="Leave from"' in form
-    assert '<input type="hidden" name="connect" value="1">' in form
-    assert '<button type="submit">Search</button>' in form
 
 
-async def test_connection_search_title(editor: Client) -> None:
-    """A connection search page is titled for a connection."""
-    text = await (
-        await editor.get('/pins/new?q=Hollis&connect=1')
-    ).text()
-    assert '<title>Add a connection' in text
+async def test_search_title(editor: Client) -> None:
+    """A search page is titled for a pin."""
     plain = await (await editor.get('/pins/new?q=Hollis')).text()
     assert '<title>Add a pin' in plain

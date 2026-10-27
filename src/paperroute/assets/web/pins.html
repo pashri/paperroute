@@ -59,12 +59,8 @@
                placeholder="Stop or station">
         <button type="submit">Search</button>
       </form>
-      <form class="search" method="get" action="/pins/new" role="search">
-        <label for="connection-search">Add a connection</label>
-        <input id="connection-search" type="search" name="q"
-               placeholder="Leave from">
-        <input type="hidden" name="connect" value="1">
-        <button type="submit">Search</button>
+      <form method="get" action="/pins/ways">
+        <button type="submit" class="secondary">Add a connection</button>
       </form>
     </section>
     <form id="order-form" method="post" action="/pins/order" hidden>

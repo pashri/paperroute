@@ -25,6 +25,8 @@ from paperroute.ports import PinOptions
 
 FAILURE: Final[str] = "Trip Planner didn't answer. Try again in a minute."
 BUSY: Final[str] = 'Trip Planner is busy. Try again in a minute.'
+PICK_FIRST: Final[str] = 'Pick From and To first.'
+FROM_TO: Final[tuple[str, str]] = ('from', 'to')
 NO_TRIPS: Final[str] = 'No trips found.'
 NOT_YET: Final[str] = 'not supported yet'
 DIRECT_NOTE: Final[str] = 'Direct trips always show on the panel.'
@@ -455,11 +457,17 @@ class SuggestPages:
         Returns
         -------
         str
-            The list, or the failure line.
+            The list, or the failure line; a line asking for From and To
+            when either is not known.
         """
         options = self._ways.options
         if self._planner is None or options is None:
             return failure_html()
+        stops = [
+            options.place(stop_id=query.get(name, '')) for name in FROM_TO
+        ]
+        if None in stops:
+            return failure_html(line=PICK_FIRST)
         try:
             journeys = await self._planner.trips(
                 origin_id=query.get('from', ''),

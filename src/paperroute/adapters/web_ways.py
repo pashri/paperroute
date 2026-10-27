@@ -2,7 +2,7 @@
 
 import html
 from collections.abc import Callable
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from http import HTTPStatus
 from typing import Final
 from urllib.parse import urlencode
@@ -29,13 +29,15 @@ from paperroute.adapters.ways_editor import (
 )
 from paperroute.adapters.web_common import asset
 from paperroute.adapters.web_pin_edit import (
+    MIN_QUERY,
     MISFIT,
-    SEARCH_FORM,
+    NO_MATCH,
     delete_form,
     edit_page,
+    option,
 )
 from paperroute.adapters.web_pin_list import pin_label
-from paperroute.adapters.web_pin_search import CONNECT_FIELD, STARTING
+from paperroute.adapters.web_pin_search import STARTING, STOPS_SHOWN
 from paperroute.adapters.web_pins import PinsPages, html_page, notice_alert
 from paperroute.core.connection_model import way_legs
 from paperroute.core.model import Pin, StopPlace, Way
@@ -43,7 +45,7 @@ from paperroute.core.pin_choices import NICKNAME_MAX
 from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
 
-ADD_TITLE: Final[str] = 'Add a pin'
+ADD_TITLE: Final[str] = 'Add a connection'
 EDIT_TITLE: Final[str] = 'Edit pin'
 NEVER_HINT: Final[str] = 'Routes ticked here are never used on any leg.'
 ARROW: Final[str] = '\u2192'
@@ -74,13 +76,26 @@ FORM: Final[str] = """<form class="editor ways" method="get"
                 formaction="/pins/ways/save">Save</button>
       </p>
     </form>"""
+PICK_STOP: Final[str] = 'Pick a stop'
+NO_WAYS: Final[str] = (
+    'Pick From and To, then suggest with Trip Planner or add a way by hand.'
+)
 STOP: Final[str] = """
         <p>
           <label for="pin-{name}">{label}</label>
-          <select id="pin-{name}" name="{name}" data-stop-search>
-            <option value="{value}" selected>{text}</option>
+          <select id="pin-{name}" name="{name}" data-stop-search
+                  placeholder="{prompt}">{options}
           </select>
-        </p>"""
+        </p>
+        <noscript>
+          <p>
+            <label for="pin-{name}-q">Search {label}</label>
+            <input id="pin-{name}-q" type="search" name="{name}_q"
+                   value="{text}">
+          </p>{note}
+        </noscript>"""
+NOTE: Final[str] = """
+          <p class="hint">{text}</p>"""
 WAY: Final[str] = """
         <label class="way"><input type="checkbox" name="way"
                value="{index}"{checked}> {label}</label>
@@ -122,27 +137,133 @@ async def posted_fields(*, request: web.Request) -> MultiMapping[str]:
     ])
 
 
-def stop_field(*, name: str, label: str, place: StopPlace) -> str:
+@dataclass(frozen=True)
+class StopPick:
     """
-    Draw a stop select that the stop search script can take over.
+    One stop field: what is chosen and what a typed search found.
+
+    Attributes
+    ----------
+    name : str
+        Field name, `from` or `to`.
+    label : str
+        Its label.
+    place : StopPlace | None
+        The stop chosen, or None.
+    text : str
+        The search typed without scripts; '' for none.
+    found : tuple[StopPlace, ...]
+        What the search found.
+    """
+
+    name: str
+    label: str
+    place: StopPlace | None
+    text: str = ''
+    found: tuple[StopPlace, ...] = ()
+
+
+def stop_options(*, pick: StopPick) -> str:
+    """
+    Draw a stop select's options.
 
     Parameters
     ----------
-    name : str
-        Field name.
-    label : str
-        Its label.
-    place : StopPlace
-        The stop chosen.
+    pick : StopPick
+        The field.
 
     Returns
     -------
     str
-        A paragraph with the select holding the chosen stop.
+        A prompt when nothing is chosen, then the chosen stop and the
+        stops found.
+    """
+    chosen = '' if pick.place is None else pick.place.stop_id
+    places = [] if pick.place is None else [pick.place]
+    places += [place for place in pick.found if place.stop_id != chosen]
+    prompt = option(value='', label=PICK_STOP, chosen=chosen)
+    return (prompt if pick.place is None else '') + ''.join(
+        option(value=place.stop_id, label=place.name, chosen=chosen)
+        for place in places
+    )
+
+
+def search_note(*, pick: StopPick) -> str:
+    """
+    Say when a typed search found nothing.
+
+    Parameters
+    ----------
+    pick : StopPick
+        The field.
+
+    Returns
+    -------
+    str
+        A hint, or an empty string.
+    """
+    if len(pick.text.strip()) < MIN_QUERY or pick.found:
+        return ''
+    return NOTE.format(
+        text=NO_MATCH.format(text=html.escape(pick.text.strip())),
+    )
+
+
+def stop_field(*, pick: StopPick) -> str:
+    """
+    Draw a stop select that the stop search script can take over.
+
+    Without scripts, a search box under it fills the select on the next
+    Show choices.
+
+    Parameters
+    ----------
+    pick : StopPick
+        The field.
+
+    Returns
+    -------
+    str
+        The select and its search box.
     """
     return STOP.format(
-        name=name, label=label, value=html.escape(place.stop_id),
-        text=html.escape(place.name),
+        name=pick.name, label=pick.label, prompt=PICK_STOP,
+        options=stop_options(pick=pick), text=html.escape(pick.text),
+        note=search_note(pick=pick),
+    )
+
+
+def stop_pick(
+    *, options: PinOptions, query: MultiMapping[str], name: str,
+    place: StopPlace | None,
+) -> StopPick:
+    """
+    Read one stop field from the page's query.
+
+    Parameters
+    ----------
+    options : PinOptions
+        What the timetable offers.
+    query : MultiMapping[str]
+        The page's fields.
+    name : str
+        Field name, `from` or `to`.
+    place : StopPlace | None
+        The stop chosen, or None.
+
+    Returns
+    -------
+    StopPick
+        The field, with the stops its `<name>_q` search found.
+    """
+    text = query.get(f'{name}_q', '')
+    matches = () if len(text.strip()) < MIN_QUERY else options.search(
+        text=text,
+    )
+    return StopPick(
+        name=name, label='From' if name == 'from' else 'To', place=place,
+        text=text,
+        found=tuple(match.place for match in matches[:STOPS_SHOWN]),
     )
 
 
@@ -272,7 +393,7 @@ def hand_location(*, query: MultiMapping[str]) -> str:
 
 
 def ways_form(
-    *, options: PinOptions, pin: Pin, ref: str | None,
+    *, options: PinOptions, pin: Pin | None, query: MultiMapping[str],
     rows: tuple[WindowRow, ...], card: str,
 ) -> str:
     """
@@ -282,10 +403,10 @@ def ways_form(
     ----------
     options : PinOptions
         What the timetable offers.
-    pin : Pin
-        The pin, with a Destination.
-    ref : str | None
-        The saved pin's ref, or None.
+    pin : Pin | None
+        The pin, with a Destination; None until From and To are known.
+    query : MultiMapping[str]
+        The page's fields.
     rows : tuple[WindowRow, ...]
         The window rows.
     card : str
@@ -296,19 +417,56 @@ def ways_form(
     str
         Escaped HTML of the form.
     """
-    destination = pin.destination or pin.origin
+    draft = ways_draft(query=query)
+    origin, destination = stop_places(options=options, pin=pin, draft=draft)
+    ways = '' if pin is None else ways_boxes(options=options, pin=pin)
     return FORM.format(
         default=DEFAULT_BUTTON,
-        ref=html.escape(ref or ''),
-        origin=stop_field(name='from', label='From', place=pin.origin),
-        destination=stop_field(name='to', label='To', place=destination),
+        ref=html.escape(draft.ref or ''),
+        origin=stop_field(pick=stop_pick(
+            options=options, query=query, name='from', place=origin,
+        )),
+        destination=stop_field(pick=stop_pick(
+            options=options, query=query, name='to', place=destination,
+        )),
         card=card,
-        ways=ways_boxes(options=options, pin=pin),
+        ways=ways or NOTE.format(text=NO_WAYS),
         never_hint=html.escape(NEVER_HINT),
-        never=never_boxes(options=options, pin=pin),
-        nickname=html.escape(pin.nickname or ''),
+        never='' if pin is None else never_boxes(options=options, pin=pin),
+        nickname=html.escape(
+            (draft.nickname if pin is None else pin.nickname) or '',
+        ),
         max=NICKNAME_MAX,
         windows=windows_fieldset(rows=rows),
+    )
+
+
+def stop_places(
+    *, options: PinOptions, pin: Pin | None, draft: WaysDraft,
+) -> tuple[StopPlace | None, StopPlace | None]:
+    """
+    Find the From and To the page shows.
+
+    Parameters
+    ----------
+    options : PinOptions
+        What the timetable offers.
+    pin : Pin | None
+        The pin, or None.
+    draft : WaysDraft
+        The choices made.
+
+    Returns
+    -------
+    tuple[StopPlace | None, StopPlace | None]
+        The pin's From and To; else the draft's, each None when not
+        known.
+    """
+    if pin is not None:
+        return pin.origin, pin.destination
+    return (
+        options.place(stop_id=draft.origin),
+        options.place(stop_id=draft.destination),
     )
 
 
@@ -447,7 +605,7 @@ class WaysPages:
         Returns
         -------
         web.Response
-            The page; the stop search when there is no pin to show.
+            The page; From and To left to pick when they are not known.
 
         Raises
         ------
@@ -456,19 +614,18 @@ class WaysPages:
         """
         draft = ways_draft(query=query)
         base = self._base(ref=draft.ref)
-        pin = self._pin(draft=draft, base=base, started='from' in query)
         title = EDIT_TITLE if draft.ref else ADD_TITLE
-        if self.options is None or pin is None:
-            body = STARTING if self.options is None else SEARCH_FORM.format(
-                text='', extra=CONNECT_FIELD,
-            )
+        if self.options is None:
             return html_page(text=edit_page(
-                title=title, notice=notice, body=body,
+                title=title, notice=notice, body=STARTING,
             ), status=status)
+        pin = self._pin(
+            options=self.options, draft=draft, base=base,
+            started='from' in query,
+        )
         rows = start_rows(rows=query_rows(fields=query), pin=base)
         body = ways_form(
-            options=self.options, pin=pin, ref=draft.ref, rows=rows,
-            card=card,
+            options=self.options, pin=pin, query=query, rows=rows, card=card,
         )
         if base is not None and draft.ref:
             body += delete_form(ref=draft.ref, label=pin_label(pin=base))
@@ -503,14 +660,18 @@ class WaysPages:
             raise web.HTTPSeeOther(location='/pins?done=gone')
         return found[1]
 
+    @staticmethod
     def _pin(
-        self, *, draft: WaysDraft, base: Pin | None, started: bool,
+        *, options: PinOptions, draft: WaysDraft, base: Pin | None,
+        started: bool,
     ) -> Pin | None:
         """
         Work out the pin the page shows.
 
         Parameters
         ----------
+        options : PinOptions
+            What the timetable offers.
         draft : WaysDraft
             The choices made.
         base : Pin | None
@@ -521,14 +682,12 @@ class WaysPages:
         Returns
         -------
         Pin | None
-            The pin; the saved pin before any choice; None when the
-            timetable is not ready or a stop is unknown.
+            The pin; the saved pin before any choice; None when a stop
+            is unknown.
         """
-        if self.options is None:
-            return None
         if not started and base is not None and base.destination:
             return base
-        return draft_pin(options=self.options, draft=draft, base=base)
+        return draft_pin(options=options, draft=draft, base=base)
 
     async def _save(self, request: web.Request) -> web.Response:
         """

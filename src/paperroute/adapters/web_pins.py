@@ -6,6 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import replace
 from http import HTTPStatus
 from typing import Final
+from urllib.parse import urlencode
 
 from aiohttp import web
 from multidict import MultiDict
@@ -581,7 +582,15 @@ class PinsPages:
         -------
         web.Response
             The results page.
+
+        Raises
+        ------
+        web.HTTPSeeOther
+            For a connection, to the ways page searching for its From.
         """
+        if request.query.get('connect') == '1':
+            text = urlencode({'from_q': request.query.get('q', '')})
+            raise web.HTTPSeeOther(location=f'/pins/ways?{text}')
         return html_page(text=search_page(
             options=self.options, query=request.query,
         ))

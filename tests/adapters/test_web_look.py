@@ -19,6 +19,12 @@ Client = TestClient[web.Request, web.Application]
 FONT_SHA256: Final[str] = (
     'c1b6da516e0062e9c2f341b3a51dd2d621d946da72f06c6cfe05fd9d2dd8622d'
 )
+TOM_SELECT_JS_SHA256: Final[str] = (
+    'b797005cf23378fb38448b80dc57a33313a5c577b841765743bb1f289c4d53e6'
+)
+TOM_SELECT_CSS_SHA256: Final[str] = (
+    '7b29f39e2916acfb3d050e00df8fcdfca89279ead2d8e654afec307ca63b10f9'
+)
 WEB: Final = files('paperroute') / 'assets' / 'web'
 PAGES: Final[list[tuple[str, str | None]]] = [
     ('live.html', '/'),
@@ -229,6 +235,43 @@ async def test_font_is_served(client: Client) -> None:
     assert hashlib.sha256(body).hexdigest() == FONT_SHA256
     licence = (WEB / 'fonts' / 'OFL.txt').read_text(encoding='utf-8')
     assert 'Public Sans' in licence
+
+
+@pytest.mark.parametrize(('name', 'kind', 'digest'), [
+    (
+        'tom-select.complete.min.js',
+        'text/javascript',
+        TOM_SELECT_JS_SHA256,
+    ),
+    ('tom-select.css', 'text/css', TOM_SELECT_CSS_SHA256),
+])
+async def test_tom_select_is_served(
+    client: Client,
+    name: str,
+    kind: str,
+    digest: str,
+) -> None:
+    """Tom Select's script and sheet are served, pinned by SHA-256.
+
+    Its licence is packaged beside them.
+    """
+    response = await client.get(f'/vendor/{name}')
+    body = await response.read()
+    assert response.status == HTTPStatus.OK
+    assert response.content_type == kind
+    assert response.headers['Cache-Control'] == 'max-age=86400'
+    assert hashlib.sha256(body).hexdigest() == digest
+    licence = (WEB / 'vendor' / 'LICENSE-tom-select.txt').read_text(
+        encoding='utf-8',
+    )
+    assert 'Apache License' in licence
+    assert 'Brian Reavis' in licence
+
+
+async def test_vendor_unknown_name_is_missing(client: Client) -> None:
+    """Only the vendored files are served."""
+    response = await client.get('/vendor/..%2Fdevice.html')
+    assert response.status == HTTPStatus.NOT_FOUND
 
 
 def test_tokens_on_root() -> None:

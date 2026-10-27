@@ -843,3 +843,51 @@ main > .notice {
     transform: none;
   }
 }
+
+.ts-wrapper {
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+}
+
+.ts-wrapper .ts-control {
+  min-height: 2.75rem;
+  padding: 0 0.5rem;
+  border: 2px solid var(--field);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-weight: 400;
+  box-shadow: none;
+}
+
+.ts-wrapper .ts-control input {
+  color: var(--text);
+  font: inherit;
+}
+
+.ts-wrapper.focus .ts-control {
+  border-color: var(--focus);
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+.ts-dropdown {
+  border: 2px solid var(--field);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  box-shadow: var(--shadow);
+}
+
+.ts-dropdown .option {
+  padding: 0.5rem;
+}
+
+.ts-dropdown .active {
+  background: var(--current-bg);
+  color: var(--text);
+}

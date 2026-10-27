@@ -49,6 +49,10 @@ logger = logging.getLogger(__name__)
 
 PING_S: Final[float] = 15  # seconds of quiet before an SSE comment
 ACTIONS: Final[dict[str, int]] = {'left': -1, 'right': 1}
+VENDORED: Final[dict[str, str]] = {
+    'tom-select.complete.min.js': 'text/javascript',
+    'tom-select.css': 'text/css',
+}
 BOTH: Final[str] = 'both'  # the knob name for both knobs together
 HELD_ACTIONS: Final[dict[str, int]] = {'hold-left': -1, 'hold-right': 1}
 HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
@@ -351,6 +355,7 @@ class WebDisplay:
             web.get('/', self._page),
             web.get('/live.css', self._css),
             web.get('/fonts/public-sans.woff2', self._font),
+            web.get('/vendor/{name}', self._vendor),
             web.get('/live.js', self._js),
             web.get('/frame.png', self._frame),
             web.get('/events', self._events),
@@ -477,6 +482,34 @@ class WebDisplay:
         return web.Response(
             body=asset_bytes(name='fonts/public-sans.woff2'),
             content_type='font/woff2',
+            headers={'Cache-Control': 'max-age=86400'},
+        )
+
+    async def _vendor(self, request: web.Request) -> web.Response:
+        """
+        Serve a vendored script or stylesheet.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request, with the file name in its path.
+
+        Returns
+        -------
+        web.Response
+            The file, cached for a day.
+
+        Raises
+        ------
+        web.HTTPNotFound
+            If the name is not a vendored file.
+        """
+        name = request.match_info['name']
+        if name not in VENDORED:
+            raise web.HTTPNotFound
+        return web.Response(
+            body=asset_bytes(name=f'vendor/{name}'),
+            content_type=VENDORED[name],
             headers={'Cache-Control': 'max-age=86400'},
         )
 

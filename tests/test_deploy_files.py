@@ -1781,6 +1781,12 @@ def test_provision_installs_polkitd() -> None:
     )
 
 
+def test_provision_installs_fontconfig_config() -> None:
+    """provision installs fonts.conf, which Skia's font manager reads."""
+    installs = commands(path=BIN / 'provision-device', word='apt-get')
+    assert 'fontconfig-config' in installs[-1].split()
+
+
 def test_provision_requires_network_manager_running() -> None:
     """provision starts NetworkManager and waits up to 10 s for it."""
     lines = [

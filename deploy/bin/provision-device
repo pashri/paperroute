@@ -138,6 +138,7 @@ bad=$(find "$DIR" ! -type f ! -type d -print -quit) || fail 'cannot read DIR'
 
 apt-get update
 apt-get install -y rsync curl sqlite3 avahi-daemon libegl1 libgl1 polkitd \
+    fontconfig-config \
     network-manager dnsmasq-base
 systemctl start NetworkManager
 for _ in {1..10}; do

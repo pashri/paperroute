@@ -920,6 +920,18 @@ async def test_connection_row_edit_link(pins: Pins) -> None:
     assert f'<small class="trip">{escape(line)}</small>' in text
 
 
+async def test_destination_row_line_is_cut(pins: Pins) -> None:
+    """A pin with a To but no ways has its line cut, like a connection."""
+    direct = replace(CONNECTION, ways=())
+    pins.seen = PinsSeen(pins=(direct, HOME), shown=0, revision=3)
+    client = await _client(pins=pins)
+    text = await (await client.get('/pins')).text()
+    await client.close()
+    line = escape(pin_line(pin=direct))
+    assert f'<small class="trip">{line}</small>' in text
+    assert text.count('class="trip"') == 1
+
+
 async def test_pins_page_adds_connection(client: Client) -> None:
     """The pins page opens the ways page for a new connection."""
     text = await (await client.get('/pins')).text()

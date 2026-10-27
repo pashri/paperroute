@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from typing import Final
 
 from paperroute.adapters.route_chips import chip_html, chip_route
-from paperroute.core.model import Pin, is_connection, pin_ref, ticked_ways
+from paperroute.core.model import Pin, pin_ref, ticked_ways
 from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
 
@@ -143,7 +143,7 @@ def pin_item(
         chip=chip_html(pin=pin, colour=colour),
         label=html.escape(pin_label(pin=pin)),
         line=html.escape(pin_line(pin=pin)),
-        trip='' if not is_connection(pin=pin) else ' class="trip"',
+        trip='' if pin.destination is None else ' class="trip"',
         flags=flags,
         up=move_form(pin=pin, steps=-1),
         down=move_form(pin=pin, steps=1),

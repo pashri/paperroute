@@ -296,6 +296,21 @@ def test_vehicle_before_board_note() -> None:
     assert near == 'T5 1 stop before Leppington Station'
 
 
+def test_loop_note_counts_from_boarded_visit() -> None:
+    """On a loop the note counts to the visit boarded, by its time."""
+    loop = replace(T5, stops=tuple(
+        replace(stop, station='LEP') if index == 0 else stop
+        for index, stop in enumerate(T5.stops)
+    ))
+    note = approach_note(
+        leg=T5_LEG,
+        position=vehicle(timestamp=0, trip_id='t5', point=(150.0, 0.0)),
+        board=LEPPINGTON,
+        pattern=loop,
+    )
+    assert note == 'T5 3 stops before Leppington Station'
+
+
 def test_no_note_after_boarding() -> None:
     """Past the boarding stop, or with no position, there is no note."""
     past = place('s2', name='s2', point=(200.0, 0.0))

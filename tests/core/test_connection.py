@@ -5,16 +5,27 @@ from typing import Final
 
 from paperroute.core.alert_match import tie_of
 from paperroute.core.alert_model import AlertTie
-from paperroute.core.connection import connection_facts, live_pairs, pair_legs
-from paperroute.core.connection_model import Legs
+from paperroute.core.connection import (
+    chain_legs,
+    connection_facts,
+    live_chains,
+    live_pairs,
+)
 from paperroute.core.messages import DeparturesLoaded
 from paperroute.core.model import Change, Departure, Mode, Pin, Way
 from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import State
+from paperroute.core.state_model import Board, State
 from paperroute.core.stop_view import clock_text
 from tests.core.alert_factories import alert
-from tests.core.connection_factories import LEG1, LEG2, WORK, WORK_CHANGE, at
+from tests.core.connection_factories import (
+    LEG1,
+    LEG2,
+    WORK,
+    WORK_CHANGE,
+    at,
+    work_legs,
+)
 from tests.core.factories import departure, place
 from tests.core.steps import wakeful
 
@@ -57,11 +68,44 @@ def loaded(
     ))
     state, _ = step(state, DeparturesLoaded(
         pin=pin,
-        departures=first,
+        departures=(),
         until=at(10, 30),
-        legs=Legs(second=second),
+        legs=work_legs(first=first, second=second),
     ))
     return state
+
+
+def board_of(
+    *,
+    pin: Pin = WORK,
+    departures: tuple[Departure, ...] = (),
+    second: tuple[Departure, ...] = LEG2,
+    direct: tuple[Departure, ...] = (),
+) -> Board:
+    """
+    Load a one-change pin's legs onto a board.
+
+    Parameters
+    ----------
+    pin : Pin
+        A pin with one one-change way.
+    departures : tuple[Departure, ...]
+        Leg-1 departures.
+    second : tuple[Departure, ...]
+        Leg-2 departures.
+    direct : tuple[Departure, ...]
+        Direct departures.
+
+    Returns
+    -------
+    Board
+        The board.
+    """
+    return Board(
+        departures=direct,
+        loaded_until=at(10, 30),
+        legs=work_legs(pin=pin, first=departures, second=second),
+    )
 
 
 def test_feeds_union_of_legs() -> None:
@@ -74,24 +118,49 @@ def test_feeds_union_of_legs() -> None:
     }
 
 
-def test_live_pairs_from_board() -> None:
-    """The loaded legs pair as Task 1's real times do."""
+def test_live_chains_from_board() -> None:
+    """The loaded legs chain as the real times do."""
     state = loaded()
-    pairs = live_pairs(state=state)
-    assert [clock_text(moment=pair.arrives) for pair in pairs] == [
+    chains = live_chains(state=state)
+    assert [clock_text(moment=chain.arrives) for chain in chains] == [
         '7:57', '8:12', '8:27', '8:45', '9:04',
     ]
-    assert [len(pair_legs(pair=pair)) for pair in pairs] == [2] * 5
+    assert [len(chain_legs(chain=chain)) for chain in chains] == [2] * 5
     plain = replace(WORK, ways=())
-    assert live_pairs(state=loaded(pin=plain)) == ()
+    assert live_chains(state=loaded(pin=plain)) == ()
+
+
+def test_live_pairs_stopgap() -> None:
+    """Each chain gives a pair of its first and last legs."""
+    pairs = live_pairs(state=loaded())
+    chains = live_chains(state=loaded())
+    assert [pair.second for pair in pairs] == [
+        chain.legs[-1] for chain in chains
+    ]
+
+
+def test_direct_list_competes() -> None:
+    """A direct trip in the board's own list is a one-leg chain."""
+    direct = (
+        departure(departs=at(7, 40), ride=10, route='609', trip_id='d1'),
+    )
+    state = wakeful(state=initial_state(
+        saved=seeded(pin=WORK), now=at(7, 30), stored=True,
+    ))
+    state, _ = step(state, DeparturesLoaded(
+        pin=WORK, departures=direct, until=at(10, 30), legs=work_legs(),
+    ))
+    alone = [
+        chain for chain in live_chains(state=state) if chain.way is None
+    ]
+    assert [chain_legs(chain=chain) for chain in alone] == [direct]
 
 
 def test_connection_alert_matches_both_legs() -> None:
     """Alerts on the change stop, the From or a leg-2 route match."""
     facts = connection_facts(
         pin=WORK,
-        departures=LEG1,
-        legs=Legs(second=LEG2),
+        board=board_of(departures=LEG1, second=LEG2),
         between=frozenset(),
         families={},
     )
@@ -111,8 +180,7 @@ def test_connection_names_per_leg() -> None:
     """Names come from a leg whose mode is matched by name, only."""
     ferry = connection_facts(
         pin=FERRY_WORK,
-        departures=LEG1,
-        legs=Legs(second=FERRY_LEG),
+        board=board_of(pin=FERRY_WORK, departures=LEG1, second=FERRY_LEG),
         between=frozenset(),
         families={},
     )
@@ -120,8 +188,7 @@ def test_connection_names_per_leg() -> None:
     assert ferry.wharf
     bus = connection_facts(
         pin=WORK,
-        departures=LEG1,
-        legs=Legs(second=LEG2),
+        board=board_of(departures=LEG1, second=LEG2),
         between=frozenset(),
         families={},
     )
@@ -133,8 +200,7 @@ def test_direct_trips_matched() -> None:
     direct = (departure(departs=at(8, 0), route='609', trip_id='d1'),)
     facts = connection_facts(
         pin=WORK,
-        departures=(),
-        legs=Legs(direct=direct),
+        board=board_of(departures=(), direct=direct),
         between=frozenset(),
         families={},
     )

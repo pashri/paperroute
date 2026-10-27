@@ -4,9 +4,9 @@ from collections.abc import Mapping, Sequence
 from dataclasses import replace
 from typing import Final
 
+from paperroute.core.chains import all_departures
 from paperroute.core.connection import live_pairs
 from paperroute.core.connection_map import connection_inputs
-from paperroute.core.connection_model import all_departures
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import (

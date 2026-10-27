@@ -2,14 +2,82 @@
 
 import bisect
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+from types import MappingProxyType
 
 from paperroute.core.connection_model import TripKey, trip_key, way_legs
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import Pin, Way
+from paperroute.core.model import Departure, Pin, Way, ticked_ways
 
 type LegKey = tuple[str, str]
+
+
+@dataclass(frozen=True)
+class Legs:
+    """
+    Departures of a connection pin's way legs.
+
+    Attributes
+    ----------
+    lists : Mapping[LegKey, tuple[Departure, ...]]
+        Each distinct leg's departures, by its stops. The direct list is
+        the board's own departures, not one of these.
+    """
+
+    lists: Mapping[LegKey, tuple[Departure, ...]] = field(
+        default_factory=lambda: MappingProxyType({}),
+    )
+
+
+def all_departures(
+    *, departures: Sequence[Departure], legs: Legs | None,
+) -> tuple[Departure, ...]:
+    """
+    List every departure a pin holds.
+
+    Parameters
+    ----------
+    departures : Sequence[Departure]
+        The pin's own departures; the direct list for a pin with a To.
+    legs : Legs | None
+        The way legs, or None for a plain pin.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        The pin's own departures, then each leg list in turn.
+    """
+    if legs is None:
+        return tuple(departures)
+    return (
+        *departures,
+        *(item for items in legs.lists.values() for item in items),
+    )
+
+
+def open_legs(*, pin: Pin) -> dict[LegKey, tuple[Pin, int]]:
+    """
+    List the distinct legs of a pin's ticked ways.
+
+    Parameters
+    ----------
+    pin : Pin
+        Pin.
+
+    Returns
+    -------
+    dict[LegKey, tuple[Pin, int]]
+        Each leg pin by its stops, in the order first met, with the
+        latest position (0 for a first leg) it takes in any way.
+    """
+    found: dict[LegKey, tuple[Pin, int]] = {}
+    for way in ticked_ways(pin=pin):
+        for position, leg in enumerate(way_legs(pin=pin, way=way)):
+            key = leg_key(leg=leg)
+            known = found.get(key, (leg, position))
+            found[key] = (leg, max(position, known[1]))
+    return found
 
 
 @dataclass(frozen=True)

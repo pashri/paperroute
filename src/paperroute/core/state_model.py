@@ -7,8 +7,8 @@ from typing import Final
 
 from paperroute.core.alert_model import AlertsState
 from paperroute.core.auto_model import AutoState
+from paperroute.core.chains import Legs
 from paperroute.core.chooser import ChooserState
-from paperroute.core.connection_model import Legs
 from paperroute.core.device_model import Panel
 from paperroute.core.map_state import MapState
 from paperroute.core.messages import PowerAction, ScreenView

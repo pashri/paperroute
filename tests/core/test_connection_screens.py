@@ -6,7 +6,6 @@ from typing import Final
 
 from paperroute.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute.core.chooser import ChooserState
-from paperroute.core.connection_model import Legs
 from paperroute.core.connection_strip import (
     ConnectionStripMapView,
     ConnectionStripView,
@@ -37,7 +36,14 @@ from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import current_view, live_stop_view
 from tests.core.alert_factories import alert
-from tests.core.connection_factories import HOLLIS, LEG1, LEG2, WORK, at
+from tests.core.connection_factories import (
+    HOLLIS,
+    LEG1,
+    LEG2,
+    WORK,
+    at,
+    work_legs,
+)
 from tests.core.factories import place
 from tests.core.steps import wakeful
 from tests.fakes import device_facts
@@ -108,7 +114,10 @@ def legs_loaded(
         State after the load, and its effects.
     """
     return step(state, DeparturesLoaded(
-        pin=WORK, departures=first, until=at(10, 30), legs=Legs(second=second),
+        pin=WORK,
+        departures=(),
+        until=at(10, 30),
+        legs=work_legs(first=first, second=second),
     ))
 
 

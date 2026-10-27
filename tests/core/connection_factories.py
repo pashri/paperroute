@@ -1,8 +1,11 @@
 """A real two-leg connection and its Tuesday 27 October times."""
 
 from datetime import datetime
+from types import MappingProxyType
 from typing import Final
 
+from paperroute.core.chains import Legs, leg_key
+from paperroute.core.connection_model import way_legs
 from paperroute.core.model import (
     SYDNEY,
     Change,
@@ -128,3 +131,33 @@ LEG2: Final[tuple[Departure, ...]] = tuple(
         ('661', (8, 58), (9, 8), 'b0858'),
     )
 )
+
+
+def work_legs(
+    *,
+    pin: Pin = WORK,
+    first: tuple[Departure, ...] = LEG1,
+    second: tuple[Departure, ...] = LEG2,
+) -> Legs:
+    """
+    Load a one-change pin's two way legs.
+
+    Parameters
+    ----------
+    pin : Pin
+        A pin with one one-change way, Work by default.
+    first : tuple[Departure, ...]
+        Leg-1 departures, From to Hammers Rd.
+    second : tuple[Departure, ...]
+        Leg-2 departures, Constitution Hill to Westmead.
+
+    Returns
+    -------
+    Legs
+        Both lists by their stops.
+    """
+    one, two = way_legs(pin=pin, way=pin.ways[0])
+    return Legs(lists=MappingProxyType({
+        leg_key(leg=one): first,
+        leg_key(leg=two): second,
+    }))

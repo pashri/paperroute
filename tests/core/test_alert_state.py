@@ -15,7 +15,6 @@ from paperroute.core.alert_model import (
     Matched,
 )
 from paperroute.core.alert_state import alert_feeds, listed_ids, shown_alerts
-from paperroute.core.connection_model import Legs
 from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import MapView
 from paperroute.core.messages import (
@@ -52,6 +51,7 @@ from tests.core.alert_factories import (
 )
 from tests.core.connection_factories import LEG1, LEG2, WORK
 from tests.core.connection_factories import at as at_connection
+from tests.core.connection_factories import work_legs
 from tests.core.factories import departure
 from tests.core.steps import wakeful
 from tests.core.test_quiet import asleep_at_one, at, evening, ticked
@@ -620,9 +620,9 @@ def connection_asks(*, second: tuple[Departure, ...]) -> list[LoadBetween]:
     ))
     _, effects = step(state, DeparturesLoaded(
         pin=WORK,
-        departures=LEG1,
+        departures=(),
         until=now + timedelta(hours=3),
-        legs=Legs(second=second),
+        legs=work_legs(second=second),
     ))
     return [effect for effect in effects if isinstance(effect, LoadBetween)]
 

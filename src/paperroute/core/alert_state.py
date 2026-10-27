@@ -11,8 +11,8 @@ from paperroute.core.alert_model import (
     BetweenLoaded,
     LoadBetween,
 )
+from paperroute.core.chains import all_departures
 from paperroute.core.connection import between_lists, board_facts, name_trips
-from paperroute.core.connection_model import all_departures
 from paperroute.core.feeds import KIND_MODES, FeedKind, alert_feeds_for
 from paperroute.core.messages import (
     Effect,

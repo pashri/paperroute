@@ -7,14 +7,7 @@ from datetime import date, datetime, timedelta
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import (
-    Change,
-    Departure,
-    Pin,
-    StopPlace,
-    Way,
-    ticked_ways,
-)
+from paperroute.core.model import Change, Pin, StopPlace, Way, ticked_ways
 
 LEG_EXTRA: Final[timedelta] = timedelta(hours=2)
 WALK_STEP: Final[int] = 10  # metres the walk is rounded up to
@@ -22,23 +15,6 @@ WALK_PACE: Final[int] = 80  # metres walked a minute
 SPARE_MINUTES: Final[int] = 2
 
 type TripKey = tuple[str, date]
-
-
-@dataclass(frozen=True)
-class Legs:
-    """
-    Departures of a connection pin beyond its first leg.
-
-    Attributes
-    ----------
-    second : tuple[Departure, ...]
-        Leg-2 departures from the board stop to the destination.
-    direct : tuple[Departure, ...]
-        Leg-1 route departures that run on to the destination.
-    """
-
-    second: tuple[Departure, ...] = ()
-    direct: tuple[Departure, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -151,29 +127,6 @@ def first_change(*, pin: Pin) -> Change | None:
     if way is None or not way.changes:
         return None
     return way.changes[0]
-
-
-def all_departures(
-    *, departures: Sequence[Departure], legs: Legs | None,
-) -> tuple[Departure, ...]:
-    """
-    List every departure a connection pin holds.
-
-    Parameters
-    ----------
-    departures : Sequence[Departure]
-        Leg-1 departures.
-    legs : Legs | None
-        The other legs, or None for a direct pin.
-
-    Returns
-    -------
-    tuple[Departure, ...]
-        Leg 1, then leg 2, then the direct list.
-    """
-    if legs is None:
-        return tuple(departures)
-    return (*departures, *legs.second, *legs.direct)
 
 
 def walk_metres(*, alight: StopPlace, board: StopPlace) -> int:

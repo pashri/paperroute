@@ -1,19 +1,21 @@
 """Reads for a connection pin, made once per leg and merged."""
 
 import functools
+from collections.abc import Sequence
 from dataclasses import replace
+from types import MappingProxyType
 
 from paperroute.core.alert_match import between_names
 from paperroute.core.alert_model import BetweenLoaded, LoadBetween
+from paperroute.core.chains import Legs, open_legs
 from paperroute.core.connection_model import (
     LEG_EXTRA,
-    Legs,
     direct_leg,
     stopgap_way,
     way_legs,
 )
 from paperroute.core.messages import DeparturesLoaded, LoadDepartures
-from paperroute.core.model import RouteKind
+from paperroute.core.model import Departure, Pin, RouteKind, is_connection
 from paperroute.ports import TimetableRepository
 
 
@@ -21,7 +23,7 @@ def departures_read(
     *, timetable: TimetableRepository, effect: LoadDepartures
 ) -> DeparturesLoaded:
     """
-    Read a pin's departures, and a connection pin's other legs.
+    Read a pin's departures, and a connection pin's way legs.
 
     Parameters
     ----------
@@ -33,33 +35,57 @@ def departures_read(
     Returns
     -------
     DeparturesLoaded
-        Leg 1 (the pin's own departures for a plain pin), with leg 2,
-        read for `LEG_EXTRA` longer, and the direct list as `legs`.
+        For a pin with a To, every route from its From to its To; for a
+        connection pin, also each distinct way leg read once, the k-th
+        leg of a way read `k * LEG_EXTRA` longer. Never routes are
+        dropped. A pin without a To reads its own departures.
 
     Raises
     ------
     sqlite3.Error
         When the timetable can't be read.
     """
+    pin = effect.pin
     read = functools.partial(timetable.departures, start=effect.start)
     loaded = DeparturesLoaded(
-        pin=effect.pin,
-        departures=(),
-        until=effect.end,
-        timetable=effect.timetable,
+        pin=pin, departures=(), until=effect.end, timetable=effect.timetable,
     )
-    way = stopgap_way(pin=effect.pin)
-    if way is None:
-        found = read(pin=effect.pin, end=effect.end)
+    if pin.destination is None:
+        found = read(pin=pin, end=effect.end)
         return replace(loaded, departures=tuple(found))
-    first, second = way_legs(pin=effect.pin, way=way)
-    direct = direct_leg(pin=effect.pin)
-    departures = tuple(read(pin=first, end=effect.end))
-    legs = Legs(
-        second=tuple(read(pin=second, end=effect.end + LEG_EXTRA)),
-        direct=tuple(read(pin=direct, end=effect.end)),
-    )
-    return replace(loaded, departures=departures, legs=legs)
+    direct = read(pin=direct_leg(pin=pin), end=effect.end)
+    loaded = replace(loaded, departures=usable(items=direct, pin=pin))
+    if not is_connection(pin=pin):
+        return loaded
+    lists = {
+        key: usable(
+            items=read(pin=leg, end=effect.end + position * LEG_EXTRA),
+            pin=pin,
+        )
+        for key, (leg, position) in open_legs(pin=pin).items()
+    }
+    return replace(loaded, legs=Legs(lists=MappingProxyType(lists)))
+
+
+def usable(
+    *, items: Sequence[Departure], pin: Pin,
+) -> tuple[Departure, ...]:
+    """
+    Drop departures on routes a pin never uses.
+
+    Parameters
+    ----------
+    items : Sequence[Departure]
+        Departures.
+    pin : Pin
+        Pin with its never list.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        The departures not on a never route, in order.
+    """
+    return tuple(item for item in items if item.route not in pin.never)
 
 
 def between_read(

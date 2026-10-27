@@ -12,7 +12,7 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app_connections import departures_read
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.connection_model import pairs_of
+from paperroute.core.chains import chains_of
 from paperroute.core.messages import LoadDepartures
 from paperroute.core.model import SYDNEY, Change, Pin, RouteKind, Way
 from tests.core.factories import live
@@ -98,17 +98,22 @@ def test_leg_two_follows_carry_on_to_town_hall(
         effect=LoadDepartures(pin=pin, start=at(6, 0), end=at(8, 0)),
     )
     assert loaded.legs is not None
-    pairs = pairs_of(
-        first=[live(item=item) for item in loaded.departures],
-        second=[live(item=item) for item in loaded.legs.second],
-        direct=[live(item=item) for item in loaded.legs.direct],
-        allow=5,
+    chains = chains_of(
+        pin=pin,
+        lists={
+            key: sorted(
+                (live(item=item) for item in items),
+                key=lambda item: item.departs,
+            )
+            for key, items in loaded.legs.lists.items()
+        },
+        direct=[live(item=item) for item in loaded.departures],
         now=at(6, 0),
     )
     trains = [
-        pair.second.departure
-        for pair in pairs
-        if pair.second is not None and pair.second.departure.route == 'T1'
+        chain.legs[-1].departure
+        for chain in chains
+        if chain.legs[-1].departure.route == 'T1'
     ]
     assert [train.trip_id for train in trains] == [
         '169C.947.173.64.A.8.91436348',

@@ -8,9 +8,7 @@ import pytest
 
 from paperroute.core.connection_model import (
     LEG_EXTRA,
-    Legs,
     Pair,
-    all_departures,
     default_allow,
     direct_leg,
     pairs_of,
@@ -225,15 +223,6 @@ def test_direct_leg() -> None:
     assert direct_leg(pin=WORK) == Pin(
         origin=HOLLIS, destination=WESTMEAD, kind=None,
     )
-
-
-def test_all_departures_in_leg_order() -> None:
-    """Leg 1 comes first, then leg 2, then the direct list."""
-    legs = Legs(second=LEG2[:1], direct=LEG1[1:2])
-    assert all_departures(departures=LEG1[:1], legs=legs) == (
-        LEG1[0], LEG2[0], LEG1[1],
-    )
-    assert all_departures(departures=LEG1[:1], legs=None) == LEG1[:1]
 
 
 def test_leg_two_extra_is_two_hours() -> None:

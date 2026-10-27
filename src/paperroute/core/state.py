@@ -13,6 +13,7 @@ from paperroute.core.alert_state import (
     rematched,
 )
 from paperroute.core.auto_pins import auto_step, with_override
+from paperroute.core.chains import all_departures
 from paperroute.core.chooser_steps import (
     chooser_event,
     chooser_knob,
@@ -20,7 +21,6 @@ from paperroute.core.chooser_steps import (
     picked_reloads,
     trip_feeds,
 )
-from paperroute.core.connection_model import all_departures
 from paperroute.core.device import (
     on_device_event,
     power_guard,

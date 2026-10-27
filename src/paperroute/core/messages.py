@@ -12,9 +12,9 @@ from paperroute.core.alert_model import (
     LoadBetween,
 )
 from paperroute.core.alerts_view import AlertsView
+from paperroute.core.chains import Legs
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.chooser_view import ChooserView
-from paperroute.core.connection_model import Legs
 from paperroute.core.connection_strip import (
     ConnectionStripMapView,
     ConnectionStripView,

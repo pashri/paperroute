@@ -1,4 +1,4 @@
-"""A connection pin's loaded legs: their pairs and what alerts name."""
+"""A connection pin's loaded legs: their chains and what alerts name."""
 
 from collections.abc import Mapping, Sequence
 
@@ -8,23 +8,87 @@ from paperroute.core.alert_match import (
     is_name_pin,
     pin_facts,
 )
-from paperroute.core.connection_model import (
-    Legs,
-    Pair,
-    first_change,
-    pairs_of,
-    stopgap_way,
-    way_legs,
-)
-from paperroute.core.live import resolved
-from paperroute.core.model import Departure, Pin
+from paperroute.core.chains import Chain, Legs, chains_of, open_legs
+from paperroute.core.connection_model import Pair, direct_leg
+from paperroute.core.live import LiveDeparture, resolved
+from paperroute.core.model import Departure, Pin, is_connection
 from paperroute.core.places import shown
 from paperroute.core.state_model import Board, State
 
 
+def live_chains(*, state: State) -> tuple[Chain, ...]:
+    """
+    Find the shown connection pin's chains with live times.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[Chain, ...]
+        The workable chains; empty for a plain pin or with no legs loaded.
+    """
+    pin = shown(state=state)
+    legs = state.board.legs
+    if not is_connection(pin=pin) or legs is None:
+        return ()
+    return chains_of(
+        pin=pin,
+        lists={
+            key: live_list(items=items, state=state)
+            for key, items in legs.lists.items()
+        },
+        direct=live_list(items=state.board.departures, state=state),
+        now=state.now,
+    )
+
+
+def live_list(
+    *, items: Sequence[Departure], state: State,
+) -> list[LiveDeparture]:
+    """
+    Apply live times to one leg's departures.
+
+    Parameters
+    ----------
+    items : Sequence[Departure]
+        Scheduled departures.
+    state : State
+        State with the live snapshots and the time.
+
+    Returns
+    -------
+    list[LiveDeparture]
+        The departures with live times, sorted by when they leave.
+    """
+    found = resolved(
+        departures=items, snapshots=state.snapshots, now=state.now,
+    )
+    return sorted(found, key=lambda item: item.departs)
+
+
+def chain_legs(*, chain: Chain) -> tuple[Departure, ...]:
+    """
+    List the scheduled departures a chain rides.
+
+    Parameters
+    ----------
+    chain : Chain
+        The chain.
+
+    Returns
+    -------
+    tuple[Departure, ...]
+        Each leg's departure in order.
+    """
+    return tuple(item.departure for item in chain.legs)
+
+
 def live_pairs(*, state: State) -> tuple[Pair, ...]:
     """
-    Pair the shown connection pin's loaded legs with live times.
+    Give the shown pin's chains as first and last legs.
 
     Parameters
     ----------
@@ -34,23 +98,15 @@ def live_pairs(*, state: State) -> tuple[Pair, ...]:
     Returns
     -------
     tuple[Pair, ...]
-        The workable pairs; empty for a plain pin or with no legs loaded.
+        One pair per chain: a direct chain alone, otherwise its first and
+        last legs.
     """
-    change = first_change(pin=shown(state=state))
-    legs = state.board.legs
-    if change is None or legs is None:
-        return ()
-    lists = (state.board.departures, legs.second, legs.direct)
-    first, second, direct = (
-        resolved(departures=items, snapshots=state.snapshots, now=state.now)
-        for items in lists
-    )
-    return pairs_of(
-        first=first,
-        second=second,
-        direct=direct,
-        allow=change.allow,
-        now=state.now,
+    return tuple(
+        Pair(
+            first=chain.legs[0],
+            second=chain.legs[-1] if len(chain.legs) > 1 else None,
+        )
+        for chain in live_chains(state=state)
     )
 
 
@@ -89,35 +145,37 @@ def leg_lists(
     Returns
     -------
     tuple[tuple[Pin, tuple[Departure, ...]], ...]
-        The pin itself for a plain pin; leg 1 and leg 2 for a connection.
+        The pin itself for a plain pin; for a connection, the direct leg
+        then each distinct leg of its ticked ways.
     """
-    way = stopgap_way(pin=pin)
-    if way is None:
+    if not is_connection(pin=pin):
         return ((pin, board.departures),)
-    legs = board.legs or Legs()
-    first, second = way_legs(pin=pin, way=way)
-    return (first, board.departures), (second, legs.second)
+    lists = (board.legs or Legs()).lists
+    return (
+        (direct_leg(pin=pin), board.departures),
+        *(
+            (leg, lists.get(key, ()))
+            for key, (leg, _) in open_legs(pin=pin).items()
+        ),
+    )
 
 
 def connection_facts(
     *,
     pin: Pin,
-    departures: Sequence[Departure],
-    legs: Legs | None,
+    board: Board,
     between: frozenset[str],
     families: Mapping[str, frozenset[str]],
 ) -> PinFacts:
     """
-    Gather what alerts can name about either leg of a connection pin.
+    Gather what alerts can name about every leg of a connection pin.
 
     Parameters
     ----------
     pin : Pin
         Connection pin.
-    departures : Sequence[Departure]
-        Leg-1 departures.
-    legs : Legs | None
-        Leg-2 and direct departures; None before they load.
+    board : Board
+        Its direct departures and way legs.
     between : frozenset[str]
         Place names of stations between each leg's ends.
     families : Mapping[str, frozenset[str]]
@@ -126,37 +184,22 @@ def connection_facts(
     Returns
     -------
     PinFacts
-        Each leg's facts as for a plain pin, merged, plus the direct
-        list's trips and routes. Names come only from a leg matched by
+        Each leg's facts as for a plain pin, merged, so routes are those
+        the loaded departures use. Names come only from a leg matched by
         name.
-
-    Raises
-    ------
-    ValueError
-        When the pin has no ticked way.
     """
-    legs = legs or Legs()
-    way = stopgap_way(pin=pin)
-    if way is None:
-        raise ValueError('A pin without a way has no legs.')
-    first, second = way_legs(pin=pin, way=way)
     parts = [
         pin_facts(
             pin=leg, departures=items, between=between, families=families,
         )
-        for leg, items in ((first, departures), (second, legs.second))
+        for leg, items in leg_lists(pin=pin, board=board)
     ]
-    direct = legs.direct
     return PinFacts(
-        trips=parts[0].trips | parts[1].trips | {
-            trip for item in direct for trip in (item.trip_id, *item.aliases)
-        },
-        stops=parts[0].stops | parts[1].stops,
-        routes=(
-            parts[0].routes | parts[1].routes | {item.route for item in direct}
-        ),
-        names=parts[0].names | parts[1].names,
-        wharf=parts[0].wharf or parts[1].wharf,
+        trips=frozenset().union(*(part.trips for part in parts)),
+        stops=frozenset().union(*(part.stops for part in parts)),
+        routes=frozenset().union(*(part.routes for part in parts)),
+        names=frozenset().union(*(part.names for part in parts)),
+        wharf=any(part.wharf for part in parts),
     )
 
 
@@ -186,7 +229,7 @@ def board_facts(
     PinFacts
         A connection pin's facts over both legs, or a plain pin's own.
     """
-    if stopgap_way(pin=pin) is None:
+    if not is_connection(pin=pin):
         return pin_facts(
             pin=pin,
             departures=board.departures,
@@ -194,11 +237,7 @@ def board_facts(
             families=families,
         )
     return connection_facts(
-        pin=pin,
-        departures=board.departures,
-        legs=board.legs,
-        between=between,
-        families=families,
+        pin=pin, board=board, between=between, families=families,
     )
 
 
@@ -256,7 +295,7 @@ def between_lists(
 
 def selected_trips(*, state: State) -> frozenset[str]:
     """
-    List the trips of the pair the connection Strip shows.
+    List the trips of the chain the connection Strip shows.
 
     Parameters
     ----------
@@ -266,10 +305,10 @@ def selected_trips(*, state: State) -> frozenset[str]:
     Returns
     -------
     frozenset[str]
-        The trip IDs of the pair the scroll selects; empty with no pair.
+        The trip IDs of the chain the scroll selects; empty with none.
     """
-    pairs = live_pairs(state=state)
-    if not pairs:
+    chains = live_chains(state=state)
+    if not chains:
         return frozenset()
-    pair = pairs[min(state.scroll, len(pairs) - 1)]
-    return frozenset(item.trip_id for item in pair_legs(pair=pair))
+    chain = chains[min(state.scroll, len(chains) - 1)]
+    return frozenset(item.trip_id for item in chain_legs(chain=chain))

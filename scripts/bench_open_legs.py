@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Final
 
+from paperroute.adapters.leg_cache import LegCache
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.core.chains import LegKey, chains_of, leg_key
 from paperroute.core.connection_model import (
@@ -32,6 +33,7 @@ DEFAULT_PAIRS: Final[tuple[str, ...]] = (
 )
 WORK_SHAPED: Final[str] = '2145615:215254:2145648:214510'
 WINDOW: Final[timedelta] = timedelta(hours=3)
+LATER: Final[timedelta] = timedelta(minutes=1)
 MORNING: Final[int] = 8  # hour of the default start
 SATURDAY: Final[int] = 5  # weekday number
 
@@ -124,12 +126,52 @@ def time_pair(
     return rows, millis
 
 
+def time_cached(
+    *,
+    repo: SqliteTimetableRepository,
+    pin: Pin,
+    start: datetime,
+    repeat: int,
+) -> list[float]:
+    """
+    Time a read a minute after a first one, through a fresh cache.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Timetable.
+    pin : Pin
+        From and To, of any kind and route.
+    start : datetime
+        Earliest departure of the first read.
+    repeat : int
+        Number of runs.
+
+    Returns
+    -------
+    list[float]
+        Each second read's milliseconds.
+    """
+    end = start + WINDOW + LEG_EXTRA
+    millis = []
+    for _ in range(repeat):
+        cache = LegCache()
+        cache.departures(timetable=repo, pin=pin, start=start, end=end)
+        began = time.perf_counter()
+        cache.departures(
+            timetable=repo, pin=pin, start=start + LATER, end=end + LATER,
+        )
+        millis.append((time.perf_counter() - began) * 1000)
+    return millis
+
+
 def pair_line(
     *,
     repo: SqliteTimetableRepository,
     pair: str,
     start: datetime,
     repeat: int,
+    cached: bool = False,
 ) -> str | None:
     """
     Time one pair of stops and describe the result.
@@ -144,12 +186,15 @@ def pair_line(
         Earliest departure.
     repeat : int
         Number of runs.
+    cached : bool
+        Also time a read a minute later through the leg cache.
 
     Returns
     -------
     str | None
-        ``{from} -> {to}: {rows} rows, median {ms} ms, max {ms} ms``;
-        None when a stop is not in the timetable.
+        ``{from} -> {to}: {rows} rows, median {ms} ms, max {ms} ms``,
+        then ``, cached median {ms} ms, max {ms} ms`` when cached; None
+        when a stop is not in the timetable.
     """
     names = pair.split(':', 1)
     found = [find_stop(repo=repo, text=text) for text in names]
@@ -157,8 +202,31 @@ def pair_line(
         return None
     pin = Pin(origin=found[0], destination=found[1], kind=None)
     rows, millis = time_pair(repo=repo, pin=pin, start=start, repeat=repeat)
+    text = f'{found[0].name} -> {found[1].name}: {rows} rows, ' + spread(
+        millis=millis,
+    )
+    if cached:
+        text += ', cached ' + spread(
+            millis=time_cached(repo=repo, pin=pin, start=start, repeat=repeat),
+        )
+    return text
+
+
+def spread(*, millis: list[float]) -> str:
+    """
+    Describe a set of timings.
+
+    Parameters
+    ----------
+    millis : list[float]
+        Milliseconds.
+
+    Returns
+    -------
+    str
+        ``median {ms} ms, max {ms} ms``.
+    """
     return (
-        f'{found[0].name} -> {found[1].name}: {rows} rows, '
         f'median {statistics.median(millis):.1f} ms, '
         f'max {max(millis):.1f} ms'
     )
@@ -340,6 +408,11 @@ def parser() -> argparse.ArgumentParser:
         metavar='FROM:ALIGHT:BOARD:TO',
         help='also time chains over these ways; a WORK-shaped way if empty',
     )
+    result.add_argument(
+        '--cached',
+        action='store_true',
+        help='also time a read a minute later through the leg cache',
+    )
     return result
 
 
@@ -370,7 +443,11 @@ def main(argv: Sequence[str] | None = None) -> int:
     with closing(SqliteTimetableRepository(path=args.db)) as repo:
         for pair in args.pairs:
             line = pair_line(
-                repo=repo, pair=pair, start=start, repeat=args.repeat,
+                repo=repo,
+                pair=pair,
+                start=start,
+                repeat=args.repeat,
+                cached=args.cached,
             )
             if line is None:
                 print(f'unknown stop in {pair}', file=sys.stderr)

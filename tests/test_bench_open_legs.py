@@ -149,3 +149,23 @@ def test_next_weekday_start(
     found = load_script().next_weekday_start(now=now)
     assert (found.day, found.hour) == expected
     assert found.weekday() < 5
+
+
+def test_bench_times_cached_reads(
+    db: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--cached` adds the timing of a read a minute later from the cache."""
+    status = load_script().main([
+        '--db', str(db),
+        '--repeat', '1',
+        '--at', '2026-10-16T07:00:00+11:00',
+        '--pairs', '2145615:215254',
+        '--cached',
+    ])
+    lines = capsys.readouterr().out.splitlines()
+    assert status == 0
+    assert re.match(
+        r'^.+ rows, median \d+\.\d ms, max \d+\.\d ms, '
+        r'cached median \d+\.\d ms, max \d+\.\d ms$',
+        lines[0],
+    )

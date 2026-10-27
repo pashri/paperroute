@@ -343,6 +343,7 @@ def way_chains(
     position: int,
     lists: Mapping[LegKey, Sequence[LiveDeparture]],
     now: datetime,
+    cache: dict[LegKey, LegList],
 ) -> list[Chain]:
     """
     Walk one way from each trip on its first leg.
@@ -357,6 +358,8 @@ def way_chains(
         Departures by leg, sorted by when they leave.
     now : datetime
         Current time.
+    cache : dict[LegKey, LegList]
+        Leg lists already built for this pin; filled in as legs are built.
 
     Returns
     -------
@@ -364,10 +367,12 @@ def way_chains(
         One chain per first-leg trip still to leave that can finish.
     """
     way = pin.ways[position]
-    legs = [
-        leg_list(items=lists.get(leg_key(leg=leg), ()), never=pin.never)
-        for leg in way_legs(pin=pin, way=way)
-    ]
+    legs = []
+    for leg in way_legs(pin=pin, way=way):
+        key = leg_key(leg=leg)
+        if key not in cache:
+            cache[key] = leg_list(items=lists.get(key, ()), never=pin.never)
+        legs.append(cache[key])
     found = (
         walked(taken=(item,), index=0, way=way, legs=legs)
         for item in legs[0].items
@@ -463,11 +468,13 @@ def chains_of(
         for item in leg_list(items=direct, never=pin.never).items
         if not item.cancelled and item.departs >= now
     ]
+    cache: dict[LegKey, LegList] = {}
     for position, way in enumerate(pin.ways):
         if way.ticked:
-            found.extend(
-                way_chains(pin=pin, position=position, lists=lists, now=now),
-            )
+            found.extend(way_chains(
+                pin=pin, position=position, lists=lists, now=now,
+                cache=cache,
+            ))
     kept = best_per_first(chains=found)
     return latest_per_final(
         chains=sorted(kept, key=lambda chain: chain.departs),

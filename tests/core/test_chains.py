@@ -12,11 +12,13 @@ from hypothesis import strategies as st
 from paperroute.core.chains import (
     Chain,
     LegKey,
+    LegList,
     chains_of,
     leg_key,
     leg_list,
     next_leg,
     walked,
+    way_chains,
 )
 from paperroute.core.connection_model import trip_key, way_legs
 from paperroute.core.live import LiveDeparture
@@ -509,6 +511,21 @@ def test_stay_on_not_before_alighting() -> None:
     )
     assert taken is not None
     assert [item.departure.trip_id for item in taken] == ['x', 'b', 'c']
+
+
+def test_way_chains_reuse_leg_lists() -> None:
+    """Leg lists are built once per leg and read from the cache after."""
+    lists = {FIRST: lived(LEG1[:1]), SECOND: lived(LEG2)}
+    cache: dict[LegKey, LegList] = {}
+    found = way_chains(
+        pin=WORK, position=0, lists=lists, now=at(7, 30), cache=cache,
+    )
+    assert ids(found) == [('a0733', 'b0746')]
+    assert set(cache) == {FIRST, SECOND}
+    cache[FIRST] = leg_list(items=(), never=())
+    assert way_chains(
+        pin=WORK, position=0, lists=lists, now=at(7, 30), cache=cache,
+    ) == []
 
 
 TIMES = st.lists(

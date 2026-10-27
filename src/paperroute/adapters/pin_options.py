@@ -192,9 +192,12 @@ def served_by(
 
 def call_order(
     call: tuple[int, int, str],
-) -> tuple[int, tuple[int, tuple[tuple[int, int | str], ...]]]:
+) -> tuple[bool, int, tuple[int, tuple[tuple[int, int | str], ...]]]:
     """
-    Sort a served route by kind, then naturally by route number.
+    Sort a served route: rail and ferry kinds first, then by kind.
+
+    A station's bus stands share its ID, so without this a busy station
+    lists only buses and reads as a bus stop.
 
     Parameters
     ----------
@@ -203,10 +206,16 @@ def call_order(
 
     Returns
     -------
-    tuple[int, tuple[int, tuple[tuple[int, int | str], ...]]]
-        The kind position and the route's `route_order`.
+    tuple[bool, int, tuple[int, tuple[tuple[int, int | str], ...]]]
+        Whether the kind comes after stations' own kinds, the kind
+        position and the route's `route_order`.
     """
-    return call[0], route_order(number=call[2])
+    kind = list(KIND_NAMES)[call[0]]
+    return (
+        kind not in STATION_FIRST,
+        call[0],
+        route_order(number=call[2]),
+    )
 
 
 def match_of(
@@ -226,7 +235,7 @@ def match_of(
     -------
     StopMatch
         The place with its kinds in `KIND_NAMES` order, and up to
-        `SHOWN_ROUTES` route numbers, grouped by kind and in natural order.
+        `SHOWN_ROUTES` route numbers, in `call_order`.
     """
     ordered = sorted(calls, key=call_order)
     kinds = list(KIND_NAMES)

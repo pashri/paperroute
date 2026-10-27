@@ -175,7 +175,12 @@ def end_call(
 
 
 def leg_calls(
-    *, item: LiveDeparture, pattern: TripPattern, start: str, end: str,
+    *,
+    item: LiveDeparture,
+    last: LiveDeparture,
+    pattern: TripPattern,
+    start: str,
+    end: str,
 ) -> tuple[LegCall, ...]:
     """
     List a leg's calls from boarding to getting off, with live times.
@@ -183,7 +188,10 @@ def leg_calls(
     Parameters
     ----------
     item : LiveDeparture
-        Departure with live times.
+        Departure with live times, boarded.
+    last : LiveDeparture
+        The same trip on the leg got off; `item` unless staying on. Its
+        arrival finds the call got off at, and times it.
     pattern : TripPattern
         Its trip.
     start : str
@@ -202,26 +210,42 @@ def leg_calls(
     first = from_call(
         departure=departure, pattern=pattern, origin=start, stations={},
     )
-    last = None if first is None else end_call(
-        item=item, pattern=pattern, start=first, end=end,
+    final = None if first is None else end_call(
+        item=last, pattern=pattern, start=first, end=end,
     )
-    if first is None or last is None:
+    if first is None or final is None:
         return ()
-    delay = int(item.departs.timestamp() - departure.departs.timestamp())
     return tuple(
         (
             stop,
             shifted(
                 moment=service_time(
                     day=departure.service_day,
-                    seconds=stop.arrives if index == last else stop.departs,
+                    seconds=stop.arrives if index == final else stop.departs,
                 ),
-                seconds=delay,
+                seconds=delay_of(item=last if index == final else item),
             ),
         )
         for index, stop in enumerate(pattern.stops)
-        if first <= index <= last and not stop.passes
+        if first <= index <= final and not stop.passes
     )
+
+
+def delay_of(*, item: LiveDeparture) -> int:
+    """
+    Give a departure's delay.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+
+    Returns
+    -------
+    int
+        Seconds it leaves after its timetabled time.
+    """
+    return int(item.departs.timestamp() - item.departure.departs.timestamp())
 
 
 def fold_leg(*, calls: Sequence[LegCall]) -> tuple[LegStop, ...]:
@@ -372,12 +396,15 @@ class Leg:
         Where it is left.
     note : str | None
         The heading's note.
+    last : LiveDeparture | None
+        The departure it is left on when staying on; None for `item`.
     """
 
     item: LiveDeparture
     start: StopPlace
     end: StopPlace
     note: str | None = None
+    last: LiveDeparture | None = None
 
 
 def walk_note(*, change: Change) -> str:
@@ -418,6 +445,7 @@ def chain_legs_of(*, chain: Chain, pin: Pin) -> tuple[Leg, ...]:
     return tuple(
         Leg(
             item=ride.item,
+            last=ride.last,
             start=ride.start,
             end=ride.end,
             note=None if ride.change is None else walk_note(
@@ -448,6 +476,7 @@ def leg_rows(
     """
     calls = () if pattern is None else leg_calls(
         item=leg.item,
+        last=leg.last or leg.item,
         pattern=pattern,
         start=leg.start.stop_id,
         end=leg.end.stop_id,

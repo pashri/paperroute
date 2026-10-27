@@ -156,7 +156,7 @@ def test_leg_calls_skip_passing() -> None:
     )
     trip = pattern(trip_id='a0733', stops=tuple(stops))
     calls = leg_calls(
-        item=live(item=LEG1[0]), pattern=trip, start='G2145615',
+        item=live(item=LEG1[0]), last=live(item=LEG1[0]), pattern=trip, start='G2145615',
         end='G215254',
     )
     assert [stop.station for stop, _ in calls] == [
@@ -180,10 +180,32 @@ def test_rowless_leg_reads_loading() -> None:
 def test_leg_calls_missing_end() -> None:
     """A trip that never reaches the end gives no calls."""
     calls = leg_calls(
-        item=live(item=LEG1[0]), pattern=FIRST_LEG, start='G2145615',
+        item=live(item=LEG1[0]), last=live(item=LEG1[0]), pattern=FIRST_LEG, start='G2145615',
         end='nowhere',
     )
     assert calls == ()
+
+
+def test_stay_on_ends_at_last_leg_visit() -> None:
+    """A stayed-on ride ends where, and when, its last leg arrives."""
+    loop = pattern(trip_id='a0733', stops=timed(
+        stations=('G2145615', 's1', 'G215254', 's2', 'G215254'),
+        start=(7, 33),
+        step=60,
+    ))
+    item = live(item=departure(departs=at(7, 33), ride=2, trip_id='a0733'))
+    last = live(
+        item=departure(departs=at(7, 36), ride=1, trip_id='a0733'), late=2,
+    )
+    calls = leg_calls(
+        item=item, last=last, pattern=loop, start='G2145615', end='G215254',
+    )
+    assert len(calls) == 5
+    assert calls[-1][1] == at(7, 39)
+    alone = leg_calls(
+        item=item, last=item, pattern=loop, start='G2145615', end='G215254',
+    )
+    assert len(alone) == 3
 
 
 def calls_at(*, count: int) -> tuple[LegCall, ...]:

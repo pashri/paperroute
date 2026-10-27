@@ -52,6 +52,7 @@ from tests.helpers import (
     schema_five,
     schema_four,
     schema_three,
+    slice_db,
     write_feed,
 )
 
@@ -462,7 +463,6 @@ def test_departures_threads_survive_replacement(tmp_path: Path) -> None:
     assert seen
 
 
-REAL = Path(__file__).parent.parent / 'fixtures' / 'real'
 HOLLIS = '2145615'
 AROUND = date(2026, 10, 16)
 
@@ -484,17 +484,7 @@ def _slice_repo(
     SqliteTimetableRepository
         Repository, closed after the tests.
     """
-    db = build_db(
-        tmp_path=tmp_path_factory.mktemp('slice'),
-        start=date(2026, 10, 15),
-        days=3,
-        sources=[
-            Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
-            Source(name='bundle', archive=REAL / 'bundle.zip'),
-        ],
-    )
-    with closing(sqlite3.connect(db)) as conn:
-        merge_rail(conn=conn)
+    db = slice_db(tmp_path=tmp_path_factory.mktemp('slice'))
     with closing(SqliteTimetableRepository(path=db)) as repo:
         yield repo
 

@@ -5,7 +5,14 @@ import io
 import sqlite3
 import zipfile
 from contextlib import closing
+from datetime import date
 from pathlib import Path
+from typing import Final
+
+from paperroute.build.dedupe import merge_rail
+from paperroute.build.gtfs_files import Source
+
+REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 
 
 def to_csv(rows: list[dict[str, str]]) -> str:
@@ -147,3 +154,34 @@ def schema_five(*, path: Path) -> None:
             "UPDATE meta SET value = '5' WHERE key = 'schema_version';",
         )
         conn.commit()
+
+
+def slice_db(*, tmp_path: Path) -> Path:
+    """
+    Build a timetable database from the real GTFS slice, with shapes.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Empty directory for the database.
+
+    Returns
+    -------
+    Path
+        The database file.
+    """
+    # feeds imports this module, so it can only be imported here.
+    from tests.build.feeds import build_db  # pylint: disable=C0415
+
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[
+            Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
+            Source(name='bundle', archive=REAL / 'bundle.zip'),
+        ],
+    )
+    with closing(sqlite3.connect(db)) as conn:
+        merge_rail(conn=conn)
+    return db

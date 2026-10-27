@@ -68,7 +68,10 @@ async def load(
     """
     try:
         event = await asyncio.to_thread(
-            departures_read, timetable=ports.timetable, effect=effect,
+            departures_read,
+            timetable=ports.timetable,
+            effect=effect,
+            cache=ports.legs,
         )
     except sqlite3.Error:
         logger.exception('reading departures failed')

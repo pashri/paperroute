@@ -5,6 +5,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from types import MappingProxyType
 
+from paperroute.adapters.leg_cache import LegCache
 from paperroute.core.alert_match import between_names
 from paperroute.core.alert_model import BetweenLoaded, LoadBetween
 from paperroute.core.chains import Legs, open_legs
@@ -15,7 +16,10 @@ from paperroute.ports import TimetableRepository
 
 
 def departures_read(
-    *, timetable: TimetableRepository, effect: LoadDepartures
+    *,
+    timetable: TimetableRepository,
+    effect: LoadDepartures,
+    cache: LegCache | None = None,
 ) -> DeparturesLoaded:
     """
     Read a pin's departures, and a connection pin's way legs.
@@ -26,6 +30,9 @@ def departures_read(
         Timetable.
     effect : LoadDepartures
         Request.
+    cache : LegCache | None
+        Scheduled departures held from earlier reads; read straight from
+        the timetable when None.
 
     Returns
     -------
@@ -41,7 +48,16 @@ def departures_read(
         When the timetable can't be read.
     """
     pin = effect.pin
-    read = functools.partial(timetable.departures, start=effect.start)
+    read = (
+        functools.partial(timetable.departures, start=effect.start)
+        if cache is None
+        else functools.partial(
+            cache.departures,
+            timetable=timetable,
+            start=effect.start,
+            version=effect.timetable,
+        )
+    )
     loaded = DeparturesLoaded(
         pin=pin, departures=(), until=effect.end, timetable=effect.timetable,
     )

@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute.adapters.leg_cache import LegCache
 from paperroute.app_connections import between_read, departures_read
 from paperroute.core.alert_model import AlertPlaces, LoadBetween
 from paperroute.core.chains import leg_key
@@ -264,3 +265,14 @@ def test_between_read_covers_two_changes() -> None:
     assert set(event.families) == {
         'G2145615', 'G215254', '2145648', '214510', '2150',
     }
+
+
+def test_connection_second_read_cached() -> None:
+    """With a cache, a repeat load of a connection reads nothing."""
+    timetable = RecordingTimetable()
+    cache = LegCache()
+    effect = LoadDepartures(pin=WORK, start=START, end=END, timetable='v1')
+    first = departures_read(timetable=timetable, effect=effect, cache=cache)
+    second = departures_read(timetable=timetable, effect=effect, cache=cache)
+    assert len(timetable.reads) == 3
+    assert second == first

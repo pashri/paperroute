@@ -528,3 +528,9 @@ def test_live_has_one_knobs_card() -> None:
     assert hint in held
     assert hint.index > max(inside(nodes=nodes, outer=groups[-1])).index
     assert by_id(nodes=nodes, ident='frame').index < card.index
+
+
+def test_on_screen_now_matches_line_size() -> None:
+    """'On the screen now' is set in the pin line's small size."""
+    body = rule_body(css=css_text(), selector='.pins small,\n.pins .now')
+    assert 'font-size: 0.875rem' in declarations(body=body)

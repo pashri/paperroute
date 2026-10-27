@@ -704,6 +704,11 @@ main > .notice {
   color: var(--muted);
 }
 
+.pins small,
+.pins .now {
+  font-size: 0.875rem;
+}
+
 .pins .move {
   display: contents;
 }

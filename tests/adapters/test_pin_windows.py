@@ -134,3 +134,14 @@ def test_fieldset_escapes_values() -> None:
     """A typed time is escaped."""
     text = windows_fieldset(rows=(WindowRow(start='"><b>'),))
     assert '"><b>' not in text
+
+
+def test_rows_have_preview_output() -> None:
+    """Each row has an empty live output; the fieldset carries the copy."""
+    text = windows_fieldset(rows=(ROW, WindowRow()))
+    assert text.count('<output class="window-preview" aria-live="polite">'
+                      '</output>') == 2
+    assert 'data-window-preview' in text
+    assert f'data-no-day="{NO_DAY}"' in text
+    assert f'data-no-time="{NO_TIME}"' in text
+    assert 'data-same-time="A window can&#x27;t start' in text

@@ -385,6 +385,15 @@ async def test_pins_js_is_served(client: Client) -> None:
     assert response.content_type == 'text/javascript'
 
 
+async def test_windows_script_is_served(client: Client) -> None:
+    """The preview script is served, and the editor page loads it."""
+    response = await client.get('/windows.js')
+    assert response.content_type == 'text/javascript'
+    assert 'export function windowSummary' in await response.text()
+    page = await client.get('/pins/edit?stop=C')
+    assert '<script type="module" src="/windows.js">' in await page.text()
+
+
 async def test_nav_has_pins_on_every_page(client: Client) -> None:
     """Every page lists Live, Pins, Settings, Device in order."""
     for path in ('/', '/settings', '/device', '/setup', '/pins'):

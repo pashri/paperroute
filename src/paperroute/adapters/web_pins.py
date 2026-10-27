@@ -295,6 +295,7 @@ class PinsPages:
         return [
             web.get('/pins', self._page),
             web.get('/pins.js', self._script),
+            web.get('/windows.js', self._windows_script),
             web.get('/route-colours.css', self._sheet),
             web.post('/pins/move', self._move),
             web.post('/pins/order', self._order),
@@ -367,6 +368,26 @@ class PinsPages:
         del request
         return web.Response(
             text=asset(name='pins.js'),
+            content_type='text/javascript',
+        )
+
+    async def _windows_script(self, request: web.Request) -> web.Response:
+        """
+        Serve the window preview script.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request.
+
+        Returns
+        -------
+        web.Response
+            The script.
+        """
+        del request
+        return web.Response(
+            text=asset(name='windows.js'),
             content_type='text/javascript',
         )
 

@@ -911,3 +911,13 @@ main > .notice {
   color: var(--text);
   font-size: 0.875rem;
 }
+
+.window-preview {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.window-preview:empty {
+  display: none;
+}

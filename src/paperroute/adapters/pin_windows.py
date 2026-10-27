@@ -35,11 +35,14 @@ ROW: Final[str] = """
             <input id="w{i}_to" type="time"
                    name="w{i}_to" value="{end}">
           </p>
+          <output class="window-preview" aria-live="polite"></output>
           <button type="submit" class="secondary"
                   name="remove_window" value="{i}">Remove</button>
         </fieldset>"""
 FIELDSET: Final[str] = """
-      <fieldset class="windows">
+      <fieldset class="windows" data-window-preview
+                data-no-day="{no_day}" data-no-time="{no_time}"
+                data-same-time="{same_time}">
         <legend>Show automatically</legend>{rows}
         <button type="submit" class="secondary"
                 name="add_window" value="1">Add window</button>
@@ -280,7 +283,13 @@ def windows_fieldset(*, rows: Sequence[WindowRow]) -> str:
         )
         for index, row in enumerate(rows)
     )
-    return FIELDSET.format(rows=drawn or NO_ROWS, count=len(rows))
+    return FIELDSET.format(
+        rows=drawn or NO_ROWS,
+        count=len(rows),
+        no_day=html.escape(NO_DAY),
+        no_time=html.escape(NO_TIME),
+        same_time=html.escape(SAME_TIME),
+    )
 
 
 def query_rows(

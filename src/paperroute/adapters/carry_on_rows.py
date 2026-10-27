@@ -68,8 +68,9 @@ SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
     trip='c.onto', after='c.after', upto='d.seq',
 ) + """
 FROM chain c
+-- unary + stops the planner scanning every call at the Destination
 JOIN stop_times d ON d.trip_id = c.onto AND d.dropoff <> 1
-  AND d.stop_id IN """ + AT_DEST + AFTER_JOIN.format(call='d') + """
+  AND +d.stop_id IN """ + AT_DEST + AFTER_JOIN.format(call='d') + """
 JOIN stop_times o ON o.trip_id = c.trip_id AND o.seq = c.seq
 JOIN trips t ON t.trip_id = c.trip_id
 JOIN routes r ON r.route_id = t.route_id

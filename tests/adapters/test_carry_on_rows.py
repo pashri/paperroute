@@ -11,7 +11,11 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.carry_on_rows import MAX_HOPS, first_to_arrive
+from paperroute.adapters.carry_on_rows import (
+    CARRY_ONS,
+    MAX_HOPS,
+    first_to_arrive,
+)
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
@@ -377,3 +381,22 @@ def test_patterns_name_the_trip_joined_onto(chain_db: Path) -> None:
     with closing(SqliteTimetableRepository(path=chain_db)) as repo:
         found = repo.patterns(trip_ids=['c1', 'c8'], around=DAY)
     assert (found['c1'].next_trip, found['c8'].next_trip) == ('c2', None)
+
+
+def test_carry_ons_reach_destination_through_the_chain(
+    chain_db: Path,
+) -> None:
+    """Destination calls are found per chained trip, not by stop."""
+    with closing(SqliteTimetableRepository(path=chain_db)) as repo:
+        sql = CARRY_ONS.format(
+            shape=repo.shape_column(), service=repo.service_filter(),
+        )
+        plan = repo.fetch(
+            sql='EXPLAIN QUERY PLAN ' + sql,
+            params={'day': '', 'origin': '', 'dest': '', 'lo': 0, 'hi': 0},
+        )
+    assert not [
+        row
+        for row in plan
+        if 'SEARCH d USING INDEX stop_times_stop' in str(row)
+    ]

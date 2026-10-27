@@ -20,6 +20,7 @@ from paperroute.core.trip_search import (
 
 TRIP_PATH: Final[str] = 'v1/tp/trip'
 WALK_CLASSES: Final[frozenset[int]] = frozenset({99, 100})
+SCHOOL_CLASS: Final[int] = 11
 FIXED_PARAMS: Final[dict[str, str]] = {
     'outputFormat': 'rapidJSON',
     'coordOutputFormat': 'EPSG:4326',
@@ -88,9 +89,28 @@ def is_walk(*, leg: Mapping[str, object]) -> bool:
     """
     transport = leg['transportation']
     assert isinstance(transport, dict)
+    return (
+        product_class(transport=transport) in WALK_CLASSES
+        or 'disassembledName' not in transport
+    )
+
+
+def product_class(*, transport: Mapping[str, object]) -> object:
+    """
+    Read a leg's product class.
+
+    Parameters
+    ----------
+    transport : Mapping[str, object]
+        The leg's `transportation` entry.
+
+    Returns
+    -------
+    object
+        The class, or None when the leg has no product.
+    """
     product = transport.get('product')
-    kind = product.get('class') if isinstance(product, dict) else None
-    return kind in WALK_CLASSES or 'disassembledName' not in transport
+    return product.get('class') if isinstance(product, dict) else None
 
 
 def parse_leg(*, leg: Mapping[str, object]) -> JourneyLeg:
@@ -127,6 +147,7 @@ def parse_leg(*, leg: Mapping[str, object]) -> JourneyLeg:
         route=str(transport['disassembledName']),
         departs=datetime.fromisoformat(origin['departureTimePlanned']),
         arrives=datetime.fromisoformat(destination['arrivalTimePlanned']),
+        school=product_class(transport=transport) == SCHOOL_CLASS,
     )
 
 

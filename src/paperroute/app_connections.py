@@ -39,8 +39,9 @@ def departures_read(
     DeparturesLoaded
         For a pin with a To, every route from its From to its To; for a
         connection pin, also each distinct way leg read once, the k-th
-        leg of a way read `k * LEG_EXTRA` longer. Never routes are
-        dropped. A pin without a To reads its own departures.
+        leg of a way read `k * LEG_EXTRA` longer. Never routes,
+        and school routes when the effect skips them, are dropped. A pin
+        without a To reads its own departures.
 
     Raises
     ------
@@ -59,19 +60,23 @@ def departures_read(
         )
     )
     loaded = DeparturesLoaded(
-        pin=pin, departures=(), until=effect.end, timetable=effect.timetable,
+        pin=pin,
+        departures=(),
+        until=effect.end,
+        timetable=effect.timetable,
+        skip_school=effect.skip_school,
     )
     if pin.destination is None:
         found = read(pin=pin, end=effect.end)
         return replace(loaded, departures=tuple(found))
+    keep = functools.partial(usable, pin=pin, skip_school=effect.skip_school)
     direct = read(pin=direct_leg(pin=pin), end=effect.end)
-    loaded = replace(loaded, departures=usable(items=direct, pin=pin))
+    loaded = replace(loaded, departures=keep(items=direct))
     if not is_connection(pin=pin):
         return loaded
     lists = {
-        key: usable(
+        key: keep(
             items=read(pin=leg, end=effect.end + position * LEG_EXTRA),
-            pin=pin,
         )
         for key, (leg, position) in open_legs(pin=pin).items()
     }
@@ -79,7 +84,7 @@ def departures_read(
 
 
 def usable(
-    *, items: Sequence[Departure], pin: Pin,
+    *, items: Sequence[Departure], pin: Pin, skip_school: bool,
 ) -> tuple[Departure, ...]:
     """
     Drop departures on routes a pin never uses.
@@ -90,13 +95,20 @@ def usable(
         Departures.
     pin : Pin
         Pin with its never list.
+    skip_school : bool
+        Whether school routes are dropped too.
 
     Returns
     -------
     tuple[Departure, ...]
-        The departures not on a never route, in order.
+        The departures kept, in order.
     """
-    return tuple(item for item in items if item.route not in pin.never)
+    return tuple(
+        item
+        for item in items
+        if item.route not in pin.never
+        and not (skip_school and item.facts.kind is RouteKind.SCHOOL)
+    )
 
 
 def between_read(

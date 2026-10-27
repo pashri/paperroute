@@ -89,3 +89,23 @@ async def test_stop_search_script_is_served(client: Client) -> None:
     assert response.status == HTTPStatus.OK
     assert response.content_type == 'text/javascript'
     assert 'export function attachStopSearch' in await response.text()
+
+
+async def test_search_follows_school_switch() -> None:
+    """Both searches leave school routes out unless the setting is off."""
+    options = FakePinOptions(found=(MATCH,))
+    reported: dict[str, object] = {}
+    display = WebDisplay(
+        status=lambda: reported,
+        pins=lambda: None,
+        options=options,
+    )
+    client = TestClient(TestServer(display.app()))
+    await client.start_server()
+    try:
+        await client.get('/pins/stops.json?q=parra')
+        reported['settings'] = {'skip_school_buses': 'off'}
+        await client.get('/pins/new?q=parra')
+    finally:
+        await client.close()
+    assert options.skipped == [True, False]

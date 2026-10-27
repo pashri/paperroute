@@ -269,6 +269,8 @@ class PinsPages:
         The timetable's choices for the editor, or None.
     sleep : Callable[[float], Awaitable[None]]
         Waits for some seconds.
+    skip_school : Callable[[], bool]
+        Says whether the stop search leaves school routes out.
     """
 
     def __init__(
@@ -278,11 +280,13 @@ class PinsPages:
         pins: Callable[[], PinsSeen | None],
         options: PinOptions | None,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
+        skip_school: Callable[[], bool] = lambda: True,
     ) -> None:
         self._post = post
         self._pins = pins
         self.options = options
         self._sleep = sleep
+        self.skip_school = skip_school
 
     def routes(self) -> list[web.RouteDef]:
         """
@@ -592,7 +596,9 @@ class PinsPages:
             text = urlencode({'from_q': request.query.get('q', '')})
             raise web.HTTPSeeOther(location=f'/pins/ways?{text}')
         return html_page(text=search_page(
-            options=self.options, query=request.query,
+            options=self.options,
+            query=request.query,
+            skip_school=self.skip_school(),
         ))
 
     async def _stops(self, request: web.Request) -> web.Response:
@@ -610,7 +616,9 @@ class PinsPages:
             The matches as a JSON list.
         """
         return web.json_response(stops_json(
-            options=self.options, text=request.query.get('q', ''),
+            options=self.options,
+            text=request.query.get('q', ''),
+            skip_school=self.skip_school(),
         ))
 
     async def _stop_script(self, request: web.Request) -> web.Response:

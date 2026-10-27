@@ -201,3 +201,14 @@ def test_settings_page_offers_three_map_choices() -> None:
     labels = ('>Changes<', '>Whole trip<', '>First change only<')
     positions = [page.index(label) for label in labels]
     assert positions == sorted(positions)
+
+
+def test_school_switch_read_and_shown() -> None:
+    """The school switch posts as on or off and is drawn checked."""
+    assert changed_from(fields={'skip_school_buses': 'off'}) == (
+        SettingsChanged(skip_school_buses=False)
+    )
+    assert form_values(settings=Settings())['skip_school_buses'] == 'on'
+    page = asset(name='settings.html')
+    assert 'name="skip_school_buses"' in page
+    assert 'Leave out school buses' in page

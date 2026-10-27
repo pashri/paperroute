@@ -62,8 +62,11 @@ class FakePinOptions:
     )
     between: tuple[str, ...] = ()
     parents: dict[str, str] = field(default_factory=dict)
+    skipped: list[bool] = field(default_factory=list)
 
-    def search(self, *, text: str) -> tuple[StopMatch, ...]:
+    def search(
+        self, *, text: str, skip_school: bool = False,
+    ) -> tuple[StopMatch, ...]:
         """
         Give the fixed matches.
 
@@ -71,12 +74,15 @@ class FakePinOptions:
         ----------
         text : str
             Ignored.
+        skip_school : bool
+            Noted in `skipped`.
 
         Returns
         -------
         tuple[StopMatch, ...]
             The matches.
         """
+        self.skipped.append(skip_school)
         return self.found
 
     def place(self, *, stop_id: str) -> StopPlace | None:

@@ -162,7 +162,7 @@ def kind_named(*, name: object) -> RouteKind | None:
 
 
 def served_by(
-    *, rows: Iterable[Row],
+    *, rows: Iterable[Row], left_out: frozenset[RouteKind] = frozenset(),
 ) -> dict[str, list[tuple[int, int, str]]]:
     """
     Group what serves each station.
@@ -171,19 +171,21 @@ def served_by(
     ----------
     rows : Iterable[Row]
         Station ID, kind, route and the route's sort position.
+    left_out : frozenset[RouteKind]
+        Kinds whose rows are dropped.
 
     Returns
     -------
     dict[str, list[tuple[int, int, str]]]
         For each station, the position of the kind in `KIND_NAMES`, the
         route's sort position and the route; rows of an unoffered kind
-        are left out.
+        and of a kind left out are dropped.
     """
     order = list(KIND_NAMES)
     served: dict[str, list[tuple[int, int, str]]] = {}
     for station, kind_name, route, pos in rows:
         kind = kind_named(name=kind_name)
-        if kind is not None:
+        if kind is not None and kind not in left_out:
             served.setdefault(str(station), []).append(
                 (order.index(kind), int(str(pos)), str(route)),
             )
@@ -300,7 +302,9 @@ class SqlitePinOptions:
     def __init__(self, *, network: SqliteNetworkRepository) -> None:
         self.network = network
 
-    def search(self, *, text: str) -> tuple[StopMatch, ...]:
+    def search(
+        self, *, text: str, skip_school: bool = False,
+    ) -> tuple[StopMatch, ...]:
         """
         Find stops and stations that runs serve by name.
 
@@ -308,6 +312,9 @@ class SqlitePinOptions:
         ----------
         text : str
             Part of a name; trimmed, and at least `MIN_SEARCH` long.
+        skip_school : bool
+            Whether school routes are left out of each stop's routes; a
+            stop only they serve is still found.
 
         Returns
         -------
@@ -331,7 +338,12 @@ class SqlitePinOptions:
             'ids': json.dumps([place.stop_id for place in places]),
             'last': LAST,
         })
-        served = served_by(rows=rows)
+        served = served_by(
+            rows=rows,
+            left_out=(
+                frozenset({RouteKind.SCHOOL}) if skip_school else frozenset()
+            ),
+        )
         return tuple(
             match_of(place=place, calls=served.get(place.stop_id, ()))
             for place in places

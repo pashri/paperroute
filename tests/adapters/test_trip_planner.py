@@ -155,6 +155,16 @@ def test_parse_drops_walk_legs() -> None:
     assert direct.changes == 0
 
 
+def test_parse_marks_school_buses() -> None:
+    """A leg of product class 11 is a school bus; others are not."""
+    data = fixture(name='arrive_by_work')
+    assert isinstance(data, dict)
+    data['journeys'][0]['legs'][0]['transportation']['product']['class'] = 11
+    first, direct = parse_journeys(data=data)
+    assert [leg.school for leg in first.legs] == [True, False]
+    assert not any(leg.school for leg in direct.legs)
+
+
 def test_parse_three_changes() -> None:
     """Four transit legs make three changes."""
     (journey,) = parse_journeys(data=fixture(name='three_changes'))

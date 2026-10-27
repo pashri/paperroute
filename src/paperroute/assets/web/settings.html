@@ -106,6 +106,12 @@
                  value="on"{{inverted_lists}}>
           White on black lists
         </label>
+        <input type="hidden" name="skip_school_buses" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="skip_school_buses"
+                 value="on"{{skip_school_buses}}>
+          Leave out school buses
+        </label>
         <label>Connection map
           <select name="connection_map">
             <option value="changes"{{connection_map:changes}}>Changes</option>

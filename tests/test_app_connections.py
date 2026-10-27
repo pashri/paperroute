@@ -93,6 +93,7 @@ class RoutesTimetable(RecordingTimetable):
     """A timetable that answers one departure per route on each call."""
 
     routes: tuple[str, ...] = ()
+    kinds: dict[str, RouteKind] = field(default_factory=dict)
 
     def departures(
         self, *, pin: Pin, start: datetime, end: datetime
@@ -116,7 +117,12 @@ class RoutesTimetable(RecordingTimetable):
         """
         self.reads.append((pin, start, end))
         return [
-            departure(departs=start, route=route, trip_id=route)
+            departure(
+                departs=start,
+                route=route,
+                trip_id=route,
+                kind=self.kinds.get(route),
+            )
             for route in self.routes
         ]
 
@@ -218,6 +224,34 @@ def test_never_dropped_from_every_leg() -> None:
     assert {
         item.route for items in event.legs.lists.values() for item in items
     } == {'665'}
+
+
+def test_school_routes_dropped_when_asked() -> None:
+    """School routes leave direct trips and legs, and the load says so."""
+    timetable = RoutesTimetable(
+        routes=('711', 'S1'), kinds={'S1': RouteKind.SCHOOL},
+    )
+    effect = LoadDepartures(pin=WORK, start=START, end=END)
+    event = departures_read(timetable=timetable, effect=effect)
+    assert event.skip_school
+    assert [item.route for item in event.departures] == ['711']
+    assert event.legs is not None
+    assert {
+        item.route for items in event.legs.lists.values() for item in items
+    } == {'711'}
+
+
+def test_school_routes_kept_when_not_skipped() -> None:
+    """With school buses allowed, school routes stay."""
+    timetable = RoutesTimetable(
+        routes=('711', 'S1'), kinds={'S1': RouteKind.SCHOOL},
+    )
+    effect = LoadDepartures(
+        pin=WORK, start=START, end=END, skip_school=False,
+    )
+    event = departures_read(timetable=timetable, effect=effect)
+    assert not event.skip_school
+    assert [item.route for item in event.departures] == ['711', 'S1']
 
 
 def test_unknown_change_stop_gives_empty_list() -> None:

@@ -50,6 +50,8 @@ class JourneyLeg:
         Planned departure from the origin.
     arrives : datetime
         Planned arrival at the destination.
+    school : bool
+        Whether it is a school bus.
     """
 
     origin_id: str
@@ -57,6 +59,7 @@ class JourneyLeg:
     route: str
     departs: datetime
     arrives: datetime
+    school: bool = False
 
 
 @dataclass(frozen=True)

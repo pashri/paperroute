@@ -77,7 +77,11 @@ DIRECT: Final[Journey] = Journey(legs=(
 ))
 
 
-async def started(*, planner: FakeTripPlanner | None) -> Client:
+async def started(
+    *,
+    planner: FakeTripPlanner | None,
+    status: dict[str, object] | None = None,
+) -> Client:
     """
     Start a display with the fake timetable and planner.
 
@@ -85,6 +89,8 @@ async def started(*, planner: FakeTripPlanner | None) -> Client:
     ----------
     planner : FakeTripPlanner | None
         The planner.
+    status : dict[str, object] | None
+        What the app reports; nothing by default.
 
     Returns
     -------
@@ -94,7 +100,7 @@ async def started(*, planner: FakeTripPlanner | None) -> Client:
     pins = Pins(pins=(WORK,))
     display = WebDisplay(
         device=Device().pages(), pins=pins.get, options=PLATFORMS,
-        planner=planner, now=lambda: NOW,
+        planner=planner, now=lambda: NOW, status=lambda: status or {},
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()
@@ -167,6 +173,26 @@ async def test_unmappable_journey_greyed() -> None:
     assert 'via NEW2' in text
     assert text.count('not supported yet') == 1
     assert text.count('name="pick"') == 1
+
+
+async def test_school_bus_journey_greyed() -> None:
+    """A journey on a school bus is greyed unless school buses are on."""
+    school = Journey(legs=(
+        replace(GOOD.legs[0], school=True), GOOD.legs[1],
+    ))
+    planner = FakeTripPlanner(journeys=(school,))
+    _, text = await fetched(planner=planner, fields=SEARCH)
+    assert '<li class="greyed">' in text
+    assert 'school bus' in text
+    assert 'name="pick"' not in text
+    client = await started(
+        planner=planner,
+        status={'settings': {'skip_school_buses': 'off'}},
+    )
+    response = await client.get(f'/pins/ways/suggest?{urlencode(SEARCH)}')
+    text = await response.text()
+    await client.close()
+    assert 'name="pick"' in text
 
 
 async def test_three_change_journey_greyed() -> None:

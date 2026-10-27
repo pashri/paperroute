@@ -25,7 +25,7 @@ class StopJson(TypedDict):
 
 
 def stops_json(
-    *, options: PinOptions | None, text: str,
+    *, options: PinOptions | None, text: str, skip_school: bool = True,
 ) -> list[StopJson]:
     """
     Search for stops and list them for the page script.
@@ -36,6 +36,8 @@ def stops_json(
         The timetable's choices, or None while it is not ready.
     text : str
         The text searched for.
+    skip_school : bool
+        Whether school routes are left out of each stop's routes.
 
     Returns
     -------
@@ -52,12 +54,17 @@ def stops_json(
             kinds=[str(kind) for kind in match.kinds],
             routes=list(match.routes),
         )
-        for match in options.search(text=text)[:STOPS_SHOWN]
+        for match in options.search(
+            text=text, skip_school=skip_school,
+        )[:STOPS_SHOWN]
     ]
 
 
 def search_page(
-    *, options: PinOptions | None, query: Mapping[str, str],
+    *,
+    options: PinOptions | None,
+    query: Mapping[str, str],
+    skip_school: bool = True,
 ) -> str:
     """
     Search for a stop or station and draw what was found.
@@ -68,6 +75,8 @@ def search_page(
         The timetable's choices, or None while it is not ready.
     query : Mapping[str, str]
         The query: `q`.
+    skip_school : bool
+        Whether school routes are left out of each stop's routes.
 
     Returns
     -------
@@ -80,5 +89,8 @@ def search_page(
     return edit_page(
         title=TITLE,
         notice='',
-        body=search_results(text=text, found=options.search(text=text)),
+        body=search_results(
+            text=text,
+            found=options.search(text=text, skip_school=skip_school),
+        ),
     )

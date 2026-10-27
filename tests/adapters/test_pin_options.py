@@ -138,6 +138,32 @@ def test_search_lists_routes_naturally(built: Path, tmp_path: Path) -> None:
     assert found[0].kinds == (RouteKind.BUS, RouteKind.TRAIN)
 
 
+def test_search_can_leave_out_school_routes(
+    built: Path, tmp_path: Path,
+) -> None:
+    """School routes go from the lists; a school-only stop stays, bare."""
+    copy = Path(shutil.copy(built, tmp_path / 'timetable.db'))
+    with closing(sqlite3.connect(copy)) as conn:
+        conn.execute(SCHOOL_RUN)
+        conn.execute(STOP_ROWS)
+        conn.execute(
+            "INSERT INTO stops VALUES ('SO', 'School Stop', NULL, 0, 0, '')",
+        )
+        conn.execute("INSERT INTO run_stops VALUES ('SO', 90, 2)")
+        conn.commit()
+    with closing(SqliteNetworkRepository(path=copy)) as network:
+        options = SqlitePinOptions(network=network)
+        skipped = {
+            m.place.stop_id: m
+            for m in options.search(text='stop', skip_school=True)
+        }
+        kept = {m.place.stop_id: m for m in options.search(text='stop')}
+    assert 'S901' not in skipped['B2'].routes
+    assert RouteKind.SCHOOL not in skipped['B2'].kinds
+    assert skipped['SO'].routes == ()
+    assert 'S901' in kept['B2'].routes
+
+
 def test_search_escapes_like(options: SqlitePinOptions) -> None:
     """LIKE wildcards and quotes in the text match nothing special."""
     assert options.search(text='%') == ()

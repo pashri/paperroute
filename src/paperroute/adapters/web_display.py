@@ -382,6 +382,7 @@ class WebDisplay:
             pins=self._pins,
             options=self._options,
             sleep=self.pins_sleep,
+            skip_school=self.skip_school,
         )
         app.add_routes(pins.routes())
         app.add_routes(ConnectionPages(
@@ -389,7 +390,9 @@ class WebDisplay:
         ).routes())
         ways = WaysPages(pages=pins, pins=self._pins, options=self._options)
         planner, now = self._trips
-        suggest = SuggestPages(ways=ways, planner=planner, now=now)
+        suggest = SuggestPages(
+            ways=ways, planner=planner, now=now, skip_school=self.skip_school,
+        )
         ways.card = suggest.card
         app.add_routes(ways.routes())
         app.add_routes(suggest.routes())
@@ -649,6 +652,20 @@ class WebDisplay:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         self._post(event)
         return web.Response(status=HTTPStatus.NO_CONTENT)
+
+    def skip_school(self) -> bool:
+        """
+        Say whether school buses are left out, as the app last reported.
+
+        Returns
+        -------
+        bool
+            The school switch; the default until the app reports.
+        """
+        status = status_settings(
+            status=self._status() if self._status else {},
+        )
+        return status['skip_school_buses'] == 'on'
 
     async def _settings_page(self, request: web.Request) -> web.Response:
         """

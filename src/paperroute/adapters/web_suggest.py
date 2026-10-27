@@ -2,7 +2,7 @@
 
 import html
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
@@ -29,6 +29,7 @@ PICK_FIRST: Final[str] = 'Pick From and To first.'
 FROM_TO: Final[tuple[str, str]] = ('from', 'to')
 NO_TRIPS: Final[str] = 'No trips found.'
 NOT_YET: Final[str] = 'not supported yet'
+SCHOOL_TAG: Final[str] = 'school bus'
 DIRECT_NOTE: Final[str] = 'Direct trips always show on the panel.'
 ARROW: Final[str] = '\u2192'
 STEP: Final[timedelta] = timedelta(minutes=1)
@@ -89,12 +90,15 @@ class SuggestionRow:
         be picked.
     greyed : bool
         True when a stop is unknown or there are too many changes.
+    school : bool
+        True when it is greyed for riding a school bus.
     """
 
     journey: Journey
     boards: tuple[str, ...]
     pick: str | None
     greyed: bool
+    school: bool = False
 
 
 def search_of(*, query: MultiMapping[str], now: datetime) -> TripSearch:
@@ -222,6 +226,27 @@ def row_of(*, options: PinOptions, journey: Journey) -> SuggestionRow:
     )
 
 
+def school_row(*, row: SuggestionRow, skip_school: bool) -> SuggestionRow:
+    """
+    Grey a row that rides a school bus when they are left out.
+
+    Parameters
+    ----------
+    row : SuggestionRow
+        The row.
+    skip_school : bool
+        Whether school buses are left out.
+
+    Returns
+    -------
+    SuggestionRow
+        The row greyed and unpickable when it is left out; else as given.
+    """
+    if not skip_school or not any(leg.school for leg in row.journey.legs):
+        return row
+    return replace(row, pick=None, greyed=True, school=True)
+
+
 def board_name(*, place: StopPlace | None, stop_id: str) -> str:
     """
     Name a stop changed onto.
@@ -288,13 +313,20 @@ def row_html(*, row: SuggestionRow) -> str:
     """
     text = row_text(row=row)
     if row.greyed:
-        return GREYED.format(text=text, tag=NOT_YET)
+        return GREYED.format(
+            text=text, tag=SCHOOL_TAG if row.school else NOT_YET,
+        )
     if row.pick is None:
         return GREYED.format(text=text, tag=DIRECT_NOTE)
     return PICK.format(pick=html.escape(row.pick), text=text)
 
 
-def list_html(*, options: PinOptions, journeys: tuple[Journey, ...]) -> str:
+def list_html(
+    *,
+    options: PinOptions,
+    journeys: tuple[Journey, ...],
+    skip_school: bool = True,
+) -> str:
     """
     Draw the suggestion list.
 
@@ -304,6 +336,8 @@ def list_html(*, options: PinOptions, journeys: tuple[Journey, ...]) -> str:
         What the timetable offers.
     journeys : tuple[Journey, ...]
         The journeys found.
+    skip_school : bool
+        Whether journeys on a school bus are greyed.
 
     Returns
     -------
@@ -313,7 +347,10 @@ def list_html(*, options: PinOptions, journeys: tuple[Journey, ...]) -> str:
     if not journeys:
         return LIST.format(body=f'\n          <p>{NO_TRIPS}</p>')
     rows = ''.join(
-        row_html(row=row_of(options=options, journey=journey))
+        row_html(row=school_row(
+            row=row_of(options=options, journey=journey),
+            skip_school=skip_school,
+        ))
         for journey in journeys
     )
     first = min(journey.legs[-1].arrives for journey in journeys)
@@ -353,6 +390,8 @@ class SuggestPages:
         The Trip Planner, or None when there is no key.
     now : Callable[[], datetime]
         Gives the current time.
+    skip_school : Callable[[], bool]
+        Says whether journeys on a school bus are greyed.
     """
 
     def __init__(
@@ -361,10 +400,12 @@ class SuggestPages:
         ways: WaysPages,
         planner: TripPlanner | None,
         now: Callable[[], datetime],
+        skip_school: Callable[[], bool] = lambda: True,
     ) -> None:
         self._ways = ways
         self._planner = planner
         self._now = now
+        self._skip_school = skip_school
 
     def routes(self) -> list[web.RouteDef]:
         """
@@ -478,4 +519,8 @@ class SuggestPages:
             return failure_html(line=BUSY)
         except PlannerUnavailable:
             return failure_html()
-        return list_html(options=options, journeys=journeys)
+        return list_html(
+            options=options,
+            journeys=journeys,
+            skip_school=self._skip_school(),
+        )

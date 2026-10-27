@@ -27,7 +27,11 @@ class WindowModel(BaseModel):
 
 
 class SettingsModel(BaseModel):
-    """The Settings page's choices as stored."""
+    """
+    The Settings page's choices as stored.
+
+    The school switch has a default, so files stored before it load.
+    """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
@@ -44,6 +48,7 @@ class SettingsModel(BaseModel):
     inverted_lists: bool
     alert_lookahead: Lookahead
     connection_map: ConnectionMap
+    skip_school_buses: bool = True
 
     @field_validator('peak_windows')
     @classmethod
@@ -148,6 +153,7 @@ def settings_to_model(*, settings: Settings) -> SettingsModel:
         inverted_lists=settings.inverted_lists,
         alert_lookahead=settings.alert_lookahead,
         connection_map=settings.connection_map,
+        skip_school_buses=settings.skip_school_buses,
     )
 
 
@@ -179,6 +185,7 @@ def settings_from_model(*, model: SettingsModel) -> Settings:
         inverted_lists=model.inverted_lists,
         alert_lookahead=model.alert_lookahead,
         connection_map=model.connection_map,
+        skip_school_buses=model.skip_school_buses,
     )
 
 

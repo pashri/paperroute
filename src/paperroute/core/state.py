@@ -221,6 +221,7 @@ def reload_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
         start=start,
         end=end,
         timetable=state.saving.timetable,
+        skip_school=state.settings.skip_school_buses,
     )
     board = replace(state.board, loading=True)
     return replace(state, board=board), (load,)

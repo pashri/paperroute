@@ -332,6 +332,31 @@ def test_first_tick_loads_departures() -> None:
     assert LoadDepartures(pin=PIN, start=start, end=end) in effects
 
 
+def test_load_follows_school_switch() -> None:
+    """The load asks to skip school buses as the settings say."""
+    state = fresh()
+    state = replace(
+        state, settings=replace(state.settings, skip_school_buses=False),
+    )
+    _, effects = step(state, Tick(now=START))
+    loads = [e for e in effects if isinstance(e, LoadDepartures)]
+    assert [load.skip_school for load in loads] == [False]
+
+
+def test_load_for_other_school_switch_is_stale() -> None:
+    """Departures loaded under the other school switch are ignored."""
+    state = fresh()
+    event = DeparturesLoaded(
+        pin=shown(state=state),
+        departures=(departure(departs=START),),
+        until=START + HORIZON,
+        skip_school=False,
+    )
+    after, effects = step(state, event)
+    assert after == state
+    assert not effects
+
+
 def test_loaded_departures_render_and_choose_feeds() -> None:
     """Loading renders and the next tick fetches the bus feed."""
     state = loaded(state=fresh())

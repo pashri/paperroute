@@ -376,13 +376,18 @@ def is_stale(*, state: State, event: Event) -> bool:
     Returns
     -------
     bool
-        True for departures loaded or failed, a service span read, or
+        True for departures loaded under the other school switch; for
+        departures loaded or failed, a service span read, or
         stations between read, for another place or another timetable
         version, for a reach, a chooser load, a failed place look-up or
         holidays from another timetable version, and for area modes
         loaded or failed for another map area.
     """
     match event:
+        case (
+            DeparturesLoaded(skip_school=skip)
+        ) if skip != state.settings.skip_school_buses:
+            return True
         case (
             DeparturesLoaded(pin=pin, timetable=timetable)
             | DeparturesFailed(pin=pin, timetable=timetable)

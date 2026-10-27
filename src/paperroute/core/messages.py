@@ -78,12 +78,17 @@ class MapData(StrEnum):
 
 @dataclass(frozen=True)
 class LoadDepartures:
-    """Ask the timetable for departures, tagged with its version."""
+    """
+    Ask the timetable for departures, tagged with its version.
+
+    `skip_school` leaves school routes out of a pin with a To.
+    """
 
     pin: Pin
     start: datetime
     end: datetime
     timetable: str | None = None
+    skip_school: bool = True
 
 
 @dataclass(frozen=True)
@@ -336,13 +341,18 @@ class Tick:
 
 @dataclass(frozen=True)
 class DeparturesLoaded:
-    """Departures arrived for a pin, from the timetable version asked."""
+    """
+    Departures arrived for a pin, from the timetable version asked.
+
+    `skip_school` echoes the load's.
+    """
 
     pin: Pin
     departures: tuple[Departure, ...]
     until: datetime
     timetable: str | None = None
     legs: Legs | None = None
+    skip_school: bool = True
 
 
 @dataclass(frozen=True)
@@ -510,6 +520,8 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
         How far ahead planned alerts are listed.
     connection_map : ConnectionMap | None
         How the Map shows a connection pin.
+    skip_school_buses : bool | None
+        Whether school routes are left out.
     """
 
     auto_rebuild: bool | None = None
@@ -523,6 +535,7 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
     inverted_lists: bool | None = None
     alert_lookahead: Lookahead | None = None
     connection_map: ConnectionMap | None = None
+    skip_school_buses: bool | None = None
 
 
 @dataclass(frozen=True)

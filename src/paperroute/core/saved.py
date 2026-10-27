@@ -120,6 +120,10 @@ class Settings:  # pylint: disable=too-many-instance-attributes
         How far ahead planned alerts are listed.
     connection_map : ConnectionMap
         Whether the Map zooms on each change, the first or the whole trip.
+    skip_school_buses : bool
+        Whether routes the timetable marks as school services are left
+        out of pins with a To, the stop search and Trip Planner
+        suggestions.
     """
 
     auto_rebuild: bool = True
@@ -133,6 +137,7 @@ class Settings:  # pylint: disable=too-many-instance-attributes
     inverted_lists: bool = False
     alert_lookahead: Lookahead = Lookahead.WEEK
     connection_map: ConnectionMap = ConnectionMap.CHANGES
+    skip_school_buses: bool = True
 
 
 @dataclass(frozen=True)

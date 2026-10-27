@@ -310,7 +310,9 @@ class NetworkRepository(Protocol):
 class PinOptions(Protocol):
     """The choices a pin's editor offers, read from the timetable."""
 
-    def search(self, *, text: str) -> tuple[StopMatch, ...]:
+    def search(
+        self, *, text: str, skip_school: bool = False,
+    ) -> tuple[StopMatch, ...]:
         """
         Find stops and stations that runs serve by name.
 
@@ -318,6 +320,8 @@ class PinOptions(Protocol):
         ----------
         text : str
             Part of a name.
+        skip_school : bool
+            Whether school routes are left out of each match's routes.
 
         Returns
         -------

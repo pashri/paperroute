@@ -19,7 +19,8 @@ from paperroute.core.trip_search import (
     TripSearch,
     default_search,
 )
-from paperroute.ports import PinOptions, TripPlanner
+from paperroute.planner_port import TripPlanner
+from paperroute.ports import PinOptions
 
 FAILURE: Final[str] = "Trip Planner didn't answer. Try again in a minute."
 NO_TRIPS: Final[str] = 'No trips found.'

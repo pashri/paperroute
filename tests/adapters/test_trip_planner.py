@@ -309,3 +309,28 @@ def test_planner_only_for_live_feeds(
     live = trip_planner_for(live=True)
     assert live is not None
     assert live.key() is None
+
+
+async def test_close_closes_session() -> None:
+    """Closing ends the session made on first use; unused, it is a no-op."""
+    made: list[aiohttp.ClientSession] = []
+
+    def session() -> aiohttp.ClientSession:
+        made.append(aiohttp.ClientSession())
+        return made[-1]
+
+    async for server in serve(status=HTTPStatus.OK):
+        tfnsw = TfnswTripPlanner(
+            session_factory=session,
+            key='not-a-key',
+            base_url=str(server.make_url('/')),
+        )
+        keyed = KeyedTripPlanner(key=lambda: 'not-a-key', planner=tfnsw)
+        await keyed.close()
+        await keyed.trips(
+            origin_id='1', destination_id='2',
+            search=TripSearch(when=WHEN, arrive=True),
+        )
+        await keyed.close()
+    assert made[0].closed
+    assert tfnsw.session is None

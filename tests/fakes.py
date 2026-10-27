@@ -951,11 +951,18 @@ class FakeTripPlanner:
         True to raise `PlannerUnavailable`.
     asked : list[tuple[str, str, TripSearch]]
         The calls made.
+    closed : bool
+        True once closed.
     """
 
     journeys: tuple[Journey, ...] = ()
     down: bool = False
     asked: list[tuple[str, str, TripSearch]] = field(default_factory=list)
+    closed: bool = False
+
+    async def close(self) -> None:
+        """Note that it was closed."""
+        self.closed = True
 
     async def trips(
         self, *, origin_id: str, destination_id: str, search: TripSearch,

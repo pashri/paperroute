@@ -243,3 +243,11 @@ async def test_default_search_on_ways_page() -> None:
     assert 'name="time" value="09:00"' in text
     assert 'name="day" value="2026-10-28"' in bad
     assert 'export async function loadSuggestions' in script
+
+
+async def test_shutdown_closes_planner() -> None:
+    """Shutting the web app down closes the Trip Planner."""
+    planner = FakeTripPlanner()
+    client = await started(planner=planner)
+    await client.close()
+    assert planner.closed

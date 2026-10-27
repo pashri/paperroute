@@ -35,7 +35,6 @@ from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.route_colours import RouteColour
 from paperroute.core.saved import Saved, Settings
 from paperroute.core.tiles import LabelKind, StreetLabel, TileVariant
-from paperroute.core.trip_search import Journey, TripSearch
 
 
 class TimetableRepository(Protocol):
@@ -758,36 +757,6 @@ class FeedsClient(Protocol):
 
     async def close(self) -> None:
         """Release any connections."""
-
-
-class TripPlanner(Protocol):
-    """Finds journeys between two stops."""
-
-    async def trips(
-        self, *, origin_id: str, destination_id: str, search: TripSearch,
-    ) -> tuple[Journey, ...]:
-        """
-        Ask for journeys.
-
-        Parameters
-        ----------
-        origin_id : str
-            Trip Planner ID of the start.
-        destination_id : str
-            Trip Planner ID of the end.
-        search : TripSearch
-            When to leave or arrive.
-
-        Returns
-        -------
-        tuple[Journey, ...]
-            The journeys found, without walking legs.
-
-        Raises
-        ------
-        PlannerUnavailable
-            On a transport error, a timeout or a bad status.
-        """
 
 
 class Display(Protocol):

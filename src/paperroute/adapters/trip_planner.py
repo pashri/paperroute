@@ -254,6 +254,12 @@ class TfnswTripPlanner:
         except (aiohttp.ClientError, TimeoutError, ValueError) as error:
             raise PlannerUnavailable(type(error).__name__) from error
 
+    async def close(self) -> None:
+        """Close the HTTP session, if one was made."""
+        if self.session is not None:
+            await self.session.close()
+            self.session = None
+
     async def trips(
         self, *, origin_id: str, destination_id: str, search: TripSearch,
     ) -> tuple[Journey, ...]:
@@ -305,6 +311,10 @@ class KeyedTripPlanner:
     ) -> None:
         self.key = key
         self.planner = planner
+
+    async def close(self) -> None:
+        """Close the planner's HTTP session."""
+        await self.planner.close()
 
     async def trips(
         self, *, origin_id: str, destination_id: str, search: TripSearch,

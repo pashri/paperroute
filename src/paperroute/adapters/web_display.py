@@ -47,7 +47,8 @@ from paperroute.rss import max_rss_mb
 if TYPE_CHECKING:
     from paperroute.adapters.web_device import DevicePages
     from paperroute.observers import PinsSeen
-    from paperroute.ports import PinOptions, TripPlanner
+    from paperroute.planner_port import TripPlanner
+    from paperroute.ports import PinOptions
 
 logger = logging.getLogger(__name__)
 
@@ -403,7 +404,7 @@ class WebDisplay:
 
     async def _close(self, app: web.Application) -> None:
         """
-        Release the open event streams so shutdown does not wait.
+        Release the open event streams and close the Trip Planner.
 
         Parameters
         ----------
@@ -413,6 +414,9 @@ class WebDisplay:
         del app
         self._closing = True
         self.changed.set()
+        planner, _ = self._trips
+        if planner is not None:
+            await planner.close()
 
     @web.middleware
     async def _guard(

@@ -1,16 +1,15 @@
 """Check the choices made while building a way by hand."""
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final
 
 from multidict import MultiMapping
 
-from paperroute.adapters.pin_editor import edited, with_origin
 from paperroute.adapters.state_change import ALLOW_MAX, ALLOW_MIN
 from paperroute.core.connection_model import default_allow
-from paperroute.core.model import Change, RouteKind, StopPlace, Way
-from paperroute.core.pin_choices import ChangeStop, PinDraft, PinEditor
+from paperroute.core.model import Change, StopPlace, Way
+from paperroute.core.pin_choices import ChangeStop
 from paperroute.ports import PinOptions
 
 ALLOW_RANGE: Final[str] = 'Allow between 1 and 60 minutes.'
@@ -48,10 +47,6 @@ class ConnectionDraft:
     ----------
     stop : str
         From stop or station ID; '' for none.
-    kind : RouteKind | None
-        Kind of leg 1's route, or None for none yet.
-    route : str
-        Leg 1's route number; '' for none.
     first : ChangeDraft
         The first change.
     second : ChangeDraft
@@ -59,14 +54,12 @@ class ConnectionDraft:
     changes : int
         Changes asked for.
     to : str
-        ID of the final To; '' for none.
+        ID of the ways page's To; '' for none.
     back : str
         The ways page's query to return to; '' for a new pin.
     """
 
     stop: str = ''
-    kind: RouteKind | None = None
-    route: str = ''
     first: ChangeDraft = ChangeDraft()
     second: ChangeDraft = ChangeDraft()
     changes: int = 1
@@ -102,9 +95,14 @@ class ConnectionEditor:
     Attributes
     ----------
     draft : ConnectionDraft
-        The choices that are offered.
-    leg : PinEditor
-        Leg 1's editor, whose To is the stop got off at.
+        The choices that are offered; `to` is '' while the last ride does
+        not reach it.
+    origin : StopPlace | None
+        The From, or None when it is not known.
+    target : StopPlace | None
+        The ways page's To, or None when it is not known.
+    firsts : tuple[StopPlace, ...]
+        Places offered to get off at after leg 1, on any route.
     first : ChangeStep
         The first change.
     offs : tuple[StopPlace, ...]
@@ -119,7 +117,9 @@ class ConnectionEditor:
     """
 
     draft: ConnectionDraft
-    leg: PinEditor
+    origin: StopPlace | None = None
+    target: StopPlace | None = None
+    firsts: tuple[StopPlace, ...] = ()
     first: ChangeStep = ChangeStep()
     offs: tuple[StopPlace, ...] = ()
     second: ChangeStep = ChangeStep()
@@ -158,22 +158,19 @@ def connection_draft(*, query: MultiMapping[str]) -> ConnectionDraft:
     Parameters
     ----------
     query : MultiMapping[str]
-        Fields: `stop`, `kind`, `route`, `off`, `on`, `allow`,
+        Fields: `stop`, `off`, `on`, `allow`,
         `allow_for`, the same with `2` for the second change, `changes`,
         `more` (one change more), `to` and `back`.
 
     Returns
     -------
     ConnectionDraft
-        The draft; an unknown kind becomes None, an unreadable count 1.
+        The draft; an unreadable count becomes 1.
     """
-    kind = query.get('kind', '')
     changes = query.get('changes', '1')
     more = 1 if query.get('more') else 0
     return ConnectionDraft(
         stop=query.get('stop', ''),
-        kind=RouteKind(kind) if kind in RouteKind else None,
-        route=query.get('route', ''),
         first=change_draft(query=query, suffix=''),
         second=change_draft(query=query, suffix='2'),
         changes=(int(changes) if changes.isdecimal() else 1) + more,
@@ -278,9 +275,9 @@ def change_step(
 
 def first_leg(
     *, options: PinOptions, draft: ConnectionDraft, origin: StopPlace,
-) -> tuple[PinEditor, StopPlace | None]:
+) -> tuple[tuple[StopPlace, ...], StopPlace | None]:
     """
-    Check leg 1 as a pin from the From to the stop got off at.
+    Check leg 1: any route from the From to the stop got off at.
 
     Parameters
     ----------
@@ -293,20 +290,12 @@ def first_leg(
 
     Returns
     -------
-    tuple[PinEditor, StopPlace | None]
-        Leg 1's editor, and the stop got off at when it is offered.
+    tuple[tuple[StopPlace, ...], StopPlace | None]
+        The places offered to get off at, and the one chosen when it is
+        offered.
     """
-    leg = with_origin(
-        options=options,
-        draft=PinDraft(
-            stop=draft.stop,
-            kind=draft.kind,
-            route=draft.route,
-            to=draft.first.off,
-        ),
-        origin=origin,
-    )
-    return leg, chosen(places=leg.destinations, given=leg.draft.to)
+    firsts = options.reached_from(place=origin)
+    return firsts, chosen(places=firsts, given=draft.first.off)
 
 
 def made_change(*, alight: StopPlace | None, step: ChangeStep) -> Change:
@@ -425,17 +414,15 @@ def later_steps(
     places = () if last is None else options.reached_from(place=last.place)
     to = chosen(places=places, given=draft.to)
     kept = ConnectionDraft(
-        stop=editor.draft.stop, kind=editor.draft.kind,
-        route=editor.draft.route, first=editor.draft.first,
+        stop=editor.draft.stop, first=editor.draft.first,
         second=change_kept(
             step=second, off='' if off2 is None else off2.stop_id,
         ),
         changes=draft.changes, to='' if to is None else to.stop_id,
         back=draft.back,
     )
-    return ConnectionEditor(
-        draft=kept, leg=editor.leg, first=editor.first, offs=offs,
-        second=second, places=places,
+    return replace(
+        editor, draft=kept, offs=offs, second=second, places=places,
     )
 
 
@@ -445,7 +432,7 @@ def connection_edited(
     """
     Check a hand way's choices and work out what is offered next.
 
-    Leg 1 is checked as a pin from the From to `off`. Then the first
+    Leg 1 runs on any route from the From to `off`. Then the first
     change, the second change when two are asked for, and the To. A
     choice that is not offered drops itself and everything after it.
 
@@ -462,27 +449,24 @@ def connection_edited(
         The checked draft, what is offered after it and, when every step
         has a value, the way.
     """
-    origin = options.place(stop_id=draft.stop) if draft.stop else None
+    origin = options.place(stop_id=draft.stop)
+    target = options.place(stop_id=draft.to)
     if origin is None:
-        empty = ConnectionDraft(back=draft.back, changes=draft.changes)
-        return ConnectionEditor(
-            draft=empty, leg=edited(options=options, draft=PinDraft()),
+        empty = ConnectionDraft(
+            back=draft.back, changes=draft.changes, to=draft.to,
         )
-    leg, alight = first_leg(options=options, draft=draft, origin=origin)
+        return ConnectionEditor(draft=empty, target=target)
+    firsts, alight = first_leg(options=options, draft=draft, origin=origin)
     first = ChangeStep() if alight is None else change_step(
         options=options, draft=draft.first, alight=alight,
     )
+    off = '' if alight is None else alight.stop_id
     start = ConnectionEditor(
         draft=ConnectionDraft(
-            stop=leg.draft.stop, kind=leg.draft.kind, route=leg.draft.route,
-            first=change_kept(step=first, off=leg.draft.to),
+            stop=draft.stop, first=change_kept(step=first, off=off),
             changes=draft.changes, back=draft.back,
         ),
-        leg=leg, first=first,
+        origin=origin, target=target, firsts=firsts, first=first,
     )
     later = later_steps(options=options, draft=draft, editor=start)
-    return ConnectionEditor(
-        draft=later.draft, leg=later.leg, first=later.first,
-        offs=later.offs, second=later.second, places=later.places,
-        way=editor_way(editor=later, alight=alight),
-    )
+    return replace(later, way=editor_way(editor=later, alight=alight))

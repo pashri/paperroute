@@ -23,12 +23,11 @@ from tests.core.connection_factories import WORK
 Client = TestClient[web.Request, web.Application]
 
 FULL: Final[list[tuple[str, str]]] = [
-    ('stop', 'G2145615'), ('kind', 'bus'), ('route', '606'),
-    ('off', 'G215254'), ('on', '2145648'), ('allow', '4'),
+    ('stop', 'G2145615'), ('off', 'G215254'), ('on', '2145648'), ('allow', '4'),
     ('allow_for', '2145648'), ('to', '214510'),
 ]
 TWO: Final[list[tuple[str, str]]] = [
-    *FULL[:7], ('changes', '2'), ('off2', '214510'), ('on2', '2145648'),
+    *FULL[:5], ('changes', '2'), ('off2', '214510'), ('on2', '2145648'),
     ('allow2', '3'), ('allow2_for', '2145648'), ('to', '214510'),
 ]
 
@@ -102,14 +101,19 @@ def query(fields: list[tuple[str, str]]) -> str:
 
 async def test_works_without_js(client: Client) -> None:
     """Every step is reachable by a plain GET, all controls labelled."""
-    text = await (await client.get('/pins/connect?stop=G2145615')).text()
+    start = query([FULL[0], FULL[-1]])
+    text = await (await client.get(f'/pins/connect?{start}')).text()
     assert '<label for="pin-off">Get off at</label>' in text
+    assert 'value="G215254">Hammers Rd Opp Sherwood St</option>' in text
+    assert 'name="kind"' not in text and 'name="route"' not in text
     assert '<legend>Change</legend>' not in text
-    text = await (await client.get(f'/pins/connect?{query(FULL[:5])}')).text()
+    text = await (
+        await client.get(f'/pins/connect?{query([*FULL[:2], FULL[-1]])}')
+    ).text()
     assert 'Constitution Hill, North West Twy · 150 m' in text
     text = await (await client.get(f'/pins/connect?{query(FULL)}')).text()
     assert 'Worked out from the 150 m walk.' in text
-    assert '<label for="pin-to">To</label>' in text
+    assert 'Then on to Westmead Station.' in text
     assert 'name="more" value="1"' in text
     assert 'formaction="/pins/connect/save"' in text
     more = await (
@@ -124,6 +128,24 @@ async def test_works_without_js(client: Client) -> None:
     assert '<legend>Leg 3</legend>' in text
     assert unlabelled(text=text) == []
     assert '<script>' not in text
+
+
+async def test_show_choices_keeps_from_and_to(client: Client) -> None:
+    """The form carries its From and To, so Show choices keeps them."""
+    text = await (
+        await client.get(f'/pins/connect?{query([FULL[0], FULL[-1]])}')
+    ).text()
+    assert '<input type="hidden" name="stop" value="G2145615">' in text
+    assert '<input type="hidden" name="to" value="214510">' in text
+    assert 'Hollis St Opp Constitution Hill Library → Westmead Station' in text
+
+
+async def test_unreached_to_says_so(client: Client) -> None:
+    """A last ride that does not reach the To says so and cannot be added."""
+    fields = [*FULL[:-1], ('to', 'G215254')]
+    text = await (await client.get(f'/pins/connect?{query(fields)}')).text()
+    assert 'No ride from Constitution Hill, North West Twy reaches' in text
+    assert 'formaction="/pins/connect/save"' not in text
 
 
 async def test_part_steps_returns_fieldset(client: Client) -> None:
@@ -206,13 +228,13 @@ async def test_save_refuses_allow(client: Client) -> None:
     assert response.status == HTTPStatus.BAD_REQUEST
     assert ALLOW_RANGE in text
     assert 'name="allow" value="0"' in text
-    assert '<option value="214510" selected>' in text
+    assert '<input type="hidden" name="to" value="214510">' in text
 
 
 async def test_save_refuses_misfit(client: Client) -> None:
     """A To that is not offered, or not the ways page's To, is refused."""
     data = [
-        (name, 'nowhere' if name == 'to' else value) for name, value in FULL
+        (name, 'G215254' if name == 'to' else value) for name, value in FULL
     ]
     response = await client.post('/pins/connect/save', data=data)
     assert response.status == HTTPStatus.BAD_REQUEST
@@ -242,11 +264,15 @@ async def test_starting_without_timetable(pins: Pins) -> None:
     assert response.headers['Location'] == '/pins'
 
 
-async def test_empty_editor_offers_from_search(client: Client) -> None:
-    """With no From yet, the page offers the stop search, without JS."""
-    text = await (await client.get('/pins/connect')).text()
-    assert '<form class="search" method="get" action="/pins/new">' in text
-    assert '<input type="hidden" name="connect" value="1">' in text
-    assert '<form class="editor"' not in text
-    assert '<title>Add a way by hand - paperroute</title>' in text
-    assert unlabelled(text=text) == []
+async def test_editor_without_stops_goes_to_ways_page(
+    client: Client,
+) -> None:
+    """Without a known From and To, it goes back to the ways page."""
+    response = await client.get('/pins/connect', allow_redirects=False)
+    assert response.headers['Location'] == '/pins/ways'
+    back = urlencode([('from', 'G2145615'), ('nickname', 'Office')])
+    response = await client.get(
+        f'/pins/connect?{query([FULL[0], ("back", back)])}',
+        allow_redirects=False,
+    )
+    assert response.headers['Location'] == f'/pins/ways?{back}'

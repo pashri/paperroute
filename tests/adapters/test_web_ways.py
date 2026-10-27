@@ -171,6 +171,7 @@ async def test_hand_way_carries_unsaved_edits(client: Client) -> None:
     assert location.path == '/pins/connect'
     fields = dict(parse_qsl(location.query))
     assert fields['stop'] == 'G2145615'
+    assert fields['to'] == '214510'
     assert parse_qsl(fields['back']) == edited
 
 

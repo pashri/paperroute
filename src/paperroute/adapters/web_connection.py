@@ -27,14 +27,11 @@ from paperroute.adapters.ways_editor import (
 )
 from paperroute.adapters.web_pin_edit import (
     MISFIT,
-    SEARCH_FORM,
     edit_page,
-    kind_fields,
-    line_field,
     option,
     select_field,
 )
-from paperroute.adapters.web_pin_search import CONNECT_FIELD, STARTING
+from paperroute.adapters.web_pin_search import STARTING
 from paperroute.adapters.web_pins import html_page, notice_alert
 from paperroute.adapters.web_ways import posted_fields
 from paperroute.core.model import MAX_CHANGES, Pin, StopPlace
@@ -44,6 +41,7 @@ from paperroute.ports import PinOptions
 TITLE: Final[str] = 'Add a way by hand'
 PICK_STOP: Final[str] = 'Pick a stop'
 WAY_FIELDS: Final[frozenset[str]] = frozenset({'ways', 'way'})
+ARROW: Final[str] = '\u2192'
 ON_HINT: Final[str] = 'Stops within 500 m of where you get off, nearest first.'
 ALLOW_HINT: Final[str] = (
     'Worked out from the {metres} m walk. Change it if you need longer.'
@@ -52,8 +50,10 @@ FORM: Final[str] = """<form class="editor" method="get" action="/pins/connect"
           data-steps>
       {default}
       <input type="hidden" name="back" value="{back}">
+      <input type="hidden" name="stop" value="{stop}">
+      <input type="hidden" name="to" value="{to}">
       <input type="hidden" name="changes" value="{changes}">
-      <h3>{origin}</h3>{steps}{buttons}
+      <h3>{origin} {arrow} {target}</h3>{steps}{buttons}
     </form>"""
 STEPS: Final[str] = """
       <fieldset class="steps">
@@ -82,6 +82,10 @@ ALLOW: Final[str] = """
       </p>"""
 HINT: Final[str] = """
       <p class="hint">{text}</p>"""
+LAST: Final[str] = """
+      <p>Then on to {to}.</p>"""
+UNREACHED: Final[str] = 'No ride from {on} reaches {to}. Pick another stop.'
+
 
 
 def place_select(
@@ -115,7 +119,7 @@ def place_select(
 
 def first_fieldset(*, editor: ConnectionEditor) -> str:
     """
-    Draw leg 1: the mode, the route and where to get off.
+    Draw leg 1: where to get off, on any route.
 
     Parameters
     ----------
@@ -127,15 +131,12 @@ def first_fieldset(*, editor: ConnectionEditor) -> str:
     str
         A fieldset.
     """
-    leg = editor.leg
-    fields = kind_fields(editor=leg) + line_field(editor=leg)
-    if leg.draft.route:
-        fields += place_select(
-            name='off',
-            label='Get off at',
-            places=[(p.stop_id, p.name) for p in leg.destinations],
-            chosen=editor.draft.first.off,
-        )
+    fields = place_select(
+        name='off',
+        label='Get off at',
+        places=stop_choices(places=editor.firsts),
+        chosen=editor.draft.first.off,
+    )
     return LEG.format(legend='Leg 1', fields=fields)
 
 
@@ -227,7 +228,7 @@ def second_change(*, editor: ConnectionEditor) -> str:
 
 def last_fieldset(*, editor: ConnectionEditor) -> str:
     """
-    Draw the last leg: the To.
+    Draw the last leg: on to the ways page's To.
 
     Parameters
     ----------
@@ -239,13 +240,15 @@ def last_fieldset(*, editor: ConnectionEditor) -> str:
     str
         A fieldset, or an empty string before the last stop got on at.
     """
-    if not editor.places:
+    step = editor.second if editor.draft.changes == 2 else editor.first
+    if not editor.places or step.on is None or editor.target is None:
         return ''
+    to = html.escape(editor.target.name)
+    text = LAST.format(to=to) if editor.draft.to else HINT.format(
+        text=UNREACHED.format(on=html.escape(step.on.place.name), to=to),
+    )
     legend = f'Leg {editor.draft.changes + 1}'
-    return LEG.format(legend=legend, fields=place_select(
-        name='to', label='To', places=stop_choices(places=editor.places),
-        chosen=editor.draft.to,
-    ))
+    return LEG.format(legend=legend, fields=text)
 
 
 def steps_fieldset(*, editor: ConnectionEditor) -> str:
@@ -272,7 +275,9 @@ def steps_fieldset(*, editor: ConnectionEditor) -> str:
     return STEPS.format(fields=fields)
 
 
-def connection_form(*, editor: ConnectionEditor) -> str:
+def connection_form(
+    *, editor: ConnectionEditor, origin: StopPlace, target: StopPlace,
+) -> str:
     """
     Draw the hand way editor.
 
@@ -280,6 +285,10 @@ def connection_form(*, editor: ConnectionEditor) -> str:
     ----------
     editor : ConnectionEditor
         The editor.
+    origin : StopPlace
+        The From.
+    target : StopPlace
+        The ways page's To.
 
     Returns
     -------
@@ -287,14 +296,17 @@ def connection_form(*, editor: ConnectionEditor) -> str:
         Escaped HTML of the form.
     """
     draft = editor.draft
-    origin = editor.leg.origin
     more = draft.changes < MAX_CHANGES and editor.first.on is not None
     return FORM.format(
         default=DEFAULT_BUTTON,
         back=html.escape(draft.back),
+        stop=html.escape(origin.stop_id),
+        to=html.escape(target.stop_id),
         changes=draft.changes,
-        origin=html.escape(PICK_STOP if origin is None else origin.name),
-        steps=steps_fieldset(editor=editor) if origin is not None else '',
+        origin=html.escape(origin.name),
+        arrow=ARROW,
+        target=html.escape(target.name),
+        steps=steps_fieldset(editor=editor),
         buttons=BUTTONS.format(
             more=MORE if more else '',
             save=SAVE if editor.way is not None else '',
@@ -328,7 +340,7 @@ def survived(*, draft: ConnectionDraft, editor: ConnectionEditor) -> bool:
         and given.allow.strip() in ('', kept.allow)
         for given, kept in pairs
     )
-    fields = ('stop', 'kind', 'route', 'to')
+    fields = ('stop', 'to')
     return same and all(
         getattr(draft, name) == getattr(checked, name) for name in fields
     )
@@ -464,20 +476,47 @@ class ConnectionPages:
         Returns
         -------
         web.Response
-            The page: the form, the stop search before a From, or a
-            line saying the timetable is not ready.
+            The page: the form, or a line saying the timetable is not
+            ready.
         """
         if self._options is None:
             body = STARTING
-        elif not draft.stop:
-            body = SEARCH_FORM.format(text='', extra=CONNECT_FIELD)
         else:
-            body = connection_form(editor=connection_edited(
-                options=self._options, draft=draft,
-            ))
+            body = self._form(draft=draft, options=self._options)
         return html_page(
             text=edit_page(title=TITLE, notice=notice, body=body),
             status=status,
+        )
+
+    @staticmethod
+    def _form(*, draft: ConnectionDraft, options: PinOptions) -> str:
+        """
+        Draw the editor's form.
+
+        Parameters
+        ----------
+        draft : ConnectionDraft
+            The choices made.
+        options : PinOptions
+            What the timetable offers.
+
+        Returns
+        -------
+        str
+            The form.
+
+        Raises
+        ------
+        web.HTTPSeeOther
+            To the ways page it came from when the From or To is not
+            known.
+        """
+        editor = connection_edited(options=options, draft=draft)
+        if editor.origin is None or editor.target is None:
+            back = f'?{draft.back}' if draft.back else ''
+            raise web.HTTPSeeOther(location=f'/pins/ways{back}')
+        return connection_form(
+            editor=editor, origin=editor.origin, target=editor.target,
         )
 
     async def _save(self, request: web.Request) -> web.Response:

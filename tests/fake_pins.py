@@ -33,7 +33,9 @@ class FakePinOptions:
     changes : tuple[ChangeStop, ...]
         What `change_stops` gives.
     reached : tuple[StopPlace, ...]
-        What `reached_from` gives.
+        What `reached_from` gives for a place not in `reached_by`.
+    reached_by : dict[str, tuple[StopPlace, ...]]
+        What `reached_from` gives, by stop ID.
     between : tuple[str, ...]
         What `routes_between` gives.
     parents : dict[str, str]
@@ -55,6 +57,9 @@ class FakePinOptions:
     colours: dict[str, RouteColour] = field(default_factory=dict)
     changes: tuple[ChangeStop, ...] = ()
     reached: tuple[StopPlace, ...] = ()
+    reached_by: dict[str, tuple[StopPlace, ...]] = field(
+        default_factory=dict,
+    )
     between: tuple[str, ...] = ()
     parents: dict[str, str] = field(default_factory=dict)
 
@@ -227,14 +232,14 @@ class FakePinOptions:
         Parameters
         ----------
         place : StopPlace
-            Ignored.
+            Where the ride starts.
 
         Returns
         -------
         tuple[StopPlace, ...]
-            The places.
+            The places for its stop ID, else `reached`.
         """
-        return self.reached
+        return self.reached_by.get(place.stop_id, self.reached)
 
     def routes_between(
         self, *, origin: StopPlace, destination: StopPlace,

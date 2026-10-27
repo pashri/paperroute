@@ -258,12 +258,16 @@ def hand_location(*, query: MultiMapping[str]) -> str:
     Returns
     -------
     str
-        The editor's address; `back` holds every field but `hand`.
+        The editor's address with the From and To; `back` holds every
+        field but `hand`.
     """
     back = urlencode([
         (name, value) for name, value in query.items() if name != 'hand'
     ])
-    fields = [('stop', query.get('from', '')), ('back', back)]
+    fields = [
+        ('stop', query.get('from', '')), ('to', query.get('to', '')),
+        ('back', back),
+    ]
     return f'/pins/connect?{urlencode(fields)}'
 
 

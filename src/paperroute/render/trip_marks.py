@@ -93,7 +93,7 @@ def draw_end(canvas: Canvas, *, at: Point) -> None:
 
 def draw_trip_legs(canvas: Canvas, *, base: MapBase, window: Window) -> None:
     """
-    Draw leg 2 dashed on a paper casing, and the dotted walk.
+    Draw the dashed rides on a paper casing, and the dotted walks.
 
     Parameters
     ----------
@@ -112,15 +112,16 @@ def draw_trip_legs(canvas: Canvas, *, base: MapBase, window: Window) -> None:
         points = on_map(points=line, mpp=base.mpp, window=window)
         canvas.line(points=points, width=width + CASING, grey=PAPER)
         canvas.line(points=points, width=width, grey=INK, dash=LEG_DASH)
-    if trip.walk is not None:
-        walk = on_map(points=trip.walk, mpp=base.mpp, window=window)
+    walks = () if trip.walk is None else (trip.walk,)
+    for ends in (*walks, *trip.others):
+        walk = on_map(points=ends, mpp=base.mpp, window=window)
         canvas.line(points=walk, width=WALK_CASING, grey=PAPER)
         canvas.line(points=walk, width=WALK_WIDTH, grey=INK, dash=WALK_DASH)
 
 
 def draw_trip_ends(canvas: Canvas, *, base: MapBase, window: Window) -> None:
     """
-    Draw the change as a square and the To as a disc.
+    Draw each change as a square and the To as a disc.
 
     Parameters
     ----------
@@ -134,8 +135,13 @@ def draw_trip_ends(canvas: Canvas, *, base: MapBase, window: Window) -> None:
     trip = base.trip
     if trip is None:
         return
-    if trip.change is not None:
-        (change,) = on_map(points=(trip.change,), mpp=base.mpp, window=window)
+    changes = () if trip.change is None else (trip.change,)
+    others = tuple(
+        ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) for a, b in trip.others
+    )
+    for change in on_map(
+        points=(*changes, *others), mpp=base.mpp, window=window,
+    ):
         draw_change(canvas, at=change)
     if trip.end is not None:
         (end,) = on_map(points=(trip.end,), mpp=base.mpp, window=window)

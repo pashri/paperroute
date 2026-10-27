@@ -4,7 +4,7 @@ from dataclasses import replace
 
 from paperroute.core.chains import Chain
 from paperroute.core.connection import live_chains
-from paperroute.core.connection_map import build_connection_map
+from paperroute.core.connection_map import build_connection_map, change_panes
 from paperroute.core.connection_strip import (
     ConnectionStripMapView,
     ConnectionStripView,
@@ -18,7 +18,7 @@ from paperroute.core.map_requests import pin_map_inputs, polled_positions
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapView
 from paperroute.core.model import Pin, is_connection
 from paperroute.core.places import shown
-from paperroute.core.saved import LiveView
+from paperroute.core.saved import ConnectionMap, LiveView
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
 
@@ -48,16 +48,25 @@ def connection_map(
     Returns
     -------
     MapView
-        The map, framed by the connection map setting.
+        The map, framed by the connection map setting: on the Map, a
+        two-change hero in the each-change setting gives one pane per
+        change side by side.
     """
     inputs = pin_map_inputs(state=state, stop_view=stop_view)
+    mode = state.settings.connection_map
     if width is not None:
         inputs = replace(inputs, width=width)
+    elif chains and mode is ConnectionMap.CHANGES:
+        panes = change_panes(
+            inputs=inputs, pin=shown(state=state), chain=chains[0], mode=mode,
+        )
+        if len(panes) > 1:
+            return replace(panes[0], panes=panes[1:])
     return build_connection_map(
         inputs=inputs,
         pin=shown(state=state),
         chains=chains,
-        mode=state.settings.connection_map,
+        mode=mode,
     )
 
 

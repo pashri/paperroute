@@ -1,5 +1,6 @@
 """Facts about a connection's marks on the map base (no golden images)."""
 
+from dataclasses import replace
 from typing import Final
 
 import numpy as np
@@ -117,3 +118,15 @@ def test_lines_are_legs_then_ends() -> None:
     draw_trip_legs(split, base=base, window=window)
     draw_trip_ends(split, base=base, window=window)
     assert (whole.grey() == split.grey()).all()
+
+
+def test_later_walks_dotted_with_change_square() -> None:
+    """A later change draws its own dotted walk and square."""
+    grey = drawn(trip=replace(
+        TRIP, others=(((400.0, 1200.0), (1200.0, 1200.0)),),
+    ))
+    row = grey[MIDDLE[1] - 150, MIDDLE[0] + 40:MIDDLE[0] + 90] == INK
+    assert row.any()
+    assert not row.all()
+    x, y = MIDDLE[0] + 100, MIDDLE[1] - 150
+    assert (grey[y - 6:y + 7, x - 6:x + 7] == INK).all()

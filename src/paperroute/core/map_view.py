@@ -34,13 +34,16 @@ class TripMarks:
     origin : Point | None
         The From, or None without a location.
     second : tuple[tuple[Point, ...], ...]
-        Leg 2's lines in metres, drawn dashed.
+        Every second ride's lines in metres, drawn dashed.
     walk : tuple[Point, Point] | None
         Where the walk starts and ends, or None when staying on.
     change : Point | None
         The walk's midpoint, or None when staying on.
     end : Point | None
         The To, or None without a location.
+    others : tuple[tuple[Point, Point], ...]
+        Each later change's walk, drawn like the first with its own
+        change mark at the midpoint.
     """
 
     origin: Point | None
@@ -48,6 +51,7 @@ class TripMarks:
     walk: tuple[Point, Point] | None
     change: Point | None
     end: Point | None
+    others: tuple[tuple[Point, Point], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -109,7 +113,12 @@ class Marker:
 
 @dataclass(frozen=True)
 class MapView:
-    """Everything the Map view draws."""
+    """
+    Everything the Map view draws.
+
+    With `panes`, this map and each pane are drawn side by side across
+    the frame, with no sidebar.
+    """
 
     origin: str
     destination: str | None
@@ -125,6 +134,7 @@ class MapView:
     more: int = 0
     planned: bool = False
     pairs: tuple[PairRow, ...] = ()
+    panes: tuple['MapView', ...] = ()
 
 
 @dataclass(frozen=True)

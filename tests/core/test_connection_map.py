@@ -2,24 +2,41 @@
 
 from dataclasses import replace
 from datetime import datetime
+from types import MappingProxyType
 from typing import Final
 
-from paperroute.core.chains import Chain
+from paperroute.core.chains import Chain, Legs, leg_key
 from paperroute.core.connection_map import (
     BANNER_ROOM,
     build_connection_map,
+    change_panes,
     connection_inputs,
     fit_zoom,
     leg_line,
 )
+from paperroute.core.connection_model import way_legs
 from paperroute.core.geo import Shape, make_shape
-from paperroute.core.map_view import DEFAULT_ZOOM, MapInputs
-from paperroute.core.model import Way
+from paperroute.core.map_view import DEFAULT_ZOOM, MapInputs, MapView
+from paperroute.core.messages import DeparturesLoaded, LoadShapes
+from paperroute.core.model import Change, Departure, Pin, StopPlace, Way
 from paperroute.core.positions import PositionsSnapshot
-from paperroute.core.saved import ConnectionMap
+from paperroute.core.saved import ConnectionMap, LiveView
+from paperroute.core.state import step
+from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.tiles import ZOOMS
-from tests.core.connection_factories import WORK, WORK_CHANGE, at
-from tests.core.factories import snapshot, vehicle
+from tests.core.connection_factories import (
+    HOLLIS,
+    LEG1,
+    LEG2,
+    PARRAMATTA,
+    WESTMEAD,
+    WORK,
+    WORK_CHANGE,
+    at,
+    run,
+)
+from tests.core.factories import live, place, snapshot, vehicle
+from tests.core.test_connection_screens import started
 from tests.core.test_connection_strip import CHAINS, STOP
 
 LEG_ONE: Final[Shape] = make_shape(
@@ -285,3 +302,129 @@ def test_banner_keeps_frame_below_it() -> None:
     )
     assert whole.zoom == ZOOMS.index(8)
     assert whole.centre == (400.0, -596.0 + BANNER_ROOM * 8 / 2)
+
+
+PLATFORM: Final[StopPlace] = place(
+    '2145W', name='Westmead Station Platform 2', point=(820.0, -1900.0),
+)
+TWO: Final[Pin] = Pin(
+    origin=HOLLIS,
+    destination=PARRAMATTA,
+    kind=None,
+    ways=(Way(changes=(
+        WORK_CHANGE, Change(alight=WESTMEAD, board=PLATFORM, allow=4),
+    )),),
+)
+LEG_THREE: Final[Shape] = make_shape(
+    shape_id='st1', points=((820.0, -1900.0), (2000.0, -2500.0)),
+)
+T1: Final[Departure] = replace(
+    run(departs=(8, 5), arrives=(8, 20), route='T1', trip_id='c0805'),
+    shape_id='st1',
+)
+TWO_CHAIN: Final[Chain] = Chain(
+    legs=(*SHAPED[0].legs, live(item=T1)), way=0,
+)
+
+
+def two_inputs(*, zoom: int = DEFAULT_ZOOM) -> MapInputs:
+    """
+    Map inputs for the two-change pin, with all three shapes.
+
+    Parameters
+    ----------
+    zoom : int
+        Knob zoom.
+
+    Returns
+    -------
+    MapInputs
+        The inputs.
+    """
+    inputs = inputs_at(now=at(7, 35), zoom=zoom)
+    return replace(inputs, shapes={**inputs.shapes, 'st1': LEG_THREE})
+
+
+def test_changes_two_panes_side_by_side() -> None:
+    """Two changes give two half-width panes, one on each walk."""
+    panes = change_panes(
+        inputs=two_inputs(), pin=TWO, chain=TWO_CHAIN,
+        mode=ConnectionMap.CHANGES,
+    )
+    assert [pane.base.width for pane in panes] == [400, 400]
+    assert [pane.base.centre for pane in panes] == [
+        (72.0, 0.0), (810.0, -1900.0),
+    ]
+    assert {pane.zoom for pane in panes} == {DEFAULT_ZOOM - 1}
+    first, second = (pane.base.trip for pane in panes)
+    assert first is not None and second is not None
+    assert first.walk == ((0.0, 0.0), (144.0, 0.0))
+    assert second.walk == ((800.0, -1900.0), (820.0, -1900.0))
+    assert second.second == (((820.0, -1900.0), (2000.0, -2500.0)),)
+
+
+def test_changes_one_change_one_pane() -> None:
+    """One change gives one pane of the map's own width."""
+    (pane,) = change_panes(
+        inputs=inputs_at(now=at(7, 35)), pin=WORK, chain=SHAPED[0],
+        mode=ConnectionMap.CHANGES,
+    )
+    assert pane.base.width == inputs_at(now=at(7, 35)).width
+    assert pane.base.centre == (72.0, 0.0)
+
+
+def test_first_only_one_pane() -> None:
+    """The first-change setting shows only the first change."""
+    (pane,) = change_panes(
+        inputs=two_inputs(), pin=TWO, chain=TWO_CHAIN,
+        mode=ConnectionMap.FIRST,
+    )
+    assert pane.base.centre == (72.0, 0.0)
+    assert pane.base.width == two_inputs().width
+
+
+def test_whole_fits_all_legs() -> None:
+    """The whole trip draws every leg, alternating solid and dashed."""
+    (pane,) = change_panes(
+        inputs=two_inputs(zoom=0), pin=TWO, chain=TWO_CHAIN,
+        mode=ConnectionMap.WHOLE,
+    )
+    trip = pane.base.trip
+    assert trip is not None
+    assert pane.base.route == (
+        ((0.0, 900.0), (0.0, 450.0), (0.0, 0.0)),
+        ((820.0, -1900.0), (2000.0, -2500.0)),
+    )
+    assert trip.second == (
+        ((144.0, 0.0), (500.0, -900.0), (800.0, -1900.0)),
+    )
+    assert trip.others == ((((800.0, -1900.0), (820.0, -1900.0))),)
+    assert pane.base.centre is not None
+    assert pane.base.centre[0] == 1000.0
+    assert ZOOMS[pane.zoom] >= 8
+
+
+def test_shapes_requested_for_each_leg() -> None:
+    """The Map asks for the shape of every leg of a two-change chain."""
+    state = started(view=LiveView.MAP, pins=(TWO,))
+    one, two, three = way_legs(pin=TWO, way=TWO.ways[0])
+    after, effects = step(state, DeparturesLoaded(
+        pin=TWO,
+        departures=(),
+        until=at(10, 30),
+        legs=Legs(lists=MappingProxyType({
+            leg_key(leg=one): tuple(
+                replace(item, shape_id='s606') for item in LEG1
+            ),
+            leg_key(leg=two): tuple(
+                replace(item, shape_id='s665') for item in LEG2
+            ),
+            leg_key(leg=three): (T1,),
+        })),
+    ))
+    [load] = [item for item in effects if isinstance(item, LoadShapes)]
+    assert load.shape_ids == frozenset({'s606', 's665', 'st1'})
+    view = current_view(state=after, stop_view=live_stop_view(state=after))
+    assert isinstance(view, MapView)
+    assert len(view.panes) == 1
+    assert view.base.width + view.panes[0].base.width == 800

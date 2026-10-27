@@ -39,6 +39,7 @@ from paperroute.render.connection_strip import draw_connection_strip
 from paperroute.render.connection_strip_map import draw_connection_strip_map
 from paperroute.render.connection_view import draw_connection_view
 from paperroute.render.map_base import draw_map_base
+from paperroute.render.map_panes import draw_map_panes
 from paperroute.render.map_view import draw_map_view
 from paperroute.render.notice import draw_notice_view
 from paperroute.render.panel import draw_panel_view
@@ -96,6 +97,7 @@ class MapRenderer:
         self.key: tuple[MapBase, str | None] | None = None
         self.base: NDArray[np.uint8] | None = None
         self.unusable: set[str | None] = set()
+        self.side: dict[tuple[MapBase, str | None], NDArray[np.uint8]] = {}
 
     def frame(self, *, view: MapView) -> NDArray[np.uint8]:
         """
@@ -111,6 +113,14 @@ class MapRenderer:
         NDArray[np.uint8]
             480 by 800 pixels.
         """
+        if view.panes:
+            return draw_map_panes(
+                view=view,
+                bases=(
+                    self.cached(base=view.base),
+                    *(self.side_cached(base=pane.base) for pane in view.panes),
+                ),
+            )
         return draw_map_view(view=view, base=self.cached(base=view.base))
 
     def strip_map_frame(self, *, view: StripMapView) -> NDArray[np.uint8]:
@@ -170,6 +180,25 @@ class MapRenderer:
             self.base = self.drawn_base(base=base, version=key[1])
             self.key = key
         return self.base
+
+    def side_cached(self, *, base: MapBase) -> NDArray[np.uint8]:
+        """
+        Give a side pane's map base, keeping only the last one drawn.
+
+        Parameters
+        ----------
+        base : MapBase
+            The pane's base map key.
+
+        Returns
+        -------
+        NDArray[np.uint8]
+            The map base for the installed tiles.
+        """
+        key = (base, self.version())
+        if key not in self.side:
+            self.side = {key: self.drawn_base(base=base, version=key[1])}
+        return self.side[key]
 
     def version(self) -> str | None:
         """

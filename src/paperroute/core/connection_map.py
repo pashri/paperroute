@@ -1,4 +1,4 @@
-"""The Map of a connection pin: both legs, the walk and the pairs."""
+"""The Map of a connection pin: its rides, walks and chains."""
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
@@ -26,6 +26,7 @@ FIT_MARGIN: Final[float] = 1.1  # the whole trip's box, plus 10%
 SIDEBAR_PAIRS: Final[int] = 4
 CREDIT_ROOM: Final[int] = 24  # pixels kept clear above the map's bottom
 BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
+PANES_WIDTH: Final[int] = 800  # the whole frame, shared by change panes
 
 type Line = tuple[Point, ...]
 
@@ -256,13 +257,36 @@ def leg_lines(
     Returns
     -------
     tuple[tuple[Line, ...], tuple[Line, ...]]
-        The first ride's lines and every later ride's, each empty when
-        not drawn.
+        The lines of the first, third, ... rides, drawn solid, and of the
+        second, fourth, ... rides, drawn dashed; empty when not drawn.
     """
     if chain is None:
         return (), ()
-    lines = ride_lines(rides=rides_of(chain=chain, pin=pin), shapes=shapes)
-    return lines[0], tuple(line for each in lines[1:] for line in each)
+    return alternate(
+        lines=ride_lines(rides=rides_of(chain=chain, pin=pin), shapes=shapes),
+    )
+
+
+def alternate(
+    *, lines: Sequence[tuple[Line, ...]],
+) -> tuple[tuple[Line, ...], tuple[Line, ...]]:
+    """
+    Split each ride's lines into solid and dashed by ride.
+
+    Parameters
+    ----------
+    lines : Sequence[tuple[Line, ...]]
+        Each ride's lines in order.
+
+    Returns
+    -------
+    tuple[tuple[Line, ...], tuple[Line, ...]]
+        Even rides' lines, then odd rides' lines.
+    """
+    return (
+        tuple(line for each in lines[::2] for line in each),
+        tuple(line for each in lines[1::2] for line in each),
+    )
 
 
 def trip_points(
@@ -449,13 +473,15 @@ def framed(
     -------
     tuple[Point | None, int]
         For the whole trip, the middle of its box at the zoom that holds
-        it. Zoomed on the change, the walk's midpoint one zoom finer than
-        the knob's, centred in the map below any banner. The From and
+        it. Zoomed on the change, the hero's first walk (else the first
+        ticked way's) at its midpoint, one zoom finer than the knob's,
+        centred in the map below any banner. The From and
         the knob's zoom when neither applies.
     """
     if mode is ConnectionMap.WHOLE:
         return whole_frame(inputs=inputs, pin=pin, chains=chains)
-    walk = walk_of(pin=pin, chain=None)
+    hero = chains[0] if chains else None
+    walk = walk_of(pin=pin, chain=hero) or walk_of(pin=pin, chain=None)
     zoom = max(0, inputs.zoom - CHANGE_ZOOM_IN)
     if walk is None:
         return inputs.centre, zoom
@@ -581,19 +607,149 @@ def build_connection_map(
         inputs=inputs, pin=pin, chains=chains, mode=mode,
     ))
     hero = chains[0] if chains else None
-    first, second = leg_lines(pin=pin, chain=hero, shapes=inputs.shapes)
-    walk = walk_of(pin=pin, chain=hero)
-    end = pin.destination
-    trip = TripMarks(
-        origin=pin.origin.point,
-        second=second,
-        walk=walk,
-        change=None if walk is None else middle(ends=walk),
-        end=None if end is None else end.point,
-    )
+    rides = () if hero is None else rides_of(chain=hero, pin=pin)
+    route, trip = chain_marks(pin=pin, rides=rides, shapes=inputs.shapes)
+    if hero is None:
+        walk = walk_of(pin=pin, chain=None)
+        trip = replace(
+            trip,
+            walk=walk,
+            change=None if walk is None else middle(ends=walk),
+        )
     return replace(
         view,
-        base=replace(view.base, route=first, trip=trip),
+        base=replace(view.base, route=route, trip=trip),
         sidebar=(),
         pairs=sidebar_rows(pin=pin, chains=chains),
+    )
+
+
+def chain_marks(
+    *, pin: Pin, rides: Sequence[Ride], shapes: Mapping[str, Shape],
+) -> tuple[tuple[Line, ...], TripMarks]:
+    """
+    Draw rides as the route and trip marks.
+
+    Parameters
+    ----------
+    pin : Pin
+        Connection pin.
+    rides : Sequence[Ride]
+        The rides drawn.
+    shapes : Mapping[str, Shape]
+        Loaded shapes by shape ID.
+
+    Returns
+    -------
+    tuple[tuple[Line, ...], TripMarks]
+        The solid lines as the route, and the dashed lines, each change's
+        walk and the ends as trip marks.
+    """
+    solid, dashed = alternate(lines=ride_lines(rides=rides, shapes=shapes))
+    walks = [
+        walk
+        for ride in rides
+        if ride.change is not None
+        and (walk := walk_ends(change=ride.change)) is not None
+    ]
+    end = pin.destination
+    return solid, TripMarks(
+        origin=pin.origin.point,
+        second=dashed,
+        walk=walks[0] if walks else None,
+        change=middle(ends=walks[0]) if walks else None,
+        end=None if end is None else end.point,
+        others=tuple(walks[1:]),
+    )
+
+
+def change_view(
+    *,
+    inputs: MapInputs,
+    pin: Pin,
+    chain: Chain,
+    rides: Sequence[Ride],
+) -> MapView:
+    """
+    Build one pane centred on the walk into its last ride.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The pane's inputs, its width set.
+    pin : Pin
+        Connection pin.
+    chain : Chain
+        The hero chain.
+    rides : Sequence[Ride]
+        The ride before the change and the ride after it.
+
+    Returns
+    -------
+    MapView
+        The pane, one zoom finer than the knob's, with both rides drawn
+        and no sidebar.
+    """
+    change = rides[-1].change
+    walk = None if change is None else walk_ends(change=change)
+    zoom = max(0, inputs.zoom - CHANGE_ZOOM_IN)
+    centre = inputs.centre
+    if walk is not None:
+        x, y = middle(ends=walk)
+        centre = (x, y + banner_room(inputs=inputs) * ZOOMS[zoom] / 2)
+    legs = chain_legs(chain=chain)
+    view = build_map_view(inputs=replace(
+        inputs,
+        departures=legs,
+        centre=centre,
+        zoom=zoom,
+        vehicle_trips=pin_trips(departures=legs),
+    ))
+    drawn = (replace(rides[0], change=None), *rides[1:])
+    route, trip = chain_marks(pin=pin, rides=drawn, shapes=inputs.shapes)
+    return replace(
+        view, base=replace(view.base, route=route, trip=trip), sidebar=(),
+    )
+
+
+def change_panes(
+    *, inputs: MapInputs, pin: Pin, chain: Chain, mode: ConnectionMap,
+) -> tuple[MapView, ...]:
+    """
+    Build the map panes the setting shows for a chain.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs as for a plain pin.
+    pin : Pin
+        Connection pin.
+    chain : Chain
+        The hero chain.
+    mode : ConnectionMap
+        Each change, the whole trip, or the first change.
+
+    Returns
+    -------
+    tuple[MapView, ...]
+        Two panes side by side, each half of `PANES_WIDTH`, for each
+        change of a two-change chain; otherwise one pane of the map's own
+        width: on the first change, or the whole trip with every ride.
+    """
+    rides = rides_of(chain=chain, pin=pin)
+    changed = [index for index, ride in enumerate(rides) if ride.change]
+    if mode is ConnectionMap.WHOLE or not changed:
+        return (build_connection_map(
+            inputs=inputs, pin=pin, chains=(chain,), mode=mode,
+        ),)
+    if mode is ConnectionMap.FIRST or len(changed) == 1:
+        changed = changed[:1]
+    else:
+        inputs = replace(inputs, width=PANES_WIDTH // len(changed))
+    return tuple(
+        change_view(
+            inputs=inputs, pin=pin, chain=chain,
+            rides=rides[index - 1 : index + 1],
+        )
+        for index in changed
     )

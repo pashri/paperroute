@@ -335,6 +335,118 @@ def new_refs(*, pins: list[object]) -> dict[str, str | None]:
     return refs
 
 
+def merged(*, first: dict[str, object], later: dict[str, object]
+           ) -> dict[str, object]:
+    """
+    Fold a pin into an earlier one with the same identity.
+
+    Parameters
+    ----------
+    first : dict[str, object]
+        The pin kept, rewritten by `with_ways`.
+    later : dict[str, object]
+        The pin dropped, rewritten by `with_ways`.
+
+    Returns
+    -------
+    dict[str, object]
+        The first pin with the later one's windows and ways added after
+        its own, leaving out ones it has already.
+    """
+    combined = dict(first)
+    for key in ('windows', 'ways'):
+        mine, theirs = first.get(key), later.get(key)
+        if isinstance(mine, list) and isinstance(theirs, list):
+            combined[key] = mine + [
+                item for item in theirs if item not in mine
+            ]
+    return combined
+
+
+def placed(
+    *,
+    pin: object,
+    found: list[object],
+    kept: dict[str, tuple[int, str | None]],
+) -> int:
+    """
+    Add one pin rewritten by `with_ways`, or merge it into an earlier one.
+
+    Parameters
+    ----------
+    pin : object
+        A stored schema 9 pin.
+    found : list[object]
+        The pins so far; the pin is added or merged in place.
+    kept : dict[str, tuple[int, str | None]]
+        Position and schema 9 ref of the first pin with each new ref;
+        updated in place.
+
+    Returns
+    -------
+    int
+        Where in `found` the pin went.
+    """
+    new = with_ways(pin=pin)
+    old = v9_ref(pin=pin)
+    ref = v9_ref(pin={**new, 'change': None}) if isinstance(
+        new, dict,
+    ) else None
+    index, first_old = kept.get(ref or '', (-1, old))
+    first = found[index] if index >= 0 else None
+    if isinstance(first, dict) and isinstance(new, dict) and first_old != old:
+        found[index] = merged(first=first, later=new)
+        return index
+    if ref is not None:
+        kept.setdefault(ref, (len(found), old))
+    found.append(new)
+    return len(found) - 1
+
+
+def unique_pins(*, pins: list[object]) -> tuple[list[object], list[int]]:
+    """
+    Rewrite pins by `with_ways`, merging ones that come to share a ref.
+
+    Parameters
+    ----------
+    pins : list[object]
+        The stored schema 9 pins.
+
+    Returns
+    -------
+    tuple[list[object], list[int]]
+        The pins in order, and where each stored pin went. A To makes a
+        pin lose its routes, so two different pins can come to share a
+        ref; the later is merged into the earlier. Pins that already
+        shared a ref are left alone.
+    """
+    found: list[object] = []
+    kept: dict[str, tuple[int, str | None]] = {}
+    where = [placed(pin=pin, found=found, kept=kept) for pin in pins]
+    return found, where
+
+
+def moved_current(*, current: object, where: list[int]) -> object:
+    """
+    Point the shown pin's index at where its pin went.
+
+    Parameters
+    ----------
+    current : object
+        The stored index.
+    where : list[int]
+        Where each stored pin went.
+
+    Returns
+    -------
+    object
+        The new index; anything out of range is returned as it is.
+    """
+    if isinstance(current, int) and 0 <= current < len(where):
+        return where[current]
+    return current
+
+
 def add_ways(data: dict[str, object]) -> dict[str, object]:
     """
     Give pins ways and a never list, and rename the change map setting.
@@ -348,18 +460,42 @@ def add_ways(data: dict[str, object]) -> dict[str, object]:
     -------
     dict[str, object]
         The data with each pin, the unpinned place and the auto before
-        place rewritten by `with_ways`, the running occurrence keyed by
-        its pin's new ref and the `change` map setting as `changes`.
+        place rewritten by `with_ways`, pins sharing a new ref merged,
+        the running occurrence keyed by its pin's new ref and the
+        `change` map setting as `changes`.
     """
     pins = data.get('pins')
-    refs = new_refs(pins=pins) if isinstance(pins, list) else {}
+    if not isinstance(pins, list):
+        return ways_added(data=data, refs={})
+    found, where = unique_pins(pins=pins)
+    current = moved_current(current=data.get('current'), where=where)
+    return ways_added(
+        data={**data, 'pins': found, 'current': current},
+        refs=new_refs(pins=pins),
+    )
+
+
+def ways_added(
+    *, data: dict[str, object], refs: dict[str, str | None],
+) -> dict[str, object]:
+    """
+    Rewrite everything but the pins for schema 10.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Version 9 data, its pins already rewritten.
+    refs : dict[str, str | None]
+        New ref by schema 9 ref.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with the unpinned place and auto block rewritten and the
+        map setting renamed.
+    """
     return {
         **data,
-        'pins': (
-            [with_ways(pin=pin) for pin in pins]
-            if isinstance(pins, list)
-            else pins
-        ),
         'unpinned': with_ways(pin=data.get('unpinned')),
         'auto': with_before_ways(
             auto=rewritten_ref(auto=data.get('auto'), refs=refs),

@@ -361,3 +361,26 @@ def test_saved_pin_holds_no_change_field(path: Path) -> None:
     assert data['schema_version'] == 10
     assert data['unpinned']['ways'] == []
     assert data['unpinned']['never'] == []
+
+
+def test_pins_sharing_identity_merged() -> None:
+    """
+    Pins that come to share a ref merge into the first, windows kept.
+
+    Pins that already shared one are left alone; the shown pin follows.
+    """
+    other = {**WINDOW, 'start': '17:00'}
+    twin = {
+        **PIN_3, 'routes': ['660'], 'windows': [other],
+        'change': CAMPBELLTOWN_CHANGE,
+    }
+    data = add_ways(
+        {'pins': [PIN_3, twin, PIN_1, PIN_1], 'current': 2, 'settings': {}},
+    )
+    pins = data['pins']
+    assert isinstance(pins, list)
+    assert len(pins) == 3
+    assert data['current'] == 1
+    assert pins[0]['windows'] == [WINDOW, other]
+    assert len(pins[0]['ways']) == 1
+    assert pins[1]['origin'] == PIN_1['origin']

@@ -721,6 +721,43 @@ def finish(
     return np.where(out < THRESHOLD, INK, PAPER).astype(np.uint8)
 
 
+def draw_marks(
+    canvas: Canvas, *, base: MapBase, window: Window, tiles: TileRepository,
+) -> None:
+    """
+    Draw the trip's ends and end name, the stop, the scale and the notes.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Canvas to draw on.
+    base : MapBase
+        The base map key, with a centre.
+    window : Window
+        The tile window drawn.
+    tiles : TileRepository
+        Where the street labels and the tile version come from.
+    """
+    draw_trip_ends(canvas, base=base, window=window)
+    draw_end_name(canvas, base=base, window=window, tiles=tiles)
+    if base.trip is None and base.centre is not None:
+        draw_stop(
+            canvas,
+            at=screen_point(
+                centre=base.centre,
+                mpp=base.mpp,
+                point=base.centre,
+                width=base.width,
+            ),
+        )
+    draw_scale(canvas, mpp=base.mpp)
+    draw_notes(
+        canvas,
+        installed=tiles.version() is not None,
+        width=base.width,
+    )
+
+
 def draw_map_base(
     *,
     base: MapBase,
@@ -769,24 +806,7 @@ def draw_map_base(
         window=window,
         tiles=tiles,
     )
-    draw_trip_ends(canvas, base=base, window=window)
-    draw_end_name(canvas, base=base, window=window, tiles=tiles)
-    if base.trip is None:
-        draw_stop(
-            canvas,
-            at=screen_point(
-                centre=base.centre,
-                mpp=base.mpp,
-                point=base.centre,
-                width=base.width,
-            ),
-        )
-    draw_scale(canvas, mpp=base.mpp)
-    draw_notes(
-        canvas,
-        installed=tiles.version() is not None,
-        width=base.width,
-    )
+    draw_marks(canvas, base=base, window=window, tiles=tiles)
     return finish(
         grey=canvas.grey(),
         variant=variant,

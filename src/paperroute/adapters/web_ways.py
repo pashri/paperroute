@@ -721,11 +721,13 @@ class WaysPages:
         )
         windows = windows_of(rows=rows_of(fields=fields))
         if pin is None or isinstance(windows, str):
-            text = MISFIT if pin is None else str(windows)
             return self.page(
                 query=fields, card=self.card(fields),
-                notice=notice_alert(text=text),
+                notice=notice_alert(
+                    text=MISFIT if pin is None else str(windows),
+                ),
                 status=HTTPStatus.BAD_REQUEST,
             )
-        pin = replace(pin, windows=windows)
-        raise self._pages.saved(seen=latest, ref=draft.ref, pin=pin)
+        raise self._pages.saved(
+            seen=latest, ref=draft.ref, pin=replace(pin, windows=windows),
+        )

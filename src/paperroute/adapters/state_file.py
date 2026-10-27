@@ -669,25 +669,63 @@ def write_atomic(
     OSError
         When writing or renaming fails; the temp file is removed.
     """
-    descriptor, temp_name = tempfile.mkstemp(
-        prefix=prefix,
-        dir=path.parent,
-    )
+    replace_through_temp(path=path, text=text, mode=mode, prefix=prefix)
     try:
-        with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
-            os.fchmod(handle.fileno(), mode)
-            handle.write(text)
-            handle.flush()
-            os.fsync(handle.fileno())
+        (sync or sync_directory)(path.parent)
+    except OSError:
+        logger.warning('%s directory not synced', path.name, exc_info=True)
+
+
+def replace_through_temp(
+    *, path: Path, text: str, mode: int, prefix: str,
+) -> None:
+    """
+    Write a temp file beside a file, then rename it over the file.
+
+    Parameters
+    ----------
+    path : Path
+        The file.
+    text : str
+        The new contents.
+    mode : int
+        Permission bits of the new file.
+    prefix : str
+        Name prefix of the temp file.
+
+    Raises
+    ------
+    OSError
+        When writing or renaming fails; the temp file is removed.
+    """
+    descriptor, temp_name = tempfile.mkstemp(prefix=prefix, dir=path.parent)
+    try:
+        write_synced(descriptor=descriptor, text=text, mode=mode)
         os.replace(temp_name, path)
     except BaseException:
         with contextlib.suppress(OSError):
             os.unlink(temp_name)
         raise
-    try:
-        (sync or sync_directory)(path.parent)
-    except OSError:
-        logger.warning('%s directory not synced', path.name, exc_info=True)
+
+
+def write_synced(*, descriptor: int, text: str, mode: int) -> None:
+    """
+    Write text to an open file, set its mode and flush it to disk.
+
+    Parameters
+    ----------
+    descriptor : int
+        The open file; closed after.
+    text : str
+        The contents.
+    mode : int
+        Permission bits.
+    """
+    with os.fdopen(descriptor, 'w', encoding='utf-8') as handle:
+        os.fchmod(handle.fileno(), mode)
+        handle.write(text)
+        handle.flush()
+        os.fsync(handle.fileno())
 
 
 def sync_directory(directory: Path) -> None:
@@ -724,6 +762,66 @@ def bad_stamp(path: Path) -> int:
     return int(stamp) if stamp.isdecimal() else 0
 
 
+def state_text(*, path: Path) -> str:
+    """
+    Read the state file's text.
+
+    Parameters
+    ----------
+    path : Path
+        The file.
+
+    Returns
+    -------
+    str
+        Its contents.
+
+    Raises
+    ------
+    OSError
+        When it is not a regular file or can't be read.
+    UnicodeDecodeError
+        When it is not UTF-8.
+    """
+    if not path.is_file():
+        raise OSError('state.json is not a regular file')
+    return path.read_text(encoding='utf-8')
+
+
+def state_model_of(*, text: str) -> StateModel:
+    """
+    Parse the file's text, migrating and repairing it first.
+
+    Parameters
+    ----------
+    text : str
+        The file's contents.
+
+    Returns
+    -------
+    StateModel
+        The stored state.
+
+    Raises
+    ------
+    ValueError
+        When it is not JSON, not an object, or not valid after repair.
+    RecursionError
+        When it is nested too deeply to parse.
+    """
+    data = json.loads(text)
+    if not isinstance(data, dict):
+        raise ValueError('state.json is not an object')
+    migrated = repaired_auto(
+        data=repaired_pins(
+            data=repaired_settings(
+                data=repaired_quota(data=migrate(data=data)),
+            ),
+        ),
+    )
+    return StateModel.model_validate(migrated)
+
+
 class JsonStateRepository:
     """
     The saved state in a JSON file.
@@ -750,24 +848,8 @@ class JsonStateRepository:
         if not self.path.exists() and not self.path.is_symlink():
             return Loaded(saved=DEFAULT_SAVED, stored=False)
         try:
-            if not self.path.is_file():
-                raise OSError('state.json is not a regular file')
-            text = self.path.read_text(encoding='utf-8')
-        except (OSError, UnicodeDecodeError):
-            return self.defaults_after_error()
-        try:
-            data = json.loads(text)
-            if not isinstance(data, dict):
-                raise ValueError('state.json is not an object')
-            migrated = repaired_auto(
-                data=repaired_pins(
-                    data=repaired_settings(
-                        data=repaired_quota(data=migrate(data=data)),
-                    ),
-                ),
-            )
-            model = StateModel.model_validate(migrated)
-        except (ValueError, RecursionError):
+            model = state_model_of(text=state_text(path=self.path))
+        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
             return self.defaults_after_error()
         return Loaded(saved=from_model(model=model), stored=True)
 

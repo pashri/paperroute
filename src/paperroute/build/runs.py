@@ -504,19 +504,22 @@ def run_calls_of(
         Stations of the run, those of them it stops at and its one-way
         positions.
     """
-    run = list(trip.stations)
-    passes = set(trip.passes)
-    flags = set(trip.no_board), set(trip.no_alight)
-    joined = {trip.trip_id}
-    current = trip
+    run, passes, flags = (
+        list(trip.stations),
+        set(trip.passes),
+        (set(trip.no_board), set(trip.no_alight)),
+    )
+    joined, current = {trip.trip_id}, trip
     while runs_on(
         current=current, after=nexts.get(current.trip_id), joined=joined,
     ):
         current = nexts[current.trip_id]
-        passes = joined_passes(passes=passes, at=len(run) - 1, after=current)
-        flags = joined_flags(
-            no_board=flags[0], no_alight=flags[1], at=len(run) - 1,
-            after=current,
+        passes, flags = (
+            joined_passes(passes=passes, at=len(run) - 1, after=current),
+            joined_flags(
+                no_board=flags[0], no_alight=flags[1], at=len(run) - 1,
+                after=current,
+            ),
         )
         run.extend(current.stations[1:])
         if len(until_repeated_hop(stations=run)) < len(run):
@@ -921,6 +924,30 @@ def load_block_runs(
                 ))
 
 
+def write_run_table(*, conn: sqlite3.Connection, table: RunTable) -> None:
+    """
+    Write the runs, their stops, calls and route patterns, with indexes.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable being built.
+    table : RunTable
+        The runs gathered.
+    """
+    insert_many(conn=conn, sql='INSERT INTO runs VALUES (?, ?, ?, ?, ?)',
+                rows=table.run_rows())
+    insert_many(conn=conn, sql='INSERT INTO run_stops VALUES (?, ?, ?)',
+                rows=table.stop_rows())
+    conn.execute(RUN_STOPS_INDEX)
+    insert_many(conn=conn, sql='INSERT INTO run_calls VALUES (?, ?, ?, ?)',
+                rows=table.call_rows())
+    conn.execute(RUN_CALLS_INDEX)
+    insert_many(conn=conn,
+                sql='INSERT INTO route_patterns VALUES (?, ?, ?, ?)',
+                rows=table.pattern_rows())
+
+
 def load_runs(*, conn: sqlite3.Connection) -> RunReport:
     """
     Store every shown trip's run, the runs, their stops and the patterns.
@@ -944,15 +971,5 @@ def load_runs(*, conn: sqlite3.Connection) -> RunReport:
                 rows=plain_trip_runs(trips=trip_calls(conn=conn),
                                      table=table, blocks=blocks))
     load_block_runs(conn=conn, table=table, blocks=blocks)
-    insert_many(conn=conn, sql='INSERT INTO runs VALUES (?, ?, ?, ?, ?)',
-                rows=table.run_rows())
-    insert_many(conn=conn, sql='INSERT INTO run_stops VALUES (?, ?, ?)',
-                rows=table.stop_rows())
-    conn.execute(RUN_STOPS_INDEX)
-    insert_many(conn=conn, sql='INSERT INTO run_calls VALUES (?, ?, ?, ?)',
-                rows=table.call_rows())
-    conn.execute(RUN_CALLS_INDEX)
-    insert_many(conn=conn,
-                sql='INSERT INTO route_patterns VALUES (?, ?, ?, ?)',
-                rows=table.pattern_rows())
+    write_run_table(conn=conn, table=table)
     return RunReport(runs=len(table.ids), trips=table.mapped)

@@ -69,6 +69,22 @@ def shape_groups(
                 yield shape_id, map(pick, rows)
 
 
+def noted_split(*, split: set[str], shape_id: str) -> None:
+    """
+    Note a shape whose rows come in more than one run, logging it once.
+
+    Parameters
+    ----------
+    split : set[str]
+        The split shapes so far; the shape is added.
+    shape_id : str
+        The shape.
+    """
+    if shape_id not in split:
+        logger.warning('shape %s not contiguous', shape_id)
+        split.add(shape_id)
+
+
 def shape_runs(
     *,
     archive: Path,
@@ -103,9 +119,7 @@ def shape_runs(
         if shape_id not in wanted:
             continue
         if shape_id in done:
-            if shape_id not in split:
-                logger.warning('shape %s not contiguous', shape_id)
-                split.add(shape_id)
+            noted_split(split=split, shape_id=shape_id)
             continue
         done.add(shape_id)
         yield shape_id, sorted(
@@ -226,6 +240,31 @@ def farthest_large(*, line: Line, first: int, last: int) -> tuple[int, float]:
     return first + 1 + index, float(gaps[index])
 
 
+def farthest(
+    *, line: Line, span: tuple[int, int], small_range: int,
+) -> tuple[int, float]:
+    """
+    Find the point of a range farthest from its chord.
+
+    Parameters
+    ----------
+    line : Line
+        The line.
+    span : tuple[int, int]
+        The range's first and last index.
+    small_range : int
+        Ranges this short are searched in plain Python.
+
+    Returns
+    -------
+    tuple[int, float]
+        The point's index and its distance.
+    """
+    first, last = span
+    search = farthest_small if last - first < small_range else farthest_large
+    return search(line=line, first=first, last=last)
+
+
 def simplify(
     *,
     points: NDArray[np.float64],
@@ -256,15 +295,13 @@ def simplify(
     """
     xs, ys = points[:, 0], points[:, 1]
     line = Line(xs=xs, ys=ys, x_list=xs.tolist(), y_list=ys.tolist())
-    keep = np.zeros(len(points), dtype=bool)
-    keep[[0, -1]] = True
+    keep = np.isin(np.arange(len(points)), (0, len(points) - 1))
     stack = [(0, len(points) - 1)] if len(points) > 2 else []
     while stack:
         first, last = stack.pop()
-        search = (
-            farthest_small if last - first < small_range else farthest_large
+        index, gap = farthest(
+            line=line, span=(first, last), small_range=small_range,
         )
-        index, gap = search(line=line, first=first, last=last)
         if gap > tolerance:
             keep[index] = True
             stack.extend(

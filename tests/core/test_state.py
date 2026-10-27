@@ -117,7 +117,7 @@ from paperroute.core.saved import (
     Saved,
     seeded,
 )
-from paperroute.core.state import SAVE_AFTER, initial_state, needed_feeds, step
+from paperroute.core.state import initial_state, needed_feeds, step
 from paperroute.core.state_model import (
     FEED_IDLE,
     LOOKBACK,
@@ -127,6 +127,7 @@ from paperroute.core.state_model import (
     State,
     load_window,
 )
+from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import live_stop_view, saved_of
 from paperroute.core.stop_view import (
     HORIZON,

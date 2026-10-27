@@ -1,7 +1,7 @@
 """Reads for a connection pin, made once per leg and merged."""
 
 import functools
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
 from types import MappingProxyType
 
@@ -49,16 +49,7 @@ def departures_read(
         When the timetable can't be read.
     """
     pin = effect.pin
-    read = (
-        functools.partial(timetable.departures, start=effect.start)
-        if cache is None
-        else functools.partial(
-            cache.departures,
-            timetable=timetable,
-            start=effect.start,
-            version=effect.timetable,
-        )
-    )
+    read = reader(timetable=timetable, effect=effect, cache=cache)
     loaded = DeparturesLoaded(
         pin=pin,
         departures=(),
@@ -67,8 +58,7 @@ def departures_read(
         skip_school=effect.skip_school,
     )
     if pin.destination is None:
-        found = read(pin=pin, end=effect.end)
-        return replace(loaded, departures=tuple(found))
+        return replace(loaded, departures=tuple(read(pin=pin, end=effect.end)))
     keep = functools.partial(usable, pin=pin, skip_school=effect.skip_school)
     direct = read(pin=direct_leg(pin=pin), end=effect.end)
     loaded = replace(loaded, departures=keep(items=direct))
@@ -81,6 +71,40 @@ def departures_read(
         for key, (leg, position) in open_legs(pin=pin).items()
     }
     return replace(loaded, legs=Legs(lists=MappingProxyType(lists)))
+
+
+def reader(
+    *,
+    timetable: TimetableRepository,
+    effect: LoadDepartures,
+    cache: LegCache | None,
+) -> Callable[..., Sequence[Departure]]:
+    """
+    Choose how a load reads departures.
+
+    Parameters
+    ----------
+    timetable : TimetableRepository
+        Timetable.
+    effect : LoadDepartures
+        Request.
+    cache : LegCache | None
+        Scheduled departures held from earlier reads, or None.
+
+    Returns
+    -------
+    Callable[..., Sequence[Departure]]
+        Reads a pin's departures from the effect's start to an end,
+        through the cache when there is one.
+    """
+    if cache is None:
+        return functools.partial(timetable.departures, start=effect.start)
+    return functools.partial(
+        cache.departures,
+        timetable=timetable,
+        start=effect.start,
+        version=effect.timetable,
+    )
 
 
 def usable(

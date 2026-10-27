@@ -86,7 +86,7 @@ from paperroute.core.saved import (
     Settings,
     seeded,
 )
-from paperroute.core.state import SAVE_AFTER
+from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.tiles import (
     TILE,

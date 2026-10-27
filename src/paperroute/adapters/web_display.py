@@ -38,6 +38,7 @@ from paperroute.core.messages import (
     KnobTurned,
     PowerAction,
     PowerRequested,
+    SettingsChanged,
 )
 from paperroute.core.model import SYDNEY
 from paperroute.core.saved import Settings
@@ -146,6 +147,63 @@ def status_settings(*, status: Mapping[str, object]) -> dict[str, str]:
             if isinstance(value, str)
         })
     return values
+
+
+async def pinged_wait(
+    *, waiting: asyncio.Event, response: web.StreamResponse,
+) -> bool:
+    """
+    Wait for an event, pinging the stream if it takes `PING_S`.
+
+    Parameters
+    ----------
+    waiting : asyncio.Event
+        The event waited for.
+    response : web.StreamResponse
+        The open event stream.
+
+    Returns
+    -------
+    bool
+        True when the event was set; False after a ping.
+    """
+    try:
+        await asyncio.wait_for(waiting.wait(), PING_S)
+    except TimeoutError:
+        await response.write(b': ping\n\n')
+        return False
+    return True
+
+
+def settings_event(
+    *, fields: Mapping[str, str],
+) -> SettingsChanged | web.Response:
+    """
+    Read a posted settings form.
+
+    Parameters
+    ----------
+    fields : Mapping[str, str]
+        The posted fields.
+
+    Returns
+    -------
+    SettingsChanged | web.Response
+        The change; a 400 response for an unknown value.
+
+    Raises
+    ------
+    web.HTTPSeeOther
+        To the page's error line for a time that is not usable.
+    """
+    try:
+        return changed_from(fields=fields)
+    except UnknownValue:
+        return web.Response(status=HTTPStatus.BAD_REQUEST)
+    except BadInput as error:
+        raise web.HTTPSeeOther(
+            location=f'/settings?error={error.section}',
+        ) from error
 
 
 def peer_address(request: web.BaseRequest) -> str | None:
@@ -273,7 +331,7 @@ class WebDisplay:
         Set, then replaced, each time a frame is shown.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-statements
         self,
         *,
         status: Callable[[], dict[str, object]] | None = None,
@@ -377,6 +435,25 @@ class WebDisplay:
             web.post('/settings', self._settings),
             web.get('/status', self._status_json),
         ])
+        app.add_routes(self._pin_routes())
+        if self.device is not None:
+            app.add_routes([
+                web.get('/device/power', self._power_page),
+                web.post('/device/power', self._power_page),
+                web.post('/power', self._power),
+                *self.device.routes(),
+            ])
+        return app
+
+    def _pin_routes(self) -> list[web.RouteDef]:
+        """
+        List the routes of the pin, connection, ways and suggestion pages.
+
+        Returns
+        -------
+        list[web.RouteDef]
+            The routes.
+        """
         pins = PinsPages(
             post=self.send,
             pins=self._pins,
@@ -384,26 +461,18 @@ class WebDisplay:
             sleep=self.pins_sleep,
             skip_school=self.skip_school,
         )
-        app.add_routes(pins.routes())
-        app.add_routes(ConnectionPages(
-            pins=self._pins, options=self._options,
-        ).routes())
         ways = WaysPages(pages=pins, pins=self._pins, options=self._options)
         planner, now = self._trips
         suggest = SuggestPages(
             ways=ways, planner=planner, now=now, skip_school=self.skip_school,
         )
         ways.card = suggest.card
-        app.add_routes(ways.routes())
-        app.add_routes(suggest.routes())
-        if self.device is not None:
-            app.add_routes([
-                web.get('/device/power', self._power_page),
-                web.post('/device/power', self._power_page),
-                web.post('/power', self._power),
-            ])
-            app.add_routes(self.device.routes())
-        return app
+        return [
+            *pins.routes(),
+            *ConnectionPages(pins=self._pins, options=self._options).routes(),
+            *ways.routes(),
+            *suggest.routes(),
+        ]
 
     async def _close(self, app: web.Application) -> None:
         """
@@ -599,23 +668,31 @@ class WebDisplay:
             'Cache-Control': 'no-store',
         })
         await response.prepare(request)
-        waiting = self.changed
         try:
-            if self.version:
-                await self._send_version(response=response)
-            while True:
-                try:
-                    await asyncio.wait_for(waiting.wait(), PING_S)
-                except TimeoutError:
-                    await response.write(b': ping\n\n')
-                    continue
-                if self._closing:
-                    break
-                waiting = self.changed
-                await self._send_version(response=response)
+            await self._stream(response=response)
         except ConnectionResetError:
             logger.debug('event stream closed by the browser')
         return response
+
+    async def _stream(self, *, response: web.StreamResponse) -> None:
+        """
+        Send each new frame version, pinging while none comes, until close.
+
+        Parameters
+        ----------
+        response : web.StreamResponse
+            The open event stream.
+        """
+        waiting = self.changed
+        if self.version:
+            await self._send_version(response=response)
+        while True:
+            if not await pinged_wait(waiting=waiting, response=response):
+                continue
+            if self._closing:
+                return
+            waiting = self.changed
+            await self._send_version(response=response)
 
     async def _send_version(self, *, response: web.StreamResponse) -> None:
         """
@@ -662,10 +739,18 @@ class WebDisplay:
         bool
             The school switch; the default until the app reports.
         """
-        status = status_settings(
-            status=self._status() if self._status else {},
-        )
-        return status['skip_school_buses'] == 'on'
+        return self._reported()['skip_school_buses'] == 'on'
+
+    def _reported(self) -> dict[str, str]:
+        """
+        Read the settings the app last reported, over the defaults.
+
+        Returns
+        -------
+        dict[str, str]
+            The form values.
+        """
+        return status_settings(status=self._status() if self._status else {})
 
     async def _settings_page(self, request: web.Request) -> web.Response:
         """
@@ -681,9 +766,7 @@ class WebDisplay:
         web.Response
             The response.
         """
-        status = status_settings(
-            status=self._status() if self._status else {},
-        )
+        status = self._reported()
         if self._posted.items() <= status.items() or status != self._before:
             self._posted = {}
         page = page_text(
@@ -730,17 +813,10 @@ class WebDisplay:
             or 303 back to the page for a plain form.
         """
         fields = await form_fields(request=request)
-        try:
-            event = changed_from(fields=fields)
-        except UnknownValue:
-            return web.Response(status=HTTPStatus.BAD_REQUEST)
-        except BadInput as error:
-            raise web.HTTPSeeOther(
-                location=f'/settings?error={error.section}',
-            ) from error
-        self._before = status_settings(
-            status=self._status() if self._status else {},
-        )
+        event = settings_event(fields=fields)
+        if isinstance(event, web.Response):
+            return event
+        self._before = self._reported()
         self._posted = posted_values(fields=fields, event=event)
         self._post(event)
         if request.content_type == 'application/json':

@@ -351,11 +351,10 @@ def heads_of(*, walk: Walk) -> dict[str, str]:
         ways = walk.children[station]
         for way in ways:
             block[way] = block[station]
-            if len(ways) < 2:
-                continue
-            if way == ways[0] and block[station] in parts[way]:
-                continue
-            heads[way] = block[way] = furthest(walk=walk, part=parts[way])
+            if len(ways) > 1 and not (
+                way == ways[0] and block[station] in parts[way]
+            ):
+                heads[way] = block[way] = furthest(walk=walk, part=parts[way])
     return heads
 
 

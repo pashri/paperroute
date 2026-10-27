@@ -288,24 +288,46 @@ def draw_note(canvas: Canvas, *, row: StripRow, right: float,
     note = row.note
     if note is None:
         return right
-    route = canvas.length(text=note.route, face=NOTE_FACE)
-    fixed = 2 * NOTE_PAD + route + NOTE_GAP + ARROW_WIDTH
+    fixed = (
+        2 * NOTE_PAD
+        + canvas.length(text=note.route, face=NOTE_FACE)
+        + NOTE_GAP
+        + ARROW_WIDTH
+    )
     room = min(NOTE_MAX, right - floor) - fixed
     then = canvas.fit(text=note.then, face=NOTE_FACE, width=room)
     if room <= 0 or not then:
         return right
     left = right - fixed - canvas.length(text=then, face=NOTE_FACE)
-    top, bottom = row.y - TAG_HALF, row.y + TAG_HALF
-    canvas.rect(box=(left, top, right, bottom), grey=INK)
-    canvas.rect(
-        box=(left + NOTE_OUTLINE, top + NOTE_OUTLINE,
-             right - NOTE_OUTLINE, bottom - NOTE_OUTLINE),
-        grey=PAPER,
+    outlined_box(
+        canvas, box=(left, row.y - TAG_HALF, right, row.y + TAG_HALF),
     )
     note_text(
         canvas, texts=(note.route, then), x=left + NOTE_PAD, y=row.y + 1,
     )
     return left
+
+
+def outlined_box(
+    canvas: Canvas, *, box: tuple[float, float, float, float],
+) -> None:
+    """
+    Draw a paper box with an ink outline.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    box : tuple[float, float, float, float]
+        Left, top, right and bottom.
+    """
+    left, top, right, bottom = box
+    canvas.rect(box=box, grey=INK)
+    canvas.rect(
+        box=(left + NOTE_OUTLINE, top + NOTE_OUTLINE,
+             right - NOTE_OUTLINE, bottom - NOTE_OUTLINE),
+        grey=PAPER,
+    )
 
 
 def note_text(canvas: Canvas, *, texts: tuple[str, str], x: float,
@@ -457,27 +479,60 @@ def draw_row(canvas: Canvas, *, row: StripRow, columns: Columns) -> None:
     columns : Columns
         Where the strip's parts sit.
     """
-    left: float = columns.name_x + INDENT * row.depth
     if row.cursor:
+        start = columns.name_x + INDENT * row.depth
         canvas.rect(
-            box=(left - CURSOR_INSET, row.y - CURSOR_HALF,
+            box=(start - CURSOR_INSET, row.y - CURSOR_HALF,
                  columns.right - CURSOR_EDGE, row.y + CURSOR_HALF),
             grey=INK,
         )
     draw_station(canvas, row=row, x=columns.track_x + INDENT * row.depth)
-    edge = draw_end(canvas, row=row, columns=columns)
+    edge: float = draw_end(canvas, row=row, columns=columns)
     left, face = name_start(canvas, row=row, columns=columns)
     if not row.tag and not row.cursor:
-        right = columns.time_right - (NAME_ROOM if row.time else 0)
-        box = draw_note(canvas, row=row, right=right, floor=left + TAG_GAP)
-        if box < right:
-            edge = min(edge, box - TAG_GAP)
+        edge = noted_edge(
+            canvas, row=row, columns=columns, left=left, edge=edge,
+        )
     canvas.text(
         at=(left, row.y + BASELINE_DROP),
         text=canvas.fit(text=row.name, face=face, width=edge - left),
         face=face,
         grey=PAPER if row.cursor else INK,
     )
+
+
+def noted_edge(
+    canvas: Canvas,
+    *,
+    row: StripRow,
+    columns: Columns,
+    left: float,
+    edge: float,
+) -> float:
+    """
+    Draw a row's carry-on note and say where its name must end.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : StripRow
+        The row, with no tag and not the cursor.
+    columns : Columns
+        Where the strip's parts sit.
+    left : float
+        Where the name starts.
+    edge : float
+        Where the name must end without a note.
+
+    Returns
+    -------
+    float
+        The edge, moved short of the note when one was drawn.
+    """
+    right = columns.time_right - (NAME_ROOM if row.time else 0)
+    box = draw_note(canvas, row=row, right=right, floor=left + TAG_GAP)
+    return min(edge, box - TAG_GAP) if box < right else edge
 
 
 def draw_rows(

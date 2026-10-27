@@ -18,6 +18,7 @@ from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.reach import Reach, RowKind, StripKey, every_route
 from paperroute.core.stop_view import clock_text, not_departed
+from paperroute.core.strip_model import TripDay, trip_day
 
 STRIP_LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 STRIP_AHEAD: Final[timedelta] = timedelta(minutes=30)
@@ -367,6 +368,39 @@ def from_call(*, departure: Departure, pattern: TripPattern, origin: str,
     return next(iter(timed or at_from), None)
 
 
+def started_pattern(
+    *, item: LiveDeparture, trips: TripInputs, origin: str,
+) -> tuple[TripPattern, int, int] | None:
+    """
+    Find a departure's pattern, its call at the From and its delay.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+    trips : TripInputs
+        The strip's loaded patterns and station map.
+    origin : str
+        The From station ID.
+
+    Returns
+    -------
+    tuple[TripPattern, int, int] | None
+        The pattern, the index of its call at the From and the delay in
+        seconds; None when the pattern isn't loaded or doesn't call there.
+    """
+    departure = item.departure
+    pattern = trips.patterns.get(departure.trip_id)
+    start = None if pattern is None else from_call(
+        departure=departure, pattern=pattern, origin=origin,
+        stations=trips.station_of,
+    )
+    if pattern is None or start is None:
+        return None
+    delay = int(item.departs.timestamp() - departure.departs.timestamp())
+    return pattern, start, delay
+
+
 def stops_after(
     *,
     item: LiveDeparture,
@@ -395,30 +429,25 @@ def stops_after(
         shifted by the delay; none when the trip's pattern isn't loaded.
         Calls run through with no pick-up or set-down are left out.
     """
-    departure = item.departure
-    stations = trips.station_of
-    pattern = trips.patterns.get(departure.trip_id)
-    start = None if pattern is None else from_call(
-        departure=departure, pattern=pattern, origin=origin, stations=stations,
-    )
-    if pattern is None or start is None:
+    day = item.departure.service_day
+    started = started_pattern(item=item, trips=trips, origin=origin)
+    if started is None:
         return
-    delay = int(item.departs.timestamp() - departure.departs.timestamp())
+    pattern, start, delay = started
     joined = joined_patterns(
-        pattern=pattern, patterns=trips.patterns, day=departure.service_day,
+        pattern=pattern, patterns=trips.patterns, day=day,
     )
     calls = chain(
         pattern.stops[start + 1:], *(more.stops[1:] for more in joined),
     )
     for stop in calls:
-        if stop.passes:
-            continue
-        arrives = service_time(day=departure.service_day, seconds=stop.arrives)
-        yield (
-            stations.get(stop.station, stop.station),
-            stop,
-            shifted(moment=arrives, seconds=delay),
-        )
+        if not stop.passes:
+            arrives = service_time(day=day, seconds=stop.arrives)
+            yield (
+                trips.station_of.get(stop.station, stop.station),
+                stop,
+                shifted(moment=arrives, seconds=delay),
+            )
 
 
 def arrivals_after(
@@ -732,31 +761,25 @@ def approach_times(*, trips: TripInputs, origin: str,
     item = next_item(trips=trips, origin=origin, target=None)
     if item is None:
         return {}
-    departure = item.departure
-    pattern = trips.patterns.get(departure.trip_id)
-    start = None if pattern is None else from_call(
-        departure=departure, pattern=pattern, origin=origin,
-        stations=trips.station_of,
-    )
-    if pattern is None or start is None:
+    started = started_pattern(item=item, trips=trips, origin=origin)
+    if started is None:
         return {}
-    delay = int(item.departs.timestamp() - departure.departs.timestamp())
-    found: dict[str, datetime] = {}
-    for stop in pattern.stops[:start]:
-        station = trips.station_of.get(stop.station, stop.station)
-        if station in stations and not stop.passes:
-            found[station] = shifted(
-                moment=service_time(
-                    day=departure.service_day,
-                    seconds=(
-                        stop.arrives
-                        if stop.departs is None
-                        else stop.departs
-                    ),
+    pattern, start, delay = started
+    return {
+        station: shifted(
+            moment=service_time(
+                day=item.departure.service_day,
+                seconds=(
+                    stop.arrives if stop.departs is None else stop.departs
                 ),
-                seconds=delay,
-            )
-    return found
+            ),
+            seconds=delay,
+        )
+        for stop in pattern.stops[:start]
+        if not stop.passes
+        and (station := trips.station_of.get(stop.station, stop.station))
+        in stations
+    }
 
 
 def approach_text(*, trips: TripInputs, reach: Reach, origin: str
@@ -791,3 +814,83 @@ def approach_text(*, trips: TripInputs, reach: Reach, origin: str
         for index, key in rows.items()
         if key in found
     }
+
+
+def ridden_times(
+    *,
+    trips: TripInputs,
+    reach: Reach,
+    origin: str,
+    target: int | None,
+    ride: frozenset[int],
+) -> dict[int, str]:
+    """
+    Give the ridden rows the first arrival there.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    reach : Reach
+        The reach.
+    origin : str
+        The From station ID.
+    target : int | None
+        The Destination row, or None.
+    ride : frozenset[int]
+        The ridden rows; empty for every reached row.
+
+    Returns
+    -------
+    dict[int, str]
+        Clock time by main or branch row the first arrival reaches.
+    """
+    best = first_arrivals(
+        trips=trips,
+        origin=origin,
+        target=None if target is None else reach.rows[target].place.stop_id,
+    )
+    return {
+        index: clock_text(moment=best[row.place.stop_id])
+        for index, row in enumerate(reach.rows)
+        if row.kind in (RowKind.MAIN, RowKind.BRANCH)
+        and (not ride or index in ride)
+        and row.place.stop_id in best
+    }
+
+
+def from_leaves(
+    *,
+    trips: TripInputs,
+    origin: str,
+    target: str | None,
+    selected: TripDay | None,
+) -> datetime | None:
+    """
+    Find when the From's shown departure leaves.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    origin : str
+        The From station ID.
+    target : str | None
+        The Destination station ID, or None.
+    selected : TripDay | None
+        The picked train, or None.
+
+    Returns
+    -------
+    datetime | None
+        The picked train's departure, else the next to the Destination;
+        None when there is neither.
+    """
+    return next(
+        (
+            item.departs
+            for item in trips.departures
+            if trip_day(departure=item.departure) == selected
+        ),
+        next_departure(trips=trips, origin=origin, target=target),
+    )

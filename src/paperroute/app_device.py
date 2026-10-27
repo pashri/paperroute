@@ -9,7 +9,7 @@ from typing import Any, Final
 from paperroute.adapters.resets import NullResets
 from paperroute.adapters.wifi import NullWifi, hotspot_password
 from paperroute.core.device import device_status
-from paperroute.core.device_model import DeviceStatus, JoinOutcome
+from paperroute.core.device_model import DeviceFacts, DeviceStatus, JoinOutcome
 from paperroute.core.messages import (
     ApiKeyChanged,
     DeviceProbed,
@@ -104,24 +104,39 @@ async def probe(*, ports: DevicePorts, queue: asyncio.Queue[Event]) -> None:
     queue : asyncio.Queue[Event]
         Event queue.
     """
-    if ports.probe is None:
+    facts = None if ports.probe is None else await probed(ports=ports)
+    if facts is None:
         await queue.put(DeviceProbeFailed())
         return
+    await queue.put(DeviceProbed(facts=facts))
+
+
+async def probed(*, ports: DevicePorts) -> DeviceFacts | None:
+    """
+    Gather the device's facts under the radio lock.
+
+    Parameters
+    ----------
+    ports : DevicePorts
+        Device adapters; their probe is set.
+
+    Returns
+    -------
+    DeviceFacts | None
+        The facts; None when the probe timed out or failed.
+    """
+    assert ports.probe is not None
     try:
         async with ports.radio:
-            facts = await asyncio.wait_for(
+            return await asyncio.wait_for(
                 ports.probe.probe(),
                 timeout=PROBE_TIMEOUT,
             )
     except TimeoutError:
         logger.error('device probe timed out')
-        await queue.put(DeviceProbeFailed())
-        return
     except Exception:  # pylint: disable=broad-exception-caught
         logger.exception('device probe failed')
-        await queue.put(DeviceProbeFailed())
-        return
-    await queue.put(DeviceProbed(facts=facts))
+    return None
 
 
 async def reset(

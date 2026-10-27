@@ -246,6 +246,38 @@ def outlined_tag(
     return left
 
 
+def name_limit(
+    canvas: Canvas, *, row: Choice, right: int, middle: int, inverted: bool,
+) -> int:
+    """
+    Draw a row's outlined tag, if it has one, and say where its name ends.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Choice
+        The row.
+    right : int
+        The row's right edge.
+    middle : int
+        The row's vertical middle.
+    inverted : bool
+        Whether the row is a focused selection.
+
+    Returns
+    -------
+    int
+        The x the name must stop before.
+    """
+    if not row.tag:
+        return right - PAD
+    return outlined_tag(
+        canvas, text=row.tag, right=right - PAD, top=middle - 9,
+        inverted=inverted,
+    ) - GAP
+
+
 def draw_route(canvas: Canvas, *, row: Choice, box: Rect, inverted: bool,
                ) -> None:
     """
@@ -277,12 +309,9 @@ def draw_route(canvas: Canvas, *, row: Choice, box: Rect, inverted: bool,
         face=CHIP_FACE,
         inverted=inverted,
     )
-    limit = right - PAD
-    if row.tag:
-        limit = outlined_tag(
-            canvas, text=row.tag, right=right - PAD, top=middle - 9,
-            inverted=inverted,
-        ) - GAP
+    limit = name_limit(
+        canvas, row=row, right=right, middle=middle, inverted=inverted,
+    )
     x = left + PAD + ROUTE_BADGE + GAP
     name = canvas.fit(text=row.label, face=NAME_FACE, width=limit - x)
     canvas.text(at=(x, middle + 5), text=name, face=NAME_FACE, grey=grey)
@@ -385,17 +414,13 @@ def draw_station(canvas: Canvas, *, row: Choice, box: Rect, inverted: bool,
     grey, _ = ink_for(inverted=inverted)
     middle = (top + bottom) // 2
     face = HEADING_FACE if row.heading else NAME_FACE
-    limit = right - PAD
-    if row.tag:
-        limit = outlined_tag(
-            canvas, text=row.tag, right=right - PAD, top=middle - 9,
-            inverted=inverted,
-        ) - GAP
     x = left + PAD + 2
     name = canvas.fit(
         text=row.label.upper() if row.heading else row.label,
         face=face,
-        width=limit - x,
+        width=name_limit(
+            canvas, row=row, right=right, middle=middle, inverted=inverted,
+        ) - x,
     )
     canvas.text(at=(x, middle + 5), text=name, face=face, grey=grey)
     if row.dim:
@@ -483,23 +508,65 @@ def scroll_bar(canvas: Canvas, *, view: ColumnView) -> None:
     view : ColumnView
         The column.
     """
-    if view.level is None:
+    span = thumb_span(view=view)
+    if span is None or view.level is None:
         return
+    top, bottom = span
+    left = WIDTH - THUMB_WIDTH
+    canvas.rect(box=(left, top, WIDTH, bottom), grey=INK)
+    if view.focused:
+        cut_selection(canvas, view=view, level=view.level, thumb=span)
+
+
+def cut_selection(
+    canvas: Canvas, *, view: ColumnView, level: Level, thumb: tuple[int, int],
+) -> None:
+    """
+    Draw in paper where the thumb crosses the focused selection.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    view : ColumnView
+        The column, focused.
+    level : Level
+        Its level.
+    thumb : tuple[int, int]
+        The thumb's top and bottom.
+    """
+    height = ROW_HEIGHTS[level]
+    row_top = CHOOSER_TOP + view.selected * height
+    cut = (max(thumb[0], row_top), min(thumb[1], row_top + height))
+    if cut[0] < cut[1]:
+        canvas.rect(
+            box=(WIDTH - THUMB_WIDTH, cut[0], WIDTH, cut[1]), grey=PAPER,
+        )
+
+
+def thumb_span(*, view: ColumnView) -> tuple[int, int] | None:
+    """
+    Place the scroll thumb of a column whose rows overflow.
+
+    Parameters
+    ----------
+    view : ColumnView
+        The column.
+
+    Returns
+    -------
+    tuple[int, int] | None
+        The thumb's top and bottom; None when every row fits.
+    """
+    if view.level is None:
+        return None
     fits = VISIBLE_HEIGHT // ROW_HEIGHTS[view.level]
     if view.total <= fits:
-        return
+        return None
     track = CHOOSER_BOTTOM - CHOOSER_TOP
     size = max(THUMB_MIN, track * fits // view.total)
     top = CHOOSER_TOP + (track - size) * view.first // (view.total - fits)
-    left = WIDTH - THUMB_WIDTH
-    canvas.rect(box=(left, top, WIDTH, top + size), grey=INK)
-    if not view.focused:
-        return
-    height = ROW_HEIGHTS[view.level]
-    row_top = CHOOSER_TOP + view.selected * height
-    cut = (max(top, row_top), min(top + size, row_top + height))
-    if cut[0] < cut[1]:
-        canvas.rect(box=(left, cut[0], WIDTH, cut[1]), grey=PAPER)
+    return top, top + size
 
 
 def draw_note(canvas: Canvas, *, text: str, edges: tuple[int, int]) -> None:
@@ -592,8 +659,8 @@ def draw_column(
         )
     if last:
         scroll_bar(canvas, view=view)
-    else:
-        canvas.rect(box=(inner, CHOOSER_TOP, right, HEIGHT), grey=INK)
+        return
+    canvas.rect(box=(inner, CHOOSER_TOP, right, HEIGHT), grey=INK)
 
 
 def draw_header(canvas: Canvas, *, view: ChooserView) -> None:

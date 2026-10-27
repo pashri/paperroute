@@ -72,6 +72,30 @@ def _formatter() -> JsonFormatter:
     )
 
 
+def error_handler(*, error_file: Path) -> logging.Handler:
+    """
+    Make the handler that keeps WARNING and above in a rotating file.
+
+    Parameters
+    ----------
+    error_file : Path
+        The file; its folder is made if missing.
+
+    Returns
+    -------
+    logging.Handler
+        The handler, rotating at about 1 MB with three backups.
+    """
+    error_file.parent.mkdir(parents=True, exist_ok=True)
+    rotating = logging.handlers.RotatingFileHandler(
+        error_file,
+        maxBytes=ERROR_FILE_BYTES,
+        backupCount=ERROR_FILE_BACKUPS,
+    )
+    rotating.setLevel(logging.WARNING)
+    return rotating
+
+
 def configure_logging(
     *,
     error_file: Path | None = None,
@@ -90,14 +114,7 @@ def configure_logging(
     """
     handlers: list[logging.Handler] = [logging.StreamHandler(sys.stderr)]
     if error_file is not None:
-        error_file.parent.mkdir(parents=True, exist_ok=True)
-        rotating = logging.handlers.RotatingFileHandler(
-            error_file,
-            maxBytes=ERROR_FILE_BYTES,
-            backupCount=ERROR_FILE_BACKUPS,
-        )
-        rotating.setLevel(logging.WARNING)
-        handlers.append(rotating)
+        handlers.append(error_handler(error_file=error_file))
     for handler in handlers:
         handler.setFormatter(_formatter())
     if last_error is not None:

@@ -164,6 +164,37 @@ def add_state_argument(parser: argparse.ArgumentParser) -> None:
     )
 
 
+def add_device_arguments(parser: argparse.ArgumentParser) -> None:
+    """
+    Add the switches for what the device itself may do.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        Parser to add to.
+    """
+    parser.add_argument(
+        '--rebuild',
+        action='store_true',
+        help='rebuild an outdated timetable in the background',
+    )
+    parser.add_argument(
+        '--power',
+        action='store_true',
+        help='let the Settings page shut down and restart the device',
+    )
+    parser.add_argument(
+        '--wifi',
+        action='store_true',
+        help='scan, join and share Wi-Fi through NetworkManager',
+    )
+    parser.add_argument(
+        '--version-file',
+        type=Path,
+        help='file holding the release installed (default: dev)',
+    )
+
+
 def require_both_or_neither(*, args: argparse.Namespace) -> None:
     """
     Exit with a message if only one of the origin and destination is given.
@@ -192,36 +223,28 @@ def parse_args() -> argparse.Namespace:
     """
     parser = argparse.ArgumentParser(prog='python -m paperroute')
     sub = parser.add_subparsers(dest='command', required=True)
-    runner = sub.add_parser('run', help='run the device software')
-    runner.add_argument('--timetable', type=Path, required=True)
-    add_pin_arguments(runner)
-    add_display_arguments(runner)
-    add_source_arguments(runner)
-    add_tiles_arguments(runner)
-    add_state_argument(runner)
-    runner.add_argument(
-        '--rebuild',
-        action='store_true',
-        help='rebuild an outdated timetable in the background',
-    )
-    runner.add_argument(
-        '--power',
-        action='store_true',
-        help='let the Settings page shut down and restart the device',
-    )
-    runner.add_argument(
-        '--wifi',
-        action='store_true',
-        help='scan, join and share Wi-Fi through NetworkManager',
-    )
-    runner.add_argument(
-        '--version-file',
-        type=Path,
-        help='file holding the release installed (default: dev)',
-    )
+    add_run_arguments(sub.add_parser('run', help='run the device software'))
     args = parser.parse_args()
     require_both_or_neither(args=args)
     return args
+
+
+def add_run_arguments(parser: argparse.ArgumentParser) -> None:
+    """
+    Add every argument of the run command.
+
+    Parameters
+    ----------
+    parser : argparse.ArgumentParser
+        The run command's parser.
+    """
+    parser.add_argument('--timetable', type=Path, required=True)
+    add_pin_arguments(parser)
+    add_display_arguments(parser)
+    add_source_arguments(parser)
+    add_tiles_arguments(parser)
+    add_state_argument(parser)
+    add_device_arguments(parser)
 
 
 def sydney(*, moment: datetime) -> datetime:
@@ -654,11 +677,32 @@ async def serve_web(
             tiles_variant=tiles_variant,
         )
     finally:
-        remove_stop_signals(loop=loop)
-        try:
-            await runner.cleanup()
-        finally:
-            await ports.feeds.close()
+        await served(runner=runner, ports=ports, loop=loop)
+
+
+async def served(
+    *,
+    runner: web.AppRunner,
+    ports: Ports,
+    loop: asyncio.AbstractEventLoop,
+) -> None:
+    """
+    Stop serving: drop the stop signals, the web server and the feeds.
+
+    Parameters
+    ----------
+    runner : web.AppRunner
+        The web server.
+    ports : Ports
+        Adapters; their feeds client is closed.
+    loop : asyncio.AbstractEventLoop
+        The running loop.
+    """
+    remove_stop_signals(loop=loop)
+    try:
+        await runner.cleanup()
+    finally:
+        await ports.feeds.close()
 
 
 async def show(
@@ -873,7 +917,7 @@ def web_main(
         serve_or_exit(args=args, ports=ports, display=display)
 
 
-def main() -> None:
+def main() -> None:  # pylint: disable=too-many-statements
     """Run the device software in a window or in browsers."""
     args = parse_args()
     last_error = LastError()

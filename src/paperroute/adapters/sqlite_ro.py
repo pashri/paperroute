@@ -78,11 +78,26 @@ class ReadOnlyDatabase:
         self.file_id: Identity | None = None
         self.refused: Identity | None = None
         self.closed = False
-        if connection is None and path is not None:
-            if allow_missing:
-                self.open_optional(path=path)
-            else:
-                self.conn, self.file_id = self.open(path=path)
+        self.open_first(path=self.path, allow_missing=allow_missing)
+
+    def open_first(self, *, path: Path | None, allow_missing: bool) -> None:
+        """
+        Open the file at start-up.
+
+        Parameters
+        ----------
+        path : Path | None
+            Database file; None for an injected connection.
+        allow_missing : bool
+            Whether a missing or unusable file counts as absent instead
+            of failing.
+        """
+        if path is None:
+            return
+        if allow_missing:
+            self.open_optional(path=path)
+        else:
+            self.conn, self.file_id = self.open(path=path)
 
     def open_optional(self, *, path: Path) -> None:
         """
@@ -186,16 +201,8 @@ class ReadOnlyDatabase:
         kept. A refused file is not tried or logged again until it is
         replaced by another. The caller must hold the lock.
         """
-        if self.path is None:
-            return
-        try:
-            current = file_identity(path=self.path)
-        except OSError:
-            logger.warning('%s stat failed', self.label, exc_info=True)
-            return
-        if current is None or current == self.refused:
-            return
-        if current == self.file_id and self.conn is not None:
+        current = self.replacement()
+        if current is None or self.path is None:
             return
         opened = self.open_checked(path=self.path)
         if opened is None:
@@ -206,6 +213,29 @@ class ReadOnlyDatabase:
         if old is not None:
             with closing(old):
                 logger.info('%s reopened', self.label)
+
+    def replacement(self) -> Identity | None:
+        """
+        Identify a file that replaced the one open.
+
+        Returns
+        -------
+        Identity | None
+            The new file's identity; None for an injected connection, a
+            missing file, a failed stat, a refused file or the same file.
+        """
+        if self.path is None:
+            return None
+        try:
+            current = file_identity(path=self.path)
+        except OSError:
+            logger.warning('%s stat failed', self.label, exc_info=True)
+            return None
+        if current is None or current == self.refused:
+            return None
+        if current == self.file_id and self.conn is not None:
+            return None
+        return current
 
     def fetch(
         self, *, sql: str, params: tuple[object, ...] | dict[str, object]

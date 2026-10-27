@@ -28,6 +28,27 @@ def notify_address(*, path: str) -> str:
     return '\0' + path[1:] if path.startswith('@') else path
 
 
+
+def send_datagram(*, address: str, message: bytes) -> None:
+    """
+    Send one datagram to a Unix socket without blocking.
+
+    Parameters
+    ----------
+    address : str
+        The socket's address.
+    message : bytes
+        The message.
+
+    Raises
+    ------
+    OSError
+        When it can't be sent, including when the queue is full.
+    """
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
+        sock.setblocking(False)
+        sock.sendto(message, address)
+
 class SystemdNotifier:
     """
     Sends sd_notify messages over the notify socket.
@@ -78,11 +99,10 @@ class SystemdNotifier:
         """
         if self.socket_path is None:
             return False
-        address = notify_address(path=self.socket_path)
         try:
-            with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as sock:
-                sock.setblocking(False)
-                sock.sendto(message, address)
+            send_datagram(
+                address=notify_address(path=self.socket_path), message=message,
+            )
         except OSError as error:
             if not self._failing:
                 logger.warning('systemd notify failed: %s', error)

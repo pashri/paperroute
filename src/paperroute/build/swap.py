@@ -265,6 +265,26 @@ def finish_refresh(
     )
 
 
+def printed(*, report: RefreshReport | None) -> int:
+    """
+    Print a refresh's report as one JSON line.
+
+    Parameters
+    ----------
+    report : RefreshReport | None
+        The report; None when the refresh failed.
+
+    Returns
+    -------
+    int
+        The exit code: 0 once printed, 1 with no report.
+    """
+    if report is None:
+        return 1
+    print(json.dumps(asdict(report)), flush=True)
+    return 0
+
+
 def complete_refresh(
     *, record: HandoffRecord, tail: RefreshTail, scratch: Path,
     build: Callable[[Path], None],
@@ -305,10 +325,7 @@ def complete_refresh(
         clear_work(work=layout.work)
         if held:
             os.close(tail.lock_fd)
-    if report is None:
-        return 1
-    print(json.dumps(asdict(report)), flush=True)
-    return 0
+    return printed(report=report)
 
 
 def complete_build(

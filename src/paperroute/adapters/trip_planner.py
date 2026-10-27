@@ -200,6 +200,28 @@ def parse_journeys(*, data: object) -> tuple[Journey, ...]:
     return tuple(journey for journey in parsed if journey is not None)
 
 
+def check_status(*, status: int) -> None:
+    """
+    Refuse any Trip Planner reply but 200.
+
+    Parameters
+    ----------
+    status : int
+        The HTTP status.
+
+    Raises
+    ------
+    PlannerBusy
+        On HTTP 429.
+    PlannerUnavailable
+        On any other status but 200.
+    """
+    if status == HTTPStatus.TOO_MANY_REQUESTS:
+        raise PlannerBusy(f'HTTP {status}')
+    if status != HTTPStatus.OK:
+        raise PlannerUnavailable(f'HTTP {status}')
+
+
 class TfnswTripPlanner:
     """
     The TfNSW Trip Planner; the API key is sent but never logged.
@@ -272,10 +294,7 @@ class TfnswTripPlanner:
                 headers={'Authorization': f'apikey {self.key}'},
                 timeout=self.timeout,
             ) as response:
-                if response.status == HTTPStatus.TOO_MANY_REQUESTS:
-                    raise PlannerBusy(f'HTTP {response.status}')
-                if response.status != HTTPStatus.OK:
-                    raise PlannerUnavailable(f'HTTP {response.status}')
+                check_status(status=response.status)
                 return await response.json(content_type=None)
         except (aiohttp.ClientError, TimeoutError, ValueError) as error:
             raise PlannerUnavailable(type(error).__name__) from error

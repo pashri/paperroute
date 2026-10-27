@@ -347,6 +347,33 @@ def free_word(*, words: tuple[str, ...], taken: set[str], number: str) -> str:
     return next((tag for tag in tags if tag not in taken), tags[0])
 
 
+def differing_picks(
+    *, units: Sequence[tuple[str, ...]], taken: set[str],
+) -> dict[tuple[str, ...], str]:
+    """
+    Pick for each name a word the other names lack, where there is one.
+
+    Parameters
+    ----------
+    units : Sequence[tuple[str, ...]]
+        Each distinct name's words.
+    taken : set[str]
+        Words already used; each pick is added.
+
+    Returns
+    -------
+    dict[tuple[str, ...], str]
+        The word picked for each name that has one.
+    """
+    picks: dict[tuple[str, ...], str] = {}
+    for unit in units:
+        others = [other for other in units if other != unit]
+        if pick := differing_word(words=unit, others=others, taken=taken):
+            picks[unit] = pick
+            taken.add(pick)
+    return picks
+
+
 def word_tags(
     *, routes: Sequence[CatalogueRoute], given: set[str],
 ) -> dict[str, str]:
@@ -373,12 +400,7 @@ def word_tags(
     }
     units = list(dict.fromkeys(words.values()))
     taken = set(given)
-    picks: dict[tuple[str, ...], str] = {}
-    for unit in units:
-        others = [other for other in units if other != unit]
-        if pick := differing_word(words=unit, others=others, taken=taken):
-            picks[unit] = pick
-            taken.add(pick)
+    picks = differing_picks(units=units, taken=taken)
     for unit in (unit for unit in units if unit not in picks):
         picks[unit] = free_word(
             words=unit, taken=taken, number=routes[0].number,

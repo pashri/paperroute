@@ -107,13 +107,31 @@ def form_values(*, settings: Settings) -> dict[str, str]:
         name: 'on' if getattr(settings, name) else 'off'
         for name in SWITCHES
     }
-    values['peak_rate'] = settings.peak_rate.value
-    values['offpeak_rate'] = settings.offpeak_rate.value
-    values['quiet_mode'] = settings.quiet_mode.value
-    values['alert_lookahead'] = settings.alert_lookahead.value
-    values['connection_map'] = settings.connection_map.value
+    values |= {
+        name: getattr(settings, name).value
+        for name in (*CHOICES, 'quiet_mode')
+    }
     values['quiet_start'] = clock_text(moment=settings.my_hours.start)
     values['quiet_end'] = clock_text(moment=settings.my_hours.end)
+    return values | peak_values(settings=settings)
+
+
+def peak_values(*, settings: Settings) -> dict[str, str]:
+    """
+    Write the peak windows as the page's start and end times.
+
+    Parameters
+    ----------
+    settings : Settings
+        The settings.
+
+    Returns
+    -------
+    dict[str, str]
+        `HH:MM` start and end for each slot; empty strings for an unused
+        slot.
+    """
+    values: dict[str, str] = {}
     for index, slot in enumerate(SLOTS):
         window = settings.peak_windows[index:index + 1]
         values[f'{slot}_start'] = (

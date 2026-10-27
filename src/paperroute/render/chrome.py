@@ -183,8 +183,29 @@ def header_titles(
         shown = canvas.fit(text=origin, face=title, width=limit - 12)
         canvas.text(at=(12, 27), text=shown, face=title, grey=PAPER)
         return
+    two_titles(canvas, first=origin, second=second, limit=limit)
+
+
+def two_titles(
+    canvas: Canvas, *, first: str, second: str, limit: float,
+) -> None:
+    """
+    Draw two header titles with an arrow between, each fitted to half.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    first : str
+        The left title.
+    second : str
+        The right title.
+    limit : float
+        Where the titles must end.
+    """
+    title = Face(weight=700, px=18)
     half = (limit - 60) / 2
-    shown = canvas.fit(text=origin, face=title, width=half)
+    shown = canvas.fit(text=first, face=title, width=half)
     x = 12 + canvas.text(
         at=(12, 27), text=shown, face=title, grey=PAPER) + 8
     x += arrow(canvas, x=x, y=20, grey=PAPER)
@@ -456,25 +477,45 @@ def outlined_triangle(canvas: Canvas, *, x: float, y: float) -> None:
     side = WARNING_SIDE
     height = side * 3 ** 0.5 / 2
     bottom = y + height / 2
-    inner = side - 9
-    inner_height = inner * 3 ** 0.5 / 2
-    inner_bottom = bottom - 2.5
     middle = x + side / 2
     canvas.polygon(
         points=[(x, bottom), (middle, y - height / 2), (x + side, bottom)],
         grey=INK,
     )
+    inner = side - 9
+    inner_height = inner * 3 ** 0.5 / 2
+    hollow(canvas, middle=middle, bottom=bottom - 2.5, side=inner)
+    exclamation(
+        canvas, middle=middle, top=bottom - 2.5 - inner_height,
+        bottom=bottom - 2.5,
+    )
+
+
+def hollow(
+    canvas: Canvas, *, middle: float, bottom: float, side: float,
+) -> None:
+    """
+    Fill an upright triangle with paper.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    middle : float
+        Its centre line.
+    bottom : float
+        Its base.
+    side : float
+        Its side length.
+    """
+    height = side * 3 ** 0.5 / 2
     canvas.polygon(
         points=[
-            (middle - inner / 2, inner_bottom),
-            (middle, inner_bottom - inner_height),
-            (middle + inner / 2, inner_bottom),
+            (middle - side / 2, bottom),
+            (middle, bottom - height),
+            (middle + side / 2, bottom),
         ],
         grey=PAPER,
-    )
-    exclamation(
-        canvas, middle=middle, top=inner_bottom - inner_height,
-        bottom=inner_bottom,
     )
 
 

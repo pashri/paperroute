@@ -475,16 +475,8 @@ class NmcliWifi:
             Exit code and combined output; None when nmcli could not
             start or ran out of time. A cancelled run kills nmcli.
         """
-        try:
-            process = await asyncio.create_subprocess_exec(
-                self.nmcli,
-                *args,
-                stdin=asyncio.subprocess.DEVNULL,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.STDOUT,
-            )
-        except OSError:
-            logger.info('nmcli could not start', extra={'verb': verb})
+        process = await self.started(*args, verb=verb)
+        if process is None:
             return None
         try:
             output, _ = await asyncio.wait_for(
@@ -498,6 +490,36 @@ class NmcliWifi:
                 process.kill()
                 await process.wait()
         return process.returncode or 0, output.decode(errors='replace')
+
+    async def started(
+        self, *args: str, verb: str,
+    ) -> asyncio.subprocess.Process | None:
+        """
+        Start nmcli with its output piped.
+
+        Parameters
+        ----------
+        *args : str
+            Arguments, without the program.
+        verb : str
+            What the run is for, for the logs.
+
+        Returns
+        -------
+        asyncio.subprocess.Process | None
+            The process; None when nmcli could not start.
+        """
+        try:
+            return await asyncio.create_subprocess_exec(
+                self.nmcli,
+                *args,
+                stdin=asyncio.subprocess.DEVNULL,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.STDOUT,
+            )
+        except OSError:
+            logger.info('nmcli could not start', extra={'verb': verb})
+            return None
 
     async def status(self) -> WifiStatus:
         """

@@ -474,6 +474,32 @@ def adopt_agency(
     )
 
 
+def hand_to_twins(
+    *, conn: sqlite3.Connection, bundle: Trip, dates: set[str],
+    twin_ids: set[str],
+) -> None:
+    """
+    Leave a bundle trip's dates to its twins, which take its agency.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable being built.
+    bundle : Trip
+        The bundle trip.
+    dates : set[str]
+        The dates its twins run; all of them removes the trip.
+    twin_ids : set[str]
+        The twins' trip IDs.
+    """
+    adopt_agency(conn=conn, trip=bundle, twin_ids=twin_ids)
+    alias_twins(conn=conn, trip=bundle, twin_ids=twin_ids)
+    if dates == bundle.dates:
+        remove_trip(conn=conn, trip=bundle)
+    else:
+        skip_dates(conn=conn, trip=bundle, dates=dates)
+
+
 def apply_group(
     *, conn: sqlite3.Connection, bundle: Trip, keep: tuple[Call, ...],
     dates: set[str], twin_ids: set[str], name: str,
@@ -508,12 +534,7 @@ def apply_group(
     """
     whole = dates == bundle.dates
     if sum(call.active for call in keep) < MIN_CALLS:
-        adopt_agency(conn=conn, trip=bundle, twin_ids=twin_ids)
-        alias_twins(conn=conn, trip=bundle, twin_ids=twin_ids)
-        if whole:
-            remove_trip(conn=conn, trip=bundle)
-        else:
-            skip_dates(conn=conn, trip=bundle, dates=dates)
+        hand_to_twins(conn=conn, bundle=bundle, dates=dates, twin_ids=twin_ids)
         return int(whole), 0
     if whole:
         delete_calls(conn=conn, trip=bundle, keep=keep)
@@ -566,22 +587,50 @@ def trim_trainlink(*, conn: sqlite3.Connection) -> TrimReport:
     )
     dropped = cut = 0
     for bundle in bundles:
-        groups = trimmed_dates(bundle=bundle, twins=twins)
-        for index, (seqs, (dates, ids)) in enumerate(groups.items()):
-            gone, shortened = apply_group(
-                conn=conn, bundle=bundle,
-                keep=tuple(c for c in bundle.calls if c.seq in seqs),
-                dates=dates, twin_ids=ids, name=f'~{index}',
-            )
-            dropped += gone
-            cut += shortened
-        if len(groups) > 1 and set().union(
-            *(dates for dates, _ in groups.values()),
-        ) == bundle.dates:
-            remove_trip(conn=conn, trip=bundle)
-            conn.execute(
-                'DELETE FROM trip_skip WHERE trip_id = ?', (bundle.trip_id,),
-            )
-            dropped += 1
+        gone, shortened = trim_bundle(conn=conn, bundle=bundle, twins=twins)
+        dropped += gone
+        cut += shortened
     conn.commit()
     return TrimReport(dropped=dropped, cut=cut)
+
+
+def trim_bundle(
+    *, conn: sqlite3.Connection, bundle: Trip, twins: list[Trip],
+) -> tuple[int, int]:
+    """
+    Trim one bundle trip against its NSW TrainLink twins.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable being built.
+    bundle : Trip
+        The bundle trip.
+    twins : list[Trip]
+        NSW TrainLink trips.
+
+    Returns
+    -------
+    tuple[int, int]
+        Trips dropped and trips cut short. A trip split into groups
+        that together cover all its dates is removed.
+    """
+    dropped = cut = 0
+    groups = trimmed_dates(bundle=bundle, twins=twins)
+    for index, (seqs, (dates, ids)) in enumerate(groups.items()):
+        gone, shortened = apply_group(
+            conn=conn, bundle=bundle,
+            keep=tuple(c for c in bundle.calls if c.seq in seqs),
+            dates=dates, twin_ids=ids, name=f'~{index}',
+        )
+        dropped += gone
+        cut += shortened
+    if len(groups) > 1 and set().union(
+        *(dates for dates, _ in groups.values()),
+    ) == bundle.dates:
+        remove_trip(conn=conn, trip=bundle)
+        conn.execute(
+            'DELETE FROM trip_skip WHERE trip_id = ?', (bundle.trip_id,),
+        )
+        dropped += 1
+    return dropped, cut

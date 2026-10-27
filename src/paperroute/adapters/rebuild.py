@@ -51,6 +51,11 @@ def lower_priority() -> None:
     It runs between fork and exec, so it makes only bare system calls.
     """
     os.nice(CHILD_NICE)
+    first_to_kill()
+
+
+def first_to_kill() -> None:
+    """Raise this process's OOM score so the kernel kills it first."""
     try:
         score = os.open(OOM_SCORE_ADJ, os.O_WRONLY)
     except OSError:
@@ -214,8 +219,32 @@ class ChildRebuilder:
             return False
         logger.info('timetable rebuild started', extra={'force': force})
         command = (*self.command, '--force') if force else self.command
+        self.process = await self.started(command=command)
+        if self.process is None:
+            return False
+        code = await self.finished(process=self.process)
+        self.process = None
+        logger.info('timetable rebuild finished', extra={'code': code})
+        return code == 0
+
+    async def started(
+        self, *, command: Sequence[str],
+    ) -> asyncio.subprocess.Process | None:
+        """
+        Start the child at idle priority.
+
+        Parameters
+        ----------
+        command : Sequence[str]
+            The command.
+
+        Returns
+        -------
+        asyncio.subprocess.Process | None
+            The child; None when it could not start.
+        """
         try:
-            self.process = await asyncio.create_subprocess_exec(
+            return await asyncio.create_subprocess_exec(
                 *idle_io(command=command),
                 stdin=asyncio.subprocess.DEVNULL,
                 stdout=asyncio.subprocess.PIPE,
@@ -224,16 +253,29 @@ class ChildRebuilder:
             )
         except OSError:
             logger.exception('timetable rebuild could not start')
-            return False
+            return None
+
+    async def finished(self, *, process: asyncio.subprocess.Process) -> int:
+        """
+        Relay a started child's output until it exits.
+
+        Parameters
+        ----------
+        process : asyncio.subprocess.Process
+            The child.
+
+        Returns
+        -------
+        int
+            Its exit code; -1 when its output could not be read, after
+            stopping it.
+        """
         try:
-            code = await self.relayed(process=self.process)
+            return await self.relayed(process=process)
         except ValueError:
             logger.exception('reading the rebuild output failed')
             await self.stop()
-            code = -1
-        self.process = None
-        logger.info('timetable rebuild finished', extra={'code': code})
-        return code == 0
+            return -1
 
     @staticmethod
     async def relayed(*, process: asyncio.subprocess.Process) -> int:

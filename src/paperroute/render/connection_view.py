@@ -243,6 +243,51 @@ def pair_column(canvas: Canvas, *, view: ConnectionView, top: int) -> None:
     )
 
 
+def draw_hero(canvas: Canvas, *, view: ConnectionView, top: int) -> None:
+    """
+    Draw the hero's countdown, steps and footer, or why there is none.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    view : ConnectionView
+        View-model.
+    top : int
+        Top of the content below the header and any banner.
+    """
+    hero = view.hero
+    if hero is not None:
+        hero_countdown(canvas, hero=hero, top=top)
+        hero_steps(canvas, hero=hero, top=top)
+        hero_footer(canvas, hero=hero, top=top)
+    elif view.empty:
+        empty_hero(canvas, text=view.empty, top=top)
+
+
+def empty_hero(canvas: Canvas, *, text: str, top: int) -> None:
+    """
+    Draw why there is no hero, centred where the hero would be.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    text : str
+        The message.
+    top : int
+        Top of the content below the header and any banner.
+    """
+    face = Face(weight=700, px=22)
+    canvas.text(
+        at=(SPLIT / 2, (top + HEIGHT) / 2),
+        text=canvas.fit(text=text, face=face, width=SPLIT - 36),
+        face=face,
+        grey=INK,
+        anchor='mm',
+    )
+
+
 def draw_connection_view(*, view: ConnectionView) -> NDArray[np.uint8]:
     """
     Draw a connection Stop view as a 1-bit frame.
@@ -262,18 +307,6 @@ def draw_connection_view(*, view: ConnectionView) -> NDArray[np.uint8]:
     view_banner(canvas, view=view)
     top = HEADER + (BANNER if view.banner else 0)
     canvas.rect(box=(SPLIT, top, SPLIT + 3, HEIGHT), grey=INK)
-    if view.hero is not None:
-        hero_countdown(canvas, hero=view.hero, top=top)
-        hero_steps(canvas, hero=view.hero, top=top)
-        hero_footer(canvas, hero=view.hero, top=top)
-    elif view.empty:
-        face = Face(weight=700, px=22)
-        canvas.text(
-            at=(SPLIT / 2, (top + HEIGHT) / 2),
-            text=canvas.fit(text=view.empty, face=face, width=SPLIT - 36),
-            face=face,
-            grey=INK,
-            anchor='mm',
-        )
+    draw_hero(canvas, view=view, top=top)
     pair_column(canvas, view=view, top=top)
     return finish(canvas)

@@ -334,18 +334,43 @@ def decode_feed(*, data: bytes) -> tuple[list[Any], int | None]:
     """
     if not data:
         raise FeedError('feed body is empty')
-    try:
-        message = gtfs_realtime_pb2.FeedMessage.FromString(data)
-    except DecodeError:
-        logger.warning('feed did not decode whole; reading entity by entity')
-    else:
-        if not message.HasField('header'):
-            raise FeedError('feed body has no header')
-        return list(message.entity), int(message.header.timestamp)
+    whole = whole_feed(data=data)
+    if whole is not None:
+        return whole
     entities = list(decoded_entities(data=data))
     if not entities:
         raise FeedError('feed body did not decode')
     return entities, None
+
+
+def whole_feed(*, data: bytes) -> tuple[list[Any], int] | None:
+    """
+    Decode a feed as one message.
+
+    Parameters
+    ----------
+    data : bytes
+        Serialised FeedMessage.
+
+    Returns
+    -------
+    tuple[list[Any], int] | None
+        The entities and the header timestamp; None when it does not
+        decode whole.
+
+    Raises
+    ------
+    FeedError
+        When it decodes but has no header.
+    """
+    try:
+        message = gtfs_realtime_pb2.FeedMessage.FromString(data)
+    except DecodeError:
+        logger.warning('feed did not decode whole; reading entity by entity')
+        return None
+    if not message.HasField('header'):
+        raise FeedError('feed body has no header')
+    return list(message.entity), int(message.header.timestamp)
 
 
 def feed_entities(*, data: bytes) -> list[Any]:

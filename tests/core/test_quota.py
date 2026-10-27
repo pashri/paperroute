@@ -20,8 +20,9 @@ from paperroute.core.quota import (
     with_calls,
 )
 from paperroute.core.saved import Quota
-from paperroute.core.state import SAVE_AFTER, step
+from paperroute.core.state import step
 from paperroute.core.state_model import State
+from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import saved_of
 from tests.core.steps import wakeful
 from tests.core.test_state import BUSES, HOLD, at, fresh, loaded, pinned, saves

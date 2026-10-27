@@ -33,8 +33,9 @@ from paperroute.core.messages import (
     Tick,
 )
 from paperroute.core.saved import ConnectionMap, Lookahead, Rate, Settings
-from paperroute.core.state import SAVE_AFTER, step
+from paperroute.core.state import step
 from paperroute.core.state_model import State
+from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import stop_view_of
 from paperroute.core.stop_view import StopView
 from tests.core.factories import START

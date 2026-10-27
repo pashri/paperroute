@@ -692,14 +692,33 @@ def load_all(*, sources: list[Source], window: Window,
             if source.name == BUNDLE:
                 load_holidays(conn=conn, archive=source.archive,
                               window=window)
-        print('progress merge', flush=True)
-        report = merge_rail(conn=conn)
-        trim_trainlink(conn=conn)
-        relabel_trainlink(conn=conn)
-        conn.execute(DROP_UNUSED_SHAPES)
-        create_indexes(conn=conn)
-        write_meta(conn=conn, window=window)
-        conn.commit()
+        return merged(conn=conn, window=window)
+
+
+def merged(*, conn: sqlite3.Connection, window: Window) -> MergeReport:
+    """
+    Merge the rail feeds, trim NSW TrainLink and finish the file.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable being built, every source loaded.
+    window : Window
+        Dates loaded.
+
+    Returns
+    -------
+    MergeReport
+        What the rail merge did.
+    """
+    print('progress merge', flush=True)
+    report = merge_rail(conn=conn)
+    trim_trainlink(conn=conn)
+    relabel_trainlink(conn=conn)
+    conn.execute(DROP_UNUSED_SHAPES)
+    create_indexes(conn=conn)
+    write_meta(conn=conn, window=window)
+    conn.commit()
     return report
 
 

@@ -690,18 +690,14 @@ def change_view(
         The pane, one zoom finer than the knob's, with both rides drawn
         and no sidebar.
     """
-    change = rides[-1].change
-    walk = None if change is None else walk_ends(change=change)
     zoom = max(0, inputs.zoom - CHANGE_ZOOM_IN)
-    centre = inputs.centre
-    if walk is not None:
-        x, y = middle(ends=walk)
-        centre = (x, y + banner_room(inputs=inputs) * ZOOMS[zoom] / 2)
     legs = chain_legs(chain=chain)
     view = build_map_view(inputs=replace(
         inputs,
         departures=legs,
-        centre=centre,
+        centre=change_centre(
+            inputs=inputs, change=rides[-1].change, zoom=zoom,
+        ),
         zoom=zoom,
         vehicle_trips=pin_trips(departures=legs),
     ))
@@ -710,6 +706,34 @@ def change_view(
     return replace(
         view, base=replace(view.base, route=route, trip=trip), sidebar=(),
     )
+
+
+def change_centre(
+    *, inputs: MapInputs, change: Change | None, zoom: int,
+) -> Point | None:
+    """
+    Centre a change pane on the middle of its walk, clear of the banner.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The pane's inputs.
+    change : Change | None
+        The change walked; None for none.
+    zoom : int
+        The pane's zoom.
+
+    Returns
+    -------
+    Point | None
+        The walk's middle, moved down by half the banner's room; the
+        inputs' own centre when the walk has no ends.
+    """
+    walk = None if change is None else walk_ends(change=change)
+    if walk is None:
+        return inputs.centre
+    x, y = middle(ends=walk)
+    return (x, y + banner_room(inputs=inputs) * ZOOMS[zoom] / 2)
 
 
 def change_panes(

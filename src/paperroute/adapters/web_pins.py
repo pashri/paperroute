@@ -255,6 +255,28 @@ def notice_html(*, done: str | None) -> str:
     return f'<p class="notice" role="status">{html.escape(text)}</p>'
 
 
+def confirm_page(*, pin: Pin, ref: str) -> web.Response:
+    """
+    Draw the page asking before a pin is deleted.
+
+    Parameters
+    ----------
+    pin : Pin
+        The pin.
+    ref : str
+        Its ref.
+
+    Returns
+    -------
+    web.Response
+        The page.
+    """
+    body = CONFIRM.format(label=html.escape(pin_label(pin=pin)), ref=ref)
+    return web.Response(
+        text=page_html(notice='', body=body), content_type='text/html',
+    )
+
+
 class PinsPages:
     """
     The Pins page and its form posts.
@@ -451,6 +473,49 @@ class PinsPages:
                 return latest, pin
         return None
 
+    def _latest(self) -> PinsSeen:
+        """
+        Give the pins the app last reported.
+
+        Returns
+        -------
+        PinsSeen
+            The report.
+
+        Raises
+        ------
+        web.HTTPSeeOther
+            Back to the list before the app has reported.
+        """
+        latest = self._pins()
+        if latest is None:
+            raise web.HTTPSeeOther(location='/pins')
+        return latest
+
+    def _found(self, *, ref: str | None) -> Pin | None:
+        """
+        Find the pin a ref names, if any ref is given.
+
+        Parameters
+        ----------
+        ref : str | None
+            The pin's ref, or None for a new pin.
+
+        Returns
+        -------
+        Pin | None
+            The pin; None for no ref.
+
+        Raises
+        ------
+        web.HTTPSeeOther
+            To the gone notice when the ref is not a pin.
+        """
+        found = None if ref is None else self.find(ref=ref)
+        if ref is not None and found is None:
+            raise web.HTTPSeeOther(location='/pins?done=gone')
+        return None if found is None else found[1]
+
     def _finish(
         self, *, event: Event | None, revision: int, done: str
     ) -> web.HTTPSeeOther:
@@ -498,9 +563,7 @@ class PinsPages:
         steps = whole_number(text=fields.get('steps', ''))
         if not ref or steps is None:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
-        latest = self._pins()
-        if latest is None:
-            raise web.HTTPSeeOther(location='/pins')
+        latest = self._latest()
         gone = self.find(ref=ref) is None
         event = None if gone else PinMoved(ref=ref, steps=steps)
         raise self._finish(
@@ -524,9 +587,7 @@ class PinsPages:
         refs = (await form_fields(request=request)).get('refs')
         if refs is None:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
-        latest = self._pins()
-        if latest is None:
-            raise web.HTTPSeeOther(location='/pins')
+        latest = self._latest()
         wanted = tuple(ref for ref in refs.split(',') if ref)
         current = {pin_ref(pin=pin) for pin in latest.pins}
         same = len(wanted) == len(current) and set(wanted) == current
@@ -559,13 +620,7 @@ class PinsPages:
             raise web.HTTPSeeOther(location='/pins?done=gone')
         latest, pin = found
         if fields.get('confirm') != 'yes':
-            body = CONFIRM.format(
-                label=html.escape(pin_label(pin=pin)), ref=ref,
-            )
-            return web.Response(
-                text=page_html(notice='', body=body),
-                content_type='text/html',
-            )
+            return confirm_page(pin=pin, ref=ref)
         raise self._finish(
             event=PinDeleted(ref=ref),
             revision=latest.revision,
@@ -665,10 +720,7 @@ class PinsPages:
             The editor page; a 303 to the gone notice when the ref is
             not a pin.
         """
-        found = None if draft.ref is None else self.find(ref=draft.ref)
-        if draft.ref is not None and found is None:
-            raise web.HTTPSeeOther(location='/pins?done=gone')
-        pin = None if found is None else found[1]
+        pin = self._found(ref=draft.ref)
         if pin is not None and draft.ref and not draft.stop:
             draft = pin_draft(pin=pin, ref=draft.ref)
         body = self._editor_body(
@@ -676,9 +728,12 @@ class PinsPages:
         )
         if pin is not None and draft.ref:
             body += delete_form(ref=draft.ref, label=pin_label(pin=pin))
-        title = 'Add a pin' if draft.ref is None else 'Edit pin'
         return html_page(
-            text=edit_page(title=title, notice=notice, body=body),
+            text=edit_page(
+                title='Add a pin' if draft.ref is None else 'Edit pin',
+                notice=notice,
+                body=body,
+            ),
             status=status,
         )
 

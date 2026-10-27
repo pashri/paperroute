@@ -721,23 +721,25 @@ class SqliteTimetableRepository:
         dict[str, str]
             Short name by ID; unknown IDs are absent.
         """
-        self.fetch(sql='SELECT 1', params=())
-        if self.identity != self.labels_id:
-            self.labels.clear()
-            self.labels_id = self.identity
-        result: dict[str, str] = {}
-        missing: set[str] = set()
-        for trip in trip_ids:
-            label = self.labels.get(trip)
-            if label is None:
-                missing.add(trip)
-            elif label:
-                result[trip] = label
+        self.labels_checked()
+        missing = {trip for trip in trip_ids if trip not in self.labels}
+        result = {
+            trip: label
+            for trip in trip_ids
+            if (label := self.labels.get(trip))
+        }
         found = self.look_up_labels(trip_ids=missing)
         if len(self.labels) > LABEL_LIMIT:
             self.labels.clear()
         self.labels.update({trip: found.get(trip, '') for trip in missing})
         return result | found
+
+    def labels_checked(self) -> None:
+        """Forget the cached labels when the file has been replaced."""
+        self.fetch(sql='SELECT 1', params=())
+        if self.identity != self.labels_id:
+            self.labels.clear()
+            self.labels_id = self.identity
 
     def look_up_labels(
         self, *, trip_ids: Collection[str]

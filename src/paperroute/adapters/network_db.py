@@ -397,37 +397,71 @@ class SqliteNetworkRepository:
         """
         kind = kind_of(path=path)
         level, key = path[-1]
-        column = None
         match (level, kind):
-            case (Level.KIND, RouteKind.BUS | RouteKind.SCHOOL):
-                column = self.group_column(kind=kind)
-            case (Level.KIND, RouteKind.COACH):
-                column = self.route_column(sql=ROUTES_OF_KIND, params=(kind,))
-            case (
-                Level.KIND,
-                RouteKind.TRAIN
-                | RouteKind.METRO
-                | RouteKind.LIGHT_RAIL
-                | RouteKind.FERRY,
-            ):
-                column = self.line_column(kind=kind)
+            case (Level.KIND, RouteKind()):
+                return self._kind_next(kind=kind)
             case (Level.GROUP, RouteKind()):
-                column = self.route_column(
+                return self.route_column(
                     sql=ROUTES_IN_GROUP, params=(kind, key),
                 )
             case (Level.LINE | Level.STATION, RouteKind()) if (
                 kind in STATION_FIRST
             ):
-                column = self.station_first_column(path=path, kind=kind)
-            case (Level.REPLACEMENTS, RouteKind.BUS):
-                column = self.replacement_lines()
-            case (Level.LINE, RouteKind.BUS):
-                column = self.route_column(
-                    sql=REPLACEMENTS_OF, params=(key,),
-                )
+                return self.station_first_column(path=path, kind=kind)
+            case (Level.REPLACEMENTS | Level.LINE, RouteKind.BUS):
+                return self._replacement_next(level=level, key=key)
             case (Level.ROUTE | Level.LINE, RouteKind()):
-                column = self.towards_column(route_key=key)
-        return column
+                return self.towards_column(route_key=key)
+        return None
+
+    def _replacement_next(self, *, level: Level, key: str) -> Column:
+        """
+        Work out the column after the replacements row or one of its lines.
+
+        Parameters
+        ----------
+        level : Level
+            REPLACEMENTS or LINE.
+        key : str
+            The line's key.
+
+        Returns
+        -------
+        Column
+            The replacement lines, or the routes replacing a line.
+        """
+        if level is Level.REPLACEMENTS:
+            return self.replacement_lines()
+        return self.route_column(sql=REPLACEMENTS_OF, params=(key,))
+
+    def _kind_next(self, *, kind: RouteKind) -> Column | None:
+        """
+        Work out the column after a kind.
+
+        Parameters
+        ----------
+        kind : RouteKind
+            The kind chosen.
+
+        Returns
+        -------
+        Column | None
+            Groups for buses and school buses, routes for coaches, lines
+            for rail and ferries; None for any other kind.
+        """
+        match kind:
+            case RouteKind.BUS | RouteKind.SCHOOL:
+                return self.group_column(kind=kind)
+            case RouteKind.COACH:
+                return self.route_column(sql=ROUTES_OF_KIND, params=(kind,))
+            case (
+                RouteKind.TRAIN
+                | RouteKind.METRO
+                | RouteKind.LIGHT_RAIL
+                | RouteKind.FERRY
+            ):
+                return self.line_column(kind=kind)
+        return None
 
     def kind_column(self) -> Column:
         """

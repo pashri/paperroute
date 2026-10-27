@@ -147,20 +147,39 @@ def draw_title(
     room = right - x
     if after is not None:
         room -= ARROW_ROOM
-        rest = canvas.length(text=after, face=HEAD_FACE)
-        room = max(room / 2, room - rest)
+        room = max(room / 2, room - canvas.length(text=after, face=HEAD_FACE))
     x += canvas.text(
         at=(x, y),
         text=canvas.fit(text=before, face=HEAD_FACE, width=room),
         face=HEAD_FACE,
         grey=INK,
     )
-    if after is None:
-        return
+    if after is not None:
+        title_tail(canvas, text=after, at=(x, y), right=right)
+
+
+def title_tail(
+    canvas: Canvas, *, text: str, at: tuple[float, float], right: float,
+) -> None:
+    """
+    Draw a heading's arrow and the part after it, cut to fit.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    text : str
+        The part after the arrow.
+    at : tuple[float, float]
+        Where the arrow starts, and the baseline.
+    right : float
+        Right limit.
+    """
+    x, y = at
     x += 4 + arrow(canvas, x=x + 4, y=y - 4, grey=INK)
     canvas.text(
         at=(x, y),
-        text=canvas.fit(text=after, face=HEAD_FACE, width=right - x),
+        text=canvas.fit(text=text, face=HEAD_FACE, width=right - x),
         face=HEAD_FACE,
         grey=INK,
     )
@@ -224,8 +243,6 @@ def draw_leg_stop(
     """
     x = edges[0] + TRACK
     middle = y + step / 2
-    top = middle if stop.mark is StopMark.FIRST else y
-    bottom = middle if stop.mark is StopMark.LAST else y + step
     if stop.mark is StopMark.FOLD:
         canvas.dots(
             points=[(x, y + 4 + i * 6) for i in range(step // 6)],
@@ -233,15 +250,44 @@ def draw_leg_stop(
             grey=INK,
         )
     else:
-        canvas.rect(box=(x - 1.5, top, x + 1.5, bottom), grey=INK)
-        box = (x - DOT, middle - DOT, x + DOT, middle + DOT)
-        canvas.ellipse(box=box, grey=INK)
-        if stop.mark is StopMark.MIDDLE:
-            inner = (x - DOT + 2.5, middle - DOT + 2.5)
-            canvas.ellipse(
-                box=(*inner, x + DOT - 2.5, middle + DOT - 2.5), grey=PAPER,
-            )
+        stop_disc(canvas, mark=stop.mark, x=x, span=(y, y + step))
     draw_stop_text(canvas, stop=stop, y=middle + 6, edges=edges)
+
+
+def stop_disc(
+    canvas: Canvas, *, mark: StopMark, x: float, span: tuple[int, int],
+) -> None:
+    """
+    Draw a stop row's track and its disc, hollow for a middle stop.
+
+    The track stops at the disc on the first and last rows.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    mark : StopMark
+        The row's mark; not a fold.
+    x : float
+        The track's centre.
+    span : tuple[int, int]
+        The row's top and bottom.
+    """
+    middle = sum(span) / 2
+    top = middle if mark is StopMark.FIRST else span[0]
+    bottom = middle if mark is StopMark.LAST else span[1]
+    canvas.rect(box=(x - 1.5, top, x + 1.5, bottom), grey=INK)
+    canvas.ellipse(
+        box=(x - DOT, middle - DOT, x + DOT, middle + DOT), grey=INK,
+    )
+    if mark is StopMark.MIDDLE:
+        canvas.ellipse(
+            box=(
+                x - DOT + 2.5, middle - DOT + 2.5,
+                x + DOT - 2.5, middle + DOT - 2.5,
+            ),
+            grey=PAPER,
+        )
 
 
 def draw_stop_text(
@@ -312,19 +358,10 @@ def draw_section(
         Top of the next section.
     """
     left, right = edges
-    y += HEAD_GAP
-    draw_heading(canvas, section=section, y=y, edges=edges)
-    y += HEAD_STEP
+    draw_heading(canvas, section=section, y=y + HEAD_GAP, edges=edges)
+    y += HEAD_GAP + HEAD_STEP
     if section.vehicle is not None:
-        canvas.text(
-            at=(left + NAME_LEFT, y + step / 2 + 5),
-            text=canvas.fit(
-                text=section.vehicle, face=FOLD_FACE,
-                width=right - left - NAME_LEFT - SIDE,
-            ),
-            face=FOLD_FACE,
-            grey=INK,
-        )
+        vehicle_line(canvas, text=section.vehicle, y=y, edges=edges, step=step)
         y += step
     if section.empty is not None:
         canvas.text(
@@ -341,6 +378,42 @@ def draw_section(
             canvas, stop=stop, y=y + index * step, edges=edges, step=step,
         )
     return y + len(section.stops) * step
+
+
+def vehicle_line(
+    canvas: Canvas,
+    *,
+    text: str,
+    y: int,
+    edges: tuple[int, int],
+    step: int,
+) -> None:
+    """
+    Draw where a leg's vehicle is, in a row of its own.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    text : str
+        The line.
+    y : int
+        Row top.
+    edges : tuple[int, int]
+        Left and right of the section.
+    step : int
+        Row height.
+    """
+    left, right = edges
+    canvas.text(
+        at=(left + NAME_LEFT, y + step / 2 + 5),
+        text=canvas.fit(
+            text=text, face=FOLD_FACE,
+            width=right - left - NAME_LEFT - SIDE,
+        ),
+        face=FOLD_FACE,
+        grey=INK,
+    )
 
 
 def draw_strip_sections(
@@ -403,6 +476,28 @@ def draw_pairs(
     )
 
 
+def empty_strip(canvas: Canvas, *, text: str, top: int) -> None:
+    """
+    Draw why there are no legs, centred left of the rule.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    text : str
+        The message.
+    top : int
+        Top of the content.
+    """
+    canvas.text(
+        at=(STRIP_RIGHT / 2, (top + HEIGHT) / 2),
+        text=canvas.fit(text=text, face=EMPTY_FACE, width=STRIP_RIGHT - 36),
+        face=EMPTY_FACE,
+        grey=INK,
+        anchor='mm',
+    )
+
+
 def draw_connection_strip(*, view: ConnectionStripView) -> NDArray[np.uint8]:
     """
     Draw a connection Strip as a 1-bit frame.
@@ -421,21 +516,14 @@ def draw_connection_strip(*, view: ConnectionStripView) -> NDArray[np.uint8]:
     view_header(canvas, view=view, active='Strip')
     view_banner(canvas, view=view)
     top = HEADER + (BANNER if view.banner else 0)
-    rule = (STRIP_RIGHT, top, STRIP_RIGHT + RULE_WIDTH, HEIGHT)
-    canvas.rect(box=rule, grey=INK)
+    canvas.rect(
+        box=(STRIP_RIGHT, top, STRIP_RIGHT + RULE_WIDTH, HEIGHT), grey=INK,
+    )
     draw_strip_sections(
         canvas, sections=view.sections, left=SIDE, right=STRIP_RIGHT - SIDE,
         top=top,
     )
     if not view.sections and view.empty:
-        canvas.text(
-            at=(STRIP_RIGHT / 2, (top + HEIGHT) / 2),
-            text=canvas.fit(
-                text=view.empty, face=EMPTY_FACE, width=STRIP_RIGHT - 36,
-            ),
-            face=EMPTY_FACE,
-            grey=INK,
-            anchor='mm',
-        )
+        empty_strip(canvas, text=view.empty, top=top)
     draw_pairs(canvas, view=view, top=top)
     return finish(canvas)

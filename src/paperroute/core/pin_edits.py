@@ -144,10 +144,12 @@ def with_saved(*, state: State, ref: str | None, pin: Pin) -> State:
     if pins == places.pins:
         return state
     after = replace(state, places=replace(places, pins=pins))
-    if index == places.current and places.unpinned is None:
-        if not same_place(first=pin, second=places.pins[index]):
-            return with_place(state=after, pin=None)
-    return after
+    moved = (
+        index == places.current
+        and places.unpinned is None
+        and not same_place(first=pin, second=places.pins[index])
+    )
+    return with_place(state=after, pin=None) if moved else after
 
 
 def without_windows(*, places: Places) -> Places:

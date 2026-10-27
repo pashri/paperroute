@@ -189,6 +189,28 @@ def resolve(
     trip = trip_for(departure=departure, snapshot=snapshot)
     if trip is None or trip.start_date not in (None, departure.service_day):
         return scheduled
+    return applied(departure=departure, trip=trip)
+
+
+def applied(*, departure: Departure, trip: TripRealtime) -> LiveDeparture:
+    """
+    Apply one trip's live note to a departure.
+
+    A note found under an alias is matched by stop ID only.
+
+    Parameters
+    ----------
+    departure : Departure
+        Scheduled departure.
+    trip : TripRealtime
+        The trip's live note, for the departure's service day.
+
+    Returns
+    -------
+    LiveDeparture
+        Departure with live times; scheduled times where the note has
+        none.
+    """
     updates = trip.updates
     if trip.trip_id != departure.trip_id:
         updates = tuple(replace(update, sequence=None) for update in updates)

@@ -128,16 +128,40 @@ class AiohttpFeedsClient:
         key = self.key()
         if key is None:
             raise FeedError(f'{feed}: no API key')
+        return await self.downloaded(feed=feed, key=key)
+
+    async def downloaded(self, *, feed: str, key: str) -> bytes:
+        """
+        Download one feed with a key, waiting for the rate limit.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+        key : str
+            The API key.
+
+        Returns
+        -------
+        bytes
+            Protobuf body.
+
+        Raises
+        ------
+        FeedError
+            On a non-200 status, a timeout or a connection error.
+        """
         self.session = self.session or aiohttp.ClientSession()
-        headers = {
-            'Authorization': f'apikey {key}',
-            'Accept': 'application/x-google-protobuf',
-        }
         if self.limiter:
             await self.limiter.wait()
         try:
             async with self.session.get(
-                self.base_url + feed, headers=headers, timeout=self.timeout
+                self.base_url + feed,
+                headers={
+                    'Authorization': f'apikey {key}',
+                    'Accept': 'application/x-google-protobuf',
+                },
+                timeout=self.timeout,
             ) as response:
                 if response.status != HTTPStatus.OK:
                     raise FeedError(f'{feed}: HTTP {response.status}')

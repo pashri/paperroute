@@ -66,6 +66,30 @@ def may_load(*, state: State, kind: MapData) -> bool:
     )
 
 
+def polled_departures(*, state: State) -> Sequence[Departure]:
+    """
+    List the departures whose modes the view polls.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    Sequence[Departure]
+        The chooser's picked window, else the Strip's window on the
+        Strip, else every departure loaded, every leg's included.
+    """
+    if state.chooser is not None:
+        return picked_window(state=state)
+    if state.view is LiveView.STRIP:
+        return strip_window(state=state)
+    return all_departures(
+        departures=state.board.departures, legs=state.board.legs,
+    )
+
+
 def map_feeds(*, state: State) -> tuple[str, ...]:
     """
     List the positions feeds the view polls.
@@ -85,14 +109,9 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
         modes for a connection pin; on the Strip, the modes of the
         strip's own departures.
     """
-    departures = all_departures(
-        departures=state.board.departures, legs=state.board.legs,
+    modes = frozenset(
+        departure.mode for departure in polled_departures(state=state)
     )
-    if state.chooser is not None:
-        departures = picked_window(state=state)
-    elif state.view is LiveView.STRIP:
-        departures = strip_window(state=state)
-    modes = frozenset(departure.mode for departure in departures)
     if state.view in MAP_VIEWS and state.chooser is None:
         _, zoom = area_frame(map_state=state.map)
         area = state.map.area_modes.get(ZOOMS[zoom]) or ALL_POSITION_MODES

@@ -91,6 +91,32 @@ def draw_end(canvas: Canvas, *, at: Point) -> None:
     )
 
 
+def cased_line(
+    canvas: Canvas,
+    *,
+    points: Sequence[Point],
+    widths: tuple[float, float],
+    dash: tuple[float, float],
+) -> None:
+    """
+    Draw a dashed ink line over a wider paper casing.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    points : Sequence[Point]
+        The line in map pixels.
+    widths : tuple[float, float]
+        The line's width and its casing's.
+    dash : tuple[float, float]
+        The dash pattern.
+    """
+    width, casing = widths
+    canvas.line(points=points, width=casing, grey=PAPER)
+    canvas.line(points=points, width=width, grey=INK, dash=dash)
+
+
 def draw_trip_legs(canvas: Canvas, *, base: MapBase, window: Window) -> None:
     """
     Draw the dashed rides on a paper casing, and the dotted walks.
@@ -109,14 +135,20 @@ def draw_trip_legs(canvas: Canvas, *, base: MapBase, window: Window) -> None:
         return
     width = ROUTE_STYLE[base.mpp][0]
     for line in trip.second:
-        points = on_map(points=line, mpp=base.mpp, window=window)
-        canvas.line(points=points, width=width + CASING, grey=PAPER)
-        canvas.line(points=points, width=width, grey=INK, dash=LEG_DASH)
+        cased_line(
+            canvas,
+            points=on_map(points=line, mpp=base.mpp, window=window),
+            widths=(width, width + CASING),
+            dash=LEG_DASH,
+        )
     walks = () if trip.walk is None else (trip.walk,)
     for ends in (*walks, *trip.others):
-        walk = on_map(points=ends, mpp=base.mpp, window=window)
-        canvas.line(points=walk, width=WALK_CASING, grey=PAPER)
-        canvas.line(points=walk, width=WALK_WIDTH, grey=INK, dash=WALK_DASH)
+        cased_line(
+            canvas,
+            points=on_map(points=ends, mpp=base.mpp, window=window),
+            widths=(WALK_WIDTH, WALK_CASING),
+            dash=WALK_DASH,
+        )
 
 
 def draw_trip_ends(canvas: Canvas, *, base: MapBase, window: Window) -> None:

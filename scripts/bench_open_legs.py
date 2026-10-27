@@ -416,7 +416,9 @@ def parser() -> argparse.ArgumentParser:
     return result
 
 
-def main(argv: Sequence[str] | None = None) -> int:
+def main(  # pylint: disable=too-many-statements
+    argv: Sequence[str] | None = None,
+) -> int:
     """
     Print the timing of each stop pair's any-route query.
 

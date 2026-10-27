@@ -761,6 +761,30 @@ def write_towards(
     conn.execute('DROP TABLE temp.catalogue_keys')
 
 
+def rows_by_kind(*, entries: Sequence[Entry]) -> list[RouteRow]:
+    """
+    Number the entries kind by kind into chooser rows.
+
+    Parameters
+    ----------
+    entries : Sequence[Entry]
+        Every entry, in any order of kinds.
+
+    Returns
+    -------
+    list[RouteRow]
+        Each kind's rows, kinds in the order first seen.
+    """
+    kinds: dict[RouteKind, list[Entry]] = defaultdict(list)
+    for entry in entries:
+        kinds[entry.kind].append(entry)
+    return [
+        row
+        for group in kinds.values()
+        for row in kind_rows(entries=group)
+    ]
+
+
 def load_catalogue(*, conn: sqlite3.Connection) -> int:
     """
     Write the chooser and line tables.
@@ -792,14 +816,7 @@ def load_catalogue(*, conn: sqlite3.Connection) -> int:
             ends=replacement_ends(conn=conn, sources=sources),
         ),
     ]
-    kinds: dict[RouteKind, list[Entry]] = defaultdict(list)
-    for entry in entries:
-        kinds[entry.kind].append(entry)
-    rows = [
-        row
-        for group in kinds.values()
-        for row in kind_rows(entries=group)
-    ]
+    rows = rows_by_kind(entries=entries)
     insert_many(conn=conn, rows=rows, sql=(
         'INSERT INTO chooser_routes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ))

@@ -375,6 +375,19 @@ def update(*, layout: Layout, fetched: Fetched, days: int,
     return True
 
 
+def fresh_work(*, layout: Layout) -> None:
+    """
+    Clear the work folder and make sure the sources folder is there.
+
+    Parameters
+    ----------
+    layout : Layout
+        Where the refresh keeps its files.
+    """
+    clear_work(work=layout.work)
+    layout.sources.mkdir(exist_ok=True)
+
+
 def refresh(
     *,
     data_dir: Path,
@@ -419,8 +432,7 @@ def refresh(
     started = time.monotonic()
     layout = Layout(data_dir=data_dir)
     with refresh_lock(path=layout.lock) as lock_fd:
-        clear_work(work=layout.work)
-        layout.sources.mkdir(exist_ok=True)
+        fresh_work(layout=layout)
         try:
             fetched = download_changed(
                 layout=layout,

@@ -183,8 +183,44 @@ def headline(
         fitted = canvas.fit(text=text, face=face, width=width)
         canvas.text(at=at, text=fitted, face=face, grey=INK)
         return
+    tagged_headline(
+        canvas,
+        tag=f'{then.route} {then.headsign}',
+        at=at,
+        text=text,
+        face=face,
+        width=width,
+    )
+
+
+def tagged_headline(
+    canvas: Canvas,
+    *,
+    tag: str,
+    at: tuple[float, float],
+    text: str,
+    face: Face,
+    width: float,
+) -> None:
+    """
+    Draw a headsign, an arrow and the run-on tag, fitted together.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    tag : str
+        The route and headsign the vehicle runs on as.
+    at : tuple[float, float]
+        Left end and baseline.
+    text : str
+        Headsign text.
+    face : Face
+        Headsign face.
+    width : float
+        Width for the headsign and tag together.
+    """
     lead = ARROW_WIDTH + ARROW_GAP
-    tag = f'{then.route} {then.headsign}'
     room = width - TAG_GAP - canvas.length(text=text, face=face)
     tag_width = min(
         canvas.length(text=tag, face=TAG_FACE) + lead,
@@ -304,13 +340,50 @@ def list_row(
         face=k.face(weight=400, px=13),
         width=LIST_WIDTH if row.then is None else TAGGED_WIDTH,
     )
+    list_times(canvas, row=row, y=y, k=k)
+    canvas.rect(box=(452, y + k.y(49), 786, y + k.y(50)), grey=INK)
+
+
+def cancelled_pill(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
+    """
+    Draw a row's cancelled pill where its times would be.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure, cancelled.
+    y : int
+        Row top.
+    k : Scale
+        The row's scale.
+    """
+    pill(
+        canvas,
+        box=(PILL_LEFT, y + k.y(10), 786, y + k.y(38)),
+        text=cancelled(row=row),
+        px=k.px(15),
+    )
+
+
+def list_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
+    """
+    Draw a list row's leave and arrive times, or its cancelled pill.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure.
+    y : int
+        Row top.
+    k : Scale
+        The row's scale.
+    """
     if row.pill is Pill.CANCELLED:
-        pill(
-            canvas,
-            box=(PILL_LEFT, y + k.y(10), 786, y + k.y(38)),
-            text=cancelled(row=row),
-            px=k.px(15),
-        )
+        cancelled_pill(canvas, row=row, y=y, k=k)
     else:
         canvas.text(
             at=(640, y + k.y(30)), text=leaves(row=row),
@@ -325,7 +398,6 @@ def list_row(
             text=FASTER,
             px=k.px(11),
         )
-    canvas.rect(box=(452, y + k.y(49), 786, y + k.y(50)), grey=INK)
 
 
 def board_row(
@@ -366,13 +438,27 @@ def board_row(
         face=k.face(weight=400, px=17),
         width=BOARD_RIGHT - left,
     )
+    board_times(canvas, row=row, y=y, k=k)
+    canvas.rect(box=(0, y + k.y(49), WIDTH, y + k.y(50)), grey=INK)
+
+
+def board_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
+    """
+    Draw a board row's countdown, or its cancelled pill.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure.
+    y : int
+        Row top.
+    k : Scale
+        The row's scale.
+    """
     if row.pill is Pill.CANCELLED:
-        pill(
-            canvas,
-            box=(PILL_LEFT, y + k.y(10), 786, y + k.y(38)),
-            text=cancelled(row=row),
-            px=k.px(15),
-        )
+        cancelled_pill(canvas, row=row, y=y, k=k)
     else:
         canvas.text(
             at=(786, y + k.y(33)), text=countdown_slot(row=row),
@@ -384,7 +470,6 @@ def board_row(
             text=FASTER,
             px=k.px(11),
         )
-    canvas.rect(box=(0, y + k.y(49), WIDTH, y + k.y(50)), grey=INK)
 
 
 def finish(canvas: Canvas) -> NDArray[np.uint8]:
@@ -421,26 +506,54 @@ def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:
     """
     canvas = Canvas()
     view_header(canvas, view=view, active='Stop')
-    top = HEADER
+    top = HEADER + (BANNER if view.banner else 0)
     view_banner(canvas, view=view)
-    if view.banner:
-        top += BANNER
     if view.empty:
-        face = Face(weight=700, px=22)
-        message = canvas.fit(text=view.empty, face=face, width=WIDTH - 64)
-        canvas.text(
-            at=(WIDTH / 2, 250), text=message, face=face, grey=INK,
-            anchor='mm')
+        empty_message(canvas, text=view.empty)
     if view.hero:
-        hero(canvas, row=view.hero, top=top)
-        canvas.rect(box=(SPLIT, top, SPLIT + 3, HEIGHT), grey=INK)
-        canvas.text(
-            at=(640, top + 22), text='LEAVES', face=Face(weight=700, px=11),
-            grey=INK, anchor='rs')
-        canvas.text(
-            at=(786, top + 22), text='ARRIVES',
-            face=Face(weight=700, px=11), grey=INK, anchor='rs')
+        hero_split(canvas, row=view.hero, top=top)
     return finish_view(canvas, view=view, top=top)
+
+
+def empty_message(canvas: Canvas, *, text: str) -> None:
+    """
+    Draw why the list is empty, centred.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    text : str
+        The message.
+    """
+    face = Face(weight=700, px=22)
+    message = canvas.fit(text=text, face=face, width=WIDTH - 64)
+    canvas.text(
+        at=(WIDTH / 2, 250), text=message, face=face, grey=INK,
+        anchor='mm')
+
+
+def hero_split(canvas: Canvas, *, row: Row, top: int) -> None:
+    """
+    Draw the hero, the rule beside it and the list's column heads.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        The hero departure.
+    top : int
+        Top of the content below the header and any banner.
+    """
+    hero(canvas, row=row, top=top)
+    canvas.rect(box=(SPLIT, top, SPLIT + 3, HEIGHT), grey=INK)
+    canvas.text(
+        at=(640, top + 22), text='LEAVES', face=Face(weight=700, px=11),
+        grey=INK, anchor='rs')
+    canvas.text(
+        at=(786, top + 22), text='ARRIVES',
+        face=Face(weight=700, px=11), grey=INK, anchor='rs')
 
 
 def finish_view(

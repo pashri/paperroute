@@ -51,15 +51,14 @@ from paperroute.core.strip_model import (
     Window,
     hook_straight,
     selected_index,
-    trip_day,
 )
 from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_times import (
     TripInputs,
     approach_text,
-    first_arrivals,
-    next_departure,
+    from_leaves,
     onward_text,
+    ridden_times,
 )
 from paperroute.core.strip_vehicles import vehicle_markers
 
@@ -216,51 +215,66 @@ def row_times(
         return {}
     station = reach.rows[origin].place.stop_id
     trips = trips_of(inputs=inputs)
-    target = target_of(reach=reach, destination=inputs.destination)
-    best = first_arrivals(
+    ends = destination_station(reach=reach, destination=inputs.destination)
+    times = station_times(
         trips=trips,
+        reach=reach,
         origin=station,
-        target=None if target is None else reach.rows[target].place.stop_id,
+        target=target_of(reach=reach, destination=inputs.destination),
+        ride=ride,
     )
-    times = {
-        index: clock_text(moment=best[row.place.stop_id])
-        for index, row in enumerate(reach.rows)
-        if row.kind in (RowKind.MAIN, RowKind.BRANCH)
-        and (not ride or index in ride)
-        and row.place.stop_id in best
-    }
-    times.update(approach_text(trips=trips, reach=reach, origin=station))
-    times.update(onward_text(
-        trips=trips, reach=reach, origin=station, target=target,
-    ))
     if reach.trip is not None:
         times = {i: text for i, text in times.items() if i < origin}
         times.update(followed_text(
-            trips=trips,
-            reach=reach,
-            target=destination_station(
-                reach=reach, destination=inputs.destination,
-            ),
-            selected=inputs.selected,
+            trips=trips, reach=reach, target=ends, selected=inputs.selected,
         ))
-    leaves = next_departure(
-        trips=trips,
-        origin=station,
-        target=destination_station(
-            reach=reach, destination=inputs.destination,
-        ),
+    leaves = from_leaves(
+        trips=trips, origin=station, target=ends, selected=inputs.selected,
     )
-    leaves = next(
-        (
-            item.departs
-            for item in trips.departures
-            if trip_day(departure=item.departure) == inputs.selected
-        ),
-        leaves,
+    return (
+        times if leaves is None
+        else {**times, origin: clock_text(moment=leaves)}
     )
-    if leaves is not None:
-        times[origin] = clock_text(moment=leaves)
-    return times
+
+
+def station_times(
+    *,
+    trips: TripInputs,
+    reach: Reach,
+    origin: str,
+    target: int | None,
+    ride: frozenset[int],
+) -> dict[int, str]:
+    """
+    Give rows the times of arrivals, approaches and onward trips.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        The strip's departures and live data.
+    reach : Reach
+        The reach.
+    origin : str
+        The From station ID.
+    target : int | None
+        The Destination row, or None.
+    ride : frozenset[int]
+        The ridden rows; empty for every reached row.
+
+    Returns
+    -------
+    dict[int, str]
+        Clock time by row; approach times over arrivals, and onward
+        times over both.
+    """
+    return {
+        **ridden_times(
+            trips=trips, reach=reach, origin=origin, target=target, ride=ride,
+        ),
+        **approach_text(trips=trips, reach=reach, origin=origin),
+        **onward_text(trips=trips, reach=reach, origin=origin, target=target),
+    }
+
 
 
 def marks_of(*, inputs: StripInputs, reach: Reach) -> Marks:

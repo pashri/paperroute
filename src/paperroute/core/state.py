@@ -1,8 +1,7 @@
 """The pure function that advances the device's state."""
 
 from dataclasses import replace
-from datetime import datetime, timedelta
-from typing import Final
+from datetime import datetime
 
 from paperroute.core.alert_model import AlertsFetched, BetweenLoaded
 from paperroute.core.alert_state import (
@@ -15,7 +14,6 @@ from paperroute.core.alert_state import (
 from paperroute.core.auto_pins import auto_step, with_override
 from paperroute.core.chains import all_departures
 from paperroute.core.chooser_steps import (
-    chooser_event,
     chooser_knob,
     chooser_retimed,
     picked_reloads,
@@ -29,7 +27,7 @@ from paperroute.core.device import (
 )
 from paperroute.core.knobs import knob_moved
 from paperroute.core.map_requests import map_feeds, shows_vehicles
-from paperroute.core.map_state import MapState, failed, with_patterns
+from paperroute.core.map_state import MapState
 from paperroute.core.menu import (
     confirm_expired,
     confirm_knob,
@@ -43,7 +41,6 @@ from paperroute.core.messages import (
     ApiKeyChanged,
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
-    ChooserEvent,
     ColumnFailed,
     ColumnLoaded,
     ConfirmAsked,
@@ -71,7 +68,6 @@ from paperroute.core.messages import (
     LoadDepartures,
     LoadHolidays,
     MapDataFailed,
-    MapEvent,
     ModesLoaded,
     PatternsLoaded,
     PinDeleted,
@@ -86,7 +82,6 @@ from paperroute.core.messages import (
     PowerRequested,
     QuitRequested,
     ResetDone,
-    SaveState,
     ServiceSpanLoaded,
     SettingsChanged,
     ShapesLoaded,
@@ -115,12 +110,13 @@ from paperroute.core.places import (
 )
 from paperroute.core.polling import poll_effects, woken
 from paperroute.core.quiet import span_loaded, span_requests, with_quiet
-from paperroute.core.quota import QUOTA_SAVE_EVERY, quota_only, with_calls
+from paperroute.core.quota import quota_only, with_calls
 from paperroute.core.rebuild import rebuild_effects, rebuilt, seen_schema
 from paperroute.core.refresh import noted, with_full
 from paperroute.core.rhythm import holidays_loaded
 from paperroute.core.saved import Saved
 from paperroute.core.sleep import held_awake
+from paperroute.core.state_data import on_chooser_event, on_map_event, on_strip
 from paperroute.core.state_model import (
     FEED_IDLE,
     Board,
@@ -130,12 +126,10 @@ from paperroute.core.state_model import (
     load_window,
     runs_short,
 )
+from paperroute.core.state_saves import saved_effects
 from paperroute.core.state_views import saved_of, settled
-from paperroute.core.strip_state import strip_failed, strip_loaded
 from paperroute.core.tiles import ZOOMS
 from paperroute.core.wifi import setup_expired, setup_knob
-
-SAVE_AFTER: Final[timedelta] = timedelta(seconds=3)
 
 
 def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
@@ -255,74 +249,6 @@ def idle_dropped(*, state: State) -> State:
     return replace(state, map=map_state)
 
 
-def save_waits(*, state: State, current: Saved) -> bool:
-    """
-    Say whether a change to the saved state is too new to write.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    current : Saved
-        The saved state, which differs from what was last written.
-
-    Returns
-    -------
-    bool
-        True when something was written before and the change is younger
-        than `SAVE_AFTER`, or a change in the quota alone is younger than
-        `QUOTA_SAVE_EVERY`.
-    """
-    saving = state.saving
-    if saving.saved is None:
-        return False
-    if quota_only(before=saving.saved, after=current):
-        return not elapsed(
-            since=saving.quota_at,
-            now=state.now,
-            span=QUOTA_SAVE_EVERY,
-        )
-    return not elapsed(
-        since=saving.changed_at,
-        now=state.now,
-        span=SAVE_AFTER,
-    )
-
-
-def saved_effects(
-    *, state: State, wait: bool = True
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Save when the saved state differs from what was last written.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    wait : bool
-        Hold the save until `SAVE_AFTER` after the last change, or a
-        quota-only change until `QUOTA_SAVE_EVERY` after the last quota
-        was written, unless nothing was ever written.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State with the save recorded, and a SaveState; unchanged when
-        nothing is due.
-    """
-    saving = state.saving
-    current = saved_of(state=state)
-    if current == saving.saved:
-        return state, ()
-    if wait and save_waits(state=state, current=current):
-        return state, ()
-    quota_at = saving.quota_at
-    if saving.saved is None or saving.saved.quota != current.quota:
-        quota_at = state.now
-    saving = replace(saving, saved=current, quota_at=quota_at)
-    return replace(state, saving=saving), (SaveState(saved=current),)
-
-
 def on_tick(
     *, state: State, event: Tick
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -344,22 +270,52 @@ def on_tick(
         New state and effects.
     """
     state = auto_step(state=idle_dropped(state=replace(state, now=event.now)))
+    state, loads = tick_loads(state=state)
+    state, polls = tick_polls(state=state)
+    state, effects = settled(state=state, effects=(*loads, *polls))
+    return with_quiet(result=with_full(state=state, effects=effects))
+
+
+def tick_loads(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Ask for the service spans and departures a tick finds due.
+
+    Parameters
+    ----------
+    state : State
+        State at the tick's time.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State marked loading, and the span, departure and chooser loads.
+    """
     state, spans = span_requests(state=state)
     state, loads = reload_effects(state=state)
     state, picked = picked_reloads(state=state)
+    return state, (*spans, *loads, *picked)
+
+
+def tick_polls(*, state: State) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Poll the feeds and alerts, save, rematch and probe as due.
+
+    Parameters
+    ----------
+    state : State
+        State at the tick's time.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with each poll noted, and their effects in that order.
+    """
     state, fetches = poll_effects(state=state)
     state, alerts = alert_polls(state=state)
     state, saves = saved_effects(state=state)
     state, matches = rematch_effects(state=state)
     state, probes = probe_effects(state=state)
-    state, effects = settled(
-        state=state,
-        effects=(
-            *spans, *loads, *picked, *fetches, *alerts, *saves, *matches,
-            *probes,
-        ),
-    )
-    return with_quiet(result=with_full(state=state, effects=effects))
+    return state, (*fetches, *alerts, *saves, *matches, *probes)
 
 
 def on_loaded(
@@ -515,10 +471,7 @@ def panel_touch(
     if state.panel.confirm is not None:
         after, effects = confirm_knob(state=state, event=event)
     elif state.panel.wifi is not None:
-        after, effects = setup_knob(state=state, event=event)
-        if after is state:
-            return state, ()
-        after, effects = settled(state=after, effects=effects)
+        return setup_touch(state=state, event=event)
     elif state.panel.menu is not None:
         after, effects = menu_knob(state=state, event=event)
     elif isinstance(event, KnobsHeld):
@@ -527,6 +480,31 @@ def panel_touch(
         return state, ()
     else:
         return on_knob(state=state, event=event)
+    return touched(state=after), effects
+
+
+def setup_touch(
+    *, state: State, event: KnobEvent | KnobsHeld
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Hand a touch to Wi-Fi setup.
+
+    Parameters
+    ----------
+    state : State
+        State with setup open.
+    event : KnobEvent | KnobsHeld
+        What happened.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        The touch noted and redrawn; unchanged when setup ignored it.
+    """
+    after, effects = setup_knob(state=state, event=event)
+    if after is state:
+        return state, ()
+    after, effects = settled(state=after, effects=effects)
     return touched(state=after), effects
 
 
@@ -675,74 +653,6 @@ def on_quit(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     return replace(state, running=False), (*saves, Stop())
 
 
-def on_map_event(
-    *, state: State, event: MapEvent
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Store map data, ask for what is still needed, and redraw.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    event : MapEvent
-        Map data or a failure to load it.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        New state and effects; a failure only records itself.
-    """
-    map_state = state.map
-    match event:
-        case ShapesLoaded(shapes=shapes):
-            map_state = replace(
-                map_state,
-                shapes={**map_state.shapes, **shapes},
-            )
-        case PatternsLoaded():
-            map_state = with_patterns(map_state=map_state, event=event)
-        case ModesLoaded(mpp=mpp, modes=modes):
-            map_state = replace(
-                map_state,
-                area_modes={**map_state.area_modes, mpp: modes},
-                pending_modes=map_state.pending_modes - {mpp},
-            )
-        case PositionsFetched(feed=feed, snapshot=snapshot):
-            map_state = replace(
-                map_state,
-                positions={**map_state.positions, feed: snapshot},
-            )
-        case MapDataFailed():
-            map_state = failed(map_state=map_state, event=event, now=state.now)
-            return replace(state, map=map_state), ()
-    return settled(state=replace(state, map=map_state))
-
-
-def on_chooser_event(
-    *, state: State, event: ChooserEvent
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Apply a chooser load's result, asking for what comes next.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    event : ChooserEvent
-        A column, line or departures loaded or failed.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        New state and effects; none when nothing changed.
-    """
-    after, effects = chooser_event(state=state, event=event)
-    if after is state:
-        return state, ()
-    return settled(state=after, effects=effects)
-
-
 def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
     """
     Apply one event, noting when the saved state changed.
@@ -836,29 +746,6 @@ def on_timetable_file(
     return with_rebuild(result=settled(state=after, effects=effects))
 
 
-def on_strip(
-    *, state: State, event: StripLoaded | StripFailed
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Store a built reach, redrawing, or note a failed one.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    event : StripLoaded | StripFailed
-        What happened.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        New state and effects.
-    """
-    if isinstance(event, StripFailed):
-        return strip_failed(state=state, event=event), ()
-    return settled(state=strip_loaded(state=state, event=event))
-
-
 def on_places(
     *, state: State, event: PinEdit | PlacesMatched | PlacesFailed
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -904,9 +791,52 @@ def dispatched(
     tuple[State, tuple[Effect, ...]]
         Next state and the effects to perform.
     """
-    result: tuple[State, tuple[Effect, ...]] = (state, ())
     if is_stale(state=state, event=event):
-        return result
+        return state, ()
+    match event:
+        case (
+            SettingsChanged()
+            | PowerRequested()
+            | PowerFailed()
+            | ApiKeyChanged()
+            | DeviceProbed()
+            | DeviceProbeFailed()
+            | ResetDone()
+            | HotspotStarted()
+            | HotspotFailed()
+            | JoinAsked()
+            | WifiJoined()
+            | WifiJoinFailed()
+            | WifiSetupStopped()
+        ):
+            return on_device_event(state=state, event=event)
+    result = (
+        live_result(state=state, event=event)
+        or data_result(state=state, event=event)
+        or (state, ())
+    )
+    return quiet_guard(result=power_guard(state=state, result=result))
+
+
+def live_result(
+    *, state: State, event: Event
+) -> tuple[State, tuple[Effect, ...]] | None:
+    """
+    Handle a tick, a load, a feed, a touch, a quit or a timetable change.
+
+    Parameters
+    ----------
+    state : State
+        Current state.
+    event : Event
+        What happened.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]] | None
+        Next state and effects; None for any other event.
+    """
+    result = None
     match event:
         case Tick():
             result = on_ticked(state=state, event=event)
@@ -934,22 +864,29 @@ def dispatched(
             | ServiceSpanLoaded()
         ):
             result = on_timetable_file(state=state, event=event)
-        case (
-            SettingsChanged()
-            | PowerRequested()
-            | PowerFailed()
-            | ApiKeyChanged()
-            | DeviceProbed()
-            | DeviceProbeFailed()
-            | ResetDone()
-            | HotspotStarted()
-            | HotspotFailed()
-            | JoinAsked()
-            | WifiJoined()
-            | WifiJoinFailed()
-            | WifiSetupStopped()
-        ):
-            return on_device_event(state=state, event=event)
+    return result
+
+
+def data_result(
+    *, state: State, event: Event
+) -> tuple[State, tuple[Effect, ...]] | None:
+    """
+    Handle pins and places, strips, chooser columns and map data.
+
+    Parameters
+    ----------
+    state : State
+        Current state.
+    event : Event
+        What happened.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]] | None
+        Next state and effects; None for any other event.
+    """
+    result = None
+    match event:
         case (
             PinSaved()
             | PinDeleted()
@@ -978,4 +915,4 @@ def dispatched(
             | MapDataFailed()
         ):
             result = on_map_event(state=state, event=event)
-    return quiet_guard(result=power_guard(state=state, result=result))
+    return result

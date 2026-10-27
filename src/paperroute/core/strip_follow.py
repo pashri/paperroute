@@ -193,6 +193,36 @@ def followed_runs(
     return found
 
 
+def common_lengths(*, first: Sequence[str], second: Sequence[str]
+                   ) -> list[list[int]]:
+    """
+    Measure the longest common run from each pair of positions on.
+
+    Parameters
+    ----------
+    first : Sequence[str]
+        Stations in order.
+    second : Sequence[str]
+        Stations in order.
+
+    Returns
+    -------
+    list[list[int]]
+        For `i` and `j`, the length of a longest run both share in order
+        from `first[i:]` and `second[j:]`; one more row and column than
+        the sequences, of zeros.
+    """
+    longest = [[0] * (len(second) + 1) for _ in range(len(first) + 1)]
+    for i in reversed(range(len(first))):
+        for j in reversed(range(len(second))):
+            longest[i][j] = (
+                longest[i + 1][j + 1] + 1
+                if first[i] == second[j]
+                else max(longest[i + 1][j], longest[i][j + 1])
+            )
+    return longest
+
+
 def common_pairs(*, first: Sequence[str], second: Sequence[str]
                  ) -> list[tuple[int, int]]:
     """
@@ -210,24 +240,18 @@ def common_pairs(*, first: Sequence[str], second: Sequence[str]
     list[tuple[int, int]]
         Index pairs of a longest run of stations both share in order.
     """
-    longest = [[0] * (len(second) + 1) for _ in range(len(first) + 1)]
-    for i in reversed(range(len(first))):
-        for j in reversed(range(len(second))):
-            longest[i][j] = (
-                longest[i + 1][j + 1] + 1
-                if first[i] == second[j]
-                else max(longest[i + 1][j], longest[i][j + 1])
-            )
+    longest = common_lengths(first=first, second=second)
     pairs: list[tuple[int, int]] = []
     i = j = 0
     while i < len(first) and j < len(second):
         if first[i] == second[j]:
             pairs.append((i, j))
-            i, j = i + 1, j + 1
-        elif longest[i + 1][j] >= longest[i][j + 1]:
-            i += 1
-        else:
-            j += 1
+        step = longest[i + 1][j] >= longest[i][j + 1]
+        i, j = (
+            (i + 1, j + 1) if first[i] == second[j]
+            else (i + 1, j) if step
+            else (i, j + 1)
+        )
     return pairs
 
 

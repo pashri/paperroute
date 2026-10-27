@@ -3,7 +3,7 @@
 import hashlib
 import json
 from collections.abc import Callable
-from typing import Final
+from typing import Any, Final
 
 from paperroute.adapters.state_auto import add_auto
 from paperroute.adapters.state_change import add_connections, before_rewritten
@@ -190,28 +190,52 @@ def v9_ref(*, pin: object) -> str | None:
     """
     if not isinstance(pin, dict):
         return None
-    origin = pin.get('origin')
-    destination = pin.get('destination')
-    change = pin.get('change')
     try:
-        parts: list[object] = [
-            origin['stop_id'],  # type: ignore[index]
-            None if destination is None else destination['stop_id'],
-            pin.get('kind'),
-            list(pin['routes']),
-            list(pin['only']),
-        ]
-        if change is not None:
-            parts.append([
-                change['alight']['stop_id'],
-                change['board']['stop_id'],
-                change['allow'],
-                list(change['only']),
-            ])
-        text = json.dumps(parts)
+        text = json.dumps(v9_parts(pin=pin))
     except (KeyError, TypeError, ValueError):
         return None
     return hashlib.sha1(text.encode()).hexdigest()[:12]
+
+
+def v9_parts(*, pin: dict[str, Any]) -> list[object]:
+    """
+    List what a schema 9 pin's ref was worked out from.
+
+    Parameters
+    ----------
+    pin : dict[str, Any]
+        A stored schema 9 pin.
+
+    Returns
+    -------
+    list[object]
+        The From and To stop IDs, kind, routes and only list, then the
+        change's stops, allow and only list when it has one.
+
+    Raises
+    ------
+    KeyError
+        When a part is missing.
+    TypeError
+        When a part has the wrong shape.
+    """
+    destination = pin.get('destination')
+    change = pin.get('change')
+    parts: list[object] = [
+        pin['origin']['stop_id'],
+        None if destination is None else destination['stop_id'],
+        pin.get('kind'),
+        list(pin['routes']),
+        list(pin['only']),
+    ]
+    if change is not None:
+        parts.append([
+            change['alight']['stop_id'],
+            change['board']['stop_id'],
+            change['allow'],
+            list(change['only']),
+        ])
+    return parts
 
 
 def with_ways(*, pin: object) -> object:
@@ -393,14 +417,37 @@ def placed(
         new, dict,
     ) else None
     index, first_old = kept.get(ref or '', (-1, old))
-    first = found[index] if index >= 0 else None
-    if isinstance(first, dict) and isinstance(new, dict) and first_old != old:
-        found[index] = merged(first=first, later=new)
+    if first_old != old and merged_at(found=found, index=index, pin=new):
         return index
     if ref is not None:
         kept.setdefault(ref, (len(found), old))
     found.append(new)
     return len(found) - 1
+
+
+def merged_at(*, found: list[object], index: int, pin: object) -> bool:
+    """
+    Merge a rewritten pin into the one at a position, when both are pins.
+
+    Parameters
+    ----------
+    found : list[object]
+        The pins so far; changed in place.
+    index : int
+        The position; negative for none.
+    pin : object
+        The rewritten pin.
+
+    Returns
+    -------
+    bool
+        Whether it was merged.
+    """
+    first = found[index] if index >= 0 else None
+    if not isinstance(first, dict) or not isinstance(pin, dict):
+        return False
+    found[index] = merged(first=first, later=pin)
+    return True
 
 
 def unique_pins(*, pins: list[object]) -> tuple[list[object], list[int]]:
@@ -519,6 +566,33 @@ MIGRATIONS: Final[
 }
 
 
+def stored_version(*, data: dict[str, object]) -> int:
+    """
+    Read the stored schema version.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        The decoded file.
+
+    Returns
+    -------
+    int
+        The version.
+
+    Raises
+    ------
+    ValueError
+        When it is missing, not a whole number or above `SCHEMA_VERSION`.
+    """
+    version = data.get('schema_version')
+    if not isinstance(version, int) or isinstance(version, bool):
+        raise ValueError(f'bad schema version {version!r}')
+    if version > SCHEMA_VERSION:
+        raise ValueError(f'schema version {version} is from the future')
+    return version
+
+
 def migrate(*, data: dict[str, object]) -> dict[str, object]:
     """
     Bring stored data up to the current schema version.
@@ -539,11 +613,7 @@ def migrate(*, data: dict[str, object]) -> dict[str, object]:
         When the version is missing, above `SCHEMA_VERSION`, or has no
         migration step.
     """
-    version = data.get('schema_version')
-    if not isinstance(version, int) or isinstance(version, bool):
-        raise ValueError(f'bad schema version {version!r}')
-    if version > SCHEMA_VERSION:
-        raise ValueError(f'schema version {version} is from the future')
+    version = stored_version(data=data)
     while version < SCHEMA_VERSION:
         if version not in MIGRATIONS:
             raise ValueError(f'no migration from version {version}')

@@ -81,15 +81,34 @@ def road_style(*, layer: str, mpp: int) -> tuple[int, int]:
     if mpp not in ZOOMS:
         raise ValueError(f'unsupported zoom: {mpp} m/px')
     width = ROAD_WIDTHS[layer][ZOOMS.index(mpp)]
+    return width, road_grey(layer=layer, mpp=mpp)
+
+
+def road_grey(*, layer: str, mpp: int) -> int:
+    """
+    Give the grey of a road class at a zoom.
+
+    Parameters
+    ----------
+    layer : str
+        Road layer name.
+    mpp : int
+        Metres per pixel, one of the zoom steps.
+
+    Returns
+    -------
+    int
+        Grey level: at the city zoom, dark for trunk roads and
+        motorways and light for the rest; minor roads light from 14
+        m/px; tertiary roads dark from 14 m/px; otherwise ink.
+    """
     if mpp == CITY:
-        grey = DARK if layer in ('road_trunk', 'road_motorway') else LIGHT
-    elif layer == 'road_minor':
-        grey = LIGHT if mpp >= 14 else DARK
-    elif layer == 'road_tertiary' and mpp >= 14:
-        grey = DARK
-    else:
-        grey = INK
-    return width, grey
+        return DARK if layer in ('road_trunk', 'road_motorway') else LIGHT
+    if layer == 'road_minor':
+        return LIGHT if mpp >= 14 else DARK
+    if layer == 'road_tertiary' and mpp >= 14:
+        return DARK
+    return INK
 
 
 def transit_style(*, layer: str, mpp: int) -> list[Stroke]:

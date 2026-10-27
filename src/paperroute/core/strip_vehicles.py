@@ -185,6 +185,29 @@ def current_leg(
     seconds = service_seconds(
         day=departure.service_day, moment=timetable_moment(now=now),
     )
+    return timetable_leg(legs=legs, seconds=seconds)
+
+
+def timetable_leg(
+    *, legs: Sequence[Leg], seconds: int,
+) -> tuple[Leg, tuple[int, float]] | None:
+    """
+    Find the leg and hop the timetable puts a vehicle on.
+
+    Parameters
+    ----------
+    legs : Sequence[Leg]
+        The departure's legs, at least one.
+    seconds : int
+        Service-day seconds now.
+
+    Returns
+    -------
+    tuple[Leg, tuple[int, float]] | None
+        The own leg's hop until its last arrival; after it, the next
+        leg's hop, or (0, 0.0) while that leg hasn't left its first
+        stop. None with no hop.
+    """
     own = legs[0]
     stops = own.pattern.stops
     if len(legs) == 1 or not stops or seconds <= stops[-1].arrives:

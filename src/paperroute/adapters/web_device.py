@@ -397,8 +397,13 @@ class DevicePages:
         asked = join_request(fields=fields, networks=device.setup.networks)
         if isinstance(asked, str):
             return self._refuse(reason=asked)
-        key = fields.get('api_key', '').strip()
-        refusal = self._store_key(key=key if device.key_set is False else '')
+        refusal = self._store_key(
+            key=(
+                fields.get('api_key', '').strip()
+                if device.key_set is False
+                else ''
+            ),
+        )
         if refusal is not None:
             return refusal
         self._post(JoinAsked(request=asked))
@@ -598,7 +603,27 @@ class DevicePages:
             303 to the page saying it was saved.
         """
         fields = await form_fields(request=request)
-        key = fields.get('api_key', '').strip()
+        refusal = self._key_refusal(key=fields.get('api_key', '').strip())
+        if refusal is not None:
+            return refusal
+        self._post(ApiKeyChanged(present=True))
+        raise web.HTTPSeeOther(location='/device?key=saved')
+
+    def _key_refusal(self, *, key: str) -> web.Response | None:
+        """
+        Save a key in place of any old one.
+
+        Parameters
+        ----------
+        key : str
+            The key, trimmed.
+
+        Returns
+        -------
+        web.Response | None
+            The device page with why it was refused: 400 for a bad key,
+            500 when it can't be saved; None once saved.
+        """
         try:
             if not key:
                 raise ValueError('no key given')
@@ -614,8 +639,7 @@ class DevicePages:
                 news=notice(text=KEY_NOT_SAVED, alert=True),
                 status=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
-        self._post(ApiKeyChanged(present=True))
-        raise web.HTTPSeeOther(location='/device?key=saved')
+        return None
 
     async def _download(self, request: web.Request) -> web.StreamResponse:
         """

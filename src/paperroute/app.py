@@ -93,15 +93,33 @@ async def ticker(
     elapsed = every
     while True:
         if elapsed >= every:
-            seen = await watch.check()
-            if seen is not None:
-                await queue.put(seen)
-            await queue.put(Tick(now=ports.clock.now()))
+            await tick(watch=watch, ports=ports, queue=queue)
             elapsed = 0.0
         if pump:
             pump()
         await asyncio.sleep(TICK_PAUSE)
         elapsed += TICK_PAUSE
+
+
+async def tick(
+    *, watch: VersionWatch, ports: Ports, queue: asyncio.Queue[Event],
+) -> None:
+    """
+    Post any timetable change, then a tick.
+
+    Parameters
+    ----------
+    watch : VersionWatch
+        Notes the timetable version.
+    ports : Ports
+        Adapters.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    """
+    seen = await watch.check()
+    if seen is not None:
+        await queue.put(seen)
+    await queue.put(Tick(now=ports.clock.now()))
 
 
 def starting_state(*, ports: Ports, seed: Pin | None = None) -> State:
@@ -173,17 +191,11 @@ async def handle(
     """
     if isinstance(event, Tick):
         ports.observer.ticked()
-    before = state.settings
-    places = state.places
+    before = state
     state, effects = step(state, event)
     outputs.pending.turned = state.settings.rotate
-    if state.settings != before:
-        ports.observer.settings_seen(settings=state.settings)
-    report_pins(
-        observer=ports.observer, before=places, state=state, event=event,
-    )
-    report_status(
-        observer=ports.observer, state=state, reported=outputs.reported,
+    report_step(
+        ports=ports, before=before, state=state, event=event, outputs=outputs,
     )
     await carry_out(
         effects=effects,
@@ -197,7 +209,79 @@ async def handle(
     return state
 
 
-async def run(
+def report_step(
+    *, ports: Ports, before: State, state: State, event: Event,
+    outputs: Outputs,
+) -> None:
+    """
+    Tell the observers what one event changed.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters.
+    before : State
+        State before the event.
+    state : State
+        State after it.
+    event : Event
+        The event.
+    outputs : Outputs
+        Holds the status last reported.
+    """
+    if state.settings != before.settings:
+        ports.observer.settings_seen(settings=state.settings)
+    report_pins(
+        observer=ports.observer,
+        before=before.places,
+        state=state,
+        event=event,
+    )
+    report_status(
+        observer=ports.observer, state=state, reported=outputs.reported,
+    )
+
+
+async def opened(
+    *,
+    ports: Ports,
+    seed: Pin | None,
+    queue: asyncio.Queue[Event],
+    outputs: Outputs,
+) -> State:
+    """
+    Make the starting state, report it and post the key's state.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters.
+    seed : Pin | None
+        Pin to start with when there is no saved state.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    outputs : Outputs
+        Holds the status last reported.
+
+    Returns
+    -------
+    State
+        The starting state.
+    """
+    state = starting_state(ports=ports, seed=seed)
+    ports.observer.settings_seen(settings=state.settings)
+    pins_shown(observer=ports.observer, places=state.places)
+    report_status(
+        observer=ports.observer, state=state, reported=outputs.reported,
+    )
+    await leftover_stopped(ports=ports.device)
+    known = key_known(ports=ports.device)
+    if known is not None:
+        queue.put_nowait(known)
+    return state
+
+
+async def run(  # pylint: disable=too-many-statements
     *,
     ports: Ports,
     seed: Pin | None = None,
@@ -243,44 +327,112 @@ async def run(
     queue: asyncio.Queue[Event] = asyncio.Queue()
     if post_hook:
         post_hook(queue.put_nowait)
-    state = starting_state(ports=ports, seed=seed)
-    ports.observer.settings_seen(settings=state.settings)
-    pins_shown(observer=ports.observer, places=state.places)
     outputs = Outputs(
         maps=MapRenderer(tiles=ports.tiles, variant=tiles_variant),
         saver=StateSaver(states=ports.states),
     )
-    report_status(
-        observer=ports.observer, state=state, reported=outputs.reported,
+    state = await opened(
+        ports=ports, seed=seed, queue=queue, outputs=outputs,
     )
-    await leftover_stopped(ports=ports.device)
-    known = key_known(ports=ports.device)
-    if known is not None:
-        queue.put_nowait(known)
     tasks: set[asyncio.Task[None]] = set()
-    clock = asyncio.create_task(
-        ticker(ports=ports, queue=queue, every=tick_every, pump=pump)
+    clock = started_ticker(
+        ports=ports, queue=queue, every=tick_every, pump=pump,
     )
-    clock.add_done_callback(
-        functools.partial(ticker_finished, queue=queue)
-    )
-    handled = 0
     try:
-        while state.running and (max_events is None or handled < max_events):
-            state = await handle(
-                state=state,
-                event=await queue.get(),
-                ports=ports,
-                queue=queue,
-                tasks=tasks,
-                outputs=outputs,
-            )
-            handled += 1
-        await draw_pending(ports=ports, outputs=outputs)
+        state = await handled(
+            state=state,
+            ports=ports,
+            queue=queue,
+            tasks=tasks,
+            outputs=outputs,
+            max_events=max_events,
+        )
     finally:
         await stop(tasks={clock, *tasks})
         await ports.builder.stop()
         await leftover_stopped(ports=ports.device)
+    return state
+
+
+def started_ticker(
+    *,
+    ports: Ports,
+    queue: asyncio.Queue[Event],
+    every: float,
+    pump: Callable[[], None] | None,
+) -> asyncio.Task[None]:
+    """
+    Start the ticker; if it crashes, the app is asked to quit.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    every : float
+        Seconds between ticks.
+    pump : Callable[[], None] | None
+        Window event pump.
+
+    Returns
+    -------
+    asyncio.Task[None]
+        The ticker's task.
+    """
+    clock = asyncio.create_task(
+        ticker(ports=ports, queue=queue, every=every, pump=pump)
+    )
+    clock.add_done_callback(
+        functools.partial(ticker_finished, queue=queue)
+    )
+    return clock
+
+
+async def handled(
+    *,
+    state: State,
+    ports: Ports,
+    queue: asyncio.Queue[Event],
+    tasks: set[asyncio.Task[None]],
+    outputs: Outputs,
+    max_events: int | None,
+) -> State:
+    """
+    Handle events until quit or `max_events`, then draw what is pending.
+
+    Parameters
+    ----------
+    state : State
+        Starting state.
+    ports : Ports
+        Adapters.
+    queue : asyncio.Queue[Event]
+        Event queue.
+    tasks : set[asyncio.Task[None]]
+        Background tasks kept alive until done.
+    outputs : Outputs
+        What effects draw and write through.
+    max_events : int | None
+        Stop after this many events (tests).
+
+    Returns
+    -------
+    State
+        Final state.
+    """
+    count = 0
+    while state.running and (max_events is None or count < max_events):
+        state = await handle(
+            state=state,
+            event=await queue.get(),
+            ports=ports,
+            queue=queue,
+            tasks=tasks,
+            outputs=outputs,
+        )
+        count += 1
+    await draw_pending(ports=ports, outputs=outputs)
     return state
 
 

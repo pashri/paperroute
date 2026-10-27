@@ -6,9 +6,9 @@ import os
 import shutil
 import sys
 import zipfile
-from collections.abc import Collection
+from collections.abc import Collection, Iterable
 from pathlib import Path
-from typing import Final
+from typing import Final, TextIO
 
 from google.transit import gtfs_realtime_pb2
 
@@ -102,40 +102,98 @@ def write_slice(*, source: Path, out: Path, trips: set[str]) -> None:
     trips : set[str]
         Trips to keep.
     """
-    trip_rows = [t for t in read_rows(archive=source, member='trips.txt')
-                 if t['trip_id'] in trips]
-    times = [s for s in read_rows(archive=source, member='stop_times.txt')
-             if s['trip_id'] in trips]
-    stop_ids = {s['stop_id'] for s in times}
-    stops = [s for s in read_rows(archive=source, member='stops.txt')
-             if s['stop_id'] in stop_ids]
-    stop_ids |= {s['parent_station'] for s in stops
-                 if s.get('parent_station')}
-    services = {t['service_id'] for t in trip_rows}
-    route_ids = {t['route_id'] for t in trip_rows}
-    tables = {
-        'stops.txt': [s for s in read_rows(archive=source,
-                                           member='stops.txt')
-                      if s['stop_id'] in stop_ids],
-        'routes.txt': [r for r in read_rows(archive=source,
-                                            member='routes.txt')
-                       if r['route_id'] in route_ids],
-        'calendar.txt': [c for c in read_rows(archive=source,
-                                              member='calendar.txt')
-                         if c['service_id'] in services],
-        'calendar_dates.txt': [
-            c for c in read_rows(archive=source,
-                                 member='calendar_dates.txt')
-            if c['service_id'] in services],
-        'trips.txt': trip_rows, 'stop_times.txt': times}
+    tables = slice_tables(source=source, trips=trips)
     with zipfile.ZipFile(out, 'w', zipfile.ZIP_DEFLATED) as archive:
         for name, table in tables.items():
             if table:
-                buffer = io.StringIO()
-                writer = csv.DictWriter(buffer, fieldnames=list(table[0]))
-                writer.writeheader()
-                writer.writerows(table)
-                archive.writestr(name, buffer.getvalue())
+                archive.writestr(name, csv_text(table=table))
+
+
+def rows_where(*, archive: Path, member: str, key: str,
+               keep: Collection[str]) -> list[dict[str, str]]:
+    """
+    Read the rows of a member whose column is in a set.
+
+    Parameters
+    ----------
+    archive : Path
+        GTFS zip.
+    member : str
+        File inside the zip.
+    key : str
+        Column compared.
+    keep : Collection[str]
+        Values kept.
+
+    Returns
+    -------
+    list[dict[str, str]]
+        The rows kept, in order.
+    """
+    return [row for row in read_rows(archive=archive, member=member)
+            if row[key] in keep]
+
+
+def slice_tables(*, source: Path,
+                 trips: set[str]) -> dict[str, list[dict[str, str]]]:
+    """
+    Pick the rows of each table linked to the given trips.
+
+    Parameters
+    ----------
+    source : Path
+        Source zip.
+    trips : set[str]
+        Trips to keep.
+
+    Returns
+    -------
+    dict[str, list[dict[str, str]]]
+        Rows by member name; stops include their parent stations.
+    """
+    trip_rows = rows_where(archive=source, member='trips.txt',
+                           key='trip_id', keep=trips)
+    times = rows_where(archive=source, member='stop_times.txt',
+                       key='trip_id', keep=trips)
+    stop_ids = {s['stop_id'] for s in times}
+    stop_ids |= {s['parent_station']
+                 for s in rows_where(archive=source, member='stops.txt',
+                                     key='stop_id', keep=stop_ids)
+                 if s.get('parent_station')}
+    services = {t['service_id'] for t in trip_rows}
+    return {
+        'stops.txt': rows_where(archive=source, member='stops.txt',
+                                key='stop_id', keep=stop_ids),
+        'routes.txt': rows_where(
+            archive=source, member='routes.txt', key='route_id',
+            keep={t['route_id'] for t in trip_rows}),
+        'calendar.txt': rows_where(archive=source, member='calendar.txt',
+                                   key='service_id', keep=services),
+        'calendar_dates.txt': rows_where(
+            archive=source, member='calendar_dates.txt', key='service_id',
+            keep=services),
+        'trips.txt': trip_rows, 'stop_times.txt': times}
+
+
+def csv_text(*, table: list[dict[str, str]]) -> str:
+    """
+    Write rows as CSV with a header from the first row.
+
+    Parameters
+    ----------
+    table : list[dict[str, str]]
+        Rows; at least one.
+
+    Returns
+    -------
+    str
+        The CSV text.
+    """
+    buffer = io.StringIO()
+    writer = csv.DictWriter(buffer, fieldnames=list(table[0]))
+    writer.writeheader()
+    writer.writerows(table)
+    return buffer.getvalue()
 
 
 def write_feed_slice(*, source: Path, out: Path, trips: set[str]) -> None:
@@ -215,23 +273,43 @@ def append_shapes(*, source: Path, target: Path, wanted: set[str]) -> int:
     ValueError
         When the source holds none of the wanted shapes.
     """
-    count = 0
-    writer: csv.DictWriter[str] | None = None
+    rows = (row for row in read_rows(archive=source, member='shapes.txt')
+            if row['shape_id'] in wanted)
     with zipfile.ZipFile(target, 'a', zipfile.ZIP_DEFLATED) as archive:
         with archive.open('shapes.txt', 'w') as raw:
             text = io.TextIOWrapper(raw, encoding='utf-8', newline='')
-            for row in read_rows(archive=source, member='shapes.txt'):
-                if row['shape_id'] not in wanted:
-                    continue
-                if writer is None:
-                    writer = csv.DictWriter(text, fieldnames=list(row))
-                    writer.writeheader()
-                writer.writerow(row)
-                count += 1
+            count = write_rows(text=text, rows=rows)
             text.flush()
             text.detach()
     if not count:
         raise ValueError(f'{source.name} holds none of the shapes')
+    return count
+
+
+def write_rows(*, text: TextIO, rows: Iterable[dict[str, str]]) -> int:
+    """
+    Write rows as CSV, with a header from the first row.
+
+    Parameters
+    ----------
+    text : TextIO
+        Where to write.
+    rows : Iterable[dict[str, str]]
+        Rows.
+
+    Returns
+    -------
+    int
+        Rows written; nothing, not even a header, for no rows.
+    """
+    count = 0
+    writer: csv.DictWriter[str] | None = None
+    for row in rows:
+        if writer is None:
+            writer = csv.DictWriter(text, fieldnames=list(row))
+            writer.writeheader()
+        writer.writerow(row)
+        count += 1
     return count
 
 
@@ -263,12 +341,7 @@ def add_shapes(*, source: Path, fixture: Path,
         When the fixture already has a shapes.txt, its trips name no
         shapes, or the source holds none of them.
     """
-    with zipfile.ZipFile(fixture) as archive:
-        if 'shapes.txt' in archive.namelist():
-            raise ValueError(f'{fixture.name} already has shapes.txt')
-    wanted = named_shapes(fixture=fixture)
-    if shape_ids is not None:
-        wanted &= set(shape_ids)
+    wanted = wanted_shapes(fixture=fixture, shape_ids=shape_ids)
     staged = fixture.with_name(f'{fixture.name}.new')
     shutil.copyfile(fixture, staged)
     try:
@@ -277,6 +350,38 @@ def add_shapes(*, source: Path, fixture: Path,
     finally:
         staged.unlink(missing_ok=True)
     return count
+
+
+def wanted_shapes(*, fixture: Path,
+                  shape_ids: Collection[str] | None) -> set[str]:
+    """
+    List the shapes to add to a fixture that has none yet.
+
+    Parameters
+    ----------
+    fixture : Path
+        Slice zip.
+    shape_ids : Collection[str] | None
+        When given, only these of the named shapes are wanted.
+
+    Returns
+    -------
+    set[str]
+        Shape IDs.
+
+    Raises
+    ------
+    ValueError
+        When the fixture already has a shapes.txt or its trips name no
+        shapes.
+    """
+    with zipfile.ZipFile(fixture) as archive:
+        if 'shapes.txt' in archive.namelist():
+            raise ValueError(f'{fixture.name} already has shapes.txt')
+    wanted = named_shapes(fixture=fixture)
+    if shape_ids is not None:
+        wanted &= set(shape_ids)
+    return wanted
 
 
 def sample_shapes(*, archive: Path) -> set[str]:
@@ -295,23 +400,21 @@ def sample_shapes(*, archive: Path) -> set[str]:
     """
     routes = {r['route_id']: (r['route_short_name'], r.get('agency_id', ''))
               for r in read_rows(archive=archive, member='routes.txt')}
-    kept: set[str] = set()
+    shaped = [(routes[t['route_id']], t['shape_id'])
+              for t in read_rows(archive=archive, member='trips.txt')
+              if t.get('shape_id')]
+    kept = {shape for (name, _), shape in shaped if name in BUS_ROUTES}
     first: dict[str, str] = {}
-    for trip in read_rows(archive=archive, member='trips.txt'):
-        name, agency = routes[trip['route_id']]
-        shape = trip.get('shape_id', '')
-        if not shape:
-            continue
-        if name in BUS_ROUTES:
-            kept.add(shape)
-            continue
-        key = RAIL_ROUTE if name == RAIL_ROUTE else agency
-        if name == RAIL_ROUTE or agency == REGIONAL_AGENCY:
+    for (name, agency), shape in shaped:
+        if name == RAIL_ROUTE or (
+            agency == REGIONAL_AGENCY and name not in BUS_ROUTES
+        ):
+            key = RAIL_ROUTE if name == RAIL_ROUTE else agency
             first[key] = min(shape, first.get(key, shape))
     return kept | set(first.values())
 
 
-def main() -> None:
+def main() -> None:  # pylint: disable=too-many-statements
     """Slice data/raw and data/rt (argv[1] repo root) into the fixtures."""
     root = Path(sys.argv[1])
     out = root / 'tests' / 'fixtures' / 'real'

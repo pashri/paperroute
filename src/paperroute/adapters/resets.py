@@ -147,6 +147,10 @@ class FileResets:
             self.key.clear()
         except OSError:
             logger.exception('reset could not clear the key')
+        await self.forget_networks()
+
+    async def forget_networks(self) -> None:
+        """Forget every saved Wi-Fi network, logging a failure."""
         try:
             await self.wifi.forget_all()
         except Exception:  # pylint: disable=broad-exception-caught

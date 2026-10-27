@@ -395,7 +395,6 @@ type PinKey = tuple[
     RouteKind | None,
     tuple[str, ...],
     tuple[str, ...],
-    tuple[str, ...],
 ]
 
 
@@ -411,10 +410,10 @@ def pin_key(*, pin: Pin) -> PinKey:
     Returns
     -------
     PinKey
-        From stop ID, Destination stop ID or None, kind, routes, route
-        filter and the sorted never list. A pin with a Destination has
-        no routes or route filter in its identity. Ways are not part of
-        it.
+        From stop ID, Destination stop ID or None, kind, routes and
+        route filter. A pin with a Destination has no routes or route
+        filter in its identity. Ways and the never list are not part of
+        it, so editing them keeps the pin's ref.
     """
     destination = pin.destination
     open_ended = destination is None
@@ -424,7 +423,6 @@ def pin_key(*, pin: Pin) -> PinKey:
         pin.kind,
         pin.routes if open_ended else (),
         pin.only if open_ended else (),
-        tuple(sorted(pin.never)),
     )
 
 
@@ -442,15 +440,12 @@ def pin_ref(*, pin: Pin) -> str:
     str
         Twelve lowercase hex digits taken from the pin's identity, so
         two pins that are the same place share a ref. A pin without a
-        Destination and without a never list hashes as it did before
-        ways existed.
+        Destination hashes as it did before ways existed.
     """
-    origin, destination, kind, routes, only, never = pin_key(pin=pin)
+    origin, destination, kind, routes, only = pin_key(pin=pin)
     parts: list[object] = [
         origin, destination, kind, list(routes), list(only),
     ]
-    if never:
-        parts.append(list(never))
     text = json.dumps(parts)
     return hashlib.sha1(text.encode()).hexdigest()[:12]
 

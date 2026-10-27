@@ -157,7 +157,6 @@ def test_same_place_ignores_names_and_points() -> None:
     pin_of('A', 'C'),
     pin_of('C', 'B'),
     Pin(origin=place('A'), destination=place('B'), kind=RouteKind.BUS),
-    Pin(origin=place('A'), destination=place('B'), never=('606',)),
 ])
 def test_same_place_tells_pins_apart(other: Pin) -> None:
     """A different stop, kind or route list is a different pin."""
@@ -257,16 +256,15 @@ def test_identity_ignores_ways() -> None:
     assert pin_ref(pin=WORK) == pin_ref(pin=plain)
 
 
-def test_never_in_identity() -> None:
-    """The never list makes a different pin, whatever its order."""
+def test_never_not_in_identity() -> None:
+    """The never list, like the ways, leaves the pin and its ref the same."""
     base = Pin(origin=place('A'), destination=place('B'))
     never = replace(base, never=('2', '1'))
-    assert not same_place(first=base, second=never)
-    assert same_place(first=never, second=replace(base, never=('1', '2')))
-    assert pin_ref(pin=base) != pin_ref(pin=never)
+    assert same_place(first=base, second=never)
+    assert pin_ref(pin=base) == pin_ref(pin=never)
     open_ended = Pin(origin=TOWN_HALL, kind=RouteKind.TRAIN, routes=('T1',))
     assert pin_ref(pin=open_ended) == pin_ref(
-        pin=replace(open_ended, never=()),
+        pin=replace(open_ended, never=('T2',)),
     )
 
 

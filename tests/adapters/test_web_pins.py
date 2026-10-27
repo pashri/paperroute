@@ -909,13 +909,13 @@ async def test_plain_search_unchanged(editor: Client) -> None:
 
 
 async def test_connection_row_edit_link(pins: Pins) -> None:
-    """A connection pin's row edits it in the connection editor."""
+    """A connection pin's row edits it on the ways page."""
     pins.seen = PinsSeen(pins=(CONNECTION, HOME), shown=0, revision=3)
     client = await _client(pins=pins)
     text = await (await client.get('/pins')).text()
     await client.close()
     ref = pin_ref(pin=CONNECTION)
-    assert f'href="/pins/connect?ref={ref}"' in text
+    assert f'href="/pins/ways?ref={ref}"' in text
     line = pin_line(pin=CONNECTION)
     assert line == (
         'Hollis St Opp Constitution Hill Library → Westmead Station'

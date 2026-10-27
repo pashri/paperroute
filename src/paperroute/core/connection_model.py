@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import Change, Pin, StopPlace, Way, ticked_ways
+from paperroute.core.model import Pin, StopPlace, Way
 
 LEG_EXTRA: Final[timedelta] = timedelta(hours=2)
 WALK_STEP: Final[int] = 10  # metres the walk is rounded up to
@@ -56,44 +56,6 @@ def direct_leg(*, pin: Pin) -> Pin:
         From to the Destination, of any kind and route.
     """
     return Pin(origin=pin.origin, destination=pin.destination, kind=None)
-
-
-def stopgap_way(*, pin: Pin) -> Way | None:
-    """
-    Pick the single-change way the one-way code still works with.
-
-    Parameters
-    ----------
-    pin : Pin
-        Pin.
-
-    Returns
-    -------
-    Way | None
-        The first ticked way, or None when the pin has none.
-    """
-    ways = ticked_ways(pin=pin)
-    return ways[0] if ways else None
-
-
-def first_change(*, pin: Pin) -> Change | None:
-    """
-    Pick the change the one-change code still works with.
-
-    Parameters
-    ----------
-    pin : Pin
-        Pin.
-
-    Returns
-    -------
-    Change | None
-        The first change of the first ticked way, or None.
-    """
-    way = stopgap_way(pin=pin)
-    if way is None or not way.changes:
-        return None
-    return way.changes[0]
 
 
 def walk_metres(*, alight: StopPlace, board: StopPlace) -> int:

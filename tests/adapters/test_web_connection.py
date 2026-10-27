@@ -1,21 +1,21 @@
-"""Tests for the connection editor page."""
+"""Tests for the hand way editor page."""
 
 import re
 from collections.abc import AsyncIterator
 from http import HTTPStatus
 from typing import Final
+from urllib.parse import parse_qsl, urlencode, urlsplit
 
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.connection_editor import ALLOW_RANGE
-from paperroute.adapters.pin_windows import NO_DAY
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.core.messages import PinSaved
+from paperroute.adapters.web_pin_edit import MISFIT
 from paperroute.core.model import pin_ref
 from paperroute.observers import PinsSeen
-from tests.adapters.test_connection_editor import OPTIONS, WORK_FOUR
+from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_device import Device
 from tests.adapters.test_web_pins import Pins
 from tests.core.connection_factories import WORK
@@ -25,8 +25,11 @@ Client = TestClient[web.Request, web.Application]
 FULL: Final[list[tuple[str, str]]] = [
     ('stop', 'G2145615'), ('kind', 'bus'), ('route', '606'),
     ('off', 'G215254'), ('on', '2145648'), ('allow', '4'),
-    ('allow_for', '2145648'), ('to', '214510'), ('nickname', 'Work'),
-    ('wn', '0'),
+    ('allow_for', '2145648'), ('to', '214510'),
+]
+TWO: Final[list[tuple[str, str]]] = [
+    *FULL[:7], ('changes', '2'), ('off2', '214510'), ('on2', '2145648'),
+    ('allow2', '3'), ('allow2_for', '2145648'), ('to', '214510'),
 ]
 
 
@@ -72,172 +75,153 @@ def unlabelled(*, text: str) -> list[str]:
         if 'type="hidden"' in tag:
             continue
         ident = re.search(r'id="([^"]+)"', tag)
-        held = f'<label>{tag}' in text
+        held = f'<label>{tag}' in text or re.search(
+            r'<label[^>]*>' + re.escape(tag), text,
+        )
         if (ident is None or ident[1] not in labels) and not held:
             found.append(tag)
     return found
 
 
-async def test_page_without_js(client: Client) -> None:
-    """Each step is a GET form showing the next choices, all labelled."""
-    response = await client.get(
-        '/pins/connect?stop=G2145615&route=606&off=G215254',
-    )
-    text = await response.text()
-    assert response.status == HTTPStatus.OK
-    assert '<form class="editor" method="get" action="/pins/connect">' in (
-        text
-    )
-    assert '<label for="pin-on">Get on at</label>' in text
+def query(fields: list[tuple[str, str]]) -> str:
+    """
+    Write fields as a query string.
+
+    Parameters
+    ----------
+    fields : list[tuple[str, str]]
+        Fields.
+
+    Returns
+    -------
+    str
+        The query.
+    """
+    return urlencode(fields)
+
+
+async def test_works_without_js(client: Client) -> None:
+    """Every step is reachable by a plain GET, all controls labelled."""
+    text = await (await client.get('/pins/connect?stop=G2145615')).text()
+    assert '<label for="pin-off">Get off at</label>' in text
+    assert '<legend>Change</legend>' not in text
+    text = await (await client.get(f'/pins/connect?{query(FULL[:5])}')).text()
     assert 'Constitution Hill, North West Twy · 150 m' in text
-    assert 'Stops within 500 m of where you get off, nearest first.' in text
-    assert '<legend>Leg 1</legend>' in text
-    assert '<legend>Change</legend>' in text
-    assert 'Save connection' not in text
-    assert '<title>Add a connection - paperroute</title>' in text
+    text = await (await client.get(f'/pins/connect?{query(FULL)}')).text()
+    assert 'Worked out from the 150 m walk.' in text
+    assert '<label for="pin-to">To</label>' in text
+    assert 'name="more" value="1"' in text
+    assert 'formaction="/pins/connect/save"' in text
+    more = await (
+        await client.get(f'/pins/connect?{query([*FULL, ("more", "1")])}')
+    ).text()
+    assert 'name="changes" value="2"' in more
+    assert '<label for="pin-off2">Get off at</label>' in more
+    assert 'name="more" value="1"' not in more
+    text = await (await client.get(f'/pins/connect?{query(TWO)}')).text()
+    assert '<legend>Change 2</legend>' in text
+    assert '<label for="pin-allow2">Allow (minutes)</label>' in text
+    assert '<legend>Leg 3</legend>' in text
     assert unlabelled(text=text) == []
     assert '<script>' not in text
 
 
-async def test_later_steps_offered(client: Client) -> None:
-    """Choosing where to get on offers the allowance, the To and routes."""
-    query = '&'.join(f'{name}={value}' for name, value in FULL[:7])
-    text = await (await client.get(f'/pins/connect?{query}')).text()
-    assert 'Worked out from the 150 m walk.' in text
-    assert '<label for="pin-allow">Allow (minutes)</label>' in text
-    assert '<legend>Leg 2</legend>' in text
-    assert '<label for="pin-to">To</label>' in text
-    assert unlabelled(text=text) == []
-    full = '&'.join(f'{name}={value}' for name, value in FULL)
-    text = await (await client.get(f'/pins/connect?{full}')).text()
-    assert 'Any route that gets there: 660, 665.' in text
-    assert 'name="only2" value="665"' in text
-    assert 'formaction="/pins/connect/save"' in text
-    assert unlabelled(text=text) == []
+async def test_part_steps_returns_fieldset(client: Client) -> None:
+    """`part=steps` answers with only the steps fieldset."""
+    response = await client.get(
+        f'/pins/connect?{query([*FULL, ("part", "steps")])}',
+    )
+    text = await response.text()
+    assert response.status == HTTPStatus.OK
+    assert text.strip().startswith('<fieldset class="steps">')
+    assert text.strip().endswith('</fieldset>')
+    assert '<html' not in text
 
 
-async def test_save_posts_connection(pins: Pins, client: Client) -> None:
-    """A full save posts the connection and returns to the list."""
-    pins.seen = PinsSeen(pins=(), shown=None, revision=3)
+async def test_third_change_refused(client: Client) -> None:
+    """Asking for a third change is refused."""
+    response = await client.get(
+        f'/pins/connect?{query([*TWO, ("more", "1")])}',
+    )
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert MISFIT in await response.text()
+
+
+async def test_hand_way_two_changes(pins: Pins, client: Client) -> None:
+    """Adding a two-change way goes back to the ways page with it."""
+    back = urlencode([('ref', pin_ref(pin=WORK)), ('from', 'G2145615'),
+                      ('to', '214510'), ('ways', 'G215254,2145648,7'),
+                      ('way', '0'), ('never', '660')])
+    response = await client.post(
+        '/pins/connect/save', data=[*TWO, ('back', back)],
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    location = urlsplit(response.headers['Location'])
+    assert location.path == '/pins/ways'
+    fields = parse_qsl(location.query)
+    assert ('ways', 'G215254,2145648,7') in fields
+    assert ('ways', 'G215254,2145648,4|214510,2145648,3') in fields
+    assert ('way', '0') in fields and ('way', '1') in fields
+    assert ('never', '660') in fields
+    assert ('ref', pin_ref(pin=WORK)) in fields
+    assert pins.posted == []
+
+
+async def test_new_way_starts_ways_page(client: Client) -> None:
+    """Without a ways page to go back to, it starts one for a new pin."""
     response = await client.post(
         '/pins/connect/save', data=FULL, allow_redirects=False,
     )
-    assert response.status == HTTPStatus.SEE_OTHER
-    assert response.headers['Location'] == '/pins?seen=3&done=saved'
-    assert pins.posted == [PinSaved(ref=None, pin=WORK_FOUR)]
+    location = urlsplit(response.headers['Location'])
+    assert parse_qsl(location.query) == [
+        ('from', 'G2145615'), ('to', '214510'),
+        ('ways', 'G215254,2145648,4'), ('way', '0'),
+    ]
 
 
-async def test_save_refuses_allow(pins: Pins, client: Client) -> None:
+async def test_save_refuses_allow(client: Client) -> None:
     """An allowance of 0 is refused with the fields kept."""
     data = [(name, '0' if name == 'allow' else value) for name, value in FULL]
     response = await client.post('/pins/connect/save', data=data)
     text = await response.text()
     assert response.status == HTTPStatus.BAD_REQUEST
     assert ALLOW_RANGE in text
-    assert 'name="allow"' in text
-    assert 'value="0"' in text
+    assert 'name="allow" value="0"' in text
     assert '<option value="214510" selected>' in text
-    assert pins.posted == []
 
 
-async def test_save_refuses_misfit(pins: Pins, client: Client) -> None:
-    """A To that is not offered is refused."""
+async def test_save_refuses_misfit(client: Client) -> None:
+    """A To that is not offered, or not the ways page's To, is refused."""
     data = [
         (name, 'nowhere' if name == 'to' else value) for name, value in FULL
     ]
     response = await client.post('/pins/connect/save', data=data)
-    text = await response.text()
     assert response.status == HTTPStatus.BAD_REQUEST
-    assert "Those choices don't fit together. Pick again." in text
-    assert pins.posted == []
-
-
-async def test_save_of_duplicate_says_so(client: Client) -> None:
-    """Saving the Work connection again says it exists."""
-    data = [
-        (name, '7' if name == 'allow' else value) for name, value in FULL
-    ]
+    assert MISFIT in await response.text()
+    other = urlencode([('from', 'G2145615'), ('to', '2150')])
     response = await client.post(
-        '/pins/connect/save', data=data, allow_redirects=False,
+        '/pins/connect/save', data=[*FULL, ('back', other)],
     )
-    assert response.headers['Location'] == '/pins?done=duplicate'
-
-
-async def test_edit_existing_connection(client: Client) -> None:
-    """Editing a connection fills every field and offers Delete."""
-    ref = pin_ref(pin=WORK)
-    text = await (await client.get(f'/pins/connect?ref={ref}')).text()
-    assert '<title>Edit connection - paperroute</title>' in text
-    assert f'name="ref" value="{ref}"' in text
-    assert '<option value="G215254" selected>' in text
-    assert '<option value="2145648" selected>' in text
-    assert 'name="allow" value="7"' in text
-    assert '<option value="214510" selected>' in text
-    assert 'value="Work"' in text
-    assert '>Delete</button>' in text
-
-
-async def test_edit_of_gone_ref(client: Client) -> None:
-    """An unknown ref goes back to the list."""
-    response = await client.get(
-        '/pins/connect?ref=nothing', allow_redirects=False,
-    )
-    assert response.status == HTTPStatus.SEE_OTHER
-    assert response.headers['Location'] == '/pins?done=gone'
-
-
-async def test_resave_existing(pins: Pins, client: Client) -> None:
-    """Saving an edited connection posts it under its ref."""
-    ref = pin_ref(pin=WORK)
-    data = [*FULL, ('ref', ref)]
+    assert response.status == HTTPStatus.BAD_REQUEST
     response = await client.post(
-        '/pins/connect/save', data=data, allow_redirects=False,
+        '/pins/connect/save', data=[*TWO, ('more', '1')],
     )
-    assert response.headers['Location'] == '/pins?seen=3&done=saved'
-    assert pins.posted == [PinSaved(ref=ref, pin=WORK_FOUR)]
+    assert response.status == HTTPStatus.BAD_REQUEST
 
 
 async def test_starting_without_timetable(pins: Pins) -> None:
-    """Before the timetable is ready the page says so."""
+    """Before the timetable is ready the page says so; saves go back."""
     display = WebDisplay(device=Device().pages(), pins=pins.get, options=None)
     client = TestClient(TestServer(display.app()))
     await client.start_server()
     text = await (await client.get('/pins/connect?stop=G2145615')).text()
-    await client.close()
-    assert 'Starting up. Reload in a moment.' in text
-
-
-async def test_save_refuses_window(pins: Pins, client: Client) -> None:
-    """A window with no day is refused like on the pin editor."""
-    data = [
-        *(item for item in FULL if item[0] != 'wn'),
-        ('wn', '1'), ('w0_from', '07:00'), ('w0_to', '08:00'),
-    ]
-    response = await client.post('/pins/connect/save', data=data)
-    assert response.status == HTTPStatus.BAD_REQUEST
-    assert NO_DAY in await response.text()
-    assert pins.posted == []
-
-
-async def test_first_step_has_no_change(client: Client) -> None:
-    """Before the stop to get off at, only leg 1 is shown."""
-    text = await (await client.get('/pins/connect?stop=G2145615')).text()
-    assert '<label for="pin-off">Get off at</label>' in text
-    assert '<legend>Change</legend>' not in text
-    assert '<legend>Leg 2</legend>' not in text
-
-
-async def test_save_before_timetable(pins: Pins) -> None:
-    """A save before the timetable is ready goes back to the list."""
-    display = WebDisplay(device=Device().pages(), pins=pins.get, options=None)
-    client = TestClient(TestServer(display.app()))
-    await client.start_server()
     response = await client.post(
         '/pins/connect/save', data=FULL, allow_redirects=False,
     )
     await client.close()
+    assert 'Starting up. Reload in a moment.' in text
     assert response.headers['Location'] == '/pins'
-    assert pins.posted == []
 
 
 async def test_empty_editor_offers_from_search(client: Client) -> None:
@@ -245,8 +229,6 @@ async def test_empty_editor_offers_from_search(client: Client) -> None:
     text = await (await client.get('/pins/connect')).text()
     assert '<form class="search" method="get" action="/pins/new">' in text
     assert '<input type="hidden" name="connect" value="1">' in text
-    assert '<label for="pin-search">Search a stop or station</label>' in text
     assert '<form class="editor"' not in text
-    assert '<title>Add a connection - paperroute</title>' in text
+    assert '<title>Add a way by hand - paperroute</title>' in text
     assert unlabelled(text=text) == []
-    assert '<script>' not in text

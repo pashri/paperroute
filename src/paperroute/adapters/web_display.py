@@ -24,6 +24,7 @@ from paperroute.adapters.settings_form import (
 from paperroute.adapters.web_common import asset, asset_bytes, form_fields
 from paperroute.adapters.web_connection import ConnectionPages
 from paperroute.adapters.web_pins import PinsPages
+from paperroute.adapters.web_ways import WaysPages
 from paperroute.core.messages import (
     POWER_ACTIONS,
     Event,
@@ -373,6 +374,9 @@ class WebDisplay:
         )
         app.add_routes(pins.routes())
         app.add_routes(ConnectionPages(
+            pins=self._pins, options=self._options,
+        ).routes())
+        app.add_routes(WaysPages(
             pages=pins, pins=self._pins, options=self._options,
         ).routes())
         if self.device is not None:

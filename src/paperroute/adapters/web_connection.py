@@ -1,95 +1,86 @@
-"""Serve the connection editor: build a two-leg pin step by step."""
+"""Serve the hand way editor: build one way step by step."""
 
 import html
 from collections.abc import Callable
-from dataclasses import replace
 from http import HTTPStatus
 from typing import Final
+from urllib.parse import parse_qsl, urlencode
 
 from aiohttp import web
 from multidict import MultiDict
 
 from paperroute.adapters.connection_editor import (
     ALLOW_RANGE,
+    ChangeStep,
     ConnectionDraft,
     ConnectionEditor,
     connection_draft,
-    connection_draft_of,
     connection_edited,
 )
-from paperroute.adapters.pin_windows import (
-    DEFAULT_BUTTON,
-    WindowRow,
-    query_rows,
-    rows_of,
-    start_rows,
-    windows_fieldset,
-    windows_of,
+from paperroute.adapters.pin_windows import DEFAULT_BUTTON
+from paperroute.adapters.ways_editor import (
+    WaysDraft,
+    added_way,
+    draft_pin,
+    ways_draft,
+    ways_query,
 )
 from paperroute.adapters.web_pin_edit import (
     MISFIT,
     SEARCH_FORM,
-    delete_form,
     edit_page,
     kind_fields,
     line_field,
     option,
     select_field,
 )
-from paperroute.adapters.web_pin_list import pin_label
 from paperroute.adapters.web_pin_search import CONNECT_FIELD, STARTING
-from paperroute.adapters.web_pins import PinsPages, html_page, notice_alert
-from paperroute.core.model import Pin
-from paperroute.core.pin_choices import NICKNAME_MAX
+from paperroute.adapters.web_pins import html_page, notice_alert
+from paperroute.adapters.web_ways import posted_fields
+from paperroute.core.model import MAX_CHANGES, StopPlace
 from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
 
-ADD_TITLE: Final[str] = 'Add a connection'
-EDIT_TITLE: Final[str] = 'Edit connection'
+TITLE: Final[str] = 'Add a way by hand'
 PICK_STOP: Final[str] = 'Pick a stop'
 ON_HINT: Final[str] = 'Stops within 500 m of where you get off, nearest first.'
 ALLOW_HINT: Final[str] = (
     'Worked out from the {metres} m walk. Change it if you need longer.'
 )
-ROUTES_HINT: Final[str] = (
-    'Any route that gets there: {routes}. Tick some to keep only those.'
-)
-FORM: Final[str] = """<form class="editor" method="get" action="/pins/connect">
+FORM: Final[str] = """<form class="editor" method="get" action="/pins/connect"
+          data-steps>
       {default}
-      <input type="hidden" name="ref" value="{ref}">
-      <input type="hidden" name="stop" value="{stop}">
-      <input type="hidden" name="allow_for" value="{allow_for}">
-      <h3>{origin}</h3>{legs}
-      <p>
-        <label for="pin-nickname">Nickname</label>
-        <input id="pin-nickname" type="text" name="nickname"
-               value="{nickname}" maxlength="{max}">
-      </p>{windows}{buttons}
+      <input type="hidden" name="back" value="{back}">
+      <input type="hidden" name="changes" value="{changes}">
+      <h3>{origin}</h3>{steps}{buttons}
     </form>"""
+STEPS: Final[str] = """
+      <fieldset class="steps">
+        <legend>Way</legend>{fields}
+      </fieldset>"""
 BUTTONS: Final[str] = """
       <p class="buttons">
-        <button type="submit" class="secondary">Show choices</button>{save}
+        <button type="submit" class="secondary">Show choices</button>{more}{save}
       </p>"""
+MORE: Final[str] = """
+        <button type="submit" name="more" value="1"
+                class="secondary">Add another change</button>"""
 SAVE: Final[str] = """
         <button type="submit" formmethod="post"
-                formaction="/pins/connect/save">Save connection</button>"""
+                formaction="/pins/connect/save">Add this way</button>"""
 LEG: Final[str] = """
       <fieldset>
         <legend>{legend}</legend>{fields}
       </fieldset>"""
 ALLOW: Final[str] = """
+      <input type="hidden" name="allow{n}_for" value="{allow_for}">
       <p>
-        <label for="pin-allow">Allow (minutes)</label>
-        <input id="pin-allow" type="number" min="1" max="60" step="1"
-               name="allow" value="{allow}">
+        <label for="pin-allow{n}">Allow (minutes)</label>
+        <input id="pin-allow{n}" type="number" min="1" max="60" step="1"
+               name="allow{n}" value="{allow}">
       </p>"""
 HINT: Final[str] = """
       <p class="hint">{text}</p>"""
-ROUTES: Final[str] = """
-      <fieldset>
-        <legend>Routes</legend>
-        <p class="hint">{hint}</p>{boxes}
-      </fieldset>"""
 
 
 def place_select(
@@ -142,46 +133,71 @@ def first_fieldset(*, editor: ConnectionEditor) -> str:
             name='off',
             label='Get off at',
             places=[(p.stop_id, p.name) for p in leg.destinations],
-            chosen=editor.draft.off,
+            chosen=editor.draft.first.off,
         )
     return LEG.format(legend='Leg 1', fields=fields)
 
 
-def change_fieldset(*, editor: ConnectionEditor) -> str:
+def change_fieldset(
+    *, step: ChangeStep, chosen: str, suffix: str, legend: str,
+) -> str:
     """
-    Draw the change: where to get on, and the minutes allowed.
+    Draw a change: where to get on, and the minutes allowed.
 
     Parameters
     ----------
-    editor : ConnectionEditor
-        The editor.
+    step : ChangeStep
+        The checked change.
+    chosen : str
+        The stop chosen to get on at.
+    suffix : str
+        '' for the first change, '2' for the second.
+    legend : str
+        The fieldset's legend.
 
     Returns
     -------
     str
-        A fieldset, or an empty string before the stop to get off at.
+        A fieldset.
     """
-    draft = editor.draft
-    if not draft.off:
-        return ''
     fields = place_select(
-        name='on',
+        name=f'on{suffix}',
         label='Get on at',
         places=[
             (stop.place.stop_id, f'{stop.place.name} · {stop.metres} m')
-            for stop in editor.changes
+            for stop in step.stops
         ],
-        chosen=draft.on,
+        chosen=chosen,
     ) + HINT.format(text=html.escape(ON_HINT))
-    if editor.walk is not None:
-        fields += ALLOW.format(allow=html.escape(draft.allow))
-        fields += HINT.format(text=ALLOW_HINT.format(metres=editor.walk))
-    return LEG.format(legend='Change', fields=fields)
+    if step.on is not None:
+        fields += ALLOW.format(
+            n=suffix, allow=html.escape(step.allow),
+            allow_for=html.escape(step.on.place.stop_id),
+        )
+        fields += HINT.format(text=ALLOW_HINT.format(metres=step.on.metres))
+    return LEG.format(legend=legend, fields=fields)
 
 
-def routes_fieldset(*, editor: ConnectionEditor) -> str:
+def stop_choices(*, places: tuple[StopPlace, ...]) -> list[tuple[str, str]]:
     """
-    Draw the leg 2 route checkboxes.
+    List places as select choices.
+
+    Parameters
+    ----------
+    places : tuple[StopPlace, ...]
+        Places.
+
+    Returns
+    -------
+    list[tuple[str, str]]
+        Each place's ID and name.
+    """
+    return [(place.stop_id, place.name) for place in places]
+
+
+def second_change(*, editor: ConnectionEditor) -> str:
+    """
+    Draw leg 2 and the second change, when two changes are asked for.
 
     Parameters
     ----------
@@ -191,24 +207,26 @@ def routes_fieldset(*, editor: ConnectionEditor) -> str:
     Returns
     -------
     str
-        A fieldset, or an empty string when no route is offered.
+        The fieldsets, or an empty string.
     """
-    if not editor.routes:
+    draft = editor.draft
+    if draft.changes != 2 or editor.first.on is None:
         return ''
-    boxes = ''.join(
-        '\n        <label><input type="checkbox" name="only2" '
-        f'value="{html.escape(route)}"'
-        f'{" checked" if route in editor.draft.only else ""}> '
-        f'{html.escape(route)}</label>'
-        for route in editor.routes
+    fields = LEG.format(legend='Leg 2', fields=place_select(
+        name='off2', label='Get off at',
+        places=stop_choices(places=editor.offs), chosen=draft.second.off,
+    ))
+    if not draft.second.off:
+        return fields
+    return fields + change_fieldset(
+        step=editor.second, chosen=draft.second.on, suffix='2',
+        legend='Change 2',
     )
-    hint = ROUTES_HINT.format(routes=', '.join(editor.routes))
-    return ROUTES.format(hint=html.escape(hint), boxes=boxes)
 
 
-def second_fieldset(*, editor: ConnectionEditor) -> str:
+def last_fieldset(*, editor: ConnectionEditor) -> str:
     """
-    Draw leg 2: the To and its routes.
+    Draw the last leg: the To.
 
     Parameters
     ----------
@@ -218,29 +236,49 @@ def second_fieldset(*, editor: ConnectionEditor) -> str:
     Returns
     -------
     str
-        A fieldset, or an empty string before the stop to get on at.
+        A fieldset, or an empty string before the last stop got on at.
     """
-    if not editor.draft.on:
+    if not editor.places:
         return ''
-    fields = place_select(
-        name='to',
-        label='To',
-        places=[(place.stop_id, place.name) for place in editor.places],
+    legend = f'Leg {editor.draft.changes + 1}'
+    return LEG.format(legend=legend, fields=place_select(
+        name='to', label='To', places=stop_choices(places=editor.places),
         chosen=editor.draft.to,
-    ) + routes_fieldset(editor=editor)
-    return LEG.format(legend='Leg 2', fields=fields)
+    ))
 
 
-def connection_form(*, editor: ConnectionEditor, windows: str) -> str:
+def steps_fieldset(*, editor: ConnectionEditor) -> str:
     """
-    Draw the connection editor.
+    Draw every step offered so far.
 
     Parameters
     ----------
     editor : ConnectionEditor
         The editor.
-    windows : str
-        The Show automatically fieldset's HTML.
+
+    Returns
+    -------
+    str
+        The steps fieldset.
+    """
+    fields = first_fieldset(editor=editor)
+    if editor.draft.first.off:
+        fields += change_fieldset(
+            step=editor.first, chosen=editor.draft.first.on, suffix='',
+            legend='Change',
+        )
+    fields += second_change(editor=editor) + last_fieldset(editor=editor)
+    return STEPS.format(fields=fields)
+
+
+def connection_form(*, editor: ConnectionEditor) -> str:
+    """
+    Draw the hand way editor.
+
+    Parameters
+    ----------
+    editor : ConnectionEditor
+        The editor.
 
     Returns
     -------
@@ -249,21 +287,17 @@ def connection_form(*, editor: ConnectionEditor, windows: str) -> str:
     """
     draft = editor.draft
     origin = editor.leg.origin
-    legs = (
-        first_fieldset(editor=editor) + change_fieldset(editor=editor)
-        + second_fieldset(editor=editor)
-    )
+    more = draft.changes < MAX_CHANGES and editor.first.on is not None
     return FORM.format(
         default=DEFAULT_BUTTON,
-        ref=html.escape(draft.ref or ''),
-        stop=html.escape(draft.stop),
-        allow_for=html.escape(draft.allow_for),
+        back=html.escape(draft.back),
+        changes=draft.changes,
         origin=html.escape(PICK_STOP if origin is None else origin.name),
-        legs=legs if origin is not None else '',
-        max=NICKNAME_MAX,
-        nickname=html.escape(draft.nickname or ''),
-        windows=windows,
-        buttons=BUTTONS.format(save=SAVE if editor.pin is not None else ''),
+        steps=steps_fieldset(editor=editor) if origin is not None else '',
+        buttons=BUTTONS.format(
+            more=MORE if more else '',
+            save=SAVE if editor.way is not None else '',
+        ),
     )
 
 
@@ -285,23 +319,45 @@ def survived(*, draft: ConnectionDraft, editor: ConnectionEditor) -> bool:
         empty may take the default.
     """
     checked = editor.draft
-    fields = ('stop', 'kind', 'route', 'off', 'on', 'to')
-    allow = draft.allow.strip()
-    return (
-        all(getattr(draft, name) == getattr(checked, name) for name in fields)
-        and set(draft.only) == set(checked.only)
-        and (not allow or allow == checked.allow)
+    pairs = [(draft.first, checked.first)]
+    if draft.changes == 2:
+        pairs.append((draft.second, checked.second))
+    same = all(
+        given.off == kept.off and given.on == kept.on
+        and given.allow.strip() in ('', kept.allow)
+        for given, kept in pairs
     )
+    fields = ('stop', 'kind', 'route', 'to')
+    return same and all(
+        getattr(draft, name) == getattr(checked, name) for name in fields
+    )
+
+
+def back_draft(*, draft: ConnectionDraft) -> WaysDraft:
+    """
+    Read the ways page a hand way goes back to.
+
+    Parameters
+    ----------
+    draft : ConnectionDraft
+        The choices made.
+
+    Returns
+    -------
+    WaysDraft
+        The ways page's choices; for a new pin, just its From and To.
+    """
+    if not draft.back:
+        return WaysDraft(origin=draft.stop, destination=draft.to)
+    return ways_draft(query=MultiDict(parse_qsl(draft.back)))
 
 
 class ConnectionPages:
     """
-    The connection editor and its save.
+    The hand way editor and its save.
 
     Parameters
     ----------
-    pages : PinsPages
-        The Pins pages, for finding and saving pins.
     pins : Callable[[], PinsSeen | None]
         Gives the pins the app last reported, or None before the first.
     options : PinOptions | None
@@ -311,11 +367,9 @@ class ConnectionPages:
     def __init__(
         self,
         *,
-        pages: PinsPages,
         pins: Callable[[], PinsSeen | None],
         options: PinOptions | None,
     ) -> None:
-        self._pages = pages
         self._pins = pins
         self._options = options
 
@@ -335,7 +389,7 @@ class ConnectionPages:
 
     async def _edit(self, request: web.Request) -> web.Response:
         """
-        Serve the editor.
+        Serve the editor, or only its steps for `part=steps`.
 
         Parameters
         ----------
@@ -345,16 +399,19 @@ class ConnectionPages:
         Returns
         -------
         web.Response
-            The editor page, or a 303 when the pin has gone.
+            The page; 400 with a notice past `MAX_CHANGES` changes.
         """
-        return self._page(
-            draft=connection_draft(query=request.query),
-            rows=query_rows(fields=request.query),
-        )
+        draft = connection_draft(query=request.query)
+        if draft.changes > MAX_CHANGES:
+            return self._refused(draft=draft, text=MISFIT)
+        if request.query.get('part') == 'steps' and self._options:
+            editor = connection_edited(options=self._options, draft=draft)
+            return html_page(text=steps_fieldset(editor=editor))
+        return self._page(draft=draft)
 
     def _page(
-        self, *, draft: ConnectionDraft, rows: tuple[WindowRow, ...] | None,
-        notice: str = '', status: int = HTTPStatus.OK,
+        self, *, draft: ConnectionDraft, notice: str = '',
+        status: int = HTTPStatus.OK,
     ) -> web.Response:
         """
         Draw the editor page for some choices.
@@ -363,8 +420,6 @@ class ConnectionPages:
         ----------
         draft : ConnectionDraft
             The choices made.
-        rows : tuple[WindowRow, ...] | None
-            The window rows, or None to start from the pin's windows.
         notice : str
             The notice's HTML, or an empty string.
         status : int
@@ -373,54 +428,25 @@ class ConnectionPages:
         Returns
         -------
         web.Response
-            The page; a 303 to the gone notice when the ref is not a pin.
-        """
-        found = None if draft.ref is None else self._pages.find(ref=draft.ref)
-        if draft.ref is not None and found is None:
-            raise web.HTTPSeeOther(location='/pins?done=gone')
-        pin = None if found is None else found[1]
-        if pin is not None and draft.ref and not draft.stop:
-            draft = connection_draft_of(pin=pin, ref=draft.ref)
-        body = self._body(draft=draft, rows=start_rows(rows=rows, pin=pin))
-        if pin is not None and draft.ref:
-            body += delete_form(ref=draft.ref, label=pin_label(pin=pin))
-        title = ADD_TITLE if draft.ref is None else EDIT_TITLE
-        return html_page(
-            text=edit_page(title=title, notice=notice, body=body),
-            status=status,
-        )
-
-    def _body(
-        self, *, draft: ConnectionDraft, rows: tuple[WindowRow, ...],
-    ) -> str:
-        """
-        Draw the editor form for some choices.
-
-        Parameters
-        ----------
-        draft : ConnectionDraft
-            The choices made.
-        rows : tuple[WindowRow, ...]
-            The window rows.
-
-        Returns
-        -------
-        str
-            The form; the stop search when no From is chosen yet; or a
+            The page: the form, the stop search before a From, or a
             line saying the timetable is not ready.
         """
         if self._options is None:
-            return STARTING
-        if not draft.stop and draft.ref is None:
-            return SEARCH_FORM.format(text='', extra=CONNECT_FIELD)
-        return connection_form(
-            editor=connection_edited(options=self._options, draft=draft),
-            windows=windows_fieldset(rows=rows),
+            body = STARTING
+        elif not draft.stop:
+            body = SEARCH_FORM.format(text='', extra=CONNECT_FIELD)
+        else:
+            body = connection_form(editor=connection_edited(
+                options=self._options, draft=draft,
+            ))
+        return html_page(
+            text=edit_page(title=TITLE, notice=notice, body=body),
+            status=status,
         )
 
     async def _save(self, request: web.Request) -> web.Response:
         """
-        Save a connection.
+        Add the way built to the ways page it came from.
 
         Parameters
         ----------
@@ -430,77 +456,67 @@ class ConnectionPages:
         Returns
         -------
         web.Response
-            400 with the editor and a notice when the choices, the
-            allowance or a window are refused.
+            400 with the editor and a notice when the choices or an
+            allowance are refused.
 
         Raises
         ------
         web.HTTPSeeOther
-            To the list: once posted, or before the app or timetable is
-            ready.
+            To the ways page with the way added and ticked; to the list
+            before the app or timetable is ready.
         """
-        posted = await request.post()
-        fields = MultiDict([
-            (name, value)
-            for name, value in posted.items()
-            if isinstance(value, str)
-        ])
+        fields = await posted_fields(request=request)
         draft = connection_draft(query=fields)
-        rows = rows_of(fields=fields)
-        latest = self._pins()
-        if latest is None or self._options is None:
+        if self._pins() is None or self._options is None:
             raise web.HTTPSeeOther(location='/pins')
-        editor = connection_edited(options=self._options, draft=draft)
-        checked = self._checked(draft=draft, editor=editor, rows=rows)
-        if isinstance(checked, web.Response):
-            return checked
-        windows = windows_of(rows=rows)
-        if isinstance(windows, str):
-            return self._refused(draft=draft, rows=rows, text=windows)
-        pin = replace(checked, windows=windows)
-        raise self._pages.saved(seen=latest, ref=draft.ref, pin=pin)
+        location = self._added(draft=draft, options=self._options)
+        if location in (MISFIT, ALLOW_RANGE):
+            return self._refused(draft=draft, text=location)
+        raise web.HTTPSeeOther(location=location)
 
-    def _checked(
-        self, *, draft: ConnectionDraft, editor: ConnectionEditor,
-        rows: tuple[WindowRow, ...],
-    ) -> Pin | web.Response:
+    @staticmethod
+    def _added(*, draft: ConnectionDraft, options: PinOptions) -> str:
         """
-        Check that submitted choices make a connection.
+        Work out where a checked way goes back to.
 
         Parameters
         ----------
         draft : ConnectionDraft
             The choices submitted.
-        editor : ConnectionEditor
-            The editor after checking them.
-        rows : tuple[WindowRow, ...]
-            The window rows submitted.
+        options : PinOptions
+            What the timetable offers.
 
         Returns
         -------
-        Pin | web.Response
-            The pin; else 400 with `MISFIT` when a choice was dropped, or
-            with `ALLOW_RANGE` when only the allowance is wrong.
+        str
+            The ways page's address with the way added; else `MISFIT`
+            or `ALLOW_RANGE`.
         """
-        if not survived(draft=draft, editor=editor):
-            return self._refused(draft=draft, rows=rows, text=MISFIT)
-        if editor.pin is None:
-            return self._refused(draft=draft, rows=rows, text=ALLOW_RANGE)
-        return editor.pin
+        editor = connection_edited(options=options, draft=draft)
+        if draft.changes > MAX_CHANGES or not survived(
+            draft=draft, editor=editor,
+        ):
+            return MISFIT
+        if editor.way is None:
+            return ALLOW_RANGE
+        back = back_draft(draft=draft)
+        pin = draft_pin(options=options, draft=back, base=None)
+        if pin is None or (back.origin, back.destination) != (
+            draft.stop, draft.to,
+        ):
+            return MISFIT
+        added = added_way(pin=pin, way=editor.way)
+        fields = ways_query(pin=added, ref=back.ref)
+        return f'/pins/ways?{urlencode(fields)}'
 
-    def _refused(
-        self, *, draft: ConnectionDraft, rows: tuple[WindowRow, ...],
-        text: str,
-    ) -> web.Response:
+    def _refused(self, *, draft: ConnectionDraft, text: str) -> web.Response:
         """
-        Answer a refused save with the editor and a notice.
+        Answer refused choices with the editor and a notice.
 
         Parameters
         ----------
         draft : ConnectionDraft
             The choices submitted.
-        rows : tuple[WindowRow, ...]
-            The window rows submitted.
         text : str
             The notice; not escaped.
 
@@ -510,6 +526,6 @@ class ConnectionPages:
             400 with the editor.
         """
         return self._page(
-            draft=draft, rows=rows, notice=notice_alert(text=text),
+            draft=draft, notice=notice_alert(text=text),
             status=HTTPStatus.BAD_REQUEST,
         )

@@ -569,8 +569,8 @@ def settled_all(*, badges: Sequence[Badge], placed: list[Badge],
     return [*counts, *forced]
 
 
-def at_stations(*, badges: Sequence[Badge], keep: Keepouts
-                ) -> tuple[list[Badge], list[Badge]]:
+def at_stations(*, badges: Sequence[Badge], keep: Keepouts,
+                hooks: Sequence[Badge]) -> tuple[list[Badge], list[Badge]]:
     """
     Line up badges at the From and Destination beside their discs.
 
@@ -580,6 +580,8 @@ def at_stations(*, badges: Sequence[Badge], keep: Keepouts
         Badges in y order.
     keep : Keepouts
         What badges stay off, the discs among them.
+    hooks : Sequence[Badge]
+        Spur badges, which never move; the lineups keep off them.
 
     Returns
     -------
@@ -588,10 +590,11 @@ def at_stations(*, badges: Sequence[Badge], keep: Keepouts
     """
     found = {id(each): at_disc(badge=each, keep=keep) for each in badges}
     lined: list[Badge] = []
+    fixed = [*hooks]
     for disc in keep.discs:
         if crowd := [each for each in badges if found[id(each)] == disc]:
             lined.extend(off_lined(
-                lineup=beside(disc=disc, crowd=crowd), lined=lined,
+                lineup=beside(disc=disc, crowd=crowd), lined=fixed + lined,
             ))
     return lined, [each for each in badges if found[id(each)] is None]
 
@@ -664,8 +667,9 @@ def pushed(*, badges: Sequence[Badge], keep: Keepouts) -> tuple[Badge, ...]:
         ),
         key=lambda each: (each.marker.y, each.marker.x),
     )
-    placed, rest = at_stations(badges=order, keep=keep)
-    placed.extend(on_hooks(badges=[each for each in badges if each.spur]))
+    hooks = on_hooks(badges=[each for each in badges if each.spur])
+    placed, rest = at_stations(badges=order, keep=keep, hooks=hooks)
+    placed.extend(hooks)
     again = settled_all(
         badges=rest, placed=placed, keep=keep, first=len(placed),
     )

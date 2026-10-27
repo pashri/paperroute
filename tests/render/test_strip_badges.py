@@ -729,9 +729,37 @@ ROUNDED_UP_GAP: Final[tuple[dict[str, Spot], list[Badge], list[Spot]]] = (
     [Spot(x=30, y=206)],
 )  # a gap beside a spur the drawings leave but rounded-up widths don't
 
+SPUR_ABOVE_DISC: Final[tuple[dict[str, Spot], list[Badge], list[Spot]]] = (
+    {
+        'S0': Spot(x=30, y=62),
+        'S1': Spot(x=30, y=98),
+        'S2': Spot(x=77.0, y=134, exit=True),
+        'S3': Spot(x=30, y=170),
+        'S4': Spot(x=77.0, y=206, exit=True),
+        'S5': Spot(x=46, y=242),
+    },
+    [
+        Badge(
+            marker=replace(
+                plain(route='SH100', x=77.0, y=206), bearing=None,
+                live=False, age=60.0,
+            ),
+            low=170, high=206, spur=True,
+        ),
+        Badge(
+            marker=replace(
+                plain(route='T1', x=30, y=242.0), bearing=0.0, live=True,
+            ),
+            low=62, high=242,
+        ),
+    ],
+    [Spot(x=46, y=242)],
+)  # a badge on its disc just below a spur badge, which never moves
+
 
 @given(case=strip_cases())
 @example(case=CROWD_BESIDE_DISC)
+@example(case=SPUR_ABOVE_DISC)
 @example(case=FACING_AT_DISCS)
 @example(case=NARROW_TAB)
 @example(case=ROUNDED_UP_GAP)

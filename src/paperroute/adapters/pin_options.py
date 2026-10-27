@@ -36,6 +36,11 @@ NEARBY_M: Final[float] = 400
 NEARBY_COUNT: Final[int] = 5
 LAST: Final[int] = 1_000_000
 FROM_TAG: Final[str] = 'ALL'
+STATION_FIRST_INDICES: Final[frozenset[int]] = frozenset(
+    index
+    for index, kind in enumerate(KIND_NAMES)
+    if kind in STATION_FIRST
+)
 SEARCH: Final[str] = r"""
 SELECT stop_id, name, lon, lat FROM stops
 WHERE name LIKE :any ESCAPE '\'
@@ -212,9 +217,8 @@ def call_order(
         Whether the kind comes after stations' own kinds, the kind
         position and the route's `route_order`.
     """
-    kind = list(KIND_NAMES)[call[0]]
     return (
-        kind not in STATION_FIRST,
+        call[0] not in STATION_FIRST_INDICES,
         call[0],
         route_order(number=call[2]),
     )

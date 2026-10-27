@@ -13,6 +13,7 @@ from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.core.chooser import UNPICKED, Choice, Level, focusable
 from paperroute.core.model import RouteKind, StopPlace
+from paperroute.core.pin_choices import KIND_NAMES
 from paperroute.core.reach import RowKind, StripKey, build_reach
 from paperroute.core.route_colours import RouteColour
 from tests.adapters.test_network_db import T1, build_network
@@ -377,3 +378,9 @@ def test_route_colours_without_network(built: Path, tmp_path: Path) -> None:
     with closing(SqliteNetworkRepository(path=copy)) as network:
         found = SqlitePinOptions(network=network).route_colours(names=('T1',))
     assert found == {}
+
+
+def test_call_order_unknown_kind_sorts_as_non_station() -> None:
+    """A kind position outside `KIND_NAMES` sorts after station kinds."""
+    unknown = len(KIND_NAMES) + 5
+    assert pin_options.call_order((unknown, 0, 'X'))[0] is True

@@ -27,6 +27,7 @@ FAILURE: Final[str] = "Trip Planner didn't answer. Try again in a minute."
 BUSY: Final[str] = 'Trip Planner is busy. Try again in a minute.'
 NO_TRIPS: Final[str] = 'No trips found.'
 NOT_YET: Final[str] = 'not supported yet'
+DIRECT_NOTE: Final[str] = 'Direct trips always show on the panel.'
 ARROW: Final[str] = '\u2192'
 STEP: Final[timedelta] = timedelta(minutes=1)
 PAGES: Final[dict[str, str]] = {'earlier': 'first', 'later': 'last'}
@@ -68,8 +69,6 @@ PICK: Final[str] = """
 GREYED: Final[str] = """
             <li class="greyed"><span class="journey">{text}</span>
               <span class="tag">{tag}</span></li>"""
-PLAIN: Final[str] = """
-            <li><span class="journey">{text}</span></li>"""
 
 
 @dataclass(frozen=True)
@@ -272,6 +271,9 @@ def row_html(*, row: SuggestionRow) -> str:
     """
     Draw one row: a pick button, or greyed with its tag.
 
+    A direct journey has no change to pick, so it is greyed with a note
+    that direct trips always show.
+
     Parameters
     ----------
     row : SuggestionRow
@@ -286,7 +288,7 @@ def row_html(*, row: SuggestionRow) -> str:
     if row.greyed:
         return GREYED.format(text=text, tag=NOT_YET)
     if row.pick is None:
-        return PLAIN.format(text=text)
+        return GREYED.format(text=text, tag=DIRECT_NOTE)
     return PICK.format(pick=html.escape(row.pick), text=text)
 
 

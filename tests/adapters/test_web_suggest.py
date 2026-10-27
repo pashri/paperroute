@@ -260,3 +260,13 @@ async def test_busy_planner_says_so() -> None:
     )
     assert 'Trip Planner is busy. Try again in a minute.' in text
     assert "didn't answer" not in text
+
+
+async def test_direct_journey_not_pickable() -> None:
+    """A direct journey is greyed with a note that it always shows."""
+    _, text = await fetched(
+        planner=FakeTripPlanner(journeys=(DIRECT,)), fields=SEARCH,
+    )
+    assert '<li class="greyed">' in text
+    assert 'Direct trips always show on the panel.' in text
+    assert 'name="pick"' not in text

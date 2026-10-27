@@ -107,7 +107,7 @@ def test_o2_centres_on_change() -> None:
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
         pairs=SHAPED,
-        mode=ConnectionMap.CHANGE,
+        mode=ConnectionMap.CHANGES,
     )
     assert found.centre == (72.0, 0.0)
     assert found.zoom == 1
@@ -119,7 +119,7 @@ def test_o2_centres_on_change() -> None:
         inputs=inputs_at(now=at(7, 35), zoom=0),
         pin=WORK,
         pairs=SHAPED,
-        mode=ConnectionMap.CHANGE,
+        mode=ConnectionMap.CHANGES,
     )
     assert widest.zoom == 0
 
@@ -130,7 +130,7 @@ def test_o2_shows_hero_pair_vehicles() -> None:
         inputs=inputs_at(now=at(7, 30)),
         pin=WORK,
         pairs=SHAPED,
-        mode=ConnectionMap.CHANGE,
+        mode=ConnectionMap.CHANGES,
     )
     assert framed.vehicle_trips == frozenset({'a0733', 'b0746'})
 
@@ -161,7 +161,7 @@ def test_connection_map_sidebar() -> None:
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
         pairs=SHAPED,
-        mode=ConnectionMap.CHANGE,
+        mode=ConnectionMap.CHANGES,
     )
     assert len(view.pairs) == 4
     assert view.sidebar == ()
@@ -188,7 +188,7 @@ def test_stay_pair_has_no_change() -> None:
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
         pairs=(stay,),
-        mode=ConnectionMap.CHANGE,
+        mode=ConnectionMap.CHANGES,
     )
     trip = view.base.trip
     assert trip is not None
@@ -202,7 +202,7 @@ def test_no_shape_no_line() -> None:
         inputs=replace(inputs_at(now=at(7, 35)), shapes={}),
         pin=WORK,
         pairs=SHAPED,
-        mode=ConnectionMap.CHANGE,
+        mode=ConnectionMap.CHANGES,
     )
     assert view.base.route == ()
     assert view.base.trip is not None
@@ -220,7 +220,7 @@ def test_vehicle_trips_filter_markers() -> None:
     )
     inputs = replace(inputs_at(now=at(7, 35)), positions={'f': feed})
     view = build_connection_map(
-        inputs=inputs, pin=WORK, pairs=SHAPED, mode=ConnectionMap.CHANGE,
+        inputs=inputs, pin=WORK, pairs=SHAPED, mode=ConnectionMap.CHANGES,
     )
     assert len(view.markers) == 1
 
@@ -231,7 +231,7 @@ def test_no_pairs_keeps_framing() -> None:
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
         pairs=(),
-        mode=ConnectionMap.CHANGE,
+        mode=ConnectionMap.CHANGES,
     )
     assert found.departures == ()
     assert found.vehicle_trips == frozenset()
@@ -240,7 +240,7 @@ def test_no_pairs_keeps_framing() -> None:
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
         pairs=(),
-        mode=ConnectionMap.CHANGE,
+        mode=ConnectionMap.CHANGES,
     )
     assert view.base.route == ()
     assert view.pairs == ()
@@ -267,7 +267,7 @@ def test_no_points_falls_back_to_from() -> None:
         inputs=inputs_at(now=at(7, 35)),
         pin=bare,
         pairs=SHAPED,
-        mode=ConnectionMap.CHANGE,
+        mode=ConnectionMap.CHANGES,
     )
     assert view.base.trip is not None
     assert view.base.trip.walk is None
@@ -278,7 +278,7 @@ def test_banner_keeps_frame_below_it() -> None:
     stop = replace(STOP, banner='Timetable times · no live data yet')
     inputs = replace(inputs_at(now=at(7, 35)), stop_view=stop)
     change = connection_inputs(
-        inputs=inputs, pin=WORK, pairs=SHAPED, mode=ConnectionMap.CHANGE,
+        inputs=inputs, pin=WORK, pairs=SHAPED, mode=ConnectionMap.CHANGES,
     )
     assert change.centre == (72.0, BANNER_ROOM * ZOOMS[change.zoom] / 2)
     whole = connection_inputs(

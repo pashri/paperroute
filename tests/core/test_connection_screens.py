@@ -51,7 +51,7 @@ PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 def started(
     *,
     view: LiveView = LiveView.STOP,
-    mode: ConnectionMap = ConnectionMap.CHANGE,
+    mode: ConnectionMap = ConnectionMap.CHANGES,
     pins: tuple[Pin, ...] = (WORK,),
 ) -> State:
     """

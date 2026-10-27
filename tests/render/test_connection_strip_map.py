@@ -28,7 +28,7 @@ VIEW: Final[ConnectionStripMapView] = ConnectionStripMapView(
         inputs=replace(inputs_at(now=at(7, 35)), width=STRIP_MAP_WIDTH),
         pin=WORK,
         pairs=SHAPED,
-        mode=ConnectionMap.CHANGE,
+        mode=ConnectionMap.CHANGES,
     ),
     pane=build_connection_strip(
         stop_view=STOP, pin=WORK, pairs=PAIRS, selected=0, patterns=PATTERNS,

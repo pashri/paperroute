@@ -1,14 +1,16 @@
 """Steps that bring an older state.json up to the current schema."""
 
+import hashlib
+import json
 from collections.abc import Callable
 from typing import Final
 
 from paperroute.adapters.state_auto import add_auto
-from paperroute.adapters.state_change import add_connections
+from paperroute.adapters.state_change import add_connections, before_rewritten
 from paperroute.adapters.state_settings import default_settings
 from paperroute.core.model import TRAINLINK
 
-SCHEMA_VERSION: Final[int] = 9
+SCHEMA_VERSION: Final[int] = 10
 
 
 def coach_pin(*, pin: object) -> object:
@@ -171,6 +173,201 @@ def add_alert_settings(data: dict[str, object]) -> dict[str, object]:
     return add_display_settings(data)
 
 
+def v9_ref(*, pin: object) -> str | None:
+    """
+    Give a stored schema 9 pin's ref as schema 9 worked it out.
+
+    Parameters
+    ----------
+    pin : object
+        A stored schema 9 pin.
+
+    Returns
+    -------
+    str | None
+        Twelve hex digits, or None when the pin is not shaped well
+        enough to have one.
+    """
+    if not isinstance(pin, dict):
+        return None
+    origin = pin.get('origin')
+    destination = pin.get('destination')
+    change = pin.get('change')
+    try:
+        parts: list[object] = [
+            origin['stop_id'],  # type: ignore[index]
+            None if destination is None else destination['stop_id'],
+            pin.get('kind'),
+            list(pin['routes']),
+            list(pin['only']),
+        ]
+        if change is not None:
+            parts.append([
+                change['alight']['stop_id'],
+                change['board']['stop_id'],
+                change['allow'],
+                list(change['only']),
+            ])
+        text = json.dumps(parts)
+    except (KeyError, TypeError, ValueError):
+        return None
+    return hashlib.sha1(text.encode()).hexdigest()[:12]
+
+
+def with_ways(*, pin: object) -> object:
+    """
+    Rewrite one stored schema 9 pin's change as ways.
+
+    Parameters
+    ----------
+    pin : object
+        A stored pin; anything that is not an object is returned as it is.
+
+    Returns
+    -------
+    object
+        The pin without `change`: a change becomes one ticked way
+        without its leg-2 filter, a pin with a To loses its routes and
+        filter, and every pin gets an empty never list.
+    """
+    if not isinstance(pin, dict):
+        return pin
+    fixed = {key: value for key, value in pin.items() if key != 'change'}
+    change = pin.get('change')
+    if isinstance(change, dict):
+        change = {key: value for key, value in change.items() if key != 'only'}
+    if change is not None:
+        fixed['ways'] = [{'changes': [change], 'ticked': True}]
+    if pin.get('destination') is not None:
+        fixed.update(routes=[], only=[])
+    return {'ways': [], 'never': [], **fixed}
+
+
+def rewritten_ref(
+    *, auto: object, refs: dict[str, str | None],
+) -> object:
+    """
+    Key the running occurrence by its pin's new ref.
+
+    Parameters
+    ----------
+    auto : object
+        The stored auto block.
+    refs : dict[str, str | None]
+        New ref by schema 9 ref.
+
+    Returns
+    -------
+    object
+        The block; an occurrence matching no schema 9 pin is kept.
+    """
+    if not isinstance(auto, dict):
+        return auto
+    occurrence = auto.get('occurrence')
+    if not isinstance(occurrence, dict):
+        return auto
+    ref = refs.get(str(occurrence.get('ref')))
+    if ref is None:
+        return auto
+    return {**auto, 'occurrence': {**occurrence, 'ref': ref}}
+
+
+def with_before_ways(*, auto: object) -> object:
+    """
+    Rewrite the place kept by the auto pin state as a pin with ways.
+
+    Parameters
+    ----------
+    auto : object
+        The stored auto block.
+
+    Returns
+    -------
+    object
+        The block with its `before.place` rewritten by `with_ways`.
+    """
+    return before_rewritten(
+        auto=auto, rewrite=lambda pin: with_ways(pin=pin),
+    )
+
+
+def renamed_map(*, settings: object) -> object:
+    """
+    Rename the schema 9 `change` map setting to `changes`.
+
+    Parameters
+    ----------
+    settings : object
+        The stored settings.
+
+    Returns
+    -------
+    object
+        The settings; anything else is returned as it is.
+    """
+    if not isinstance(settings, dict):
+        return settings
+    if settings.get('connection_map') != 'change':
+        return settings
+    return {**settings, 'connection_map': 'changes'}
+
+
+def new_refs(*, pins: list[object]) -> dict[str, str | None]:
+    """
+    Pair each stored schema 9 pin's ref with its schema 10 ref.
+
+    Parameters
+    ----------
+    pins : list[object]
+        The stored schema 9 pins.
+
+    Returns
+    -------
+    dict[str, str | None]
+        New ref by old ref, for pins shaped well enough to have one.
+    """
+    refs: dict[str, str | None] = {}
+    for pin in pins:
+        old = v9_ref(pin=pin)
+        new = with_ways(pin=pin)
+        if old is not None and isinstance(new, dict):
+            refs[old] = v9_ref(pin={**new, 'change': None})
+    return refs
+
+
+def add_ways(data: dict[str, object]) -> dict[str, object]:
+    """
+    Give pins ways and a never list, and rename the change map setting.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Version 9 data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with each pin, the unpinned place and the auto before
+        place rewritten by `with_ways`, the running occurrence keyed by
+        its pin's new ref and the `change` map setting as `changes`.
+    """
+    pins = data.get('pins')
+    refs = new_refs(pins=pins) if isinstance(pins, list) else {}
+    return {
+        **data,
+        'pins': (
+            [with_ways(pin=pin) for pin in pins]
+            if isinstance(pins, list)
+            else pins
+        ),
+        'unpinned': with_ways(pin=data.get('unpinned')),
+        'auto': with_before_ways(
+            auto=rewritten_ref(auto=data.get('auto'), refs=refs),
+        ),
+        'settings': renamed_map(settings=data.get('settings')),
+    }
+
+
 MIGRATIONS: Final[
     dict[int, Callable[[dict[str, object]], dict[str, object]]]
 ] = {
@@ -182,6 +379,7 @@ MIGRATIONS: Final[
     6: add_alert_settings,
     7: add_auto,
     8: add_connections,
+    9: add_ways,
 }
 
 

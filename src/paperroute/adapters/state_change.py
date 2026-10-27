@@ -1,5 +1,6 @@
 """Connection changes on stored pins: the v9 step and per-field repair."""
 
+from collections.abc import Callable
 from typing import Final
 
 from paperroute.adapters.state_settings import default_settings
@@ -27,6 +28,34 @@ def with_change(*, pin: object) -> object:
     return {'change': None, **pin}
 
 
+def before_rewritten(
+    *, auto: object, rewrite: Callable[[object], object],
+) -> object:
+    """
+    Rewrite the place kept by the auto pin state.
+
+    Parameters
+    ----------
+    auto : object
+        The stored auto block.
+    rewrite : Callable[[object], object]
+        Gives the rewritten stored pin.
+
+    Returns
+    -------
+    object
+        The block with its `before.place` rewritten; anything that is
+        not shaped that way is left for validation.
+    """
+    if not isinstance(auto, dict):
+        return auto
+    before = auto.get('before')
+    if not isinstance(before, dict):
+        return auto
+    place = rewrite(before.get('place'))
+    return {**auto, 'before': {**before, 'place': place}}
+
+
 def with_before_change(*, auto: object) -> object:
     """
     Give the place kept by the auto pin state no change.
@@ -39,16 +68,11 @@ def with_before_change(*, auto: object) -> object:
     Returns
     -------
     object
-        The block with its `before.place` given no change; anything that
-        is not shaped that way is left for validation.
+        The block with its `before.place` given no change.
     """
-    if not isinstance(auto, dict):
-        return auto
-    before = auto.get('before')
-    if not isinstance(before, dict):
-        return auto
-    place = with_change(pin=before.get('place'))
-    return {**auto, 'before': {**before, 'place': place}}
+    return before_rewritten(
+        auto=auto, rewrite=lambda pin: with_change(pin=pin),
+    )
 
 
 def add_connections(data: dict[str, object]) -> dict[str, object]:
@@ -126,9 +150,68 @@ def repaired_allow(*, allow: object) -> object:
     return min(max(allow, ALLOW_MIN), ALLOW_MAX)
 
 
-def repaired_change(*, pin: dict[str, object]) -> dict[str, object]:
+def repaired_way(*, way: object) -> object:
     """
-    Repair the parts of a stored pin's change that can be repaired.
+    Clamp the allowances of one stored way's changes.
+
+    Parameters
+    ----------
+    way : object
+        The stored way.
+
+    Returns
+    -------
+    object
+        The way with each integer allowance clamped into 1-60; anything
+        not shaped as a way is returned as it is, for validation.
+    """
+    if not isinstance(way, dict):
+        return way
+    changes = way.get('changes')
+    if not isinstance(changes, list):
+        return way
+    return {
+        **way,
+        'changes': [
+            (
+                {**change, 'allow': repaired_allow(allow=change['allow'])}
+                if isinstance(change, dict) and 'allow' in change
+                else change
+            )
+            for change in changes
+        ],
+    }
+
+
+def repaired_ways(
+    *, pin: dict[str, object], readable: Callable[[object], bool],
+) -> dict[str, object]:
+    """
+    Drop each stored way that cannot be read, keeping the rest.
+
+    Parameters
+    ----------
+    pin : dict[str, object]
+        The stored pin.
+    readable : Callable[[object], bool]
+        Whether one repaired way is valid.
+
+    Returns
+    -------
+    dict[str, object]
+        The pin with allowances clamped and unreadable ways dropped; a
+        pin left with no ways is a plain pin with its To.
+    """
+    ways = pin.get('ways')
+    if not isinstance(ways, list):
+        return {**pin, 'ways': []}
+    repaired = [repaired_way(way=way) for way in ways]
+    return {**pin, 'ways': [way for way in repaired if readable(way)]}
+
+
+def repaired_never(*, pin: dict[str, object]) -> dict[str, object]:
+    """
+    Empty a stored never list that is not a list of route names.
 
     Parameters
     ----------
@@ -138,17 +221,6 @@ def repaired_change(*, pin: dict[str, object]) -> dict[str, object]:
     Returns
     -------
     dict[str, object]
-        The pin with a missing change set to None, a route filter that is
-        not a list of names emptied and an integer allowance clamped into
-        1-60. Anything else wrong is left for validation.
+        The pin with a usable never list.
     """
-    change = pin.get('change')
-    if not isinstance(change, dict):
-        return {**pin, 'change': change}
-    fixed = {
-        **change,
-        'only': route_names(value=change.get('only')),
-    }
-    if 'allow' in change:
-        fixed['allow'] = repaired_allow(allow=change['allow'])
-    return {**pin, 'change': fixed}
+    return {**pin, 'never': route_names(value=pin.get('never'))}

@@ -36,7 +36,8 @@ from paperroute.adapters.state_auto import (
 from paperroute.adapters.state_change import (
     ALLOW_MAX,
     ALLOW_MIN,
-    repaired_change,
+    repaired_never,
+    repaired_ways,
     route_names,
 )
 from paperroute.adapters.state_migrations import SCHEMA_VERSION, migrate
@@ -47,8 +48,8 @@ from paperroute.adapters.state_settings import (
     settings_to_model,
 )
 from paperroute.core.auto_model import AutoState, Before
-from paperroute.core.connection_model import first_change
 from paperroute.core.model import (
+    MAX_CHANGES,
     SYDNEY,
     Change,
     Pin,
@@ -89,7 +90,17 @@ class ChangeModel(BaseModel):
     alight: StopModel
     board: StopModel
     allow: int = Field(ge=ALLOW_MIN, le=ALLOW_MAX)
-    only: tuple[str, ...]
+
+
+class WayModel(BaseModel):
+    """One way to go of a connection pin, as stored."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    changes: tuple[ChangeModel, ...] = Field(
+        min_length=1, max_length=MAX_CHANGES,
+    )
+    ticked: bool
 
 
 class PinModel(BaseModel):
@@ -104,7 +115,8 @@ class PinModel(BaseModel):
     nickname: str | None = Field(max_length=NICKNAME_MAX)
     only: tuple[str, ...]
     windows: tuple[AutoWindowModel, ...]
-    change: ChangeModel | None
+    ways: tuple[WayModel, ...]
+    never: tuple[str, ...]
 
 
 class BeforeModel(BaseModel):
@@ -212,7 +224,6 @@ def change_to_model(*, change: Change) -> ChangeModel:
         alight=stop_to_model(place=change.alight),
         board=stop_to_model(place=change.board),
         allow=change.allow,
-        only=(),
     )
 
 
@@ -252,7 +263,6 @@ def pin_to_model(*, pin: Pin) -> PinModel:
         The stored pin.
     """
     destination = pin.destination
-    change = first_change(pin=pin)
     return PinModel(
         origin=stop_to_model(place=pin.origin),
         destination=(
@@ -267,7 +277,16 @@ def pin_to_model(*, pin: Pin) -> PinModel:
         windows=tuple(
             auto_window_to_model(window=window) for window in pin.windows
         ),
-        change=None if change is None else change_to_model(change=change),
+        ways=tuple(
+            WayModel(
+                changes=tuple(
+                    change_to_model(change=change) for change in way.changes
+                ),
+                ticked=way.ticked,
+            )
+            for way in pin.ways
+        ),
+        never=pin.never,
     )
 
 
@@ -300,9 +319,16 @@ def pin_from_model(*, model: PinModel) -> Pin:
         windows=tuple(
             auto_window_from_model(model=window) for window in model.windows
         ),
-        ways=() if model.change is None else (
-            Way(changes=(change_from_model(model=model.change),)),
+        ways=tuple(
+            Way(
+                changes=tuple(
+                    change_from_model(model=change) for change in way.changes
+                ),
+                ticked=way.ticked,
+            )
+            for way in model.ways
         ),
+        never=model.never,
     )
 
 
@@ -519,6 +545,28 @@ def repaired_settings(*, data: dict[str, object]) -> dict[str, object]:
     return data
 
 
+def readable_way(way: object) -> bool:
+    """
+    Say whether one stored way is valid.
+
+    Parameters
+    ----------
+    way : object
+        The stored way.
+
+    Returns
+    -------
+    bool
+        True when it validates; an unreadable way is logged.
+    """
+    try:
+        WayModel.model_validate(way)
+    except ValidationError:
+        logger.warning('state.json way unusable, dropping it')
+        return False
+    return True
+
+
 def repaired_pin(*, pin: object) -> dict[str, object] | None:
     """
     Repair one stored pin's windows, nickname and route filter.
@@ -532,13 +580,16 @@ def repaired_pin(*, pin: object) -> dict[str, object] | None:
     -------
     dict[str, object] | None
         The pin with bad windows dropped, a bad nickname reset to None
-        (a long one is cleaned), a bad filter reset to empty and its
-        change repaired as far as it can be; None
+        (a long one is cleaned), a bad filter or never list reset to
+        empty and unreadable ways dropped; None
         when the pin is still not valid.
     """
     if not isinstance(pin, dict):
         return None
-    pin = repaired_change(pin=repaired_windows(pin=pin))
+    pin = repaired_ways(
+        pin=repaired_windows(pin=pin), readable=readable_way,
+    )
+    pin = repaired_never(pin=pin)
     nickname = pin.get('nickname')
     fixed = {
         **pin,

@@ -13,6 +13,7 @@ from paperroute.core.messages import LoadDepartures
 from paperroute.core.model import Departure, Pin, RouteKind, Way
 from tests.core.connection_factories import (
     CAMPBELLTOWN_WAY,
+    PARRAMATTA,
     TWO_WAY,
     WORK,
     WORK_CHANGE,
@@ -239,9 +240,27 @@ def test_between_read_merges_legs() -> None:
     effect = LoadBetween(pin=WORK, trip_ids=frozenset(), day=START.date())
     event = between_read(timetable=timetable, effect=effect)
     assert timetable.asked == [
+        frozenset({'G2145615', '214510'}),
         frozenset({'G2145615', 'G215254'}),
         frozenset({'2145648', '214510'}),
     ]
     assert event.pin == WORK
     assert set(event.families) == {'G2145615', 'G215254', '2145648', '214510'}
     assert not event.names
+
+
+def test_between_read_covers_two_changes() -> None:
+    """Each leg of a two-change way, and direct, is looked up."""
+    pin = replace(WORK, destination=PARRAMATTA, ways=(TWO_WAY,))
+    timetable = RecordingTimetable()
+    effect = LoadBetween(pin=pin, trip_ids=frozenset(), day=START.date())
+    event = between_read(timetable=timetable, effect=effect)
+    assert timetable.asked == [
+        frozenset({'G2145615', '2150'}),
+        frozenset({'G2145615', 'G215254'}),
+        frozenset({'2145648', '214510'}),
+        frozenset({'214510', '2150'}),
+    ]
+    assert set(event.families) == {
+        'G2145615', 'G215254', '2145648', '214510', '2150',
+    }

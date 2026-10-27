@@ -18,6 +18,7 @@ from paperroute.core.alert_match import (
     names_place,
     pin_facts,
     place_name,
+    tie_of,
     time_line,
     timing_of,
 )
@@ -638,3 +639,13 @@ def test_pin_facts_name_pin_by_modes() -> None:
 def test_unmatched_alert_is_not_listed() -> None:
     """An alert with no tie to the pin is dropped."""
     assert not listed_for(pin=CENTRAL_PIN, found=RHODES, now=SAT_MORNING)
+
+
+def test_plain_destination_pin_matches_any_loaded_route() -> None:
+    """A train pin with a To matches a bus route its departures use."""
+    bus = trains(route='526', mode=Mode.BUS)
+    facts = pin_facts(
+        pin=PARRAMATTA_CENTRAL, departures=trains() + bus, between=BETWEEN,
+    )
+    route = alert(alert_id='bus', header='x', route='526')
+    assert tie_of(alert=route, facts=facts) is AlertTie.ROUTE

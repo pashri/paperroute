@@ -19,8 +19,11 @@ from paperroute.core.state_model import Board, State
 from paperroute.core.stop_view import clock_text
 from tests.core.alert_factories import alert
 from tests.core.connection_factories import (
+    CAMPBELLTOWN_WAY,
     LEG1,
     LEG2,
+    PARRAMATTA,
+    TWO_WAY,
     WORK,
     WORK_CHANGE,
     at,
@@ -206,3 +209,42 @@ def test_direct_trips_matched() -> None:
     )
     assert 'd1' in facts.trips
     assert '609' in facts.routes
+
+
+def test_open_leg_alert_by_loaded_route() -> None:
+    """A route alert matches only once that route is in a loaded leg."""
+    route = alert(alert_id='route', header='x', route='664')
+    without = tuple(item for item in LEG2 if item.route != '664')
+    before = connection_facts(
+        pin=WORK,
+        board=board_of(departures=LEG1, second=without),
+        between=frozenset(),
+        families={},
+    )
+    after = connection_facts(
+        pin=WORK,
+        board=board_of(departures=LEG1, second=LEG2),
+        between=frozenset(),
+        families={},
+    )
+    assert tie_of(alert=route, facts=before) is None
+    assert tie_of(alert=route, facts=after) is AlertTie.ROUTE
+
+
+def test_second_change_stop_alert() -> None:
+    """An alert on a second change's stop matches a two-change pin."""
+    pin = replace(WORK, destination=PARRAMATTA, ways=(TWO_WAY,))
+    facts = connection_facts(
+        pin=pin, board=Board(), between=frozenset(), families={},
+    )
+    found = alert(alert_id='change', header='x', stops=frozenset({'214510'}))
+    assert tie_of(alert=found, facts=facts) is AlertTie.STOP
+
+
+def test_every_ticked_way_matched() -> None:
+    """The legs of a second ticked way are matched too."""
+    pin = replace(WORK, ways=(*WORK.ways, CAMPBELLTOWN_WAY))
+    facts = connection_facts(
+        pin=pin, board=Board(), between=frozenset(), families={},
+    )
+    assert '2560' in facts.stops

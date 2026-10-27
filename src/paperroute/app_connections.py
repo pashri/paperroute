@@ -8,12 +8,7 @@ from types import MappingProxyType
 from paperroute.core.alert_match import between_names
 from paperroute.core.alert_model import BetweenLoaded, LoadBetween
 from paperroute.core.chains import Legs, open_legs
-from paperroute.core.connection_model import (
-    LEG_EXTRA,
-    direct_leg,
-    stopgap_way,
-    way_legs,
-)
+from paperroute.core.connection_model import LEG_EXTRA, direct_leg
 from paperroute.core.messages import DeparturesLoaded, LoadDepartures
 from paperroute.core.model import Departure, Pin, RouteKind, is_connection
 from paperroute.ports import TimetableRepository
@@ -104,23 +99,31 @@ def between_read(
     Returns
     -------
     BetweenLoaded
-        The names; for a connection pin, both legs' names and families
-        merged, and NSW TrainLink when either leg has it.
+        The names; for a connection pin, the names and families of the
+        direct leg and every ticked way's legs merged, and NSW TrainLink
+        when any leg has it.
     """
-    way = stopgap_way(pin=effect.pin)
-    if way is None:
+    pin = effect.pin
+    if not is_connection(pin=pin):
         return leg_between(timetable=timetable, effect=effect)
-    first, second = way_legs(pin=effect.pin, way=way)
+    legs = (
+        direct_leg(pin=pin),
+        *(leg for leg, _ in open_legs(pin=pin).values()),
+    )
     loaded = [
         leg_between(timetable=timetable, effect=replace(effect, pin=leg))
-        for leg in (first, second)
+        for leg in legs
     ]
     return BetweenLoaded(
-        pin=effect.pin,
-        names=loaded[0].names | loaded[1].names,
+        pin=pin,
+        names=frozenset().union(*(part.names for part in loaded)),
         timetable=effect.timetable,
-        families={**loaded[0].families, **loaded[1].families},
-        trainlink=loaded[0].trainlink or loaded[1].trainlink,
+        families={
+            stop: family
+            for part in loaded
+            for stop, family in part.families.items()
+        },
+        trainlink=any(part.trainlink for part in loaded),
     )
 
 

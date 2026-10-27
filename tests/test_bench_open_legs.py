@@ -17,6 +17,10 @@ LINE = re.compile(
     r'^.+ -> .+: \d+ rows, median \d+\.\d ms, max \d+\.\d ms$',
 )
 
+CHAINS = re.compile(
+    r'^.+ -> .+ chains: \d+ chains, median \d+\.\d ms, max \d+\.\d ms$',
+)
+
 
 def load_script() -> ModuleType:
     """
@@ -91,6 +95,46 @@ def test_bench_missing_database_fails(
     status = load_script().main(['--db', str(tmp_path / 'none.db')])
     assert status == 1
     assert 'no timetable at' in capsys.readouterr().err
+
+
+def test_bench_times_chains(
+    db: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--chains` times the chain search over each way given."""
+    status = load_script().main([
+        '--db', str(db),
+        '--repeat', '1',
+        '--at', '2026-10-16T07:00:00+11:00',
+        '--pairs', '2145615:215254',
+        '--chains', '2145615:215254:215254:215020',
+    ])
+    lines = capsys.readouterr().out.splitlines()
+    assert status == 0
+    assert CHAINS.match(lines[1])
+    assert lines[1].startswith('Hollis St Opp Constitution Hill Library -> ')
+
+
+def test_bench_bad_way_fails(
+    db: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A way with an unknown stop or the wrong count is reported."""
+    status = load_script().main([
+        '--db', str(db), '--repeat', '1', '--pairs', '2145615:215254',
+        '--chains', '2145615:215254', 'nowhere:215254:215254:215020',
+    ])
+    assert status == 1
+    assert 'unknown way 2145615:215254' in capsys.readouterr().err
+
+
+def test_bench_chains_default_is_work_shaped(
+    db: Path, capsys: pytest.CaptureFixture[str],
+) -> None:
+    """`--chains` alone times the WORK-shaped way."""
+    load_script().main([
+        '--db', str(db), '--repeat', '1', '--pairs', '2145615:215254',
+        '--chains',
+    ])
+    assert '2145615:215254:2145648:214510' in capsys.readouterr().err
 
 
 @pytest.mark.parametrize(('now', 'expected'), [

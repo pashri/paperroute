@@ -11,8 +11,16 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.core.connection_model import LEG_EXTRA
-from paperroute.core.model import SYDNEY, Pin, StopPlace
+from paperroute.core.chains import LegKey, chains_of, leg_key
+from paperroute.core.connection_model import (
+    LEG_EXTRA,
+    default_allow,
+    direct_leg,
+    walk_metres,
+    way_legs,
+)
+from paperroute.core.live import LiveDeparture, resolved
+from paperroute.core.model import SYDNEY, Change, Pin, StopPlace, Way
 
 DEFAULT_DB: Final[Path] = Path('data/timetable.db')
 DEFAULT_REPEAT: Final[int] = 5
@@ -22,6 +30,7 @@ DEFAULT_PAIRS: Final[tuple[str, ...]] = (
     'Parramatta Station:Central Station',
     'Constitution Hill, North West Twy:Westmead Station',
 )
+WORK_SHAPED: Final[str] = '2145615:215254:2145648:214510'
 WINDOW: Final[timedelta] = timedelta(hours=3)
 MORNING: Final[int] = 8  # hour of the default start
 SATURDAY: Final[int] = 5  # weekday number
@@ -155,6 +164,154 @@ def pair_line(
     )
 
 
+def way_pin(*, stops: Sequence[StopPlace]) -> Pin:
+    """
+    Build a pin with one way through the given stops.
+
+    Parameters
+    ----------
+    stops : Sequence[StopPlace]
+        From, then an alight and a board stop per change, then To.
+
+    Returns
+    -------
+    Pin
+        The pin, each change allowed its default walk time.
+    """
+    changes = tuple(
+        Change(
+            alight=alight,
+            board=board,
+            allow=default_allow(
+                metres=walk_metres(alight=alight, board=board),
+            ),
+        )
+        for alight, board in zip(stops[1:-1:2], stops[2:-1:2])
+    )
+    return Pin(
+        origin=stops[0],
+        destination=stops[-1],
+        kind=None,
+        ways=(Way(changes=changes),),
+    )
+
+
+def loaded(
+    *, repo: SqliteTimetableRepository, leg: Pin, start: datetime, index: int,
+) -> tuple[LiveDeparture, ...]:
+    """
+    Load one leg's departures as on time, sorted by when they leave.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Timetable.
+    leg : Pin
+        Leg pin.
+    start : datetime
+        Earliest departure.
+    index : int
+        Leg number from 0; each later leg is searched `LEG_EXTRA` further.
+
+    Returns
+    -------
+    tuple[LiveDeparture, ...]
+        The departures.
+    """
+    end = start + WINDOW + LEG_EXTRA * index
+    items = resolved(
+        departures=repo.departures(pin=leg, start=start, end=end),
+        snapshots={},
+        now=start,
+    )
+    return tuple(sorted(items, key=lambda item: item.departs))
+
+
+def time_chains(
+    *,
+    repo: SqliteTimetableRepository,
+    pin: Pin,
+    start: datetime,
+    repeat: int,
+) -> tuple[int, list[float]]:
+    """
+    Load a pin's legs once, then run the chain search repeatedly.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Timetable.
+    pin : Pin
+        Pin with one way.
+    start : datetime
+        Earliest departure.
+    repeat : int
+        Number of runs.
+
+    Returns
+    -------
+    tuple[int, list[float]]
+        The chains found and each run's milliseconds.
+    """
+    lists: dict[LegKey, tuple[LiveDeparture, ...]] = {
+        leg_key(leg=leg): loaded(repo=repo, leg=leg, start=start, index=index)
+        for index, leg in enumerate(way_legs(pin=pin, way=pin.ways[0]))
+    }
+    direct = loaded(repo=repo, leg=direct_leg(pin=pin), start=start, index=0)
+    found = 0
+    millis = []
+    for _ in range(repeat):
+        began = time.perf_counter()
+        found = len(
+            chains_of(pin=pin, lists=lists, direct=direct, now=start),
+        )
+        millis.append((time.perf_counter() - began) * 1000)
+    return found, millis
+
+
+def chain_line(
+    *,
+    repo: SqliteTimetableRepository,
+    spec: str,
+    start: datetime,
+    repeat: int,
+) -> str | None:
+    """
+    Time the chain search over one way and describe the result.
+
+    Parameters
+    ----------
+    repo : SqliteTimetableRepository
+        Timetable.
+    spec : str
+        ``from:alight:board:to``, with a second ``alight:board`` for two
+        changes; each a stop ID or an exact stop name.
+    start : datetime
+        Earliest departure.
+    repeat : int
+        Number of runs.
+
+    Returns
+    -------
+    str | None
+        ``{from} -> {to} chains: {n} chains, median {ms} ms, max {ms}
+        ms``; None when a stop is unknown or the stops are not a way.
+    """
+    found = [find_stop(repo=repo, text=text) for text in spec.split(':')]
+    stops = [stop for stop in found if stop is not None]
+    if len(stops) != len(found) or len(stops) not in (4, 6):
+        return None
+    pin = way_pin(stops=stops)
+    count, millis = time_chains(
+        repo=repo, pin=pin, start=start, repeat=repeat,
+    )
+    return (
+        f'{stops[0].name} -> {stops[-1].name} chains: {count} chains, '
+        f'median {statistics.median(millis):.1f} ms, '
+        f'max {max(millis):.1f} ms'
+    )
+
+
 def parser() -> argparse.ArgumentParser:
     """
     Build the command-line parser.
@@ -176,6 +333,12 @@ def parser() -> argparse.ArgumentParser:
         default=list(DEFAULT_PAIRS),
         metavar='FROM:TO',
         help='stop IDs or exact names',
+    )
+    result.add_argument(
+        '--chains',
+        nargs='*',
+        metavar='FROM:ALIGHT:BOARD:TO',
+        help='also time chains over these ways; a WORK-shaped way if empty',
     )
     return result
 
@@ -211,6 +374,16 @@ def main(argv: Sequence[str] | None = None) -> int:
             )
             if line is None:
                 print(f'unknown stop in {pair}', file=sys.stderr)
+                status = 1
+            else:
+                print(line)
+        specs = [] if args.chains is None else args.chains or [WORK_SHAPED]
+        for spec in specs:
+            line = chain_line(
+                repo=repo, spec=spec, start=start, repeat=args.repeat,
+            )
+            if line is None:
+                print(f'unknown way {spec}', file=sys.stderr)
                 status = 1
             else:
                 print(line)

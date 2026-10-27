@@ -341,6 +341,21 @@ class PinOptions(Protocol):
             The place; None when the timetable does not know it.
         """
 
+    def trip_stop(self, *, stop_id: str) -> StopPlace | None:
+        """
+        Map a Trip Planner stop to the editor's station-level place.
+
+        Parameters
+        ----------
+        stop_id : str
+            Trip Planner stop ID.
+
+        Returns
+        -------
+        StopPlace | None
+            The stop, lifted to its parent station; None when unknown.
+        """
+
     def kinds_at(self, *, stop_id: str) -> tuple[RouteKind, ...]:
         """
         List the kinds of route that have a line or route at a stop.

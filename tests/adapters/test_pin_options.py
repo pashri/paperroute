@@ -165,6 +165,14 @@ def test_place_finds_or_misses(options: SqlitePinOptions) -> None:
     assert options.place(stop_id='nowhere') is None
 
 
+def test_trip_stop_lifts_to_parent(options: SqlitePinOptions) -> None:
+    """A platform maps to its station; a station to itself."""
+    station = at(options=options, stop_id='C')
+    assert options.trip_stop(stop_id='C_1') == station
+    assert options.trip_stop(stop_id='C') == station
+    assert options.trip_stop(stop_id='nowhere') is None
+
+
 def test_kinds_at_lists_kinds_with_lines(options: SqlitePinOptions) -> None:
     """Only kinds that have a line or route at the stop are listed."""
     assert options.kinds_at(stop_id='C') == (RouteKind.TRAIN,)

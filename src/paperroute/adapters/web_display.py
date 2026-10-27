@@ -5,6 +5,7 @@ import ipaddress
 import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping
+from datetime import datetime
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Final
 from urllib.parse import urlsplit
@@ -24,6 +25,7 @@ from paperroute.adapters.settings_form import (
 from paperroute.adapters.web_common import asset, asset_bytes, form_fields
 from paperroute.adapters.web_connection import ConnectionPages
 from paperroute.adapters.web_pins import PinsPages
+from paperroute.adapters.web_suggest import SuggestPages
 from paperroute.adapters.web_ways import WaysPages
 from paperroute.core.messages import (
     POWER_ACTIONS,
@@ -37,6 +39,7 @@ from paperroute.core.messages import (
     PowerAction,
     PowerRequested,
 )
+from paperroute.core.model import SYDNEY
 from paperroute.core.saved import Settings
 from paperroute.render.canvas import encode_png
 from paperroute.rss import max_rss_mb
@@ -44,7 +47,7 @@ from paperroute.rss import max_rss_mb
 if TYPE_CHECKING:
     from paperroute.adapters.web_device import DevicePages
     from paperroute.observers import PinsSeen
-    from paperroute.ports import PinOptions
+    from paperroute.ports import PinOptions, TripPlanner
 
 logger = logging.getLogger(__name__)
 
@@ -250,6 +253,10 @@ class WebDisplay:
         Gives the pins the app last reported; None until it does.
     options : PinOptions | None
         The timetable's choices for the pin editor, or None.
+    planner : TripPlanner | None
+        The Trip Planner for suggested ways, or None.
+    now : Callable[[], datetime]
+        Gives the current time, for the default trip search.
 
     Attributes
     ----------
@@ -273,7 +280,10 @@ class WebDisplay:
         device: 'DevicePages | None' = None,
         pins: Callable[[], 'PinsSeen | None'] | None = None,
         options: 'PinOptions | None' = None,
+        planner: 'TripPlanner | None' = None,
+        now: Callable[[], datetime] = lambda: datetime.now(SYDNEY),
     ) -> None:
+        self._trips = planner, now
         self._status = status
         self.device = device
         self._pins = pins or (lambda: None)
@@ -376,9 +386,12 @@ class WebDisplay:
         app.add_routes(ConnectionPages(
             pins=self._pins, options=self._options,
         ).routes())
-        app.add_routes(WaysPages(
-            pages=pins, pins=self._pins, options=self._options,
-        ).routes())
+        ways = WaysPages(pages=pins, pins=self._pins, options=self._options)
+        planner, now = self._trips
+        suggest = SuggestPages(ways=ways, planner=planner, now=now)
+        ways.card = suggest.card
+        app.add_routes(ways.routes())
+        app.add_routes(suggest.routes())
         if self.device is not None:
             app.add_routes([
                 web.get('/device/power', self._power_page),

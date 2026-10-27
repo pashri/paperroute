@@ -36,6 +36,7 @@ from paperroute.adapters.systemd import SystemdNotifier
 from paperroute.adapters.tfnsw import AiohttpFeedsClient
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
+from paperroute.adapters.trip_planner import trip_planner_for
 from paperroute.adapters.web_device import DevicePages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.wifi import NmcliWifi, NullWifi
@@ -847,6 +848,7 @@ def web_main(
             status=timings.snapshot,
             pins=lambda: timings.pins,
             options=SqlitePinOptions(network=network),
+            planner=trip_planner_for(live=args.feeds == 'live'),
         )
         display.device = device_pages_for(
             args=args, timings=timings, display=display,

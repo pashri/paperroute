@@ -921,3 +921,38 @@ main > .notice {
 .window-preview:empty {
   display: none;
 }
+
+.suggestions .journeys {
+  display: grid;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.suggestions .journey {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  min-width: 0;
+  text-align: start;
+}
+
+.suggestions .greyed,
+.suggestions .failure {
+  color: var(--muted);
+}
+
+.suggestions .tag {
+  font-size: 0.875rem;
+  font-style: italic;
+}
+
+.ways .way {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem;
+  min-width: 0;
+}

@@ -54,6 +54,11 @@ GROUP BY s.station_id, r.kind, r.route
 PLACE: Final[str] = (
     'SELECT stop_id, name, lon, lat FROM stops WHERE stop_id = ?'
 )
+TRIP_STOP: Final[str] = """
+SELECT p.stop_id, p.name, p.lon, p.lat FROM stops s
+JOIN stops p ON p.stop_id = COALESCE(NULLIF(s.parent_station, ''), s.stop_id)
+WHERE s.stop_id = ?
+"""
 STATION_LINES: Final[str] = (
     ROUTE_COLUMNS
     + """
@@ -338,6 +343,23 @@ class SqlitePinOptions:
             The place; None when the timetable does not know it.
         """
         rows = self.network.fetch(sql=PLACE, params=(stop_id,))
+        return place_of(row=rows[0]) if rows else None
+
+    def trip_stop(self, *, stop_id: str) -> StopPlace | None:
+        """
+        Map a Trip Planner stop to the editor's station-level place.
+
+        Parameters
+        ----------
+        stop_id : str
+            Trip Planner stop ID.
+
+        Returns
+        -------
+        StopPlace | None
+            The stop, lifted to its parent station; None when unknown.
+        """
+        rows = self.network.fetch(sql=TRIP_STOP, params=(stop_id,))
         return place_of(row=rows[0]) if rows else None
 
     def kinds_at(self, *, stop_id: str) -> tuple[RouteKind, ...]:

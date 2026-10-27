@@ -36,6 +36,8 @@ class FakePinOptions:
         What `reached_from` gives.
     between : tuple[str, ...]
         What `routes_between` gives.
+    parents : dict[str, str]
+        Station IDs by Trip Planner stop ID, for `trip_stop`.
     """
 
     places: dict[str, StopPlace] = field(default_factory=dict)
@@ -54,6 +56,7 @@ class FakePinOptions:
     changes: tuple[ChangeStop, ...] = ()
     reached: tuple[StopPlace, ...] = ()
     between: tuple[str, ...] = ()
+    parents: dict[str, str] = field(default_factory=dict)
 
     def search(self, *, text: str) -> tuple[StopMatch, ...]:
         """
@@ -86,6 +89,22 @@ class FakePinOptions:
             The place, or None when it is not known.
         """
         return self.places.get(stop_id)
+
+    def trip_stop(self, *, stop_id: str) -> StopPlace | None:
+        """
+        Give a known place, lifted to its parent.
+
+        Parameters
+        ----------
+        stop_id : str
+            Trip Planner stop ID.
+
+        Returns
+        -------
+        StopPlace | None
+            The place, or None when it is not known.
+        """
+        return self.places.get(self.parents.get(stop_id, stop_id))
 
     def kinds_at(self, *, stop_id: str) -> tuple[RouteKind, ...]:
         """

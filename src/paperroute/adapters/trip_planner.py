@@ -8,6 +8,7 @@ from typing import Final
 import aiohttp
 
 from paperroute.adapters.rate_limit import StartLimiter
+from paperroute.adapters.secrets_file import SecretsFile, key_path_from_env
 from paperroute.adapters.tfnsw import BASE_URL
 from paperroute.core.trip_search import (
     Journey,
@@ -285,3 +286,82 @@ class TfnswTripPlanner:
         )
         data = await self.fetch_json(self.base_url + TRIP_PATH, params)
         return parse_journeys(data=data)
+
+
+class KeyedTripPlanner:
+    """
+    A Trip Planner that reads the API key before each request.
+
+    Parameters
+    ----------
+    key : Callable[[], str | None]
+        Gives the current key, or None when there is none.
+    planner : TfnswTripPlanner
+        The planner that makes the requests.
+    """
+
+    def __init__(
+        self, *, key: Callable[[], str | None], planner: TfnswTripPlanner,
+    ) -> None:
+        self.key = key
+        self.planner = planner
+
+    async def trips(
+        self, *, origin_id: str, destination_id: str, search: TripSearch,
+    ) -> tuple[Journey, ...]:
+        """
+        Ask for journeys with the current key.
+
+        Parameters
+        ----------
+        origin_id : str
+            Trip Planner ID of the start.
+        destination_id : str
+            Trip Planner ID of the end.
+        search : TripSearch
+            When to leave or arrive.
+
+        Returns
+        -------
+        tuple[Journey, ...]
+            The journeys found, without walking legs.
+
+        Raises
+        ------
+        PlannerUnavailable
+            When there is no key, or the request fails.
+        """
+        key = self.key()
+        if key is None:
+            raise PlannerUnavailable('no key')
+        self.planner.key = key
+        return await self.planner.trips(
+            origin_id=origin_id, destination_id=destination_id, search=search,
+        )
+
+
+def trip_planner_for(*, live: bool) -> KeyedTripPlanner | None:
+    """
+    Make the Trip Planner for live feeds.
+
+    Parameters
+    ----------
+    live : bool
+        True when the device runs on live feeds.
+
+    Returns
+    -------
+    KeyedTripPlanner | None
+        A planner reading the key file named by PAPERROUTE_API_KEY_FILE
+        at each request; None for replayed feeds.
+    """
+    if not live:
+        return None
+    return KeyedTripPlanner(
+        key=SecretsFile(path=key_path_from_env()).read,
+        planner=TfnswTripPlanner(
+            session_factory=aiohttp.ClientSession,
+            key='',
+            limiter=StartLimiter(),
+        ),
+    )

@@ -14,7 +14,12 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from paperroute.adapters.trip_planner import TfnswTripPlanner, parse_journeys
+from paperroute.adapters.trip_planner import (
+    KeyedTripPlanner,
+    TfnswTripPlanner,
+    parse_journeys,
+    trip_planner_for,
+)
 from paperroute.core.trip_search import PlannerUnavailable, TripSearch
 from tests.fakes import FakeTripPlanner
 
@@ -277,3 +282,30 @@ async def test_fake_planner_records_and_fails() -> None:
     fake.down = True
     with pytest.raises(PlannerUnavailable):
         await fake.trips(origin_id='a', destination_id='b', search=search)
+
+
+async def test_keyed_planner_reads_key_each_time() -> None:
+    """No key fails; a key is set before each request."""
+    keys: list[str | None] = [None, 'first-fake-key', 'second-fake-key']
+    fetch = Recorder(data={'journeys': []})
+    keyed = KeyedTripPlanner(key=lambda: keys[0], planner=planner(fetch=fetch))
+    search = TripSearch(when=WHEN, arrive=True)
+    with pytest.raises(PlannerUnavailable):
+        await keyed.trips(origin_id='A', destination_id='B', search=search)
+    keys.pop(0)
+    assert await keyed.trips(
+        origin_id='A', destination_id='B', search=search,
+    ) == ()
+    assert keyed.planner.key == 'first-fake-key'
+    assert len(fetch.calls) == 1
+
+
+def test_planner_only_for_live_feeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Replayed feeds get no planner; live feeds one over the key file."""
+    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    assert trip_planner_for(live=False) is None
+    live = trip_planner_for(live=True)
+    assert live is not None
+    assert live.key() is None

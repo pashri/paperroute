@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import Final, cast
 
 from paperroute.adapters.alert_rows import (
+    LineMemory,
     alert_places,
-    read_leg_lines,
     read_trainlink,
 )
 from paperroute.adapters.calendar_rows import (
@@ -208,6 +208,7 @@ class SqliteTimetableRepository:
         self.schema: tuple[Identity | None, Features] | None = None
         self.labels: dict[str, str] = {}
         self.labels_id: Identity | None = None
+        self.lines = LineMemory()
 
     @property
     def identity(self) -> tuple[int, int] | None:
@@ -815,12 +816,13 @@ class SqliteTimetableRepository:
         Returns
         -------
         frozenset[str]
-            Route IDs ridden between them (see `read_leg_lines`).
+            Route IDs ridden between them, kept for the file and day.
         """
         params = dict[str, object](origin=ends[0], dest=ends[1], day=f'{day}')
-        return read_leg_lines(
-            fetch=lambda sql: self.fetch(sql=sql, params=params),
+        return self.lines.read(
             joins=self.features().joins,
+            key=(self.identity, ends, day),
+            fetch=lambda sql: self.fetch(sql=sql, params=params),
         )
 
     def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:

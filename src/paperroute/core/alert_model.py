@@ -200,9 +200,9 @@ class AlertsState:
         The `between` pin's TrainLink answer.
     lines : frozenset[str]
         The `between` pin's leg route IDs from the timetable.
-    asked : tuple[Pin, str | None, bool] | None
-        The pin and timetable version stations between were last asked
-        for, and whether its trips were known then.
+    asked : tuple[Pin, str | None, bool, date] | None
+        The pin, timetable version and service day stations between
+        were last asked for, and whether its trips were known then.
     matched : tuple[Pin, tuple[Matched, ...]] | None
         A pin and the alerts tied to it.
     selected : str | None
@@ -217,7 +217,7 @@ class AlertsState:
     families: Mapping[str, frozenset[str]] = field(default_factory=dict)
     trainlink: bool = False
     lines: frozenset[str] = frozenset()
-    asked: tuple[Pin, str | None, bool] | None = None
+    asked: tuple[Pin, str | None, bool, date] | None = None
     matched: tuple[Pin, tuple[Matched, ...]] | None = None
     selected: str | None = None
     page: int = 0

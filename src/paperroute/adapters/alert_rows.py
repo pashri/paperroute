@@ -1,12 +1,14 @@
 """Look up the routes and stops an alert feed names."""
 
 from collections.abc import Callable, Collection, Sequence
+from datetime import date
 from typing import Final
 
 from paperroute.adapters.calendar_rows import Fetch, FetchIn
 from paperroute.core.alert_model import AlertPlaces
 from paperroute.core.model import REGIONAL_AGENCIES
 
+LINES_LIMIT: Final[int] = 64
 ROUTE_PREFIXES: Final[tuple[str, ...]] = (
     'sydneytrains:',
     'metro:',
@@ -99,6 +101,53 @@ def read_leg_lines(
     """
     rows = fetch(LEG_LINES_JOINED if joins else LEG_LINES)
     return frozenset(str(route) for route, in rows)
+
+
+type LineKey = tuple[tuple[int, int] | None, tuple[str, str], date]
+
+
+class LineMemory:
+    """
+    Keep each leg's lines for the file and day they were read from.
+
+    At most `LINES_LIMIT` answers are held; the rest are dropped when it
+    is full.
+    """
+
+    def __init__(self) -> None:
+        self.held: dict[LineKey, frozenset[str]] = {}
+
+    def read(
+        self,
+        *,
+        key: LineKey,
+        fetch: Callable[[str], Sequence[tuple[object, ...]]],
+        joins: bool,
+    ) -> frozenset[str]:
+        """
+        Give a leg's lines, reading them only when not already held.
+
+        Parameters
+        ----------
+        key : LineKey
+            File identity, From and To, and service day.
+        fetch : Callable[[str], Sequence[tuple[object, ...]]]
+            Runs one query, as for `read_leg_lines`.
+        joins : bool
+            Whether the timetable joins trips that run on as others.
+
+        Returns
+        -------
+        frozenset[str]
+            The route IDs.
+        """
+        found = self.held.get(key)
+        if found is None:
+            found = read_leg_lines(fetch=fetch, joins=joins)
+            if len(self.held) >= LINES_LIMIT:
+                self.held.clear()
+            self.held[key] = found
+        return found
 
 
 def suffix_of(*, route_id: str) -> str | None:

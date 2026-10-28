@@ -337,6 +337,18 @@ def test_between_asked_again_once_trips_known() -> None:
     ] == [frozenset({'trip-0'})]
 
 
+def test_between_asked_again_on_a_new_service_day() -> None:
+    """A pin reloaded past midnight is asked about for the new day."""
+    state, _ = loaded_with(
+        state=started(pins=(STRATHFIELD_TOWN_HALL,)), modes=(),
+    )
+    tomorrow = NOW + timedelta(days=1)
+    _, effects = loaded_with(state=replace(state, now=tomorrow), modes=())
+    assert [e.day for e in effects if isinstance(e, LoadBetween)] == [
+        tomorrow.date(),
+    ]
+
+
 def test_between_stored_and_rematched() -> None:
     """Stations between are kept for the pin and used in matching."""
     state, _ = loaded_with(state=started(pins=(STRATHFIELD_TOWN_HALL,)))

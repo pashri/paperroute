@@ -1933,3 +1933,25 @@ def test_leg_lines_without_joins(
     assert 'sydneytrains:T1' in old_network.leg_lines(
         ends=('C', 'W2'), day=date(2026, 10, 6),
     )
+
+
+def test_leg_lines_repeat_ask_does_not_query_again(
+    network: SqliteTimetableRepository,
+) -> None:
+    """The same ends and day are answered from memory the second time."""
+    day = date(2026, 10, 6)
+    first = network.leg_lines(ends=('C', 'W2'), day=day)
+    queries: list[str] = []
+    fetch = network.fetch
+
+    def counting(
+        *, sql: str, params: tuple[object, ...] | dict[str, object],
+    ) -> list[tuple[object, ...]]:
+        queries.append(sql)
+        return fetch(sql=sql, params=params)
+
+    network.fetch = counting  # type: ignore[method-assign]
+    assert network.leg_lines(ends=('C', 'W2'), day=day) == first
+    assert not queries
+    network.leg_lines(ends=('C', 'W2'), day=date(2026, 10, 7))
+    assert queries

@@ -117,7 +117,7 @@ def alert_polls(*, state: State) -> tuple[State, tuple[Effect, ...]]:
 
 def between_requests(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
-    Ask once per pin and timetable for its stop families and stations.
+    Ask once per pin, timetable and day for its stop families and stations.
 
     Parameters
     ----------
@@ -142,17 +142,18 @@ def between_requests(*, state: State) -> tuple[State, tuple[Effect, ...]]:
         leg.kind is None and leg.destination is not None for leg, _ in lists
     )
     known = bool(departures) or not (wants or unsure)
-    if was_asked(state=state, pin=pin, known=known):
+    day = departures[0].service_day if departures else service_date(
+        moment=state.now,
+    )
+    if was_asked(state=state, pin=pin, known=known, day=day):
         return state, ()
     load = LoadBetween(
         pin=pin,
         trip_ids=trip_ids,
-        day=departures[0].service_day if departures else service_date(
-            moment=state.now,
-        ),
+        day=day,
         timetable=state.saving.timetable,
     )
-    asked = (pin, state.saving.timetable, known)
+    asked = (pin, state.saving.timetable, known, day)
     return replace(state, alerts=replace(state.alerts, asked=asked)), (load,)
 
 
@@ -173,7 +174,7 @@ def service_date(*, moment: datetime) -> date:
     return moment.astimezone(SYDNEY).date()
 
 
-def was_asked(*, state: State, pin: Pin, known: bool) -> bool:
+def was_asked(*, state: State, pin: Pin, known: bool, day: date) -> bool:
     """
     Say whether a pin was asked about of this timetable already.
 
@@ -185,6 +186,8 @@ def was_asked(*, state: State, pin: Pin, known: bool) -> bool:
         The pin.
     known : bool
         True when its trips are known now, or not needed.
+    day : date
+        The service day the lines are wanted for.
 
     Returns
     -------
@@ -195,6 +198,7 @@ def was_asked(*, state: State, pin: Pin, known: bool) -> bool:
     return (
         asked is not None
         and asked[1] == state.saving.timetable
+        and asked[3] == day
         and same_place(first=asked[0], second=pin)
         and (asked[2] or not known)
     )

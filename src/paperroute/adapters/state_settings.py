@@ -49,6 +49,7 @@ class SettingsModel(BaseModel):
     alert_lookahead: Lookahead
     connection_map: ConnectionMap
     skip_school_buses: bool = True
+    skip_school_on_route_pins: bool = False
 
     @field_validator('peak_windows')
     @classmethod
@@ -154,6 +155,7 @@ def settings_to_model(*, settings: Settings) -> SettingsModel:
         alert_lookahead=settings.alert_lookahead,
         connection_map=settings.connection_map,
         skip_school_buses=settings.skip_school_buses,
+        skip_school_on_route_pins=settings.skip_school_on_route_pins,
     )
 
 
@@ -186,6 +188,7 @@ def settings_from_model(*, model: SettingsModel) -> Settings:
         alert_lookahead=model.alert_lookahead,
         connection_map=model.connection_map,
         skip_school_buses=model.skip_school_buses,
+        skip_school_on_route_pins=model.skip_school_on_route_pins,
     )
 
 

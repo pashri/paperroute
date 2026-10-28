@@ -124,6 +124,9 @@ class Settings:  # pylint: disable=too-many-instance-attributes
         Whether routes the timetable marks as school services are left
         out of pins with a To, the stop search and Trip Planner
         suggestions.
+    skip_school_on_route_pins : bool
+        Whether school routes are also left out of pins without a To;
+        it has no effect while `skip_school_buses` is off.
     """
 
     auto_rebuild: bool = True
@@ -138,6 +141,19 @@ class Settings:  # pylint: disable=too-many-instance-attributes
     alert_lookahead: Lookahead = Lookahead.WEEK
     connection_map: ConnectionMap = ConnectionMap.CHANGES
     skip_school_buses: bool = True
+    skip_school_on_route_pins: bool = False
+
+    @property
+    def school_off_route_pins(self) -> bool:
+        """
+        Say whether school routes are left out of pins without a To.
+
+        Returns
+        -------
+        bool
+            True when both school switches are on.
+        """
+        return self.skip_school_buses and self.skip_school_on_route_pins
 
 
 @dataclass(frozen=True)

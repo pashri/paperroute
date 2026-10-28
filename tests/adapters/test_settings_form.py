@@ -203,6 +203,18 @@ def test_settings_page_offers_three_map_choices() -> None:
     assert positions == sorted(positions)
 
 
+def test_route_pin_school_switch_read_and_shown() -> None:
+    """The second school switch posts as on or off and is drawn unchecked."""
+    assert changed_from(fields={'skip_school_on_route_pins': 'on'}) == (
+        SettingsChanged(skip_school_on_route_pins=True)
+    )
+    values = form_values(settings=Settings())
+    assert values['skip_school_on_route_pins'] == 'off'
+    page = asset(name='settings.html')
+    assert 'name="skip_school_on_route_pins"' in page
+    assert 'Also on pins without a To' in page
+
+
 def test_school_switch_read_and_shown() -> None:
     """The school switch posts as on or off and is drawn checked."""
     assert changed_from(fields={'skip_school_buses': 'off'}) == (

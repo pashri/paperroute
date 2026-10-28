@@ -112,6 +112,13 @@
                  value="on"{{skip_school_buses}}>
           Leave out school buses
         </label>
+        <input type="hidden" name="skip_school_on_route_pins" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch"
+                 name="skip_school_on_route_pins"
+                 value="on"{{skip_school_on_route_pins}}>
+          Also on pins without a To
+        </label>
         <label>Connection map
           <select name="connection_map">
             <option value="changes"{{connection_map:changes}}>Changes</option>

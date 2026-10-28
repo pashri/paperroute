@@ -81,7 +81,8 @@ class LoadDepartures:
     """
     Ask the timetable for departures, tagged with its version.
 
-    `skip_school` leaves school routes out of a pin with a To.
+    `skip_school` leaves school routes out of a pin with a To;
+    `skip_school_pins` leaves them out of a pin without one.
     """
 
     pin: Pin
@@ -89,6 +90,7 @@ class LoadDepartures:
     end: datetime
     timetable: str | None = None
     skip_school: bool = True
+    skip_school_pins: bool = False
 
 
 @dataclass(frozen=True)
@@ -344,7 +346,7 @@ class DeparturesLoaded:
     """
     Departures arrived for a pin, from the timetable version asked.
 
-    `skip_school` echoes the load's.
+    `skip_school` and `skip_school_pins` echo the load's.
     """
 
     pin: Pin
@@ -353,6 +355,7 @@ class DeparturesLoaded:
     timetable: str | None = None
     legs: Legs | None = None
     skip_school: bool = True
+    skip_school_pins: bool = False
 
 
 @dataclass(frozen=True)
@@ -522,6 +525,8 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
         How the Map shows a connection pin.
     skip_school_buses : bool | None
         Whether school routes are left out.
+    skip_school_on_route_pins : bool | None
+        Whether school routes are also left out of pins without a To.
     """
 
     auto_rebuild: bool | None = None
@@ -536,6 +541,7 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
     alert_lookahead: Lookahead | None = None
     connection_map: ConnectionMap | None = None
     skip_school_buses: bool | None = None
+    skip_school_on_route_pins: bool | None = None
 
 
 @dataclass(frozen=True)

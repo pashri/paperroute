@@ -241,6 +241,21 @@ def test_school_routes_dropped_when_asked() -> None:
     } == {'711'}
 
 
+def test_school_routes_dropped_on_pin_without_to_when_asked() -> None:
+    """A pin without a To drops school routes only when the load asks."""
+    timetable = RoutesTimetable(
+        routes=('711', 'S1'), kinds={'S1': RouteKind.SCHOOL},
+    )
+    pin = replace(WORK, destination=None)
+    plain = LoadDepartures(pin=pin, start=START, end=END)
+    asked = replace(plain, skip_school_pins=True)
+    kept = departures_read(timetable=timetable, effect=plain)
+    dropped = departures_read(timetable=timetable, effect=asked)
+    assert [item.route for item in kept.departures] == ['711', 'S1']
+    assert [item.route for item in dropped.departures] == ['711']
+    assert dropped.skip_school_pins
+
+
 def test_school_routes_kept_when_not_skipped() -> None:
     """With school buses allowed, school routes stay."""
     timetable = RoutesTimetable(

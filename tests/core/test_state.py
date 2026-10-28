@@ -115,6 +115,7 @@ from paperroute.core.saved import (
     LiveView,
     Rate,
     Saved,
+    Settings,
     seeded,
 )
 from paperroute.core.state import initial_state, needed_feeds, step
@@ -342,6 +343,39 @@ def test_load_follows_school_switch() -> None:
     _, effects = step(state, Tick(now=START))
     loads = [e for e in effects if isinstance(e, LoadDepartures)]
     assert [load.skip_school for load in loads] == [False]
+
+
+def test_load_follows_route_pin_school_switch() -> None:
+    """The load skips school on route pins only with both switches on."""
+    state = fresh()
+    effective = []
+    for main, second in ((True, True), (True, False), (False, True)):
+        settings = replace(
+            state.settings,
+            skip_school_buses=main,
+            skip_school_on_route_pins=second,
+        )
+        _, effects = step(replace(state, settings=settings), Tick(now=START))
+        loads = [e for e in effects if isinstance(e, LoadDepartures)]
+        effective.append(loads[0].skip_school_pins)
+    assert effective == [True, False, False]
+
+
+def test_load_for_other_route_pin_switch_is_stale() -> None:
+    """Departures loaded under the other route-pin switch are ignored."""
+    state = replace(
+        fresh(),
+        settings=Settings(skip_school_on_route_pins=True),
+    )
+    event = DeparturesLoaded(
+        pin=shown(state=state),
+        departures=(departure(departs=START),),
+        until=START + HORIZON,
+        skip_school_pins=False,
+    )
+    after, effects = step(state, event)
+    assert after == state
+    assert not effects
 
 
 def test_load_for_other_school_switch_is_stale() -> None:

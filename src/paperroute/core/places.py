@@ -384,9 +384,10 @@ def is_stale(*, state: State, event: Event) -> bool:
         loaded or failed for another map area.
     """
     match event:
-        case (
-            DeparturesLoaded(skip_school=skip)
-        ) if skip != state.settings.skip_school_buses:
+        case DeparturesLoaded(skip_school=skip, skip_school_pins=pins) if (
+            skip != state.settings.skip_school_buses
+            or pins != state.settings.school_off_route_pins
+        ):
             return True
         case (
             DeparturesLoaded(pin=pin, timetable=timetable)

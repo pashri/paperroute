@@ -35,6 +35,7 @@ from paperroute.core.messages import (
     WifiEvent,
 )
 from paperroute.core.quota import calls_today
+from paperroute.core.saved import Settings
 from paperroute.core.state_model import State
 from paperroute.core.state_views import saved_of, settled
 from paperroute.core.wifi import on_wifi_event, setup_closed
@@ -50,6 +51,28 @@ RESET_NOTICE: Final[dict[ResetKind, str]] = {
 RESET_DETAIL: Final[str] = 'paperroute starts again by itself'
 PROBE_EVERY: Final[timedelta] = timedelta(seconds=30)
 WATCH_EVERY: Final[timedelta] = timedelta(seconds=5)
+
+
+def school_changed(*, before: Settings, after: Settings) -> bool:
+    """
+    Say whether a settings change alters which school routes are shown.
+
+    Parameters
+    ----------
+    before : Settings
+        Settings before the change.
+    after : Settings
+        Settings after it.
+
+    Returns
+    -------
+    bool
+        True when either school switch differs.
+    """
+    return (
+        before.skip_school_buses != after.skip_school_buses
+        or before.skip_school_on_route_pins != after.skip_school_on_route_pins
+    )
 
 
 def on_settings(
@@ -83,7 +106,7 @@ def on_settings(
     settings = replace(state.settings, **given)
     turned = settings.rotate != state.settings.rotate
     after = replace(state, settings=settings)
-    if settings.skip_school_buses != state.settings.skip_school_buses:
+    if school_changed(before=state.settings, after=settings):
         after = replace(
             after,
             board=replace(

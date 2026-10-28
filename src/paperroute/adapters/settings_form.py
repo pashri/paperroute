@@ -24,6 +24,7 @@ SWITCHES: Final[tuple[str, ...]] = (
     'larger_text',
     'inverted_lists',
     'skip_school_buses',
+    'skip_school_on_route_pins',
 )
 SLOTS: Final[tuple[str, ...]] = ('peak_1', 'peak_2')
 CHOICES: Final[frozenset[str]] = frozenset(
@@ -355,6 +356,7 @@ def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged:
             kind=ConnectionMap, fields=fields, name='connection_map',
         ),
         skip_school_buses=switches.get('skip_school_buses'),
+        skip_school_on_route_pins=switches.get('skip_school_on_route_pins'),
     )
 
 

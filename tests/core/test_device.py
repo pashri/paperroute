@@ -93,6 +93,16 @@ def test_school_switch_reloads_departures() -> None:
     assert same.board == before.board
 
 
+def test_route_pin_school_switch_reloads_departures() -> None:
+    """Turning the route-pin school switch drops the loaded departures."""
+    before = loaded(state=fresh())
+    state, _ = step(before, SettingsChanged(skip_school_on_route_pins=True))
+    assert state.board.loaded_until is None
+    assert not state.board.departures
+    same, _ = step(before, SettingsChanged(skip_school_on_route_pins=False))
+    assert same.board == before.board
+
+
 def test_rotate_change_redraws_full() -> None:
     """Turning the frame redraws in full; an unchanged rotate does not."""
     before = pinned()

@@ -56,9 +56,17 @@ def departures_read(
         until=effect.end,
         timetable=effect.timetable,
         skip_school=effect.skip_school,
+        skip_school_pins=effect.skip_school_pins,
     )
     if pin.destination is None:
-        return replace(loaded, departures=tuple(read(pin=pin, end=effect.end)))
+        return replace(
+            loaded,
+            departures=usable(
+                items=read(pin=pin, end=effect.end),
+                pin=replace(pin, never=()),
+                skip_school=effect.skip_school_pins,
+            ),
+        )
     keep = functools.partial(usable, pin=pin, skip_school=effect.skip_school)
     direct = read(pin=direct_leg(pin=pin), end=effect.end)
     loaded = replace(loaded, departures=keep(items=direct))

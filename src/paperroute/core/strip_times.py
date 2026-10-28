@@ -540,168 +540,6 @@ def arrivals_after(
         yield station, moment
 
 
-def up_to(
-    *, calls: Iterable[tuple[str, datetime]], target: str | None,
-) -> Iterator[tuple[str, datetime]]:
-    """
-    Cut a run of calls after its first call at a station.
-
-    Parameters
-    ----------
-    calls : Iterable[tuple[str, datetime]]
-        Stations and times in running order.
-    target : str | None
-        The station to stop after, or None to keep every call.
-
-    Yields
-    ------
-    tuple[str, datetime]
-        The calls up to and including the first at the target.
-    """
-    for station, moment in calls:
-        yield station, moment
-        if station == target:
-            return
-
-
-def first_arrivals(*, trips: TripInputs, origin: str,
-                   target: str | None = None) -> dict[str, datetime]:
-    """
-    Find the first arrival at each station after the From.
-
-    Parameters
-    ----------
-    trips : TripInputs
-        The strip's departures and live data.
-    origin : str
-        The From station ID.
-    target : str | None
-        The Destination's station ID; each departure counts only up to
-        its first call there. None counts every call.
-
-    Returns
-    -------
-    dict[str, datetime]
-        Earliest arrival by station, among the strip's departures not yet
-        gone and not cancelled whose patterns are loaded.
-    """
-    best: dict[str, datetime] = {}
-    upcoming = not_departed(
-        departures=live_strip(trips=trips), now=trips.now,
-    )
-    for item in upcoming:
-        if item.cancelled:
-            continue
-        calls = arrivals_after(item=item, trips=trips, origin=origin)
-        for station, moment in up_to(calls=calls, target=target):
-            if station not in best or moment < best[station]:
-                best[station] = moment
-    return best
-
-
-def onward_arrivals(*, trips: TripInputs, origin: str, target: str
-                    ) -> dict[str, datetime]:
-    """
-    Follow the first vehicle to reach the Destination on past it.
-
-    Parameters
-    ----------
-    trips : TripInputs
-        The strip's departures and live data.
-    origin : str
-        The From station ID.
-    target : str
-        The Destination's station ID.
-
-    Returns
-    -------
-    dict[str, datetime]
-        First arrival by station after its first call at the Destination,
-        for the departure not yet gone and not cancelled that gets there
-        first; empty when none does.
-    """
-    reached: list[tuple[datetime, list[tuple[str, datetime]]]] = []
-    upcoming = not_departed(
-        departures=live_strip(trips=trips), now=trips.now,
-    )
-    for item in upcoming:
-        calls = [] if item.cancelled else list(
-            arrivals_after(item=item, trips=trips, origin=origin),
-        )
-        at = next(
-            (i for i, (station, _) in enumerate(calls) if station == target),
-            None,
-        )
-        if at is not None:
-            reached.append((calls[at][1], calls[at + 1:]))
-    found: dict[str, datetime] = {}
-    if reached:
-        for station, moment in min(reached, key=lambda pair: pair[0])[1]:
-            found.setdefault(station, moment)
-    return found
-
-
-def past_rows(*, reach: Reach, target: int) -> list[int]:
-    """
-    List the line and branch rows the track reaches past a row.
-
-    Parameters
-    ----------
-    reach : Reach
-        The reach.
-    target : int
-        The Destination's row.
-
-    Returns
-    -------
-    list[int]
-        Indices of the rows whose track comes from the target row,
-        directly or through others, in row order.
-    """
-    found: list[int] = []
-    for index, row in enumerate(reach.rows):
-        at = row.parent
-        while at is not None and at != target:
-            at = reach.rows[at].parent
-        if at == target and row.kind in (RowKind.MAIN, RowKind.BRANCH):
-            found.append(index)
-    return found
-
-
-def onward_text(*, trips: TripInputs, reach: Reach, origin: str,
-                target: int | None) -> dict[int, str]:
-    """
-    Give the rows past the Destination the first vehicle's times there.
-
-    Parameters
-    ----------
-    trips : TripInputs
-        The strip's departures and live data.
-    reach : Reach
-        The reach.
-    origin : str
-        The From station ID.
-    target : int | None
-        The Destination's row, or None when it isn't on the strip.
-
-    Returns
-    -------
-    dict[int, str]
-        Clock time by row past the Destination, for the stations the
-        vehicle that reaches the Destination first goes on to call at.
-    """
-    if target is None:
-        return {}
-    found = onward_arrivals(
-        trips=trips, origin=origin, target=reach.rows[target].place.stop_id,
-    )
-    return {
-        index: clock_text(moment=found[reach.rows[index].place.stop_id])
-        for index in past_rows(reach=reach, target=target)
-        if reach.rows[index].place.stop_id in found
-    }
-
-
 def boardable(*, item: LiveDeparture, trips: TripInputs, origin: str,
               target: str | None) -> bool:
     """
@@ -772,162 +610,15 @@ def next_item(*, trips: TripInputs, origin: str, target: str | None
     )
 
 
-def next_departure(*, trips: TripInputs, origin: str, target: str | None
-                   ) -> datetime | None:
-    """
-    Find when the strip's next departure leaves the From.
-
-    Parameters
-    ----------
-    trips : TripInputs
-        The strip's departures and live data.
-    origin : str
-        The From station ID.
-    target : str | None
-        The Destination's station ID, or None for any departure.
-
-    Returns
-    -------
-    datetime | None
-        The earliest live departure time among the strip's departures
-        not yet gone that can be taken, or None.
-    """
-    item = next_item(trips=trips, origin=origin, target=target)
-    return None if item is None else item.departs
-
-
-def approach_times(*, trips: TripInputs, origin: str,
-                   stations: Collection[str]) -> dict[str, datetime]:
-    """
-    Find when the From's next departure calls at stations before it.
-
-    Parameters
-    ----------
-    trips : TripInputs
-        The strip's departures and live data.
-    origin : str
-        The From station ID.
-    stations : Collection[str]
-        Station IDs before the From.
-
-    Returns
-    -------
-    dict[str, datetime]
-        Departure time by station for each of the stations the next
-        departure (any target) stops at before the From, not running
-        through, shifted by its
-        live delay; empty when there is none or its pattern is unknown.
-    """
-    item = next_item(trips=trips, origin=origin, target=None)
-    if item is None:
-        return {}
-    started = started_pattern(item=item, trips=trips, origin=origin)
-    if started is None:
-        return {}
-    pattern, start, delay = started
-    return {
-        station: shifted(
-            moment=service_time(
-                day=item.departure.service_day,
-                seconds=(
-                    stop.arrives if stop.departs is None else stop.departs
-                ),
-            ),
-            seconds=delay,
-        )
-        for stop in pattern.stops[:start]
-        if not stop.passes
-        and (station := trips.station_of.get(stop.station, stop.station))
-        in stations
-    }
-
-
-def approach_text(*, trips: TripInputs, reach: Reach, origin: str
-                  ) -> dict[int, str]:
-    """
-    Give each approach row the time the next departure calls there.
-
-    Parameters
-    ----------
-    trips : TripInputs
-        The strip's departures and live data.
-    reach : Reach
-        The reach.
-    origin : str
-        The From station ID.
-
-    Returns
-    -------
-    dict[int, str]
-        Clock time by approach row; a row the trip skips has none.
-    """
-    rows = {
-        index: row.place.stop_id
-        for index, row in enumerate(reach.rows)
-        if row.kind == RowKind.APPROACH
-    }
-    found = approach_times(
-        trips=trips, origin=origin, stations=set(rows.values()),
-    ) if rows else {}
-    return {
-        index: clock_text(moment=found[key])
-        for index, key in rows.items()
-        if key in found
-    }
-
-
-def ridden_times(
-    *,
-    trips: TripInputs,
-    reach: Reach,
-    origin: str,
-    target: int | None,
-    ride: frozenset[int],
-) -> dict[int, str]:
-    """
-    Give the ridden rows the first arrival there.
-
-    Parameters
-    ----------
-    trips : TripInputs
-        The strip's departures and live data.
-    reach : Reach
-        The reach.
-    origin : str
-        The From station ID.
-    target : int | None
-        The Destination row, or None.
-    ride : frozenset[int]
-        The ridden rows; empty for every reached row.
-
-    Returns
-    -------
-    dict[int, str]
-        Clock time by main or branch row the first arrival reaches.
-    """
-    best = first_arrivals(
-        trips=trips,
-        origin=origin,
-        target=None if target is None else reach.rows[target].place.stop_id,
-    )
-    return {
-        index: clock_text(moment=best[row.place.stop_id])
-        for index, row in enumerate(reach.rows)
-        if row.kind in (RowKind.MAIN, RowKind.BRANCH)
-        and (not ride or index in ride)
-        and row.place.stop_id in best
-    }
-
-
-def from_leaves(
+def shown_item(
     *,
     trips: TripInputs,
     origin: str,
     target: str | None,
     selected: TripDay | None,
-) -> datetime | None:
+) -> LiveDeparture | None:
     """
-    Find when the From's shown departure leaves.
+    Find the departure whose times a strip shows.
 
     Parameters
     ----------
@@ -942,15 +633,151 @@ def from_leaves(
 
     Returns
     -------
-    datetime | None
-        The picked train's departure, else the next to the Destination;
-        None when there is neither.
+    LiveDeparture | None
+        The picked train, else the next that can be taken; None when
+        there is neither.
     """
-    return next(
+    picked = next(
         (
-            item.departs
+            item
             for item in trips.departures
             if trip_day(departure=item.departure) == selected
         ),
-        next_departure(trips=trips, origin=origin, target=target),
+        None,
     )
+    if picked is not None:
+        return picked
+    return next_item(trips=trips, origin=origin, target=target)
+
+
+def calls_before(
+    *, item: LiveDeparture, trips: TripInputs, origin: str,
+) -> dict[str, datetime]:
+    """
+    Find when a departure calls at stations before the From.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+    trips : TripInputs
+        The strip's loaded patterns, station map and time.
+    origin : str
+        The From station ID.
+
+    Returns
+    -------
+    dict[str, datetime]
+        Departure time by station for the calls before the From that it
+        stops at, shifted by its delay at the From, leaving out the ones
+        it has already made; empty when its pattern is unknown.
+    """
+    started = started_pattern(item=item, trips=trips, origin=origin)
+    if started is None:
+        return {}
+    pattern, start, delay = started
+    found = {
+        trips.station_of.get(stop.station, stop.station): shifted(
+            moment=service_time(
+                day=item.departure.service_day,
+                seconds=(
+                    stop.arrives if stop.departs is None else stop.departs
+                ),
+            ),
+            seconds=delay,
+        )
+        for stop in pattern.stops[:start]
+        if not stop.passes
+    }
+    return {
+        station: moment
+        for station, moment in found.items()
+        if moment >= trips.now
+    }
+
+
+def trip_times(
+    *, item: LiveDeparture, trips: TripInputs, origin: str, above: bool,
+) -> dict[str, datetime]:
+    """
+    Find when one departure calls at each station.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+    trips : TripInputs
+        The strip's loaded patterns, station map and time.
+    origin : str
+        The From station ID.
+    above : bool
+        Include the calls before the From, for rows above it.
+
+    Returns
+    -------
+    dict[str, datetime]
+        Time by station: its first call after the From, else, with
+        `above`, a call before the From it has still to make (see
+        `calls_before`).
+    """
+    after: dict[str, datetime] = {}
+    for station, moment in arrivals_after(
+        item=item, trips=trips, origin=origin,
+    ):
+        after.setdefault(station, moment)
+    before = (
+        calls_before(item=item, trips=trips, origin=origin) if above else {}
+    )
+    return {**before, **after}
+
+
+def trip_text(
+    *,
+    item: LiveDeparture,
+    trips: TripInputs,
+    reach: Reach,
+    rows: Collection[int],
+) -> dict[int, str]:
+    """
+    Give strip rows one departure's times.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+    trips : TripInputs
+        The strip's departures and live data.
+    reach : Reach
+        The reach, with its From row.
+    rows : Collection[int]
+        The rows that may show a time.
+
+    Returns
+    -------
+    dict[int, str]
+        Clock time by approach, main or branch row among `rows` that the
+        departure calls at after the From or, above the From, still has
+        to call at before it (see `trip_times`); rows it skips, has
+        passed or never reaches have none.
+    """
+    origin = next(
+        index
+        for index, row in enumerate(reach.rows)
+        if row.kind is RowKind.ORIGIN
+    )
+    found = [
+        trip_times(
+            item=item,
+            trips=trips,
+            origin=reach.rows[origin].place.stop_id,
+            above=above,
+        )
+        for above in (False, True)
+    ]
+    return {
+        index: clock_text(moment=found[index < origin][row.place.stop_id])
+        for index, row in enumerate(reach.rows)
+        if index in rows
+        and row.kind in (RowKind.APPROACH, RowKind.MAIN, RowKind.BRANCH)
+        and row.place.stop_id in found[index < origin]
+    }

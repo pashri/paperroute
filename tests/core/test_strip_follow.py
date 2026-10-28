@@ -650,3 +650,37 @@ def test_common_pairs_keep_both_orders() -> None:
     """Shared stations are matched in order, either side skipping."""
     assert common_pairs(first='ABCE', second='XBYE') == [(1, 1), (3, 3)]
     assert common_pairs(first='AE', second='BCDE') == [(1, 3)]
+
+
+def test_rows_above_the_from_show_only_the_shown_train() -> None:
+    """Above the From only the next train's calls still to come have times."""
+    inputs = inputs_of(
+        reach=example_reach(),
+        departures=[
+            live(item=train(minutes=0, trip_id='e')),
+            live(item=train(minutes=1, trip_id='w')),
+        ],
+        patterns={
+            'e': line_pattern(
+                trip_id='e',
+                stations=('W2', 'W1', 'J', 'C', 'E1', 'E2'),
+                minutes=-9,
+            ),
+            'w': line_pattern(
+                trip_id='w', stations=('C', 'J', 'W1', 'W2'), minutes=1,
+            ),
+        },
+        now=START - timedelta(minutes=4),
+    )
+    laid = followed(inputs=inputs)
+    reach = laid.reach
+    assert reach is not None
+    times = marks_of(inputs=laid, reach=reach).times
+    above = {
+        row.place.stop_id: times.get(index, '')
+        for index, row in enumerate(reach.rows)
+        if row.above
+    }
+    assert above == {
+        'W2': '', 'W1': '', 'J': '7:57', 'R1': '', 'R2': '', 'R3': '',
+    }

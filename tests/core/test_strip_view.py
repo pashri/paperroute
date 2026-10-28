@@ -244,11 +244,11 @@ def test_times_on_ride_rows_and_on_past_the_destination() -> None:
     }
 
 
-def test_times_on_every_reached_row_no_destination() -> None:
-    """With no destination every reached row has its first arrival."""
+def test_times_come_from_the_next_train_no_destination() -> None:
+    """With no destination only the next train's calls have times."""
     assert times(inputs=three_trains()) == {
-        'W2': '8:12', 'W1': '8:09', 'R3': '8:16', 'R2': '8:13',
-        'R1': '8:10', 'J': '8:06', 'C': '8:00', 'E1': '8:03', 'E2': '8:06',
+        'W2': '', 'W1': '', 'R3': '', 'R2': '',
+        'R1': '', 'J': '', 'C': '8:00', 'E1': '8:03', 'E2': '8:06',
     }
     assert not any(
         row.ride or row.bold
@@ -282,7 +282,6 @@ def test_times_shift_by_live_delay() -> None:
         ),
     )
     assert times(inputs=late)['E1'] == '8:07'
-    assert times(inputs=late)['W2'] == '8:16'
 
 
 def test_times_ignore_other_kinds() -> None:
@@ -903,14 +902,13 @@ def test_times_follow_the_train_through_a_join() -> None:
     }
 
 
-def test_times_stop_where_the_joined_trip_is_not_loaded() -> None:
-    """Without the joined trip's pattern the times end at the join."""
+def test_no_times_until_the_joined_trip_shows_the_to_is_reached() -> None:
+    """Without the joined trip's pattern no train is known to reach TO."""
     inputs = joined_trains()
     inputs = replace(
         inputs, patterns={'a': inputs.patterns['a']},
     )
-    found = times(inputs=inputs)
-    assert (found['J'], found['W1'], found['W2']) == ('8:06', '', '')
+    assert not any(times(inputs=inputs).values())
 
 
 def test_onward_times_only_where_the_first_train_calls() -> None:

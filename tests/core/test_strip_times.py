@@ -1,7 +1,7 @@
 """Tests for the trips that feed a strip."""
 
 from dataclasses import replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.core.model import CarryOn, Departure, RouteKind
@@ -9,10 +9,10 @@ from paperroute.core.reach import StripKey
 from paperroute.core.strip_times import (
     STRIP_HOPS,
     TripInputs,
-    approach_times,
     arrivals_after,
     board_departures,
     call_delay,
+    calls_before,
     filtered,
     joined_ids,
     strip_trips,
@@ -158,22 +158,49 @@ def approach_inputs(*, late: int = 0) -> TripInputs:
     )
 
 
+def approach_times(
+    *, trips: TripInputs, origin: str, stations: set[str],
+) -> dict[str, datetime]:
+    """
+    Find the earlier train's calls before the From at some stations.
+
+    Parameters
+    ----------
+    trips : TripInputs
+        Inputs from `approach_inputs`, the earlier train listed second.
+    origin : str
+        The From station ID.
+    stations : set[str]
+        Stations to keep.
+
+    Returns
+    -------
+    dict[str, datetime]
+        Its calls still to come at those stations.
+    """
+    found = calls_before(
+        item=trips.departures[1], trips=trips, origin=origin,
+    )
+    return {
+        station: moment
+        for station, moment in found.items()
+        if station in stations
+    }
+
+
 def test_approach_times_follow_the_next_departure() -> None:
     """The earlier trip's calls give the times, shifted by its delay."""
-    on_time = approach_times(
-        trips=approach_inputs(), origin='C', stations={'A', 'B'},
+    on_time = approach_times(trips=approach_inputs(), origin='C', stations={'A', 'B'},
     )
     assert on_time == {'A': START + timedelta(minutes=5)}
-    late = approach_times(
-        trips=approach_inputs(late=2), origin='C', stations={'A'},
+    late = approach_times(trips=approach_inputs(late=2), origin='C', stations={'A'},
     )
     assert late == {'A': START + timedelta(minutes=7)}
 
 
 def test_approach_time_blank_where_trip_skips() -> None:
     """A station the next trip runs through gets no time."""
-    assert 'B' not in approach_times(
-        trips=approach_inputs(), origin='C', stations={'A', 'B'},
+    assert 'B' not in approach_times(trips=approach_inputs(), origin='C', stations={'A', 'B'},
     )
 
 
@@ -196,8 +223,7 @@ def test_approach_time_uses_a_departure_at_second_zero() -> None:
             'a': pattern(trip_id='a', stops=midnight),
         },
     )
-    assert approach_times(
-        trips=trips, origin='C', stations={'A'},
+    assert approach_times(trips=trips, origin='C', stations={'A'},
     ) == approach_times(trips=expected, origin='C', stations={'A'})
 
 
@@ -237,8 +263,7 @@ def test_approach_times_skip_a_station_run_through() -> None:
             through[0], replace(through[1], passes=True), through[2],
         )),
     })
-    assert set(approach_times(
-        trips=trips, origin='C', stations={'A', 'B'},
+    assert set(approach_times(trips=trips, origin='C', stations={'A', 'B'},
     )) == {'A'}
 
 
@@ -301,3 +326,11 @@ def test_call_delay_keeps_the_from_delay_without_a_later_arrival() -> None:
     """An arrival time not after the From leaves the From's delay."""
     ends = ((EIGHT + 60, 120), (EIGHT + 30, 0))
     assert call_delay(seconds=EIGHT, ends=ends) == 120
+
+
+def test_calls_before_leave_out_calls_already_made() -> None:
+    """A call before the From that is already past has no time."""
+    trips = replace(
+        approach_inputs(), now=START + timedelta(minutes=6),
+    )
+    assert approach_times(trips=trips, origin='C', stations={'A'}) == {}

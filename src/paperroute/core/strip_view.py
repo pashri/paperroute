@@ -15,11 +15,7 @@ from paperroute.core.strip_badges import (
     Spot,
     level_with,
 )
-from paperroute.core.strip_follow import (
-    followed_note,
-    followed_text,
-    origin_of,
-)
+from paperroute.core.strip_follow import followed_note, origin_of, picked_calls
 from paperroute.core.strip_model import (
     ALL_TAG,
     BANNER_ROWS,
@@ -48,18 +44,13 @@ from paperroute.core.strip_model import (
     StripPanel,
     StripRow,
     StripView,
+    TripDay,
     Window,
     hook_straight,
     selected_index,
 )
 from paperroute.core.strip_notes import carry_note
-from paperroute.core.strip_times import (
-    TripInputs,
-    approach_text,
-    from_leaves,
-    onward_text,
-    ridden_times,
-)
+from paperroute.core.strip_times import TripInputs, shown_item, trip_text
 from paperroute.core.strip_vehicles import vehicle_markers
 
 
@@ -182,10 +173,12 @@ def row_times(
     inputs: StripInputs,
     reach: Reach,
     origin: int | None,
-    ride: frozenset[int],
 ) -> dict[int, str]:
     """
     Choose the clock time each row shows.
+
+    Every time comes from one departure: the picked train, else the next
+    to the Destination (or the next at all, with none).
 
     Parameters
     ----------
@@ -195,86 +188,89 @@ def row_times(
         The reach.
     origin : int | None
         The From row; with none no row has a time.
-    ride : frozenset[int]
-        The ridden rows; empty when there is no Destination row.
 
     Returns
     -------
     dict[int, str]
-        Clock time by row: the From's next departure (to the Destination
-        when there is one, on the strip or not), then the first arrival
-        on the ridden rows past the From, or on every reached row when
-        nothing is ridden. Rows past the Destination have the times of
-        the vehicle that reaches it first; rows below the From laid out
-        along the next trains have the picked train's times instead, or
-        the next train's with none picked. The From has the picked
-        train's departure, else the next. Approach
-        rows have the times the From's next departure calls there.
+        Clock time by row: the From has the departure's time, and each
+        other row the time it calls there, after the From or still to
+        come before it. Rows below the From laid out along the next
+        trains have the picked train's times by its place among them.
+        Rows it skips, has passed or doesn't reach have none.
     """
     if origin is None:
         return {}
-    station = reach.rows[origin].place.stop_id
     trips = trips_of(inputs=inputs)
-    ends = destination_station(reach=reach, destination=inputs.destination)
-    times = station_times(
-        trips=trips,
-        reach=reach,
-        origin=station,
-        target=target_of(reach=reach, destination=inputs.destination),
-        ride=ride,
+    target = destination_station(
+        reach=reach, destination=inputs.destination,
     )
     if reach.trip is not None:
-        times = {i: text for i, text in times.items() if i < origin}
-        times.update(followed_text(
-            trips=trips, reach=reach, target=ends, selected=inputs.selected,
-        ))
-    leaves = from_leaves(
-        trips=trips, origin=station, target=ends, selected=inputs.selected,
+        return followed_times(
+            trips=trips, reach=reach, target=target, selected=inputs.selected,
+        )
+    item = shown_item(
+        trips=trips,
+        origin=reach.rows[origin].place.stop_id,
+        target=target,
+        selected=inputs.selected,
     )
-    return (
-        times if leaves is None
-        else {**times, origin: clock_text(moment=leaves)}
-    )
+    if item is None:
+        return {}
+    return {
+        **trip_text(
+            item=item, trips=trips, reach=reach, rows=range(len(reach.rows)),
+        ),
+        origin: clock_text(moment=item.departs),
+    }
 
 
-def station_times(
+def followed_times(
     *,
     trips: TripInputs,
     reach: Reach,
-    origin: str,
-    target: int | None,
-    ride: frozenset[int],
+    target: str | None,
+    selected: TripDay | None,
 ) -> dict[int, str]:
     """
-    Give rows the times of arrivals, approaches and onward trips.
+    Time the rows of a reach laid out along the next trains.
 
     Parameters
     ----------
     trips : TripInputs
         The strip's departures and live data.
     reach : Reach
-        The reach.
-    origin : str
-        The From station ID.
-    target : int | None
-        The Destination row, or None.
-    ride : frozenset[int]
-        The ridden rows; empty for every reached row.
+        The reach, laid out by `followed_reach`.
+    target : str | None
+        The Destination station ID, or None.
+    selected : TripDay | None
+        The picked train, or None.
 
     Returns
     -------
     dict[int, str]
-        Clock time by row; approach times over arrivals, and onward
-        times over both.
+        Clock time by row: the picked train's at the From, at its calls
+        still to come above the From, and at the line rows below it;
+        the next train's at the From and above when the rows no longer
+        match the trains.
     """
+    origin = origin_of(reach=reach) or 0
+    picked = picked_calls(
+        trips=trips, reach=reach, target=target, selected=selected,
+    )
+    item = picked[0] if picked is not None else shown_item(
+        trips=trips,
+        origin=reach.rows[origin].place.stop_id,
+        target=target,
+        selected=selected,
+    )
+    if item is None:
+        return {}
+    below = {} if picked is None else picked[1]
     return {
-        **ridden_times(
-            trips=trips, reach=reach, origin=origin, target=target, ride=ride,
-        ),
-        **approach_text(trips=trips, reach=reach, origin=origin),
-        **onward_text(trips=trips, reach=reach, origin=origin, target=target),
+        **trip_text(item=item, trips=trips, reach=reach, rows=range(origin)),
+        **{index: clock_text(moment=at) for index, at in below.items()},
+        origin: clock_text(moment=item.departs),
     }
-
 
 
 def marks_of(*, inputs: StripInputs, reach: Reach) -> Marks:
@@ -300,12 +296,7 @@ def marks_of(*, inputs: StripInputs, reach: Reach) -> Marks:
         origin=origin,
         target=target,
         ride=ride,
-        times=row_times(
-            inputs=inputs,
-            reach=reach,
-            origin=origin,
-            ride=ride,
-        ),
+        times=row_times(inputs=inputs, reach=reach, origin=origin),
         cursor=inputs.cursor,
         picking=inputs.picking,
         note=note_of(inputs=inputs, reach=reach),

@@ -173,7 +173,6 @@ def filter_step(
     stop: str,
     kind: RouteKind | None,
     given: tuple[str, ...],
-    to: StopPlace | None,
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """
     Check the route filter against the routes the kind offers.
@@ -188,16 +187,13 @@ def filter_step(
         The kind chosen, or None for none.
     given : tuple[str, ...]
         The route numbers given.
-    to : StopPlace | None
-        The To chosen, or None for none.
 
     Returns
     -------
     tuple[tuple[str, ...], tuple[str, ...]]
-        The route numbers offered, and the given ones that are offered;
-        none without a kind, or without a To, where the line filters.
+        The route numbers offered, and the given ones that are offered.
     """
-    if kind is None or to is None:
+    if kind is None:
         return (), ()
     filters = options.filters_at(stop_id=stop, kind=kind)
     return filters, tuple(route for route in given if route in filters)
@@ -249,8 +245,7 @@ def edited(
 
     Each choice is checked in turn: stop, kind, line, To, then the route
     filter. A choice that is not offered is dropped, with every choice
-    after it, except that the filter depends on the stop, kind and
-    whether there is a To. Without a To the line is the filter.
+    after it, except that the filter depends on the stop and kind alone.
     A kind or line is chosen when only one is offered; a To never is.
 
     Parameters
@@ -327,7 +322,6 @@ def with_origin(
     filters, only = filter_step(
         options=options, stop=stop, kind=kind,
         given=draft.only if kind_kept else (),
-        to=destination,
     )
     checked = PinDraft(
         stop=stop,

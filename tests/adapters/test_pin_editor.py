@@ -42,14 +42,14 @@ def test_single_kind_and_line_are_chosen() -> None:
 
 
 def test_unoffered_to_is_dropped() -> None:
-    """A To the line does not offer goes, and the filter with it."""
+    """A To the line does not offer goes; the filter stays."""
     draft = PinDraft(
         stop='H', kind=RouteKind.TRAIN, route='T1', to='nowhere',
         only=('T2',),
     )
     found = edited(options=options(), draft=draft)
     assert found.draft.to == ''
-    assert found.draft.only == ()
+    assert found.draft.only == ('T2',)
     assert found.pin is not None
     assert found.pin.destination is None
 
@@ -102,14 +102,6 @@ def test_complete_draft_gives_pin() -> None:
     )
     assert found.destinations == (WORK, FAR)
     assert found.filters == ('T1', 'T2')
-
-
-def test_no_to_offers_the_line_alone() -> None:
-    """Without a To the line is the only filter; route ticks are dropped."""
-    draft = PinDraft(stop='H', kind=RouteKind.TRAIN, route='T1', only=('T2',))
-    found = edited(options=options(), draft=draft)
-    assert found.filters == ()
-    assert found.pin == Pin(HOME, kind=RouteKind.TRAIN, routes=('T1',))
 
 
 def test_nearby_comes_only_from_the_missing_pin() -> None:

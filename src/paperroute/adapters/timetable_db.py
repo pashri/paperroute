@@ -838,9 +838,8 @@ class SqliteTimetableRepository:
             In departure order, then trip ID. With a Destination, only
             the pin's kind and routes, as on its strip: a station's bus
             stands sit under it too. Without one, the departures of the
-            pin's kind (see `board_departures`) and, when it has any, its
-            routes from any platform of the From, each running to its
-            last stop. A
+            pin's kind (see `board_departures`) from any platform of the
+            From, each running to its last stop. A
             trip calling at the From several times in a row, such as a
             bus moving between two stands, leaves once, from its last call
             there that takes passengers on. The pin's route filter
@@ -864,10 +863,7 @@ class SqliteTimetableRepository:
             )
         ]
         if destination is None:
-            found = list(filtered(
-                departures=board_departures(departures=found, kind=pin.kind),
-                only=pin.routes,
-            ))
+            found = list(board_departures(departures=found, kind=pin.kind))
         else:
             found = list(strip_departures(
                 departures=first_to_arrive(departures=found),

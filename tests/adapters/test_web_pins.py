@@ -587,9 +587,6 @@ async def test_editor_offers_valid_choices(editor: Client) -> None:
     assert re.findall(r'<option value="(\w*)"', text) == [
         '', 'T1', 'T2', '', 'J', 'R',
     ]
-    assert 'name="only"' not in text
-    with_to = await editor.get('/pins/edit?stop=C&kind=train&route=T1&to=J')
-    text = await with_to.text()
     assert re.findall(r'name="only" value="(\w+)"', text) == ['T1', 'T2']
     assert 'Leave all unticked to show every route.' in text
     assert 'maxlength="24"' in text

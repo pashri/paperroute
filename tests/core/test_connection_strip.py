@@ -17,7 +17,7 @@ from paperroute.core.live import LiveDeparture
 from paperroute.core.model import StopPlace
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.stop_view import StopView
-from paperroute.core.strip_model import LOADING
+from paperroute.core.strip_model import LOADING, NO_LEG_STOPS
 from tests.core.connection_factories import LEG1, WORK, at, run, work_chains
 from tests.core.factories import (
     departure,
@@ -164,8 +164,8 @@ def test_leg_calls_skip_passing() -> None:
     ]
 
 
-def test_rowless_leg_reads_loading() -> None:
-    """A leg whose trip never reaches its end reads the loading text."""
+def test_rowless_leg_says_no_stops() -> None:
+    """A loaded leg whose trip never reaches its end says so."""
     trip = pattern(trip_id='b0746', route='665', stops=FIRST_LEG.stops)
     view = build_connection_strip(
         stop_view=STOP, pin=WORK, chains=CHAINS, selected=0,
@@ -174,7 +174,38 @@ def test_rowless_leg_reads_loading() -> None:
         now=at(7, 30),
     )
     assert view.sections[1].stops == ()
-    assert view.sections[1].empty == LOADING
+    assert view.sections[1].empty == NO_LEG_STOPS
+
+
+def test_unknown_trip_says_no_stops() -> None:
+    """A leg whose trip the timetable does not know is not loading."""
+    view = build_connection_strip(
+        stop_view=STOP, pin=WORK, chains=CHAINS, selected=0,
+        patterns={'a0733': FIRST_LEG, 'b0746': None},
+        positions={},
+        now=at(7, 30),
+    )
+    assert view.sections[1].empty == NO_LEG_STOPS
+
+
+def test_leg_follows_joined_trip_to_its_end() -> None:
+    """A leg whose trip runs on as the next one reaches its end on it."""
+    split = len(SECOND_LEG.stops) - 2
+    first = replace(
+        SECOND_LEG, stops=SECOND_LEG.stops[:split], next_trip='b0746x',
+    )
+    joined = replace(
+        SECOND_LEG, trip_id='b0746x', stops=SECOND_LEG.stops[split - 1:],
+    )
+    view = build_connection_strip(
+        stop_view=STOP, pin=WORK, chains=CHAINS, selected=0,
+        patterns={'a0733': FIRST_LEG, 'b0746': first, 'b0746x': joined},
+        positions={},
+        now=at(7, 30),
+    )
+    second = view.sections[1]
+    assert second.empty is None
+    assert second.stops[-1].name == 'Westmead Station'
 
 
 def test_leg_calls_missing_end() -> None:

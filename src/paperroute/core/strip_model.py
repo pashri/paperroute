@@ -32,6 +32,7 @@ type TripDay = tuple[str, date]  # a trip ID and its service day
 
 LOADING: Final[str] = 'Loading the line…'
 NO_STRIP: Final[str] = 'No strip for this stop'
+NO_LEG_STOPS: Final[str] = 'No stops in the timetable for this leg'
 NEEDS_UPDATE: Final[str] = 'Strip needs a timetable update'
 HINTS: Final[dict[str, str]] = {
     'TO': f'Press: set TO{DOT}press FROM: all departures',

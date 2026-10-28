@@ -1,7 +1,7 @@
 """The Strip of a connection pin: a section per leg, then the pairs."""
 
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime
 from enum import StrEnum
 
@@ -23,8 +23,8 @@ from paperroute.core.patterns import PatternStop, TripPattern, hop_near
 from paperroute.core.positions import PositionsSnapshot, VehiclePosition
 from paperroute.core.rides import rides_of
 from paperroute.core.stop_view import PinTag, StopView, clock_text, stops_text
-from paperroute.core.strip_model import LOADING
-from paperroute.core.strip_times import from_call
+from paperroute.core.strip_model import LOADING, NO_LEG_STOPS
+from paperroute.core.strip_times import from_call, joined_patterns
 
 type LegCall = tuple[PatternStop, datetime]
 
@@ -456,8 +456,44 @@ def chain_legs_of(*, chain: Chain, pin: Pin) -> tuple[Leg, ...]:
     )
 
 
+def run_on_pattern(
+    *,
+    pattern: TripPattern,
+    patterns: Mapping[str, TripPattern | None],
+    leg: Leg,
+) -> TripPattern:
+    """
+    Join a trip's calls to those of the trips it runs on as.
+
+    Parameters
+    ----------
+    pattern : TripPattern
+        The boarded trip.
+    patterns : Mapping[str, TripPattern | None]
+        Loaded patterns by trip ID.
+    leg : Leg
+        The leg, for its service day.
+
+    Returns
+    -------
+    TripPattern
+        The trip with each loaded joined trip's calls after its own; a
+        joined trip's first call is where the vehicle already is, so it
+        is left out.
+    """
+    joined = joined_patterns(
+        pattern=pattern,
+        patterns=patterns,
+        day=leg.item.departure.service_day,
+    )
+    stops = pattern.stops + tuple(
+        stop for more in joined for stop in more.stops[1:]
+    )
+    return replace(pattern, stops=stops, along=None)
+
+
 def leg_rows(
-    *, leg: Leg, pattern: TripPattern | None,
+    *, leg: Leg, patterns: Mapping[str, TripPattern | None],
 ) -> tuple[LegStop, ...]:
     """
     List every row of a leg.
@@ -466,18 +502,21 @@ def leg_rows(
     ----------
     leg : Leg
         The leg.
-    pattern : TripPattern | None
-        Its trip, or None while loading.
+    patterns : Mapping[str, TripPattern | None]
+        Loaded patterns by trip ID.
 
     Returns
     -------
     tuple[LegStop, ...]
-        The folded rows; empty while loading.
+        The folded rows, following the trip on through the trips it
+        joins onto; empty while loading or when the trip never reaches
+        the leg's end.
     """
+    pattern = patterns.get(leg.item.departure.trip_id)
     calls = () if pattern is None else leg_calls(
         item=leg.item,
         last=leg.last or leg.item,
-        pattern=pattern,
+        pattern=run_on_pattern(pattern=pattern, patterns=patterns, leg=leg),
         start=leg.start.stop_id,
         end=leg.end.stop_id,
     )
@@ -501,14 +540,15 @@ def leg_section(
     rows : tuple[LegStop, ...]
         Its rows, already folded.
     loaded : bool
-        False while its pattern has not loaded.
+        False while its pattern has not come back.
     vehicle : str | None
         Where its vehicle is before the boarding stop, or None.
 
     Returns
     -------
     LegSection
-        The section; one not loaded, or with no rows, reads `LOADING`.
+        The section; one not loaded reads `LOADING`, and one loaded
+        with no rows `NO_LEG_STOPS`.
     """
     departure = leg.item.departure
     return LegSection(
@@ -517,7 +557,11 @@ def leg_section(
         title=f'{leg.start.name} → {leg.end.name}',
         note=leg.note,
         stops=rows,
-        empty=LOADING if not loaded or not rows else None,
+        empty=(
+            LOADING if not loaded
+            else NO_LEG_STOPS if not rows
+            else None
+        ),
         vehicle=vehicle,
     )
 
@@ -553,7 +597,8 @@ def chain_sections(
     """
     sections = []
     for leg in chain_legs_of(chain=chain, pin=pin):
-        trip = patterns.get(leg.item.departure.trip_id)
+        trip_id = leg.item.departure.trip_id
+        trip = patterns.get(trip_id)
         note = approach_note(
             leg=leg.item,
             position=leg_vehicle(leg=leg.item, positions=positions, now=now),
@@ -562,8 +607,8 @@ def chain_sections(
         )
         sections.append(leg_section(
             leg=leg,
-            rows=leg_rows(leg=leg, pattern=trip),
-            loaded=trip is not None,
+            rows=leg_rows(leg=leg, patterns=patterns),
+            loaded=trip_id in patterns,
             vehicle=note,
         ))
     return tuple(sections)

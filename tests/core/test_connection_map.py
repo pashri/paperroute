@@ -16,13 +16,19 @@ from paperroute.core.connection_map import (
 )
 from paperroute.core.connection_model import way_legs
 from paperroute.core.geo import Shape, make_shape
-from paperroute.core.map_view import DEFAULT_ZOOM, MapInputs, MapView
+from paperroute.core.map_view import (
+    DEFAULT_ZOOM,
+    NO_LOCATION,
+    MapInputs,
+    MapView,
+)
 from paperroute.core.messages import DeparturesLoaded, LoadShapes
 from paperroute.core.model import Change, Departure, Pin, StopPlace, Way
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.saved import ConnectionMap, LiveView
 from paperroute.core.state import step
 from paperroute.core.state_views import current_view, live_stop_view
+from paperroute.core.stop_view import empty_text
 from paperroute.core.tiles import ZOOMS
 from tests.core.connection_factories import (
     HOLLIS,
@@ -257,6 +263,35 @@ def test_no_pairs_keeps_framing() -> None:
     )
     assert view.base.route == ()
     assert view.pairs == ()
+    assert view.empty == 'No connections to Westmead Station in the next 3 hours'
+
+
+def test_chains_hide_the_direct_list_notice() -> None:
+    """The direct list's empty text is not shown over listed chains."""
+    direct = empty_text(destination='Westmead Station', loaded=True)
+    inputs = replace(
+        inputs_at(now=at(7, 35)), stop_view=replace(STOP, empty=direct),
+    )
+    view = build_connection_map(
+        inputs=inputs, pin=WORK, chains=SHAPED, mode=ConnectionMap.CHANGES,
+    )
+    assert view.empty is None
+    two = replace(two_inputs(), stop_view=replace(STOP, empty=direct))
+    panes = change_panes(
+        inputs=two, pin=TWO, chain=TWO_CHAIN, mode=ConnectionMap.CHANGES,
+    )
+    assert [pane.empty for pane in panes] == [None, None]
+
+
+def test_no_location_still_said() -> None:
+    """A From with no location keeps its own notice."""
+    view = build_connection_map(
+        inputs=replace(inputs_at(now=at(7, 35)), centre=None),
+        pin=replace(WORK, origin=replace(WORK.origin, point=None)),
+        chains=(),
+        mode=ConnectionMap.START,
+    )
+    assert view.empty == NO_LOCATION
 
 
 def test_no_points_falls_back_to_from() -> None:

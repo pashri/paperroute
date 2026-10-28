@@ -183,7 +183,7 @@ def test_no_chains_text() -> None:
     )
     assert view.hero is None
     assert not view.rows
-    assert view.empty == NO_PAIRS == 'No connection in the next 3 hours'
+    assert view.empty == 'No connections to Westmead Station in the next 3 hours'
     loading = empty_text(destination='Westmead Station', loaded=False)
     view = build_connection_view(
         stop_view=replace(STOP, empty=loading),
@@ -205,7 +205,19 @@ def test_no_direct_trip_still_says_no_chains() -> None:
         scroll=0,
         now=at(7, 30),
     )
-    assert view.empty == NO_PAIRS
+    assert view.empty == 'No connections to Westmead Station in the next 3 hours'
+
+
+def test_no_chains_without_destination() -> None:
+    """Without a To name the no-chain text names no place."""
+    view = build_connection_view(
+        stop_view=replace(STOP, destination=None),
+        pin=WORK,
+        chains=(),
+        scroll=0,
+        now=at(7, 30),
+    )
+    assert view.empty == NO_PAIRS == 'No connections in the next 3 hours'
 
 
 def test_chrome_from_stop_view() -> None:

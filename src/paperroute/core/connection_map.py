@@ -6,7 +6,7 @@ from typing import Final
 
 from paperroute.core.chains import Chain
 from paperroute.core.connection import chain_legs
-from paperroute.core.connection_view import PairRow, chain_rows
+from paperroute.core.connection_view import PairRow, chain_rows, no_pair_text
 from paperroute.core.geo import Point, Shape, point_along, stop_distances
 from paperroute.core.map_view import (
     MAP_HEIGHT,
@@ -693,11 +693,13 @@ def build_connection_map(
     -------
     MapView
         The map with leg 1 as the route, leg 2, the walk and the ends as
-        trip marks, and the pairs in the sidebar.
+        trip marks, and the pairs in the sidebar; its notice says why
+        there is no chain, never that there is no direct trip.
     """
-    view = build_map_view(inputs=connection_inputs(
+    framing = connection_inputs(
         inputs=inputs, pin=pin, chains=chains, mode=mode,
-    ))
+    )
+    view = build_map_view(inputs=framing)
     hero = chains[0] if chains else None
     rides = () if hero is None else rides_of(chain=hero, pin=pin)
     route, trip = chain_marks(pin=pin, rides=rides, shapes=inputs.shapes)
@@ -713,6 +715,11 @@ def build_connection_map(
         base=replace(view.base, route=route, trip=trip),
         sidebar=(),
         pairs=sidebar_rows(pin=pin, chains=chains),
+        empty=(
+            view.empty
+            if framing.centre is None
+            else no_pair_text(stop_view=inputs.stop_view, chains=chains)
+        ),
     )
 
 
@@ -796,7 +803,10 @@ def change_view(
     drawn = (replace(rides[0], change=None), *rides[1:])
     route, trip = chain_marks(pin=pin, rides=drawn, shapes=inputs.shapes)
     return replace(
-        view, base=replace(view.base, route=route, trip=trip), sidebar=(),
+        view,
+        base=replace(view.base, route=route, trip=trip),
+        sidebar=(),
+        empty=None if view.base.centre is not None else view.empty,
     )
 
 

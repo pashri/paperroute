@@ -461,4 +461,4 @@ def test_no_pairs_no_sections() -> None:
     )
     assert view.sections == ()
     assert view.selected == 0
-    assert view.empty == 'No connection in the next 3 hours'
+    assert view.empty == 'No connections to Westmead Station in the next 3 hours'

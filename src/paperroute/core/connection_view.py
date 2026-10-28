@@ -10,6 +10,7 @@ from paperroute.core.connection_model import walk_metres
 from paperroute.core.model import Mode, Pin
 from paperroute.core.rides import Ride, rides_of
 from paperroute.core.stop_view import (
+    HORIZON_TEXT,
     PinTag,
     StopView,
     clock_text,
@@ -17,7 +18,7 @@ from paperroute.core.stop_view import (
     empty_text,
 )
 
-NO_PAIRS: Final[str] = 'No connection in the next 3 hours'
+NO_PAIRS: Final[str] = f'No connections in {HORIZON_TEXT}'
 PAIR_ROWS: Final[int] = 5
 MODE_NOUNS: Final[dict[Mode, str]] = {
     Mode.BUS: 'bus',
@@ -363,13 +364,16 @@ def no_pair_text(
     -------
     str | None
         None with a chain; the Stop view's text while loading or with a
-        missing stop; otherwise `NO_PAIRS`.
+        missing stop; otherwise no connections to the To, or `NO_PAIRS`
+        without a To name.
     """
     if chains:
         return None
     if stop_view.empty in WAITING:
         return stop_view.empty
-    return NO_PAIRS
+    if stop_view.destination is None:
+        return NO_PAIRS
+    return f'No connections to {stop_view.destination} in {HORIZON_TEXT}'
 
 
 def build_connection_view(

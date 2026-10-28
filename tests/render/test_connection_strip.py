@@ -93,7 +93,7 @@ def test_selected_pair_kept_on_screen() -> None:
 def test_no_pairs_draws_empty_text() -> None:
     """With no pair, the empty text is drawn left of the rule."""
     view = replace(
-        VIEW, sections=(), pairs=(), empty='No connection in the next 3 hours',
+        VIEW, sections=(), pairs=(), empty='No connections in the next 3 hours',
     )
     frame = draw_connection_strip(view=view)
     assert frame[HEADER + 4:HEIGHT, :STRIP_RIGHT].min() == 0

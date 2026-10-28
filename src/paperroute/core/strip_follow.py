@@ -9,7 +9,7 @@ from paperroute.core.live import LiveDeparture
 from paperroute.core.model import StopPlace
 from paperroute.core.patterns import PatternStop
 from paperroute.core.reach import Reach, ReachRow, RowKind
-from paperroute.core.stop_view import clock_text, not_departed
+from paperroute.core.stop_view import not_departed
 from paperroute.core.strip_model import CarryNote, TripDay, trip_day
 from paperroute.core.strip_times import (
     TripInputs,
@@ -677,40 +677,6 @@ def picked_calls(
     return item, item_calls(
         trips=trips, reach=reach, steady=steady, item=item,
     )
-
-
-def followed_text(*, trips: TripInputs, reach: Reach, target: str | None,
-                  selected: TripDay | None = None) -> dict[int, str]:
-    """
-    Give the rows below the From the picked train's times.
-
-    Parameters
-    ----------
-    trips : TripInputs
-        The strip's departures and live data.
-    reach : Reach
-        The reach, laid out by `followed_reach`.
-    target : str | None
-        The Destination's station ID, or None.
-    selected : TripDay | None
-        The picked train, or None for the next of the trains.
-
-    Returns
-    -------
-    dict[int, str]
-        Clock time by line row below the From where the train stops;
-        none on the rows it skips or doesn't reach. Empty when the rows
-        no longer match the trains.
-    """
-    picked = picked_calls(
-        trips=trips, reach=reach, target=target, selected=selected,
-    )
-    if picked is None:
-        return {}
-    return {
-        index: clock_text(moment=moment)
-        for index, moment in picked[1].items()
-    }
 
 
 def change_at(*, trips: TripInputs, item: LiveDeparture) -> str | None:

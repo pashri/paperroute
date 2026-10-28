@@ -474,10 +474,26 @@ def test_start_centres_on_origin() -> None:
         mode=ConnectionMap.START,
     )
     assert found.centre == (0.0, 900.0)
-    assert found.zoom == DEFAULT_ZOOM - 1
+    assert found.zoom == 0
     assert found.vehicle_trips == frozenset(
         {'a0733', 'a0748', 'a0803', 'a0822'},
     )
+
+
+def test_start_is_finest_zoom_and_never_coarser_than_first_leg() -> None:
+    """The start setting uses the finest zoom, at any knob setting."""
+    for zoom in range(len(ZOOMS)):
+        start, first = (
+            connection_inputs(
+                inputs=inputs_at(now=at(7, 30), zoom=zoom),
+                pin=WORK,
+                chains=SHAPED,
+                mode=mode,
+            )
+            for mode in (ConnectionMap.START, ConnectionMap.FIRST_LEG)
+        )
+        assert start.zoom == 0
+        assert start.zoom <= first.zoom
 
 
 def test_new_settings_one_pane() -> None:

@@ -534,17 +534,21 @@ def framed(
     -------
     tuple[Point | None, int]
         For the whole trip or the first leg, the middle of its box at the
-        zoom that holds it. Zoomed on the start, the From; zoomed on the
-        change, the hero's first walk (else the first ticked way's) at
-        its midpoint. Zoomed framings are one zoom finer than the knob's
-        and centred in the map below any banner, on the From when there
-        is no walk.
+        zoom that holds it. Zoomed on the start, the From at the finest
+        zoom whatever the knob says; zoomed on the change, the hero's
+        first walk (else the first ticked way's) at its midpoint, one
+        zoom finer than the knob's. Zoomed framings are centred in the
+        map below any banner, on the From when there is no walk.
     """
     if mode is ConnectionMap.WHOLE:
         return whole_frame(inputs=inputs, pin=pin, chains=chains)
     if mode is ConnectionMap.FIRST_LEG:
         return first_leg_frame(inputs=inputs, pin=pin, chains=chains)
-    zoom = max(0, inputs.zoom - CHANGE_ZOOM_IN)
+    zoom = (
+        0
+        if mode is ConnectionMap.START
+        else max(0, inputs.zoom - CHANGE_ZOOM_IN)
+    )
     spot = zoomed_spot(pin=pin, chains=chains, mode=mode)
     if spot is None:
         return inputs.centre, zoom

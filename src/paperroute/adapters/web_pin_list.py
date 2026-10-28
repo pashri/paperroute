@@ -4,7 +4,7 @@ import html
 from collections.abc import Mapping
 from typing import Final
 
-from paperroute.adapters.route_chips import chip_html, chip_route
+from paperroute.adapters.route_chips import chip_html, chip_route, named_routes
 from paperroute.core.model import Pin, pin_ref, ticked_ways
 from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
@@ -68,14 +68,15 @@ def pin_line(*, pin: Pin) -> str:
     -------
     str
         The From, then the To after an arrow when there is one, then
-        the routes after a dot; for a connection, the From and To, then
+        the routes it may claim (see `named_routes`) after a dot; for a
+        connection, the From and To, then
         where its ticked ways change.
         Not escaped.
     """
     line = pin.origin.name
     if pin.destination is not None:
         line += f' → {pin.destination.name}'
-    routes = pin.only or pin.routes
+    routes = named_routes(pin=pin)
     boards = dict.fromkeys(
         change.board.name
         for way in ticked_ways(pin=pin)

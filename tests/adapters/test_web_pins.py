@@ -138,6 +138,16 @@ def test_pin_label_prefers_nickname() -> None:
     assert pin_label(pin=HOME) == 'Home Stop'
 
 
+def test_pin_line_without_a_to_names_only_its_filter() -> None:
+    """A T1 pin without a To lists every line, so no line is named."""
+    station = StopPlace(stop_id='P', name='Parramatta Station', point=None)
+    line = Pin(origin=station, kind=RouteKind.TRAIN, routes=('T1',))
+    assert pin_line(pin=line) == 'Parramatta Station'
+    assert pin_line(pin=replace(line, only=('T2',))) == (
+        'Parramatta Station · T2'
+    )
+
+
 def test_pin_line_joins_from_to_and_routes() -> None:
     """The line has the To and routes only when there are some."""
     assert pin_line(pin=WORK) == 'Hollis St → Parramatta · 606'

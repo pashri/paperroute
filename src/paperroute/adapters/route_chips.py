@@ -24,6 +24,28 @@ RULE: Final[str] = (
 )
 
 
+def named_routes(*, pin: Pin) -> tuple[str, ...]:
+    """
+    List the routes a pin's name and chip may claim.
+
+    A pin without a To lists every route of its kind at its stop, so its
+    chosen line is not claimed; only its route filter is.
+
+    Parameters
+    ----------
+    pin : Pin
+        The pin.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The route filter, else, with a To, the routes chosen.
+    """
+    if pin.only or pin.destination is None:
+        return pin.only
+    return pin.routes
+
+
 def chip_route(*, pin: Pin) -> str | None:
     """
     Pick the route a pin's chip names.
@@ -36,10 +58,9 @@ def chip_route(*, pin: Pin) -> str | None:
     Returns
     -------
     str | None
-        The first of the pin's route filter, else of its routes; None
-        when it has neither.
+        The first of `named_routes`; None when there are none.
     """
-    return next(iter(pin.only or pin.routes), None)
+    return next(iter(named_routes(pin=pin)), None)
 
 
 def chip_html(*, pin: Pin, colour: RouteColour | None) -> str:

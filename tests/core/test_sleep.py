@@ -22,11 +22,13 @@ from paperroute.core.messages import (
     TimetableSeen,
 )
 from paperroute.core.panel_views import ConfirmView, SleepView
-from paperroute.core.sleep import SLEEP_BAND
+from paperroute.core.sleep import SLEEP_BAND, sleep_view, slept
 from paperroute.core.state import step
 from paperroute.core.state_model import State
+from paperroute.core.state_views import live_stop_view
 from paperroute.core.stop_view import StopView
 from tests.core.factories import START, departure
+from tests.core.test_connection import loaded as connection_loaded
 from tests.core.test_menu import BOTH, DOWN, run, turn
 from tests.core.test_state import BUSES, fresh, loaded
 from tests.fakes import device_facts
@@ -197,3 +199,16 @@ def test_sleep_screen_redrawn_once_departures_load() -> None:
     assert not second.loading
     _, effects = step(state, event)
     assert not renders(effects=effects)
+
+
+def test_connection_sleep_screen_draws_the_next_connection() -> None:
+    """A connection pin sleeps on its connection map, not direct trips."""
+    state = slept(state=connection_loaded())
+    view = sleep_view(state=state, stop_view=live_stop_view(state=state))
+    assert view.map.empty is None
+    assert view.map.base.route is not None
+    assert view.map.pairs == ()
+    empty = slept(state=connection_loaded(second=()))
+    gone = sleep_view(state=empty, stop_view=live_stop_view(state=empty))
+    assert gone.map.empty is not None
+    assert gone.map.empty.startswith('No connections')

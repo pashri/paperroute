@@ -4,9 +4,13 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
+from paperroute.core.connection import live_chains
+from paperroute.core.connection_screens import connection_map
 from paperroute.core.map_requests import map_inputs
-from paperroute.core.map_view import build_map_view
+from paperroute.core.map_view import MapView, build_map_view
+from paperroute.core.model import is_connection
 from paperroute.core.panel_views import SleepView, sleep_map
+from paperroute.core.places import shown
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import DOT, StopView
 
@@ -96,9 +100,34 @@ def sleep_view(*, state: State, stop_view: StopView) -> SleepView:
         under the sleep band, marked loading until departures load. It
         does not change as time passes.
     """
-    inputs = map_inputs(state=state, stop_view=stop_view)
     return SleepView(
-        map=sleep_map(view=build_map_view(inputs=inputs)),
+        map=sleep_map(view=pin_map(state=state, stop_view=stop_view)),
         band=SLEEP_BAND,
         loading=state.board.loaded_until is None,
+    )
+
+
+def pin_map(*, state: State, stop_view: StopView) -> MapView:
+    """
+    Build the shown pin's Map view as the Map would show it.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    stop_view : StopView
+        The state's Stop view.
+
+    Returns
+    -------
+    MapView
+        A connection pin's connection map, which draws its next
+        connection or says there is none; any other pin's map.
+    """
+    if is_connection(pin=shown(state=state)):
+        return connection_map(
+            state=state, stop_view=stop_view, chains=live_chains(state=state),
+        )
+    return build_map_view(
+        inputs=map_inputs(state=state, stop_view=stop_view),
     )

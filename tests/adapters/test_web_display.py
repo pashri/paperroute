@@ -508,19 +508,18 @@ async def test_settings_page_served(
 
 
 async def test_settings_page_has_connection_map() -> None:
-    """The Display form has a labelled connection map select."""
+    """The Display form has the connection map radios, Changes checked."""
     client = await _client(display=WebDisplay(status=dict))
     try:
         text = await (await client.get('/settings')).text()
     finally:
         await client.close()
     assert re.search(
-        r'<label>Connection map\s*<select name="connection_map">\s*'
-        r'<option value="changes" selected>Changes</option>\s*'
-        r'<option value="whole">Whole trip</option>\s*'
-        r'<option value="first">First change only</option>\s*</select>\s*</label>',
+        r'<input type="radio" name="connection_map" value="changes" '
+        r'checked aria-describedby="map-changes-hint">',
         text,
     )
+    assert 'value="whole" aria-describedby' in text
 
 
 def test_live_page_links_to_settings() -> None:

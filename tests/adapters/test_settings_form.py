@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import time
+from typing import Final
 
 import pytest
 
@@ -163,29 +164,29 @@ def test_page_text_fills_marks() -> None:
     assert 'Quiet hours not saved' not in text
 
 
-def test_connection_map_three_choices() -> None:
-    """Each connection map choice is read and marks its own option."""
-    for value, expected in (
-        ('changes', ConnectionMap.CHANGES),
-        ('whole', ConnectionMap.WHOLE),
-        ('first', ConnectionMap.FIRST),
-    ):
+MAP_VALUES: Final[tuple[str, ...]] = (
+    'changes', 'whole', 'first_leg', 'first', 'start',
+)
+
+
+def test_connection_map_five_choices() -> None:
+    """Each connection map choice is read and checks its own radio."""
+    template = ''.join(
+        f'<{tag}{{{{connection_map:{value}}}}}>'
+        for tag, value in zip('abcde', MAP_VALUES, strict=True)
+    )
+    for tag, value in zip('abcde', MAP_VALUES, strict=True):
+        expected = ConnectionMap(value)
         assert changed_from(fields={'connection_map': value}) == (
             SettingsChanged(connection_map=expected)
         )
         text = page_text(
-            template=(
-                '<a{{connection_map:changes}}><b{{connection_map:whole}}>'
-                '<c{{connection_map:first}}>'
-            ),
+            template=template,
             values=form_values(settings=Settings(connection_map=expected)),
             error=None,
         )
-        assert text.count(' selected') == 1
-        assert f'{{{{connection_map:{value}}}}}' not in text
-        assert f'<{"abc"[("changes", "whole", "first").index(value)]} sel' in (
-            text
-        )
+        assert text.count(' checked') == 1
+        assert f'<{tag} checked>' in text
 
 
 def test_unknown_value_keeps_setting() -> None:
@@ -195,12 +196,45 @@ def test_unknown_value_keeps_setting() -> None:
     assert changed_from(fields={}).connection_map is None
 
 
-def test_settings_page_offers_three_map_choices() -> None:
-    """The page lists the three labels in order, Changes first."""
-    page = asset(name='settings.html')
-    labels = ('>Changes<', '>Whole trip<', '>First change only<')
-    positions = [page.index(label) for label in labels]
+MAP_HINTS: Final[tuple[tuple[str, str], ...]] = (
+    (
+        'Changes',
+        'Zoomed in on each place you change, showing the services that '
+        'meet there.',
+    ),
+    ('Whole trip', 'Everything from your stop to your destination.'),
+    (
+        'First leg',
+        'Your first bus or train from your stop to the first change, with '
+        'the vehicle on its way.',
+    ),
+    ('First change only', 'Zoomed in on the first place you change.'),
+    (
+        'Start only',
+        'Zoomed in on your stop, with the vehicles coming towards it.',
+    ),
+)
+
+
+def test_settings_page_offers_five_map_choices() -> None:
+    """The page lists the five radios in order, each with its hint."""
+    page = ' '.join(asset(name='settings.html').split())
+    positions = []
+    for (label, hint), value in zip(MAP_HINTS, MAP_VALUES, strict=True):
+        radio = (
+            f'<input type="radio" name="connection_map" value="{value}"'
+        )
+        positions += [page.index(radio), page.index(label), page.index(hint)]
     assert positions == sorted(positions)
+
+
+def test_route_pin_switch_dimmed_by_css() -> None:
+    """The route pin switch is dimmed while the school switch is off."""
+    css = ' '.join(asset(name='live.css').split())
+    assert (
+        ':has(input[name="skip_school_buses"]:not(:checked)) '
+        '.switch:has(input[name="skip_school_on_route_pins"])'
+    ) in css
 
 
 def test_route_pin_school_switch_read_and_shown() -> None:

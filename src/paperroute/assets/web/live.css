@@ -482,6 +482,13 @@ label:has(input:disabled) {
   color: var(--muted);
 }
 
+form:has(input[name="skip_school_buses"]:not(:checked))
+  .switch:has(input[name="skip_school_on_route_pins"]) {
+  color: var(--muted);
+  opacity: 0.5;
+  pointer-events: none;
+}
+
 .switch {
   display: flex;
   align-items: center;

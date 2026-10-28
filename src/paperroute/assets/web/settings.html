@@ -119,13 +119,34 @@
                  value="on"{{skip_school_on_route_pins}}>
           Also on pins without a To
         </label>
-        <label>Connection map
-          <select name="connection_map">
-            <option value="changes"{{connection_map:changes}}>Changes</option>
-            <option value="whole"{{connection_map:whole}}>Whole trip</option>
-            <option value="first"{{connection_map:first}}>First change only</option>
-          </select>
-        </label>
+        <fieldset>
+          <legend>Connection map</legend>
+          <label class="switch">
+            <input type="radio" name="connection_map" value="changes"{{connection_map:changes}} aria-describedby="map-changes-hint">
+            Changes
+          </label>
+          <p id="map-changes-hint" class="hint">Zoomed in on each place you change, showing the services that meet there.</p>
+          <label class="switch">
+            <input type="radio" name="connection_map" value="whole"{{connection_map:whole}} aria-describedby="map-whole-hint">
+            Whole trip
+          </label>
+          <p id="map-whole-hint" class="hint">Everything from your stop to your destination.</p>
+          <label class="switch">
+            <input type="radio" name="connection_map" value="first_leg"{{connection_map:first_leg}} aria-describedby="map-first-leg-hint">
+            First leg
+          </label>
+          <p id="map-first-leg-hint" class="hint">Your first bus or train from your stop to the first change, with the vehicle on its way.</p>
+          <label class="switch">
+            <input type="radio" name="connection_map" value="first"{{connection_map:first}} aria-describedby="map-first-hint">
+            First change only
+          </label>
+          <p id="map-first-hint" class="hint">Zoomed in on the first place you change.</p>
+          <label class="switch">
+            <input type="radio" name="connection_map" value="start"{{connection_map:start}} aria-describedby="map-start-hint">
+            Start only
+          </label>
+          <p id="map-start-hint" class="hint">Zoomed in on your stop, with the vehicles coming towards it.</p>
+        </fieldset>
         <button type="submit">Save</button>
       </form>
     </section>

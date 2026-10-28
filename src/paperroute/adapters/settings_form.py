@@ -28,8 +28,9 @@ SWITCHES: Final[tuple[str, ...]] = (
 )
 SLOTS: Final[tuple[str, ...]] = ('peak_1', 'peak_2')
 CHOICES: Final[frozenset[str]] = frozenset(
-    {'peak_rate', 'offpeak_rate', 'alert_lookahead', 'connection_map'}
+    {'peak_rate', 'offpeak_rate', 'alert_lookahead'}
 )
+RADIOS: Final[tuple[str, ...]] = ('quiet_mode', 'connection_map')
 SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
 CLOCK: Final[re.Pattern[str]] = re.compile(r'(\d\d):(\d\d)')
 ERRORS: Final[dict[str, str]] = {
@@ -110,7 +111,7 @@ def form_values(*, settings: Settings) -> dict[str, str]:
     }
     values |= {
         name: getattr(settings, name).value
-        for name in (*CHOICES, 'quiet_mode')
+        for name in (*CHOICES, *RADIOS)
     }
     values['quiet_start'] = clock_text(moment=settings.my_hours.start)
     values['quiet_end'] = clock_text(moment=settings.my_hours.end)

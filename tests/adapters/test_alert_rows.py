@@ -92,6 +92,7 @@ def test_alert_places_resolve_routes(
     """A Sydney Trains route ID resolves to its line's short name."""
     places = slice_repo.alert_places(route_ids=['WST_2c'], stop_ids=[])
     assert places.routes['WST_2c'] == 'T1'
+    assert places.lines == {'WST_2c': 'sydneytrains:WST_2c'}
 
 
 def test_suffix_route_resolves(
@@ -108,6 +109,7 @@ def test_suffix_route_resolves(
         route_ids=['9999_' + short], stop_ids=[]
     )
     assert found.routes == {'9999_' + short: short}
+    assert found.lines == {}
 
 
 def test_unresolved_routes_absent(

@@ -98,7 +98,11 @@ def to_departure(*, row: tuple[object, ...], day: date) -> Departure:
         service_day=day,
         shape_id=str(row[13]) if row[13] else None,
         facts=facts_of(row=row),
-        stops=int(str(row[17])) if len(row) > 17 else None,
+        stops=(
+            int(str(row[17]))
+            if len(row) > 17 and row[17] is not None
+            else None
+        ),
     )
 
 
@@ -114,12 +118,13 @@ def facts_of(*, row: tuple[object, ...]) -> TripFacts:
     Returns
     -------
     TripFacts
-        Kind of the route and the service the vehicle runs next, None
-        when the row has none.
+        Kind and ID of the route and the service the vehicle runs next,
+        None when the row has none.
     """
     route, route_type, agency = row[1:4]
     then, then_to, then_trip = row[14:17]
     return TripFacts(
+        route_id=str(row[18]) if len(row) > 18 else '',
         kind=kind_for(
             route_type=int(str(route_type)),
             agency_id=str(agency) if agency else None,
@@ -144,7 +149,8 @@ SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
   (SELECT group_concat(a.alias_id, ' ') FROM trip_aliases a
      WHERE a.trip_id = t.trip_id),
   {shape}, {then},
-  """ + stop_count(trip='o.trip_id', after='o.seq', upto='d.seq') + """
+  """ + stop_count(trip='o.trip_id', after='o.seq', upto='d.seq') + """,
+  t.route_id
 FROM stop_times o
 JOIN trips t ON t.trip_id = o.trip_id
 JOIN services sv ON sv.service_id = t.service_id AND sv.date = :day
@@ -169,7 +175,7 @@ SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
   o.seq, o.stop_id, d.seq, d.stop_id, o.dep, d.arr,
   (SELECT group_concat(a.alias_id, ' ') FROM trip_aliases a
      WHERE a.trip_id = t.trip_id),
-  {shape}, {then}
+  {shape}, {then}, NULL, t.route_id
 FROM stop_times o
 JOIN trips t ON t.trip_id = o.trip_id
 JOIN services sv ON sv.service_id = t.service_id AND sv.date = :day

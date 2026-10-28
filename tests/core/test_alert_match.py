@@ -26,6 +26,7 @@ from paperroute.core.alert_model import (
     Alert,
     AlertBanner,
     AlertTie,
+    Informed,
     Matched,
     Period,
 )
@@ -649,3 +650,73 @@ def test_plain_destination_pin_matches_any_loaded_route() -> None:
     )
     route = alert(alert_id='bus', header='x', route='526')
     assert tie_of(alert=route, facts=facts) is AlertTie.ROUTE
+
+
+def informed_alert(*, entity: Informed) -> Alert:
+    """
+    An alert about one entity.
+
+    Parameters
+    ----------
+    entity : Informed
+        What it is about.
+
+    Returns
+    -------
+    Alert
+        The alert.
+    """
+    return Alert(
+        alert_id='a', header='x', description='', periods=(),
+        informed=(entity,),
+    )
+
+
+def test_stop_alert_for_a_route_the_pin_does_not_use_is_dropped() -> None:
+    """An XPT alert at the From stop ties only to a pin taking the XPT."""
+    xpt = informed_alert(entity=Informed(
+        route_id='4T.T.WT27', stop_id='2150', stops=frozenset({'2150'}),
+    ))
+    t1 = pin_facts(
+        pin=PARRAMATTA_CENTRAL, departures=trains(), between=frozenset(),
+    )
+    regional = pin_facts(
+        pin=replace(PARRAMATTA_CENTRAL, kind=None),
+        departures=trains(route='WST', mode=Mode.REGIONAL),
+        between=frozenset(),
+    )
+    assert tie_of(alert=xpt, facts=t1) is None
+    assert tie_of(alert=xpt, facts=regional) is AlertTie.STOP
+
+
+def test_route_alert_ties_by_the_line_the_departures_run_on() -> None:
+    """A T1 North Shore alert misses T1 trains on the Western Line."""
+    western = [
+        replace(
+            item,
+            facts=replace(item.facts, route_id='sydneytrains:WST_2c'),
+        )
+        for item in trains()
+    ]
+    facts = pin_facts(
+        pin=PARRAMATTA_CENTRAL, departures=western, between=frozenset(),
+    )
+    north_shore = informed_alert(entity=Informed(
+        route_id='NSN_1a', route='T1', line='sydneytrains:NSN_1a',
+    ))
+    own = informed_alert(entity=Informed(
+        route_id='WST_2c', route='T1', line='sydneytrains:WST_2c',
+    ))
+    assert tie_of(alert=north_shore, facts=facts) is None
+    assert tie_of(alert=own, facts=facts) is AlertTie.ROUTE
+
+
+def test_route_alert_listing_other_stops_is_dropped() -> None:
+    """A route alert about stops off the pin does not count."""
+    facts = pin_facts(
+        pin=PARRAMATTA_CENTRAL, departures=trains(), between=frozenset(),
+    )
+    elsewhere = informed_alert(entity=Informed(
+        route='T1', stop_id='9999', stops=frozenset({'9999'}),
+    ))
+    assert tie_of(alert=elsewhere, facts=facts) is None

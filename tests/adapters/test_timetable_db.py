@@ -1154,16 +1154,19 @@ def test_departures_carry_on_as_the_next_route(
             start=at(hour=9, minute=0, day=6),
             end=at(hour=10, minute=0, day=6),
         )
-        assert [(d.trip_id, d.facts) for d in found] == [
-            ('v1', TripFacts(kind=RouteKind.BUS, then=then)),
-        ]
+        assert [(d.trip_id, d.facts) for d in found] == [(
+            'v1',
+            TripFacts(
+                kind=RouteKind.BUS, then=then, route_id='sydneytrains:809',
+            ),
+        )]
     old = old_network.departures(
         pin=pin_of('B1', None),
         start=at(hour=9, minute=0, day=6),
         end=at(hour=10, minute=0, day=6),
     )
-    assert [(d.trip_id, d.facts) for d in old] == [
-        ('v1', TripFacts(kind=RouteKind.BUS, then=None)),
+    assert [(d.trip_id, d.facts.kind, d.facts.then) for d in old] == [
+        ('v1', RouteKind.BUS, None),
     ]
 
 
@@ -1882,3 +1885,27 @@ def test_filter_matches_carry_on_by_boarding_route(
     assert routes_of(repo=network, pin=kept) == {'809'}
     dropped = replace(pin, only=('811',))
     assert routes_of(repo=network, pin=dropped) == set()
+
+
+def test_departures_carry_their_route_id(
+    network: SqliteTimetableRepository,
+) -> None:
+    """Every departure names the timetable route its trip runs on."""
+    to_w2 = network.departures(
+        pin=pin_of('C', 'W2'),
+        start=at(hour=7, minute=0, day=6),
+        end=at(hour=7, minute=10, day=6),
+    )
+    anywhere = whole_stop(repo=network, origin='C', hours=(7, 7))
+    carried = network.departures(
+        pin=pin_of('B1', 'B2'),
+        start=at(hour=9, minute=0, day=6),
+        end=at(hour=10, minute=0, day=6),
+    )
+    assert {d.facts.route_id for d in (*to_w2, *anywhere)} >= {
+        'sydneytrains:T1',
+    }
+    assert all(
+        d.facts.route_id.endswith(d.route) for d in (*anywhere, *carried)
+    )
+    assert carried

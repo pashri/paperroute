@@ -66,7 +66,8 @@ SELECT t.trip_id, r.short_name, r.type, COALESCE(t.agency_id, r.agency_id),
   {shape}, nr.short_name, n.headsign, n.trip_id,
   c.counted + """ + stop_count(
     trip='c.onto', after='c.after', upto='d.seq',
-) + """
+) + """,
+  t.route_id
 FROM chain c
 -- unary + stops the planner scanning every call at the Destination
 JOIN stop_times d ON d.trip_id = c.onto AND d.dropoff <> 1
@@ -108,7 +109,7 @@ def carry_on_departure(*, row: tuple[object, ...], day: date) -> Departure:
     """
     onto, onto_to, onto_trip = row[14:17]
     departure = to_departure(
-        row=(*row[:14], None, None, None, row[17]),
+        row=(*row[:14], None, None, None, *row[17:19]),
         day=day,
     )
     return replace(

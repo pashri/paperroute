@@ -157,6 +157,8 @@ def connection_facts(
         routes=frozenset().union(*(part.routes for part in parts)),
         names=frozenset().union(*(part.names for part in parts)),
         wharf=any(part.wharf for part in parts),
+        lines=frozenset().union(*(part.lines for part in parts)),
+        loose=any(part.loose for part in parts),
     )
 
 

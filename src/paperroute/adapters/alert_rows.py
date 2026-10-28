@@ -114,6 +114,34 @@ def prefixed_routes(
         Short name by feed ID, from the first of its sydneytrains, metro
         and bundle forms that is a route; other IDs are absent.
     """
+    return {
+        route_id: name
+        for route_id, (_, name) in prefixed_rows(
+            route_ids=route_ids, fetch_in=fetch_in,
+        ).items()
+    }
+
+
+def prefixed_rows(
+    *, route_ids: Collection[str], fetch_in: FetchIn
+) -> dict[str, tuple[str, str]]:
+    """
+    Find the timetable route each feed route ID is with a prefix.
+
+    Parameters
+    ----------
+    route_ids : Collection[str]
+        Route IDs from a feed.
+    fetch_in : FetchIn
+        Runs a query with an IN list and returns its rows.
+
+    Returns
+    -------
+    dict[str, tuple[str, str]]
+        Timetable route ID and short name by feed ID, from the first of
+        its sydneytrains, metro and bundle forms that is a route; other
+        IDs are absent.
+    """
     candidates = [
         prefix + route_id
         for route_id in route_ids
@@ -124,7 +152,7 @@ def prefixed_routes(
     }
     return {
         route_id: next(
-            names[prefix + route_id]
+            (prefix + route_id, names[prefix + route_id])
             for prefix in ROUTE_PREFIXES
             if prefix + route_id in names
         )
@@ -227,10 +255,17 @@ def alert_places(
     Returns
     -------
     AlertPlaces
-        Route short names, stop families and the metro line.
+        Route short names, stop families, the metro line and the
+        timetable route IDs found through a prefix.
     """
     return AlertPlaces(
         routes=read_routes(route_ids=route_ids, fetch_in=fetch_in),
         stops=read_families(stop_ids=stop_ids, fetch_in=fetch_in),
         metro=read_metro(fetch=fetch),
+        lines={
+            route_id: line
+            for route_id, (line, _) in prefixed_rows(
+                route_ids=route_ids, fetch_in=fetch_in,
+            ).items()
+        },
     )

@@ -21,8 +21,9 @@ class Informed:
     """
     One thing an alert is about.
 
-    ``route`` and ``stops`` are filled in once the feed's IDs have been
-    looked up in the timetable.
+    ``route``, ``line`` and ``stops`` are filled in once the feed's IDs
+    have been looked up in the timetable. ``line`` is the timetable route
+    ID when the feed's ID is one with a source prefix added, else None.
     """
 
     route_id: str | None = None
@@ -30,6 +31,7 @@ class Informed:
     trip_id: str | None = None
     route: str | None = None
     stops: frozenset[str] = frozenset()
+    line: str | None = None
 
 
 @dataclass(frozen=True)
@@ -60,12 +62,14 @@ class AlertPlaces:
     ``routes`` maps a feed route ID to a route short name and ``stops``
     maps a feed stop ID to its family: the stop, its parent station and
     its child stops. Unknown IDs are absent. ``metro`` is the short name
-    of the timetable's only metro route, or None.
+    of the timetable's only metro route, or None. ``lines`` maps a feed
+    route ID to the timetable route ID it is with a source prefix.
     """
 
     routes: Mapping[str, str]
     stops: Mapping[str, frozenset[str]]
     metro: str | None = None
+    lines: Mapping[str, str] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)

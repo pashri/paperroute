@@ -650,8 +650,8 @@ def informed_with(
     Returns
     -------
     Informed
-        The entity with its route short name and stop family, where
-        known.
+        The entity with its route short name, timetable route ID and
+        stop family, where known.
     """
     route = places.routes.get(item.route_id or '')
     if route is None and metro and item.route_id:
@@ -660,6 +660,7 @@ def informed_with(
         item,
         route=route,
         stops=places.stops.get(item.stop_id or '', frozenset()),
+        line=places.lines.get(item.route_id or ''),
     )
 
 

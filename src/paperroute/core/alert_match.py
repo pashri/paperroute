@@ -10,6 +10,7 @@ from paperroute.core.alert_model import (
     Alert,
     AlertBanner,
     AlertTie,
+    Informed,
     Matched,
     Period,
 )
@@ -38,6 +39,14 @@ NAME_MODES: Final[frozenset[Mode]] = frozenset({
     Mode.REGIONAL,
     Mode.FERRY,
 })
+LOOSE_MODES: Final[frozenset[Mode]] = frozenset({
+    Mode.REGIONAL,
+    Mode.LIGHT_RAIL,
+})
+LOOSE_KINDS: Final[frozenset[RouteKind]] = frozenset({
+    RouteKind.COACH,
+    RouteKind.LIGHT_RAIL,
+})
 BETWEEN_TRIPS: Final[int] = 12
 WEEK_DAYS: Final[int] = 6
 NAME_BEFORE: Final[str] = (
@@ -65,6 +74,12 @@ class PinFacts:
         pin whose places aren't matched by name.
     wharf : bool
         True for a ferry pin, whose names may be followed by 'Wharf'.
+    lines : frozenset[str]
+        Timetable route IDs its departures run on.
+    loose : bool
+        True when it takes NSW TrainLink or light rail, whose feed route
+        IDs the timetable does not know, so a stop alert naming one of
+        those counts.
     """
 
     trips: frozenset[str]
@@ -72,6 +87,8 @@ class PinFacts:
     routes: frozenset[str]
     names: frozenset[str]
     wharf: bool = False
+    lines: frozenset[str] = frozenset()
+    loose: bool = False
 
 
 @dataclass(frozen=True)
@@ -293,6 +310,13 @@ def pin_facts(
         ),
         names=pin_names(pin=pin, between=between) if named else frozenset(),
         wharf=is_ferry_pin(pin=pin, departures=departures),
+        lines=frozenset(
+            item.facts.route_id
+            for item in departures
+            if item.facts.route_id
+        ),
+        loose=pin.kind in LOOSE_KINDS
+        or any(item.mode in LOOSE_MODES for item in departures),
     )
 
 
@@ -397,11 +421,63 @@ def tie_of(*, alert: Alert, facts: PinFacts) -> AlertTie | None:
     informed = alert.informed
     if any(item.trip_id in facts.trips for item in informed):
         return AlertTie.TRIP
-    if any(item.stops & facts.stops for item in informed):
+    if any(at_stop(item=item, facts=facts) for item in informed):
         return AlertTie.STOP
-    if any(item.route in facts.routes for item in informed):
+    if any(
+        item.stop_id is None and uses_route(item=item, facts=facts)
+        for item in informed
+    ):
         return AlertTie.ROUTE
     return None
+
+
+def uses_route(*, item: Informed, facts: PinFacts) -> bool:
+    """
+    Say whether an entity's route is one the pin's departures use.
+
+    Parameters
+    ----------
+    item : Informed
+        The entity.
+    facts : PinFacts
+        What alerts can name about the pin.
+
+    Returns
+    -------
+    bool
+        By timetable route ID when both the entity and the pin's
+        departures have one, else by route short name.
+    """
+    if item.line is not None and facts.lines:
+        return item.line in facts.lines
+    return item.route is not None and item.route in facts.routes
+
+
+def at_stop(*, item: Informed, facts: PinFacts) -> bool:
+    """
+    Say whether an entity names one of the pin's stops for it.
+
+    Parameters
+    ----------
+    item : Informed
+        The entity.
+    facts : PinFacts
+        What alerts can name about the pin.
+
+    Returns
+    -------
+    bool
+        True when it names one of the pin's stops with no route, with a
+        route the pin uses, or, for a pin taking services whose route
+        IDs the timetable does not know, with such a route.
+    """
+    if not item.stops & facts.stops:
+        return False
+    if item.route_id is None and item.route is None:
+        return True
+    return uses_route(item=item, facts=facts) or (
+        item.route is None and facts.loose
+    )
 
 
 def matched_alerts(

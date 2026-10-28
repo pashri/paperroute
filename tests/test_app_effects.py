@@ -699,7 +699,11 @@ def alert_event(
 def test_alert_feed_parsed_to_event() -> None:
     """An alerts fetch gives AlertsFetched with the routes resolved."""
     timetable = PlacesTimetable(
-        places=AlertPlaces(routes={'WST_2c': 'T1'}, stops={})
+        places=AlertPlaces(
+            routes={'WST_2c': 'T1'},
+            stops={},
+            lines={'WST_2c': 'sydneytrains:WST_2c'},
+        )
     )
     data = (REAL / 'v2_gtfs_alerts_sydneytrains.pb').read_bytes()
     event = alert_event(timetable=timetable, feed=ALERTS_FEED, data=data)
@@ -713,6 +717,9 @@ def test_alert_feed_parsed_to_event() -> None:
     routes = {item.route_id: item.route for item in western.informed}
     assert routes['WST_2c'] == 'T1'
     assert routes['WST_1a'] is None
+    lines = {item.route_id: item.line for item in western.informed}
+    assert lines['WST_2c'] == 'sydneytrains:WST_2c'
+    assert lines['WST_1a'] is None
     assert timetable.asked == 1
 
 

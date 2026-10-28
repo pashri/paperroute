@@ -238,3 +238,27 @@ def test_every_ticked_way_matched() -> None:
         pin=pin, board=Board(), between=frozenset(), families={},
     )
     assert '2560' in facts.stops
+
+
+def test_connection_facts_merge_lines_and_loose() -> None:
+    """Every leg's route IDs are merged, and any loose leg makes it loose."""
+    first = tuple(
+        replace(item, facts=replace(item.facts, route_id='bundle:606'))
+        for item in LEG1
+    )
+    second = tuple(
+        replace(
+            item,
+            mode=Mode.REGIONAL,
+            facts=replace(item.facts, route_id='sydneytrains:WST_2c'),
+        )
+        for item in LEG2
+    )
+    facts = connection_facts(
+        pin=WORK,
+        board=board_of(departures=first, second=second),
+        between=frozenset(),
+        families={},
+    )
+    assert facts.lines == {'bundle:606', 'sydneytrains:WST_2c'}
+    assert facts.loose

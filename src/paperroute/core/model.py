@@ -484,11 +484,15 @@ class TripFacts:
     onto : CarryOn | None
         The trip the vehicle becomes before reaching the Destination,
         when the boarded trip doesn't reach it itself; None otherwise.
+    route_id : str
+        The timetable's route ID, which tells apart lines sharing a short
+        name (T1's Western and North Shore runs); empty when not known.
     """
 
     kind: RouteKind | None = None
     then: CarryOn | None = None
     onto: CarryOn | None = None
+    route_id: str = ''
 
 
 NO_FACTS: Final[TripFacts] = TripFacts()

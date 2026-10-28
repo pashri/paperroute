@@ -13,9 +13,10 @@ from paperroute.core.connection_strip import (
     build_connection_strip,
     fold_leg,
     leg_calls,
+    walk_note,
 )
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import StopPlace
+from paperroute.core.model import Change, StopPlace
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import LOADING, NO_LEG_STOPS
@@ -482,3 +483,19 @@ def test_no_pairs_no_sections() -> None:
     assert view.sections == ()
     assert view.selected == 0
     assert view.empty == 'No connections to Westmead Station in the next 3 hours'
+
+
+def test_change_without_a_walk_says_change() -> None:
+    """Changing at one stop, or at stops no distance apart, has no walk."""
+    here = place('215020', name='Parramatta Station', point=(0.0, 0.0))
+    there = place('2150401', name='Parramatta Station', point=(0.0, 0.0))
+    nowhere = place('215099', name='Parramatta Station')
+    assert walk_note(change=Change(alight=here, board=here, allow=5)) == (
+        'change, 5 min'
+    )
+    assert walk_note(change=Change(alight=here, board=there, allow=2)) == (
+        'change, 2 min'
+    )
+    assert walk_note(
+        change=Change(alight=nowhere, board=here, allow=2),
+    ) == 'change, 2 min'

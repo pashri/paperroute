@@ -6,7 +6,7 @@ from datetime import datetime
 from typing import Final
 
 from paperroute.core.chains import Chain
-from paperroute.core.connection_model import walk_metres
+from paperroute.core.connection_model import change_walk
 from paperroute.core.model import Mode, Pin
 from paperroute.core.rides import Ride, rides_of
 from paperroute.core.stop_view import (
@@ -175,8 +175,8 @@ def change_lines(*, ride: Ride) -> tuple[HeroLine, ...]:
     Returns
     -------
     tuple[HeroLine, ...]
-        'change at {board} {time}', then 'walk {metres} m' when the stop
-        got off at is another stop; nothing for the first ride.
+        'change at {board} {time}', then 'walk {metres} m' when the
+        change walks (see `change_walk`); nothing for the first ride.
     """
     change = ride.change
     if change is None:
@@ -187,9 +187,9 @@ def change_lines(*, ride: Ride) -> tuple[HeroLine, ...]:
         text=f'change at {change.board.name} '
         f'{clock_text(moment=ride.departs)}',
     )
-    if change.alight.stop_id == change.board.stop_id:
+    metres = change_walk(change=change)
+    if metres is None:
         return (at,)
-    metres = walk_metres(alight=change.alight, board=change.board)
     return at, HeroLine(route=None, mode=None, text=f'walk {metres} m')
 
 

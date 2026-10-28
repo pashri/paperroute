@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import Pin, StopPlace, Way
+from paperroute.core.model import Change, Pin, StopPlace, Way
 
 LEG_EXTRA: Final[timedelta] = timedelta(hours=2)
 WALK_STEP: Final[int] = 10  # metres the walk is rounded up to
@@ -112,3 +112,24 @@ def trip_key(*, item: LiveDeparture) -> TripKey:
         Trip ID and service day.
     """
     return item.departure.trip_id, item.departure.service_day
+
+
+def change_walk(*, change: Change) -> int | None:
+    """
+    Measure the walk a change makes, if it makes one.
+
+    Parameters
+    ----------
+    change : Change
+        The change.
+
+    Returns
+    -------
+    int | None
+        Metres, as `walk_metres` gives them; None when the change gets
+        off and on at one stop, or at stops no distance apart or without
+        positions.
+    """
+    if change.alight.stop_id == change.board.stop_id:
+        return None
+    return walk_metres(alight=change.alight, board=change.board) or None

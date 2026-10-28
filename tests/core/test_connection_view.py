@@ -12,10 +12,12 @@ from paperroute.core.connection_view import (
     build_connection_view,
     chain_hero,
     chain_row,
+    change_lines,
     route_chips,
     via_text,
 )
 from paperroute.core.model import Change, Mode, Pin, Way
+from paperroute.core.rides import Ride
 from paperroute.core.stop_view import StopView, empty_text
 from tests.core.connection_factories import (
     HOLLIS,
@@ -27,7 +29,7 @@ from tests.core.connection_factories import (
     run,
     work_chains,
 )
-from tests.core.factories import live
+from tests.core.factories import live, place
 
 CHAINS: Final[tuple[Chain, ...]] = work_chains()
 STOP: Final[StopView] = StopView(
@@ -238,3 +240,17 @@ def test_mode_nouns_cover_modes() -> None:
     assert set(MODE_NOUNS) == set(Mode)
     assert MODE_NOUNS[Mode.REGIONAL] == 'train'
     assert MODE_NOUNS[Mode.OTHER] == 'service'
+
+
+def test_change_at_stops_no_distance_apart_has_no_walk() -> None:
+    """Two stops with no distance between them say only the change."""
+    ride = Ride(
+        item=live(item=A0733),
+        last=live(item=A0733),
+        start=place('b'),
+        end=place('c'),
+        change=Change(alight=place('a'), board=place('b'), allow=2),
+    )
+    assert [line.text for line in change_lines(ride=ride)] == [
+        'change at  7:33',
+    ]

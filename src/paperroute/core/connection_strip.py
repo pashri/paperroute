@@ -6,7 +6,7 @@ from datetime import datetime
 from enum import StrEnum
 
 from paperroute.core.chains import Chain
-from paperroute.core.connection_model import walk_metres
+from paperroute.core.connection_model import change_walk
 from paperroute.core.connection_view import PairRow, chain_rows, no_pair_text
 from paperroute.core.live import LiveDeparture
 from paperroute.core.map_view import MapView, is_fresh, position_age
@@ -439,9 +439,12 @@ def walk_note(*, change: Change) -> str:
     Returns
     -------
     str
-        'walk {metres} m, {allow} min'.
+        'walk {metres} m, {allow} min', or 'change, {allow} min' when
+        there is no walk (see `change_walk`).
     """
-    metres = walk_metres(alight=change.alight, board=change.board)
+    metres = change_walk(change=change)
+    if metres is None:
+        return f'change, {change.allow} min'
     return f'walk {metres} m, {change.allow} min'
 
 

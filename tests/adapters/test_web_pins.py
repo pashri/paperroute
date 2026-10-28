@@ -602,7 +602,23 @@ async def test_editor_offers_valid_choices(editor: Client) -> None:
     assert 'maxlength="24"' in text
     assert 'formaction="/pins/save"' in text
     assert '<legend>Mode</legend>' in text
-    assert '>Line<' in text
+
+
+async def test_editor_line_without_a_to_says_it_sets_the_strip(
+    editor: Client,
+) -> None:
+    """With no To the line select is labelled as the Strip's, not a filter."""
+    plain = await (
+        await editor.get('/pins/edit?stop=C&kind=train&route=T1')
+    ).text()
+    assert '>Strip line<' in plain
+    assert 'aria-describedby="pin-route-hint"' in plain
+    assert 'the stop lists every route' in plain
+    to = await (
+        await editor.get('/pins/edit?stop=C&kind=train&route=T1&to=J')
+    ).text()
+    assert '>Line<' in to
+    assert 'pin-route-hint' not in to
 
 
 async def test_editor_without_line_has_no_save(editor: Client) -> None:

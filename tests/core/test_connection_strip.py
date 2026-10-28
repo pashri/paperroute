@@ -2,6 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import replace
+from datetime import timedelta
 from typing import Final
 
 from paperroute.core.chains import Chain
@@ -145,6 +146,25 @@ def test_leg_times_follow_delay() -> None:
     first, second = view.sections
     assert [stop.time for stop in first.stops] == ['7:36', '', '7:42']
     assert second.stops[0].time == '7:46'
+
+
+def test_leg_arrival_is_the_live_arrival_the_pair_was_made_with() -> None:
+    """A leg's last row shows the live arrival, not its departure delay."""
+    first = LEG1[0]
+    item = replace(
+        live(item=first, late=3), arrives=first.arrives + timedelta(minutes=1),
+    )
+    view = build_connection_strip(
+        stop_view=STOP, pin=WORK,
+        chains=(Chain(legs=(item, CHAINS[0].legs[1]), way=0),),
+        selected=0,
+        patterns=PATTERNS,
+        positions={},
+        now=at(7, 30),
+    )
+    assert [stop.time for stop in view.sections[0].stops] == [
+        '7:36', '', '7:40',
+    ]
 
 
 def test_leg_calls_skip_passing() -> None:

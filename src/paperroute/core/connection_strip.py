@@ -202,9 +202,9 @@ def leg_calls(
     Returns
     -------
     tuple[LegCall, ...]
-        Each call and its time shifted by the delay: the departure, or
-        the arrival on the last call. Passing calls are left out. Empty
-        when either end is not found.
+        Each call and its time shifted by the departure's delay, and the
+        last call by the delay of the live arrival that chose the pair.
+        Passing calls are left out. Empty when either end is not found.
     """
     departure = item.departure
     first = from_call(
@@ -223,7 +223,10 @@ def leg_calls(
                     day=departure.service_day,
                     seconds=stop.arrives if index == final else stop.departs,
                 ),
-                seconds=delay_of(item=last if index == final else item),
+                seconds=(
+                    late_arriving(item=last) if index == final
+                    else delay_of(item=item)
+                ),
             ),
         )
         for index, stop in enumerate(pattern.stops)
@@ -246,6 +249,23 @@ def delay_of(*, item: LiveDeparture) -> int:
         Seconds it leaves after its timetabled time.
     """
     return int(item.departs.timestamp() - item.departure.departs.timestamp())
+
+
+def late_arriving(*, item: LiveDeparture) -> int:
+    """
+    Give how late a departure arrives.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+
+    Returns
+    -------
+    int
+        Seconds it arrives after its timetabled time.
+    """
+    return int(item.arrives.timestamp() - item.departure.arrives.timestamp())
 
 
 def fold_leg(*, calls: Sequence[LegCall]) -> tuple[LegStop, ...]:

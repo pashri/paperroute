@@ -534,3 +534,21 @@ def test_on_screen_now_matches_line_size() -> None:
     """'On the screen now' is set in the pin line's small size."""
     body = rule_body(css=css_text(), selector='.pins small,\n.pins .now')
     assert 'font-size: 0.875rem' in declarations(body=body)
+
+
+def test_live_frame_is_drawn_at_its_own_size() -> None:
+    """The panel preview is never shrunk; a narrow page scrolls its box."""
+    css = css_text()
+    frame = declarations(body=rule_body(css=css, selector='.frame'))
+    assert 'image-rendering: pixelated' in frame
+    assert 'max-width: 100%' not in frame
+    box = declarations(body=rule_body(css=css, selector='.frame-box'))
+    assert 'overflow-x: auto' in box
+    nodes = parse_tree(text=page_text(name='live.html'))
+    holder = next(
+        node for node in nodes if 'frame-box' in (node.attrs.get('class') or '')
+    )
+    assert by_id(nodes=nodes, ident='frame') in inside(
+        nodes=nodes, outer=holder,
+    )
+

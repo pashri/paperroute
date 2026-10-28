@@ -428,3 +428,73 @@ def test_shapes_requested_for_each_leg() -> None:
     assert isinstance(view, MapView)
     assert len(view.panes) == 1
     assert view.base.width + view.panes[0].base.width == 800
+
+
+def test_first_leg_fits_first_leg() -> None:
+    """The first-leg setting fits the first leg and shows its vehicle."""
+    whole = connection_inputs(
+        inputs=inputs_at(now=at(7, 30), zoom=0),
+        pin=WORK,
+        chains=SHAPED,
+        mode=ConnectionMap.WHOLE,
+    )
+    found = connection_inputs(
+        inputs=inputs_at(now=at(7, 30), zoom=0),
+        pin=WORK,
+        chains=SHAPED,
+        mode=ConnectionMap.FIRST_LEG,
+    )
+    assert found.centre is not None
+    assert found.centre[0] == 0.0
+    assert found.zoom < whole.zoom
+    assert found.vehicle_trips == frozenset({'a0733'})
+
+
+def test_first_leg_direct_is_whole_trip() -> None:
+    """A direct row's first leg is the whole trip."""
+    direct = (Chain(legs=SHAPED[0].legs[:1], way=None),)
+    first, whole = (
+        connection_inputs(
+            inputs=inputs_at(now=at(7, 30), zoom=0),
+            pin=WORK,
+            chains=direct,
+            mode=mode,
+        )
+        for mode in (ConnectionMap.FIRST_LEG, ConnectionMap.WHOLE)
+    )
+    assert (first.centre, first.zoom) == (whole.centre, whole.zoom)
+
+
+def test_start_centres_on_origin() -> None:
+    """The start setting zooms on the From with first-leg vehicles."""
+    found = connection_inputs(
+        inputs=inputs_at(now=at(7, 30)),
+        pin=WORK,
+        chains=SHAPED,
+        mode=ConnectionMap.START,
+    )
+    assert found.centre == (0.0, 900.0)
+    assert found.zoom == DEFAULT_ZOOM - 1
+    assert found.vehicle_trips == frozenset(
+        {'a0733', 'a0748', 'a0803', 'a0822'},
+    )
+
+
+def test_new_settings_one_pane() -> None:
+    """The first-leg and start settings give one full-width pane."""
+    for mode in (ConnectionMap.FIRST_LEG, ConnectionMap.START):
+        (pane,) = change_panes(
+            inputs=two_inputs(), pin=TWO, chain=TWO_CHAIN, mode=mode,
+        )
+        assert pane.base.width == two_inputs().width
+
+
+def test_first_leg_without_chains_keeps_from() -> None:
+    """With no chain the first-leg setting stays on the From."""
+    found = connection_inputs(
+        inputs=inputs_at(now=at(7, 30)),
+        pin=WORK,
+        chains=(),
+        mode=ConnectionMap.FIRST_LEG,
+    )
+    assert (found.centre, found.zoom) == ((0.0, 900.0), DEFAULT_ZOOM)

@@ -75,7 +75,9 @@ class ConnectionMap(StrEnum):
 
     CHANGES = 'changes'
     WHOLE = 'whole'
+    FIRST_LEG = 'first_leg'
     FIRST = 'first'
+    START = 'start'
 
 
 LOOKAHEAD: Final[dict[Lookahead, timedelta | None]] = {

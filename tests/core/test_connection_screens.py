@@ -209,6 +209,15 @@ def test_cycle_keeps_strip_map() -> None:
     assert state.view is LiveView.ALERTS
 
 
+STRIP_MAP_X: Final[dict[ConnectionMap, float]] = {
+    ConnectionMap.CHANGES: 72.0,
+    ConnectionMap.WHOLE: 400.0,
+    ConnectionMap.FIRST_LEG: 0.0,
+    ConnectionMap.FIRST: 72.0,
+    ConnectionMap.START: 0.0,
+}
+
+
 def test_strip_map_shows_connection_pane() -> None:
     """Strip + map has the connection map and the pair's sections."""
     for mode in ConnectionMap:
@@ -225,7 +234,7 @@ def test_strip_map_shows_connection_pane() -> None:
         assert len(view.pane.sections) == 2
         centre = view.map.base.centre
         assert centre is not None
-        assert centre[0] == (400.0 if mode is ConnectionMap.WHOLE else 72.0)
+        assert centre[0] == STRIP_MAP_X[mode]
     state = with_legs(state=started(view=LiveView.STRIP_MAP))
     before = shown_view(state=state)
     state = stepped(state=state, event=KnobTurned(knob=Knob.BOTTOM, steps=1))

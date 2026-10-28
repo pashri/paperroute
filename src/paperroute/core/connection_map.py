@@ -27,6 +27,9 @@ SIDEBAR_PAIRS: Final[int] = 4
 CREDIT_ROOM: Final[int] = 24  # pixels kept clear above the map's bottom
 BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
 PANES_WIDTH: Final[int] = 800  # the whole frame, shared by change panes
+CHANGE_MODES: Final[frozenset[ConnectionMap]] = frozenset(
+    {ConnectionMap.CHANGES, ConnectionMap.FIRST},
+)
 
 type Line = tuple[Point, ...]
 
@@ -336,18 +339,20 @@ def shown_trips(
     Returns
     -------
     frozenset[str]
-        For the whole trip, every leg of the listed chains. Zoomed on the
-        changes, every leg of the hero chain.
+        For the whole trip, every leg of the listed chains; for the
+        start, their first legs; for the first leg, the hero's first leg.
+        Zoomed on the changes, every leg of the hero chain.
     """
+    listed = chains[:SIDEBAR_PAIRS]
     if mode is ConnectionMap.WHOLE:
-        return pin_trips(departures=[
-            departure
-            for chain in chains[:SIDEBAR_PAIRS]
-            for departure in chain_legs(chain=chain)
-        ])
-    if not chains:
-        return frozenset()
-    return pin_trips(departures=chain_legs(chain=chains[0]))
+        legs = [leg for chain in listed for leg in chain_legs(chain=chain)]
+    elif mode is ConnectionMap.START:
+        legs = [chain_legs(chain=chain)[0] for chain in listed]
+    elif mode is ConnectionMap.FIRST_LEG:
+        legs = list(chain_legs(chain=chains[0])[:1]) if chains else []
+    else:
+        legs = list(chain_legs(chain=chains[0])) if chains else []
+    return pin_trips(departures=legs)
 
 
 def banner_room(*, inputs: MapInputs) -> int:
@@ -385,14 +390,70 @@ def whole_frame(
     Returns
     -------
     tuple[Point | None, int]
-        The middle of the box around the hero's legs and the four stops,
-        moved so the box clears the map's credit and any banner, and the finest
-        zoom that holds it with that room; the From and the knob's zoom
-        with no point at all.
+        The fit of the hero's legs and the four stops, as `fit_frame`.
     """
     hero = chains[0] if chains else None
     first, second = leg_lines(pin=pin, chain=hero, shapes=inputs.shapes)
     points = trip_points(pin=pin, chain=hero, lines=(*first, *second))
+    return fit_frame(inputs=inputs, points=points)
+
+
+def first_leg_frame(
+    *, inputs: MapInputs, pin: Pin, chains: Sequence[Chain],
+) -> tuple[Point | None, int]:
+    """
+    Frame the hero's first ride, from the From to the first change.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+    pin : Pin
+        Connection pin.
+    chains : Sequence[Chain]
+        Workable chains.
+
+    Returns
+    -------
+    tuple[Point | None, int]
+        The fit of the first ride's line and its two stops, as
+        `fit_frame`; for a direct chain, that is the whole trip.
+    """
+    if not chains:
+        return fit_frame(inputs=inputs, points=())
+    ride = rides_of(chain=chains[0], pin=pin)[0]
+    lines = cut_leg(
+        departure=ride.item.departure,
+        ends=(ride.start, ride.end),
+        shapes=inputs.shapes,
+    )
+    stops = (ride.start.point, ride.end.point)
+    return fit_frame(inputs=inputs, points=(
+        *(point for line in lines for point in line),
+        *(point for point in stops if point is not None),
+    ))
+
+
+def fit_frame(
+    *, inputs: MapInputs, points: Sequence[Point],
+) -> tuple[Point | None, int]:
+    """
+    Frame a set of points.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+    points : Sequence[Point]
+        Points to hold.
+
+    Returns
+    -------
+    tuple[Point | None, int]
+        The middle of the points' box, moved so the box clears the map's
+        credit and any banner, and the finest zoom that holds it with
+        that room; the From and the knob's zoom with no point at all.
+    """
     if not points:
         return inputs.centre, inputs.zoom
     box = box_of(points=points)
@@ -472,21 +533,51 @@ def framed(
     Returns
     -------
     tuple[Point | None, int]
-        For the whole trip, the middle of its box at the zoom that holds
-        it. Zoomed on the change, the hero's first walk (else the first
-        ticked way's) at its midpoint, one zoom finer than the knob's,
-        centred in the map below any banner. The From and
-        the knob's zoom when neither applies.
+        For the whole trip or the first leg, the middle of its box at the
+        zoom that holds it. Zoomed on the start, the From; zoomed on the
+        change, the hero's first walk (else the first ticked way's) at
+        its midpoint. Zoomed framings are one zoom finer than the knob's
+        and centred in the map below any banner, on the From when there
+        is no walk.
     """
     if mode is ConnectionMap.WHOLE:
         return whole_frame(inputs=inputs, pin=pin, chains=chains)
+    if mode is ConnectionMap.FIRST_LEG:
+        return first_leg_frame(inputs=inputs, pin=pin, chains=chains)
+    zoom = max(0, inputs.zoom - CHANGE_ZOOM_IN)
+    spot = zoomed_spot(pin=pin, chains=chains, mode=mode)
+    if spot is None:
+        return inputs.centre, zoom
+    x, y = spot
+    return (x, y + banner_room(inputs=inputs) * ZOOMS[zoom] / 2), zoom
+
+
+def zoomed_spot(
+    *, pin: Pin, chains: Sequence[Chain], mode: ConnectionMap,
+) -> Point | None:
+    """
+    Find the point a zoomed framing centres on.
+
+    Parameters
+    ----------
+    pin : Pin
+        Connection pin.
+    chains : Sequence[Chain]
+        Workable chains.
+    mode : ConnectionMap
+        A zoomed framing.
+
+    Returns
+    -------
+    Point | None
+        The From for the start, else the middle of the first walk; None
+        without a point.
+    """
+    if mode is ConnectionMap.START:
+        return pin.origin.point
     hero = chains[0] if chains else None
     walk = walk_of(pin=pin, chain=hero) or walk_of(pin=pin, chain=None)
-    zoom = max(0, inputs.zoom - CHANGE_ZOOM_IN)
-    if walk is None:
-        return inputs.centre, zoom
-    x, y = middle(ends=walk)
-    return (x, y + banner_room(inputs=inputs) * ZOOMS[zoom] / 2), zoom
+    return None if walk is None else middle(ends=walk)
 
 
 def connection_inputs(
@@ -508,7 +599,7 @@ def connection_inputs(
     chains : Sequence[Chain]
         Workable chains in first-leg departure order.
     mode : ConnectionMap
-        Zoomed on the change, or the whole trip.
+        Which framing.
 
     Returns
     -------
@@ -595,7 +686,7 @@ def build_connection_map(
     chains : Sequence[Chain]
         Workable chains in first-leg departure order.
     mode : ConnectionMap
-        Zoomed on the change, or the whole trip.
+        Which framing.
 
     Returns
     -------
@@ -751,18 +842,18 @@ def change_panes(
     chain : Chain
         The hero chain.
     mode : ConnectionMap
-        Each change, the whole trip, or the first change.
+        Which framing.
 
     Returns
     -------
     tuple[MapView, ...]
         Two panes side by side, each half of `PANES_WIDTH`, for each
         change of a two-change chain; otherwise one pane of the map's own
-        width: on the first change, or the whole trip with every ride.
+        width: on the first change, or framed as `framed` says.
     """
     rides = rides_of(chain=chain, pin=pin)
     changed = [index for index, ride in enumerate(rides) if ride.change]
-    if mode is ConnectionMap.WHOLE or not changed:
+    if mode not in CHANGE_MODES or not changed:
         return (build_connection_map(
             inputs=inputs, pin=pin, chains=(chain,), mode=mode,
         ),)

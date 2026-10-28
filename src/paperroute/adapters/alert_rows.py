@@ -63,6 +63,8 @@ chain(start, seq, trip_id, after, hops) AS (
   UNION ALL
   SELECT c.start, c.seq, j.next_trip, -1, c.hops + 1 FROM chain c
   JOIN trip_joins j ON j.trip_id = c.trip_id
+  JOIN trips nt ON nt.trip_id = j.next_trip
+  JOIN services ns ON ns.service_id = nt.service_id AND ns.date = :day
   WHERE c.hops < 6),
 reached(start, seq, hops) AS (
   SELECT c.start, c.seq, MIN(c.hops) FROM chain c

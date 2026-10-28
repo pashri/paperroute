@@ -408,3 +408,14 @@ def test_leg_lines_follow_the_trip_a_vehicle_becomes(chain_db: Path) -> None:
         found = repo.leg_lines(ends=('E2', 'C'), day=date(2026, 10, 6))
     assert found == {'sydneytrains:T1', 'sydneytrains:T2'}
 
+
+
+def test_leg_lines_skip_a_next_trip_not_running(chain_db: Path) -> None:
+    """A joined trip on another service that day adds no line."""
+    change(
+        db=chain_db,
+        sql="UPDATE trips SET service_id = 'other' WHERE trip_id = 'c2'",
+    )
+    with closing(SqliteTimetableRepository(path=chain_db)) as repo:
+        found = repo.leg_lines(ends=('E2', 'C'), day=date(2026, 10, 6))
+    assert found == {'sydneytrains:T1'}

@@ -434,6 +434,7 @@ def stops_after(
     if started is None:
         return
     pattern, start, delay = started
+    ends = delay_ends(item=item, leaves=pattern.stops[start], delay=delay)
     joined = joined_patterns(
         pattern=pattern, patterns=trips.patterns, day=day,
     )
@@ -446,8 +447,67 @@ def stops_after(
             yield (
                 trips.station_of.get(stop.station, stop.station),
                 stop,
-                shifted(moment=arrives, seconds=delay),
+                shifted(
+                    moment=arrives,
+                    seconds=call_delay(seconds=stop.arrives, ends=ends),
+                ),
             )
+
+
+def delay_ends(
+    *, item: LiveDeparture, leaves: PatternStop, delay: int,
+) -> tuple[tuple[int, int], tuple[int, int]]:
+    """
+    Pair a departure's delay at the From with its delay on arrival.
+
+    Parameters
+    ----------
+    item : LiveDeparture
+        Departure with live times.
+    leaves : PatternStop
+        Its call at the From.
+    delay : int
+        Seconds late leaving the From.
+
+    Returns
+    -------
+    tuple[tuple[int, int], tuple[int, int]]
+        Service-day seconds and delay at the From, then at the stop the
+        departure's arrival time is for.
+    """
+    departure = item.departure
+    arrives = service_seconds(
+        day=departure.service_day, moment=departure.arrives,
+    )
+    late = int(item.arrives.timestamp() - departure.arrives.timestamp())
+    return (leaves.departs, delay), (arrives, late)
+
+
+def call_delay(
+    *, seconds: int, ends: tuple[tuple[int, int], tuple[int, int]],
+) -> int:
+    """
+    Work out a call's delay between the From and the arrival stop.
+
+    Parameters
+    ----------
+    seconds : int
+        The call's scheduled service-day seconds.
+    ends : tuple[tuple[int, int], tuple[int, int]]
+        Seconds and delay at the From and at the arrival stop.
+
+    Returns
+    -------
+    int
+        The delay moved in step with the scheduled time from the From's
+        to the arrival's; the arrival's at and after the arrival stop.
+    """
+    (first, early), (last, late) = ends
+    if seconds >= last:
+        return late
+    if last <= first:
+        return early
+    return early + round((late - early) * (seconds - first) / (last - first))
 
 
 def arrivals_after(

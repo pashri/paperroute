@@ -12,6 +12,7 @@ from paperroute.core.strip_times import (
     approach_times,
     arrivals_after,
     board_departures,
+    call_delay,
     filtered,
     joined_ids,
     strip_trips,
@@ -271,3 +272,32 @@ def test_filtered_keeps_only_routes() -> None:
     kept = filtered(departures=found, only=('606', '607X'))
     assert [d.route for d in kept] == ['606', '607X']
     assert filtered(departures=found, only=()) == tuple(found)
+
+
+def test_arrivals_after_meet_the_live_arrival_at_the_destination() -> None:
+    """Calls move from the From's delay to the live arrival's delay."""
+    plain = approach_inputs()
+    trip = replace(
+        train(minutes=10, trip_id='a'),
+        arrives=START + timedelta(minutes=20),
+    )
+    item = replace(
+        live(item=trip, late=2),
+        arrives=trip.arrives - timedelta(minutes=1),
+    )
+    trips = replace(plain, patterns={
+        'a': pattern(trip_id='a', stops=calls(
+            stations=('C', 'D', 'E', 'F'), start=EIGHT + 600, step=300,
+        )),
+    })
+    assert dict(arrivals_after(item=item, trips=trips, origin='C')) == {
+        'D': START + timedelta(minutes=15, seconds=30),
+        'E': item.arrives,
+        'F': START + timedelta(minutes=24),
+    }
+
+
+def test_call_delay_keeps_the_from_delay_without_a_later_arrival() -> None:
+    """An arrival time not after the From leaves the From's delay."""
+    ends = ((EIGHT + 60, 120), (EIGHT + 30, 0))
+    assert call_delay(seconds=EIGHT, ends=ends) == 120

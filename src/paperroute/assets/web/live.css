@@ -636,6 +636,8 @@ main > .notice {
 
 .table th[scope='row'] {
   font-weight: normal;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .downloads {

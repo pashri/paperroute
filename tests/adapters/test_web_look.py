@@ -552,3 +552,8 @@ def test_live_frame_is_drawn_at_its_own_size() -> None:
         nodes=nodes, outer=holder,
     )
 
+
+def test_feed_names_wrap_so_the_times_show() -> None:
+    """A long feed name wraps instead of pushing its times out of view."""
+    body = rule_body(css=css_text(), selector=".table th[scope='row']")
+    assert 'white-space: normal' in declarations(body=body)

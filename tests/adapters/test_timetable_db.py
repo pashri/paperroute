@@ -1035,7 +1035,6 @@ def whole_stop(
         pin=Pin(
             origin=place(origin),
             kind=RouteKind.TRAIN,
-            routes=('T2',),
         ),
         start=at(hour=hours[0], minute=0, day=6),
         end=at(hour=hours[1], minute=59, day=6),
@@ -1045,7 +1044,7 @@ def whole_stop(
 def test_no_destination_lists_the_whole_stop(
     network: SqliteTimetableRepository,
 ) -> None:
-    """Every train route leaving C is listed, whatever routes were chosen."""
+    """Every train route leaving C is listed when no line is chosen."""
     found = whole_stop(repo=network, origin='C', hours=(7, 7))
     assert [d.trip_id for d in found] == [
         'ew1', 'we1', 'er1', 'cc1', 're1', 'y1', 'cc1',
@@ -1847,18 +1846,15 @@ def routes_of(
     }
 
 
-def test_departures_respect_filter(
+def test_departures_without_a_to_keep_the_pins_line(
     network: SqliteTimetableRepository,
 ) -> None:
-    """A route filter narrows the board; an empty one keeps both lines."""
-    pin = Pin(
-        origin=place('C'),
-        kind=RouteKind.TRAIN,
-        routes=('T1',),
-        only=('T2',),
-    )
-    assert routes_of(repo=network, pin=pin) == {'T2'}
-    assert routes_of(repo=network, pin=replace(pin, only=())) == {'T1', 'T2'}
+    """A T1 pin without a To lists T1 only; no line keeps both lines."""
+    pin = Pin(origin=place('C'), kind=RouteKind.TRAIN, routes=('T1',))
+    assert routes_of(repo=network, pin=pin) == {'T1'}
+    assert routes_of(repo=network, pin=replace(pin, routes=())) == {
+        'T1', 'T2',
+    }
 
 
 def test_filter_with_destination(

@@ -785,13 +785,17 @@ def test_my_hours_may_wrap_or_be_empty(
             },
             Settings(rotate=True, larger_text=True),
         ),
+        (
+            {'connection_map': 'first', 'larger_text': True},
+            Settings(rotate=True, larger_text=True),
+        ),
     ],
-    ids=['bad-rate', 'bad-my-hours'],
+    ids=['bad-rate', 'bad-my-hours', 'retired-first-map'],
 )
 def test_bad_setting_resets_only_itself(
     path: Path, changes: dict[str, object], expected: Settings
 ) -> None:
-    """A bad rate or My hours resets that field; the others survive."""
+    """A bad or retired setting resets that field; the others survive."""
     saved = load_with_settings(path=path, changes=changes)
     assert saved.settings == expected
 

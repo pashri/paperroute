@@ -27,9 +27,6 @@ SIDEBAR_PAIRS: Final[int] = 4
 CREDIT_ROOM: Final[int] = 24  # pixels kept clear above the map's bottom
 BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
 PANES_WIDTH: Final[int] = 800  # the whole frame, shared by change panes
-CHANGE_MODES: Final[frozenset[ConnectionMap]] = frozenset(
-    {ConnectionMap.CHANGES, ConnectionMap.FIRST},
-)
 
 type Line = tuple[Point, ...]
 
@@ -853,17 +850,15 @@ def change_panes(
     tuple[MapView, ...]
         Two panes side by side, each half of `PANES_WIDTH`, for each
         change of a two-change chain; otherwise one pane of the map's own
-        width: on the first change, or framed as `framed` says.
+        width: on the one change, or framed as `framed` says.
     """
     rides = rides_of(chain=chain, pin=pin)
     changed = [index for index, ride in enumerate(rides) if ride.change]
-    if mode not in CHANGE_MODES or not changed:
+    if mode is not ConnectionMap.CHANGES or not changed:
         return (build_connection_map(
             inputs=inputs, pin=pin, chains=(chain,), mode=mode,
         ),)
-    if mode is ConnectionMap.FIRST or len(changed) == 1:
-        changed = changed[:1]
-    else:
+    if len(changed) > 1:
         inputs = replace(inputs, width=PANES_WIDTH // len(changed))
     return tuple(
         change_view(

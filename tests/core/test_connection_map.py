@@ -373,16 +373,6 @@ def test_changes_one_change_one_pane() -> None:
     assert pane.base.centre == (72.0, 0.0)
 
 
-def test_first_only_one_pane() -> None:
-    """The first-change setting shows only the first change."""
-    (pane,) = change_panes(
-        inputs=two_inputs(), pin=TWO, chain=TWO_CHAIN,
-        mode=ConnectionMap.FIRST,
-    )
-    assert pane.base.centre == (72.0, 0.0)
-    assert pane.base.width == two_inputs().width
-
-
 def test_whole_fits_all_legs() -> None:
     """The whole trip draws every leg, alternating solid and dashed."""
     (pane,) = change_panes(

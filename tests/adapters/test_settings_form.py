@@ -165,17 +165,17 @@ def test_page_text_fills_marks() -> None:
 
 
 MAP_VALUES: Final[tuple[str, ...]] = (
-    'changes', 'whole', 'first_leg', 'first', 'start',
+    'changes', 'whole', 'first_leg', 'start',
 )
 
 
-def test_connection_map_five_choices() -> None:
+def test_connection_map_four_choices() -> None:
     """Each connection map choice is read and checks its own radio."""
     template = ''.join(
         f'<{tag}{{{{connection_map:{value}}}}}>'
-        for tag, value in zip('abcde', MAP_VALUES, strict=True)
+        for tag, value in zip('abcd', MAP_VALUES, strict=True)
     )
-    for tag, value in zip('abcde', MAP_VALUES, strict=True):
+    for tag, value in zip('abcd', MAP_VALUES, strict=True):
         expected = ConnectionMap(value)
         assert changed_from(fields={'connection_map': value}) == (
             SettingsChanged(connection_map=expected)
@@ -208,7 +208,6 @@ MAP_HINTS: Final[tuple[tuple[str, str], ...]] = (
         'Your first bus or train from your stop to the first change, with '
         'the vehicle on its way.',
     ),
-    ('First change only', 'Zoomed in on the first place you change.'),
     (
         'Start only',
         'Zoomed in on your stop, with the vehicles coming towards it.',
@@ -216,8 +215,8 @@ MAP_HINTS: Final[tuple[tuple[str, str], ...]] = (
 )
 
 
-def test_settings_page_offers_five_map_choices() -> None:
-    """The page lists the five radios in order, each with its hint."""
+def test_settings_page_offers_four_map_choices() -> None:
+    """The page lists the four radios in order, each with its hint."""
     page = ' '.join(asset(name='settings.html').split())
     positions = []
     for (label, hint), value in zip(MAP_HINTS, MAP_VALUES, strict=True):
@@ -226,6 +225,7 @@ def test_settings_page_offers_five_map_choices() -> None:
         )
         positions += [page.index(radio), page.index(label), page.index(hint)]
     assert positions == sorted(positions)
+    assert 'First change only' not in page
 
 
 def test_route_pin_switch_dimmed_by_css() -> None:

@@ -213,7 +213,6 @@ STRIP_MAP_X: Final[dict[ConnectionMap, float]] = {
     ConnectionMap.CHANGES: 72.0,
     ConnectionMap.WHOLE: 400.0,
     ConnectionMap.FIRST_LEG: 0.0,
-    ConnectionMap.FIRST: 72.0,
     ConnectionMap.START: 0.0,
 }
 

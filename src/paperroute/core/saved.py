@@ -76,7 +76,6 @@ class ConnectionMap(StrEnum):
     CHANGES = 'changes'
     WHOLE = 'whole'
     FIRST_LEG = 'first_leg'
-    FIRST = 'first'
     START = 'start'
 
 
@@ -121,7 +120,7 @@ class Settings:  # pylint: disable=too-many-instance-attributes
     alert_lookahead : Lookahead
         How far ahead planned alerts are listed.
     connection_map : ConnectionMap
-        Whether the Map zooms on each change, the first or the whole trip.
+        How the Map frames a connection pin.
     skip_school_buses : bool
         Whether routes the timetable marks as school services are left
         out of pins with a To, the stop search and Trip Planner

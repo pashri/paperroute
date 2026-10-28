@@ -63,6 +63,7 @@ MENU_FOOTER: Final[str] = (
 )
 DEVICE_FOOTER: Final[str] = f'Full details on {LOCAL_NAME}{DOT}top press: back'
 PHONE_FOOTER: Final[str] = 'Top press: back'
+FAILED_FOOTER: Final[str] = PHONE_FOOTER
 CONFIRM_FOOTER: Final[str] = TIMEOUT_LINE
 CONFIRM_BOX: Final[tuple[int, int, int, int]] = (32, 290, 392, 354)
 CANCEL_BOX: Final[tuple[int, int, int, int]] = (420, 290, 760, 354)
@@ -462,7 +463,9 @@ def draw_hotspot(canvas: Canvas, *, view: WifiSetupView) -> None:
 
 def draw_failed(canvas: Canvas, *, view: WifiSetupView) -> None:
     """
-    Draw why setup has no hotspot, and the timeout.
+    Draw why setup has no hotspot, and how to go back.
+
+    The hotspot never started, so nothing is said about it closing.
 
     Parameters
     ----------
@@ -474,7 +477,7 @@ def draw_failed(canvas: Canvas, *, view: WifiSetupView) -> None:
     width = WIDTH - 2 * MARGIN
     title = view.error or START_FAILED
     lines(canvas, texts=(title,), top=110, width=width, face=TITLE_FACE)
-    footer(canvas, text=setup_footer(minutes_left=view.minutes_left))
+    footer(canvas, text=FAILED_FOOTER)
 
 
 def draw_waiting(canvas: Canvas, *, view: WifiSetupView) -> None:

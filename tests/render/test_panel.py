@@ -256,3 +256,23 @@ def test_qr_too_big_raises() -> None:
                 clock='', url='x' * 200, addresses=(), network=None,
             ),
         )
+
+
+def test_wifi_failed_footer_has_no_hotspot_countdown() -> None:
+    """A setup that never started says nothing about the hotspot closing."""
+    frames = [
+        draw_panel_view(
+            view=WifiSetupView(
+                clock='21:52',
+                phase=WifiPhase.FAILED,
+                qr='',
+                password='',
+                address='10.42.0.1',
+                minutes_left=minutes,
+                ssid=None,
+                error=None,
+            ),
+        )
+        for minutes in (10, 3)
+    ]
+    assert (frames[0] == frames[1]).all()

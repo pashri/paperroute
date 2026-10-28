@@ -636,15 +636,16 @@ def sidebar_rows(
     Returns
     -------
     tuple[PairRow, ...]
-        Up to four rows whose detail is the journey time; the first adds
-        where it changes, or that it is direct or stays on.
+        Up to four rows whose detail is the journey time, then where it
+        changes or that it is direct or stays on; the first spells out
+        a single change.
     """
     rows = chain_rows(chains=chains[:SIDEBAR_PAIRS], pin=pin)
     return tuple(
         replace(
             row,
-            detail=f'{row.minutes} min' if index else (
-                f'{row.minutes} min · {sidebar_detail(detail=row.detail)}'
+            detail=f'{row.minutes} min · ' + (
+                row.detail if index else sidebar_detail(detail=row.detail)
             ),
         )
         for index, row in enumerate(rows)

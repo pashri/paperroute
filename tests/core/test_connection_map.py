@@ -187,7 +187,9 @@ def test_connection_map_sidebar() -> None:
     assert view.pairs[0].detail == (
         '24 min · change at Constitution Hill, North West Twy'
     )
-    assert view.pairs[1].detail == '24 min'
+    assert view.pairs[1].detail == (
+        '24 min · at Constitution Hill, North West Twy'
+    )
     trip = view.base.trip
     assert trip is not None
     assert trip.change == (72.0, 0.0)

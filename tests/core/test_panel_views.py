@@ -12,7 +12,7 @@ from paperroute.core.device_model import (
     Origin,
     WifiStatus,
 )
-from paperroute.core.map_view import MapView
+from paperroute.core.map_view import MapView, Marker
 from paperroute.core.panel_screens import device_rows, panel_view, phone_view
 from paperroute.core.panel_views import (
     CONFIRM_COPY,
@@ -217,3 +217,32 @@ def test_sleep_map_never_changes_with_time() -> None:
     assert sleep_map(view=base) == sleep_map(view=later)
     assert sleep_map(view=base).clock == ''
     assert sleep_map(view=base).banner is None
+
+
+def test_sleep_map_strips_every_pane() -> None:
+    """A two-pane map has no markers in any pane and never changes."""
+    marker = Marker(
+        route='T1', x=1, y=2, bearing=None, live=True, pinned=True,
+    )
+
+    def tick(*, clock: str) -> MapView:
+        pane = MapView(
+            origin='B',
+            destination=None,
+            clock=clock,
+            base=None,  # type: ignore[arg-type]
+            zoom=1,
+            markers=(marker,),
+            sidebar=(),
+            banner='y',
+            empty=None,
+        )
+        return replace(
+            pane, origin='A', markers=(marker,), panes=(pane,),
+        )
+
+    asleep = sleep_map(view=tick(clock='8:00'))
+    assert asleep.markers == ()
+    assert all(pane.markers == () for pane in asleep.panes)
+    assert all(pane.clock == '' for pane in asleep.panes)
+    assert asleep == sleep_map(view=tick(clock='8:01'))

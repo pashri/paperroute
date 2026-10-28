@@ -244,9 +244,15 @@ def sleep_map(*, view: MapView) -> MapView:
     Returns
     -------
     MapView
-        The view with no clock, sidebar, pairs, markers or banner, so it
-        stays the same while time passes.
+        The view, and each of its panes, with no clock, sidebar, pairs,
+        markers or banner, so it stays the same while time passes.
     """
     return replace(
-        view, clock='', sidebar=(), pairs=(), markers=(), banner=None,
+        view,
+        clock='',
+        sidebar=(),
+        pairs=(),
+        markers=(),
+        banner=None,
+        panes=tuple(sleep_map(view=pane) for pane in view.panes),
     )

@@ -11,10 +11,11 @@ from paperroute.core.alert_match import (
     when_text,
     window_key,
 )
-from paperroute.core.alert_model import Period
-from paperroute.core.stop_view import PinTag, StopView
+from paperroute.core.alert_model import Alert, Period
+from paperroute.core.stop_view import DOT, PinTag, StopView
 
 ALERT_ROWS: Final[int] = 6
+LINE_NAMES: Final[int] = 3  # route names put in front of a header
 
 
 @dataclass(frozen=True)
@@ -25,7 +26,7 @@ class AlertRow:
     Attributes
     ----------
     headline : str
-        The alert's header.
+        The alert's header, its lines first (see `headline_of`).
     when : str
         Its time line.
     active : bool
@@ -45,7 +46,7 @@ class AlertText:
     Attributes
     ----------
     title : str
-        The header.
+        The header, its lines first (see `headline_of`).
     when : str
         The time line.
     body : str
@@ -143,11 +144,35 @@ def alert_text(*, listed: Listed, now: datetime) -> AlertText:
     windows = sorted(alert.periods, key=window_key)
     later = windows[len(windows) - listed.timing.more:]
     return AlertText(
-        title=alert.header,
+        title=headline_of(alert=alert),
         when=time_line(timing=listed.timing, now=now),
         body=alert.description,
         also=tuple(also_line(window=item, now=now) for item in later),
     )
+
+
+def headline_of(*, alert: Alert) -> str:
+    """
+    Give an alert's header with its lines in front.
+
+    Parameters
+    ----------
+    alert : Alert
+        The alert.
+
+    Returns
+    -------
+    str
+        The header after the first few route names it is about, such as
+        'T2 · Trains run to a changed timetable'; the header alone when
+        it names no route or already starts with one of them.
+    """
+    routes = list(dict.fromkeys(
+        item.route for item in alert.informed if item.route
+    ))
+    if not routes or alert.header.startswith(tuple(routes)):
+        return alert.header
+    return f'{"/".join(routes[:LINE_NAMES])}{DOT}{alert.header}'
 
 
 def alert_row(*, listed: Listed, now: datetime) -> AlertRow:
@@ -167,7 +192,7 @@ def alert_row(*, listed: Listed, now: datetime) -> AlertRow:
         Its row.
     """
     return AlertRow(
-        headline=listed.matched.alert.header,
+        headline=headline_of(alert=listed.matched.alert),
         when=time_line(timing=listed.timing, now=now),
         active=listed.timing.active,
     )

@@ -311,8 +311,8 @@ def test_rows_window_holds_selection() -> None:
         now=now,
     )
     assert len(view.rows) == ALERT_ROWS
-    assert view.rows[view.selected].headline == '7'
-    assert view.rows[0].headline == '2'
+    assert view.rows[view.selected].headline == f'T1{DOT}7'
+    assert view.rows[0].headline == f'T1{DOT}2'
 
 def test_alerts_view_not_saved() -> None:
     """The Alerts view is kept as the Stop view."""
@@ -339,3 +339,33 @@ def test_also_line_without_start() -> None:
     assert also_line(window=Period(), now=now) == 'Also ongoing'
     window = Period(end=sydney(day=27, hour=1, minute=30))
     assert also_line(window=window, now=now) == 'Also until Tue 1:30'
+
+
+def test_rows_put_the_line_first() -> None:
+    """A header not starting with its line gets the line in front."""
+    now = sydney(day=24, hour=12)
+    plain = replace(
+        WESTERN, alert_id='plain', header='Trains run to a changed timetable',
+    )
+    view = build_alerts_view(
+        listed=listed_of(alerts=(plain, WESTERN), now=now),
+        selected='plain',
+        page=0,
+        stop_view=stop_view(),
+        now=now,
+    )
+    assert [row.headline for row in view.rows] == [
+        WESTERN.header,
+        f'T1{DOT}Trains run to a changed timetable',
+    ]
+    assert view.text.title == f'T1{DOT}Trains run to a changed timetable'
+
+
+def test_identical_alerts_are_listed_once() -> None:
+    """Two alerts with the same text and windows make one row."""
+    now = sydney(day=24, hour=12)
+    twin = replace(WESTERN, alert_id='twin')
+    listed = listed_of(alerts=(WESTERN, twin), now=now)
+    assert [item.matched.alert.alert_id for item in listed] == [
+        min(WESTERN.alert_id, 'twin'),
+    ]

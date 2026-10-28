@@ -666,7 +666,8 @@ def listed_alerts(
     -------
     tuple[Listed, ...]
         Dated before open-ended, active before coming, then trip, stop
-        and route ties, then by start, header and ID.
+        and route ties, then by start, header and ID; of alerts with the
+        same text and windows only the first.
     """
     found = []
     for item in matched:
@@ -677,7 +678,32 @@ def listed_alerts(
             continue
         banner = is_banner(matched=item, timing=timing, now=now)
         found.append(Listed(matched=item, timing=timing, banner=banner))
-    return tuple(sorted(found, key=rank_key))
+    return without_repeats(listed=sorted(found, key=rank_key))
+
+
+def without_repeats(*, listed: Sequence[Listed]) -> tuple[Listed, ...]:
+    """
+    Keep one of each set of alerts with the same text and windows.
+
+    Parameters
+    ----------
+    listed : Sequence[Listed]
+        Ranked listed alerts.
+
+    Returns
+    -------
+    tuple[Listed, ...]
+        The first of each, in order.
+    """
+    seen: set[tuple[str, str, tuple[Period, ...]]] = set()
+    kept = []
+    for item in listed:
+        alert = item.matched.alert
+        key = (alert.header, alert.description, alert.periods)
+        if key not in seen:
+            seen.add(key)
+            kept.append(item)
+    return tuple(kept)
 
 
 def alert_banner(

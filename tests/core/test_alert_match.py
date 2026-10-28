@@ -376,6 +376,7 @@ def test_trip_alert_ranks_first() -> None:
     trip = alert(
         alert_id='trip',
         header=XPLORER.header,
+        description='Your train',
         periods=XPLORER.periods,
         trip_id='alias-1',
     )
@@ -466,12 +467,12 @@ def test_lookahead_limits_list() -> None:
 
 RANKED = (
     Matched(
-        alert=replace(XPLORER, alert_id='a'),
+        alert=replace(XPLORER, alert_id='a', description='a'),
         tie=AlertTie.TRIP,
         names_place=False,
     ),
     Matched(
-        alert=replace(XPLORER, alert_id='b'),
+        alert=replace(XPLORER, alert_id='b', description='b'),
         tie=AlertTie.STOP,
         names_place=False,
     ),
@@ -498,7 +499,9 @@ def test_more_counts_banner_eligible() -> None:
         matched=[
             Matched(alert=XPLORER, tie=AlertTie.STOP, names_place=False),
             Matched(
-                alert=replace(XPLORER, alert_id='other'),
+                alert=replace(
+                    XPLORER, alert_id='other', description='other',
+                ),
                 tie=AlertTie.STOP,
                 names_place=False,
             ),

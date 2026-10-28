@@ -160,8 +160,9 @@ def between_read(
     -------
     BetweenLoaded
         The names; for a connection pin, the names and families of the
-        direct leg and every ticked way's legs merged, and NSW TrainLink
-        when any leg has it.
+        direct leg and every ticked way's legs merged, NSW TrainLink
+        when any leg has it, and every line the timetable runs along the
+        legs that day.
     """
     pin = effect.pin
     if not is_connection(pin=pin):
@@ -184,6 +185,14 @@ def between_read(
             for stop, family in part.families.items()
         },
         trainlink=any(part.trainlink for part in loaded),
+        lines=frozenset().union(*(
+            timetable.leg_lines(
+                ends=(leg.origin.stop_id, leg.destination.stop_id),
+                day=effect.day,
+            )
+            for leg in legs
+            if leg.destination is not None
+        )),
     )
 
 

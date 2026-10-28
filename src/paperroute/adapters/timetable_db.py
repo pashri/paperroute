@@ -9,7 +9,11 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.adapters.alert_rows import alert_places, read_trainlink
+from paperroute.adapters.alert_rows import (
+    alert_places,
+    read_leg_lines,
+    read_trainlink,
+)
 from paperroute.adapters.calendar_rows import (
     SERVICE_DAY_LENGTH,
     read_holidays,
@@ -793,6 +797,30 @@ class SqliteTimetableRepository:
             stop_ids=stop_ids,
             fetch=lambda sql: self.fetch(sql=sql, params=()),
             fetch_in=lambda sql, ids: self.fetch_in(sql=sql, ids=ids),
+        )
+
+    def leg_lines(
+        self, *, ends: tuple[str, str], day: date,
+    ) -> frozenset[str]:
+        """
+        List the routes with a trip from one stop to another on a day.
+
+        Parameters
+        ----------
+        ends : tuple[str, str]
+            From and To stop or station IDs.
+        day : date
+            Service date.
+
+        Returns
+        -------
+        frozenset[str]
+            Route IDs ridden between them (see `read_leg_lines`).
+        """
+        params = dict[str, object](origin=ends[0], dest=ends[1], day=f'{day}')
+        return read_leg_lines(
+            fetch=lambda sql: self.fetch(sql=sql, params=params),
+            joins=self.features().joins,
         )
 
     def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:

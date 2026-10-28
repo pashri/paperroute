@@ -4,12 +4,20 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute.core.alert_match import tie_of
-from paperroute.core.alert_model import AlertTie
+from paperroute.core.alert_model import (
+    Alert,
+    AlertsFetched,
+    AlertsSnapshot,
+    AlertTie,
+    BetweenLoaded,
+    Informed,
+)
 from paperroute.core.connection import (
     chain_legs,
     connection_facts,
     live_chains,
 )
+from paperroute.core.feeds import ALERT_FEEDS
 from paperroute.core.messages import DeparturesLoaded
 from paperroute.core.model import Change, Departure, Mode, Pin, Way
 from paperroute.core.saved import seeded
@@ -262,3 +270,28 @@ def test_connection_facts_merge_lines_and_loose() -> None:
     )
     assert facts.lines == {'bundle:606', 'sydneytrains:WST_2c'}
     assert facts.loose
+
+
+def test_leg_lines_from_the_timetable_tie_alerts() -> None:
+    """A line the timetable says serves a leg ties its alerts."""
+    state = loaded()
+    on_line = Alert(
+        alert_id='line',
+        header='x',
+        description='',
+        periods=(),
+        informed=(Informed(route='T1', line='sydneytrains:WST_2c'),),
+    )
+    feed = ALERT_FEEDS[Mode.BUS]
+    snapshot = AlertsSnapshot(
+        feed=feed, fetched_at=at(7, 30), alerts=(on_line,),
+    )
+    state, _ = step(state, AlertsFetched(feed=feed, snapshot=snapshot))
+    assert state.alerts.matched is not None
+    assert not state.alerts.matched[1]
+    lines = frozenset({'sydneytrains:WST_2c'})
+    state, _ = step(
+        state, BetweenLoaded(pin=WORK, names=frozenset(), lines=lines),
+    )
+    assert state.alerts.matched is not None
+    assert [item.tie for item in state.alerts.matched[1]] == [AlertTie.ROUTE]

@@ -2,7 +2,7 @@
 
 from collections.abc import Collection
 from dataclasses import dataclass, field, replace
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 from typing import Final
 
 from paperroute.adapters.leg_cache import LegCache
@@ -86,6 +86,26 @@ class RecordingTimetable(EmptyPlacedTimetable):
             routes={},
             stops={stop: frozenset({stop, f'{stop}-1'}) for stop in stop_ids},
         )
+
+    def leg_lines(
+        self, *, ends: tuple[str, str], day: date,
+    ) -> frozenset[str]:
+        """
+        Name one route ID after the leg's ends.
+
+        Parameters
+        ----------
+        ends : tuple[str, str]
+            From and To stop IDs.
+        day : date
+            Ignored.
+
+        Returns
+        -------
+        frozenset[str]
+            One route ID made of the two stop IDs.
+        """
+        return frozenset({'>'.join(ends)})
 
 
 @dataclass
@@ -297,6 +317,9 @@ def test_between_read_merges_legs() -> None:
     assert event.pin == WORK
     assert set(event.families) == {'G2145615', 'G215254', '2145648', '214510'}
     assert not event.names
+    assert event.lines == {
+        'G2145615>214510', 'G2145615>G215254', '2145648>214510',
+    }
 
 
 def test_between_read_covers_two_changes() -> None:

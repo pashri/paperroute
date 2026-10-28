@@ -397,6 +397,26 @@ class BrokenTimetable:
         """
         return AlertPlaces(routes={}, stops={})
 
+    def leg_lines(
+        self, *, ends: tuple[str, str], day: date,
+    ) -> frozenset[str]:
+        """
+        Know no routes between two stops.
+
+        Parameters
+        ----------
+        ends : tuple[str, str]
+            Ignored.
+        day : date
+            Ignored.
+
+        Returns
+        -------
+        frozenset[str]
+            Nothing.
+        """
+        return frozenset()
+
     def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:
         """
         Know no NSW TrainLink trips.

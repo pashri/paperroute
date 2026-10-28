@@ -400,3 +400,11 @@ def test_carry_ons_reach_destination_through_the_chain(
         for row in plan
         if 'SEARCH d USING INDEX stop_times_stop' in str(row)
     ]
+
+
+def test_leg_lines_follow_the_trip_a_vehicle_becomes(chain_db: Path) -> None:
+    """E2 to C stays on c1 as c2, so both lines ride the leg."""
+    with closing(SqliteTimetableRepository(path=chain_db)) as repo:
+        found = repo.leg_lines(ends=('E2', 'C'), day=date(2026, 10, 6))
+    assert found == {'sydneytrains:T1', 'sydneytrains:T2'}
+

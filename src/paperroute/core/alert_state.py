@@ -239,7 +239,8 @@ def rematched(*, state: State) -> State:
     -------
     State
         State with the ties stored for the shown pin; with no departures
-        loaded, alerts are tied by stop and route only.
+        loaded, alerts are tied by stop and route only. A connection's
+        legs also tie by every line the timetable runs along them.
     """
     pin = shown(state=state)
     alerts = state.alerts
@@ -251,6 +252,8 @@ def rematched(*, state: State) -> State:
         between=between[1] if between is not None and known else frozenset(),
         families=alerts.families if known else {},
     )
+    if known:
+        facts = replace(facts, lines=facts.lines | alerts.lines)
     found = matched_alerts(alerts=feed_alerts(state=state), facts=facts)
     return replace(state, alerts=replace(alerts, matched=(pin, found)))
 
@@ -281,6 +284,7 @@ def on_alerts(*, state: State, event: AlertsFetched | BetweenLoaded) -> State:
             between=(event.pin, event.names),
             families=event.families,
             trainlink=event.trainlink,
+            lines=event.lines,
         )
     return rematched(state=replace(state, alerts=alerts))
 

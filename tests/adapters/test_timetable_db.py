@@ -1913,3 +1913,23 @@ def test_departures_carry_their_route_id(
         d.facts.route_id.endswith(d.route) for d in (*anywhere, *carried)
     )
     assert carried
+
+
+def test_leg_lines_name_every_route_between_two_stops(
+    network: SqliteTimetableRepository,
+) -> None:
+    """Every route with a trip calling at C and then W2 that day counts."""
+    found = network.leg_lines(ends=('C', 'W2'), day=date(2026, 10, 6))
+    assert 'sydneytrains:T1' in found
+    assert network.leg_lines(
+        ends=('W2', 'W2'), day=date(2026, 10, 6),
+    ) == frozenset()
+
+
+def test_leg_lines_without_joins(
+    old_network: SqliteTimetableRepository,
+) -> None:
+    """A timetable without trip joins still names the direct lines."""
+    assert 'sydneytrains:T1' in old_network.leg_lines(
+        ends=('C', 'W2'), day=date(2026, 10, 6),
+    )

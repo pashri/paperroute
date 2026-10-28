@@ -1,6 +1,6 @@
 """Look up the routes and stops an alert feed names."""
 
-from collections.abc import Collection
+from collections.abc import Callable, Collection, Sequence
 from typing import Final
 
 from paperroute.adapters.calendar_rows import Fetch, FetchIn
@@ -37,6 +37,68 @@ TRAINLINK_STOPS: Final[str] = (
     + ', '.join(f"'{agency}'" for agency in sorted(REGIONAL_AGENCIES))
     + ') LIMIT 1'
 )
+
+
+FAMILY_OF: Final[str] = """(SELECT stop_id FROM stops
+                    WHERE stop_id = :{end} OR parent_station = :{end})"""
+BOARDED: Final[str] = """
+boarded(trip_id, seq) AS (
+  SELECT o.trip_id, o.seq FROM stop_times o
+  JOIN trips t ON t.trip_id = o.trip_id
+  JOIN services sv ON sv.service_id = t.service_id AND sv.date = :day
+  WHERE o.stop_id IN """ + FAMILY_OF.format(end='origin') + """
+    AND o.pickup <> 1)"""
+LEG_LINES: Final[str] = """
+WITH """ + BOARDED + """
+SELECT DISTINCT t.route_id FROM boarded b
+JOIN trips t ON t.trip_id = b.trip_id
+JOIN stop_times d ON d.trip_id = b.trip_id AND d.seq > b.seq
+WHERE d.dropoff <> 1 AND d.stop_id IN """ + FAMILY_OF.format(end='dest')
+LEG_LINES_JOINED: Final[str] = """
+WITH RECURSIVE """ + BOARDED + """,
+chain(start, seq, trip_id, after, hops) AS (
+  SELECT trip_id, seq, trip_id, seq, 0 FROM boarded
+  UNION ALL
+  SELECT c.start, c.seq, j.next_trip, -1, c.hops + 1 FROM chain c
+  JOIN trip_joins j ON j.trip_id = c.trip_id
+  WHERE c.hops < 6),
+reached(start, seq, hops) AS (
+  SELECT c.start, c.seq, MIN(c.hops) FROM chain c
+  JOIN stop_times d ON d.trip_id = c.trip_id AND d.seq > c.after
+  WHERE d.dropoff <> 1
+    AND d.stop_id IN """ + FAMILY_OF.format(end='dest') + """
+  GROUP BY c.start, c.seq)
+SELECT DISTINCT t.route_id FROM chain c
+JOIN reached r ON r.start = c.start AND r.seq = c.seq AND c.hops <= r.hops
+JOIN trips t ON t.trip_id = c.trip_id
+"""
+
+
+def read_leg_lines(
+    *,
+    fetch: Callable[[str], Sequence[tuple[object, ...]]],
+    joins: bool,
+) -> frozenset[str]:
+    """
+    List the routes ridden from one stop to another on a day.
+
+    Parameters
+    ----------
+    fetch : Callable[[str], Sequence[tuple[object, ...]]]
+        Runs one query, bound to the From, To and day, and returns its
+        rows.
+    joins : bool
+        Whether the timetable joins trips that run on as others.
+
+    Returns
+    -------
+    frozenset[str]
+        Route IDs of the trips that call at the From and then the To,
+        with the trips a vehicle runs on as up to the one reaching the
+        To when `joins` is set.
+    """
+    rows = fetch(LEG_LINES_JOINED if joins else LEG_LINES)
+    return frozenset(str(route) for route, in rows)
 
 
 def suffix_of(*, route_id: str) -> str | None:

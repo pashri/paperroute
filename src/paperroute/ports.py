@@ -194,6 +194,25 @@ class TimetableRepository(Protocol):
             IDs are absent.
         """
 
+    def leg_lines(
+        self, *, ends: tuple[str, str], day: date,
+    ) -> frozenset[str]:
+        """
+        List the routes with a trip from one stop to another on a day.
+
+        Parameters
+        ----------
+        ends : tuple[str, str]
+            From and To stop or station IDs.
+        day : date
+            Service date.
+
+        Returns
+        -------
+        frozenset[str]
+            Timetable route IDs.
+        """
+
     def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:
         """
         Say whether an NSW TrainLink trip calls at any of some stops.

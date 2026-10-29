@@ -1,4 +1,4 @@
-"""Vehicle markers: H1++ badges with wedges, age tabs and city dots."""
+"""Vehicle markers: pinned badges over other vehicles' arrows."""
 
 import math
 from collections.abc import Sequence
@@ -7,7 +7,6 @@ from typing import Final
 
 from paperroute.core.map_view import Marker
 from paperroute.core.strip_extents import age_text
-from paperroute.core.tiles import CITY
 from paperroute.render.canvas import (
     INK,
     PAPER,
@@ -18,6 +17,7 @@ from paperroute.render.canvas import (
     text_width,
 )
 from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
+from paperroute.render.others import draw_others
 
 BADGE_FACE: Final[Face] = Face(weight=800, px=14)
 AGE_FACE: Final[Face] = Face(weight=800, px=10)
@@ -40,12 +40,6 @@ GROW_Y: Final[float] = 4.0  # pixels each side
 STOP_HALF: Final[float] = 18.0
 END_HALF: Final[float] = 15.0
 CHANGE_HALF: Final[float] = 11.0
-LIVE_DOTS: Final[tuple[tuple[float, int], ...]] = ((9, PAPER), (7, INK))
-HOLLOW_DOTS: Final[tuple[tuple[float, int], ...]] = (
-    (9, PAPER),
-    (7, INK),
-    (4, PAPER),
-)
 
 
 @dataclass(frozen=True)
@@ -251,6 +245,26 @@ def overlaps(*, first: Box, second: Box) -> bool:
     )
 
 
+def grown_box(*, marker: Marker, centre: Point) -> Box:
+    """
+    Give the box a badge keeps clear, grown for its wedge.
+
+    Parameters
+    ----------
+    marker : Marker
+        The vehicle.
+    centre : Point
+        Badge centre.
+
+    Returns
+    -------
+    Box
+        Left, top, right, bottom.
+    """
+    left, top, right, bottom = marker_box(marker=marker, centre=centre)
+    return left - GROW_X, top - GROW_Y, right + GROW_X, bottom + GROW_Y
+
+
 def free_spot(
     *,
     marker: Marker,
@@ -274,8 +288,7 @@ def free_spot(
     """
     for dx, dy in OFFSETS:
         centre = (marker.x + dx, marker.y + dy)
-        left, top, right, bottom = marker_box(marker=marker, centre=centre)
-        box = (left - GROW_X, top - GROW_Y, right + GROW_X, bottom + GROW_Y)
+        box = grown_box(marker=marker, centre=centre)
         if not any(overlaps(first=box, second=other) for other in taken):
             return centre, box
     return None
@@ -419,34 +432,6 @@ def shifted(*, point: Point, origin: Point) -> Point:
     return point[0] + origin[0], point[1] + origin[1]
 
 
-def draw_dots(
-    canvas: Canvas,
-    *,
-    markers: Sequence[Marker],
-    origin: Point,
-) -> None:
-    """
-    Draw every marker as a dot, in batched calls.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    markers : Sequence[Marker]
-        Vehicles.
-    origin : Point
-        The map's top left on the canvas.
-    """
-    for live, layers in ((True, LIVE_DOTS), (False, HOLLOW_DOTS)):
-        points = [
-            shifted(point=(marker.x, marker.y), origin=origin)
-            for marker in markers
-            if marker.live is live
-        ]
-        for diameter, grey in layers:
-            canvas.dots(points=points, diameter=diameter, grey=grey)
-
-
 def draw_leaders(
     canvas: Canvas,
     *,
@@ -504,44 +489,55 @@ def draw_markers(
     mpp: int,
     origin: Point,
     reserved: Sequence[Box],
+    stops: Sequence[Box] = (),
     keep_out: KeepOut = NO_KEEP_OUT,
 ) -> None:
     """
-    Draw vehicles: placed badges, with others as dots at city zoom.
+    Draw vehicles: other vehicles' arrows under placed pinned badges.
 
     Pinned routes are badges at every zoom, placed first and drawn last,
-    so they sit on top. At city zoom every other vehicle is a dot.
+    so they sit on top. Every other vehicle is an arrow, numbered when
+    zoomed in.
 
     Parameters
     ----------
     canvas : Canvas
         Target.
     markers : Sequence[Marker]
-        Vehicles in map pixels.
+        Vehicles in map pixels, nearest the map centre first.
     mpp : int
         Metres per pixel.
     origin : Point
         The map's top left on the canvas.
     reserved : Sequence[Box]
-        Map-pixel boxes no badge may cover, such as the From and the To.
+        Map-pixel boxes no badge or number may cover, such as the From
+        and the To.
+    stops : Sequence[Box]
+        Map-pixel boxes of the ridden stops, which numbers keep clear of.
     keep_out : KeepOut
         Map-pixel boxes of the baked names and the corner boxes.
     """
-    del keep_out
-    badges = markers
-    if mpp == CITY:
-        draw_dots(
-            canvas,
-            markers=[marker for marker in markers if not marker.pinned],
-            origin=origin,
-        )
-        badges = [marker for marker in markers if marker.pinned]
     placed = place(
-        markers=sorted(badges, key=lambda marker: not marker.pinned),
+        markers=[marker for marker in markers if marker.pinned],
         reserved=reserved,
     )
+    draw_others(
+        canvas,
+        markers=[marker for marker in markers if not marker.pinned],
+        mpp=mpp,
+        origin=origin,
+        taken=[
+            *reserved,
+            *stops,
+            *(
+                grown_box(marker=item.marker, centre=item.centre)
+                for item in placed
+            ),
+        ],
+        keep_out=keep_out,
+    )
     draw_leaders(canvas, placed=placed, origin=origin)
-    for item in sorted(placed, key=lambda item: item.marker.pinned):
+    for item in placed:
         draw = draw_live if item.marker.live else draw_hollow
         draw(
             canvas,

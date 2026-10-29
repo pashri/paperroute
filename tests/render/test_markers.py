@@ -251,30 +251,40 @@ def test_crowded_badges_overlap_rather_than_vanish() -> None:
     assert placed[-1].centre == SPOT
 
 
-def test_city_zoom_draws_dots() -> None:
-    """Live dots are ink; hollow dots are ringed with a paper centre."""
+@pytest.mark.parametrize('mpp', ZOOMS)
+def test_other_vehicles_never_get_badges(mpp: int) -> None:
+    """At every zoom another vehicle is only its arrow and number."""
+    other = replace(marker(bearing=90.0), pinned=False)
     canvas = CountingCanvas()
     draw_markers(
         canvas,
-        markers=[
-            replace(marker(), pinned=False),
-            replace(marker(at=(200.0, 100.0), live=False), pinned=False),
-        ],
-        mpp=CITY,
+        markers=[other],
+        mpp=mpp,
         origin=(0.0, 0.0),
-        reserved=[square(at=MIDDLE, half=STOP_HALF)],
+        reserved=[],
     )
-    grey = canvas.grey()
-    assert int(grey[100, 100]) == INK
-    assert int(grey[100, 200]) == PAPER
-    assert int(grey[100, 202]) == INK
-    assert [(count, diameter) for count, diameter, _ in canvas.calls] == [
-        (1, 9),
-        (1, 7),
-        (1, 9),
-        (1, 7),
-        (1, 4),
-    ]
+    ink = np.argwhere(canvas.grey() == INK)
+    assert len(ink) > 0
+    assert ink[:, 0].min() >= 92 and ink[:, 0].max() <= 108
+    assert ink[:, 1].min() >= 92
+    assert not canvas.lines
+
+
+def test_pinned_badges_over_other_arrows() -> None:
+    """An arrow under a pinned badge leaves the badge whole."""
+    pinned = marker()
+    under = replace(
+        marker(at=(90.0, 110.0), bearing=90.0), route='T1', pinned=False,
+    )
+    alone = drawn(markers=[pinned])
+    over = drawn(markers=[under, pinned])
+    left, top, right, bottom = badge_box(route='606', centre=SPOT)
+    inside = (
+        slice(math.ceil(top), math.floor(bottom)),
+        slice(math.ceil(left), math.floor(right)),
+    )
+    assert (over[inside] == alone[inside]).all()
+    assert (over != alone).any()
 
 
 def test_marker_on_the_stop_slides_away() -> None:
@@ -355,11 +365,11 @@ def test_age_text_minutes_and_hours(seconds: float, text: str) -> None:
     assert age_text(seconds=seconds) == text
 
 
-def test_city_zoom_has_no_tab() -> None:
-    """At city zoom a stale unpinned vehicle is only its hollow dot."""
+def test_stale_other_vehicle_has_no_tab() -> None:
+    """A stale unpinned vehicle is only its mark, with no tab."""
     stale = replace(marker(live=False, age=240.0), pinned=False)
     grey = drawn(markers=[stale], mpp=CITY)
-    assert int(grey[100, 100]) == PAPER
+    assert int(grey[100, 100]) == INK
     assert (grey[106:130, 80:120] == PAPER).all()
 
 

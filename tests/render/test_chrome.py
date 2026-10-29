@@ -43,7 +43,7 @@ class Recording(Canvas):
         super().__init__()
         self.fitted: list[str] = []
         self.drawn: list[str] = []
-        self.polygons: list[Sequence[Point]] = []
+        self.shapes: list[Sequence[Point]] = []
 
     def fit(self, *, text: str, face: Face, width: float) -> str:
         """Record the text and fit it as usual."""
@@ -57,7 +57,7 @@ class Recording(Canvas):
 
     def polygon(self, *, points: Sequence[Point], grey: int) -> None:
         """Record the polygon and draw it as usual."""
-        self.polygons.append(points)
+        self.shapes.append(points)
         super().polygon(points=points, grey=grey)
 
 
@@ -174,7 +174,7 @@ def test_no_destination_title() -> None:
         tag=NOT_PINNED,
     )
     assert canvas.fitted == ['Town Hall']
-    assert not any(len(points) == 3 for points in canvas.polygons)
+    assert not any(len(points) == 3 for points in canvas.shapes)
     assert 'None' not in canvas.drawn
 
 
@@ -192,7 +192,7 @@ def test_picking_title() -> None:
     )
     assert canvas.fitted == ['Town Hall', 'pick To']
     assert 'pick To' in canvas.drawn
-    assert len(canvas.polygons) == 1
+    assert len(canvas.shapes) == 1
 
 
 def test_picking_from_title() -> None:
@@ -208,7 +208,7 @@ def test_picking_from_title() -> None:
         picking='FROM',
     )
     assert canvas.fitted == ['606 to Parramatta · pick FROM']
-    assert not canvas.polygons
+    assert not canvas.shapes
 
 
 def test_titles_stop_before_the_tag() -> None:

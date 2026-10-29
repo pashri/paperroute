@@ -310,6 +310,7 @@ def draw_overlay(
             mpp=view.base.mpp,
             origin=(0, HEADER),
             reserved=end_boxes(base=view.base),
+            stops=stop_boxes(base=view.base),
             keep_out=keep_out,
         )
         if view.empty:

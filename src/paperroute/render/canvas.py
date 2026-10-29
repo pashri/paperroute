@@ -22,10 +22,21 @@ ELLIPSIS: Final[str] = '...'
 
 @dataclass(frozen=True)
 class Face:
-    """An Overpass weight at a pixel size."""
+    """An Overpass weight at a pixel size.
+
+    Attributes
+    ----------
+    weight : int
+        Font weight.
+    px : int
+        Pixel size.
+    squeeze : float
+        Horizontal scale; 1 is the font's own width.
+    """
 
     weight: int
     px: int
+    squeeze: float = 1.0
 
 
 @cache
@@ -47,7 +58,9 @@ def font(face: Face, smooth: bool = False) -> skia.Font:
     """
     ttf = (files('paperroute') / 'assets' / 'fonts'
            / f'Overpass-{face.weight}.ttf')
-    loaded = skia.Font(skia.Typeface.MakeFromFile(str(ttf)), face.px)
+    loaded = skia.Font(
+        skia.Typeface.MakeFromFile(str(ttf)), face.px, face.squeeze, 0,
+    )
     loaded.setEdging(
         skia.Font.Edging.kAntiAlias if smooth else skia.Font.Edging.kAlias,
     )
@@ -457,6 +470,25 @@ class Canvas:
         combined.setFillType(skia.PathFillType.kEvenOdd)
         for ring in rings:
             combined.addPath(path(points=ring, close=True))
+        self.canvas.drawPath(combined, self.paint(grey=grey))
+
+    def polygons(
+        self, *, polygons: Sequence[Sequence[Point]], grey: int,
+    ) -> None:
+        """
+        Fill polygons in one call, so overlaps stay filled.
+
+        Parameters
+        ----------
+        polygons : Sequence[Sequence[Point]]
+            Closed outlines, all turning the same way.
+        grey : int
+            Fill level.
+        """
+        combined = skia.Path()
+        combined.setFillType(skia.PathFillType.kWinding)
+        for points in polygons:
+            combined.addPath(path(points=points, close=True))
         self.canvas.drawPath(combined, self.paint(grey=grey))
 
     def image(self, *, grey: NDArray[np.uint8], at: Point) -> None:

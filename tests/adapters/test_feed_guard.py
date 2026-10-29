@@ -8,6 +8,7 @@ import pytest
 from paperroute.adapters.feed_guard import (
     FeedBackingOff,
     GuardedFeeds,
+    JoinedBody,
     backoff_s,
 )
 from paperroute.adapters.tfnsw import FeedError, FeedThrottled, FeedUnavailable
@@ -269,6 +270,8 @@ async def test_fetches_in_flight_are_shared() -> None:
     await asyncio.sleep(0)
     inner.gate.set()
     assert [await first, await second] == [b'one', b'one']
+    assert not isinstance(first.result(), JoinedBody)
+    assert isinstance(second.result(), JoinedBody)
     assert inner.calls == [BUSES]
     assert await guard.fetch(feed=BUSES) == b'two'
 

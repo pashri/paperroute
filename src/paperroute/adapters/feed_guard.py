@@ -20,6 +20,10 @@ class FeedBackingOff(FeedError):
     """A feed was not asked for because it is backing off."""
 
 
+class JoinedBody(bytes):
+    """A feed body that came from a request another caller started."""
+
+
 @dataclass(frozen=True)
 class Backoff:
     """
@@ -98,7 +102,8 @@ class GuardedFeeds:
         Returns
         -------
         bytes
-            Protobuf body.
+            Protobuf body; a `JoinedBody` when it came from a request
+            already in flight.
 
         Raises
         ------
@@ -109,9 +114,10 @@ class GuardedFeeds:
         if backoff is not None and self.clock() < backoff.until:
             raise FeedBackingOff(f'{feed}: backing off')
         flight = self.flights.get(feed)
-        if flight is None:
-            flight = asyncio.create_task(self.fetched(feed=feed))
-            self.flights[feed] = flight
+        if flight is not None:
+            return JoinedBody(await asyncio.shield(flight))
+        flight = asyncio.create_task(self.fetched(feed=feed))
+        self.flights[feed] = flight
         return await asyncio.shield(flight)
 
     async def fetched(self, *, feed: str) -> bytes:

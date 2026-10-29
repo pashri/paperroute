@@ -7,7 +7,7 @@ import sqlite3
 from collections.abc import Coroutine
 from typing import Any
 
-from paperroute.adapters.feed_guard import FeedBackingOff
+from paperroute.adapters.feed_guard import FeedBackingOff, JoinedBody
 from paperroute.adapters.tfnsw import FeedError
 from paperroute.app_connections import departures_read
 from paperroute.app_device import DeviceEffect, device_work
@@ -28,6 +28,7 @@ from paperroute.core.messages import (
     Effect,
     Event,
     FeedFailed,
+    FeedJoined,
     FetchFeed,
     JoinWifi,
     LoadDepartures,
@@ -91,7 +92,8 @@ async def fetch(
 
     A failed download, a bad body or a failed route labels read all post
     FeedFailed for the feed; one turned away by its backoff is marked as
-    not sent.
+    not sent. A feed that shared another fetch's request also posts
+    FeedJoined after its result.
 
     Parameters
     ----------
@@ -138,6 +140,8 @@ async def fetch(
         feed=effect.feed, fetch_ms=fetch_ms, parse_ms=parse_ms, trips=count
     )
     await queue.put(event)
+    if isinstance(data, JoinedBody):
+        await queue.put(FeedJoined(feed=effect.feed))
 
 
 async def load_map(

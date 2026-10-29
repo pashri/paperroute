@@ -4,7 +4,13 @@ from dataclasses import replace
 from datetime import date, timedelta
 from typing import Final
 
-from paperroute.core.messages import Effect, Event, FeedFailed, FetchFeed
+from paperroute.core.messages import (
+    Effect,
+    Event,
+    FeedFailed,
+    FeedJoined,
+    FetchFeed,
+)
 from paperroute.core.saved import Quota, Saved
 from paperroute.core.state_model import State
 
@@ -83,7 +89,8 @@ def without_skipped(*, state: State, event: Event) -> State:
     Give back the call of a fetch that sent no request.
 
     A fetch is counted when it is asked for; one turned away by its
-    feed's backoff never reached TfNSW.
+    feed's backoff, or one that shared another fetch's request, never
+    reached TfNSW.
 
     Parameters
     ----------
@@ -96,9 +103,11 @@ def without_skipped(*, state: State, event: Event) -> State:
     -------
     State
         State with one call fewer today for a FeedFailed that was not
-        sent; the same state otherwise, or when today has no calls.
+        sent or a FeedJoined; the same state otherwise, or when today
+        has no calls.
     """
-    if not isinstance(event, FeedFailed) or event.sent:
+    unsent = isinstance(event, FeedFailed) and not event.sent
+    if not (unsent or isinstance(event, FeedJoined)):
         return state
     if calls_today(quota=state.quota, day=state.now.date()) == 0:
         return state

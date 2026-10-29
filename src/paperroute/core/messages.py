@@ -375,6 +375,13 @@ class FeedFetched:
 
 
 @dataclass(frozen=True)
+class FeedJoined:
+    """A fetch shared another fetch's request, so it sent none of its own."""
+
+    feed: str
+
+
+@dataclass(frozen=True)
 class FeedFailed:
     """
     A realtime fetch failed.
@@ -943,6 +950,7 @@ Event = (
     | DeparturesFailed
     | FeedFetched
     | FeedFailed
+    | FeedJoined
     | AlertsFetched
     | BetweenLoaded
     | KnobTurned

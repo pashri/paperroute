@@ -5,6 +5,7 @@ from datetime import date, datetime, timedelta
 
 from paperroute.core.messages import (
     FeedFailed,
+    FeedJoined,
     FetchFeed,
     QuitRequested,
     SaveState,
@@ -188,6 +189,16 @@ def test_fetch_skipped_in_backoff_is_not_counted() -> None:
         loaded(state=fresh(now=now)), quota=Quota(day=DAY, calls=5),
     )
     state, _ = step(state, skipped(at=now))
+    assert state.quota == Quota(day=DAY, calls=4)
+
+
+def test_joined_fetch_is_not_counted() -> None:
+    """A fetch that shared another's request gives back its call."""
+    now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY)
+    state = replace(
+        loaded(state=fresh(now=now)), quota=Quota(day=DAY, calls=5),
+    )
+    state, _ = step(state, FeedJoined(feed=BUSES))
     assert state.quota == Quota(day=DAY, calls=4)
 
 

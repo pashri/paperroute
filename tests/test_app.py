@@ -15,7 +15,7 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.adapters.feed_files import FileFeedsClient
-from paperroute.adapters.feed_guard import FeedBackingOff
+from paperroute.adapters.feed_guard import FeedBackingOff, JoinedBody
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.resets import FileResets
 from paperroute.adapters.state_file import JsonStateRepository
@@ -52,6 +52,8 @@ from paperroute.core.messages import (
     ApiKeyChanged,
     Event,
     FeedFailed,
+    FeedFetched,
+    FeedJoined,
     FetchFeed,
     Knob,
     KnobHeld,
@@ -797,6 +799,44 @@ async def test_fetch_skipped_in_backoff_is_posted_as_not_sent() -> None:
     posted = queue.get_nowait()
     assert isinstance(posted, FeedFailed)
     assert not posted.sent
+
+
+class JoiningFeeds(FileFeedsClient):
+    """A feeds client whose every body came from another caller's request."""
+
+    async def fetch(self, *, feed: str) -> bytes:
+        """
+        Read a recording and mark it as shared.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+
+        Returns
+        -------
+        bytes
+            The recording, as a shared body.
+        """
+        return JoinedBody(await super().fetch(feed=feed))
+
+
+async def test_fetch_joining_another_posts_feed_joined() -> None:
+    """A fetch that shared a request posts its feed, then FeedJoined."""
+    ports = Ports(
+        timetable=BrokenTimetable(),
+        feeds=JoiningFeeds(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    feed = 'v2/gtfs/realtime/sydneytrains'
+    await fetch(ports=ports, effect=FetchFeed(feed=feed), queue=queue)
+    posted = [queue.get_nowait(), queue.get_nowait()]
+    assert isinstance(posted[0], FeedFetched)
+    assert posted[1] == FeedJoined(feed=feed)
 
 
 async def test_run_survives_unexpected_load_error(

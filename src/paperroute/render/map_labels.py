@@ -3,14 +3,14 @@
 import math
 from typing import Final
 
-from paperroute.build.map_style import (
-    DARK,
-    STATION_FACE,
-    SUBURB_FACE,
-    SUBURB_ZOOMS,
-)
+from paperroute.build.map_style import DARK, STATION_FACE, SUBURB_FACE
 from paperroute.core.map_view import MAP_HEIGHT, MapBase
-from paperroute.core.tiles import LABEL_REACH, LabelKind, StreetLabel
+from paperroute.core.tiles import (
+    LABEL_REACH,
+    SUBURB_ZOOMS,
+    LabelKind,
+    StreetLabel,
+)
 from paperroute.ports import TileRepository
 from paperroute.render.canvas import INK, PAPER, Canvas, text_width
 from paperroute.render.map_marks import Window

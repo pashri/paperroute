@@ -13,17 +13,15 @@ from paperroute.build.map_style import (
     ROAD_LAYERS,
     ROAD_WIDTHS,
     STATION_FACE,
-    STATION_ZOOMS,
     STREET_FACE,
     STREET_REPEAT_PX,
     STREET_ZOOMS,
     SUBURB_FACE,
-    SUBURB_ZOOMS,
     named_roads,
     road_style,
     transit_style,
 )
-from paperroute.core.tiles import ZOOMS
+from paperroute.core.tiles import STATION_ZOOMS, SUBURB_ZOOMS, ZOOMS
 from paperroute.render.canvas import INK, PAPER, Face
 
 

@@ -12,6 +12,8 @@ LABEL_REACH: Final[int] = TILE  # pixels a baked label may reach past
 ZOOMS: Final[tuple[int, ...]] = (3, 5, 8, 14, 25, 45)
 CITY: Final[int] = 45
 TILE_STYLE: Final[str] = 'm9d'  # bump when the tiles' look changes
+SUBURB_ZOOMS: Final[frozenset[int]] = frozenset({8, 14, 25, 45})
+STATION_ZOOMS: Final[frozenset[int]] = frozenset({3, 5, 8, 14, 25, 45})
 NSW_BBOX: Final[tuple[float, float, float, float]] = (
     140.99,
     -37.51,

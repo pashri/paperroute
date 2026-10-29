@@ -131,3 +131,18 @@ def test_pydantic_only_in_state_file() -> None:
         )
     ]
     assert not offenders
+
+
+def test_render_takes_only_faces_and_greys_from_build() -> None:
+    """Render reads only face, grey and supersample constants from build."""
+    allowed = {'DARK', 'LIGHT', 'SUPERSAMPLE'}
+    offenders = [
+        f'{path.name}: {alias.name}'
+        for path in sorted((SRC / 'render').glob('*.py'))
+        for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
+        if isinstance(node, ast.ImportFrom)
+        and resolve_from(path=path, node=node).startswith('paperroute.build')
+        for alias in node.names
+        if alias.name not in allowed and not alias.name.endswith('_FACE')
+    ]
+    assert not offenders

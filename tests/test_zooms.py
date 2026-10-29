@@ -1,12 +1,7 @@
 """Tests that every zoom-keyed style table follows the zoom list."""
 
-from paperroute.build.map_style import (
-    ROAD_WIDTHS,
-    STATION_ZOOMS,
-    STREET_ZOOMS,
-    SUBURB_ZOOMS,
-)
-from paperroute.core.tiles import ZOOMS
+from paperroute.build.map_style import ROAD_WIDTHS, STREET_ZOOMS
+from paperroute.core.tiles import STATION_ZOOMS, SUBURB_ZOOMS, ZOOMS
 from paperroute.render.map_marks import ROUTE_STYLE
 
 

@@ -44,8 +44,6 @@ AREA_GREYS: Final[dict[str, int]] = {
 RIVER_STYLE: Final[tuple[int, int]] = (2, DARK)
 
 STREET_ZOOMS: Final[frozenset[int]] = frozenset({3, 5, 8, 14})
-SUBURB_ZOOMS: Final[frozenset[int]] = frozenset({8, 14, 25, 45})
-STATION_ZOOMS: Final[frozenset[int]] = frozenset({3, 5, 8, 14, 25, 45})
 CITY_PLACES: Final[frozenset[str]] = frozenset({'suburb', 'town'})
 PLACE_KINDS: Final[frozenset[str]] = frozenset(
     {'suburb', 'town', 'locality', 'village'}

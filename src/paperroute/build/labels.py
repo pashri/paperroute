@@ -16,12 +16,10 @@ from paperroute.build.map_style import (
     PLACE_KINDS,
     ROAD_LAYERS,
     STATION_FACE,
-    STATION_ZOOMS,
     STREET_FACE,
     STREET_REPEAT_PX,
     STREET_ZOOMS,
     SUBURB_FACE,
-    SUBURB_ZOOMS,
     named_roads,
 )
 from paperroute.build.tile_set import BLOCK, blocks
@@ -31,7 +29,9 @@ from paperroute.core.tiles import (
     CITY,
     GRID_ORIGIN,
     POINT_HALF_HEIGHT,
+    STATION_ZOOMS,
     STREET_HEIGHT,
+    SUBURB_ZOOMS,
     TILE,
     LabelKind,
     PixelBox,

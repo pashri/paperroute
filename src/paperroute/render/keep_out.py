@@ -3,11 +3,12 @@
 from dataclasses import dataclass
 from typing import Final
 
-from paperroute.build.map_style import STATION_FACE, SUBURB_FACE, SUBURB_ZOOMS
+from paperroute.build.map_style import STATION_FACE, SUBURB_FACE
 from paperroute.core.map_view import MAP_HEIGHT, MapBase
 from paperroute.core.tiles import (
     POINT_HALF_HEIGHT,
     STREET_HEIGHT,
+    SUBURB_ZOOMS,
     LabelKind,
     StreetLabel,
     text_box,

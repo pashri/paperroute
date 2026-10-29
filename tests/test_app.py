@@ -102,6 +102,8 @@ from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
 from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.chrome import HEADER
+from paperroute.render.keep_out import KeepOut, keep_out
+from paperroute.render.map_corners import scale_box
 from paperroute.render.notice import draw_notice_view
 from paperroute.render.panel import draw_panel_view
 from paperroute.render.sleep import with_sleep_band
@@ -129,6 +131,7 @@ from tests.fakes import (
     FakeWifi,
     FixedClock,
     FrameRecorder,
+    LabelCountingTiles,
     MemoryStates,
     PlacedTimetable,
 )
@@ -1076,6 +1079,36 @@ def test_map_base_is_cached_between_overlay_frames() -> None:
     maps.frame(view=map_view(markers=(bus,)))
     assert once > 0
     assert tiles.reads == once
+
+
+def test_renderer_caches_boxes_with_the_base() -> None:
+    """A second frame with the same base reads no more labels."""
+    tiles = LabelCountingTiles(tiles=CountingTiles())
+    maps = MapRenderer(tiles=tiles)
+    maps.frame(view=map_view())
+    once = tiles.label_reads
+    bus = Marker(
+        route='606', x=200.0, y=200.0, bearing=90.0, live=True, pinned=True
+    )
+    maps.frame(view=map_view(markers=(bus,)))
+    assert once > 0
+    assert tiles.label_reads == once
+    assert maps.boxes(base=map_view().base) is maps.boxes(
+        base=map_view().base,
+    )
+
+
+def test_unreadable_tiles_give_corner_boxes_only(tmp_path: Path) -> None:
+    """Tiles that fail a read keep out only the scale box, as drawn."""
+    base = map_view().base
+    with closing(tableless_tiles(out=tmp_path / 'tiles.db')) as tiles:
+        broken = MapRenderer(tiles=tiles).boxes(base=base)
+    versionless = MapRenderer(tiles=VersionlessTiles()).boxes(base=base)
+    left, top, right, bottom = scale_box(mpp=base.mpp)
+    edged = (left - 1, top - 1, right + 1, bottom + 1)
+    assert broken == KeepOut(places=(edged,), streets=())
+    assert versionless == broken
+    assert broken == keep_out(base=base, tiles=NullTiles())
 
 
 def test_drawing_picks_panel_and_sleep() -> None:

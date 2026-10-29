@@ -9,13 +9,17 @@ from numpy.typing import NDArray
 from paperroute.core.map_view import MapView
 from paperroute.render.canvas import HEIGHT, INK, WIDTH, Canvas
 from paperroute.render.chrome import HEADER, view_banner, view_header
+from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
 from paperroute.render.map_view import draw_overlay, snap
 
 RULE_WIDTH: Final[int] = 3
 
 
 def pane_pixels(
-    *, view: MapView, base: NDArray[np.uint8],
+    *,
+    view: MapView,
+    base: NDArray[np.uint8],
+    keep_out: KeepOut = NO_KEEP_OUT,
 ) -> NDArray[np.uint8]:
     """
     Draw one pane's map and overlay alone.
@@ -26,6 +30,8 @@ def pane_pixels(
         The pane.
     base : NDArray[np.uint8]
         Its map base, ``MAP_HEIGHT`` by ``view.base.width``.
+    keep_out : KeepOut
+        Map-pixel boxes of the base's baked names and corner boxes.
 
     Returns
     -------
@@ -34,12 +40,15 @@ def pane_pixels(
     """
     canvas = Canvas()
     canvas.image(grey=base, at=(0, HEADER))
-    draw_overlay(canvas, view=view)
+    draw_overlay(canvas, view=view, keep_out=keep_out)
     return canvas.grey()[HEADER:, : view.base.width]
 
 
 def draw_map_panes(
-    *, view: MapView, bases: Sequence[NDArray[np.uint8]],
+    *,
+    view: MapView,
+    bases: Sequence[NDArray[np.uint8]],
+    keep_outs: Sequence[KeepOut] = (),
 ) -> NDArray[np.uint8]:
     """
     Draw a map and its panes side by side, under one header.
@@ -50,6 +59,9 @@ def draw_map_panes(
         The first pane, holding the others in `panes`.
     bases : Sequence[NDArray[np.uint8]]
         Each pane's map base, the first pane's first.
+    keep_outs : Sequence[KeepOut]
+        Each pane's keep-out boxes in the same order; none keeps nothing
+        out.
 
     Returns
     -------
@@ -59,8 +71,13 @@ def draw_map_panes(
     """
     canvas = Canvas()
     left = 0
-    for pane, base in zip((view, *view.panes), bases, strict=True):
-        canvas.image(grey=pane_pixels(view=pane, base=base), at=(left, HEADER))
+    panes = (view, *view.panes)
+    boxes = keep_outs or [NO_KEEP_OUT] * len(panes)
+    for pane, base, keep_out in zip(panes, bases, boxes, strict=True):
+        canvas.image(
+            grey=pane_pixels(view=pane, base=base, keep_out=keep_out),
+            at=(left, HEADER),
+        )
         if left:
             canvas.rect(
                 box=(left - 1, HEADER, left + RULE_WIDTH - 1, HEIGHT),

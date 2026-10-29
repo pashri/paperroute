@@ -24,10 +24,12 @@ from paperroute.render.markers import (
     BADGE_FACE,
     OFFSETS,
     STOP_HALF,
+    badge_box,
     badge_half,
     draw_markers,
     draw_tab,
     marker_box,
+    overlaps,
     place,
     square,
     tab_box,
@@ -286,6 +288,17 @@ def test_marker_on_the_stop_slides_away() -> None:
     edge = int(stop[0] - badge_half(route='606')[0]) + 2
     assert int(grey[int(stop[1]) + 34, edge]) == INK
     assert int(grey[int(stop[1]) + 6, edge]) == PAPER
+
+
+def test_badge_on_the_from_slides_clear() -> None:
+    """A bus waiting exactly at the From slides 36 px up, clear of it."""
+    stop = (MAP_WIDTH / 2, MAP_HEIGHT / 2)
+    waiting = marker(at=stop)
+    reserved = [square(at=stop, half=STOP_HALF)]
+    placed = place(markers=[waiting], reserved=reserved)
+    assert placed[0].centre == (stop[0], stop[1] - 36)
+    box = badge_box(route='606', centre=placed[0].centre)
+    assert not overlaps(first=box, second=reserved[0])
 
 
 @pytest.mark.parametrize(

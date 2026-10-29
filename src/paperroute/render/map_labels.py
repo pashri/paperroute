@@ -2,7 +2,12 @@
 
 from typing import Final
 
-from paperroute.build.map_style import DARK, STATION_FACE, SUBURB_FACE
+from paperroute.build.map_style import (
+    DARK,
+    STATION_FACE,
+    SUBURB_FACE,
+    SUBURB_ZOOMS,
+)
 from paperroute.core.map_view import MAP_HEIGHT, MapBase
 from paperroute.core.tiles import LABEL_REACH, LabelKind, StreetLabel
 from paperroute.ports import TileRepository
@@ -48,8 +53,7 @@ def draw_place_knockouts(
     """
     Redraw suburb and station names on paper halos over the tiles.
 
-    The tiles file holds suburb labels only at the zooms that show them,
-    so asking at every zoom finds each one where it belongs.
+    Suburb names are drawn only at the zooms that show them.
 
     Parameters
     ----------
@@ -63,9 +67,12 @@ def draw_place_knockouts(
         Where the labels come from.
     """
     box = label_query(window=window, width=base.width)
-    for label in tiles.street_labels(
-        zoom=base.mpp, box=box, kind=LabelKind.SUBURB,
-    ):
+    suburbs = (
+        tiles.street_labels(zoom=base.mpp, box=box, kind=LabelKind.SUBURB)
+        if base.mpp in SUBURB_ZOOMS
+        else []
+    )
+    for label in suburbs:
         canvas.text(
             at=(label.x - window[0], label.y - window[1]),
             text=label.name,

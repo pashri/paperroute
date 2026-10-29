@@ -19,6 +19,10 @@ NSW_BBOX: Final[tuple[float, float, float, float]] = (
     -28.15,
 )
 GRID_ORIGIN: Final[Point] = to_metres(lon=149.5, lat=-32.0)
+STREET_HEIGHT: Final[int] = 14
+POINT_HALF_HEIGHT: Final[float] = 0.7  # of the face's pixel size
+
+PixelBox = tuple[float, float, float, float]
 
 
 class TileVariant(StrEnum):
@@ -197,3 +201,37 @@ def levels_text(*, zooms: tuple[int, ...] | None) -> str:
     if zooms is None:
         return 'none'
     return ','.join(str(mpp) for mpp in zooms)
+
+
+def text_box(
+    *,
+    centre: Point,
+    width: float,
+    height: float,
+    angle: float,
+) -> PixelBox:
+    """
+    Bound a turned text box.
+
+    Parameters
+    ----------
+    centre : Point
+        Centre in global pixels.
+    width : float
+        Text width.
+    height : float
+        Text height.
+    angle : float
+        Rotation in degrees.
+
+    Returns
+    -------
+    PixelBox
+        Left, top, right and bottom.
+    """
+    turn = math.radians(angle)
+    cos, sin = abs(math.cos(turn)), abs(math.sin(turn))
+    half_x = (cos * width + sin * height) / 2
+    half_y = (sin * width + cos * height) / 2
+    x, y = centre
+    return (x - half_x, y - half_y, x + half_x, y + half_y)

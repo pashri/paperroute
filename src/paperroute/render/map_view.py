@@ -36,6 +36,7 @@ from paperroute.render.chrome import (
     view_banner,
     view_header,
 )
+from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
 from paperroute.render.map_base import HALO, NOT_INSTALLED_DROP
 from paperroute.render.map_marks import RIDDEN_RING, draw_stop
 from paperroute.render.markers import (
@@ -282,7 +283,9 @@ def stop_boxes(*, base: MapBase) -> list[Box]:
     ]
 
 
-def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
+def draw_overlay(
+    canvas: Canvas, *, view: MapView, keep_out: KeepOut = NO_KEEP_OUT,
+) -> None:
     """
     Draw the markers, the empty text and the From stop over the map.
 
@@ -296,6 +299,8 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
         Target, with the base already drawn below the header.
     view : MapView
         View-model.
+    keep_out : KeepOut
+        Map-pixel boxes of the baked names and the corner boxes.
     """
     stop = stop_at(base=view.base)
     with canvas.clipped(box=(0, HEADER, view.base.width, HEIGHT)):
@@ -305,6 +310,7 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
             mpp=view.base.mpp,
             origin=(0, HEADER),
             reserved=end_boxes(base=view.base),
+            keep_out=keep_out,
         )
         if view.empty:
             draw_empty(canvas, text=view.empty, width=view.base.width)
@@ -495,6 +501,7 @@ def draw_map_view(
     *,
     view: MapView,
     base: NDArray[np.uint8],
+    keep_out: KeepOut = NO_KEEP_OUT,
 ) -> NDArray[np.uint8]:
     """
     Draw a Map view frame over a cached map base.
@@ -505,6 +512,8 @@ def draw_map_view(
         View-model.
     base : NDArray[np.uint8]
         The map base, ``MAP_HEIGHT`` by ``view.base.width``; never changed.
+    keep_out : KeepOut
+        Map-pixel boxes of the base's baked names and corner boxes.
 
     Returns
     -------
@@ -513,7 +522,7 @@ def draw_map_view(
     """
     canvas = Canvas()
     canvas.image(grey=base, at=(0, HEADER))
-    draw_overlay(canvas, view=view)
+    draw_overlay(canvas, view=view, keep_out=keep_out)
     view_header(canvas, view=view, active='Map')
     draw_sidebar(canvas, view=view)
     view_banner(canvas, view=view)

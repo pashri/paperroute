@@ -33,13 +33,14 @@ from paperroute.core.model import (
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.saved import DEFAULT_SAVED, Saved
+from paperroute.core.tiles import LabelKind, StreetLabel, TileVariant
 from paperroute.core.trip_search import (
     Journey,
     PlannerBusy,
     PlannerUnavailable,
     TripSearch,
 )
-from paperroute.ports import Loaded
+from paperroute.ports import Loaded, TileRepository
 
 STOP_POINT: Point = to_metres(lon=151.0036, lat=-33.8170)
 
@@ -1025,3 +1026,73 @@ class FakeTripPlanner:
         if self.down:
             raise PlannerUnavailable('down')
         return self.journeys
+
+
+@dataclass
+class LabelCountingTiles:
+    """Wrap a tile repository and count its label reads."""
+
+    tiles: TileRepository
+    label_reads: int = 0
+
+    def tile(
+        self, *, zoom: int, col: int, row: int, variant: TileVariant
+    ) -> NDArray[np.uint8] | None:
+        """
+        Read a tile from the wrapped repository.
+
+        Parameters
+        ----------
+        zoom : int
+            Metres per pixel.
+        col : int
+            Tile column.
+        row : int
+            Tile row.
+        variant : TileVariant
+            Which rendering.
+
+        Returns
+        -------
+        NDArray[np.uint8] | None
+            The tile, or None when there is none.
+        """
+        return self.tiles.tile(zoom=zoom, col=col, row=row, variant=variant)
+
+    def street_labels(
+        self,
+        *,
+        zoom: int,
+        box: tuple[float, float, float, float],
+        kind: LabelKind = LabelKind.STREET,
+    ) -> list[StreetLabel]:
+        """
+        Count a label read and pass it on.
+
+        Parameters
+        ----------
+        zoom : int
+            Metres per pixel.
+        box : tuple[float, float, float, float]
+            Left, top, right and bottom in global pixels.
+        kind : LabelKind
+            Which labels.
+
+        Returns
+        -------
+        list[StreetLabel]
+            The wrapped repository's labels.
+        """
+        self.label_reads += 1
+        return self.tiles.street_labels(zoom=zoom, box=box, kind=kind)
+
+    def version(self) -> str | None:
+        """
+        Say which build the wrapped repository is.
+
+        Returns
+        -------
+        str | None
+            The build, or None when there is none.
+        """
+        return self.tiles.version()

@@ -5,6 +5,7 @@ import functools
 import logging
 import sqlite3
 from collections.abc import Callable
+from typing import Final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -38,6 +39,7 @@ from paperroute.render.chooser import draw_chooser_view
 from paperroute.render.connection_strip import draw_connection_strip
 from paperroute.render.connection_strip_map import draw_connection_strip_map
 from paperroute.render.connection_view import draw_connection_view
+from paperroute.render.keep_out import KeepOut, keep_out
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_panes import draw_map_panes
 from paperroute.render.map_view import draw_map_view
@@ -48,6 +50,8 @@ from paperroute.render.stop_view import draw_stop_view
 from paperroute.render.strip_view import draw_strip_map_view, draw_strip_view
 
 logger = logging.getLogger(__name__)
+
+KEPT_BOXES: Final[int] = 4  # maps whose keep-out boxes are remembered
 
 
 type View = ScreenView
@@ -98,6 +102,7 @@ class MapRenderer:
         self.base: NDArray[np.uint8] | None = None
         self.unusable: set[str | None] = set()
         self.side: dict[tuple[MapBase, str | None], NDArray[np.uint8]] = {}
+        self.kept: dict[tuple[MapBase, str | None], KeepOut] = {}
 
     def frame(self, *, view: MapView) -> NDArray[np.uint8]:
         """
@@ -120,8 +125,16 @@ class MapRenderer:
                     self.cached(base=view.base),
                     *(self.side_cached(base=pane.base) for pane in view.panes),
                 ),
+                keep_outs=[
+                    self.boxes(base=pane.base)
+                    for pane in (view, *view.panes)
+                ],
             )
-        return draw_map_view(view=view, base=self.cached(base=view.base))
+        return draw_map_view(
+            view=view,
+            base=self.cached(base=view.base),
+            keep_out=self.boxes(base=view.base),
+        )
 
     def strip_map_frame(self, *, view: StripMapView) -> NDArray[np.uint8]:
         """
@@ -138,7 +151,9 @@ class MapRenderer:
             480 by 800 pixels.
         """
         return draw_strip_map_view(
-            view=view, base=self.cached(base=view.map.base),
+            view=view,
+            base=self.cached(base=view.map.base),
+            keep_out=self.boxes(base=view.map.base),
         )
 
     def connection_strip_map_frame(
@@ -158,7 +173,9 @@ class MapRenderer:
             480 by 800 pixels.
         """
         return draw_connection_strip_map(
-            view=view, base=self.cached(base=view.map.base),
+            view=view,
+            base=self.cached(base=view.map.base),
+            keep_out=self.boxes(base=view.map.base),
         )
 
     def cached(self, *, base: MapBase) -> NDArray[np.uint8]:
@@ -199,6 +216,48 @@ class MapRenderer:
         if key not in self.side:
             self.side = {key: self.drawn_base(base=base, version=key[1])}
         return self.side[key]
+
+    def boxes(self, *, base: MapBase) -> KeepOut:
+        """
+        Give a map's keep-out boxes, reading the labels only when it changed.
+
+        Parameters
+        ----------
+        base : MapBase
+            The base map key.
+
+        Returns
+        -------
+        KeepOut
+            The boxes for the installed tiles; only the corner boxes drawn
+            without tiles when the tiles can't be read.
+        """
+        key = (base, self.version())
+        if key not in self.kept:
+            if len(self.kept) >= KEPT_BOXES:
+                self.kept.clear()
+            self.kept[key] = self.read_boxes(base=base)
+        return self.kept[key]
+
+    def read_boxes(self, *, base: MapBase) -> KeepOut:
+        """
+        Read a map's keep-out boxes, without labels when that fails.
+
+        Parameters
+        ----------
+        base : MapBase
+            The base map key.
+
+        Returns
+        -------
+        KeepOut
+            The boxes; a failed read gives the boxes of a map drawn
+            without tiles, as the base is.
+        """
+        try:
+            return keep_out(base=base, tiles=self.tiles)
+        except sqlite3.Error:
+            return keep_out(base=base, tiles=NullTiles())
 
     def version(self) -> str | None:
         """

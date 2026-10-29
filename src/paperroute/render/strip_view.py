@@ -26,6 +26,7 @@ from paperroute.render.chrome import (
     view_banner,
     view_header,
 )
+from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
 from paperroute.render.map_view import draw_overlay, snap, wrap
 from paperroute.render.stop_view import TAG_FACE, finish
 from paperroute.render.strip import draw_band, draw_rows, draw_strip_markers
@@ -426,6 +427,7 @@ def draw_strip_map_view(
     *,
     view: StripMapView,
     base: NDArray[np.uint8],
+    keep_out: KeepOut = NO_KEEP_OUT,
 ) -> NDArray[np.uint8]:
     """
     Draw a Strip + map frame over a cached map base.
@@ -437,6 +439,8 @@ def draw_strip_map_view(
     base : NDArray[np.uint8]
         The map base, ``MAP_HEIGHT`` by ``view.map.base.width``; never
         changed.
+    keep_out : KeepOut
+        Map-pixel boxes of the base's baked names and corner boxes.
 
     Returns
     -------
@@ -445,7 +449,7 @@ def draw_strip_map_view(
     """
     canvas = Canvas()
     canvas.image(grey=base, at=(0, HEADER))
-    draw_overlay(canvas, view=view.map)
+    draw_overlay(canvas, view=view.map, keep_out=keep_out)
     draw_pane(canvas, view=view)
     view_header(canvas, view=view.map, active='Strip + map')
     view_banner(canvas, view=view.map)

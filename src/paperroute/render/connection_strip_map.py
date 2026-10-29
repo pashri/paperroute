@@ -10,6 +10,7 @@ from paperroute.core.map_view import STRIP_MAP_WIDTH
 from paperroute.render.canvas import HEIGHT, INK, Canvas
 from paperroute.render.chrome import BANNER, HEADER, view_banner, view_header
 from paperroute.render.connection_strip import RULE_WIDTH, draw_strip_sections
+from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
 from paperroute.render.map_view import draw_overlay, snap
 
 PANE_LEFT: Final[int] = STRIP_MAP_WIDTH + 16
@@ -17,7 +18,10 @@ PANE_RIGHT: Final[int] = 786
 
 
 def draw_connection_strip_map(
-    *, view: ConnectionStripMapView, base: NDArray[np.uint8],
+    *,
+    view: ConnectionStripMapView,
+    base: NDArray[np.uint8],
+    keep_out: KeepOut = NO_KEEP_OUT,
 ) -> NDArray[np.uint8]:
     """
     Draw a connection Strip + map frame over a cached map base.
@@ -28,6 +32,8 @@ def draw_connection_strip_map(
         View-model.
     base : NDArray[np.uint8]
         The map base, ``MAP_HEIGHT`` by ``STRIP_MAP_WIDTH``; never changed.
+    keep_out : KeepOut
+        Map-pixel boxes of the base's baked names and corner boxes.
 
     Returns
     -------
@@ -36,7 +42,7 @@ def draw_connection_strip_map(
     """
     canvas = Canvas()
     canvas.image(grey=base, at=(0, HEADER))
-    draw_overlay(canvas, view=view.map)
+    draw_overlay(canvas, view=view.map, keep_out=keep_out)
     rule = (STRIP_MAP_WIDTH, HEADER, STRIP_MAP_WIDTH + RULE_WIDTH, HEIGHT)
     canvas.rect(box=rule, grey=INK)
     draw_strip_sections(

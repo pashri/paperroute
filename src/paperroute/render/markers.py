@@ -17,6 +17,7 @@ from paperroute.render.canvas import (
     Point,
     text_width,
 )
+from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
 
 BADGE_FACE: Final[Face] = Face(weight=800, px=14)
 AGE_FACE: Final[Face] = Face(weight=800, px=10)
@@ -24,6 +25,8 @@ OFFSETS: Final[tuple[tuple[int, int], ...]] = (
     (0, 0),
     (0, -28),
     (0, 28),
+    (0, -36),
+    (0, 36),
     (40, 0),
     (-40, 0),
     (40, -28),
@@ -501,6 +504,7 @@ def draw_markers(
     mpp: int,
     origin: Point,
     reserved: Sequence[Box],
+    keep_out: KeepOut = NO_KEEP_OUT,
 ) -> None:
     """
     Draw vehicles: placed badges, with others as dots at city zoom.
@@ -520,7 +524,10 @@ def draw_markers(
         The map's top left on the canvas.
     reserved : Sequence[Box]
         Map-pixel boxes no badge may cover, such as the From and the To.
+    keep_out : KeepOut
+        Map-pixel boxes of the baked names and the corner boxes.
     """
+    del keep_out
     badges = markers
     if mpp == CITY:
         draw_dots(

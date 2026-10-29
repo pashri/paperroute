@@ -30,19 +30,19 @@ from paperroute.core.geo import MetreBox, Point
 from paperroute.core.tiles import (
     CITY,
     GRID_ORIGIN,
+    POINT_HALF_HEIGHT,
+    STREET_HEIGHT,
     TILE,
     LabelKind,
+    PixelBox,
     from_pixels,
+    text_box,
     to_pixels,
 )
 from paperroute.render.canvas import Face, text_width
 
-PixelBox = tuple[float, float, float, float]
-
 BLOCK_PX: Final[int] = BLOCK * TILE
 TEXT_MARGIN: Final[int] = 6  # pixels added to the measured text width
-STREET_HEIGHT: Final[int] = 14
-POINT_HALF_HEIGHT: Final[float] = 0.7  # of the face's pixel size
 STRAIGHT: Final[float] = 0.94  # end-to-end distance over text width
 STATION_RISE: Final[int] = 15
 POINT_REACH: Final[int] = 32  # pixels searched past a block for places
@@ -360,40 +360,6 @@ def upright(*, angle: float) -> float:
     if angle <= -90:
         return angle + 180
     return angle
-
-
-def text_box(
-    *,
-    centre: Point,
-    width: float,
-    height: float,
-    angle: float,
-) -> PixelBox:
-    """
-    Bound a turned text box.
-
-    Parameters
-    ----------
-    centre : Point
-        Centre in global pixels.
-    width : float
-        Text width.
-    height : float
-        Text height.
-    angle : float
-        Rotation in degrees.
-
-    Returns
-    -------
-    PixelBox
-        Left, top, right and bottom.
-    """
-    turn = math.radians(angle)
-    cos, sin = abs(math.cos(turn)), abs(math.sin(turn))
-    half_x = (cos * width + sin * height) / 2
-    half_y = (sin * width + cos * height) / 2
-    x, y = centre
-    return (x - half_x, y - half_y, x + half_x, y + half_y)
 
 
 def label_box(*, label: PlacedLabel) -> PixelBox:

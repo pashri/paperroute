@@ -8,6 +8,7 @@ from paperroute.core.geo import Point
 from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM
 from paperroute.core.map_requests import map_feeds, pin_ends, request_positions
 from paperroute.core.map_state import area_box, area_frame
+from paperroute.core.map_view import MapView
 from paperroute.core.messages import (
     Effect,
     Knob,
@@ -23,7 +24,7 @@ from paperroute.core.model import SYDNEY, Departure, Mode, Pin, RouteKind
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
-from paperroute.core.state_views import live_stop_view
+from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.tiles import ZOOMS
 from tests.core.connection_factories import LEG1, LEG2
 from tests.core.factories import EIGHT, START, calls, departure, pattern, place
@@ -265,3 +266,15 @@ def test_new_frame_drops_area_modes() -> None:
     [load] = [item for item in effects if isinstance(item, LoadModes)]
     assert load.mpp == 8
 
+
+
+def test_plain_map_holds_the_frame_on_screen() -> None:
+    """A frame on screen that still holds the trip is drawn again."""
+    state, _ = fitted_on()
+    assert state.map.frame is not None
+    (x, y), zoom = state.map.frame
+    held = ((x + 40.0, y), zoom)
+    state = replace(state, map=replace(state.map, frame=held))
+    view = current_view(state=state, stop_view=live_stop_view(state=state))
+    assert isinstance(view, MapView)
+    assert view.base.centre == held[0]

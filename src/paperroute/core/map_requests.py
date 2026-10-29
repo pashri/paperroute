@@ -9,7 +9,7 @@ from paperroute.core.connection import live_chains
 from paperroute.core.connection_map import connection_inputs
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.geo import Point
-from paperroute.core.map_fit import plain_frame, resting_zoom
+from paperroute.core.map_fit import resting_zoom, steady_frame
 from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import (
     MAP_WIDTH,
@@ -249,7 +249,8 @@ def map_inputs(
     Returns
     -------
     MapInputs
-        A plain pin's inputs fitted to its next trip; for a connection
+        A plain pin's inputs fitted to its next trip, keeping the frame
+        on screen while it still holds the trip; for a connection
         pin, framed on the connection with the hero chain's legs as the
         departures.
     """
@@ -260,7 +261,7 @@ def map_inputs(
     )
     pin = shown(state=state)
     if not is_connection(pin=pin):
-        return plain_frame(inputs=inputs)
+        return steady_frame(inputs=inputs, held=state.map.frame)
     return connection_inputs(
         inputs=inputs,
         pin=pin,

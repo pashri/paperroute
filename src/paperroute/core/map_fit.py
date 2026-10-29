@@ -296,14 +296,10 @@ def plain_frame(*, inputs: MapInputs) -> MapInputs:
         with the From kept inside; the From at the resting zoom with
         fewer than two points; unchanged with no From point.
     """
-    origin, end = inputs.ends
+    origin = inputs.ends[0]
     if origin is None:
         return inputs
-    points = (
-        *trip_stops(inputs=inputs),
-        origin,
-        *(() if end is None else (end,)),
-    )
+    points = plain_points(inputs=inputs)
     if len(set(points)) < 2:
         return replace(
             inputs, centre=origin, zoom=resting_zoom(step=inputs.step),
@@ -348,4 +344,92 @@ def trip_stops(*, inputs: MapInputs) -> tuple[Point, ...]:
         departure=upcoming,
         pattern=inputs.patterns.get(upcoming.trip_id),
         window=stops_window(destination=inputs.stop_view.destination),
+    )
+
+
+
+def plain_points(*, inputs: MapInputs) -> tuple[Point, ...]:
+    """
+    List the points a plain pin's map holds.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+
+    Returns
+    -------
+    tuple[Point, ...]
+        The next departure's ridden stops, then the From and the To
+        where they have points.
+    """
+    return (
+        *trip_stops(inputs=inputs),
+        *(point for point in inputs.ends if point is not None),
+    )
+
+
+def steady_frame(
+    *, inputs: MapInputs, held: tuple[Point, int] | None,
+) -> MapInputs:
+    """
+    Frame a plain pin's map, keeping the frame on screen while it fits.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs, centred on the From.
+    held : tuple[Point, int] | None
+        The centre and zoom the map is drawn at now, or None.
+
+    Returns
+    -------
+    MapInputs
+        The held frame while it has the fitted zoom and still holds the
+        next trip with the From well inside; else as `plain_frame`.
+    """
+    fit = plain_frame(inputs=inputs)
+    if held is None or held[1] != fit.zoom:
+        return fit
+    if not holds(inputs=inputs, frame=held):
+        return fit
+    return replace(fit, centre=held[0])
+
+
+def holds(*, inputs: MapInputs, frame: tuple[Point, int]) -> bool:
+    """
+    Say whether a frame still shows a plain pin's trip.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+    frame : tuple[Point, int]
+        A map centre and zoom.
+
+    Returns
+    -------
+    bool
+        True when the From sits `KEEP_IN` pixels inside the map and
+        every point of `plain_points` is clear of the banner and the
+        bottom room.
+    """
+    centre, zoom = frame
+    mpp = ZOOMS[zoom]
+    rooms = (banner_room(inputs=inputs), bottom_room(inputs=inputs))
+    origin = inputs.ends[0]
+    if origin is None or centre != kept(
+        centre=centre, keep=origin, mpp=mpp, width=inputs.width, rooms=rooms,
+    ):
+        return False
+    pixels = [
+        (
+            inputs.width / 2 + (x - centre[0]) / mpp,
+            MAP_HEIGHT / 2 - (y - centre[1]) / mpp,
+        )
+        for x, y in plain_points(inputs=inputs)
+    ]
+    return all(
+        0 <= x <= inputs.width and rooms[0] <= y <= MAP_HEIGHT - rooms[1]
+        for x, y in pixels
     )

@@ -11,6 +11,7 @@ from paperroute.core.map_fit import (
     fitted,
     plain_frame,
     resting_zoom,
+    steady_frame,
 )
 from paperroute.core.map_view import (
     DEFAULT_ZOOM,
@@ -347,3 +348,117 @@ def test_strip_map_fits_at_its_own_width() -> None:
     )
     assert (wide.zoom, narrow.zoom) == (ZOOMS.index(5), ZOOMS.index(8))
 
+
+
+def eastward(
+    *, trip_id: str, minutes: int, lean: float,
+) -> tuple[Departure, TripPattern]:
+    """
+    A no-To departure running east from the From, and its pattern.
+
+    Parameters
+    ----------
+    trip_id : str
+        Trip ID.
+    minutes : int
+        Minutes after 8:00 it leaves.
+    lean : float
+        Metres east per stop; negative runs west.
+
+    Returns
+    -------
+    tuple[Departure, TripPattern]
+        The departure and its pattern.
+    """
+    ride = departure(
+        departs=START + timedelta(minutes=minutes), ride=60, trip_id=trip_id,
+    )
+    stops = calls(
+        stations='ABCDE',
+        start=8 * 3600 + minutes * 60,
+        points={
+            name: (index * lean, 800.0 + index * 40.0)
+            for index, name in enumerate('ABCDE')
+        },
+    )
+    return ride, pattern(trip_id=trip_id, stops=stops)
+
+
+def no_to(
+    *, rides: tuple[tuple[Departure, TripPattern], ...], now: datetime,
+) -> MapInputs:
+    """
+    Map inputs for a pin with no To.
+
+    Parameters
+    ----------
+    rides : tuple[tuple[Departure, TripPattern], ...]
+        Departures and their patterns.
+    now : datetime
+        Current time.
+
+    Returns
+    -------
+    MapInputs
+        The inputs, centred on the From.
+    """
+    return replace(
+        plain(
+            departures=tuple(ride for ride, _ in rides),
+            patterns={ride.trip_id: found for ride, found in rides},
+            ends=(FROM, None),
+            now=now,
+        ),
+        stop_view=stop_view(destination=None),
+    )
+
+
+def test_steady_frame_holds_while_the_next_trip_fits() -> None:
+    """A new next departure that fits the frame on screen moves nothing."""
+    rides = (
+        eastward(trip_id='t1', minutes=0, lean=500.0),
+        eastward(trip_id='t2', minutes=2, lean=450.0),
+    )
+    first = plain_frame(inputs=no_to(rides=rides, now=START))
+    assert first.centre is not None
+    held = (first.centre, first.zoom)
+    later = no_to(rides=rides, now=START + timedelta(minutes=1))
+    assert plain_frame(inputs=later).centre != first.centre
+    found = steady_frame(inputs=later, held=held)
+    assert (found.centre, found.zoom) == held
+
+
+def test_steady_frame_refits_when_the_next_trip_leaves_it() -> None:
+    """A next departure the frame no longer holds is fitted afresh."""
+    rides = (
+        eastward(trip_id='t1', minutes=0, lean=500.0),
+        eastward(trip_id='t2', minutes=2, lean=-500.0),
+    )
+    first = plain_frame(inputs=no_to(rides=rides, now=START))
+    assert first.centre is not None
+    later = no_to(rides=rides, now=START + timedelta(minutes=1))
+    found = steady_frame(inputs=later, held=(first.centre, first.zoom))
+    assert found == plain_frame(inputs=later)
+    assert found.centre != first.centre
+
+
+def test_steady_frame_refits_on_a_new_zoom() -> None:
+    """A knob step or a new fitted zoom always refits."""
+    rides = (eastward(trip_id='t1', minutes=0, lean=500.0),)
+    inputs = no_to(rides=rides, now=START)
+    first = plain_frame(inputs=inputs)
+    assert first.centre is not None
+    stepped_in = replace(inputs, step=-1)
+    found = steady_frame(
+        inputs=stepped_in, held=(first.centre, first.zoom),
+    )
+    assert found == plain_frame(inputs=stepped_in)
+
+
+def test_steady_frame_without_a_held_frame_fits() -> None:
+    """With nothing on screen yet, the trip is fitted."""
+    rides = (eastward(trip_id='t1', minutes=0, lean=500.0),)
+    inputs = no_to(rides=rides, now=START)
+    assert steady_frame(inputs=inputs, held=None) == plain_frame(
+        inputs=inputs,
+    )

@@ -33,11 +33,7 @@ from paperroute.render.map_marks import (
     draw_stop,
 )
 from paperroute.render.tile_codec import THRESHOLD, diffuse, quantise4
-from paperroute.render.trip_marks import (
-    draw_end_name,
-    draw_trip_ends,
-    draw_trip_legs,
-)
+from paperroute.render.trip_marks import draw_trip_ends, draw_trip_legs
 
 Region = tuple[slice, slice]
 
@@ -609,7 +605,6 @@ def draw_marks(
     """
     draw_ridden_stops(canvas, base=base, window=window)
     draw_trip_ends(canvas, base=base, window=window)
-    draw_end_name(canvas, base=base, window=window, tiles=tiles)
     if base.trip is None and base.centre is not None:
         draw_stop(
             canvas,

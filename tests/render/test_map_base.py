@@ -1008,49 +1008,6 @@ def test_scale_bar_is_2_km_at_14_m_per_px(tmp_path: Path) -> None:
     assert 12 + 142 <= ink.max() + 1 <= 12 + 143
 
 
-def test_to_station_name_is_redrawn_over_the_trip(tmp_path: Path) -> None:
-    """The To's station name is drawn again over leg 2 and the disc."""
-    end = (CENTRE[0] + 800.0, CENTRE[1])
-    gx, gy = to_pixels(point=end, mpp=MPP)
-    label = PlacedLabel(
-        zoom=MPP,
-        kind=LabelKind.STATION,
-        name='Westmead',
-        x=gx,
-        y=gy - 15.0,
-        angle=0.0,
-        width=75.0,
-        start=(gx, gy),
-        end=(gx, gy),
-    )
-    trip = TripMarks(
-        origin=None,
-        second=(((end[0], end[1] - 800.0), (end[0], end[1] + 800.0)),),
-        walk=None,
-        change=None,
-        end=end,
-    )
-    drawn = []
-    for name, labels in (('named.db', [label]), ('plain.db', [])):
-        with closing(build(out=tmp_path / name, labels=labels)) as tiles:
-            drawn.append(draw_map_base(
-                base=replace(base(), trip=trip),
-                tiles=tiles,
-                variant=TileVariant.GREY,
-            ))
-    named, plain = drawn
-    x, y = screen_point(centre=CENTRE, mpp=MPP, point=end)
-    box = (slice(math.floor(y) - 22, math.floor(y) - 8),
-           slice(math.floor(x) - 30, math.floor(x) + 31))
-    assert (plain[box] == INK).any()
-    assert np.count_nonzero(named[box] == INK) != np.count_nonzero(
-        plain[box] == INK,
-    )
-    assert np.count_nonzero(named[:, : math.floor(x) - 40] == INK) == (
-        np.count_nonzero(plain[:, : math.floor(x) - 40] == INK)
-    )
-
-
 def test_ridden_stops_are_rings(tmp_path: Path) -> None:
     """A ridden stop is an ink ring with a paper centre."""
     stop = (CENTRE[0] + 800.0, CENTRE[1] + 400.0)

@@ -2,6 +2,7 @@
 
 import math
 from contextlib import closing
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -9,7 +10,12 @@ import numpy as np
 from paperroute.adapters.tiles_db import SqliteTileRepository
 from paperroute.build.map_style import DARK
 from paperroute.build.tile_store import PlacedLabel
-from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, screen_point
+from paperroute.core.map_view import (
+    MAP_HEIGHT,
+    MAP_WIDTH,
+    TripMarks,
+    screen_point,
+)
 from paperroute.core.tiles import (
     TILE,
     LabelKind,
@@ -86,6 +92,34 @@ def test_route_stays_whole_through_a_station_name(tmp_path: Path) -> None:
     outside = (slice(row - 9, row - 5), slice(x - 40, x + 41))
     assert (named[outside] == INK).any()
     assert (plain[outside] == PAPER).all()
+
+
+def test_route_stays_whole_through_the_to_station_name(
+    tmp_path: Path,
+) -> None:
+    """The To's station name is not drawn again over the route."""
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    label = place_label(
+        kind=LabelKind.STATION, name='Westmead', at=(gx + 120.0, gy),
+    )
+    end = (CENTRE[0] + 120.0 * MPP, CENTRE[1] - 20.0 * MPP)
+    trip = TripMarks(
+        origin=None, second=(), walk=None, change=None, end=end,
+    )
+    drawn = []
+    for name, labels in (('named.db', [label]), ('plain.db', [])):
+        with closing(build(out=tmp_path / name, labels=labels)) as tiles:
+            drawn.append(draw_map_base(
+                base=replace(base(route=across(half=5000.0)), trip=trip),
+                tiles=tiles,
+                variant=TileVariant.GREY,
+            ))
+    named, plain = drawn
+    row = centre_row()
+    x = math.floor(MAP_WIDTH / 2 + 120.0)
+    stroke = (slice(row - 4, row + 4), slice(x - 40, x + 41))
+    assert (named[stroke] == plain[stroke]).all()
+    assert (named[stroke] == INK).mean() > 0.5
 
 
 def test_station_square_is_ink_in_paper(tmp_path: Path) -> None:

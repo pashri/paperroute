@@ -18,6 +18,7 @@ from paperroute.adapters.tfnsw import (
     AiohttpFeedsClient,
     FeedError,
     FeedThrottled,
+    FeedTimedOut,
     FeedUnavailable,
     NoApiKey,
     api_key_from_env,
@@ -119,7 +120,7 @@ async def slow_handler(request: web.Request) -> web.Response:
 
 
 async def test_fetch_raises_feed_error_on_timeout() -> None:
-    """A slow server gives FeedUnavailable naming TimeoutError, not the key."""
+    """A slow server gives FeedTimedOut naming TimeoutError, not the key."""
     app = web.Application()
     app.router.add_get('/v1/gtfs/realtime/buses', slow_handler)
     server = TestServer(app)
@@ -130,8 +131,9 @@ async def test_fetch_raises_feed_error_on_timeout() -> None:
         timeout_s=0.05,
     )
     try:
-        with pytest.raises(FeedUnavailable) as caught:
+        with pytest.raises(FeedTimedOut) as caught:
             await client.fetch(feed='v1/gtfs/realtime/buses')
+        assert isinstance(caught.value, FeedUnavailable)
         assert 'TimeoutError' in str(caught.value)
         assert 'secret' not in str(caught.value)
     finally:

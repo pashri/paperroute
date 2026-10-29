@@ -127,7 +127,7 @@ async def fetch(
         )
         await queue.put(failed)
         return
-    logger.info(
+    logger.debug(
         'feed parsed',
         extra={
             'feed': effect.feed,

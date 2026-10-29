@@ -695,10 +695,10 @@ async def test_run_survives_a_raising_observer(tmp_path: Path) -> None:
     assert 'v2/gtfs/realtime/sydneytrains' in state.snapshots
 
 
-async def test_run_logs_frame_and_feed_timings_at_info(
+async def test_run_logs_frame_and_feed_timings_at_debug(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """The INFO records carry the fields the journal reader needs."""
+    """Per-frame and per-feed records are DEBUG, keeping the journal quiet."""
     timetable = SqliteTimetableRepository(path=_build_db(tmp_path))
     ports = Ports(
         timetable=timetable,
@@ -708,7 +708,7 @@ async def test_run_logs_frame_and_feed_timings_at_info(
         network=FakeNetwork(),
         states=MemoryStates(),
     )
-    with caplog.at_level(logging.INFO):
+    with caplog.at_level(logging.DEBUG):
         try:
             await run(ports=ports, seed=PIN, tick_every=0.01, max_events=60)
         finally:
@@ -717,7 +717,7 @@ async def test_run_logs_frame_and_feed_timings_at_info(
     feeds = [r for r in caplog.records if r.message == 'feed parsed']
     assert frames
     assert feeds
-    assert all(r.levelno == logging.INFO for r in frames + feeds)
+    assert all(r.levelno == logging.DEBUG for r in frames + feeds)
     assert all(r.__dict__['render_ms'] >= 0 for r in frames)
     for record in feeds:
         assert record.__dict__['feed']

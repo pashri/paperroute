@@ -11,7 +11,13 @@ from paperroute.adapters.feed_guard import (
     JoinedBody,
     backoff_s,
 )
-from paperroute.adapters.tfnsw import FeedError, FeedThrottled, FeedUnavailable
+from paperroute.adapters.tfnsw import (
+    FeedError,
+    FeedThrottled,
+    FeedTimedOut,
+    FeedUnavailable,
+)
+from paperroute.summary import Summary
 
 BUSES: Final[str] = 'v1/gtfs/vehiclepos/buses'
 TRAINS: Final[str] = 'v2/gtfs/vehiclepos/sydneytrains'
@@ -293,3 +299,136 @@ async def test_close_closes_the_inner_client() -> None:
     guard, inner, _ = guarded(script={})
     await guard.close()
     assert inner.closed
+
+
+class SlowFeeds(ScriptedFeeds):
+    """A scripted client whose every answer takes a set time."""
+
+    def __init__(
+        self,
+        *,
+        script: dict[str, list[bytes | FeedError]],
+        clock: Clock,
+        takes_s: float,
+    ) -> None:
+        super().__init__(script=script)
+        self.clock = clock
+        self.takes_s = takes_s
+
+    async def fetch(self, *, feed: str) -> bytes:
+        """
+        Move the clock on, then give the scripted answer.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+
+        Returns
+        -------
+        bytes
+            The scripted body.
+        """
+        self.clock.now += self.takes_s
+        return await super().fetch(feed=feed)
+
+
+def counted(
+    *, script: dict[str, list[bytes | FeedError]], takes_s: float = 0.25,
+) -> tuple[GuardedFeeds, Summary, Clock]:
+    """
+    Wrap a slow scripted client, counting into a summary.
+
+    Parameters
+    ----------
+    script : dict[str, list[bytes | FeedError]]
+        Answers by feed.
+    takes_s : float
+        Seconds each answer takes.
+
+    Returns
+    -------
+    tuple[GuardedFeeds, Summary, Clock]
+        The guard, its summary and the clock they share.
+    """
+    clock = Clock()
+    inner = SlowFeeds(script=script, clock=clock, takes_s=takes_s)
+    summary = Summary(clock=clock)
+    guard = GuardedFeeds(inner=inner, clock=clock, summary=summary)
+    return guard, summary, clock
+
+
+def bus_counts(*, summary: Summary) -> dict[str, object]:
+    """
+    Give the buses feed's counts from a summary.
+
+    Parameters
+    ----------
+    summary : Summary
+        The summary.
+
+    Returns
+    -------
+    dict[str, object]
+        The feed's entry in the report.
+    """
+    feeds = summary.report()['feeds']
+    assert isinstance(feeds, dict)
+    entry = feeds[BUSES]
+    assert isinstance(entry, dict)
+    return entry
+
+
+async def test_answered_request_is_counted_with_its_time() -> None:
+    """A good answer counts as sent and OK, with how long it took."""
+    guard, summary, _ = counted(script={BUSES: [b'one']}, takes_s=0.25)
+    await guard.fetch(feed=BUSES)
+    counts = bus_counts(summary=summary)
+    assert (counts['sent'], counts['ok']) == (1, 1)
+    assert counts['fetch_ms'] == {'median': 250.0, 'p90': 250.0}
+
+
+async def test_failed_requests_are_counted_by_reason() -> None:
+    """A 429, a timeout, a 5xx and a 403 each count under their reason."""
+    guard, summary, clock = counted(
+        script={
+            BUSES: [
+                throttled(),
+                FeedTimedOut(f'{BUSES}: TimeoutError'),
+                FeedUnavailable(f'{BUSES}: HTTP 502'),
+                FeedError(f'{BUSES}: HTTP 403'),
+            ],
+        },
+    )
+    for _ in range(4):
+        clock.now += 1000
+        with pytest.raises(FeedError):
+            await guard.fetch(feed=BUSES)
+    counts = bus_counts(summary=summary)
+    assert (counts['sent'], counts['ok']) == (4, 0)
+    assert counts['failed'] == {'429': 1, 'timeout': 1, '5xx': 1, 'other': 1}
+
+
+async def test_skipped_fetch_counts_as_backed_off_not_sent() -> None:
+    """A fetch turned away by the backoff sends nothing and is counted."""
+    guard, summary, _ = counted(script={BUSES: [throttled()]})
+    with pytest.raises(FeedThrottled):
+        await guard.fetch(feed=BUSES)
+    with pytest.raises(FeedBackingOff):
+        await guard.fetch(feed=BUSES)
+    counts = bus_counts(summary=summary)
+    assert (counts['sent'], counts['backed_off']) == (1, 1)
+
+
+async def test_joined_fetch_counts_as_joined_not_sent() -> None:
+    """A fetch that shares a request in flight is counted once as joined."""
+    guard, summary, _ = counted(script={BUSES: [b'one']})
+    assert isinstance(guard.inner, ScriptedFeeds)
+    guard.inner.gate.clear()
+    first = asyncio.create_task(guard.fetch(feed=BUSES))
+    second = asyncio.create_task(guard.fetch(feed=BUSES))
+    await asyncio.sleep(0)
+    guard.inner.gate.set()
+    await asyncio.gather(first, second)
+    counts = bus_counts(summary=summary)
+    assert (counts['sent'], counts['ok'], counts['joined']) == (1, 1, 1)

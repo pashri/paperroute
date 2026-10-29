@@ -469,7 +469,7 @@ async def render(
     draw = drawing(view=view, maps=maps)
     frame, render_ms = await timed_async(call=asyncio.to_thread(draw))
     ports.display.show(frame=frame, full=full, turned=turned)
-    logger.info(
+    logger.debug(
         'frame drawn', extra={'render_ms': render_ms, 'full': full}
     )
     ports.observer.frame_drawn(render_ms=render_ms)

@@ -15,8 +15,11 @@ from paperroute.logs import LastError, configure_logging
 def _restore_root_logger() -> Iterator[None]:
     """Put the root logger back after each test."""
     root = logging.getLogger()
+    access = logging.getLogger('aiohttp.access')
     handlers, level = list(root.handlers), root.level
+    access_level = access.level
     yield
+    access.setLevel(access_level)
     for handler in list(root.handlers):
         if handler not in handlers:
             handler.close()
@@ -129,3 +132,34 @@ def test_configure_logging_attaches_last_error(
     text = last.text()
     assert text is not None
     assert text.endswith(' boom')
+
+
+def test_web_access_lines_are_dropped(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
+) -> None:
+    """aiohttp's per-request INFO lines reach neither stderr nor the file."""
+    path = tmp_path / 'errors.jsonl'
+    stream = _configure(monkeypatch, error_file=path)
+    access = logging.getLogger('aiohttp.access')
+    access.info('GET /frame.png 200')
+    access.warning('odd request')
+    assert 'frame.png' not in stream.getvalue()
+    assert 'odd request' in stream.getvalue()
+
+
+def test_debug_lines_are_dropped(monkeypatch: pytest.MonkeyPatch) -> None:
+    """DEBUG records, such as each frame drawn, never reach stderr."""
+    stream = _configure(monkeypatch)
+    logging.getLogger('paperroute.t').debug('frame drawn')
+    assert stream.getvalue() == ''
+
+
+def test_nested_extra_fields_stay_on_one_line(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A summary's nested counts are written as one JSON line."""
+    stream = _configure(monkeypatch)
+    feeds = {'v1/x': {'sent': 2, 'failed': {'429': 1}}}
+    logging.getLogger('paperroute.t').info('summary', extra={'feeds': feeds})
+    [text] = stream.getvalue().splitlines()
+    assert json.loads(text)['feeds'] == feeds

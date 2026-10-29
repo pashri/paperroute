@@ -59,6 +59,7 @@ from paperroute.ports import (
     TimetableBuilder,
     WifiControl,
 )
+from paperroute.summary import Summary
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor
@@ -410,7 +411,9 @@ def device_for(
     return DevicePorts(wifi=wifi, probe=probe, key=key, resets=resets)
 
 
-def feeds_client(*, choice: str) -> FeedsClient:
+def feeds_client(
+    *, choice: str, summary: Summary | None = None,
+) -> FeedsClient:
     """
     Make the live client or a replay one.
 
@@ -422,6 +425,8 @@ def feeds_client(*, choice: str) -> FeedsClient:
     ----------
     choice : str
         'live' or a directory path.
+    summary : Summary | None
+        Counts the live client's requests; a new one by default.
 
     Returns
     -------
@@ -435,6 +440,7 @@ def feeds_client(*, choice: str) -> FeedsClient:
             key=SecretsFile(path=key_path_from_env()).read,
             limiter=tfnsw_limiter(),
         ),
+        summary=summary,
     )
 
 
@@ -872,11 +878,38 @@ def device_pages_for(
     )
 
 
+def web_observer(*, timings: Timings, summary: Summary) -> ObserverGroup:
+    """
+    Gather the web app's observers.
+
+    Parameters
+    ----------
+    timings : Timings
+        Keeps the latest timings for the status page.
+    summary : Summary
+        Logs the periodic summary.
+
+    Returns
+    -------
+    ObserverGroup
+        The timings, the summary, the systemd notifier and the ACT LED.
+    """
+    return ObserverGroup(
+        observers=[
+            timings,
+            summary,
+            SystemdNotifier.from_environment(),
+            ActLed(),
+        ]
+    )
+
+
 def web_main(
     *,
     args: argparse.Namespace,
     feeds: FeedsClient,
     last_error: LastError | None = None,
+    summary: Summary | None = None,
 ) -> None:
     """
     Serve the device software to browsers.
@@ -889,15 +922,11 @@ def web_main(
         Feeds client.
     last_error : LastError | None
         Holds the latest error logged; a new one by default.
+    summary : Summary | None
+        Counts frames and the feeds' requests; a new one by default.
     """
     timings = Timings()
-    observer = ObserverGroup(
-        observers=[
-            timings,
-            SystemdNotifier.from_environment(),
-            ActLed(),
-        ]
-    )
+    observer = web_observer(timings=timings, summary=summary or Summary())
     with (
         timetable_for(args=args) as timetable,
         network_for(args=args) as network,
@@ -937,10 +966,13 @@ def main() -> None:  # pylint: disable=too-many-statements
     args = parse_args()
     last_error = LastError()
     configure_logging(error_file=args.error_log, last_error=last_error)
+    summary = Summary()
     try:
-        feeds = feeds_client(choice=args.feeds)
+        feeds = feeds_client(choice=args.feeds, summary=summary)
         if args.display == 'web':
-            web_main(args=args, feeds=feeds, last_error=last_error)
+            web_main(
+                args=args, feeds=feeds, last_error=last_error, summary=summary,
+            )
         else:
             tk_main(args=args, feeds=feeds, last_error=last_error)
     except Exception:

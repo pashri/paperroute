@@ -24,6 +24,10 @@ class FeedUnavailable(FeedError):
     """TfNSW timed out or answered with a server error (HTTP 5xx)."""
 
 
+class FeedTimedOut(FeedUnavailable):
+    """TfNSW took too long to answer."""
+
+
 class FeedThrottled(FeedError):
     """
     TfNSW refused a feed for going over the rate limit (HTTP 429).
@@ -234,8 +238,10 @@ class AiohttpFeedsClient:
         ------
         FeedThrottled
             On HTTP 429.
+        FeedTimedOut
+            On a timeout.
         FeedUnavailable
-            On HTTP 5xx or a timeout.
+            On HTTP 5xx.
         FeedError
             On another non-200 status or a connection error.
         """
@@ -254,7 +260,7 @@ class AiohttpFeedsClient:
                 check_status(feed=feed, response=response)
                 return await response.read()
         except TimeoutError as error:
-            raise FeedUnavailable(f'{feed}: TimeoutError') from error
+            raise FeedTimedOut(f'{feed}: TimeoutError') from error
         except aiohttp.ClientError as error:
             raise FeedError(f'{feed}: {type(error).__name__}') from error
 

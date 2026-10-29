@@ -9,9 +9,11 @@ from typing import Final
 
 from paperroute.adapters.tfnsw import FeedError, FeedThrottled, FeedUnavailable
 from paperroute.ports import FeedsClient
+from paperroute.summary import Summary, failure_reason
 
 FIRST_BACKOFF_S: Final[float] = 30.0
 MOST_BACKOFF_S: Final[float] = 300.0
+MS_PER_SECOND: Final[float] = 1000.0
 
 logger = logging.getLogger(__name__)
 
@@ -77,6 +79,8 @@ class GuardedFeeds:
         The client that makes the requests.
     clock : Callable[[], float]
         Returns the current time in seconds.
+    summary : Summary | None
+        Counts each request, skip and join; a new one by default.
     """
 
     def __init__(
@@ -84,9 +88,11 @@ class GuardedFeeds:
         *,
         inner: FeedsClient,
         clock: Callable[[], float] = time.monotonic,
+        summary: Summary | None = None,
     ) -> None:
         self.inner = inner
         self.clock = clock
+        self.summary = summary or Summary(clock=clock)
         self.backoffs: dict[str, Backoff] = {}
         self.flights: dict[str, asyncio.Task[bytes]] = {}
 
@@ -112,9 +118,11 @@ class GuardedFeeds:
         """
         backoff = self.backoffs.get(feed)
         if backoff is not None and self.clock() < backoff.until:
+            self.summary.backed_off(feed=feed)
             raise FeedBackingOff(f'{feed}: backing off')
         flight = self.flights.get(feed)
         if flight is not None:
+            self.summary.joined(feed=feed)
             return JoinedBody(await asyncio.shield(flight))
         flight = asyncio.create_task(self.fetched(feed=feed))
         self.flights[feed] = flight
@@ -135,7 +143,7 @@ class GuardedFeeds:
             Protobuf body.
         """
         try:
-            data = await self.inner.fetch(feed=feed)
+            data = await self.counted(feed=feed)
         except FeedThrottled as error:
             self.struck(feed=feed, retry_after_s=error.retry_after_s)
             raise
@@ -145,6 +153,30 @@ class GuardedFeeds:
         finally:
             del self.flights[feed]
         self.backoffs.pop(feed, None)
+        return data
+
+    async def counted(self, *, feed: str) -> bytes:
+        """
+        Download a feed, counting the request in the summary.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+
+        Returns
+        -------
+        bytes
+            Protobuf body.
+        """
+        started = self.clock()
+        try:
+            data = await self.inner.fetch(feed=feed)
+        except FeedError as error:
+            self.summary.failed(feed=feed, reason=failure_reason(error=error))
+            raise
+        fetch_ms = (self.clock() - started) * MS_PER_SECOND
+        self.summary.sent(feed=feed, fetch_ms=fetch_ms)
         return data
 
     def struck(self, *, feed: str, retry_after_s: float | None) -> None:

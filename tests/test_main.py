@@ -35,6 +35,7 @@ from paperroute.__main__ import (
     serve_web,
     tiles_for,
     web_main,
+    web_observer,
     wifi_for,
 )
 from paperroute.adapters.checked_tiles import CheckedTiles
@@ -63,6 +64,7 @@ from paperroute.core.tiles import TILE_STYLE, ZOOMS, TileVariant, levels_text
 from paperroute.observers import Timings
 from paperroute.render.canvas import INK
 from paperroute.render.map_base import draw_map_base
+from paperroute.summary import Summary
 from tests.core.factories import pin_of
 from tests.fakes import FakeKeys, FakeNetwork, FakeWifi, MemoryStates
 
@@ -727,6 +729,26 @@ def test_live_feeds_are_guarded_and_share_the_tfnsw_limiter(
     assert isinstance(client, GuardedFeeds)
     assert isinstance(client.inner, AiohttpFeedsClient)
     assert client.inner.limiter is tfnsw_limiter()
+
+
+def test_live_feeds_count_into_the_summary_given(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The live client reports its requests to the run summary."""
+    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    summary = Summary()
+    client = feeds_client(choice='live', summary=summary)
+    assert isinstance(client, GuardedFeeds)
+    assert client.summary is summary
+
+
+def test_web_observer_feeds_frames_and_ticks_to_the_summary() -> None:
+    """The web app's observers include the run summary and the timings."""
+    timings, summary = Timings(), Summary()
+    observer = web_observer(timings=timings, summary=summary)
+    observer.frame_drawn(render_ms=4.0)
+    assert summary.report()['frames'] == 1
+    assert timings.frames == 1
 
 
 def test_replayed_feeds_are_read_as_they_are(tmp_path: Path) -> None:

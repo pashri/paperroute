@@ -21,6 +21,7 @@ FIELD_NAMES: Final[dict[str, str]] = {
 ERROR_FILE_BYTES: Final[int] = 1_000_000
 ERROR_FILE_BACKUPS: Final[int] = 3
 LAST_ERROR_CHARS: Final[int] = 80
+ACCESS_LOGGER: Final[str] = 'aiohttp.access'
 
 
 class LastError(logging.Handler):
@@ -104,6 +105,8 @@ def configure_logging(
     """
     Send INFO and above to stderr as JSON lines.
 
+    aiohttp's access log, a line per web request, is kept to WARNING.
+
     Parameters
     ----------
     error_file : Path | None
@@ -120,3 +123,4 @@ def configure_logging(
     if last_error is not None:
         handlers.append(last_error)
     logging.basicConfig(level=logging.INFO, handlers=handlers, force=True)
+    logging.getLogger(ACCESS_LOGGER).setLevel(logging.WARNING)

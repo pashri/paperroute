@@ -191,3 +191,41 @@ def test_suburb_name_knocked_out_off_the_route(tmp_path: Path) -> None:
         axis=1,
     )
     assert 3.0 <= float(np.max(reach)) < 4.5
+
+
+def test_bits_suburb_name_is_dithered(tmp_path: Path) -> None:
+    """In BITS a knocked-out dark grey suburb name is dithered, not ink."""
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    label = place_label(
+        kind=LabelKind.SUBURB, name='Westmead', at=(gx - 120.0, gy - 80.0),
+    )
+    drawn = {}
+    for variant in TileVariant:
+        with closing(
+            build(out=tmp_path / f'{variant}.db', labels=[label]),
+        ) as tiles:
+            drawn[variant] = draw_map_base(
+                base=base(), tiles=tiles, variant=variant,
+            )
+    text = drawn[TileVariant.GREY] == DARK
+    assert np.count_nonzero(text) > 0
+    share = np.count_nonzero(drawn[TileVariant.BITS][text] == PAPER) / (
+        np.count_nonzero(text)
+    )
+    assert 0.05 <= share <= 0.5
+
+
+def test_bits_corner_box_edges_are_dithered(tmp_path: Path) -> None:
+    """In BITS the boxes' 1 px dark grey edges are dithered, not ink."""
+    drawn = {}
+    for variant in TileVariant:
+        with closing(build(out=tmp_path / f'{variant}.db')) as tiles:
+            drawn[variant] = draw_map_base(
+                base=base(), tiles=tiles, variant=variant,
+            )
+    edge = drawn[TileVariant.GREY] == DARK
+    assert np.count_nonzero(edge) > 0
+    share = np.count_nonzero(drawn[TileVariant.BITS][edge] == PAPER) / (
+        np.count_nonzero(edge)
+    )
+    assert 0.05 <= share <= 0.6

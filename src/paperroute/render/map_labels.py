@@ -1,5 +1,6 @@
 """Place names knocked out of the map, so the route can lie over them."""
 
+import math
 from typing import Final
 
 from paperroute.build.map_style import (
@@ -11,8 +12,10 @@ from paperroute.build.map_style import (
 from paperroute.core.map_view import MAP_HEIGHT, MapBase
 from paperroute.core.tiles import LABEL_REACH, LabelKind, StreetLabel
 from paperroute.ports import TileRepository
-from paperroute.render.canvas import INK, PAPER, Canvas
+from paperroute.render.canvas import INK, PAPER, Canvas, text_width
 from paperroute.render.map_marks import Window
+
+Region = tuple[slice, slice]
 
 PLACE_HALO: Final[int] = 3
 KNOCKOUT_SQUARE: Final[tuple[int, int]] = (7, 5)  # paper, then ink
@@ -49,7 +52,7 @@ def label_query(
 
 def draw_place_knockouts(
     canvas: Canvas, *, base: MapBase, window: Window, tiles: TileRepository,
-) -> None:
+) -> list[Region]:
     """
     Redraw suburb and station names on paper halos over the tiles.
 
@@ -65,6 +68,11 @@ def draw_place_knockouts(
         The map's top-left corner in global pixels.
     tiles : TileRepository
         Where the labels come from.
+
+    Returns
+    -------
+    list[Region]
+        Where the dark grey suburb names are, to dither in BITS.
     """
     box = label_query(window=window, width=base.width)
     suburbs = (
@@ -86,6 +94,32 @@ def draw_place_knockouts(
         zoom=base.mpp, box=box, kind=LabelKind.STATION,
     ):
         draw_station(canvas, label=label, window=window)
+    return [place_region(label=label, window=window) for label in suburbs]
+
+
+def place_region(*, label: StreetLabel, window: Window) -> Region:
+    """
+    Find the map pixels a suburb name and its halo may cover.
+
+    Parameters
+    ----------
+    label : StreetLabel
+        The label, in global pixels.
+    window : Window
+        The map's top-left corner in global pixels.
+
+    Returns
+    -------
+    Region
+        Row and column slices, clipped at the map's top and left.
+    """
+    width = text_width(text=label.name, face=SUBURB_FACE)
+    half = math.hypot(width / 2, SUBURB_FACE.px) + PLACE_HALO
+    x, y = label.x - window[0], label.y - window[1]
+    return (
+        slice(max(0, math.floor(y - half)), max(0, math.ceil(y + half))),
+        slice(max(0, math.floor(x - half)), max(0, math.ceil(x + half))),
+    )
 
 
 def draw_station(

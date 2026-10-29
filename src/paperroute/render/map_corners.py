@@ -1,5 +1,6 @@
 """The map's corner boxes: the scale at the bottom left, the credit right."""
 
+import math
 from typing import Final
 
 from paperroute.build.map_style import DARK
@@ -130,6 +131,38 @@ def credit_box(*, width: int, text: str = CREDIT) -> Box:
     right = width - BOX_INSET
     left = right - text_width(text=text, face=BOX_FACE) - 2 * BOX_PAD
     return left, top, right, bottom
+
+
+def corner_regions(
+    *, mpp: int, width: int, text: str,
+) -> list[tuple[slice, slice]]:
+    """
+    Find the map pixels both corner boxes cover, with their edges.
+
+    Parameters
+    ----------
+    mpp : int
+        Metres per pixel.
+    width : int
+        Map width in pixels.
+    text : str
+        The bottom right box's text.
+
+    Returns
+    -------
+    list[tuple[slice, slice]]
+        Row and column slices of the scale box, then the right box.
+    """
+    return [
+        (
+            slice(math.floor(top) - 1, math.ceil(bottom) + 1),
+            slice(math.floor(left) - 1, math.ceil(right) + 1),
+        )
+        for left, top, right, bottom in (
+            scale_box(mpp=mpp),
+            credit_box(width=width, text=text),
+        )
+    ]
 
 
 def draw_box(canvas: Canvas, *, box: Box) -> None:

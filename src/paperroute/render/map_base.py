@@ -24,11 +24,16 @@ from paperroute.core.tiles import (
 from paperroute.ports import TileRepository
 from paperroute.render.canvas import INK, PAPER, Canvas, text_width
 from paperroute.render.map_corners import (
+    corner_regions,
     corner_text,
     draw_boxed_credit,
     draw_boxed_scale,
 )
-from paperroute.render.map_labels import draw_place_knockouts, label_query
+from paperroute.render.map_labels import (
+    Region,
+    draw_place_knockouts,
+    label_query,
+)
 from paperroute.render.map_marks import (
     ROUTE_STYLE,
     Window,
@@ -37,8 +42,6 @@ from paperroute.render.map_marks import (
 )
 from paperroute.render.tile_codec import THRESHOLD, diffuse, quantise4
 from paperroute.render.trip_marks import draw_trip_ends, draw_trip_legs
-
-Region = tuple[slice, slice]
 
 BEAD_DASH: Final[tuple[float, float]] = (2.0, 7.0)
 HALO: Final[int] = 2
@@ -539,8 +542,9 @@ def finish(
     """
     Snap the drawn base to the variant's levels.
 
-    For BITS, the redrawn names are dithered like the baked ones before
-    everything else is thresholded.
+    For BITS, the redrawn street names, the knocked-out suburb names and
+    the corner boxes are dithered like the baked names before everything
+    else is thresholded, so their dark grey stays grey.
 
     Parameters
     ----------
@@ -549,7 +553,7 @@ def finish(
     variant : TileVariant
         GREY keeps four levels; BITS keeps ink and paper.
     names : Sequence[Region]
-        Where the redrawn names are.
+        Where the redrawn names, suburb names and corner boxes are.
 
     Returns
     -------
@@ -643,7 +647,9 @@ def draw_map_base(
         ),
         at=(0, 0),
     )
-    draw_place_knockouts(canvas, base=base, window=window, tiles=tiles)
+    places = draw_place_knockouts(
+        canvas, base=base, window=window, tiles=tiles,
+    )
     names = draw_line_and_names(
         canvas,
         base=base,
@@ -652,8 +658,17 @@ def draw_map_base(
         tiles=tiles,
     )
     draw_marks(canvas, base=base, window=window, tiles=tiles)
+    corners = corner_regions(
+        mpp=base.mpp,
+        width=base.width,
+        text=corner_text(installed=tiles.version() is not None),
+    )
     return finish(
         grey=canvas.grey(),
         variant=variant,
-        names=[name_region(label=label, offset=window) for label in names],
+        names=[
+            *places,
+            *corners,
+            *(name_region(label=label, offset=window) for label in names),
+        ],
     )

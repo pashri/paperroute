@@ -16,6 +16,7 @@ from paperroute.core.map_fit import (
     resting_zoom,
 )
 from paperroute.core.map_view import (
+    MAP_WIDTH,
     MapInputs,
     MapView,
     TripMarks,
@@ -566,6 +567,50 @@ def connection_inputs(
         zoom=zoom,
         vehicle_trips=shown_trips(chains=chains, mode=mode),
     )
+
+
+def panes_inputs(
+    *,
+    inputs: MapInputs,
+    pin: Pin,
+    chains: Sequence[Chain],
+    mode: ConnectionMap,
+) -> MapInputs:
+    """
+    Frame the area every Changes pane shows, for the area requests.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs, framed by `connection_inputs`.
+    pin : Pin
+        Connection pin.
+    chains : Sequence[Chain]
+        Workable chains.
+    mode : ConnectionMap
+        Which framing.
+
+    Returns
+    -------
+    MapInputs
+        On the Map in Changes with a two-change hero, fitted to every
+        change's `change_points` at the Map's width; else unchanged.
+    """
+    if mode is not ConnectionMap.CHANGES or inputs.width != MAP_WIDTH:
+        return inputs
+    rides = rides_of(chain=chains[0], pin=pin) if chains else ()
+    changed = [index for index, ride in enumerate(rides) if ride.change]
+    if len(changed) < 2:
+        return inputs
+    points = tuple(
+        point
+        for index in changed
+        for point in change_points(
+            inputs=inputs, rides=rides[index - 1 : index + 1],
+        )
+    )
+    centre, zoom = fit_frame(inputs=inputs, points=points, keep=None)
+    return replace(inputs, centre=centre, zoom=zoom)
 
 
 def sidebar_rows(

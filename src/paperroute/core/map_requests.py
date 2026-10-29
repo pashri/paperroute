@@ -6,7 +6,7 @@ from typing import Final
 
 from paperroute.core.chains import all_departures
 from paperroute.core.connection import live_chains
-from paperroute.core.connection_map import connection_inputs
+from paperroute.core.connection_map import connection_inputs, panes_inputs
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.geo import Point
 from paperroute.core.map_fit import resting_zoom, steady_frame
@@ -251,8 +251,8 @@ def map_inputs(
     MapInputs
         A plain pin's inputs fitted to its next trip, keeping the frame
         on screen while it still holds the trip; for a connection
-        pin, framed on the connection with the hero chain's legs as the
-        departures.
+        pin, framed on the connection, or on both panes of a two-change
+        Changes map, with the hero chain's legs as the departures.
     """
     inputs = replace(
         pin_map_inputs(state=state, stop_view=stop_view),
@@ -262,11 +262,15 @@ def map_inputs(
     pin = shown(state=state)
     if not is_connection(pin=pin):
         return steady_frame(inputs=inputs, held=state.map.frame)
-    return connection_inputs(
-        inputs=inputs,
+    chains = live_chains(state=state)
+    mode = state.settings.connection_map
+    return panes_inputs(
+        inputs=connection_inputs(
+            inputs=inputs, pin=pin, chains=chains, mode=mode,
+        ),
         pin=pin,
-        chains=live_chains(state=state),
-        mode=state.settings.connection_map,
+        chains=chains,
+        mode=mode,
     )
 
 

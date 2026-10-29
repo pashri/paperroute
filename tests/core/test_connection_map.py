@@ -821,3 +821,28 @@ def on_screen_of(*, inputs: MapInputs, point: Point | None) -> Point:
         inputs.width / 2 + (point[0] - inputs.centre[0]) / mpp,
         MAP_HEIGHT / 2 - (point[1] - inputs.centre[1]) / mpp,
     )
+
+
+def test_two_change_frame_covers_both_panes() -> None:
+    """The recorded frame of two Changes panes holds both changes."""
+    state = started(view=LiveView.MAP, pins=(TWO,))
+    one, two, three = way_legs(pin=TWO, way=TWO.ways[0])
+    state, _ = step(state, DeparturesLoaded(
+        pin=TWO,
+        departures=(),
+        until=at(10, 30),
+        legs=Legs(lists=MappingProxyType({
+            leg_key(leg=one): tuple(
+                replace(item, shape_id='s606') for item in LEG1
+            ),
+            leg_key(leg=two): tuple(
+                replace(item, shape_id='s665') for item in LEG2
+            ),
+            leg_key(leg=three): (T1,),
+        })),
+    ))
+    assert state.map.frame is not None
+    centre, zoom = state.map.frame
+    framed = replace(inputs_at(now=at(7, 35)), centre=centre, zoom=zoom)
+    for point in ((0.0, 0.0), (144.0, 0.0), (800.0, -1900.0)):
+        assert on_map(inputs=framed, point=point)

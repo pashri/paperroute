@@ -209,7 +209,6 @@ def connection_strip(
                 current=current,
                 unpinned=None,
                 view=LiveView.STRIP,
-                zoom=DEFAULT_ZOOM,
             ),
             now=now,
             stored=True,

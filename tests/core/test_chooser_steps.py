@@ -90,7 +90,7 @@ def pinned(*, view: LiveView = LiveView.STOP) -> State:
         The state after its first tick.
     """
     saved = Saved(
-        pins=PINS, current=0, unpinned=None, view=view, zoom=DEFAULT_ZOOM,
+        pins=PINS, current=0, unpinned=None, view=view,
     )
     state = initial_state(saved=saved, now=START, stored=True)
     state, _ = step(state, Tick(now=START))
@@ -395,7 +395,6 @@ def test_commit_matching_pin_selects_it() -> None:
         current=0,
         unpinned=None,
         view=LiveView.STOP,
-        zoom=DEFAULT_ZOOM,
     )
     state = initial_state(saved=saved, now=START, stored=True)
     state, _ = run_events(

@@ -118,7 +118,7 @@ def test_quota_only() -> None:
     more = replace(saved, quota=Quota(day=DAY, calls=1))
     assert quota_only(before=saved, after=more)
     assert not quota_only(before=saved, after=saved)
-    assert not quota_only(before=saved, after=replace(more, zoom=1))
+    assert not quota_only(before=saved, after=replace(more, current=1))
 
 
 def test_quota_only_change_saves_every_ten_minutes() -> None:

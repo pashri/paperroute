@@ -101,7 +101,6 @@ def started() -> State:
         current=0,
         unpinned=None,
         view=LiveView.MAP,
-        zoom=12,
     )
     state = initial_state(saved=saved, now=START, stored=True)
     return step(state, Tick(now=START))[0]

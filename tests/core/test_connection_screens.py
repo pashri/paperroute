@@ -82,7 +82,6 @@ def started(
         current=0,
         unpinned=None,
         view=view,
-        zoom=seeded(pin=WORK).zoom,
         settings=Settings(connection_map=mode),
     )
     return wakeful(state=initial_state(

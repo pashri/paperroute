@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
+from paperroute.core.map_state import area_frame
 from paperroute.core.map_view import DEFAULT_ZOOM, MapView
 from paperroute.core.messages import (
     DeparturesLoaded,
@@ -240,7 +241,7 @@ def test_strip_map_zooms_on_bottom_turn() -> None:
     state, _ = on_view(view=LiveView.STRIP_MAP)
     state, _ = step(state, StripLoaded(key=KEY, reach=long_reach()))
     state, effects = step(state, turn(steps=-1))
-    assert state.map.zoom == DEFAULT_ZOOM + 1
+    assert area_frame(map_state=state.map)[1] == DEFAULT_ZOOM + 1
     assert state.strip.scroll == 0
     [render] = kinds(effects=effects, kind=Render)
     assert isinstance(render.view, StripMapView)
@@ -325,7 +326,6 @@ def test_flip_resets_the_strip_scroll() -> None:
         current=0,
         unpinned=None,
         view=LiveView.STRIP,
-        zoom=DEFAULT_ZOOM,
     )
     state = initial_state(saved=saved, now=START, stored=True)
     state, _ = step(state, StripLoaded(key=KEY, reach=long_reach()))

@@ -161,7 +161,7 @@ def test_bottom_turn_keeps_selection() -> None:
     after, effects = step(state, KnobTurned(knob=Knob.BOTTOM, steps=2))
     assert after.alerts.selected == WESTERN.alert_id
     assert after.alerts.page == 1
-    assert after.map.zoom == state.map.zoom
+    assert after.map.step == state.map.step
     assert after.view is LiveView.ALERTS
     assert not effects
 

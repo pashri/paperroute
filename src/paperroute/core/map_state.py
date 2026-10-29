@@ -1,4 +1,4 @@
-"""What the reducer keeps for the Map view: zoom, centre and map data."""
+"""What the reducer keeps for the Map view: knob step, centre and data."""
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
@@ -6,7 +6,8 @@ from datetime import datetime
 from typing import Final
 
 from paperroute.core.geo import MetreBox, Point, Shape
-from paperroute.core.map_view import DEFAULT_ZOOM, MAP_HEIGHT, MAP_WIDTH
+from paperroute.core.map_fit import resting_zoom
+from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH
 from paperroute.core.messages import (
     LoadModes,
     LoadPatterns,
@@ -25,12 +26,13 @@ AREA_GROWTH: Final[float] = 1.1
 
 @dataclass(frozen=True)
 class MapState:
-    """The Map view's zoom, centre and loaded data.
+    """The Map view's knob step, centre and loaded data.
 
     Attributes
     ----------
-    zoom : int
-        Index into `ZOOMS`.
+    step : int
+        Knob detents from the framed zoom; negative is finer. Not saved,
+        and 0 for a new place.
     centre : Point | None
         The From stop in metres, or None when it has no location.
     shapes : Mapping[str, Shape]
@@ -52,11 +54,12 @@ class MapState:
     failed_at : Mapping[MapData, datetime]
         When each kind of map data last failed to load.
     frame : tuple[Point, int] | None
-        The centre and zoom a connection map was last drawn at, which
-        differ from `centre` and `zoom`; None for a plain pin's map.
+        The centre and zoom a map was last drawn at, the knob's step
+        already applied; None when no fitted map is drawn, which leaves
+        the From at the resting zoom.
     """
 
-    zoom: int = DEFAULT_ZOOM
+    step: int = 0
     centre: Point | None = None
     shapes: Mapping[str, Shape] = field(default_factory=dict)
     requested_shapes: frozenset[str] = frozenset()
@@ -82,12 +85,11 @@ def area_frame(*, map_state: MapState) -> tuple[Point | None, int]:
     Returns
     -------
     tuple[Point | None, int]
-        The connection map's frame when one is drawn, else the From and
-        the knob's zoom.
+        The frame when one is drawn, else the From at the resting zoom.
     """
     if map_state.frame is not None:
         return map_state.frame
-    return map_state.centre, map_state.zoom
+    return map_state.centre, resting_zoom(step=map_state.step)
 
 
 def area_box(*, centre: Point, mpp: int) -> MetreBox:
@@ -114,7 +116,7 @@ def area_box(*, centre: Point, mpp: int) -> MetreBox:
 
 def zoomed(*, map_state: MapState, steps: int) -> MapState:
     """
-    Zoom by some knob detents.
+    Zoom by some knob detents, counting only those that move the map.
 
     Parameters
     ----------
@@ -126,10 +128,14 @@ def zoomed(*, map_state: MapState, steps: int) -> MapState:
     Returns
     -------
     MapState
-        The state with the zoom moved and clamped to `ZOOMS`.
+        The state with the step moved by as many levels as the shown
+        zoom moved, clamped so it never passes the number of levels.
     """
-    zoom = min(max(map_state.zoom - steps, 0), len(ZOOMS) - 1)
-    return replace(map_state, zoom=zoom)
+    _, zoom = area_frame(map_state=map_state)
+    moved = min(max(zoom - steps, 0), len(ZOOMS) - 1) - zoom
+    reach = len(ZOOMS) - 1
+    step = min(max(map_state.step + moved, -reach), reach)
+    return replace(map_state, step=step)
 
 
 def with_patterns(*, map_state: MapState, event: PatternsLoaded) -> MapState:

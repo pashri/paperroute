@@ -69,7 +69,6 @@ def pinned() -> State:
         current=0,
         unpinned=None,
         view=LiveView.STOP,
-        zoom=DEFAULT_ZOOM,
     )
     state = initial_state(saved=saved, now=START, stored=True)
     return step(state, Tick(now=START))[0]

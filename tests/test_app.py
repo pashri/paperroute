@@ -1539,7 +1539,7 @@ async def test_run_survives_a_tiles_read_error(
             max_events=30,
         )
     assert state.running
-    assert state.map.zoom != 2
+    assert state.map.step != 0
     assert len(display.frames) >= 4
     unusable = [r for r in caplog.records if r.message == 'tiles file unusable']
     assert len(unusable) == 1

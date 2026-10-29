@@ -154,7 +154,7 @@ def with_place(
     State
         State showing the place, with a board of `departures` and no load
         in flight, the Stop view and the Strip at the top, only the
-        needed feeds' downloads, and the map at the same zoom centred on
+        needed feeds' downloads, and the map with no knob step centred on
         the new From. Only vehicle positions and their fetch times are
         kept; the old reach goes once it is out of use.
     """
@@ -174,7 +174,6 @@ def with_place(
         scroll=0,
         strip=replace(state.strip, scroll=0, asked=0),
         map=MapState(
-            zoom=old.zoom,
             centre=shown(state=state).origin.point,
             positions=old.positions,
             fetched_at=old.fetched_at,

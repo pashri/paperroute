@@ -7,7 +7,6 @@ from typing import Final
 
 from paperroute.core.auto_model import AutoState
 from paperroute.core.geo import to_metres
-from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.model import Pin, RouteKind, StopPlace
 
 
@@ -177,7 +176,7 @@ class Quota:
 @dataclass(frozen=True)
 class Saved:
     """
-    The pins, the place shown, the Live view, the zoom and settings.
+    The pins, the place shown, the Live view and settings.
 
     Attributes
     ----------
@@ -189,8 +188,6 @@ class Saved:
         The place shown ahead of the pins, or None to show the current pin.
     view : LiveView
         The Live view shown.
-    zoom : int
-        The map zoom, an index into `ZOOMS`.
     settings : Settings
         The choices made on the Settings page.
     quota : Quota
@@ -203,7 +200,6 @@ class Saved:
     current: int
     unpinned: Pin | None
     view: LiveView
-    zoom: int
     settings: Settings = field(default_factory=Settings)
     quota: Quota = field(default_factory=Quota)
     auto: AutoState = field(default_factory=AutoState)
@@ -220,7 +216,6 @@ DEFAULT_SAVED: Final[Saved] = Saved(
     current=0,
     unpinned=DEFAULT_PLACE,
     view=LiveView.MAP,
-    zoom=DEFAULT_ZOOM,
 )
 
 
@@ -236,13 +231,11 @@ def seeded(*, pin: Pin) -> Saved:
     Returns
     -------
     Saved
-        The pin alone, current, with no unpinned place and the default
-        zoom.
+        The pin alone, current, with no unpinned place.
     """
     return Saved(
         pins=(pin,),
         current=0,
         unpinned=None,
         view=LiveView.STOP,
-        zoom=DEFAULT_ZOOM,
     )

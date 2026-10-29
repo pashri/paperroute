@@ -4,7 +4,6 @@ from dataclasses import replace
 from datetime import timedelta
 
 from paperroute.core.geo import make_shape
-from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import MapData
 from paperroute.core.model import Mode, Pin
 from paperroute.core.places import (
@@ -58,9 +57,15 @@ def state_with(
         current=current,
         unpinned=unpinned,
         view=LiveView.STOP,
-        zoom=DEFAULT_ZOOM,
     )
     return initial_state(saved=saved, now=START, stored=True)
+
+
+def test_new_place_resets_step() -> None:
+    """Showing another place drops the knob step."""
+    state = state_with()
+    state = replace(state, map=replace(state.map, step=3))
+    assert with_place(state=state, pin=ELSEWHERE).map.step == 0
 
 
 def test_shown_is_the_current_pin() -> None:
@@ -78,7 +83,7 @@ def test_shown_is_the_unpinned_place_first() -> None:
 
 
 def test_with_place_resets_what_belonged_to_the_old_place() -> None:
-    """The board, scroll, map data and failures go; zoom and positions stay."""
+    """The board, scroll, map data, failures and step go; positions stay."""
     state = state_with()
     bus = departure(departs=START + timedelta(minutes=3))
     state = replace(
@@ -90,7 +95,7 @@ def test_with_place_resets_what_belonged_to_the_old_place() -> None:
         scroll=4,
         map=replace(
             state.map,
-            zoom=0,
+            step=-2,
             shapes={'s': make_shape(shape_id='s', points=[(0, 0), (1, 1)])},
             requested_shapes=frozenset({'s'}),
             positions={'p': snapshot(fetched_at=START, vehicles=())},
@@ -103,7 +108,7 @@ def test_with_place_resets_what_belonged_to_the_old_place() -> None:
     assert (after.feeds, after.snapshots, after.scroll) == ((), {}, 0)
     assert after.last_fetch is None
     assert after.map.centre == ELSEWHERE.origin.point
-    assert after.map.zoom == 0
+    assert after.map.step == 0
     assert not after.map.shapes
     assert not after.map.requested_shapes
     assert set(after.map.positions) == {'p'}

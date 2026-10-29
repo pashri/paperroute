@@ -1,4 +1,4 @@
-"""Tests for the step from state.json schema 9 to 10."""
+"""Tests for the steps from state.json schema 9 to 11."""
 
 import json
 from dataclasses import replace
@@ -8,8 +8,17 @@ from typing import Any, Final
 
 import pytest
 
-from paperroute.adapters.state_file import JsonStateRepository
-from paperroute.adapters.state_migrations import add_ways, v9_ref
+from paperroute.adapters.state_file import (
+    JsonStateRepository,
+    from_model,
+    state_model_of,
+)
+from paperroute.adapters.state_migrations import (
+    SCHEMA_VERSION,
+    add_ways,
+    drop_zoom,
+    v9_ref,
+)
 from paperroute.core.model import (
     SYDNEY,
     AutoWindow,
@@ -358,7 +367,7 @@ def test_saved_pin_holds_no_change_field(path: Path) -> None:
     saved: Saved = replace(DEFAULT_SAVED)
     JsonStateRepository(path=path).save(saved=saved)
     data = json.loads(path.read_text())
-    assert data['schema_version'] == 10
+    assert data['schema_version'] == SCHEMA_VERSION
     assert data['unpinned']['ways'] == []
     assert data['unpinned']['never'] == []
 
@@ -384,3 +393,119 @@ def test_pins_sharing_identity_merged() -> None:
     assert pins[0]['windows'] == [WINDOW, other]
     assert len(pins[0]['ways']) == 1
     assert pins[1]['origin'] == PIN_1['origin']
+
+
+def v10_pin(
+    *,
+    origin: dict[str, object],
+    destination: dict[str, object] | None,
+    kind: str | None,
+    ways: list[object] | None = None,
+) -> dict[str, object]:
+    """
+    Give a pin as schema 10 stored it.
+
+    Parameters
+    ----------
+    origin : dict[str, object]
+        The From.
+    destination : dict[str, object] | None
+        The To.
+    kind : str | None
+        The kind.
+    ways : list[object] | None
+        The ways; none when not given.
+
+    Returns
+    -------
+    dict[str, object]
+        The stored pin.
+    """
+    return {
+        'origin': origin,
+        'destination': destination,
+        'kind': kind,
+        'routes': ['T1'] if destination is None else [],
+        'nickname': None,
+        'only': [],
+        'windows': [],
+        'ways': ways or [],
+        'never': [],
+    }
+
+
+def v10_data() -> dict[str, object]:
+    """
+    Give a schema 10 file shaped like a real one saved by the spike.
+
+    Returns
+    -------
+    dict[str, object]
+        Six pins, the last a connection, at zoom 4 on the Stop view.
+    """
+    parramatta = stop('215020', 'Parramatta Station')
+    change = {'alight': parramatta, 'board': parramatta, 'allow': 2}
+    return {
+        'schema_version': 10,
+        'pins': [
+            v10_pin(
+                origin=stop('G2145618', 'Constitution Hill Library'),
+                destination=stop('214520', 'Wentworthville Station'),
+                kind='bus',
+            ),
+            v10_pin(origin=parramatta, destination=None, kind='train'),
+            v10_pin(
+                origin=stop('G2145615', 'Hollis St'),
+                destination=parramatta,
+                kind='bus',
+            ),
+            v10_pin(
+                origin=stop('201510', 'Redfern Station'),
+                destination=None,
+                kind='train',
+            ),
+            v10_pin(
+                origin=stop('G257060', 'Old Hume Hwy'),
+                destination=stop('200070', 'Town Hall Station'),
+                kind='bus',
+            ),
+            v10_pin(
+                origin=stop('G2145615', 'Hollis St'),
+                destination=stop('200070', 'Town Hall Station'),
+                kind=None,
+                ways=[{'changes': [change], 'ticked': True}],
+            ),
+        ],
+        'current': 5,
+        'unpinned': None,
+        'view': 'stop',
+        'zoom': 4,
+        'settings': {
+            'auto_rebuild': True,
+            'peak_rate': '30s',
+            'offpeak_rate': '2min',
+            'quiet_mode': 'my_hours',
+            'my_hours': {'start': '23:00', 'end': '05:30'},
+            'connection_map': 'first_leg',
+        },
+        'quota': {'day': '2026-10-29', 'calls': 859},
+        'auto': {'occurrence': None, 'before': None, 'overridden_at': None},
+    }
+
+
+def test_v10_zoom_is_dropped() -> None:
+    """A schema 10 file with a zoom loads at 11 without it."""
+    model = state_model_of(text=json.dumps(v10_data()))
+    assert model.schema_version == SCHEMA_VERSION == 11
+    assert 'zoom' not in model.model_dump()
+    saved = from_model(model=model)
+    assert len(saved.pins) == 6
+    assert saved.current == 5
+    assert len(saved.pins[5].ways) == 1
+
+
+def test_drop_zoom_without_zoom() -> None:
+    """Data with no zoom passes through unchanged."""
+    data: dict[str, object] = {'view': 'stop'}
+    assert drop_zoom(data) == {'view': 'stop'}
+    assert drop_zoom({'zoom': 4, 'view': 'map'}) == {'view': 'map'}

@@ -181,7 +181,7 @@ def on_view(
         State and effects after the load.
     """
     saved = Saved(
-        pins=(pin,), current=0, unpinned=None, view=view, zoom=DEFAULT_ZOOM,
+        pins=(pin,), current=0, unpinned=None, view=view,
     )
     state = initial_state(saved=saved, now=START, stored=True)
     return step(

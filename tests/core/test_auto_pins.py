@@ -395,7 +395,6 @@ def restarted(*, auto: AutoState, current: int) -> State:
         current=current,
         unpinned=None,
         view=LiveView.STOP,
-        zoom=seeded(pin=HOME).zoom,
         auto=auto,
     )
     state = initial_state(saved=saved, now=at(8), stored=True)

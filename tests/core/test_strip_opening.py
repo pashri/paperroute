@@ -387,7 +387,6 @@ def strip_with_end_open(*, pins: tuple[Pin, ...]) -> State:
     """
     saved = Saved(
         pins=pins, current=0, unpinned=None, view=LiveView.STRIP,
-        zoom=DEFAULT_ZOOM,
     )
     state = initial_state(saved=saved, now=START, stored=True)
     state, _ = run(state=state, events=[

@@ -128,7 +128,6 @@ from paperroute.core.state_model import (
 )
 from paperroute.core.state_saves import saved_effects
 from paperroute.core.state_views import saved_of, settled
-from paperroute.core.tiles import ZOOMS
 from paperroute.core.wifi import setup_expired, setup_knob
 
 
@@ -139,7 +138,7 @@ def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
     Parameters
     ----------
     saved : Saved
-        The pins, place, view and zoom to start with, with the places'
+        The pins, place and view to start with, with the places'
         names and points filled in.
     now : datetime
         Start time.
@@ -150,8 +149,8 @@ def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
     Returns
     -------
     State
-        State. A current pin out of range is clamped, a zoom too, and with
-        no place to show Town Hall is unpinned.
+        State, the map with no knob step. A current pin out of range is
+        clamped, and with no place to show Town Hall is unpinned.
     """
     state = State(
         now=now,
@@ -166,8 +165,7 @@ def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
         auto=saved.auto,
     )
     centre = shown(state=state).origin.point
-    zoom = min(max(saved.zoom, 0), len(ZOOMS) - 1)
-    return replace(state, map=MapState(zoom=zoom, centre=centre))
+    return replace(state, map=MapState(centre=centre))
 
 
 def needed_feeds(*, state: State) -> tuple[str, ...]:

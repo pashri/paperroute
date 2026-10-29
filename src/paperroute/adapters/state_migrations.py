@@ -10,7 +10,7 @@ from paperroute.adapters.state_change import add_connections, before_rewritten
 from paperroute.adapters.state_settings import default_settings
 from paperroute.core.model import TRAINLINK
 
-SCHEMA_VERSION: Final[int] = 10
+SCHEMA_VERSION: Final[int] = 11
 
 
 def coach_pin(*, pin: object) -> object:
@@ -551,6 +551,23 @@ def ways_added(
     }
 
 
+def drop_zoom(data: dict[str, object]) -> dict[str, object]:
+    """
+    Drop the saved map zoom, which is no longer kept.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Version 10 data.
+
+    Returns
+    -------
+    dict[str, object]
+        The data without its ``zoom`` key, if it had one.
+    """
+    return {key: value for key, value in data.items() if key != 'zoom'}
+
+
 MIGRATIONS: Final[
     dict[int, Callable[[dict[str, object]], dict[str, object]]]
 ] = {
@@ -563,6 +580,7 @@ MIGRATIONS: Final[
     7: add_auto,
     8: add_connections,
     9: add_ways,
+    10: drop_zoom,
 }
 
 

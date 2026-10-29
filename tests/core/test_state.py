@@ -32,7 +32,7 @@ from paperroute.core.connection_view import ConnectionView
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.geo import Point, make_shape
 from paperroute.core.map_requests import map_feeds, shows_vehicles
-from paperroute.core.map_state import area_box
+from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import DEFAULT_ZOOM, MAP_WIDTH, MapView
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
@@ -292,6 +292,12 @@ def test_initial_state_centres_on_the_pins_point() -> None:
     """The Map starts centred on the pin's From."""
     assert fresh(centre=CENTRE).map.centre == CENTRE
     assert fresh().map.centre is None
+
+
+def test_start_has_step_zero() -> None:
+    """The Map starts with no knob step, at the resting zoom."""
+    assert fresh(centre=CENTRE).map.step == 0
+    assert fresh(centre=CENTRE).map.frame is None
 
 
 def test_stop_view_names_the_pins_places() -> None:
@@ -628,14 +634,31 @@ def test_entering_map_requests_modes_shapes_and_renders_map() -> None:
     assert isinstance(renders[0].view, MapView)
 
 
+def map_zoom(*, state: State) -> int:
+    """
+    Give the zoom of the map area shown.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    int
+        The frame's zoom, else the resting zoom.
+    """
+    return area_frame(map_state=state.map)[1]
+
+
 def test_bottom_turn_zooms_on_map_and_scrolls_on_stop() -> None:
     """On the Stop view the turn scrolls; on the Map it zooms."""
     state = loaded(state=fresh(), count=20)
     state, _ = turned(state=state, steps=2)
-    assert (state.scroll, state.map.zoom) == (2, DEFAULT_ZOOM)
+    assert (state.scroll, state.map.step) == (2, 0)
     state, _ = step(state, PRESS)
     state, effects = turned(state=state, steps=1)
-    assert ZOOMS[state.map.zoom] == 5
+    assert ZOOMS[map_zoom(state=state)] == 5
     assert state.scroll == 2
     renders = effects_of(effects=effects, kind=Render)
     assert len(renders) == 1
@@ -647,13 +670,13 @@ def test_zoom_clamps_at_both_ends() -> None:
     """Spinning either way stops at 3 and 45 m/px."""
     state, _ = step(loaded(state=fresh()), PRESS)
     state, _ = turned(state=state, steps=10)
-    assert ZOOMS[state.map.zoom] == 3
+    assert ZOOMS[map_zoom(state=state)] == 3
     state, _ = turned(state=state, steps=1)
-    assert ZOOMS[state.map.zoom] == 3
+    assert ZOOMS[map_zoom(state=state)] == 3
     state, _ = turned(state=state, steps=-10)
-    assert ZOOMS[state.map.zoom] == 45
+    assert ZOOMS[map_zoom(state=state)] == 45
     state, _ = turned(state=state, steps=-1)
-    assert ZOOMS[state.map.zoom] == 45
+    assert ZOOMS[map_zoom(state=state)] == 45
 
 
 def test_zoom_is_kept_after_returning_to_stop() -> None:
@@ -1532,7 +1555,7 @@ def check_effects(
         Effects returned.
     """
     assert after.scroll >= 0
-    assert 0 <= after.map.zoom < len(ZOOMS)
+    assert abs(after.map.step) < len(ZOOMS)
     assert after.view in LIVE_VIEWS
     if after.view is LiveView.STOP and isinstance(after.last_view, StopView):
         assert after.scroll == after.last_view.scroll
@@ -1982,7 +2005,6 @@ def start_saved(draw: st.DrawFn) -> Saved:
             current=draw(st.integers(-1, 4)),
             unpinned=draw(st.sampled_from([None, ELSEWHERE])),
             view=draw(st.sampled_from(LIVE_VIEWS)),
-            zoom=DEFAULT_ZOOM,
         ),
     ]
     return draw(st.sampled_from(options))
@@ -2153,7 +2175,7 @@ def city_map(*, count: int = 1) -> State:
     state = loaded(state=fresh(centre=CENTRE), count=count, shaped=True)
     state, _ = step(state, PRESS)
     state, _ = turned(state=state, steps=-len(ZOOMS))
-    assert ZOOMS[state.map.zoom] == CITY
+    assert ZOOMS[map_zoom(state=state)] == CITY
     return state
 
 
@@ -2424,7 +2446,6 @@ def pinned(
         current=current,
         unpinned=unpinned,
         view=view,
-        zoom=DEFAULT_ZOOM,
     )
     state = initial_state(saved=saved, now=START, stored=True)
     state, _ = step(state, Tick(now=START))
@@ -2581,12 +2602,12 @@ def test_bottom_turn_scrolls_stop_and_zooms_map_and_strip_map() -> None:
     """The Stop view scrolls; both map views zoom; the Strip moves neither."""
     state = loaded(state=fresh(centre=CENTRE), count=20)
     state, _ = step(state, KnobTurned(knob=Knob.BOTTOM, steps=2))
-    assert (state.scroll, state.map.zoom) == (2, DEFAULT_ZOOM)
+    assert (state.scroll, state.map.step) == (2, 0)
     zooms = []
     for _ in range(3):
         state, _ = step(state, PRESS)
         state, _ = step(state, KnobTurned(knob=Knob.BOTTOM, steps=-1))
-        zooms.append(state.map.zoom)
+        zooms.append(map_zoom(state=state))
     assert zooms == [DEFAULT_ZOOM + 1, DEFAULT_ZOOM + 1, DEFAULT_ZOOM + 2]
     assert state.scroll == 2
 
@@ -2745,7 +2766,6 @@ def test_new_timetable_version_matches_every_place() -> None:
         current=0,
         unpinned=ELSEWHERE,
         view=LiveView.STOP,
-        zoom=DEFAULT_ZOOM,
     )
     state = initial_state(saved=saved, now=START, stored=True)
     state = loaded(state=state)

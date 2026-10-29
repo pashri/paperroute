@@ -8,6 +8,7 @@ from paperroute.core.chains import all_departures
 from paperroute.core.connection import live_chains
 from paperroute.core.connection_map import connection_inputs
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
+from paperroute.core.map_fit import resting_zoom
 from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import (
     MapInputs,
@@ -191,7 +192,7 @@ def pin_map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
         stop_view=stop_view,
         departures=drawn_departures(state=state, stop_view=stop_view),
         centre=state.map.centre,
-        zoom=state.map.zoom,
+        zoom=resting_zoom(step=state.map.step),
         positions=polled_positions(state=state),
         patterns=state.map.patterns,
         shapes=state.map.shapes,

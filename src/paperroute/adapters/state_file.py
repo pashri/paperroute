@@ -59,7 +59,6 @@ from paperroute.core.model import (
 )
 from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
 from paperroute.core.saved import DEFAULT_SAVED, LiveView, Quota, Saved
-from paperroute.core.tiles import ZOOMS
 from paperroute.ports import Loaded
 
 logger = logging.getLogger(__name__)
@@ -157,7 +156,6 @@ class StateModel(BaseModel):
     current: int = Field(ge=0)
     unpinned: PinModel | None
     view: LiveView
-    zoom: int = Field(ge=0, le=len(ZOOMS) - 1)
     settings: SettingsModel
     quota: QuotaModel
     auto: AutoModel
@@ -423,7 +421,6 @@ def to_model(*, saved: Saved) -> StateModel:
         current=saved.current,
         unpinned=None if unpinned is None else pin_to_model(pin=unpinned),
         view=saved.view,
-        zoom=saved.zoom,
         settings=settings_to_model(settings=saved.settings),
         quota=QuotaModel(day=saved.quota.day, calls=saved.quota.calls),
         auto=auto_to_model(auto=saved.auto),
@@ -458,7 +455,6 @@ def from_model(*, model: StateModel) -> Saved:
         current=min(model.current, max(len(pins) - 1, 0)),
         unpinned=unpinned,
         view=model.view,
-        zoom=model.zoom,
         settings=settings_from_model(model=model.settings),
         quota=Quota(day=model.quota.day, calls=model.quota.calls),
         auto=auto_from_model(model=model.auto),

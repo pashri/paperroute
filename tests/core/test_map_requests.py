@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from paperroute.core.feeds import ALL_POSITION_MODES, position_feeds
 from paperroute.core.geo import Point
 from paperroute.core.map_requests import map_feeds, request_positions
-from paperroute.core.map_state import area_box
+from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import (
     Knob,
@@ -71,7 +71,7 @@ def area(*, state: State, centre: Point = CENTRE) -> LoadModes:
     LoadModes
         The request.
     """
-    mpp = ZOOMS[state.map.zoom]
+    mpp = ZOOMS[area_frame(map_state=state.map)[1]]
     return LoadModes(mpp=mpp, box=area_box(centre=centre, mpp=mpp))
 
 

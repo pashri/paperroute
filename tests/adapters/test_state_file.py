@@ -44,7 +44,6 @@ from paperroute.core.saved import (
 )
 from paperroute.core.state import initial_state
 from paperroute.core.state_views import saved_of
-from paperroute.core.tiles import ZOOMS
 from tests.core.connection_factories import WORK, WORK_CHANGE
 from tests.core.factories import pin_at
 from tests.core.test_auto_pins import is_shown, started, ticked, trusted
@@ -152,7 +151,7 @@ def saved_values(draw: st.DrawFn) -> Saved:
     Returns
     -------
     Saved
-        Zero to five pins, a valid current index, any view and zoom.
+        Zero to five pins, a valid current index and any view.
     """
     pins = tuple(draw(st.lists(PINS, max_size=5)))
     unpinned = draw(st.none() | PINS) if pins else draw(PINS)
@@ -161,7 +160,6 @@ def saved_values(draw: st.DrawFn) -> Saved:
         current=draw(st.integers(0, max(len(pins) - 1, 0))),
         unpinned=unpinned,
         view=draw(st.sampled_from(LiveView)),
-        zoom=draw(st.integers(0, len(ZOOMS) - 1)),
         settings=draw(settings_values()),
     )
 
@@ -185,7 +183,6 @@ def sample() -> Saved:
         current=1,
         unpinned=None,
         view=LiveView.STRIP,
-        zoom=0,
     )
 
 
@@ -262,7 +259,7 @@ def test_wrong_field_type_gives_defaults(path: Path) -> None:
     repository = JsonStateRepository(path=path)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
-    data['zoom'] = 'big'
+    data['current'] = 'big'
     path.write_text(json.dumps(data))
     assert repository.load().saved == DEFAULT_SAVED
 
@@ -366,6 +363,15 @@ def test_failed_write_keeps_old_file(locked: Path) -> None:
     assert [p.name for p in locked.parent.iterdir()] == ['state.json']
 
 
+def test_state_file_round_trip_has_no_zoom(path: Path) -> None:
+    """The map zoom is not saved, and a saved state loads back the same."""
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=sample())
+    assert 'zoom' not in json.loads(path.read_text())
+    assert not hasattr(sample(), 'zoom')
+    assert repository.load().saved == sample()
+
+
 def test_file_holds_no_secret_keys(path: Path) -> None:
     """Only the documented keys are written."""
     JsonStateRepository(path=path).save(saved=sample())
@@ -376,7 +382,6 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
         'current',
         'unpinned',
         'view',
-        'zoom',
         'settings',
         'quota',
         'auto',

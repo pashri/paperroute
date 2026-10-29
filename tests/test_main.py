@@ -36,6 +36,7 @@ from paperroute.__main__ import (
     web_main,
     wifi_for,
 )
+from paperroute.adapters.checked_tiles import CheckedTiles
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.power import NullPower, SystemctlPower
@@ -54,7 +55,7 @@ from paperroute.core.geo import to_metres
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
 from paperroute.core.messages import Event
 from paperroute.core.model import SYDNEY
-from paperroute.core.tiles import TILE_STYLE, TileVariant
+from paperroute.core.tiles import TILE_STYLE, ZOOMS, TileVariant, levels_text
 from paperroute.observers import Timings
 from paperroute.render.canvas import INK
 from paperroute.render.map_base import draw_map_base
@@ -216,7 +217,7 @@ def test_tiles_arguments_parse(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_tiles_for_tolerates_a_missing_file(tmp_path: Path) -> None:
     """A missing tiles file opens as an empty build; no file gives none."""
     with tiles_for(args=argparse.Namespace(tiles=tmp_path / 'no.db')) as tiles:
-        assert isinstance(tiles, SqliteTileRepository)
+        assert isinstance(tiles, CheckedTiles)
         assert tiles.version() is None
     with tiles_for(args=argparse.Namespace(tiles=None)) as tiles:
         assert isinstance(tiles, NullTiles)
@@ -268,6 +269,42 @@ def test_mismatched_tiles_open_as_no_tiles(
         f'none; this release needs 3,5,8,14,25,45 and {TILE_STYLE}, so '
         'the map is off'
     ) in caplog.text
+
+
+def test_tiles_installed_while_running_are_checked(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A mismatched file that appears after start-up reads as no tiles."""
+    out = tmp_path / 'tiles.db'
+    with (
+        caplog.at_level(logging.WARNING),
+        tiles_for(args=argparse.Namespace(tiles=out)) as tiles,
+    ):
+        assert tiles.version() is None
+        old_tiles(out=out)
+        assert tiles.version() is None
+        assert tiles.street_labels(zoom=8, box=(0.0, 0.0, 1.0, 1.0)) == []
+        grey = TileVariant.GREY
+        assert tiles.tile(zoom=8, col=0, row=0, variant=grey) is None
+        assert tiles.version() is None
+    assert caplog.text.count('so the map is off') == 1
+
+
+def test_matching_tiles_installed_while_running_are_read(
+    tmp_path: Path,
+) -> None:
+    """A matching file that appears after start-up is read."""
+    out = tmp_path / 'tiles.db'
+    with tiles_for(args=argparse.Namespace(tiles=out)) as tiles:
+        assert tiles.version() is None
+        with TileWriter(out=out) as writer:
+            writer.finish(meta={
+                'zooms': levels_text(zooms=ZOOMS), 'style': TILE_STYLE,
+            })
+        assert tiles.version() is not None
+        assert tiles.street_labels(zoom=8, box=(0.0, 0.0, 1.0, 1.0)) == []
+        grey = TileVariant.GREY
+        assert tiles.tile(zoom=8, col=0, row=0, variant=grey) is None
 
 
 def test_mismatched_tiles_draw_map_not_installed(tmp_path: Path) -> None:

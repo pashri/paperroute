@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING, Final
 from aiohttp import web
 
 from paperroute.adapters.act_led import ActLed
+from paperroute.adapters.checked_tiles import CheckedTiles, warn_unfit
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.device_probe import SystemProbe
 from paperroute.adapters.feed_files import FileFeedsClient
@@ -44,7 +45,7 @@ from paperroute.app import Ports, run
 from paperroute.app_device import DevicePorts
 from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin, StopPlace
-from paperroute.core.tiles import TILE_STYLE, ZOOMS, TileVariant, levels_text
+from paperroute.core.tiles import TileVariant
 from paperroute.logs import LastError, configure_logging
 from paperroute.observers import ObserverGroup, Timings
 from paperroute.ports import (
@@ -538,7 +539,8 @@ def tiles_for(*, args: argparse.Namespace) -> Iterator[TileRepository]:
     TileRepository
         The tiles file, which may be missing. No tiles without --tiles,
         or when the file was built for other zoom levels or another map
-        style; the maps then say "Map not installed".
+        style; the maps then say "Map not installed". A file installed
+        while the app runs is checked when it is first seen.
     """
     if args.tiles is None:
         yield NullTiles()
@@ -550,35 +552,11 @@ def tiles_for(*, args: argparse.Namespace) -> Iterator[TileRepository]:
         warn_unfit(path=args.tiles, built=built)
         yield NullTiles()
         return
+    checked = CheckedTiles(tiles=tiles, path=args.tiles)
     try:
-        yield tiles
+        yield checked
     finally:
-        tiles.close()
-
-
-def warn_unfit(
-    *, path: Path, built: tuple[tuple[int, ...] | None, str | None]
-) -> None:
-    """
-    Log that a tiles file doesn't fit this release, so the map is off.
-
-    Parameters
-    ----------
-    path : Path
-        The tiles file.
-    built : tuple[tuple[int, ...] | None, str | None]
-        The zoom levels and style it was built for.
-    """
-    zooms, style = built
-    logger.warning(
-        'tiles: %s was built for zoom levels %s and style %s; this '
-        'release needs %s and %s, so the map is off',
-        path,
-        levels_text(zooms=zooms),
-        style or 'none',
-        levels_text(zooms=ZOOMS),
-        TILE_STYLE,
-    )
+        checked.close()
 
 
 def install_stop_signals(

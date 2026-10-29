@@ -20,6 +20,10 @@ class FeedError(Exception):
     """A feed couldn't be fetched."""
 
 
+class FeedUnavailable(FeedError):
+    """TfNSW timed out or answered with a server error (HTTP 5xx)."""
+
+
 class FeedThrottled(FeedError):
     """
     TfNSW refused a feed for going over the rate limit (HTTP 429).
@@ -130,6 +134,8 @@ def check_status(*, feed: str, response: aiohttp.ClientResponse) -> None:
     ------
     FeedThrottled
         On HTTP 429, with any Retry-After.
+    FeedUnavailable
+        On HTTP 5xx.
     FeedError
         On any other status but 200.
     """
@@ -141,6 +147,8 @@ def check_status(*, feed: str, response: aiohttp.ClientResponse) -> None:
                 now=datetime.now(tz=UTC),
             ),
         )
+    if response.status >= HTTPStatus.INTERNAL_SERVER_ERROR:
+        raise FeedUnavailable(f'{feed}: HTTP {response.status}')
     if response.status != HTTPStatus.OK:
         raise FeedError(f'{feed}: HTTP {response.status}')
 
@@ -226,8 +234,10 @@ class AiohttpFeedsClient:
         ------
         FeedThrottled
             On HTTP 429.
+        FeedUnavailable
+            On HTTP 5xx or a timeout.
         FeedError
-            On another non-200 status, a timeout or a connection error.
+            On another non-200 status or a connection error.
         """
         self.session = self.session or aiohttp.ClientSession()
         if self.limiter:
@@ -243,7 +253,9 @@ class AiohttpFeedsClient:
             ) as response:
                 check_status(feed=feed, response=response)
                 return await response.read()
-        except (aiohttp.ClientError, TimeoutError) as error:
+        except TimeoutError as error:
+            raise FeedUnavailable(f'{feed}: TimeoutError') from error
+        except aiohttp.ClientError as error:
             raise FeedError(f'{feed}: {type(error).__name__}') from error
 
     async def close(self) -> None:

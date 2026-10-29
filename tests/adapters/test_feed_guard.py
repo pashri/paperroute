@@ -10,7 +10,7 @@ from paperroute.adapters.feed_guard import (
     GuardedFeeds,
     backoff_s,
 )
-from paperroute.adapters.tfnsw import FeedError, FeedThrottled
+from paperroute.adapters.tfnsw import FeedError, FeedThrottled, FeedUnavailable
 
 BUSES: Final[str] = 'v1/gtfs/vehiclepos/buses'
 TRAINS: Final[str] = 'v2/gtfs/vehiclepos/sydneytrains'
@@ -199,10 +199,49 @@ async def test_retry_after_is_honoured() -> None:
     assert await guard.fetch(feed=BUSES) == b'ok'
 
 
+@pytest.mark.parametrize(
+    'reason', [f'{BUSES}: TimeoutError', f'{BUSES}: HTTP 502'],
+)
+async def test_outage_backs_off_and_doubles(reason: str) -> None:
+    """A timeout or 5xx holds the feed 30 s, then 60 s, until it works."""
+    guard, inner, clock = guarded(
+        script={
+            BUSES: [FeedUnavailable(reason), FeedUnavailable(reason), b'ok'],
+        },
+    )
+    for wait in (0, 30):
+        clock.now += wait
+        with pytest.raises(FeedUnavailable):
+            await guard.fetch(feed=BUSES)
+    clock.now += 59
+    with pytest.raises(FeedBackingOff, match='backing off'):
+        await guard.fetch(feed=BUSES)
+    clock.now += 1
+    assert await guard.fetch(feed=BUSES) == b'ok'
+    assert inner.calls == [BUSES] * 3
+
+
+async def test_outage_then_429_keeps_doubling() -> None:
+    """A 429 straight after a timeout counts as the second strike."""
+    guard, _, clock = guarded(
+        script={
+            BUSES: [FeedUnavailable(f'{BUSES}: TimeoutError'), throttled()],
+        },
+    )
+    with pytest.raises(FeedUnavailable):
+        await guard.fetch(feed=BUSES)
+    clock.now += 30
+    with pytest.raises(FeedThrottled):
+        await guard.fetch(feed=BUSES)
+    clock.now += 59
+    with pytest.raises(FeedBackingOff):
+        await guard.fetch(feed=BUSES)
+
+
 async def test_other_errors_do_not_back_off() -> None:
-    """A failure that isn't a 429 leaves the feed free to try again."""
+    """A refusal that isn't a 429, a 5xx or a timeout tries again."""
     guard, inner, _ = guarded(
-        script={BUSES: [FeedError(f'{BUSES}: HTTP 503'), b'ok']},
+        script={BUSES: [FeedError(f'{BUSES}: HTTP 403'), b'ok']},
     )
     with pytest.raises(FeedError):
         await guard.fetch(feed=BUSES)

@@ -18,6 +18,7 @@ from paperroute.adapters.tfnsw import (
     AiohttpFeedsClient,
     FeedError,
     FeedThrottled,
+    FeedUnavailable,
     NoApiKey,
     api_key_from_env,
     read_retry_after,
@@ -118,7 +119,7 @@ async def slow_handler(request: web.Request) -> web.Response:
 
 
 async def test_fetch_raises_feed_error_on_timeout() -> None:
-    """A slow server gives FeedError naming TimeoutError, not the key."""
+    """A slow server gives FeedUnavailable naming TimeoutError, not the key."""
     app = web.Application()
     app.router.add_get('/v1/gtfs/realtime/buses', slow_handler)
     server = TestServer(app)
@@ -129,7 +130,7 @@ async def test_fetch_raises_feed_error_on_timeout() -> None:
         timeout_s=0.05,
     )
     try:
-        with pytest.raises(FeedError) as caught:
+        with pytest.raises(FeedUnavailable) as caught:
             await client.fetch(feed='v1/gtfs/realtime/buses')
         assert 'TimeoutError' in str(caught.value)
         assert 'secret' not in str(caught.value)
@@ -363,3 +364,36 @@ def test_read_retry_after(value: str | None, seconds: float | None) -> None:
     """Seconds and HTTP dates are read; anything else is None."""
     now = datetime(2026, 10, 29, 4, 0, tzinfo=UTC)
     assert read_retry_after(value=value, now=now) == seconds
+
+
+@pytest.mark.parametrize(
+    ('status', 'unavailable'),
+    [
+        (HTTPStatus.BAD_GATEWAY, True),
+        (HTTPStatus.INTERNAL_SERVER_ERROR, True),
+        (HTTPStatus.FORBIDDEN, False),
+    ],
+)
+async def test_server_errors_are_unavailable(
+    status: HTTPStatus, unavailable: bool,
+) -> None:
+    """A 5xx raises FeedUnavailable; another refusal a plain FeedError."""
+
+    async def handler(_: web.Request) -> web.Response:
+        return web.Response(status=status)
+
+    app = web.Application()
+    app.router.add_get('/v1/gtfs/realtime/buses', handler)
+    server = TestServer(app)
+    await server.start_server()
+    client = AiohttpFeedsClient(
+        key=lambda: 'secret', base_url=str(server.make_url('/')),
+    )
+    try:
+        with pytest.raises(FeedError) as caught:
+            await client.fetch(feed='v1/gtfs/realtime/buses')
+    finally:
+        await client.close()
+        await server.close()
+    assert str(caught.value) == f'v1/gtfs/realtime/buses: HTTP {status}'
+    assert isinstance(caught.value, FeedUnavailable) is unavailable

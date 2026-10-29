@@ -69,6 +69,9 @@ UNIT_ENVIRONMENT: Final[str] = (
     'PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets'
     f' FONTCONFIG_FILE=/opt/paperroute/current/{FONTS_CONF}'
 )
+JOURNALD: Final[dict[str, dict[str, str]]] = {
+    'Journal': {'Storage': 'volatile', 'RuntimeMaxUse': '24M'},
+}
 APP_SERVICE: Final[dict[str, str]] = {
     'Type': 'notify',
     'NotifyAccess': 'main',
@@ -1842,6 +1845,16 @@ def test_shipped_fonts_conf_is_minimal() -> None:
         capture_output=True,
         text=True,
     ).stdout
+
+
+def test_journald_keeps_volatile_storage_with_room_for_a_week() -> None:
+    """The journal stays in RAM, sparing the SD card, capped at 24 MB."""
+    parser = UnitParser(interpolation=None, delimiters=('=',))
+    parser.read(filenames=DEPLOY / 'conf' / 'journald.conf', encoding='utf-8')
+    found = {
+        section: dict(parser[section]) for section in parser.sections()
+    }
+    assert found == JOURNALD
 
 
 def test_provision_installs_fontconfig_config() -> None:

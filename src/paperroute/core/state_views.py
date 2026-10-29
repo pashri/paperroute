@@ -240,12 +240,12 @@ def live_view(*, state: State, stop_view: StopView) -> ScreenView:
             strip = shown_strip(state=state, stop_view=stop_view)
             return build_strip_view(inputs=strip)
         case LiveView.STRIP_MAP:
-            inputs = map_inputs(state=state, stop_view=stop_view)
+            inputs = map_inputs(
+                state=state, stop_view=stop_view, width=STRIP_MAP_WIDTH,
+            )
             strip = shown_strip(state=state, stop_view=stop_view)
             return StripMapView(
-                map=build_map_view(
-                    inputs=replace(inputs, width=STRIP_MAP_WIDTH),
-                ),
+                map=build_map_view(inputs=inputs),
                 pane=build_strip_pane(inputs=strip),
             )
         case LiveView.ALERTS if listed := shown_alerts(state=state):

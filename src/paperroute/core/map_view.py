@@ -11,6 +11,7 @@ from paperroute.core.geo import Point, Shape
 from paperroute.core.model import Departure
 from paperroute.core.patterns import TripPattern, timetable_point
 from paperroute.core.positions import PositionsSnapshot, VehiclePosition
+from paperroute.core.ridden import route_stops, stops_window
 from paperroute.core.stop_view import NOT_PINNED, PinTag, Row, StopView
 from paperroute.core.tiles import ZOOMS, to_pixels
 
@@ -69,7 +70,10 @@ class MapBase:
     width : int
         Map width in pixels.
     trip : TripMarks | None
-        A connection's other marks, or None for a plain pin.
+        The From, To and a connection's other marks, or None for a plain
+        pin with no From point.
+    stops : tuple[Point, ...]
+        The stops the drawn departures are ridden between, each once.
     """
 
     centre: Point | None
@@ -77,6 +81,7 @@ class MapBase:
     route: tuple[tuple[Point, ...], ...]
     width: int = MAP_WIDTH
     trip: TripMarks | None = None
+    stops: tuple[Point, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -163,6 +168,10 @@ class MapInputs:
         Map width in pixels.
     vehicle_trips : frozenset[str] | None
         When set, only these trips get vehicle markers.
+    ends : tuple[Point | None, Point | None]
+        The pin's From and To points; None where missing.
+    step : int
+        Knob detents from the fitted zoom; negative is finer.
     """
 
     stop_view: StopView
@@ -175,6 +184,8 @@ class MapInputs:
     now: datetime
     width: int = MAP_WIDTH
     vehicle_trips: frozenset[str] | None = None
+    ends: tuple[Point | None, Point | None] = (None, None)
+    step: int = 0
 
 
 def map_window(
@@ -860,6 +871,12 @@ def build_map_view(*, inputs: MapInputs) -> MapView:
                 shapes=inputs.shapes,
             ),
             width=inputs.width,
+            trip=plain_marks(inputs=inputs),
+            stops=route_stops(
+                departures=inputs.departures,
+                patterns=inputs.patterns,
+                window=stops_window(destination=stop.destination),
+            ),
         ),
         zoom=inputs.zoom,
         markers=(
@@ -875,3 +892,24 @@ def build_map_view(*, inputs: MapInputs) -> MapView:
         more=stop.more,
         planned=stop.planned,
     )
+
+
+def plain_marks(*, inputs: MapInputs) -> TripMarks | None:
+    """
+    Mark a pin's From and To.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+
+    Returns
+    -------
+    TripMarks | None
+        The From as the origin and the To as the end; None with no From
+        point.
+    """
+    origin, end = inputs.ends
+    if origin is None:
+        return None
+    return TripMarks(origin=origin, second=(), walk=None, change=None, end=end)

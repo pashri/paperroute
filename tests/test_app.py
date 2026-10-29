@@ -90,6 +90,7 @@ from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.tiles import (
     TILE,
+    ZOOMS,
     LabelKind,
     StreetLabel,
     TileVariant,
@@ -930,7 +931,7 @@ class PressingDisplay(FrameRecorder):
 
 def light_tiles(*, out: Path, point: Point) -> SqliteTileRepository:
     """
-    Write a tiles file with one LIGHT tile under a point and open it.
+    Write a tiles file with a LIGHT tile under a point at each zoom.
 
     Parameters
     ----------
@@ -944,16 +945,17 @@ def light_tiles(*, out: Path, point: Point) -> SqliteTileRepository:
     SqliteTileRepository
         The opened file.
     """
-    col, row = tile_of(pixel=to_pixels(point=point, mpp=MAP_MPP))
     grey = np.full((TILE, TILE), LIGHT, dtype=np.uint8)
     with TileWriter(out=out) as writer:
-        writer.add_tile(
-            zoom=MAP_MPP,
-            col=col,
-            row=row,
-            grey=pack_grey(grey=grey),
-            bits=pack_bits(paper=grey >= 128),
-        )
+        for mpp in ZOOMS:
+            col, row = tile_of(pixel=to_pixels(point=point, mpp=mpp))
+            writer.add_tile(
+                zoom=mpp,
+                col=col,
+                row=row,
+                grey=pack_grey(grey=grey),
+                bits=pack_bits(paper=grey >= 128),
+            )
         writer.finish(meta={})
     return SqliteTileRepository(path=out)
 

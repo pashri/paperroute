@@ -5,10 +5,12 @@ from datetime import datetime, timedelta
 
 from paperroute.core.feeds import ALL_POSITION_MODES, position_feeds
 from paperroute.core.geo import Point
-from paperroute.core.map_requests import map_feeds, request_positions
+from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM
+from paperroute.core.map_requests import map_feeds, pin_ends, request_positions
 from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import (
+    Effect,
     Knob,
     KnobPressed,
     LoadModes,
@@ -16,15 +18,17 @@ from paperroute.core.messages import (
     LoadShapes,
     MapDataFailed,
     ModesLoaded,
+    PatternsLoaded,
 )
-from paperroute.core.model import SYDNEY, Departure, Mode
+from paperroute.core.model import SYDNEY, Departure, Mode, Pin, RouteKind
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
+from paperroute.core.state_views import live_stop_view
 from paperroute.core.tiles import ZOOMS
 from tests.core.connection_factories import LEG1, LEG2
-from tests.core.factories import START, departure
-from tests.core.strip_factories import CENTRE, on_view, trains
+from tests.core.factories import EIGHT, START, calls, departure, pattern, place
+from tests.core.strip_factories import CENTRE, on_view, trains, turn
 from tests.core.test_connection_screens import legs_loaded, started
 
 
@@ -177,3 +181,88 @@ def test_connection_modes_around_drawn_map() -> None:
     strip, _ = step(state, KnobPressed(knob=Knob.BOTTOM))
     assert strip.view is LiveView.STRIP
     assert strip.map.frame is None
+
+
+SOUTH_TO: Point = (CENTRE[0], CENTRE[1] - 1600.0)
+EAST_TO: Point = (CENTRE[0] + 2300.0, CENTRE[1])
+
+
+def fitted_on(
+    *, view: LiveView = LiveView.MAP, to: Point = SOUTH_TO,
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Show a bus pin with a To and load its next trip's pattern.
+
+    Parameters
+    ----------
+    view : LiveView
+        The view shown.
+    to : Point
+        Where the To is.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State after the pattern loads, and the effects of both steps.
+    """
+    pin = Pin(
+        origin=place('C', name='Central', point=CENTRE),
+        destination=place('S5', name='S5', point=to),
+        kind=RouteKind.BUS,
+    )
+    state, first = on_view(view=view, pin=pin, departures=bus_pin())
+    stops = calls(
+        stations='AB',
+        start=EIGHT + 180,
+        step=1800,
+        points={'A': CENTRE, 'B': to},
+    )
+    state, then = step(
+        state,
+        PatternsLoaded(
+            trip_ids=frozenset({'trip-0803'}),
+            patterns={'trip-0803': pattern(trip_id='trip-0803', stops=stops)},
+            shapes={},
+        ),
+    )
+    return state, (*first, *then)
+
+
+def test_frame_recorded_for_plain_pins() -> None:
+    """A plain pin's fitted frame is recorded and its area asked about."""
+    state, effects = fitted_on()
+    assert live_stop_view(state=state).banner is not None
+    centre = (
+        CENTRE[0],
+        CENTRE[1] - 800.0 + (BANNER_ROOM - CREDIT_ROOM) * 5 / 2,
+    )
+    assert state.map.frame == (centre, ZOOMS.index(5))
+    assert LoadModes(mpp=5, box=area_box(centre=centre, mpp=5)) in effects
+
+
+def test_strip_map_frame_uses_strip_width() -> None:
+    """On Strip + map the frame is fitted at the strip map's width."""
+    state, _ = fitted_on(view=LiveView.STRIP_MAP, to=EAST_TO)
+    assert state.map.frame is not None
+    assert state.map.frame[1] == ZOOMS.index(8)
+    wide, _ = fitted_on(view=LiveView.MAP, to=EAST_TO)
+    assert wide.map.frame is not None
+    assert wide.map.frame[1] == ZOOMS.index(5)
+
+
+def test_new_frame_drops_area_modes() -> None:
+    """A new frame forgets the area modes asked for the old one."""
+    state, _ = fitted_on()
+    state = replace(state, map=replace(
+        state.map,
+        area_modes={5: frozenset({Mode.FERRY}), 8: frozenset({Mode.BUS})},
+        pending_modes=frozenset({14}),
+    ))
+    state, effects = step(state, turn(steps=-1))
+    assert state.map.frame is not None
+    assert state.map.frame[1] == ZOOMS.index(8)
+    assert state.map.area_modes == {}
+    assert state.map.pending_modes == {8}
+    [load] = [item for item in effects if isinstance(item, LoadModes)]
+    assert load.mpp == 8
+

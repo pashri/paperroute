@@ -8,9 +8,12 @@ from paperroute.core.chains import all_departures
 from paperroute.core.connection import live_chains
 from paperroute.core.connection_map import connection_inputs
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
-from paperroute.core.map_fit import resting_zoom
+from paperroute.core.geo import Point
+from paperroute.core.map_fit import plain_frame, resting_zoom
 from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import (
+    MAP_WIDTH,
+    STRIP_MAP_WIDTH,
     MapInputs,
     map_departures,
     needed_patterns,
@@ -185,8 +188,9 @@ def pin_map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     Returns
     -------
     MapInputs
-        Inputs at the Map's width, with only the positions of feeds the
-        view polls and the departures from `drawn_departures`.
+        Inputs at the Map's width, centred on the From at the resting
+        zoom, with only the positions of feeds the view polls and the
+        departures from `drawn_departures`.
     """
     return MapInputs(
         stop_view=stop_view,
@@ -197,10 +201,33 @@ def pin_map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
         patterns=state.map.patterns,
         shapes=state.map.shapes,
         now=state.now,
+        ends=pin_ends(state=state),
+        step=state.map.step,
     )
 
 
-def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
+def pin_ends(*, state: State) -> tuple[Point | None, Point | None]:
+    """
+    Find the shown pin's From and To points.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[Point | None, Point | None]
+        The points; None where the To or a point is missing.
+    """
+    pin = shown(state=state)
+    end = pin.destination
+    return pin.origin.point, None if end is None else end.point
+
+
+def map_inputs(
+    *, state: State, stop_view: StopView, width: int = MAP_WIDTH,
+) -> MapInputs:
     """
     Gather what the shown map is built from.
 
@@ -210,17 +237,22 @@ def map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
         State.
     stop_view : StopView
         The pin's Stop view.
+    width : int
+        Map width in pixels.
 
     Returns
     -------
     MapInputs
-        The plain pin's inputs; for a connection pin, framed on the
-        connection with the hero chain's legs as the departures.
+        A plain pin's inputs fitted to its next trip; for a connection
+        pin, framed on the connection with the hero chain's legs as the
+        departures.
     """
-    inputs = pin_map_inputs(state=state, stop_view=stop_view)
+    inputs = replace(
+        pin_map_inputs(state=state, stop_view=stop_view), width=width,
+    )
     pin = shown(state=state)
     if not is_connection(pin=pin):
-        return inputs
+        return plain_frame(inputs=inputs)
     return connection_inputs(
         inputs=inputs,
         pin=pin,
@@ -527,7 +559,10 @@ def shows_vehicles(*, state: State) -> bool:
 
 def framed_state(*, state: State, inputs: MapInputs | None) -> State:
     """
-    Record where a connection map is drawn.
+    Record where the map is drawn.
+
+    The area modes are kept by zoom alone, so a frame with a new centre
+    forgets them.
 
     Parameters
     ----------
@@ -539,16 +574,19 @@ def framed_state(*, state: State, inputs: MapInputs | None) -> State:
     Returns
     -------
     State
-        State with the connection map's centre and zoom as the map's
-        frame; no frame for a plain pin or with no centre.
+        State with the map's centre and zoom as its frame, and no area
+        modes loaded or pending when the area's centre moved; no frame
+        with no map or no centre.
     """
     frame = None
     if inputs is not None and inputs.centre is not None:
-        if is_connection(pin=shown(state=state)):
-            frame = (inputs.centre, inputs.zoom)
+        frame = (inputs.centre, inputs.zoom)
     if frame == state.map.frame:
         return state
-    return replace(state, map=replace(state.map, frame=frame))
+    framed = replace(state.map, frame=frame)
+    if area_frame(map_state=framed)[0] != area_frame(map_state=state.map)[0]:
+        framed = replace(framed, area_modes={}, pending_modes=frozenset())
+    return replace(state, map=framed)
 
 
 def map_effects(
@@ -576,8 +614,11 @@ def map_effects(
     """
     if not shows_vehicles(state=state):
         return state, ()
+    width = (
+        STRIP_MAP_WIDTH if state.view is LiveView.STRIP_MAP else MAP_WIDTH
+    )
     inputs = (
-        map_inputs(state=state, stop_view=stop_view)
+        map_inputs(state=state, stop_view=stop_view, width=width)
         if map_shown(state=state)
         else None
     )

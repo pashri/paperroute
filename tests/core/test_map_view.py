@@ -13,6 +13,7 @@ from paperroute.core.map_view import (
     STRIP_MAP_WIDTH,
     MapInputs,
     Marker,
+    TripMarks,
     build_map_view,
     map_window,
     needed_patterns,
@@ -29,7 +30,14 @@ from paperroute.core.patterns import timetable_point
 from paperroute.core.positions import VehiclePosition
 from paperroute.core.stop_view import SIDEBAR_ROWS, Row, StopView
 from paperroute.core.tiles import ZOOMS
-from tests.core.factories import START, departure, pattern, snapshot, vehicle
+from tests.core.factories import (
+    START,
+    calls,
+    departure,
+    pattern,
+    snapshot,
+    vehicle,
+)
 
 CENTRE: Point = (0.0, 0.0)
 ZOOM: int = 2
@@ -560,3 +568,43 @@ def test_no_destination_map_sidebar_lists_departures() -> None:
     )
     assert view.destination is None
     assert view.sidebar == rows[:SIDEBAR_ROWS]
+
+
+def test_plain_base_marks_from_and_to() -> None:
+    """A plain pin's base marks its From and To as trip ends."""
+    view = build_map_view(
+        inputs=replace(inputs(), ends=(CENTRE, (900.0, 0.0))),
+    )
+    assert view.base.trip == TripMarks(
+        origin=CENTRE, second=(), walk=None, change=None, end=(900.0, 0.0),
+    )
+    bare = build_map_view(inputs=inputs())
+    assert bare.base.trip is None
+
+
+def test_base_lists_ridden_stops() -> None:
+    """The base holds the drawn departures' ridden stops, each once."""
+    view = build_map_view(inputs=inputs(departures=(pin(),)))
+    assert view.base.stops == ((0.0, 0.0), (1000.0, 0.0))
+    windowed = build_map_view(
+        inputs=replace(
+            inputs(departures=(pin(),)),
+            stop_view=replace(
+                stop_view(hero=row(), rows=()), destination=None,
+            ),
+            patterns={
+                't1': pattern(
+                    stops=calls(
+                        stations='ABC',
+                        step=900,
+                        points={
+                            'A': (0.0, 0.0),
+                            'B': (500.0, 0.0),
+                            'C': (900.0, 0.0),
+                        },
+                    ),
+                ),
+            },
+        ),
+    )
+    assert windowed.base.stops == ((0.0, 0.0), (500.0, 0.0))

@@ -8,8 +8,8 @@ from paperroute.core.chains import Chain
 from paperroute.core.connection import chain_legs
 from paperroute.core.connection_view import PairRow, chain_rows, no_pair_text
 from paperroute.core.geo import Point, Shape, point_along, stop_distances
+from paperroute.core.map_fit import banner_room, fitted, middle
 from paperroute.core.map_view import (
-    MAP_HEIGHT,
     MapInputs,
     MapView,
     TripMarks,
@@ -22,10 +22,7 @@ from paperroute.core.saved import ConnectionMap
 from paperroute.core.tiles import ZOOMS
 
 CHANGE_ZOOM_IN: Final[int] = 1
-FIT_MARGIN: Final[float] = 1.1  # the whole trip's box, plus 10%
 SIDEBAR_PAIRS: Final[int] = 4
-CREDIT_ROOM: Final[int] = 24  # pixels kept clear above the map's bottom
-BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
 PANES_WIDTH: Final[int] = 800  # the whole frame, shared by change panes
 
 type Line = tuple[Point, ...]
@@ -62,55 +59,6 @@ def leg_line(*, shape: Shape, start: Point, end: Point) -> Line:
         *inside,
         point_along(shape=shape, distance=last),
     )
-
-
-def fit_zoom(*, points: Sequence[Point], width: int) -> int:
-    """
-    Find the finest zoom whose map holds a set of points.
-
-    Parameters
-    ----------
-    points : Sequence[Point]
-        Points in metres.
-    width : int
-        Map width in pixels.
-
-    Returns
-    -------
-    int
-        The finest `ZOOMS` index whose `width` by `MAP_HEIGHT` window
-        holds the points' box with a 10% margin, else the widest.
-    """
-    xs = [x for x, _ in points]
-    ys = [y for _, y in points]
-    across = (max(xs) - min(xs)) * FIT_MARGIN
-    down = (max(ys) - min(ys)) * FIT_MARGIN
-    return next(
-        (
-            index
-            for index, mpp in enumerate(ZOOMS)
-            if across <= width * mpp and down <= MAP_HEIGHT * mpp
-        ),
-        len(ZOOMS) - 1,
-    )
-
-
-def middle(*, ends: tuple[Point, Point]) -> Point:
-    """
-    Find the point halfway between two points.
-
-    Parameters
-    ----------
-    ends : tuple[Point, Point]
-        The two points.
-
-    Returns
-    -------
-    Point
-        The midpoint.
-    """
-    first, second = ends
-    return (first[0] + second[0]) / 2, (first[1] + second[1]) / 2
 
 
 def walk_ends(*, change: Change) -> tuple[Point, Point] | None:
@@ -352,23 +300,6 @@ def shown_trips(
     return pin_trips(departures=legs)
 
 
-def banner_room(*, inputs: MapInputs) -> int:
-    """
-    Say how much of the map's top a banner covers.
-
-    Parameters
-    ----------
-    inputs : MapInputs
-        The map's inputs.
-
-    Returns
-    -------
-    int
-        Pixels; 0 with no banner.
-    """
-    return BANNER_ROOM if inputs.stop_view.banner else 0
-
-
 def whole_frame(
     *, inputs: MapInputs, pin: Pin, chains: Sequence[Chain],
 ) -> tuple[Point | None, int]:
@@ -451,59 +382,14 @@ def fit_frame(
         credit and any banner, and the finest zoom that holds it with
         that room; the From and the knob's zoom with no point at all.
     """
-    if not points:
-        return inputs.centre, inputs.zoom
-    box = box_of(points=points)
-    top = banner_room(inputs=inputs)
-    zoom = roomy_zoom(box=box, width=inputs.width, top=top)
-    x, y = middle(ends=box)
-    return (x, y + (top - CREDIT_ROOM) * ZOOMS[zoom] / 2), zoom
-
-
-def box_of(*, points: Sequence[Point]) -> tuple[Point, Point]:
-    """
-    Find the box around some points.
-
-    Parameters
-    ----------
-    points : Sequence[Point]
-        At least one point.
-
-    Returns
-    -------
-    tuple[Point, Point]
-        The smallest and largest corners.
-    """
-    xs = [x for x, _ in points]
-    ys = [y for _, y in points]
-    return (min(xs), min(ys)), (max(xs), max(ys))
-
-
-def roomy_zoom(*, box: tuple[Point, Point], width: int, top: int) -> int:
-    """
-    Find the finest zoom that holds a box and the map's covered edges.
-
-    Parameters
-    ----------
-    box : tuple[Point, Point]
-        Corners in metres.
-    width : int
-        Map width in pixels.
-    top : int
-        Pixels a banner covers at the top.
-
-    Returns
-    -------
-    int
-        The fitted zoom, one wider when the box and the credit and banner
-        rooms do not fit the map's height.
-    """
-    zoom = fit_zoom(points=box, width=width)
-    if (box[1][1] - box[0][1]) + (CREDIT_ROOM + top) * ZOOMS[zoom] > (
-        MAP_HEIGHT * ZOOMS[zoom]
-    ):
-        zoom = min(zoom + 1, len(ZOOMS) - 1)
-    return zoom
+    found = fitted(
+        points=points,
+        width=inputs.width,
+        top=banner_room(inputs=inputs),
+        step=0,
+        keep=None,
+    )
+    return (inputs.centre, inputs.zoom) if found is None else found
 
 
 def framed(

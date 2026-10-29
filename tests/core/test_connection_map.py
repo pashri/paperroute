@@ -7,15 +7,14 @@ from typing import Final
 
 from paperroute.core.chains import Chain, Legs, leg_key
 from paperroute.core.connection_map import (
-    BANNER_ROOM,
     build_connection_map,
     change_panes,
     connection_inputs,
-    fit_zoom,
     leg_line,
 )
 from paperroute.core.connection_model import way_legs
 from paperroute.core.geo import Shape, make_shape
+from paperroute.core.map_fit import BANNER_ROOM, fit_zoom
 from paperroute.core.map_view import (
     DEFAULT_ZOOM,
     NO_LOCATION,
@@ -166,7 +165,7 @@ def test_o1_fits_whole_trip() -> None:
         chains=SHAPED,
         mode=ConnectionMap.WHOLE,
     )
-    assert found.centre == (400.0, -596.0)
+    assert found.centre == (400.0, -612.0)
     assert found.zoom == ZOOMS.index(8)
     assert found.vehicle_trips == frozenset({
         'a0733', 'b0746', 'a0748', 'b0801a', 'a0803', 'b0817', 'a0822',
@@ -338,7 +337,7 @@ def test_banner_keeps_frame_below_it() -> None:
         mode=ConnectionMap.WHOLE,
     )
     assert whole.zoom == ZOOMS.index(8)
-    assert whole.centre == (400.0, -596.0 + BANNER_ROOM * 8 / 2)
+    assert whole.centre == (400.0, -612.0 + BANNER_ROOM * 8 / 2)
 
 
 PLATFORM: Final[StopPlace] = place(

@@ -4,10 +4,12 @@ from dataclasses import replace
 from datetime import timedelta
 
 from paperroute.core.geo import make_shape
-from paperroute.core.messages import MapData
+from paperroute.core.map_state import area_box
+from paperroute.core.messages import MapData, ModesLoaded
 from paperroute.core.model import Mode, Pin
 from paperroute.core.places import (
     flipped,
+    is_stale,
     matched,
     rematched,
     shown,
@@ -19,7 +21,9 @@ from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved
 from paperroute.core.state import initial_state
 from paperroute.core.state_model import Board, State
+from paperroute.core.tiles import ZOOMS
 from tests.core.factories import START, departure, pin_at, place, snapshot
+from tests.core.test_map_requests import fitted_on
 
 FIRST = pin_at('first', x=100.0)
 SECOND = pin_at('second', x=200.0)
@@ -245,3 +249,22 @@ def test_rematch_keeps_nickname_and_filter() -> None:
     assert result.origin == fresh
     assert result.nickname == 'Work'
     assert result.only == ('606',)
+
+
+def test_modes_reply_for_the_frame_is_kept() -> None:
+    """A modes reply for the fitted frame's area is not stale."""
+    state, _ = fitted_on()
+    assert state.map.frame is not None
+    centre, zoom = state.map.frame
+    start = state.map.centre
+    assert start is not None
+    assert centre != start
+    mpp = ZOOMS[zoom]
+    reply = ModesLoaded(
+        mpp=mpp,
+        box=area_box(centre=centre, mpp=mpp),
+        modes=frozenset({Mode.BUS}),
+    )
+    assert not is_stale(state=state, event=reply)
+    away = replace(reply, box=area_box(centre=start, mpp=mpp))
+    assert is_stale(state=state, event=away)

@@ -6,7 +6,7 @@ from dataclasses import replace
 from paperroute.core.alert_model import BetweenLoaded
 from paperroute.core.feeds import feed_for
 from paperroute.core.geo import MetreBox
-from paperroute.core.map_state import MapState, area_box
+from paperroute.core.map_state import MapState, area_box, area_frame
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
@@ -357,7 +357,7 @@ def other_area(*, state: State, mpp: int, box: MetreBox) -> bool:
     bool
         True when the map has no centre or its area at `mpp` differs.
     """
-    centre = state.map.centre
+    centre, _ = area_frame(map_state=state.map)
     return centre is None or box != area_box(centre=centre, mpp=mpp)
 
 

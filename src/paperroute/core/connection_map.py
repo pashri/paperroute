@@ -8,7 +8,7 @@ from paperroute.core.chains import Chain
 from paperroute.core.connection import chain_legs
 from paperroute.core.connection_view import PairRow, chain_rows, no_pair_text
 from paperroute.core.geo import Point, Shape, point_along, stop_distances
-from paperroute.core.map_fit import banner_room, fitted, middle
+from paperroute.core.map_fit import banner_room, fitted, middle, resting_zoom
 from paperroute.core.map_view import (
     MapInputs,
     MapView,
@@ -17,11 +17,11 @@ from paperroute.core.map_view import (
     pin_trips,
 )
 from paperroute.core.model import Change, Departure, Pin, StopPlace
+from paperroute.core.ridden import SECOND_RIDE_WINDOW, route_stops
 from paperroute.core.rides import Ride, rides_of
 from paperroute.core.saved import ConnectionMap
 from paperroute.core.tiles import ZOOMS
 
-CHANGE_ZOOM_IN: Final[int] = 1
 SIDEBAR_PAIRS: Final[int] = 4
 PANES_WIDTH: Final[int] = 800  # the whole frame, shared by change panes
 
@@ -380,16 +380,19 @@ def fit_frame(
     tuple[Point | None, int]
         The middle of the points' box, moved so the box clears the map's
         credit and any banner, and the finest zoom that holds it with
-        that room; the From and the knob's zoom with no point at all.
+        that room, moved by the knob's step; the From at the resting
+        zoom with no point at all.
     """
     found = fitted(
         points=points,
         width=inputs.width,
         top=banner_room(inputs=inputs),
-        step=0,
+        step=inputs.step,
         keep=None,
     )
-    return (inputs.centre, inputs.zoom) if found is None else found
+    if found is None:
+        return inputs.centre, resting_zoom(step=inputs.step)
+    return found
 
 
 def framed(
@@ -416,55 +419,94 @@ def framed(
     Returns
     -------
     tuple[Point | None, int]
-        For the whole trip or the first leg, the middle of its box at the
-        zoom that holds it. Zoomed on the start, the From at the finest
-        zoom whatever the knob says; zoomed on the change, the hero's
-        first walk (else the first ticked way's) at its midpoint, one
-        zoom finer than the knob's. Zoomed framings are centred in the
-        map below any banner, on the From when there is no walk.
+        The whole trip, the first leg or the hero's first change, each
+        fitted as `fit_frame` with the knob's step. Zoomed on the start,
+        the From at the finest zoom whatever the knob says, centred in
+        the map below any banner.
     """
     if mode is ConnectionMap.WHOLE:
         return whole_frame(inputs=inputs, pin=pin, chains=chains)
     if mode is ConnectionMap.FIRST_LEG:
         return first_leg_frame(inputs=inputs, pin=pin, chains=chains)
-    zoom = (
-        0
-        if mode is ConnectionMap.START
-        else max(0, inputs.zoom - CHANGE_ZOOM_IN)
-    )
-    spot = zoomed_spot(pin=pin, chains=chains, mode=mode)
-    if spot is None:
-        return inputs.centre, zoom
-    x, y = spot
-    return (x, y + banner_room(inputs=inputs) * ZOOMS[zoom] / 2), zoom
+    if mode is ConnectionMap.CHANGES:
+        return change_frame(inputs=inputs, pin=pin, chains=chains)
+    origin = pin.origin.point
+    if origin is None:
+        return inputs.centre, 0
+    x, y = origin
+    return (x, y + banner_room(inputs=inputs) * ZOOMS[0] / 2), 0
 
 
-def zoomed_spot(
-    *, pin: Pin, chains: Sequence[Chain], mode: ConnectionMap,
-) -> Point | None:
+def change_frame(
+    *, inputs: MapInputs, pin: Pin, chains: Sequence[Chain],
+) -> tuple[Point | None, int]:
     """
-    Find the point a zoomed framing centres on.
+    Frame the hero's first change.
 
     Parameters
     ----------
+    inputs : MapInputs
+        The map's inputs.
     pin : Pin
         Connection pin.
     chains : Sequence[Chain]
         Workable chains.
-    mode : ConnectionMap
-        A zoomed framing.
 
     Returns
     -------
-    Point | None
-        The From for the start, else the middle of the first walk; None
-        without a point.
+    tuple[Point | None, int]
+        The fit of `change_points` for the ride into the hero's first
+        change and the ride out of it, as `fit_frame`; the first leg's
+        frame with no change; the From at the resting zoom with no chain.
     """
-    if mode is ConnectionMap.START:
-        return pin.origin.point
-    hero = chains[0] if chains else None
-    walk = walk_of(pin=pin, chain=hero) or walk_of(pin=pin, chain=None)
-    return None if walk is None else middle(ends=walk)
+    if not chains:
+        return inputs.centre, resting_zoom(step=inputs.step)
+    rides = rides_of(chain=chains[0], pin=pin)
+    changed = [index for index, ride in enumerate(rides) if ride.change]
+    if not changed:
+        return first_leg_frame(inputs=inputs, pin=pin, chains=chains)
+    pair = rides[changed[0] - 1 : changed[0] + 1]
+    return fit_frame(
+        inputs=inputs, points=change_points(inputs=inputs, rides=pair),
+    )
+
+
+def change_points(
+    *, inputs: MapInputs, rides: Sequence[Ride],
+) -> tuple[Point, ...]:
+    """
+    List the points a change's map holds.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+    rides : Sequence[Ride]
+        The ride into the change and the ride out of it.
+
+    Returns
+    -------
+    tuple[Point, ...]
+        The first ride's ridden stops, the second's for its first
+        `SECOND_RIDE_WINDOW`, the first ride's two ends, the second's
+        start and the walk's ends. The second ride's far end is left out.
+    """
+    into, out = rides
+    stops = (
+        *route_stops(
+            departures=(into.item.departure, into.last.departure),
+            patterns=inputs.patterns,
+            window=None,
+        ),
+        *route_stops(
+            departures=(out.item.departure,),
+            patterns=inputs.patterns,
+            window=SECOND_RIDE_WINDOW,
+        ),
+    )
+    walk = None if out.change is None else walk_ends(change=out.change)
+    ends = (into.start.point, into.end.point, out.start.point, *(walk or ()))
+    return (*stops, *(point for point in ends if point is not None))
 
 
 def connection_inputs(
@@ -657,7 +699,7 @@ def change_view(
     rides: Sequence[Ride],
 ) -> MapView:
     """
-    Build one pane centred on the walk into its last ride.
+    Build one pane fitted on the change between two rides.
 
     Parameters
     ----------
@@ -673,17 +715,17 @@ def change_view(
     Returns
     -------
     MapView
-        The pane, one zoom finer than the knob's, with both rides drawn
-        and no sidebar.
+        The pane fitted to `change_points` with the knob's step, with
+        both rides drawn and no sidebar.
     """
-    zoom = max(0, inputs.zoom - CHANGE_ZOOM_IN)
+    centre, zoom = fit_frame(
+        inputs=inputs, points=change_points(inputs=inputs, rides=rides),
+    )
     legs = chain_legs(chain=chain)
     view = build_map_view(inputs=replace(
         inputs,
         departures=legs,
-        centre=change_centre(
-            inputs=inputs, change=rides[-1].change, zoom=zoom,
-        ),
+        centre=centre,
         zoom=zoom,
         vehicle_trips=pin_trips(departures=legs),
     ))
@@ -695,34 +737,6 @@ def change_view(
         sidebar=(),
         empty=None if view.base.centre is not None else view.empty,
     )
-
-
-def change_centre(
-    *, inputs: MapInputs, change: Change | None, zoom: int,
-) -> Point | None:
-    """
-    Centre a change pane on the middle of its walk, clear of the banner.
-
-    Parameters
-    ----------
-    inputs : MapInputs
-        The pane's inputs.
-    change : Change | None
-        The change walked; None for none.
-    zoom : int
-        The pane's zoom.
-
-    Returns
-    -------
-    Point | None
-        The walk's middle, moved down by half the banner's room; the
-        inputs' own centre when the walk has no ends.
-    """
-    walk = None if change is None else walk_ends(change=change)
-    if walk is None:
-        return inputs.centre
-    x, y = middle(ends=walk)
-    return (x, y + banner_room(inputs=inputs) * ZOOMS[zoom] / 2)
 
 
 def change_panes(

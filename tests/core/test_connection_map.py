@@ -9,21 +9,25 @@ from paperroute.core.chains import Chain, Legs, leg_key
 from paperroute.core.connection_map import (
     build_connection_map,
     change_panes,
+    change_points,
     connection_inputs,
     leg_line,
 )
 from paperroute.core.connection_model import way_legs
-from paperroute.core.geo import Shape, make_shape
-from paperroute.core.map_fit import BANNER_ROOM, fit_zoom
+from paperroute.core.geo import Point, Shape, make_shape
+from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM, fit_zoom
 from paperroute.core.map_view import (
     DEFAULT_ZOOM,
+    MAP_HEIGHT,
     NO_LOCATION,
     MapInputs,
     MapView,
 )
 from paperroute.core.messages import DeparturesLoaded, LoadShapes
 from paperroute.core.model import Change, Departure, Pin, StopPlace, Way
+from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.positions import PositionsSnapshot
+from paperroute.core.rides import rides_of
 from paperroute.core.saved import ConnectionMap, LiveView
 from paperroute.core.state import step
 from paperroute.core.state_views import current_view, live_stop_view
@@ -40,7 +44,7 @@ from tests.core.connection_factories import (
     at,
     run,
 )
-from tests.core.factories import live, place, snapshot, vehicle
+from tests.core.factories import live, pattern, place, snapshot, vehicle
 from tests.core.test_connection_screens import started
 from tests.core.test_connection_strip import CHAINS, STOP
 
@@ -120,26 +124,19 @@ def test_leg_line_cuts_between_stops() -> None:
     assert line == tuple((float(x), 0.0) for x in range(200, 701, 100))
 
 
-def test_o2_centres_on_change() -> None:
-    """O2 centres on the walk and opens one zoom finer."""
+def test_o2_fits_the_change() -> None:
+    """O2 fits the ride into the change and the walk, above the credit."""
     found = connection_inputs(
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
         chains=SHAPED,
         mode=ConnectionMap.CHANGES,
     )
-    assert found.centre == (72.0, 0.0)
-    assert found.zoom == 1
+    assert found.centre == (72.0, 450.0 - CREDIT_ROOM * ZOOMS[0] / 2)
+    assert found.zoom == 0
     assert found.departures == tuple(
         item.departure for item in SHAPED[0].legs
     )
-    widest = connection_inputs(
-        inputs=inputs_at(now=at(7, 35), zoom=0),
-        pin=WORK,
-        chains=SHAPED,
-        mode=ConnectionMap.CHANGES,
-    )
-    assert widest.zoom == 0
 
 
 def test_o2_shows_hero_pair_vehicles() -> None:
@@ -246,7 +243,7 @@ def test_vehicle_trips_filter_markers() -> None:
 
 
 def test_no_pairs_keeps_framing() -> None:
-    """With no pair, O2 still centres on the change and draws nothing."""
+    """With no pair, O2 stays on the From and draws nothing."""
     found = connection_inputs(
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
@@ -255,7 +252,7 @@ def test_no_pairs_keeps_framing() -> None:
     )
     assert found.departures == ()
     assert found.vehicle_trips == frozenset()
-    assert found.centre == (72.0, 0.0)
+    assert (found.centre, found.zoom) == ((0.0, 900.0), DEFAULT_ZOOM)
     view = build_connection_map(
         inputs=inputs_at(now=at(7, 35)),
         pin=WORK,
@@ -329,7 +326,9 @@ def test_banner_keeps_frame_below_it() -> None:
     change = connection_inputs(
         inputs=inputs, pin=WORK, chains=SHAPED, mode=ConnectionMap.CHANGES,
     )
-    assert change.centre == (72.0, BANNER_ROOM * ZOOMS[change.zoom] / 2)
+    assert change.centre == (
+        72.0, 450.0 + (BANNER_ROOM - CREDIT_ROOM) * ZOOMS[change.zoom] / 2,
+    )
     whole = connection_inputs(
         inputs=replace(inputs, zoom=0),
         pin=WORK,
@@ -382,16 +381,16 @@ def two_inputs(*, zoom: int = DEFAULT_ZOOM) -> MapInputs:
 
 
 def test_changes_two_panes_side_by_side() -> None:
-    """Two changes give two half-width panes, one on each walk."""
+    """Two changes give two half-width panes, each fitted on its pair."""
     panes = change_panes(
         inputs=two_inputs(), pin=TWO, chain=TWO_CHAIN,
         mode=ConnectionMap.CHANGES,
     )
     assert [pane.base.width for pane in panes] == [400, 400]
     assert [pane.base.centre for pane in panes] == [
-        (72.0, 0.0), (810.0, -1900.0),
+        (72.0, 408.0), (482.0, -1020.0),
     ]
-    assert {pane.zoom for pane in panes} == {DEFAULT_ZOOM - 1}
+    assert [pane.zoom for pane in panes] == [0, 1]
     first, second = (pane.base.trip for pane in panes)
     assert first is not None and second is not None
     assert first.walk == ((0.0, 0.0), (144.0, 0.0))
@@ -406,7 +405,7 @@ def test_changes_one_change_one_pane() -> None:
         mode=ConnectionMap.CHANGES,
     )
     assert pane.base.width == inputs_at(now=at(7, 35)).width
-    assert pane.base.centre == (72.0, 0.0)
+    assert pane.base.centre == (72.0, 408.0)
 
 
 def test_whole_fits_all_legs() -> None:
@@ -540,3 +539,194 @@ def test_first_leg_without_chains_keeps_from() -> None:
         mode=ConnectionMap.FIRST_LEG,
     )
     assert (found.centre, found.zoom) == ((0.0, 900.0), DEFAULT_ZOOM)
+
+
+def calls_of(
+    *, times: tuple[tuple[int, int], ...], points: tuple[Point, ...],
+) -> tuple[PatternStop, ...]:
+    """
+    Calls at Sydney times on the 27th.
+
+    Parameters
+    ----------
+    times : tuple[tuple[int, int], ...]
+        Hour and minute of each call.
+    points : tuple[Point, ...]
+        Each call's point.
+
+    Returns
+    -------
+    tuple[PatternStop, ...]
+        The calls, arriving and leaving at the same second.
+    """
+    return tuple(
+        PatternStop(
+            arrives=hour * 3600 + minute * 60,
+            departs=hour * 3600 + minute * 60,
+            point=point,
+        )
+        for (hour, minute), point in zip(times, points, strict=True)
+    )
+
+
+PATTERNS: Final[dict[str, TripPattern | None]] = {
+    'a0733': pattern(trip_id='a0733', stops=calls_of(
+        times=((7, 33), (7, 36), (7, 39)),
+        points=((0.0, 900.0), (-300.0, 450.0), (0.0, 0.0)),
+    )),
+    'b0746': pattern(trip_id='b0746', stops=calls_of(
+        times=((7, 46), (7, 52), (7, 57)),
+        points=((144.0, 0.0), (500.0, -900.0), (800.0, -1900.0)),
+    )),
+    'c0805': pattern(trip_id='c0805', stops=calls_of(
+        times=((8, 5), (8, 12), (8, 20)),
+        points=((820.0, -1900.0), (1400.0, -2200.0), (2000.0, -2500.0)),
+    )),
+}
+
+
+def on_map(*, inputs: MapInputs, point: Point) -> bool:
+    """
+    Say whether a point falls inside a framed map.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The framed inputs.
+    point : Point
+        A point in metres.
+
+    Returns
+    -------
+    bool
+        True when the point is within the map's pixels.
+    """
+    assert inputs.centre is not None
+    mpp = ZOOMS[inputs.zoom]
+    x = inputs.width / 2 + (point[0] - inputs.centre[0]) / mpp
+    y = MAP_HEIGHT / 2 - (point[1] - inputs.centre[1]) / mpp
+    return 0 <= x <= inputs.width and 0 <= y <= MAP_HEIGHT
+
+
+def framed_at(
+    *, mode: ConnectionMap, knob: int = 0, patterns: bool = True,
+) -> MapInputs:
+    """
+    Frame the Work pin with a knob step.
+
+    Parameters
+    ----------
+    mode : ConnectionMap
+        Which framing.
+    knob : int
+        Knob detents from the fit.
+    patterns : bool
+        True to give the legs' patterns.
+
+    Returns
+    -------
+    MapInputs
+        The framed inputs.
+    """
+    return connection_inputs(
+        inputs=replace(
+            inputs_at(now=at(7, 30)),
+            step=knob,
+            patterns=PATTERNS if patterns else {},
+        ),
+        pin=WORK,
+        chains=SHAPED,
+        mode=mode,
+    )
+
+
+def test_whole_trip_fit_honours_step() -> None:
+    """A knob step of +1 frames the whole trip one level coarser."""
+    fit = framed_at(mode=ConnectionMap.WHOLE)
+    coarser = framed_at(mode=ConnectionMap.WHOLE, knob=1)
+    assert coarser.zoom == fit.zoom + 1
+
+
+def test_first_leg_fit_honours_step() -> None:
+    """A knob step of +1 frames the first leg one level coarser."""
+    fit = framed_at(mode=ConnectionMap.FIRST_LEG)
+    coarser = framed_at(mode=ConnectionMap.FIRST_LEG, knob=1)
+    assert coarser.zoom == fit.zoom + 1
+
+
+def test_changes_fits_first_ride_and_ten_minutes_of_the_next() -> None:
+    """Changes holds the ride in and the first 10 minutes of the next."""
+    rides = rides_of(chain=SHAPED[0], pin=WORK)
+    points = change_points(
+        inputs=replace(inputs_at(now=at(7, 30)), patterns=PATTERNS),
+        rides=rides,
+    )
+    assert (500.0, -900.0) in points
+    assert (800.0, -1900.0) not in points
+    fit = framed_at(mode=ConnectionMap.CHANGES)
+    for point in ((0.0, 900.0), (-300.0, 450.0), (0.0, 0.0), (144.0, 0.0)):
+        assert on_map(inputs=fit, point=point)
+
+
+def test_changes_fit_honours_step() -> None:
+    """A knob step of +1 frames the change one level coarser."""
+    fit = framed_at(mode=ConnectionMap.CHANGES)
+    coarser = framed_at(mode=ConnectionMap.CHANGES, knob=1)
+    assert coarser.zoom == fit.zoom + 1
+
+
+def test_changes_fit_before_patterns_load() -> None:
+    """With no patterns, Changes holds the rides' ends and the walk."""
+    rides = rides_of(chain=SHAPED[0], pin=WORK)
+    points = change_points(inputs=inputs_at(now=at(7, 30)), rides=rides)
+    assert set(points) == {(0.0, 900.0), (0.0, 0.0), (144.0, 0.0)}
+    fit = framed_at(mode=ConnectionMap.CHANGES, patterns=False)
+    for point in points:
+        assert on_map(inputs=fit, point=point)
+
+
+def test_changes_without_a_change_fits_the_first_leg() -> None:
+    """A chain with no change frames as the first leg."""
+    direct = (Chain(legs=SHAPED[0].legs[:1], way=None),)
+    changes, first = (
+        connection_inputs(
+            inputs=inputs_at(now=at(7, 30)),
+            pin=WORK,
+            chains=direct,
+            mode=mode,
+        )
+        for mode in (ConnectionMap.CHANGES, ConnectionMap.FIRST_LEG)
+    )
+    assert (changes.centre, changes.zoom) == (first.centre, first.zoom)
+
+
+def test_change_pane_fits_its_own_rides() -> None:
+    """A two-change chain's second pane fits rides 2 and 3, not ride 1."""
+    rides = rides_of(chain=TWO_CHAIN, pin=TWO)
+    points = change_points(
+        inputs=replace(two_inputs(), patterns=PATTERNS), rides=rides[1:3],
+    )
+    assert (0.0, 900.0) not in points
+    assert (-300.0, 450.0) not in points
+    assert {(144.0, 0.0), (800.0, -1900.0), (1400.0, -2200.0)} <= set(points)
+    assert (2000.0, -2500.0) not in points
+
+
+def test_start_only_stays_finest_whatever_step() -> None:
+    """Start only is at the finest zoom at any knob step."""
+    for knob in range(-len(ZOOMS), len(ZOOMS) + 1):
+        assert framed_at(mode=ConnectionMap.START, knob=knob).zoom == 0
+
+
+def test_connection_base_lists_each_legs_ridden_stops() -> None:
+    """A connection map's stops are every leg's ridden stops."""
+    view = build_connection_map(
+        inputs=replace(inputs_at(now=at(7, 30)), patterns=PATTERNS),
+        pin=WORK,
+        chains=SHAPED,
+        mode=ConnectionMap.WHOLE,
+    )
+    assert view.base.stops == (
+        (0.0, 900.0), (-300.0, 450.0), (0.0, 0.0),
+        (144.0, 0.0), (500.0, -900.0), (800.0, -1900.0),
+    )

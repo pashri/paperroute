@@ -8,7 +8,6 @@ from paperroute.core.geo import Point
 from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM
 from paperroute.core.map_requests import map_feeds, pin_ends, request_positions
 from paperroute.core.map_state import area_box, area_frame
-from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import (
     Effect,
     Knob,
@@ -155,7 +154,7 @@ def test_connection_positions_union() -> None:
     """The connection Map polls every leg's positions feed."""
     second = tuple(replace(item, mode=Mode.TRAIN) for item in LEG2)
     state, _ = legs_loaded(state=started(view=LiveView.MAP), second=second)
-    mpp = ZOOMS[DEFAULT_ZOOM - 1]
+    mpp = ZOOMS[0]  # the Changes fit
     state = replace(state, map=replace(
         state.map, area_modes={mpp: frozenset({Mode.FERRY})},
     ))
@@ -167,10 +166,10 @@ def test_connection_positions_union() -> None:
 def test_connection_modes_around_drawn_map() -> None:
     """The connection Map asks for the modes around the change it shows."""
     state, effects = legs_loaded(state=started(view=LiveView.MAP))
-    mpp = ZOOMS[DEFAULT_ZOOM - 1]
+    mpp = ZOOMS[0]  # the Changes fit
     assert state.map.frame is not None
     centre, zoom = state.map.frame
-    assert (centre[0], zoom) == (72.0, DEFAULT_ZOOM - 1)
+    assert (centre[0], zoom) == (72.0, 0)
     assert LoadModes(mpp=mpp, box=area_box(centre=centre, mpp=mpp)) in effects
     state = replace(state, map=replace(
         state.map, area_modes={mpp: frozenset({Mode.FERRY})},

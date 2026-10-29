@@ -233,7 +233,9 @@ def test_strip_map_shows_connection_pane() -> None:
         centre = view.map.base.centre
         assert centre is not None
         assert centre[0] == STRIP_MAP_X[mode]
-    state = with_legs(state=started(view=LiveView.STRIP_MAP))
+    state = with_legs(state=started(
+        view=LiveView.STRIP_MAP, mode=ConnectionMap.WHOLE,
+    ))
     before = shown_view(state=state)
     state = stepped(state=state, event=KnobTurned(knob=Knob.BOTTOM, steps=1))
     after = shown_view(state=state)

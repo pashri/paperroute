@@ -9,6 +9,7 @@ from paperroute.core.model import Departure, service_epoch
 from paperroute.core.patterns import TripPattern
 
 NO_DESTINATION_WINDOW: Final[timedelta] = timedelta(minutes=20)
+SECOND_RIDE_WINDOW: Final[timedelta] = timedelta(minutes=10)
 
 
 def ridden_stops(

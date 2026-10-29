@@ -126,9 +126,20 @@ def test_backoff_s_doubles_to_five_minutes(
     assert backoff_s(strikes=strikes, retry_after_s=None) == seconds
 
 
-def test_backoff_s_honours_retry_after() -> None:
-    """The server's Retry-After wins over the doubling."""
-    assert backoff_s(strikes=4, retry_after_s=12) == 12
+def test_backoff_s_honours_longer_retry_after() -> None:
+    """A Retry-After longer than the doubling wins over it."""
+    assert backoff_s(strikes=2, retry_after_s=90) == 90
+
+
+def test_backoff_s_short_retry_after_keeps_doubling() -> None:
+    """A Retry-After shorter than the doubling does not undo it."""
+    assert backoff_s(strikes=4, retry_after_s=12) == 240
+
+
+@pytest.mark.parametrize('retry_after_s', [301, 86400, 1e12])
+def test_backoff_s_caps_retry_after(retry_after_s: float) -> None:
+    """A huge Retry-After is cut to five minutes."""
+    assert backoff_s(strikes=1, retry_after_s=retry_after_s) == 300
 
 
 async def test_fetch_passes_through() -> None:

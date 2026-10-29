@@ -51,13 +51,12 @@ def backoff_s(*, strikes: int, retry_after_s: float | None) -> float:
     Returns
     -------
     float
-        The server's Retry-After when given; else `FIRST_BACKOFF_S`
-        doubled for each earlier strike, at most `MOST_BACKOFF_S`.
+        `FIRST_BACKOFF_S` doubled for each earlier strike, or the
+        server's Retry-After if that is longer, at most `MOST_BACKOFF_S`.
     """
-    if retry_after_s is not None:
-        return retry_after_s
     doubled = FIRST_BACKOFF_S * 2.0 ** (strikes - 1)
-    return min(doubled, MOST_BACKOFF_S)
+    asked = retry_after_s or 0.0
+    return min(max(doubled, asked), MOST_BACKOFF_S)
 
 
 class GuardedFeeds:

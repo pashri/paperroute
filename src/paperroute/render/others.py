@@ -330,7 +330,7 @@ def place_numbers(
         Other vehicles in placing order, at their map pixels.
     taken : Sequence[Box]
         Map-pixel boxes already claimed: the From, To, changes, ridden
-        stops and pinned badges.
+        stops, pinned badges, the banner and the area off the map.
     keep_out : KeepOut
         Baked names and corner boxes; a street name may be covered when
         neither side is free.

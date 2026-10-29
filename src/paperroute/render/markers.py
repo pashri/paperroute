@@ -515,7 +515,7 @@ def draw_markers(
         and the To.
     edges : Sequence[Box]
         Map-pixel boxes off the map and under the banner, which no badge
-        slides into.
+        slides into and no number is placed in.
     stops : Sequence[Box]
         Map-pixel boxes of the ridden stops, which numbers keep clear of.
     keep_out : KeepOut
@@ -532,6 +532,7 @@ def draw_markers(
         origin=origin,
         taken=[
             *reserved,
+            *edges,
             *stops,
             *(
                 grown_box(marker=item.marker, centre=item.centre)

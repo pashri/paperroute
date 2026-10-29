@@ -742,3 +742,21 @@ def test_badge_near_the_right_edge_slides_inward() -> None:
         ],
     )
     assert placed.centre == (x - 40, y)
+
+
+def test_number_near_the_right_edge_goes_left() -> None:
+    """A route number with no room before the map's edge goes left."""
+    x, y = MAP_WIDTH - 15.0, MAP_HEIGHT / 2 + 60.0
+    other = Marker(
+        route='401', x=x, y=y, bearing=None, live=True, pinned=False,
+    )
+    view = replace(
+        VIEW,
+        base=replace(VIEW.base, mpp=14),
+        zoom=ZOOMS.index(14),
+        markers=(other,),
+    )
+    frame = draw_map_view(view=view, base=paper())
+    top = math.floor(HEADER + y)
+    left = frame[top - 8 : top + 4, math.floor(x) - 40 : math.floor(x) - 8]
+    assert (left == INK).any()

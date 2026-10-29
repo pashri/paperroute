@@ -59,7 +59,13 @@ from paperroute.render.map_view import (
     snap,
     stop_boxes,
 )
-from paperroute.render.markers import END_HALF, badge_half, place
+from paperroute.render.markers import (
+    END_HALF,
+    badge_half,
+    grown_box,
+    overlaps,
+    place,
+)
 from paperroute.render.tile_codec import GREYS, pack_bits, pack_grey
 
 MPP = 8
@@ -760,3 +766,18 @@ def test_number_near_the_right_edge_goes_left() -> None:
     top = math.floor(HEADER + y)
     left = frame[top - 8 : top + 4, math.floor(x) - 40 : math.floor(x) - 8]
     assert (left == INK).any()
+
+
+def test_badge_at_a_crowded_from_by_the_edge_still_shows() -> None:
+    """A bus at a From in the top left corner, with a badge below, shows."""
+    stop = (38.0, BANNER + 35.0)
+    waiting = live(at=stop, route='T1')
+    below = live(at=(42.0, stop[1] + 31.0), route='T5')
+    reserved = [
+        (stop[0] - 18, stop[1] - 18, stop[0] + 18, stop[1] + 18),
+        *edge_boxes(width=MAP_WIDTH, banner=True),
+    ]
+    _, placed = place(markers=[below, waiting], reserved=reserved)
+    assert placed.centre != stop
+    box = grown_box(marker=waiting, centre=placed.centre)
+    assert not any(overlaps(first=box, second=other) for other in reserved)

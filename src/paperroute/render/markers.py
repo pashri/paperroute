@@ -33,6 +33,10 @@ OFFSETS: Final[tuple[tuple[int, int], ...]] = (
     (-40, -28),
     (40, 28),
     (-40, 28),
+    (0, 64),
+    (0, -64),
+    (80, 0),
+    (-80, 0),
 )
 BADGE_HALF_HEIGHT: Final[float] = 10.0
 GROW_X: Final[float] = 12.0  # pixels each side, room for a wedge

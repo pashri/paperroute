@@ -65,9 +65,10 @@ def banner_room(*, inputs: MapInputs) -> int:
     Returns
     -------
     int
-        Pixels; 0 with no banner.
+        Pixels; 0 with no banner, and asleep, where none is drawn.
     """
-    return BANNER_ROOM if inputs.stop_view.banner else 0
+    shown = inputs.stop_view.banner and not inputs.asleep
+    return BANNER_ROOM if shown else 0
 
 
 def bottom_room(*, inputs: MapInputs) -> int:

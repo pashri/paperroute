@@ -637,6 +637,37 @@ def rebased(
     return replace(state, map=replace(state.map, step=inputs.zoom - fit.zoom))
 
 
+def sleep_effects(
+    *, state: State, stop_view: StopView
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Ask for the shapes and patterns the sleep screen's map draws.
+
+    Parameters
+    ----------
+    state : State
+        State, asleep.
+    stop_view : StopView
+        The state's Stop view.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with the requests recorded, and a LoadShapes and a
+        LoadPatterns for the drawn departures' lines and stops; no
+        positions, and nothing when the From has no location.
+    """
+    inputs = map_inputs(state=state, stop_view=stop_view, asleep=True)
+    if inputs.centre is None:
+        return state, ()
+    state, shapes = request_shapes(state=state, departures=inputs.departures)
+    state, loads = request_patterns(
+        state=state,
+        wanted=frozenset(dep.trip_id for dep in inputs.departures),
+    )
+    return state, (*shapes, *loads)
+
+
 def map_effects(
     *, state: State, stop_view: StopView
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -657,9 +688,12 @@ def map_effects(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the requests recorded, and the effects; nothing on the
-        Stop view, or while the chooser lists routes or picks a From.
+        State with the requests recorded, and the effects; only the sleep
+        map's from `sleep_effects` while asleep, and nothing on the Stop
+        view, or while the chooser lists routes or picks a From.
     """
+    if state.panel.asleep:
+        return sleep_effects(state=state, stop_view=stop_view)
     if not shows_vehicles(state=state):
         return state, ()
     width = (

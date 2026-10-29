@@ -142,6 +142,25 @@ def zoomed(*, map_state: MapState, steps: int) -> MapState:
     return replace(map_state, step=step)
 
 
+def awaiting(*, map_state: MapState) -> bool:
+    """
+    Say whether shapes or patterns asked for are still to arrive.
+
+    Parameters
+    ----------
+    map_state : MapState
+        The Map state.
+
+    Returns
+    -------
+    bool
+        True while a pattern is pending or a shape asked for is not
+        loaded.
+    """
+    unloaded = map_state.requested_shapes - map_state.shapes.keys()
+    return bool(map_state.pending_patterns or unloaded)
+
+
 def with_patterns(*, map_state: MapState, event: PatternsLoaded) -> MapState:
     """
     Store loaded patterns and their shapes, and clear the request.

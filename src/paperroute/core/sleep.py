@@ -7,6 +7,7 @@ from typing import Final
 from paperroute.core.connection import live_chains
 from paperroute.core.connection_screens import connection_map
 from paperroute.core.map_requests import map_inputs
+from paperroute.core.map_state import awaiting
 from paperroute.core.map_view import MapView, build_map_view
 from paperroute.core.model import is_connection
 from paperroute.core.panel_views import SleepView, sleep_map
@@ -97,13 +98,17 @@ def sleep_view(*, state: State, stop_view: StopView) -> SleepView:
     -------
     SleepView
         The shown pin's map with no vehicles, sidebar, banner or clock,
-        under the sleep band, marked loading until departures load. It
-        does not change as time passes.
+        under the sleep band, marked loading until departures load and
+        until the shapes and patterns asked for arrive. It does not
+        change as time passes.
     """
     return SleepView(
         map=sleep_map(view=pin_map(state=state, stop_view=stop_view)),
         band=SLEEP_BAND,
-        loading=state.board.loaded_until is None,
+        loading=(
+            state.board.loaded_until is None
+            or awaiting(map_state=state.map)
+        ),
     )
 
 

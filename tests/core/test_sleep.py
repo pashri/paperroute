@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import timedelta
 
 from paperroute.core.device_model import ConfirmAction, MenuRow
+from paperroute.core.geo import make_shape
 from paperroute.core.map_view import MAP_HEIGHT, MapView, screen_point
 from paperroute.core.messages import (
     ApiKeyChanged,
@@ -18,7 +19,11 @@ from paperroute.core.messages import (
     KnobPressed,
     KnobsHeld,
     KnobTurned,
+    LoadPatterns,
+    LoadShapes,
+    PatternsLoaded,
     Render,
+    ShapesLoaded,
     Tick,
     TimetableSeen,
 )
@@ -31,10 +36,10 @@ from paperroute.core.state_views import live_stop_view
 from paperroute.core.stop_view import StopView
 from paperroute.render.sleep import BAND_H
 from paperroute.render.trip_marks import END_DISC, END_EDGE
-from tests.core.factories import START, departure, place
+from tests.core.factories import START, departure, pattern, place
 from tests.core.test_connection import loaded as connection_loaded
 from tests.core.test_menu import BOTH, DOWN, run, turn
-from tests.core.test_state import BUSES, PIN, fresh, loaded
+from tests.core.test_state import BUSES, CENTRE, PIN, fresh, loaded
 from tests.fakes import device_facts
 
 
@@ -237,3 +242,42 @@ def test_sleep_map_keeps_both_ends_above_the_band() -> None:
             centre=base.centre, mpp=base.mpp, point=point, width=base.width,
         )
         assert y + END_DISC + END_EDGE <= MAP_HEIGHT - BAND_H
+
+
+def test_sleep_screen_waits_for_its_route_line_and_stops() -> None:
+    """Asleep, the map asks for its trip and is drawn again once it loads."""
+    state, _ = step(fresh(centre=CENTRE), Tick(now=START))
+    index = tuple(MenuRow).index(MenuRow.SLEEP)
+    state, _ = run(state=state, events=(BOTH, turn(steps=index)))
+    state, _ = step(state, DOWN)
+    trip = replace(
+        departure(departs=START + timedelta(minutes=3)), shape_id='b:0',
+    )
+    state, effects = step(
+        state,
+        DeparturesLoaded(
+            pin=state.places.pins[0],
+            departures=(trip,),
+            until=START + timedelta(hours=2),
+        ),
+    )
+    assert LoadShapes(shape_ids=frozenset({'b:0'})) in effects
+    assert [e for e in effects if isinstance(e, LoadPatterns)]
+    line = make_shape(shape_id='b:0', points=[CENTRE, (-16_900.0, 1_000.0)])
+    state, _ = step(state, ShapesLoaded(shapes={'b:0': line}))
+    state, effects = step(
+        state,
+        PatternsLoaded(
+            trip_ids=frozenset({trip.trip_id}),
+            patterns={trip.trip_id: pattern(trip_id=trip.trip_id)},
+            shapes={},
+        ),
+    )
+    (view,) = renders(effects=effects)
+    assert isinstance(view, SleepView)
+    assert not view.loading
+    assert view.map.base.route == (line.points,)
+    assert view.map.base.stops == ((1000.0, 0.0),)
+    assert view.map.markers == ()
+    _, effects = step(state, Tick(now=START + timedelta(seconds=40)))
+    assert not renders(effects=effects)

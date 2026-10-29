@@ -241,6 +241,20 @@ def test_plain_fit_moves_down_for_the_banner() -> None:
     assert found.centre[1] == (BANNER_ROOM - CREDIT_ROOM) * mpp / 2
 
 
+def test_sleep_fit_ignores_the_banner_it_hides() -> None:
+    """Asleep, no banner is drawn, so its room is not kept at the top."""
+    ride, patterns = next_trip()
+    asleep = replace(
+        plain(departures=(ride,), patterns=patterns), asleep=True,
+    )
+    bannered = replace(
+        asleep, stop_view=stop_view(banner='Live times unavailable'),
+    )
+    assert plain_frame(inputs=bannered) == replace(
+        plain_frame(inputs=asleep), stop_view=bannered.stop_view,
+    )
+
+
 def test_plain_fit_without_from_location() -> None:
     """With no From point, the inputs are unchanged."""
     ride, patterns = next_trip()

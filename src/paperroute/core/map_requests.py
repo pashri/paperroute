@@ -598,6 +598,35 @@ def framed_state(*, state: State, inputs: MapInputs | None) -> State:
     return replace(state, map=framed)
 
 
+def rebased(
+    *, state: State, inputs: MapInputs | None, stop_view: StopView,
+) -> State:
+    """
+    Drop knob detents that the drawn zoom's clamp hides.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    inputs : MapInputs | None
+        The shown map's inputs, or None with no map on screen.
+    stop_view : StopView
+        The state's Stop view.
+
+    Returns
+    -------
+    State
+        State whose step is the drawn zoom less the zoom the map takes
+        with no step, so the next detent always moves the map;
+        unchanged with no map.
+    """
+    if inputs is None:
+        return state
+    still = replace(state, map=replace(state.map, step=0))
+    fit = map_inputs(state=still, stop_view=stop_view, width=inputs.width)
+    return replace(state, map=replace(state.map, step=inputs.zoom - fit.zoom))
+
+
 def map_effects(
     *, state: State, stop_view: StopView
 ) -> tuple[State, tuple[Effect, ...]]:
@@ -632,7 +661,10 @@ def map_effects(
         else None
     )
     drawn = () if inputs is None else inputs.departures
-    state = framed_state(state=state, inputs=inputs)
+    state = framed_state(
+        state=rebased(state=state, inputs=inputs, stop_view=stop_view),
+        inputs=inputs,
+    )
     wanted = map_patterns(state=state, inputs=inputs)
     state = pruned(state=state, wanted=wanted, departures=drawn)
     state, area = area_effects(state=state, departures=drawn)

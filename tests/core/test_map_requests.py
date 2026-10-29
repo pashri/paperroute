@@ -19,6 +19,7 @@ from paperroute.core.messages import (
     MapDataFailed,
     ModesLoaded,
     PatternsLoaded,
+    Tick,
 )
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, RouteKind
 from paperroute.core.saved import LiveView
@@ -278,3 +279,17 @@ def test_plain_map_holds_the_frame_on_screen() -> None:
     view = current_view(state=state, stop_view=live_stop_view(state=state))
     assert isinstance(view, MapView)
     assert view.base.centre == held[0]
+
+
+def test_coarser_detent_moves_after_the_fit_gets_finer() -> None:
+    """Hidden finer detents are dropped when a finer fit clamps them."""
+    state, _ = fitted_on(view=LiveView.STRIP_MAP, to=EAST_TO)
+    state, _ = step(state, turn(steps=2))
+    assert state.map.frame is not None
+    assert state.map.frame[1] == 0
+    state, _ = step(replace(state, view=LiveView.MAP), Tick(now=state.now))
+    assert state.map.frame is not None
+    assert state.map.frame[1] == 0
+    state, _ = step(state, turn(steps=-1))
+    assert state.map.frame is not None
+    assert state.map.frame[1] == 1

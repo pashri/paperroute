@@ -53,12 +53,13 @@ from paperroute.render.map_view import (
     SIDEBAR_RIGHT,
     SIDEBAR_TEXT,
     draw_map_view,
+    edge_boxes,
     empty_lines,
     end_boxes,
     snap,
     stop_boxes,
 )
-from paperroute.render.markers import END_HALF, place
+from paperroute.render.markers import END_HALF, badge_half, place
 from paperroute.render.tile_codec import GREYS, pack_bits, pack_grey
 
 MPP = 8
@@ -708,3 +709,36 @@ def test_no_centre_has_no_boxes() -> None:
     map_base = replace(VIEW.base, centre=None, trip=trip, stops=(CENTRE,))
     assert end_boxes(base=map_base) == []
     assert stop_boxes(base=map_base) == []
+
+
+def test_badge_on_a_from_under_the_banner_slides_down() -> None:
+    """A bus at a From near the banner slides down, not under it."""
+    top = BANNER + 24.0
+    origin = (CENTRE[0], CENTRE[1] + (MAP_HEIGHT / 2 - top) * MPP)
+    trip = TripMarks(
+        origin=origin, second=(), walk=None, change=None, end=None,
+    )
+    view = replace(
+        VIEW,
+        base=replace(VIEW.base, trip=trip),
+        markers=(live(at=(MAP_WIDTH / 2, top)),),
+        banner='Showing timetable only',
+    )
+    frame = draw_map_view(view=view, base=paper())
+    edge = math.floor(MAP_WIDTH / 2 - badge_half(route='606')[0]) + 2
+    assert frame[math.floor(HEADER + top + 36), edge] == INK
+
+
+def test_badge_near_the_right_edge_slides_inward() -> None:
+    """A badge with only a sideways spot free never slides off the map."""
+    x, y = MAP_WIDTH - 24.0, MAP_HEIGHT / 2
+    blocked = [(x - 5, y - 60, x + 5, y - 5), (x - 5, y + 5, x + 5, y + 60)]
+    (placed,) = place(
+        markers=[live(at=(x, y))],
+        reserved=[
+            (x - 5, y - 5, x + 5, y + 5),
+            *blocked,
+            *edge_boxes(width=MAP_WIDTH, banner=False),
+        ],
+    )
+    assert placed.centre == (x - 40, y)

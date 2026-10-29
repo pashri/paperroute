@@ -489,6 +489,7 @@ def draw_markers(
     mpp: int,
     origin: Point,
     reserved: Sequence[Box],
+    edges: Sequence[Box] = (),
     stops: Sequence[Box] = (),
     keep_out: KeepOut = NO_KEEP_OUT,
 ) -> None:
@@ -512,6 +513,9 @@ def draw_markers(
     reserved : Sequence[Box]
         Map-pixel boxes no badge or number may cover, such as the From
         and the To.
+    edges : Sequence[Box]
+        Map-pixel boxes off the map and under the banner, which no badge
+        slides into.
     stops : Sequence[Box]
         Map-pixel boxes of the ridden stops, which numbers keep clear of.
     keep_out : KeepOut
@@ -519,7 +523,7 @@ def draw_markers(
     """
     placed = place(
         markers=[marker for marker in markers if marker.pinned],
-        reserved=reserved,
+        reserved=[*reserved, *edges],
     )
     draw_others(
         canvas,

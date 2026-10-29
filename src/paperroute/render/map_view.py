@@ -61,6 +61,7 @@ EMPTY_FACES: Final[tuple[Face, ...]] = (
     Face(weight=700, px=15),
 )
 EMPTY_LINES: Final[int] = 2
+OFF_MAP: Final[float] = 1000.0  # pixels each edge box reaches out
 EMPTY_LEADING: Final[int] = 4  # pixels between the empty text's lines
 EMPTY_MARGIN: Final[int] = 32  # pixels each side of the empty text
 EMPTY_DROP: Final[float] = NOT_INSTALLED_DROP + 26.0  # below the centre
@@ -263,6 +264,31 @@ def end_boxes(*, base: MapBase) -> list[Box]:
     ]
 
 
+def edge_boxes(*, width: int, banner: bool) -> list[Box]:
+    """
+    Give the boxes off the map and under the banner, in map pixels.
+
+    Parameters
+    ----------
+    width : int
+        Map width in pixels.
+    banner : bool
+        True when a banner covers the map's top.
+
+    Returns
+    -------
+    list[Box]
+        Strips above, below, left and right of what shows of the map.
+    """
+    top = BANNER if banner else 0
+    return [
+        (-OFF_MAP, -OFF_MAP, width + OFF_MAP, top),
+        (-OFF_MAP, MAP_HEIGHT, width + OFF_MAP, MAP_HEIGHT + OFF_MAP),
+        (-OFF_MAP, -OFF_MAP, 0, MAP_HEIGHT + OFF_MAP),
+        (width, -OFF_MAP, width + OFF_MAP, MAP_HEIGHT + OFF_MAP),
+    ]
+
+
 def stop_boxes(*, base: MapBase) -> list[Box]:
     """
     Give the boxes of the ridden stops, in map pixels.
@@ -310,6 +336,9 @@ def draw_overlay(
             mpp=view.base.mpp,
             origin=(0, HEADER),
             reserved=end_boxes(base=view.base),
+            edges=edge_boxes(
+                width=view.base.width, banner=view.banner is not None,
+            ),
             stops=stop_boxes(base=view.base),
             keep_out=keep_out,
         )

@@ -62,7 +62,7 @@ def read_retry_after(*, value: str | None, now: datetime) -> float | None:
         Seconds to wait, never below 0; None when absent or unreadable.
     """
     value = (value or '').strip()
-    if value.isdigit():
+    if value.isascii() and value.isdigit():
         return float(value)
     try:
         when = parsedate_to_datetime(value)

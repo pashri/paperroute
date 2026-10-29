@@ -357,6 +357,7 @@ async def test_429_without_retry_after(server: TestServer) -> None:
         ('Thu, 29 Oct 2026 04:01:00 GMT', 60.0),
         ('Thu, 29 Oct 2026 03:59:00 GMT', 0.0),
         ('soon', None),
+        ('²', None),
         ('', None),
     ],
 )

@@ -11,9 +11,7 @@ from paperroute.core.tiles import LabelKind, to_pixels
 from paperroute.ports import TileRepository
 from paperroute.render.canvas import INK, PAPER, Canvas
 from paperroute.render.chrome import HEADER
-from paperroute.render.map_marks import ROUTE_STYLE, draw_stop
-
-Window = tuple[int, int]
+from paperroute.render.map_marks import ROUTE_STYLE, Window, draw_stop
 
 CASING: Final[int] = 4  # extra paper width under leg 2
 LEG_DASH: Final[tuple[float, float]] = (12.0, 7.0)
@@ -22,7 +20,7 @@ WALK_WIDTH: Final[float] = 2.5
 WALK_DASH: Final[tuple[float, float]] = (2.0, 4.0)
 SQUARE: Final[int] = 8  # half the change square's side
 SQUARE_EDGE: Final[int] = 3  # paper round the square
-END_DISC: Final[int] = 8
+END_DISC: Final[int] = 12
 END_EDGE: Final[int] = 3  # paper round the To's disc
 NAME_REACH: Final[float] = 20.0  # pixels from the To to its station
 NAME_HALO: Final[int] = 2

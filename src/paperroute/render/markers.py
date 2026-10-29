@@ -34,7 +34,9 @@ OFFSETS: Final[tuple[tuple[int, int], ...]] = (
 BADGE_HALF_HEIGHT: Final[float] = 10.0
 GROW_X: Final[float] = 12.0  # pixels each side, room for a wedge
 GROW_Y: Final[float] = 4.0  # pixels each side
-STOP_HALF: Final[float] = 14.0
+STOP_HALF: Final[float] = 18.0
+END_HALF: Final[float] = 15.0
+CHANGE_HALF: Final[float] = 11.0
 LIVE_DOTS: Final[tuple[tuple[float, int], ...]] = ((9, PAPER), (7, INK))
 HOLLOW_DOTS: Final[tuple[tuple[float, int], ...]] = (
     (9, PAPER),
@@ -469,7 +471,27 @@ def draw_leaders(
         canvas.line(points=[spot, centre], width=3, grey=PAPER)
         canvas.line(points=[spot, centre], width=1.5, grey=INK)
         spots.append(spot)
-    canvas.dots(points=spots, diameter=3.5, grey=INK)
+    if spots:
+        canvas.dots(points=spots, diameter=3.5, grey=INK)
+
+
+def square(*, at: Point, half: float) -> Box:
+    """
+    Give the square box around a point.
+
+    Parameters
+    ----------
+    at : Point
+        The square's centre.
+    half : float
+        Half its side.
+
+    Returns
+    -------
+    Box
+        Left, top, right, bottom.
+    """
+    return at[0] - half, at[1] - half, at[0] + half, at[1] + half
 
 
 def draw_markers(
@@ -478,12 +500,13 @@ def draw_markers(
     markers: Sequence[Marker],
     mpp: int,
     origin: Point,
-    stop: Point | None,
+    reserved: Sequence[Box],
 ) -> None:
     """
-    Draw vehicles: dots at city zoom, else placed badges.
+    Draw vehicles: placed badges, with others as dots at city zoom.
 
-    Pinned routes are placed first and drawn last, so they sit on top.
+    Pinned routes are badges at every zoom, placed first and drawn last,
+    so they sit on top. At city zoom every other vehicle is a dot.
 
     Parameters
     ----------
@@ -495,27 +518,19 @@ def draw_markers(
         Metres per pixel.
     origin : Point
         The map's top left on the canvas.
-    stop : Point | None
-        Where the From stop is drawn, in map pixels; badges keep clear of
-        it. None when no stop is drawn.
+    reserved : Sequence[Box]
+        Map-pixel boxes no badge may cover, such as the From and the To.
     """
+    badges = markers
     if mpp == CITY:
-        draw_dots(canvas, markers=markers, origin=origin)
-        return
-    reserved = (
-        []
-        if stop is None
-        else [
-            (
-                stop[0] - STOP_HALF,
-                stop[1] - STOP_HALF,
-                stop[0] + STOP_HALF,
-                stop[1] + STOP_HALF,
-            ),
-        ]
-    )
+        draw_dots(
+            canvas,
+            markers=[marker for marker in markers if not marker.pinned],
+            origin=origin,
+        )
+        badges = [marker for marker in markers if marker.pinned]
     placed = place(
-        markers=sorted(markers, key=lambda marker: not marker.pinned),
+        markers=sorted(badges, key=lambda marker: not marker.pinned),
         reserved=reserved,
     )
     draw_leaders(canvas, placed=placed, origin=origin)

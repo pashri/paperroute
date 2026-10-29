@@ -1,5 +1,6 @@
 """Draw the Map view: header, map with markers, sidebar and banner."""
 
+from collections.abc import Sequence
 from typing import Final
 
 import numpy as np
@@ -18,8 +19,10 @@ from paperroute.render.canvas import (
     INK,
     PAPER,
     WIDTH,
+    Box,
     Canvas,
     Face,
+    Point,
     text_width,
 )
 from paperroute.render.chrome import (
@@ -34,8 +37,14 @@ from paperroute.render.chrome import (
     view_header,
 )
 from paperroute.render.map_base import HALO, NOT_INSTALLED_DROP
-from paperroute.render.map_marks import draw_stop
-from paperroute.render.markers import draw_markers
+from paperroute.render.map_marks import RIDDEN_RING, draw_stop
+from paperroute.render.markers import (
+    CHANGE_HALF,
+    END_HALF,
+    STOP_HALF,
+    draw_markers,
+    square,
+)
 from paperroute.render.pair_list import draw_pair_list
 from paperroute.render.tile_codec import THRESHOLD, quantise4
 from paperroute.render.trip_marks import draw_trip_points
@@ -188,6 +197,91 @@ def stop_at(*, base: MapBase) -> tuple[float, float] | None:
     )
 
 
+def map_pixels(*, base: MapBase, points: Sequence[Point]) -> list[Point]:
+    """
+    Place points in metres on the map.
+
+    Parameters
+    ----------
+    base : MapBase
+        The base map key.
+    points : Sequence[Point]
+        Points in metres.
+
+    Returns
+    -------
+    list[Point]
+        Map pixels of each point; none without a centre.
+    """
+    centre = base.centre
+    if centre is None:
+        return []
+    return [
+        screen_point(
+            centre=centre, mpp=base.mpp, point=point, width=base.width,
+        )
+        for point in points
+    ]
+
+
+def end_boxes(*, base: MapBase) -> list[Box]:
+    """
+    Give the boxes of the From, the To and each change, in map pixels.
+
+    Parameters
+    ----------
+    base : MapBase
+        The base map key.
+
+    Returns
+    -------
+    list[Box]
+        The From's box where it is drawn, then the To's and each change
+        square's when there are trip marks.
+    """
+    stop = stop_at(base=base)
+    boxes = [] if stop is None else [square(at=stop, half=STOP_HALF)]
+    trip = base.trip
+    if trip is None:
+        return boxes
+    ends = () if trip.end is None else (trip.end,)
+    changes = (
+        *(() if trip.change is None else (trip.change,)),
+        *(((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) for a, b in trip.others),
+    )
+    return [
+        *boxes,
+        *(
+            square(at=end, half=END_HALF)
+            for end in map_pixels(base=base, points=ends)
+        ),
+        *(
+            square(at=change, half=CHANGE_HALF)
+            for change in map_pixels(base=base, points=changes)
+        ),
+    ]
+
+
+def stop_boxes(*, base: MapBase) -> list[Box]:
+    """
+    Give the boxes of the ridden stops, in map pixels.
+
+    Parameters
+    ----------
+    base : MapBase
+        The base map key.
+
+    Returns
+    -------
+    list[Box]
+        A square one pixel wider than each stop's ring.
+    """
+    return [
+        square(at=stop, half=RIDDEN_RING + 1)
+        for stop in map_pixels(base=base, points=base.stops)
+    ]
+
+
 def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
     """
     Draw the markers, the empty text and the From stop over the map.
@@ -210,7 +304,7 @@ def draw_overlay(canvas: Canvas, *, view: MapView) -> None:
             markers=view.markers,
             mpp=view.base.mpp,
             origin=(0, HEADER),
-            stop=stop,
+            reserved=end_boxes(base=view.base),
         )
         if view.empty:
             draw_empty(canvas, text=view.empty, width=view.base.width)

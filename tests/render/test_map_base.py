@@ -296,29 +296,12 @@ def test_stop_marker_sits_on_the_map_centre(tmp_path: Path) -> None:
         )
     x, y = MAP_WIDTH // 2, MAP_HEIGHT // 2
     assert grey[y, x] == INK
-    assert grey[y, x + 9] == INK
-    assert grey[y, x - 9] == INK
-    assert grey[y - 9, x] == INK
-    assert grey[y + 9, x] == INK
-    assert grey[y, x + 6] == PAPER
-    assert grey[y, x + 11] == PAPER
-
-
-def test_stop_marker_is_drawn_over_the_route(tmp_path: Path) -> None:
-    """Across the stop: route, paper disc, 3 px ring, paper, 8 px dot."""
-    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
-        grey = draw_map_base(
-            base=base(route=across(half=5000.0)),
-            tiles=tiles,
-            variant=TileVariant.GREY,
-        )
-    x, y = MAP_WIDTH // 2, centre_row()
-    assert pattern(values=grey[y, x - 14 : x + 13]) == (
-        '#...###...########....###.#'
-    )
-    assert pattern(values=grey[y - 14 : y + 15, x]) == (
-        '....###...########....###....'
-    )
+    assert grey[y, x + 12] == INK
+    assert grey[y, x - 12] == INK
+    assert grey[y - 12, x] == INK
+    assert grey[y + 12, x] == INK
+    assert grey[y, x + 7] == PAPER
+    assert grey[y, x + 15] == PAPER
 
 
 def test_route_line_is_ink_through_the_centre(tmp_path: Path) -> None:
@@ -495,16 +478,17 @@ def test_names_over_the_line_are_redrawn(tmp_path: Path) -> None:
 
 
 def test_route_street_names_redrawn_in_ink(tmp_path: Path) -> None:
-    """A name redrawn along the route is ink, beside the stroke too."""
+    """A name redrawn along the route is ink letters over the stroke."""
     gx, gy = to_pixels(point=CENTRE, mpp=MPP)
     label = street(name='Church Street', x=gx + LABEL_SHIFT, y=gy)
     named = draw_with(out=tmp_path / 'named.db', labels=[label])
     plain = draw_with(out=tmp_path / 'plain.db', labels=[])
     row = centre_row()
     x = math.floor(MAP_WIDTH / 2 + LABEL_SHIFT)
-    beside = (slice(row - 7, row - 3), slice(x - 30, x + 31))
-    assert np.count_nonzero(named[beside] == INK) > 0
-    assert np.count_nonzero(plain[beside] == INK) == 0
+    edge = (slice(row - 5, row - 2), slice(x - 30, x + 31))
+    assert (plain[edge] == INK).all()
+    assert np.count_nonzero(named[edge] == INK) > 0
+    assert np.count_nonzero(named[edge] == PAPER) > 0
 
 
 def smooth_name(
@@ -800,7 +784,14 @@ def test_scale_text_names_the_largest_fitting_step(
 
 @pytest.mark.parametrize(
     ('mpp', 'outer', 'bead'),
-    [(3, 7, 3), (5, 7, 3), (8, 7, 3), (14, 5, 1), (25, 4, 0), (45, 3, 0)],
+    [
+        (3, 11, 5),
+        (5, 11, 5),
+        (8, 10, 4),
+        (14, 8, 2),
+        (25, 7, 0),
+        (45, 6, 0),
+    ],
 )
 def test_route_style_at_every_zoom(
     tmp_path: Path,
@@ -1091,4 +1082,58 @@ def test_to_station_name_is_redrawn_over_the_trip(tmp_path: Path) -> None:
     )
     assert np.count_nonzero(named[:, : math.floor(x) - 40] == INK) == (
         np.count_nonzero(plain[:, : math.floor(x) - 40] == INK)
+    )
+
+
+def test_ridden_stops_are_rings(tmp_path: Path) -> None:
+    """A ridden stop is an ink ring with a paper centre."""
+    stop = (CENTRE[0] + 800.0, CENTRE[1] + 400.0)
+    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
+        grey = draw_map_base(
+            base=replace(base(), stops=(stop,)),
+            tiles=tiles,
+            variant=TileVariant.GREY,
+        )
+    x, y = screen_point(centre=CENTRE, mpp=MPP, point=stop)
+    column, row = math.floor(x), math.floor(y)
+    assert grey[row, column] == PAPER
+    assert grey[row, column + 4] == INK
+    assert grey[row, column - 4] == INK
+    assert grey[row + 4, column] == INK
+    assert grey[row, column + 7] == PAPER
+
+
+def test_to_disc_is_12_px(tmp_path: Path) -> None:
+    """The To is an ink disc 12 px in radius edged with paper."""
+    end = (CENTRE[0] + 800.0, CENTRE[1])
+    trip = TripMarks(
+        origin=None, second=(), walk=None, change=None, end=end,
+    )
+    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
+        grey = draw_map_base(
+            base=replace(base(), trip=trip),
+            tiles=tiles,
+            variant=TileVariant.GREY,
+        )
+    x, y = screen_point(centre=CENTRE, mpp=MPP, point=end)
+    column, row = math.floor(x), math.floor(y)
+    assert grey[row, column + 11] == INK
+    assert grey[row, column - 11] == INK
+    assert grey[row, column + 14] == PAPER
+
+
+def test_from_marker_is_16_px(tmp_path: Path) -> None:
+    """The From is a 16 px paper disc, a 4 px ring at 12 and a 5 px dot."""
+    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
+        grey = draw_map_base(
+            base=base(route=across(half=5000.0)),
+            tiles=tiles,
+            variant=TileVariant.GREY,
+        )
+    x, y = MAP_WIDTH // 2, centre_row()
+    assert pattern(values=grey[y, x - 20 : x + 21]) == (
+        '####..####.....##########.....####..#####'
+    )
+    assert pattern(values=grey[y - 20 : y + 21, x]) == (
+        '......####.....##########.....####.......'
     )

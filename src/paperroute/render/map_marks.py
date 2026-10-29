@@ -1,22 +1,28 @@
-"""The map's fixed marks: route line widths and the From stop."""
+"""The map's fixed marks: route line widths, ridden stops and the From."""
 
 from typing import Final
 
 from paperroute.core.geo import Point
+from paperroute.core.map_view import MapBase
+from paperroute.core.tiles import to_pixels
 from paperroute.render.canvas import INK, PAPER, Canvas
 
+Window = tuple[int, int]
+
 ROUTE_STYLE: Final[dict[int, tuple[int, int | None]]] = {
-    3: (7, 3),
-    5: (7, 3),
-    8: (7, 3),
-    14: (5, 1),
-    25: (4, None),
-    45: (3, None),
+    3: (11, 5),
+    5: (11, 5),
+    8: (10, 4),
+    14: (8, 2),
+    25: (7, None),
+    45: (6, None),
 }
-STOP_DISC: Final[float] = 12.0
-STOP_RING: Final[float] = 9.0
-STOP_RING_WIDTH: Final[float] = 3.0
-STOP_DOT: Final[float] = 4.0
+STOP_DISC: Final[float] = 16.0
+STOP_RING: Final[float] = 12.0
+STOP_RING_WIDTH: Final[float] = 4.0
+STOP_DOT: Final[float] = 5.0
+RIDDEN_RING: Final[float] = 5.0
+RIDDEN_HOLE: Final[float] = 3.0
 
 
 def draw_stop(canvas: Canvas, *, at: Point) -> None:
@@ -44,3 +50,28 @@ def draw_stop(canvas: Canvas, *, at: Point) -> None:
         box=(x - STOP_DOT, y - STOP_DOT, x + STOP_DOT, y + STOP_DOT),
         grey=INK,
     )
+
+
+def draw_ridden_stops(
+    canvas: Canvas, *, base: MapBase, window: Window,
+) -> None:
+    """
+    Draw each ridden stop as an ink ring with a paper centre.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target, the map alone.
+    base : MapBase
+        The base map key.
+    window : Window
+        The map's top-left corner in global pixels.
+    """
+    points = [
+        (x - window[0], y - window[1])
+        for x, y in (
+            to_pixels(point=point, mpp=base.mpp) for point in base.stops
+        )
+    ]
+    canvas.dots(points=points, diameter=2 * RIDDEN_RING, grey=INK)
+    canvas.dots(points=points, diameter=2 * RIDDEN_HOLE, grey=PAPER)

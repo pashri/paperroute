@@ -25,7 +25,13 @@ from paperroute.core.tiles import (
 )
 from paperroute.ports import TileRepository
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
-from paperroute.render.map_marks import ROUTE_STYLE, STOP_DISC, draw_stop
+from paperroute.render.map_marks import (
+    ROUTE_STYLE,
+    STOP_DISC,
+    Window,
+    draw_ridden_stops,
+    draw_stop,
+)
 from paperroute.render.tile_codec import THRESHOLD, diffuse, quantise4
 from paperroute.render.trip_marks import (
     draw_end_name,
@@ -33,7 +39,6 @@ from paperroute.render.trip_marks import (
     draw_trip_legs,
 )
 
-Window = tuple[int, int]
 Region = tuple[slice, slice]
 
 BEAD_DASH: Final[tuple[float, float]] = (2.0, 7.0)
@@ -725,7 +730,7 @@ def draw_marks(
     canvas: Canvas, *, base: MapBase, window: Window, tiles: TileRepository,
 ) -> None:
     """
-    Draw the trip's ends and end name, the stop, the scale and the notes.
+    Draw the ridden stops, trip ends, stop, scale and notes.
 
     Parameters
     ----------
@@ -738,6 +743,7 @@ def draw_marks(
     tiles : TileRepository
         Where the street labels and the tile version come from.
     """
+    draw_ridden_stops(canvas, base=base, window=window)
     draw_trip_ends(canvas, base=base, window=window)
     draw_end_name(canvas, base=base, window=window, tiles=tiles)
     if base.trip is None and base.centre is not None:

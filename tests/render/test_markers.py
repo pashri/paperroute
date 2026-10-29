@@ -23,11 +23,13 @@ from paperroute.render.markers import (
     AGE_FACE,
     BADGE_FACE,
     OFFSETS,
+    STOP_HALF,
     badge_half,
     draw_markers,
     draw_tab,
     marker_box,
     place,
+    square,
     tab_box,
     wedge_points,
 )
@@ -163,7 +165,7 @@ def drawn(
         markers=markers,
         mpp=mpp,
         origin=origin,
-        stop=MIDDLE,
+        reserved=[square(at=MIDDLE, half=STOP_HALF)],
     )
     return canvas.grey()
 
@@ -252,10 +254,13 @@ def test_city_zoom_draws_dots() -> None:
     canvas = CountingCanvas()
     draw_markers(
         canvas,
-        markers=[marker(), marker(at=(200.0, 100.0), live=False)],
+        markers=[
+            replace(marker(), pinned=False),
+            replace(marker(at=(200.0, 100.0), live=False), pinned=False),
+        ],
         mpp=CITY,
         origin=(0.0, 0.0),
-        stop=MIDDLE,
+        reserved=[square(at=MIDDLE, half=STOP_HALF)],
     )
     grey = canvas.grey()
     assert int(grey[100, 100]) == INK
@@ -271,15 +276,16 @@ def test_city_zoom_draws_dots() -> None:
 
 
 def test_marker_on_the_stop_slides_away() -> None:
-    """A badge on the stop slides off it."""
+    """A badge just below the stop slides further down, off it."""
     stop = (MAP_WIDTH / 2, MAP_HEIGHT / 2)
-    reserved = [(stop[0] - 14, stop[1] - 14, stop[0] + 14, stop[1] + 14)]
-    placed = place(markers=[marker(at=stop)], reserved=reserved)
-    assert placed[0].centre == (stop[0], stop[1] - 28)
-    grey = drawn(markers=[marker(at=stop)])
+    near = marker(at=(stop[0], stop[1] + 6))
+    reserved = [square(at=stop, half=STOP_HALF)]
+    placed = place(markers=[near], reserved=reserved)
+    assert placed[0].centre == (stop[0], stop[1] + 34)
+    grey = drawn(markers=[near])
     edge = int(stop[0] - badge_half(route='606')[0]) + 2
-    assert int(grey[int(stop[1]) - 28, edge]) == INK
-    assert int(grey[int(stop[1]), edge]) == PAPER
+    assert int(grey[int(stop[1]) + 34, edge]) == INK
+    assert int(grey[int(stop[1]) + 6, edge]) == PAPER
 
 
 @pytest.mark.parametrize(
@@ -337,8 +343,9 @@ def test_age_text_minutes_and_hours(seconds: float, text: str) -> None:
 
 
 def test_city_zoom_has_no_tab() -> None:
-    """At city zoom a stale vehicle is only its hollow dot."""
-    grey = drawn(markers=[marker(live=False, age=240.0)], mpp=CITY)
+    """At city zoom a stale unpinned vehicle is only its hollow dot."""
+    stale = replace(marker(live=False, age=240.0), pinned=False)
+    grey = drawn(markers=[stale], mpp=CITY)
     assert int(grey[100, 100]) == PAPER
     assert (grey[106:130, 80:120] == PAPER).all()
 
@@ -460,7 +467,7 @@ def test_leaders_are_two_strokes_and_one_dot_batch() -> None:
         markers=markers,
         mpp=BADGE_ZOOM,
         origin=(0, 0),
-        stop=MIDDLE,
+        reserved=[square(at=MIDDLE, half=STOP_HALF)],
     )
     moved = sum(
         item.centre != SPOT for item in place(markers=markers, reserved=[])
@@ -471,9 +478,9 @@ def test_leaders_are_two_strokes_and_one_dot_batch() -> None:
     assert canvas.calls == [(moved, 3.5, INK)]
 
 
-@pytest.mark.parametrize(('y', 'slides'), [(247.0, True), (248.0, False)])
-def test_stop_box_is_14_px_each_side(y: float, slides: bool) -> None:
-    """A badge must clear the stop's 28 px box by its 4 px growth."""
+@pytest.mark.parametrize(('y', 'slides'), [(251.0, True), (252.0, False)])
+def test_stop_box_is_18_px_each_side(y: float, slides: bool) -> None:
+    """A badge must clear the stop's 36 px box by its 4 px growth."""
     canvas = CountingCanvas()
     below = marker(at=(MAP_WIDTH / 2, y))
     draw_markers(
@@ -481,7 +488,7 @@ def test_stop_box_is_14_px_each_side(y: float, slides: bool) -> None:
         markers=[below],
         mpp=BADGE_ZOOM,
         origin=(0, 0),
-        stop=MIDDLE,
+        reserved=[square(at=MIDDLE, half=STOP_HALF)],
     )
     assert bool(canvas.lines) is slides
 
@@ -490,19 +497,19 @@ def test_stop_box_is_14_px_each_side(y: float, slides: bool) -> None:
     ('stop', 'slides'),
     [((MAP_WIDTH / 2, MAP_HEIGHT / 2 + 1), True), (None, False)],
 )
-def test_stop_box_sits_where_the_stop_is_drawn(
+def test_reserved_box_sits_where_given(
     stop: Point | None,
     slides: bool,
 ) -> None:
-    """The reserved box follows the given stop point, or is absent."""
+    """Badges keep clear of the reserved boxes given, and only those."""
     canvas = CountingCanvas()
-    below = marker(at=(MAP_WIDTH / 2, 248.5))
+    below = marker(at=(MAP_WIDTH / 2, 252.5))
     draw_markers(
         canvas,
         markers=[below],
         mpp=BADGE_ZOOM,
         origin=(0, 0),
-        stop=stop,
+        reserved=[] if stop is None else [square(at=stop, half=STOP_HALF)],
     )
     assert bool(canvas.lines) is slides
 
@@ -511,3 +518,11 @@ def test_badge_half_pads_the_route() -> None:
     """A badge is the route's width plus 5 px a side, and 20 px tall."""
     width = text_width(text='606', face=BADGE_FACE)
     assert badge_half(route='606') == (width / 2 + 5, 10)
+
+
+def test_pinned_badges_at_city_zoom() -> None:
+    """At 45 m/px a pinned live marker is a badge, not a dot."""
+    grey = drawn(markers=[marker()], mpp=CITY)
+    edge = math.ceil(100 - badge_half(route='606')[0])
+    assert int(grey[100, edge]) == INK
+    assert int(grey[100, 100]) == INK

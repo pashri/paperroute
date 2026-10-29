@@ -67,7 +67,8 @@ def test_change_square_and_end_disc() -> None:
     assert (grey[y - 6:y + 7, x - 6:x + 7] == INK).all()
     x, y = MIDDLE[0] + 200, MIDDLE[1] + 100
     assert grey[y, x] == INK
-    assert grey[y - 7, x - 7] != INK
+    assert grey[y, x + 11] == INK
+    assert grey[y - 10, x - 10] != INK
 
 
 def test_walk_dotted() -> None:
@@ -83,8 +84,8 @@ def test_no_stop_ring_at_centre() -> None:
     plain = drawn(trip=None)
     marked = drawn(trip=TRIP)
     x, y = MIDDLE
-    assert plain[y, x + 9] == INK
-    assert marked[y, x + 9] == PAPER
+    assert plain[y, x + 12] == INK
+    assert marked[y, x + 12] == PAPER
 
 
 def test_from_drawn_at_origin() -> None:
@@ -97,7 +98,7 @@ def test_from_drawn_at_origin() -> None:
     grey = canvas.grey()
     x, y = MIDDLE[0] - 200, MIDDLE[1] - 100 + 40
     assert grey[y, x] < 128
-    assert grey[y, x + 9] < 128
+    assert grey[y, x + 12] < 128
 
 
 def test_no_trip_draws_no_from() -> None:

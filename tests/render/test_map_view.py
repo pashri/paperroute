@@ -54,8 +54,11 @@ from paperroute.render.map_view import (
     SIDEBAR_TEXT,
     draw_map_view,
     empty_lines,
+    end_boxes,
     snap,
+    stop_boxes,
 )
+from paperroute.render.markers import END_HALF, place
 from paperroute.render.tile_codec import GREYS, pack_bits, pack_grey
 
 MPP = 8
@@ -387,11 +390,11 @@ def test_stop_marker_is_drawn_over_badges() -> None:
     frame = draw_map_view(view=view, base=paper())
     sx, sy = stop_pixel()
     assert frame[sy, sx] == INK
-    assert frame[sy, sx + 6] == PAPER
-    assert frame[sy, sx + 9] == INK
-    assert frame[sy, sx - 9] == INK
-    assert frame[sy, sx + 11] == PAPER
-    assert frame[sy, sx - 11] == PAPER
+    assert frame[sy, sx + 7] == PAPER
+    assert frame[sy, sx + 12] == INK
+    assert frame[sy, sx - 12] == INK
+    assert frame[sy, sx + 15] == PAPER
+    assert frame[sy, sx - 15] == PAPER
 
 
 def empty_band(*, frame: NDArray[np.uint8]) -> NDArray[np.uint8]:
@@ -417,11 +420,11 @@ def test_empty_text_sits_below_the_stop() -> None:
     frame = draw_map_view(view=replace(VIEW, empty=EMPTY), base=paper())
     assert np.any(empty_band(frame=frame) == INK)
     sx, sy = stop_pixel()
-    assert np.all(frame[sy - 20 : sy + 20, 60 : sx - 16] == PAPER)
-    assert np.all(frame[sy - 20 : sy + 20, sx + 16 : 460] == PAPER)
+    assert np.all(frame[sy - 20 : sy + 20, 60 : sx - 20] == PAPER)
+    assert np.all(frame[sy - 20 : sy + 20, sx + 20 : 460] == PAPER)
     assert frame[sy, sx] == INK
-    assert frame[sy, sx + 6] == PAPER
-    assert frame[sy, sx + 9] == INK
+    assert frame[sy, sx + 7] == PAPER
+    assert frame[sy, sx + 12] == INK
 
 
 def test_empty_text_has_a_halo() -> None:
@@ -477,7 +480,9 @@ def test_markers_and_tiles_share_one_transform(tmp_path: Path) -> None:
     ty, tx = math.floor(sy) + HEADER, math.floor(sx)
     assert tiled[ty, tx] == INK
     marked = draw_map_view(
-        view=replace(view, markers=(live(at=(sx, sy)),)),
+        view=replace(
+            view, markers=(replace(live(at=(sx, sy)), pinned=False),),
+        ),
         base=paper(),
     )
     near = marked[ty - 10 : ty + 11, tx - 10 : tx + 11]
@@ -655,4 +660,51 @@ def test_trip_origin_gets_the_stop() -> None:
     frame = draw_map_view(view=view, base=paper())
     x, y = stop_pixel()
     assert frame[y, x + 9] == PAPER
-    assert frame[y, x - 100 + 9] == INK
+    assert frame[y, x - 100 + 12] == INK
+
+
+def test_badges_keep_clear_of_the_to() -> None:
+    """A badge on the To slides off its 15 px box."""
+    end = (CENTRE[0] + 800.0, CENTRE[1])
+    trip = TripMarks(
+        origin=CENTRE, second=(), walk=None, change=None, end=end,
+    )
+    map_base = replace(VIEW.base, trip=trip)
+    x, y = screen_point(centre=CENTRE, mpp=MPP, point=end)
+    boxes = end_boxes(base=map_base)
+    assert (x - END_HALF, y - END_HALF, x + END_HALF, y + END_HALF) in boxes
+    (placed,) = place(markers=[live(at=(x, y + 6))], reserved=boxes)
+    assert placed.centre != (x, y + 6)
+
+
+def test_plain_from_drawn_by_overlay_at_origin() -> None:
+    """With a fitted centre away from the From, the stop is at the From."""
+    origin = (CENTRE[0] - 800.0, CENTRE[1])
+    end = (CENTRE[0] + 800.0, CENTRE[1])
+    trip = TripMarks(
+        origin=origin, second=(), walk=None, change=None, end=end,
+    )
+    view = replace(VIEW, base=replace(VIEW.base, trip=trip))
+    frame = draw_map_view(view=view, base=paper())
+    x, y = stop_pixel()
+    assert frame[y, x - 100] == INK
+    assert frame[y, x - 100 + 12] == INK
+    assert frame[y, x] == PAPER
+
+
+def test_stop_boxes_are_one_px_wider_than_the_ring() -> None:
+    """Each ridden stop's box is 6 px each side of its pixel."""
+    stop = (CENTRE[0] + 80.0, CENTRE[1])
+    map_base = replace(VIEW.base, stops=(stop,))
+    x, y = screen_point(centre=CENTRE, mpp=MPP, point=stop)
+    assert stop_boxes(base=map_base) == [(x - 6, y - 6, x + 6, y + 6)]
+
+
+def test_no_centre_has_no_boxes() -> None:
+    """Without a centre nothing is drawn, so nothing is kept clear."""
+    trip = TripMarks(
+        origin=CENTRE, second=(), walk=None, change=CENTRE, end=CENTRE,
+    )
+    map_base = replace(VIEW.base, centre=None, trip=trip, stops=(CENTRE,))
+    assert end_boxes(base=map_base) == []
+    assert stop_boxes(base=map_base) == []

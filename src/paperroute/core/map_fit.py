@@ -1,7 +1,8 @@
 """Where a map sits: the fitted zoom moved by the knob's step."""
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from dataclasses import replace
+from functools import partial
 from typing import Final
 
 from paperroute.core.geo import Point
@@ -9,12 +10,11 @@ from paperroute.core.map_view import DEFAULT_ZOOM, MAP_HEIGHT, MapInputs
 from paperroute.core.ridden import ridden_stops, stops_window
 from paperroute.core.tiles import ZOOMS
 
-FIT_MARGIN: Final[float] = 1.1  # the box, plus 10%
 CREDIT_ROOM: Final[int] = 28  # pixels kept clear above the map's bottom
 BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
 KEEP_IN: Final[int] = 24  # pixels the From is kept inside the map
 SLEEP_BAND: Final[int] = 56  # pixels the sleep band covers at the bottom
-SLEEP_ROOM: Final[int] = SLEEP_BAND + 16  # the band, and a To disc above it
+SLEEP_ROOM: Final[int] = SLEEP_BAND  # the margin clears a To disc above it
 
 
 def stepped(*, zoom: int, step: int) -> int:
@@ -88,7 +88,47 @@ def bottom_room(*, inputs: MapInputs) -> int:
     return SLEEP_ROOM if inputs.asleep else CREDIT_ROOM
 
 
-def fit_zoom(*, points: Sequence[Point], width: int) -> int:
+def holds_box(
+    *,
+    box: tuple[Point, Point],
+    mpp: int,
+    width: int,
+    rooms: tuple[int, int] = (0, 0),
+) -> bool:
+    """
+    Say whether a map at a zoom holds a box with room round it.
+
+    Parameters
+    ----------
+    box : tuple[Point, Point]
+        Corners in metres.
+    mpp : int
+        Metres per pixel.
+    width : int
+        Map width in pixels.
+    rooms : tuple[int, int]
+        Pixels covered at the top and kept clear at the bottom.
+
+    Returns
+    -------
+    bool
+        True when the box fits with `KEEP_IN` pixels on every side,
+        inside the rooms.
+    """
+    (left, low), (right, high) = box
+    tall = MAP_HEIGHT - sum(rooms) - 2 * KEEP_IN
+    return (
+        right - left <= (width - 2 * KEEP_IN) * mpp
+        and high - low <= tall * mpp
+    )
+
+
+def fit_zoom(
+    *,
+    points: Sequence[Point],
+    width: int,
+    rooms: tuple[int, int] = (0, 0),
+) -> int:
     """
     Find the finest zoom whose map holds a set of points.
 
@@ -98,22 +138,21 @@ def fit_zoom(*, points: Sequence[Point], width: int) -> int:
         Points in metres.
     width : int
         Map width in pixels.
+    rooms : tuple[int, int]
+        Pixels covered at the top and kept clear at the bottom.
 
     Returns
     -------
     int
-        The finest `ZOOMS` index whose `width` by `MAP_HEIGHT` window
-        holds the points' box with a 10% margin, else the widest.
+        The finest `ZOOMS` index whose map holds the points' box as
+        `holds_box`, else the widest.
     """
-    xs = [x for x, _ in points]
-    ys = [y for _, y in points]
-    across = (max(xs) - min(xs)) * FIT_MARGIN
-    down = (max(ys) - min(ys)) * FIT_MARGIN
+    box = box_of(points=points)
     return next(
         (
             index
             for index, mpp in enumerate(ZOOMS)
-            if across <= width * mpp and down <= MAP_HEIGHT * mpp
+            if holds_box(box=box, mpp=mpp, width=width, rooms=rooms)
         ),
         len(ZOOMS) - 1,
     )
@@ -156,38 +195,34 @@ def box_of(*, points: Sequence[Point]) -> tuple[Point, Point]:
     return (min(xs), min(ys)), (max(xs), max(ys))
 
 
-def roomy_zoom(
-    *, box: tuple[Point, Point], width: int, top: int, bottom: int,
-) -> int:
+def narrowed(
+    *,
+    box: tuple[Point, Point],
+    inner: tuple[Point, Point],
+    fits: Callable[..., bool],
+) -> tuple[Point, Point]:
     """
-    Find the finest zoom that holds a box and the map's covered edges.
+    Swap in an inner box along each axis the box overflows.
 
     Parameters
     ----------
     box : tuple[Point, Point]
         Corners in metres.
-    width : int
-        Map width in pixels.
-    top : int
-        Pixels a banner covers at the top.
-    bottom : int
-        Pixels kept clear at the bottom.
+    inner : tuple[Point, Point]
+        Corners of the box to fall back to.
+    fits : Callable[..., bool]
+        `holds_box` with all but the box given.
 
     Returns
     -------
-    int
-        The fitted zoom, one wider when the box, the top and bottom
-        rooms and `KEEP_IN` do not fit the map's height; keeping a From
-        at the box's edge `KEEP_IN` inside then leaves the other edge
-        clear of its room.
+    tuple[Point, Point]
+        The box's sides along each axis it fits, the inner box's along
+        each it does not.
     """
-    zoom = fit_zoom(points=box, width=width)
-    rooms = bottom + top + KEEP_IN
-    if (box[1][1] - box[0][1]) + rooms * ZOOMS[zoom] > (
-        MAP_HEIGHT * ZOOMS[zoom]
-    ):
-        zoom = min(zoom + 1, len(ZOOMS) - 1)
-    return zoom
+    (left, low), (right, high) = box
+    across = box if fits(box=((left, 0.0), (right, 0.0))) else inner
+    down = box if fits(box=((0.0, low), (0.0, high))) else inner
+    return (across[0][0], down[0][1]), (across[1][0], down[1][1])
 
 
 def fitted(
@@ -198,6 +233,7 @@ def fitted(
     step: int,
     keep: Point | None,
     bottom: int = CREDIT_ROOM,
+    ends: Sequence[Point] = (),
 ) -> tuple[Point, int] | None:
     """
     Frame a set of points, moved by the knob's step.
@@ -218,22 +254,31 @@ def fitted(
     bottom : int
         Pixels kept clear at the bottom: the corner boxes, or the sleep
         band.
+    ends : Sequence[Point]
+        The From and To, framed on their own along an axis the points'
+        box overflows.
 
     Returns
     -------
     tuple[Point, int] | None
-        The middle of the points' box, moved so the box clears the
-        bottom room and the banner, then moved the least that keeps
-        `keep` inside; and the stepped zoom. None with no points.
+        The middle of the box, moved so it clears the bottom room and
+        the banner, then moved the least that keeps `keep` inside; and
+        the stepped zoom. None with no points.
     """
     if not points:
         return None
+    rooms = (top, bottom)
     box = box_of(points=points)
     zoom = stepped(
-        zoom=roomy_zoom(box=box, width=width, top=top, bottom=bottom),
-        step=step,
+        zoom=fit_zoom(points=box, width=width, rooms=rooms), step=step,
     )
     mpp = ZOOMS[zoom]
+    if ends:
+        box = narrowed(
+            box=box,
+            inner=box_of(points=ends),
+            fits=partial(holds_box, mpp=mpp, width=width, rooms=rooms),
+        )
     x, y = middle(ends=box)
     centre = (x, y + (top - bottom) * mpp / 2)
     if keep is not None:
@@ -285,6 +330,23 @@ def kept(
     return (centre[0] - right * mpp, centre[1] + down * mpp)
 
 
+def known(*, points: Sequence[Point | None]) -> tuple[Point, ...]:
+    """
+    Drop the missing points.
+
+    Parameters
+    ----------
+    points : Sequence[Point | None]
+        Points, None where missing.
+
+    Returns
+    -------
+    tuple[Point, ...]
+        The points that are not None, in order.
+    """
+    return tuple(point for point in points if point is not None)
+
+
 def plain_frame(*, inputs: MapInputs) -> MapInputs:
     """
     Frame a plain pin's map on its next trip.
@@ -298,7 +360,8 @@ def plain_frame(*, inputs: MapInputs) -> MapInputs:
     -------
     MapInputs
         Fitted to the next departure's ridden stops and the From and To,
-        with the From kept inside; the From at the resting zoom with
+        or to the From and To alone when the stops do not fit, with the
+        From kept inside; the From at the resting zoom with
         fewer than two points; unchanged with no From point.
     """
     origin = inputs.ends[0]
@@ -316,6 +379,7 @@ def plain_frame(*, inputs: MapInputs) -> MapInputs:
         step=inputs.step,
         keep=origin,
         bottom=bottom_room(inputs=inputs),
+        ends=known(points=inputs.ends),
     ) or (origin, inputs.zoom)
     return replace(inputs, centre=centre, zoom=zoom)
 
@@ -370,7 +434,7 @@ def plain_points(*, inputs: MapInputs) -> tuple[Point, ...]:
     """
     return (
         *trip_stops(inputs=inputs),
-        *(point for point in inputs.ends if point is not None),
+        *known(points=inputs.ends),
     )
 
 

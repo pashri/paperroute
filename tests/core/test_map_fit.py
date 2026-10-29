@@ -200,6 +200,39 @@ def test_fitted_keeps_from_on_a_too_long_trip() -> None:
         assert top + KEEP_IN <= y <= MAP_HEIGHT - CREDIT_ROOM - KEEP_IN
 
 
+def test_fitted_keeps_the_same_margin_top_and_bottom() -> None:
+    """A tall fit leaves every point 24 px clear of the top and the credit."""
+    points = ((0.0, 0.0), (0.0, -1_900.0))
+    found = fitted(
+        points=points, width=MAP_WIDTH, top=0, step=0, keep=None,
+    )
+    assert found is not None
+    centre, zoom = found
+    for point in points:
+        _, y = on_screen(centre=centre, zoom=zoom, point=point)
+        assert KEEP_IN <= y <= MAP_HEIGHT - CREDIT_ROOM - KEEP_IN
+
+
+def test_fitted_keeps_both_ends_inside_a_too_wide_line() -> None:
+    """A line too wide for 45 m/px still frames From and To evenly inside."""
+    start, end = (0.0, 0.0), (20_700.0, -2_000.0)
+    found = fitted(
+        points=(start, end, (-1_000.0, 0.0), (21_000.0, -2_000.0)),
+        width=MAP_WIDTH,
+        top=BANNER_ROOM,
+        step=0,
+        keep=start,
+        ends=(start, end),
+    )
+    assert found is not None
+    centre, zoom = found
+    assert ZOOMS[zoom] == 45
+    left, _ = on_screen(centre=centre, zoom=zoom, point=start)
+    right, _ = on_screen(centre=centre, zoom=zoom, point=end)
+    assert left >= KEEP_IN
+    assert abs(left - (MAP_WIDTH - right)) < 1e-9
+
+
 def test_fitted_keeps_from_below_the_banner() -> None:
     """A From too near the top moves down clear of the banner."""
     found = fitted(
@@ -253,6 +286,12 @@ def test_sleep_fit_ignores_the_banner_it_hides() -> None:
     assert plain_frame(inputs=bannered) == replace(
         plain_frame(inputs=asleep), stop_view=bannered.stop_view,
     )
+
+
+def test_sleep_fit_keeps_only_the_band_clear() -> None:
+    """Asleep, a trip that fits above the band and its margins keeps zoom."""
+    inputs = replace(plain(ends=(FROM, (0.0, 800.0 - 1_680.0))), asleep=True)
+    assert plain_frame(inputs=inputs).zoom == ZOOMS.index(5)
 
 
 def test_plain_fit_without_from_location() -> None:

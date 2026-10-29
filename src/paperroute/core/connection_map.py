@@ -12,6 +12,7 @@ from paperroute.core.map_fit import (
     banner_room,
     bottom_room,
     fitted,
+    known,
     middle,
     resting_zoom,
 )
@@ -326,12 +327,17 @@ def whole_frame(
     -------
     tuple[Point | None, int]
         The fit of the hero's legs and the four stops, as `fit_frame`,
-        keeping the From.
+        keeping the From; of the From and To when the legs do not fit.
     """
     hero = chains[0] if chains else None
     first, second = leg_lines(pin=pin, chain=hero, shapes=inputs.shapes)
     points = trip_points(pin=pin, chain=hero, lines=(*first, *second))
-    return fit_frame(inputs=inputs, points=points, keep=pin.origin.point)
+    return fit_frame(
+        inputs=inputs,
+        points=points,
+        keep=pin.origin.point,
+        ends=known(points=inputs.ends),
+    )
 
 
 def first_leg_frame(
@@ -376,7 +382,11 @@ def first_leg_frame(
 
 
 def fit_frame(
-    *, inputs: MapInputs, points: Sequence[Point], keep: Point | None,
+    *,
+    inputs: MapInputs,
+    points: Sequence[Point],
+    keep: Point | None,
+    ends: Sequence[Point] = (),
 ) -> tuple[Point | None, int]:
     """
     Frame a set of points.
@@ -390,6 +400,8 @@ def fit_frame(
     keep : Point | None
         A point kept on the map when the points do not fit at the
         widest zoom, or None.
+    ends : Sequence[Point]
+        The From and To, framed alone when the points do not fit.
 
     Returns
     -------
@@ -407,6 +419,7 @@ def fit_frame(
         step=inputs.step,
         keep=keep,
         bottom=bottom_room(inputs=inputs),
+        ends=ends,
     )
     if found is None:
         return inputs.centre, resting_zoom(step=inputs.step)

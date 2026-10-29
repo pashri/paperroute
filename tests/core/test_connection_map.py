@@ -326,11 +326,7 @@ def test_no_points_falls_back_to_from() -> None:
 
 
 def test_banner_keeps_frame_below_it() -> None:
-    """
-    Under a banner both framings move down by half its height.
-
-    The whole trip moves 10 px more, to keep the From 24 px below it.
-    """
+    """Under a banner both framings move down by half its height."""
     stop = replace(STOP, banner='Timetable times · no live data yet')
     inputs = replace(inputs_at(now=at(7, 35)), stop_view=stop)
     change = connection_inputs(
@@ -345,10 +341,9 @@ def test_banner_keeps_frame_below_it() -> None:
         chains=SHAPED,
         mode=ConnectionMap.WHOLE,
     )
-    assert whole.zoom == ZOOMS.index(8)
-    assert whole.centre == (400.0, -612.0 + BANNER_ROOM * 8 / 2 + 80.0)
-    assert whole.centre[1] + (MAP_HEIGHT / 2 - BANNER_ROOM - KEEP_IN) * 8 == (
-        900.0
+    assert whole.zoom == ZOOMS.index(14)
+    assert whole.centre == (
+        400.0, -500.0 + (BANNER_ROOM - CREDIT_ROOM) * 14 / 2,
     )
 
 
@@ -401,9 +396,9 @@ def test_changes_two_panes_side_by_side() -> None:
     )
     assert [pane.base.width for pane in panes] == [400, 400]
     assert [pane.base.centre for pane in panes] == [
-        (72.0, 408.0), (482.0, -1060.0),
+        (72.0, 408.0), (482.0, -1062.0),
     ]
-    assert [pane.zoom for pane in panes] == [0, 1]
+    assert [pane.zoom for pane in panes] == [0, 2]
     first, second = (pane.base.trip for pane in panes)
     assert first is not None and second is not None
     assert first.walk == ((0.0, 0.0), (144.0, 0.0))

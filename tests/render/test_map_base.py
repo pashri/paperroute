@@ -47,6 +47,7 @@ from paperroute.render.map_base import (
     window_of,
 )
 from paperroute.render.map_corners import BOX_FACE
+from paperroute.render.map_marks import ROUTE_STYLE
 from paperroute.render.tile_codec import (
     diffuse,
     pack_bits,
@@ -1004,7 +1005,7 @@ def test_scale_bar_is_2_km_at_14_m_per_px(tmp_path: Path) -> None:
 
 
 def test_ridden_stops_are_rings(tmp_path: Path) -> None:
-    """A ridden stop is an ink ring with a paper centre."""
+    """A ridden stop is a 2 px ink ring round a paper centre."""
     stop = (CENTRE[0] + 800.0, CENTRE[1] + 400.0)
     with closing(build(out=tmp_path / 'tiles.db')) as tiles:
         grey = draw_map_base(
@@ -1015,10 +1016,34 @@ def test_ridden_stops_are_rings(tmp_path: Path) -> None:
     x, y = screen_point(centre=CENTRE, mpp=MPP, point=stop)
     column, row = math.floor(x), math.floor(y)
     assert grey[row, column] == PAPER
-    assert grey[row, column + 4] == INK
-    assert grey[row, column - 4] == INK
-    assert grey[row + 4, column] == INK
-    assert grey[row, column + 7] == PAPER
+    assert grey[row, column + 3] == PAPER
+    assert grey[row, column + 6] == INK
+    assert grey[row, column - 6] == INK
+    assert grey[row + 6, column] == INK
+    assert grey[row, column + 9] == PAPER
+
+
+@pytest.mark.parametrize('mpp', [3, 5, 8])
+def test_ridden_stop_ring_shows_outside_the_route(
+    tmp_path: Path, mpp: int,
+) -> None:
+    """A stop on the bold route rings it 2 px outside the line."""
+    stop = (CENTRE[0] + 120.0 * mpp, CENTRE[1])
+    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
+        grey = draw_map_base(
+            base=replace(
+                base(route=across(half=5000.0), mpp=mpp), stops=(stop,),
+            ),
+            tiles=tiles,
+            variant=TileVariant.GREY,
+        )
+    x, y = screen_point(centre=CENTRE, mpp=mpp, point=stop)
+    column, row = math.floor(x), math.floor(y)
+    reach = math.floor(ROUTE_STYLE[mpp][0] / 2) + 1
+    assert grey[row - reach, column] == INK
+    assert grey[row + reach, column] == INK
+    assert grey[row, column] == PAPER
+    assert grey[row + 2, column] == PAPER
 
 
 def test_to_disc_is_12_px(tmp_path: Path) -> None:

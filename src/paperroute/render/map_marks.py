@@ -21,8 +21,9 @@ STOP_DISC: Final[float] = 16.0
 STOP_RING: Final[float] = 12.0
 STOP_RING_WIDTH: Final[float] = 4.0
 STOP_DOT: Final[float] = 5.0
-RIDDEN_RING: Final[float] = 5.0
-RIDDEN_HOLE: Final[float] = 3.0
+RIDDEN_RING: Final[float] = 5.0  # the smallest ring
+RIDDEN_HOLE: Final[float] = 3.0  # the smallest ring's paper centre
+RIDDEN_REACH: Final[float] = 2.0  # ink each side of the route's line
 
 
 def draw_stop(canvas: Canvas, *, at: Point) -> None:
@@ -52,6 +53,26 @@ def draw_stop(canvas: Canvas, *, at: Point) -> None:
     )
 
 
+def ridden_ring(*, mpp: int) -> tuple[float, float]:
+    """
+    Size a ridden stop's ring so it shows outside the route's line.
+
+    Parameters
+    ----------
+    mpp : int
+        Metres per pixel.
+
+    Returns
+    -------
+    tuple[float, float]
+        The ring's radius, `RIDDEN_REACH` beyond half the route's width
+        and at least `RIDDEN_RING`, and its paper centre's radius, the
+        same ink width inside it as the smallest ring has.
+    """
+    ring = max(RIDDEN_RING, ROUTE_STYLE[mpp][0] / 2 + RIDDEN_REACH)
+    return ring, ring - (RIDDEN_RING - RIDDEN_HOLE)
+
+
 def draw_ridden_stops(
     canvas: Canvas, *, base: MapBase, window: Window,
 ) -> None:
@@ -73,5 +94,6 @@ def draw_ridden_stops(
             to_pixels(point=point, mpp=base.mpp) for point in base.stops
         )
     ]
-    canvas.dots(points=points, diameter=2 * RIDDEN_RING, grey=INK)
-    canvas.dots(points=points, diameter=2 * RIDDEN_HOLE, grey=PAPER)
+    ring, hole = ridden_ring(mpp=base.mpp)
+    canvas.dots(points=points, diameter=2 * ring, grey=INK)
+    canvas.dots(points=points, diameter=2 * hole, grey=PAPER)

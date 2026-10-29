@@ -38,7 +38,7 @@ from paperroute.render.chrome import (
 )
 from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
 from paperroute.render.map_base import HALO
-from paperroute.render.map_marks import RIDDEN_RING, STOP_DISC, draw_stop
+from paperroute.render.map_marks import STOP_DISC, draw_stop, ridden_ring
 from paperroute.render.markers import (
     CHANGE_HALF,
     END_HALF,
@@ -304,7 +304,7 @@ def stop_boxes(*, base: MapBase) -> list[Box]:
         A square one pixel wider than each stop's ring.
     """
     return [
-        square(at=stop, half=RIDDEN_RING + 1)
+        square(at=stop, half=ridden_ring(mpp=base.mpp)[0] + 1)
         for stop in map_pixels(base=base, points=base.stops)
     ]
 

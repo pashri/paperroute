@@ -694,11 +694,11 @@ def test_plain_from_drawn_by_overlay_at_origin() -> None:
 
 
 def test_stop_boxes_are_one_px_wider_than_the_ring() -> None:
-    """Each ridden stop's box is 6 px each side of its pixel."""
+    """At 8 m/px each ridden stop's 7 px ring gets a box 8 px each side."""
     stop = (CENTRE[0] + 80.0, CENTRE[1])
     map_base = replace(VIEW.base, stops=(stop,))
     x, y = screen_point(centre=CENTRE, mpp=MPP, point=stop)
-    assert stop_boxes(base=map_base) == [(x - 6, y - 6, x + 6, y + 6)]
+    assert stop_boxes(base=map_base) == [(x - 8, y - 8, x + 8, y + 8)]
 
 
 def test_no_centre_has_no_boxes() -> None:

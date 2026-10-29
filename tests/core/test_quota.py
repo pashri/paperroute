@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 from paperroute.core.messages import (
+    FeedFailed,
     FetchFeed,
     QuitRequested,
     SaveState,
@@ -159,3 +160,52 @@ def test_quit_saves_quota_at_once() -> None:
     assert effects == (SaveState(saved=saved_of(state=state)), Stop())
     assert saves(effects=effects)[0].saved.quota == state.quota
 
+
+
+def skipped(*, at: datetime, sent: bool = False) -> FeedFailed:
+    """
+    Make a failed fetch.
+
+    Parameters
+    ----------
+    at : datetime
+        When it failed.
+    sent : bool
+        Whether a request went out.
+
+    Returns
+    -------
+    FeedFailed
+        The event.
+    """
+    return FeedFailed(feed=BUSES, at=at, reason='backing off', sent=sent)
+
+
+def test_fetch_skipped_in_backoff_is_not_counted() -> None:
+    """A fetch its backoff turned away gives back its call."""
+    now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY)
+    state = replace(
+        loaded(state=fresh(now=now)), quota=Quota(day=DAY, calls=5),
+    )
+    state, _ = step(state, skipped(at=now))
+    assert state.quota == Quota(day=DAY, calls=4)
+
+
+def test_sent_failure_is_still_counted() -> None:
+    """A fetch that reached TfNSW and failed keeps its call."""
+    now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY)
+    state = replace(
+        loaded(state=fresh(now=now)), quota=Quota(day=DAY, calls=5),
+    )
+    state, _ = step(state, skipped(at=now, sent=True))
+    assert state.quota == Quota(day=DAY, calls=5)
+
+
+def test_skip_after_midnight_leaves_the_new_day_alone() -> None:
+    """A skip landing on a day with no calls counted takes nothing."""
+    early = datetime(2026, 10, 22, 0, 0, 1, tzinfo=SYDNEY)
+    state = replace(
+        loaded(state=fresh(now=early)), quota=Quota(day=DAY, calls=5),
+    )
+    state, _ = step(state, skipped(at=early))
+    assert state.quota == Quota(day=DAY, calls=5)

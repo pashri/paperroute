@@ -376,11 +376,25 @@ class FeedFetched:
 
 @dataclass(frozen=True)
 class FeedFailed:
-    """A realtime fetch failed."""
+    """
+    A realtime fetch failed.
+
+    Attributes
+    ----------
+    feed : str
+        Feed path.
+    at : datetime
+        When it failed.
+    reason : str
+        What went wrong.
+    sent : bool
+        False when no request went out, because the feed was backing off.
+    """
 
     feed: str
     at: datetime
     reason: str
+    sent: bool = True
 
 
 @dataclass(frozen=True)

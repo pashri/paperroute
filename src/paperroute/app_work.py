@@ -7,6 +7,7 @@ import sqlite3
 from collections.abc import Coroutine
 from typing import Any
 
+from paperroute.adapters.feed_guard import FeedBackingOff
 from paperroute.adapters.tfnsw import FeedError
 from paperroute.app_connections import departures_read
 from paperroute.app_device import DeviceEffect, device_work
@@ -89,7 +90,8 @@ async def fetch(
     Fetch and parse a feed, posting success or failure.
 
     A failed download, a bad body or a failed route labels read all post
-    FeedFailed for the feed.
+    FeedFailed for the feed; one turned away by its backoff is marked as
+    not sent.
 
     Parameters
     ----------
@@ -116,7 +118,10 @@ async def fetch(
     except (FeedError, sqlite3.Error) as error:
         logger.warning('feed failed: %s', error)
         failed = FeedFailed(
-            feed=effect.feed, at=ports.clock.now(), reason=str(error)
+            feed=effect.feed,
+            at=ports.clock.now(),
+            reason=str(error),
+            sent=not isinstance(error, FeedBackingOff),
         )
         await queue.put(failed)
         return

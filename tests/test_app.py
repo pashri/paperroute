@@ -15,6 +15,7 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.feed_guard import FeedBackingOff
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.resets import FileResets
 from paperroute.adapters.state_file import JsonStateRepository
@@ -35,6 +36,7 @@ from paperroute.app_device import DevicePorts
 from paperroute.app_effects import StateSaver, loaded_patterns
 from paperroute.app_outputs import carry_out, draw_pending
 from paperroute.app_render import drawing
+from paperroute.app_work import fetch
 from paperroute.build.gtfs_files import Source
 from paperroute.build.map_style import LIGHT
 from paperroute.build.tile_store import TileWriter
@@ -747,8 +749,54 @@ async def test_fetch_failure_does_not_report_a_parsed_feed(
         saver=StateSaver(states=ports.states),
     )
     await asyncio.gather(*tasks)
-    assert isinstance(queue.get_nowait(), FeedFailed)
+    posted = queue.get_nowait()
+    assert isinstance(posted, FeedFailed)
+    assert posted.sent
     assert observer.feeds == 0
+
+
+class BackingOffFeeds:
+    """A feeds client whose every feed is backing off."""
+
+    async def fetch(self, *, feed: str) -> bytes:
+        """
+        Refuse without sending.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+
+        Raises
+        ------
+        FeedBackingOff
+            Always.
+        """
+        raise FeedBackingOff(f'{feed}: backing off')
+
+    async def close(self) -> None:
+        """Nothing to close."""
+
+
+async def test_fetch_skipped_in_backoff_is_posted_as_not_sent() -> None:
+    """A feed turned away by its backoff posts FeedFailed with sent False."""
+    ports = Ports(
+        timetable=BrokenTimetable(),
+        feeds=BackingOffFeeds(),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    await fetch(
+        ports=ports,
+        effect=FetchFeed(feed='v2/gtfs/realtime/sydneytrains'),
+        queue=queue,
+    )
+    posted = queue.get_nowait()
+    assert isinstance(posted, FeedFailed)
+    assert not posted.sent
 
 
 async def test_run_survives_unexpected_load_error(

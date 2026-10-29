@@ -30,6 +30,7 @@ from paperroute.core.state_model import State
 from paperroute.core.state_views import live_stop_view
 from paperroute.core.stop_view import StopView
 from paperroute.render.sleep import BAND_H
+from paperroute.render.trip_marks import END_DISC, END_EDGE
 from tests.core.factories import START, departure, place
 from tests.core.test_connection import loaded as connection_loaded
 from tests.core.test_menu import BOTH, DOWN, run, turn
@@ -218,11 +219,11 @@ def test_connection_sleep_screen_draws_the_next_connection() -> None:
 
 
 def test_sleep_map_keeps_both_ends_above_the_band() -> None:
-    """A trip running down the map ends above the sleep band, not under."""
+    """A trip running down the map ends with its To disc clear of the band."""
     pin = replace(
         PIN,
-        origin=replace(PIN.origin, point=(0.0, 1000.0)),
-        destination=place('215020', point=(0.0, -1000.0)),
+        origin=replace(PIN.origin, point=(0.0, 900.0)),
+        destination=place('215020', point=(0.0, -900.0)),
     )
     state = slept(
         state=initial_state(saved=seeded(pin=pin), now=START, stored=True),
@@ -235,4 +236,4 @@ def test_sleep_map_keeps_both_ends_above_the_band() -> None:
         _, y = screen_point(
             centre=base.centre, mpp=base.mpp, point=point, width=base.width,
         )
-        assert y <= MAP_HEIGHT - BAND_H
+        assert y + END_DISC + END_EDGE <= MAP_HEIGHT - BAND_H

@@ -5,11 +5,11 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.map_fit import SLEEP_ROOM
+from paperroute.core.map_fit import SLEEP_BAND
 from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH, Canvas, Face
 from paperroute.render.stop_view import finish
 
-BAND_H: Final[int] = SLEEP_ROOM
+BAND_H: Final[int] = SLEEP_BAND
 BAND_FACE: Final[Face] = Face(weight=700, px=24)
 
 

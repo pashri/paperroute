@@ -13,7 +13,8 @@ FIT_MARGIN: Final[float] = 1.1  # the box, plus 10%
 CREDIT_ROOM: Final[int] = 28  # pixels kept clear above the map's bottom
 BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
 KEEP_IN: Final[int] = 24  # pixels the From is kept inside the map
-SLEEP_ROOM: Final[int] = 56  # pixels the sleep band covers at the bottom
+SLEEP_BAND: Final[int] = 56  # pixels the sleep band covers at the bottom
+SLEEP_ROOM: Final[int] = SLEEP_BAND + 16  # the band, and a To disc above it
 
 
 def stepped(*, zoom: int, step: int) -> int:
@@ -174,11 +175,14 @@ def roomy_zoom(
     Returns
     -------
     int
-        The fitted zoom, one wider when the box and the top and bottom
-        rooms do not fit the map's height.
+        The fitted zoom, one wider when the box, the top and bottom
+        rooms and `KEEP_IN` do not fit the map's height; keeping a From
+        at the box's edge `KEEP_IN` inside then leaves the other edge
+        clear of its room.
     """
     zoom = fit_zoom(points=box, width=width)
-    if (box[1][1] - box[0][1]) + (bottom + top) * ZOOMS[zoom] > (
+    rooms = bottom + top + KEEP_IN
+    if (box[1][1] - box[0][1]) + rooms * ZOOMS[zoom] > (
         MAP_HEIGHT * ZOOMS[zoom]
     ):
         zoom = min(zoom + 1, len(ZOOMS) - 1)

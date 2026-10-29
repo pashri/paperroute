@@ -19,10 +19,11 @@ from paperroute.adapters.checked_tiles import CheckedTiles, warn_unfit
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.device_probe import SystemProbe
 from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.feed_guard import GuardedFeeds
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.adapters.power import NullPower, SystemctlPower
-from paperroute.adapters.rate_limit import StartLimiter
+from paperroute.adapters.rate_limit import tfnsw_limiter
 from paperroute.adapters.rebuild import (
     ChildRebuilder,
     NullBuilder,
@@ -414,7 +415,8 @@ def feeds_client(*, choice: str) -> FeedsClient:
     Make the live client or a replay one.
 
     The live client reads the key from PAPERROUTE_API_KEY_FILE at each
-    fetch, so a changed key is used without a restart.
+    fetch, so a changed key is used without a restart. It waits on the
+    limiter the Trip Planner shares, and backs off a feed after a 429.
 
     Parameters
     ----------
@@ -428,9 +430,11 @@ def feeds_client(*, choice: str) -> FeedsClient:
     """
     if choice != 'live':
         return FileFeedsClient(directory=Path(choice))
-    return AiohttpFeedsClient(
-        key=SecretsFile(path=key_path_from_env()).read,
-        limiter=StartLimiter(),
+    return GuardedFeeds(
+        inner=AiohttpFeedsClient(
+            key=SecretsFile(path=key_path_from_env()).read,
+            limiter=tfnsw_limiter(),
+        ),
     )
 
 

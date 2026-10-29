@@ -3,6 +3,8 @@
 import os
 import sys
 from collections.abc import Callable
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import Final
@@ -18,8 +20,52 @@ class FeedError(Exception):
     """A feed couldn't be fetched."""
 
 
+class FeedThrottled(FeedError):
+    """
+    TfNSW refused a feed for going over the rate limit (HTTP 429).
+
+    Parameters
+    ----------
+    feed : str
+        Feed path.
+    retry_after_s : float | None
+        Seconds the server asked to wait, or None when it didn't say.
+    """
+
+    def __init__(self, *, feed: str, retry_after_s: float | None) -> None:
+        super().__init__(f'{feed}: HTTP {HTTPStatus.TOO_MANY_REQUESTS}')
+        self.retry_after_s = retry_after_s
+
+
 class NoApiKey(Exception):
     """The key file is missing, blank or unreadable."""
+
+
+def read_retry_after(*, value: str | None, now: datetime) -> float | None:
+    """
+    Read a Retry-After header as seconds from now.
+
+    Parameters
+    ----------
+    value : str | None
+        The header, in seconds or as an HTTP date; None when absent.
+    now : datetime
+        The current time, timezone-aware.
+
+    Returns
+    -------
+    float | None
+        Seconds to wait, never below 0; None when absent or unreadable.
+    """
+    value = (value or '').strip()
+    if value.isdigit():
+        return float(value)
+    try:
+        when = parsedate_to_datetime(value)
+    except (TypeError, ValueError):
+        return None
+    when = when if when.tzinfo else when.replace(tzinfo=UTC)
+    return max((when - now).total_seconds(), 0.0)
 
 
 def key_path_from_env() -> Path:
@@ -67,6 +113,36 @@ def api_key_from_env() -> str:
     if not key:
         raise NoApiKey(f'No TfNSW API key in {path}')
     return key
+
+
+def check_status(*, feed: str, response: aiohttp.ClientResponse) -> None:
+    """
+    Raise for a feed response that isn't 200.
+
+    Parameters
+    ----------
+    feed : str
+        Feed path.
+    response : aiohttp.ClientResponse
+        The response.
+
+    Raises
+    ------
+    FeedThrottled
+        On HTTP 429, with any Retry-After.
+    FeedError
+        On any other status but 200.
+    """
+    if response.status == HTTPStatus.TOO_MANY_REQUESTS:
+        raise FeedThrottled(
+            feed=feed,
+            retry_after_s=read_retry_after(
+                value=response.headers.get('Retry-After'),
+                now=datetime.now(tz=UTC),
+            ),
+        )
+    if response.status != HTTPStatus.OK:
+        raise FeedError(f'{feed}: HTTP {response.status}')
 
 
 class AiohttpFeedsClient:
@@ -148,8 +224,10 @@ class AiohttpFeedsClient:
 
         Raises
         ------
+        FeedThrottled
+            On HTTP 429.
         FeedError
-            On a non-200 status, a timeout or a connection error.
+            On another non-200 status, a timeout or a connection error.
         """
         self.session = self.session or aiohttp.ClientSession()
         if self.limiter:
@@ -163,8 +241,7 @@ class AiohttpFeedsClient:
                 },
                 timeout=self.timeout,
             ) as response:
-                if response.status != HTTPStatus.OK:
-                    raise FeedError(f'{feed}: HTTP {response.status}')
+                check_status(feed=feed, response=response)
                 return await response.read()
         except (aiohttp.ClientError, TimeoutError) as error:
             raise FeedError(f'{feed}: {type(error).__name__}') from error

@@ -10,6 +10,7 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Final
 
+from paperroute.adapters.rate_limit import SyncStartLimiter
 from paperroute.adapters.tfnsw import BASE_URL
 from paperroute.build.gtfs_files import Source
 from paperroute.build.handoff import (
@@ -47,6 +48,10 @@ from paperroute.rss import max_rss_mb
 
 TIMEOUT_S: Final[float] = 60
 MIN_DAYS_LEFT: Final[int] = 7
+BUILD_STARTS_PER_S: Final[float] = 1.0  # leaves the panel's share of 5/s
+LIMITER: Final[SyncStartLimiter] = SyncStartLimiter(
+    per_second=BUILD_STARTS_PER_S,
+)
 
 
 class RefreshBusy(Exception):
@@ -104,6 +109,7 @@ def head_all(*, base_url: str, api_key: str) -> dict[str, SourceState]:
             spec=spec,
             api_key=api_key,
             timeout_s=TIMEOUT_S,
+            limiter=LIMITER,
         )
         for spec in SOURCES
     }
@@ -185,6 +191,7 @@ def fetch_source(
         api_key=api_key,
         out=layout.work / f'{spec.name}.zip',
         timeout_s=TIMEOUT_S,
+        limiter=LIMITER,
     )
     return replace(fresh, sha256=digest), True
 

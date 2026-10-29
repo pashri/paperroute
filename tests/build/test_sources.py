@@ -10,6 +10,7 @@ from typing import Final
 
 import pytest
 
+from paperroute.adapters.rate_limit import SyncStartLimiter
 from paperroute.build.sources import (
     SOURCES,
     SourceError,
@@ -265,3 +266,23 @@ def test_redirect_does_not_forward_key(
         REDIRECT: f'apikey {KEY}',
         TARGET: None,
     }
+
+
+def test_requests_wait_for_their_start_slot(
+    server: FeedServer, tmp_path: Path,
+) -> None:
+    """A HEAD and a GET on one limiter start a slot apart."""
+    server.state.files['/' + SPEC.path] = Served(body=b'zip')
+    waits: list[float] = []
+    limiter = SyncStartLimiter(
+        per_second=1, clock=lambda: 0.0, sleep=waits.append,
+    )
+    head(
+        base_url=server.base_url, spec=SPEC, api_key=KEY, timeout_s=5,
+        limiter=limiter,
+    )
+    download(
+        base_url=server.base_url, spec=SPEC, api_key=KEY, timeout_s=5,
+        out=tmp_path / 'out.zip', limiter=limiter,
+    )
+    assert waits == pytest.approx([0.0, 1.01])

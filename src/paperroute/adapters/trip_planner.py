@@ -7,7 +7,7 @@ from typing import Final
 
 import aiohttp
 
-from paperroute.adapters.rate_limit import StartLimiter
+from paperroute.adapters.rate_limit import StartLimiter, tfnsw_limiter
 from paperroute.adapters.secrets_file import SecretsFile, key_path_from_env
 from paperroute.adapters.tfnsw import BASE_URL
 from paperroute.core.trip_search import (
@@ -408,7 +408,8 @@ def trip_planner_for(*, live: bool) -> KeyedTripPlanner | None:
     -------
     KeyedTripPlanner | None
         A planner reading the key file named by PAPERROUTE_API_KEY_FILE
-        at each request; None for replayed feeds.
+        at each request and sharing the feeds' limiter; None for replayed
+        feeds.
     """
     if not live:
         return None
@@ -417,6 +418,6 @@ def trip_planner_for(*, live: bool) -> KeyedTripPlanner | None:
         planner=TfnswTripPlanner(
             session_factory=aiohttp.ClientSession,
             key='',
-            limiter=StartLimiter(),
+            limiter=tfnsw_limiter(),
         ),
     )

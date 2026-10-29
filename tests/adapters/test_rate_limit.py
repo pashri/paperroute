@@ -1,10 +1,17 @@
 """Tests for the request start limiter, on a fake clock."""
 
 import asyncio
+from typing import Final
 
 import pytest
 
-from paperroute.adapters.rate_limit import StartLimiter
+from paperroute.adapters.rate_limit import (
+    StartLimiter,
+    SyncStartLimiter,
+    tfnsw_limiter,
+)
+
+STEP: Final[float] = 1 / 3 + 0.01  # seconds between starts
 
 
 class FakeTime:
@@ -39,23 +46,23 @@ class FakeTime:
 
 
 async def test_starts_are_spaced() -> None:
-    """Eight calls at once get slots just over a quarter second apart."""
+    """Eight calls at once get slots just over a third of a second apart."""
     fake = FakeTime()
     limiter = StartLimiter(clock=fake.clock, sleep=fake.sleep)
     for _ in range(8):
         await limiter.wait()
-    assert fake.slept_until == pytest.approx([i * 0.26 for i in range(8)])
+    assert fake.slept_until == pytest.approx([i * STEP for i in range(8)])
 
 
-async def test_no_closed_second_holds_five_starts() -> None:
-    """Any window of one second, ends included, holds at most four starts."""
+async def test_no_closed_second_holds_four_starts() -> None:
+    """Any window of one second, ends included, holds at most three starts."""
     fake = FakeTime()
     limiter = StartLimiter(clock=fake.clock, sleep=fake.sleep)
     for _ in range(40):
         await limiter.wait()
     starts = fake.slept_until
     for first in starts:
-        assert sum(first <= s <= first + 1 for s in starts) <= 4
+        assert sum(first <= s <= first + 1 for s in starts) <= 3
 
 
 async def test_idle_limiter_does_not_wait() -> None:
@@ -92,4 +99,24 @@ async def test_cancelled_waiter_leaves_later_slots_alone() -> None:
     assert isinstance(results[1], asyncio.CancelledError)
     assert results[0] is None
     assert results[2] is None
-    assert fake.slept_until == pytest.approx([0.0, 0.52])
+    assert fake.slept_until == pytest.approx([0.0, 2 * STEP])
+
+
+def test_one_limiter_for_every_tfnsw_call() -> None:
+    """Each ask for the TfNSW limiter gets the same one."""
+    assert tfnsw_limiter() is tfnsw_limiter()
+
+
+def test_sync_limiter_spaces_blocking_starts() -> None:
+    """Blocking callers get the same slots as async ones."""
+    fake = FakeTime()
+    slept: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        fake.now += seconds
+        slept.append(fake.now)
+
+    limiter = SyncStartLimiter(per_second=1, clock=fake.clock, sleep=sleep)
+    for _ in range(3):
+        limiter.wait()
+    assert slept == pytest.approx([0.0, 1.01, 2.02])

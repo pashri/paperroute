@@ -25,6 +25,7 @@ import paperroute.adapters.tk_monitor as tk_monitor
 from paperroute.__main__ import (
     builder_for,
     device_pages_for,
+    feeds_client,
     main,
     parse_args,
     power_for,
@@ -39,9 +40,12 @@ from paperroute.__main__ import (
 from paperroute.adapters.checked_tiles import CheckedTiles
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.feed_guard import GuardedFeeds
 from paperroute.adapters.power import NullPower, SystemctlPower
+from paperroute.adapters.rate_limit import tfnsw_limiter
 from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
 from paperroute.adapters.resets import FileResets, NullResets
+from paperroute.adapters.tfnsw import AiohttpFeedsClient
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
@@ -712,3 +716,19 @@ async def test_show_passes_the_tiles_variant_to_run(
             tiles_variant=TileVariant.BITS,
         )
     assert seen == [TileVariant.BITS]
+
+
+def test_live_feeds_are_guarded_and_share_the_tfnsw_limiter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Live feeds back off on 429 and wait on the process's one limiter."""
+    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    client = feeds_client(choice='live')
+    assert isinstance(client, GuardedFeeds)
+    assert isinstance(client.inner, AiohttpFeedsClient)
+    assert client.inner.limiter is tfnsw_limiter()
+
+
+def test_replayed_feeds_are_read_as_they_are(tmp_path: Path) -> None:
+    """Replayed feeds need no guard."""
+    assert isinstance(feeds_client(choice=str(tmp_path)), FileFeedsClient)

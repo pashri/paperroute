@@ -14,6 +14,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
+from paperroute.adapters.rate_limit import tfnsw_limiter
 from paperroute.adapters.trip_planner import (
     KeyedTripPlanner,
     TfnswTripPlanner,
@@ -334,6 +335,7 @@ def test_planner_only_for_live_feeds(
     live = trip_planner_for(live=True)
     assert live is not None
     assert live.key() is None
+    assert live.planner.limiter is tfnsw_limiter()
 
 
 async def test_close_closes_session() -> None:

@@ -14,6 +14,7 @@ from typing import Final
 
 import pytest
 
+from paperroute.adapters.rate_limit import SyncStartLimiter
 from paperroute.build import handoff as handoff_module
 from paperroute.build import refresh as refresh_module
 from paperroute.build import swap
@@ -78,6 +79,29 @@ def _server(tmp_path: Path) -> Iterator[FeedServer]:
                 body=bodies[spec.name],
             )
         yield server
+
+
+@pytest.fixture(name='waits', autouse=True)
+def _waits(monkeypatch: pytest.MonkeyPatch) -> list[float]:
+    """
+    Record the refresh's waits for a start slot instead of sleeping.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        Patcher.
+
+    Returns
+    -------
+    list[float]
+        Seconds each request waited, on a clock that stands still.
+    """
+    waits: list[float] = []
+    limiter = SyncStartLimiter(
+        per_second=1, clock=lambda: 0.0, sleep=waits.append,
+    )
+    monkeypatch.setattr(refresh_module, 'LIMITER', limiter)
+    return waits
 
 
 @pytest.fixture(name='data_dir')
@@ -197,6 +221,17 @@ def test_first_refresh_downloads_all_and_builds(
         'metro.zip',
         'bundle.zip',
     }
+
+
+def test_every_request_waits_for_a_start_slot(
+    server: FeedServer,
+    data_dir: Path,
+    waits: list[float],
+) -> None:
+    """Each HEAD and GET takes a slot a second after the one before."""
+    run(server=server, data_dir=data_dir)
+    assert server.state.hits == {'HEAD': 3, 'GET': 3}
+    assert waits == pytest.approx([1.01 * n for n in range(6)])
 
 
 def test_unchanged_headers_skip_download(

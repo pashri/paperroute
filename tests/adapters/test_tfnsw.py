@@ -3,6 +3,7 @@
 import asyncio
 import time
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import Final
@@ -16,8 +17,10 @@ from paperroute.adapters.rate_limit import StartLimiter
 from paperroute.adapters.tfnsw import (
     AiohttpFeedsClient,
     FeedError,
+    FeedThrottled,
     NoApiKey,
     api_key_from_env,
+    read_retry_after,
 )
 
 
@@ -159,7 +162,7 @@ JITTER_S: Final[float] = 0.1
 
 
 async def test_burst_is_spaced_and_complete() -> None:
-    """A burst all returns, started in call order, no more than four a second."""
+    """A burst all returns, started in call order, at most three a second."""
     starts: list[tuple[float, int]] = []
 
     async def handler(request: web.Request) -> web.Response:
@@ -190,8 +193,8 @@ async def test_burst_is_spaced_and_complete() -> None:
     assert bodies == [b'payload'] * 12
     times = [moment for moment, _ in starts]
     assert [n for _, n in starts] == list(range(12))
-    for first, fifth in zip(times, times[4:]):
-        assert fifth - first >= 1 - JITTER_S
+    for first, fourth in zip(times, times[3:]):
+        assert fourth - first >= 1 - JITTER_S
 
 
 async def test_failure_does_not_stall_queue() -> None:
@@ -303,3 +306,60 @@ def test_api_key_from_env_refuses_no_key(
     with pytest.raises(NoApiKey) as caught:
         api_key_from_env()
     assert str(caught.value) == f'No TfNSW API key in {key_file}'
+
+
+async def test_429_carries_retry_after() -> None:
+    """A 429 raises FeedThrottled with the Retry-After seconds."""
+
+    async def handler(_: web.Request) -> web.Response:
+        return web.Response(
+            status=HTTPStatus.TOO_MANY_REQUESTS,
+            headers={'Retry-After': '120'},
+        )
+
+    app = web.Application()
+    app.router.add_get('/v1/gtfs/realtime/buses', handler)
+    server = TestServer(app)
+    await server.start_server()
+    client = AiohttpFeedsClient(
+        key=lambda: 'secret', base_url=str(server.make_url('/')),
+    )
+    try:
+        with pytest.raises(FeedThrottled) as caught:
+            await client.fetch(feed='v1/gtfs/realtime/buses')
+    finally:
+        await client.close()
+        await server.close()
+    assert str(caught.value) == 'v1/gtfs/realtime/buses: HTTP 429'
+    assert caught.value.retry_after_s == 120
+
+
+async def test_429_without_retry_after(server: TestServer) -> None:
+    """A 429 with no Retry-After leaves the wait to the caller."""
+    client = AiohttpFeedsClient(
+        key=lambda: 'wrong', base_url=str(server.make_url('/'))
+    )
+    try:
+        with pytest.raises(FeedThrottled) as caught:
+            await client.fetch(feed='v1/gtfs/realtime/buses')
+    finally:
+        await client.close()
+    assert caught.value.retry_after_s is None
+
+
+@pytest.mark.parametrize(
+    ('value', 'seconds'),
+    [
+        (None, None),
+        ('30', 30.0),
+        (' 7 ', 7.0),
+        ('Thu, 29 Oct 2026 04:01:00 GMT', 60.0),
+        ('Thu, 29 Oct 2026 03:59:00 GMT', 0.0),
+        ('soon', None),
+        ('', None),
+    ],
+)
+def test_read_retry_after(value: str | None, seconds: float | None) -> None:
+    """Seconds and HTTP dates are read; anything else is None."""
+    now = datetime(2026, 10, 29, 4, 0, tzinfo=UTC)
+    assert read_retry_after(value=value, now=now) == seconds

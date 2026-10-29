@@ -11,6 +11,8 @@ from typing import Final
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from paperroute.adapters.rate_limit import SyncStartLimiter
+
 CHUNK_BYTES: Final[int] = 1 << 20
 
 
@@ -124,6 +126,7 @@ def open_source(
     built: Request,
     name: str,
     timeout_s: float,
+    limiter: SyncStartLimiter | None = None,
 ) -> http.client.HTTPResponse:
     """
     Send a request, turning failures into SourceError.
@@ -136,6 +139,8 @@ def open_source(
         Source name, for the error message.
     timeout_s : float
         Socket timeout in seconds.
+    limiter : SyncStartLimiter | None
+        Spaces out request starts; none means no limit.
 
     Returns
     -------
@@ -148,6 +153,8 @@ def open_source(
         On an HTTP error status or a connection failure. The message holds
         the source name and the status or error class only.
     """
+    if limiter:
+        limiter.wait()
     try:
         # pylint: disable-next=consider-using-with
         response: http.client.HTTPResponse = urlopen(
@@ -168,6 +175,7 @@ def head(
     spec: SourceSpec,
     api_key: str,
     timeout_s: float,
+    limiter: SyncStartLimiter | None = None,
 ) -> SourceState:
     """
     Read a source's ETag and Last-Modified.
@@ -182,6 +190,8 @@ def head(
         TfNSW API key.
     timeout_s : float
         Socket timeout in seconds.
+    limiter : SyncStartLimiter | None
+        Spaces out request starts; none means no limit.
 
     Returns
     -------
@@ -194,7 +204,9 @@ def head(
         api_key=api_key,
         method='HEAD',
     )
-    with open_source(built=built, name=spec.name, timeout_s=timeout_s) as rsp:
+    with open_source(
+        built=built, name=spec.name, timeout_s=timeout_s, limiter=limiter,
+    ) as rsp:
         return SourceState(
             etag=rsp.headers.get('ETag'),
             last_modified=rsp.headers.get('Last-Modified'),
@@ -279,6 +291,7 @@ def download(
     api_key: str,
     out: Path,
     timeout_s: float,
+    limiter: SyncStartLimiter | None = None,
 ) -> str:
     """
     Download a source's zip.
@@ -295,6 +308,8 @@ def download(
         File to write.
     timeout_s : float
         Socket timeout in seconds.
+    limiter : SyncStartLimiter | None
+        Spaces out request starts; none means no limit.
 
     Returns
     -------
@@ -318,6 +333,7 @@ def download(
             built=built,
             name=spec.name,
             timeout_s=timeout_s,
+            limiter=limiter,
         ) as response:
             return stream_to(response=response, out=out)
     except (http.client.HTTPException, OSError) as error:

@@ -7,7 +7,7 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.build.map_style import DARK, STREET_FACE, SUPERSAMPLE
+from paperroute.build.map_style import STREET_FACE, SUPERSAMPLE
 from paperroute.core.geo import Point
 from paperroute.core.map_view import (
     MAP_HEIGHT,
@@ -16,15 +16,15 @@ from paperroute.core.map_view import (
     screen_point,
 )
 from paperroute.core.tiles import (
-    LABEL_REACH,
     TILE,
-    ZOOMS,
     StreetLabel,
     TileVariant,
     tiles_covering,
 )
 from paperroute.ports import TileRepository
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
+from paperroute.render.map_corners import draw_boxed_credit, draw_boxed_scale
+from paperroute.render.map_labels import draw_place_knockouts, label_query
 from paperroute.render.map_marks import (
     ROUTE_STYLE,
     STOP_DISC,
@@ -47,21 +47,6 @@ MATCH_POINTS: Final[int] = 9
 MATCH_NEEDED: Final[int] = 6
 MATCH_REACH: Final[float] = 5.0  # pixels
 MATCH_TURN: Final[float] = 25.0  # degrees
-SCALE_STEPS: Final[tuple[int, ...]] = (5000, 2000, 1000, 500, 200, 100)
-SCALE_REACH: Final[float] = 143.0  # pixels
-SCALE_FACE: Final[Face] = Face(weight=400, px=11)
-SCALE_BOX_LEFT: Final[float] = 10.0
-SCALE_BOX_TOP: Final[float] = 22.0  # pixels above the map's bottom
-SCALE_BOX_BOTTOM: Final[float] = 6.0  # pixels above the map's bottom
-SCALE_BOX_PAD: Final[float] = 4.0  # paper right of the text
-SCALE_BAR_LEFT: Final[float] = 14.0
-SCALE_BAR_TOP: Final[float] = 12.0  # pixels above the map's bottom
-SCALE_BAR_BOTTOM: Final[float] = 9.0  # pixels above the map's bottom
-SCALE_TEXT_GAP: Final[float] = 6.0  # pixels from the bar's end
-SCALE_BASELINE: Final[float] = 10.0  # pixels above the map's bottom
-CREDIT: Final[str] = '© OpenStreetMap'
-CREDIT_FACE: Final[Face] = Face(weight=400, px=11)
-EDGE: Final[float] = 6.0  # pixels from the map's edge to the credit
 NOT_INSTALLED: Final[str] = 'Map not installed'
 NOT_INSTALLED_FACE: Final[Face] = Face(weight=700, px=16)
 NOT_INSTALLED_DROP: Final[float] = STOP_DISC + 16.0  # below the centre
@@ -469,35 +454,6 @@ def redraw_name(
     grey[rows, cols] = quantise4(grey=canvas.grey())
 
 
-def label_query(
-    *,
-    window: Window,
-    width: int,
-) -> tuple[float, float, float, float]:
-    """
-    Give the box to fetch street labels for, grown by the label reach.
-
-    Parameters
-    ----------
-    window : Window
-        The map's top-left corner in global pixels.
-    width : int
-        Map width in pixels.
-
-    Returns
-    -------
-    tuple[float, float, float, float]
-        Left, top, right and bottom in global pixels.
-    """
-    left, top = window
-    return (
-        left - LABEL_REACH,
-        top - LABEL_REACH,
-        left + width + LABEL_REACH,
-        top + MAP_HEIGHT + LABEL_REACH,
-    )
-
-
 def draw_line_and_names(
     canvas: Canvas,
     *,
@@ -553,109 +509,17 @@ def draw_line_and_names(
     )
 
 
-def scale_metres(*, mpp: int) -> int:
+def draw_notes(canvas: Canvas, *, width: int) -> None:
     """
-    Pick the scale bar's length.
-
-    Parameters
-    ----------
-    mpp : int
-        Metres per pixel.
-
-    Returns
-    -------
-    int
-        The largest step that fits in 143 px, else the smallest step.
-    """
-    return next(
-        (metres for metres in SCALE_STEPS if metres / mpp <= SCALE_REACH),
-        SCALE_STEPS[-1],
-    )
-
-
-def scale_text(*, mpp: int) -> str:
-    """
-    Label the scale bar with its length and the zoom step.
-
-    Parameters
-    ----------
-    mpp : int
-        Metres per pixel, one of ``ZOOMS``.
-
-    Returns
-    -------
-    str
-        For example ``1 km · zoom 3 of 5``.
-    """
-    metres = scale_metres(mpp=mpp)
-    length = f'{metres // 1000} km' if metres >= 1000 else f'{metres} m'
-    return f'{length} · zoom {ZOOMS.index(mpp) + 1} of {len(ZOOMS)}'
-
-
-def draw_scale(canvas: Canvas, *, mpp: int) -> None:
-    """
-    Draw the scale bar and its label at the bottom left, on paper.
+    Say below the stop that there is no map.
 
     Parameters
     ----------
     canvas : Canvas
         Target.
-    mpp : int
-        Metres per pixel.
-    """
-    length = scale_metres(mpp=mpp) / mpp
-    text = scale_text(mpp=mpp)
-    text_left = SCALE_BAR_LEFT + length + SCALE_TEXT_GAP
-    reach = text_left + canvas.length(text=text, face=SCALE_FACE)
-    canvas.rect(
-        box=(
-            SCALE_BOX_LEFT,
-            MAP_HEIGHT - SCALE_BOX_TOP,
-            reach + SCALE_BOX_PAD,
-            MAP_HEIGHT - SCALE_BOX_BOTTOM,
-        ),
-        grey=PAPER,
-    )
-    canvas.rect(
-        box=(
-            SCALE_BAR_LEFT,
-            MAP_HEIGHT - SCALE_BAR_TOP,
-            SCALE_BAR_LEFT + length,
-            MAP_HEIGHT - SCALE_BAR_BOTTOM,
-        ),
-        grey=INK,
-    )
-    canvas.text(
-        at=(text_left, MAP_HEIGHT - SCALE_BASELINE),
-        text=text,
-        face=SCALE_FACE,
-        grey=INK,
-    )
-
-
-def draw_notes(canvas: Canvas, *, installed: bool, width: int) -> None:
-    """
-    Draw the OSM credit, or a note below the stop when there is no map.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    installed : bool
-        False when there is no tiles file.
     width : int
         Map width in pixels.
     """
-    if installed:
-        canvas.text(
-            at=(width - EDGE, MAP_HEIGHT - EDGE),
-            text=CREDIT,
-            face=CREDIT_FACE,
-            grey=DARK,
-            anchor='rs',
-            halo=HALO,
-        )
-        return
     canvas.text(
         at=(width / 2, MAP_HEIGHT / 2 + NOT_INSTALLED_DROP),
         text=NOT_INSTALLED,
@@ -730,7 +594,7 @@ def draw_marks(
     canvas: Canvas, *, base: MapBase, window: Window, tiles: TileRepository,
 ) -> None:
     """
-    Draw the ridden stops, trip ends, stop, scale and notes.
+    Draw the ridden stops, trip ends, stop and corner boxes or note.
 
     Parameters
     ----------
@@ -756,12 +620,11 @@ def draw_marks(
                 width=base.width,
             ),
         )
-    draw_scale(canvas, mpp=base.mpp)
-    draw_notes(
-        canvas,
-        installed=tiles.version() is not None,
-        width=base.width,
-    )
+    draw_boxed_scale(canvas, mpp=base.mpp)
+    if tiles.version() is None:
+        draw_notes(canvas, width=base.width)
+    else:
+        draw_boxed_credit(canvas, width=base.width)
 
 
 def draw_map_base(
@@ -805,6 +668,7 @@ def draw_map_base(
         ),
         at=(0, 0),
     )
+    draw_place_knockouts(canvas, base=base, window=window, tiles=tiles)
     names = draw_line_and_names(
         canvas,
         base=base,

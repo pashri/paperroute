@@ -4,13 +4,13 @@ import math
 from collections.abc import Sequence
 from typing import Final
 
-from paperroute.build.map_style import STATION_FACE
 from paperroute.core.geo import Point
 from paperroute.core.map_view import MapBase, screen_point
 from paperroute.core.tiles import LabelKind, to_pixels
 from paperroute.ports import TileRepository
 from paperroute.render.canvas import INK, PAPER, Canvas
 from paperroute.render.chrome import HEADER
+from paperroute.render.map_labels import draw_station_name
 from paperroute.render.map_marks import ROUTE_STYLE, Window, draw_stop
 
 CASING: Final[int] = 4  # extra paper width under leg 2
@@ -209,14 +209,7 @@ def draw_end_name(
     if not near:
         return
     label = min(near, key=lambda item: math.dist(item.start, (x, y)))
-    canvas.text(
-        at=(label.x - window[0], label.y - window[1]),
-        text=label.name,
-        face=STATION_FACE,
-        grey=INK,
-        anchor='mm',
-        halo=NAME_HALO,
-    )
+    draw_station_name(canvas, label=label, window=window, halo=NAME_HALO)
 
 
 def draw_trip_lines(canvas: Canvas, *, base: MapBase, window: Window) -> None:

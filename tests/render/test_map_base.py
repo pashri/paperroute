@@ -18,6 +18,7 @@ from paperroute.build.tile_draw import Window as DrawWindow
 from paperroute.build.tile_draw import draw_window
 from paperroute.build.tile_store import PlacedLabel, TileWriter
 from paperroute.core.geo import Point, to_metres
+from paperroute.core.map_fit import CREDIT_ROOM
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
@@ -37,14 +38,12 @@ from paperroute.core.tiles import (
 )
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.map_base import (
-    EDGE,
     HALO,
     compose_tiles,
     draw_map_base,
     name_region,
     on_route,
     redraw_name,
-    scale_text,
     window_of,
 )
 from paperroute.render.tile_codec import (
@@ -681,7 +680,7 @@ def test_no_tiles_says_map_not_installed(tmp_path: Path) -> None:
     stop = (slice(middle - 14, middle + 14), slice(240, 280))
     assert np.array_equal(missing[stop], installed[stop])
     rows = np.flatnonzero(np.any(missing != installed, axis=1))
-    rows = rows[rows < MAP_HEIGHT - 24]
+    rows = rows[rows < MAP_HEIGHT - CREDIT_ROOM - 1]
     assert rows.min() >= middle + 14
     assert rows.max() <= middle + 44
     note = missing[rows.min() : rows.max() + 1]
@@ -692,17 +691,32 @@ def test_no_tiles_says_map_not_installed(tmp_path: Path) -> None:
 
 
 def test_scale_bar_and_credit_are_drawn(tmp_path: Path) -> None:
-    """Ink at the bottom left and the DARK credit at the bottom right."""
+    """The scale box at the bottom left and the credit box at the right."""
     with closing(build(out=tmp_path / 'tiles.db')) as tiles:
         grey = draw_map_base(
             base=base(),
             tiles=tiles,
             variant=TileVariant.GREY,
         )
-    bar = grey[MAP_HEIGHT - 13 : MAP_HEIGHT - 8, 14 : 14 + 125]
-    assert np.all(np.any(bar == INK, axis=0))
-    credit = grey[MAP_HEIGHT - 20 :, MAP_WIDTH - 120 :]
+    bar = grey[MAP_HEIGHT - 16 : MAP_HEIGHT - 12, 12 : 12 + 125]
+    assert np.all(bar == INK)
+    credit = grey[MAP_HEIGHT - 30 :, MAP_WIDTH - 120 :]
     assert np.count_nonzero(credit == DARK) > 0
+    assert np.count_nonzero(credit == INK) > 0
+
+
+def test_no_tiles_keeps_scale_and_says_map_not_installed() -> None:
+    """Without tiles the scale box stays and the credit box goes."""
+    grey = draw_map_base(
+        base=base(),
+        tiles=NullTiles(),
+        variant=TileVariant.GREY,
+    )
+    assert np.all(grey[MAP_HEIGHT - 16 : MAP_HEIGHT - 12, 12 : 12 + 125] == INK)
+    assert grey[MAP_HEIGHT - 18, 7] == DARK
+    assert np.all(grey[MAP_HEIGHT - 30 :, MAP_WIDTH - 120 :] == PAPER)
+    middle = MAP_HEIGHT // 2
+    assert np.any(grey[middle + 20 : middle + 44] == INK)
 
 
 def test_base_is_width_wide() -> None:
@@ -716,16 +730,16 @@ def test_base_is_width_wide() -> None:
 
 
 def test_credit_sits_at_the_narrow_edge(tmp_path: Path) -> None:
-    """At 480 px the credit is at the right edge, not at 520."""
+    """At 480 px the credit box is 8 px in from 480, not from 520."""
     with closing(build(out=tmp_path / 'tiles.db')) as tiles:
         grey = draw_map_base(
             base=replace(base(), width=STRIP_MAP_WIDTH),
             tiles=tiles,
             variant=TileVariant.GREY,
         )
-    credit = grey[MAP_HEIGHT - 20 :, : STRIP_MAP_WIDTH + 40]
-    right = np.flatnonzero(np.any(credit == DARK, axis=0)).max() + 1
-    assert abs(right - (STRIP_MAP_WIDTH - EDGE)) <= 3
+    credit = grey[MAP_HEIGHT - 30 :]
+    right = np.flatnonzero(np.any(credit == DARK, axis=0)).max()
+    assert right == STRIP_MAP_WIDTH - 8
 
 
 def test_stop_sits_on_the_narrow_centre() -> None:
@@ -761,25 +775,6 @@ def test_no_tiles_hides_the_credit() -> None:
     )
     credit = grey[MAP_HEIGHT - 20 :, MAP_WIDTH - 120 :]
     assert np.all(credit == PAPER)
-
-
-@pytest.mark.parametrize(
-    ('mpp', 'text'),
-    [
-        (3, '200 m · zoom 1 of 6'),
-        (5, '500 m · zoom 2 of 6'),
-        (8, '1 km · zoom 3 of 6'),
-        (14, '2 km · zoom 4 of 6'),
-        (25, '2 km · zoom 5 of 6'),
-        (45, '5 km · zoom 6 of 6'),
-    ],
-)
-def test_scale_text_names_the_largest_fitting_step(
-    mpp: int,
-    text: str,
-) -> None:
-    """The bar is the largest step within 143 px, then the zoom."""
-    assert scale_text(mpp=mpp) == text
 
 
 @pytest.mark.parametrize(
@@ -962,6 +957,7 @@ def test_bits_names_over_the_line_are_dithered(tmp_path: Path) -> None:
                 variant=variant,
             )
     text = drawn[TileVariant.GREY] == DARK
+    text[MAP_HEIGHT - CREDIT_ROOM - 1 :] = False
     share = np.count_nonzero(drawn[TileVariant.BITS][text] == PAPER) / (
         np.count_nonzero(text)
     )
@@ -998,48 +994,18 @@ def test_redraw_name_off_the_map_changes_nothing() -> None:
     assert (grey == LIGHT).all()
 
 
-def test_credit_has_a_2_px_paper_halo(tmp_path: Path) -> None:
-    """Over ink tiles, the credit's paper reaches 2 px past its text."""
-    left, top = window_of(base=base())
-    ink = np.full((TILE, TILE), INK, dtype=np.uint8)
-    covering = tiles_covering(
-        left=left,
-        top=top,
-        right=left + MAP_WIDTH,
-        bottom=top + MAP_HEIGHT,
-    )
-    tiles = build(
-        out=tmp_path / 'tiles.db',
-        tiles={tile: ink for tile in covering},
-    )
-    with closing(tiles):
-        grey = draw_map_base(
-            base=base(),
-            tiles=tiles,
-            variant=TileVariant.GREY,
-        )
-    credit = grey[MAP_HEIGHT - 24 :, MAP_WIDTH - 120 :]
-    text = np.argwhere(credit == DARK)
-    paper = np.argwhere(credit == PAPER)
-    reach = np.min(
-        np.linalg.norm(paper[:, None, :] - text[None, :, :], axis=2),
-        axis=1,
-    )
-    assert 2.5 < float(np.max(reach)) < 3.0
-
-
 def test_scale_bar_is_2_km_at_14_m_per_px(tmp_path: Path) -> None:
-    """At 14 m/px the 2 km bar is 143 px long."""
+    """At 14 m/px the 2 km bar is 143 px long, 4 px in from its box."""
     with closing(build(out=tmp_path / 'tiles.db')) as tiles:
         grey = draw_map_base(
             base=base(mpp=14),
             tiles=tiles,
             variant=TileVariant.GREY,
         )
-    bar = grey[MAP_HEIGHT - 12 : MAP_HEIGHT - 9]
+    bar = grey[MAP_HEIGHT - 16 : MAP_HEIGHT - 12, : 12 + 145]
     ink = np.flatnonzero(np.all(bar == INK, axis=0))
-    assert ink.min() == 14
-    assert 14 + 142 <= ink.max() + 1 <= 14 + 143
+    assert ink.min() == 12
+    assert 12 + 142 <= ink.max() + 1 <= 12 + 143
 
 
 def test_to_station_name_is_redrawn_over_the_trip(tmp_path: Path) -> None:

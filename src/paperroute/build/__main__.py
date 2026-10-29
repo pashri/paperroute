@@ -16,8 +16,9 @@ from paperroute.build.gtfs_files import Source
 from paperroute.build.handoff import Handoff
 from paperroute.build.refresh import RefreshBusy, refresh
 from paperroute.build.swap import guarded
+from paperroute.build.tile_store import tile_meta
 from paperroute.build.timetable import Window, build_timetable, yesterday
-from paperroute.core.tiles import NSW_BBOX, ZOOMS
+from paperroute.core.tiles import NSW_BBOX, TILE_STYLE, ZOOMS, levels_text
 from paperroute.logs import configure_logging
 
 logger = logging.getLogger(__name__)
@@ -149,6 +150,10 @@ def parse_args() -> argparse.Namespace:
     add_tiles(
         command=sub.add_parser('tiles', help='build the map tiles'),
     )
+    sub.add_parser(
+        'check-tiles',
+        help='check a tiles file fits this release',
+    ).add_argument('path', type=Path)
     return parser.parse_args()
 
 
@@ -250,9 +255,39 @@ def run_tiles(*, args: argparse.Namespace) -> int:
     return 0
 
 
+def run_check_tiles(*, args: argparse.Namespace) -> int:
+    """
+    Check a tiles file was built for this release's zooms and style.
+
+    Parameters
+    ----------
+    args : argparse.Namespace
+        Parsed check-tiles arguments.
+
+    Returns
+    -------
+    int
+        Exit status: 0 when it fits, 1 (after a message) when it doesn't.
+    """
+    zooms, style = tile_meta(path=args.path)
+    if zooms == ZOOMS and style == TILE_STYLE:
+        return 0
+    print(
+        f'tiles: {args.path} has zoom levels {levels_text(zooms=zooms)}'
+        f' and style {style or "none"}; this release needs'
+        f' {levels_text(zooms=ZOOMS)} and {TILE_STYLE}. The Pi will show'
+        ' "Map not installed" until you rebuild the tiles (README, Map'
+        ' tiles).',
+        file=sys.stderr,
+    )
+    return 1
+
+
 def main() -> None:
     """Run the chosen subcommand."""
     args = parse_args()
+    if args.command == 'check-tiles':
+        sys.exit(run_check_tiles(args=args))
     if args.command == 'refresh':
         sys.exit(run_refresh(args=args))
     if args.command == 'tiles':

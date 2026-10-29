@@ -11,6 +11,7 @@ TILE: Final[int] = 256
 LABEL_REACH: Final[int] = TILE  # pixels a baked label may reach past
 ZOOMS: Final[tuple[int, ...]] = (3, 5, 8, 14, 25, 45)
 CITY: Final[int] = 45
+TILE_STYLE: Final[str] = 'm9d'  # bump when the tiles' look changes
 NSW_BBOX: Final[tuple[float, float, float, float]] = (
     140.99,
     -37.51,
@@ -157,3 +158,42 @@ def tiles_covering(
         for row in range(first_row, last_row + 1)
         for col in range(first_col, last_col + 1)
     ]
+
+
+def zooms_of(*, text: str | None) -> tuple[int, ...] | None:
+    """Read a tiles file's comma-separated zoom levels.
+
+    Parameters
+    ----------
+    text : str | None
+        The stored levels, such as ``3,5,8``, or None when missing.
+
+    Returns
+    -------
+    tuple[int, ...] | None
+        The levels, or None when missing or not whole numbers.
+    """
+    if text is None:
+        return None
+    try:
+        return tuple(int(part) for part in text.split(','))
+    except ValueError:
+        return None
+
+
+def levels_text(*, zooms: tuple[int, ...] | None) -> str:
+    """Write zoom levels for a message.
+
+    Parameters
+    ----------
+    zooms : tuple[int, ...] | None
+        The levels, or None when unknown.
+
+    Returns
+    -------
+    str
+        The levels joined with commas, or ``none``.
+    """
+    if zooms is None:
+        return 'none'
+    return ','.join(str(mpp) for mpp in zooms)

@@ -3,13 +3,15 @@
 import os
 import sqlite3
 from collections.abc import Iterable, Mapping
+from contextlib import closing
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from types import TracebackType
 from typing import Final, Self
+from urllib.parse import quote
 
-from paperroute.core.tiles import LabelKind, StreetLabel
+from paperroute.core.tiles import LabelKind, StreetLabel, zooms_of
 
 TILE_FORMAT: Final[str] = 'z2'
 LABELS_TABLE: Final[str] = (
@@ -29,6 +31,9 @@ CREATE TABLE tiles (zoom INTEGER NOT NULL, col INTEGER NOT NULL,
     + """CREATE INDEX labels_place ON labels (zoom, kind, x);
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 """
+)
+META_KEYS: Final[str] = (
+    "SELECT key, value FROM meta WHERE key IN ('zooms', 'style')"
 )
 INSERT_LABEL: Final[str] = (
     'INSERT INTO labels (zoom, kind, name, rank, x, y, angle, width,'
@@ -218,3 +223,31 @@ class TileWriter:
         conn.close()
         self.conn = None
         os.replace(self.staged, self.out)
+
+
+def tile_meta(*, path: Path) -> tuple[tuple[int, ...] | None, str | None]:
+    """
+    Read which zoom levels and map style a tiles file was built for.
+
+    The file is opened read-only, so a missing file is not created.
+
+    Parameters
+    ----------
+    path : Path
+        The tiles file.
+
+    Returns
+    -------
+    tuple[tuple[int, ...] | None, str | None]
+        The zoom levels and the style; each is None when the file, the
+        table or the key is missing, or the value doesn't parse.
+    """
+    try:
+        with closing(
+            sqlite3.connect(f'file:{quote(str(path))}?mode=ro', uri=True),
+        ) as conn:
+            rows = conn.execute(META_KEYS).fetchall()
+    except sqlite3.Error:
+        return (None, None)
+    values = {str(key): str(value) for key, value in rows}
+    return (zooms_of(text=values.get('zooms')), values.get('style'))

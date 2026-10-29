@@ -22,7 +22,7 @@ from paperroute.build.tile_set import (
 )
 from paperroute.build.tile_store import TileWriter
 from paperroute.core.geo import MetreBox, to_metres
-from paperroute.core.tiles import NSW_BBOX, ZOOMS
+from paperroute.core.tiles import NSW_BBOX, TILE_STYLE, ZOOMS
 from paperroute.rss import BYTES_PER_MB, max_rss_mb
 
 STORE_NAME: Final[str] = 'features.db'
@@ -502,6 +502,7 @@ def swap(
             'origin': ORIGIN,
             'osm_timestamp': header_timestamp(path=config.osm),
             'tiles': str(count),
+            'style': TILE_STYLE,
         },
     )
 

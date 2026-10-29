@@ -1503,6 +1503,31 @@ def test_deploy_checks_free_disk_before_tile_upload() -> None:
     assert 'not enough free disk on the Pi for the tiles' in text
 
 
+def test_deploy_only_warns_on_tiles() -> None:
+    """scripts/deploy checks the tiles before any ssh and never stops."""
+    text = DEPLOY_SCRIPT.read_text(encoding='utf-8')
+    lines = text.splitlines()
+    check = next(
+        index
+        for index, line in enumerate(lines)
+        if 'check-tiles' in line
+    )
+    first_ssh = next(
+        index
+        for index, line in enumerate(lines)
+        if re.search(r'\bssh\b', line) and not line.lstrip().startswith('#')
+    )
+    assert check < first_ssh
+    assert lines[check].strip() == (
+        'uv run python -m paperroute.build check-tiles data/tiles.db '
+        "|| printf 'deploy: warning: tiles do not match this release; "
+        "deploying anyway\\n' >&2"
+    )
+    assert 'exit' not in lines[check]
+    assert lines[check - 1].strip() == 'if [[ -f data/tiles.db ]]; then'
+    assert lines[check + 1].strip() == 'fi'
+
+
 def test_deploy_reports_a_failed_tile_size_read() -> None:
     """An ssh failure reading sizes reaches the number check's message."""
     text = DEPLOY_SCRIPT.read_text(encoding='utf-8')
@@ -1668,7 +1693,7 @@ def test_deploy_installs_tiles_before_the_release() -> None:
         text.index(part)
         for part in (
             '| rsync -a --from0',
-            'if [[ -f data/tiles.db ]]; then',
+            'if [[ -f data/tiles.db ]]; then\n    if ! ssh',
             "printf 'deploy: run scripts/provision first (tiles)\\n' >&2",
             'ssh -- "$host" mkdir -p "$STAGE/tiles"',
             'rsync -a --partial data/tiles.db "$host:$STAGE/tiles/tiles.db"',

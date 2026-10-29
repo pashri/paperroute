@@ -13,6 +13,7 @@ from paperroute.build.tile_store import (
     TILES_SCHEMA,
     PlacedLabel,
     TileWriter,
+    tile_meta,
 )
 from paperroute.core.tiles import TILE, LabelKind
 from paperroute.render.tile_codec import pack_bits, pack_grey
@@ -121,3 +122,24 @@ def test_writer_meta_has_format_and_built_at(tmp_path: Path) -> None:
 def test_tiles_schema_text_is_unchanged() -> None:
     """The tiles schema keeps its exact text."""
     assert TILES_SCHEMA == TILES_SCHEMA_TEXT
+
+
+def test_tile_meta_reads_zooms_and_style(tmp_path: Path) -> None:
+    """tile_meta parses the zooms and gives the style."""
+    out = tmp_path / 'tiles.db'
+    write_tile(out=out, meta={'zooms': '3,5,8,14,45', 'style': 'm9c'})
+    assert tile_meta(path=out) == ((3, 5, 8, 14, 45), 'm9c')
+
+
+def test_tile_meta_none_without_meta(tmp_path: Path) -> None:
+    """Missing keys, bad zooms, no meta table or no file give None."""
+    out = tmp_path / 'tiles.db'
+    write_tile(out=out)
+    assert tile_meta(path=out) == (None, None)
+    write_tile(out=out, meta={'zooms': '3,x'})
+    assert tile_meta(path=out) == (None, None)
+    with closing(sqlite3.connect(tmp_path / 'empty.db')) as conn:
+        conn.execute('CREATE TABLE other (a)')
+    assert tile_meta(path=tmp_path / 'empty.db') == (None, None)
+    assert tile_meta(path=tmp_path / 'missing.db') == (None, None)
+    assert not (tmp_path / 'missing.db').exists()

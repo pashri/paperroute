@@ -10,7 +10,7 @@ import pytest
 
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.build.tile_store import PlacedLabel, TileWriter
-from paperroute.core.tiles import TILE, LabelKind, TileVariant
+from paperroute.core.tiles import TILE, TILE_STYLE, LabelKind, TileVariant
 from paperroute.render.tile_codec import pack_bits, pack_grey
 
 
@@ -292,3 +292,84 @@ def test_corrupt_tile_is_a_database_error(
         pytest.raises(sqlite3.DatabaseError, match='tile 14/3/4'),
     ):
         repo.tile(zoom=14, col=3, row=4, variant=variant)
+
+
+def with_meta(*, out: Path, meta: dict[str, str]) -> Path:
+    """
+    Write a tiles file with no tiles and the given meta.
+
+    Parameters
+    ----------
+    out : Path
+        Destination file.
+    meta : dict[str, str]
+        Meta rows.
+
+    Returns
+    -------
+    Path
+        The file.
+    """
+    with TileWriter(out=out) as writer:
+        writer.finish(meta=meta)
+    return out
+
+
+def test_fits_this_release(tmp_path: Path) -> None:
+    """A file built for this release's zooms and style fits."""
+    out = with_meta(
+        out=tmp_path / 'tiles.db',
+        meta={'zooms': '3,5,8,14,25,45', 'style': TILE_STYLE},
+    )
+    with closing(SqliteTileRepository(path=out)) as repo:
+        assert repo.fits()
+
+
+def test_other_zooms_do_not_fit(tmp_path: Path) -> None:
+    """A file without the 25 m/px level doesn't fit."""
+    out = with_meta(
+        out=tmp_path / 'tiles.db',
+        meta={'zooms': '3,5,8,14,45', 'style': TILE_STYLE},
+    )
+    with closing(SqliteTileRepository(path=out)) as repo:
+        assert not repo.fits()
+
+
+def test_missing_style_does_not_fit(tmp_path: Path) -> None:
+    """Today's meta keys, with no style, don't fit."""
+    out = with_meta(
+        out=tmp_path / 'tiles.db',
+        meta={
+            'bbox': '140.99,-37.51,153.64,-28.15',
+            'zooms': '3,5,8,14,25,45',
+            'origin': '149.5,-32.0',
+            'osm_timestamp': '2026-10-01T00:00:00Z',
+            'tiles': '1',
+        },
+    )
+    with closing(SqliteTileRepository(path=out)) as repo:
+        assert not repo.fits()
+
+
+def test_missing_file_does_not_fit(tmp_path: Path) -> None:
+    """No file doesn't fit."""
+    with closing(SqliteTileRepository(path=tmp_path / 'no.db')) as repo:
+        assert not repo.fits()
+
+
+def test_bad_zooms_do_not_fit(tmp_path: Path) -> None:
+    """Zooms that don't parse don't fit."""
+    out = with_meta(
+        out=tmp_path / 'tiles.db',
+        meta={'zooms': '3,five', 'style': TILE_STYLE},
+    )
+    with closing(SqliteTileRepository(path=out)) as repo:
+        assert not repo.fits()
+
+
+def test_unreadable_meta_does_not_fit(tmp_path: Path) -> None:
+    """A meta table that can't be read doesn't fit."""
+    with closing(sqlite3.connect(':memory:')) as conn:
+        conn.execute('CREATE TABLE meta (k TEXT)')
+        repo = SqliteTileRepository(connection=conn)
+        assert not repo.fits()

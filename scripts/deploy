@@ -29,6 +29,9 @@ sha=$(git rev-parse --short HEAD)
     printf 'deploy: unexpected sha\n' >&2
     exit 1
 }
+if [[ -f data/tiles.db ]]; then
+    uv run python -m paperroute.build check-tiles data/tiles.db || printf 'deploy: warning: tiles do not match this release; deploying anyway\n' >&2
+fi
 
 if ! ssh -- "$host" sudo -n -l "$INSTALL" >/dev/null 2>&1; then
     printf 'deploy: run scripts/provision first\n' >&2

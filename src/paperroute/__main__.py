@@ -44,7 +44,7 @@ from paperroute.app import Ports, run
 from paperroute.app_device import DevicePorts
 from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin, StopPlace
-from paperroute.core.tiles import TileVariant
+from paperroute.core.tiles import TILE_STYLE, ZOOMS, TileVariant, levels_text
 from paperroute.logs import LastError, configure_logging
 from paperroute.observers import ObserverGroup, Timings
 from paperroute.ports import (
@@ -536,16 +536,49 @@ def tiles_for(*, args: argparse.Namespace) -> Iterator[TileRepository]:
     Yields
     ------
     TileRepository
-        The tiles file, which may be missing, or no tiles without --tiles.
+        The tiles file, which may be missing. No tiles without --tiles,
+        or when the file was built for other zoom levels or another map
+        style; the maps then say "Map not installed".
     """
     if args.tiles is None:
         yield NullTiles()
         return
     tiles = SqliteTileRepository(path=args.tiles)
+    if args.tiles.exists() and not tiles.fits():
+        built = tiles.built_for()
+        tiles.close()
+        warn_unfit(path=args.tiles, built=built)
+        yield NullTiles()
+        return
     try:
         yield tiles
     finally:
         tiles.close()
+
+
+def warn_unfit(
+    *, path: Path, built: tuple[tuple[int, ...] | None, str | None]
+) -> None:
+    """
+    Log that a tiles file doesn't fit this release, so the map is off.
+
+    Parameters
+    ----------
+    path : Path
+        The tiles file.
+    built : tuple[tuple[int, ...] | None, str | None]
+        The zoom levels and style it was built for.
+    """
+    zooms, style = built
+    logger.warning(
+        'tiles: %s was built for zoom levels %s and style %s; this '
+        'release needs %s and %s, so the map is off',
+        path,
+        levels_text(zooms=zooms),
+        style or 'none',
+        levels_text(zooms=ZOOMS),
+        TILE_STYLE,
+    )
 
 
 def install_stop_signals(

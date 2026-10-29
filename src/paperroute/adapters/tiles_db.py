@@ -9,7 +9,14 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.adapters.sqlite_ro import ReadOnlyDatabase
-from paperroute.core.tiles import LabelKind, StreetLabel, TileVariant
+from paperroute.core.tiles import (
+    TILE_STYLE,
+    ZOOMS,
+    LabelKind,
+    StreetLabel,
+    TileVariant,
+    zooms_of,
+)
 from paperroute.render.tile_codec import unpack_bits, unpack_grey
 
 DEFAULT_TILES: Final[Path] = Path('/var/lib/paperroute/tiles.db')
@@ -144,6 +151,37 @@ class SqliteTileRepository:
             params=('built_at',),
         )
         return str(rows[0][0]) if rows else None
+
+    def built_for(self) -> tuple[tuple[int, ...] | None, str | None]:
+        """
+        Say which zoom levels and map style the file was built for.
+
+        Returns
+        -------
+        tuple[tuple[int, ...] | None, str | None]
+            The zoom levels and the style; each is None when the file,
+            the key or a readable value is missing.
+        """
+        try:
+            rows = self.db.fetch(
+                sql="SELECT key, value FROM meta WHERE key IN (?, ?)",
+                params=('zooms', 'style'),
+            )
+        except sqlite3.Error:
+            return (None, None)
+        values = {str(key): str(value) for key, value in rows}
+        return (zooms_of(text=values.get('zooms')), values.get('style'))
+
+    def fits(self) -> bool:
+        """
+        Say whether the file was built for this release's map.
+
+        Returns
+        -------
+        bool
+            True when its zoom levels and style match this release.
+        """
+        return self.built_for() == (ZOOMS, TILE_STYLE)
 
     def close(self) -> None:
         """Close the database connection."""

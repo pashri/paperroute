@@ -58,7 +58,10 @@ then build the tiles on the Mac:
 This builds all of NSW. It takes about 28 minutes on an Apple-silicon Mac,
 needs about 2 GB of RAM and makes about 470 MB. Add `--bbox` to build a
 smaller area for trying things out. Without `data/tiles.db` the Map shows
-"Map not installed".
+"Map not installed". The app shows "Map not installed" when the tiles file
+was built for other zoom levels or another map style; rebuild the tiles when
+a release changes them. scripts/deploy warns about such a file but deploys
+anyway.
 
 `scripts/deploy` copies `data/tiles.db` to the Pi only when it has changed.
 The first upload takes about 12.5 minutes, and later deploys print "tiles

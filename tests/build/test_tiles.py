@@ -13,7 +13,13 @@ from paperroute.build.labels import label_box
 from paperroute.build.tile_store import TILE_FORMAT
 from paperroute.build.tiles import TileBuildConfig, TileReport, build_tiles
 from paperroute.core.geo import to_metres
-from paperroute.core.tiles import ZOOMS, TileVariant, tile_of, to_pixels
+from paperroute.core.tiles import (
+    TILE_STYLE,
+    ZOOMS,
+    TileVariant,
+    tile_of,
+    to_pixels,
+)
 from tests.build.osm_factory import TIMESTAMP, TINY_BBOX, write_tiny_osm
 from tests.build.tile_inputs import STOPS, write_timetable
 
@@ -108,6 +114,16 @@ def test_build_tiles_end_to_end(inputs: Path, serial: TileReport) -> None:
     finally:
         repo.close()
     assert tile is not None
+
+
+def test_build_writes_the_style(inputs: Path, serial: TileReport) -> None:
+    """The meta names the map style, so the device can check it fits."""
+    assert serial.tiles > 0
+    rows = read_rows(
+        path=inputs / 'tiles-1.db',
+        sql="SELECT value FROM meta WHERE key = 'style'",
+    )
+    assert rows == [(TILE_STYLE,)]
 
 
 @pytest.mark.parametrize('mpp', [3, 5, 8])

@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
 
 import aiohttp
+import numpy as np
 import pytest
 
 import paperroute.__main__ as cli
@@ -45,12 +46,18 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.wifi import NmcliWifi, NullWifi
 from paperroute.app import Ports
+from paperroute.app_render import MapRenderer
 from paperroute.build.gtfs_files import Source
+from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.core.geo import to_metres
+from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
 from paperroute.core.messages import Event
 from paperroute.core.model import SYDNEY
-from paperroute.core.tiles import TileVariant
+from paperroute.core.tiles import TILE_STYLE, TileVariant
 from paperroute.observers import Timings
+from paperroute.render.canvas import INK
+from paperroute.render.map_base import draw_map_base
 from tests.core.factories import pin_of
 from tests.fakes import FakeKeys, FakeNetwork, FakeWifi, MemoryStates
 
@@ -213,6 +220,78 @@ def test_tiles_for_tolerates_a_missing_file(tmp_path: Path) -> None:
         assert tiles.version() is None
     with tiles_for(args=argparse.Namespace(tiles=None)) as tiles:
         assert isinstance(tiles, NullTiles)
+
+
+def old_tiles(*, out: Path) -> Path:
+    """
+    Write a tiles file built before the 25 m/px level and the style.
+
+    Parameters
+    ----------
+    out : Path
+        Destination file.
+
+    Returns
+    -------
+    Path
+        The file.
+    """
+    with TileWriter(out=out) as writer:
+        writer.finish(meta={'zooms': '3,5,8,14,45'})
+    return out
+
+
+def test_mismatched_tiles_open_as_no_tiles(
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A file for other zooms or style is closed and opens as no tiles."""
+    closed: list[bool] = []
+    close = SqliteTileRepository.close
+
+    def recorded(self: SqliteTileRepository) -> None:
+        """Note the close, then close."""
+        closed.append(True)
+        close(self)
+
+    monkeypatch.setattr(SqliteTileRepository, 'close', recorded)
+    out = old_tiles(out=tmp_path / 'tiles.db')
+    with (
+        caplog.at_level(logging.WARNING),
+        tiles_for(args=argparse.Namespace(tiles=out)) as tiles,
+    ):
+        assert isinstance(tiles, NullTiles)
+        assert closed == [True]
+    assert (
+        f'tiles: {out} was built for zoom levels 3,5,8,14,45 and style '
+        f'none; this release needs 3,5,8,14,25,45 and {TILE_STYLE}, so '
+        'the map is off'
+    ) in caplog.text
+
+
+def test_mismatched_tiles_draw_map_not_installed(tmp_path: Path) -> None:
+    """The map says it isn't installed but keeps the From and route."""
+    centre = to_metres(lon=151.0036, lat=-33.8170)
+    x, y = centre
+    base = MapBase(
+        centre=centre,
+        mpp=8,
+        route=(((x - 3000.0, y), (x + 3000.0, y)),),
+    )
+    out = old_tiles(out=tmp_path / 'tiles.db')
+    with tiles_for(args=argparse.Namespace(tiles=out)) as tiles:
+        grey = MapRenderer(tiles=tiles).cached(base=base)
+    expected = draw_map_base(
+        base=base,
+        tiles=NullTiles(),
+        variant=TileVariant.GREY,
+    )
+    assert np.array_equal(grey, expected)
+    middle = MAP_HEIGHT // 2
+    assert np.any(grey[middle + 14 : middle + 44] == INK)
+    assert np.any(grey[middle - 3 : middle + 3, MAP_WIDTH // 2] == INK)
+    assert np.any(grey[middle - 6 : middle + 6, 20] == INK)
 
 
 def test_power_for_acts_only_when_asked() -> None:

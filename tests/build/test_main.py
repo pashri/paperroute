@@ -1,5 +1,6 @@
 """Tests for the build command line."""
 
+import argparse
 import json
 import logging
 import os
@@ -13,8 +14,10 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.build.__main__ import main, parse_args
+from paperroute.build.__main__ import main, parse_args, run_check_tiles
+from paperroute.build.tile_store import TileWriter
 from paperroute.core.model import SYDNEY
+from paperroute.core.tiles import TILE_STYLE
 from tests.build.network_feed import network_feed
 from tests.build.osm_factory import TINY_BBOX, write_tiny_osm
 from tests.build.tile_inputs import write_timetable
@@ -221,3 +224,82 @@ def test_gtfs_execs_into_the_extras(tmp_path: Path) -> None:
     ]
     with closing(sqlite3.connect(out)) as conn:
         assert conn.execute('SELECT count(*) FROM runs').fetchone()[0] > 0
+
+
+def tiles_with(*, out: Path, meta: dict[str, str]) -> Path:
+    """
+    Write a tiles file with no tiles and the given meta.
+
+    Parameters
+    ----------
+    out : Path
+        Destination file.
+    meta : dict[str, str]
+        Meta rows.
+
+    Returns
+    -------
+    Path
+        The file.
+    """
+    with TileWriter(out=out) as writer:
+        writer.finish(meta=meta)
+    return out
+
+
+def test_check_tiles_accepts_this_release(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Tiles for this release's zooms and style pass quietly."""
+    out = tiles_with(
+        out=tmp_path / 'tiles.db',
+        meta={'zooms': '3,5,8,14,25,45', 'style': TILE_STYLE},
+    )
+    assert run_check_tiles(args=argparse.Namespace(path=out)) == 0
+    assert capsys.readouterr().err == ''
+
+
+def test_check_tiles_warns_on_other_zooms(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Other zooms fail with both lists and what the Pi will show."""
+    out = tiles_with(
+        out=tmp_path / 'tiles.db',
+        meta={'zooms': '3,5,8,14,45', 'style': TILE_STYLE},
+    )
+    assert run_check_tiles(args=argparse.Namespace(path=out)) == 1
+    assert capsys.readouterr().err == (
+        f'tiles: {out} has zoom levels 3,5,8,14,45 and style {TILE_STYLE}; '
+        f'this release needs 3,5,8,14,25,45 and {TILE_STYLE}. The Pi will '
+        'show "Map not installed" until you rebuild the tiles (README, '
+        'Map tiles).\n'
+    )
+
+
+def test_check_tiles_unreadable(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A file that isn't a tiles database fails with none for both."""
+    out = tmp_path / 'tiles.db'
+    out.write_bytes(b'not a database ' * 100)
+    assert run_check_tiles(args=argparse.Namespace(path=out)) == 1
+    err = capsys.readouterr().err
+    assert 'has zoom levels none and style none;' in err
+
+
+def test_check_tiles_from_the_command_line(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """check-tiles takes the path and exits with the check's status."""
+    out = tiles_with(
+        out=tmp_path / 'tiles.db',
+        meta={'zooms': '3,5,8,14,25,45', 'style': TILE_STYLE},
+    )
+    monkeypatch.setattr(sys, 'argv', ['build', 'check-tiles', str(out)])
+    with pytest.raises(SystemExit) as info:
+        main()
+    assert info.value.code == 0

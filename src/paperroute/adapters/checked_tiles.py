@@ -51,7 +51,9 @@ class CheckedTiles:
     The file may be missing at first. Its zoom levels and style are
     checked again each time `version` sees a new build, so a file
     installed while the app runs is checked too. Reads between two
-    `version` calls follow the last check.
+    `version` calls follow the last check. A build is marked as seen
+    only once its check is done, so a caller on another thread never
+    reads it with the previous build's fit.
 
     Parameters
     ----------
@@ -78,8 +80,8 @@ class CheckedTiles:
         """
         found = self.tiles.version()
         if found != self.seen:
-            self.seen = found
             self.fit = found is None or self.checked()
+            self.seen = found
         return found if self.fit else None
 
     def checked(self) -> bool:

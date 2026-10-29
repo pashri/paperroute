@@ -8,7 +8,7 @@ Type=notify
 NotifyAccess=main
 User=paperroute
 Group=paperroute
-Environment=PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets
+Environment=PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets FONTCONFIG_FILE=/opt/paperroute/current/src/paperroute/assets/fontconfig/fonts.conf
 ExecStart=/opt/paperroute/current/.venv/bin/python -m paperroute run --display web --timetable /var/lib/paperroute/timetable.db --tiles /var/lib/paperroute/tiles.db --state /var/lib/paperroute/state.json --error-log /var/lib/paperroute/log/errors.jsonl --rebuild --power --wifi --version-file /opt/paperroute/current/VERSION
 # + runs it as root: the paperroute user can't write delay_on or delay_off
 ExecStopPost=+/usr/local/bin/paperroute-led boot

@@ -9,6 +9,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
+from xml.etree import ElementTree
 
 import pytest
 
@@ -51,7 +52,7 @@ BAD_SHAS: Final[tuple[str, ...]] = (
 SHA: Final[str] = 'abc1234'
 KMS_OFF: Final[str] = 's/^dtoverlay=vc4-kms-v3d/#&/'
 ROOT_SAFE_ENVIRONMENT: Final[frozenset[str]] = frozenset(
-    {'PAPERROUTE_API_KEY_FILE'}
+    {'PAPERROUTE_API_KEY_FILE', 'FONTCONFIG_FILE'}
 )
 LED_PATTERNS: Final[dict[str, dict[str, str]]] = {
     'boot': {'trigger': 'timer', 'delay_on': '100', 'delay_off': '100'},
@@ -63,14 +64,17 @@ LED_PATTERNS: Final[dict[str, dict[str, str]]] = {
     'on': {'trigger': 'default-on'},
 }
 PYTHON: Final[str] = '/opt/paperroute/current/.venv/bin/python'
+FONTS_CONF: Final[str] = 'src/paperroute/assets/fontconfig/fonts.conf'
+UNIT_ENVIRONMENT: Final[str] = (
+    'PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets'
+    f' FONTCONFIG_FILE=/opt/paperroute/current/{FONTS_CONF}'
+)
 APP_SERVICE: Final[dict[str, str]] = {
     'Type': 'notify',
     'NotifyAccess': 'main',
     'User': 'paperroute',
     'Group': 'paperroute',
-    'Environment': (
-        'PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets'
-    ),
+    'Environment': UNIT_ENVIRONMENT,
     'ExecStart': (
         f'{PYTHON} -m paperroute run --display web'
         ' --timetable /var/lib/paperroute/timetable.db'
@@ -98,7 +102,7 @@ TIMETABLE_SERVICE: Final[dict[str, str]] = {
     'Type': 'oneshot',
     'User': 'paperroute',
     'Group': 'paperroute',
-    'Environment': 'PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets',
+    'Environment': UNIT_ENVIRONMENT,
     'ExecStartPre': '+/usr/local/bin/paperroute-led rebuild',
     'ExecStart': (
         '/usr/bin/env TMPDIR=/var/lib/paperroute/work'
@@ -1804,6 +1808,40 @@ def test_provision_installs_polkitd() -> None:
         )
         for line in needed
     )
+
+
+@pytest.mark.parametrize(
+    'name', ['paperroute.service', 'paperroute-timetable.service'],
+)
+def test_units_point_fontconfig_at_the_shipped_file(name: str) -> None:
+    """Both Python services read the fonts.conf the release ships."""
+    environment = read_unit(name=name)['Service']['Environment'].split()
+    assert f'FONTCONFIG_FILE=/opt/paperroute/current/{FONTS_CONF}' in (
+        environment
+    )
+
+
+def test_shipped_fonts_conf_is_minimal() -> None:
+    """
+    fonts.conf includes no system config and names no font folders.
+
+    Skia's own fontconfig is older than the system's, so it must not read
+    the system files.
+    """
+    path = ROOT / FONTS_CONF
+    tree = ElementTree.parse(path)
+    root = tree.getroot()
+    assert root.tag == 'fontconfig'
+    assert not list(root.iter('include'))
+    assert not list(root.iter('reset-dirs'))
+    assert not list(root.iter('dir'))
+    assert FONTS_CONF in subprocess.run(
+        ['git', 'ls-files', FONTS_CONF],
+        cwd=ROOT,
+        check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
 
 
 def test_provision_installs_fontconfig_config() -> None:

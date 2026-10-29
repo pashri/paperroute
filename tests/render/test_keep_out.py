@@ -164,10 +164,15 @@ def test_corner_boxes_included(tmp_path: Path) -> None:
     assert boxes == KeepOut(places=corners(), streets=())
 
 
-def test_no_credit_box_without_tiles() -> None:
-    """Without tiles only the scale box is kept out."""
+def test_note_box_kept_out_without_tiles() -> None:
+    """Without tiles the scale box and the note's box are kept out."""
+    note = credit_box(width=base().width, text='Map not installed')
     assert keep_out(base=base(), tiles=NullTiles()) == KeepOut(
-        places=(grown(box=scale_box(mpp=MPP), by=1.0),), streets=(),
+        places=(
+            grown(box=scale_box(mpp=MPP), by=1.0),
+            grown(box=note, by=1.0),
+        ),
+        streets=(),
     )
 
 

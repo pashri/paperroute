@@ -22,12 +22,15 @@ from paperroute.core.tiles import (
     tiles_covering,
 )
 from paperroute.ports import TileRepository
-from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
-from paperroute.render.map_corners import draw_boxed_credit, draw_boxed_scale
+from paperroute.render.canvas import INK, PAPER, Canvas, text_width
+from paperroute.render.map_corners import (
+    corner_text,
+    draw_boxed_credit,
+    draw_boxed_scale,
+)
 from paperroute.render.map_labels import draw_place_knockouts, label_query
 from paperroute.render.map_marks import (
     ROUTE_STYLE,
-    STOP_DISC,
     Window,
     draw_ridden_stops,
     draw_stop,
@@ -43,9 +46,6 @@ MATCH_POINTS: Final[int] = 9
 MATCH_NEEDED: Final[int] = 6
 MATCH_REACH: Final[float] = 5.0  # pixels
 MATCH_TURN: Final[float] = 25.0  # degrees
-NOT_INSTALLED: Final[str] = 'Map not installed'
-NOT_INSTALLED_FACE: Final[Face] = Face(weight=700, px=16)
-NOT_INSTALLED_DROP: Final[float] = STOP_DISC + 16.0  # below the centre
 
 
 def window_of(*, base: MapBase) -> Window:
@@ -505,27 +505,6 @@ def draw_line_and_names(
     )
 
 
-def draw_notes(canvas: Canvas, *, width: int) -> None:
-    """
-    Say below the stop that there is no map.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    width : int
-        Map width in pixels.
-    """
-    canvas.text(
-        at=(width / 2, MAP_HEIGHT / 2 + NOT_INSTALLED_DROP),
-        text=NOT_INSTALLED,
-        face=NOT_INSTALLED_FACE,
-        grey=INK,
-        anchor='mm',
-        halo=HALO,
-    )
-
-
 def name_region(*, label: StreetLabel, offset: Window) -> Region:
     """
     Find the map pixels a redrawn name and its halo may cover.
@@ -616,10 +595,11 @@ def draw_marks(
             ),
         )
     draw_boxed_scale(canvas, mpp=base.mpp)
-    if tiles.version() is None:
-        draw_notes(canvas, width=base.width)
-    else:
-        draw_boxed_credit(canvas, width=base.width)
+    draw_boxed_credit(
+        canvas,
+        width=base.width,
+        text=corner_text(installed=tiles.version() is not None),
+    )
 
 
 def draw_map_base(

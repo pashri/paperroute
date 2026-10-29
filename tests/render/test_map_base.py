@@ -46,6 +46,7 @@ from paperroute.render.map_base import (
     redraw_name,
     window_of,
 )
+from paperroute.render.map_corners import BOX_FACE
 from paperroute.render.tile_codec import (
     diffuse,
     pack_bits,
@@ -663,31 +664,23 @@ def test_window_of_needs_a_centre() -> None:
         window_of(base=MapBase(centre=None, mpp=MPP, route=()))
 
 
-def test_no_tiles_says_map_not_installed(tmp_path: Path) -> None:
-    """Without a tiles file, a bold note sits below the intact stop."""
-    missing = draw_map_base(
+def test_no_tiles_says_map_not_installed_in_the_credit_corner() -> None:
+    """Without tiles, the note takes the credit's box, not the middle."""
+    grey = draw_map_base(
         base=base(),
         tiles=NullTiles(),
         variant=TileVariant.GREY,
     )
-    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
-        installed = draw_map_base(
-            base=base(),
-            tiles=tiles,
-            variant=TileVariant.GREY,
-        )
     middle = MAP_HEIGHT // 2
-    stop = (slice(middle - 14, middle + 14), slice(240, 280))
-    assert np.array_equal(missing[stop], installed[stop])
-    rows = np.flatnonzero(np.any(missing != installed, axis=1))
-    rows = rows[rows < MAP_HEIGHT - CREDIT_ROOM - 1]
-    assert rows.min() >= middle + 14
-    assert rows.max() <= middle + 44
-    note = missing[rows.min() : rows.max() + 1]
-    ink = np.flatnonzero(np.any(note == INK, axis=0))
-    width = text_width(text='Map not installed', face=Face(weight=700, px=16))
+    assert np.all(grey[middle + 14 : middle + 60] == PAPER)
+    width = text_width(text='Map not installed', face=BOX_FACE)
+    corner = grey[MAP_HEIGHT - 30 :]
+    ink = np.flatnonzero(np.any(corner == INK, axis=0))
+    ink = ink[ink > MAP_WIDTH / 2]
+    assert ink.max() <= MAP_WIDTH - 12
     assert abs((ink.max() - ink.min() + 1) - width) <= 3
-    assert abs((ink.max() + ink.min() + 1) / 2 - MAP_WIDTH / 2) <= 2
+    edge = np.flatnonzero(np.any(corner == DARK, axis=0))
+    assert edge.max() == MAP_WIDTH - 8
 
 
 def test_scale_bar_and_credit_are_drawn(tmp_path: Path) -> None:
@@ -706,7 +699,7 @@ def test_scale_bar_and_credit_are_drawn(tmp_path: Path) -> None:
 
 
 def test_no_tiles_keeps_scale_and_says_map_not_installed() -> None:
-    """Without tiles the scale box stays and the credit box goes."""
+    """Without tiles the scale box stays and the note boxes the credit."""
     grey = draw_map_base(
         base=base(),
         tiles=NullTiles(),
@@ -714,9 +707,7 @@ def test_no_tiles_keeps_scale_and_says_map_not_installed() -> None:
     )
     assert np.all(grey[MAP_HEIGHT - 16 : MAP_HEIGHT - 12, 12 : 12 + 125] == INK)
     assert grey[MAP_HEIGHT - 18, 7] == DARK
-    assert np.all(grey[MAP_HEIGHT - 30 :, MAP_WIDTH - 120 :] == PAPER)
-    middle = MAP_HEIGHT // 2
-    assert np.any(grey[middle + 20 : middle + 44] == INK)
+    assert np.any(grey[MAP_HEIGHT - 30 :, MAP_WIDTH - 120 :] == INK)
 
 
 def test_base_is_width_wide() -> None:
@@ -752,29 +743,33 @@ def test_stop_sits_on_the_narrow_centre() -> None:
     assert grey[centre_row(), STRIP_MAP_WIDTH // 2] == INK
 
 
-def test_not_installed_note_is_centred_at_the_narrow_width() -> None:
-    """At 480 px the 'Map not installed' note is centred at x 240."""
-    narrow = replace(base(), width=STRIP_MAP_WIDTH)
+def test_not_installed_note_sits_at_the_narrow_edge() -> None:
+    """At 480 px the note's box is 8 px in from 480, not from 520."""
     missing = draw_map_base(
-        base=narrow,
+        base=replace(base(), width=STRIP_MAP_WIDTH),
         tiles=NullTiles(),
         variant=TileVariant.GREY,
     )
-    middle = MAP_HEIGHT // 2
-    note = missing[middle + 14 : middle + 44]
-    ink = np.flatnonzero(np.any(note == INK, axis=0))
-    assert abs((ink.max() + ink.min() + 1) / 2 - STRIP_MAP_WIDTH / 2) <= 2
+    corner = missing[MAP_HEIGHT - 30 :]
+    right = np.flatnonzero(np.any(corner == DARK, axis=0)).max()
+    assert right == STRIP_MAP_WIDTH - 8
 
 
-def test_no_tiles_hides_the_credit() -> None:
+def test_no_tiles_hides_the_credit(tmp_path: Path) -> None:
     """Without a tiles file there is no OpenStreetMap credit."""
-    grey = draw_map_base(
+    missing = draw_map_base(
         base=base(),
         tiles=NullTiles(),
         variant=TileVariant.GREY,
     )
-    credit = grey[MAP_HEIGHT - 20 :, MAP_WIDTH - 120 :]
-    assert np.all(credit == PAPER)
+    with closing(build(out=tmp_path / 'tiles.db')) as tiles:
+        installed = draw_map_base(
+            base=base(),
+            tiles=tiles,
+            variant=TileVariant.GREY,
+        )
+    corner = (slice(MAP_HEIGHT - 20, MAP_HEIGHT), slice(MAP_WIDTH - 120, None))
+    assert not np.array_equal(missing[corner], installed[corner])
 
 
 @pytest.mark.parametrize(

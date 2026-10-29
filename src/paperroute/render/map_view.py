@@ -37,8 +37,8 @@ from paperroute.render.chrome import (
     view_header,
 )
 from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
-from paperroute.render.map_base import HALO, NOT_INSTALLED_DROP
-from paperroute.render.map_marks import RIDDEN_RING, draw_stop
+from paperroute.render.map_base import HALO
+from paperroute.render.map_marks import RIDDEN_RING, STOP_DISC, draw_stop
 from paperroute.render.markers import (
     CHANGE_HALF,
     END_HALF,
@@ -64,7 +64,7 @@ EMPTY_LINES: Final[int] = 2
 OFF_MAP: Final[float] = 1000.0  # pixels each edge box reaches out
 EMPTY_LEADING: Final[int] = 4  # pixels between the empty text's lines
 EMPTY_MARGIN: Final[int] = 32  # pixels each side of the empty text
-EMPTY_DROP: Final[float] = NOT_INSTALLED_DROP + 26.0  # below the centre
+EMPTY_DROP: Final[float] = STOP_DISC + 42.0  # below the centre
 DESTINATION_FACE: Final[Face] = Face(weight=700, px=16)
 DESTINATION_Y: Final[int] = 70
 DESTINATION_WIDTH: Final[int] = 250

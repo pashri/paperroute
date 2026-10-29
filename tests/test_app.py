@@ -103,7 +103,7 @@ from paperroute.ports import Observer
 from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.chrome import HEADER
 from paperroute.render.keep_out import KeepOut, keep_out
-from paperroute.render.map_corners import scale_box
+from paperroute.render.map_corners import NOT_INSTALLED, credit_box, scale_box
 from paperroute.render.notice import draw_notice_view
 from paperroute.render.panel import draw_panel_view
 from paperroute.render.sleep import with_sleep_band
@@ -1099,14 +1099,19 @@ def test_renderer_caches_boxes_with_the_base() -> None:
 
 
 def test_unreadable_tiles_give_corner_boxes_only(tmp_path: Path) -> None:
-    """Tiles that fail a read keep out only the scale box, as drawn."""
+    """Tiles that fail a read keep out only the corner boxes, as drawn."""
     base = map_view().base
     with closing(tableless_tiles(out=tmp_path / 'tiles.db')) as tiles:
         broken = MapRenderer(tiles=tiles).boxes(base=base)
     versionless = MapRenderer(tiles=VersionlessTiles()).boxes(base=base)
-    left, top, right, bottom = scale_box(mpp=base.mpp)
-    edged = (left - 1, top - 1, right + 1, bottom + 1)
-    assert broken == KeepOut(places=(edged,), streets=())
+    edged = tuple(
+        (left - 1, top - 1, right + 1, bottom + 1)
+        for left, top, right, bottom in (
+            scale_box(mpp=base.mpp),
+            credit_box(width=base.width, text=NOT_INSTALLED),
+        )
+    )
+    assert broken == KeepOut(places=edged, streets=())
     assert versionless == broken
     assert broken == keep_out(base=base, tiles=NullTiles())
 

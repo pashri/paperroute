@@ -15,7 +15,7 @@ from paperroute.core.tiles import (
 from paperroute.ports import TileRepository
 from paperroute.render.canvas import Box, Face
 from paperroute.render.map_base import HALO, window_of
-from paperroute.render.map_corners import credit_box, scale_box
+from paperroute.render.map_corners import corner_text, credit_box, scale_box
 from paperroute.render.map_labels import (
     KNOCKOUT_SQUARE,
     PLACE_HALO,
@@ -172,16 +172,22 @@ def corner_boxes(*, base: MapBase, tiles: TileRepository) -> list[Box]:
     base : MapBase
         The base map key.
     tiles : TileRepository
-        Says whether tiles are installed, which adds the credit.
+        Says whether tiles are installed, which picks the right box's
+        text.
 
     Returns
     -------
     list[Box]
-        The scale box, then the credit box when tiles are installed.
+        The scale box, then the credit box, or the `Map not installed`
+        box without tiles.
     """
-    boxes = [scale_box(mpp=base.mpp)]
-    if tiles.version() is not None:
-        boxes.append(credit_box(width=base.width))
+    boxes = (
+        scale_box(mpp=base.mpp),
+        credit_box(
+            width=base.width,
+            text=corner_text(installed=tiles.version() is not None),
+        ),
+    )
     return [grown(box=box, by=EDGE) for box in boxes]
 
 

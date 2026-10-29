@@ -10,6 +10,7 @@ SCALE_STEPS: Final[tuple[int, ...]] = (5000, 2000, 1000, 500, 200, 100)
 SCALE_REACH: Final[float] = 143.0  # pixels
 SCALE_TEXT_GAP: Final[float] = 6.0  # pixels from the bar's end
 CREDIT: Final[str] = '© OpenStreetMap'
+NOT_INSTALLED: Final[str] = 'Map not installed'
 BOX_INSET: Final[float] = 8.0  # pixels from the map's edges to a box
 BOX_PAD: Final[float] = 4.0  # paper round a box's contents
 BOX_FACE: Final[Face] = Face(weight=700, px=12)
@@ -92,7 +93,24 @@ def scale_box(*, mpp: int) -> Box:
     return BOX_INSET, top, right + BOX_PAD, bottom
 
 
-def credit_box(*, width: int) -> Box:
+def corner_text(*, installed: bool) -> str:
+    """
+    Give the bottom right box's text.
+
+    Parameters
+    ----------
+    installed : bool
+        True when tiles are installed.
+
+    Returns
+    -------
+    str
+        The OpenStreetMap credit, else `NOT_INSTALLED`.
+    """
+    return CREDIT if installed else NOT_INSTALLED
+
+
+def credit_box(*, width: int, text: str = CREDIT) -> Box:
     """
     Give the credit box's paper, in map pixels.
 
@@ -100,6 +118,8 @@ def credit_box(*, width: int) -> Box:
     ----------
     width : int
         Map width in pixels.
+    text : str
+        The box's text.
 
     Returns
     -------
@@ -108,7 +128,7 @@ def credit_box(*, width: int) -> Box:
     """
     top, bottom = box_rows()
     right = width - BOX_INSET
-    left = right - text_width(text=CREDIT, face=BOX_FACE) - 2 * BOX_PAD
+    left = right - text_width(text=text, face=BOX_FACE) - 2 * BOX_PAD
     return left, top, right, bottom
 
 
@@ -156,9 +176,11 @@ def draw_boxed_scale(canvas: Canvas, *, mpp: int) -> None:
     )
 
 
-def draw_boxed_credit(canvas: Canvas, *, width: int) -> None:
+def draw_boxed_credit(
+    canvas: Canvas, *, width: int, text: str = CREDIT,
+) -> None:
     """
-    Draw the OpenStreetMap credit in a box at the bottom right.
+    Draw the OpenStreetMap credit, or another note, in a box at the right.
 
     Parameters
     ----------
@@ -166,12 +188,14 @@ def draw_boxed_credit(canvas: Canvas, *, width: int) -> None:
         Target, the map alone.
     width : int
         Map width in pixels.
+    text : str
+        The box's text.
     """
-    box = credit_box(width=width)
+    box = credit_box(width=width, text=text)
     draw_box(canvas, box=box)
     canvas.text(
         at=(box[2] - BOX_PAD, box[3] - BOX_PAD - 1),
-        text=CREDIT,
+        text=text,
         face=BOX_FACE,
         grey=INK,
         anchor='rs',

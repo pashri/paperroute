@@ -289,7 +289,7 @@ def test_mismatched_tiles_draw_map_not_installed(tmp_path: Path) -> None:
     )
     assert np.array_equal(grey, expected)
     middle = MAP_HEIGHT // 2
-    assert np.any(grey[middle + 14 : middle + 44] == INK)
+    assert np.any(grey[MAP_HEIGHT - 30 :, MAP_WIDTH - 120 :] == INK)
     assert np.any(grey[middle - 3 : middle + 3, MAP_WIDTH // 2] == INK)
     assert np.any(grey[middle - 6 : middle + 6, 20] == INK)
 

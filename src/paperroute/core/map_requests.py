@@ -261,7 +261,11 @@ def map_inputs(
     )
     pin = shown(state=state)
     if not is_connection(pin=pin):
-        return steady_frame(inputs=inputs, held=state.map.frame)
+        return steady_frame(
+            inputs=inputs,
+            held=state.map.frame,
+            held_ends=state.map.frame_ends,
+        )
     chains = live_chains(state=state)
     mode = state.settings.connection_map
     return panes_inputs(
@@ -592,11 +596,13 @@ def framed_state(*, state: State, inputs: MapInputs | None) -> State:
         with no map or no centre.
     """
     frame = None
+    ends = None
     if inputs is not None and inputs.centre is not None:
         frame = (inputs.centre, inputs.zoom)
-    if frame == state.map.frame:
+        ends = inputs.ends
+    if frame == state.map.frame and ends == state.map.frame_ends:
         return state
-    framed = replace(state.map, frame=frame)
+    framed = replace(state.map, frame=frame, frame_ends=ends)
     if area_frame(map_state=framed)[0] != area_frame(map_state=state.map)[0]:
         framed = replace(framed, area_modes={}, pending_modes=frozenset())
     return replace(state, map=framed)

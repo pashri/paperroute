@@ -374,7 +374,10 @@ def plain_points(*, inputs: MapInputs) -> tuple[Point, ...]:
 
 
 def steady_frame(
-    *, inputs: MapInputs, held: tuple[Point, int] | None,
+    *,
+    inputs: MapInputs,
+    held: tuple[Point, int] | None,
+    held_ends: tuple[Point | None, Point | None] | None = None,
 ) -> MapInputs:
     """
     Frame a plain pin's map, keeping the frame on screen while it fits.
@@ -385,15 +388,18 @@ def steady_frame(
         The map's inputs, centred on the From.
     held : tuple[Point, int] | None
         The centre and zoom the map is drawn at now, or None.
+    held_ends : tuple[Point | None, Point | None] | None
+        The From and To points of the pin the held frame was drawn for.
 
     Returns
     -------
     MapInputs
-        The held frame while it has the fitted zoom and still holds the
-        next trip with the From well inside; else as `plain_frame`.
+        The held frame while it is for the same pin, has the fitted zoom
+        and still holds the next trip with the From well inside; else as
+        `plain_frame`.
     """
     fit = plain_frame(inputs=inputs)
-    if held is None or held[1] != fit.zoom:
+    if held is None or held[1] != fit.zoom or held_ends != inputs.ends:
         return fit
     if not holds(inputs=inputs, frame=held):
         return fit

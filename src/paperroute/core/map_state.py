@@ -57,6 +57,9 @@ class MapState:
         The centre and zoom a map was last drawn at, the knob's step
         already applied; None when no fitted map is drawn, which leaves
         the From at the resting zoom.
+    frame_ends : tuple[Point | None, Point | None] | None
+        The pin's From and To points the frame was drawn for; None with
+        no frame.
     """
 
     step: int = 0
@@ -71,6 +74,7 @@ class MapState:
     fetched_at: Mapping[str, datetime] = field(default_factory=dict)
     failed_at: Mapping[MapData, datetime] = field(default_factory=dict)
     frame: tuple[Point, int] | None = None
+    frame_ends: tuple[Point | None, Point | None] | None = None
 
 
 def area_frame(*, map_state: MapState) -> tuple[Point | None, int]:

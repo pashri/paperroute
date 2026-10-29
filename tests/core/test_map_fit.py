@@ -27,6 +27,7 @@ from paperroute.core.tiles import ZOOMS
 from tests.core.factories import START, calls, departure, pattern
 
 FROM: Point = (0.0, 800.0)
+OTHER: Point = (30.0, 800.0)
 TO: Point = (0.0, -800.0)
 LINE = {
     'A': FROM,
@@ -424,7 +425,7 @@ def test_steady_frame_holds_while_the_next_trip_fits() -> None:
     held = (first.centre, first.zoom)
     later = no_to(rides=rides, now=START + timedelta(minutes=1))
     assert plain_frame(inputs=later).centre != first.centre
-    found = steady_frame(inputs=later, held=held)
+    found = steady_frame(inputs=later, held=held, held_ends=later.ends)
     assert (found.centre, found.zoom) == held
 
 
@@ -437,7 +438,11 @@ def test_steady_frame_refits_when_the_next_trip_leaves_it() -> None:
     first = plain_frame(inputs=no_to(rides=rides, now=START))
     assert first.centre is not None
     later = no_to(rides=rides, now=START + timedelta(minutes=1))
-    found = steady_frame(inputs=later, held=(first.centre, first.zoom))
+    found = steady_frame(
+        inputs=later,
+        held=(first.centre, first.zoom),
+        held_ends=later.ends,
+    )
     assert found == plain_frame(inputs=later)
     assert found.centre != first.centre
 
@@ -450,9 +455,28 @@ def test_steady_frame_refits_on_a_new_zoom() -> None:
     assert first.centre is not None
     stepped_in = replace(inputs, step=-1)
     found = steady_frame(
-        inputs=stepped_in, held=(first.centre, first.zoom),
+        inputs=stepped_in,
+        held=(first.centre, first.zoom),
+        held_ends=stepped_in.ends,
     )
     assert found == plain_frame(inputs=stepped_in)
+
+
+def test_steady_frame_refits_on_a_new_pin() -> None:
+    """A frame drawn for another pin is fitted afresh, even if it holds."""
+    rides = (
+        eastward(trip_id='t1', minutes=0, lean=500.0),
+        eastward(trip_id='t2', minutes=2, lean=450.0),
+    )
+    first = plain_frame(inputs=no_to(rides=rides, now=START))
+    assert first.centre is not None
+    held = (first.centre, first.zoom)
+    later = no_to(rides=rides, now=START + timedelta(minutes=1))
+    found = steady_frame(
+        inputs=later, held=held, held_ends=(OTHER, None),
+    )
+    assert found.centre != held[0]
+    assert found == plain_frame(inputs=later)
 
 
 def test_steady_frame_without_a_held_frame_fits() -> None:

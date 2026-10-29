@@ -18,13 +18,15 @@ ROAD_LAYERS: Final[tuple[str, ...]] = (
     'road_motorway',
 )
 ROAD_WIDTHS: Final[dict[str, tuple[int, ...]]] = {
-    'road_minor': (3, 2, 1, 1, 0),
-    'road_tertiary': (4, 3, 2, 1, 1),
-    'road_secondary': (5, 4, 3, 2, 1),
-    'road_primary': (7, 6, 5, 3, 2),
-    'road_trunk': (8, 7, 5, 4, 2),
-    'road_motorway': (9, 8, 6, 4, 3),
+    'road_minor': (3, 2, 1, 1, 1, 0),
+    'road_tertiary': (4, 3, 2, 1, 1, 1),
+    'road_secondary': (5, 4, 3, 2, 1, 1),
+    'road_primary': (7, 6, 5, 3, 2, 2),
+    'road_trunk': (8, 7, 5, 4, 3, 2),
+    'road_motorway': (9, 8, 6, 4, 3, 3),
 }
+MAIN_ROAD_PX: Final[int] = 3  # ink roads this wide or wider turn dark
+TOWN: Final[int] = 25  # m/px, the level between streets and the city
 TRANSIT_LAYERS: Final[tuple[str, ...]] = (
     'rail_tunnel',
     'subway_tunnel',
@@ -42,8 +44,8 @@ AREA_GREYS: Final[dict[str, int]] = {
 RIVER_STYLE: Final[tuple[int, int]] = (2, DARK)
 
 STREET_ZOOMS: Final[frozenset[int]] = frozenset({3, 5, 8, 14})
-SUBURB_ZOOMS: Final[frozenset[int]] = frozenset({8, 14, 45})
-STATION_ZOOMS: Final[frozenset[int]] = frozenset({3, 5, 8, 14, 45})
+SUBURB_ZOOMS: Final[frozenset[int]] = frozenset({8, 14, 25, 45})
+STATION_ZOOMS: Final[frozenset[int]] = frozenset({3, 5, 8, 14, 25, 45})
 CITY_PLACES: Final[frozenset[str]] = frozenset({'suburb', 'town'})
 PLACE_KINDS: Final[frozenset[str]] = frozenset(
     {'suburb', 'town', 'locality', 'village'}
@@ -99,16 +101,22 @@ def road_grey(*, layer: str, mpp: int) -> int:
     -------
     int
         Grey level: at the city zoom, dark for trunk roads and
-        motorways and light for the rest; minor roads light from 14
-        m/px; tertiary roads dark from 14 m/px; otherwise ink.
+        motorways and light for the rest; at 25 m/px, light for minor
+        and tertiary roads and dark for the rest. Below that, minor
+        roads are light from 14 m/px and tertiary roads dark from 14
+        m/px; other roads are ink, or dark when at least
+        ``MAIN_ROAD_PX`` wide.
     """
     if mpp == CITY:
         return DARK if layer in ('road_trunk', 'road_motorway') else LIGHT
+    if mpp == TOWN:
+        return LIGHT if layer in ('road_minor', 'road_tertiary') else DARK
     if layer == 'road_minor':
         return LIGHT if mpp >= 14 else DARK
     if layer == 'road_tertiary' and mpp >= 14:
         return DARK
-    return INK
+    width = ROAD_WIDTHS[layer][ZOOMS.index(mpp)]
+    return DARK if width >= MAIN_ROAD_PX else INK
 
 
 def transit_style(*, layer: str, mpp: int) -> list[Stroke]:

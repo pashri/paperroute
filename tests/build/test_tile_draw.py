@@ -54,7 +54,7 @@ DIAGONAL_SLACK: Final[int] = 12  # pixels per sloping road crossing a seam
 NAME_STYLES: Final[dict[LabelKind, tuple[Face, int]]] = {
     LabelKind.STATION: (STATION_FACE, INK),
     LabelKind.SUBURB: (SUBURB_FACE, DARK),
-    LabelKind.STREET: (STREET_FACE, DARK),
+    LabelKind.STREET: (STREET_FACE, INK),
 }
 
 
@@ -455,8 +455,8 @@ def test_tile_has_four_levels_only(store: FeatureStore) -> None:
     assert set(np.unique(tile).tolist()) <= set(GREYS)
 
 
-def test_primary_road_is_ink(store: FeatureStore) -> None:
-    assert grey_at(store=store, lon=151.003, lat=-33.802, mpp=3) == INK
+def test_primary_road_is_dark_at_3(store: FeatureStore) -> None:
+    assert grey_at(store=store, lon=151.003, lat=-33.802, mpp=3) == DARK
 
 
 def test_minor_road_is_light_at_14(store: FeatureStore) -> None:
@@ -525,7 +525,7 @@ def test_label_crossing_a_tile_edge_is_seamless(
     )
     empty.add_labels(labels=[label])
     tiles, whole = stitched(store=empty, mpp=SEAM_MPP)
-    assert (whole[:, TILE - TILE // 4 : TILE + TILE // 4] == DARK).any()
+    assert (whole[:, TILE - TILE // 4 : TILE + TILE // 4] == INK).any()
     assert_nearly_seamless(tiles=tiles, whole=whole, slack=1)
 
 
@@ -540,7 +540,7 @@ def test_turned_label_crossing_a_tile_edge_is_exact(
     )
     empty.add_labels(labels=[label])
     tiles, whole = stitched(store=empty, mpp=SEAM_MPP)
-    assert (whole[:, TILE - 8 : TILE + 8] == DARK).any()
+    assert (whole[:, TILE - 8 : TILE + 8] == INK).any()
     np.testing.assert_array_equal(tiles, whole)
 
 
@@ -556,7 +556,7 @@ def test_sloping_road_crossing_a_tile_edge_is_nearly_seamless(
         mpp=SEAM_MPP,
     )
     tiles, whole = stitched(store=empty, mpp=SEAM_MPP)
-    assert (whole[:, TILE - 2 : TILE + 2] == INK).any()
+    assert (whole[:, TILE - 2 : TILE + 2] == DARK).any()
     assert_nearly_seamless(tiles=tiles, whole=whole, slack=DIAGONAL_SLACK)
 
 
@@ -588,7 +588,7 @@ def test_seven_sloping_roads_crossing_a_tile_edge_are_nearly_seamless(
             mpp=SEAM_MPP,
         )
     tiles, whole = stitched(store=empty, mpp=SEAM_MPP)
-    assert (whole[:, TILE - 2 : TILE + 2] == INK).sum() >= len(roads)
+    assert (whole[:, TILE - 2 : TILE + 2] == DARK).sum() >= len(roads)
     assert_nearly_seamless(
         tiles=tiles,
         whole=whole,
@@ -609,8 +609,8 @@ def test_roads_beside_a_tile_edge_are_seamless(
     for layer, pixels in lines:
         add_pixel_line(store=empty, layer=layer, pixels=pixels, mpp=SEAM_MPP)
     tiles, whole = stitched(store=empty, mpp=SEAM_MPP)
-    assert (whole[:, TILE - 2] == INK).any()
-    assert (whole[:, TILE + 1] == INK).any()
+    assert (whole[:, TILE - 2] == DARK).any()
+    assert (whole[:, TILE + 1] == DARK).any()
     np.testing.assert_array_equal(tiles, whole)
 
 
@@ -624,7 +624,7 @@ def test_long_label_reaches_the_next_tile(empty: FeatureStore) -> None:
     empty.add_labels(labels=[label])
     tiles, whole = stitched(store=empty, mpp=SEAM_MPP)
     assert label.width / 2 > 80 + 40
-    assert (whole[:, TILE + 40 :] == DARK).any()
+    assert (whole[:, TILE + 40 :] == INK).any()
     np.testing.assert_array_equal(tiles, whole)
 
 
@@ -639,7 +639,7 @@ def test_label_too_wide_for_the_reach_is_not_drawn(
     assert wide.width / 2 + 2 > LABEL_REACH
     assert fits.width / 2 + 2 < LABEL_REACH
     assert (tile[: TILE // 2] == PAPER).all()
-    assert (tile[TILE // 2 :] == DARK).any()
+    assert (tile[TILE // 2 :] == INK).any()
 
 
 def test_crossing_transit_is_seamless(empty: FeatureStore) -> None:
@@ -686,7 +686,7 @@ def test_road_between_pixels_shades_its_edges(empty: FeatureStore) -> None:
         mpp=14,
     )
     tile = draw_window(store=empty, window=window)
-    profile = [PAPER, LIGHT, INK, INK, DARK, PAPER]
+    profile = [PAPER, LIGHT, DARK, DARK, LIGHT, PAPER]
     assert (tile[97:103] == np.array(profile)[:, None]).all()
 
 
@@ -704,8 +704,7 @@ def test_diagonal_road_edges_are_smoothed(empty: FeatureStore) -> None:
         tile[20 + math.floor((step + 0.5) / 2), 20 + step]
         for step in range(200)
     ]
-    assert set(along) == {INK}
-    assert (tile == DARK).any()
+    assert set(along) == {DARK}
     assert (tile == LIGHT).any()
 
 
@@ -901,8 +900,42 @@ def test_halo_clears_paper_around_names(empty: FeatureStore) -> None:
         ],
     )
     tile = draw_window(store=empty, window=window)
-    assert (tile == DARK).any()
+    assert (tile == INK).any()
     assert (tile == PAPER).any()
+
+
+def test_street_names_baked_in_ink(empty: FeatureStore) -> None:
+    window = tile_window(mpp=SEAM_MPP)
+    x, y = float(window.left), float(window.top)
+    label = street_label(
+        name='Ink Street',
+        centre=(x + 128, y + 128),
+        angle=0.0,
+    )
+    empty.add_labels(labels=[label])
+    tile = draw_window(store=empty, window=window)
+    assert (tile[120:137, 80:177] == INK).any()
+    np.testing.assert_array_equal(
+        tile,
+        reference(window=window, labels=[label]),
+    )
+
+
+def test_suburb_names_stay_dark(empty: FeatureStore) -> None:
+    window = tile_window(mpp=SEAM_MPP)
+    x, y = float(window.left), float(window.top)
+    empty.add_labels(
+        labels=[
+            point_label(
+                name='DARKTON',
+                kind=LabelKind.SUBURB,
+                point=(x + 128, y + 128),
+                rank=0,
+            ),
+        ],
+    )
+    tile = draw_window(store=empty, window=window)
+    assert tile.min() == DARK
 
 
 def test_water_is_drawn_over_parks(empty: FeatureStore) -> None:

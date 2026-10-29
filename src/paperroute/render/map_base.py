@@ -456,7 +456,7 @@ def redraw_name(
         ),
         text=label.name,
         face=STREET_FACE,
-        grey=DARK,
+        grey=INK,
         anchor='mm',
         halo=HALO,
         angle=label.angle,

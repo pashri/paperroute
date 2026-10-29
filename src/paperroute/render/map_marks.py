@@ -10,6 +10,7 @@ ROUTE_STYLE: Final[dict[int, tuple[int, int | None]]] = {
     5: (7, 3),
     8: (7, 3),
     14: (5, 1),
+    25: (4, None),
     45: (3, None),
 }
 STOP_DISC: Final[float] = 12.0

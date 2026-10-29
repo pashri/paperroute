@@ -9,7 +9,7 @@ from paperroute.core.geo import Point, to_metres
 
 TILE: Final[int] = 256
 LABEL_REACH: Final[int] = TILE  # pixels a baked label may reach past
-ZOOMS: Final[tuple[int, ...]] = (3, 5, 8, 14, 45)
+ZOOMS: Final[tuple[int, ...]] = (3, 5, 8, 14, 25, 45)
 CITY: Final[int] = 45
 NSW_BBOX: Final[tuple[float, float, float, float]] = (
     140.99,

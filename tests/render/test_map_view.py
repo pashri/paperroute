@@ -24,7 +24,14 @@ from paperroute.core.map_view import (
 )
 from paperroute.core.model import Mode
 from paperroute.core.stop_view import Pill, Row, empty_text
-from paperroute.core.tiles import CITY, TILE, TileVariant, tile_of, to_pixels
+from paperroute.core.tiles import (
+    CITY,
+    TILE,
+    ZOOMS,
+    TileVariant,
+    tile_of,
+    to_pixels,
+)
 from paperroute.render.canvas import (
     HEIGHT,
     INK,
@@ -464,7 +471,7 @@ def test_markers_and_tiles_share_one_transform(tmp_path: Path) -> None:
     city = MapBase(centre=CENTRE, mpp=CITY, route=())
     with closing(SqliteTileRepository(path=tmp_path / 'tiles.db')) as tiles:
         base = draw_map_base(base=city, tiles=tiles, variant=TileVariant.GREY)
-    view = replace(VIEW, base=city, zoom=4)
+    view = replace(VIEW, base=city, zoom=ZOOMS.index(CITY))
     tiled = draw_map_view(view=view, base=base)
     sx, sy = screen_point(centre=CENTRE, mpp=CITY, point=point)
     ty, tx = math.floor(sy) + HEADER, math.floor(sx)

@@ -7,6 +7,7 @@ from paperroute.build.map_style import (
     CITY_PLACES,
     DARK,
     LIGHT,
+    MAIN_ROAD_PX,
     PLACE_KINDS,
     RIVER_STYLE,
     ROAD_LAYERS,
@@ -58,9 +59,57 @@ def test_minor_road_is_light_at_14() -> None:
     """Minor roads turn light grey at 14 m/px."""
     assert road_style(layer='road_minor', mpp=14) == (1, LIGHT)
     assert road_style(layer='road_minor', mpp=8) == (1, DARK)
-    assert ROAD_WIDTHS['road_primary'] == (7, 6, 5, 3, 2)
+    assert ROAD_WIDTHS['road_primary'] == (7, 6, 5, 3, 2, 2)
     assert road_style(layer='road_tertiary', mpp=14) == (1, DARK)
     assert road_style(layer='road_tertiary', mpp=8) == (2, INK)
+
+
+@pytest.mark.parametrize(
+    ('mpp', 'layer', 'grey'),
+    [
+        (3, 'road_tertiary', DARK),
+        (5, 'road_tertiary', DARK),
+        (8, 'road_tertiary', INK),
+        (8, 'road_secondary', DARK),
+        (14, 'road_secondary', INK),
+        (14, 'road_primary', DARK),
+        (3, 'road_minor', DARK),
+        (14, 'road_minor', LIGHT),
+        (25, 'road_tertiary', LIGHT),
+        (25, 'road_secondary', DARK),
+        (45, 'road_trunk', DARK),
+        (45, 'road_minor', LIGHT),
+    ],
+)
+def test_s1_greys(mpp: int, layer: str, grey: int) -> None:
+    """Ink roads as wide as a main road turn dark grey."""
+    assert road_style(layer=layer, mpp=mpp)[1] == grey
+
+
+@pytest.mark.parametrize('mpp', ZOOMS)
+def test_no_ink_road_is_main_road_wide(mpp: int) -> None:
+    """Every ink road is thinner than a main road."""
+    assert all(
+        width < MAIN_ROAD_PX
+        for width, grey in (
+            road_style(layer=layer, mpp=mpp) for layer in ROAD_LAYERS
+        )
+        if grey == INK
+    )
+
+
+def test_25_widths() -> None:
+    """At 25 m/px primary roads are two dark pixels, minor one light."""
+    assert road_style(layer='road_primary', mpp=25) == (2, DARK)
+    assert road_style(layer='road_minor', mpp=25) == (1, LIGHT)
+
+
+def test_places_and_stations_at_25() -> None:
+    """Suburbs and stations are labelled at 25 m/px, streets are not."""
+    assert 25 in SUBURB_ZOOMS
+    assert 25 in STATION_ZOOMS
+    assert 25 not in STREET_ZOOMS
+    assert named_roads(mpp=25) == frozenset()
 
 
 @pytest.mark.parametrize('mpp', ZOOMS)
@@ -79,8 +128,8 @@ def test_road_style_rejects_unknown_zoom() -> None:
 def test_label_zones_match_the_spec() -> None:
     """Label zooms and place kinds are the chosen ones."""
     assert STREET_ZOOMS == {3, 5, 8, 14}
-    assert SUBURB_ZOOMS == {8, 14, 45}
-    assert STATION_ZOOMS == {3, 5, 8, 14, 45}
+    assert SUBURB_ZOOMS == {8, 14, 25, 45}
+    assert STATION_ZOOMS == {3, 5, 8, 14, 25, 45}
     assert CITY_PLACES == {'suburb', 'town'}
     assert PLACE_KINDS == {'suburb', 'town', 'locality', 'village'}
     assert STREET_REPEAT_PX == 384

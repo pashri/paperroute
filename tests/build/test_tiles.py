@@ -188,3 +188,30 @@ def test_build_tiles_refuses_a_bbox_without_stops(
     with pytest.raises(ValueError, match='no stops'):
         build_tiles(config=config)
     assert not (tmp_path / 'tiles.db').exists()
+
+
+def test_build_writes_the_25_level(inputs: Path, tmp_path: Path) -> None:
+    """A build of the 25 m/px level writes its tiles, places and meta."""
+    out = tmp_path / 'tiles.db'
+    config = TileBuildConfig(
+        osm=inputs / 'tiny.osm.pbf',
+        timetable=inputs / 'timetable.db',
+        out=out,
+        work=tmp_path / 'work',
+        bbox=TINY_BBOX,
+        zooms=(25,),
+    )
+    build_tiles(config=config)
+    zooms = read_rows(path=out, sql='SELECT DISTINCT zoom FROM tiles')
+    assert zooms == [(25,)]
+    places = read_rows(
+        path=out,
+        sql='SELECT count(*) FROM labels WHERE zoom = 25'
+        " AND kind IN ('suburb', 'station')",
+    )
+    assert int(str(places[0][0])) > 0
+    meta = read_rows(
+        path=out,
+        sql="SELECT value FROM meta WHERE key = 'zooms'",
+    )
+    assert meta == [('25',)]

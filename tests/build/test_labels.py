@@ -315,10 +315,10 @@ def test_long_street_is_named_repeatedly(store: FeatureStore) -> None:
 
 
 def test_suburbs_only_from_8(store: FeatureStore) -> None:
-    """A suburb is named at 8, 14 and 45 m/px only, in spaced capitals."""
+    """A suburb is named from 8 m/px up, in spaced capitals."""
     add_place(store=store, kind='suburb', name='Constitution Hill')
     labels = place(store=store, zooms=ZOOMS)
-    assert sorted(label.zoom for label in labels) == [8, 14, 45]
+    assert sorted(label.zoom for label in labels) == [8, 14, 25, 45]
     assert {label.name for label in labels} == {
         'C O N S T I T U T I O N   H I L L',
     }

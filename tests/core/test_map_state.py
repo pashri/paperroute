@@ -41,7 +41,7 @@ def test_zoomed_clockwise_zooms_in() -> None:
 
 @pytest.mark.parametrize(
     ('steps', 'mpp'),
-    [(10, 3), (-10, 45), (2, 3), (-2, 45)],
+    [(10, 3), (-10, 45), (2, 3), (-3, 45)],
 )
 def test_zoomed_clamps_at_both_ends(steps: int, mpp: int) -> None:
     """The zoom stops at 3 and 45 m/px and doesn't wrap."""

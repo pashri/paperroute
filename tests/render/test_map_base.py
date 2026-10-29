@@ -494,6 +494,19 @@ def test_names_over_the_line_are_redrawn(tmp_path: Path) -> None:
     assert set(np.unique(plain[box]).tolist()) == {INK, PAPER}
 
 
+def test_route_street_names_redrawn_in_ink(tmp_path: Path) -> None:
+    """A name redrawn along the route is ink, beside the stroke too."""
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    label = street(name='Church Street', x=gx + LABEL_SHIFT, y=gy)
+    named = draw_with(out=tmp_path / 'named.db', labels=[label])
+    plain = draw_with(out=tmp_path / 'plain.db', labels=[])
+    row = centre_row()
+    x = math.floor(MAP_WIDTH / 2 + LABEL_SHIFT)
+    beside = (slice(row - 7, row - 3), slice(x - 30, x + 31))
+    assert np.count_nonzero(named[beside] == INK) > 0
+    assert np.count_nonzero(plain[beside] == INK) == 0
+
+
 def smooth_name(
     *,
     under: NDArray[np.uint8],
@@ -769,11 +782,12 @@ def test_no_tiles_hides_the_credit() -> None:
 @pytest.mark.parametrize(
     ('mpp', 'text'),
     [
-        (3, '200 m · zoom 1 of 5'),
-        (5, '500 m · zoom 2 of 5'),
-        (8, '1 km · zoom 3 of 5'),
-        (14, '2 km · zoom 4 of 5'),
-        (45, '5 km · zoom 5 of 5'),
+        (3, '200 m · zoom 1 of 6'),
+        (5, '500 m · zoom 2 of 6'),
+        (8, '1 km · zoom 3 of 6'),
+        (14, '2 km · zoom 4 of 6'),
+        (25, '2 km · zoom 5 of 6'),
+        (45, '5 km · zoom 6 of 6'),
     ],
 )
 def test_scale_text_names_the_largest_fitting_step(
@@ -786,7 +800,7 @@ def test_scale_text_names_the_largest_fitting_step(
 
 @pytest.mark.parametrize(
     ('mpp', 'outer', 'bead'),
-    [(3, 7, 3), (5, 7, 3), (8, 7, 3), (14, 5, 1), (45, 3, 0)],
+    [(3, 7, 3), (5, 7, 3), (8, 7, 3), (14, 5, 1), (25, 4, 0), (45, 3, 0)],
 )
 def test_route_style_at_every_zoom(
     tmp_path: Path,

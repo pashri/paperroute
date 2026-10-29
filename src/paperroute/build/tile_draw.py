@@ -343,7 +343,7 @@ def draw_name(*, canvas: Canvas, label: PlacedLabel, at: Point) -> None:
         at=(label.x - at[0], label.y - at[1]),
         text=label.name,
         face=face,
-        grey=DARK,
+        grey=DARK if label.kind == LabelKind.SUBURB else INK,
         anchor='mm',
         halo=HALO,
         angle=label.angle,

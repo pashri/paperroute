@@ -172,6 +172,8 @@ class MapInputs:
         The pin's From and To points; None where missing.
     step : int
         Knob detents from the fitted zoom; negative is finer.
+    asleep : bool
+        True for the sleep screen, whose band covers the map's bottom.
     """
 
     stop_view: StopView
@@ -186,6 +188,7 @@ class MapInputs:
     vehicle_trips: frozenset[str] | None = None
     ends: tuple[Point | None, Point | None] = (None, None)
     step: int = 0
+    asleep: bool = False
 
 
 def map_window(

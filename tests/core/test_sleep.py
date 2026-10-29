@@ -1,9 +1,10 @@
 """Tests for sleeping the screen from the Settings menu."""
 
+from dataclasses import replace
 from datetime import timedelta
 
 from paperroute.core.device_model import ConfirmAction, MenuRow
-from paperroute.core.map_view import MapView
+from paperroute.core.map_view import MAP_HEIGHT, MapView, screen_point
 from paperroute.core.messages import (
     ApiKeyChanged,
     ConfirmAsked,
@@ -22,15 +23,17 @@ from paperroute.core.messages import (
     TimetableSeen,
 )
 from paperroute.core.panel_views import ConfirmView, SleepView
+from paperroute.core.saved import seeded
 from paperroute.core.sleep import SLEEP_BAND, sleep_view, slept
-from paperroute.core.state import step
+from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import live_stop_view
 from paperroute.core.stop_view import StopView
-from tests.core.factories import START, departure
+from paperroute.render.sleep import BAND_H
+from tests.core.factories import START, departure, place
 from tests.core.test_connection import loaded as connection_loaded
 from tests.core.test_menu import BOTH, DOWN, run, turn
-from tests.core.test_state import BUSES, fresh, loaded
+from tests.core.test_state import BUSES, PIN, fresh, loaded
 from tests.fakes import device_facts
 
 
@@ -212,3 +215,24 @@ def test_connection_sleep_screen_draws_the_next_connection() -> None:
     gone = sleep_view(state=empty, stop_view=live_stop_view(state=empty))
     assert gone.map.empty is not None
     assert gone.map.empty.startswith('No connections')
+
+
+def test_sleep_map_keeps_both_ends_above_the_band() -> None:
+    """A trip running down the map ends above the sleep band, not under."""
+    pin = replace(
+        PIN,
+        origin=replace(PIN.origin, point=(0.0, 1000.0)),
+        destination=place('215020', point=(0.0, -1000.0)),
+    )
+    state = slept(
+        state=initial_state(saved=seeded(pin=pin), now=START, stored=True),
+    )
+    view = sleep_view(state=state, stop_view=live_stop_view(state=state))
+    base = view.map.base
+    assert base.centre is not None and base.trip is not None
+    for point in (base.trip.origin, base.trip.end):
+        assert point is not None
+        _, y = screen_point(
+            centre=base.centre, mpp=base.mpp, point=point, width=base.width,
+        )
+        assert y <= MAP_HEIGHT - BAND_H

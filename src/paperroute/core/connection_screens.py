@@ -29,7 +29,7 @@ type ConnectionScreen = (
 
 def connection_map(
     *, state: State, stop_view: StopView, chains: tuple[Chain, ...],
-    width: int | None = None,
+    width: int | None = None, asleep: bool = False,
 ) -> MapView:
     """
     Build the connection map the state shows.
@@ -44,6 +44,8 @@ def connection_map(
         The workable chains.
     width : int | None
         Map width in pixels, or None for the Map's own.
+    asleep : bool
+        True to fit the map clear of the sleep band.
 
     Returns
     -------
@@ -52,7 +54,9 @@ def connection_map(
         two-change hero in the each-change setting gives one pane per
         change side by side.
     """
-    inputs = pin_map_inputs(state=state, stop_view=stop_view)
+    inputs = replace(
+        pin_map_inputs(state=state, stop_view=stop_view), asleep=asleep,
+    )
     mode = state.settings.connection_map
     if width is not None:
         inputs = replace(inputs, width=width)

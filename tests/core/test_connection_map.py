@@ -15,7 +15,13 @@ from paperroute.core.connection_map import (
 )
 from paperroute.core.connection_model import way_legs
 from paperroute.core.geo import Point, Shape, make_shape
-from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM, KEEP_IN, fit_zoom
+from paperroute.core.map_fit import (
+    BANNER_ROOM,
+    CREDIT_ROOM,
+    KEEP_IN,
+    SLEEP_ROOM,
+    fit_zoom,
+)
 from paperroute.core.map_view import (
     DEFAULT_ZOOM,
     MAP_HEIGHT,
@@ -778,3 +784,40 @@ def test_long_ride_keeps_the_change_on_the_changes_map() -> None:
         found, centre=pane.base.centre, zoom=ZOOMS.index(pane.base.mpp),
     )
     assert on_map(inputs=framed, point=(0.0, 0.0))
+
+
+def test_asleep_connection_fit_clears_the_sleep_band() -> None:
+    """Asleep, a long trip's From is kept clear of the sleep band."""
+    south = replace(WORK, origin=replace(HOLLIS, point=(0.0, -60000.0)))
+    found = connection_inputs(
+        inputs=replace(inputs_at(now=at(7, 30)), asleep=True),
+        pin=south,
+        chains=SHAPED,
+        mode=ConnectionMap.WHOLE,
+    )
+    _, y = on_screen_of(inputs=found, point=(0.0, -60000.0))
+    assert y <= MAP_HEIGHT - SLEEP_ROOM - KEEP_IN
+
+
+def on_screen_of(*, inputs: MapInputs, point: Point | None) -> Point:
+    """
+    Find a point's map pixel on a framed map.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The framed inputs.
+    point : Point | None
+        A point in metres.
+
+    Returns
+    -------
+    Point
+        Map pixels from the left and top.
+    """
+    assert inputs.centre is not None and point is not None
+    mpp = ZOOMS[inputs.zoom]
+    return (
+        inputs.width / 2 + (point[0] - inputs.centre[0]) / mpp,
+        MAP_HEIGHT / 2 - (point[1] - inputs.centre[1]) / mpp,
+    )

@@ -226,7 +226,11 @@ def pin_ends(*, state: State) -> tuple[Point | None, Point | None]:
 
 
 def map_inputs(
-    *, state: State, stop_view: StopView, width: int = MAP_WIDTH,
+    *,
+    state: State,
+    stop_view: StopView,
+    width: int = MAP_WIDTH,
+    asleep: bool = False,
 ) -> MapInputs:
     """
     Gather what the shown map is built from.
@@ -239,6 +243,8 @@ def map_inputs(
         The pin's Stop view.
     width : int
         Map width in pixels.
+    asleep : bool
+        True to fit the map clear of the sleep band.
 
     Returns
     -------
@@ -248,7 +254,9 @@ def map_inputs(
         departures.
     """
     inputs = replace(
-        pin_map_inputs(state=state, stop_view=stop_view), width=width,
+        pin_map_inputs(state=state, stop_view=stop_view),
+        width=width,
+        asleep=asleep,
     )
     pin = shown(state=state)
     if not is_connection(pin=pin):

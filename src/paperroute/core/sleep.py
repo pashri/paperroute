@@ -122,12 +122,16 @@ def pin_map(*, state: State, stop_view: StopView) -> MapView:
     -------
     MapView
         A connection pin's connection map, which draws its next
-        connection or says there is none; any other pin's map.
+        connection or says there is none; any other pin's map. Each is
+        fitted clear of the sleep band.
     """
     if is_connection(pin=shown(state=state)):
         return connection_map(
-            state=state, stop_view=stop_view, chains=live_chains(state=state),
+            state=state,
+            stop_view=stop_view,
+            chains=live_chains(state=state),
+            asleep=True,
         )
     return build_map_view(
-        inputs=map_inputs(state=state, stop_view=stop_view),
+        inputs=map_inputs(state=state, stop_view=stop_view, asleep=True),
     )

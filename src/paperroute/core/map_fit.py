@@ -13,6 +13,7 @@ FIT_MARGIN: Final[float] = 1.1  # the box, plus 10%
 CREDIT_ROOM: Final[int] = 28  # pixels kept clear above the map's bottom
 BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
 KEEP_IN: Final[int] = 24  # pixels the From is kept inside the map
+SLEEP_ROOM: Final[int] = 56  # pixels the sleep band covers at the bottom
 
 
 def stepped(*, zoom: int, step: int) -> int:
@@ -66,6 +67,23 @@ def banner_room(*, inputs: MapInputs) -> int:
         Pixels; 0 with no banner.
     """
     return BANNER_ROOM if inputs.stop_view.banner else 0
+
+
+def bottom_room(*, inputs: MapInputs) -> int:
+    """
+    Say how much of the map's bottom is kept clear.
+
+    Parameters
+    ----------
+    inputs : MapInputs
+        The map's inputs.
+
+    Returns
+    -------
+    int
+        Pixels: the sleep band's height asleep, else the corner boxes'.
+    """
+    return SLEEP_ROOM if inputs.asleep else CREDIT_ROOM
 
 
 def fit_zoom(*, points: Sequence[Point], width: int) -> int:
@@ -136,7 +154,9 @@ def box_of(*, points: Sequence[Point]) -> tuple[Point, Point]:
     return (min(xs), min(ys)), (max(xs), max(ys))
 
 
-def roomy_zoom(*, box: tuple[Point, Point], width: int, top: int) -> int:
+def roomy_zoom(
+    *, box: tuple[Point, Point], width: int, top: int, bottom: int,
+) -> int:
     """
     Find the finest zoom that holds a box and the map's covered edges.
 
@@ -148,15 +168,17 @@ def roomy_zoom(*, box: tuple[Point, Point], width: int, top: int) -> int:
         Map width in pixels.
     top : int
         Pixels a banner covers at the top.
+    bottom : int
+        Pixels kept clear at the bottom.
 
     Returns
     -------
     int
-        The fitted zoom, one wider when the box and the credit and banner
+        The fitted zoom, one wider when the box and the top and bottom
         rooms do not fit the map's height.
     """
     zoom = fit_zoom(points=box, width=width)
-    if (box[1][1] - box[0][1]) + (CREDIT_ROOM + top) * ZOOMS[zoom] > (
+    if (box[1][1] - box[0][1]) + (bottom + top) * ZOOMS[zoom] > (
         MAP_HEIGHT * ZOOMS[zoom]
     ):
         zoom = min(zoom + 1, len(ZOOMS) - 1)
@@ -170,6 +192,7 @@ def fitted(
     top: int,
     step: int,
     keep: Point | None,
+    bottom: int = CREDIT_ROOM,
 ) -> tuple[Point, int] | None:
     """
     Frame a set of points, moved by the knob's step.
@@ -187,28 +210,45 @@ def fitted(
     keep : Point | None
         A point to keep `KEEP_IN` pixels inside the map whatever the
         zoom, or None.
+    bottom : int
+        Pixels kept clear at the bottom: the corner boxes, or the sleep
+        band.
 
     Returns
     -------
     tuple[Point, int] | None
         The middle of the points' box, moved so the box clears the
-        credit and the banner, then moved the least that keeps `keep`
-        inside; and the stepped zoom. None with no points.
+        bottom room and the banner, then moved the least that keeps
+        `keep` inside; and the stepped zoom. None with no points.
     """
     if not points:
         return None
     box = box_of(points=points)
-    zoom = stepped(zoom=roomy_zoom(box=box, width=width, top=top), step=step)
+    zoom = stepped(
+        zoom=roomy_zoom(box=box, width=width, top=top, bottom=bottom),
+        step=step,
+    )
     mpp = ZOOMS[zoom]
     x, y = middle(ends=box)
-    centre = (x, y + (top - CREDIT_ROOM) * mpp / 2)
+    centre = (x, y + (top - bottom) * mpp / 2)
     if keep is not None:
-        centre = kept(centre=centre, keep=keep, mpp=mpp, width=width, top=top)
+        centre = kept(
+            centre=centre,
+            keep=keep,
+            mpp=mpp,
+            width=width,
+            rooms=(top, bottom),
+        )
     return centre, zoom
 
 
 def kept(
-    *, centre: Point, keep: Point, mpp: int, width: int, top: int,
+    *,
+    centre: Point,
+    keep: Point,
+    mpp: int,
+    width: int,
+    rooms: tuple[int, int],
 ) -> Point:
     """
     Move a centre the least that puts a point well inside the map.
@@ -223,19 +263,20 @@ def kept(
         Metres per pixel.
     width : int
         Map width in pixels.
-    top : int
-        Pixels a banner covers at the top.
+    rooms : tuple[int, int]
+        Pixels covered at the top and kept clear at the bottom.
 
     Returns
     -------
     Point
         The centre, moved so `keep` is at least `KEEP_IN` pixels inside
-        the sides, below `top` and above `CREDIT_ROOM`.
+        the sides and clear of both rooms.
     """
+    top, bottom = rooms
     x = width / 2 + (keep[0] - centre[0]) / mpp
     y = MAP_HEIGHT / 2 - (keep[1] - centre[1]) / mpp
     right = min(max(x, KEEP_IN), width - KEEP_IN) - x
-    down = min(max(y, top + KEEP_IN), MAP_HEIGHT - CREDIT_ROOM - KEEP_IN) - y
+    down = min(max(y, top + KEEP_IN), MAP_HEIGHT - bottom - KEEP_IN) - y
     return (centre[0] - right * mpp, centre[1] + down * mpp)
 
 
@@ -273,6 +314,7 @@ def plain_frame(*, inputs: MapInputs) -> MapInputs:
         top=banner_room(inputs=inputs),
         step=inputs.step,
         keep=origin,
+        bottom=bottom_room(inputs=inputs),
     ) or (origin, inputs.zoom)
     return replace(inputs, centre=centre, zoom=zoom)
 

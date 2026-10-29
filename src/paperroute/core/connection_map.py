@@ -8,7 +8,13 @@ from paperroute.core.chains import Chain
 from paperroute.core.connection import chain_legs
 from paperroute.core.connection_view import PairRow, chain_rows, no_pair_text
 from paperroute.core.geo import Point, Shape, point_along, stop_distances
-from paperroute.core.map_fit import banner_room, fitted, middle, resting_zoom
+from paperroute.core.map_fit import (
+    banner_room,
+    bottom_room,
+    fitted,
+    middle,
+    resting_zoom,
+)
 from paperroute.core.map_view import (
     MapInputs,
     MapView,
@@ -399,6 +405,7 @@ def fit_frame(
         top=banner_room(inputs=inputs),
         step=inputs.step,
         keep=keep,
+        bottom=bottom_room(inputs=inputs),
     )
     if found is None:
         return inputs.centre, resting_zoom(step=inputs.step)

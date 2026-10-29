@@ -17,7 +17,7 @@ from paperroute.render.canvas import (
     text_width,
 )
 from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
-from paperroute.render.others import draw_others
+from paperroute.render.others import draw_others, mark_box
 
 BADGE_FACE: Final[Face] = Face(weight=800, px=14)
 AGE_FACE: Final[Face] = Face(weight=800, px=10)
@@ -298,15 +298,43 @@ def free_spot(
     return None
 
 
+def nearest_first(
+    *, markers: Sequence[Marker], near: Point | None,
+) -> list[Marker]:
+    """
+    Order markers by distance from a point.
+
+    Parameters
+    ----------
+    markers : Sequence[Marker]
+        Vehicles.
+    near : Point | None
+        The point, or None to keep the order given.
+
+    Returns
+    -------
+    list[Marker]
+        The markers, nearest first; ties keep their order.
+    """
+    if near is None:
+        return list(markers)
+    return sorted(
+        markers,
+        key=lambda marker: math.dist(near, (marker.x, marker.y)),
+    )
+
+
 def place(
     *,
     markers: Sequence[Marker],
     reserved: Sequence[Box],
 ) -> list[Placed]:
     """
-    Place badges in order, sliding each to the first free nearby spot.
+    Place badges in order, each slid clear of reserved boxes.
 
-    A badge with no free spot stays on its true spot and may overlap.
+    A badge whose own spot overlaps a badge already placed is dropped,
+    as is one with no spot clear of the reserved boxes and the placed
+    badges.
 
     Parameters
     ----------
@@ -318,18 +346,40 @@ def place(
     Returns
     -------
     list[Placed]
-        One placement per marker, in the same order.
+        The badges kept, in placing order.
     """
-    taken = list(reserved)
-    placed = []
+    placed: list[Placed] = []
+    claimed: list[Box] = []
     for marker in markers:
-        spot = free_spot(marker=marker, taken=taken)
-        if spot is None:
-            placed.append(Placed(marker=marker, centre=(marker.x, marker.y)))
+        own = grown_box(marker=marker, centre=(marker.x, marker.y))
+        if any(overlaps(first=own, second=box) for box in claimed):
             continue
-        taken.append(spot[1])
+        spot = free_spot(marker=marker, taken=[*reserved, *claimed])
+        if spot is None:
+            continue
+        claimed.append(spot[1])
         placed.append(Placed(marker=marker, centre=spot[0]))
     return placed
+
+
+def clear_of(*, marker: Marker, boxes: Sequence[Box]) -> bool:
+    """
+    Check whether a vehicle's spot keeps clear of some boxes.
+
+    Parameters
+    ----------
+    marker : Marker
+        The vehicle.
+    boxes : Sequence[Box]
+        Boxes in map pixels.
+
+    Returns
+    -------
+    bool
+        True when its mark's box overlaps none of them.
+    """
+    spot = mark_box(centre=(marker.x, marker.y))
+    return not any(overlaps(first=spot, second=box) for box in boxes)
 
 
 def draw_tab(canvas: Canvas, *, centre: Point, age: float) -> None:
@@ -502,14 +552,15 @@ def draw_markers(
 
     Pinned routes are badges at every zoom, placed first and drawn last,
     so they sit on top. Every other vehicle is an arrow, numbered when
-    zoomed in.
+    zoomed in. A vehicle under a corner box is not drawn.
 
     Parameters
     ----------
     canvas : Canvas
         Target.
     markers : Sequence[Marker]
-        Vehicles in map pixels, nearest the map centre first.
+        Vehicles in map pixels in placing order; of badges that would
+        overlap, the first is kept.
     mpp : int
         Metres per pixel.
     origin : Point
@@ -525,13 +576,18 @@ def draw_markers(
     keep_out : KeepOut
         Map-pixel boxes of the baked names and the corner boxes.
     """
+    shown = [
+        marker
+        for marker in markers
+        if clear_of(marker=marker, boxes=keep_out.corners)
+    ]
     placed = place(
-        markers=[marker for marker in markers if marker.pinned],
-        reserved=[*reserved, *edges],
+        markers=[marker for marker in shown if marker.pinned],
+        reserved=[*reserved, *edges, *keep_out.corners],
     )
     draw_others(
         canvas,
-        markers=[marker for marker in markers if not marker.pinned],
+        markers=[marker for marker in shown if not marker.pinned],
         mpp=mpp,
         origin=origin,
         taken=[

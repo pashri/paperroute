@@ -63,6 +63,7 @@ from paperroute.render.markers import (
     END_HALF,
     badge_half,
     grown_box,
+    nearest_first,
     overlaps,
     place,
 )
@@ -402,6 +403,16 @@ def test_stop_marker_is_drawn_over_badges() -> None:
     assert frame[sy, sx - 12] == INK
     assert frame[sy, sx + 15] == PAPER
     assert frame[sy, sx - 15] == PAPER
+
+
+def test_of_crowded_badges_the_one_nearest_the_stop_shows() -> None:
+    """Two overlapping badges draw only the one nearer the From."""
+    x, y = screen_point(centre=CENTRE, mpp=MPP, point=CENTRE)
+    far = live(at=(x + 100, y + 60))
+    near = live(at=(x + 100, y + 52))
+    both = draw_map_view(view=replace(VIEW, markers=(far, near)), base=paper())
+    alone = draw_map_view(view=replace(VIEW, markers=(near,)), base=paper())
+    assert (both == alone).all()
 
 
 def empty_band(*, frame: NDArray[np.uint8]) -> NDArray[np.uint8]:
@@ -777,7 +788,11 @@ def test_badge_at_a_crowded_from_by_the_edge_still_shows() -> None:
         (stop[0] - 18, stop[1] - 18, stop[0] + 18, stop[1] + 18),
         *edge_boxes(width=MAP_WIDTH, banner=True),
     ]
-    _, placed = place(markers=[below, waiting], reserved=reserved)
+    placed, *_ = place(
+        markers=nearest_first(markers=[below, waiting], near=stop),
+        reserved=reserved,
+    )
+    assert placed.marker == waiting
     assert placed.centre != stop
     box = grown_box(marker=waiting, centre=placed.centre)
     assert not any(overlaps(first=box, second=other) for other in reserved)

@@ -19,6 +19,7 @@ from paperroute.render.canvas import (
     Point,
     text_width,
 )
+from paperroute.render.keep_out import KeepOut
 from paperroute.render.markers import (
     AGE_FACE,
     BADGE_FACE,
@@ -29,6 +30,7 @@ from paperroute.render.markers import (
     draw_markers,
     draw_tab,
     marker_box,
+    nearest_first,
     overlaps,
     place,
     square,
@@ -233,22 +235,20 @@ def test_hollow_badge_is_paper_inside_with_no_wedge() -> None:
     assert int(grey[84, 100]) == PAPER
 
 
-def test_overlapping_badges_slide_with_a_leader() -> None:
-    """The second badge on a spot slides up, joined by a leader line."""
+def test_second_badge_on_a_spot_is_dropped() -> None:
+    """A second badge on a spot is not slid away; only the first shows."""
     markers = [marker(), replace(marker(), route='T1')]
     placed = place(markers=markers, reserved=[])
+    assert [item.marker for item in placed] == markers[:1]
     assert placed[0].centre == SPOT
-    assert placed[1].centre == (100.0, 72.0)
     grey = drawn(markers=markers)
-    assert int(grey[86, 100]) == INK
-    assert int(grey[86, 104]) == PAPER
+    assert int(grey[86, 100]) == PAPER
 
 
-def test_crowded_badges_overlap_rather_than_vanish() -> None:
-    """Forty badges on one spot are all placed."""
+def test_crowded_badges_show_once() -> None:
+    """Forty badges on one spot draw one badge, on the spot."""
     placed = place(markers=[marker()] * 40, reserved=[])
-    assert len(placed) == 40
-    assert placed[-1].centre == SPOT
+    assert [item.centre for item in placed] == [SPOT]
 
 
 @pytest.mark.parametrize('mpp', ZOOMS)
@@ -402,48 +402,47 @@ def test_pinned_badge_is_drawn_last() -> None:
     pinned = marker(live=False)
     others = [replace(marker(), pinned=False)] * 12
     placed = place(markers=[pinned, *others], reserved=[])
-    assert sum(item.centre == SPOT for item in placed) > 1
+    assert [item.marker for item in placed] == [pinned]
     grey = drawn(markers=[*others, pinned])
     left = first_column(edge=100 - badge_half(route='606')[0])
     assert int(grey[93, left + 3]) == PAPER
 
 
-@pytest.mark.parametrize(('gap', 'slides'), [(23.5, True), (24.5, False)])
-def test_badges_keep_12_px_apart_sideways(gap: float, slides: bool) -> None:
+@pytest.mark.parametrize(('gap', 'drops'), [(23.5, True), (24.5, False)])
+def test_badges_keep_12_px_apart_sideways(gap: float, drops: bool) -> None:
     """Side by side, badges need a 24 px gap: 12 px grown on each."""
     width = 2 * badge_half(route='606')[0]
     beside = marker(at=(100.0 + width + gap, 100.0))
     placed = place(markers=[marker(), beside], reserved=[])
-    assert (placed[1].centre != (beside.x, beside.y)) is slides
+    assert (len(placed) == 1) is drops
 
 
-@pytest.mark.parametrize(('gap', 'slides'), [(7.5, True), (8.5, False)])
-def test_badges_keep_4_px_apart_vertically(gap: float, slides: bool) -> None:
+@pytest.mark.parametrize(('gap', 'drops'), [(7.5, True), (8.5, False)])
+def test_badges_keep_4_px_apart_vertically(gap: float, drops: bool) -> None:
     """Stacked, badges need an 8 px gap: 4 px grown on each."""
     below = marker(at=(100.0, 120.0 + gap))
     placed = place(markers=[marker(), below], reserved=[])
-    assert (placed[1].centre != (below.x, below.y)) is slides
+    assert (len(placed) == 1) is drops
 
 
 def test_origin_moves_badges_and_leaders() -> None:
     """Badges and leaders are drawn offset by the map's origin."""
-    markers = [marker(), replace(marker(), route='T1')]
-    grey = drawn(markers=markers, origin=(30.0, 50.0))
-    edge = first_column(edge=130 - badge_half(route='606')[0]) + 1
-    assert int(grey[150, edge]) == INK
-    assert int(grey[100, edge - 30]) == PAPER
-    assert int(grey[136, 130]) == INK
-    assert int(grey[86, 100]) == PAPER
+    grey = drawn(markers=[marker(at=MIDDLE)], origin=(30.0, 50.0))
+    x, y = MIDDLE[0] + 30, MIDDLE[1] + 50
+    edge = first_column(edge=x - badge_half(route='606')[0]) + 1
+    assert int(grey[int(y) - 36, edge]) == INK
+    assert int(grey[int(y) - 36, edge - 30]) == PAPER
+    assert int(grey[int(y) - 10, int(x)]) == INK
+    assert int(grey[int(MIDDLE[1]) - 10, int(MIDDLE[0])]) == PAPER
 
 
-def test_stuck_badge_stays_put_without_claiming_its_box() -> None:
-    """A badge with no free spot stays put and blocks nothing later."""
+def test_stuck_badge_is_dropped_without_claiming_its_box() -> None:
+    """A badge with no free spot is dropped and blocks nothing later."""
     points = [(100.0 + dx, 100.0 + dy) for dx, dy in OFFSETS]
     reserved = [(x, y, x, y) for x, y in points]
-    below = marker(at=(100.0, 114.0))
+    below = marker(at=(100.0, 116.0))
     placed = place(markers=[marker(), below], reserved=reserved)
-    assert placed[0].centre == SPOT
-    assert placed[1].centre == (100.0, 114.0)
+    assert [item.marker for item in placed] == [below]
 
 
 @pytest.mark.parametrize(
@@ -484,18 +483,20 @@ def test_live_marker_age_takes_no_tab_space() -> None:
 def test_leaders_are_two_strokes_and_one_dot_batch() -> None:
     """Each leader is a 3 px paper line under 1.5 px ink; one dot call."""
     canvas = CountingCanvas()
-    markers = [marker(), replace(marker(), route='T1')] * 2
+    markers = [marker(), replace(marker(at=MIDDLE), route='T1')]
+    reserved = [square(at=spot, half=STOP_HALF) for spot in (SPOT, MIDDLE)]
     draw_markers(
         canvas,
         markers=markers,
         mpp=BADGE_ZOOM,
         origin=(0, 0),
-        reserved=[square(at=MIDDLE, half=STOP_HALF)],
+        reserved=reserved,
     )
     moved = sum(
-        item.centre != SPOT for item in place(markers=markers, reserved=[])
+        (item.marker.x, item.marker.y) != item.centre
+        for item in place(markers=markers, reserved=reserved)
     )
-    assert moved > 1
+    assert moved == 2
     strokes = [(width, grey) for _, width, grey in canvas.lines]
     assert strokes == [(3, PAPER), (1.5, INK)] * moved
     assert canvas.calls == [(moved, 3.5, INK)]
@@ -549,3 +550,50 @@ def test_pinned_badges_at_city_zoom() -> None:
     edge = math.ceil(100 - badge_half(route='606')[0])
     assert int(grey[100, edge]) == INK
     assert int(grey[100, 100]) == INK
+
+
+def test_overlapping_badges_keep_only_the_nearest_to_the_stop() -> None:
+    """Of badges that would overlap, only the one nearest the From shows."""
+    far = marker(at=(100.0, 90.0))
+    near = replace(marker(at=(100.0, 104.0)), route='T1')
+    ordered = nearest_first(markers=[far, near], near=(100.0, 200.0))
+    placed = place(markers=ordered, reserved=[])
+    assert [item.marker for item in placed] == [near]
+    assert placed[0].centre == (near.x, near.y)
+
+
+def test_badge_with_no_free_spot_is_dropped() -> None:
+    """A badge with every spot reserved is not drawn at all."""
+    reserved = [(-1000.0, -1000.0, 1000.0, 1000.0)]
+    assert not place(markers=[marker()], reserved=reserved)
+
+
+def test_badges_and_arrows_keep_out_of_the_corner_boxes() -> None:
+    """Badges slide clear of a corner box; vehicles inside it are not drawn."""
+    corner = (80.0, 80.0, 120.0, 120.0)
+    keep = KeepOut(places=(corner,), streets=(), corners=(corner,))
+    arrow = replace(
+        marker(at=(110.0, 110.0), bearing=90.0), route='T1', pinned=False,
+    )
+    canvas = CountingCanvas()
+    canvas.rect(box=(0, 0, WIDTH, HEIGHT), grey=PAPER)
+    beside = replace(marker(at=(100.0, 128.0)), route='T1')
+    draw_markers(
+        canvas,
+        markers=[marker(), beside, arrow],
+        mpp=CITY,
+        origin=(0.0, 0.0),
+        reserved=[],
+        keep_out=keep,
+    )
+    grey = canvas.grey()
+    assert (grey[80:120, 80:120] == PAPER).all()
+    assert canvas.lines
+
+
+def test_badge_crowding_a_kept_one_is_dropped_not_slid() -> None:
+    """A badge on a kept badge is dropped, though a slide would free it."""
+    beside = replace(marker(at=(100.0, 116.0)), route='T1')
+    reserved = [square(at=(100.0, y), half=2.0) for y in (80.0, 120.0)]
+    placed = place(markers=[marker(), beside], reserved=reserved)
+    assert [item.marker.route for item in placed] == ['606']

@@ -1111,7 +1111,7 @@ def test_unreadable_tiles_give_corner_boxes_only(tmp_path: Path) -> None:
             credit_box(width=base.width, text=NOT_INSTALLED),
         )
     )
-    assert broken == KeepOut(places=edged, streets=())
+    assert broken == KeepOut(places=edged, streets=(), corners=edged)
     assert versionless == broken
     assert broken == keep_out(base=base, tiles=NullTiles())
 

@@ -44,6 +44,7 @@ from paperroute.render.markers import (
     END_HALF,
     STOP_HALF,
     draw_markers,
+    nearest_first,
     square,
 )
 from paperroute.render.pair_list import draw_pair_list
@@ -332,7 +333,7 @@ def draw_overlay(
     with canvas.clipped(box=(0, HEADER, view.base.width, HEIGHT)):
         draw_markers(
             canvas,
-            markers=view.markers,
+            markers=nearest_first(markers=view.markers, near=stop),
             mpp=view.base.mpp,
             origin=(0, HEADER),
             reserved=end_boxes(base=view.base),

@@ -161,18 +161,20 @@ def test_corner_boxes_included(tmp_path: Path) -> None:
     """With tiles installed, the scale and credit boxes are kept out."""
     with closing(build(out=tmp_path / 'tiles.db')) as tiles:
         boxes = keep_out(base=base(), tiles=tiles)
-    assert boxes == KeepOut(places=corners(), streets=())
+    assert boxes == KeepOut(
+        places=corners(), streets=(), corners=corners(),
+    )
 
 
 def test_note_box_kept_out_without_tiles() -> None:
     """Without tiles the scale box and the note's box are kept out."""
     note = credit_box(width=base().width, text='Map not installed')
+    edged = (
+        grown(box=scale_box(mpp=MPP), by=1.0),
+        grown(box=note, by=1.0),
+    )
     assert keep_out(base=base(), tiles=NullTiles()) == KeepOut(
-        places=(
-            grown(box=scale_box(mpp=MPP), by=1.0),
-            grown(box=note, by=1.0),
-        ),
-        streets=(),
+        places=edged, streets=(), corners=edged,
     )
 
 
@@ -189,7 +191,9 @@ def test_no_centre_keeps_out_the_corners_only(tmp_path: Path) -> None:
     """A map with no location keeps out only its corner boxes."""
     with closing(build(out=tmp_path / 'tiles.db')) as tiles:
         boxes = keep_out(base=MapBase(centre=None, mpp=MPP, route=()), tiles=tiles)
-    assert boxes == KeepOut(places=corners(), streets=())
+    assert boxes == KeepOut(
+        places=corners(), streets=(), corners=corners(),
+    )
 
 
 def test_no_keep_out_is_empty() -> None:

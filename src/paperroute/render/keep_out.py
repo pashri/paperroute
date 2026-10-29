@@ -38,10 +38,13 @@ class KeepOut:
         nothing may cover them.
     streets : tuple[Box, ...]
         Street names; a number may cover one when it has nowhere else.
+    corners : tuple[Box, ...]
+        The corner boxes alone, which badges and arrows keep clear of.
     """
 
     places: tuple[Box, ...]
     streets: tuple[Box, ...]
+    corners: tuple[Box, ...] = ()
 
 
 NO_KEEP_OUT: Final[KeepOut] = KeepOut(places=(), streets=())
@@ -292,7 +295,7 @@ def keep_out(*, base: MapBase, tiles: TileRepository) -> KeepOut:
     """
     corners = tuple(corner_boxes(base=base, tiles=tiles))
     if base.centre is None:
-        return KeepOut(places=corners, streets=())
+        return KeepOut(places=corners, streets=(), corners=corners)
     window = window_of(base=base)
     places = place_boxes(base=base, tiles=tiles, window=window)
     streets = street_boxes(base=base, tiles=tiles, window=window)
@@ -304,4 +307,5 @@ def keep_out(*, base: MapBase, tiles: TileRepository) -> KeepOut:
         streets=tuple(
             box for box in streets if on_map(box=box, width=base.width)
         ),
+        corners=corners,
     )

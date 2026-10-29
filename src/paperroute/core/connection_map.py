@@ -318,12 +318,13 @@ def whole_frame(
     Returns
     -------
     tuple[Point | None, int]
-        The fit of the hero's legs and the four stops, as `fit_frame`.
+        The fit of the hero's legs and the four stops, as `fit_frame`,
+        keeping the From.
     """
     hero = chains[0] if chains else None
     first, second = leg_lines(pin=pin, chain=hero, shapes=inputs.shapes)
     points = trip_points(pin=pin, chain=hero, lines=(*first, *second))
-    return fit_frame(inputs=inputs, points=points)
+    return fit_frame(inputs=inputs, points=points, keep=pin.origin.point)
 
 
 def first_leg_frame(
@@ -345,10 +346,11 @@ def first_leg_frame(
     -------
     tuple[Point | None, int]
         The fit of the first ride's line and its two stops, as
-        `fit_frame`; for a direct chain, that is the whole trip.
+        `fit_frame` keeping the From; for a direct chain, that is the
+        whole trip.
     """
     if not chains:
-        return fit_frame(inputs=inputs, points=())
+        return fit_frame(inputs=inputs, points=(), keep=None)
     ride = rides_of(chain=chains[0], pin=pin)[0]
     lines = cut_leg(
         departure=ride.item.departure,
@@ -356,14 +358,18 @@ def first_leg_frame(
         shapes=inputs.shapes,
     )
     stops = (ride.start.point, ride.end.point)
-    return fit_frame(inputs=inputs, points=(
-        *(point for line in lines for point in line),
-        *(point for point in stops if point is not None),
-    ))
+    return fit_frame(
+        inputs=inputs,
+        points=(
+            *(point for line in lines for point in line),
+            *(point for point in stops if point is not None),
+        ),
+        keep=pin.origin.point,
+    )
 
 
 def fit_frame(
-    *, inputs: MapInputs, points: Sequence[Point],
+    *, inputs: MapInputs, points: Sequence[Point], keep: Point | None,
 ) -> tuple[Point | None, int]:
     """
     Frame a set of points.
@@ -374,21 +380,25 @@ def fit_frame(
         The map's inputs.
     points : Sequence[Point]
         Points to hold.
+    keep : Point | None
+        A point kept on the map when the points do not fit at the
+        widest zoom, or None.
 
     Returns
     -------
     tuple[Point | None, int]
         The middle of the points' box, moved so the box clears the map's
-        credit and any banner, and the finest zoom that holds it with
-        that room, moved by the knob's step; the From at the resting
-        zoom with no point at all.
+        credit and any banner, then moved the least that keeps `keep`
+        inside, and the finest zoom that holds it with that room, moved
+        by the knob's step; the From at the resting zoom with no point
+        at all.
     """
     found = fitted(
         points=points,
         width=inputs.width,
         top=banner_room(inputs=inputs),
         step=inputs.step,
-        keep=None,
+        keep=keep,
     )
     if found is None:
         return inputs.centre, resting_zoom(step=inputs.step)
@@ -456,7 +466,8 @@ def change_frame(
     -------
     tuple[Point | None, int]
         The fit of `change_points` for the ride into the hero's first
-        change and the ride out of it, as `fit_frame`; the first leg's
+        change and the ride out of it, as `fit_frame` keeping the
+        change; the first leg's
         frame with no change; the From at the resting zoom with no chain.
     """
     if not chains:
@@ -467,7 +478,9 @@ def change_frame(
         return first_leg_frame(inputs=inputs, pin=pin, chains=chains)
     pair = rides[changed[0] - 1 : changed[0] + 1]
     return fit_frame(
-        inputs=inputs, points=change_points(inputs=inputs, rides=pair),
+        inputs=inputs,
+        points=change_points(inputs=inputs, rides=pair),
+        keep=pair[0].end.point,
     )
 
 
@@ -715,11 +728,13 @@ def change_view(
     Returns
     -------
     MapView
-        The pane fitted to `change_points` with the knob's step, with
-        both rides drawn and no sidebar.
+        The pane fitted to `change_points` with the knob's step and the
+        change kept on it, with both rides drawn and no sidebar.
     """
     centre, zoom = fit_frame(
-        inputs=inputs, points=change_points(inputs=inputs, rides=rides),
+        inputs=inputs,
+        points=change_points(inputs=inputs, rides=rides),
+        keep=rides[0].end.point,
     )
     legs = chain_legs(chain=chain)
     view = build_map_view(inputs=replace(

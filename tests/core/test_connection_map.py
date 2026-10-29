@@ -15,7 +15,7 @@ from paperroute.core.connection_map import (
 )
 from paperroute.core.connection_model import way_legs
 from paperroute.core.geo import Point, Shape, make_shape
-from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM, fit_zoom
+from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM, KEEP_IN, fit_zoom
 from paperroute.core.map_view import (
     DEFAULT_ZOOM,
     MAP_HEIGHT,
@@ -320,7 +320,11 @@ def test_no_points_falls_back_to_from() -> None:
 
 
 def test_banner_keeps_frame_below_it() -> None:
-    """Under a banner both framings move down by half its height."""
+    """
+    Under a banner both framings move down by half its height.
+
+    The whole trip moves 10 px more, to keep the From 24 px below it.
+    """
     stop = replace(STOP, banner='Timetable times · no live data yet')
     inputs = replace(inputs_at(now=at(7, 35)), stop_view=stop)
     change = connection_inputs(
@@ -336,7 +340,10 @@ def test_banner_keeps_frame_below_it() -> None:
         mode=ConnectionMap.WHOLE,
     )
     assert whole.zoom == ZOOMS.index(8)
-    assert whole.centre == (400.0, -612.0 + BANNER_ROOM * 8 / 2)
+    assert whole.centre == (400.0, -612.0 + BANNER_ROOM * 8 / 2 + 80.0)
+    assert whole.centre[1] + (MAP_HEIGHT / 2 - BANNER_ROOM - KEEP_IN) * 8 == (
+        900.0
+    )
 
 
 PLATFORM: Final[StopPlace] = place(
@@ -388,7 +395,7 @@ def test_changes_two_panes_side_by_side() -> None:
     )
     assert [pane.base.width for pane in panes] == [400, 400]
     assert [pane.base.centre for pane in panes] == [
-        (72.0, 408.0), (482.0, -1020.0),
+        (72.0, 408.0), (482.0, -1060.0),
     ]
     assert [pane.zoom for pane in panes] == [0, 1]
     first, second = (pane.base.trip for pane in panes)
@@ -730,3 +737,44 @@ def test_connection_base_lists_each_legs_ridden_stops() -> None:
         (0.0, 900.0), (-300.0, 450.0), (0.0, 0.0),
         (144.0, 0.0), (500.0, -900.0), (800.0, -1900.0),
     )
+
+
+FAR: Final[Pin] = replace(
+    WORK, origin=replace(HOLLIS, point=(0.0, 60000.0)),
+)
+
+
+def test_long_trip_keeps_the_from_on_the_whole_and_first_leg_maps() -> None:
+    """A 60 km trip at 45 m/px keeps the From on Whole trip and First leg."""
+    for mode in (ConnectionMap.WHOLE, ConnectionMap.FIRST_LEG):
+        found = connection_inputs(
+            inputs=inputs_at(now=at(7, 30)),
+            pin=FAR,
+            chains=SHAPED,
+            mode=mode,
+        )
+        assert ZOOMS[found.zoom] == 45
+        assert on_map(inputs=found, point=(0.0, 60000.0))
+
+
+def test_long_ride_keeps_the_change_on_the_changes_map() -> None:
+    """A 60 km ride into the change keeps the change on the Changes map."""
+    found = connection_inputs(
+        inputs=inputs_at(now=at(7, 30)),
+        pin=FAR,
+        chains=SHAPED,
+        mode=ConnectionMap.CHANGES,
+    )
+    assert ZOOMS[found.zoom] == 45
+    assert on_map(inputs=found, point=(0.0, 0.0))
+    (pane,) = change_panes(
+        inputs=inputs_at(now=at(7, 30)),
+        pin=FAR,
+        chain=SHAPED[0],
+        mode=ConnectionMap.CHANGES,
+    )
+    assert pane.base.centre is not None
+    framed = replace(
+        found, centre=pane.base.centre, zoom=ZOOMS.index(pane.base.mpp),
+    )
+    assert on_map(inputs=framed, point=(0.0, 0.0))

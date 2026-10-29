@@ -7,7 +7,12 @@ from typing import Final
 from paperroute.core.chains import all_departures
 from paperroute.core.connection import live_chains
 from paperroute.core.connection_map import connection_inputs, panes_inputs
-from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
+from paperroute.core.feeds import (
+    ALL_POSITION_MODES,
+    FeedKind,
+    feeds_near,
+    position_feeds,
+)
 from paperroute.core.geo import Point
 from paperroute.core.map_fit import resting_zoom, steady_frame
 from paperroute.core.map_state import area_box, area_frame
@@ -109,20 +114,27 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
         While the chooser picks a Destination, the modes of its strip's
         departures. Otherwise, on a map, the feeds for the modes in the
         map area at the current zoom, or for every mode when none are
-        known there (not loaded, failed or none found), with every leg's
-        modes for a connection pin; on the Strip, the modes of the
-        strip's own departures.
+        known there (not loaded, failed or none found), less the light
+        rail lines nowhere near the area, with every leg's modes for a
+        connection pin; on the Strip, the modes of the strip's own
+        departures. Sorted and unique.
     """
     modes = frozenset(
         departure.mode for departure in polled_departures(state=state)
     )
-    if state.view in MAP_VIEWS and state.chooser is None:
-        _, zoom = area_frame(map_state=state.map)
-        area = state.map.area_modes.get(ZOOMS[zoom]) or ALL_POSITION_MODES
-        # A connection's legs can run beyond the area the modes were
-        # read for, so its own modes are polled as well.
-        modes = area | modes if state.board.legs is not None else area
-    return position_feeds(modes=modes)
+    if not map_shown(state=state):
+        return position_feeds(modes=modes)
+    centre, zoom = area_frame(map_state=state.map)
+    mpp = ZOOMS[zoom]
+    area = position_feeds(
+        modes=state.map.area_modes.get(mpp) or ALL_POSITION_MODES,
+    )
+    if centre is not None:
+        area = feeds_near(feeds=area, box=area_box(centre=centre, mpp=mpp))
+    # A connection's legs can run beyond the area the modes were read
+    # for, so its own modes are polled as well.
+    legs = () if state.board.legs is None else position_feeds(modes=modes)
+    return tuple(sorted({*area, *legs}))
 
 
 def polled_positions(*, state: State) -> Mapping[str, PositionsSnapshot]:

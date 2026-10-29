@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from enum import StrEnum
 from typing import Final
 
+from paperroute.core.geo import MetreBox, to_metres
 from paperroute.core.model import Mode, RouteKind
 
 FEEDS: Final[dict[Mode, str]] = {
@@ -33,6 +34,20 @@ POSITION_FEEDS: Final[dict[Mode, tuple[str, ...]]] = {
         'v1/gtfs/vehiclepos/lightrail/newcastle',
     ),
 }
+LINE_AREAS: Final[dict[str, tuple[float, float, float, float]]] = {
+    'v1/gtfs/vehiclepos/lightrail/cbdandsoutheast': (
+        151.19, -33.95, 151.26, -33.85,
+    ),
+    'v2/gtfs/vehiclepos/lightrail/innerwest': (
+        151.12, -33.92, 151.22, -33.86,
+    ),
+    'v1/gtfs/vehiclepos/lightrail/parramatta': (
+        150.96, -33.87, 151.10, -33.76,
+    ),
+    'v1/gtfs/vehiclepos/lightrail/newcastle': (
+        151.73, -32.94, 151.80, -32.91,
+    ),
+}  # west, south, east and north in degrees, with a margin round each line
 KIND_MODES: Final[dict[RouteKind, frozenset[Mode]]] = {
     RouteKind.BUS: frozenset({Mode.BUS}),
     RouteKind.SCHOOL: frozenset({Mode.BUS}),
@@ -102,6 +117,52 @@ def position_feeds(*, modes: Iterable[Mode]) -> tuple[str, ...]:
             }
         )
     )
+
+
+def feeds_near(*, feeds: Iterable[str], box: MetreBox) -> tuple[str, ...]:
+    """
+    Drop the single-line feeds whose line is nowhere near an area.
+
+    Parameters
+    ----------
+    feeds : Iterable[str]
+        Feed paths.
+    box : MetreBox
+        The area: west, south, east and north in metres.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The feeds in their order, without those in `LINE_AREAS` whose
+        area misses the box.
+    """
+    return tuple(feed for feed in feeds if line_near(feed=feed, box=box))
+
+
+def line_near(*, feed: str, box: MetreBox) -> bool:
+    """
+    Say whether a feed's line comes near an area.
+
+    Parameters
+    ----------
+    feed : str
+        Feed path.
+    box : MetreBox
+        The area: west, south, east and north in metres.
+
+    Returns
+    -------
+    bool
+        True when the feed's `LINE_AREAS` entry overlaps the box, and for
+        a feed with no entry.
+    """
+    if feed not in LINE_AREAS:
+        return True
+    west_lon, south_lat, east_lon, north_lat = LINE_AREAS[feed]
+    west, south = to_metres(lon=west_lon, lat=south_lat)
+    east, north = to_metres(lon=east_lon, lat=north_lat)
+    left, bottom, right, top = box
+    return west <= right and east >= left and south <= top and north >= bottom
 
 
 def alert_feeds_for(*, modes: Iterable[Mode]) -> tuple[str, ...]:

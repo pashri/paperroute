@@ -6,9 +6,33 @@ from paperroute.core.feeds import (
     feed_for,
     feed_kind,
     feed_label,
+    feeds_near,
     position_feeds,
 )
+from paperroute.core.geo import MetreBox, to_metres
 from paperroute.core.model import Mode
+
+
+def box_around(*, lon: float, lat: float, half: float = 1000) -> MetreBox:
+    """
+    Make a square area around a place.
+
+    Parameters
+    ----------
+    lon : float
+        Longitude in degrees.
+    lat : float
+        Latitude in degrees.
+    half : float
+        Half the side, in metres.
+
+    Returns
+    -------
+    MetreBox
+        West, south, east and north in metres.
+    """
+    x, y = to_metres(lon=lon, lat=lat)
+    return (x - half, y - half, x + half, y + half)
 
 
 def test_feed_for_live_modes() -> None:
@@ -92,3 +116,34 @@ def test_feed_label_alerts() -> None:
     assert feed_label(feed='v2/gtfs/alerts/sydneytrains') == (
         'Sydney Trains alerts'
     )
+
+
+def test_feeds_near_keeps_the_light_rail_line_in_the_area() -> None:
+    """Around Parramatta only the Parramatta light rail feed is kept."""
+    parramatta = box_around(lon=151.003, lat=-33.817)
+    feeds = position_feeds(modes=[Mode.LIGHT_RAIL, Mode.BUS])
+    assert feeds_near(feeds=feeds, box=parramatta) == (
+        'v1/gtfs/vehiclepos/buses',
+        'v1/gtfs/vehiclepos/lightrail/parramatta',
+    )
+
+
+def test_feeds_near_keeps_both_lines_that_meet() -> None:
+    """At Central the CBD and Inner West light rail lines both stay."""
+    central = box_around(lon=151.206, lat=-33.884)
+    assert feeds_near(
+        feeds=position_feeds(modes=[Mode.LIGHT_RAIL]), box=central,
+    ) == (
+        'v1/gtfs/vehiclepos/lightrail/cbdandsoutheast',
+        'v2/gtfs/vehiclepos/lightrail/innerwest',
+    )
+
+
+def test_feeds_near_drops_newcastle_from_a_city_wide_map() -> None:
+    """A map of all of Sydney still has no Newcastle light rail."""
+    sydney = box_around(lon=151.1, lat=-33.85, half=15_000)
+    feeds = position_feeds(modes=[Mode.LIGHT_RAIL])
+    assert 'v1/gtfs/vehiclepos/lightrail/newcastle' not in feeds_near(
+        feeds=feeds, box=sydney,
+    )
+    assert len(feeds_near(feeds=feeds, box=sydney)) == 3

@@ -80,32 +80,64 @@ def area(*, state: State, centre: Point = CENTRE) -> LoadModes:
     return LoadModes(mpp=mpp, box=area_box(centre=centre, mpp=mpp))
 
 
-def test_map_polls_all_feeds_before_modes_load() -> None:
-    """Until the area's modes are known, every position feed is polled."""
-    feeds = map_feeds(state=on_map())
-    assert feeds == position_feeds(modes=ALL_POSITION_MODES)
-    assert len(feeds) == 9
+def every_feed_near() -> tuple[str, ...]:
+    """
+    List every position feed but the light rail lines far from `CENTRE`.
 
+    `CENTRE` is near Parramatta.
 
-def test_map_polls_all_feeds_after_modes_fail() -> None:
-    """A failed modes load leaves every position feed polled."""
-    state = on_map()
-    state, _ = step(state, MapDataFailed(request=area(state=state)))
-    assert map_feeds(state=state) == position_feeds(
-        modes=ALL_POSITION_MODES
+    Returns
+    -------
+    tuple[str, ...]
+        Feed paths.
+    """
+    far = {
+        'v1/gtfs/vehiclepos/lightrail/cbdandsoutheast',
+        'v1/gtfs/vehiclepos/lightrail/newcastle',
+        'v2/gtfs/vehiclepos/lightrail/innerwest',
+    }
+    return tuple(
+        feed
+        for feed in position_feeds(modes=ALL_POSITION_MODES)
+        if feed not in far
     )
 
 
+def test_map_polls_all_feeds_before_modes_load() -> None:
+    """Until the area's modes are known, every nearby feed is polled."""
+    feeds = map_feeds(state=on_map())
+    assert feeds == every_feed_near()
+    assert len(feeds) == 6
+
+
+def test_map_polls_all_feeds_after_modes_fail() -> None:
+    """A failed modes load leaves every nearby feed polled."""
+    state = on_map()
+    state, _ = step(state, MapDataFailed(request=area(state=state)))
+    assert map_feeds(state=state) == every_feed_near()
+
+
 def test_map_polls_all_feeds_for_empty_modes() -> None:
-    """An area with no shapes polls every position feed."""
+    """An area with no shapes polls every nearby feed."""
     state = on_map()
     request = area(state=state)
     event = ModesLoaded(
         mpp=request.mpp, box=request.box, modes=frozenset()
     )
     state, _ = step(state, event)
-    assert map_feeds(state=state) == position_feeds(
-        modes=ALL_POSITION_MODES
+    assert map_feeds(state=state) == every_feed_near()
+
+
+def test_map_polls_only_the_light_rail_line_in_its_area() -> None:
+    """Light rail in the area polls that line's feed, not all four."""
+    state = on_map()
+    request = area(state=state)
+    modes = frozenset({Mode.LIGHT_RAIL})
+    state, _ = step(
+        state, ModesLoaded(mpp=request.mpp, box=request.box, modes=modes),
+    )
+    assert map_feeds(state=state) == (
+        'v1/gtfs/vehiclepos/lightrail/parramatta',
     )
 
 
@@ -162,6 +194,19 @@ def test_connection_positions_union() -> None:
     ))
     assert set(map_feeds(state=state)) == set(position_feeds(
         modes={Mode.BUS, Mode.TRAIN, Mode.FERRY},
+    ))
+
+
+def test_connection_legs_poll_their_light_rail_anywhere() -> None:
+    """A light rail leg polls every light rail feed, near the map or not."""
+    second = tuple(replace(item, mode=Mode.LIGHT_RAIL) for item in LEG2)
+    state, _ = legs_loaded(state=started(view=LiveView.MAP), second=second)
+    mpp = ZOOMS[0]  # the Changes fit
+    state = replace(state, map=replace(
+        state.map, area_modes={mpp: frozenset({Mode.BUS})},
+    ))
+    assert set(map_feeds(state=state)) == set(position_feeds(
+        modes={Mode.BUS, Mode.LIGHT_RAIL},
     ))
 
 

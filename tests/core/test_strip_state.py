@@ -351,11 +351,15 @@ def test_strip_polls_positions_for_departure_modes() -> None:
 
 
 def test_strip_map_polls_every_position_feed_until_modes_known() -> None:
-    """Strip + map polls all position feeds while area modes are unknown."""
+    """Strip + map polls all nearby feeds while area modes are unknown."""
     _, effects = on_view(view=LiveView.STRIP_MAP, departures=trains())
     fetches = kinds(effects=effects, kind=FetchFeed)
     assert {fetch.feed for fetch in fetches} >= {
-        *position_feeds(modes=ALL_POSITION_MODES),
+        *position_feeds(modes=ALL_POSITION_MODES - {Mode.LIGHT_RAIL}),
+        'v1/gtfs/vehiclepos/lightrail/parramatta',
+    }
+    assert 'v1/gtfs/vehiclepos/lightrail/newcastle' not in {
+        fetch.feed for fetch in fetches
     }
     assert kinds(effects=effects, kind=LoadModes)
 

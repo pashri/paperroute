@@ -29,7 +29,12 @@ from paperroute.core.connection_strip import (
     ConnectionStripView,
 )
 from paperroute.core.connection_view import ConnectionView
-from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
+from paperroute.core.feeds import (
+    ALL_POSITION_MODES,
+    FeedKind,
+    feeds_near,
+    position_feeds,
+)
 from paperroute.core.geo import Point, make_shape
 from paperroute.core.map_requests import map_feeds, shows_vehicles
 from paperroute.core.map_state import area_box, area_frame
@@ -754,14 +759,14 @@ def test_map_polls_positions_for_a_ferry_pin() -> None:
 
 
 def test_empty_area_modes_fall_back_to_every_mode() -> None:
-    """With no modes found in the area, every mode's positions are polled."""
+    """With no modes found in the area, every nearby feed is polled."""
     state, _ = step(loaded(state=fresh(centre=CENTRE)), PRESS)
     box = area_box(centre=CENTRE, mpp=8)
     empty = ModesLoaded(mpp=8, box=box, modes=frozenset())
     state, _ = step(state, empty)
     assert needed_feeds(state=state) == (
         BUSES,
-        *position_feeds(modes=ALL_POSITION_MODES),
+        *feeds_near(feeds=position_feeds(modes=ALL_POSITION_MODES), box=box),
     )
     ferry = ModesLoaded(mpp=8, box=box, modes=frozenset({Mode.FERRY}))
     state, _ = step(state, ferry)

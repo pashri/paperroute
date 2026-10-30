@@ -49,6 +49,7 @@ from paperroute.render.strip_view import (
     HINT_PAD,
     NAME_X,
     PANE_NAME_X,
+    TEXT_RIGHT,
     draw_strip_map_view,
     draw_strip_view,
     paint_strip_view,
@@ -554,6 +555,18 @@ def test_whole_board_carry_on_follows_the_destination() -> None:
     x = 556 + round(width) + CARRY_GAP
     assert (frame[SECOND_LINE, x:x + int(ARROW_WIDTH)] == INK).any()
     assert (frame[SECOND_LINE, x - 6:x - 1] == PAPER).all()
+
+
+def test_whole_board_carry_on_after_long_destination_fits() -> None:
+    """A long line-2 destination leaves room for the carry-on's label."""
+    then = CarryOn(route='T9', headsign='Hornsby')
+    row = replace(
+        central(onto='T8', then=then),
+        destination='Macarthur via Airport and Sydenham',
+    )
+    frame = panel_frame(panel=WHOLE, row=row)
+    assert (frame[SECOND_LINE, TEXT_RIGHT + 1:] == PAPER).all()
+    assert (frame[SECOND_LINE, TEXT_RIGHT - 36:TEXT_RIGHT] == INK).any()
 
 
 def test_whole_board_panel_row_draws_both_badges() -> None:

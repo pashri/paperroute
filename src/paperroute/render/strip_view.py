@@ -60,6 +60,7 @@ TIME_DROP: Final[int] = 44  # baseline below the row's rule
 SECOND_DROP: Final[int] = 62  # carry-on baseline below the row's rule
 MIDDLE_X: Final[int] = 556  # arrive arrow, badge and carry-on line
 BADGE_PX: Final[int] = 14
+CARRY_ROOM: Final[int] = 72  # kept free after a destination for a carry-on
 CARRY_GAP: Final[int] = 10  # pixels between the arrival and a carry-on
 BADGE_DROP: Final[int] = 34  # badge centre below the row's rule
 COUNTDOWN_ROOM: Final[int] = 84  # pixels kept for the countdown
@@ -150,10 +151,11 @@ def continuing_middle(canvas: Canvas, *, row: Row, top: int) -> int:
         onto=row.onto,
         px=BADGE_PX,
     )
+    room = CARRY_ROOM if row.then is not None else 0
     shown = canvas.fit(
         text=row.destination,
         face=HEADSIGN_FACE,
-        width=TEXT_RIGHT - MIDDLE_X,
+        width=TEXT_RIGHT - MIDDLE_X - room,
     )
     used = canvas.text(
         at=(MIDDLE_X, top + SECOND_DROP),

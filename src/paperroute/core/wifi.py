@@ -23,7 +23,7 @@ from paperroute.core.messages import (
 )
 from paperroute.core.panel_views import WifiSetupView
 from paperroute.core.state_model import State
-from paperroute.core.stop_view import DOT, clock_text
+from paperroute.core.stop_view import HINT_DOT, clock_text
 
 SETUP_FOR: Final[timedelta] = timedelta(minutes=10)
 SETUP_SSID: Final[str] = 'paperroute-setup'
@@ -141,8 +141,8 @@ def setup_footer(*, minutes_left: int) -> str:
         The footer.
     """
     return (
-        f'New password each time{DOT}closes in {minutes_left} min'
-        f'{DOT}top press: cancel'
+        f'New password each time{HINT_DOT}closes in {minutes_left} min'
+        f'{HINT_DOT}Top: press to cancel'
     )
 
 

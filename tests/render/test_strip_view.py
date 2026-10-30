@@ -44,6 +44,9 @@ from paperroute.render.markers import badge_box
 from paperroute.render.stop_view import WIDEST_COUNT
 from paperroute.render.strip_view import (
     CARRY_GAP,
+    HINT_BOX,
+    HINT_FACE,
+    HINT_PAD,
     NAME_X,
     PANE_NAME_X,
     draw_strip_map_view,
@@ -649,8 +652,8 @@ def test_fullest_panels_end_on_screen_and_above_the_hint() -> None:
         for banner, rows, hint in (
             (None, 5, None),
             ('No live data yet', 4, None),
-            (None, 4, 'Press: set TO'),
-            ('No live data yet', 3, 'Press: set TO'),
+            (None, 4, HINTS['TO']),
+            ('No live data yet', 3, HINTS['TO']),
         )
     ]
     for frame in full:
@@ -677,3 +680,10 @@ def test_the_picked_panel_row_is_inverted_in_ink_and_paper() -> None:
     others = np.ones(chosen.shape, dtype=bool)
     others[box] = False
     assert np.array_equal(chosen[others], plain[others])
+
+
+def test_strip_hints_fit_the_pill() -> None:
+    """Every Strip hint fits its pill without a cut."""
+    room = HINT_BOX[2] - HINT_BOX[0] - 2 * HINT_PAD
+    for hint in (*HINTS.values(), OPEN_HINT):
+        assert text_width(text=hint, face=HINT_FACE) <= room, hint

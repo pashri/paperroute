@@ -11,7 +11,7 @@ from paperroute.core.model import Departure
 from paperroute.core.patterns import TripPattern
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.reach import Reach, RowKind, StripKey
-from paperroute.core.stop_view import DOT, PinTag, Row, StopView
+from paperroute.core.stop_view import HINT_DOT, PinTag, Row, StopView
 
 STRIP_TOP: Final[int] = 44
 ROW_H: Final[int] = 36
@@ -35,10 +35,10 @@ NO_STRIP: Final[str] = 'No strip for this stop'
 NO_LEG_STOPS: Final[str] = 'No stops in the timetable for this leg'
 NEEDS_UPDATE: Final[str] = 'Strip needs a timetable update'
 HINTS: Final[dict[str, str]] = {
-    'TO': f'Press: set TO{DOT}press FROM: all departures',
-    'FROM': f'Press: set FROM{DOT}top press: back',
+    'TO': f'Bottom: press to set To{HINT_DOT}ALL: any stop',
+    'FROM': f'Bottom: press to set From{HINT_DOT}Top: press to go back',
 }
-OPEN_HINT: Final[str] = f'Press: open{DOT}press FROM: all departures'
+OPEN_HINT: Final[str] = f'Bottom: press to open{HINT_DOT}ALL: any stop'
 OPEN_TAG: Final[str] = 'OPEN'  # a closed fold under the TO cursor
 PICK_FROM: Final[str] = 'FROM'
 PICK_TO: Final[str] = 'TO'

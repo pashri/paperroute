@@ -403,7 +403,8 @@ def test_presses_that_pick_nothing_change_nothing() -> None:
 def test_to_view_has_hint() -> None:
     to_view = build_chooser_view(chooser=at_to_column())
     assert (to_view.title, to_view.hint) == (
-        'Choose a destination', 'Press: set TO · press FROM: all departures',
+        'Choose a destination',
+        'Bottom: press to set To \u2022 ALL: any stop',
     )
     assert to_view.trail == 'Train · T1 · Penrith'
     station_view = build_chooser_view(chooser=at_stations())

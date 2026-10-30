@@ -17,7 +17,7 @@ from paperroute.core.panel_views import (
     PhoneView,
     WifiSetupView,
 )
-from paperroute.core.stop_view import DOT
+from paperroute.core.stop_view import HINT_DOT
 from paperroute.core.wifi import (
     SCANNING_LINE,
     SETUP_STEPS,
@@ -57,11 +57,14 @@ NAME_FACE: Final[Face] = Face(weight=700, px=28)
 QUESTION_FACE: Final[Face] = Face(weight=700, px=30)
 BUTTON_FACE: Final[Face] = Face(weight=700, px=24)
 LOCAL_NAME: Final[str] = 'paperroute.local'
+BACK_LINE: Final[str] = 'Top: press to go back'
 MENU_FOOTER: Final[str] = (
-    f'Bottom: turn to choose, press to open{DOT}top press: back'
+    f'Bottom: turn to choose{HINT_DOT}press to open{HINT_DOT}{BACK_LINE}'
 )
-DEVICE_FOOTER: Final[str] = f'Full details on {LOCAL_NAME}{DOT}top press: back'
-PHONE_FOOTER: Final[str] = 'Top press: back'
+DEVICE_FOOTER: Final[str] = (
+    f'Full details on {LOCAL_NAME}{HINT_DOT}{BACK_LINE}'
+)
+PHONE_FOOTER: Final[str] = BACK_LINE
 FAILED_FOOTER: Final[str] = PHONE_FOOTER
 CONFIRM_FOOTER: Final[str] = TIMEOUT_LINE
 TOP_BOX: Final[tuple[int, int, int, int]] = (32, 262, 768, 318)

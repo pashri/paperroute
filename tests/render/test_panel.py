@@ -19,21 +19,36 @@ from paperroute.core.panel_views import (
     WifiSetupView,
     confirm_view,
 )
-from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH, text_width
+from paperroute.core.stop_view import DOT, HINT_DOT
+from paperroute.core.wifi import setup_footer
+from paperroute.render.canvas import (
+    HEIGHT,
+    INK,
+    PAPER,
+    WIDTH,
+    Canvas,
+    Face,
+    text_width,
+)
 from paperroute.render.chrome import HEADER
 from paperroute.render.panel import (
     BODY_FACE,
     BUTTON_FACE,
     CUE_H,
+    DEVICE_FOOTER,
+    FOOTER_FACE,
     FOOTER_Y,
     MARGIN,
+    MENU_FOOTER,
     MENU_TOP,
+    PHONE_FOOTER,
     QR_PX,
     ROW_H,
     TOP_BOX,
     draw_panel_view,
 )
 from paperroute.render.qr import qr_image
+from paperroute.render.strip_view import HINT_FACE
 from tests.core.factories import START
 
 WIFI_QR = 'WIFI:T:WPA;S:paperroute-setup;P:7Q4K9W2M;;'
@@ -316,3 +331,51 @@ def test_wifi_failed_footer_has_no_hotspot_countdown() -> None:
         for minutes in (10, 3)
     ]
     assert (frames[0] == frames[1]).all()
+
+
+def test_footers_fit_the_panel() -> None:
+    """Each footer reads as ruled, and fits the panel without a cut."""
+    footers = (
+        MENU_FOOTER, DEVICE_FOOTER, PHONE_FOOTER,
+        setup_footer(minutes_left=10),
+    )
+    assert footers == (
+        'Bottom: turn to choose \u2022 press to open \u2022 '
+        'Top: press to go back',
+        'Full details on paperroute.local \u2022 Top: press to go back',
+        'Top: press to go back',
+        'New password each time \u2022 closes in 10 min \u2022 '
+        'Top: press to cancel',
+    )
+    for footer in footers:
+        width = text_width(text=footer, face=FOOTER_FACE)
+        assert width <= WIDTH - 2 * MARGIN
+
+
+def separator_ink(*, mark: str, face: Face) -> int:
+    """
+    Count the ink a mark leaves drawn alone.
+
+    Parameters
+    ----------
+    mark : str
+        The mark.
+    face : Face
+        Font.
+
+    Returns
+    -------
+    int
+        Inked pixels.
+    """
+    canvas = Canvas()
+    canvas.text(at=(100, 100), text=mark, face=face, grey=INK)
+    return int((canvas.grey() == INK).sum())
+
+
+@pytest.mark.parametrize('face', [FOOTER_FACE, HINT_FACE])
+def test_hint_separator_is_heavier(face: Face) -> None:
+    """The hint bullet inks at least twice the middle dot."""
+    bullet = separator_ink(mark=HINT_DOT.strip(), face=face)
+    dot = separator_ink(mark=DOT.strip(), face=face)
+    assert bullet >= 2 * dot > 0

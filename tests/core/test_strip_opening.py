@@ -363,12 +363,12 @@ def test_to_cursor_on_a_fold_offers_to_open_it() -> None:
     assert isinstance(view, StripView)
     cursor = next(row for row in view.rows if row.cursor)
     assert (cursor.kind, cursor.tag) == (RowKind.FOLD, OPEN_TAG)
-    assert view.panel.hint == 'Press: open · press FROM: all departures'
+    assert view.panel.hint == 'Bottom: press to open \u2022 ALL: any stop'
     state, _ = run(state=state, events=[PRESS])
     view = state.last_view
     assert isinstance(view, StripView)
     assert next(row for row in view.rows if row.cursor).tag == 'TO?'
-    assert view.panel.hint == 'Press: set TO · press FROM: all departures'
+    assert view.panel.hint == 'Bottom: press to set To \u2022 ALL: any stop'
 
 
 def strip_with_end_open(*, pins: tuple[Pin, ...]) -> State:

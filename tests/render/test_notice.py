@@ -1,8 +1,9 @@
 """Tests for the notice screen."""
 
 from paperroute.core.messages import NoticeView
-from paperroute.render.canvas import HEIGHT, INK
-from paperroute.render.notice import draw_notice_view
+from paperroute.core.rebuild import SETTINGS_HINT
+from paperroute.render.canvas import HEIGHT, INK, WIDTH, text_width
+from paperroute.render.notice import DETAIL_FACE, draw_notice_view
 
 BORDER = 40
 
@@ -30,3 +31,10 @@ def test_notice_detail_line() -> None:
     assert not (plain[below] == INK).any()
     assert (detailed[below] == INK).any()
     assert (detailed[: HEIGHT // 2 + 20] == plain[: HEIGHT // 2 + 20]).all()
+
+
+def test_settings_hint_fits_the_notice() -> None:
+    """The rebuild screen's Settings hint fits inside the border."""
+    assert SETTINGS_HINT == 'Both knobs: hold to open Settings'
+    width = text_width(text=SETTINGS_HINT, face=DETAIL_FACE)
+    assert width <= WIDTH - 64

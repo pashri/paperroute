@@ -373,11 +373,11 @@ def test_building_screen_details() -> None:
         for state in (running, offline, no_key, failed, idle)
     ]
     assert details == [
-        'Hold both knobs for Settings',
+        'Both knobs: hold to open Settings',
         'Waiting for Wi-Fi \u00b7 hold both knobs, then Wi-Fi',
         'Waiting for the API key \u00b7 set it on your phone',
         'Last try failed \u00b7 trying again at 9:05',
-        'Hold both knobs for Settings',
+        'Both knobs: hold to open Settings',
     ]
     assert building_view(state=idle).title == 'Building the timetable'
 

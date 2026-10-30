@@ -16,7 +16,7 @@ from paperroute.core.state_model import Rebuild, State
 from paperroute.core.stop_view import DOT, clock_text
 
 BUILDING: Final[str] = 'Building the timetable'
-SETTINGS_HINT: Final[str] = 'Hold both knobs for Settings'
+SETTINGS_HINT: Final[str] = 'Both knobs: hold to open Settings'
 WAITING_WIFI: Final[str] = (
     f'Waiting for Wi-Fi{DOT}hold both knobs, then Wi-Fi'
 )

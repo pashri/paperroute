@@ -2154,7 +2154,7 @@ async def test_app_runs_with_no_timetable(tmp_path: Path) -> None:
     building = draw_notice_view(
         view=NoticeView(
             title='Building the timetable',
-            detail='Hold both knobs for Settings',
+            detail='Both knobs: hold to open Settings',
         ),
     )
     display = ScriptedDisplay(

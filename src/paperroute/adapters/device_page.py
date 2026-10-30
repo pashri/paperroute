@@ -20,26 +20,25 @@ from paperroute.core.panel_screens import (
     local_time,
 )
 from paperroute.core.panel_screens import strength as dbm_strength
+from paperroute.core.panel_views import CANCEL_LINE, CONFIRM_COPY
 from paperroute.core.quota import DAILY_LIMIT
-from paperroute.core.stop_view import DOT, clock_text
+from paperroute.core.stop_view import DOT, HINT_DOT, clock_text
 
 POWER_STATUS: Final[dict[PowerAction, str]] = {
     PowerAction.OFF: 'Shutting down...',
     PowerAction.RESTART: 'Restarting...',
 }
+# The asks name the same buttons the panel's confirm screen draws.
 ASKED: Final[dict[str, str]] = {
-    ConfirmAction.JOIN_WIFI.value: (
-        'Confirm on the device: bottom press to start Wi-Fi setup, top '
-        'press to cancel.'
-    ),
-    ConfirmAction.RESET_SETTINGS.value: (
-        'Confirm on the device: bottom press to reset, top press to '
-        'cancel.'
-    ),
-    ConfirmAction.ERASE.value: (
-        'Confirm on the device: bottom press to erase, top press to '
-        'cancel.'
-    ),
+    action.value: (
+        'Confirm on the device. Bottom: press to '
+        f'{CONFIRM_COPY[action][2]}{HINT_DOT}{CANCEL_LINE}'
+    )
+    for action in (
+        ConfirmAction.JOIN_WIFI,
+        ConfirmAction.RESET_SETTINGS,
+        ConfirmAction.ERASE,
+    )
 }
 RESETS: Final[dict[str, ConfirmAction]] = {
     'settings': ConfirmAction.RESET_SETTINGS,

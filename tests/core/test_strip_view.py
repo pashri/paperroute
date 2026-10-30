@@ -15,13 +15,15 @@ from paperroute.core.reach import (
     build_reach,
 )
 from paperroute.core.reach_layout import LineExit
-from paperroute.core.stop_view import NOT_PINNED
+from paperroute.core.stop_view import DOT, NOT_PINNED
 from paperroute.core.strip_badges import HALF_WIDE
 from paperroute.core.strip_model import (
+    HINTS,
     INDENT,
     LOADING,
     NEEDS_UPDATE,
     NO_STRIP,
+    OPEN_HINT,
     PANE_TRACK_X,
     ROW_H,
     STRIP_ROWS,
@@ -39,6 +41,7 @@ from paperroute.core.strip_view import (
     home_of,
     line_reach,
 )
+from paperroute.core.wifi import setup_footer
 from tests.core.factories import (
     EAST,
     POINTS,
@@ -400,7 +403,7 @@ def test_hint_leaves_four_panel_rows() -> None:
     panel = build_strip_view(
         inputs=replace(inputs, picking='TO', cursor=7),
     ).panel
-    assert panel.hint == 'Press: set TO · press FROM: all departures'
+    assert panel.hint == 'Bottom: press to set To \u2022 ALL: any stop'
     assert len(panel.rows) == 4
 
 
@@ -712,7 +715,9 @@ def test_line_reach_has_no_origin_and_from_cursor_tag() -> None:
     assert [row.tag for row in view.rows] == ['', 'FROM?', '']
     assert [row.cursor for row in view.rows] == [False, True, False]
     assert view.panel.rows == ()
-    assert view.panel.hint == 'Press: set FROM · top press: back'
+    assert view.panel.hint == (
+        'Bottom: press to set From \u2022 Top: press to go back'
+    )
     assert view.empty is None
 
 
@@ -920,3 +925,19 @@ def test_onward_times_only_where_the_first_train_calls() -> None:
     )
     found = times(inputs=replace(inputs, patterns=patterns))
     assert (found['W1'], found['W2']) == ('8:09', '')
+
+
+def test_hints_name_the_knob() -> None:
+    """Every Strip and Wi-Fi hint names its knob, split by a bullet."""
+    footer = setup_footer(minutes_left=10)
+    assert HINTS == {
+        'TO': 'Bottom: press to set To \u2022 ALL: any stop',
+        'FROM': 'Bottom: press to set From \u2022 Top: press to go back',
+    }
+    assert OPEN_HINT == 'Bottom: press to open \u2022 ALL: any stop'
+    assert footer == (
+        'New password each time \u2022 closes in 10 min \u2022 '
+        'Top: press to cancel'
+    )
+    for hint in (*HINTS.values(), OPEN_HINT, footer):
+        assert DOT not in hint

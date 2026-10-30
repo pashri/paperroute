@@ -14,6 +14,7 @@ from paperroute.core.chooser_view import (
     ROW_HEIGHTS,
     ColumnView,
 )
+from paperroute.core.strip_model import HINTS
 from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH
 from paperroute.render.chooser import COLUMN_WIDTHS, draw_chooser_view
 from tests.render.factories import column, groups, route_choice, view_of
@@ -366,7 +367,7 @@ def test_station_then_to_columns_draw() -> None:
 
 def test_to_hint_drawn() -> None:
     """A hint shows as paper text in the header, and only when given."""
-    hint = 'Press: set TO'
+    hint = HINTS['TO']
     box = (200, 4, 500, CHOOSER_TOP - 4)
     plain = station_frame(items=station_pair())
     hinted = station_frame(items=station_pair(), hint=hint)

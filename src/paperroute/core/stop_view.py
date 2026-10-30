@@ -18,6 +18,7 @@ SIDEBAR_ROWS: Final[int] = 5
 HORIZON: Final[timedelta] = timedelta(hours=3)
 HORIZON_TEXT: Final[str] = f'the next {HORIZON // timedelta(hours=1)} hours'
 DOT: Final[str] = ' \u00b7 '
+HINT_DOT: Final[str] = ' \u2022 '  # between the parts of a knob hint
 
 
 class Pill(StrEnum):

@@ -72,7 +72,7 @@ STRIP_EMPTY_FACE: Final[Face] = Face(weight=700, px=18)
 STRIP_EMPTY_Y: Final[int] = 250
 HINT_BOX: Final[tuple[int, int, int, int]] = (456, 420, 786, 464)
 HINT_FACE: Final[Face] = Face(weight=700, px=14)
-HINT_PAD: Final[int] = 6  # pixels each side of the hint text
+HINT_PAD: Final[int] = 4  # pixels each side of the hint text
 
 
 def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:

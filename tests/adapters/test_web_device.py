@@ -2,6 +2,7 @@
 
 from collections.abc import AsyncIterator
 from dataclasses import replace
+from datetime import datetime
 from http import HTTPStatus
 from importlib.resources import files
 from pathlib import Path
@@ -10,13 +11,16 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.device_page import ASKED as DEVICE_ASKED
 from paperroute.adapters.device_page import ago_text
 from paperroute.adapters.web_device import DevicePages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.device_model import (
+    Confirm,
     ConfirmAction,
     DeviceFacts,
     DeviceStatus,
+    Origin,
     WifiStatus,
 )
 from paperroute.core.feeds import FEEDS, POSITION_FEEDS
@@ -27,7 +31,8 @@ from paperroute.core.messages import (
     PowerAction,
     PowerRequested,
 )
-from paperroute.core.model import Mode
+from paperroute.core.model import SYDNEY, Mode
+from paperroute.core.panel_views import confirm_view
 from tests.fakes import FakeKeys
 from tests.page_markup import parse_page
 
@@ -36,6 +41,7 @@ KEY = 'already-set-key-123'
 NOW = 1_761_043_500.0  # 21 Oct 2025 21:45 in Sydney
 TRAINS = POSITION_FEEDS[Mode.TRAIN][0]
 BUSES = FEEDS[Mode.BUS]
+ASKED_AT = datetime(2025, 10, 21, 21, 45, tzinfo=SYDNEY)
 FACTS = DeviceFacts(
     wifi=WifiStatus(managed=True, ssid='Home', dbm=-52, ip='192.168.1.40'),
     clock_synced=True,
@@ -59,16 +65,16 @@ STATUS = DeviceStatus(
 )
 ASKED = {
     'join_wifi': (
-        'Confirm on the device: bottom press to start Wi-Fi setup, '
-        'top press to cancel.'
+        'Confirm on the device. Bottom: press to start \u2022 '
+        'Top: press to cancel'
     ),
     'reset_settings': (
-        'Confirm on the device: bottom press to reset, top press to '
-        'cancel.'
+        'Confirm on the device. Bottom: press to reset \u2022 '
+        'Top: press to cancel'
     ),
     'erase': (
-        'Confirm on the device: bottom press to erase, top press to '
-        'cancel.'
+        'Confirm on the device. Bottom: press to erase \u2022 '
+        'Top: press to cancel'
     ),
 }
 
@@ -325,7 +331,20 @@ async def test_reset_unknown_kind_400(
 async def test_asked_ignores_unknown_value(client: Client) -> None:
     """Only the three asks are drawn."""
     text = await (await client.get('/device?asked=restart')).text()
-    assert 'Confirm on the device:' not in text
+    assert 'Confirm on the device. Bottom:' not in text
+
+
+@pytest.mark.parametrize('action', [
+    ConfirmAction.JOIN_WIFI,
+    ConfirmAction.RESET_SETTINGS,
+    ConfirmAction.ERASE,
+])
+def test_device_asks_name_the_confirm_buttons(action: ConfirmAction) -> None:
+    """The phone's ask names the buttons the panel draws."""
+    confirm = Confirm(action=action, origin=Origin.PHONE, asked_at=ASKED_AT)
+    view = confirm_view(confirm=confirm)
+    assert view.confirm in DEVICE_ASKED[action.value]
+    assert view.cancel in DEVICE_ASKED[action.value]
 
 
 async def test_key_post_saves_and_posts(

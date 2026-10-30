@@ -160,11 +160,12 @@ def clock_value(*, facts: DeviceFacts | None) -> str:
     Returns
     -------
     str
-        `synced`, `not synced`, or a dash when unknown.
+        `Synced`, `Not synced`, or `Unknown` when there is no probe or it
+        couldn't tell.
     """
     if facts is None or facts.clock_synced is None:
-        return UNKNOWN
-    return 'synced' if facts.clock_synced else 'not synced'
+        return 'Unknown'
+    return 'Synced' if facts.clock_synced else 'Not synced'
 
 
 def timetable_text(*, status: DeviceStatus) -> str:

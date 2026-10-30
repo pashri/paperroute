@@ -8,7 +8,6 @@ from numpy.typing import NDArray
 
 from paperroute.core.device_model import WifiPhase
 from paperroute.core.panel_views import (
-    CANCEL_LINE,
     MENU_VISIBLE,
     TIMEOUT_LINE,
     ConfirmView,
@@ -65,8 +64,8 @@ DEVICE_FOOTER: Final[str] = f'Full details on {LOCAL_NAME}{DOT}top press: back'
 PHONE_FOOTER: Final[str] = 'Top press: back'
 FAILED_FOOTER: Final[str] = PHONE_FOOTER
 CONFIRM_FOOTER: Final[str] = TIMEOUT_LINE
-CONFIRM_BOX: Final[tuple[int, int, int, int]] = (32, 290, 392, 354)
-CANCEL_BOX: Final[tuple[int, int, int, int]] = (420, 290, 760, 354)
+TOP_BOX: Final[tuple[int, int, int, int]] = (32, 262, 768, 318)
+BOTTOM_BOX: Final[tuple[int, int, int, int]] = (32, 336, 768, 392)
 BUTTON_EDGE: Final[int] = 3
 SETUP_TITLE: Final[str] = 'Join a Wi-Fi network'
 JOINING_DETAIL: Final[str] = 'This screen closes once it has joined.'
@@ -564,7 +563,10 @@ def button(
 
 def draw_confirm(*, view: ConfirmView) -> NDArray[np.uint8]:
     """
-    Draw a confirm: the question, its lines and the two knob buttons.
+    Draw a confirm: the question, its lines and two stacked knob buttons.
+
+    The cancel button sits over the confirm button, as the top knob sits
+    over the bottom one.
 
     Parameters
     ----------
@@ -582,18 +584,13 @@ def draw_confirm(*, view: ConfirmView) -> NDArray[np.uint8]:
     lines(
         canvas,
         texts=(view.question,),
-        top=140,
+        top=128,
         width=width,
         face=QUESTION_FACE,
     )
-    body = tuple(
-        line
-        for line in view.lines
-        if line not in (CANCEL_LINE, TIMEOUT_LINE)
-    )
-    lines(canvas, texts=body[:2], top=190, width=width)
-    button(canvas, box=CONFIRM_BOX, text=view.confirm, filled=True)
-    button(canvas, box=CANCEL_BOX, text=CANCEL_LINE, filled=False)
+    lines(canvas, texts=view.lines[:2], top=180, width=width)
+    button(canvas, box=TOP_BOX, text=view.cancel, filled=False)
+    button(canvas, box=BOTTOM_BOX, text=view.confirm, filled=True)
     footer(canvas, text=CONFIRM_FOOTER)
     return finish(canvas)
 

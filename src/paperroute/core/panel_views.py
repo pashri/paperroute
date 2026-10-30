@@ -13,18 +13,22 @@ from paperroute.core.map_view import MapView
 
 MENU_VISIBLE: Final[int] = 7
 PHONE_ASKED: Final[str] = 'Asked for from a phone on your Wi-Fi.'
-CANCEL_LINE: Final[str] = 'Top press: cancel'
+CONFIRM_TITLE: Final[str] = 'Settings'
+CANCEL_LINE: Final[str] = 'Top: press to cancel'
 TIMEOUT_LINE: Final[str] = 'Cancels by itself after 60 s'
-CONFIRM_COPY: Final[dict[ConfirmAction, tuple[str, str, str, str]]] = {
-    ConfirmAction.RESTART: ('Restart?', 'Restart paperroute?', '', 'restart'),
+CONFIRM_COPY: Final[dict[ConfirmAction, tuple[str, str, str]]] = {
+    ConfirmAction.RESTART: (
+        'Restart paperroute?',
+        'paperroute starts again. Your pins and settings stay.',
+        'restart',
+    ),
     ConfirmAction.SHUT_DOWN: (
-        'Shut down?',
         'Shut down paperroute?',
-        "The screen will say when it's safe to unplug.",
+        "paperroute switches off. The screen says when it's safe"
+        ' to unplug.',
         'shut down',
     ),
     ConfirmAction.RESET_SETTINGS: (
-        'Reset settings?',
         'Reset settings?',
         'Clears pins, settings, Wi-Fi and the key.'
         ' The timetable and map stay.',
@@ -32,12 +36,11 @@ CONFIRM_COPY: Final[dict[ConfirmAction, tuple[str, str, str, str]]] = {
     ),
     ConfirmAction.ERASE: (
         'Erase everything?',
-        'Erase everything?',
-        'Also deletes the timetable and map.',
+        'Clears pins, settings, Wi-Fi, the key and the timetable.'
+        ' The map stays.',
         'erase',
     ),
     ConfirmAction.JOIN_WIFI: (
-        'Join another network?',
         'Start Wi-Fi setup?',
         'paperroute leaves its Wi-Fi while you set up the new one.',
         'start',
@@ -172,7 +175,9 @@ class ConfirmView:
     question : str
         The question, in large type.
     lines : tuple[str, ...]
-        Explanation under the question.
+        Explanation under the question: who asked, then what happens.
+    cancel : str
+        The cancel button's label.
     confirm : str
         The confirm button's label.
     """
@@ -180,6 +185,7 @@ class ConfirmView:
     title: str
     question: str
     lines: tuple[str, ...]
+    cancel: str
     confirm: str
 
 
@@ -218,17 +224,17 @@ def confirm_view(*, confirm: Confirm) -> ConfirmView:
     Returns
     -------
     ConfirmView
-        The title, question, the lines under it and the button label;
+        The title, question, the lines under it and the button labels;
         a phone's ask says so first.
     """
-    title, question, note, verb = CONFIRM_COPY[confirm.action]
+    question, happens, verb = CONFIRM_COPY[confirm.action]
     asked = (PHONE_ASKED,) if confirm.origin is Origin.PHONE else ()
-    noted = (note,) if note else ()
     return ConfirmView(
-        title=title,
+        title=CONFIRM_TITLE,
         question=question,
-        lines=(*asked, *noted, CANCEL_LINE, TIMEOUT_LINE),
-        confirm=f'Bottom press: {verb}',
+        lines=(*asked, happens),
+        cancel=CANCEL_LINE,
+        confirm=f'Bottom: press to {verb}',
     )
 
 

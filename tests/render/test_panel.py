@@ -4,27 +4,37 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.core.device_model import WifiPhase
+from paperroute.core.device_model import (
+    Confirm,
+    ConfirmAction,
+    Origin,
+    WifiPhase,
+)
 from paperroute.core.panel_views import (
     MENU_VISIBLE,
-    ConfirmView,
     DeviceView,
     InfoRow,
     MenuView,
     PhoneView,
     WifiSetupView,
+    confirm_view,
 )
-from paperroute.render.canvas import HEIGHT, INK, WIDTH
+from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH, text_width
 from paperroute.render.chrome import HEADER
 from paperroute.render.panel import (
+    BODY_FACE,
+    BUTTON_FACE,
     CUE_H,
     FOOTER_Y,
+    MARGIN,
     MENU_TOP,
     QR_PX,
     ROW_H,
+    TOP_BOX,
     draw_panel_view,
 )
 from paperroute.render.qr import qr_image
+from tests.core.factories import START
 
 WIFI_QR = 'WIFI:T:WPA;S:paperroute-setup;P:7Q4K9W2M;;'
 ROWS = (
@@ -104,19 +114,49 @@ def test_menu_scrolls_to_last_row() -> None:
     assert (row_band(frame=top, slot=MENU_VISIBLE - 1) == INK).mean() > 0.5
 
 
-def test_confirm_frame() -> None:
-    """The confirm draws its header, text and buttons below the header."""
-    frame = draw_panel_view(
-        view=ConfirmView(
-            title='Shut down?',
-            question='Shut down paperroute?',
-            lines=('Asked for from a phone on your Wi-Fi.',),
-            confirm='Bottom press: shut down',
-        ),
+def shut_down_frame() -> NDArray[np.uint8]:
+    """
+    Draw a phone's Shut down confirm.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The frame.
+    """
+    confirm = Confirm(
+        action=ConfirmAction.SHUT_DOWN, origin=Origin.PHONE, asked_at=START,
     )
+    return draw_panel_view(view=confirm_view(confirm=confirm))
+
+
+def test_confirm_stacks_cancel_over_confirm() -> None:
+    """Cancel is outlined over a filled confirm, as the knobs stack."""
+    frame = shut_down_frame()
     assert (frame[:HEADER] == INK).mean() > 0.8
-    assert (frame[HEADER + 40:HEIGHT // 2] == INK).any()
-    assert (frame[280:370] == INK).mean() > 0.1
+    assert (frame[270:310, 40:760] == PAPER).mean() > 0.8
+    assert (frame[262:265, 40:760] == INK).all()
+    assert (frame[340:388, 40:760] == INK).mean() > 0.8
+    assert (frame[100:135] == INK).any()
+
+
+def test_phone_confirm_lines_clear_the_buttons() -> None:
+    """Both body lines sit above the top button."""
+    frame = shut_down_frame()
+    assert (frame[160:225] == INK).any()
+    assert (frame[228:258, MARGIN:WIDTH - MARGIN] == PAPER).all()
+
+
+@pytest.mark.parametrize('action', list(ConfirmAction))
+def test_every_confirm_fits(action: ConfirmAction) -> None:
+    """Every line and label fits its room without a cut."""
+    view = confirm_view(
+        confirm=Confirm(action=action, origin=Origin.PHONE, asked_at=START),
+    )
+    for line in view.lines:
+        assert text_width(text=line, face=BODY_FACE) <= WIDTH - 2 * MARGIN
+    left, _, right, _ = TOP_BOX
+    for label in (view.cancel, view.confirm):
+        assert text_width(text=label, face=BUTTON_FACE) <= right - left - 16
 
 
 def test_device_frame() -> None:

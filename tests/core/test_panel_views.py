@@ -33,15 +33,18 @@ from tests.fakes import device_facts
 def test_confirm_copy() -> None:
     """Every confirm says exactly what was agreed."""
     assert CONFIRM_COPY == {
-        ConfirmAction.RESTART: ('Restart?', 'Restart paperroute?', '', 'restart'),
+        ConfirmAction.RESTART: (
+            'Restart paperroute?',
+            'paperroute starts again. Your pins and settings stay.',
+            'restart',
+        ),
         ConfirmAction.SHUT_DOWN: (
-            'Shut down?',
             'Shut down paperroute?',
-            "The screen will say when it's safe to unplug.",
+            "paperroute switches off. The screen says when it's safe"
+            ' to unplug.',
             'shut down',
         ),
         ConfirmAction.RESET_SETTINGS: (
-            'Reset settings?',
             'Reset settings?',
             'Clears pins, settings, Wi-Fi and the key.'
             ' The timetable and map stay.',
@@ -49,12 +52,11 @@ def test_confirm_copy() -> None:
         ),
         ConfirmAction.ERASE: (
             'Erase everything?',
-            'Erase everything?',
-            'Also deletes the timetable and map.',
+            'Clears pins, settings, Wi-Fi, the key and the timetable.'
+            ' The map stays.',
             'erase',
         ),
         ConfirmAction.JOIN_WIFI: (
-            'Join another network?',
             'Start Wi-Fi setup?',
             'paperroute leaves its Wi-Fi while you set up the new one.',
             'start',
@@ -63,25 +65,24 @@ def test_confirm_copy() -> None:
 
 
 def test_confirm_view_lines() -> None:
-    """A phone's ask says so; a panel restart has no note."""
+    """A phone's ask says so; every confirm says what happens."""
     phone = Confirm(
         action=ConfirmAction.ERASE, origin=Origin.PHONE, asked_at=START,
     )
     assert confirm_view(confirm=phone) == ConfirmView(
-        title='Erase everything?',
+        title='Settings',
         question='Erase everything?',
         lines=(
             'Asked for from a phone on your Wi-Fi.',
-            'Also deletes the timetable and map.',
-            'Top press: cancel',
-            'Cancels by itself after 60 s',
+            'Clears pins, settings, Wi-Fi, the key and the timetable.'
+            ' The map stays.',
         ),
-        confirm='Bottom press: erase',
+        cancel='Top: press to cancel',
+        confirm='Bottom: press to erase',
     )
     panel = replace(phone, action=ConfirmAction.RESTART, origin=Origin.PANEL)
     assert confirm_view(confirm=panel).lines == (
-        'Top press: cancel',
-        'Cancels by itself after 60 s',
+        'paperroute starts again. Your pins and settings stay.',
     )
 
 

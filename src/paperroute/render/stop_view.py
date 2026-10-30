@@ -36,9 +36,11 @@ VEHICLE: Final[dict[Mode, str]] = {
     Mode.REGIONAL: 'service', Mode.OTHER: 'service'}
 LIST_LEFT: Final[int] = 456
 LIST_WIDTH: Final[int] = 140
-LIST_PAIR_ROOM: Final[int] = 92  # clear of a '99 min' countdown
+LIST_PAIR_ROOM: Final[int] = 92  # clear of a '100 min' at LIST_LEAVE_RIGHT
+LIST_LEAVE_RIGHT: Final[int] = 688
+WIDEST_COUNT: Final[str] = '100 min'  # widest live count, Ruling 2
 FASTER_LEFT: Final[int] = 712
-PILL_LEFT: Final[int] = 600
+PILL_LEFT: Final[int] = 596
 TAGGED_WIDTH: Final[int] = FASTER_LEFT - LIST_LEFT - 16
 BOARD_BADGE_X: Final[int] = 96
 BOARD_RIGHT: Final[int] = PILL_LEFT - 20
@@ -386,7 +388,7 @@ def list_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
         cancelled_pill(canvas, row=row, y=y, k=k)
     else:
         canvas.text(
-            at=(640, y + k.y(30)), text=leaves(row=row),
+            at=(LIST_LEAVE_RIGHT, y + k.y(30)), text=leaves(row=row),
             face=k.face(weight=800, px=28), grey=INK, anchor='rs')
         canvas.text(
             at=(786, y + k.y(24)), text=row.arrives_at,
@@ -549,7 +551,8 @@ def hero_split(canvas: Canvas, *, row: Row, top: int) -> None:
     hero(canvas, row=row, top=top)
     canvas.rect(box=(SPLIT, top, SPLIT + 3, HEIGHT), grey=INK)
     canvas.text(
-        at=(640, top + 22), text='LEAVES', face=Face(weight=700, px=11),
+        at=(LIST_LEAVE_RIGHT, top + 22), text='LEAVES',
+        face=Face(weight=700, px=11),
         grey=INK, anchor='rs')
     canvas.text(
         at=(786, top + 22), text='ARRIVES',

@@ -67,7 +67,7 @@ class ChainHero:
     Attributes
     ----------
     countdown : str
-        Minutes to the first ride, 'now', or its clock time when far.
+        Minutes to the first ride, or 'now'.
     leaves_at : str
         The first ride's departure time.
     lines : tuple[HeroLine, ...]

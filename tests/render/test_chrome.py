@@ -263,8 +263,8 @@ def test_view_header_passes_picking() -> None:
     assert plain.fitted == ['Town Hall', 'Parramatta']
 
 
-def test_countdown_slot_follows_the_far_flag() -> None:
-    """The slot is empty only for a row marked far, whatever its text."""
+def test_countdown_slot_shows_only_live_counts() -> None:
+    """A live row fills the slot at any distance; a timetable row doesn't."""
     near = Row(
         route='T1', mode=Mode.TRAIN, platform='3', destination='Emu Plains',
         countdown='9', leaves_at='8:09', arrives_at='8:45', ride_minutes=36,
@@ -272,7 +272,8 @@ def test_countdown_slot_follows_the_far_flag() -> None:
     )
     assert countdown_slot(row=near) == '9 min'
     assert countdown_slot(row=replace(near, countdown='now')) == 'now'
-    assert countdown_slot(row=replace(near, countdown='9:51', far=True)) == ''
+    assert countdown_slot(row=replace(near, countdown='130')) == '130 min'
+    assert countdown_slot(row=replace(near, live=False)) == ''
 
 
 def test_leaves_names_its_minutes() -> None:

@@ -55,6 +55,7 @@ SIDEBAR_LEFT: Final[int] = 520
 RULE_WIDTH: Final[int] = 3
 SIDEBAR_TEXT: Final[int] = 538
 SIDEBAR_RIGHT: Final[int] = 784
+SIDEBAR_PAIR_ROOM: Final[int] = 109  # clear of a '100 min' countdown
 EMPTY_FACE: Final[Face] = Face(weight=700, px=22)
 EMPTY_FACES: Final[tuple[Face, ...]] = (
     EMPTY_FACE,
@@ -406,6 +407,7 @@ def sidebar_row(canvas: Canvas, *, row: Row, y: int) -> None:
         route=row.route,
         onto=row.onto,
         px=BADGE_PX,
+        room=SIDEBAR_PAIR_ROOM,
     )
     row_time(canvas, row=row, y=y)
     canvas.text(

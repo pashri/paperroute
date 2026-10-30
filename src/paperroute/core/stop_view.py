@@ -15,7 +15,6 @@ ROWS_UNDER_BANNER: Final[int] = 7
 LARGE_VISIBLE_ROWS: Final[int] = 6
 LARGE_ROWS_UNDER_BANNER: Final[int] = 5
 SIDEBAR_ROWS: Final[int] = 5
-FAR_MINUTES: Final[int] = 100  # from here a countdown shows the clock time
 HORIZON: Final[timedelta] = timedelta(hours=3)
 HORIZON_TEXT: Final[str] = f'the next {HORIZON // timedelta(hours=1)} hours'
 DOT: Final[str] = ' \u00b7 '
@@ -33,8 +32,8 @@ class Row:
     """
     One departure as shown.
 
-    `far` when its countdown is a clock time; `stops` counts the stations
-    stopped at up to the Destination, None without one.
+    `stops` counts the stations stopped at up to the Destination, None
+    without one.
     """
 
     route: str
@@ -48,7 +47,6 @@ class Row:
     live: bool
     pill: Pill | None
     then: CarryOn | None = None
-    far: bool = False
     onto: str | None = None
     stops: int | None = None
 
@@ -266,28 +264,13 @@ def clock_text(*, moment: datetime) -> str:
     return f'{local.hour}:{local.minute:02d}'
 
 
-def is_far(*, departs: datetime, now: datetime) -> bool:
-    """
-    Say whether a departure counts down as a clock time.
-
-    Parameters
-    ----------
-    departs : datetime
-        Departure time.
-    now : datetime
-        Current time.
-
-    Returns
-    -------
-    bool
-        True when it is `FAR_MINUTES` or more away.
-    """
-    return departs.timestamp() - now.timestamp() >= FAR_MINUTES * 60
-
-
 def countdown(*, departs: datetime, now: datetime) -> str:
     """
-    Count down to a departure: minutes, 'now', or the clock time if 100+ away.
+    Count the clock minutes to a departure.
+
+    The count is the difference in whole epoch minutes, which match the
+    printed clock's minutes. Across a daylight-saving change it stays in
+    real minutes.
 
     Parameters
     ----------
@@ -299,11 +282,9 @@ def countdown(*, departs: datetime, now: datetime) -> str:
     Returns
     -------
     str
-        Countdown text.
+        'now' for this minute or earlier, else the number of minutes.
     """
-    if is_far(departs=departs, now=now):
-        return clock_text(moment=departs)
-    minutes = int((departs.timestamp() - now.timestamp()) // 60)
+    minutes = int(departs.timestamp() // 60) - int(now.timestamp() // 60)
     return 'now' if minutes <= 0 else str(minutes)
 
 
@@ -342,7 +323,6 @@ def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
         live=item.live,
         pill=pill,
         then=dep.facts.then,
-        far=is_far(departs=item.departs, now=now),
         onto=onto.route if onto and onto.route != dep.route else None,
         stops=dep.stops,
     )

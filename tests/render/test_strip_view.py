@@ -34,6 +34,7 @@ from paperroute.core.strip_view import build_strip_view
 from paperroute.render.canvas import INK, PAPER, Canvas, Face
 from paperroute.render.chrome import BANNER, HEADER, badge, route_pair
 from paperroute.render.markers import badge_box
+from paperroute.render.stop_view import WIDEST_COUNT
 from paperroute.render.strip_view import (
     NAME_X,
     PANE_NAME_X,
@@ -185,16 +186,24 @@ def test_cancelled_panel_row_has_block() -> None:
     assert block.mean() < 128
 
 
-def test_far_departure_leaves_the_countdown_slot_empty() -> None:
-    """A departure 100+ minutes away doesn't repeat its time as a count."""
-    far = replace(panel_row(), countdown='9:51', leaves_at='9:51', far=True)
-    view = replace(VIEW, panel=replace(PANEL, rows=(far,)))
+def test_timetable_departure_leaves_the_countdown_slot_empty() -> None:
+    """A departure without live data doesn't repeat its time as a count."""
+    timetabled = replace(panel_row(), live=False)
+    view = replace(VIEW, panel=replace(PANEL, rows=(timetabled,)))
     slot = draw_strip_view(view=view)[PANEL_TOP + 20:PANEL_TOP + 48, 700:786]
     assert (slot == PAPER).all()
     near = draw_strip_view(view=replace(
         VIEW, panel=replace(PANEL, rows=(panel_row(),)),
     ))
     assert (near[PANEL_TOP + 20:PANEL_TOP + 48, 700:786] == INK).any()
+
+
+def test_live_departure_counts_down_past_100() -> None:
+    """A live departure 130 minutes away still fills the slot."""
+    later = replace(panel_row(), countdown='130')
+    view = replace(VIEW, panel=replace(PANEL, rows=(later,)))
+    slot = draw_strip_view(view=view)[PANEL_TOP + 20:PANEL_TOP + 48, 690:786]
+    assert (slot == INK).any()
 
 
 def test_empty_strip_says_why() -> None:
@@ -493,6 +502,32 @@ def test_long_route_pair_leaves_the_countdown_clear() -> None:
     )
     rows = slice(PANEL_TOP + 30, PANEL_TOP + 43)
     assert (frame[rows, 701:int(784 - count) - 2] == PAPER).all()
+
+
+def test_strip_widest_count_clears_a_long_pair() -> None:
+    """A BMT to CCN pair and its headsign stop before a '100 min' count."""
+    long = replace(
+        panel_row(onto='CCN'),
+        route='BMT',
+        destination='Somewhere ' * 9,
+        countdown='100',
+    )
+    frames = [
+        draw_strip_view(view=replace(
+            VIEW, panel=replace(PANEL, rows=(shown,)),
+        ))
+        for shown in (long, replace(long, live=False))
+    ]
+    count = Canvas().length(
+        text=WIDEST_COUNT, face=Face(weight=700, px=22),
+    )
+    rows = slice(PANEL_TOP + 30, PANEL_TOP + 43)
+    text = np.flatnonzero((frames[1][rows, :] == INK).any(axis=0))
+    drawn = np.flatnonzero((frames[0][rows, :] != frames[1][rows, :]).any(
+        axis=0,
+    ))
+    assert drawn.min() >= int(784 - count) - 1
+    assert drawn.min() - text.max() > 2
 
 
 def test_panel_arrival_with_stops_leaves_the_countdown_clear() -> None:

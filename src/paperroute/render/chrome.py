@@ -745,7 +745,7 @@ def with_minutes(*, text: str) -> str:
     Returns
     -------
     str
-        '<n> min' for a count; 'now' and clock times as they are.
+        '<n> min' for a count; anything else as it is.
     """
     return f'{text} min' if text.isdigit() else text
 
@@ -780,11 +780,10 @@ def countdown_slot(*, row: Row) -> str:
     Returns
     -------
     str
-        The countdown ('<n> min' for a count of minutes), or '' for a far
-        departure, whose countdown is the clock time the row already
-        shows.
+        The countdown ('<n> min' for a count of minutes) when live, else
+        '', since the row already shows the clock time.
     """
-    return '' if row.far else with_minutes(text=row.countdown)
+    return with_minutes(text=row.countdown) if row.live else ''
 
 
 def cancelled(*, row: Row) -> str:

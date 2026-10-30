@@ -4,6 +4,9 @@ from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
+from hypothesis import given
+from hypothesis import strategies as st
+
 from paperroute.core.alert_model import AlertBanner
 from paperroute.core.banners import NO_WIFI
 from paperroute.core.live import LiveDeparture
@@ -24,6 +27,7 @@ from paperroute.core.stop_view import (
     arrival_line,
     build_stop_view,
     clock_text,
+    countdown,
     pin_tag,
     to_row,
 )
@@ -198,18 +202,78 @@ def test_view_countdown_zero_is_now() -> None:
     assert hero(result=view(departures=(live(minutes=0),))).countdown == 'now'
 
 
-def test_view_countdown_over_99_minutes_shows_clock() -> None:
-    """Countdowns of 100 minutes or more show the clock time instead."""
+def test_live_countdown_has_no_far_limit() -> None:
+    """A live departure counts down however far away it is."""
     result = view(departures=(live(minutes=130),))
-    assert hero(result=result).countdown == '10:10'
-    assert hero(result=result).far
+    assert hero(result=result).countdown == '130'
 
 
-def test_view_countdown_99_minutes_stays_minutes() -> None:
-    """99 minutes still counts down."""
-    result = view(departures=(live(minutes=99),))
-    assert hero(result=result).countdown == '99'
-    assert not hero(result=result).far
+def test_countdown_counts_clock_minutes() -> None:
+    """The count is the difference between the printed clock minutes."""
+    now = datetime(2026, 10, 6, 7, 45, 50, tzinfo=SYDNEY)
+    soon = datetime(2026, 10, 6, 7, 48, 10, tzinfo=SYDNEY)
+    later = datetime(2026, 10, 6, 8, 55, tzinfo=SYDNEY)
+    assert countdown(departs=soon, now=now) == '3'
+    assert countdown(departs=later, now=now) == '70'
+
+
+def test_countdown_now_for_this_minute_and_just_gone() -> None:
+    """This minute's departure, or last minute's, reads 'now'."""
+    this = datetime(2026, 10, 6, 7, 45, 59, tzinfo=SYDNEY)
+    gone = datetime(2026, 10, 6, 7, 44, 30, tzinfo=SYDNEY)
+    assert countdown(
+        departs=this,
+        now=datetime(2026, 10, 6, 7, 45, tzinfo=SYDNEY),
+    ) == 'now'
+    assert countdown(
+        departs=gone,
+        now=datetime(2026, 10, 6, 7, 45, 10, tzinfo=SYDNEY),
+    ) == 'now'
+
+
+def test_countdown_counts_real_minutes_across_dst() -> None:
+    """Across the clocks going forward the count stays in real minutes."""
+    now = datetime(2026, 10, 4, 1, 59, tzinfo=SYDNEY)
+    departs = datetime(2026, 10, 4, 3, 1, tzinfo=SYDNEY)
+    assert countdown(departs=departs, now=now) == '2'
+
+
+def clock_minutes(*, text: str) -> int:
+    """
+    Read a clock time as minutes of the day.
+
+    Parameters
+    ----------
+    text : str
+        For example '8:05'.
+
+    Returns
+    -------
+    int
+        Minutes since midnight.
+    """
+    hours, minutes = text.split(':')
+    return int(hours) * 60 + int(minutes)
+
+
+@given(
+    now=st.datetimes(
+        min_value=datetime(2026, 10, 5),
+        max_value=datetime(2026, 10, 7),
+        timezones=st.just(SYDNEY),
+    ),
+    ahead=st.integers(min_value=0, max_value=3 * 3600),
+)
+def test_countdown_agrees_with_printed_clocks(
+    now: datetime,
+    ahead: int,
+) -> None:
+    """The count plus the printed now is the printed departure."""
+    departs = now + timedelta(seconds=ahead)
+    text = countdown(departs=departs, now=now)
+    dep_min = clock_minutes(text=clock_text(moment=departs))
+    now_min = clock_minutes(text=clock_text(moment=now))
+    assert (dep_min - now_min) % 1440 == (0 if text == 'now' else int(text))
 
 
 def test_view_faster_and_cancelled_pills() -> None:

@@ -50,6 +50,7 @@ from paperroute.render.map_view import (
     PAIR_STEP,
     PAIRS_TOP,
     SIDEBAR_LEFT,
+    SIDEBAR_PAIR_ROOM,
     SIDEBAR_RIGHT,
     SIDEBAR_TEXT,
     draw_map_view,
@@ -67,6 +68,7 @@ from paperroute.render.markers import (
     overlaps,
     place,
 )
+from paperroute.render.stop_view import WIDEST_COUNT
 from paperroute.render.tile_codec import GREYS, pack_bits, pack_grey
 
 MPP = 8
@@ -585,10 +587,11 @@ def test_map_sidebar_omits_the_destination_line_without_one() -> None:
 
 
 def test_sidebar_minute_countdown_clears_a_wide_badge() -> None:
-    """'99 min' fits right of a five-letter route badge."""
+    """'100 min' fits right of a five-letter badge and of a pair's room."""
     route = badge(Canvas(), x=SIDEBAR_TEXT, y=0, route='SH100', px=BADGE_PX)
-    wide = text_width(text='99 min', face=COUNTDOWN_FACE)
+    wide = text_width(text=WIDEST_COUNT, face=COUNTDOWN_FACE)
     assert SIDEBAR_TEXT + route + 8 < SIDEBAR_RIGHT - wide
+    assert SIDEBAR_TEXT + SIDEBAR_PAIR_ROOM + 8 <= SIDEBAR_RIGHT - wide
 
 
 def test_carry_on_sidebar_row_stays_inside_and_clear_of_the_time() -> None:
@@ -603,6 +606,33 @@ def test_carry_on_sidebar_row_stays_inside_and_clear_of_the_time() -> None:
                 VIEW,
                 sidebar=(
                     row(route='BMT', onto=onto, countdown='99'),
+                ) * 5,
+            ),
+            base=paper(),
+        )
+        for onto in (None, 'CCN')
+    ]
+    ends = [
+        np.flatnonzero((frame[band] == INK).any(axis=0))[-1]
+        for frame in frames
+    ]
+    assert ends[1] > ends[0] + 30
+    assert ends[1] + 538 < start - 4
+    assert not np.any(frames[1][top - 14 : top + 13, 785:] == INK)
+
+
+def test_sidebar_widest_count_clears_a_long_pair() -> None:
+    """A BMT to CCN pair fits the sidebar and ends before '100 min'."""
+    top = ROW_TOPS[0]
+    count = Canvas().length(text=WIDEST_COUNT, face=Face(weight=800, px=34))
+    start = int(784 - count)
+    band = (slice(top - 8, top - 4), slice(538, start - 2))
+    frames = [
+        draw_map_view(
+            view=replace(
+                VIEW,
+                sidebar=(
+                    row(route='BMT', onto=onto, countdown='100'),
                 ) * 5,
             ),
             base=paper(),

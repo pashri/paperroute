@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 import numpy as np
+import pytest
 
 from paperroute.core.model import CarryOn, Mode
 from paperroute.core.stop_view import Pill
@@ -10,12 +11,19 @@ from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.chrome import BANNER, HEADER, badge, route_pair
 from paperroute.render.stop_view import (
     BOARD_RIGHT,
+    FASTER_LEFT,
     LARGE_ROW_H,
+    LIST_LEAVE_RIGHT,
     LIST_LEFT,
+    LIST_PAIR_ROOM,
     PILL_LEFT,
     ROW_H,
     SPLIT,
+    WIDEST_COUNT,
+    Scale,
     draw_stop_view,
+    finish,
+    list_row,
 )
 from tests.render.factories import STOP_VIEW as BASE
 from tests.render.factories import stop_row as row
@@ -145,8 +153,8 @@ def test_no_destination_frame_draws_rows_under_the_header() -> None:
     assert (frame[HEADER + 100:, 90:140] == PAPER).all()
 
 
-def test_no_destination_rows_draw_pills_and_every_countdown() -> None:
-    """Board rows carry CANCELLED and FASTER; timetable rows count too."""
+def test_no_destination_rows_draw_pills_and_live_countdowns() -> None:
+    """Board rows carry CANCELLED and FASTER; only live rows count down."""
     rows = (
         row(pill=Pill.CANCELLED),
         row(pill=Pill.FASTER),
@@ -158,17 +166,26 @@ def test_no_destination_rows_draw_pills_and_every_countdown() -> None:
     assert frame[top + 12:top + 36, 600:780].mean() < 128
     assert (frame[top + 50 + 18:top + 50 + 31, 602:672] == INK).any()
     assert (frame[top + 50 + 5:top + 50 + 38, 720:790] == INK).any()
-    assert (frame[top + 100 + 5:top + 100 + 38, 720:790] == INK).any()
+    assert (frame[top + 100 + 5:top + 100 + 38, 720:790] == PAPER).all()
 
 
-def test_no_destination_far_row_leaves_the_countdown_slot_empty() -> None:
-    """A board row 100+ minutes away shows its time once, at the left."""
-    far = replace(row(), countdown='9:51', leaves_at='9:51', far=True)
+def test_board_timetable_row_shows_its_time_once() -> None:
+    """A board row without live data shows its time once, at the left."""
+    timetabled = replace(row(), live=False)
     frame = draw_stop_view(
-        view=replace(BASE, destination=None, hero=None, rows=(far,)))
+        view=replace(BASE, destination=None, hero=None, rows=(timetabled,)))
     top = HEADER
     assert (frame[top + 5:top + 38, 720:790] == PAPER).all()
     assert (frame[top + 5:top + 38, 18:80] == INK).any()
+
+
+def test_board_live_row_counts_down_past_100() -> None:
+    """A live board row 130 minutes away still fills its countdown slot."""
+    later = replace(row(), countdown='130')
+    frame = draw_stop_view(
+        view=replace(BASE, destination=None, hero=None, rows=(later,)))
+    top = HEADER
+    assert (frame[top + 5:top + 38, 680:790] == INK).any()
 
 
 def test_a_real_tag_is_not_cut_under_a_short_headsign() -> None:
@@ -186,12 +203,48 @@ def test_a_real_tag_is_not_cut_under_a_short_headsign() -> None:
     assert ink.max() >= head + 8 + 22 + 4 + tag - 3
 
 
-def test_minute_countdowns_fit_beside_badges_and_pills() -> None:
-    """'99 min' clears a five-letter badge, the FASTER pill and headsigns."""
-    wide = text_width(text='99 min', face=Face(weight=800, px=28))
+def test_widest_count_clears_list_pairs_and_board_pills() -> None:
+    """'100 min' clears pairs, badges, the arrivals and the board pill."""
+    wide = text_width(text=WIDEST_COUNT, face=Face(weight=800, px=28))
+    large = text_width(text=WIDEST_COUNT, face=Face(weight=800, px=35))
+    arrive = text_width(text='88:88', face=Face(weight=800, px=25))
     route = badge(Canvas(), x=LIST_LEFT, y=14, route='SH100', px=14)
-    assert LIST_LEFT + route + 8 < 640 - wide
+    assert LIST_LEFT + LIST_PAIR_ROOM + 8 <= LIST_LEAVE_RIGHT - wide
+    assert LIST_LEFT + LIST_PAIR_ROOM + 8 <= LIST_LEAVE_RIGHT - large
+    assert LIST_LEAVE_RIGHT + 16 <= min(FASTER_LEFT, 786 - arrive)
+    assert LIST_LEFT + route + 8 < LIST_LEAVE_RIGHT - wide
     assert max(PILL_LEFT + 74, BOARD_RIGHT) + 8 < 786 - wide
+
+
+@pytest.mark.parametrize('large', [False, True], ids=['normal', 'large'])
+def test_list_widest_count_clears_a_long_pair(large: bool) -> None:
+    """A '100 min' count starts clear of a BMT to CCN pair, in real ink."""
+    canvas = Canvas()
+    y = 100
+    long = replace(
+        row(pill=Pill.FASTER, onto='CCN'),
+        route='BMT',
+        countdown='100',
+        arrives_at='23:58',
+    )
+    list_row(canvas, row=long, y=y, large=large)
+    frame = finish(canvas)
+    rows = slice(y, y + Scale(large=large).y(31))
+    ink = np.flatnonzero((frame[rows] == INK).any(axis=0))
+    room = LIST_LEFT + LIST_PAIR_ROOM
+    pair_right = ink[(ink >= LIST_LEFT) & (ink <= room)].max()
+    count = ink[(ink > room) & (ink < FASTER_LEFT)]
+    assert count.min() - pair_right >= 8
+    assert count.max() <= FASTER_LEFT - 16
+
+
+def test_live_hero_widest_count_fits_left_of_the_split() -> None:
+    """The hero's '100 min' ends before the rule beside it."""
+    widest = draw_stop_view(
+        view=replace(BASE, hero=replace(row(), countdown='100')),
+    )
+    top = HEADER
+    assert (widest[top + 60:top + 170, SPLIT - 12:SPLIT] == PAPER).all()
 
 
 def _ink_extent(*, frame: np.ndarray, band: tuple[slice, slice]) -> int:

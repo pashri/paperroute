@@ -20,6 +20,7 @@ from paperroute.render.canvas import (
 )
 from paperroute.render.chrome import (
     BANNER,
+    FROM_FLOOR,
     HEADER,
     TABS,
     badge,
@@ -30,6 +31,7 @@ from paperroute.render.chrome import (
     leaves,
     pin_tag,
     route_pair,
+    two_titles,
     view_header,
 )
 
@@ -237,6 +239,46 @@ def test_titles_stop_before_the_tag() -> None:
     limit = box_left - 8
     slack = text_width(text='W…', face=Face(weight=700, px=18))
     assert limit - 18 - slack <= ink_columns.max() <= limit - 18
+
+
+LONG_FROM: str = 'Bogalara Rd Opp Tabooba St'
+TITLE_FACE: Face = Face(weight=700, px=18)
+
+
+def test_two_titles_keep_the_to_whole() -> None:
+    """A From too long for its room is shortened; the To stays whole."""
+    canvas = Recording()
+    two_titles(
+        canvas, first=LONG_FROM, second='Parramatta Station', limit=400,
+    )
+    assert canvas.drawn == ['Hollis St', 'Parramatta Station']
+
+
+def test_two_titles_leave_a_fitting_from_alone() -> None:
+    """A From that fits its room keeps its full name."""
+    canvas = Recording()
+    two_titles(
+        canvas, first=LONG_FROM, second='Parramatta Station', limit=500,
+    )
+    assert canvas.drawn == [LONG_FROM, 'Parramatta Station']
+
+
+def test_long_to_leaves_the_from_its_floor() -> None:
+    """A To wider than the room still leaves the From its floor."""
+    canvas = Recording()
+    two_titles(
+        canvas,
+        first=LONG_FROM,
+        second="Westmead Children's Hospital, Hawkesbury Rd",
+        limit=400,
+    )
+    first, second = canvas.drawn
+    assert first.startswith('Boga')
+    assert first.endswith('\u2026')
+    assert text_width(text=first, face=TITLE_FACE) <= FROM_FLOOR
+    assert second.startswith('Westmead')
+    assert second.endswith('\u2026')
+    assert text_width(text=second, face=TITLE_FACE) > 240
 
 
 @dataclass(frozen=True)

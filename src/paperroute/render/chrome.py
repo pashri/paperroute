@@ -3,6 +3,7 @@
 import math
 from typing import Final, Protocol
 
+from paperroute.core.stop_names import short_name
 from paperroute.core.stop_view import DOT, PinTag, Row
 from paperroute.core.strip_model import PICK_FROM
 from paperroute.render.canvas import (
@@ -26,6 +27,8 @@ TAG_GAP: Final[int] = 8
 TABS: Final[tuple[str, ...]] = ('Stop', 'Map', 'Strip', 'Strip + map')
 ALERT_TABS: Final[tuple[str, ...]] = (*TABS, 'Alerts')
 ONE_TITLE_PICKS: Final[frozenset[str]] = frozenset({PICK_FROM})
+FROM_FLOOR: Final[int] = 80  # pixels the From keeps beside a long To
+TITLE_END: Final[int] = 18  # pixels the To stops short of its limit
 
 
 def arrow(canvas: Canvas, *, x: float, y: float, grey: int) -> float:
@@ -190,7 +193,11 @@ def two_titles(
     canvas: Canvas, *, first: str, second: str, limit: float,
 ) -> None:
     """
-    Draw two header titles with an arrow between, each fitted to half.
+    Draw two header titles with an arrow between, keeping the right whole.
+
+    The right title takes all the room but ``FROM_FLOOR`` pixels. The
+    left title gets the rest, shortened by ``short_name`` when it does
+    not fit, then cut if it still does not.
 
     Parameters
     ----------
@@ -204,12 +211,16 @@ def two_titles(
         Where the titles must end.
     """
     title = Face(weight=700, px=18)
-    half = (limit - 60) / 2
-    shown = canvas.fit(text=first, face=title, width=half)
+    room = limit - 60
+    to_room = min(canvas.length(text=second, face=title), room - FROM_FLOOR)
+    from_room = room - to_room
+    if canvas.length(text=first, face=title) > from_room:
+        first = short_name(name=first)
+    shown = canvas.fit(text=first, face=title, width=from_room)
     x = 12 + canvas.text(
         at=(12, 27), text=shown, face=title, grey=PAPER) + 8
     x += arrow(canvas, x=x, y=20, grey=PAPER)
-    name = canvas.fit(text=second, face=title, width=half)
+    name = canvas.fit(text=second, face=title, width=limit - TITLE_END - x)
     canvas.text(at=(x, 27), text=name, face=title, grey=PAPER)
 
 

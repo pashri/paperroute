@@ -69,6 +69,10 @@ function autoSave(form) {
   const card = { busy: false, dirty: false };
   form.querySelector('button[type="submit"]').hidden = true;
   form.addEventListener('change', () => save(form, note, card));
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    save(form, note, card);
+  });
 }
 
 document.querySelectorAll('.setting form').forEach(autoSave);

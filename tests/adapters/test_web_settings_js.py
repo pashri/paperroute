@@ -39,11 +39,12 @@ globalThis.FormData = class {
     return this.pairs[Symbol.iterator]();
   }
 };
-const fakeForm = (entries) => {
+const fakeForm = (entries, extra = {}) => {
   const listeners = {};
   const nodes = {
     '.saved': { textContent: 'old' },
     'button[type="submit"]': { hidden: false },
+    ...extra,
   };
   return {
     entries,
@@ -53,7 +54,11 @@ const fakeForm = (entries) => {
     querySelector: (selector) => nodes[selector],
   };
 };
-const quiet = fakeForm([['quiet_mode', 'my_hours'], ['quiet_start', '22:00']]);
+const errorLine = { gone: false, remove() { this.gone = true; } };
+const quiet = fakeForm(
+  [['quiet_mode', 'my_hours'], ['quiet_start', '22:00']],
+  { '.error': errorLine },
+);
 const display = fakeForm([
   ['rotate', 'off'], ['rotate', 'on'], ['peak_rate', '60s'],
 ]);
@@ -70,6 +75,10 @@ const change = async (form) => {
   await tick();
 };
 const results = {};
+let prevented = false;
+quiet.listeners.submit({ preventDefault: () => { prevented = true; } });
+await tick();
+results.submit = [prevented, sent.splice(0).length];
 results.hidesSave = [quiet, display].map(
   (form) => form.nodes['button[type="submit"]'].hidden,
 );
@@ -130,6 +139,7 @@ def test_settings_script_in_node(tmp_path: Path) -> None:
     ]
     assert results['saved'] == 'Saved'
     assert results['badTime'] == 'Quiet hours not saved: use HH:MM times.'
+    assert results['submit'] == [True, 1]
     assert results['refused'] == 'Not saved'
     assert results['network'] == 'Not saved: network error'
     assert results['cleared'] == ''

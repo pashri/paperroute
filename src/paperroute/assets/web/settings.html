@@ -143,6 +143,7 @@
           <p id="map-start-hint" class="hint">Zoomed in on your stop, with the vehicles coming towards it.</p>
         </fieldset>
         <button type="submit">Save</button>
+        <p class="hint saved" aria-live="polite"></p>
       </form>
     </section>
     <section class="card setting" aria-labelledby="quiet">
@@ -173,6 +174,7 @@
         </p>
         {{error_quiet}}
         <button type="submit">Save</button>
+        <p class="hint saved" aria-live="polite"></p>
       </form>
     </section>
     <section class="card setting" aria-labelledby="alerts">
@@ -191,6 +193,7 @@
           alerts from a day before they start.
         </p>
         <button type="submit">Save</button>
+        <p class="hint saved" aria-live="polite"></p>
       </form>
     </section>
     <section class="card setting" aria-labelledby="timetable">
@@ -207,8 +210,8 @@
           Rebuilds an outdated timetable on the device when a new version
           needs it.
         </p>
-        <button id="timetable-save" type="submit">Save</button>
-        <p id="settings-status" class="hint" aria-live="polite"></p>
+        <button type="submit">Save</button>
+        <p class="hint saved" aria-live="polite"></p>
       </form>
     </section>
   </main>

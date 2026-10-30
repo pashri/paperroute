@@ -16,6 +16,7 @@ from aiohttp import ClientResponse, web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters import web_display
+from paperroute.adapters.settings_form import ERRORS
 from paperroute.adapters.web_display import WebDisplay, knob_event
 from paperroute.core.messages import (
     Event,
@@ -595,6 +596,63 @@ async def test_bad_peak_redirects_with_error(
     assert 'Quiet hours not saved' not in text
     plain = await (await client.get('/settings')).text()
     assert 'not saved' not in plain
+
+
+async def test_json_bad_time_is_422_with_the_error_text(
+    display: WebDisplay, client: Client
+) -> None:
+    """A JSON post with an unusable time gets the error text to show."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        '/settings',
+        json={
+            'quiet_mode': 'my_hours',
+            'quiet_start': '25:00',
+            'quiet_end': '07:00',
+        },
+    )
+    assert response.status == HTTPStatus.UNPROCESSABLE_ENTITY
+    assert await response.json() == {'error': ERRORS['quiet']}
+    assert not posted
+
+
+async def test_form_bad_time_still_redirects(
+    display: WebDisplay, client: Client
+) -> None:
+    """A form post with an unusable time goes back to the error line."""
+    posted: list[Event] = []
+    display.bind(post=posted.append)
+    response = await client.post(
+        '/settings',
+        data={
+            'quiet_mode': 'my_hours',
+            'quiet_start': '25:00',
+            'quiet_end': '07:00',
+        },
+        allow_redirects=False,
+    )
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert response.headers['Location'] == '/settings?error=quiet'
+    assert not posted
+
+
+async def test_every_settings_card_has_its_own_save(client: Client) -> None:
+    """Each card's form has a visible Save and a note for the script."""
+    text = await (await client.get('/settings')).text()
+    forms = [
+        chunk.split('</form>')[0]
+        for chunk in text.split('<form')[1:]
+    ]
+    assert len(forms) == 4
+    for form in forms:
+        assert 'action="/settings"' in form
+        buttons = re.findall(r'<button[^>]*type="submit"[^>]*>', form)
+        assert len(buttons) == 1
+        assert 'hidden' not in buttons[0]
+        assert form.count('class="hint saved"') == 1
+    assert 'timetable-save' not in text
+    assert 'settings-status' not in text
 
 
 async def test_unknown_value_is_400(

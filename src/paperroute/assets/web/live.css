@@ -996,3 +996,7 @@ main > .notice {
   gap: 0.25rem;
   min-width: 0;
 }
+
+[hidden] {
+  display: none !important;
+}

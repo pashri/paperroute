@@ -557,3 +557,8 @@ def test_feed_names_wrap_so_the_times_show() -> None:
     """A long feed name wraps instead of pushing its times out of view."""
     body = rule_body(css=css_text(), selector=".table th[scope='row']")
     assert 'white-space: normal' in declarations(body=body)
+
+
+def test_hidden_beats_the_button_display() -> None:
+    """A `hidden` element stays hidden whatever its own display rule."""
+    assert '[hidden] {\n  display: none !important;\n}' in css_text()

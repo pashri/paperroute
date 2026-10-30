@@ -15,6 +15,7 @@ from aiohttp import web
 from numpy.typing import NDArray
 
 from paperroute.adapters.settings_form import (
+    ERRORS,
     BadInput,
     UnknownValue,
     changed_from,
@@ -176,7 +177,7 @@ async def pinged_wait(
 
 
 def settings_event(
-    *, fields: Mapping[str, str],
+    *, fields: Mapping[str, str], as_json: bool,
 ) -> SettingsChanged | web.Response:
     """
     Read a posted settings form.
@@ -185,22 +186,31 @@ def settings_event(
     ----------
     fields : Mapping[str, str]
         The posted fields.
+    as_json : bool
+        Whether the fields came from the script as JSON.
 
     Returns
     -------
     SettingsChanged | web.Response
-        The change; a 400 response for an unknown value.
+        The change; a 400 response for an unknown value; for JSON, a 422
+        response carrying the error text for a time that is not usable.
 
     Raises
     ------
     web.HTTPSeeOther
-        To the page's error line for a time that is not usable.
+        For a form, to the page's error line for a time that is not
+        usable.
     """
     try:
         return changed_from(fields=fields)
     except UnknownValue:
         return web.Response(status=HTTPStatus.BAD_REQUEST)
     except BadInput as error:
+        if as_json:
+            return web.json_response(
+                {'error': ERRORS[error.section]},
+                status=HTTPStatus.UNPROCESSABLE_ENTITY,
+            )
         raise web.HTTPSeeOther(
             location=f'/settings?error={error.section}',
         ) from error
@@ -808,18 +818,20 @@ class WebDisplay:
         Returns
         -------
         web.Response
-            400 for an unknown value; 303 to the page's error line for a
-            time that is not usable; otherwise 204 to the script's JSON,
-            or 303 back to the page for a plain form.
+            400 for an unknown value. For a time that is not usable, 422
+            with the error text to the script's JSON, or 303 to the
+            page's error line for a plain form. Otherwise 204 to the
+            script's JSON, or 303 back to the page for a plain form.
         """
         fields = await form_fields(request=request)
-        event = settings_event(fields=fields)
+        as_json = request.content_type == 'application/json'
+        event = settings_event(fields=fields, as_json=as_json)
         if isinstance(event, web.Response):
             return event
         self._before = self._reported()
         self._posted = posted_values(fields=fields, event=event)
         self._post(event)
-        if request.content_type == 'application/json':
+        if as_json:
             return web.Response(status=HTTPStatus.NO_CONTENT)
         raise web.HTTPSeeOther(location='/settings')
 

@@ -262,12 +262,45 @@ TITLE_FACE: Face = Face(weight=700, px=18)
 
 
 def test_two_titles_keep_the_to_whole() -> None:
-    """A From too long for its room is shortened; the To stays whole."""
+    """A From too long for its room is cut with '…'; the To stays whole."""
     canvas = Recording()
     two_titles(
         canvas, first=LONG_FROM, second='Parramatta Station', limit=400,
     )
-    assert canvas.drawn == ['Hollis St', 'Parramatta Station']
+    first, second = canvas.drawn
+    assert first.endswith('…')
+    assert first.startswith('Bogalara Rd Opp')
+    assert LONG_FROM.startswith(first.removesuffix('…'))
+    assert second == 'Parramatta Station'
+
+
+@pytest.mark.parametrize('tag', ['pin 3/3', 'Home 3/12'])
+@pytest.mark.parametrize(
+    ('origin', 'destination'),
+    [
+        (LONG_FROM, 'Parramatta Station'),
+        ('Constitution Hill Library, Hollis St', 'Wentworthville Station'),
+    ],
+)
+def test_header_cuts_the_from_without_dropping_words(
+    origin: str, destination: str, tag: str,
+) -> None:
+    """A real pin's From is whole or cut with '…'; its To stays whole."""
+    canvas = Recording()
+    header(
+        canvas,
+        origin=origin,
+        destination=destination,
+        clock='9:20',
+        active='Stop',
+        tag=PinTag(text=tag, pinned=True),
+    )
+    first, second = canvas.drawn[-2:]
+    assert first == origin or (
+        first.endswith('…') and origin.startswith(first.removesuffix('…'))
+    )
+    assert len(first) > len(origin.split(maxsplit=2)[0])
+    assert second == destination
 
 
 def test_two_titles_leave_a_fitting_from_alone() -> None:

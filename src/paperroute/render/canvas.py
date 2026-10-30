@@ -17,7 +17,7 @@ INK: Final[int] = 0
 PAPER: Final[int] = 255
 WIDTH: Final[int] = 800
 HEIGHT: Final[int] = 480
-ELLIPSIS: Final[str] = '...'
+ELLIPSIS: Final[str] = '\u2026'
 
 
 @dataclass(frozen=True)
@@ -564,7 +564,7 @@ class Canvas:
         Returns
         -------
         str
-            The text, or a shortened copy ending in '...', or '' when
+            The text, or a shortened copy ending in '\u2026', or '' when
             not even that fits.
         """
         if self.length(text=text, face=face) <= width:

@@ -7,6 +7,7 @@ import skia
 from numpy.typing import NDArray
 
 from paperroute.render.canvas import (
+    ELLIPSIS,
     HEIGHT,
     INK,
     PAPER,
@@ -65,13 +66,24 @@ def test_fit_keeps_short_text() -> None:
 
 
 def test_fit_truncates_long_text() -> None:
-    """Text too wide is cut and ends with an ASCII ellipsis."""
+    """Text too wide is cut and ends with the one-character ellipsis."""
     canvas = Canvas()
     face = Face(weight=400, px=13)
     fitted = canvas.fit(text='Our Lady Of Mercy College, OConnell St',
                         face=face, width=120)
-    assert fitted.endswith('...')
+    assert ELLIPSIS == '\u2026'
+    assert fitted.endswith(ELLIPSIS)
+    assert '...' not in fitted
     assert canvas.length(text=fitted, face=face) <= 120
+
+
+def test_fit_says_nothing_when_even_the_mark_overflows() -> None:
+    """A slot narrower than the ellipsis gets no text at all."""
+    canvas = Canvas()
+    fitted = canvas.fit(
+        text='Parramatta', face=Face(weight=400, px=14), width=12,
+    )
+    assert fitted == ''
 
 
 def test_encode_png_has_signature() -> None:

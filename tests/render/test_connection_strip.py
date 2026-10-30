@@ -12,7 +12,7 @@ from paperroute.core.connection_strip import (
     StopMark,
     build_connection_strip,
 )
-from paperroute.render.canvas import HEIGHT, INK, PAPER, Canvas
+from paperroute.render.canvas import ELLIPSIS, HEIGHT, INK, PAPER, Canvas
 from paperroute.render.chrome import HEADER
 from paperroute.render.connection_strip import (
     HEAD_FACE,
@@ -113,7 +113,7 @@ def test_loading_section_draws_text() -> None:
 
 
 def test_pane_cuts_long_names() -> None:
-    """Long names and headings are cut to the pane and end in '...'."""
+    """Long names and headings are cut to the pane and end in '\u2026'."""
     section = LegSection(
         route='665',
         mode=VIEW.sections[0].mode,
@@ -132,8 +132,12 @@ def test_pane_cuts_long_names() -> None:
     assert grey[:, 787:].min() == PAPER
     assert grey[HEADER:, 483:786].min() < 128
     room = name_room(left=483, right=786)
-    assert canvas.fit(text=LONG, face=NAME_FACE, width=room).endswith('...')
-    assert canvas.fit(text=LONG, face=HEAD_FACE, width=room).endswith('...')
+    assert canvas.fit(
+        text=LONG, face=NAME_FACE, width=room,
+    ).endswith(ELLIPSIS)
+    assert canvas.fit(
+        text=LONG, face=HEAD_FACE, width=room,
+    ).endswith(ELLIPSIS)
 
 
 def test_heading_arrow_drawn_as_shape() -> None:

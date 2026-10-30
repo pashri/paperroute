@@ -2,7 +2,7 @@
 
 import pytest
 
-from paperroute.core.stop_names import short_name
+from paperroute.core.stop_names import header_short_name
 
 
 @pytest.mark.parametrize(
@@ -15,12 +15,12 @@ from paperroute.core.stop_names import short_name
         ('Parramatta', 'Parramatta'),
     ],
 )
-def test_short_name_drops_the_qualifier(name: str, short: str) -> None:
+def test_header_short_name_drops_the_qualifier(name: str, short: str) -> None:
     """Qualifiers after the place's own name are dropped."""
-    assert short_name(name=name) == short
+    assert header_short_name(name=name) == short
 
 
-def test_short_name_never_empties() -> None:
+def test_header_short_name_never_empties() -> None:
     """A drop that would leave nothing is skipped."""
-    assert short_name(name='Station') == 'Station'
-    assert short_name(name=', Stand A') == ', Stand A'
+    assert header_short_name(name='Station') == 'Station'
+    assert header_short_name(name=', Stand A') == ', Stand A'

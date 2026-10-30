@@ -3,7 +3,7 @@
 import math
 from typing import Final, Protocol
 
-from paperroute.core.stop_names import short_name
+from paperroute.core.stop_names import header_short_name
 from paperroute.core.stop_view import DOT, PinTag, Row
 from paperroute.core.strip_model import PICK_FROM
 from paperroute.render.canvas import (
@@ -228,7 +228,7 @@ def two_titles(
     Draw two header titles with an arrow between, keeping the right whole.
 
     The right title takes all the room but ``FROM_FLOOR`` pixels. The
-    left title gets the rest, shortened by ``short_name`` when it does
+    left title gets the rest, shortened by ``header_short_name`` when it does
     not fit, then cut if it still does not.
 
     Parameters
@@ -247,7 +247,7 @@ def two_titles(
     to_room = min(canvas.length(text=second, face=title), room - FROM_FLOOR)
     from_room = room - to_room
     if canvas.length(text=first, face=title) > from_room:
-        first = short_name(name=first)
+        first = header_short_name(name=first)
     shown = canvas.fit(text=first, face=title, width=from_room)
     x = 12 + canvas.text(
         at=(12, 27), text=shown, face=title, grey=PAPER) + 8

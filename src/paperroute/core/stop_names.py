@@ -12,7 +12,7 @@ SHORT_DROPS: Final[tuple[str, ...]] = (
 )
 
 
-def short_name(*, name: str) -> str:
+def header_short_name(*, name: str) -> str:
     """
     Shorten a stop name to the place's own name.
 

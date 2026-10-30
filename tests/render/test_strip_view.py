@@ -15,7 +15,7 @@ from paperroute.core.map_view import (
     Marker,
 )
 from paperroute.core.model import CarryOn
-from paperroute.core.stop_view import Pill, PinTag
+from paperroute.core.stop_view import Pill, PinTag, Row
 from paperroute.core.strip_badges import HALF_WIDE
 from paperroute.core.strip_model import (
     HINTS,
@@ -27,15 +27,23 @@ from paperroute.core.strip_model import (
     Band,
     StripMapView,
     StripPane,
+    StripPanel,
     StripRow,
     StripView,
 )
 from paperroute.core.strip_view import build_strip_view
-from paperroute.render.canvas import INK, PAPER, Canvas, Face
-from paperroute.render.chrome import BANNER, HEADER, badge, route_pair
+from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
+from paperroute.render.chrome import (
+    ARROW_WIDTH,
+    BANNER,
+    HEADER,
+    badge,
+    route_pair,
+)
 from paperroute.render.markers import badge_box
 from paperroute.render.stop_view import WIDEST_COUNT
 from paperroute.render.strip_view import (
+    CARRY_GAP,
     NAME_X,
     PANE_NAME_X,
     draw_strip_map_view,
@@ -468,66 +476,139 @@ def test_whole_stop_row_unchanged() -> None:
     assert (row[SECOND_LINE, MIDDLE] == PAPER).all()
 
 
-def test_strip_panel_row_draws_both_badges() -> None:
-    """A carry-on panel row's destination starts after the pair."""
+WHOLE = replace(PANEL, destination=None, no_destination=True)
+
+
+def panel_frame(
+    *, panel: StripPanel, row: Row,
+) -> NDArray[np.uint8]:
+    """
+    Draw the Strip with one row in its panel.
+
+    Parameters
+    ----------
+    panel : StripPanel
+        The panel the row goes in.
+    row : Row
+        The departure.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The frame.
+    """
+    return draw_strip_view(
+        view=replace(VIEW, panel=replace(panel, rows=(row,))),
+    )
+
+
+def central(*, onto: str | None, then: CarryOn | None = None) -> Row:
+    """
+    Make a T1 departure to Central.
+
+    Parameters
+    ----------
+    onto : str | None
+        Route the train becomes.
+    then : CarryOn | None
+        Where the train runs on to.
+
+    Returns
+    -------
+    Row
+        The departure.
+    """
+    return replace(
+        panel_row(onto=onto, then=then), destination='Central',
+    )
+
+
+def test_continuing_row_drops_the_onto_tag_beside_an_arrival() -> None:
+    """With a To, a continuing row draws as if it did not continue."""
+    area = np.s_[PANEL_TOP - 2:PANEL_TOP + 68, 456:786]
+    tagged = panel_frame(panel=PANEL, row=central(onto='T8'))
+    plain = panel_frame(panel=PANEL, row=central(onto=None))
+    assert (tagged[area] == plain[area]).all()
+
+
+def test_whole_board_continuing_row_puts_the_destination_second() -> None:
+    """On the whole-stop board the pair is alone on line 1."""
+    frame = panel_frame(panel=WHOLE, row=central(onto='T8'))
+    assert (frame[SECOND_LINE, 556:600] == INK).any()
+    pair_end = 556 + route_pair(
+        Canvas(), x=0, y=0, route='T1', onto='T8', px=14,
+    )
+    assert (frame[FIRST_LINE, int(pair_end) + 4:700] == PAPER).all()
+    plain = panel_frame(panel=WHOLE, row=central(onto=None))
+    assert (plain[SECOND_LINE, MIDDLE] == PAPER).all()
+
+
+def test_whole_board_carry_on_follows_the_destination() -> None:
+    """A carry-on starts CARRY_GAP after the destination on line 2."""
+    then = CarryOn(route='T9', headsign='Hornsby')
+    frame = panel_frame(panel=WHOLE, row=central(onto='T8', then=then))
+    width = text_width(text='Central', face=Face(weight=400, px=14))
+    x = 556 + round(width) + CARRY_GAP
+    assert (frame[SECOND_LINE, x:x + int(ARROW_WIDTH)] == INK).any()
+    assert (frame[SECOND_LINE, x - 6:x - 1] == PAPER).all()
+
+
+def test_whole_board_panel_row_draws_both_badges() -> None:
+    """On the whole-stop board, a continuing row's pair stands alone."""
     rows = slice(PANEL_TOP + 30, PANEL_TOP + 43)
     pair_width = route_pair(
         Canvas(), x=556, y=0, route='T1', onto='T2', px=14,
     )
     plain_width = badge(Canvas(), x=556, y=0, route='T1', px=14)
-    frames = [
-        draw_strip_view(view=replace(
-            VIEW, panel=replace(PANEL, rows=(panel_row(onto=onto),)),
-        ))
+    plain, pair = (
+        panel_frame(panel=WHOLE, row=panel_row(onto=onto))
         for onto in (None, 'T2')
-    ]
+    )
     edge = int(556 + pair_width)
-    gap = np.s_[rows, edge + 1:edge + 8]
-    assert (frames[1][gap] == PAPER).all()
+    assert (pair[rows, edge + 1:edge + 8] == PAPER).all()
     plain_edge = int(556 + plain_width)
-    assert (frames[0][rows, plain_edge + 8:plain_edge + 12] == INK).any()
-    assert (frames[1][rows, edge + 8:edge + 80] == INK).any()
+    assert (plain[rows, plain_edge + 8:plain_edge + 12] == INK).any()
+    count = text_width(text='6 min', face=Face(weight=700, px=22))
+    end = min(edge + 80, int(784 - count) - 2)
+    assert (pair[rows, edge + 8:end] == PAPER).all()
+
+
+def assert_pair_clears_the_count(*, row: Row, count_text: str) -> None:
+    """
+    Check a whole-stop row's first line ends 8 px before its count.
+
+    Parameters
+    ----------
+    row : Row
+        The departure.
+    count_text : str
+        The countdown the row shows.
+    """
+    frame = panel_frame(panel=WHOLE, row=row)
+    count = text_width(text=count_text, face=Face(weight=700, px=22))
+    band = frame[PANEL_TOP + 22:PANEL_TOP + 46, 556:int(784 - count) - 2]
+    ink = np.flatnonzero((band == INK).any(axis=0))
+    assert ink.size
+    assert 556 + ink.max() <= 784 - count - 8
 
 
 def test_long_route_pair_leaves_the_countdown_clear() -> None:
-    """A BMT to CCN pair and a long destination stop before the time."""
+    """A BMT to CCN pair stops before the time."""
     long = replace(
         panel_row(onto='CCN'), route='BMT', destination='Somewhere ' * 9,
     )
-    frame = draw_strip_view(view=replace(
-        VIEW, panel=replace(PANEL, rows=(long,)),
-    ))
-    count = Canvas().length(
-        text='6 min', face=Face(weight=700, px=22),
-    )
-    rows = slice(PANEL_TOP + 30, PANEL_TOP + 43)
-    assert (frame[rows, 701:int(784 - count) - 2] == PAPER).all()
+    assert_pair_clears_the_count(row=long, count_text='6 min')
 
 
 def test_strip_widest_count_clears_a_long_pair() -> None:
-    """A BMT to CCN pair and its headsign stop before a '100 min' count."""
+    """A BMT to CCN pair stops before a '100 min' count."""
     long = replace(
         panel_row(onto='CCN'),
         route='BMT',
         destination='Somewhere ' * 9,
         countdown='100',
     )
-    frames = [
-        draw_strip_view(view=replace(
-            VIEW, panel=replace(PANEL, rows=(shown,)),
-        ))
-        for shown in (long, replace(long, live=False))
-    ]
-    count = Canvas().length(
-        text=WIDEST_COUNT, face=Face(weight=700, px=22),
-    )
-    rows = slice(PANEL_TOP + 30, PANEL_TOP + 43)
-    text = np.flatnonzero((frames[1][rows, :] == INK).any(axis=0))
-    drawn = np.flatnonzero((frames[0][rows, :] != frames[1][rows, :]).any(
-        axis=0,
-    ))
-    assert drawn.min() >= int(784 - count) - 1
-    assert drawn.min() - text.max() > 2
+    assert_pair_clears_the_count(row=long, count_text=WIDEST_COUNT)
 
 
 def test_panel_arrival_with_stops_leaves_the_countdown_clear() -> None:

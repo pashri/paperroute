@@ -20,6 +20,7 @@ from paperroute.render.chrome import (
     BANNER,
     HEADER,
     arrow,
+    badge,
     countdown_slot,
     pill,
     route_pair,
@@ -78,6 +79,11 @@ def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
     """
     Draw a departure's route badge and headsign, and its arrival if any.
 
+    A train that continues as another route draws its route pair on the
+    whole-stop board, with its destination on the second line. With a
+    To, the second line holds the arrival, so the row draws its route
+    badge alone, as for a train that does not continue.
+
     Parameters
     ----------
     canvas : Canvas
@@ -94,13 +100,10 @@ def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
     int
         Where a carry-on line starts.
     """
-    x = MIDDLE_X + route_pair(
-        canvas,
-        x=MIDDLE_X,
-        y=top + BADGE_DROP,
-        route=row.route,
-        onto=row.onto,
-        px=BADGE_PX,
+    if whole and row.onto is not None:
+        return continuing_middle(canvas, row=row, top=top)
+    x = MIDDLE_X + badge(
+        canvas, x=MIDDLE_X, y=top + BADGE_DROP, route=row.route, px=BADGE_PX,
     ) + 8
     canvas.text(
         at=(x, top + 40),
@@ -119,6 +122,46 @@ def row_middle(canvas: Canvas, *, row: Row, top: int, whole: bool) -> int:
         face=TAG_FACE, grey=INK,
     )
     return MIDDLE_X + round(arrival) + CARRY_GAP
+
+
+def continuing_middle(canvas: Canvas, *, row: Row, top: int) -> int:
+    """
+    Draw a continuing train's route pair, then its destination below.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : Row
+        Departure with an onto route.
+    top : int
+        The row's rule.
+
+    Returns
+    -------
+    int
+        Where a carry-on line starts, after the destination.
+    """
+    route_pair(
+        canvas,
+        x=MIDDLE_X,
+        y=top + BADGE_DROP,
+        route=row.route,
+        onto=row.onto,
+        px=BADGE_PX,
+    )
+    shown = canvas.fit(
+        text=row.destination,
+        face=HEADSIGN_FACE,
+        width=TEXT_RIGHT - MIDDLE_X,
+    )
+    used = canvas.text(
+        at=(MIDDLE_X, top + SECOND_DROP),
+        text=shown,
+        face=HEADSIGN_FACE,
+        grey=INK,
+    )
+    return MIDDLE_X + round(used) + CARRY_GAP
 
 
 def row_countdown(canvas: Canvas, *, row: Row, top: int) -> None:

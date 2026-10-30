@@ -1745,6 +1745,9 @@ def check_map_requests(
     Assert map data is asked for only on the Map, and modes once per zoom
     while the map shows the same place in the same spot.
 
+    Asleep, positions are never fetched, and the sleep screen's map asks
+    for its shapes and patterns whatever the view.
+
     Parameters
     ----------
     before : State
@@ -1763,6 +1766,13 @@ def check_map_requests(
             and effect.kind is FeedKind.POSITIONS
         )
     ]
+    if after.panel.asleep:
+        assert not any(isinstance(request, FetchFeed) for request in requests)
+        requests = [
+            request
+            for request in requests
+            if not isinstance(request, (LoadShapes, LoadPatterns))
+        ]
     if not shows_vehicles(state=after):
         assert not requests
     if after.view is LiveView.STRIP or after.chooser is not None:
@@ -2013,6 +2023,32 @@ def start_saved(draw: st.DrawFn) -> Saved:
         ),
     ]
     return draw(st.sampled_from(options))
+
+
+@pytest.mark.parametrize('view', [LiveView.STRIP, LiveView.STOP])
+def test_step_invariants_asleep_on_a_view_without_a_map(
+    view: LiveView,
+) -> None:
+    """Falling asleep off the Map loads the sleep map, not positions."""
+    night = datetime(2026, 4, 12, 1, 30, tzinfo=SYDNEY)
+    state = initial_state(
+        saved=replace(DEFAULT_SAVED, view=view), now=night, stored=True,
+    )
+    trip = replace(departure(departs=night), shape_id='b:1')
+    state, _ = step(
+        state,
+        DeparturesLoaded(
+            pin=shown(state=state),
+            departures=(trip,),
+            until=night + HORIZON,
+        ),
+    )
+    tick = Tick(now=night)
+    after, effects = step(state, tick)
+    assert after.panel.asleep
+    assert effects_of(effects=effects, kind=LoadShapes)
+    assert not effects_of(effects=effects, kind=FetchFeed)
+    check_effects(before=state, after=after, event=tick, effects=effects)
 
 
 @given(

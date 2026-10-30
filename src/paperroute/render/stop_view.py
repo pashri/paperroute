@@ -8,7 +8,14 @@ from numpy.typing import NDArray
 
 from paperroute.core.model import Mode
 from paperroute.core.stop_view import DOT, Pill, Row, StopView, stops_text
-from paperroute.render.canvas import HEIGHT, INK, WIDTH, Canvas, Face
+from paperroute.render.canvas import (
+    HEIGHT,
+    INK,
+    WIDTH,
+    Canvas,
+    Face,
+    text_width,
+)
 from paperroute.render.chrome import (
     ARROW_GAP,
     ARROW_WIDTH,
@@ -44,7 +51,8 @@ FASTER_LEFT: Final[int] = 712
 PILL_LEFT: Final[int] = 596
 TAGGED_WIDTH: Final[int] = FASTER_LEFT - LIST_LEFT - 16
 BOARD_BADGE_X: Final[int] = 96
-BOARD_RIGHT: Final[int] = PILL_LEFT - 20
+FASTER_WIDTH: Final[int] = 74
+FASTER_GAP: Final[int] = 10
 TAG_FACE: Final[Face] = Face(weight=700, px=12)
 TAG_GAP: Final[int] = 8
 TAG_FLOOR: Final[int] = 40
@@ -308,6 +316,60 @@ class Scale:
         return round(size * LARGE_SCALE) if self.large else size
 
 
+def faster_width(*, k: Scale) -> int:
+    """
+    Width of the board's FASTER pill.
+
+    Parameters
+    ----------
+    k : Scale
+        The row's scale.
+
+    Returns
+    -------
+    int
+        ``FASTER_WIDTH`` scaled with the row.
+    """
+    return round(FASTER_WIDTH * k.y(100) / 100)
+
+
+def faster_left(*, k: Scale) -> int:
+    """
+    Left edge of the board's FASTER pill.
+
+    The pill ends ``FASTER_GAP`` left of the widest live count.
+
+    Parameters
+    ----------
+    k : Scale
+        The row's scale.
+
+    Returns
+    -------
+    int
+        The pill's left x.
+    """
+    count = text_width(text=WIDEST_COUNT, face=k.face(weight=800, px=28))
+    return round(786 - count - FASTER_GAP - faster_width(k=k))
+
+
+def board_right(*, k: Scale) -> int:
+    """
+    Where a board row's headsign must end, 20 px before the FASTER pill.
+
+    Parameters
+    ----------
+    k : Scale
+        The row's scale.
+
+    Returns
+    -------
+    int
+        The headsign's right limit.
+    """
+    return faster_left(k=k) - 20
+
+
 def list_row(
     canvas: Canvas, *, row: Row, y: int, large: bool = False
 ) -> None:
@@ -439,7 +501,7 @@ def board_row(
         at=(left, y + k.y(31)),
         text=f'to {row.destination}',
         face=k.face(weight=400, px=17),
-        width=BOARD_RIGHT - left,
+        width=board_right(k=k) - left,
     )
     board_times(canvas, row=row, y=y, k=k)
     canvas.rect(box=(0, y + k.y(49), WIDTH, y + k.y(50)), grey=INK)
@@ -467,9 +529,10 @@ def board_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
             at=(786, y + k.y(33)), text=countdown_slot(row=row),
             face=k.face(weight=800, px=28), grey=INK, anchor='rs')
     if row.pill is Pill.FASTER:
+        left = faster_left(k=k)
         pill(
             canvas,
-            box=(PILL_LEFT, y + k.y(17), PILL_LEFT + 74, y + k.y(32)),
+            box=(left, y + k.y(17), left + faster_width(k=k), y + k.y(32)),
             text=FASTER,
             px=k.px(11),
         )

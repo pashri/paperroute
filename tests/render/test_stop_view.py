@@ -10,7 +10,6 @@ from paperroute.core.stop_view import Pill
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.chrome import BANNER, HEADER, badge, route_pair
 from paperroute.render.stop_view import (
-    BOARD_RIGHT,
     FASTER_LEFT,
     LARGE_ROW_H,
     LIST_LEAVE_RIGHT,
@@ -21,7 +20,11 @@ from paperroute.render.stop_view import (
     SPLIT,
     WIDEST_COUNT,
     Scale,
+    board_right,
+    board_row,
     draw_stop_view,
+    faster_left,
+    faster_width,
     finish,
     list_row,
 )
@@ -213,7 +216,8 @@ def test_widest_count_clears_list_pairs_and_board_pills() -> None:
     assert LIST_LEFT + LIST_PAIR_ROOM + 8 <= LIST_LEAVE_RIGHT - large
     assert LIST_LEAVE_RIGHT + 16 <= min(FASTER_LEFT, 786 - arrive)
     assert LIST_LEFT + route + 8 < LIST_LEAVE_RIGHT - wide
-    assert max(PILL_LEFT + 74, BOARD_RIGHT) + 8 < 786 - wide
+    for k, count in ((Scale(), wide), (Scale(large=True), large)):
+        assert faster_left(k=k) + faster_width(k=k) + 8 < 786 - count
 
 
 @pytest.mark.parametrize('large', [False, True], ids=['normal', 'large'])
@@ -236,6 +240,55 @@ def test_list_widest_count_clears_a_long_pair(large: bool) -> None:
     count = ink[(ink > room) & (ink < FASTER_LEFT)]
     assert count.min() - pair_right >= 8
     assert count.max() <= FASTER_LEFT - 16
+
+
+def test_faster_geometry_follows_the_text_size() -> None:
+    """The board's FASTER pill grows and moves left with larger text."""
+    normal, large = Scale(), Scale(large=True)
+    assert (faster_width(k=normal), faster_width(k=large)) == (74, 95)
+    assert (faster_left(k=normal), faster_left(k=large)) == (596, 549)
+    assert (board_right(k=normal), board_right(k=large)) == (576, 529)
+
+
+@pytest.mark.parametrize('large', [False, True], ids=['normal', 'large'])
+def test_faster_pill_clears_the_widest_count(large: bool) -> None:
+    """The FASTER pill ends clear of a '100 min' count, in real ink."""
+    k = Scale(large=large)
+    canvas = Canvas()
+    y = 100
+    board_row(
+        canvas,
+        row=replace(row(pill=Pill.FASTER), countdown='100', live=True),
+        y=y,
+        large=large,
+    )
+    frame = finish(canvas)
+    band = frame[y + k.y(17):y + k.y(32)]
+    ink = np.flatnonzero((band == INK).any(axis=0))
+    count = text_width(text=WIDEST_COUNT, face=k.face(weight=800, px=28))
+    pill_right = ink[ink < 786 - count - 4].max()
+    count_left = ink[ink > pill_right + 1].min()
+    assert count_left - pill_right >= 8
+
+
+@pytest.mark.parametrize('large', [False, True], ids=['normal', 'large'])
+def test_board_headsign_stops_before_the_pill(large: bool) -> None:
+    """A long headsign ends before the FASTER pill at both sizes."""
+    k = Scale(large=large)
+    canvas = Canvas()
+    y = 100
+    board_row(
+        canvas,
+        row=row(pill=Pill.FASTER, destination='Somewhere ' * 9),
+        y=y,
+        large=large,
+    )
+    frame = finish(canvas)
+    gap = frame[
+        y:y + k.y(49),
+        board_right(k=k) + 4:faster_left(k=k) - 2,
+    ]
+    assert (gap == PAPER).all()
 
 
 def test_live_hero_widest_count_fits_left_of_the_split() -> None:
@@ -317,7 +370,11 @@ def test_long_route_pair_fits_every_row_style() -> None:
     board = draw_stop_view(
         view=replace(BASE, destination=None, hero=None, rows=(long,)),
     )
-    gap = np.s_[HEADER:HEADER + 48, BOARD_RIGHT + 4:PILL_LEFT - 2]
+    normal = Scale()
+    gap = np.s_[
+        HEADER:HEADER + 48,
+        board_right(k=normal) + 4:faster_left(k=normal) - 2,
+    ]
     assert (board[gap] == PAPER).all()
 
 

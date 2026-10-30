@@ -1,10 +1,14 @@
 """Tests for the shared header, banner and badge."""
 
+import sqlite3
 from collections.abc import Sequence
+from contextlib import closing
 from dataclasses import dataclass, replace
-from typing import Any
+from pathlib import Path
+from typing import Any, Final
 
 import numpy as np
+import pytest
 
 from paperroute.core.model import Mode
 from paperroute.core.stop_view import NOT_PINNED, PinTag, Row
@@ -22,19 +26,31 @@ from paperroute.render.chrome import (
     BANNER,
     FROM_FLOOR,
     HEADER,
+    LINK_ARROW,
+    LINK_WIDTH,
+    MIN_SQUEEZE,
     TABS,
     badge,
+    badge_face,
+    badge_width,
     banner,
     countdown_slot,
     header,
     header_tabs,
     leaves,
+    link_arrow,
     pin_tag,
     route_pair,
+    row_px,
+    shared_width,
     two_titles,
     view_header,
 )
+from paperroute.render.pair_list import CHIP_PX
+from paperroute.render.stop_view import LIST_PAIR_ROOM
 
+REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
+LONG_LABELS: Final[tuple[str, ...]] = ('SH100', '283S2', '772V8')
 PINNED = PinTag(text='pin 2/3', pinned=True)
 
 
@@ -348,7 +364,7 @@ def test_route_pair_second_badge_starts_after_the_arrow() -> None:
     full = (canvas.grey()[:, :] == INK).sum(axis=0) >= 15
     blocks = np.flatnonzero(full)
     second = blocks[blocks > 10 + first + 4][0]
-    assert second >= 10 + first + 4 + 22 + 4
+    assert second >= 10 + first + LINK_WIDTH
     assert blocks[-1] < 10 + pair
 
 
@@ -442,3 +458,103 @@ def test_long_nickname_tag_keeps_titles() -> None:
     left = int(np.flatnonzero(grey[11] == PAPER).min())
     assert int(grey[12:30, 12:left].max()) == PAPER
     assert int(grey[12:30, left - 8:left].max()) == INK
+
+
+def real_labels() -> list[str]:
+    """
+    List every route label in the real timetable, if there is one.
+
+    Returns
+    -------
+    list[str]
+        Route labels; none without data/timetable.db.
+    """
+    if not REAL_DB.exists():
+        return []
+    with closing(sqlite3.connect(f'file:{REAL_DB}?mode=ro', uri=True)) as db:
+        rows = db.execute('SELECT DISTINCT short_name FROM routes').fetchall()
+    return [row[0] for row in rows]
+
+
+def test_badges_share_one_width() -> None:
+    """Every route's badge is as wide as four eights."""
+    width = badge_width(px=14)
+    for route in ('T1', '711', 'BMT', 'SH100'):
+        assert badge(Canvas(), x=10, y=20, route=route, px=14) == width
+    assert width == pytest.approx(
+        text_width(text='8888', face=Face(weight=800, px=14)) + 12,
+    )
+
+
+def test_short_labels_keep_their_shape() -> None:
+    """A label no wider than four eights is not condensed."""
+    for route in ('T1', '711', '894', 'BMT', '894X', '8888'):
+        assert badge_face(route=route, px=14).squeeze == 1.0
+
+
+@pytest.mark.parametrize('px', [14, 20])
+@pytest.mark.parametrize('route', LONG_LABELS)
+def test_long_labels_squeeze_just_enough(route: str, px: int) -> None:
+    """A long label condenses to fit its badge, and no further."""
+    face = badge_face(route=route, px=px)
+    room = badge_width(px=px) - 8
+    looser = replace(face, squeeze=face.squeeze + 0.02)
+    assert MIN_SQUEEZE <= face.squeeze < 1
+    assert text_width(text=route, face=face) <= room
+    assert text_width(text=route, face=looser) > room
+
+
+def test_label_past_the_floor_is_cut() -> None:
+    """A label too long even at the floor is cut with one mark."""
+    canvas = Recording()
+    badge(canvas, x=10, y=20, route='WWWWWW', px=14)
+    assert canvas.drawn == ['WWW\u2026']
+    assert badge_face(route='WWWWWW', px=14).squeeze == MIN_SQUEEZE
+
+
+def test_every_timetable_label_fits_above_the_floor() -> None:
+    """Every real route label fits its badge without a cut."""
+    room = badge_width(px=14) - 8
+    floor = Face(weight=800, px=14, squeeze=MIN_SQUEEZE)
+    for route in real_labels():
+        assert text_width(text=route, face=floor) <= room, route
+
+
+def test_link_arrow_is_short_and_thin() -> None:
+    """The link between badges inks a small box beside its point."""
+    canvas = Canvas()
+    assert link_arrow(canvas, x=100, y=50, grey=INK) == LINK_ARROW
+    ink = canvas.grey() == INK
+    assert ink.any()
+    assert ink[46:55, 99:109].sum() == ink.sum()
+    assert LINK_WIDTH == 12
+
+
+def test_shared_width_narrows_only_at_the_floor() -> None:
+    """Badges share a narrower width only when the floor overflows."""
+    full = badge_width(px=14)
+    assert shared_width(px=14, count=2, room=None) == full
+    assert shared_width(px=14, count=2, room=200) == full
+    assert shared_width(px=9, count=2, room=70) == pytest.approx(29.0)
+    pair = row_px(count=2, px=14, room=LIST_PAIR_ROOM)
+    chips = row_px(count=3, px=CHIP_PX, room=143)
+    assert (pair, chips) == (11, 10)
+    assert shared_width(
+        px=pair, count=2, room=LIST_PAIR_ROOM,
+    ) == badge_width(px=pair)
+    assert shared_width(px=chips, count=3, room=143) == badge_width(
+        px=chips,
+    )
+
+
+@pytest.mark.parametrize('px', [14, 18])
+@pytest.mark.parametrize('pair', [('BMT', 'CCN'), ('SH100', '283S2')])
+def test_list_pair_keeps_full_labels(px: int, pair: tuple[str, str]) -> None:
+    """A carry-on pair fits the list's room with full-width badges."""
+    route, onto = pair
+    width = route_pair(
+        Canvas(), x=0, y=20, route=route, onto=onto, px=px,
+        room=LIST_PAIR_ROOM,
+    )
+    assert width == pytest.approx(2 * badge_width(px=11) + LINK_WIDTH)
+    assert width <= LIST_PAIR_ROOM

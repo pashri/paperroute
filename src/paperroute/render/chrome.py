@@ -20,6 +20,11 @@ HEADER: Final[int] = 40
 ARROW_WIDTH: Final[float] = 22.0
 ARROW_GAP: Final[int] = 4
 MIN_PAIR_PX: Final[int] = 9
+BADGE_SIZER: Final[str] = '8888'  # every badge has room for this
+MIN_SQUEEZE: Final[float] = 0.7
+LINK_ARROW: Final[float] = 8.0
+LINK_GAP: Final[int] = 2
+LINK_WIDTH: Final[float] = 2 * LINK_GAP + LINK_ARROW
 BANNER: Final[int] = 34
 WARNING_SIDE: Final[int] = 18  # warning triangle side, in pixels
 FASTER: Final[str] = 'FASTER'
@@ -55,6 +60,33 @@ def arrow(canvas: Canvas, *, x: float, y: float, grey: int) -> float:
     canvas.polygon(
         points=[(x + 16, y), (x + 10, y - 5), (x + 10, y + 5)], grey=grey)
     return ARROW_WIDTH
+
+
+def link_arrow(canvas: Canvas, *, x: float, y: float, grey: int) -> float:
+    """
+    Draw the short thin arrow that links two route badges.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    x : float
+        Left end.
+    y : float
+        Centre line.
+    grey : int
+        Colour.
+
+    Returns
+    -------
+    float
+        Width used.
+    """
+    canvas.line(points=[(x, y), (x + 4, y)], width=1.5, grey=grey)
+    canvas.polygon(
+        points=[(x + 8, y), (x + 4, y - 3.5), (x + 4, y + 3.5)], grey=grey,
+    )
+    return LINK_ARROW
 
 
 def header_tabs(
@@ -582,10 +614,20 @@ def warning_triangle(
     canvas.rect(box=(middle - 1, bottom - 3, middle + 1, bottom - 1), grey=INK)
 
 
-def badge(canvas: Canvas, *, x: float, y: float, route: str,
-          px: int) -> float:
+def badge(
+    canvas: Canvas,
+    *,
+    x: float,
+    y: float,
+    route: str,
+    px: int,
+    width: float | None = None,
+) -> float:
     """
     Draw a route badge (white on black) and return its width.
+
+    A label too wide for the badge is condensed; one still too wide at
+    MIN_SQUEEZE is cut.
 
     Parameters
     ----------
@@ -599,15 +641,17 @@ def badge(canvas: Canvas, *, x: float, y: float, route: str,
         Route label.
     px : int
         Text size.
+    width : float | None
+        Badge width; None means badge_width at px.
 
     Returns
     -------
     float
         Badge width.
     """
-    face = Face(weight=800, px=px)
-    route = canvas.fit(text=route, face=face, width=px * 4)
-    width = badge_width(canvas, route=route, px=px)
+    width = badge_width(px=px) if width is None else width
+    face = badge_face(route=route, px=px, width=width)
+    route = canvas.fit(text=route, face=face, width=width - 8)
     canvas.rect(box=(x, y - px * 0.65, x + width, y + px * 0.65), grey=INK)
     canvas.text(
         at=(x + width / 2, y + 1), text=route, face=face, grey=PAPER,
@@ -615,43 +659,85 @@ def badge(canvas: Canvas, *, x: float, y: float, route: str,
     return width
 
 
-def badge_width(canvas: Canvas, *, route: str, px: int) -> float:
+def badge_width(*, px: int) -> float:
     """
-    Measure a route badge.
+    Give the width every route badge shares at a text size.
 
     Parameters
     ----------
-    canvas : Canvas
-        Target.
-    route : str
-        Route label.
     px : int
         Text size.
 
     Returns
     -------
     float
-        Badge width.
+        Badge width: room for BADGE_SIZER and a margin.
     """
-    face = Face(weight=800, px=px)
-    route = canvas.fit(text=route, face=face, width=px * 4)
-    return max(canvas.length(text=route, face=face) + 12, px * 2.4)
+    return text_width(text=BADGE_SIZER, face=Face(weight=800, px=px)) + 12
 
 
-def pair_px(
-    canvas: Canvas, *, route: str, onto: str, px: int, room: float,
-) -> int:
+def badge_face(
+    *, route: str, px: int, width: float | None = None,
+) -> Face:
     """
-    Choose the largest text size, up to px, at which a pair fits a room.
+    Choose a badge's face, condensed only as much as its label needs.
 
     Parameters
     ----------
-    canvas : Canvas
-        Target.
     route : str
-        Route label of the boarded trip.
-    onto : str
-        Route label of the trip it becomes.
+        Route label.
+    px : int
+        Text size.
+    width : float | None
+        Badge width; None means badge_width at px.
+
+    Returns
+    -------
+    Face
+        The bold face, squeezed to fit the badge, never below MIN_SQUEEZE.
+    """
+    face = Face(weight=800, px=px)
+    room = (badge_width(px=px) if width is None else width) - 8
+    length = text_width(text=route, face=face)
+    if length <= room:
+        return face
+    squeeze = max(MIN_SQUEEZE, math.floor(100 * room / length) / 100)
+    return Face(weight=800, px=px, squeeze=squeeze)
+
+
+def shared_width(*, px: int, count: int, room: float | None) -> float:
+    """
+    Give the width each badge in a linked row takes.
+
+    Parameters
+    ----------
+    px : int
+        Text size.
+    count : int
+        Badges in the row.
+    room : float | None
+        Width the row must fit, or None for no limit.
+
+    Returns
+    -------
+    float
+        The full badge width at px, narrowed equally only when the row
+        overflows.
+    """
+    full = badge_width(px=px)
+    if room is None:
+        return full
+    return min(full, (room - (count - 1) * LINK_WIDTH) / count)
+
+
+def row_px(*, count: int, px: int, room: float) -> int:
+    """
+    Choose the largest text size, up to px, at which linked badges fit.
+
+    Parameters
+    ----------
+    count : int
+        Badges in the row.
     px : int
         Largest text size.
     room : float
@@ -662,13 +748,8 @@ def pair_px(
     int
         Text size, never below MIN_PAIR_PX.
     """
-    while px > MIN_PAIR_PX:
-        width = 2 * ARROW_GAP + ARROW_WIDTH + sum(
-            badge_width(canvas, route=label, px=px)
-            for label in (route, onto)
-        )
-        if width <= room:
-            break
+    links = (count - 1) * LINK_WIDTH
+    while px > MIN_PAIR_PX and count * badge_width(px=px) + links > room:
         px -= 1
     return px
 
@@ -684,7 +765,7 @@ def route_pair(
     room: float | None = None,
 ) -> float:
     """
-    Draw a route badge, and for a carry-on an arrow and the onto badge.
+    Draw a route badge, and for a carry-on a link and the onto badge.
 
     Parameters
     ----------
@@ -702,21 +783,25 @@ def route_pair(
         Text size.
     room : float | None
         Width the pair must fit; the text shrinks to fit it, down to
-        MIN_PAIR_PX. None means no limit.
+        MIN_PAIR_PX, and past that the badges narrow. None means no
+        limit.
 
     Returns
     -------
     float
         Total width.
     """
-    if onto is not None and room is not None:
-        px = pair_px(canvas, route=route, onto=onto, px=px, room=room)
-    width = badge(canvas, x=x, y=y, route=route, px=px)
     if onto is None:
-        return width
-    width += ARROW_GAP
-    width += arrow(canvas, x=x + width, y=y, grey=INK) + ARROW_GAP
-    return width + badge(canvas, x=x + width, y=y, route=onto, px=px)
+        return badge(canvas, x=x, y=y, route=route, px=px)
+    if room is not None:
+        px = row_px(count=2, px=px, room=room)
+    each = shared_width(px=px, count=2, room=room)
+    width = badge(canvas, x=x, y=y, route=route, px=px, width=each)
+    width += LINK_GAP
+    width += link_arrow(canvas, x=x + width, y=y, grey=INK) + LINK_GAP
+    return width + badge(
+        canvas, x=x + width, y=y, route=onto, px=px, width=each,
+    )
 
 
 def pill(canvas: Canvas, *, box: Box, text: str, px: int) -> None:

@@ -439,8 +439,8 @@ def test_destination_row_has_badge_and_destination() -> None:
     badge_part = (FIRST_LINE, slice(556, 590))
     assert (row[badge_part] == bare[badge_part]).all()
     assert (row[badge_part] == INK).any()
-    assert (row[FIRST_LINE, 600:700] == INK).any()
-    assert (bare[FIRST_LINE, 600:700] == PAPER).all()
+    assert (row[FIRST_LINE, 610:700] == INK).any()
+    assert (bare[FIRST_LINE, 610:700] == PAPER).all()
 
 
 def test_destination_row_arrival_on_second_line() -> None:

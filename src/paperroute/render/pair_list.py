@@ -6,12 +6,11 @@ from typing import Final
 from paperroute.core.connection_view import PairRow
 from paperroute.render.canvas import INK, Canvas, Face
 from paperroute.render.chrome import (
-    ARROW_GAP,
-    ARROW_WIDTH,
-    MIN_PAIR_PX,
-    arrow,
+    LINK_GAP,
     badge,
-    badge_width,
+    link_arrow,
+    row_px,
+    shared_width,
 )
 
 INSET: Final[int] = 6
@@ -24,45 +23,12 @@ CHIP_PX: Final[int] = 14
 MIN_UNIT: Final[str] = 'min'
 
 
-def chips_px(
-    canvas: Canvas, *, chips: Sequence[str], px: int, room: float,
-) -> int:
-    """
-    Choose the largest text size, up to px, at which chips fit a room.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Target.
-    chips : Sequence[str]
-        Route labels.
-    px : int
-        Largest text size.
-    room : float
-        Width available.
-
-    Returns
-    -------
-    int
-        Text size, never below MIN_PAIR_PX.
-    """
-    gaps = (len(chips) - 1) * (2 * ARROW_GAP + ARROW_WIDTH)
-    while px > MIN_PAIR_PX:
-        width = gaps + sum(
-            badge_width(canvas, route=label, px=px) for label in chips
-        )
-        if width <= room:
-            break
-        px -= 1
-    return px
-
-
 def route_chips(
     canvas: Canvas, *, x: float, y: float, chips: Sequence[str],
     room: float, px: int = CHIP_PX,
 ) -> float:
     """
-    Draw route badges with an arrow between each.
+    Draw route badges with a link between each.
 
     Parameters
     ----------
@@ -75,7 +41,8 @@ def route_chips(
     chips : Sequence[str]
         Route labels in order.
     room : float
-        Width they must fit; the text shrinks to fit it.
+        Width they must fit; the text shrinks to fit it, and past
+        MIN_PAIR_PX the badges narrow.
     px : int
         Largest text size.
 
@@ -84,13 +51,17 @@ def route_chips(
     float
         Total width.
     """
-    px = chips_px(canvas, chips=chips, px=px, room=room)
+    px = row_px(count=len(chips), px=px, room=room)
+    each = shared_width(px=px, count=len(chips), room=room)
     width = 0.0
     for index, label in enumerate(chips):
         if index:
-            width += ARROW_GAP
-            width += arrow(canvas, x=x + width, y=y, grey=INK) + ARROW_GAP
-        width += badge(canvas, x=x + width, y=y, route=label, px=px)
+            width += LINK_GAP
+            width += link_arrow(canvas, x=x + width, y=y, grey=INK)
+            width += LINK_GAP
+        width += badge(
+            canvas, x=x + width, y=y, route=label, px=px, width=each,
+        )
     return width
 
 

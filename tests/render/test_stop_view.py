@@ -8,7 +8,13 @@ import pytest
 from paperroute.core.model import CarryOn, Mode
 from paperroute.core.stop_view import Pill
 from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
-from paperroute.render.chrome import BANNER, HEADER, badge, route_pair
+from paperroute.render.chrome import (
+    BANNER,
+    HEADER,
+    badge,
+    badge_width,
+    route_pair,
+)
 from paperroute.render.stop_view import (
     FASTER_LEFT,
     LARGE_ROW_H,
@@ -211,7 +217,7 @@ def test_widest_count_clears_list_pairs_and_board_pills() -> None:
     wide = text_width(text=WIDEST_COUNT, face=Face(weight=800, px=28))
     large = text_width(text=WIDEST_COUNT, face=Face(weight=800, px=35))
     arrive = text_width(text='88:88', face=Face(weight=800, px=25))
-    route = badge(Canvas(), x=LIST_LEFT, y=14, route='SH100', px=14)
+    route = badge_width(px=14)
     assert LIST_LEFT + LIST_PAIR_ROOM + 8 <= LIST_LEAVE_RIGHT - wide
     assert LIST_LEFT + LIST_PAIR_ROOM + 8 <= LIST_LEAVE_RIGHT - large
     assert LIST_LEAVE_RIGHT + 16 <= min(FASTER_LEFT, 786 - arrive)
@@ -220,14 +226,20 @@ def test_widest_count_clears_list_pairs_and_board_pills() -> None:
         assert faster_left(k=k) + faster_width(k=k) + 8 < 786 - count
 
 
+@pytest.mark.parametrize(
+    'pair', [('BMT', 'CCN'), ('SH100', '283S2')], ids=['BMT', 'SH100'],
+)
 @pytest.mark.parametrize('large', [False, True], ids=['normal', 'large'])
-def test_list_widest_count_clears_a_long_pair(large: bool) -> None:
-    """A '100 min' count starts clear of a BMT to CCN pair, in real ink."""
+def test_list_widest_count_clears_a_long_pair(
+    large: bool, pair: tuple[str, str],
+) -> None:
+    """A '100 min' count starts clear of a long pair, in real ink."""
     canvas = Canvas()
     y = 100
+    route, onto = pair
     long = replace(
-        row(pill=Pill.FASTER, onto='CCN'),
-        route='BMT',
+        row(pill=Pill.FASTER, onto=onto),
+        route=route,
         countdown='100',
         arrives_at='23:58',
     )

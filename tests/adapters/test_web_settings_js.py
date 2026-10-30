@@ -79,6 +79,7 @@ let prevented = false;
 quiet.listeners.submit({ preventDefault: () => { prevented = true; } });
 await tick();
 results.submit = [prevented, sent.splice(0).length];
+errorLine.gone = false;
 results.hidesSave = [quiet, display].map(
   (form) => form.nodes['button[type="submit"]'].hidden,
 );
@@ -87,6 +88,7 @@ results.postsCard = sent.splice(0);
 results.saved = note(display);
 replies.push(badTime());
 await change(quiet);
+results.errorKeptOnFailure = errorLine.gone;
 results.badTime = note(quiet);
 replies.push({ status: 400 });
 await change(quiet);
@@ -94,6 +96,9 @@ results.refused = note(quiet);
 replies.push('throw');
 await change(quiet);
 results.network = note(quiet);
+replies.push({ status: 204 });
+await change(quiet);
+results.errorGone = errorLine.gone;
 sent.length = 0;
 const first = held(badTime());
 const second = held({ status: 204 });
@@ -140,6 +145,8 @@ def test_settings_script_in_node(tmp_path: Path) -> None:
     assert results['saved'] == 'Saved'
     assert results['badTime'] == 'Quiet hours not saved: use HH:MM times.'
     assert results['submit'] == [True, 1]
+    assert results['errorKeptOnFailure'] is False
+    assert results['errorGone'] is True
     assert results['refused'] == 'Not saved'
     assert results['network'] == 'Not saved: network error'
     assert results['cleared'] == ''

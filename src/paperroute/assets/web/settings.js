@@ -55,6 +55,7 @@ async function save(form, note, card) {
     note.textContent = '';
     const text = await postForm(form);
     if (!card.dirty) note.textContent = text;
+    if (text === NOTES.ok) form.querySelector('.error')?.remove();
   } while (card.dirty);
   card.busy = false;
 }

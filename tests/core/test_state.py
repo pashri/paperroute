@@ -1780,8 +1780,11 @@ def check_map_requests(
             isinstance(request, (LoadPatterns, FetchFeed))
             for request in requests
         )
-    moved = before.map.centre != after.map.centre or not same_place(
-        first=shown(state=before), second=shown(state=after)
+    spot = area_frame(map_state=before.map)[0]
+    moved = (
+        before.map.centre != after.map.centre
+        or spot != area_frame(map_state=after.map)[0]
+        or not same_place(first=shown(state=before), second=shown(state=after))
     )
     if moved:
         return

@@ -433,3 +433,45 @@ def test_inverted_box_sits_below_the_banner() -> None:
     top = HEADER + BANNER
     assert (turned[:top] == plain[:top]).all()
     assert (turned[top:, SPLIT + 3:] == 255 - plain[top:, SPLIT + 3:]).all()
+
+
+def later_band(*, top: int) -> tuple[slice, slice]:
+    """
+    Find where the LATER head goes.
+
+    Parameters
+    ----------
+    top : int
+        Top of the content below the header and any banner.
+
+    Returns
+    -------
+    tuple[slice, slice]
+        Rows and columns of the head.
+    """
+    return slice(top + 12, top + 24), slice(LIST_LEFT, LIST_LEFT + 40)
+
+
+def test_hero_list_is_headed_later() -> None:
+    """With a hero, the list is headed LATER."""
+    assert BASE.hero is not None
+    frame = draw_stop_view(view=BASE)
+    assert frame[later_band(top=HEADER)].min() == INK
+
+
+def test_board_has_no_later_head() -> None:
+    """The board has no hero and no LATER head."""
+    view = replace(BASE, destination=None, hero=None, rows=())
+    frame = draw_stop_view(view=view)
+    assert frame[later_band(top=HEADER)].min() == PAPER
+
+
+def test_later_head_moves_under_a_banner() -> None:
+    """Under a banner, the head's ink starts below the banner."""
+    view = replace(BASE, banner='No live data since 7:56')
+    frame = draw_stop_view(view=view)
+    top = HEADER + BANNER
+    assert frame[later_band(top=top)].min() == INK
+    assert frame[top + 1 : top + 10, LIST_LEFT : LIST_LEFT + 40].min() == (
+        PAPER
+    )

@@ -35,6 +35,7 @@ VEHICLE: Final[dict[Mode, str]] = {
     Mode.FERRY: 'ferry', Mode.LIGHT_RAIL: 'light rail', Mode.COACH: 'coach',
     Mode.REGIONAL: 'service', Mode.OTHER: 'service'}
 LIST_LEFT: Final[int] = 456
+LATER: Final[str] = 'LATER'
 LIST_WIDTH: Final[int] = 140
 LIST_PAIR_ROOM: Final[int] = 92  # clear of a '100 min' at LIST_LEAVE_RIGHT
 LIST_LEAVE_RIGHT: Final[int] = 688
@@ -550,6 +551,10 @@ def hero_split(canvas: Canvas, *, row: Row, top: int) -> None:
     """
     hero(canvas, row=row, top=top)
     canvas.rect(box=(SPLIT, top, SPLIT + 3, HEIGHT), grey=INK)
+    canvas.text(
+        at=(LIST_LEFT, top + 22), text=LATER,
+        face=Face(weight=700, px=11), grey=INK,
+    )
     canvas.text(
         at=(LIST_LEAVE_RIGHT, top + 22), text='LEAVES',
         face=Face(weight=700, px=11),

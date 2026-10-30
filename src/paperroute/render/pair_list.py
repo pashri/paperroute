@@ -21,6 +21,7 @@ LEAVE_FACE: Final[Face] = Face(weight=800, px=24)
 ARRIVE_FACE: Final[Face] = Face(weight=800, px=20)
 DETAIL_FACE: Final[Face] = Face(weight=400, px=14)
 CHIP_PX: Final[int] = 14
+MIN_UNIT: Final[str] = 'min'
 
 
 def chips_px(
@@ -93,6 +94,35 @@ def route_chips(
     return width
 
 
+def leave_time(canvas: Canvas, *, row: PairRow, x: float, y: int) -> None:
+    """
+    Draw a row's leave time: a live count, or the clock time.
+
+    Parameters
+    ----------
+    canvas : Canvas
+        Target.
+    row : PairRow
+        The pair.
+    x : float
+        Left edge of the text.
+    y : int
+        Row top.
+    """
+    if not row.live:
+        canvas.text(
+            at=(x, y + 32), text=row.leaves_at, face=LEAVE_FACE, grey=INK,
+        )
+        return
+    canvas.text(
+        at=(x, y + 32), text=row.countdown, face=LEAVE_FACE, grey=INK,
+    )
+    if row.countdown.isdigit():
+        canvas.text(
+            at=(x, y + 50), text=MIN_UNIT, face=DETAIL_FACE, grey=INK,
+        )
+
+
 def draw_pair_row(
     canvas: Canvas,
     *,
@@ -121,10 +151,7 @@ def draw_pair_row(
     routes = left + ROUTES_LEFT
     room = right - ARRIVE_ROOM - routes
     canvas.rect(box=(left, y, right, y + 1), grey=INK)
-    canvas.text(
-        at=(left + INSET, y + 32), text=row.leaves_at, face=LEAVE_FACE,
-        grey=INK,
-    )
+    leave_time(canvas, row=row, x=left + INSET, y=y)
     route_chips(canvas, x=routes, y=y + 20, chips=row.chips, room=room)
     canvas.text(
         at=(routes, y + 50),

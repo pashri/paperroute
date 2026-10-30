@@ -4,6 +4,8 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute.core.chains import Chain
+from paperroute.core.connection_map import sidebar_rows
+from paperroute.core.connection_strip import build_connection_strip
 from paperroute.core.connection_view import (
     MODE_NOUNS,
     NO_PAIRS,
@@ -67,6 +69,9 @@ DIRECT: Final[Chain] = Chain(
     )),),
     way=None,
 )
+LIVE_DIRECT: Final[Chain] = Chain(
+    legs=(replace(DIRECT.legs[0], live=True),), way=None,
+)
 STAY: Final[Chain] = Chain(
     legs=(live(item=A0733), live(item=replace(A0733, departs=at(7, 39)))),
     way=0,
@@ -120,14 +125,51 @@ def test_stay_on_folds_into_one_leg() -> None:
     hero = chain_hero(chain=STAY, pin=WORK, now=at(7, 30))
     assert [line.route for line in hero.lines] == ['606', None]
     assert hero.lines[1].text == 'stay on to Westmead Station'
-    row = chain_row(chain=STAY, pin=WORK)
+    row = chain_row(chain=STAY, pin=WORK, now=at(7, 30))
     assert row.chips == ('606',)
     assert row.detail == 'stay on'
 
 
+def test_chain_row_counts_down_when_live() -> None:
+    """A live first leg counts down and keeps its clock time."""
+    row = chain_row(chain=LIVE_DIRECT, pin=WORK, now=at(5, 30))
+    assert row.countdown == '130'
+    assert row.live
+    assert row.leaves_at == '7:40'
+
+
+def test_chain_row_timetable_keeps_the_clock() -> None:
+    """A timetable-only first leg is not live."""
+    row = chain_row(chain=DIRECT, pin=WORK, now=at(7, 30))
+    assert not row.live
+    assert row.leaves_at == '7:40'
+
+
+def test_every_pair_surface_gets_the_count() -> None:
+    """The Stop list, the sidebar and the Strip pairs all count down."""
+    chains = (LIVE_DIRECT, LIVE_DIRECT)
+    now = at(7, 28)
+    view = build_connection_view(
+        stop_view=STOP, pin=WORK, chains=chains, scroll=0, now=now,
+    )
+    strip = build_connection_strip(
+        stop_view=STOP,
+        pin=WORK,
+        chains=chains,
+        selected=0,
+        patterns={},
+        positions={},
+        now=now,
+    )
+    sidebar = sidebar_rows(pin=WORK, chains=chains, now=now)
+    assert view.rows[0].countdown == '12'
+    assert sidebar[0].countdown == '12'
+    assert strip.pairs[0].countdown == '12'
+
+
 def test_row_at_one_stop() -> None:
     """A one-change row says where to change."""
-    row = chain_row(chain=CHAINS[1], pin=WORK)
+    row = chain_row(chain=CHAINS[1], pin=WORK, now=at(7, 30))
     assert row.detail == 'at Constitution Hill, North West Twy'
     assert row.chips == ('606', '664')
     assert (row.leaves_at, row.arrives_at, row.minutes) == (
@@ -145,7 +187,7 @@ def test_row_via_two_stops() -> None:
 
 def test_direct_row_single_chip() -> None:
     """A direct row has one chip and says direct."""
-    row = chain_row(chain=DIRECT, pin=WORK)
+    row = chain_row(chain=DIRECT, pin=WORK, now=at(7, 30))
     assert row.chips == ('609',)
     assert row.detail == 'direct'
 

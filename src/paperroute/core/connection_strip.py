@@ -690,7 +690,7 @@ def build_connection_strip(
         sections=sections,
         more=stop_view.more,
         planned=stop_view.planned,
-        pairs=chain_rows(chains=chains, pin=pin),
+        pairs=chain_rows(chains=chains, pin=pin, now=now),
         selected=index,
         empty=no_pair_text(stop_view=stop_view, chains=chains),
     )

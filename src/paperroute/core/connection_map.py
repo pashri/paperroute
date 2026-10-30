@@ -2,6 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
+from datetime import datetime
 from typing import Final
 
 from paperroute.core.chains import Chain
@@ -627,7 +628,7 @@ def panes_inputs(
 
 
 def sidebar_rows(
-    *, pin: Pin, chains: Sequence[Chain],
+    *, pin: Pin, chains: Sequence[Chain], now: datetime,
 ) -> tuple[PairRow, ...]:
     """
     Summarise the first chains for the sidebar.
@@ -638,6 +639,8 @@ def sidebar_rows(
         Connection pin.
     chains : Sequence[Chain]
         Workable chains.
+    now : datetime
+        Current time.
 
     Returns
     -------
@@ -646,7 +649,7 @@ def sidebar_rows(
         changes or that it is direct or stays on; the first spells out
         a single change.
     """
-    rows = chain_rows(chains=chains[:SIDEBAR_PAIRS], pin=pin)
+    rows = chain_rows(chains=chains[:SIDEBAR_PAIRS], pin=pin, now=now)
     return tuple(
         replace(
             row,
@@ -721,7 +724,7 @@ def build_connection_map(
         view,
         base=replace(view.base, route=route, trip=trip),
         sidebar=(),
-        pairs=sidebar_rows(pin=pin, chains=chains),
+        pairs=sidebar_rows(pin=pin, chains=chains, now=inputs.now),
         empty=(
             view.empty
             if framing.centre is None

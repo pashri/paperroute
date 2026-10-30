@@ -103,6 +103,10 @@ class PairRow:
         Arrival time at the Destination.
     minutes : int
         Journey time: whole minutes from leaving to arriving.
+    countdown : str
+        Minutes to the first ride, or 'now'; empty when not counted.
+    live : bool
+        True when the first ride has live times.
     """
 
     leaves_at: str
@@ -110,6 +114,8 @@ class PairRow:
     detail: str
     arrives_at: str
     minutes: int
+    countdown: str = ''
+    live: bool = False
 
 
 @dataclass(frozen=True)
@@ -300,7 +306,7 @@ def via_text(*, chain: Chain, pin: Pin) -> str:
     return 'via ' + ', '.join(boards)
 
 
-def chain_row(*, chain: Chain, pin: Pin) -> PairRow:
+def chain_row(*, chain: Chain, pin: Pin, now: datetime) -> PairRow:
     """
     Summarise a chain as a list row.
 
@@ -310,6 +316,8 @@ def chain_row(*, chain: Chain, pin: Pin) -> PairRow:
         The chain.
     pin : Pin
         Connection pin.
+    now : datetime
+        Current time.
 
     Returns
     -------
@@ -323,11 +331,13 @@ def chain_row(*, chain: Chain, pin: Pin) -> PairRow:
         detail=via_text(chain=chain, pin=pin),
         arrives_at=clock_text(moment=chain.arrives),
         minutes=int(seconds // 60),
+        countdown=countdown(departs=chain.departs, now=now),
+        live=chain.legs[0].live,
     )
 
 
 def chain_rows(
-    *, chains: Sequence[Chain], pin: Pin,
+    *, chains: Sequence[Chain], pin: Pin, now: datetime,
 ) -> tuple[PairRow, ...]:
     """
     Summarise chains as list rows.
@@ -338,13 +348,17 @@ def chain_rows(
         The chains.
     pin : Pin
         Connection pin.
+    now : datetime
+        Current time.
 
     Returns
     -------
     tuple[PairRow, ...]
         One row each, in order.
     """
-    return tuple(chain_row(chain=chain, pin=pin) for chain in chains)
+    return tuple(
+        chain_row(chain=chain, pin=pin, now=now) for chain in chains
+    )
 
 
 def no_pair_text(
@@ -416,7 +430,9 @@ def build_connection_view(
         hero=(
             chain_hero(chain=chains[0], pin=pin, now=now) if chains else None
         ),
-        rows=chain_rows(chains=rest[start : start + PAIR_ROWS], pin=pin),
+        rows=chain_rows(
+            chains=rest[start : start + PAIR_ROWS], pin=pin, now=now,
+        ),
         empty=no_pair_text(stop_view=stop_view, chains=chains),
         banner=stop_view.banner,
         warning=stop_view.warning,

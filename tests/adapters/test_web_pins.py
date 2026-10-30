@@ -722,7 +722,7 @@ async def test_edit_page_offers_delete(editor: Client) -> None:
     field = next(node for node in held if node.attrs.get('name') == 'ref')
     assert field.attrs['value'] == ref
     button = next(node for node in held if node.tag == 'button')
-    assert button.text.strip() == 'Delete'
+    assert button.text.strip() == 'Delete pin'
     assert button.attrs['class'] == 'danger'
     assert button.attrs['data-label'] == pin_label(pin=SAVED)
     editor_form = next(
@@ -737,6 +737,62 @@ async def test_new_pin_editor_has_no_delete(editor: Client) -> None:
     """A pin not yet saved has nothing to delete."""
     text = await (await editor.get('/pins/edit?stop=B2')).text()
     assert '/pins/delete' not in text
+
+
+def check_danger_card(*, text: str, ref: str, label: str) -> None:
+    """
+    Check a page puts Delete in its own card after the editor's.
+
+    Parameters
+    ----------
+    text : str
+        The page.
+    ref : str
+        The pin's ref.
+    label : str
+        The pin's name.
+    """
+    nodes = parse_tree(text=text)
+    editor_card = next(
+        node for node in nodes
+        if node.attrs.get('aria-labelledby') == 'pin-edit-heading'
+    )
+    card = next(
+        node for node in nodes
+        if node.tag == 'section'
+        and 'danger-zone' in (node.attrs.get('class') or '').split()
+    )
+    assert card.index > max(inside(nodes=nodes, outer=editor_card)).index
+    assert editor_card.index not in card.parents
+    held = inside(nodes=nodes, outer=card)
+    assert [node.text for node in held if node.tag == 'h2'] == [
+        'Delete this pin',
+    ]
+    assert [node.text for node in held if node.tag == 'p'] == [
+        "It disappears from the panel and this list. This can't be undone.",
+    ]
+    form = next(node for node in held if node.tag == 'form')
+    assert form.attrs['action'] == '/pins/delete'
+    field = next(node for node in held if node.attrs.get('name') == 'ref')
+    assert field.attrs['value'] == ref
+    button = next(node for node in held if node.tag == 'button')
+    assert button.text.strip() == 'Delete pin'
+    assert button.attrs['class'] == 'danger'
+    assert button.attrs['data-label'] == label
+
+
+async def test_edit_page_puts_delete_in_its_own_card(editor: Client) -> None:
+    """A saved pin's Delete sits in a danger card after the editor."""
+    ref = pin_ref(pin=SAVED)
+    text = await (await editor.get(f'/pins/edit?ref={ref}')).text()
+    check_danger_card(text=text, ref=ref, label=pin_label(pin=SAVED))
+
+
+async def test_new_pin_has_no_delete_card(editor: Client) -> None:
+    """The Add a pin page has no danger card."""
+    text = await (await editor.get('/pins/edit?stop=B2')).text()
+    assert 'Add a pin' in text
+    assert 'danger-zone' not in text
 
 
 async def test_delete_confirm_cancels_to_editor(client: Client) -> None:

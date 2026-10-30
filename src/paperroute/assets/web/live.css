@@ -1000,3 +1000,7 @@ main > .notice {
 [hidden] {
   display: none !important;
 }
+
+.danger-zone {
+  border-block-start-color: var(--danger);
+}

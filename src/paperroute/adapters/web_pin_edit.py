@@ -51,12 +51,16 @@ SAVE: Final[str] = """
         <button type="submit" formmethod="post"
                 formaction="/pins/save">Save</button>"""
 
-DELETE: Final[str] = """
-    <form class="delete" method="post" action="/pins/delete">
-      <input type="hidden" name="ref" value="{ref}">
-      <button type="submit" class="danger"
-              data-label="{label}">Delete</button>
-    </form>"""
+DANGER_CARD: Final[str] = """
+    <section class="card danger-zone" aria-labelledby="delete-heading">
+      <h2 id="delete-heading">Delete this pin</h2>
+      <p>It disappears from the panel and this list. This can't be undone.</p>
+      <form class="delete" method="post" action="/pins/delete">
+        <input type="hidden" name="ref" value="{ref}">
+        <button type="submit" class="danger"
+                data-label="{label}">Delete pin</button>
+      </form>
+    </section>"""
 
 
 def draft_of(
@@ -431,7 +435,7 @@ def editor_form(*, editor: PinEditor, origin: str, windows: str) -> str:
 
 def delete_form(*, ref: str, label: str) -> str:
     """
-    Draw the Delete button for a saved pin.
+    Draw the Delete card for a saved pin.
 
     Parameters
     ----------
@@ -443,15 +447,17 @@ def delete_form(*, ref: str, label: str) -> str:
     Returns
     -------
     str
-        A form that posts to the delete confirmation.
+        A card whose form posts to the delete confirmation.
     """
-    return DELETE.format(
+    return DANGER_CARD.format(
         ref=html.escape(ref),
         label=html.escape(label),
     )
 
 
-def edit_page(*, title: str, notice: str, body: str) -> str:
+def edit_page(
+    *, title: str, notice: str, body: str, danger: str = '',
+) -> str:
     """
     Fill in the search and editor page.
 
@@ -463,6 +469,9 @@ def edit_page(*, title: str, notice: str, body: str) -> str:
         The notice's HTML, or an empty string.
     body : str
         The page's HTML.
+    danger : str
+        The Delete card's HTML after the editor's card, or an empty
+        string.
 
     Returns
     -------
@@ -474,6 +483,7 @@ def edit_page(*, title: str, notice: str, body: str) -> str:
         .replace('{{title}}', html.escape(title))
         .replace('{{notice}}', notice)
         .replace('{{body}}', body)
+        .replace('{{danger}}', danger)
     )
 
 

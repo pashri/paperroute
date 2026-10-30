@@ -12,13 +12,14 @@ from aiohttp.test_utils import TestClient, TestServer
 from paperroute.adapters.pin_windows import NO_DAY
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_pin_edit import MISFIT
+from paperroute.adapters.web_pin_list import pin_label
 from paperroute.core.messages import PinSaved
 from paperroute.core.model import pin_ref
 from paperroute.observers import PinsSeen
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_connection import unlabelled
 from tests.adapters.test_web_device import Device
-from tests.adapters.test_web_pins import Pins
+from tests.adapters.test_web_pins import Pins, check_danger_card
 from tests.core.connection_factories import CAMPBELLTOWN_WAY, WORK
 
 Client = TestClient[web.Request, web.Application]
@@ -68,7 +69,7 @@ async def test_page_of_saved_pin(client: Client) -> None:
     assert '<legend>Never use</legend>' in text
     assert 'Routes ticked here are never used on any leg.' in text
     assert 'value="Work"' in text
-    assert '>Delete</button>' in text
+    assert '>Delete pin</button>' in text
     assert unlabelled(text=text) == []
     assert '<script src="/vendor/tom-select.complete.min.js" defer>' in text
 
@@ -188,3 +189,11 @@ async def test_stop_search_reads_as_field_text(client: Client) -> None:
     assert 'background: var(--surface);' in sheet[full:full + 120]
     item = sheet.index('.ts-wrapper .ts-control .item,')
     assert 'color: var(--text);' in sheet[item:item + 120]
+
+
+async def test_ways_page_puts_delete_in_its_own_card(client: Client) -> None:
+    """A saved connection pin's Delete sits in a danger card."""
+    text = await (await client.get(f'/pins/ways?ref={REF}')).text()
+    check_danger_card(text=text, ref=REF, label=pin_label(pin=WORK))
+    editor_end = text.index('</section>', text.index('pin-edit-heading'))
+    assert text.index('>Delete pin</button>') > editor_end

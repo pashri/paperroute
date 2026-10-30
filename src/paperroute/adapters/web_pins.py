@@ -726,13 +726,15 @@ class PinsPages:
         body = self._editor_body(
             draft=draft, pin=pin, rows=start_rows(rows=rows, pin=pin),
         )
+        danger = ''
         if pin is not None and draft.ref:
-            body += delete_form(ref=draft.ref, label=pin_label(pin=pin))
+            danger = delete_form(ref=draft.ref, label=pin_label(pin=pin))
         return html_page(
             text=edit_page(
                 title='Add a pin' if draft.ref is None else 'Edit pin',
                 notice=notice,
                 body=body,
+                danger=danger,
             ),
             status=status,
         )

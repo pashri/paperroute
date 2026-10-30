@@ -627,10 +627,13 @@ class WaysPages:
         body = ways_form(
             options=self.options, pin=pin, query=query, rows=rows, card=card,
         )
+        danger = ''
         if base is not None and draft.ref:
-            body += delete_form(ref=draft.ref, label=pin_label(pin=base))
+            danger = delete_form(ref=draft.ref, label=pin_label(pin=base))
         return html_page(
-            text=edit_page(title=title, notice=notice, body=body),
+            text=edit_page(
+                title=title, notice=notice, body=body, danger=danger,
+            ),
             status=status,
         )
 

@@ -562,3 +562,9 @@ def test_feed_names_wrap_so_the_times_show() -> None:
 def test_hidden_beats_the_button_display() -> None:
     """A `hidden` element stays hidden whatever its own display rule."""
     assert '[hidden] {\n  display: none !important;\n}' in css_text()
+
+
+def test_danger_zone_rule() -> None:
+    """The Delete card's top border is the danger colour."""
+    rule = '.danger-zone {\n  border-block-start-color: var(--danger);\n}'
+    assert rule in css_text()

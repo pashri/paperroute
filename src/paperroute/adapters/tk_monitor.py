@@ -19,6 +19,7 @@ from paperroute.core.messages import (
     KnobTurned,
     QuitRequested,
 )
+from paperroute.core.saved import CLEAN_AFTER
 from paperroute.render.canvas import HEIGHT, WIDTH, encode_png
 
 KEYS: Final[dict[str, Event]] = {
@@ -293,6 +294,7 @@ class TkMonitor:
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """
         Show a frame, upside down when turned.
@@ -311,8 +313,10 @@ class TkMonitor:
             Ignored.
         clear : bool
             Ignored.
+        clean_after : int
+            Ignored.
         """
-        del full, quick, asleep, clear
+        del full, quick, asleep, clear, clean_after
         shown = turned_frame(frame=frame, turned=turned)
         data = base64.b64encode(encode_png(grey=shown)).decode('ascii')
         self.image = tkinter.PhotoImage(data=data, format='png')

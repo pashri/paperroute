@@ -30,6 +30,7 @@ from paperroute.core.panel_views import (
     SleepView,
     WifiSetupView,
 )
+from paperroute.core.saved import CLEAN_AFTER
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
 from paperroute.core.tiles import TileVariant
@@ -442,7 +443,7 @@ def plain_drawing(*, view: PlainView) -> Callable[[], Frame]:
     return functools.partial(draw_chooser_view, view=view)
 
 
-async def render(
+async def render(  # pylint: disable=too-many-arguments
     *,
     ports: Ports,
     view: View,
@@ -452,6 +453,7 @@ async def render(
     quick: bool = False,
     asleep: bool = False,
     clear: bool = False,
+    clean_after: int = CLEAN_AFTER,
 ) -> None:
     """
     Draw a view off the event loop, show it and report how long it took.
@@ -474,6 +476,8 @@ async def render(
         Whether the device is in Sleep mode.
     clear : bool
         Whether to ask for a clear refresh.
+    clean_after : int
+        Quick patches before the panel cleans the screen.
     """
     draw = drawing(view=view, maps=maps)
     frame, render_ms = await timed_async(call=asyncio.to_thread(draw))
@@ -484,6 +488,7 @@ async def render(
         turned=turned,
         quick=quick,
         asleep=asleep,
+        clean_after=clean_after,
     )
     logger.debug(
         'frame drawn', extra={'render_ms': render_ms, 'full': full}

@@ -86,6 +86,7 @@ from paperroute.core.panel_views import MenuView, SleepView
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.places import shown
 from paperroute.core.saved import (
+    CLEAN_AFTER,
     DEFAULT_SAVED,
     TOWN_HALL,
     LiveView,
@@ -1024,6 +1025,7 @@ class PressingDisplay(FrameRecorder):
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """
         Keep a frame; after the first, press the bottom knob.
@@ -1042,6 +1044,8 @@ class PressingDisplay(FrameRecorder):
             Whether the device is in Sleep mode.
         clear : bool
             Whether a clear refresh was asked for.
+        clean_after : int
+            Quick patches before a cleaning full refresh.
         """
         if not self.frames and self.post is not None:
             self.post(KnobPressed(knob=Knob.BOTTOM))
@@ -1052,6 +1056,7 @@ class PressingDisplay(FrameRecorder):
             quick=quick,
             asleep=asleep,
             clear=clear,
+            clean_after=clean_after,
         )
 
     def hook(self, post: Callable[[Event], None]) -> None:
@@ -1665,6 +1670,7 @@ class ZoomingDisplay(PressingDisplay):
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """
         Keep a frame; press the bottom knob, then turn it twice.
@@ -1683,6 +1689,8 @@ class ZoomingDisplay(PressingDisplay):
             Whether the device is in Sleep mode.
         clear : bool
             Whether a clear refresh was asked for.
+        clean_after : int
+            Quick patches before a cleaning full refresh.
         """
         if self.post is not None and 1 <= len(self.frames) <= 2:
             self.post(KnobTurned(knob=Knob.BOTTOM, steps=-1))
@@ -1693,6 +1701,7 @@ class ZoomingDisplay(PressingDisplay):
             quick=quick,
             asleep=asleep,
             clear=clear,
+            clean_after=clean_after,
         )
 
 
@@ -1959,6 +1968,29 @@ async def test_app_turns_panel_frames() -> None:
     assert display.turns[-1] is True
 
 
+async def test_app_passes_clean_after_to_panel() -> None:
+    """The saved cleaning count reaches the panel, and a change follows."""
+    display = FrameRecorder()
+    saved = replace(DEFAULT_SAVED, settings=Settings(clean_after=60))
+    ports = ports_of(display=display, states=MemoryStates(stored=saved))
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    outputs = Outputs(
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    state = starting_state(ports=ports, seed=PIN)
+    for event in (Tick(now=AT), SettingsChanged(clean_after=15)):
+        state = await handle(
+            state=state, event=event, ports=ports, queue=queue,
+            tasks=tasks, outputs=outputs,
+        )
+        outputs.pending.view = NoticeView(title='Frame')
+        await draw_pending(ports=ports, outputs=outputs)
+    assert display.cleans[-2:] == [60, 15]
+    await stop(tasks=tasks)
+
+
 async def test_app_marks_frames_quick_after_a_knob_turn() -> None:
     """A knob turn's frame is quick; a tick 5 s later is not."""
     display = FrameRecorder()
@@ -2026,6 +2058,7 @@ class Ordered(FrameRecorder):
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """Log the show and keep the frame."""
         self.log.append('show')
@@ -2036,6 +2069,7 @@ class Ordered(FrameRecorder):
             quick=quick,
             asleep=asleep,
             clear=clear,
+            clean_after=clean_after,
         )
 
     def settle(self, *, timeout: float) -> bool:
@@ -2330,6 +2364,7 @@ class ScriptedDisplay(FrameRecorder):
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """
         Keep a frame; when it is the trigger, post the script once.
@@ -2348,6 +2383,8 @@ class ScriptedDisplay(FrameRecorder):
             Whether the device is in Sleep mode.
         clear : bool
             Whether a clear refresh was asked for.
+        clean_after : int
+            Quick patches before a cleaning full refresh.
         """
         super().show(
             frame=frame,
@@ -2356,6 +2393,7 @@ class ScriptedDisplay(FrameRecorder):
             quick=quick,
             asleep=asleep,
             clear=clear,
+            clean_after=clean_after,
         )
         trigger = self.trigger
         if trigger is None or self.post is None:
@@ -2477,6 +2515,7 @@ class ArrivingDisplay(FrameRecorder):
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """
         Keep a frame; after the first, copy the timetable in.
@@ -2495,6 +2534,8 @@ class ArrivingDisplay(FrameRecorder):
             Whether the device is in Sleep mode.
         clear : bool
             Whether a clear refresh was asked for.
+        clean_after : int
+            Quick patches before a cleaning full refresh.
         """
         super().show(
             frame=frame,
@@ -2503,6 +2544,7 @@ class ArrivingDisplay(FrameRecorder):
             quick=quick,
             asleep=asleep,
             clear=clear,
+            clean_after=clean_after,
         )
         if self.source is not None and self.target is not None:
             shutil.copyfile(self.source, self.target)

@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from paperroute.adapters.state_auto import CLOCK, CLOCK_FORMAT
 from paperroute.core.saved import (
+    CLEAN_AFTER,
+    CLEAN_CHOICES,
     ConnectionMap,
     Lookahead,
     QuietMode,
@@ -30,7 +32,8 @@ class SettingsModel(BaseModel):
     """
     The Settings page's choices as stored.
 
-    The school switch has a default, so files stored before it load.
+    The school switches and the cleaning count have defaults, so files
+    stored before them load.
     """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
@@ -50,6 +53,32 @@ class SettingsModel(BaseModel):
     connection_map: ConnectionMap
     skip_school_buses: bool = True
     skip_school_on_route_pins: bool = False
+    clean_after: int = CLEAN_AFTER
+
+    @field_validator('clean_after')
+    @classmethod
+    def check_clean_after(cls, count: int) -> int:
+        """
+        Refuse a cleaning count the Settings page never offers.
+
+        Parameters
+        ----------
+        count : int
+            The stored count.
+
+        Returns
+        -------
+        int
+            The count, unchanged.
+
+        Raises
+        ------
+        ValueError
+            When the count is not one of `CLEAN_CHOICES`.
+        """
+        if count not in CLEAN_CHOICES:
+            raise ValueError(f'clean_after must be one of {CLEAN_CHOICES}')
+        return count
 
     @field_validator('peak_windows')
     @classmethod
@@ -156,6 +185,7 @@ def settings_to_model(*, settings: Settings) -> SettingsModel:
         connection_map=settings.connection_map,
         skip_school_buses=settings.skip_school_buses,
         skip_school_on_route_pins=settings.skip_school_on_route_pins,
+        clean_after=settings.clean_after,
     )
 
 
@@ -189,6 +219,7 @@ def settings_from_model(*, model: SettingsModel) -> Settings:
         connection_map=model.connection_map,
         skip_school_buses=model.skip_school_buses,
         skip_school_on_route_pins=model.skip_school_on_route_pins,
+        clean_after=model.clean_after,
     )
 
 

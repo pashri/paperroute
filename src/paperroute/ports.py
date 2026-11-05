@@ -35,7 +35,7 @@ from paperroute.core.patterns import TripPattern
 from paperroute.core.pin_choices import ChangeStop, StopMatch
 from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.route_colours import RouteColour
-from paperroute.core.saved import Saved, Settings
+from paperroute.core.saved import CLEAN_AFTER, Saved, Settings
 from paperroute.core.tiles import LabelKind, StreetLabel, TileVariant
 
 
@@ -821,6 +821,7 @@ class Display(Protocol):
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """
         Show a frame.
@@ -843,6 +844,8 @@ class Display(Protocol):
         clear : bool
             Whether to do a clear refresh: the whole screen in black and
             white, with no wipe. A full refresh wins over it.
+        clean_after : int
+            Quick patches a panel draws before a cleaning full refresh.
         """
 
     def settle(self, *, timeout: float) -> bool:

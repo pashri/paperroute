@@ -10,6 +10,7 @@ from typing import Final
 
 from paperroute.core.messages import SettingsChanged
 from paperroute.core.saved import (
+    CLEAN_CHOICES,
     ConnectionMap,
     Lookahead,
     QuietMode,
@@ -31,6 +32,7 @@ CHOICES: Final[frozenset[str]] = frozenset(
     {'peak_rate', 'offpeak_rate', 'alert_lookahead'}
 )
 RADIOS: Final[tuple[str, ...]] = ('quiet_mode', 'connection_map')
+COUNTS: Final[dict[str, int]] = {str(count): count for count in CLEAN_CHOICES}
 SWITCH: Final[dict[str, bool]] = {'on': True, 'off': False}
 CLOCK: Final[re.Pattern[str]] = re.compile(r'(\d\d):(\d\d)')
 ERRORS: Final[dict[str, str]] = {
@@ -102,8 +104,9 @@ def form_values(*, settings: Settings) -> dict[str, str]:
     Returns
     -------
     dict[str, str]
-        `on` or `off` for each switch, the rate, mode and lookahead values, and
-        `HH:MM` times; an unused peak slot holds empty strings.
+        `on` or `off` for each switch, the rate, mode and lookahead values,
+        the cleaning count, and `HH:MM` times; an unused peak slot holds
+        empty strings.
     """
     values = {
         name: 'on' if getattr(settings, name) else 'off'
@@ -113,6 +116,7 @@ def form_values(*, settings: Settings) -> dict[str, str]:
         name: getattr(settings, name).value
         for name in (*CHOICES, *RADIOS)
     }
+    values['clean_after'] = str(settings.clean_after)
     values['quiet_start'] = clock_text(moment=settings.my_hours.start)
     values['quiet_end'] = clock_text(moment=settings.my_hours.end)
     return values | peak_values(settings=settings)
@@ -306,6 +310,32 @@ def switches_of(*, fields: Mapping[str, str]) -> dict[str, bool]:
     return found
 
 
+def clean_after_of(*, fields: Mapping[str, str]) -> int | None:
+    """
+    Read the cleaning count if it was posted.
+
+    Parameters
+    ----------
+    fields : Mapping[str, str]
+        The posted fields.
+
+    Returns
+    -------
+    int | None
+        The count, or None when the field is absent.
+
+    Raises
+    ------
+    UnknownValue
+        If the field is not one of the offered counts.
+    """
+    if 'clean_after' not in fields:
+        return None
+    if fields['clean_after'] not in COUNTS:
+        raise UnknownValue(fields['clean_after'])
+    return COUNTS[fields['clean_after']]
+
+
 def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged:
     """
     Turn posted fields into a settings change.
@@ -323,7 +353,8 @@ def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged:
     Raises
     ------
     UnknownValue
-        If a switch, rate, mode or lookahead holds an unknown value.
+        If a switch, rate, mode, lookahead or cleaning count holds an
+        unknown value.
     BadInput
         If a time is not `HH:MM` or a peak window is unusable.
     """
@@ -358,6 +389,7 @@ def changed_from(*, fields: Mapping[str, str]) -> SettingsChanged:
         ),
         skip_school_buses=switches.get('skip_school_buses'),
         skip_school_on_route_pins=switches.get('skip_school_on_route_pins'),
+        clean_after=clean_after_of(fields=fields),
     )
 
 
@@ -428,9 +460,8 @@ def page_text(
     ----------
     template : str
         The page with `{{field}}` marks. A switch mark becomes
-        ` checked` when on; `{{field:choice}}` becomes ` selected` (a
-        rate or lookahead) or ` checked` (a radio) when the field holds
-        that choice;
+        ` checked` when on; `{{field:choice}}` becomes ` checked` (a
+        radio) or ` selected` (a list) when the field holds that choice;
         any other becomes the value.
         `{{error_peak}}` and `{{error_quiet}}` become a message.
     values : Mapping[str, str]
@@ -463,7 +494,7 @@ def page_text(
             return error_line(shown=error == section, section=section)
         value = values.get(name, '')
         if choice:
-            mark = ' selected' if name in CHOICES else ' checked'
+            mark = ' checked' if name in RADIOS else ' selected'
             return mark if value == choice else ''
         if name in SWITCHES:
             return ' checked' if value == 'on' else ''

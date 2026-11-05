@@ -14,13 +14,13 @@ from numpy.typing import NDArray
 from paperroute.adapters import panel_display
 from paperroute.adapters.epaper import PanelTimeout
 from paperroute.adapters.panel_display import (
-    CLEAN_AFTER,
     CLEAN_QUIET,
     RETRY_AFTER,
     SCREEN,
     Displays,
     PanelDisplay,
 )
+from paperroute.core.saved import CLEAN_AFTER
 from paperroute.ports import PanelRefresh
 from paperroute.render.panel_bits import (
     Box,
@@ -216,6 +216,7 @@ class Rig:
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """
         Show a frame and wait for the panel to settle.
@@ -234,6 +235,8 @@ class Rig:
             Whether the device is in Sleep mode.
         clear : bool
             Whether to ask for a clear refresh.
+        clean_after : int
+            Quick patches before a cleaning full refresh.
         """
         self.display.show(
             frame=frame,
@@ -242,6 +245,7 @@ class Rig:
             quick=quick,
             asleep=asleep,
             clear=clear,
+            clean_after=clean_after,
         )
         assert self.display.settle(timeout=WAIT)
 
@@ -505,6 +509,7 @@ def flicker(
     count: int,
     quick: bool = False,
     turned: bool = False,
+    clean_after: int = CLEAN_AFTER,
 ) -> NDArray[np.uint8]:
     """
     Show frames that alternate black and white in one box.
@@ -521,6 +526,8 @@ def flicker(
         Whether each one is quick.
     turned : bool
         Whether each one is turned.
+    clean_after : int
+        Quick patches before a cleaning full refresh.
 
     Returns
     -------
@@ -530,7 +537,12 @@ def flicker(
     frame = white()
     for index in range(count):
         frame = painted(boxes=(BOX_A,), grey=255 if index % 2 else 0)
-        rig.show(frame=frame, quick=quick, turned=turned)
+        rig.show(
+            frame=frame,
+            quick=quick,
+            turned=turned,
+            clean_after=clean_after,
+        )
     return frame
 
 
@@ -594,6 +606,38 @@ def test_no_clean_within_quiet_time(rig: Rig) -> None:
     rig.clock.now += 1
     rig.show(frame=last)
     assert rig.controller.kinds() == ['full', *['partial'] * 30, 'full']
+
+
+def test_cleans_after_fifteen_when_told_fifteen(rig: Rig) -> None:
+    """With a count of 15, the fifteenth patch is followed by a clean."""
+    rig.show(frame=white(), clean_after=15)
+    last = flicker(rig=rig, count=15, clean_after=15)
+    rig.show(frame=last, clean_after=15)
+    assert rig.controller.kinds() == ['full', *['partial'] * 15, 'full']
+    assert rig.controller.calls[-1] == ('full', grey_planes(frame=last))
+
+
+def test_no_clean_after_thirty_when_told_sixty(rig: Rig) -> None:
+    """With a count of 60, thirty patches are not cleaned."""
+    rig.show(frame=white(), clean_after=60)
+    last = flicker(rig=rig, count=CLEAN_AFTER, clean_after=60)
+    rig.clock.now += CLEAN_QUIET
+    rig.show(frame=last, clean_after=60)
+    assert rig.controller.kinds() == ['full', *['partial'] * CLEAN_AFTER]
+
+
+def test_lowered_count_cleans_once_quiet(rig: Rig) -> None:
+    """A count lowered below the patches drawn cleans after the quiet."""
+    rig.show(frame=white())
+    flicker(rig=rig, count=20)
+    last = painted(boxes=(BOX_A,), grey=0)
+    rig.show(frame=last, quick=True, clean_after=15)
+    rig.clock.now += CLEAN_QUIET - 1
+    rig.show(frame=last, clean_after=15)
+    assert rig.controller.kinds() == ['full', *['partial'] * 21]
+    rig.clock.now += 1
+    rig.show(frame=last, clean_after=15)
+    assert rig.controller.kinds() == ['full', *['partial'] * 21, 'full']
 
 
 def test_full_resets_patch_count(rig: Rig) -> None:
@@ -880,6 +924,15 @@ def test_displays_passes_asleep() -> None:
     displays.show(frame=white(), asleep=True, clear=True)
     assert first.sleeps == second.sleeps == [True]
     assert first.clears == second.clears == [True]
+
+
+def test_displays_passes_clean_after() -> None:
+    """Displays forwards the cleaning count to each display."""
+    first = FrameRecorder()
+    second = FrameRecorder()
+    displays = Displays(displays=[first, second])
+    displays.show(frame=white(), clean_after=120)
+    assert first.cleans == second.cleans == [120]
 
 
 def test_displays_fans_out() -> None:

@@ -42,7 +42,7 @@ from paperroute.core.messages import (
     SettingsChanged,
 )
 from paperroute.core.model import SYDNEY
-from paperroute.core.saved import Settings
+from paperroute.core.saved import CLEAN_AFTER, Settings
 from paperroute.render.canvas import encode_png
 from paperroute.rss import max_rss_mb
 
@@ -378,6 +378,7 @@ class WebDisplay:
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """
         Store a frame and wake the event streams.
@@ -398,8 +399,10 @@ class WebDisplay:
             Ignored.
         clear : bool
             Ignored.
+        clean_after : int
+            Ignored.
         """
-        del full, turned, quick, asleep, clear
+        del full, turned, quick, asleep, clear, clean_after
         self._png = encode_png(grey=frame)
         self.version += 1
         self.changed.set()

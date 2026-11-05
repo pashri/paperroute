@@ -32,7 +32,7 @@ from paperroute.core.model import (
 )
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
-from paperroute.core.saved import DEFAULT_SAVED, Saved
+from paperroute.core.saved import CLEAN_AFTER, DEFAULT_SAVED, Saved
 from paperroute.core.tiles import LabelKind, StreetLabel, TileVariant
 from paperroute.core.trip_search import (
     Journey,
@@ -197,6 +197,7 @@ class FrameRecorder:
     quicks: list[bool] = field(default_factory=list)
     sleeps: list[bool] = field(default_factory=list)
     clears: list[bool] = field(default_factory=list)
+    cleans: list[int] = field(default_factory=list)
 
     def show(
         self,
@@ -207,6 +208,7 @@ class FrameRecorder:
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """
         Keep a frame.
@@ -225,6 +227,8 @@ class FrameRecorder:
             Whether the device is in Sleep mode.
         clear : bool
             Whether a clear refresh was asked for.
+        clean_after : int
+            Quick patches before a cleaning full refresh.
         """
         self.frames.append(frame)
         self.fulls.append(full)
@@ -232,6 +236,7 @@ class FrameRecorder:
         self.quicks.append(quick)
         self.sleeps.append(asleep)
         self.clears.append(clear)
+        self.cleans.append(clean_after)
 
     def settle(self, *, timeout: float) -> bool:
         """

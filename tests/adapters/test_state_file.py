@@ -794,8 +794,12 @@ def test_my_hours_may_wrap_or_be_empty(
             {'connection_map': 'first', 'larger_text': True},
             Settings(rotate=True, larger_text=True),
         ),
+        (
+            {'clean_after': 45, 'larger_text': True},
+            Settings(rotate=True, larger_text=True),
+        ),
     ],
-    ids=['bad-rate', 'bad-my-hours', 'retired-first-map'],
+    ids=['bad-rate', 'bad-my-hours', 'retired-first-map', 'bad-clean'],
 )
 def test_bad_setting_resets_only_itself(
     path: Path, changes: dict[str, object], expected: Settings
@@ -803,6 +807,26 @@ def test_bad_setting_resets_only_itself(
     """A bad or retired setting resets that field; the others survive."""
     saved = load_with_settings(path=path, changes=changes)
     assert saved.settings == expected
+
+
+def test_file_without_clean_after_cleans_after_thirty(path: Path) -> None:
+    """A state.json from before the cleaning choice loads with 30."""
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=replace(sample(), settings=Settings(rotate=True)))
+    data = json.loads(path.read_text())
+    del data['settings']['clean_after']
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved.settings == Settings(rotate=True, clean_after=30)
+
+
+def test_round_trips_clean_after(path: Path) -> None:
+    """A cleaning choice survives a save and a load."""
+    repository = JsonStateRepository(path=path)
+    changed = Settings(clean_after=120)
+    repository.save(saved=replace(sample(), settings=changed))
+    assert repository.load().saved.settings == changed
 
 
 def test_migrates_to_pin_fields(path: Path) -> None:

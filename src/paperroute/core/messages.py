@@ -552,6 +552,8 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
         Whether school routes are left out.
     skip_school_on_route_pins : bool | None
         Whether school routes are also left out of pins without a To.
+    clean_after : int | None
+        Quick patches the panel draws before a cleaning full refresh.
     """
 
     auto_rebuild: bool | None = None
@@ -567,6 +569,7 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
     connection_map: ConnectionMap | None = None
     skip_school_buses: bool | None = None
     skip_school_on_route_pins: bool | None = None
+    clean_after: int | None = None
 
 
 @dataclass(frozen=True)

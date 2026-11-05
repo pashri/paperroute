@@ -119,6 +119,18 @@
                  value="on"{{skip_school_on_route_pins}}>
           Also on pins without a To
         </label>
+        <label>Clean screen after
+          <select name="clean_after" aria-describedby="clean-hint">
+            <option value="15"{{clean_after:15}}>15 changes</option>
+            <option value="30"{{clean_after:30}}>30 changes</option>
+            <option value="60"{{clean_after:60}}>60 changes</option>
+            <option value="120"{{clean_after:120}}>120 changes</option>
+          </select>
+        </label>
+        <p id="clean-hint" class="hint">
+          A full refresh clears the faint marks quick updates leave behind.
+          It waits until the knobs have rested for 30 s.
+        </p>
         <fieldset>
           <legend>Connection map</legend>
           <label class="switch">

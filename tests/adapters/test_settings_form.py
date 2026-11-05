@@ -16,6 +16,7 @@ from paperroute.adapters.settings_form import (
 from paperroute.adapters.web_common import asset
 from paperroute.core.messages import SettingsChanged
 from paperroute.core.saved import (
+    CLEAN_CHOICES,
     ConnectionMap,
     Lookahead,
     QuietMode,
@@ -36,6 +37,7 @@ ODD = Settings(
     inverted_lists=True,
     alert_lookahead=Lookahead.THREE_DAYS,
     connection_map=ConnectionMap.WHOLE,
+    clean_after=60,
 )
 PEAK = {
     'peak_1_start': '06:30',
@@ -258,3 +260,36 @@ def test_school_switch_read_and_shown() -> None:
     page = asset(name='settings.html')
     assert 'name="skip_school_buses"' in page
     assert 'Leave out school buses' in page
+
+
+@pytest.mark.parametrize('count', CLEAN_CHOICES)
+def test_clean_after_form_round_trip(count: int) -> None:
+    """Each cleaning choice is written as its number and read back."""
+    values = form_values(settings=Settings(clean_after=count))
+    assert values['clean_after'] == str(count)
+    event = changed_from(fields={'clean_after': str(count)})
+    assert event == SettingsChanged(clean_after=count)
+
+
+@pytest.mark.parametrize('bad', ['45', '0', 'never', '', '030', ' 30'])
+def test_clean_after_refuses_other_values(bad: str) -> None:
+    """A count the page never offers is refused."""
+    with pytest.raises(UnknownValue):
+        changed_from(fields={'clean_after': bad})
+
+
+def test_clean_after_selects_its_option() -> None:
+    """The page's cleaning choice is drawn with the saved count selected."""
+    page = asset(name='settings.html')
+    text = page_text(
+        template=page,
+        values=form_values(settings=Settings(clean_after=15)),
+        error=None,
+    )
+    plain = ' '.join(text.split())
+    assert 'Clean screen after' in plain
+    assert '<select name="clean_after" aria-describedby="clean-hint">' in plain
+    for count in CLEAN_CHOICES:
+        assert f'>{count} changes</option>' in plain
+    assert '<option value="15" selected>' in plain
+    assert plain.count(' selected>') == 4

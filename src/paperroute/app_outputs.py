@@ -18,6 +18,7 @@ from paperroute.core.messages import (
     Render,
     ResetDevice,
 )
+from paperroute.core.saved import CLEAN_AFTER
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +45,8 @@ class PendingView:
     clear : bool
         Whether any render since the last frame asked for a clear
         refresh.
+    clean_after : int
+        Quick patches before the panel cleans the screen.
     """
 
     view: View | None = None
@@ -52,6 +55,7 @@ class PendingView:
     quick: bool = False
     asleep: bool = False
     clear: bool = False
+    clean_after: int = CLEAN_AFTER
 
 
 @dataclass(frozen=True)
@@ -102,6 +106,7 @@ async def draw_pending(*, ports: Ports, outputs: Outputs) -> None:
         quick=pending.quick,
         asleep=pending.asleep,
         clear=clear,
+        clean_after=pending.clean_after,
     )
 
 

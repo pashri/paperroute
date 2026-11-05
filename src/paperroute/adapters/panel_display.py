@@ -11,6 +11,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.adapters.epaper import PanelTimeout
+from paperroute.core.saved import CLEAN_AFTER
 from paperroute.ports import Display, PanelRefresh
 from paperroute.render.panel_bits import (
     HEIGHT,
@@ -23,7 +24,6 @@ from paperroute.render.panel_bits import (
     quick_planes,
 )
 
-CLEAN_AFTER: Final[int] = 30  # quick patches
 CLEAN_QUIET: Final[float] = 30  # seconds
 RETRY_AFTER: Final[float] = 60  # seconds
 STOP_WAIT: Final[float] = 8  # seconds
@@ -134,6 +134,7 @@ class Retry:
     due: float
 
 
+# pylint: disable-next=too-many-instance-attributes
 class PanelDisplay:
     """
     Draws frames on an e-paper panel from one worker thread.
@@ -142,7 +143,8 @@ class PanelDisplay:
     greys. A clear refresh draws the whole screen in black and white
     with no wipe. Every other change is a 1-bit quick patch that drives
     only the pixels whose value changed, so grey that did not change
-    stays grey. After `CLEAN_AFTER` quick patches, the last frame gets
+    stays grey. After the latest frame's `clean_after` quick patches
+    (`CLEAN_AFTER` until a frame says otherwise), the last frame gets
     a cleaning full refresh once no quick frame has come for
     `CLEAN_QUIET` seconds, unless the device is in Sleep mode. A frame
     shown in Sleep mode puts the panel into deep sleep once drawn. A
@@ -179,6 +181,7 @@ class PanelDisplay:
         self._turned = False
         self._owed_full = True
         self._patches = 0
+        self._clean_after = CLEAN_AFTER
         self._asleep = False
         self._retry: Retry | None = None
         self._thread = threading.Thread(
@@ -197,6 +200,7 @@ class PanelDisplay:
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """
         Pass on finished refreshes, then leave a frame for the worker.
@@ -220,6 +224,9 @@ class PanelDisplay:
             once the frame is drawn, and is not cleaned.
         clear : bool
             Whether to do a clear refresh, unless a full one is due.
+        clean_after : int
+            Quick patches before a cleaning full refresh; a count below
+            the patches already drawn makes the clean due.
         """
         with self._ready:
             results, self._results = self._results, []
@@ -240,6 +247,7 @@ class PanelDisplay:
                 asleep=asleep,
                 clear=clear or (waiting is not None and waiting.clear),
             )
+            self._clean_after = clean_after
             if quick:
                 self._last_quick = self._clock()
             self._ready.notify_all()
@@ -356,15 +364,15 @@ class PanelDisplay:
         -------
         bool
             True when a frame is drawn, no full refresh is owed, the
-            last frame was not shown in Sleep mode and `CLEAN_AFTER`
-            quick patches have been drawn since the last full or clear
-            refresh.
+            last frame was not shown in Sleep mode and the latest
+            frame's `clean_after` quick patches have been drawn since
+            the last full or clear refresh.
         """
         return (
             self._drawn is not None
             and not self._owed_full
             and not self._asleep
-            and self._patches >= CLEAN_AFTER
+            and self._patches >= self._clean_after
         )
 
     def _clean_due(self) -> bool:
@@ -641,6 +649,7 @@ class Displays:
         quick: bool = False,
         asleep: bool = False,
         clear: bool = False,
+        clean_after: int = CLEAN_AFTER,
     ) -> None:
         """
         Show a frame on every display.
@@ -659,6 +668,8 @@ class Displays:
             Whether the device is in Sleep mode.
         clear : bool
             Whether to do a clear refresh.
+        clean_after : int
+            Quick patches before a cleaning full refresh.
         """
         for display in self._displays:
             display.show(
@@ -668,6 +679,7 @@ class Displays:
                 quick=quick,
                 asleep=asleep,
                 clear=clear,
+                clean_after=clean_after,
             )
 
     def settle(self, *, timeout: float) -> bool:

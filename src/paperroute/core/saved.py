@@ -89,6 +89,8 @@ PEAK_WINDOWS: Final[tuple[Window, ...]] = (
     Window(start=time(15), end=time(19)),
 )
 MY_HOURS: Final[Window] = Window(start=time(23), end=time(5, 30))
+CLEAN_AFTER: Final[int] = 30  # quick patches
+CLEAN_CHOICES: Final[tuple[int, ...]] = (15, 30, 60, 120)  # quick patches
 
 
 @dataclass(frozen=True)
@@ -127,6 +129,9 @@ class Settings:  # pylint: disable=too-many-instance-attributes
     skip_school_on_route_pins : bool
         Whether school routes are also left out of pins without a To;
         it has no effect while `skip_school_buses` is off.
+    clean_after : int
+        Quick patches the panel draws before a cleaning full refresh;
+        one of `CLEAN_CHOICES`.
     """
 
     auto_rebuild: bool = True
@@ -142,6 +147,7 @@ class Settings:  # pylint: disable=too-many-instance-attributes
     connection_map: ConnectionMap = ConnectionMap.CHANGES
     skip_school_buses: bool = True
     skip_school_on_route_pins: bool = False
+    clean_after: int = CLEAN_AFTER
 
     @property
     def school_off_route_pins(self) -> bool:

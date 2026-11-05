@@ -140,6 +140,16 @@ def test_loading_screen_waits_five_seconds() -> None:
     assert render.full
 
 
+def test_loading_hold_ends_when_clock_steps_back() -> None:
+    """A clock stepped back past the start stops holding the screen."""
+    state = initial_state(saved=seeded(pin=PIN), now=START, stored=True)
+    state, effects = step(state, Tick(now=START))
+    assert not renders(effects=effects)
+    _, effects = step(state, Tick(now=START - timedelta(hours=1)))
+    [render] = renders(effects=effects)
+    assert render.full
+
+
 def test_no_scheduled_full_refresh() -> None:
     """The Map view left idle for 30 minutes gets no full refresh."""
     state = on_map()

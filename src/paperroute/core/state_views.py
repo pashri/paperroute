@@ -276,11 +276,14 @@ def loading_held(*, state: State) -> bool:
     -------
     bool
         True before any frame is drawn and before departures load,
-        until `LOADING_WAIT` has passed since the app started.
+        until `LOADING_WAIT` has passed since the app started. False
+        once the clock has stepped back past the start.
     """
     if state.last_view is not None or state.board.loaded_until is not None:
         return False
     started = state.refresh.started_at or state.now
+    if state.now < started:
+        return False
     return not elapsed(since=started, now=state.now, span=LOADING_WAIT)
 
 

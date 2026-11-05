@@ -41,7 +41,9 @@ class PanelController(Protocol):
             The two grey planes for the whole screen.
         """
 
-    def draw_partial(self, *, box: Box, patch: bytes) -> None:
+    def draw_partial(
+        self, *, box: Box, old: bytes, patch: bytes
+    ) -> None:
         """
         Draw a 1-bit patch without wiping the rest of the panel.
 
@@ -49,8 +51,10 @@ class PanelController(Protocol):
         ----------
         box : Box
             The area to draw.
+        old : bytes
+            Rows of bits the panel shows there now, 1 for black.
         patch : bytes
-            Rows of bits, 1 for black.
+            Rows of bits to draw, 1 for black.
         """
 
     def draw_grey_patch(
@@ -395,7 +399,9 @@ class PanelDisplay:
             self._dotted = None
         else:
             self._controller.draw_partial(
-                box=box, patch=mono_patch(frame=job.frame, box=box),
+                box=box,
+                old=mono_patch(frame=self._drawn, box=box),
+                patch=mono_patch(frame=job.frame, box=box),
             )
             if grey:
                 self._dotted = union(a=self._dotted, b=box)

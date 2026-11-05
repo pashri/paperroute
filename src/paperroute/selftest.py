@@ -125,10 +125,13 @@ def draw_steps(
         ] = 0
         box = changed_box(old=frame, new=new)
         assert box is not None
+        old = mono_patch(frame=frame, box=box)
         patch = mono_patch(frame=new, box=box)
         elapsed = timed(
             clock=clock,
-            draw=partial(controller.draw_partial, box=box, patch=patch),
+            draw=partial(
+                controller.draw_partial, box=box, old=old, patch=patch,
+            ),
         )
         times.append(elapsed)
         print(f'partial {step}: {elapsed:.2f} s', file=out)

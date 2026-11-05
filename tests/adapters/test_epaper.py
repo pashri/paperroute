@@ -90,12 +90,16 @@ def test_draw_full_sequence() -> None:
 def test_draw_partial_window_bytes() -> None:
     """The window command carries the box edges."""
     bus = FakePanelBus()
-    make(bus=bus).draw_partial(box=BOX, patch=b'p' * 20000)
+    make(bus=bus).draw_partial(
+        box=BOX, old=b'o' * 20000, patch=b'p' * 20000,
+    )
     assert (0x90, WINDOW) in sent(bus=bus)
+    assert (0x10, b'o' * 20000) in sent(bus=bus)
     assert (0x13, b'p' * 20000) in sent(bus=bus)
     assert codes(bus=bus) == [
         (0x00, 1), (0x04, 0), (0x71, 0), (0xE0, 1), (0xE5, 1),
-        (0x50, 2), (0x91, 0), (0x90, 9), (0x13, 20000), (0x12, 0),
+        (0x50, 2), (0x91, 0), (0x90, 9), (0x10, 20000),
+        (0x13, 20000), (0x12, 0),
         (0x71, 0), (0x92, 0), (0x50, 1), (0x02, 0), (0x71, 0),
         (0x07, 1),
     ]
@@ -104,7 +108,7 @@ def test_draw_partial_window_bytes() -> None:
 def test_wait_resends_status_command() -> None:
     """Each poll sends the status command again."""
     bus = FakePanelBus(busy_polls=3)
-    make(bus=bus).draw_partial(box=BOX, patch=b'')
+    make(bus=bus).draw_partial(box=BOX, old=b'', patch=b'')
     first = codes(bus=bus)[:6]
     assert first[:2] == [(0x00, 1), (0x04, 0)]
     assert first[2:] == [(0x71, 0)] * 4
@@ -114,7 +118,7 @@ def test_stuck_panel_times_out() -> None:
     """A panel that never goes idle raises, naming the step."""
     bus = FakePanelBus(stuck=True)
     with pytest.raises(PanelTimeout, match='power on'):
-        make(bus=bus).draw_partial(box=BOX, patch=b'')
+        make(bus=bus).draw_partial(box=BOX, old=b'', patch=b'')
     assert bus.now_s >= 30
 
 

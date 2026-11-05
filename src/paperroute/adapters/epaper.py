@@ -84,7 +84,9 @@ class Uc8179:
         self._refresh(step='grey refresh')
         self._sleep()
 
-    def draw_partial(self, *, box: Box, patch: bytes) -> None:
+    def draw_partial(
+        self, *, box: Box, old: bytes, patch: bytes
+    ) -> None:
         """
         Redraw one box in black and white.
 
@@ -92,8 +94,10 @@ class Uc8179:
         ----------
         box : Box
             The area to redraw.
+        old : bytes
+            The box's 1-bit pixels as the panel shows them now.
         patch : bytes
-            The box's 1-bit pixels.
+            The box's new 1-bit pixels.
 
         Raises
         ------
@@ -108,6 +112,7 @@ class Uc8179:
         self._send(0xE5, '6E')
         self._send(0x50, 'A907')
         self._window(box=box)
+        self._bus.command(code=0x10, data=old)
         self._bus.command(code=0x13, data=patch)
         self._refresh(step='partial refresh')
         self._bus.command(code=0x92)

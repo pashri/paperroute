@@ -33,9 +33,11 @@ class RecordingController:
         self.draws.append(('full', None))
         self.now += 4.7
 
-    def draw_partial(self, *, box: Box, patch: bytes) -> None:
+    def draw_partial(
+        self, *, box: Box, old: bytes, patch: bytes
+    ) -> None:
         """Record a partial refresh."""
-        assert patch
+        assert old and patch
         if self.fail:
             raise TimeoutError('busy stuck')
         self.draws.append(('partial', box))

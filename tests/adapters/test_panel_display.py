@@ -71,6 +71,8 @@ class GatedController:
     calls : list[tuple[str, object]]
         ('full', planes), ('partial', (box, patch)) and
         ('grey', (box, planes)), in the order they were asked for.
+    olds : list[bytes]
+        The `old` bits of each partial, in order.
     gate : threading.Event
         Each draw waits for this; it starts set.
     entered : threading.Event
@@ -82,6 +84,7 @@ class GatedController:
     """
 
     calls: list[tuple[str, object]] = field(default_factory=list)
+    olds: list[bytes] = field(default_factory=list)
     gate: threading.Event = field(default_factory=threading.Event)
     entered: threading.Event = field(default_factory=threading.Event)
     failures: list[Exception] = field(default_factory=list)
@@ -124,7 +127,9 @@ class GatedController:
         """
         self.draw(kind='full', args=planes)
 
-    def draw_partial(self, *, box: Box, patch: bytes) -> None:
+    def draw_partial(
+        self, *, box: Box, old: bytes, patch: bytes
+    ) -> None:
         """
         Record a 1-bit patch.
 
@@ -132,9 +137,12 @@ class GatedController:
         ----------
         box : Box
             The area.
+        old : bytes
+            The bits the panel shows now.
         patch : bytes
             The bits.
         """
+        self.olds.append(old)
         self.draw(kind='partial', args=(box, patch))
 
     def draw_grey_patch(
@@ -309,6 +317,18 @@ def test_change_draws_partial_box(rig: Rig) -> None:
     rig.show(frame=frame)
     assert rig.controller.calls[1:] == [
         ('partial', (BOX_A, mono_patch(frame=frame, box=BOX_A))),
+    ]
+
+
+def test_partial_sends_old_picture_of_last_frame(rig: Rig) -> None:
+    """The old bits are the last frame's patch of the same box."""
+    first = painted(boxes=(BOX_A,), grey=0)
+    second = painted(boxes=(BOX_B,), grey=0, frame=first)
+    rig.show(frame=first)
+    rig.show(frame=second)
+    assert rig.controller.olds == [mono_patch(frame=first, box=BOX_B)]
+    assert rig.controller.calls[1:] == [
+        ('partial', (BOX_B, mono_patch(frame=second, box=BOX_B))),
     ]
 
 

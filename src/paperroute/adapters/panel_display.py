@@ -23,7 +23,7 @@ from paperroute.render.panel_bits import (
 )
 
 TIDY_AFTER: Final[float] = 3  # seconds
-STOP_WAIT: Final[float] = 10  # seconds
+STOP_WAIT: Final[float] = 8  # seconds
 
 logger = logging.getLogger(__name__)
 

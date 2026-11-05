@@ -623,6 +623,30 @@ def test_main_logs_a_startup_crash_to_the_error_log(
     assert 'OperationalError' in record['exc_info']
 
 
+@pytest.mark.usefixtures('restored_logging')
+def test_main_warns_that_panel_needs_web(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--panel with --display tk is ignored with a warning."""
+    monkeypatch.setattr(cli, 'tk_main', lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'paperroute', 'run', '--timetable', str(tmp_path / 'x.db'),
+            '--from', 'a', '--to', 'b', '--feeds', 'files',
+            '--display', 'tk', '--panel',
+            '--error-log', str(tmp_path / 'errors.jsonl'),
+        ],
+    )
+    main()
+    assert '--panel only works with --display web; ignoring it' in (
+        capsys.readouterr().err
+    )
+
+
 async def test_serve_web_passes_the_tiles_variant_to_run(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

@@ -2,6 +2,7 @@
 
 import logging
 import threading
+import time
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from typing import Final
@@ -41,6 +42,22 @@ class Clock:
         float
             Seconds.
         """
+        return self.now
+
+
+class CreepingClock(Clock):
+    """A clock that moves a little every time it is read."""
+
+    def __call__(self) -> float:
+        """
+        Read the time, then move it on.
+
+        Returns
+        -------
+        float
+            Seconds.
+        """
+        self.now += 0.002
         return self.now
 
 
@@ -324,6 +341,34 @@ def test_quick_grey_change_is_dotted_then_tidied(rig: Rig) -> None:
     both = union(a=BOX_A, b=BOX_B)
     assert rig.controller.calls[3:] == [
         ('grey', (both, grey_planes(frame=second, box=both))),
+    ]
+
+
+@pytest.mark.parametrize('attempt', range(20))
+def test_worker_tidies_on_its_own_wake_up(
+    monkeypatch: pytest.MonkeyPatch, attempt: int
+) -> None:
+    """The dotted area is tidied from the worker's timed wake-up."""
+    assert attempt >= 0
+    monkeypatch.setattr(panel_display, 'TIDY_AFTER', 0.01)
+    controller = GatedController()
+    display = PanelDisplay(
+        controller=controller,
+        report=lambda refresh: None,
+        clock=CreepingClock(),
+    )
+    first = painted(boxes=(BOX_A,), grey=85)
+    display.show(frame=white())
+    assert display.settle(timeout=WAIT)
+    display.show(frame=first, quick=True)
+    deadline = time.monotonic() + WAIT
+    while 'grey' not in controller.kinds() and time.monotonic() < deadline:
+        time.sleep(0.001)
+    assert display.settle(timeout=WAIT)
+    display.stop()
+    assert controller.calls[1:] == [
+        ('partial', (BOX_A, mono_patch(frame=first, box=BOX_A))),
+        ('grey', (BOX_A, grey_planes(frame=first, box=BOX_A))),
     ]
 
 

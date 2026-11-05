@@ -1,11 +1,20 @@
 """Tests for the panel self-test."""
 
+import errno
 import io
 
 import numpy as np
+import pytest
 
+from paperroute.ports import PanelBus
 from paperroute.render.panel_bits import Box
-from paperroute.selftest import card, run_selftest
+from paperroute.selftest import (
+    BUSY_MESSAGE,
+    NO_PANEL_MESSAGE,
+    card,
+    run_selftest,
+    selftest_main,
+)
 
 
 class RecordingController:
@@ -103,3 +112,48 @@ def test_run_selftest_raising_controller_fails() -> None:
     assert status == 1
     assert 'FAIL: TimeoutError: busy stuck' in out.getvalue()
     assert controller.closed
+
+
+def failing(*, error: Exception) -> PanelBus:
+    """
+    Fail to open the bus.
+
+    Parameters
+    ----------
+    error : Exception
+        What to raise.
+
+    Raises
+    ------
+    Exception
+        Always `error`.
+    """
+    raise error
+
+
+def test_selftest_main_busy_panel(capsys: pytest.CaptureFixture[str]) -> None:
+    """A panel in use gives the stop-paperroute message and exit 2."""
+    status = selftest_main(
+        opener=lambda: failing(error=OSError(errno.EBUSY, 'busy')),
+    )
+    assert status == 2
+    assert capsys.readouterr().err.strip() == BUSY_MESSAGE
+
+
+def test_selftest_main_other_os_error_is_raised() -> None:
+    """Any other OSError is not hidden."""
+    with pytest.raises(OSError, match='gone'):
+        selftest_main(
+            opener=lambda: failing(error=OSError(errno.ENOENT, 'gone')),
+        )
+
+
+def test_selftest_main_no_panel_here(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """A machine without the panel library says so and exits 1."""
+    status = selftest_main(
+        opener=lambda: failing(error=ImportError('gpiod')),
+    )
+    assert status == 1
+    assert capsys.readouterr().err.strip() == NO_PANEL_MESSAGE

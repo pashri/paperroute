@@ -13,6 +13,7 @@ from numpy.typing import NDArray
 from paperroute.adapters.epaper import Uc8179
 from paperroute.adapters.panel_bus import LinuxPanelBus
 from paperroute.adapters.panel_display import PanelController
+from paperroute.ports import PanelBus
 from paperroute.render.panel_bits import (
     HEIGHT,
     WIDTH,
@@ -41,6 +42,7 @@ BUSY_MESSAGE: Final[str] = (
     'sudo systemctl stop paperroute'
 )
 BUSY_EXIT: Final[int] = 2
+NO_PANEL_MESSAGE: Final[str] = 'No panel on this machine'
 
 
 def card() -> NDArray[np.uint8]:
@@ -230,17 +232,33 @@ def run_selftest(
     return 0 if reason is None else 1
 
 
-def selftest_main() -> int:
+def selftest_main(
+    *, opener: Callable[[], PanelBus] = LinuxPanelBus.open
+) -> int:
     """
     Open the panel and run the self-test on it.
+
+    Parameters
+    ----------
+    opener : Callable[[], PanelBus]
+        Opens the panel's bus.
 
     Returns
     -------
     int
-        The exit status: 0 pass, 1 fail, 2 when the panel is in use.
+        The exit status: 0 pass, 1 fail or no panel here, 2 when the
+        panel is in use.
+
+    Raises
+    ------
+    OSError
+        When the bus cannot be opened for a reason other than being busy.
     """
     try:
-        bus = LinuxPanelBus.open()
+        bus = opener()
+    except ImportError:
+        print(NO_PANEL_MESSAGE, file=sys.stderr)
+        return 1
     except OSError as error:
         if error.errno != errno.EBUSY:
             raise

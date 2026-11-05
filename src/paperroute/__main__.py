@@ -48,8 +48,8 @@ from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin, StopPlace
 from paperroute.core.tiles import TileVariant
 from paperroute.logs import LastError, configure_logging
-from paperroute.observers import PanelTimes, Timings
-from paperroute.panel_open import panel_for
+from paperroute.observers import Timings
+from paperroute.panel_open import panel_for, panel_times_for
 from paperroute.ports import (
     Clock,
     FeedsClient,
@@ -914,7 +914,7 @@ def web_main(
         report=lambda refresh: observer.panel_refreshed(refresh=refresh),
     )
     shown = [panel] if panel else []
-    timings.panel = PanelTimes() if panel else None
+    timings.panel = panel_times_for(wanted=args.panel, panel=panel)
     with (
         timetable_for(args=args) as timetable,
         network_for(args=args) as network,
@@ -968,6 +968,10 @@ def main() -> None:  # pylint: disable=too-many-statements
                 args=args, feeds=feeds, last_error=last_error, summary=summary,
             )
         else:
+            if args.panel:
+                logger.warning(
+                    '--panel only works with --display web; ignoring it',
+                )
             tk_main(args=args, feeds=feeds, last_error=last_error)
     except Exception:
         logger.exception('paperroute crashed')

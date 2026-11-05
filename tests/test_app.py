@@ -73,6 +73,7 @@ from paperroute.core.messages import (
     QuitRequested,
     RebuildTimetable,
     Render,
+    ResetDevice,
     ResetDone,
     SettingsChanged,
     Tick,
@@ -139,6 +140,7 @@ from tests.fakes import (
     LabelCountingTiles,
     MemoryStates,
     PlacedTimetable,
+    RecordingResets,
 )
 
 
@@ -2014,6 +2016,42 @@ async def test_power_waits_for_panel() -> None:
     )
     await asyncio.gather(*tasks)
     assert log == ['show', 'settle', 'power']
+
+
+@dataclass
+class LoggedResets(RecordingResets):
+    """Resets that log their call."""
+
+    log: list[str] = field(default_factory=list)
+
+    async def reset(self, *, kind: ResetKind) -> None:
+        """Log the call."""
+        self.log.append('reset')
+        await super().reset(kind=kind)
+
+
+async def test_reset_waits_for_panel() -> None:
+    """The notice is shown and settled before the reset runs."""
+    log: list[str] = []
+    ports = replace(
+        ports_of(display=Ordered(log=log)),
+        device=DevicePorts(resets=LoggedResets(log=log)),
+    )
+    outputs = Outputs(
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    effects = (
+        Render(view=NoticeView(title='Resetting'), full=True),
+        ResetDevice(kind=ResetKind.ERASE),
+    )
+    tasks: set[asyncio.Task[None]] = set()
+    await carry_out(
+        effects=effects, ports=ports, queue=asyncio.Queue(),
+        tasks=tasks, outputs=outputs,
+    )
+    await asyncio.gather(*tasks)
+    assert log == ['show', 'settle', 'reset']
 
 
 async def test_full_survives_burst() -> None:

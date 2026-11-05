@@ -450,6 +450,8 @@ async def render(
     full: bool = False,
     turned: bool = False,
     quick: bool = False,
+    asleep: bool = False,
+    clear: bool = False,
 ) -> None:
     """
     Draw a view off the event loop, show it and report how long it took.
@@ -468,14 +470,20 @@ async def render(
         Whether to ask for the frame upside down.
     quick : bool
         Whether a knob was turned just now.
+    asleep : bool
+        Whether the device is in Sleep mode.
+    clear : bool
+        Whether to ask for a clear refresh.
     """
     draw = drawing(view=view, maps=maps)
     frame, render_ms = await timed_async(call=asyncio.to_thread(draw))
     ports.display.show(
         frame=frame,
         full=full,
+        clear=clear,
         turned=turned,
         quick=quick,
+        asleep=asleep,
     )
     logger.debug(
         'frame drawn', extra={'render_ms': render_ms, 'full': full}

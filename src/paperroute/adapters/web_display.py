@@ -376,6 +376,8 @@ class WebDisplay:
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """
         Store a frame and wake the event streams.
@@ -392,8 +394,12 @@ class WebDisplay:
             Ignored.
         quick : bool
             Ignored.
+        asleep : bool
+            Ignored.
+        clear : bool
+            Ignored.
         """
-        del full, turned, quick
+        del full, turned, quick, asleep, clear
         self._png = encode_png(grey=frame)
         self.version += 1
         self.changed.set()

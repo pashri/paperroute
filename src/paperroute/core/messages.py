@@ -220,10 +220,14 @@ class Render:
     full : bool
         Whether the panel should do a full refresh rather than a partial
         one.
+    clear : bool
+        Whether the panel should do a clear refresh: the whole screen in
+        black and white, with no wipe.
     """
 
     view: ScreenView
     full: bool = False
+    clear: bool = False
 
 
 @dataclass(frozen=True)

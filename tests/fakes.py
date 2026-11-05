@@ -195,6 +195,8 @@ class FrameRecorder:
     fulls: list[bool] = field(default_factory=list)
     turns: list[bool] = field(default_factory=list)
     quicks: list[bool] = field(default_factory=list)
+    sleeps: list[bool] = field(default_factory=list)
+    clears: list[bool] = field(default_factory=list)
 
     def show(
         self,
@@ -203,6 +205,8 @@ class FrameRecorder:
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """
         Keep a frame.
@@ -217,11 +221,17 @@ class FrameRecorder:
             Whether the frame is turned upside down.
         quick : bool
             Whether a knob was turned just now.
+        asleep : bool
+            Whether the device is in Sleep mode.
+        clear : bool
+            Whether a clear refresh was asked for.
         """
         self.frames.append(frame)
         self.fulls.append(full)
         self.turns.append(turned)
         self.quicks.append(quick)
+        self.sleeps.append(asleep)
+        self.clears.append(clear)
 
     def settle(self, *, timeout: float) -> bool:
         """

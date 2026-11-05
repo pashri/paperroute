@@ -1021,6 +1021,8 @@ class PressingDisplay(FrameRecorder):
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """
         Keep a frame; after the first, press the bottom knob.
@@ -1035,10 +1037,21 @@ class PressingDisplay(FrameRecorder):
             Whether the frame is turned upside down.
         quick : bool
             Whether a knob was turned just now.
+        asleep : bool
+            Whether the device is in Sleep mode.
+        clear : bool
+            Whether a clear refresh was asked for.
         """
         if not self.frames and self.post is not None:
             self.post(KnobPressed(knob=Knob.BOTTOM))
-        super().show(frame=frame, full=full, turned=turned, quick=quick)
+        super().show(
+            frame=frame,
+            full=full,
+            turned=turned,
+            quick=quick,
+            asleep=asleep,
+            clear=clear,
+        )
 
     def hook(self, post: Callable[[Event], None]) -> None:
         """
@@ -1649,6 +1662,8 @@ class ZoomingDisplay(PressingDisplay):
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """
         Keep a frame; press the bottom knob, then turn it twice.
@@ -1663,10 +1678,21 @@ class ZoomingDisplay(PressingDisplay):
             Whether the frame is turned upside down.
         quick : bool
             Whether a knob was turned just now.
+        asleep : bool
+            Whether the device is in Sleep mode.
+        clear : bool
+            Whether a clear refresh was asked for.
         """
         if self.post is not None and 1 <= len(self.frames) <= 2:
             self.post(KnobTurned(knob=Knob.BOTTOM, steps=-1))
-        super().show(frame=frame, full=full, turned=turned, quick=quick)
+        super().show(
+            frame=frame,
+            full=full,
+            turned=turned,
+            quick=quick,
+            asleep=asleep,
+            clear=clear,
+        )
 
 
 def test_tiles_read_error_draws_map_not_installed(tmp_path: Path) -> None:
@@ -1957,6 +1983,30 @@ async def test_app_marks_frames_quick_after_a_knob_turn() -> None:
     await stop(tasks=tasks)
 
 
+async def test_app_marks_frames_asleep_in_sleep_mode() -> None:
+    """Frames drawn while the screen is asleep are marked asleep."""
+    display = FrameRecorder()
+    ports = ports_of(display=display)
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    outputs = Outputs(
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    awake = starting_state(ports=ports, seed=PIN)
+    asleep = replace(awake, panel=replace(awake.panel, asleep=True))
+    for state in (awake, asleep):
+        state = await handle(
+            state=state, event=Tick(now=AT), ports=ports, queue=queue,
+            tasks=tasks, outputs=outputs,
+        )
+        assert outputs.pending.asleep is state.panel.asleep
+        outputs.pending.view = NoticeView(title='Frame')
+        await draw_pending(ports=ports, outputs=outputs)
+    assert display.sleeps[-2:] == [False, True]
+    await stop(tasks=tasks)
+
+
 class Ordered(FrameRecorder):
     """A display that logs its shows and settles."""
 
@@ -1971,10 +2021,19 @@ class Ordered(FrameRecorder):
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """Log the show and keep the frame."""
         self.log.append('show')
-        super().show(frame=frame, full=full, turned=turned, quick=quick)
+        super().show(
+            frame=frame,
+            full=full,
+            turned=turned,
+            quick=quick,
+            asleep=asleep,
+            clear=clear,
+        )
 
     def settle(self, *, timeout: float) -> bool:
         """Log the settle."""
@@ -2074,6 +2133,28 @@ async def test_full_survives_burst() -> None:
     await draw_pending(ports=ports, outputs=outputs)
     assert display.fulls == [True]
     assert outputs.pending.full is False
+
+
+async def test_clear_survives_burst() -> None:
+    """A clear render replaced by a plain one is still drawn clear."""
+    display = FrameRecorder()
+    ports = ports_of(display=display)
+    tasks: set[asyncio.Task[None]] = set()
+    outputs = Outputs(
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    effects = (
+        Render(view=NoticeView(title='One'), clear=True),
+        Render(view=NoticeView(title='Two')),
+    )
+    await carry_out(
+        effects=effects, ports=ports, queue=asyncio.Queue(), tasks=tasks,
+        outputs=outputs,
+    )
+    await draw_pending(ports=ports, outputs=outputs)
+    assert display.clears == [True]
+    assert outputs.pending.clear is False
 
 
 async def test_app_performs_rebuild() -> None:
@@ -2244,6 +2325,8 @@ class ScriptedDisplay(FrameRecorder):
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """
         Keep a frame; when it is the trigger, post the script once.
@@ -2258,8 +2341,19 @@ class ScriptedDisplay(FrameRecorder):
             Whether the frame is turned upside down.
         quick : bool
             Whether a knob was turned just now.
+        asleep : bool
+            Whether the device is in Sleep mode.
+        clear : bool
+            Whether a clear refresh was asked for.
         """
-        super().show(frame=frame, full=full, turned=turned, quick=quick)
+        super().show(
+            frame=frame,
+            full=full,
+            turned=turned,
+            quick=quick,
+            asleep=asleep,
+            clear=clear,
+        )
         trigger = self.trigger
         if trigger is None or self.post is None:
             return
@@ -2378,6 +2472,8 @@ class ArrivingDisplay(FrameRecorder):
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """
         Keep a frame; after the first, copy the timetable in.
@@ -2392,8 +2488,19 @@ class ArrivingDisplay(FrameRecorder):
             Whether the frame is turned upside down.
         quick : bool
             Whether a knob was turned just now.
+        asleep : bool
+            Whether the device is in Sleep mode.
+        clear : bool
+            Whether a clear refresh was asked for.
         """
-        super().show(frame=frame, full=full, turned=turned, quick=quick)
+        super().show(
+            frame=frame,
+            full=full,
+            turned=turned,
+            quick=quick,
+            asleep=asleep,
+            clear=clear,
+        )
         if self.source is not None and self.target is not None:
             shutil.copyfile(self.source, self.target)
             self.source = None

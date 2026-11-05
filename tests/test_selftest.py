@@ -43,6 +43,11 @@ class RecordingController:
         self.draws.append(('partial', box))
         self.now += self.partial_seconds
 
+    def draw_clear(self, *, bits: bytes) -> None:
+        """Record a clear refresh."""
+        assert len(bits) == 48000
+        self.draws.append(('clear', None))
+
     def sleep(self) -> None:
         """Record a deep sleep."""
         self.draws.append(('sleep', None))

@@ -196,6 +196,7 @@ async def handle(
     state, effects = step(state, event)
     outputs.pending.turned = state.settings.rotate
     outputs.pending.quick = quick_now(state=state)
+    outputs.pending.asleep = state.panel.asleep
     report_step(
         ports=ports, before=before, state=state, event=event, outputs=outputs,
     )

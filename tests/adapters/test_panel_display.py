@@ -16,6 +16,7 @@ from paperroute.adapters.epaper import PanelTimeout
 from paperroute.adapters.panel_display import (
     CLEAN_AFTER,
     CLEAN_QUIET,
+    SCREEN,
     Displays,
     PanelDisplay,
 )
@@ -75,8 +76,8 @@ class GatedController:
     Attributes
     ----------
     calls : list[tuple[str, object]]
-        ('full', planes), ('partial', (box, patch)) and ('sleep', None),
-        in the order they were asked for.
+        ('full', planes), ('partial', (box, patch)), ('clear', bits)
+        and ('sleep', None), in the order they were asked for.
     olds : list[bytes]
         The `old` bits of each partial, in order.
     gate : threading.Event
@@ -107,7 +108,7 @@ class GatedController:
         Parameters
         ----------
         kind : str
-            'full' or 'partial'.
+            'full', 'partial' or 'clear'.
         args : object
             What it was given.
 
@@ -150,6 +151,17 @@ class GatedController:
         """
         self.olds.append(old)
         self.draw(kind='partial', args=(box, patch))
+
+    def draw_clear(self, *, bits: bytes) -> None:
+        """
+        Record a clear refresh.
+
+        Parameters
+        ----------
+        bits : bytes
+            The whole screen's bits.
+        """
+        self.draw(kind='clear', args=bits)
 
     def sleep(self) -> None:
         """Record a deep sleep."""
@@ -200,6 +212,8 @@ class Rig:
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """
         Show a frame and wait for the panel to settle.
@@ -214,8 +228,19 @@ class Rig:
             Whether to turn it.
         quick : bool
             Whether the knob was just turned.
+        asleep : bool
+            Whether the device is in Sleep mode.
+        clear : bool
+            Whether to ask for a clear refresh.
         """
-        self.display.show(frame=frame, full=full, turned=turned, quick=quick)
+        self.display.show(
+            frame=frame,
+            full=full,
+            turned=turned,
+            quick=quick,
+            asleep=asleep,
+            clear=clear,
+        )
         assert self.display.settle(timeout=WAIT)
 
 
@@ -669,6 +694,105 @@ class Unsettled(FrameRecorder):
         """
         del timeout
         return False
+
+
+def test_asleep_frame_puts_panel_to_sleep(rig: Rig) -> None:
+    """A frame shown asleep is drawn, then the panel deep-sleeps."""
+    rig.show(frame=white(), full=True, asleep=True)
+    assert rig.controller.kinds() == ['full', 'sleep']
+
+
+def test_asleep_patch_puts_panel_to_sleep(rig: Rig) -> None:
+    """A patch shown asleep is followed by a deep sleep too."""
+    rig.show(frame=white())
+    rig.show(frame=painted(boxes=(BOX_A,), grey=0), asleep=True)
+    assert rig.controller.kinds() == ['full', 'partial', 'sleep']
+
+
+def test_awake_frames_never_sleep(rig: Rig) -> None:
+    """Frames shown awake never put the panel to sleep."""
+    rig.show(frame=white())
+    flicker(rig=rig, count=3)
+    rig.show(frame=white(), full=True)
+    assert 'sleep' not in rig.controller.kinds()
+
+
+def test_waking_frame_draws_without_sleep(rig: Rig) -> None:
+    """After Sleep mode, an awake frame is drawn and not slept."""
+    rig.show(frame=white(), full=True, asleep=True)
+    rig.show(frame=painted(boxes=(BOX_A,), grey=0), full=True)
+    assert rig.controller.kinds() == ['full', 'sleep', 'full']
+
+
+def test_no_clean_while_asleep(rig: Rig) -> None:
+    """A clean that falls due in Sleep mode does not wake the panel."""
+    rig.show(frame=white())
+    flicker(rig=rig, count=CLEAN_AFTER, quick=True)
+    asleep = painted(boxes=(BOX_B,), grey=0)
+    rig.show(frame=asleep, asleep=True)
+    rig.clock.now += CLEAN_QUIET
+    rig.show(frame=asleep, asleep=True)
+    assert 'full' not in rig.controller.kinds()[1:]
+
+
+def test_clear_job_draws_clear(rig: Rig) -> None:
+    """A clear frame is one clear refresh of its whole-screen bits."""
+    rig.show(frame=white())
+    frame = painted(boxes=(BOX_A, BOX_B), grey=0)
+    rig.show(frame=frame, clear=True)
+    assert rig.controller.kinds() == ['full', 'clear']
+    assert rig.controller.calls[-1] == (
+        'clear', mono_patch(frame=frame, box=SCREEN),
+    )
+    assert [r.full for r in rig.reports[:1]] == [True]
+    rig.show(frame=white())
+    assert rig.reports[-1].full is True
+
+
+def test_clear_resets_patch_count(rig: Rig) -> None:
+    """Patches before a clear refresh do not count towards a clean."""
+    rig.show(frame=white())
+    flicker(rig=rig, count=20)
+    rig.show(frame=white(), clear=True)
+    last = flicker(rig=rig, count=20)
+    rig.clock.now += CLEAN_QUIET
+    rig.show(frame=last)
+    assert rig.controller.kinds().count('full') == 1
+
+
+def test_owed_full_beats_clear(rig: Rig) -> None:
+    """The first frame is owed a full refresh, even when asked clear."""
+    rig.show(frame=white(), clear=True)
+    assert rig.controller.kinds() == ['full']
+
+
+def test_asked_full_beats_clear(rig: Rig) -> None:
+    """A full refresh asked for wins over a clear."""
+    rig.show(frame=white())
+    rig.show(frame=painted(boxes=(BOX_A,), grey=0), full=True, clear=True)
+    assert rig.controller.kinds() == ['full', 'full']
+
+
+def test_show_keeps_clear_through_replacement(rig: Rig) -> None:
+    """A waiting clear frame replaced by a newer one stays clear."""
+    rig.controller.gate.clear()
+    rig.display.show(frame=white())
+    assert rig.controller.entered.wait(timeout=WAIT)
+    rig.display.show(frame=painted(boxes=(BOX_B,), grey=0), clear=True)
+    rig.display.show(frame=painted(boxes=(BOX_A, BOX_B), grey=0))
+    rig.controller.gate.set()
+    assert rig.display.settle(timeout=WAIT)
+    assert rig.controller.kinds() == ['full', 'clear']
+
+
+def test_displays_passes_asleep() -> None:
+    """Displays forwards asleep and clear to each display."""
+    first = FrameRecorder()
+    second = FrameRecorder()
+    displays = Displays(displays=[first, second])
+    displays.show(frame=white(), asleep=True, clear=True)
+    assert first.sleeps == second.sleeps == [True]
+    assert first.clears == second.clears == [True]
 
 
 def test_displays_fans_out() -> None:

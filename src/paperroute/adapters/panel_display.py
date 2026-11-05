@@ -13,9 +13,12 @@ from numpy.typing import NDArray
 from paperroute.adapters.epaper import PanelTimeout
 from paperroute.ports import Display, PanelRefresh
 from paperroute.render.panel_bits import (
+    HEIGHT,
+    WIDTH,
     Box,
     changed_box,
     grey_planes,
+    mono_patch,
     oriented,
     quick_planes,
 )
@@ -23,6 +26,7 @@ from paperroute.render.panel_bits import (
 CLEAN_AFTER: Final[int] = 30  # quick patches
 CLEAN_QUIET: Final[float] = 30  # seconds
 STOP_WAIT: Final[float] = 8  # seconds
+SCREEN: Final[Box] = Box(left=0, top=0, right=WIDTH, bottom=HEIGHT)
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +62,16 @@ class PanelController(Protocol):
             Rows of bits to draw, 1 for black.
         """
 
+    def draw_clear(self, *, bits: bytes) -> None:
+        """
+        Draw the whole screen in black and white, with no wipe.
+
+        Parameters
+        ----------
+        bits : bytes
+            The whole screen's 1-bit pixels, 1 for black.
+        """
+
     def sleep(self) -> None:
         """Put the panel into deep sleep until the next draw."""
 
@@ -80,12 +94,18 @@ class Job:
         Whether the frame is turned.
     quick : bool
         Whether the knob was just turned.
+    asleep : bool
+        Whether the device is in Sleep mode.
+    clear : bool
+        Whether a clear refresh was asked for.
     """
 
     frame: NDArray[np.uint8]
     full: bool
     turned: bool
     quick: bool
+    asleep: bool = False
+    clear: bool = False
 
 
 @dataclass(frozen=True)
@@ -101,11 +121,13 @@ class PanelDisplay:
     Draws frames on an e-paper panel from one worker thread.
 
     Only the newest frame waits to be drawn. A full refresh draws four
-    greys. Every other change is a 1-bit quick patch that drives only
-    the pixels whose value changed, so grey that did not change stays
-    grey. After `CLEAN_AFTER` quick patches, the last frame gets a
-    cleaning full refresh once no quick frame has come for
-    `CLEAN_QUIET` seconds.
+    greys. A clear refresh draws the whole screen in black and white
+    with no wipe. Every other change is a 1-bit quick patch that drives
+    only the pixels whose value changed, so grey that did not change
+    stays grey. After `CLEAN_AFTER` quick patches, the last frame gets
+    a cleaning full refresh once no quick frame has come for
+    `CLEAN_QUIET` seconds, unless the device is in Sleep mode. A frame
+    shown in Sleep mode puts the panel into deep sleep once drawn.
 
     Parameters
     ----------
@@ -137,6 +159,7 @@ class PanelDisplay:
         self._turned = False
         self._owed_full = True
         self._patches = 0
+        self._asleep = False
         self._failing = False
         self._thread = threading.Thread(
             target=self._run,
@@ -152,12 +175,14 @@ class PanelDisplay:
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """
         Pass on finished refreshes, then leave a frame for the worker.
 
         Never waits for the panel. A frame still waiting is replaced,
-        keeping its request for a full refresh.
+        keeping its request for a full or clear refresh.
 
         Parameters
         ----------
@@ -170,6 +195,11 @@ class PanelDisplay:
             Whether to show the frame upside down.
         quick : bool
             Whether the knob was just turned, which holds back cleaning.
+        asleep : bool
+            Whether the device is in Sleep mode: the panel deep-sleeps
+            once the frame is drawn, and is not cleaned.
+        clear : bool
+            Whether to do a clear refresh, unless a full one is due.
         """
         with self._ready:
             results, self._results = self._results, []
@@ -181,9 +211,14 @@ class PanelDisplay:
             else frame.copy()
         )
         with self._ready:
-            asked = self._waiting is not None and self._waiting.full
+            waiting = self._waiting
             self._waiting = Job(
-                frame=kept, full=full or asked, turned=turned, quick=quick,
+                frame=kept,
+                full=full or (waiting is not None and waiting.full),
+                turned=turned,
+                quick=quick,
+                asleep=asleep,
+                clear=clear or (waiting is not None and waiting.clear),
             )
             if quick:
                 self._last_quick = self._clock()
@@ -271,13 +306,15 @@ class PanelDisplay:
         Returns
         -------
         bool
-            True when a frame is drawn, no full refresh is owed and
-            `CLEAN_AFTER` quick patches have been drawn since the last
-            full refresh.
+            True when a frame is drawn, no full refresh is owed, the
+            last frame was not shown in Sleep mode and `CLEAN_AFTER`
+            quick patches have been drawn since the last full or clear
+            refresh.
         """
         return (
             self._drawn is not None
             and not self._owed_full
+            and not self._asleep
             and self._patches >= CLEAN_AFTER
         )
 
@@ -319,21 +356,55 @@ class PanelDisplay:
             A frame or a cleaning refresh.
         """
         full = isinstance(work, Clean) or self._needs_full(job=work)
+        whole = full or self._clears(work=work)
         started = self._clock()
         try:
             drew = self._draw(work=work, full=full)
+            self._rest(work=work)
         except (PanelTimeout, OSError) as error:
             if not self._failing:
                 logger.error('panel refresh failed', exc_info=error)
-            self._failed(full=full, started=started)
+            self._failed(full=whole, started=started)
         except Exception:  # pylint: disable=broad-exception-caught
             if not self._failing:
                 logger.exception('panel refresh failed')
-            self._failed(full=full, started=started)
+            self._failed(full=whole, started=started)
         else:
             if drew:
                 self._failing = False
-                self._finish(full=full, started=started, ok=True)
+                self._finish(full=whole, started=started, ok=True)
+
+    @staticmethod
+    def _clears(*, work: Job | Clean) -> bool:
+        """
+        Tell whether a clear refresh was asked for.
+
+        Parameters
+        ----------
+        work : Job | Clean
+            A frame or a cleaning refresh.
+
+        Returns
+        -------
+        bool
+            True for a frame asked to be drawn with a clear refresh.
+        """
+        return isinstance(work, Job) and work.clear
+
+    def _rest(self, *, work: Job | Clean) -> None:
+        """
+        Deep-sleep the panel after a frame shown in Sleep mode.
+
+        Parameters
+        ----------
+        work : Job | Clean
+            The work just done.
+        """
+        if isinstance(work, Clean):
+            return
+        self._asleep = work.asleep
+        if work.asleep:
+            self._controller.sleep()
 
     def _needs_full(self, *, job: Job) -> bool:
         """
@@ -375,6 +446,9 @@ class PanelDisplay:
             self._full(frame=work.frame)
             self._turned = work.turned
             return True
+        if work.clear:
+            self._clear(frame=work.frame)
+            return True
         return self._patch(job=work)
 
     def _full(self, *, frame: NDArray[np.uint8]) -> None:
@@ -388,6 +462,19 @@ class PanelDisplay:
         """
         self._controller.draw_full(planes=grey_planes(frame=frame))
         self._owed_full = False
+        self._patches = 0
+        self._drawn = frame
+
+    def _clear(self, *, frame: NDArray[np.uint8]) -> None:
+        """
+        Draw a frame with a clear refresh, which clears the patch count.
+
+        Parameters
+        ----------
+        frame : NDArray[np.uint8]
+            The frame, already turned.
+        """
+        self._controller.draw_clear(bits=mono_patch(frame=frame, box=SCREEN))
         self._patches = 0
         self._drawn = frame
 
@@ -470,6 +557,8 @@ class Displays:
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """
         Show a frame on every display.
@@ -484,6 +573,10 @@ class Displays:
             Whether to show the frame upside down.
         quick : bool
             Whether a knob was turned just now.
+        asleep : bool
+            Whether the device is in Sleep mode.
+        clear : bool
+            Whether to do a clear refresh.
         """
         for display in self._displays:
             display.show(
@@ -491,6 +584,8 @@ class Displays:
                 full=full,
                 turned=turned,
                 quick=quick,
+                asleep=asleep,
+                clear=clear,
             )
 
     def settle(self, *, timeout: float) -> bool:

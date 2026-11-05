@@ -39,12 +39,19 @@ class PendingView:
         Whether frames are shown upside down.
     quick : bool
         Whether a knob was turned just now.
+    asleep : bool
+        Whether the device is in Sleep mode.
+    clear : bool
+        Whether any render since the last frame asked for a clear
+        refresh.
     """
 
     view: View | None = None
     full: bool = False
     turned: bool = False
     quick: bool = False
+    asleep: bool = False
+    clear: bool = False
 
 
 @dataclass(frozen=True)
@@ -82,10 +89,10 @@ async def draw_pending(*, ports: Ports, outputs: Outputs) -> None:
         What effects draw and write through.
     """
     pending = outputs.pending
-    view, full = pending.view, pending.full
+    view, full, clear = pending.view, pending.full, pending.clear
     if view is None:
         return
-    pending.view, pending.full = None, False
+    pending.view, pending.full, pending.clear = None, False, False
     await render(
         ports=ports,
         view=view,
@@ -93,6 +100,8 @@ async def draw_pending(*, ports: Ports, outputs: Outputs) -> None:
         full=full,
         turned=pending.turned,
         quick=pending.quick,
+        asleep=pending.asleep,
+        clear=clear,
     )
 
 
@@ -123,9 +132,10 @@ async def carry_out(
     """
     Perform an event's effects in order, keeping its view to draw later.
 
-    A full Render stays full when a later one in the burst replaces its
-    view. A ControlPower or ResetDevice draws the waiting view first, so the
-    notice is on screen before the device goes down or is reset.
+    A full or clear Render stays so when a later one in the burst
+    replaces its view. A ControlPower or ResetDevice draws the waiting
+    view first, so the notice is on screen before the device goes down
+    or is reset.
 
     Parameters
     ----------
@@ -144,6 +154,7 @@ async def carry_out(
         if isinstance(effect, Render):
             outputs.pending.view = effect.view
             outputs.pending.full = outputs.pending.full or effect.full
+            outputs.pending.clear = outputs.pending.clear or effect.clear
             continue
         if isinstance(effect, ControlPower | ResetDevice):
             await draw_pending(ports=ports, outputs=outputs)

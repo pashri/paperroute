@@ -291,6 +291,8 @@ class TkMonitor:
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """
         Show a frame, upside down when turned.
@@ -305,8 +307,12 @@ class TkMonitor:
             Whether to show the frame upside down.
         quick : bool
             Ignored.
+        asleep : bool
+            Ignored.
+        clear : bool
+            Ignored.
         """
-        del full, quick
+        del full, quick, asleep, clear
         shown = turned_frame(frame=frame, turned=turned)
         data = base64.b64encode(encode_png(grey=shown)).decode('ascii')
         self.image = tkinter.PhotoImage(data=data, format='png')

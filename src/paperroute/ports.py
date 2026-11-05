@@ -819,6 +819,8 @@ class Display(Protocol):
         full: bool = False,
         turned: bool = False,
         quick: bool = False,
+        asleep: bool = False,
+        clear: bool = False,
     ) -> None:
         """
         Show a frame.
@@ -835,6 +837,12 @@ class Display(Protocol):
             the other way round.
         quick : bool
             A knob was turned just now; a panel may trade grey for speed.
+        asleep : bool
+            The device is in Sleep mode; a panel may deep-sleep after
+            drawing.
+        clear : bool
+            Whether to do a clear refresh: the whole screen in black and
+            white, with no wipe. A full refresh wins over it.
         """
 
     def settle(self, *, timeout: float) -> bool:

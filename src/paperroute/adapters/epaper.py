@@ -16,6 +16,7 @@ SETTLE: Final[float] = 0.1  # seconds
 SLEEP_PAUSE: Final[float] = 2  # seconds
 PLANE_BYTES: Final[int] = 48_000
 GREY_BOOSTER: Final[bytes] = bytes.fromhex('27271817')
+INVERT: Final[bytes] = bytes(range(255, -1, -1))
 
 
 class PanelTimeout(Exception):
@@ -26,8 +27,12 @@ class Uc8179:
     """
     Runs refresh sequences on a UC8179 controller.
 
-    The controller goes into deep sleep after every refresh; the next
-    one wakes it with a reset.
+    The controller powers off after every refresh and goes into deep
+    sleep only when asked. Every refresh starts with a reset, which
+    also wakes it from deep sleep.
+
+    Callers give 1-bit planes with 1 for black. Quick mode reads 0 as
+    black, so `draw_partial` inverts both planes on the wire.
 
     Parameters
     ----------
@@ -49,10 +54,11 @@ class Uc8179:
         self._bus = bus
         self._timeout = timeout
         self._clock = clock
+        self._deep = True
 
     def draw_full(self, *, planes: tuple[bytes, bytes]) -> None:
         """
-        Wipe the panel white, then draw four greys.
+        Wipe the panel white with a hot wipe, then draw four greys.
 
         Parameters
         ----------
@@ -64,14 +70,9 @@ class Uc8179:
         PanelTimeout
             When the panel stays busy too long.
         """
-        self._wake()
-        self._send(0x01, '07072817')
-        self._power_on()
-        self._send(0x00, '1F')
-        self._send(0x61, '032001E0')
-        self._send(0x15, '00')
-        self._send(0x50, '1007')
-        self._send(0x60, '22')
+        self._full_setup()
+        self._send(0xE0, '02')
+        self._send(0xE5, '6E')
         self._bus.command(code=0x10, data=b'\xff' * PLANE_BYTES)
         self._bus.command(code=0x13, data=b'\x00' * PLANE_BYTES)
         self._refresh(step='wipe refresh')
@@ -82,7 +83,29 @@ class Uc8179:
         self._bus.command(code=0x10, data=planes[0])
         self._bus.command(code=0x13, data=planes[1])
         self._refresh(step='grey refresh')
-        self._sleep()
+        self._rest()
+
+    def draw_clear(self, *, bits: bytes) -> None:
+        """
+        Draw the whole screen in black and white, with no wipe.
+
+        Parameters
+        ----------
+        bits : bytes
+            The whole screen's 1-bit pixels, 1 for black.
+
+        Raises
+        ------
+        PanelTimeout
+            When the panel stays busy too long.
+        """
+        self._full_setup()
+        self._send(0xE0, '02')
+        self._send(0xE5, '5A')
+        self._bus.command(code=0x10, data=bits.translate(INVERT))
+        self._bus.command(code=0x13, data=bits)
+        self._refresh(step='clear refresh')
+        self._rest()
 
     def draw_partial(
         self, *, box: Box, old: bytes, patch: bytes
@@ -95,28 +118,27 @@ class Uc8179:
         box : Box
             The area to redraw.
         old : bytes
-            The box's 1-bit pixels as the panel shows them now.
+            The box's old 1-bit pixels, 1 for black.
         patch : bytes
-            The box's new 1-bit pixels.
+            The box's new 1-bit pixels, 1 for black.
 
         Raises
         ------
         PanelTimeout
             When the panel stays busy too long.
         """
-        self._bus.power(on=True)
-        self._bus.reset()
+        self._start()
         self._send(0x00, '1F')
         self._power_on()
         self._send(0xE0, '02')
         self._send(0xE5, '6E')
         self._send(0x50, 'A907')
         self._window(box=box)
-        self._bus.command(code=0x10, data=old)
-        self._bus.command(code=0x13, data=patch)
+        self._bus.command(code=0x10, data=old.translate(INVERT))
+        self._bus.command(code=0x13, data=patch.translate(INVERT))
         self._refresh(step='partial refresh')
         self._bus.command(code=0x92)
-        self._sleep()
+        self._rest()
 
     def draw_grey_patch(
         self, *, box: Box, planes: tuple[bytes, bytes]
@@ -136,8 +158,7 @@ class Uc8179:
         PanelTimeout
             When the panel stays busy too long.
         """
-        self._bus.power(on=True)
-        self._bus.reset()
+        self._start()
         self._send(0x00, '1F')
         self._send(0x50, '1007')
         self._power_on()
@@ -147,10 +168,17 @@ class Uc8179:
         self._bus.command(code=0x13, data=planes[1])
         self._refresh(step='grey patch refresh')
         self._bus.command(code=0x92)
-        self._sleep()
+        self._rest()
+
+    def sleep(self) -> None:
+        """Put the controller into deep sleep, unless it is already."""
+        if not self._deep:
+            self._send(0x07, 'A5')
+        self._deep = True
 
     def close(self) -> None:
-        """Wait for deep sleep to settle, then power off and close."""
+        """Deep-sleep, wait for it to settle, then power off and close."""
+        self.sleep()
         self._bus.pause(seconds=SLEEP_PAUSE)
         self._bus.power(on=False)
         self._bus.close()
@@ -168,11 +196,23 @@ class Uc8179:
         """
         self._bus.command(code=code, data=bytes.fromhex(data))
 
-    def _wake(self) -> None:
-        """Power up, reset and set the full-screen driving values."""
+    def _start(self) -> None:
+        """Power up and reset, which also ends any deep sleep."""
         self._bus.power(on=True)
         self._bus.reset()
+        self._deep = False
+
+    def _full_setup(self) -> None:
+        """Wake the controller and set it up for a whole-screen draw."""
+        self._start()
         self._send(0x06, '17172817')
+        self._send(0x01, '07072817')
+        self._power_on()
+        self._send(0x00, '1F')
+        self._send(0x61, '032001E0')
+        self._send(0x15, '00')
+        self._send(0x50, '1007')
+        self._send(0x60, '22')
 
     def _power_on(self) -> None:
         """Send power-on and wait for the panel."""
@@ -215,12 +255,11 @@ class Uc8179:
         self._bus.pause(seconds=SETTLE)
         self._wait(step=step)
 
-    def _sleep(self) -> None:
-        """Put the controller into deep sleep."""
+    def _rest(self) -> None:
+        """Power the controller off until the next refresh."""
         self._send(0x50, 'F7')
         self._bus.command(code=0x02)
         self._wait(step='power off')
-        self._send(0x07, 'A5')
 
     def _wait(self, *, step: str) -> None:
         """

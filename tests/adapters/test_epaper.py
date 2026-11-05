@@ -75,11 +75,12 @@ def test_draw_full_sequence() -> None:
     assert codes(bus=bus) == [
         (0x06, 4), (0x01, 4), (0x04, 0), (0x71, 0),
         (0x00, 1), (0x61, 4), (0x15, 1), (0x50, 2), (0x60, 1),
+        (0xE0, 1), (0xE5, 1),
         (0x10, 48000), (0x13, 48000), (0x12, 0), (0x71, 0),
         (0x04, 0),
         (0x00, 1), (0x50, 2), (0x06, 4), (0xE0, 1), (0xE5, 1),
         (0x10, 48000), (0x13, 48000), (0x12, 0), (0x71, 0),
-        (0x50, 1), (0x02, 0), (0x71, 0), (0x07, 1),
+        (0x50, 1), (0x02, 0), (0x71, 0),
     ]
     commands = sent(bus=bus)
     assert (0x10, b'\xff' * 48000) in commands
@@ -94,14 +95,13 @@ def test_draw_partial_window_bytes() -> None:
         box=BOX, old=b'o' * 20000, patch=b'p' * 20000,
     )
     assert (0x90, WINDOW) in sent(bus=bus)
-    assert (0x10, b'o' * 20000) in sent(bus=bus)
-    assert (0x13, b'p' * 20000) in sent(bus=bus)
+    assert (0x10, bytes([ord('o') ^ 0xFF]) * 20000) in sent(bus=bus)
+    assert (0x13, bytes([ord('p') ^ 0xFF]) * 20000) in sent(bus=bus)
     assert codes(bus=bus) == [
         (0x00, 1), (0x04, 0), (0x71, 0), (0xE0, 1), (0xE5, 1),
         (0x50, 2), (0x91, 0), (0x90, 9), (0x10, 20000),
         (0x13, 20000), (0x12, 0),
         (0x71, 0), (0x92, 0), (0x50, 1), (0x02, 0), (0x71, 0),
-        (0x07, 1),
     ]
 
 
@@ -148,6 +148,101 @@ def test_draw_grey_patch_sequence() -> None:
         (0x00, 1), (0x50, 2), (0x04, 0), (0x71, 0), (0x06, 4),
         (0xE0, 1), (0xE5, 1), (0x91, 0), (0x90, 9), (0x10, 5),
         (0x13, 5), (0x12, 0), (0x71, 0), (0x92, 0), (0x50, 1),
-        (0x02, 0), (0x71, 0), (0x07, 1),
+        (0x02, 0), (0x71, 0),
     ]
     assert (0x90, WINDOW) in sent(bus=bus)
+
+
+REST: list[tuple[int, bytes]] = [(0x50, b'\xf7'), (0x02, b''), (0x71, b'')]
+DEEP_SLEEP: tuple[int, bytes] = (0x07, b'\xa5')
+SMALL = Box(left=0, top=0, right=8, bottom=1)
+
+
+def test_draw_partial_inverts_both_planes() -> None:
+    """Quick mode reads 0 as black, so both planes go out inverted."""
+    bus = FakePanelBus()
+    make(bus=bus).draw_partial(box=SMALL, old=b'\x0f', patch=b'\xf0')
+    commands = sent(bus=bus)
+    assert (0x10, b'\xf0') in commands
+    assert (0x13, b'\x0f') in commands
+
+
+def test_refresh_rests_without_deep_sleep() -> None:
+    """Partial and full refreshes end with a power off, not deep sleep."""
+    bus = FakePanelBus()
+    panel = make(bus=bus)
+    panel.draw_partial(box=SMALL, old=b'\x00', patch=b'\x00')
+    assert sent(bus=bus)[-3:] == REST
+    panel.draw_full(planes=(b'', b''))
+    assert sent(bus=bus)[-3:] == REST
+    assert all(code != 0x07 for code, _ in sent(bus=bus))
+
+
+def test_sleep_deep_sleeps_once() -> None:
+    """A second sleep in a row sends nothing."""
+    bus = FakePanelBus()
+    panel = make(bus=bus)
+    panel.draw_partial(box=SMALL, old=b'\x00', patch=b'\x00')
+    panel.sleep()
+    panel.sleep()
+    assert sent(bus=bus).count(DEEP_SLEEP) == 1
+
+
+def test_close_deep_sleeps_once() -> None:
+    """Close deep-sleeps an awake panel, and only once."""
+    bus = FakePanelBus()
+    panel = make(bus=bus)
+    panel.draw_full(planes=(b'', b''))
+    panel.close()
+    assert sent(bus=bus).count(DEEP_SLEEP) == 1
+    bus = FakePanelBus()
+    panel = make(bus=bus)
+    panel.draw_full(planes=(b'', b''))
+    panel.sleep()
+    panel.close()
+    assert sent(bus=bus).count(DEEP_SLEEP) == 1
+    bus = FakePanelBus()
+    make(bus=bus).close()
+    assert DEEP_SLEEP not in sent(bus=bus)
+
+
+def test_draw_after_sleep_resets() -> None:
+    """A draw after deep sleep wakes the panel with a reset."""
+    bus = FakePanelBus()
+    panel = make(bus=bus)
+    panel.draw_full(planes=(b'', b''))
+    panel.sleep()
+    bus.log.clear()
+    panel.draw_partial(box=SMALL, old=b'\x00', patch=b'\x00')
+    assert bus.log[:2] == [('power', True), ('reset', None)]
+    panel.sleep()
+    assert sent(bus=bus).count(DEEP_SLEEP) == 1
+
+
+def test_draw_full_hot_wipe() -> None:
+    """The wipe is driven hot and the greys with their own setting."""
+    bus = FakePanelBus()
+    make(bus=bus).draw_full(planes=(b'', b''))
+    commands = sent(bus=bus)
+    refreshes = [i for i, (code, _) in enumerate(commands) if code == 0x12]
+    wipe = commands[: refreshes[0]]
+    grey = commands[refreshes[0] : refreshes[1]]
+    assert wipe.index((0xE0, b'\x02')) > wipe.index((0x60, b'\x22'))
+    assert (0xE5, b'\x6e') in wipe
+    assert (0xE5, b'\x5f') in grey
+
+
+def test_draw_clear_sequence() -> None:
+    """A clear refresh is one warm 1-bit pass with no wipe."""
+    bus = FakePanelBus()
+    bits = bytes([0x0F]) * 48000
+    make(bus=bus).draw_clear(bits=bits)
+    commands = sent(bus=bus)
+    assert bus.log[:2] == [('power', True), ('reset', None)]
+    assert commands.index((0xE0, b'\x02')) > commands.index((0x60, b'\x22'))
+    assert (0xE5, b'\x5a') in commands
+    assert (0x10, bytes([0xF0]) * 48000) in commands
+    assert (0x13, bits) in commands
+    assert [code for code, _ in commands].count(0x12) == 1
+    assert commands[-3:] == REST
+    assert all(code != 0x07 for code, _ in commands)

@@ -43,10 +43,10 @@ from paperroute.core.rebuild import (
     is_outdated,
 )
 from paperroute.core.saved import LiveView, Saved
-from paperroute.core.state import initial_state, step
+from paperroute.core.state import step
 from paperroute.core.state_model import Rebuild, State
 from tests.core.chooser_walks import DOWN, KINDS, NEXT, OPEN
-from tests.core.factories import START, pin_at
+from tests.core.factories import START, begun, pin_at
 from tests.core.steps import step_untouched
 from tests.fakes import device_facts
 
@@ -70,7 +70,7 @@ def pinned() -> State:
         unpinned=None,
         view=LiveView.STOP,
     )
-    state = initial_state(saved=saved, now=START, stored=True)
+    state = begun(saved=saved)
     return step(state, Tick(now=START))[0]
 
 

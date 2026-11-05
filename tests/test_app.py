@@ -93,6 +93,7 @@ from paperroute.core.saved import (
     seeded,
 )
 from paperroute.core.state_saves import SAVE_AFTER
+from paperroute.core.state_views import LOADING_WAIT
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.tiles import (
     TILE,
@@ -1924,11 +1925,12 @@ def test_starting_state_keeps_unknown_seed_places_bare(
 
 
 async def test_queued_knob_turns_draw_one_frame() -> None:
-    """A tick and five turns queued at once draw a single frame."""
+    """Ticks and five turns queued at once draw a single frame."""
     display = FrameRecorder()
 
     def hook(post: Callable[[Event], None]) -> None:
         post(Tick(now=AT))
+        post(Tick(now=AT + LOADING_WAIT))
         for steps in (1, -1, 1, -1, 1):
             post(KnobTurned(knob=Knob.BOTTOM, steps=steps))
 
@@ -1937,7 +1939,7 @@ async def test_queued_knob_turns_draw_one_frame() -> None:
             ports=ports_of(display=display),
             post_hook=hook,
             tick_every=60.0,
-            max_events=6,
+            max_events=7,
         )
     assert len(display.frames) == 1
 
@@ -1950,9 +1952,10 @@ async def test_app_turns_panel_frames() -> None:
 
     def hook(post: Callable[[Event], None]) -> None:
         post(Tick(now=AT))
+        post(Tick(now=AT + LOADING_WAIT))
 
     async with asyncio.timeout(5):
-        await run(ports=ports, post_hook=hook, max_events=1)
+        await run(ports=ports, post_hook=hook, max_events=2)
     assert display.turns[-1] is True
 
 

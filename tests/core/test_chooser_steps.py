@@ -38,7 +38,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import Departure, Pin, shifted
 from paperroute.core.places import shown
 from paperroute.core.saved import LiveView, Saved
-from paperroute.core.state import initial_state, step
+from paperroute.core.state import step
 from paperroute.core.state_model import LOOKBACK, RELOAD_BEFORE, State
 from paperroute.core.state_views import saved_of
 from paperroute.core.stop_view import HORIZON, StopView
@@ -60,6 +60,7 @@ from tests.core.chooser_walks import (
 from tests.core.factories import (
     EIGHT,
     START,
+    begun,
     calls,
     departure,
     pattern,
@@ -92,7 +93,7 @@ def pinned(*, view: LiveView = LiveView.STOP) -> State:
     saved = Saved(
         pins=PINS, current=0, unpinned=None, view=view,
     )
-    state = initial_state(saved=saved, now=START, stored=True)
+    state = begun(saved=saved)
     state, _ = step(state, Tick(now=START))
     return state
 
@@ -396,7 +397,7 @@ def test_commit_matching_pin_selects_it() -> None:
         unpinned=None,
         view=LiveView.STOP,
     )
-    state = initial_state(saved=saved, now=START, stored=True)
+    state = begun(saved=saved)
     state, _ = run_events(
         state=state,
         events=[*TO_STAGE, StripLoaded(key=CHOSEN_KEY, reach=REACH), NEXT],

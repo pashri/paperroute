@@ -271,18 +271,21 @@ class Calendar:
 @dataclass(frozen=True)
 class Refresh:
     """
-    When the panel was last fully refreshed and last touched.
+    When the app started and the knobs were touched, and any menu shown.
 
     Attributes
     ----------
-    last_full : datetime | None
-        The last full refresh, or None before the first.
+    started_at : datetime | None
+        The time of the first event, or None before it.
     touched_at : datetime | None
         The last knob touch, or None before the first.
+    in_menu : bool
+        Whether the last frame rendered was a menu or the route chooser.
     """
 
-    last_full: datetime | None = None
+    started_at: datetime | None = None
     touched_at: datetime | None = None
+    in_menu: bool = False
 
 
 @dataclass(frozen=True)

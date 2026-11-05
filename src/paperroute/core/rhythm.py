@@ -9,10 +9,10 @@ from paperroute.core.quota import DAILY_LIMIT, calls_today
 from paperroute.core.saved import Rate, Settings, Window
 from paperroute.core.state_model import State
 
-RATES: Final[dict[Rate, tuple[timedelta, timedelta]]] = {
-    Rate.FAST: (timedelta(seconds=30), timedelta(minutes=5)),
-    Rate.STEADY: (timedelta(seconds=60), timedelta(minutes=10)),
-    Rate.SLOW: (timedelta(minutes=2), timedelta(minutes=15)),
+RATES: Final[dict[Rate, timedelta]] = {
+    Rate.FAST: timedelta(seconds=30),
+    Rate.STEADY: timedelta(seconds=60),
+    Rate.SLOW: timedelta(minutes=2),
 }
 GUARDS: Final[tuple[tuple[float, timedelta], ...]] = (
     (0.95, timedelta(minutes=5)),
@@ -109,7 +109,7 @@ def poll_every(*, state: State) -> timedelta:
         The rate's poll interval, raised to the floor of the first guard
         whose share of `DAILY_LIMIT` today's calls are over.
     """
-    every, _ = RATES[rate_now(state=state)]
+    every = RATES[rate_now(state=state)]
     calls = calls_today(quota=state.quota, day=state.now.date())
     floor = next(
         (
@@ -120,24 +120,6 @@ def poll_every(*, state: State) -> timedelta:
         every,
     )
     return max(every, floor)
-
-
-def full_every(*, state: State) -> timedelta:
-    """
-    Give the time between full refreshes of the panel.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    timedelta
-        The rate's full-refresh interval.
-    """
-    _, every = RATES[rate_now(state=state)]
-    return every
 
 
 def holidays_loaded(*, state: State, event: HolidaysLoaded) -> State:

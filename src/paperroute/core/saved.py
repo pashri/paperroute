@@ -29,7 +29,7 @@ LIVE_VIEWS: Final[tuple[LiveView, ...]] = (
 
 
 class Rate(StrEnum):
-    """How often the feeds are polled and the panel fully refreshed."""
+    """How often the feeds are polled."""
 
     FAST = '30s'
     STEADY = '60s'

@@ -181,6 +181,7 @@ from tests.core.chooser_walks import (
 from tests.core.connection_factories import WORK
 from tests.core.factories import (
     START,
+    begun,
     departure,
     pattern,
     pin_at,
@@ -216,7 +217,7 @@ POOL: Final[tuple[Pin, ...]] = (
 
 def fresh(*, now: datetime = START, centre: Point | None = None) -> State:
     """
-    A state with nothing loaded.
+    A state with nothing loaded, started long enough ago to draw.
 
     Parameters
     ----------
@@ -231,7 +232,7 @@ def fresh(*, now: datetime = START, centre: Point | None = None) -> State:
         Initial state.
     """
     pin = replace(PIN, origin=replace(PIN.origin, point=centre))
-    return initial_state(saved=seeded(pin=pin), now=now, stored=True)
+    return begun(saved=seeded(pin=pin), now=now)
 
 
 def every_position_fetch() -> list[FetchFeed]:
@@ -319,7 +320,7 @@ def test_header_shows_nickname() -> None:
     """The tag reads '<nickname> n/total'; unpinning drops it."""
     pins = (replace(PIN, nickname='Home'), PINS[0])
     saved = replace(seeded(pin=PIN), pins=pins)
-    state = initial_state(saved=saved, now=START, stored=True)
+    state = begun(saved=saved)
     state, _ = step(state, Tick(now=START))
     assert isinstance(state.last_view, StopView)
     assert state.last_view.tag.text == 'Home 1/2'
@@ -331,7 +332,7 @@ def test_header_shows_nickname() -> None:
 def test_stop_view_without_a_destination_names_none() -> None:
     """A pin with no Destination gives the view no destination."""
     saved = seeded(pin=replace(PIN, destination=None))
-    state = initial_state(saved=saved, now=START, stored=True)
+    state = begun(saved=saved)
     state, _ = step(state, Tick(now=START))
     assert isinstance(state.last_view, StopView)
     assert state.last_view.destination is None
@@ -2491,7 +2492,7 @@ def pinned(
         unpinned=unpinned,
         view=view,
     )
-    state = initial_state(saved=saved, now=START, stored=True)
+    state = begun(saved=saved)
     state, _ = step(state, Tick(now=START))
     return state
 

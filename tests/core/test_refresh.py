@@ -1,45 +1,40 @@
-"""Tests for the full-refresh schedule."""
+"""Tests for when the panel gets a full or clear refresh."""
 
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from paperroute.core.device_model import ResetKind
+from paperroute.core.chooser import ChooserState
+from paperroute.core.map_view import MapView
 from paperroute.core.messages import (
     Effect,
     Knob,
     KnobHeld,
-    PowerAction,
+    KnobsHeld,
+    KnobTurned,
     Render,
     Tick,
 )
-from paperroute.core.panel_views import SleepView
-from paperroute.core.refresh import Refresh, quick_now
-from paperroute.core.saved import LiveView, Rate, Settings
-from paperroute.core.state import step
+from paperroute.core.panel_views import MenuView, SleepView
+from paperroute.core.refresh import quick_now
+from paperroute.core.saved import LiveView, seeded
+from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
+from paperroute.core.stop_view import StopView
 from tests.core.factories import START
-from tests.core.test_state import PRESS, effects_of, fresh, loaded
+from tests.core.test_state import PIN, PRESS, effects_of, fresh, loaded
 
 IGNORED = KnobHeld(knob=Knob.TOP)
+TURN = KnobTurned(knob=Knob.BOTTOM, steps=1)
 
 
-def drawn(
-    *,
-    last_full: datetime,
-    touched_at: datetime | None = None,
-    settings: Settings | None = None,
-) -> State:
+def drawn(*, touched_at: datetime | None = None) -> State:
     """
-    Make a state with a view drawn and a schedule set.
+    Make a state with a view drawn.
 
     Parameters
     ----------
-    last_full : datetime
-        The last full refresh.
     touched_at : datetime | None
         The last knob touch.
-    settings : Settings | None
-        The settings; the defaults when None.
 
     Returns
     -------
@@ -48,10 +43,38 @@ def drawn(
     """
     state = step(loaded(state=fresh()), Tick(now=START))[0]
     return replace(
-        state,
-        settings=settings or state.settings,
-        refresh=Refresh(last_full=last_full, touched_at=touched_at),
+        state, refresh=replace(state.refresh, touched_at=touched_at),
     )
+
+
+def on_map() -> State:
+    """
+    Make a state with the Map view drawn.
+
+    Returns
+    -------
+    State
+        The state at `START`.
+    """
+    state = replace(drawn(), view=LiveView.MAP)
+    return step(state, Tick(now=START))[0]
+
+
+def renders(*, effects: tuple[Effect, ...]) -> list[Render]:
+    """
+    Pick the renders.
+
+    Parameters
+    ----------
+    effects : tuple[Effect, ...]
+        Effects.
+
+    Returns
+    -------
+    list[Render]
+        The Render effects.
+    """
+    return effects_of(effects=effects, kind=Render)
 
 
 def fulls(*, effects: tuple[Effect, ...]) -> list[Render]:
@@ -95,69 +118,76 @@ def ticked(*, state: State, after: timedelta) -> tuple[State, list[Render]]:
     return state, fulls(effects=effects)
 
 
-def test_first_frame_is_full() -> None:
-    """The first view drawn is a full refresh."""
-    state, effects = step(fresh(), Tick(now=START))
-    [render] = effects_of(effects=effects, kind=Render)
+def test_loaded_start_draws_at_once() -> None:
+    """With the timetable loaded, the first frame is drawn full at once."""
+    state = fresh()
+    board = replace(state.board, loaded_until=START + timedelta(hours=1))
+    _, effects = step(replace(state, board=board), Tick(now=START))
+    [render] = renders(effects=effects)
     assert render.full
-    assert state.refresh.last_full == START
 
 
-def test_full_after_interval_when_idle() -> None:
-    """At peak, a full refresh follows 5 minutes on with idle knobs."""
-    state = drawn(
-        last_full=START - timedelta(minutes=5),
-        touched_at=START - timedelta(seconds=25),
-    )
-    after, renders = ticked(state=state, after=timedelta())
-    assert [(render.view, render.full) for render in renders] == [
-        (state.last_view, True),
-    ]
-    assert after.refresh.last_full == START
+def test_loading_screen_waits_five_seconds() -> None:
+    """Still loading, the first frame waits 5 s, then is drawn full."""
+    state = initial_state(saved=seeded(pin=PIN), now=START, stored=True)
+    state, effects = step(state, Tick(now=START))
+    assert not renders(effects=effects)
+    assert state.refresh.started_at == START
+    state, effects = step(state, Tick(now=START + timedelta(seconds=4)))
+    assert not renders(effects=effects)
+    _, effects = step(state, Tick(now=START + timedelta(seconds=5)))
+    [render] = renders(effects=effects)
+    assert render.full
 
 
-def test_full_waits_for_idle() -> None:
-    """A due refresh waits until the knobs are 20 s idle."""
-    touch = START - timedelta(seconds=10)
-    state = drawn(
-        last_full=START - timedelta(minutes=5), touched_at=touch,
-    )
-    state, renders = ticked(state=state, after=timedelta())
-    assert not renders
-    _, renders = ticked(state=state, after=timedelta(seconds=10))
-    assert len(renders) == 1
+def test_no_scheduled_full_refresh() -> None:
+    """The Map view left idle for 30 minutes gets no full refresh."""
+    state = on_map()
+    assert isinstance(state.last_view, MapView)
+    _, found = ticked(state=state, after=timedelta(minutes=30))
+    assert not found
 
 
-def test_full_at_most_two_minutes_late() -> None:
-    """Touches every 5 s hold a refresh only until 2 minutes late."""
-    state = drawn(
-        last_full=START - timedelta(minutes=7, seconds=-5),
-        touched_at=START - timedelta(seconds=5),
-    )
-    state, renders = ticked(state=state, after=timedelta())
-    assert not renders
-    state = replace(
-        state, refresh=replace(state.refresh, touched_at=START),
-    )
-    _, renders = ticked(state=state, after=timedelta(seconds=5))
-    assert len(renders) == 1
+def test_entering_menu_from_map_is_clear() -> None:
+    """Opening a menu over the map is a clear refresh, not a full one."""
+    state, effects = step(on_map(), KnobsHeld())
+    [render] = renders(effects=effects)
+    assert isinstance(render.view, MenuView)
+    assert (render.full, render.clear) == (False, True)
+    assert state.refresh.in_menu
 
 
-def test_off_peak_full_every_fifteen() -> None:
-    """Off-peak at the slow rate, a full refresh comes every 15 minutes."""
-    state = drawn(
-        last_full=START,
-        settings=Settings(peak_windows=(), offpeak_rate=Rate.SLOW),
-    )
-    state, renders = ticked(state=state, after=timedelta(minutes=10))
-    assert not renders
-    _, renders = ticked(state=state, after=timedelta(minutes=15))
-    assert len(renders) == 1
+def test_turning_inside_menu_is_not_full() -> None:
+    """A change inside a menu is neither full nor clear."""
+    state, _ = step(on_map(), KnobsHeld())
+    _, effects = step(state, TURN)
+    [render] = renders(effects=effects)
+    assert (render.full, render.clear) == (False, False)
+
+
+def test_leaving_menu_to_stop_view_is_full() -> None:
+    """Closing a menu to the Stop view is a full refresh."""
+    state, _ = step(drawn(), KnobsHeld())
+    closed = replace(state, panel=replace(state.panel, menu=None))
+    state, effects = step(closed, Tick(now=START))
+    [render] = renders(effects=effects)
+    assert isinstance(render.view, StopView)
+    assert (render.full, render.clear) == (True, False)
+    assert not state.refresh.in_menu
+
+
+def test_opening_chooser_is_clear() -> None:
+    """The route chooser counts as a menu, whatever view it shows."""
+    state = replace(on_map(), chooser=ChooserState())
+    state, effects = step(state, Tick(now=START))
+    [render] = renders(effects=effects)
+    assert (render.full, render.clear) == (False, True)
+    assert state.refresh.in_menu
 
 
 def test_map_change_is_full() -> None:
     """Into or out of a map view is full; between map views is partial."""
-    state = drawn(last_full=START)
+    state = drawn()
     state, effects = step(state, PRESS)
     [render] = effects_of(effects=effects, kind=Render)
     assert render.full
@@ -175,7 +205,7 @@ def test_map_change_is_full() -> None:
 
 def test_touch_is_noted() -> None:
     """A knob event notes its time, even one that is ignored."""
-    state = drawn(last_full=START)
+    state = drawn()
     for event in (PRESS, IGNORED):
         after, _ = step(state, event)
         assert after.refresh.touched_at == START
@@ -183,7 +213,7 @@ def test_touch_is_noted() -> None:
 
 def test_waking_is_full() -> None:
     """The first frame after the sleep screen is a full refresh."""
-    state = drawn(last_full=START)
+    state = drawn()
     asleep, _ = ticked(
         state=replace(state, panel=replace(state.panel, asleep=True)),
         after=timedelta(),
@@ -194,25 +224,9 @@ def test_waking_is_full() -> None:
     assert not isinstance(render.view, SleepView)
 
 
-def test_no_full_while_asleep_or_powering() -> None:
-    """No full refresh is scheduled asleep, powering off or resetting."""
-    state = drawn(last_full=START - timedelta(minutes=20))
-    asleep, _ = ticked(
-        state=replace(state, panel=replace(state.panel, asleep=True)),
-        after=timedelta(),
-    )
-    powering = replace(state, power=PowerAction.OFF)
-    resetting = replace(
-        state, panel=replace(state.panel, resetting=ResetKind.SETTINGS),
-    )
-    for held in (asleep, powering, resetting):
-        _, renders = ticked(state=held, after=timedelta(minutes=10))
-        assert not renders
-
-
 def test_quick_now_lasts_three_seconds() -> None:
     """A knob touched 2.9 s ago is quick; at 3 s or never it is not."""
-    base = drawn(last_full=START)
+    base = drawn()
     for age, quick in ((2.9, True), (3.0, False)):
         touched = START - timedelta(seconds=age)
         refresh = replace(base.refresh, touched_at=touched)

@@ -43,7 +43,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import Pin, RouteKind, shifted
 from paperroute.core.places import feeds_of
 from paperroute.core.saved import LiveView, Saved
-from paperroute.core.state import initial_state, step
+from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import HORIZON
 from tests.core.chooser_walks import (
@@ -64,7 +64,7 @@ from tests.core.chooser_walks import (
     fed,
     opened_at_kind,
 )
-from tests.core.factories import START, pin_at, place
+from tests.core.factories import START, begun, pin_at, place
 
 PENRITH_PATH: Final = (*T1, (Level.STATION, 'E2'))
 
@@ -102,7 +102,7 @@ def started() -> State:
         unpinned=None,
         view=LiveView.MAP,
     )
-    state = initial_state(saved=saved, now=START, stored=True)
+    state = begun(saved=saved)
     return step(state, Tick(now=START))[0]
 
 

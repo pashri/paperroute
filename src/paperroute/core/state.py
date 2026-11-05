@@ -112,7 +112,7 @@ from paperroute.core.polling import poll_effects, woken
 from paperroute.core.quiet import span_loaded, span_requests, with_quiet
 from paperroute.core.quota import quota_only, with_calls, without_skipped
 from paperroute.core.rebuild import rebuild_effects, rebuilt, seen_schema
-from paperroute.core.refresh import noted, with_full
+from paperroute.core.refresh import noted
 from paperroute.core.rhythm import holidays_loaded
 from paperroute.core.saved import Saved
 from paperroute.core.sleep import held_awake
@@ -272,7 +272,7 @@ def on_tick(
     state, loads = tick_loads(state=state)
     state, polls = tick_polls(state=state)
     state, effects = settled(state=state, effects=(*loads, *polls))
-    return with_quiet(result=with_full(state=state, effects=effects))
+    return with_quiet(result=(state, effects))
 
 
 def tick_loads(*, state: State) -> tuple[State, tuple[Effect, ...]]:
@@ -675,7 +675,6 @@ def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
             effects=effects,
         ),
         event=event,
-        effects=effects,
     )
     before, now = saved_of(state=state), saved_of(state=after)
     if before == now or quota_only(before=before, after=now):

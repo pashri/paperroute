@@ -53,16 +53,16 @@
       <form id="display-form" method="post" action="/settings">
         <label>Peak rate
           <select name="peak_rate">
-            <option value="30s"{{peak_rate:30s}}>Every 30 s &middot; full refresh 5 min</option>
-            <option value="60s"{{peak_rate:60s}}>Every 60 s &middot; full refresh 10 min</option>
-            <option value="2min"{{peak_rate:2min}}>Every 2 min &middot; full refresh 15 min</option>
+            <option value="30s"{{peak_rate:30s}}>Every 30 s</option>
+            <option value="60s"{{peak_rate:60s}}>Every 60 s</option>
+            <option value="2min"{{peak_rate:2min}}>Every 2 min</option>
           </select>
         </label>
         <label>Off-peak rate
           <select name="offpeak_rate">
-            <option value="30s"{{offpeak_rate:30s}}>Every 30 s &middot; full refresh 5 min</option>
-            <option value="60s"{{offpeak_rate:60s}}>Every 60 s &middot; full refresh 10 min</option>
-            <option value="2min"{{offpeak_rate:2min}}>Every 2 min &middot; full refresh 15 min</option>
+            <option value="30s"{{offpeak_rate:30s}}>Every 30 s</option>
+            <option value="60s"{{offpeak_rate:60s}}>Every 60 s</option>
+            <option value="2min"{{offpeak_rate:2min}}>Every 2 min</option>
           </select>
         </label>
         <fieldset aria-describedby="peak-hint">

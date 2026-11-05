@@ -6,7 +6,7 @@ from datetime import date, datetime, time, timedelta
 import pytest
 
 from paperroute.core.model import SYDNEY
-from paperroute.core.rhythm import full_every, in_window, is_peak, poll_every
+from paperroute.core.rhythm import in_window, is_peak, poll_every
 from paperroute.core.saved import Quota, Rate, Settings, Window, seeded
 from paperroute.core.state import initial_state
 from paperroute.core.state_model import Calendar, State
@@ -147,24 +147,6 @@ def test_guard_only_slows(
         quota=Quota(day=day, calls=calls),
     )
     assert poll_every(state=state) == every
-
-
-@pytest.mark.parametrize(
-    ('rate', 'every'),
-    [
-        (Rate.FAST, timedelta(minutes=5)),
-        (Rate.STEADY, timedelta(minutes=10)),
-        (Rate.SLOW, timedelta(minutes=15)),
-    ],
-)
-def test_full_every_follows_rate(rate: Rate, every: timedelta) -> None:
-    """The full-refresh interval follows the rate, whatever the quota."""
-    state = state_at(
-        now=at(hour=8),
-        settings=Settings(peak_rate=rate),
-        quota=Quota(day=TUESDAY, calls=59_000),
-    )
-    assert full_every(state=state) == every
 
 
 def test_poll_every_on_a_holiday_uses_offpeak() -> None:

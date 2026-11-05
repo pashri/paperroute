@@ -1,6 +1,8 @@
 """Build the screen a state shows, and what it keeps between restarts."""
 
 from dataclasses import replace
+from datetime import timedelta
+from typing import Final
 
 from paperroute.core.alert_match import alert_banner
 from paperroute.core.alert_state import alerts_left, shown_alerts
@@ -24,7 +26,7 @@ from paperroute.core.rebuild import building_view
 from paperroute.core.refresh import needs_greys
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.sleep import sleep_view
-from paperroute.core.state_model import State
+from paperroute.core.state_model import State, elapsed
 from paperroute.core.stop_view import (
     StopInputs,
     StopView,
@@ -36,6 +38,8 @@ from paperroute.core.strip_opening import with_folds
 from paperroute.core.strip_select import kept_selection
 from paperroute.core.strip_state import clamped, request_strips, strip_inputs
 from paperroute.core.strip_view import build_strip_pane, build_strip_view
+
+LOADING_WAIT: Final[timedelta] = timedelta(seconds=5)
 
 
 def saved_of(*, state: State) -> Saved:
@@ -259,6 +263,81 @@ def live_view(*, state: State, stop_view: StopView) -> ScreenView:
     return stop_view
 
 
+def loading_held(*, state: State) -> bool:
+    """
+    Say whether the first frame waits for the timetable to load.
+
+    Parameters
+    ----------
+    state : State
+        State after the event.
+
+    Returns
+    -------
+    bool
+        True before any frame is drawn and before departures load,
+        until `LOADING_WAIT` has passed since the app started.
+    """
+    if state.last_view is not None or state.board.loaded_until is not None:
+        return False
+    started = state.refresh.started_at or state.now
+    return not elapsed(since=started, now=state.now, span=LOADING_WAIT)
+
+
+def in_menu(*, state: State) -> bool:
+    """
+    Say whether the state shows a menu.
+
+    The route chooser counts as a menu whatever view it builds, since
+    some of its stages show a `StripView`.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    bool
+        True with a panel screen (a menu, confirm or Wi-Fi setup) or
+        the route chooser open.
+    """
+    return panel_view(state=state) is not None or state.chooser is not None
+
+
+def render_of(*, state: State, view: ScreenView, menu: bool) -> Render:
+    """
+    Choose how the panel draws a changed view.
+
+    Parameters
+    ----------
+    state : State
+        State after the event, with the last view still recorded.
+    view : ScreenView
+        The view to draw.
+    menu : bool
+        Whether the view is a menu, from `in_menu`.
+
+    Returns
+    -------
+    Render
+        Full for the first frame, into or out of the sleep screen,
+        leaving a menu, and between views with and without grey tiles
+        outside menus. Clear for entering a menu. Otherwise neither.
+    """
+    last, was_menu = state.last_view, state.refresh.in_menu
+    if (
+        last is None
+        or isinstance(view, SleepView)
+        or isinstance(last, SleepView)
+    ):
+        return Render(view=view, full=True)
+    if menu != was_menu:
+        return Render(view=view, full=was_menu, clear=menu)
+    greys = needs_greys(view=view) != needs_greys(view=last)
+    return Render(view=view, full=greys and not menu)
+
+
 def rendered(
     *,
     state: State,
@@ -268,10 +347,11 @@ def rendered(
     """
     Add a Render effect when the view changed.
 
-    The first frame, the sleep screen, the first frame after it and a
-    change into or out of a view with grey tiles are full refreshes.
-    While the sleep screen is shown nothing redraws; it is drawn once,
-    and once more when it was drawn before departures loaded.
+    The first frame waits up to `LOADING_WAIT` for departures to load,
+    so a quick start draws once. See `render_of` for which renders are
+    full or clear. While the sleep screen is shown nothing redraws; it
+    is drawn once, and once more when it was drawn before departures
+    loaded.
 
     Parameters
     ----------
@@ -285,25 +365,24 @@ def rendered(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the view recorded, the scroll too on the Stop view,
-        and effects.
+        State with the view and whether it is a menu recorded, the
+        scroll too on the Stop view, and effects.
     """
     last = state.last_view
     if state.panel.asleep and isinstance(last, SleepView) and not last.loading:
         return state, effects
+    if loading_held(state=state):
+        return state, effects
     view = current_view(state=state, stop_view=stop_view)
     if isinstance(view, StopView) and state.view is LiveView.STOP:
         state = replace(state, scroll=view.scroll)
-    if view == state.last_view:
+    if view == last:
         return state, effects
-    full = (
-        state.last_view is None
-        or isinstance(view, SleepView)
-        or isinstance(state.last_view, SleepView)
-        or needs_greys(view=view) != needs_greys(view=state.last_view)
-    )
-    render = Render(view=view, full=full)
-    return replace(state, last_view=view), (*effects, render)
+    menu = in_menu(state=state)
+    render = render_of(state=state, view=view, menu=menu)
+    refresh = replace(state.refresh, in_menu=menu)
+    state = replace(state, last_view=view, refresh=refresh)
+    return state, (*effects, render)
 
 
 def settled(

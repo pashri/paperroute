@@ -1,6 +1,7 @@
 """Departures, trip patterns, vehicle positions and strip inputs."""
 
 from collections.abc import Mapping, Sequence
+from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Final
 
@@ -26,6 +27,10 @@ from paperroute.core.reach import (
     build_reach,
 )
 from paperroute.core.reach_layout import LineExit
+from paperroute.core.saved import Saved
+from paperroute.core.state import initial_state
+from paperroute.core.state_model import State
+from paperroute.core.state_views import LOADING_WAIT
 from paperroute.core.stop_view import (
     NOT_PINNED,
     StopInputs,
@@ -57,6 +62,29 @@ LINE: Final[dict[str, Point]] = {
 T2_ON: Final[CarryOn] = CarryOn(
     route='T2', headsign='Leppington', trip_id='b',
 )
+
+
+def begun(*, saved: Saved, now: datetime = START) -> State:
+    """
+    Make a stored state whose app started `LOADING_WAIT` ago.
+
+    Its first frame is drawn at once, even before departures load.
+
+    Parameters
+    ----------
+    saved : Saved
+        What the device kept.
+    now : datetime
+        The time now.
+
+    Returns
+    -------
+    State
+        The state.
+    """
+    state = initial_state(saved=saved, now=now, stored=True)
+    refresh = replace(state.refresh, started_at=now - LOADING_WAIT)
+    return replace(state, refresh=refresh)
 
 
 def place(

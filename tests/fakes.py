@@ -1096,3 +1096,87 @@ class LabelCountingTiles:
             The build, or None when there is none.
         """
         return self.tiles.version()
+
+
+@dataclass
+class FakePanelBus:
+    """
+    A panel bus that records what it is sent and never sleeps.
+
+    Attributes
+    ----------
+    log : list[tuple[str, object]]
+        Entries are ('command', (code, data)), ('reset', None),
+        ('power', on), ('pause', seconds) and ('close', None).
+    busy_polls : int
+        How many `idle` calls answer False before it answers True.
+    stuck : bool
+        When True, `idle` never answers True.
+    now_s : float
+        Fake time, advanced by `pause`.
+    """
+
+    log: list[tuple[str, object]] = field(default_factory=list)
+    busy_polls: int = 0
+    stuck: bool = False
+    now_s: float = 0.0
+
+    def reset(self) -> None:
+        """Record a reset."""
+        self.log.append(('reset', None))
+
+    def command(self, *, code: int, data: bytes = b'') -> None:
+        """
+        Record a command.
+
+        Parameters
+        ----------
+        code : int
+            The command byte.
+        data : bytes
+            Its data.
+        """
+        self.log.append(('command', (code, data)))
+
+    def idle(self) -> bool:
+        """
+        Answer from `busy_polls` and `stuck`.
+
+        Returns
+        -------
+        bool
+            True when the panel counts as idle.
+        """
+        if self.stuck:
+            return False
+        if self.busy_polls > 0:
+            self.busy_polls -= 1
+            return False
+        return True
+
+    def pause(self, *, seconds: float) -> None:
+        """
+        Record a pause and advance the fake time.
+
+        Parameters
+        ----------
+        seconds : float
+            How long.
+        """
+        self.log.append(('pause', seconds))
+        self.now_s += seconds
+
+    def power(self, *, on: bool) -> None:
+        """
+        Record a power change.
+
+        Parameters
+        ----------
+        on : bool
+            The new state.
+        """
+        self.log.append(('power', on))
+
+    def close(self) -> None:
+        """Record the close."""
+        self.log.append(('close', None))

@@ -1,5 +1,7 @@
 """Interfaces the core and app depend on; adapters implement them."""
 
+# pylint: disable=too-many-lines
+
 from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -981,3 +983,55 @@ class KeyStore(Protocol):
 
     def clear(self) -> None:
         """Remove the key."""
+
+
+class PanelBus(Protocol):
+    """The wires to a UC8179 e-paper controller."""
+
+    def reset(self) -> None:
+        """Pulse the reset pin: high 20 ms, low 2 ms, high 20 ms."""
+
+    def command(self, *, code: int, data: bytes = b'') -> None:
+        """
+        Send a command byte, then its data.
+
+        Parameters
+        ----------
+        code : int
+            The command byte, sent with the data/command pin low.
+        data : bytes
+            The data bytes, sent with the pin high.
+        """
+
+    def idle(self) -> bool:
+        """
+        Read the busy pin.
+
+        Returns
+        -------
+        bool
+            True when the pin reads 1, which means the panel is idle.
+        """
+
+    def pause(self, *, seconds: float) -> None:
+        """
+        Wait.
+
+        Parameters
+        ----------
+        seconds : float
+            How long to wait.
+        """
+
+    def power(self, *, on: bool) -> None:
+        """
+        Switch the panel's power pin.
+
+        Parameters
+        ----------
+        on : bool
+            True for on.
+        """
+
+    def close(self) -> None:
+        """Release the pins and the SPI device."""

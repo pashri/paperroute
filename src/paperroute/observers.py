@@ -3,13 +3,13 @@
 import logging
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 
 from paperroute.adapters.settings_form import form_values
 from paperroute.core.device_model import DeviceStatus
 from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
-from paperroute.ports import Observer
+from paperroute.ports import Observer, PanelRefresh
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,26 @@ class PinsSeen:
 
 
 @dataclass
+class PanelTimes:
+    """
+    The e-paper panel's latest refresh times.
+
+    Attributes
+    ----------
+    partial_s : float | None
+        Seconds the latest good patch took, or None before one.
+    full_s : float | None
+        Seconds the latest good full refresh took, or None before one.
+    ok : bool
+        False after a failed refresh, until the next good one.
+    """
+
+    partial_s: float | None = None
+    full_s: float | None = None
+    ok: bool = True
+
+
+@dataclass
 class Timings:
     """
     Keeps the latest timings for the status page.
@@ -98,6 +118,8 @@ class Timings:
         The device status, or None before the app reports it.
     pins : PinsSeen | None
         The pins, or None before the app reports them.
+    panel : PanelTimes | None
+        The panel's refresh times, or None when there is no panel.
     """
 
     frames: int = 0
@@ -110,6 +132,7 @@ class Timings:
     last_ok: dict[str, float] = field(default_factory=dict)
     device: DeviceStatus | None = None
     pins: PinsSeen | None = None
+    panel: PanelTimes | None = None
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """
@@ -189,6 +212,26 @@ class Timings:
         revision = 1 if self.pins is None else self.pins.revision + 1
         self.pins = PinsSeen(pins=pins, shown=shown, revision=revision)
 
+    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
+        """
+        Record a panel refresh, starting the panel's times if needed.
+
+        Parameters
+        ----------
+        refresh : PanelRefresh
+            The refresh; a failed one only marks the panel not ok.
+        """
+        if self.panel is None:
+            self.panel = PanelTimes()
+        panel = self.panel
+        panel.ok = refresh.ok
+        if not refresh.ok:
+            return
+        if refresh.full:
+            panel.full_s = refresh.seconds
+        else:
+            panel.partial_s = refresh.seconds
+
     def snapshot(self) -> dict[str, object]:
         """
         Current timings in a JSON-ready form.
@@ -198,7 +241,8 @@ class Timings:
         dict[str, object]
             Frame counts and times, ages in seconds (None before the
             first frame or tick), the latest timing per feed with when
-            it last worked, and the settings and device status once
+            it last worked, the panel's refresh times (None when there
+            is no panel), and the settings and device status once
             reported. The device facts are left out.
         """
         now = time.time()
@@ -218,6 +262,7 @@ class Timings:
                 }
                 for name, timing in self.feeds.items()
             },
+            'panel': None if self.panel is None else asdict(self.panel),
         }
         if self.settings is not None:
             snapshot['settings'] = form_values(settings=self.settings)
@@ -319,6 +364,16 @@ class NullObserver:
             The pins.
         shown : int | None
             Index of the pin on screen, or None.
+        """
+
+    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
+        """
+        Ignore a panel refresh.
+
+        Parameters
+        ----------
+        refresh : PanelRefresh
+            The refresh.
         """
 
 
@@ -425,3 +480,14 @@ class ObserverGroup:
             Index of the pin on screen, or None.
         """
         self._each(call=lambda o: o.pins_seen(pins=pins, shown=shown))
+
+    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
+        """
+        Pass on a panel refresh.
+
+        Parameters
+        ----------
+        refresh : PanelRefresh
+            The refresh.
+        """
+        self._each(call=lambda o: o.panel_refreshed(refresh=refresh))

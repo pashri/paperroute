@@ -103,7 +103,7 @@ from paperroute.core.tiles import (
 )
 from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, Timings
-from paperroute.ports import Observer
+from paperroute.ports import Observer, PanelRefresh
 from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.chrome import HEADER
 from paperroute.render.keep_out import KeepOut, keep_out
@@ -459,6 +459,22 @@ class RaisingObserver:
         """
         raise RuntimeError(f'pins {pins} {shown}')
 
+    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
+        """
+        Fail.
+
+        Parameters
+        ----------
+        refresh : PanelRefresh
+            Ignored.
+
+        Raises
+        ------
+        RuntimeError
+            Always.
+        """
+        raise RuntimeError(f'panel {refresh}')
+
 
 @dataclass
 class CallRecorder:
@@ -539,6 +555,16 @@ class CallRecorder:
             Index of the pin shown, or None when the unpinned place is.
         """
         self.pins.append((pins, shown))
+
+    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
+        """
+        Ignore a panel refresh.
+
+        Parameters
+        ----------
+        refresh : PanelRefresh
+            Ignored.
+        """
 
 
 async def test_app_reports_settings() -> None:

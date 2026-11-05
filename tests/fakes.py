@@ -218,6 +218,23 @@ class FrameRecorder:
         self.fulls.append(full)
         self.turns.append(turned)
 
+    def settle(self, *, timeout: float) -> bool:
+        """
+        Report that every frame is shown, which it always is.
+
+        Parameters
+        ----------
+        timeout : float
+            Ignored.
+
+        Returns
+        -------
+        bool
+            Always True.
+        """
+        del timeout
+        return True
+
 
 @dataclass(frozen=True)
 class FixedClock:

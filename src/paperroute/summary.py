@@ -16,6 +16,7 @@ from paperroute.adapters.tfnsw import (
     FeedUnavailable,
 )
 from paperroute.observers import NullObserver
+from paperroute.ports import PanelRefresh
 
 SUMMARY_EVERY_S: Final[float] = 900.0
 DECILES: Final[int] = 10
@@ -157,6 +158,8 @@ class Summary(NullObserver):
         self.started = clock()
         self.feeds: dict[str, FeedTally] = {}
         self.render_ms: list[float] = []
+        self.panel_partial_ms: list[float] = []
+        self.panel_full_ms: list[float] = []
 
     def tally(self, *, feed: str) -> FeedTally:
         """
@@ -235,6 +238,20 @@ class Summary(NullObserver):
         """
         self.render_ms.append(render_ms)
 
+    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
+        """
+        Keep a good panel refresh's time in milliseconds.
+
+        Parameters
+        ----------
+        refresh : PanelRefresh
+            The refresh; a failed one is left out.
+        """
+        if not refresh.ok:
+            return
+        times = self.panel_full_ms if refresh.full else self.panel_partial_ms
+        times.append(refresh.seconds * 1000)
+
     def report(self) -> dict[str, object]:
         """
         Give this window's counts in a JSON-ready form.
@@ -243,12 +260,16 @@ class Summary(NullObserver):
         -------
         dict[str, object]
             The window's length in seconds, frames drawn with the median
-            and p90 render time, and each feed's counts.
+            and p90 render time, the median and p90 of good panel
+            patches and full refreshes in milliseconds, and each feed's
+            counts.
         """
         return {
             'window_s': round(self.clock() - self.started, 1),
             'frames': len(self.render_ms),
             'render_ms': spread(values=self.render_ms),
+            'panel_partial_ms': spread(values=self.panel_partial_ms),
+            'panel_full_ms': spread(values=self.panel_full_ms),
             'feeds': {
                 feed: tally.report() for feed, tally in self.feeds.items()
             },
@@ -262,3 +283,5 @@ class Summary(NullObserver):
         self.started = self.clock()
         self.feeds = {}
         self.render_ms = []
+        self.panel_partial_ms = []
+        self.panel_full_ms = []

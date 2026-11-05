@@ -7,6 +7,7 @@ import socket
 from paperroute.core.device_model import DeviceStatus
 from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
+from paperroute.ports import PanelRefresh
 
 logger = logging.getLogger(__name__)
 
@@ -177,4 +178,14 @@ class SystemdNotifier:
             The pins.
         shown : int | None
             Index of the pin on screen, or None.
+        """
+
+    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
+        """
+        Ignore a panel refresh.
+
+        Parameters
+        ----------
+        refresh : PanelRefresh
+            The refresh.
         """

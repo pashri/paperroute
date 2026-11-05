@@ -784,6 +784,26 @@ class FeedsClient(Protocol):
         """Release any connections."""
 
 
+@dataclass(frozen=True)
+class PanelRefresh:
+    """
+    One attempt to refresh the e-paper panel.
+
+    Attributes
+    ----------
+    full : bool
+        True for a full refresh, False for any kind of patch.
+    seconds : float
+        How long the attempt took.
+    ok : bool
+        Whether the panel finished it.
+    """
+
+    full: bool
+    seconds: float
+    ok: bool
+
+
 class Display(Protocol):
     """
     Somewhere frames are shown.
@@ -812,6 +832,21 @@ class Display(Protocol):
         turned : bool
             Whether to show the frame upside down, for a panel mounted
             the other way round.
+        """
+
+    def settle(self, *, timeout: float) -> bool:
+        """
+        Wait until every frame shown so far is on the panel.
+
+        Parameters
+        ----------
+        timeout : float
+            Seconds to wait at most.
+
+        Returns
+        -------
+        bool
+            True when it is.
         """
 
 
@@ -894,6 +929,16 @@ class Observer(Protocol):
         shown : int | None
             Index of the pin on screen, or None when the unpinned place
             is.
+        """
+
+    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
+        """
+        Record an attempt to refresh the e-paper panel.
+
+        Parameters
+        ----------
+        refresh : PanelRefresh
+            The attempt.
         """
 
 

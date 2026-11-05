@@ -309,6 +309,23 @@ class TkMonitor:
         self.image = tkinter.PhotoImage(data=data, format='png')
         self.label.configure(image=self.image)
 
+    def settle(self, *, timeout: float) -> bool:
+        """
+        Report that every frame is shown, which it always is.
+
+        Parameters
+        ----------
+        timeout : float
+            Ignored.
+
+        Returns
+        -------
+        bool
+            Always True.
+        """
+        del timeout
+        return True
+
     def bind(self, *, post: Callable[[Event], None]) -> None:
         """
         Send knob events from key presses.

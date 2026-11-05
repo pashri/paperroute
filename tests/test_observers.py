@@ -10,7 +10,13 @@ from paperroute.adapters.settings_form import form_values
 from paperroute.core.device_model import DeviceStatus, WifiPhase, WifiSetup
 from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
-from paperroute.observers import NullObserver, ObserverGroup, Timings
+from paperroute.observers import (
+    NullObserver,
+    ObserverGroup,
+    PanelTimes,
+    Timings,
+)
+from paperroute.ports import PanelRefresh
 from tests.core.factories import pin_of
 from tests.fakes import device_facts
 
@@ -55,6 +61,10 @@ class _Failing:
     def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
         """Raise."""
         raise RuntimeError(pins, shown)
+
+    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
+        """Raise."""
+        raise RuntimeError(refresh)
 
 
 def test_timings_records_frames_and_max() -> None:
@@ -212,3 +222,53 @@ def test_group_passes_pins_on() -> None:
     NullObserver().pins_seen(pins=PINS, shown=None)
     assert timings.pins is not None
     assert timings.pins.pins == PINS
+
+
+def test_timings_without_a_panel_report_none() -> None:
+    """With no panel the snapshot's panel entry is None."""
+    assert Timings().snapshot()['panel'] is None
+
+
+def test_timings_keep_panel_times() -> None:
+    """Good refreshes set their kind's time; a failure only clears ok."""
+    timings = Timings(panel=PanelTimes())
+    assert timings.snapshot()['panel'] == {
+        'partial_s': None,
+        'full_s': None,
+        'ok': True,
+    }
+    timings.panel_refreshed(
+        refresh=PanelRefresh(full=False, seconds=0.5, ok=True),
+    )
+    timings.panel_refreshed(
+        refresh=PanelRefresh(full=True, seconds=4.8, ok=False),
+    )
+    assert timings.snapshot()['panel'] == {
+        'partial_s': 0.5,
+        'full_s': None,
+        'ok': False,
+    }
+    timings.panel_refreshed(
+        refresh=PanelRefresh(full=True, seconds=4.8, ok=True),
+    )
+    assert timings.panel == PanelTimes(partial_s=0.5, full_s=4.8, ok=True)
+
+
+def test_timings_start_panel_times_on_a_refresh() -> None:
+    """A refresh before the panel is marked open starts its times."""
+    timings = Timings()
+    timings.panel_refreshed(
+        refresh=PanelRefresh(full=True, seconds=4.0, ok=True),
+    )
+    assert timings.panel == PanelTimes(full_s=4.0)
+
+
+def test_group_passes_panel_refreshes_on() -> None:
+    """The group passes refreshes on past a failing observer."""
+    timings = Timings()
+    refresh = PanelRefresh(full=False, seconds=0.5, ok=True)
+    ObserverGroup(observers=[_Failing(), timings]).panel_refreshed(
+        refresh=refresh,
+    )
+    NullObserver().panel_refreshed(refresh=refresh)
+    assert timings.panel == PanelTimes(partial_s=0.5)

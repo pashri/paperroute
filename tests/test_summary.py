@@ -11,6 +11,7 @@ from paperroute.adapters.tfnsw import (
     FeedTimedOut,
     FeedUnavailable,
 )
+from paperroute.ports import PanelRefresh
 from paperroute.summary import (
     SUMMARY_EVERY_S,
     FailReason,
@@ -199,3 +200,41 @@ def test_tick_after_the_window_starts_a_new_one(
         0, {}, 10.0,
     )
 
+
+
+def test_report_gives_panel_times_from_good_refreshes() -> None:
+    """Panel times are in milliseconds and skip failed refreshes."""
+    summary = summary_on(Clock())
+    for seconds in (0.5, 0.6, 0.7):
+        summary.panel_refreshed(
+            refresh=PanelRefresh(full=False, seconds=seconds, ok=True),
+        )
+    summary.panel_refreshed(
+        refresh=PanelRefresh(full=True, seconds=4.81234, ok=True),
+    )
+    summary.panel_refreshed(
+        refresh=PanelRefresh(full=True, seconds=30.0, ok=False),
+    )
+    report = summary.report()
+    assert report['panel_partial_ms'] == {'median': 600.0, 'p90': 680.0}
+    assert report['panel_full_ms'] == {'median': 4812.3, 'p90': 4812.3}
+
+
+def test_tick_after_the_window_clears_panel_times(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A new window starts with no panel times."""
+    clock = Clock()
+    summary = summary_on(clock)
+    summary.panel_refreshed(
+        refresh=PanelRefresh(full=False, seconds=0.5, ok=True),
+    )
+    summary.panel_refreshed(
+        refresh=PanelRefresh(full=True, seconds=4.0, ok=True),
+    )
+    clock.now += SUMMARY_EVERY_S
+    with caplog.at_level(logging.INFO):
+        summary.ticked()
+    report = summary.report()
+    assert report['panel_partial_ms'] == {'median': None, 'p90': None}
+    assert report['panel_full_ms'] == {'median': None, 'p90': None}

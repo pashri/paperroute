@@ -959,3 +959,8 @@ async def test_web_wake_keeps_the_map_view(
     assert posted == [KnobPressed(knob=Knob.BOTTOM)]
     assert not state.panel.asleep
     assert state.view == LiveView.MAP
+
+
+def test_settle_is_immediate(display: WebDisplay) -> None:
+    """A browser copy is always settled."""
+    assert display.settle(timeout=0)

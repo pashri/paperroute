@@ -149,52 +149,6 @@ def grey_planes(
     )
 
 
-def has_grey(*, frame: NDArray[np.uint8], box: Box) -> bool:
-    """
-    Tell whether any pixel in a box is dark or light grey.
-
-    Parameters
-    ----------
-    frame : NDArray[np.uint8]
-        The frame.
-    box : Box
-        The area to look at.
-
-    Returns
-    -------
-    bool
-        True when a pixel rounds to dark or light.
-    """
-    levels = grey_levels(pixels=crop(frame=frame, box=box))
-    return bool(((levels == 1) | (levels == 2)).any())
-
-
-def union(*, a: Box | None, b: Box) -> Box:
-    """
-    Find the smallest box covering two boxes.
-
-    Parameters
-    ----------
-    a : Box | None
-        The first box, or None.
-    b : Box
-        The second box.
-
-    Returns
-    -------
-    Box
-        The covering box.
-    """
-    if a is None:
-        return b
-    return Box(
-        left=min(a.left, b.left),
-        top=min(a.top, b.top),
-        right=max(a.right, b.right),
-        bottom=max(a.bottom, b.bottom),
-    )
-
-
 def changed_box(
     *,
     old: NDArray[np.uint8],

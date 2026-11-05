@@ -140,19 +140,6 @@ def test_close_powers_off() -> None:
     assert bus.log == [('pause', 2), ('power', False), ('close', None)]
 
 
-def test_draw_grey_patch_sequence() -> None:
-    """The grey patch sends its window and both planes."""
-    bus = FakePanelBus()
-    make(bus=bus).draw_grey_patch(box=BOX, planes=(b'a' * 5, b'b' * 5))
-    assert codes(bus=bus) == [
-        (0x00, 1), (0x50, 2), (0x04, 0), (0x71, 0), (0x06, 4),
-        (0xE0, 1), (0xE5, 1), (0x91, 0), (0x90, 9), (0x10, 5),
-        (0x13, 5), (0x12, 0), (0x71, 0), (0x92, 0), (0x50, 1),
-        (0x02, 0), (0x71, 0),
-    ]
-    assert (0x90, WINDOW) in sent(bus=bus)
-
-
 REST: list[tuple[int, bytes]] = [(0x50, b'\xf7'), (0x02, b''), (0x71, b'')]
 DEEP_SLEEP: tuple[int, bytes] = (0x07, b'\xa5')
 SMALL = Box(left=0, top=0, right=8, bottom=1)

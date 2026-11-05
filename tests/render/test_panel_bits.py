@@ -9,11 +9,9 @@ from paperroute.render.panel_bits import (
     Box,
     changed_box,
     grey_planes,
-    has_grey,
     mono_patch,
     oriented,
     quick_planes,
-    union,
 )
 
 
@@ -132,25 +130,6 @@ def test_grey_planes_of_box() -> None:
     part = grey_planes(frame=frame, box=Box(8, 0, 16, 2))
     for full, small in zip(whole, part):
         assert small == bytes([full[1], full[101]])
-
-
-def test_has_grey() -> None:
-    """Only greys that do not round to black or white count."""
-    box = Box(0, 0, 8, 2)
-    frame = _frame()
-    frame[0, :4] = 0
-    assert not has_grey(frame=frame, box=box)
-    frame[1, 1] = 30
-    assert not has_grey(frame=frame, box=box)
-    frame[1, 2] = 100
-    assert has_grey(frame=frame, box=box)
-
-
-def test_union() -> None:
-    """The union covers both boxes, and a missing box is skipped."""
-    box = Box(8, 4, 16, 8)
-    assert union(a=None, b=box) == box
-    assert union(a=box, b=Box(0, 6, 8, 20)) == Box(0, 4, 16, 20)
 
 
 def test_quick_planes_unchanged_pixels_match() -> None:

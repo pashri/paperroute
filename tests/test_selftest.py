@@ -43,13 +43,9 @@ class RecordingController:
         self.draws.append(('partial', box))
         self.now += self.partial_seconds
 
-    def draw_grey_patch(
-        self, *, box: Box, planes: tuple[bytes, bytes],
-    ) -> None:
-        """Record a grey patch."""
-        assert planes[0]
-        self.draws.append(('grey', box))
-        self.now += 2.1
+    def sleep(self) -> None:
+        """Record a deep sleep."""
+        self.draws.append(('sleep', None))
 
     def close(self) -> None:
         """Record the close."""
@@ -70,7 +66,7 @@ def test_card_bands_and_bar() -> None:
 
 
 def test_run_selftest_sequence_and_pass() -> None:
-    """One full, ten marching partials, one grey patch, then PASS."""
+    """One full and ten marching partials, then PASS."""
     controller = RecordingController()
     out = io.StringIO()
     status = run_selftest(
@@ -78,14 +74,14 @@ def test_run_selftest_sequence_and_pass() -> None:
     )
     assert status == 0
     kinds = [kind for kind, _ in controller.draws]
-    assert kinds == ['full', *['partial'] * 10, 'grey']
+    assert kinds == ['full', *['partial'] * 10]
     assert controller.draws[1][1] == Box(40, 400, 112, 440)
     assert controller.draws[10][1] == Box(40 + 72 * 9, 400, 760, 440)
-    assert controller.draws[-1][1] == Box(40, 400, 760, 440)
     lines = out.getvalue().splitlines()
     assert lines[0] == 'full: 4.7 s'
     assert lines[1] == 'partial 1: 0.50 s'
-    assert lines[-2] == 'grey patch: 2.10 s'
+    assert lines[-2] == 'partial 10: 0.50 s'
+    assert not any('grey' in line for line in lines)
     assert lines[-1] == 'PASS'
     assert controller.closed
 

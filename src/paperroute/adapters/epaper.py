@@ -140,36 +140,6 @@ class Uc8179:
         self._bus.command(code=0x92)
         self._rest()
 
-    def draw_grey_patch(
-        self, *, box: Box, planes: tuple[bytes, bytes]
-    ) -> None:
-        """
-        Redraw one box in four greys.
-
-        Parameters
-        ----------
-        box : Box
-            The area to redraw.
-        planes : tuple[bytes, bytes]
-            The two grey planes cut to the box.
-
-        Raises
-        ------
-        PanelTimeout
-            When the panel stays busy too long.
-        """
-        self._start()
-        self._send(0x00, '1F')
-        self._send(0x50, '1007')
-        self._power_on()
-        self._grey_setup()
-        self._window(box=box)
-        self._bus.command(code=0x10, data=planes[0])
-        self._bus.command(code=0x13, data=planes[1])
-        self._refresh(step='grey patch refresh')
-        self._bus.command(code=0x92)
-        self._rest()
-
     def sleep(self) -> None:
         """Put the controller into deep sleep, unless it is already."""
         if not self._deep:

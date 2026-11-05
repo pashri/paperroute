@@ -17,10 +17,9 @@ from paperroute.ports import PanelBus
 from paperroute.render.panel_bits import (
     HEIGHT,
     WIDTH,
-    Box,
     changed_box,
     grey_planes,
-    mono_patch,
+    quick_planes,
 )
 
 __all__ = ['card', 'run_selftest', 'selftest_main']
@@ -35,8 +34,6 @@ STEPS: Final[int] = 10
 STEP_WIDTH: Final[int] = (BAR_RIGHT - BAR_LEFT) // STEPS  # pixels
 FULL_LIMIT: Final[float] = 8  # seconds
 PARTIAL_LIMIT: Final[float] = 1.0  # seconds
-GREY_LIMIT: Final[float] = 4  # seconds
-LIGHT_GREY: Final[int] = 170
 BUSY_MESSAGE: Final[str] = (
     'The panel is in use. Stop paperroute first: '
     'sudo systemctl stop paperroute'
@@ -125,8 +122,7 @@ def draw_steps(
         ] = 0
         box = changed_box(old=frame, new=new)
         assert box is not None
-        old = mono_patch(frame=frame, box=box)
-        patch = mono_patch(frame=new, box=box)
+        old, patch = quick_planes(old=frame, new=new, box=box)
         elapsed = timed(
             clock=clock,
             draw=partial(
@@ -139,42 +135,7 @@ def draw_steps(
     return times
 
 
-def draw_grey(
-    *,
-    controller: PanelController,
-    clock: Callable[[], float],
-    out: TextIO,
-) -> float:
-    """
-    Turn the bar light grey with one grey patch.
-
-    Parameters
-    ----------
-    controller : PanelController
-        The panel.
-    clock : Callable[[], float]
-        Gives the time in seconds.
-    out : TextIO
-        Where the time is printed.
-
-    Returns
-    -------
-    float
-        Seconds the grey patch took.
-    """
-    frame = card()
-    frame[BAR_TOP:BAR_BOTTOM, BAR_LEFT:BAR_RIGHT] = LIGHT_GREY
-    box = Box(BAR_LEFT, BAR_TOP, BAR_RIGHT, BAR_BOTTOM)
-    planes = grey_planes(frame=frame, box=box)
-    elapsed = timed(
-        clock=clock,
-        draw=lambda: controller.draw_grey_patch(box=box, planes=planes),
-    )
-    print(f'grey patch: {elapsed:.2f} s', file=out)
-    return elapsed
-
-
-def verdict(*, times: list[float], grey: float) -> str | None:
+def verdict(*, times: list[float]) -> str | None:
     """
     Find the first reason the self-test failed.
 
@@ -182,8 +143,6 @@ def verdict(*, times: list[float], grey: float) -> str | None:
     ----------
     times : list[float]
         The full refresh time followed by each partial's time.
-    grey : float
-        Seconds the grey patch took.
 
     Returns
     -------
@@ -195,8 +154,6 @@ def verdict(*, times: list[float], grey: float) -> str | None:
     slowest = max(times[1:])
     if slowest > PARTIAL_LIMIT:
         return f'slowest partial {slowest:.2f} s'
-    if grey > GREY_LIMIT:
-        return f'grey patch {grey:.2f} s'
     return None
 
 
@@ -225,8 +182,7 @@ def run_selftest(
     """
     try:
         times = draw_steps(controller=controller, clock=clock, out=out)
-        grey = draw_grey(controller=controller, clock=clock, out=out)
-        reason = verdict(times=times, grey=grey)
+        reason = verdict(times=times)
     except Exception as error:  # pylint: disable=broad-exception-caught
         reason = f'{type(error).__name__}: {error}'
     finally:

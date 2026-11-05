@@ -14,12 +14,18 @@ from numpy.typing import NDArray
 from paperroute.adapters import panel_display
 from paperroute.adapters.epaper import PanelTimeout
 from paperroute.adapters.panel_display import (
-    TIDY_AFTER,
+    CLEAN_AFTER,
+    CLEAN_QUIET,
     Displays,
     PanelDisplay,
 )
 from paperroute.ports import PanelRefresh
-from paperroute.render.panel_bits import Box, grey_planes, mono_patch, union
+from paperroute.render.panel_bits import (
+    Box,
+    grey_planes,
+    mono_patch,
+    quick_planes,
+)
 from tests.fakes import FrameRecorder
 
 WAIT: Final[float] = 5  # seconds
@@ -69,8 +75,8 @@ class GatedController:
     Attributes
     ----------
     calls : list[tuple[str, object]]
-        ('full', planes), ('partial', (box, patch)) and
-        ('grey', (box, planes)), in the order they were asked for.
+        ('full', planes), ('partial', (box, patch)) and ('sleep', None),
+        in the order they were asked for.
     olds : list[bytes]
         The `old` bits of each partial, in order.
     gate : threading.Event
@@ -101,7 +107,7 @@ class GatedController:
         Parameters
         ----------
         kind : str
-            'full', 'partial' or 'grey'.
+            'full' or 'partial'.
         args : object
             What it was given.
 
@@ -145,23 +151,9 @@ class GatedController:
         self.olds.append(old)
         self.draw(kind='partial', args=(box, patch))
 
-    def draw_grey_patch(
-        self,
-        *,
-        box: Box,
-        planes: tuple[bytes, bytes],
-    ) -> None:
-        """
-        Record a grey patch.
-
-        Parameters
-        ----------
-        box : Box
-            The area.
-        planes : tuple[bytes, bytes]
-            The grey planes of the area.
-        """
-        self.draw(kind='grey', args=(box, planes))
+    def sleep(self) -> None:
+        """Record a deep sleep."""
+        self.calls.append(('sleep', None))
 
     def close(self) -> None:
         """Record the close."""
@@ -321,114 +313,16 @@ def test_change_draws_partial_box(rig: Rig) -> None:
 
 
 def test_partial_sends_old_picture_of_last_frame(rig: Rig) -> None:
-    """The old bits are the last frame's patch of the same box."""
+    """The old bits come from the last frame and the new one."""
     first = painted(boxes=(BOX_A,), grey=0)
     second = painted(boxes=(BOX_B,), grey=0, frame=first)
     rig.show(frame=first)
     rig.show(frame=second)
-    assert rig.controller.olds == [mono_patch(frame=first, box=BOX_B)]
+    old, _ = quick_planes(old=first, new=second, box=BOX_B)
+    assert rig.controller.olds == [old]
     assert rig.controller.calls[1:] == [
         ('partial', (BOX_B, mono_patch(frame=second, box=BOX_B))),
     ]
-
-
-def test_grey_change_draws_grey_patch(rig: Rig) -> None:
-    """A change with grey in it is a grey patch of its box."""
-    frame = painted(boxes=(BOX_A,), grey=85)
-    rig.show(frame=white())
-    rig.show(frame=frame)
-    assert rig.controller.calls[1:] == [
-        ('grey', (BOX_A, grey_planes(frame=frame, box=BOX_A))),
-    ]
-
-
-def test_quick_grey_change_is_dotted_then_tidied(rig: Rig) -> None:
-    """A quick grey change is dotted, then tidied once quick frames stop."""
-    first = painted(boxes=(BOX_A,), grey=85)
-    second = painted(boxes=(BOX_B,), grey=170, frame=first)
-    rig.show(frame=white())
-    rig.show(frame=first, quick=True)
-    rig.clock.now += 2
-    rig.show(frame=second, quick=True)
-    rig.clock.now += TIDY_AFTER - 1
-    rig.show(frame=second)
-    assert rig.controller.calls[1:] == [
-        ('partial', (BOX_A, mono_patch(frame=first, box=BOX_A))),
-        ('partial', (BOX_B, mono_patch(frame=second, box=BOX_B))),
-    ]
-    rig.clock.now += 1
-    rig.show(frame=second)
-    both = union(a=BOX_A, b=BOX_B)
-    assert rig.controller.calls[3:] == [
-        ('grey', (both, grey_planes(frame=second, box=both))),
-    ]
-
-
-@pytest.mark.parametrize('attempt', range(20))
-def test_worker_tidies_on_its_own_wake_up(
-    monkeypatch: pytest.MonkeyPatch, attempt: int
-) -> None:
-    """The dotted area is tidied from the worker's timed wake-up."""
-    assert attempt >= 0
-    monkeypatch.setattr(panel_display, 'TIDY_AFTER', 0.01)
-    controller = GatedController()
-    display = PanelDisplay(
-        controller=controller,
-        report=lambda refresh: None,
-        clock=CreepingClock(),
-    )
-    first = painted(boxes=(BOX_A,), grey=85)
-    display.show(frame=white())
-    assert display.settle(timeout=WAIT)
-    display.show(frame=first, quick=True)
-    deadline = time.monotonic() + WAIT
-    while 'grey' not in controller.kinds() and time.monotonic() < deadline:
-        time.sleep(0.001)
-    assert display.settle(timeout=WAIT)
-    display.stop()
-    assert controller.calls[1:] == [
-        ('partial', (BOX_A, mono_patch(frame=first, box=BOX_A))),
-        ('grey', (BOX_A, grey_planes(frame=first, box=BOX_A))),
-    ]
-
-
-def test_no_tidy_after_failure(rig: Rig) -> None:
-    """A failed dotted patch is cleared by a full, never tidied."""
-    frame = painted(boxes=(BOX_A,), grey=85)
-    rig.show(frame=white())
-    rig.controller.failures.append(PanelTimeout('busy'))
-    rig.show(frame=frame, quick=True)
-    rig.clock.now += TIDY_AFTER
-    rig.show(frame=frame)
-    rig.clock.now += TIDY_AFTER
-    rig.show(frame=frame)
-    assert rig.controller.kinds() == ['full', 'partial', 'full']
-
-
-def test_grey_patch_covers_dotted_area(rig: Rig) -> None:
-    """A grey patch after a dotted one redraws both areas."""
-    first = painted(boxes=(BOX_A,), grey=85)
-    second = painted(boxes=(BOX_B,), grey=85, frame=first)
-    both = union(a=BOX_A, b=BOX_B)
-    rig.show(frame=white())
-    rig.show(frame=first, quick=True)
-    rig.show(frame=second)
-    rig.clock.now += TIDY_AFTER
-    rig.show(frame=second)
-    assert rig.controller.calls[2:] == [
-        ('grey', (both, grey_planes(frame=second, box=both))),
-    ]
-
-
-def test_full_clears_dotted(rig: Rig) -> None:
-    """A full refresh leaves nothing to tidy."""
-    frame = painted(boxes=(BOX_A,), grey=85)
-    rig.show(frame=white())
-    rig.show(frame=frame, quick=True)
-    rig.show(frame=frame, full=True)
-    rig.clock.now += TIDY_AFTER
-    rig.show(frame=frame)
-    assert rig.controller.kinds() == ['full', 'partial', 'full']
 
 
 def test_show_keeps_full_through_replacement(rig: Rig) -> None:
@@ -501,18 +395,6 @@ def test_unexpected_error_keeps_the_worker_going(
     assert rig.controller.kinds() == ['full', 'partial', 'full']
     [record] = caplog.records
     assert record.exc_info is not None
-
-
-def test_failed_tidy_owes_a_full(rig: Rig) -> None:
-    """A failed tidy-up is not retried; the next frame is full."""
-    frame = painted(boxes=(BOX_A,), grey=85)
-    rig.show(frame=white())
-    rig.show(frame=frame, quick=True)
-    rig.controller.failures.append(OSError('spi'))
-    rig.clock.now += TIDY_AFTER
-    rig.show(frame=frame)
-    rig.show(frame=frame)
-    assert rig.controller.kinds() == ['full', 'partial', 'grey', 'full']
 
 
 def test_settle_waits_and_times_out(rig: Rig) -> None:
@@ -588,6 +470,184 @@ def test_stop_leaves_a_stuck_controller_open(
     rig.display.stop()
     assert rig.controller.closed
     assert rig.controller.kinds() == ['full']
+
+
+def flicker(
+    *,
+    rig: Rig,
+    count: int,
+    quick: bool = False,
+    turned: bool = False,
+) -> NDArray[np.uint8]:
+    """
+    Show frames that alternate black and white in one box.
+
+    The first one is black, so each one is a change from a white frame.
+
+    Parameters
+    ----------
+    rig : Rig
+        The rig.
+    count : int
+        How many frames to show.
+    quick : bool
+        Whether each one is quick.
+    turned : bool
+        Whether each one is turned.
+
+    Returns
+    -------
+    NDArray[np.uint8]
+        The last frame shown.
+    """
+    frame = white()
+    for index in range(count):
+        frame = painted(boxes=(BOX_A,), grey=255 if index % 2 else 0)
+        rig.show(frame=frame, quick=quick, turned=turned)
+    return frame
+
+
+def test_grey_change_draws_quick_patch(rig: Rig) -> None:
+    """A grey change that is not quick is still one quick patch."""
+    frame = painted(boxes=(BOX_A,), grey=85)
+    rig.show(frame=white())
+    rig.show(frame=frame)
+    assert rig.controller.calls[1:] == [
+        ('partial', (BOX_A, mono_patch(frame=frame, box=BOX_A))),
+    ]
+
+
+def test_patch_drives_only_changed_pixels(rig: Rig) -> None:
+    """The old and new bits differ only at the changed pixel."""
+    first = painted(boxes=(BOX_A,), grey=170)
+    second = first.copy()
+    second[12, 20] = 0
+    rig.show(frame=first)
+    rig.show(frame=second)
+    box = Box(left=16, top=12, right=24, bottom=13)
+    patch = mono_patch(frame=second, box=box)
+    assert rig.controller.calls[1:] == [('partial', (box, patch))]
+    [old] = rig.controller.olds
+    flipped = sum(
+        (a ^ b).bit_count() for a, b in zip(old, patch, strict=True)
+    )
+    assert flipped == 1
+
+
+def test_cleans_after_thirty_patches_when_quiet(rig: Rig) -> None:
+    """The thirtieth patch is followed by a full refresh of its frame."""
+    rig.show(frame=white())
+    last = flicker(rig=rig, count=CLEAN_AFTER)
+    rig.show(frame=last)
+    assert rig.controller.kinds() == [
+        'full', *['partial'] * CLEAN_AFTER, 'full',
+    ]
+    assert rig.controller.calls[-1] == ('full', grey_planes(frame=last))
+    assert [r.full for r in rig.reports][-2:] == [False, True]
+
+
+def test_twenty_nine_patches_do_not_clean(rig: Rig) -> None:
+    """One patch short of the count, nothing is cleaned."""
+    rig.show(frame=white())
+    last = flicker(rig=rig, count=CLEAN_AFTER - 1)
+    rig.clock.now += CLEAN_QUIET
+    rig.show(frame=last)
+    assert rig.controller.kinds() == ['full', *['partial'] * 29]
+
+
+def test_no_clean_within_quiet_time(rig: Rig) -> None:
+    """A knob turn holds the clean back for the quiet time."""
+    rig.show(frame=white())
+    flicker(rig=rig, count=CLEAN_AFTER - 1)
+    last = painted(boxes=(BOX_A,), grey=255)
+    rig.show(frame=last, quick=True)
+    rig.clock.now += CLEAN_QUIET - 1
+    rig.show(frame=last)
+    assert rig.controller.kinds() == ['full', *['partial'] * 30]
+    rig.clock.now += 1
+    rig.show(frame=last)
+    assert rig.controller.kinds() == ['full', *['partial'] * 30, 'full']
+
+
+def test_full_resets_patch_count(rig: Rig) -> None:
+    """Patches before a full refresh do not count towards a clean."""
+    rig.show(frame=white())
+    flicker(rig=rig, count=20)
+    rig.show(frame=white(), full=True)
+    flicker(rig=rig, count=20)
+    assert rig.controller.kinds() == [
+        'full', *['partial'] * 20, 'full', *['partial'] * 20,
+    ]
+
+
+def test_turned_frame_resets_patch_count(rig: Rig) -> None:
+    """Turning the screen is a full refresh that restarts the count."""
+    rig.show(frame=white())
+    flicker(rig=rig, count=20)
+    rig.show(frame=white(), turned=True)
+    flicker(rig=rig, count=20, turned=True)
+    assert rig.controller.kinds() == [
+        'full', *['partial'] * 20, 'full', *['partial'] * 20,
+    ]
+
+
+def test_owed_full_resets_patch_count(rig: Rig) -> None:
+    """The full refresh owed after a failure restarts the count."""
+    rig.show(frame=white())
+    flicker(rig=rig, count=25)
+    rig.controller.failures.append(OSError('spi'))
+    rig.show(frame=white())
+    rig.show(frame=white())
+    flicker(rig=rig, count=20)
+    assert rig.controller.kinds() == [
+        'full', *['partial'] * 26, 'full', *['partial'] * 20,
+    ]
+
+
+def test_failed_clean_owes_a_full(rig: Rig) -> None:
+    """A failed clean is not retried; the next frame is full."""
+    rig.show(frame=white())
+    flicker(rig=rig, count=CLEAN_AFTER, quick=True)
+    rig.controller.failures.append(OSError('spi'))
+    rig.clock.now += CLEAN_QUIET
+    rig.show(frame=white())
+    rig.show(frame=white())
+    rig.show(frame=white())
+    assert rig.controller.kinds() == [
+        'full', *['partial'] * CLEAN_AFTER, 'full', 'full',
+    ]
+    assert [(r.full, r.ok) for r in rig.reports][-2:] == [
+        (True, False),
+        (True, True),
+    ]
+
+
+@pytest.mark.parametrize('attempt', range(20))
+def test_worker_cleans_on_its_own_wake_up(
+    monkeypatch: pytest.MonkeyPatch, attempt: int
+) -> None:
+    """A clean falls due from the worker's timed wake-up."""
+    assert attempt >= 0
+    monkeypatch.setattr(panel_display, 'CLEAN_QUIET', 0.01)
+    controller = GatedController()
+    display = PanelDisplay(
+        controller=controller,
+        report=lambda refresh: None,
+        clock=CreepingClock(),
+    )
+    display.show(frame=white())
+    assert display.settle(timeout=WAIT)
+    for index in range(CLEAN_AFTER):
+        grey = 255 if index % 2 else 0
+        display.show(frame=painted(boxes=(BOX_A,), grey=grey), quick=True)
+        assert display.settle(timeout=WAIT)
+    deadline = time.monotonic() + WAIT
+    while len(controller.calls) <= CLEAN_AFTER + 1:
+        assert time.monotonic() < deadline
+        time.sleep(0.001)
+    assert display.settle(timeout=WAIT)
+    display.stop()
+    assert controller.kinds() == ['full', *['partial'] * CLEAN_AFTER, 'full']
 
 
 class Unsettled(FrameRecorder):

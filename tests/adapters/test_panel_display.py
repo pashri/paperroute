@@ -16,6 +16,7 @@ from paperroute.adapters.epaper import PanelTimeout
 from paperroute.adapters.panel_display import (
     CLEAN_AFTER,
     CLEAN_QUIET,
+    RETRY_AFTER,
     SCREEN,
     Displays,
     PanelDisplay,
@@ -32,6 +33,7 @@ from tests.fakes import FrameRecorder
 WAIT: Final[float] = 5  # seconds
 BOX_A: Final[Box] = Box(left=16, top=10, right=32, bottom=20)
 BOX_B: Final[Box] = Box(left=400, top=300, right=424, bottom=310)
+QUICK_RETRY: Final[float] = 1 / 16  # seconds
 
 
 class Clock:
@@ -630,7 +632,7 @@ def test_owed_full_resets_patch_count(rig: Rig) -> None:
 
 
 def test_failed_clean_owes_a_full(rig: Rig) -> None:
-    """A failed clean is not retried; the next frame is full."""
+    """A failed clean owes a full; the next frame is drawn full."""
     rig.show(frame=white())
     flicker(rig=rig, count=CLEAN_AFTER, quick=True)
     rig.controller.failures.append(OSError('spi'))
@@ -673,6 +675,91 @@ def test_worker_cleans_on_its_own_wake_up(
     assert display.settle(timeout=WAIT)
     display.stop()
     assert controller.kinds() == ['full', *['partial'] * CLEAN_AFTER, 'full']
+
+
+def wait_for_calls(*, rig: Rig, count: int) -> None:
+    """
+    Wait until the controller has had a number of calls, then settle.
+
+    Parameters
+    ----------
+    rig : Rig
+        The rig.
+    count : int
+        How many calls to wait for.
+    """
+    deadline = time.monotonic() + WAIT
+    while len(rig.controller.calls) < count:
+        assert time.monotonic() < deadline
+        time.sleep(0.001)
+    assert rig.display.settle(timeout=WAIT)
+
+
+def test_failed_refresh_is_retried_after_a_minute(
+    rig: Rig,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failed frame is redrawn full after each wait until it works."""
+    monkeypatch.setattr(panel_display, 'RETRY_AFTER', QUICK_RETRY)
+    frame = painted(boxes=(BOX_A,), grey=0)
+    rig.show(frame=white())
+    rig.controller.failures.extend((OSError('spi'), PanelTimeout('busy')))
+    with caplog.at_level(logging.ERROR):
+        rig.show(frame=frame)
+        rig.clock.now += QUICK_RETRY
+        wait_for_calls(rig=rig, count=3)
+        rig.clock.now += QUICK_RETRY
+        wait_for_calls(rig=rig, count=4)
+    assert rig.controller.kinds() == ['full', 'partial', 'full', 'full']
+    assert rig.controller.calls[-1] == ('full', grey_planes(frame=frame))
+    assert [record.message for record in caplog.records] == [
+        'panel refresh failed',
+    ]
+
+
+def test_retry_of_asleep_frame_sleeps_after(
+    rig: Rig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A retried Sleep mode frame puts the panel to sleep once drawn."""
+    monkeypatch.setattr(panel_display, 'RETRY_AFTER', QUICK_RETRY)
+    rig.show(frame=white())
+    rig.controller.failures.append(PanelTimeout('busy'))
+    rig.show(frame=painted(boxes=(BOX_B,), grey=0), asleep=True)
+    assert rig.controller.kinds() == ['full', 'partial']
+    rig.clock.now += QUICK_RETRY
+    wait_for_calls(rig=rig, count=4)
+    assert rig.controller.kinds() == ['full', 'partial', 'full', 'sleep']
+
+
+def test_newer_frame_beats_retry(rig: Rig) -> None:
+    """A frame shown once a retry is due is drawn full instead."""
+    newer = painted(boxes=(BOX_B,), grey=0)
+    rig.show(frame=white())
+    rig.controller.failures.append(OSError('spi'))
+    rig.show(frame=painted(boxes=(BOX_A,), grey=0))
+    rig.clock.now += RETRY_AFTER
+    rig.show(frame=newer)
+    assert rig.controller.kinds() == ['full', 'partial', 'full']
+    assert rig.controller.calls[-1] == ('full', grey_planes(frame=newer))
+
+
+def test_no_retry_before_a_minute(
+    rig: Rig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed frame is not redrawn before the wait has passed."""
+    monkeypatch.setattr(panel_display, 'RETRY_AFTER', QUICK_RETRY)
+    rig.show(frame=white())
+    rig.controller.failures.append(OSError('spi'))
+    rig.show(frame=painted(boxes=(BOX_A,), grey=0))
+    rig.clock.now += QUICK_RETRY / 2
+    time.sleep(QUICK_RETRY * 4)
+    assert rig.controller.kinds() == ['full', 'partial']
+    rig.clock.now += QUICK_RETRY / 2
+    wait_for_calls(rig=rig, count=3)
+    assert rig.controller.kinds() == ['full', 'partial', 'full']
 
 
 class Unsettled(FrameRecorder):

@@ -4,7 +4,7 @@ import logging
 import threading
 import time
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Final, Protocol
 
 import numpy as np
@@ -25,6 +25,7 @@ from paperroute.render.panel_bits import (
 
 CLEAN_AFTER: Final[int] = 30  # quick patches
 CLEAN_QUIET: Final[float] = 30  # seconds
+RETRY_AFTER: Final[float] = 60  # seconds
 STOP_WAIT: Final[float] = 8  # seconds
 SCREEN: Final[Box] = Box(left=0, top=0, right=WIDTH, bottom=HEIGHT)
 
@@ -116,6 +117,23 @@ class Clean:
 CLEAN: Final[Clean] = Clean()
 
 
+@dataclass(frozen=True)
+class Retry:
+    """
+    A failed frame to draw again.
+
+    Attributes
+    ----------
+    job : Job
+        The frame, as a full refresh.
+    due : float
+        When to draw it, in clock seconds.
+    """
+
+    job: Job
+    due: float
+
+
 class PanelDisplay:
     """
     Draws frames on an e-paper panel from one worker thread.
@@ -127,7 +145,9 @@ class PanelDisplay:
     stays grey. After `CLEAN_AFTER` quick patches, the last frame gets
     a cleaning full refresh once no quick frame has come for
     `CLEAN_QUIET` seconds, unless the device is in Sleep mode. A frame
-    shown in Sleep mode puts the panel into deep sleep once drawn.
+    shown in Sleep mode puts the panel into deep sleep once drawn. A
+    failed refresh is tried again as a full refresh every `RETRY_AFTER`
+    seconds until it works or a newer frame comes.
 
     Parameters
     ----------
@@ -160,7 +180,7 @@ class PanelDisplay:
         self._owed_full = True
         self._patches = 0
         self._asleep = False
-        self._failing = False
+        self._retry: Retry | None = None
         self._thread = threading.Thread(
             target=self._run,
             name='panel',
@@ -278,7 +298,7 @@ class PanelDisplay:
 
     def _next(self) -> Job | Clean | None:
         """
-        Wait for a frame or a due cleaning refresh.
+        Wait for a frame, a due retry or a due cleaning refresh.
 
         Returns
         -------
@@ -287,17 +307,46 @@ class PanelDisplay:
         """
         with self._ready:
             while not self._stopping:
-                if self._waiting is not None:
-                    job, self._waiting = self._waiting, None
+                if (work := self._take()) is not None:
                     self._busy = True
-                    return job
-                if self._clean_due():
-                    self._busy = True
-                    return CLEAN
+                    return work
                 self._busy = False
                 self._ready.notify_all()
-                self._ready.wait(timeout=self._clean_wait())
+                self._ready.wait(timeout=self._wait())
             return None
+
+    def _take(self) -> Job | Clean | None:
+        """
+        Take the work due now, newest frame first.
+
+        Returns
+        -------
+        Job | Clean | None
+            The waiting frame, the failed frame once `RETRY_AFTER` has
+            passed, a due cleaning refresh, or None. The failed frame
+            stays until a full refresh works.
+        """
+        if self._waiting is not None:
+            job, self._waiting = self._waiting, None
+            return job
+        if self._retry is not None and self._clock() >= self._retry.due:
+            return self._retry.job
+        if self._clean_due():
+            return CLEAN
+        return None
+
+    def _wait(self) -> float | None:
+        """
+        Give how long to wait before a retry or a clean falls due.
+
+        Returns
+        -------
+        float | None
+            Seconds, or None when neither is coming.
+        """
+        if self._retry is not None:
+            return self._retry.due - self._clock()
+        return self._clean_wait()
 
     def _clean_coming(self) -> bool:
         """
@@ -358,20 +407,20 @@ class PanelDisplay:
         full = isinstance(work, Clean) or self._needs_full(job=work)
         whole = full or self._clears(work=work)
         started = self._clock()
+        failing = self._retry is not None
         try:
             drew = self._draw(work=work, full=full)
             self._rest(work=work)
         except (PanelTimeout, OSError) as error:
-            if not self._failing:
+            if not failing:
                 logger.error('panel refresh failed', exc_info=error)
-            self._failed(full=whole, started=started)
+            self._failed(work=work, full=whole, started=started)
         except Exception:  # pylint: disable=broad-exception-caught
-            if not self._failing:
+            if not failing:
                 logger.exception('panel refresh failed')
-            self._failed(full=whole, started=started)
+            self._failed(work=work, full=whole, started=started)
         else:
             if drew:
-                self._failing = False
                 self._finish(full=whole, started=started, ok=True)
 
     @staticmethod
@@ -462,6 +511,7 @@ class PanelDisplay:
         """
         self._controller.draw_full(planes=grey_planes(frame=frame))
         self._owed_full = False
+        self._retry = None
         self._patches = 0
         self._drawn = frame
 
@@ -502,20 +552,52 @@ class PanelDisplay:
         self._drawn = job.frame
         return True
 
-    def _failed(self, *, full: bool, started: float) -> None:
+    def _failed(
+        self, *, work: Job | Clean, full: bool, started: float
+    ) -> None:
         """
-        Owe a full refresh and report the failure.
+        Owe a full refresh, keep the frame to retry and report.
 
         Parameters
         ----------
+        work : Job | Clean
+            The work that failed.
         full : bool
             Whether the failed refresh was full.
         started : float
             When it started.
         """
-        self._failing = True
         self._owed_full = True
+        self._retry = Retry(
+            job=self._redo(work=work),
+            due=self._clock() + RETRY_AFTER,
+        )
         self._finish(full=full, started=started, ok=False)
+
+    def _redo(self, *, work: Job | Clean) -> Job:
+        """
+        Make the full refresh that tries failed work again.
+
+        Parameters
+        ----------
+        work : Job | Clean
+            The work that failed.
+
+        Returns
+        -------
+        Job
+            The failed frame, or the last frame for a failed clean.
+        """
+        if isinstance(work, Job):
+            return replace(work, full=True, quick=False, clear=False)
+        assert self._drawn is not None
+        return Job(
+            frame=self._drawn,
+            full=True,
+            turned=self._turned,
+            quick=False,
+            asleep=self._asleep,
+        )
 
     def _finish(self, *, full: bool, started: float, ok: bool) -> None:
         """

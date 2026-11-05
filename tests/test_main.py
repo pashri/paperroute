@@ -35,7 +35,6 @@ from paperroute.__main__ import (
     serve_web,
     tiles_for,
     web_main,
-    web_observer,
     wifi_for,
 )
 from paperroute.adapters.checked_tiles import CheckedTiles
@@ -68,6 +67,7 @@ from paperroute.ports import PanelBus
 from paperroute.render.canvas import INK
 from paperroute.render.map_base import draw_map_base
 from paperroute.summary import Summary
+from paperroute.web_observer import web_observer
 from tests.core.factories import pin_of
 from tests.fakes import (
     FakeKeys,
@@ -807,3 +807,11 @@ def test_web_observer_feeds_frames_and_ticks_to_the_summary() -> None:
 def test_replayed_feeds_are_read_as_they_are(tmp_path: Path) -> None:
     """Replayed feeds need no guard."""
     assert isinstance(feeds_client(choice=str(tmp_path)), FileFeedsClient)
+
+
+def test_parse_args_selftest_needs_nothing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The selftest command parses with no other arguments."""
+    monkeypatch.setattr(sys, 'argv', ['paperroute', 'selftest'])
+    assert parse_args().command == 'selftest'

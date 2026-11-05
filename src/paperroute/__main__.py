@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Final
 
 from aiohttp import web
 
-from paperroute.adapters.act_led import ActLed
 from paperroute.adapters.checked_tiles import CheckedTiles, warn_unfit
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.device_probe import SystemProbe
@@ -36,7 +35,6 @@ from paperroute.adapters.resets import FileResets, NullResets
 from paperroute.adapters.secrets_file import SecretsFile, key_path_from_env
 from paperroute.adapters.state_file import DEFAULT_PATH as STATE_PATH
 from paperroute.adapters.state_file import JsonStateRepository
-from paperroute.adapters.systemd import SystemdNotifier
 from paperroute.adapters.tfnsw import AiohttpFeedsClient
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
@@ -50,7 +48,7 @@ from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin, StopPlace
 from paperroute.core.tiles import TileVariant
 from paperroute.logs import LastError, configure_logging
-from paperroute.observers import ObserverGroup, PanelTimes, Timings
+from paperroute.observers import PanelTimes, Timings
 from paperroute.panel_open import panel_for
 from paperroute.ports import (
     Clock,
@@ -62,7 +60,9 @@ from paperroute.ports import (
     TimetableBuilder,
     WifiControl,
 )
+from paperroute.selftest import selftest_main
 from paperroute.summary import Summary
+from paperroute.web_observer import web_observer
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor
@@ -231,8 +231,10 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(prog='python -m paperroute')
     sub = parser.add_subparsers(dest='command', required=True)
     add_run_arguments(sub.add_parser('run', help='run the device software'))
+    sub.add_parser('selftest', help='test the e-paper panel')
     args = parser.parse_args()
-    require_both_or_neither(args=args)
+    if args.command == 'run':
+        require_both_or_neither(args=args)
     return args
 
 
@@ -883,32 +885,6 @@ def device_pages_for(
     )
 
 
-def web_observer(*, timings: Timings, summary: Summary) -> ObserverGroup:
-    """
-    Gather the web app's observers.
-
-    Parameters
-    ----------
-    timings : Timings
-        Keeps the latest timings for the status page.
-    summary : Summary
-        Logs the periodic summary.
-
-    Returns
-    -------
-    ObserverGroup
-        The timings, the summary, the systemd notifier and the ACT LED.
-    """
-    return ObserverGroup(
-        observers=[
-            timings,
-            summary,
-            SystemdNotifier.from_environment(),
-            ActLed(),
-        ]
-    )
-
-
 def web_main(
     *,
     args: argparse.Namespace,
@@ -980,6 +956,8 @@ def web_main(
 def main() -> None:  # pylint: disable=too-many-statements
     """Run the device software in a window or in browsers."""
     args = parse_args()
+    if args.command == 'selftest':
+        sys.exit(selftest_main())
     last_error = LastError()
     configure_logging(error_file=args.error_log, last_error=last_error)
     summary = Summary()

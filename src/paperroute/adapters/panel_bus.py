@@ -36,10 +36,18 @@ def write_all(
         The bytes to write.
     writer : Callable[[int, bytes], int]
         Writes some bytes and returns how many it took.
+
+    Raises
+    ------
+    OSError
+        If the writer takes no bytes.
     """
     view = memoryview(payload)
     while view:
-        view = view[writer(fd, bytes(view[:CHUNK])) :]
+        written = writer(fd, bytes(view[:CHUNK]))
+        if written <= 0:
+            raise OSError('write made no progress')
+        view = view[written:]
 
 
 class LinuxPanelBus:  # pragma: no cover
@@ -89,9 +97,11 @@ class LinuxPanelBus:  # pragma: no cover
             If the lines or device are unavailable, for example EBUSY
             when another process holds them.
         """
-        # pylint: disable-next=import-error,import-outside-toplevel
+        # pylint: disable=import-error,import-outside-toplevel
         import gpiod
-        from gpiod import line  # pylint: disable=all
+        from gpiod import line
+
+        # pylint: enable=import-error,import-outside-toplevel
 
         lines = gpiod.request_lines(
             chip,
@@ -104,15 +114,18 @@ class LinuxPanelBus:  # pragma: no cover
                 BUSY: gpiod.LineSettings(direction=line.Direction.INPUT),
             },
         )
+        fd = -1
         try:
             fd = os.open(spi, os.O_WRONLY)
+            fcntl.ioctl(fd, SPI_IOC_WR_MODE, struct.pack('B', 0))
+            fcntl.ioctl(
+                fd, SPI_IOC_WR_MAX_SPEED_HZ, struct.pack('I', SPI_SPEED)
+            )
         except OSError:
+            if fd >= 0:
+                os.close(fd)
             lines.release()
             raise
-        fcntl.ioctl(fd, SPI_IOC_WR_MODE, struct.pack('B', 0))
-        fcntl.ioctl(
-            fd, SPI_IOC_WR_MAX_SPEED_HZ, struct.pack('I', SPI_SPEED)
-        )
         return cls(lines=lines, fd=fd, value=line.Value)
 
     def set_pin(self, *, pin: int, high: bool) -> None:
@@ -126,7 +139,8 @@ class LinuxPanelBus:  # pragma: no cover
         high : bool
             True for 1, False for 0.
         """
-        self.lines.set_value(pin, self.value.ACTIVE if high else self.value.INACTIVE)
+        level = self.value.ACTIVE if high else self.value.INACTIVE
+        self.lines.set_value(pin, level)
 
     def reset(self) -> None:
         """Pulse the reset pin: high 20 ms, low 2 ms, high 20 ms."""

@@ -3,6 +3,8 @@
 import os
 from pathlib import Path
 
+import pytest
+
 from paperroute.adapters.panel_bus import (
     CHUNK,
     SPI_IOC_WR_MAX_SPEED_HZ,
@@ -36,3 +38,9 @@ def test_ioctl_numbers() -> None:
     assert SPI_IOC_WR_MODE == 0x40016B01
     assert SPI_IOC_WR_MAX_SPEED_HZ == 0x40046B04
     assert CHUNK == 4096
+
+
+def test_write_all_stalled_writer() -> None:
+    """A writer that takes no bytes raises instead of looping."""
+    with pytest.raises(OSError):
+        write_all(fd=0, payload=b'abc', writer=lambda fd, data: 0)

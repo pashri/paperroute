@@ -12,6 +12,7 @@ from paperroute.render.panel_bits import (
     has_grey,
     mono_patch,
     oriented,
+    quick_planes,
     union,
 )
 
@@ -150,3 +151,32 @@ def test_union() -> None:
     box = Box(8, 4, 16, 8)
     assert union(a=None, b=box) == box
     assert union(a=box, b=Box(0, 6, 8, 20)) == Box(0, 4, 16, 20)
+
+
+def test_quick_planes_unchanged_pixels_match() -> None:
+    """With no change the old plane equals the new plane."""
+    frame = np.full((HEIGHT, WIDTH), 170, dtype=np.uint8)
+    box = Box(left=0, top=0, right=16, bottom=2)
+    old_bits, new_bits = quick_planes(old=frame, new=frame.copy(), box=box)
+    assert old_bits == new_bits
+
+
+def test_quick_planes_flips_only_changed_pixels() -> None:
+    """Only the changed pixel differs between the planes."""
+    old = np.full((HEIGHT, WIDTH), 255, dtype=np.uint8)
+    new = old.copy()
+    new[0, 3] = 0
+    box = Box(left=0, top=0, right=8, bottom=1)
+    old_bits, new_bits = quick_planes(old=old, new=new, box=box)
+    assert new_bits == bytes([0b0001_0000])
+    assert old_bits == bytes([0b0000_0000])
+
+
+def test_quick_planes_grey_to_white_drives_pixel() -> None:
+    """A grey pixel turning white is driven from black."""
+    old = np.full((HEIGHT, WIDTH), 170, dtype=np.uint8)
+    new = np.full((HEIGHT, WIDTH), 255, dtype=np.uint8)
+    box = Box(left=0, top=0, right=8, bottom=4)
+    old_bits, new_bits = quick_planes(old=old, new=new, box=box)
+    assert new_bits == bytes(4)
+    assert old_bits == bytes([0xFF]) * 4

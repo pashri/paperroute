@@ -247,3 +247,37 @@ def mono_patch(*, frame: NDArray[np.uint8], box: Box) -> bytes:
     limits = (BAYER4[ys, xs] * 16 + 8).astype(np.uint16)
     pixels = crop(frame=frame, box=box).astype(np.uint16)
     return np.packbits(pixels < limits, axis=1).tobytes()
+
+
+def quick_planes(
+    *,
+    old: NDArray[np.uint8],
+    new: NDArray[np.uint8],
+    box: Box,
+) -> tuple[bytes, bytes]:
+    """
+    Make the old and new 1-bit planes for a quick patch.
+
+    The new plane is the dithered new frame. The old plane matches it
+    except where a pixel changed, where its bit is flipped, so only the
+    changed pixels are driven.
+
+    Parameters
+    ----------
+    old : NDArray[np.uint8]
+        The frame the panel shows now.
+    new : NDArray[np.uint8]
+        The frame to show.
+    box : Box
+        The area to take.
+
+    Returns
+    -------
+    tuple[bytes, bytes]
+        The old and new planes, 1 for black, `box.width_bytes` bytes
+        per row.
+    """
+    new_bits = np.frombuffer(mono_patch(frame=new, box=box), dtype=np.uint8)
+    changed = crop(frame=old, box=box) != crop(frame=new, box=box)
+    mask = np.packbits(changed, axis=1).ravel()
+    return (new_bits ^ mask).tobytes(), new_bits.tobytes()

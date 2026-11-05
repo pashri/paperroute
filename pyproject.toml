@@ -13,6 +13,7 @@ dependencies = [
     "python-json-logger>=3.2",
     "segno>=1.6.6",
     "skia-python>=138.0",
+    "gpiod==2.5.0; sys_platform == 'linux'",
 ]
 
 [build-system]
@@ -64,6 +65,10 @@ files = ["src", "tests"]
 
 [[tool.mypy.overrides]]
 module = ["skia", "google.transit.*", "google.protobuf.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["gpiod", "gpiod.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

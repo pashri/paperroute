@@ -146,3 +146,18 @@ def test_render_takes_only_faces_and_greys_from_build() -> None:
         if alias.name not in allowed and not alias.name.endswith('_FACE')
     ]
     assert not offenders
+
+
+def test_gpiod_only_in_panel_bus() -> None:
+    """Only the Linux panel bus imports gpiod."""
+    allowed = SRC / 'adapters' / 'panel_bus.py'
+    offenders = [
+        str(path)
+        for path in sorted(SRC.rglob('*.py'))
+        if path != allowed
+        and any(
+            name.split('.')[0] == 'gpiod'
+            for name in imported_names(path=path)
+        )
+    ]
+    assert not offenders

@@ -24,12 +24,15 @@ __all__ = [
     'full_due',
     'full_refresh_effects',
     'needs_greys',
+    'QUICK_FOR',
     'noted',
+    'quick_now',
     'with_full',
 ]
 
 IDLE_FOR: Final[timedelta] = timedelta(seconds=20)
 LATE_BY: Final[timedelta] = timedelta(minutes=2)
+QUICK_FOR: Final[timedelta] = timedelta(seconds=3)
 
 
 def needs_greys(*, view: ScreenView | None) -> bool:
@@ -162,3 +165,23 @@ def noted(
     if refresh == state.refresh:
         return state
     return replace(state, refresh=refresh)
+
+
+def quick_now(*, state: State) -> bool:
+    """
+    Say whether a knob was turned within the last `QUICK_FOR`.
+
+    Parameters
+    ----------
+    state : State
+        State at the event's time.
+
+    Returns
+    -------
+    bool
+        True when the knobs were touched and `QUICK_FOR` has not passed.
+    """
+    touched_at = state.refresh.touched_at
+    return touched_at is not None and not elapsed(
+        since=touched_at, now=state.now, span=QUICK_FOR,
+    )

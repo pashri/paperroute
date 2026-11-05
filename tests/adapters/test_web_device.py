@@ -33,6 +33,7 @@ from paperroute.core.messages import (
 )
 from paperroute.core.model import SYDNEY, Mode
 from paperroute.core.panel_views import confirm_view
+from paperroute.observers import PanelTimes
 from tests.fakes import FakeKeys
 from tests.page_markup import parse_page
 
@@ -102,6 +103,7 @@ class Device:
     def __init__(self) -> None:
         self.status: DeviceStatus | None = STATUS
         self.feeds = {TRAINS: NOW - 12, BUSES: NOW - 40}
+        self.panel: PanelTimes | None = None
         self.keys = FakeKeys(key=KEY)
         self.posted: list[Event] = []
         self.error_log: Path | None = None
@@ -119,6 +121,7 @@ class Device:
         return DevicePages(
             status=lambda: self.status,
             feeds=lambda: self.feeds,
+            panel=lambda: self.panel,
             key=self.keys,
             post=self.posted.append,
             error_log=self.error_log,
@@ -235,6 +238,28 @@ async def test_device_page_values(
     device.status = replace(STATUS, **change)  # type: ignore[arg-type]
     text = await (await client.get('/device')).text()
     assert _row(label=label, value=value) in text
+
+
+@pytest.mark.parametrize(('panel', 'value'), [
+    (PanelTimes(partial_s=0.516, full_s=4.81), 'partial 0.52 s, full 4.81 s'),
+    (PanelTimes(full_s=4.81), 'full 4.81 s'),
+    (PanelTimes(partial_s=0.5), 'partial 0.50 s'),
+    (PanelTimes(), 'waiting for first refresh'),
+    (PanelTimes(partial_s=0.5, ok=False), 'not answering'),
+])
+async def test_device_page_panel_line(
+    device: Device, client: Client, panel: PanelTimes, value: str,
+) -> None:
+    """The Panel line says what the panel has done, or that it is silent."""
+    device.panel = panel
+    text = await (await client.get('/device')).text()
+    assert _row(label='Panel', value=value) in text
+
+
+async def test_device_page_without_panel_has_no_line(client: Client) -> None:
+    """No panel, no Panel line."""
+    text = await (await client.get('/device')).text()
+    assert '<dt>Panel</dt>' not in text
 
 
 async def test_device_page_feed_table(client: Client) -> None:

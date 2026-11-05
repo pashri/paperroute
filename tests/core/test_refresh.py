@@ -13,7 +13,7 @@ from paperroute.core.messages import (
     Tick,
 )
 from paperroute.core.panel_views import SleepView
-from paperroute.core.refresh import Refresh
+from paperroute.core.refresh import Refresh, quick_now
 from paperroute.core.saved import LiveView, Rate, Settings
 from paperroute.core.state import step
 from paperroute.core.state_model import State
@@ -208,3 +208,14 @@ def test_no_full_while_asleep_or_powering() -> None:
     for held in (asleep, powering, resetting):
         _, renders = ticked(state=held, after=timedelta(minutes=10))
         assert not renders
+
+
+def test_quick_now_lasts_three_seconds() -> None:
+    """A knob touched 2.9 s ago is quick; at 3 s or never it is not."""
+    base = drawn(last_full=START)
+    for age, quick in ((2.9, True), (3.0, False)):
+        touched = START - timedelta(seconds=age)
+        refresh = replace(base.refresh, touched_at=touched)
+        state = replace(base, now=START, refresh=refresh)
+        assert quick_now(state=state) is quick
+    assert quick_now(state=base) is False

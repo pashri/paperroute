@@ -23,6 +23,7 @@ from paperroute.core.panel_screens import strength as dbm_strength
 from paperroute.core.panel_views import CANCEL_LINE, CONFIRM_COPY
 from paperroute.core.quota import DAILY_LIMIT
 from paperroute.core.stop_view import DOT, HINT_DOT, clock_text
+from paperroute.observers import PanelTimes
 
 POWER_STATUS: Final[dict[PowerAction, str]] = {
     PowerAction.OFF: 'Shutting down...',
@@ -363,6 +364,53 @@ def system_rows(*, facts: DeviceFacts | None) -> str:
             value=(facts.last_error or 'none') if facts else UNKNOWN,
         ),
     ))
+
+
+def panel_text(*, panel: PanelTimes) -> str:
+    """
+    Say how the panel's refreshes are going.
+
+    Parameters
+    ----------
+    panel : PanelTimes
+        The panel's times.
+
+    Returns
+    -------
+    str
+        The partial and full refresh times that are known, a note that
+        none is yet, or that the panel is not answering.
+    """
+    if not panel.ok:
+        return 'not answering'
+    parts = [
+        f'{name} {seconds:.2f} s'
+        for name, seconds in (
+            ('partial', panel.partial_s),
+            ('full', panel.full_s),
+        )
+        if seconds is not None
+    ]
+    return ', '.join(parts) or 'waiting for first refresh'
+
+
+def panel_rows(*, panel: PanelTimes | None) -> str:
+    """
+    Draw the Panel fact.
+
+    Parameters
+    ----------
+    panel : PanelTimes | None
+        The panel's times, or None when there is no panel.
+
+    Returns
+    -------
+    str
+        One row; empty when there is no panel.
+    """
+    if panel is None:
+        return ''
+    return row(label='Panel', value=panel_text(panel=panel))
 
 
 def feed_rows(*, feeds: Mapping[str, float], now: float) -> str:

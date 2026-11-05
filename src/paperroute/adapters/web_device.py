@@ -19,6 +19,7 @@ from paperroute.adapters.device_page import (
     key_text,
     network_rows,
     notice,
+    panel_rows,
     power_status,
     system_rows,
 )
@@ -37,6 +38,7 @@ from paperroute.core.messages import (
     Event,
     JoinAsked,
 )
+from paperroute.observers import PanelTimes
 from paperroute.ports import KeyStore
 
 logger = logging.getLogger(__name__)
@@ -230,6 +232,8 @@ class DevicePages:
         The latest device status.
     feeds : Callable[[], Mapping[str, float]]
         When each feed last worked.
+    panel : Callable[[], PanelTimes | None]
+        The panel's refresh times, or None when there is no panel.
     key : KeyStore
         Where the TfNSW API key is kept.
     post : Callable[[Event], None]
@@ -247,6 +251,7 @@ class DevicePages:
         *,
         status: Callable[[], DeviceStatus | None],
         feeds: Callable[[], Mapping[str, float]],
+        panel: Callable[[], PanelTimes | None],
         key: KeyStore,
         post: Callable[[Event], None],
         error_log: Path | None,
@@ -255,6 +260,7 @@ class DevicePages:
     ) -> None:
         self._status = status
         self._feeds = feeds
+        self._panel = panel
         self._key = key
         self._post = post
         self._error_log = error_log
@@ -492,6 +498,7 @@ class DevicePages:
             '{{data}}': data_rows(status=device),
             '{{feeds}}': feed_rows(feeds=feeds, now=now),
             '{{system}}': system_rows(facts=facts),
+            '{{panel}}': panel_rows(panel=self._panel()),
             '{{key_status}}': html.escape(key_text(
                 present=self._key.present(),
                 last_used=max(feeds.values(), default=None),

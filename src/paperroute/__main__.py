@@ -21,6 +21,8 @@ from paperroute.adapters.device_probe import SystemProbe
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import GuardedFeeds
 from paperroute.adapters.network_db import SqliteNetworkRepository
+from paperroute.adapters.panel_bus import LinuxPanelBus
+from paperroute.adapters.panel_display import Displays
 from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.adapters.power import NullPower, SystemctlPower
 from paperroute.adapters.rate_limit import tfnsw_limiter
@@ -48,7 +50,8 @@ from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin, StopPlace
 from paperroute.core.tiles import TileVariant
 from paperroute.logs import LastError, configure_logging
-from paperroute.observers import ObserverGroup, Timings
+from paperroute.observers import ObserverGroup, PanelTimes, Timings
+from paperroute.panel_open import panel_for
 from paperroute.ports import (
     Clock,
     FeedsClient,
@@ -106,6 +109,7 @@ def add_display_arguments(parser: argparse.ArgumentParser) -> None:
         Parser to add to.
     """
     parser.add_argument('--display', choices=['tk', 'web'], default='tk')
+    parser.add_argument('--panel', action='store_true')
     parser.add_argument('--host', default='0.0.0.0')
     parser.add_argument('--port', type=int, default=80)
     parser.add_argument('--error-log', type=Path)
@@ -870,6 +874,7 @@ def device_pages_for(
         return None
     return DevicePages(
         status=lambda: timings.device,
+        panel=lambda: timings.panel,
         feeds=lambda: timings.last_ok,
         key=SecretsFile(path=key_path_from_env()),
         post=display.send,
@@ -927,6 +932,13 @@ def web_main(
     """
     timings = Timings()
     observer = web_observer(timings=timings, summary=summary or Summary())
+    panel = panel_for(
+        enabled=args.panel,
+        opener=LinuxPanelBus.open,
+        report=lambda refresh: observer.panel_refreshed(refresh=refresh),
+    )
+    shown = [panel] if panel else []
+    timings.panel = PanelTimes() if panel else None
     with (
         timetable_for(args=args) as timetable,
         network_for(args=args) as network,
@@ -944,7 +956,7 @@ def web_main(
         ports = Ports(
             timetable=timetable,
             feeds=feeds,
-            display=display,
+            display=Displays(displays=[display, *shown]),
             clock=clock_for(args=args),
             network=network,
             states=JsonStateRepository(path=args.state),
@@ -958,7 +970,11 @@ def web_main(
                 last_error=last_error or LastError(),
             ),
         )
-        serve_or_exit(args=args, ports=ports, display=display)
+        try:
+            serve_or_exit(args=args, ports=ports, display=display)
+        finally:
+            if panel is not None:
+                panel.stop()
 
 
 def main() -> None:  # pylint: disable=too-many-statements

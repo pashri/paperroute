@@ -194,6 +194,7 @@ class FrameRecorder:
     frames: list[NDArray[np.uint8]] = field(default_factory=list)
     fulls: list[bool] = field(default_factory=list)
     turns: list[bool] = field(default_factory=list)
+    quicks: list[bool] = field(default_factory=list)
 
     def show(
         self,
@@ -201,6 +202,7 @@ class FrameRecorder:
         frame: NDArray[np.uint8],
         full: bool = False,
         turned: bool = False,
+        quick: bool = False,
     ) -> None:
         """
         Keep a frame.
@@ -213,10 +215,13 @@ class FrameRecorder:
             Whether a full refresh was asked for.
         turned : bool
             Whether the frame is turned upside down.
+        quick : bool
+            Whether a knob was turned just now.
         """
         self.frames.append(frame)
         self.fulls.append(full)
         self.turns.append(turned)
+        self.quicks.append(quick)
 
     def settle(self, *, timeout: float) -> bool:
         """

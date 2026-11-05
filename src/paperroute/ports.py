@@ -818,6 +818,7 @@ class Display(Protocol):
         frame: NDArray[np.uint8],
         full: bool = False,
         turned: bool = False,
+        quick: bool = False,
     ) -> None:
         """
         Show a frame.
@@ -832,6 +833,8 @@ class Display(Protocol):
         turned : bool
             Whether to show the frame upside down, for a panel mounted
             the other way round.
+        quick : bool
+            A knob was turned just now; a panel may trade grey for speed.
         """
 
     def settle(self, *, timeout: float) -> bool:

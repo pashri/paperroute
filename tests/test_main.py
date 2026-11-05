@@ -42,6 +42,7 @@ from paperroute.adapters.checked_tiles import CheckedTiles
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import GuardedFeeds
+from paperroute.adapters.panel_display import Displays
 from paperroute.adapters.power import NullPower, SystemctlPower
 from paperroute.adapters.rate_limit import tfnsw_limiter
 from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
@@ -62,11 +63,19 @@ from paperroute.core.messages import Event
 from paperroute.core.model import SYDNEY
 from paperroute.core.tiles import TILE_STYLE, ZOOMS, TileVariant, levels_text
 from paperroute.observers import Timings
+from paperroute.panel_open import panel_for
+from paperroute.ports import PanelBus
 from paperroute.render.canvas import INK
 from paperroute.render.map_base import draw_map_base
 from paperroute.summary import Summary
 from tests.core.factories import pin_of
-from tests.fakes import FakeKeys, FakeNetwork, FakeWifi, MemoryStates
+from tests.fakes import (
+    FakeKeys,
+    FakeNetwork,
+    FakePanelBus,
+    FakeWifi,
+    MemoryStates,
+)
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor
@@ -106,6 +115,49 @@ def test_device_pages_only_for_live_feeds(
     assert device_pages_for(
         args=args, timings=timings, display=display,
     ) is None
+
+
+def test_panel_for_off_never_opens() -> None:
+    """Without --panel the opener is not called."""
+    opened: list[str] = []
+
+    def opener() -> PanelBus:
+        opened.append('opened')
+        raise OSError('unused')
+
+    panel = panel_for(enabled=False, opener=opener, report=lambda _: None)
+    assert panel is None
+    assert not opened
+
+
+def test_panel_for_opens_a_panel_display() -> None:
+    """A bus that opens gives a panel display, which stops cleanly."""
+    panel = panel_for(
+        enabled=True, opener=FakePanelBus, report=lambda _: None,
+    )
+    assert panel is not None
+    assert panel.settle(timeout=1)
+    panel.stop()
+
+
+@pytest.mark.parametrize('error', [OSError('no spi'), ImportError('gpiod')])
+def test_panel_open_failure_keeps_web(
+    caplog: pytest.LogCaptureFixture, error: Exception,
+) -> None:
+    """A panel that will not open is one error log and no panel."""
+
+    def opener() -> PanelBus:
+        raise error
+
+    with caplog.at_level(logging.ERROR):
+        panel = panel_for(
+            enabled=True, opener=opener, report=lambda _: None,
+        )
+    assert panel is None
+    errors = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert [r.getMessage() for r in errors] == ['panel not available']
+    display = WebDisplay(status=Timings().snapshot)
+    assert Displays(displays=[display]).settle(timeout=0)
 
 
 def test_seed_for_builds_bare_places() -> None:
@@ -498,6 +550,7 @@ def test_web_main_logs_a_bind_failure(
         state=tmp_path / 'state.json',
         rebuild=False,
         power=False,
+        panel=False,
         wifi=False,
         version_file=None,
         feeds=str(REAL),

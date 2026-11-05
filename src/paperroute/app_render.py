@@ -449,6 +449,7 @@ async def render(
     maps: MapRenderer,
     full: bool = False,
     turned: bool = False,
+    quick: bool = False,
 ) -> None:
     """
     Draw a view off the event loop, show it and report how long it took.
@@ -465,10 +466,17 @@ async def render(
         Whether to ask for a full refresh.
     turned : bool
         Whether to ask for the frame upside down.
+    quick : bool
+        Whether a knob was turned just now.
     """
     draw = drawing(view=view, maps=maps)
     frame, render_ms = await timed_async(call=asyncio.to_thread(draw))
-    ports.display.show(frame=frame, full=full, turned=turned)
+    ports.display.show(
+        frame=frame,
+        full=full,
+        turned=turned,
+        quick=quick,
+    )
     logger.debug(
         'frame drawn', extra={'render_ms': render_ms, 'full': full}
     )

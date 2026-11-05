@@ -77,9 +77,10 @@ APP_SERVICE: Final[dict[str, str]] = {
     'NotifyAccess': 'main',
     'User': 'paperroute',
     'Group': 'paperroute',
+    'SupplementaryGroups': 'spi gpio',
     'Environment': UNIT_ENVIRONMENT,
     'ExecStart': (
-        f'{PYTHON} -m paperroute run --display web'
+        f'{PYTHON} -m paperroute run --display web --panel'
         ' --timetable /var/lib/paperroute/timetable.db'
         ' --tiles /var/lib/paperroute/tiles.db'
         ' --state /var/lib/paperroute/state.json'
@@ -584,6 +585,13 @@ def test_service_unit_passes_rebuild() -> None:
         ' --version-file /opt/paperroute/current/VERSION'
     )
     assert timer['OnCalendar'] == '*-*-* 03:30:00 Australia/Sydney'
+
+
+def test_service_unit_drives_the_panel() -> None:
+    """The unit asks for the panel and joins the spi and gpio groups."""
+    service = read_unit(name='paperroute.service')['Service']
+    assert ' --display web --panel ' in service['ExecStart']
+    assert service['SupplementaryGroups'] == 'spi gpio'
 
 
 def test_root_exec_lines_carry_plus() -> None:

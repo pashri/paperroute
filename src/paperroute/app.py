@@ -21,6 +21,7 @@ from paperroute.app_render import MapRenderer
 from paperroute.app_work import perform
 from paperroute.core.messages import Event, QuitRequested, Tick
 from paperroute.core.model import Pin
+from paperroute.core.refresh import quick_now
 from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
@@ -194,6 +195,7 @@ async def handle(
     before = state
     state, effects = step(state, event)
     outputs.pending.turned = state.settings.rotate
+    outputs.pending.quick = quick_now(state=state)
     report_step(
         ports=ports, before=before, state=state, event=event, outputs=outputs,
     )

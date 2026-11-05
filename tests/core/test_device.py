@@ -148,7 +148,7 @@ def test_power_request_saves_draws_then_powers(
     assert [type(effect) for effect in effects] == [
         SaveState, Render, ControlPower,
     ]
-    assert effects[1] == Render(view=NoticeView(title=title))
+    assert effects[1] == Render(view=NoticeView(title=title), full=True)
     assert effects[2] == ControlPower(action=action)
     assert state.power is action
 
@@ -340,7 +340,7 @@ def test_reset_draws_notice_then_resets() -> None:
         detail='paperroute starts again by itself',
     )
     assert effects == (
-        Render(view=notice),
+        Render(view=notice, full=True),
         ResetDevice(kind=ResetKind.SETTINGS),
     )
     assert state.panel.resetting is ResetKind.SETTINGS

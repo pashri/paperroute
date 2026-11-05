@@ -375,6 +375,7 @@ class WebDisplay:
         frame: NDArray[np.uint8],
         full: bool = False,
         turned: bool = False,
+        quick: bool = False,
     ) -> None:
         """
         Store a frame and wake the event streams.
@@ -389,8 +390,10 @@ class WebDisplay:
             Ignored.
         turned : bool
             Ignored.
+        quick : bool
+            Ignored.
         """
-        del full, turned
+        del full, turned, quick
         self._png = encode_png(grey=frame)
         self.version += 1
         self.changed.set()

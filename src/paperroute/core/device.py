@@ -156,7 +156,7 @@ def on_power(
     return state, (
         *stops,
         SaveState(saved=saved),
-        Render(view=view),
+        Render(view=view, full=True),
         ControlPower(action=event.action),
     )
 
@@ -211,7 +211,8 @@ def on_reset(
     view = NoticeView(title=RESET_NOTICE[kind], detail=RESET_DETAIL)
     panel = replace(state.panel, resetting=kind)
     state = replace(state, panel=panel, last_view=view)
-    return state, (*stops, Render(view=view), ResetDevice(kind=kind))
+    notice = Render(view=view, full=True)
+    return state, (*stops, notice, ResetDevice(kind=kind))
 
 
 def on_reset_done(*, state: State) -> tuple[State, tuple[Effect, ...]]:

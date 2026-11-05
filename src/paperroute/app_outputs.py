@@ -1,8 +1,10 @@
 """Where effects draw and write, and carrying them out."""
 
 import asyncio
+import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from typing import Final
 
 from paperroute.app_device import Reported
 from paperroute.app_effects import StateSaver
@@ -16,6 +18,10 @@ from paperroute.core.messages import (
     Render,
     ResetDevice,
 )
+
+logger = logging.getLogger(__name__)
+
+PANEL_SETTLE: Final[float] = 15  # seconds
 
 
 @dataclass
@@ -31,11 +37,14 @@ class PendingView:
         Whether any render since the last frame asked for a full refresh.
     turned : bool
         Whether frames are shown upside down.
+    quick : bool
+        Whether a knob was turned just now.
     """
 
     view: View | None = None
     full: bool = False
     turned: bool = False
+    quick: bool = False
 
 
 @dataclass(frozen=True)
@@ -83,7 +92,24 @@ async def draw_pending(*, ports: Ports, outputs: Outputs) -> None:
         maps=outputs.maps,
         full=full,
         turned=pending.turned,
+        quick=pending.quick,
     )
+
+
+async def settle_panel(*, ports: Ports) -> None:
+    """
+    Wait for the panel to finish drawing, warning if it does not.
+
+    Parameters
+    ----------
+    ports : Ports
+        Adapters.
+    """
+    settled = await asyncio.to_thread(
+        ports.display.settle, timeout=PANEL_SETTLE,
+    )
+    if not settled:
+        logger.warning('panel still busy, carrying on')
 
 
 async def carry_out(
@@ -121,6 +147,7 @@ async def carry_out(
             continue
         if isinstance(effect, ControlPower | ResetDevice):
             await draw_pending(ports=ports, outputs=outputs)
+            await settle_panel(ports=ports)
         await perform(
             ports=ports,
             effect=effect,

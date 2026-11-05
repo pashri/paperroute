@@ -473,6 +473,7 @@ class Displays:
         frame: NDArray[np.uint8],
         full: bool = False,
         turned: bool = False,
+        quick: bool = False,
     ) -> None:
         """
         Show a frame on every display.
@@ -485,9 +486,16 @@ class Displays:
             Whether to do a full refresh.
         turned : bool
             Whether to show the frame upside down.
+        quick : bool
+            Whether a knob was turned just now.
         """
         for display in self._displays:
-            display.show(frame=frame, full=full, turned=turned)
+            display.show(
+                frame=frame,
+                full=full,
+                turned=turned,
+                quick=quick,
+            )
 
     def settle(self, *, timeout: float) -> bool:
         """

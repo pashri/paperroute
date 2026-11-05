@@ -7,7 +7,7 @@ import sqlite3
 from collections.abc import Callable, Collection
 from contextlib import closing
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -50,6 +50,7 @@ from paperroute.core.geo import Point, Shape, make_shape
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
 from paperroute.core.messages import (
     ApiKeyChanged,
+    ControlPower,
     Event,
     FeedFailed,
     FeedFetched,
@@ -1017,6 +1018,7 @@ class PressingDisplay(FrameRecorder):
         frame: NDArray[np.uint8],
         full: bool = False,
         turned: bool = False,
+        quick: bool = False,
     ) -> None:
         """
         Keep a frame; after the first, press the bottom knob.
@@ -1029,10 +1031,12 @@ class PressingDisplay(FrameRecorder):
             Whether a full refresh was asked for.
         turned : bool
             Whether the frame is turned upside down.
+        quick : bool
+            Whether a knob was turned just now.
         """
         if not self.frames and self.post is not None:
             self.post(KnobPressed(knob=Knob.BOTTOM))
-        super().show(frame=frame, full=full, turned=turned)
+        super().show(frame=frame, full=full, turned=turned, quick=quick)
 
     def hook(self, post: Callable[[Event], None]) -> None:
         """
@@ -1642,6 +1646,7 @@ class ZoomingDisplay(PressingDisplay):
         frame: NDArray[np.uint8],
         full: bool = False,
         turned: bool = False,
+        quick: bool = False,
     ) -> None:
         """
         Keep a frame; press the bottom knob, then turn it twice.
@@ -1654,10 +1659,12 @@ class ZoomingDisplay(PressingDisplay):
             Whether a full refresh was asked for.
         turned : bool
             Whether the frame is turned upside down.
+        quick : bool
+            Whether a knob was turned just now.
         """
         if self.post is not None and 1 <= len(self.frames) <= 2:
             self.post(KnobTurned(knob=Knob.BOTTOM, steps=-1))
-        super().show(frame=frame, full=full, turned=turned)
+        super().show(frame=frame, full=full, turned=turned, quick=quick)
 
 
 def test_tiles_read_error_draws_map_not_installed(tmp_path: Path) -> None:
@@ -1921,6 +1928,94 @@ async def test_app_turns_panel_frames() -> None:
     assert display.turns[-1] is True
 
 
+async def test_app_marks_frames_quick_after_a_knob_turn() -> None:
+    """A knob turn's frame is quick; a tick 5 s later is not."""
+    display = FrameRecorder()
+    ports = ports_of(display=display)
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    tasks: set[asyncio.Task[None]] = set()
+    outputs = Outputs(
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    state = starting_state(ports=ports, seed=PIN)
+    later = AT + timedelta(seconds=5)
+    for event in (
+        Tick(now=AT),
+        KnobTurned(knob=Knob.BOTTOM, steps=1),
+        Tick(now=later),
+    ):
+        state = await handle(
+            state=state, event=event, ports=ports, queue=queue,
+            tasks=tasks, outputs=outputs,
+        )
+        outputs.pending.view = NoticeView(title='Frame')
+        await draw_pending(ports=ports, outputs=outputs)
+    assert display.quicks[-2:] == [True, False]
+    await stop(tasks=tasks)
+
+
+class Ordered(FrameRecorder):
+    """A display that logs its shows and settles."""
+
+    def __init__(self, *, log: list[str]) -> None:
+        super().__init__()
+        self.log = log
+
+    def show(
+        self,
+        *,
+        frame: NDArray[np.uint8],
+        full: bool = False,
+        turned: bool = False,
+        quick: bool = False,
+    ) -> None:
+        """Log the show and keep the frame."""
+        self.log.append('show')
+        super().show(frame=frame, full=full, turned=turned, quick=quick)
+
+    def settle(self, *, timeout: float) -> bool:
+        """Log the settle."""
+        self.log.append('settle')
+        return super().settle(timeout=timeout)
+
+
+@dataclass
+class LoggedPower(FakePower):
+    """A power control that logs its call."""
+
+    log: list[str] = field(default_factory=list)
+
+    async def control(self, *, action: PowerAction) -> bool:
+        """Log the call."""
+        self.log.append('power')
+        return await super().control(action=action)
+
+
+async def test_power_waits_for_panel() -> None:
+    """The notice is shown and settled before the power action runs."""
+    log: list[str] = []
+    display = Ordered(log=log)
+    ports = replace(
+        ports_of(display=display), power=LoggedPower(log=log),
+    )
+    outputs = Outputs(
+        maps=MapRenderer(tiles=ports.tiles),
+        saver=StateSaver(states=ports.states),
+    )
+    effects = (
+        Render(view=NoticeView(title='Off'), full=True),
+        ControlPower(action=PowerAction.OFF),
+    )
+    tasks: set[asyncio.Task[None]] = set()
+    await carry_out(
+        effects=effects, ports=ports, queue=asyncio.Queue(),
+        tasks=tasks, outputs=outputs,
+    )
+    await asyncio.gather(*tasks)
+    assert log == ['show', 'settle', 'power']
+
+
 async def test_full_survives_burst() -> None:
     """A full render replaced by a partial one is still drawn full."""
     display = FrameRecorder()
@@ -2110,6 +2205,7 @@ class ScriptedDisplay(FrameRecorder):
         frame: NDArray[np.uint8],
         full: bool = False,
         turned: bool = False,
+        quick: bool = False,
     ) -> None:
         """
         Keep a frame; when it is the trigger, post the script once.
@@ -2122,8 +2218,10 @@ class ScriptedDisplay(FrameRecorder):
             Whether a full refresh was asked for.
         turned : bool
             Whether the frame is turned upside down.
+        quick : bool
+            Whether a knob was turned just now.
         """
-        super().show(frame=frame, full=full, turned=turned)
+        super().show(frame=frame, full=full, turned=turned, quick=quick)
         trigger = self.trigger
         if trigger is None or self.post is None:
             return
@@ -2241,6 +2339,7 @@ class ArrivingDisplay(FrameRecorder):
         frame: NDArray[np.uint8],
         full: bool = False,
         turned: bool = False,
+        quick: bool = False,
     ) -> None:
         """
         Keep a frame; after the first, copy the timetable in.
@@ -2253,8 +2352,10 @@ class ArrivingDisplay(FrameRecorder):
             Whether a full refresh was asked for.
         turned : bool
             Whether the frame is turned upside down.
+        quick : bool
+            Whether a knob was turned just now.
         """
-        super().show(frame=frame, full=full, turned=turned)
+        super().show(frame=frame, full=full, turned=turned, quick=quick)
         if self.source is not None and self.target is not None:
             shutil.copyfile(self.source, self.target)
             self.source = None

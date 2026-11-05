@@ -81,6 +81,7 @@ class Setup:
         return DevicePages(
             status=lambda: self.status,
             feeds=dict,
+            panel=lambda: None,
             key=self.keys,
             post=self.posted.append,
             error_log=None,

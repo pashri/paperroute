@@ -5,7 +5,6 @@ from datetime import datetime
 
 from paperroute.core.alert_model import AlertsFetched, BetweenLoaded
 from paperroute.core.alert_state import (
-    alert_polls,
     alerts_knob,
     between_requests,
     on_alerts,
@@ -17,8 +16,8 @@ from paperroute.core.chooser_steps import (
     chooser_knob,
     chooser_retimed,
     picked_reloads,
-    trip_feeds,
 )
+from paperroute.core.cycle import answered
 from paperroute.core.device import (
     on_device_event,
     power_guard,
@@ -26,7 +25,6 @@ from paperroute.core.device import (
     quiet_guard,
 )
 from paperroute.core.knobs import knob_moved
-from paperroute.core.map_requests import map_feeds, shows_vehicles
 from paperroute.core.map_state import MapState
 from paperroute.core.menu import (
     confirm_expired,
@@ -108,7 +106,7 @@ from paperroute.core.places import (
     shown,
     with_place,
 )
-from paperroute.core.polling import poll_effects, woken
+from paperroute.core.polling import woken
 from paperroute.core.quiet import span_loaded, span_requests, with_quiet
 from paperroute.core.quota import quota_only, with_calls, without_skipped
 from paperroute.core.rebuild import rebuild_effects, rebuilt, seen_schema
@@ -124,6 +122,7 @@ from paperroute.core.state_model import (
     State,
     elapsed,
     load_window,
+    restarted,
     runs_short,
 )
 from paperroute.core.state_saves import saved_effects
@@ -166,27 +165,6 @@ def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
     )
     centre = shown(state=state).origin.point
     return replace(state, map=MapState(centre=centre))
-
-
-def needed_feeds(*, state: State) -> tuple[str, ...]:
-    """
-    List every feed the screen polls.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    tuple[str, ...]
-        The trip-updates feeds, then the positions feeds of a screen that
-        draws vehicles.
-    """
-    trips = trip_feeds(state=state)
-    if not shows_vehicles(state=state):
-        return trips
-    return (*trips, *map_feeds(state=state))
 
 
 def reload_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
@@ -297,7 +275,9 @@ def tick_loads(*, state: State) -> tuple[State, tuple[Effect, ...]]:
 
 def tick_polls(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     """
-    Poll the feeds and alerts, save, rematch and probe as due.
+    Save, rematch and probe as due.
+
+    The feeds are fetched by `settled`, from `cycle_effects`.
 
     Parameters
     ----------
@@ -309,12 +289,10 @@ def tick_polls(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     tuple[State, tuple[Effect, ...]]
         State with each poll noted, and their effects in that order.
     """
-    state, fetches = poll_effects(state=state)
-    state, alerts = alert_polls(state=state)
     state, saves = saved_effects(state=state)
     state, matches = rematch_effects(state=state)
     state, probes = probe_effects(state=state)
-    return state, (*fetches, *alerts, *saves, *matches, *probes)
+    return state, (*saves, *matches, *probes)
 
 
 def on_loaded(
@@ -370,8 +348,11 @@ def on_feed(
             state = replace(state, board=board)
         case FeedFetched(feed=feed, snapshot=snapshot):
             state = replace(
-                state, snapshots={**state.snapshots, feed: snapshot}
+                answered(state=state, feed=feed),
+                snapshots={**state.snapshots, feed: snapshot},
             )
+        case FeedFailed(feed=feed):
+            state = answered(state=state, feed=feed)
     return settled(state=state)
 
 
@@ -740,8 +721,10 @@ def on_timetable_file(
         return settled(state=rebuilt(state=state, ok=event.ok))
     seen = seen_schema(state=state, seen=event)
     if state.rebuild.missing and not seen.rebuild.missing:
-        seen = replace(
-            seen, map=replace(seen.map, fetched_at={}), last_fetch=None,
+        seen = restarted(
+            state=replace(
+                seen, map=replace(seen.map, fetched_at={}), last_fetch=None,
+            ),
         )
     after, effects = on_timetable(state=seen, event=event)
     return with_rebuild(result=settled(state=after, effects=effects))
@@ -845,7 +828,10 @@ def live_result(
             result = on_loaded(state=state, event=event)
         case DeparturesFailed() | FeedFetched() | FeedFailed():
             result = on_feed(state=state, event=event)
-        case AlertsFetched() | BetweenLoaded():
+        case AlertsFetched(feed=feed):
+            answer = answered(state=state, feed=feed)
+            result = settled(state=on_alerts(state=answer, event=event))
+        case BetweenLoaded():
             result = settled(state=on_alerts(state=state, event=event))
         case (
             KnobTurned()

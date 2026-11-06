@@ -42,6 +42,7 @@ from paperroute.core.state_model import (
     Places,
     State,
     elapsed,
+    restarted,
 )
 
 
@@ -156,11 +157,13 @@ def with_place(
         in flight, the Stop view and the Strip at the top, only the
         needed feeds' downloads, and the map with no knob step centred on
         the new From. Only vehicle positions and their fetch times are
-        kept; the old reach goes once it is out of use.
+        kept; the old reach goes once it is out of use. A new cycle is
+        due at once.
     """
     state = replace(state, places=replace(state.places, unpinned=pin))
     feeds = feeds_of(departures=departures)
     old = state.map
+    state = restarted(state=state)
     return replace(
         state,
         board=Board(departures=departures),

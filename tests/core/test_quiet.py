@@ -560,7 +560,7 @@ def test_window_wakes_quiet_sleep() -> None:
     assert not state.panel.asleep
     assert shows_work(state=state)
     state = boarded(state=state)
-    state, effects = step(state, Tick(now=at(5) + HALF_MINUTE))
+    state, effects = step(state, Tick(now=at(5, 2)))
     assert not state.panel.asleep
     assert FetchFeed(feed=BUSES) in fetches(effects=effects)
 

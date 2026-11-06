@@ -202,39 +202,50 @@ def tick_at(
 
 
 def test_alerts_polled_for_pin_modes() -> None:
-    """A train pin fetches the trains alerts every five minutes."""
-    state, _ = loaded_with(state=started())
-    state, fetches = tick_at(state=state, after=timedelta())
-    assert fetches == [FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS)]
+    """
+    A train pin fetches the trains alerts on five-minute boundaries.
+
+    Alerts go out with the first poll cycle on or after the boundary,
+    which off-peak is two minutes apart.
+    """
+    wanted = [FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS)]
+    state, effects = loaded_with(state=started())
+    assert alert_fetches(effects=effects) == wanted
+    state, fetches = tick_at(state=state, after=timedelta(seconds=55))
+    assert not fetches
+    state, fetches = tick_at(state=state, after=timedelta(minutes=1))
+    assert fetches == wanted
     state, fetches = tick_at(
-        state=state, after=timedelta(minutes=4, seconds=55),
+        state=state, after=timedelta(minutes=5, seconds=55),
     )
     assert not fetches
-    _, fetches = tick_at(state=state, after=timedelta(minutes=5))
-    assert fetches == [FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS)]
+    _, fetches = tick_at(state=state, after=timedelta(minutes=7))
+    assert fetches == wanted
 
 
 def test_two_modes_poll_each_feed() -> None:
     """Bus and train departures fetch each alerts feed once a poll."""
-    state, _ = loaded_with(state=started(), modes=(Mode.BUS, Mode.TRAIN))
+    state, effects = loaded_with(
+        state=started(), modes=(Mode.BUS, Mode.TRAIN),
+    )
     wanted = [
         FetchFeed(feed=BUSES, kind=FeedKind.ALERTS),
         FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS),
     ]
-    state, fetches = tick_at(state=state, after=timedelta())
-    assert fetches == wanted
-    state, fetches = tick_at(state=state, after=timedelta(minutes=1))
+    assert alert_fetches(effects=effects) == wanted
+    state, fetches = tick_at(state=state, after=timedelta(seconds=30))
     assert not fetches
-    _, fetches = tick_at(state=state, after=timedelta(minutes=5))
+    _, fetches = tick_at(state=state, after=timedelta(minutes=1))
     assert fetches == wanted
 
 
 def test_ferry_pin_polls_ferry_alerts() -> None:
     """A ferry pin fetches the ferry alerts feed."""
     pin = replace(PARRAMATTA_CENTRAL, kind=RouteKind.FERRY)
-    state, _ = loaded_with(state=started(pins=(pin,)), modes=(Mode.FERRY,))
-    _, fetches = tick_at(state=state, after=timedelta())
-    assert fetches == [FetchFeed(feed=FERRIES, kind=FeedKind.ALERTS)]
+    _, effects = loaded_with(state=started(pins=(pin,)), modes=(Mode.FERRY,))
+    assert alert_fetches(effects=effects) == [
+        FetchFeed(feed=FERRIES, kind=FeedKind.ALERTS),
+    ]
 
 
 def test_no_departures_no_alert_polls() -> None:
@@ -543,7 +554,8 @@ def trainlink_fetches(
     *, pin: Pin, mode: Mode, trainlink: bool,
 ) -> list[FetchFeed]:
     """
-    Load a pin's departures and TrainLink answer, then tick.
+    Load a pin's departures and TrainLink answer, then tick to the
+    next alerts boundary.
 
     Parameters
     ----------
@@ -557,13 +569,26 @@ def trainlink_fetches(
     Returns
     -------
     list[FetchFeed]
-        The alert fetches due at once.
+        The alert fetches of that tick.
     """
     state, _ = loaded_with(state=started(pins=(pin,)), modes=(mode,))
     event = BetweenLoaded(pin=pin, names=frozenset(), trainlink=trainlink)
     state, _ = step(state, event)
-    _, fetches = tick_at(state=state, after=timedelta())
+    _, fetches = tick_at(state=state, after=timedelta(minutes=1))
     return fetches
+
+
+def test_trainlink_answer_fetches_its_feed_at_once() -> None:
+    """A TrainLink feed newly needed is fetched at once, and only it."""
+    pin = PARRAMATTA_CENTRAL
+    state, _ = loaded_with(state=started(pins=(pin,)), modes=(Mode.TRAIN,))
+    event = BetweenLoaded(pin=pin, names=frozenset(), trainlink=True)
+    state, effects = step(state, event)
+    assert alert_fetches(effects=effects) == [
+        FetchFeed(feed=REGIONAL, kind=FeedKind.ALERTS),
+    ]
+    _, fetches = tick_at(state=state, after=timedelta(seconds=30))
+    assert not fetches
 
 
 def test_trainlink_station_polls_trainlink() -> None:

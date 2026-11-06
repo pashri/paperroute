@@ -1,7 +1,7 @@
 """The map data and positions the Map and strip views ask for."""
 
 from collections.abc import Mapping, Sequence
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Final
 
 from paperroute.core.chains import all_departures
@@ -9,7 +9,6 @@ from paperroute.core.connection import live_chains
 from paperroute.core.connection_map import connection_inputs, panes_inputs
 from paperroute.core.feeds import (
     ALL_POSITION_MODES,
-    FeedKind,
     feeds_near,
     position_feeds,
 )
@@ -26,7 +25,6 @@ from paperroute.core.map_view import (
 )
 from paperroute.core.messages import (
     Effect,
-    FetchFeed,
     LoadModes,
     LoadPatterns,
     LoadShapes,
@@ -35,7 +33,6 @@ from paperroute.core.messages import (
 from paperroute.core.model import SYDNEY, Departure, is_connection
 from paperroute.core.places import shown
 from paperroute.core.positions import PositionsSnapshot
-from paperroute.core.rhythm import poll_every
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
@@ -50,6 +47,23 @@ from paperroute.core.tiles import ZOOMS
 MAP_VIEWS: Final[frozenset[LiveView]] = frozenset(
     {LiveView.MAP, LiveView.STRIP_MAP}
 )
+
+
+@dataclass(frozen=True)
+class PatternAsk:
+    """
+    The trip patterns a map wants.
+
+    Attributes
+    ----------
+    wanted : frozenset[str]
+        Trip IDs whose patterns the map needs.
+    drawn : tuple[Departure, ...]
+        The departures the map draws.
+    """
+
+    wanted: frozenset[str]
+    drawn: tuple[Departure, ...]
 
 
 def may_load(*, state: State, kind: MapData) -> bool:
@@ -345,34 +359,6 @@ def request_shapes(
         return state, ()
     map_state = replace(state.map, requested_shapes=asked | new)
     return replace(state, map=map_state), (LoadShapes(shape_ids=new),)
-
-
-def request_positions(*, state: State) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Fetch the positions feeds the Map needs and hasn't fetched lately.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State with the fetch times recorded, and a FetchFeed for each feed
-        never fetched or last fetched a poll interval or more ago.
-    """
-    fetched_at = state.map.fetched_at
-    every = poll_every(state=state)
-    due = [
-        feed
-        for feed in map_feeds(state=state)
-        if elapsed(since=fetched_at.get(feed), now=state.now, span=every)
-    ]
-    fetched_at = {**fetched_at, **dict.fromkeys(due, state.now)}
-    fetches = (FetchFeed(feed=feed, kind=FeedKind.POSITIONS) for feed in due)
-    map_state = replace(state.map, fetched_at=fetched_at)
-    return replace(state, map=map_state), tuple(fetches)
 
 
 def request_patterns(
@@ -682,13 +668,14 @@ def sleep_effects(
 
 def map_effects(
     *, state: State, stop_view: StopView
-) -> tuple[State, tuple[Effect, ...]]:
+) -> tuple[State, tuple[Effect, ...], PatternAsk | None]:
     """
-    Ask for the map data and positions the view needs.
+    Ask for the map data the view needs, apart from trip patterns.
 
     Patterns and shapes no longer needed are dropped, so memory stays
-    bounded. Stale vehicles' patterns wait while their feed has a newer
-    fetch in flight; the strip's own trips never wait.
+    bounded. The patterns are asked for by `pattern_effects` once the
+    positions feeds are fetched, since stale vehicles' patterns wait
+    while their feed has a newer fetch in flight.
 
     Parameters
     ----------
@@ -699,15 +686,17 @@ def map_effects(
 
     Returns
     -------
-    tuple[State, tuple[Effect, ...]]
-        State with the requests recorded, and the effects; only the sleep
-        map's from `sleep_effects` while asleep, and nothing on the Stop
-        view, or while the chooser lists routes or picks a From.
+    tuple[State, tuple[Effect, ...], PatternAsk | None]
+        State with the requests recorded, the effects, and the patterns
+        wanted; only the sleep map's from `sleep_effects` while asleep,
+        and nothing on the Stop view, or while the chooser lists routes
+        or picks a From. The patterns wanted are None in those cases.
     """
     if state.panel.asleep:
-        return sleep_effects(state=state, stop_view=stop_view)
+        state, effects = sleep_effects(state=state, stop_view=stop_view)
+        return state, effects, None
     if not shows_vehicles(state=state):
-        return state, ()
+        return state, (), None
     width = (
         STRIP_MAP_WIDTH if state.view is LiveView.STRIP_MAP else MAP_WIDTH
     )
@@ -716,7 +705,7 @@ def map_effects(
         if map_shown(state=state)
         else None
     )
-    drawn = () if inputs is None else inputs.departures
+    drawn = () if inputs is None else tuple(inputs.departures)
     state = framed_state(
         state=rebased(state=state, inputs=inputs, stop_view=stop_view),
         inputs=inputs,
@@ -724,9 +713,34 @@ def map_effects(
     wanted = map_patterns(state=state, inputs=inputs)
     state = pruned(state=state, wanted=wanted, departures=drawn)
     state, area = area_effects(state=state, departures=drawn)
-    state, fetches = request_positions(state=state)
-    state, loads = request_patterns(
+    return state, area, PatternAsk(wanted=wanted, drawn=drawn)
+
+
+def pattern_effects(
+    *, state: State, ask: PatternAsk | None
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Ask for the trip patterns a map wants.
+
+    Stale vehicles' patterns wait while their feed has a newer fetch in
+    flight; the strip's own trips never wait.
+
+    Parameters
+    ----------
+    state : State
+        State, with the positions feeds fetched now recorded.
+    ask : PatternAsk | None
+        The patterns wanted, from `map_effects`.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with the patterns pending, and a LoadPatterns; nothing when
+        no patterns are wanted.
+    """
+    if ask is None:
+        return state, ()
+    return request_patterns(
         state=state,
-        wanted=wanted - held_back(state=state, departures=drawn),
+        wanted=ask.wanted - held_back(state=state, departures=ask.drawn),
     )
-    return state, (*area, *fetches, *loads)

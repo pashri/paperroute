@@ -3,6 +3,7 @@
 from dataclasses import replace
 
 from paperroute.core.chooser_steps import chooser_event
+from paperroute.core.cycle import answered
 from paperroute.core.map_state import failed, with_patterns
 from paperroute.core.messages import (
     ChooserEvent,
@@ -55,6 +56,7 @@ def on_map_event(
                 pending_modes=map_state.pending_modes - {mpp},
             )
         case PositionsFetched(feed=feed, snapshot=snapshot):
+            state = answered(state=state, feed=feed)
             map_state = replace(
                 map_state,
                 positions={**map_state.positions, feed: snapshot},

@@ -12,7 +12,7 @@ from paperroute.core.map_view import MapView, build_map_view
 from paperroute.core.model import is_connection
 from paperroute.core.panel_views import SleepView, sleep_map
 from paperroute.core.places import shown
-from paperroute.core.state_model import State
+from paperroute.core.state_model import State, restarted
 from paperroute.core.stop_view import DOT, StopView
 
 SLEEP_BAND: Final[str] = f'Asleep{DOT}turn or press a knob to wake'
@@ -76,11 +76,13 @@ def awake(*, state: State) -> State:
     Returns
     -------
     State
-        State awake, with every feed due at once.
+        State awake, with a cycle due at once.
     """
     panel = replace(state.panel, asleep=False, by_quiet=False)
     map_state = replace(state.map, fetched_at={})
-    return replace(state, panel=panel, map=map_state, last_fetch=None)
+    return restarted(
+        state=replace(state, panel=panel, map=map_state, last_fetch=None),
+    )
 
 
 def sleep_view(*, state: State, stop_view: StopView) -> SleepView:

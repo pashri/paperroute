@@ -1,13 +1,35 @@
 """Tests for the poll cycle timing."""
 
+from dataclasses import replace
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 import pytest
 
+from paperroute.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute.core.alert_state import ALERT_EVERY
-from paperroute.core.cycle import alerts_due, boundary, cycle_due
-from paperroute.core.state_model import Cycle
+from paperroute.core.cycle import alerts_due, answered, boundary, cycle_due
+from paperroute.core.device_model import WifiStatus
+from paperroute.core.feeds import FeedKind
+from paperroute.core.messages import (
+    DeparturesLoaded,
+    DeviceProbed,
+    Effect,
+    FeedFailed,
+    FetchFeed,
+    PositionsFetched,
+    Tick,
+)
+from paperroute.core.places import shown
+from paperroute.core.sleep import slept
+from paperroute.core.state import step
+from paperroute.core.state_model import RELOAD_BEFORE, Cycle, State
+from paperroute.core.stop_view import HORIZON
+from tests.core.factories import START, departure, snapshot
+from tests.core.test_quiet import at as quiet_at
+from tests.core.test_quiet import evening
+from tests.core.test_state import ALERTS, BUSES, CENTRE, PRESS, fresh, loaded
+from tests.fakes import device_facts
 
 SYDNEY = ZoneInfo('Australia/Sydney')
 
@@ -97,3 +119,202 @@ def test_cycle_fires_once_per_boundary_on_fall_back_night() -> None:
             fired += 1
             cycle = Cycle(started=now)
     assert fired == 120
+
+
+def _fetches(*, effects: tuple[Effect, ...]) -> list[FetchFeed]:
+    """Keep the FetchFeed effects."""
+    return [effect for effect in effects if isinstance(effect, FetchFeed)]
+
+
+def _kinds(*, effects: tuple[Effect, ...]) -> set[FeedKind]:
+    """List the kinds of feed fetched."""
+    return {fetch.kind for fetch in _fetches(effects=effects)}
+
+
+def _offline() -> DeviceProbed:
+    """Facts saying no Wi-Fi network is joined."""
+    facts = replace(device_facts(), wifi=WifiStatus(managed=True))
+    return DeviceProbed(facts=facts)
+
+
+def _online() -> DeviceProbed:
+    """Facts saying a Wi-Fi network is joined."""
+    wifi = WifiStatus(managed=True, ssid='home')
+    return DeviceProbed(facts=replace(device_facts(), wifi=wifi))
+
+
+def _ticked(*, state: State, seconds: int) -> tuple[State, tuple[Effect, ...]]:
+    """Tick some seconds after START."""
+    return step(state, Tick(now=START + timedelta(seconds=seconds)))
+
+
+def test_cycle_fires_every_due_feed_together() -> None:
+    """A Tick past a boundary on the Map fetches every kind of feed at once."""
+    state, _ = step(loaded(state=fresh()), PRESS)
+    state, effects = _ticked(state=state, seconds=5 * 60 + 2)
+    assert _kinds(effects=effects) == {
+        FeedKind.TRIPS,
+        FeedKind.POSITIONS,
+        FeedKind.ALERTS,
+    }
+    assert state.cycle.started == START + timedelta(seconds=5 * 60 + 2)
+    assert state.cycle.waiting == frozenset(
+        fetch.feed for fetch in _fetches(effects=effects)
+    )
+
+
+def test_no_second_cycle_before_next_boundary() -> None:
+    """At 30 s, Ticks between boundaries fetch nothing."""
+    state, effects = _ticked(state=loaded(state=fresh()), seconds=30)
+    assert FetchFeed(feed=BUSES) in effects
+    for seconds in (35, 55):
+        state, effects = _ticked(state=state, seconds=seconds)
+        assert not _fetches(effects=effects)
+    _, effects = _ticked(state=state, seconds=60)
+    assert FetchFeed(feed=BUSES) in effects
+
+
+def test_stop_view_cycle_has_no_positions() -> None:
+    """The Stop view's cycle fetches no positions."""
+    state = loaded(state=fresh(centre=CENTRE))
+    _, effects = _ticked(state=state, seconds=5 * 60)
+    assert _kinds(effects=effects) == {FeedKind.TRIPS, FeedKind.ALERTS}
+
+
+def test_new_feed_fetched_at_once() -> None:
+    """Switching to the Map fetches its positions and joins the cycle."""
+    state, _ = _ticked(state=loaded(state=fresh()), seconds=30)
+    started = state.cycle.started
+    state, effects = step(state, PRESS)
+    positions = {
+        fetch.feed
+        for fetch in _fetches(effects=effects)
+        if fetch.kind == FeedKind.POSITIONS
+    }
+    assert positions
+    assert positions <= state.cycle.waiting
+    assert state.cycle.started == started
+
+
+def test_departures_loading_after_first_cycle_fetch_at_once() -> None:
+    """Departures loading mid-cycle fetch their trip feed at once."""
+    state, effects = step(fresh(centre=CENTRE), PRESS)
+    started = state.cycle.started
+    assert started is not None
+    assert FetchFeed(feed=BUSES) not in effects
+    state = replace(state, now=START + timedelta(seconds=10))
+    state, effects = step(
+        state,
+        DeparturesLoaded(
+            pin=shown(state=state),
+            departures=(departure(departs=START + timedelta(minutes=3)),),
+            until=START + HORIZON + RELOAD_BEFORE,
+        ),
+    )
+    assert FetchFeed(feed=BUSES) in effects
+    assert BUSES in state.cycle.waiting
+    assert state.cycle.started == started
+
+
+def test_nothing_needed_starts_no_cycle() -> None:
+    """With no feed needed, no cycle starts."""
+    state, effects = _ticked(state=fresh(), seconds=0)
+    assert not _fetches(effects=effects)
+    assert state.cycle.started is None
+
+
+def test_held_feeds_record_no_cycle() -> None:
+    """Offline, no cycle runs; back online, one starts at once."""
+    state, _ = step(loaded(state=fresh()), _offline())
+    state, effects = _ticked(state=state, seconds=30)
+    assert not _fetches(effects=effects)
+    assert state.cycle.started is None
+    assert not state.cycle.waiting
+    state, probed = step(state, _online())
+    state, effects = _ticked(state=state, seconds=35)
+    assert _fetches(effects=(*probed, *effects)).count(
+        FetchFeed(feed=BUSES),
+    ) == 1
+
+
+def test_wake_starts_cycle_at_once() -> None:
+    """Waking from Sleep now starts a cycle off the boundary."""
+    state, _ = _ticked(state=loaded(state=fresh()), seconds=30)
+    state = replace(slept(state=state), now=START + timedelta(seconds=40))
+    state, effects = step(state, PRESS)
+    assert not state.panel.asleep
+    assert FetchFeed(feed=BUSES) in effects
+    assert state.cycle.started == START + timedelta(seconds=40)
+
+
+def test_fetch_times_still_recorded() -> None:
+    """A cycle records the fetch times other code reads."""
+    state, _ = step(loaded(state=fresh()), PRESS)
+    state, effects = _ticked(state=state, seconds=30)
+    now = START + timedelta(seconds=30)
+    positions = [
+        fetch.feed
+        for fetch in _fetches(effects=effects)
+        if fetch.kind == FeedKind.POSITIONS
+    ]
+    assert positions
+    assert state.last_fetch == now
+    assert all(state.map.fetched_at[feed] == now for feed in positions)
+    assert set(state.alerts.fetched_at.values()) == {START}
+
+
+def test_slow_cycle_does_not_delay_next() -> None:
+    """Unanswered feeds do not hold back the next cycle."""
+    state, _ = _ticked(state=loaded(state=fresh()), seconds=30)
+    assert BUSES in state.cycle.waiting
+    state, effects = _ticked(state=state, seconds=60)
+    assert FetchFeed(feed=BUSES) in effects
+    assert state.cycle.started == START + timedelta(seconds=60)
+
+
+def test_answers_leave_waiting() -> None:
+    """A failure and an alerts download each stop the wait for their feed."""
+    state, _ = _ticked(state=loaded(state=fresh()), seconds=5 * 60)
+    assert state.cycle.waiting == {BUSES, ALERTS}
+    later = START + timedelta(seconds=5 * 60 + 1)
+    state, _ = step(state, FeedFailed(feed=BUSES, at=later, reason='HTTP 500'))
+    assert state.cycle.waiting == {ALERTS}
+    state, _ = step(
+        state,
+        AlertsFetched(
+            feed=ALERTS,
+            snapshot=AlertsSnapshot(
+                feed=ALERTS, fetched_at=later, alerts=(),
+            ),
+        ),
+    )
+    assert not state.cycle.waiting
+
+
+def test_positions_answer_leaves_waiting() -> None:
+    """A positions download stops the wait for its feed."""
+    state, _ = step(loaded(state=fresh()), PRESS)
+    feed = next(iter(state.cycle.waiting - {BUSES, ALERTS}))
+    state, _ = step(
+        state,
+        PositionsFetched(
+            feed=feed,
+            snapshot=snapshot(fetched_at=START, vehicles=()),
+        ),
+    )
+    assert feed not in state.cycle.waiting
+
+
+def test_answered_ignores_unknown_feed() -> None:
+    """Only a feed waited on is removed."""
+    state = replace(fresh(), cycle=Cycle(waiting=frozenset({BUSES})))
+    assert answered(state=state, feed='other').cycle.waiting == {BUSES}
+    assert not answered(state=state, feed=BUSES).cycle.waiting
+
+
+def test_quiet_sleep_leaves_nothing_waiting() -> None:
+    """Falling asleep for quiet hours leaves no cycle under way."""
+    state, effects = step(evening(), Tick(now=quiet_at(23)))
+    assert state.panel.asleep
+    assert not _fetches(effects=effects)
+    assert state.cycle == Cycle()

@@ -11,10 +11,12 @@ from paperroute.core.auto_pins import rule_holds
 from paperroute.core.banners import device_banner
 from paperroute.core.chooser_steps import chooser_view
 from paperroute.core.connection_screens import connection_screen
+from paperroute.core.cycle import cycle_effects
 from paperroute.core.live import LiveDeparture, live_since, resolved
 from paperroute.core.map_requests import (
     map_effects,
     map_inputs,
+    pattern_effects,
     polled_positions,
 )
 from paperroute.core.map_view import STRIP_MAP_WIDTH, build_map_view
@@ -392,7 +394,7 @@ def settled(
     *, state: State, effects: tuple[Effect, ...] = ()
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Ask for the reaches and map data needed, and redraw.
+    Ask for the reaches, map data and feeds needed, and redraw.
 
     The Stop view is built once, the folds the strip on screen shows are
     opened, the Strip's scroll is clamped to its reach and a picked train
@@ -420,9 +422,11 @@ def settled(
     state, strips = request_strips(
         state=clamped(state=state, banner=banner),
     )
-    state, requests = map_effects(state=state, stop_view=stop_view)
+    state, requests, ask = map_effects(state=state, stop_view=stop_view)
+    state, fetches = cycle_effects(state=state)
+    state, loads = pattern_effects(state=state, ask=ask)
     return rendered(
         state=state,
         stop_view=stop_view,
-        effects=(*effects, *strips, *requests),
+        effects=(*effects, *strips, *requests, *fetches, *loads),
     )

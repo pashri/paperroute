@@ -14,7 +14,6 @@ from paperroute.core.messages import (
 )
 from paperroute.core.model import same_place
 from paperroute.core.places import shown
-from paperroute.core.polling import poll_effects
 from paperroute.core.rhythm import in_window
 from paperroute.core.saved import QuietMode
 from paperroute.core.sleep import awake, slept
@@ -136,17 +135,17 @@ def quiet_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        A quiet sleep that is no longer due wakes, polling at once; quiet
-        hours sleep a screen that `may_sleep`; a wake run out outside
-        quiet hours is forgotten. A Sleep now sleep is left alone. Quiet
-        hours are not due while an auto window holds the panel awake.
+        A quiet sleep that is no longer due wakes, starting a cycle at
+        once; quiet hours sleep a screen that `may_sleep`; a wake run out
+        outside quiet hours is forgotten. A Sleep now sleep is left alone.
+        Quiet hours are not due while an auto window holds the panel
+        awake.
     """
     panel = state.panel
     due = quiet_due(state=state) and not holds_awake(auto=state.auto)
     if panel.asleep:
         if panel.by_quiet and not due:
-            state, polls = poll_effects(state=awake(state=state))
-            return settled(state=state, effects=polls)
+            return settled(state=awake(state=state))
         return state, ()
     if due and may_sleep(state=state):
         return fall_asleep(state=state, by_quiet=True)

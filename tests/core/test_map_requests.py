@@ -3,14 +3,16 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from paperroute.core.feeds import ALL_POSITION_MODES, position_feeds
+from paperroute.core.cycle import cycle_effects
+from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.geo import Point
 from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM
-from paperroute.core.map_requests import map_feeds, pin_ends, request_positions
+from paperroute.core.map_requests import map_feeds, pin_ends
 from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import MapView
 from paperroute.core.messages import (
     Effect,
+    FetchFeed,
     Knob,
     KnobPressed,
     LoadModes,
@@ -24,7 +26,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, RouteKind
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
-from paperroute.core.state_model import State
+from paperroute.core.state_model import Cycle, State
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.tiles import ZOOMS
 from tests.core.connection_factories import LEG1, LEG2
@@ -161,15 +163,20 @@ def test_strip_feeds_unchanged() -> None:
 
 
 def test_positions_follow_rate() -> None:
-    """Off-peak, the Map's positions are due two minutes after a fetch."""
+    """Off-peak, the Map's positions are due on two-minute boundaries."""
     noon = datetime(2026, 10, 16, 12, 0, tzinfo=SYDNEY)
-    state = replace(on_map(), now=noon)
-    for ago, due in ((60, False), (120, True)):
-        fetched = noon - timedelta(seconds=ago)
-        fetched_at = dict.fromkeys(map_feeds(state=state), fetched)
-        stale = replace(state, map=replace(state.map, fetched_at=fetched_at))
-        _, effects = request_positions(state=stale)
-        assert bool(effects) is due
+    state = on_map()
+    cycle = Cycle(started=noon, asked=frozenset(map_feeds(state=state)))
+    for later, due in ((60, False), (119, False), (120, True)):
+        now = noon + timedelta(seconds=later)
+        _, effects = cycle_effects(state=replace(state, now=now, cycle=cycle))
+        positions = [
+            effect
+            for effect in effects
+            if isinstance(effect, FetchFeed)
+            and effect.kind == FeedKind.POSITIONS
+        ]
+        assert bool(positions) is due
 
 
 def test_connection_map_requests_both_shapes() -> None:

@@ -10,7 +10,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.core.alert_state import alert_feeds
+from paperroute.core.alert_state import ALERT_EVERY, alert_feeds
 from paperroute.core.auto_model import AutoState
 from paperroute.core.chooser import (
     ChooserPath,
@@ -29,6 +29,7 @@ from paperroute.core.connection_strip import (
     ConnectionStripView,
 )
 from paperroute.core.connection_view import ConnectionView
+from paperroute.core.cycle import needed_feeds
 from paperroute.core.feeds import (
     ALL_POSITION_MODES,
     FeedKind,
@@ -123,7 +124,7 @@ from paperroute.core.saved import (
     Settings,
     seeded,
 )
-from paperroute.core.state import initial_state, needed_feeds, step
+from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import (
     FEED_IDLE,
     LOOKBACK,
@@ -405,10 +406,10 @@ def test_load_for_other_school_switch_is_stale() -> None:
 
 
 def test_loaded_departures_render_and_choose_feeds() -> None:
-    """Loading renders and the next tick fetches the bus feed."""
+    """Loading renders and the next cycle fetches the bus feed."""
     state = loaded(state=fresh())
     assert state.feeds == (BUSES,)
-    _, effects = step(state, Tick(now=START))
+    _, effects = step(state, Tick(now=START + POLL_EVERY))
     assert FetchFeed(feed=BUSES) in effects
 
 
@@ -535,7 +536,7 @@ def test_mixed_modes_fetch_each_needed_feed_once() -> None:
         pin=PIN, departures=deps, until=START + HORIZON + RELOAD_BEFORE
     )
     state, _ = step(fresh(), event)
-    _, effects = step(state, Tick(now=START))
+    _, effects = step(state, Tick(now=START + POLL_EVERY))
     fetched = [
         e.feed
         for e in effects
@@ -731,7 +732,7 @@ def test_map_polls_positions_with_trip_updates() -> None:
 def test_stop_view_never_polls_positions() -> None:
     """The Stop view fetches trip updates only."""
     state = loaded(state=fresh(centre=CENTRE))
-    for seconds in (0, 30, 60):
+    for seconds in (30, 60, 90):
         now = START + timedelta(seconds=seconds)
         state, effects = step(state, Tick(now=now))
         fetched = effects_of(effects=effects, kind=FetchFeed)
@@ -880,7 +881,7 @@ def test_map_sidebar_starts_at_the_next_departure() -> None:
 
 
 def test_positions_are_not_fetched_twice_within_a_poll() -> None:
-    """The first fetch on entering the Map starts that feed's 30 s clock."""
+    """Positions fetched on entering the Map wait for the next boundary."""
     state, effects = step(loaded(state=fresh(), mode=Mode.FERRY), PRESS)
     assert effects_of(effects=effects, kind=FetchFeed) == (
         every_position_fetch()
@@ -890,9 +891,12 @@ def test_positions_are_not_fetched_twice_within_a_poll() -> None:
     state, _ = step(loaded(state=fresh()), Tick(now=START))
     state, _ = step(state, Tick(now=START + timedelta(seconds=29)))
     state, _ = step(state, PRESS)
+    _, effects = step(state, Tick(now=START + timedelta(seconds=29)))
+    assert not effects_of(effects=effects, kind=FetchFeed)
     _, effects = step(state, Tick(now=START + POLL_EVERY))
     assert effects_of(effects=effects, kind=FetchFeed) == [
         FetchFeed(feed=BUSES),
+        *every_position_fetch(),
     ]
 
 
@@ -1584,7 +1588,7 @@ def check_effects(
                 first=shown(state=before), second=effect.pin
             )
         if isinstance(effect, FetchFeed):
-            check_fetch(before=before, after=after, event=event, effect=effect)
+            check_fetch(before=before, after=after, effect=effect)
 
 
 def check_selection(*, before: State, after: State, event: Event) -> None:
@@ -1865,36 +1869,14 @@ def check_render(
             assert view.map.base.width < MAP_WIDTH
 
 
-def polled(*, before: State, event: Event) -> bool:
-    """
-    Say whether an event is a tick at least POLL_EVERY after the last fetch.
-
-    Parameters
-    ----------
-    before : State
-        State before the event.
-    event : Event
-        The event applied.
-
-    Returns
-    -------
-    bool
-        True for a due tick.
-    """
-    if not isinstance(event, Tick):
-        return False
-    if before.last_fetch is None:
-        return True
-    gap = event.now.timestamp() - before.last_fetch.timestamp()
-    return gap >= POLL_EVERY.total_seconds()
-
-
 def check_fetch(
-    *, before: State, after: State, event: Event, effect: FetchFeed
+    *, before: State, after: State, effect: FetchFeed
 ) -> None:
     """
-    Assert a fetch is needed and due on its own clock; a timetable
-    arriving or the panel waking makes every needed feed due at once.
+    Assert a fetch is needed and either starts a cycle or joins it once.
+
+    A timetable arriving, the panel waking or a new place shown starts
+    a cycle afresh.
 
     Parameters
     ----------
@@ -1902,26 +1884,24 @@ def check_fetch(
         State before the event.
     after : State
         State after the event.
-    event : Event
-        The event applied.
     effect : FetchFeed
         The fetch.
     """
-    arrived = (
-        before.rebuild.missing and not after.rebuild.missing
-    ) or (before.panel.asleep and not after.panel.asleep)
-    if effect.kind is FeedKind.TRIPS:
-        assert effect.feed in trip_feeds(state=after)
-        assert arrived or polled(before=before, event=event)
-        return
-    if effect.kind is FeedKind.ALERTS:
-        assert effect.feed in alert_feeds(state=after)
-        return
-    assert effect.feed in needed_feeds(state=after)
-    last = before.map.fetched_at.get(effect.feed)
-    if last is not None and not arrived:
-        gap = after.now.timestamp() - last.timestamp()
-        assert gap >= POLL_EVERY.total_seconds()
+    needed = (
+        alert_feeds(state=after)
+        if effect.kind is FeedKind.ALERTS
+        else needed_feeds(state=after)
+    )
+    assert effect.feed in needed
+    assert effect.feed in after.cycle.asked
+    assert effect.feed in after.cycle.waiting
+    restarted = (
+        after.cycle.started != before.cycle.started
+        or (before.rebuild.missing and not after.rebuild.missing)
+        or (before.panel.asleep and not after.panel.asleep)
+        or not same_place(first=shown(state=before), second=shown(state=after))
+    )
+    assert restarted or effect.feed not in before.cycle.asked
 
 
 def check_places(*, before: State, after: State, event: Event) -> None:
@@ -2988,7 +2968,7 @@ def test_settings_reach_stop_view() -> None:
 def test_alerts_counted_in_quota() -> None:
     """The alert fetches of a tick count against the day's quota."""
     state = loaded(state=fresh())
-    after, effects = step(state, Tick(now=START))
+    after, effects = step(state, Tick(now=START + ALERT_EVERY))
     fetches = [e for e in effects if isinstance(e, FetchFeed)]
     assert FetchFeed(feed=ALERTS, kind=FeedKind.ALERTS) in fetches
     assert after.quota.calls - state.quota.calls == len(fetches)

@@ -36,7 +36,7 @@ from paperroute.core.messages import (
 )
 from paperroute.core.quota import calls_today
 from paperroute.core.saved import Settings
-from paperroute.core.state_model import State
+from paperroute.core.state_model import Cycle, State, restarted
 from paperroute.core.state_views import saved_of, settled
 from paperroute.core.wifi import on_wifi_event, setup_closed
 
@@ -334,13 +334,15 @@ def on_key(
     -------
     tuple[State, tuple[Effect, ...]]
         State with the key noted, and the redraw if the view changed. A
-        key that was missing and is now set makes the next tick poll.
+        key that was missing and is now set starts a cycle at once.
     """
     if event.present and state.panel.key_set is False:
-        state = replace(
-            state,
-            last_fetch=None,
-            map=replace(state.map, fetched_at={}),
+        state = restarted(
+            state=replace(
+                state,
+                last_fetch=None,
+                map=replace(state.map, fetched_at={}),
+            ),
         )
     panel = replace(state.panel, key_set=event.present)
     return settled(state=replace(state, panel=panel))
@@ -362,7 +364,8 @@ def quiet_guard(
     tuple[State, tuple[Effect, ...]]
         The result, without FetchFeeds when `feeds_held` says so for the
         state after the event. Held feeds also have their poll clocks
-        cleared, so they poll at once when they are let go.
+        and cycle cleared, so a cycle starts at once when they are let
+        go.
     """
     after, effects = result
     if not feeds_held(state=after):
@@ -375,6 +378,7 @@ def quiet_guard(
             after,
             last_fetch=None,
             map=replace(after.map, fetched_at={}),
+            cycle=Cycle(free=after.cycle.free),
         ),
     )
     return cleared, kept

@@ -23,7 +23,7 @@ from paperroute.core.quota import (
 )
 from paperroute.core.saved import Quota
 from paperroute.core.state import step
-from paperroute.core.state_model import State
+from paperroute.core.state_model import Cycle, State
 from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import saved_of
 from tests.core.steps import wakeful
@@ -36,7 +36,7 @@ TWO_FEEDS = (BUSES, 'v1/gtfs/realtime/ferries')
 
 def fetching(*, state: State) -> State:
     """
-    Make the next tick poll the trip feeds.
+    Make the next tick start a poll cycle with the alerts.
 
     Parameters
     ----------
@@ -46,9 +46,9 @@ def fetching(*, state: State) -> State:
     Returns
     -------
     State
-        State that has never fetched.
+        State that has never fetched and has no cycle under way.
     """
-    return replace(state, last_fetch=None)
+    return replace(state, last_fetch=None, cycle=Cycle())
 
 
 def test_constants() -> None:
@@ -60,8 +60,10 @@ def test_constants() -> None:
 def test_fetches_are_counted() -> None:
     """A tick fetching two trip feeds and one alerts feed counts three."""
     now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY)
-    state = replace(loaded(state=fresh(now=now)), feeds=TWO_FEEDS)
-    state, effects = step(state, Tick(now=now))
+    state = replace(
+        loaded(state=fresh(now=now)), feeds=TWO_FEEDS, quota=Quota(),
+    )
+    state, effects = step(fetching(state=state), Tick(now=now))
     assert sum(isinstance(e, FetchFeed) for e in effects) == 3
     assert state.quota == Quota(day=DAY, calls=3)
 
@@ -72,10 +74,10 @@ def test_quota_rolls_over_at_sydney_midnight() -> None:
     early = datetime(2026, 10, 22, 0, 0, 5, tzinfo=SYDNEY)
     state = wakeful(state=loaded(state=fresh(now=late)))
     state = replace(state, quota=Quota(day=DAY, calls=500))
-    state, _ = step(state, Tick(now=late))
+    state, _ = step(fetching(state=state), Tick(now=late))
     assert state.quota == Quota(day=DAY, calls=502)
     state, _ = step(fetching(state=state), Tick(now=early))
-    assert state.quota == Quota(day=NEXT_DAY, calls=1)
+    assert state.quota == Quota(day=NEXT_DAY, calls=2)
 
 
 def test_quota_rolls_over_on_a_daylight_saving_day() -> None:
@@ -84,10 +86,10 @@ def test_quota_rolls_over_on_a_daylight_saving_day() -> None:
     early = datetime(2026, 10, 5, 0, 0, tzinfo=SYDNEY)
     state = wakeful(state=loaded(state=fresh(now=late)))
     state = replace(state, quota=Quota(day=date(2026, 10, 4), calls=9))
-    state, _ = step(state, Tick(now=late))
+    state, _ = step(fetching(state=state), Tick(now=late))
     assert state.quota == Quota(day=date(2026, 10, 4), calls=11)
     state, _ = step(fetching(state=state), Tick(now=early))
-    assert state.quota == Quota(day=date(2026, 10, 5), calls=1)
+    assert state.quota == Quota(day=date(2026, 10, 5), calls=2)
 
 
 def test_calls_today_is_zero_on_a_new_day() -> None:

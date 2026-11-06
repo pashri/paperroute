@@ -1,7 +1,7 @@
 """What the device knows, and the timings both its halves share."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from typing import Final
 
@@ -396,3 +396,22 @@ class State:
     alerts: AlertsState = field(default_factory=AlertsState)
     auto: AutoState = field(default_factory=AutoState)
     cycle: Cycle = field(default_factory=Cycle)
+
+
+def restarted(*, state: State) -> State:
+    """
+    Forget the cycle under way, so the next one starts at once.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    State
+        State with a cycle not yet started that keeps when the alerts
+        were last asked for and whether its frame is free.
+    """
+    cycle = Cycle(alerts_at=state.cycle.alerts_at, free=state.cycle.free)
+    return replace(state, cycle=cycle)

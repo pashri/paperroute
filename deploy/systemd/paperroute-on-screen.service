@@ -1,0 +1,10 @@
+[Unit]
+ConditionPathExists=/dev/spidev0.0
+
+[Service]
+Type=oneshot
+TimeoutStartSec=30
+ExecStart=/opt/paperroute/current/.venv/bin/python -m paperroute.screen --image /usr/local/share/paperroute/deploy/screens/on.raw
+
+[Install]
+WantedBy=multi-user.target

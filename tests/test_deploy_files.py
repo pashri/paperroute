@@ -28,7 +28,9 @@ BIN_SCRIPTS: Final[tuple[str, ...]] = (
     'paperroute-led',
     'provision-device',
 )
+OFF_HOOK: Final[Path] = DEPLOY / 'system-shutdown' / 'paperroute-off-screen'
 SHELL_SCRIPTS: Final[tuple[Path, ...]] = (
+    OFF_HOOK,
     ROOT / 'scripts' / 'provision',
     ROOT / 'scripts' / 'deploy',
     *(BIN / name for name in BIN_SCRIPTS),
@@ -153,6 +155,21 @@ UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
             'RandomizedDelaySec': '0',
         },
         'Install': {'WantedBy': 'timers.target'},
+    },
+    'paperroute-on-screen.service': {
+        'Unit': {
+            'ConditionPathExists': '/dev/spidev0.0',
+        },
+        'Service': {
+            'Type': 'oneshot',
+            'TimeoutStartSec': '30',
+            'ExecStart': (
+                '/opt/paperroute/current/.venv/bin/python'
+                ' -m paperroute.screen --image'
+                ' /usr/local/share/paperroute/deploy/screens/on.raw'
+            ),
+        },
+        'Install': {'WantedBy': 'multi-user.target'},
     },
     'paperroute-led-boot.service': {
         'Unit': {
@@ -585,7 +602,7 @@ def test_unit_has_exact_values(name: str) -> None:
 
 
 def test_units_are_the_planned_set() -> None:
-    """deploy/systemd holds the four units and nothing else."""
+    """deploy/systemd holds the planned units and nothing else."""
     assert sorted(path.name for path in SYSTEMD.iterdir()) == sorted(UNITS)
 
 
@@ -1952,3 +1969,58 @@ def test_shipped_screens_are_panel_frames() -> None:
     for name in ('off.raw', 'on.raw'):
         frame = load_frame(path=DEPLOY / 'screens' / name)
         assert set(np.unique(frame)) <= {0, 85, 170, 255}
+
+
+@pytest.mark.parametrize(
+    ('action', 'drawn'),
+    [('poweroff', True), ('halt', True), ('reboot', False), ('kexec', False)],
+)
+def test_off_hook_draws_on_poweroff_only(
+    tmp_path: Path,
+    action: str,
+    drawn: bool,
+) -> None:
+    """The hook draws the off screen for poweroff and halt, and exits 0."""
+    record = tmp_path / 'args'
+    stub = tmp_path / 'timeout'
+    stub.write_text(
+        f'#!/bin/sh\necho "$@" >{record}\nexit 1\n',
+        encoding='utf-8',
+    )
+    stub.chmod(0o755)
+    result = subprocess.run(
+        args=['sh', str(OFF_HOOK), action],
+        env=user_env(
+            PAPERROUTE_TIMEOUT=str(stub),
+            PAPERROUTE_PYTHON='/py',
+        ),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 0
+    assert record.exists() is drawn
+    if drawn:
+        assert record.read_text(encoding='utf-8').split() == [
+            '20',
+            '/py',
+            '-m',
+            'paperroute.screen',
+            '--image',
+            '/usr/local/share/paperroute/deploy/screens/off.raw',
+        ]
+
+
+def test_install_files_installs_hook_and_enables_on_screen() -> None:
+    """The hook is installed 0755 and the boot screen unit is enabled."""
+    path = BIN / 'install-files'
+    assert commands(path=path, word='system-shutdown') == [
+        'install -D -m 0755 -o root -g root'
+        ' "$SRC/system-shutdown/paperroute-off-screen"'
+        ' /usr/lib/systemd/system-shutdown/paperroute-off-screen',
+    ]
+    assert commands(path=path, word='enable') == [
+        'systemctl enable paperroute-led-boot paperroute'
+        ' paperroute-timetable.timer paperroute-on-screen',
+    ]

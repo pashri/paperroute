@@ -27,6 +27,9 @@ bad=$(
 install -m 0644 -o root -g root "$SRC"/systemd/* /etc/systemd/system/
 install -m 0755 -o root -g root "$SRC/bin/paperroute-led" \
     /usr/local/bin/paperroute-led
+install -D -m 0755 -o root -g root \
+    "$SRC/system-shutdown/paperroute-off-screen" \
+    /usr/lib/systemd/system-shutdown/paperroute-off-screen
 
 install -m 0644 -o root -g root "$SRC/udev/99-paperroute-led.rules" \
     /etc/udev/rules.d/99-paperroute-led.rules
@@ -53,5 +56,6 @@ fi
 systemctl reload ssh
 
 systemctl daemon-reload
-systemctl enable paperroute-led-boot paperroute paperroute-timetable.timer
+systemctl enable paperroute-led-boot paperroute paperroute-timetable.timer \
+    paperroute-on-screen
 systemctl start paperroute-timetable.timer

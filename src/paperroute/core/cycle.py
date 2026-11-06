@@ -41,6 +41,9 @@ def stale(
     """
     Say whether a last time is missing, in the future or before a boundary.
 
+    Times are compared as real instants, because datetimes sharing a zone
+    compare by wall clock and the repeated fall-back hour would misorder.
+
     Parameters
     ----------
     last : datetime | None
@@ -55,9 +58,9 @@ def stale(
     bool
         True when it is due again.
     """
-    if last is None or last > now:
+    if last is None or last.timestamp() > now.timestamp():
         return True
-    return last < boundary(now=now, every=every)
+    return last.timestamp() < boundary(now=now, every=every).timestamp()
 
 
 def cycle_due(

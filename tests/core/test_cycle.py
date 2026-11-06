@@ -84,3 +84,16 @@ def test_alerts_due_only_on_five_minute_boundary() -> None:
     assert not alerts_due(cycle=cycle, now=_at(10, 4, 59))
     assert alerts_due(cycle=cycle, now=_at(10, 5, 1))
     assert alerts_due(cycle=Cycle(), now=_at(10, 5, 1))
+
+
+def test_cycle_fires_once_per_boundary_on_fall_back_night() -> None:
+    every = timedelta(seconds=60)
+    start = datetime(2026, 4, 5, 1, 58, tzinfo=SYDNEY)
+    cycle = Cycle()
+    fired = 0
+    for i in range(int(timedelta(hours=2) / timedelta(seconds=5))):
+        now = datetime.fromtimestamp(start.timestamp() + 5 * i, tz=SYDNEY)
+        if cycle_due(cycle=cycle, now=now, every=every):
+            fired += 1
+            cycle = Cycle(started=now)
+    assert fired == 120

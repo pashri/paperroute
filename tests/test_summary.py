@@ -220,6 +220,61 @@ def test_report_gives_panel_times_from_good_refreshes() -> None:
     assert report['panel_full_ms'] == {'median': 4812.3, 'p90': 4812.3}
 
 
+def refresh_of(*, kind: str, ok: bool = True) -> PanelRefresh:
+    """
+    Make a refresh of one kind.
+
+    Parameters
+    ----------
+    kind : str
+        'partial', 'full' or 'clear'.
+    ok : bool
+        Whether it worked.
+
+    Returns
+    -------
+    PanelRefresh
+        The refresh; a clear is also full, as the panel reports it.
+    """
+    return PanelRefresh(
+        full=kind != 'partial',
+        seconds=1.0,
+        ok=ok,
+        clear=kind == 'clear',
+    )
+
+
+def test_summary_counts_refresh_kinds() -> None:
+    """Partials, fulls and clears are counted apart; failures are not."""
+    summary = summary_on(Clock())
+    kinds = ['partial'] * 3 + ['full'] * 2 + ['clear']
+    for kind in kinds:
+        summary.panel_refreshed(refresh=refresh_of(kind=kind))
+    summary.panel_refreshed(refresh=refresh_of(kind='full', ok=False))
+    report = summary.report()
+    assert report['panel_partials'] == 3
+    assert report['panel_fulls'] == 2
+    assert report['panel_clears'] == 1
+    assert report['panel_full_ms'] == {'median': 1000.0, 'p90': 1000.0}
+
+
+def test_summary_resets_counts_each_window(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A new window starts with no refresh counts."""
+    clock = Clock()
+    summary = summary_on(clock)
+    for kind in ('partial', 'full', 'clear'):
+        summary.panel_refreshed(refresh=refresh_of(kind=kind))
+    clock.now += SUMMARY_EVERY_S
+    with caplog.at_level(logging.INFO):
+        summary.ticked()
+    report = summary.report()
+    assert report['panel_partials'] == 0
+    assert report['panel_fulls'] == 0
+    assert report['panel_clears'] == 0
+
+
 def test_tick_after_the_window_clears_panel_times(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

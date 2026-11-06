@@ -880,6 +880,24 @@ def test_clear_job_draws_clear(rig: Rig) -> None:
     assert rig.reports[-1].full is True
 
 
+def test_clear_refresh_reports_clear(rig: Rig) -> None:
+    """A clear refresh is reported as a clear, timed as a full one."""
+    rig.show(frame=white())
+    rig.show(frame=painted(boxes=(BOX_A,), grey=0), clear=True)
+    rig.show(frame=white())
+    assert [(r.full, r.clear) for r in rig.reports[:2]] == [
+        (True, False),
+        (True, True),
+    ]
+
+
+def test_forced_full_clear_reports_full(rig: Rig) -> None:
+    """A clear forced to full is reported as full, not as a clear."""
+    rig.show(frame=white(), clear=True)
+    rig.show(frame=white())
+    assert (rig.reports[0].full, rig.reports[0].clear) == (True, False)
+
+
 def test_clear_resets_patch_count(rig: Rig) -> None:
     """Patches before a clear refresh do not count towards a clean."""
     rig.show(frame=white())

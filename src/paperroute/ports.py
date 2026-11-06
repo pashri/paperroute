@@ -797,11 +797,15 @@ class PanelRefresh:
         How long the attempt took.
     ok : bool
         Whether the panel finished it.
+    clear : bool
+        True for a clear refresh. It also has ``full`` set, as it
+        takes about as long as a full one.
     """
 
     full: bool
     seconds: float
     ok: bool
+    clear: bool = False
 
 
 class Display(Protocol):

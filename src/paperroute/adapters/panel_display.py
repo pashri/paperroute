@@ -413,7 +413,8 @@ class PanelDisplay:
             A frame or a cleaning refresh.
         """
         full = isinstance(work, Clean) or self._needs_full(job=work)
-        whole = full or self._clears(work=work)
+        clear = self._clears(work=work) and not full
+        whole = full or clear
         started = self._clock()
         failing = self._retry is not None
         try:
@@ -422,14 +423,20 @@ class PanelDisplay:
         except (PanelTimeout, OSError) as error:
             if not failing:
                 logger.error('panel refresh failed', exc_info=error)
-            self._failed(work=work, full=whole, started=started)
+            self._failed(
+                work=work, full=whole, clear=clear, started=started,
+            )
         except Exception:  # pylint: disable=broad-exception-caught
             if not failing:
                 logger.exception('panel refresh failed')
-            self._failed(work=work, full=whole, started=started)
+            self._failed(
+                work=work, full=whole, clear=clear, started=started,
+            )
         else:
             if drew:
-                self._finish(full=whole, started=started, ok=True)
+                self._finish(
+                    full=whole, clear=clear, started=started, ok=True,
+                )
 
     @staticmethod
     def _clears(*, work: Job | Clean) -> bool:
@@ -561,7 +568,7 @@ class PanelDisplay:
         return True
 
     def _failed(
-        self, *, work: Job | Clean, full: bool, started: float
+        self, *, work: Job | Clean, full: bool, clear: bool, started: float
     ) -> None:
         """
         Owe a full refresh, keep the frame to retry and report.
@@ -572,6 +579,8 @@ class PanelDisplay:
             The work that failed.
         full : bool
             Whether the failed refresh was full.
+        clear : bool
+            Whether the failed refresh was a clear.
         started : float
             When it started.
         """
@@ -580,7 +589,9 @@ class PanelDisplay:
             job=self._redo(work=work),
             due=self._clock() + RETRY_AFTER,
         )
-        self._finish(full=full, started=started, ok=False)
+        self._finish(
+            full=full, clear=clear, started=started, ok=False,
+        )
 
     def _redo(self, *, work: Job | Clean) -> Job:
         """
@@ -607,7 +618,9 @@ class PanelDisplay:
             asleep=self._asleep,
         )
 
-    def _finish(self, *, full: bool, started: float, ok: bool) -> None:
+    def _finish(
+        self, *, full: bool, clear: bool, started: float, ok: bool
+    ) -> None:
         """
         Queue a refresh for the next `show` to pass on.
 
@@ -615,13 +628,18 @@ class PanelDisplay:
         ----------
         full : bool
             Whether it was full.
+        clear : bool
+            Whether it was a clear.
         started : float
             When it started.
         ok : bool
             Whether it worked.
         """
         refresh = PanelRefresh(
-            full=full, seconds=self._clock() - started, ok=ok,
+            full=full,
+            seconds=self._clock() - started,
+            ok=ok,
+            clear=clear,
         )
         with self._ready:
             self._results.append(refresh)

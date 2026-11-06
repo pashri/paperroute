@@ -160,6 +160,9 @@ class Summary(NullObserver):
         self.render_ms: list[float] = []
         self.panel_partial_ms: list[float] = []
         self.panel_full_ms: list[float] = []
+        self.panel_partials = 0
+        self.panel_fulls = 0
+        self.panel_clears = 0
 
     def tally(self, *, feed: str) -> FeedTally:
         """
@@ -245,10 +248,17 @@ class Summary(NullObserver):
         Parameters
         ----------
         refresh : PanelRefresh
-            The refresh; a failed one is left out.
+            The refresh; a failed one is left out. A clear is counted
+            apart from fulls, but its time joins theirs.
         """
         if not refresh.ok:
             return
+        if refresh.clear:
+            self.panel_clears += 1
+        elif refresh.full:
+            self.panel_fulls += 1
+        else:
+            self.panel_partials += 1
         times = self.panel_full_ms if refresh.full else self.panel_partial_ms
         times.append(refresh.seconds * 1000)
 
@@ -261,8 +271,9 @@ class Summary(NullObserver):
         dict[str, object]
             The window's length in seconds, frames drawn with the median
             and p90 render time, the median and p90 of good panel
-            patches and full refreshes in milliseconds, and each feed's
-            counts.
+            patches and full refreshes in milliseconds, how many good
+            partial, full (cleaning ones included) and clear refreshes
+            there were, and each feed's counts.
         """
         return {
             'window_s': round(self.clock() - self.started, 1),
@@ -270,6 +281,9 @@ class Summary(NullObserver):
             'render_ms': spread(values=self.render_ms),
             'panel_partial_ms': spread(values=self.panel_partial_ms),
             'panel_full_ms': spread(values=self.panel_full_ms),
+            'panel_partials': self.panel_partials,
+            'panel_fulls': self.panel_fulls,
+            'panel_clears': self.panel_clears,
             'feeds': {
                 feed: tally.report() for feed, tally in self.feeds.items()
             },
@@ -285,3 +299,6 @@ class Summary(NullObserver):
         self.render_ms = []
         self.panel_partial_ms = []
         self.panel_full_ms = []
+        self.panel_partials = 0
+        self.panel_fulls = 0
+        self.panel_clears = 0

@@ -866,7 +866,7 @@ async def test_power_post_posts_event(
 @pytest.mark.parametrize(('action', 'question', 'button'), [
     (
         'poweroff',
-        "Shut down now? The screen will say when it's safe to unplug.",
+        "Shut down now? The screen will show OFF when it's safe to unplug.",
         'Shut down',
     ),
     ('reboot', 'Restart now?', 'Restart'),

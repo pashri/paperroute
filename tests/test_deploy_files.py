@@ -11,7 +11,10 @@ from pathlib import Path
 from typing import Final
 from xml.etree import ElementTree
 
+import numpy as np
 import pytest
+
+from paperroute.screen import load_frame
 
 ROOT: Final[Path] = Path(__file__).parents[1]
 DEPLOY: Final[Path] = ROOT / 'deploy'
@@ -258,7 +261,27 @@ def run_script(
     )
 
 
-def snapshot(root: Path) -> dict[str, str]:
+def file_content(*, path: Path) -> str | bytes:
+    """
+    Read a file as text, or as bytes when it is not UTF-8.
+
+    Parameters
+    ----------
+    path : Path
+        The file.
+
+    Returns
+    -------
+    str | bytes
+        Its text, or its bytes.
+    """
+    try:
+        return path.read_text(encoding='utf-8')
+    except UnicodeDecodeError:
+        return path.read_bytes()
+
+
+def snapshot(root: Path) -> dict[str, str | bytes]:
     """
     Describe every path under a directory, without following links.
 
@@ -269,16 +292,16 @@ def snapshot(root: Path) -> dict[str, str]:
 
     Returns
     -------
-    dict[str, str]
-        Each relative path mapped to its link target, its text,
-        ``'dir'`` or ``'other'``.
+    dict[str, str | bytes]
+        Each relative path mapped to its link target, its text (its
+        bytes when it is not text), ``'dir'`` or ``'other'``.
     """
     return {
         str(path.relative_to(root)): (
             f'link:{os.readlink(path)}'
             if path.is_symlink()
             else 'dir' if path.is_dir()
-            else path.read_text(encoding='utf-8') if path.is_file()
+            else file_content(path=path) if path.is_file()
             else 'other'
         )
         for path in root.rglob('*')
@@ -1922,3 +1945,10 @@ def test_provision_creates_empty_secrets() -> None:
     assert any(SECRETS_LINE in line for line in body)
     log = lines.index('make_service_dir /var/lib/paperroute/log')
     assert lines[log + 1] == 'make_secrets'
+
+
+def test_shipped_screens_are_panel_frames() -> None:
+    """Both pictures load and hold only the panel's four greys."""
+    for name in ('off.raw', 'on.raw'):
+        frame = load_frame(path=DEPLOY / 'screens' / name)
+        assert set(np.unique(frame)) <= {0, 85, 170, 255}

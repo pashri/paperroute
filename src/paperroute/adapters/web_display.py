@@ -65,7 +65,7 @@ HELD_ACTIONS: Final[dict[str, int]] = {'hold-left': -1, 'hold-right': 1}
 HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
 CONFIRM: Final[dict[PowerAction, tuple[str, str]]] = {
     PowerAction.OFF: (
-        "Shut down now? The screen will say when it's safe to unplug.",
+        "Shut down now? The screen will show OFF when it's safe to unplug.",
         'Shut down',
     ),
     PowerAction.RESTART: ('Restart now?', 'Restart'),

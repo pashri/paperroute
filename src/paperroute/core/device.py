@@ -42,7 +42,7 @@ from paperroute.core.state_views import saved_of, settled
 from paperroute.core.wifi import on_wifi_event, setup_closed
 
 NOTICE: Final[dict[PowerAction, str]] = {
-    PowerAction.OFF: 'Shut down - safe to unplug',
+    PowerAction.OFF: 'Shutting down',
     PowerAction.RESTART: 'Restarting',
 }
 RESET_NOTICE: Final[dict[ResetKind, str]] = {

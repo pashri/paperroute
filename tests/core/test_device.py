@@ -5,7 +5,7 @@ from datetime import timedelta
 import pytest
 
 from paperroute.core.banners import NO_KEY
-from paperroute.core.device import PROBE_EVERY, device_status, on_reset
+from paperroute.core.device import NOTICE, PROBE_EVERY, device_status, on_reset
 from paperroute.core.device_model import DeviceStatus, ResetKind
 from paperroute.core.messages import (
     ApiKeyChanged,
@@ -136,7 +136,7 @@ def powering(*, action: PowerAction) -> State:
 @pytest.mark.parametrize(
     ('action', 'title'),
     [
-        (PowerAction.OFF, 'Shut down - safe to unplug'),
+        (PowerAction.OFF, 'Shutting down'),
         (PowerAction.RESTART, 'Restarting'),
     ],
 )
@@ -399,3 +399,8 @@ def test_connection_map_changed() -> None:
         pinned(), SettingsChanged(connection_map=ConnectionMap.WHOLE),
     )
     assert state.settings.connection_map is ConnectionMap.WHOLE
+
+
+def test_off_notice_says_shutting_down() -> None:
+    """The Off notice names what is happening, not the finished state."""
+    assert NOTICE[PowerAction.OFF] == 'Shutting down'

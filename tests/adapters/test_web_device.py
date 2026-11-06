@@ -481,8 +481,8 @@ async def test_power_lives_on_device(
     assert 'action="/device/power?action=poweroff"' in text
     assert '<p id="reboot-question">Restart now?</p>' in text
     assert (
-        '<p id="poweroff-question">Shut down now? The screen will say '
-        "when it's safe to unplug.</p>"
+        '<p id="poweroff-question">Shut down now? The screen will show '
+        "OFF when it's safe to unplug.</p>"
     ) in text
     assert text.count('<dialog ') == 2
     assert '<script type="module" src="/device.js"></script>' in text

@@ -40,6 +40,23 @@ def test_notifier_sends_ready_once_and_watchdog(sock_dir: Path) -> None:
     assert got == [b'READY=1', b'WATCHDOG=1']
 
 
+def test_ready_sent_on_first_tick(sock_dir: Path) -> None:
+    """The first tick sends READY=1 before any frame, then WATCHDOG=1."""
+    path = sock_dir / 'n.sock'
+    with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as server:
+        server.bind(str(path))
+        server.settimeout(1)
+        notifier = SystemdNotifier(socket_path=str(path))
+        notifier.ticked()
+        notifier.ticked()
+        notifier.frame_drawn(render_ms=1.0)
+        got = [server.recv(64) for _ in range(3)]
+        server.settimeout(0.1)
+        with pytest.raises(TimeoutError):
+            server.recv(64)
+    assert got == [b'READY=1', b'WATCHDOG=1', b'WATCHDOG=1']
+
+
 def test_notifier_without_socket_is_silent() -> None:
     """With no socket path every call does nothing."""
     notifier = SystemdNotifier(socket_path=None)

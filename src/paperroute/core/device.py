@@ -34,9 +34,10 @@ from paperroute.core.messages import (
     Stop,
     WifiEvent,
 )
+from paperroute.core.model import shifted
 from paperroute.core.quota import calls_today
 from paperroute.core.saved import Settings
-from paperroute.core.state_model import Cycle, State, restarted
+from paperroute.core.state_model import CLOCK_WAIT, Cycle, State, restarted
 from paperroute.core.state_views import saved_of, settled
 from paperroute.core.wifi import on_wifi_event, setup_closed
 
@@ -383,6 +384,62 @@ def quiet_guard(
         ),
     )
     return cleared, kept
+
+
+def clock_checked(*, state: State, synced: bool) -> State:
+    """
+    Start or end the wait for the clock to be synchronised.
+
+    Only the first frame waits: an unsynced tick after a frame is drawn
+    starts no wait.
+
+    Parameters
+    ----------
+    state : State
+        State at the tick's time.
+    synced : bool
+        Whether the tick found the clock synchronised.
+
+    Returns
+    -------
+    State
+        State waiting until `CLOCK_WAIT` from now after the first
+        unsynced tick; `clock_set` on the first synced tick after
+        unsynced ones; unchanged otherwise.
+    """
+    waiting = state.clock_wait_until is not None
+    if synced:
+        return clock_set(state=state) if waiting else state
+    if waiting or state.last_view is not None:
+        return state
+    until = shifted(moment=state.now, seconds=int(CLOCK_WAIT.total_seconds()))
+    return replace(state, clock_wait_until=until)
+
+
+def clock_set(*, state: State) -> State:
+    """
+    Start afresh once the clock is synchronised, as it may have jumped.
+
+    Parameters
+    ----------
+    state : State
+        State at the first synced tick's time.
+
+    Returns
+    -------
+    State
+        State with no clock wait, departures due to reload, the app
+        counted as started now, a fresh poll cycle and a probe due.
+    """
+    board = replace(state.board, loaded_until=None, loading=False)
+    return replace(
+        state,
+        clock_wait_until=None,
+        board=board,
+        refresh=replace(state.refresh, started_at=state.now),
+        cycle=Cycle(),
+        panel=replace(state.panel, probed_at=None),
+    )
 
 
 def probe_due(*, state: State) -> bool:

@@ -131,8 +131,6 @@ UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
     'paperroute.service': {
         'Unit': {
             'Description': 'paperroute',
-            'After': 'network-online.target time-sync.target',
-            'Wants': 'network-online.target time-sync.target',
         },
         'Service': APP_SERVICE,
         'Install': {'WantedBy': 'multi-user.target'},

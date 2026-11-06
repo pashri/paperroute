@@ -1,7 +1,5 @@
 [Unit]
 Description=paperroute
-After=network-online.target time-sync.target
-Wants=network-online.target time-sync.target
 
 [Service]
 Type=notify

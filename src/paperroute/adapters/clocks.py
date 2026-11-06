@@ -2,12 +2,37 @@
 
 import time
 from datetime import datetime
+from pathlib import Path
+from typing import Final
 
 from paperroute.core.model import SYDNEY, shifted
 
+TIMESYNC_FLAG: Final[Path] = Path('/run/systemd/timesync/synchronized')
+
 
 class SystemClock:
-    """The wall clock in Sydney time."""
+    """
+    The wall clock in Sydney time.
+
+    Parameters
+    ----------
+    flag : Path
+        File systemd-timesyncd creates once it has set the clock.
+    """
+
+    def __init__(self, *, flag: Path = TIMESYNC_FLAG) -> None:
+        self.flag = flag
+
+    def synced(self) -> bool:
+        """
+        Say whether the clock has been synchronised since boot.
+
+        Returns
+        -------
+        bool
+            True once the flag file exists.
+        """
+        return self.flag.exists()
 
     def now(self) -> datetime:
         """
@@ -46,3 +71,14 @@ class ReplayClock:
         """
         elapsed = int(time.monotonic() - self.began)
         return shifted(moment=self.start, seconds=elapsed)
+
+    def synced(self) -> bool:
+        """
+        Say the replayed time is synchronised.
+
+        Returns
+        -------
+        bool
+            Always True.
+        """
+        return True

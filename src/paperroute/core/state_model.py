@@ -24,6 +24,7 @@ RELOAD_BEFORE: Final[timedelta] = timedelta(minutes=30)
 LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 RETRY_AFTER: Final[timedelta] = timedelta(seconds=30)
 FEED_IDLE: Final[timedelta] = timedelta(minutes=10)
+CLOCK_WAIT: Final[timedelta] = timedelta(minutes=2)
 
 
 def elapsed(*, since: datetime | None, now: datetime, span: timedelta) -> bool:
@@ -370,6 +371,9 @@ class State:
         What the auto pin rules have done.
     cycle : Cycle
         The poll cycle under way.
+    clock_wait_until : datetime | None
+        When to stop waiting for the clock to be synchronised, or None
+        when not waiting.
     """
 
     now: datetime
@@ -396,6 +400,25 @@ class State:
     alerts: AlertsState = field(default_factory=AlertsState)
     auto: AutoState = field(default_factory=AutoState)
     cycle: Cycle = field(default_factory=Cycle)
+    clock_wait_until: datetime | None = None
+
+
+def clock_waiting(*, state: State) -> bool:
+    """
+    Say whether the app still waits for the clock to be synchronised.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    bool
+        True while a wait is set and its end has not come, in real time.
+    """
+    until = state.clock_wait_until
+    return until is not None and state.now.timestamp() < until.timestamp()
 
 
 def restarted(*, state: State) -> State:

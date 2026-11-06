@@ -54,7 +54,8 @@ class SystemdNotifier:
     """
     Sends sd_notify messages over the notify socket.
 
-    Sends READY=1 after the first frame and WATCHDOG=1 on every tick.
+    Sends READY=1 on the first tick or frame, and WATCHDOG=1 on every
+    tick.
     With no socket path it does nothing.
 
     Parameters
@@ -116,7 +117,7 @@ class SystemdNotifier:
         self, *, render_ms: float  # pylint: disable=unused-argument
     ) -> None:
         """
-        Send READY=1 on the first frame, retrying until it is sent.
+        Send READY=1 if no tick has, retrying until it is sent.
 
         Parameters
         ----------
@@ -145,7 +146,9 @@ class SystemdNotifier:
         """
 
     def ticked(self) -> None:
-        """Send WATCHDOG=1."""
+        """Send READY=1 once, then WATCHDOG=1."""
+        if not self._ready_sent:
+            self._ready_sent = self._send(message=b'READY=1')
         self._send(message=b'WATCHDOG=1')
 
     def settings_seen(self, *, settings: Settings) -> None:

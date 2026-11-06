@@ -340,9 +340,10 @@ Effect = (
 
 @dataclass(frozen=True)
 class Tick:
-    """Time passed."""
+    """Time passed; `synced` says the clock was set since boot."""
 
     now: datetime
+    synced: bool = True
 
 
 @dataclass(frozen=True)

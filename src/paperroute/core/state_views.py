@@ -28,7 +28,7 @@ from paperroute.core.rebuild import building_view
 from paperroute.core.refresh import needs_greys
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.sleep import sleep_view
-from paperroute.core.state_model import State, elapsed
+from paperroute.core.state_model import State, clock_waiting, elapsed
 from paperroute.core.stop_view import (
     StopInputs,
     StopView,
@@ -313,6 +313,30 @@ def frame_held(*, state: State, view: ScreenView, menu: bool) -> bool:
     return cycle_held(state=state)
 
 
+def clock_held(*, state: State, view: ScreenView, menu: bool) -> bool:
+    """
+    Say whether a changed view waits for the clock to be synchronised.
+
+    Parameters
+    ----------
+    state : State
+        State after the event.
+    view : ScreenView
+        The view to draw.
+    menu : bool
+        Whether the view is a menu, from `in_menu`.
+
+    Returns
+    -------
+    bool
+        True while `clock_waiting`, for a view that is not a menu or a
+        notice and does not answer a person's action.
+    """
+    if menu or state.cycle.free or isinstance(view, NoticeView):
+        return False
+    return clock_waiting(state=state)
+
+
 def in_menu(*, state: State) -> bool:
     """
     Say whether the state shows a menu.
@@ -379,7 +403,8 @@ def rendered(
 
     The first frame waits up to `LOADING_WAIT` for departures to load,
     so a quick start draws once. A changed view is not drawn while
-    `cycle_held`, unless it is a menu, the sleep screen or a notice.
+    `cycle_held`, unless it is a menu, the sleep screen or a notice, nor
+    while `clock_held`.
     See `render_of` for which renders are full or clear. While the sleep
     screen is shown nothing redraws; it is drawn once, and once more
     when it was drawn before departures loaded.
@@ -410,7 +435,11 @@ def rendered(
     if isinstance(view, StopView) and state.view is LiveView.STOP:
         state = replace(state, scroll=view.scroll)
     menu = in_menu(state=state)
-    if view == last or frame_held(state=state, view=view, menu=menu):
+    if (
+        view == last
+        or frame_held(state=state, view=view, menu=menu)
+        or clock_held(state=state, view=view, menu=menu)
+    ):
         return state, effects
     render = render_of(state=state, view=view, menu=menu)
     refresh = replace(state.refresh, in_menu=menu)

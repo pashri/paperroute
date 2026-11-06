@@ -144,6 +144,7 @@ from tests.fakes import (
     MemoryStates,
     PlacedTimetable,
     RecordingResets,
+    SyncingClock,
 )
 
 
@@ -954,6 +955,28 @@ async def test_a_queued_tick_that_is_never_handled_sends_no_watchdog(
     posted = [queue.get_nowait() for _ in range(queue.qsize())]
     assert [type(event) for event in posted] == [TimetableSeen, Tick]
     assert observer.ticks == 0
+
+
+async def test_ticker_passes_synced_flag() -> None:
+    """Each Tick carries whether the clock was synchronised."""
+    ports = Ports(
+        timetable=BrokenTimetable(),
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=SyncingClock(at=AT, unsynced=2),
+        network=FakeNetwork(),
+        states=MemoryStates(),
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    task = asyncio.create_task(
+        ticker(ports=ports, queue=queue, every=0.05, pump=None)
+    )
+    await asyncio.sleep(0.5)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    posted = [queue.get_nowait() for _ in range(queue.qsize())]
+    ticks = [event for event in posted if isinstance(event, Tick)]
+    assert [tick.synced for tick in ticks[:3]] == [False, False, True]
 
 
 async def test_run_sends_a_watchdog_for_each_handled_tick(

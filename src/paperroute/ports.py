@@ -881,6 +881,16 @@ class Clock(Protocol):
             Aware datetime.
         """
 
+    def synced(self) -> bool:
+        """
+        Say whether the clock has been synchronised since boot.
+
+        Returns
+        -------
+        bool
+            True once the time can be trusted.
+        """
+
 
 class Observer(Protocol):
     """Receives timing events from the running app."""

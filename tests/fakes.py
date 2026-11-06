@@ -274,6 +274,57 @@ class FixedClock:
         """
         return self.at
 
+    def synced(self) -> bool:
+        """
+        Say the clock is synchronised.
+
+        Returns
+        -------
+        bool
+            Always True.
+        """
+        return True
+
+
+@dataclass
+class SyncingClock:
+    """
+    A clock stuck at one moment that syncs after a few asks.
+
+    Attributes
+    ----------
+    at : datetime
+        The fixed time.
+    unsynced : int
+        How many asks are answered unsynchronised first.
+    """
+
+    at: datetime
+    unsynced: int
+
+    def now(self) -> datetime:
+        """
+        The fixed time.
+
+        Returns
+        -------
+        datetime
+            Time.
+        """
+        return self.at
+
+    def synced(self) -> bool:
+        """
+        Say whether the clock is synchronised, counting down the asks.
+
+        Returns
+        -------
+        bool
+            False for the first `unsynced` asks, then True.
+        """
+        self.unsynced -= 1
+        return self.unsynced < 0
+
 
 @dataclass
 class BrokenTimetable:

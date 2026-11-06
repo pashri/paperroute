@@ -2,7 +2,7 @@
 
 from collections import Counter
 from dataclasses import dataclass, replace
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
 from typing import Final
 
@@ -79,6 +79,9 @@ from paperroute.core.messages import (
     PlacesFailed,
     PlacesMatched,
     PositionsFetched,
+    PowerAction,
+    PowerRequested,
+    ProbeDevice,
     QuitRequested,
     Render,
     SaveState,
@@ -122,10 +125,12 @@ from paperroute.core.saved import (
     Rate,
     Saved,
     Settings,
+    Window,
     seeded,
 )
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import (
+    CLOCK_WAIT,
     FEED_IDLE,
     LOOKBACK,
     POLL_EVERY,
@@ -3005,3 +3010,181 @@ def test_auto_saved_and_restored() -> None:
     assert saved_of(state=replace(state, auto=auto)).auto == auto
     saved = replace(seeded(pin=PIN), auto=auto)
     assert initial_state(saved=saved, now=START, stored=True).auto == auto
+
+
+UNSYNCED_AT: Final[datetime] = datetime(2026, 11, 5, 23, 10, tzinfo=SYDNEY)
+SYNCED_AT: Final[datetime] = datetime(2026, 11, 6, 7, 42, tzinfo=SYDNEY)
+
+
+def clock_waiting(
+    *, state: State | None = None
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Start on an unsynced clock and load departures.
+
+    Parameters
+    ----------
+    state : State | None
+        State before the first tick; a fresh one by default.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State with departures loaded, and every effect so far.
+    """
+    state, effects = step(state or fresh(), Tick(now=START, synced=False))
+    deps = tuple(
+        departure(departs=START + timedelta(minutes=3 * (i + 1)))
+        for i in range(3)
+    )
+    event = DeparturesLoaded(
+        pin=shown(state=state),
+        departures=deps,
+        until=START + HORIZON + RELOAD_BEFORE,
+    )
+    state, more = step(state, event)
+    return state, (*effects, *more)
+
+
+def drawn_or_fetched(*, effects: tuple[Effect, ...]) -> list[Effect]:
+    """
+    Pick out the renders and feed fetches.
+
+    Parameters
+    ----------
+    effects : tuple[Effect, ...]
+        Effects.
+
+    Returns
+    -------
+    list[Effect]
+        The Render and FetchFeed effects, in order.
+    """
+    return [
+        effect
+        for effect in effects
+        if isinstance(effect, Render | FetchFeed)
+    ]
+
+
+def test_unsynced_clock_draws_nothing() -> None:
+    """For 90 s of unsynced ticks nothing is drawn or fetched."""
+    state, effects = clock_waiting()
+    for seconds in range(5, 95, 5):
+        state, more = step(
+            state, Tick(now=START + timedelta(seconds=seconds), synced=False),
+        )
+        effects = (*effects, *more)
+    assert drawn_or_fetched(effects=effects) == []
+    assert state.last_view is None
+
+
+def test_clock_wait_gives_up_after_two_minutes() -> None:
+    """With no sync, the first frame comes once `CLOCK_WAIT` has passed."""
+    state, effects = clock_waiting()
+    late = START + CLOCK_WAIT - timedelta(seconds=5)
+    state, more = step(state, Tick(now=late, synced=False))
+    assert drawn_or_fetched(effects=(*effects, *more)) == []
+    state, more = step_answered(
+        state=state, event=Tick(now=START + CLOCK_WAIT, synced=False),
+    )
+    assert any(isinstance(effect, FetchFeed) for effect in more)
+    assert sum(isinstance(effect, Render) for effect in more) == 1
+
+
+def test_sync_jump_starts_afresh() -> None:
+    """A synced tick hours later reloads, fires a cycle and draws once."""
+    state, _ = step(fresh(now=UNSYNCED_AT), Tick(now=UNSYNCED_AT, synced=False))
+    state, early = step(
+        state, Tick(now=UNSYNCED_AT + timedelta(seconds=5), synced=False),
+    )
+    state, effects = step(state, Tick(now=SYNCED_AT))
+    assert state.clock_wait_until is None
+    assert state.refresh.started_at == SYNCED_AT
+    assert LoadDepartures(
+        pin=PIN,
+        start=SYNCED_AT - LOOKBACK,
+        end=SYNCED_AT + HORIZON + RELOAD_BEFORE,
+    ) in effects
+    assert not any(isinstance(effect, ProbeDevice) for effect in early)
+    assert any(isinstance(effect, ProbeDevice) for effect in effects)
+    deps = tuple(
+        departure(departs=SYNCED_AT + timedelta(minutes=3 * (i + 1)))
+        for i in range(3)
+    )
+    state, loads = step_answered(
+        state=state,
+        event=DeparturesLoaded(
+            pin=PIN,
+            departures=deps,
+            until=SYNCED_AT + HORIZON + RELOAD_BEFORE,
+        ),
+    )
+    assert any(isinstance(effect, FetchFeed) for effect in loads)
+    renders = [e for e in (*effects, *loads) if isinstance(e, Render)]
+    assert len(renders) == 1
+    assert state.last_view is not None
+
+
+def test_sync_jump_fires_a_cycle_on_the_tick() -> None:
+    """Departures loaded during the wait are fetched on the synced tick."""
+    state, _ = clock_waiting()
+    later = START + timedelta(hours=3, seconds=7)
+    state, effects = step(state, Tick(now=later))
+    assert state.cycle.started == later
+    assert any(isinstance(effect, FetchFeed) for effect in effects)
+    assert not any(isinstance(effect, Render) for effect in effects)
+
+
+def test_synced_start_never_waits() -> None:
+    """A synced first tick sets no clock wait."""
+    state, _ = step(fresh(), Tick(now=START))
+    assert state.clock_wait_until is None
+
+
+def test_unsynced_again_after_drawing_does_not_wait() -> None:
+    """Once a frame is drawn, an unsynced tick starts no new wait."""
+    state = loaded(state=fresh())
+    assert state.last_view is not None
+    state, _ = step(
+        state, Tick(now=START + timedelta(seconds=5), synced=False),
+    )
+    assert state.clock_wait_until is None
+
+
+def test_knob_draws_during_clock_wait() -> None:
+    """A person's turn draws at once while the clock is unsynced."""
+    state, _ = clock_waiting()
+    _, effects = step(state, KnobTurned(knob=Knob.BOTTOM, steps=1))
+    assert sum(isinstance(effect, Render) for effect in effects) == 1
+
+
+def test_menu_draws_during_clock_wait() -> None:
+    """A menu opened by a person draws while the clock is unsynced."""
+    state, _ = clock_waiting()
+    _, effects = step(state, KnobsHeld())
+    assert sum(isinstance(effect, Render) for effect in effects) == 1
+
+
+def test_notice_draws_during_clock_wait() -> None:
+    """Shutting down is drawn while the clock is unsynced."""
+    state, _ = clock_waiting()
+    _, effects = step(state, PowerRequested(action=PowerAction.OFF))
+    renders = [e for e in effects if isinstance(e, Render)]
+    assert [type(render.view) for render in renders] == [NoticeView]
+
+
+def test_sleep_screen_held_during_clock_wait() -> None:
+    """In quiet hours the sleep screen waits for the clock too."""
+    quiet = Window(start=time(7), end=time(9))
+    state = fresh()
+    state = replace(state, settings=replace(state.settings, my_hours=quiet))
+    state, effects = clock_waiting(state=state)
+    state, more = step(
+        state, Tick(now=START + timedelta(seconds=5), synced=False),
+    )
+    assert state.panel.asleep
+    assert drawn_or_fetched(effects=(*effects, *more)) == []
+    _, more = step(state, Tick(now=START + CLOCK_WAIT, synced=False))
+    renders = [e for e in more if isinstance(e, Render)]
+    assert [type(render.view) for render in renders] == [SleepView]

@@ -1,6 +1,7 @@
 """Tests for clocks."""
 
 from datetime import datetime
+from pathlib import Path
 
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.core.model import SYDNEY
@@ -26,3 +27,18 @@ def test_replay_clock_adds_real_seconds_across_dst() -> None:
     expected = datetime(2026, 10, 4, 3, 0, 1, tzinfo=SYDNEY)
     assert clock.now() == expected
     assert clock.now().hour == expected.hour
+
+
+def test_system_clock_synced_follows_flag(tmp_path: Path) -> None:
+    """The system clock is synchronised once the flag file exists."""
+    flag = tmp_path / 'synchronized'
+    clock = SystemClock(flag=flag)
+    assert not clock.synced()
+    flag.touch()
+    assert clock.synced()
+
+
+def test_replay_clock_is_synced() -> None:
+    """A replay clock is always synchronised."""
+    start = datetime(2026, 10, 16, 6, 30, tzinfo=SYDNEY)
+    assert ReplayClock(start=start).synced()

@@ -11,7 +11,7 @@ from paperroute.core.feeds import FeedKind
 from paperroute.core.map_requests import map_feeds, shows_vehicles
 from paperroute.core.messages import Effect, FetchFeed
 from paperroute.core.rhythm import poll_every
-from paperroute.core.state_model import Cycle, State, elapsed
+from paperroute.core.state_model import Cycle, State, clock_waiting, elapsed
 
 CYCLE_WAIT: Final[timedelta] = timedelta(seconds=8)
 
@@ -323,10 +323,10 @@ def cycle_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     -------
     tuple[State, tuple[Effect, ...]]
         State with the cycle and fetch times recorded, and a FetchFeed for
-        each feed sent; unchanged while the feeds are held or when no
-        feed is to be fetched.
+        each feed sent; unchanged while the feeds are held, while the
+        clock is awaited, or when no feed is to be fetched.
     """
-    if feeds_held(state=state):
+    if feeds_held(state=state) or clock_waiting(state=state):
         return state, ()
     cycle, now = state.cycle, state.now
     due = cycle_due(cycle=cycle, now=now, every=poll_every(state=state))

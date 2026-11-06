@@ -20,6 +20,7 @@ from paperroute.core.chooser_steps import (
 )
 from paperroute.core.cycle import answered, answered_late
 from paperroute.core.device import (
+    clock_checked,
     on_device_event,
     power_guard,
     probe_effects,
@@ -517,7 +518,9 @@ def on_ticked(
     tuple[State, tuple[Effect, ...]]
         New state and effects.
     """
-    state = replace(state, now=event.now)
+    state = clock_checked(
+        state=replace(state, now=event.now), synced=event.synced,
+    )
     state, stops = setup_expired(state=state)
     state = menu_idle(state=confirm_expired(state=state))
     state, effects = with_rebuild(result=on_tick(state=state, event=event))

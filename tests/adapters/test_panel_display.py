@@ -264,7 +264,7 @@ def _rig() -> Iterator[Rig]:
     clock = Clock()
     reports: list[PanelRefresh] = []
     display = PanelDisplay(
-        controller=controller,
+        opener=lambda: controller,
         report=reports.append,
         clock=clock,
     )
@@ -444,7 +444,7 @@ def test_reports_on_callers_thread(rig: Rig) -> None:
     threads: list[int] = []
     rig.display.stop()
     display = PanelDisplay(
-        controller=rig.controller,
+        opener=lambda: rig.controller,
         report=lambda refresh: threads.append(threading.get_ident()),
         clock=rig.clock,
     )
@@ -702,7 +702,7 @@ def test_worker_cleans_on_its_own_wake_up(
     monkeypatch.setattr(panel_display, 'CLEAN_QUIET', 0.01)
     controller = GatedController()
     display = PanelDisplay(
-        controller=controller,
+        opener=lambda: controller,
         report=lambda refresh: None,
         clock=CreepingClock(),
     )
@@ -965,3 +965,65 @@ def test_displays_fans_out() -> None:
     assert first.turns == second.turns == [True]
     assert not displays.settle(timeout=0)
     assert Displays(displays=[first]).settle(timeout=0)
+
+
+def test_panel_opens_on_first_job() -> None:
+    """Nothing opens at start-up; the first frame opens the panel."""
+    opened: list[str] = []
+    controller = GatedController()
+
+    def opener() -> GatedController:
+        opened.append('open')
+        return controller
+
+    display = PanelDisplay(opener=opener, report=lambda refresh: None)
+    try:
+        assert not opened
+        display.show(frame=white())
+        assert display.settle(timeout=WAIT)
+        assert opened == ['open']
+        display.show(frame=white(), full=True)
+        assert display.settle(timeout=WAIT)
+        assert opened == ['open']
+    finally:
+        display.stop()
+    assert controller.closed
+
+
+def test_stop_without_an_open_panel_closes_nothing() -> None:
+    """Stopping a display that never drew does not open the panel."""
+    opened: list[str] = []
+
+    def opener() -> GatedController:
+        opened.append('open')
+        return GatedController()
+
+    PanelDisplay(opener=opener, report=lambda refresh: None).stop()
+    assert not opened
+
+
+def test_failed_open_retries_on_next_job() -> None:
+    """A failed open is reported, then the next frame is a full refresh."""
+    controller = GatedController()
+    attempts: list[str] = []
+
+    def opener() -> GatedController:
+        attempts.append('try')
+        if len(attempts) == 1:
+            raise OSError('no spi')
+        return controller
+
+    reports: list[PanelRefresh] = []
+    display = PanelDisplay(opener=opener, report=reports.append)
+    try:
+        display.show(frame=white())
+        assert display.settle(timeout=WAIT)
+        assert not controller.calls
+        display.show(frame=white())
+        assert display.settle(timeout=WAIT)
+        display.show(frame=white())
+    finally:
+        display.stop()
+    assert [kind for kind, _ in controller.calls] == ['full']
+    assert [refresh.ok for refresh in reports] == [False, True]
+    assert len(attempts) == 2

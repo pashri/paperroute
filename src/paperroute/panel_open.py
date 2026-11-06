@@ -1,6 +1,5 @@
 """Opening the e-paper panel for the service."""
 
-import logging
 from collections.abc import Callable
 
 from paperroute.adapters.epaper import Uc8179
@@ -10,8 +9,6 @@ from paperroute.ports import PanelBus, PanelRefresh
 
 __all__ = ['panel_for', 'panel_times_for']
 
-logger = logging.getLogger(__name__)
-
 
 def panel_for(
     *,
@@ -20,7 +17,10 @@ def panel_for(
     report: Callable[[PanelRefresh], None],
 ) -> PanelDisplay | None:
     """
-    Open the e-paper panel, if asked for and available.
+    Make the e-paper panel display, if asked for.
+
+    The panel itself is opened at the first frame, and again at the
+    next frame after a failed open.
 
     Parameters
     ----------
@@ -29,21 +29,19 @@ def panel_for(
     opener : Callable[[], PanelBus]
         Opens the panel's bus.
     report : Callable[[PanelRefresh], None]
-        Receives each refresh the panel does.
+        Receives each refresh the panel does, including a failed open.
 
     Returns
     -------
     PanelDisplay | None
-        The panel display; None when not asked for or not available.
+        The panel display; None when not asked for.
     """
     if not enabled:
         return None
-    try:
-        controller = Uc8179(bus=opener())
-    except (OSError, ImportError):
-        logger.error('panel not available', exc_info=True)
-        return None
-    return PanelDisplay(controller=controller, report=report)
+    return PanelDisplay(
+        opener=lambda: Uc8179(bus=opener()),
+        report=report,
+    )
 
 
 def panel_times_for(
@@ -57,13 +55,13 @@ def panel_times_for(
     wanted : bool
         Whether the panel was asked for.
     panel : PanelDisplay | None
-        The panel that opened, if any.
+        The panel display, if asked for.
 
     Returns
     -------
     PanelTimes | None
         No times when the panel was not asked for, failed ones when it
-        was asked for but did not open, otherwise new ones.
+        was asked for but there is no display, otherwise new ones.
     """
     if not wanted:
         return None

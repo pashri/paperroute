@@ -65,9 +65,10 @@ from paperroute.core.model import SYDNEY
 from paperroute.core.tiles import TILE_STYLE, ZOOMS, TileVariant, levels_text
 from paperroute.observers import Timings
 from paperroute.panel_open import panel_for
-from paperroute.ports import LineEdge, PanelBus
+from paperroute.ports import LineEdge, PanelBus, PanelRefresh
 from paperroute.render.canvas import INK
 from paperroute.render.map_base import draw_map_base
+from paperroute.render.panel_bits import HEIGHT, WIDTH
 from paperroute.summary import Summary
 from paperroute.web_observer import web_observer
 from tests.core.factories import pin_of
@@ -134,12 +135,16 @@ def test_panel_for_off_never_opens() -> None:
 
 
 def test_panel_for_opens_a_panel_display() -> None:
-    """A bus that opens gives a panel display, which stops cleanly."""
+    """A bus opens at the first frame, and the panel stops cleanly."""
+    bus = FakePanelBus()
     panel = panel_for(
-        enabled=True, opener=FakePanelBus, report=lambda _: None,
+        enabled=True, opener=lambda: bus, report=lambda _: None,
     )
     assert panel is not None
-    assert panel.settle(timeout=1)
+    assert not bus.log
+    panel.show(frame=np.full((HEIGHT, WIDTH), 255, dtype=np.uint8))
+    assert panel.settle(timeout=5)
+    assert bus.log
     panel.stop()
 
 
@@ -147,18 +152,22 @@ def test_panel_for_opens_a_panel_display() -> None:
 def test_panel_open_failure_keeps_web(
     caplog: pytest.LogCaptureFixture, error: Exception,
 ) -> None:
-    """A panel that will not open is one error log and no panel."""
+    """A panel that will not open is one error log and a failed report."""
 
     def opener() -> PanelBus:
         raise error
 
+    reports: list[PanelRefresh] = []
+    panel = panel_for(enabled=True, opener=opener, report=reports.append)
+    assert panel is not None
     with caplog.at_level(logging.ERROR):
-        panel = panel_for(
-            enabled=True, opener=opener, report=lambda _: None,
-        )
-    assert panel is None
+        panel.show(frame=np.full((HEIGHT, WIDTH), 255, dtype=np.uint8))
+        assert panel.settle(timeout=5)
+    panel.show(frame=np.full((HEIGHT, WIDTH), 255, dtype=np.uint8))
+    panel.stop()
+    assert [refresh.ok for refresh in reports] == [False]
     errors = [r for r in caplog.records if r.levelno == logging.ERROR]
-    assert [r.getMessage() for r in errors] == ['panel not available']
+    assert [r.getMessage() for r in errors] == ['panel refresh failed']
     display = WebDisplay(status=Timings().snapshot)
     assert Displays(displays=[display]).settle(timeout=0)
 

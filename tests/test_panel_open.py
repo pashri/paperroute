@@ -21,7 +21,7 @@ def test_panel_times_for_failed_open() -> None:
 def test_panel_times_for_opened() -> None:
     """A panel that opened starts with fresh times."""
     panel = PanelDisplay(
-        controller=GatedController(), report=lambda refresh: None,
+        opener=GatedController, report=lambda refresh: None,
     )
     try:
         assert panel_times_for(wanted=True, panel=panel) == PanelTimes()

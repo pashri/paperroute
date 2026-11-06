@@ -153,8 +153,11 @@ class PanelDisplay:
 
     Parameters
     ----------
-    controller : PanelController
-        The panel's controller; only the worker thread uses it.
+    opener : Callable[[], PanelController]
+        Opens the panel's controller. Only the worker thread calls it,
+        at the first frame, and again at the next frame after a failed
+        open, which is reported as a failed refresh. Nothing touches
+        the panel before then.
     report : Callable[[PanelRefresh], None]
         Receives each refresh, on the thread that calls `show`.
     clock : Callable[[], float]
@@ -164,11 +167,12 @@ class PanelDisplay:
     def __init__(
         self,
         *,
-        controller: PanelController,
+        opener: Callable[[], PanelController],
         report: Callable[[PanelRefresh], None],
         clock: Callable[[], float] = time.monotonic,
     ) -> None:
-        self._controller = controller
+        self._opener = opener
+        self._controller: PanelController | None = None
         self._report = report
         self._clock = clock
         self._ready = threading.Condition()
@@ -275,8 +279,9 @@ class PanelDisplay:
         """
         Stop the worker, dropping any frame still waiting.
 
-        The controller is closed only if the worker ends within
-        `STOP_WAIT` seconds; a worker stuck in a refresh is left behind.
+        The controller is closed only if it was opened and the worker
+        ends within `STOP_WAIT` seconds; a worker stuck in a refresh is
+        left behind.
         """
         with self._ready:
             self._stopping = True
@@ -286,7 +291,21 @@ class PanelDisplay:
         if self._thread.is_alive():
             logger.warning('panel still busy; left it open')
             return
-        self._controller.close()
+        if self._controller is not None:
+            self._controller.close()
+
+    def _open(self) -> PanelController:
+        """
+        Give the controller, opening it first if it is not open yet.
+
+        Returns
+        -------
+        PanelController
+            The open controller.
+        """
+        if self._controller is None:
+            self._controller = self._opener()
+        return self._controller
 
     def _idle(self) -> bool:
         """
@@ -420,7 +439,7 @@ class PanelDisplay:
         try:
             drew = self._draw(work=work, full=full)
             self._rest(work=work)
-        except (PanelTimeout, OSError) as error:
+        except (PanelTimeout, OSError, ImportError) as error:
             if not failing:
                 logger.error('panel refresh failed', exc_info=error)
             self._failed(
@@ -468,7 +487,7 @@ class PanelDisplay:
             return
         self._asleep = work.asleep
         if work.asleep:
-            self._controller.sleep()
+            self._open().sleep()
 
     def _needs_full(self, *, job: Job) -> bool:
         """
@@ -524,7 +543,7 @@ class PanelDisplay:
         frame : NDArray[np.uint8]
             The frame, already turned.
         """
-        self._controller.draw_full(planes=grey_planes(frame=frame))
+        self._open().draw_full(planes=grey_planes(frame=frame))
         self._owed_full = False
         self._retry = None
         self._patches = 0
@@ -539,7 +558,7 @@ class PanelDisplay:
         frame : NDArray[np.uint8]
             The frame, already turned.
         """
-        self._controller.draw_clear(bits=mono_patch(frame=frame, box=SCREEN))
+        self._open().draw_clear(bits=mono_patch(frame=frame, box=SCREEN))
         self._patches = 0
         self._drawn = frame
 
@@ -562,7 +581,7 @@ class PanelDisplay:
         if box is None:
             return False
         old, patch = quick_planes(old=self._drawn, new=job.frame, box=box)
-        self._controller.draw_partial(box=box, old=old, patch=patch)
+        self._open().draw_partial(box=box, old=old, patch=patch)
         self._patches += 1
         self._drawn = job.frame
         return True

@@ -554,6 +554,8 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
         Whether school routes are also left out of pins without a To.
     clean_after : int | None
         Quick patches the panel draws before a cleaning full refresh.
+    swap_knobs : bool | None
+        Whether knob A plays the bottom knob and knob B the top.
     """
 
     auto_rebuild: bool | None = None
@@ -570,6 +572,7 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
     skip_school_buses: bool | None = None
     skip_school_on_route_pins: bool | None = None
     clean_after: int | None = None
+    swap_knobs: bool | None = None
 
 
 @dataclass(frozen=True)

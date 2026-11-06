@@ -413,6 +413,25 @@ def panel_rows(*, panel: PanelTimes | None) -> str:
     return row(label='Panel', value=panel_text(panel=panel))
 
 
+def knob_rows(*, knobs: bool | None) -> str:
+    """
+    Draw the Knobs fact.
+
+    Parameters
+    ----------
+    knobs : bool | None
+        Whether the knobs' lines opened, or None when not asked for.
+
+    Returns
+    -------
+    str
+        One row; empty when the knobs were not asked for.
+    """
+    if knobs is None:
+        return ''
+    return row(label='Knobs', value='on' if knobs else 'not answering')
+
+
 def feed_rows(*, feeds: Mapping[str, float], now: float) -> str:
     """
     Draw the feed table's body.

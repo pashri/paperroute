@@ -1203,3 +1203,23 @@ def test_allow_not_a_number_drops_way(path: Path) -> None:
     assert JsonStateRepository(path=path).load().saved.pins == (
         sample().pins[0], replace(WORK, ways=()),
     )
+
+
+def test_file_without_swap_knobs_leaves_the_knobs(path: Path) -> None:
+    """A state.json from before the swap switch loads with it off."""
+    repository = JsonStateRepository(path=path)
+    repository.save(saved=replace(sample(), settings=Settings(rotate=True)))
+    data = json.loads(path.read_text())
+    del data['settings']['swap_knobs']
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert loaded.stored
+    assert loaded.saved.settings == Settings(rotate=True, swap_knobs=False)
+
+
+def test_round_trips_swap_knobs(path: Path) -> None:
+    """The swap switch survives a save and a load."""
+    repository = JsonStateRepository(path=path)
+    changed = Settings(swap_knobs=True)
+    repository.save(saved=replace(sample(), settings=changed))
+    assert repository.load().saved.settings == changed

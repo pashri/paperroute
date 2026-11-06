@@ -41,6 +41,7 @@ from paperroute.adapters.checked_tiles import CheckedTiles
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import GuardedFeeds
+from paperroute.adapters.knob_reader import KnobReader
 from paperroute.adapters.panel_display import Displays
 from paperroute.adapters.power import NullPower, SystemctlPower
 from paperroute.adapters.rate_limit import tfnsw_limiter
@@ -57,13 +58,14 @@ from paperroute.build.gtfs_files import Source
 from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.geo import to_metres
+from paperroute.core.knob_decoder import KnobDecoder
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
-from paperroute.core.messages import Event
+from paperroute.core.messages import Event, Knob, KnobTurned
 from paperroute.core.model import SYDNEY
 from paperroute.core.tiles import TILE_STYLE, ZOOMS, TileVariant, levels_text
 from paperroute.observers import Timings
 from paperroute.panel_open import panel_for
-from paperroute.ports import PanelBus
+from paperroute.ports import LineEdge, PanelBus
 from paperroute.render.canvas import INK
 from paperroute.render.map_base import draw_map_base
 from paperroute.summary import Summary
@@ -71,6 +73,7 @@ from paperroute.web_observer import web_observer
 from tests.core.factories import pin_of
 from tests.fakes import (
     FakeKeys,
+    FakeKnobLines,
     FakeNetwork,
     FakePanelBus,
     FakeWifi,
@@ -250,6 +253,17 @@ def test_defaults_are_tk_on_port_80(monkeypatch: pytest.MonkeyPatch) -> None:
     args = parse_args()
     assert (args.display, args.host, args.port) == ('tk', '0.0.0.0', 80)
     assert args.error_log is None
+
+
+def test_knobs_flag_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+    """--knobs is off unless given."""
+    base = [
+        'paperroute', 'run', '--timetable', 'x.db', '--from', 'a', '--to', 'b',
+    ]
+    monkeypatch.setattr(sys, 'argv', base)
+    assert parse_args().knobs is False
+    monkeypatch.setattr(sys, 'argv', [*base, '--display', 'web', '--knobs'])
+    assert parse_args().knobs is True
 
 
 def test_tiles_arguments_parse(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -551,6 +565,7 @@ def test_web_main_logs_a_bind_failure(
         rebuild=False,
         power=False,
         panel=False,
+        knobs=False,
         wifi=False,
         version_file=None,
         feeds=str(REAL),
@@ -645,6 +660,72 @@ def test_main_warns_that_panel_needs_web(
     assert '--panel only works with --display web; ignoring it' in (
         capsys.readouterr().err
     )
+
+
+@pytest.mark.usefixtures('restored_logging')
+def test_main_warns_that_knobs_need_web(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """--knobs with --display tk is ignored with a warning."""
+    monkeypatch.setattr(cli, 'tk_main', lambda **kwargs: None)
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            'paperroute', 'run', '--timetable', str(tmp_path / 'x.db'),
+            '--from', 'a', '--to', 'b', '--feeds', 'files',
+            '--display', 'tk', '--knobs',
+            '--error-log', str(tmp_path / 'errors.jsonl'),
+        ],
+    )
+    main()
+    assert '--knobs only works with --display web; ignoring it' in (
+        capsys.readouterr().err
+    )
+
+
+async def test_serve_web_posts_knob_events_then_stops_the_knobs(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The knobs' thread reaches the app's queue; quitting stops it."""
+    seen: list[Event] = []
+    lines = FakeKnobLines(reads=[[LineEdge(line=20, rising=False)]])
+    knobs = KnobReader(
+        lines=lines, decoder=KnobDecoder(swapped=lambda: False), wait=0.01,
+    )
+
+    async def fake_run(**kwargs: object) -> None:
+        queue: asyncio.Queue[Event] = asyncio.Queue()
+        hook = cast(
+            Callable[[Callable[[Event], None]], None], kwargs['post_hook'],
+        )
+        hook(queue.put_nowait)
+        seen.append(await asyncio.wait_for(queue.get(), timeout=2))
+
+    monkeypatch.setattr(cli, 'run', fake_run)
+    display = WebDisplay(status=Timings().snapshot)
+    memory = SqliteTimetableRepository(connection=sqlite3.connect(':memory:'))
+    with closing(memory) as timetable:
+        ports = Ports(
+            timetable=timetable,
+            feeds=FileFeedsClient(directory=REAL),
+            display=display,
+            clock=ReplayClock(start=AT),
+            network=FakeNetwork(),
+            states=MemoryStates(),
+        )
+        await serve_web(
+            ports=ports,
+            display=display,
+            seed=PIN,
+            host='127.0.0.1',
+            port=free_port(),
+            knobs=knobs,
+        )
+    assert seen == [KnobTurned(knob=Knob.TOP, steps=1)]
+    assert lines.closes == 1
 
 
 async def test_serve_web_passes_the_tiles_variant_to_run(

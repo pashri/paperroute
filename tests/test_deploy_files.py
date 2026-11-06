@@ -80,7 +80,7 @@ APP_SERVICE: Final[dict[str, str]] = {
     'SupplementaryGroups': 'spi gpio',
     'Environment': UNIT_ENVIRONMENT,
     'ExecStart': (
-        f'{PYTHON} -m paperroute run --display web --panel'
+        f'{PYTHON} -m paperroute run --display web --panel --knobs'
         ' --timetable /var/lib/paperroute/timetable.db'
         ' --tiles /var/lib/paperroute/tiles.db'
         ' --state /var/lib/paperroute/state.json'
@@ -592,6 +592,12 @@ def test_service_unit_drives_the_panel() -> None:
     service = read_unit(name='paperroute.service')['Service']
     assert ' --display web --panel ' in service['ExecStart']
     assert service['SupplementaryGroups'] == 'spi gpio'
+
+
+def test_service_unit_reads_the_knobs() -> None:
+    """The unit asks for the knobs."""
+    service = read_unit(name='paperroute.service')['Service']
+    assert ' --panel --knobs ' in service['ExecStart']
 
 
 def test_root_exec_lines_carry_plus() -> None:

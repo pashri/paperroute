@@ -1,5 +1,7 @@
 """Command line: run the device software on the development monitor."""
 
+# pylint: disable=too-many-lines
+
 import argparse
 import asyncio
 import logging
@@ -19,6 +21,8 @@ from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.device_probe import SystemProbe
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import GuardedFeeds
+from paperroute.adapters.knob_lines import GpiodKnobLines
+from paperroute.adapters.knob_reader import KnobReader
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.panel_bus import LinuxPanelBus
 from paperroute.adapters.panel_display import Displays
@@ -47,6 +51,7 @@ from paperroute.app_device import DevicePorts
 from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin, StopPlace
 from paperroute.core.tiles import TileVariant
+from paperroute.knobs_open import knobs_for, knobs_state_for
 from paperroute.logs import LastError, configure_logging
 from paperroute.observers import Timings
 from paperroute.panel_open import panel_for, panel_times_for
@@ -110,6 +115,7 @@ def add_display_arguments(parser: argparse.ArgumentParser) -> None:
     """
     parser.add_argument('--display', choices=['tk', 'web'], default='tk')
     parser.add_argument('--panel', action='store_true')
+    parser.add_argument('--knobs', action='store_true')
     parser.add_argument('--host', default='0.0.0.0')
     parser.add_argument('--port', type=int, default=80)
     parser.add_argument('--error-log', type=Path)
@@ -605,14 +611,48 @@ def remove_stop_signals(*, loop: asyncio.AbstractEventLoop) -> None:
         loop.remove_signal_handler(number)
 
 
+def threadsafe(
+    *, loop: asyncio.AbstractEventLoop, post: Callable[[Event], None]
+) -> Callable[[Event], None]:
+    """
+    Make a post that other threads can call.
+
+    Parameters
+    ----------
+    loop : asyncio.AbstractEventLoop
+        The running loop.
+    post : Callable[[Event], None]
+        Posts an event; only safe on the loop's thread.
+
+    Returns
+    -------
+    Callable[[Event], None]
+        Hands each event to the loop, which posts it on its own thread.
+    """
+
+    def send(event: Event) -> None:
+        """
+        Hand an event to the loop.
+
+        Parameters
+        ----------
+        event : Event
+            The event.
+        """
+        loop.call_soon_threadsafe(post, event)
+
+    return send
+
+
 def bind_web(
     *,
     loop: asyncio.AbstractEventLoop,
     display: WebDisplay,
     post: Callable[[Event], None],
+    knobs: KnobReader | None = None,
 ) -> None:
     """
-    Send browser knobs and stop signals to the app.
+    Send browser knobs, the physical knobs and stop signals to the app.
 
     Parameters
     ----------
@@ -621,10 +661,15 @@ def bind_web(
     display : WebDisplay
         Display whose knob events are bound.
     post : Callable[[Event], None]
-        Posts an event to the app.
+        Posts an event to the app; only safe on the loop's thread.
+    knobs : KnobReader | None
+        The physical knobs, started here; their thread posts through
+        the loop.
     """
     display.bind(post=post)
     install_stop_signals(loop=loop, post=post)
+    if knobs is not None:
+        knobs.start(post=threadsafe(loop=loop, post=post))
 
 
 async def listen(*, runner: web.AppRunner, host: str, port: int) -> None:
@@ -652,7 +697,7 @@ async def listen(*, runner: web.AppRunner, host: str, port: int) -> None:
         raise BindError(f'cannot serve on {host}:{port}') from error
 
 
-async def serve_web(
+async def serve_web(  # pylint: disable=too-many-arguments
     *,
     ports: Ports,
     display: WebDisplay,
@@ -662,6 +707,7 @@ async def serve_web(
     tick_every: float = 5.0,
     max_events: int | None = None,
     tiles_variant: TileVariant = TileVariant.GREY,
+    knobs: KnobReader | None = None,
 ) -> None:
     """
     Run the app and serve its display until it quits.
@@ -687,6 +733,9 @@ async def serve_web(
         Stop after this many events (tests).
     tiles_variant : TileVariant
         Which tile rendering the Map draws.
+    knobs : KnobReader | None
+        The physical knobs; stopped before the loop ends, so their
+        thread never posts to a closed loop.
     """
     loop = asyncio.get_running_loop()
     runner = web.AppRunner(display.app(), shutdown_timeout=1.0)
@@ -698,12 +747,14 @@ async def serve_web(
             seed=seed,
             tick_every=tick_every,
             post_hook=lambda post: bind_web(
-                loop=loop, display=display, post=post
+                loop=loop, display=display, post=post, knobs=knobs,
             ),
             max_events=max_events,
             tiles_variant=tiles_variant,
         )
     finally:
+        if knobs is not None:
+            knobs.stop()
         await served(runner=runner, ports=ports, loop=loop)
 
 
@@ -823,7 +874,11 @@ def tk_main(
 
 
 def serve_or_exit(
-    *, args: argparse.Namespace, ports: Ports, display: WebDisplay
+    *,
+    args: argparse.Namespace,
+    ports: Ports,
+    display: WebDisplay,
+    knobs: KnobReader | None = None,
 ) -> None:
     """
     Serve the display; exit 1 if the port can't be used.
@@ -836,6 +891,8 @@ def serve_or_exit(
         Adapters.
     display : WebDisplay
         Web display.
+    knobs : KnobReader | None
+        The physical knobs, if any.
     """
     try:
         asyncio.run(
@@ -846,6 +903,7 @@ def serve_or_exit(
                 host=args.host,
                 port=args.port,
                 tiles_variant=args.tiles_variant,
+                knobs=knobs,
             )
         )
     except BindError:
@@ -882,6 +940,7 @@ def device_pages_for(
         post=display.send,
         error_log=args.error_log,
         state_file=args.state,
+        knobs=lambda: timings.knobs,
     )
 
 
@@ -915,6 +974,12 @@ def web_main(
     )
     shown = [panel] if panel else []
     timings.panel = panel_times_for(wanted=args.panel, panel=panel)
+    knobs = knobs_for(
+        enabled=args.knobs,
+        opener=GpiodKnobLines.open,
+        swapped=timings.knobs_swapped,
+    )
+    timings.knobs = knobs_state_for(wanted=args.knobs, knobs=knobs)
     with (
         timetable_for(args=args) as timetable,
         network_for(args=args) as network,
@@ -947,10 +1012,14 @@ def web_main(
             ),
         )
         try:
-            serve_or_exit(args=args, ports=ports, display=display)
+            serve_or_exit(
+                args=args, ports=ports, display=display, knobs=knobs,
+            )
         finally:
             if panel is not None:
                 panel.stop()
+            if knobs is not None:
+                knobs.stop()
 
 
 def main() -> None:  # pylint: disable=too-many-statements
@@ -968,10 +1037,12 @@ def main() -> None:  # pylint: disable=too-many-statements
                 args=args, feeds=feeds, last_error=last_error, summary=summary,
             )
         else:
-            if args.panel:
-                logger.warning(
-                    '--panel only works with --display web; ignoring it',
-                )
+            for flag in ('panel', 'knobs'):
+                if getattr(args, flag):
+                    logger.warning(
+                        '--%s only works with --display web; ignoring it',
+                        flag,
+                    )
             tk_main(args=args, feeds=feeds, last_error=last_error)
     except Exception:
         logger.exception('paperroute crashed')

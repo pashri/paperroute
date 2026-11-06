@@ -104,6 +104,7 @@ class Device:
         self.status: DeviceStatus | None = STATUS
         self.feeds = {TRAINS: NOW - 12, BUSES: NOW - 40}
         self.panel: PanelTimes | None = None
+        self.knobs: bool | None = None
         self.keys = FakeKeys(key=KEY)
         self.posted: list[Event] = []
         self.error_log: Path | None = None
@@ -122,6 +123,7 @@ class Device:
             status=lambda: self.status,
             feeds=lambda: self.feeds,
             panel=lambda: self.panel,
+            knobs=lambda: self.knobs,
             key=self.keys,
             post=self.posted.append,
             error_log=self.error_log,
@@ -260,6 +262,25 @@ async def test_device_page_without_panel_has_no_line(client: Client) -> None:
     """No panel, no Panel line."""
     text = await (await client.get('/device')).text()
     assert '<dt>Panel</dt>' not in text
+
+
+@pytest.mark.parametrize(('knobs', 'value'), [
+    (True, 'on'),
+    (False, 'not answering'),
+])
+async def test_device_page_knobs_line(
+    device: Device, client: Client, knobs: bool, value: str,
+) -> None:
+    """The Knobs line says whether the knobs' lines opened."""
+    device.knobs = knobs
+    text = await (await client.get('/device')).text()
+    assert _row(label='Knobs', value=value) in text
+
+
+async def test_device_page_without_knobs_has_no_line(client: Client) -> None:
+    """No --knobs, no Knobs line."""
+    text = await (await client.get('/device')).text()
+    assert '<dt>Knobs</dt>' not in text
 
 
 async def test_device_page_feed_table(client: Client) -> None:

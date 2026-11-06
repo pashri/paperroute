@@ -2,6 +2,7 @@
 
 import asyncio
 import sqlite3
+import time
 from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import date, datetime
@@ -40,7 +41,7 @@ from paperroute.core.trip_search import (
     PlannerUnavailable,
     TripSearch,
 )
-from paperroute.ports import Loaded, TileRepository
+from paperroute.ports import LineEdge, Loaded, TileRepository
 
 STOP_POINT: Point = to_metres(lon=151.0036, lat=-33.8170)
 
@@ -1217,3 +1218,73 @@ class FakePanelBus:
     def close(self) -> None:
         """Record the close."""
         self.log.append(('close', None))
+
+
+@dataclass
+class FakeKnobLines:
+    """
+    Knob lines that give scripted changes.
+
+    Attributes
+    ----------
+    reads : list[list[LineEdge]]
+        What each `read` gives, in turn; once used up, reads wait out
+        their timeout and give nothing, or raise `error`.
+    levels : dict[int, bool]
+        Line levels; a line not listed reads 1, as an idle knob does.
+    error : OSError | None
+        Raised by `read` once `reads` is used up.
+    closes : int
+        How many times `close` was called.
+    """
+
+    reads: list[list[LineEdge]] = field(default_factory=list)
+    levels: dict[int, bool] = field(default_factory=dict)
+    error: OSError | None = None
+    closes: int = 0
+
+    def read(self, *, timeout: float) -> list[LineEdge]:
+        """
+        Give the next scripted changes.
+
+        Parameters
+        ----------
+        timeout : float
+            Seconds to wait when there are none.
+
+        Returns
+        -------
+        list[LineEdge]
+            The next changes, or none.
+
+        Raises
+        ------
+        OSError
+            When `error` is set and the script is used up.
+        """
+        if self.reads:
+            return self.reads.pop(0)
+        if self.error is not None:
+            raise self.error
+        time.sleep(timeout)
+        return []
+
+    def level(self, *, line: int) -> bool:
+        """
+        Read a line.
+
+        Parameters
+        ----------
+        line : int
+            The BCM line offset.
+
+        Returns
+        -------
+        bool
+            Its level in `levels`, else True.
+        """
+        return self.levels.get(line, True)
+
+    def close(self) -> None:
+        """Count the close."""
+        self.closes += 1

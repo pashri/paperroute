@@ -76,3 +76,23 @@ def test_settings_refuse_unknown_clean_after(count: int) -> None:
     stored = default_settings() | {'clean_after': count}
     with pytest.raises(ValidationError):
         SettingsModel.model_validate(stored)
+
+
+def test_settings_swap_knobs_defaults_off() -> None:
+    """Knob A is the top knob unless told otherwise."""
+    assert Settings().swap_knobs is False
+
+
+def test_settings_without_swap_knobs_leave_the_knobs() -> None:
+    """Settings stored before the swap switch load with it off."""
+    stored = default_settings()
+    del stored['swap_knobs']
+    model = SettingsModel.model_validate(stored)
+    assert settings_from_model(model=model).swap_knobs is False
+
+
+def test_settings_round_trip_swap_knobs() -> None:
+    """The swap switch survives storing and reading back."""
+    settings = Settings(swap_knobs=True)
+    model = settings_to_model(settings=settings)
+    assert settings_from_model(model=model) == settings

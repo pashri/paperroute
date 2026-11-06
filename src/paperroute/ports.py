@@ -1094,3 +1094,58 @@ class PanelBus(Protocol):
 
     def close(self) -> None:
         """Release the pins and the SPI device."""
+
+
+@dataclass(frozen=True)
+class LineEdge:
+    """
+    A GPIO input line changing level.
+
+    Attributes
+    ----------
+    line : int
+        The BCM line offset.
+    rising : bool
+        True when the line went from 0 to 1, False when it fell.
+    """
+
+    line: int
+    rising: bool
+
+
+class KnobLines(Protocol):
+    """The GPIO input lines the two knobs are wired to."""
+
+    def read(self, *, timeout: float) -> list[LineEdge]:
+        """
+        Wait for the lines to change, then give the changes.
+
+        Parameters
+        ----------
+        timeout : float
+            Seconds to wait for a first change.
+
+        Returns
+        -------
+        list[LineEdge]
+            The changes in the order they happened; empty when none
+            came within the timeout.
+        """
+
+    def level(self, *, line: int) -> bool:
+        """
+        Read a line.
+
+        Parameters
+        ----------
+        line : int
+            The BCM line offset.
+
+        Returns
+        -------
+        bool
+            True when the line reads 1.
+        """
+
+    def close(self) -> None:
+        """Release the lines."""

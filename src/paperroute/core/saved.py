@@ -132,6 +132,8 @@ class Settings:  # pylint: disable=too-many-instance-attributes
     clean_after : int
         Quick patches the panel draws before a cleaning full refresh;
         one of `CLEAN_CHOICES`.
+    swap_knobs : bool
+        Whether knob A plays the bottom knob and knob B the top.
     """
 
     auto_rebuild: bool = True
@@ -148,6 +150,7 @@ class Settings:  # pylint: disable=too-many-instance-attributes
     skip_school_buses: bool = True
     skip_school_on_route_pins: bool = False
     clean_after: int = CLEAN_AFTER
+    swap_knobs: bool = False
 
     @property
     def school_off_route_pins(self) -> bool:

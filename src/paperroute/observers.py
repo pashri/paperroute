@@ -120,6 +120,8 @@ class Timings:
         The pins, or None before the app reports them.
     panel : PanelTimes | None
         The panel's refresh times, or None when there is no panel.
+    knobs : bool | None
+        Whether the knobs' lines opened, or None when not asked for.
     """
 
     frames: int = 0
@@ -133,6 +135,7 @@ class Timings:
     device: DeviceStatus | None = None
     pins: PinsSeen | None = None
     panel: PanelTimes | None = None
+    knobs: bool | None = None
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """
@@ -211,6 +214,18 @@ class Timings:
         """
         revision = 1 if self.pins is None else self.pins.revision + 1
         self.pins = PinsSeen(pins=pins, shown=shown, revision=revision)
+
+    def knobs_swapped(self) -> bool:
+        """
+        Say whether the settings in force swap the knobs.
+
+        Returns
+        -------
+        bool
+            The swap switch; False before the app reports its settings.
+        """
+        settings = self.settings
+        return settings is not None and settings.swap_knobs
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
         """

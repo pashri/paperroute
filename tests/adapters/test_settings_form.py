@@ -293,3 +293,29 @@ def test_clean_after_selects_its_option() -> None:
         assert f'>{count} changes</option>' in plain
     assert '<option value="15" selected>' in plain
     assert plain.count(' selected>') == 4
+
+
+@pytest.mark.parametrize(('swap', 'value'), [(True, 'on'), (False, 'off')])
+def test_swap_knobs_form_round_trip(swap: bool, value: str) -> None:
+    """The swap switch is written as on or off and read back."""
+    values = form_values(settings=Settings(swap_knobs=swap))
+    assert values['swap_knobs'] == value
+    event = changed_from(fields={'swap_knobs': value})
+    assert event == SettingsChanged(swap_knobs=swap)
+
+
+def test_swap_knobs_switch_shown_checked() -> None:
+    """The page draws the swap switch, checked when on."""
+    page = asset(name='settings.html')
+    text = page_text(
+        template=page,
+        values=form_values(settings=Settings(swap_knobs=True)),
+        error=None,
+    )
+    plain = ' '.join(text.split())
+    assert '<input type="hidden" name="swap_knobs" value="off">' in plain
+    assert (
+        '<input type="checkbox" role="switch" name="swap_knobs"'
+        ' value="on" checked>'
+    ) in plain
+    assert 'Swap knobs' in plain

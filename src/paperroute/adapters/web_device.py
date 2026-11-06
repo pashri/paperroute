@@ -17,6 +17,7 @@ from paperroute.adapters.device_page import (
     device_notice,
     feed_rows,
     key_text,
+    knob_rows,
     network_rows,
     notice,
     panel_rows,
@@ -244,9 +245,11 @@ class DevicePages:
         The saved state, if any.
     clock : Callable[[], float]
         The wall-clock time, as `time.time` gives it.
+    knobs : Callable[[], bool | None]
+        Whether the knobs' lines opened, or None when not asked for.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         *,
         status: Callable[[], DeviceStatus | None],
@@ -257,6 +260,7 @@ class DevicePages:
         error_log: Path | None,
         state_file: Path | None,
         clock: Callable[[], float] = time.time,
+        knobs: Callable[[], bool | None] = lambda: None,
     ) -> None:
         self._status = status
         self._feeds = feeds
@@ -266,6 +270,7 @@ class DevicePages:
         self._error_log = error_log
         self._state_file = state_file
         self._clock = clock
+        self._knobs = knobs
 
     def routes(self) -> list[web.RouteDef]:
         """
@@ -498,7 +503,10 @@ class DevicePages:
             '{{data}}': data_rows(status=device),
             '{{feeds}}': feed_rows(feeds=feeds, now=now),
             '{{system}}': system_rows(facts=facts),
-            '{{panel}}': panel_rows(panel=self._panel()),
+            '{{panel}}': (
+                panel_rows(panel=self._panel())
+                + knob_rows(knobs=self._knobs())
+            ),
             '{{key_status}}': html.escape(key_text(
                 present=self._key.present(),
                 last_used=max(feeds.values(), default=None),

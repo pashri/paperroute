@@ -32,8 +32,8 @@ class SettingsModel(BaseModel):
     """
     The Settings page's choices as stored.
 
-    The school switches and the cleaning count have defaults, so files
-    stored before them load.
+    The school switches, the cleaning count and the knob swap have
+    defaults, so files stored before them load.
     """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
@@ -54,6 +54,7 @@ class SettingsModel(BaseModel):
     skip_school_buses: bool = True
     skip_school_on_route_pins: bool = False
     clean_after: int = CLEAN_AFTER
+    swap_knobs: bool = False
 
     @field_validator('clean_after')
     @classmethod
@@ -186,6 +187,7 @@ def settings_to_model(*, settings: Settings) -> SettingsModel:
         skip_school_buses=settings.skip_school_buses,
         skip_school_on_route_pins=settings.skip_school_on_route_pins,
         clean_after=settings.clean_after,
+        swap_knobs=settings.swap_knobs,
     )
 
 
@@ -220,6 +222,7 @@ def settings_from_model(*, model: SettingsModel) -> Settings:
         skip_school_buses=model.skip_school_buses,
         skip_school_on_route_pins=model.skip_school_on_route_pins,
         clean_after=model.clean_after,
+        swap_knobs=model.swap_knobs,
     )
 
 

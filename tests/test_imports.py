@@ -148,13 +148,16 @@ def test_render_takes_only_faces_and_greys_from_build() -> None:
     assert not offenders
 
 
-def test_gpiod_only_in_panel_bus() -> None:
-    """Only the Linux panel bus imports gpiod."""
-    allowed = SRC / 'adapters' / 'panel_bus.py'
+def test_gpiod_only_in_the_line_adapters() -> None:
+    """Only the Linux panel bus and the knobs' lines import gpiod."""
+    allowed = {
+        SRC / 'adapters' / 'panel_bus.py',
+        SRC / 'adapters' / 'knob_lines.py',
+    }
     offenders = [
         str(path)
         for path in sorted(SRC.rglob('*.py'))
-        if path != allowed
+        if path not in allowed
         and any(
             name.split('.')[0] == 'gpiod'
             for name in imported_names(path=path)

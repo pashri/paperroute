@@ -272,3 +272,13 @@ def test_group_passes_panel_refreshes_on() -> None:
     )
     NullObserver().panel_refreshed(refresh=refresh)
     assert timings.panel == PanelTimes(partial_s=0.5)
+
+
+def test_timings_knobs_swapped_follows_the_settings() -> None:
+    """The knobs are not swapped until the settings in force say so."""
+    timings = Timings()
+    assert not timings.knobs_swapped()
+    timings.settings_seen(settings=Settings(swap_knobs=True))
+    assert timings.knobs_swapped()
+    timings.settings_seen(settings=Settings())
+    assert not timings.knobs_swapped()

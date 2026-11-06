@@ -289,6 +289,32 @@ class Refresh:
 
 
 @dataclass(frozen=True)
+class Cycle:
+    """
+    The poll cycle under way.
+
+    Attributes
+    ----------
+    started : datetime | None
+        When the cycle began, or None before the first.
+    alerts_at : datetime | None
+        When the alerts were last asked for, or None before the first.
+    asked : frozenset[str]
+        The feeds asked for in this cycle.
+    waiting : frozenset[str]
+        The asked feeds that have not answered yet.
+    free : bool
+        Whether the cycle's frame may be drawn at once.
+    """
+
+    started: datetime | None = None
+    alerts_at: datetime | None = None
+    asked: frozenset[str] = frozenset()
+    waiting: frozenset[str] = frozenset()
+    free: bool = False
+
+
+@dataclass(frozen=True)
 # pylint: disable-next=too-many-instance-attributes
 class State:
     """
@@ -342,6 +368,8 @@ class State:
         The alerts and their ties to the shown pin.
     auto : AutoState
         What the auto pin rules have done.
+    cycle : Cycle
+        The poll cycle under way.
     """
 
     now: datetime
@@ -367,3 +395,4 @@ class State:
     refresh: Refresh = field(default_factory=Refresh)
     alerts: AlertsState = field(default_factory=AlertsState)
     auto: AutoState = field(default_factory=AutoState)
+    cycle: Cycle = field(default_factory=Cycle)

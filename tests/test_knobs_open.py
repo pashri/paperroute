@@ -49,6 +49,28 @@ def test_knobs_for_failure_runs_without_knobs(
     ]
 
 
+class _DeadLines(FakeKnobLines):
+    """Lines that open but cannot be read."""
+
+    def level(self, *, line: int) -> bool:
+        """Fail as a dead line does."""
+        raise OSError(f'line {line} gone')
+
+
+def test_knobs_for_unreadable_lines_run_without_knobs(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Lines that fail their first read are released, with no knobs."""
+    lines = _DeadLines()
+    with caplog.at_level(logging.ERROR):
+        reader = knobs_for(enabled=True, opener=lambda: lines, swapped=bool)
+    assert reader is None
+    assert lines.closes == 1
+    assert [r.getMessage() for r in caplog.records] == [
+        'knobs not available',
+    ]
+
+
 def test_knobs_state_for() -> None:
     """None when not asked for, else whether the lines opened."""
     lines = FakeKnobLines()
@@ -57,4 +79,14 @@ def test_knobs_state_for() -> None:
     assert knobs_state_for(wanted=True, knobs=None) is False
     assert knobs_state_for(wanted=True, knobs=reader) is True
     assert reader is not None
+    reader.stop()
+
+
+def test_knobs_state_for_knobs_that_stop_answering() -> None:
+    """Knobs whose lines fail while running read as not answering."""
+    lines = FakeKnobLines(error=OSError('gone'))
+    reader = knobs_for(enabled=True, opener=lambda: lines, swapped=bool)
+    assert reader is not None
+    reader.run(post=lambda event: None)
+    assert knobs_state_for(wanted=True, knobs=reader) is False
     reader.stop()

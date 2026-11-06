@@ -911,7 +911,11 @@ def serve_or_exit(
 
 
 def device_pages_for(
-    *, args: argparse.Namespace, timings: Timings, display: WebDisplay
+    *,
+    args: argparse.Namespace,
+    timings: Timings,
+    display: WebDisplay,
+    knob_state: Callable[[], bool | None] = lambda: None,
 ) -> DevicePages | None:
     """
     Build the phone setup pages for a device on live feeds.
@@ -924,6 +928,8 @@ def device_pages_for(
         Holds the latest device status and feed times.
     display : WebDisplay
         Sends the pages' events on to the app.
+    knob_state : Callable[[], bool | None]
+        Whether the knobs are answering, or None when not asked for.
 
     Returns
     -------
@@ -940,7 +946,7 @@ def device_pages_for(
         post=display.send,
         error_log=args.error_log,
         state_file=args.state,
-        knobs=lambda: timings.knobs,
+        knobs=knob_state,
     )
 
 
@@ -979,7 +985,6 @@ def web_main(
         opener=GpiodKnobLines.open,
         swapped=timings.knobs_swapped,
     )
-    timings.knobs = knobs_state_for(wanted=args.knobs, knobs=knobs)
     with (
         timetable_for(args=args) as timetable,
         network_for(args=args) as network,
@@ -992,7 +997,12 @@ def web_main(
             planner=trip_planner_for(live=args.feeds == 'live'),
         )
         display.device = device_pages_for(
-            args=args, timings=timings, display=display,
+            args=args,
+            timings=timings,
+            display=display,
+            knob_state=lambda: knobs_state_for(
+                wanted=args.knobs, knobs=knobs,
+            ),
         )
         ports = Ports(
             timetable=timetable,

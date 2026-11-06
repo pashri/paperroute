@@ -44,7 +44,12 @@ def knobs_for(
     except (OSError, ImportError):
         logger.error('knobs not available', exc_info=True)
         return None
-    return KnobReader(lines=lines, decoder=KnobDecoder(swapped=swapped))
+    try:
+        return KnobReader(lines=lines, decoder=KnobDecoder(swapped=swapped))
+    except OSError:
+        logger.error('knobs not available', exc_info=True)
+        lines.close()
+        return None
 
 
 def knobs_state_for(
@@ -64,8 +69,8 @@ def knobs_state_for(
     -------
     bool | None
         None when the knobs were not asked for, else whether they
-        opened.
+        opened and are still answering.
     """
     if not wanted:
         return None
-    return knobs is not None
+    return knobs is not None and knobs.answering

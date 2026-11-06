@@ -30,6 +30,7 @@ DT_LINES: Final[dict[Encoder, int]] = {
     if role is Role.DT
 }
 DEBOUNCE: Final[timedelta] = timedelta(milliseconds=1)
+NANOSECONDS: Final[float] = 1e9  # per second
 
 
 class GpiodKnobLines:  # pragma: no cover
@@ -84,6 +85,7 @@ class GpiodKnobLines:  # pragma: no cover
                     edge_detection=line.Edge.BOTH,
                     bias=line.Bias.PULL_UP,
                     debounce_period=DEBOUNCE,
+                    event_clock=line.Clock.MONOTONIC,
                 ),
             },
         )
@@ -101,8 +103,9 @@ class GpiodKnobLines:  # pragma: no cover
         Returns
         -------
         list[LineEdge]
-            The changes in the order they happened; empty when none
-            came within the timeout.
+            The changes in the order they happened, timed on the same
+            clock as `time.monotonic`; empty when none came within the
+            timeout.
         """
         if not self.lines.wait_edge_events(timedelta(seconds=timeout)):
             return []
@@ -110,6 +113,7 @@ class GpiodKnobLines:  # pragma: no cover
             LineEdge(
                 line=event.line_offset,
                 rising=event.event_type == event.Type.RISING_EDGE,
+                at=event.timestamp_ns / NANOSECONDS,
             )
             for event in self.lines.read_edge_events()
         ]

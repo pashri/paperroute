@@ -21,8 +21,12 @@ class KnobReader:
     """
     Turns the knobs' line changes into knob events on its own thread.
 
-    A turn is a CLK fall: DT high at that moment means clockwise. The
-    switch pulls its line low while pressed.
+    A turn is a CLK fall: DT high at that moment means clockwise. DT's
+    level is followed through its own edges in event order, from its
+    level when the reader is made, because by the time a batch of
+    edges is read DT may have moved on. Edges are timed by their own
+    timestamps, so a late read does not change a press into a hold.
+    The switch pulls its line low while pressed.
 
     Parameters
     ----------
@@ -31,9 +35,14 @@ class KnobReader:
     decoder : KnobDecoder
         Tells presses, holds and turns apart.
     clock : Callable[[], float]
-        Gives the time in seconds.
+        Gives the time in seconds, on the edges' clock.
     wait : float
         Seconds each read waits for a change.
+
+    Attributes
+    ----------
+    answering : bool
+        False once the lines have failed and the reader has stopped.
     """
 
     def __init__(
@@ -48,9 +57,14 @@ class KnobReader:
         self.decoder = decoder
         self.clock = clock
         self.wait = wait
+        self.dt = {
+            encoder: lines.level(line=line)
+            for encoder, line in DT_LINES.items()
+        }
         self._stopping = threading.Event()
         self._thread: threading.Thread | None = None
         self._closed = False
+        self.answering = True
 
     def step(self) -> list[Event]:
         """
@@ -62,24 +76,21 @@ class KnobReader:
             The events the changes make, then any that time settles.
         """
         edges = self.lines.read(timeout=self.wait)
-        now = self.clock()
         events = [
             event
             for edge in edges
-            for event in self.edge_events(edge=edge, now=now)
+            for event in self.edge_events(edge=edge)
         ]
-        return events + self.decoder.poll(now=now)
+        return events + self.decoder.poll(now=self.clock())
 
-    def edge_events(self, *, edge: LineEdge, now: float) -> list[Event]:
+    def edge_events(self, *, edge: LineEdge) -> list[Event]:
         """
-        Decode one line change.
+        Decode one line change, at the time it happened.
 
         Parameters
         ----------
         edge : LineEdge
             The change.
-        now : float
-            Current time in seconds.
 
         Returns
         -------
@@ -88,15 +99,16 @@ class KnobReader:
         """
         encoder, role = LINES[edge.line]
         match role:
+            case Role.DT:
+                self.dt[encoder] = edge.rising
             case Role.CLK if not edge.rising:
-                clockwise = self.lines.level(line=DT_LINES[encoder])
                 return self.decoder.turned(
-                    encoder=encoder, clockwise=clockwise, now=now,
+                    encoder=encoder, clockwise=self.dt[encoder], now=edge.at,
                 )
             case Role.SW if edge.rising:
-                return self.decoder.released(encoder=encoder, now=now)
+                return self.decoder.released(encoder=encoder, now=edge.at)
             case Role.SW:
-                return self.decoder.pressed(encoder=encoder, now=now)
+                return self.decoder.pressed(encoder=encoder, now=edge.at)
         return []
 
     def run(self, *, post: Callable[[Event], None]) -> None:
@@ -113,6 +125,7 @@ class KnobReader:
                 for event in self.step():
                     post(event)
         except OSError:
+            self.answering = False
             logger.error('knobs stopped answering', exc_info=True)
 
     def start(self, *, post: Callable[[Event], None]) -> None:

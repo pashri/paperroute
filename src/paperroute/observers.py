@@ -120,8 +120,6 @@ class Timings:
         The pins, or None before the app reports them.
     panel : PanelTimes | None
         The panel's refresh times, or None when there is no panel.
-    knobs : bool | None
-        Whether the knobs' lines opened, or None when not asked for.
     """
 
     frames: int = 0
@@ -135,7 +133,6 @@ class Timings:
     device: DeviceStatus | None = None
     pins: PinsSeen | None = None
     panel: PanelTimes | None = None
-    knobs: bool | None = None
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """

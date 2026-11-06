@@ -1107,10 +1107,13 @@ class LineEdge:
         The BCM line offset.
     rising : bool
         True when the line went from 0 to 1, False when it fell.
+    at : float
+        When it changed, in seconds on the monotonic clock.
     """
 
     line: int
     rising: bool
+    at: float
 
 
 class KnobLines(Protocol):

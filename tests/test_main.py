@@ -691,7 +691,7 @@ async def test_serve_web_posts_knob_events_then_stops_the_knobs(
 ) -> None:
     """The knobs' thread reaches the app's queue; quitting stops it."""
     seen: list[Event] = []
-    lines = FakeKnobLines(reads=[[LineEdge(line=20, rising=False)]])
+    lines = FakeKnobLines(reads=[[LineEdge(line=20, rising=False, at=0.0)]])
     knobs = KnobReader(
         lines=lines, decoder=KnobDecoder(swapped=lambda: False), wait=0.01,
     )

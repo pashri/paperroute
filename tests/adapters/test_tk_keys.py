@@ -2,7 +2,8 @@
 
 import pytest
 
-from paperroute.adapters.tk_monitor import HOLD_S, Chord, HoldKey, key_event
+from paperroute.adapters.tk_monitor import key_event
+from paperroute.core.knob_hold import HOLD_S, Chord, HoldKey
 from paperroute.core.messages import (
     Event,
     Knob,

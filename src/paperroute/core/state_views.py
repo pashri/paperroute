@@ -11,7 +11,7 @@ from paperroute.core.auto_pins import rule_holds
 from paperroute.core.banners import device_banner
 from paperroute.core.chooser_steps import chooser_view
 from paperroute.core.connection_screens import connection_screen
-from paperroute.core.cycle import cycle_effects
+from paperroute.core.cycle import cycle_effects, cycle_held
 from paperroute.core.live import LiveDeparture, live_since, resolved
 from paperroute.core.map_requests import (
     map_effects,
@@ -289,6 +289,30 @@ def loading_held(*, state: State) -> bool:
     return not elapsed(since=started, now=state.now, span=LOADING_WAIT)
 
 
+def frame_held(*, state: State, view: ScreenView, menu: bool) -> bool:
+    """
+    Say whether a changed view waits for the poll cycle's feeds.
+
+    Parameters
+    ----------
+    state : State
+        State after the event.
+    view : ScreenView
+        The view to draw.
+    menu : bool
+        Whether the view is a menu, from `in_menu`.
+
+    Returns
+    -------
+    bool
+        True while `cycle_held`, for a view that is not a menu, the sleep
+        screen or a notice.
+    """
+    if menu or isinstance(view, SleepView | NoticeView):
+        return False
+    return cycle_held(state=state)
+
+
 def in_menu(*, state: State) -> bool:
     """
     Say whether the state shows a menu.
@@ -348,15 +372,17 @@ def rendered(
     state: State,
     stop_view: StopView,
     effects: tuple[Effect, ...] = (),
+    draw: bool = True,
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Add a Render effect when the view changed.
 
     The first frame waits up to `LOADING_WAIT` for departures to load,
-    so a quick start draws once. See `render_of` for which renders are
-    full or clear. While the sleep screen is shown nothing redraws; it
-    is drawn once, and once more when it was drawn before departures
-    loaded.
+    so a quick start draws once. A changed view is not drawn while
+    `cycle_held`, unless it is a menu, the sleep screen or a notice.
+    See `render_of` for which renders are full or clear. While the sleep
+    screen is shown nothing redraws; it is drawn once, and once more
+    when it was drawn before departures loaded.
 
     Parameters
     ----------
@@ -366,6 +392,8 @@ def rendered(
         The state's Stop view, from `live_stop_view`.
     effects : tuple[Effect, ...]
         Effects so far.
+    draw : bool
+        False to leave the view for the next frame to draw.
 
     Returns
     -------
@@ -376,14 +404,14 @@ def rendered(
     last = state.last_view
     if state.panel.asleep and isinstance(last, SleepView) and not last.loading:
         return state, effects
-    if loading_held(state=state):
+    if not draw or loading_held(state=state):
         return state, effects
     view = current_view(state=state, stop_view=stop_view)
     if isinstance(view, StopView) and state.view is LiveView.STOP:
         state = replace(state, scroll=view.scroll)
-    if view == last:
-        return state, effects
     menu = in_menu(state=state)
+    if view == last or frame_held(state=state, view=view, menu=menu):
+        return state, effects
     render = render_of(state=state, view=view, menu=menu)
     refresh = replace(state.refresh, in_menu=menu)
     state = replace(state, last_view=view, refresh=refresh)
@@ -391,7 +419,7 @@ def rendered(
 
 
 def settled(
-    *, state: State, effects: tuple[Effect, ...] = ()
+    *, state: State, effects: tuple[Effect, ...] = (), draw: bool = True
 ) -> tuple[State, tuple[Effect, ...]]:
     """
     Ask for the reaches, map data and feeds needed, and redraw.
@@ -407,6 +435,8 @@ def settled(
         State after the event.
     effects : tuple[Effect, ...]
         Effects so far.
+    draw : bool
+        False to leave the view for the next frame to draw.
 
     Returns
     -------
@@ -429,4 +459,5 @@ def settled(
         state=state,
         stop_view=stop_view,
         effects=(*effects, *strips, *requests, *fetches, *loads),
+        draw=draw,
     )

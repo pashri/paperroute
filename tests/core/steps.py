@@ -3,7 +3,7 @@
 from dataclasses import replace
 from datetime import time
 
-from paperroute.core.messages import Effect, Event
+from paperroute.core.messages import Effect, Event, FeedFailed, FetchFeed
 from paperroute.core.saved import Window
 from paperroute.core.state import step
 from paperroute.core.state_model import State
@@ -64,3 +64,56 @@ def step_untouched(
     """
     after, effects = step(state, event)
     return untouched(state=after), effects
+
+
+def answer_fetches(
+    *, state: State, effects: tuple[Effect, ...]
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Answer every feed fetched in some effects with a failure.
+
+    A failure stores nothing, so the poll cycle's frame is released
+    without changing what it shows.
+
+    Parameters
+    ----------
+    state : State
+        State after the effects were made.
+    effects : tuple[Effect, ...]
+        Effects, some of them FetchFeeds.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State after the answers, and the effects followed by theirs.
+    """
+    fetches = [effect for effect in effects if isinstance(effect, FetchFeed)]
+    for fetch in fetches:
+        state, more = step(
+            state,
+            FeedFailed(feed=fetch.feed, at=state.now, reason='test'),
+        )
+        effects = (*effects, *more)
+    return state, effects
+
+
+def step_answered(
+    *, state: State, event: Event
+) -> tuple[State, tuple[Effect, ...]]:
+    """
+    Apply an event, then answer every feed it fetched.
+
+    Parameters
+    ----------
+    state : State
+        State before.
+    event : Event
+        What happened.
+
+    Returns
+    -------
+    tuple[State, tuple[Effect, ...]]
+        State after the answers, and every effect in order.
+    """
+    after, effects = step(state, event)
+    return answer_fetches(state=after, effects=effects)

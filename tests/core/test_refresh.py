@@ -21,6 +21,7 @@ from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
 from tests.core.factories import START
+from tests.core.steps import step_answered
 from tests.core.test_state import PIN, PRESS, effects_of, fresh, loaded
 
 IGNORED = KnobHeld(knob=Knob.TOP)
@@ -57,7 +58,7 @@ def on_map() -> State:
         The state at `START`.
     """
     state = replace(drawn(), view=LiveView.MAP)
-    return step(state, Tick(now=START))[0]
+    return step_answered(state=state, event=Tick(now=START))[0]
 
 
 def renders(*, effects: tuple[Effect, ...]) -> list[Render]:
@@ -197,17 +198,16 @@ def test_opening_chooser_is_clear() -> None:
 
 def test_map_change_is_full() -> None:
     """Into or out of a map view is full; between map views is partial."""
-    state = drawn()
-    state, effects = step(state, PRESS)
+    state, effects = step_answered(state=drawn(), event=PRESS)
     [render] = effects_of(effects=effects, kind=Render)
     assert render.full
-    state, effects = step(
-        replace(state, view=LiveView.STRIP_MAP), Tick(now=START),
+    state, effects = step_answered(
+        state=replace(state, view=LiveView.STRIP_MAP), event=Tick(now=START),
     )
     [render] = effects_of(effects=effects, kind=Render)
     assert not render.full
-    _, effects = step(
-        replace(state, view=LiveView.STRIP), Tick(now=START),
+    _, effects = step_answered(
+        state=replace(state, view=LiveView.STRIP), event=Tick(now=START),
     )
     [render] = effects_of(effects=effects, kind=Render)
     assert render.full

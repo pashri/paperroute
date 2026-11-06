@@ -190,7 +190,12 @@ from tests.core.factories import (
     snapshot,
     vehicle,
 )
-from tests.core.steps import step_untouched, wakeful
+from tests.core.steps import (
+    answer_fetches,
+    step_answered,
+    step_untouched,
+    wakeful,
+)
 
 PIN = Pin(
     origin=place('2145615', name='Hollis St'),
@@ -292,7 +297,7 @@ def loaded(
         departures=deps,
         until=START + HORIZON + RELOAD_BEFORE,
     )
-    return step(state, event)[0]
+    return step_answered(state=state, event=event)[0]
 
 
 def test_initial_state_centres_on_the_pins_point() -> None:
@@ -443,8 +448,11 @@ def test_step_no_feed_for_ferry_pin() -> None:
 
 
 def test_feed_fetched_renders_once() -> None:
-    """New data renders; an identical view isn't rendered again."""
-    state = loaded(state=fresh())
+    """A cycle's answer renders; an identical view isn't rendered again."""
+    state, _ = step(
+        loaded(state=fresh()), Tick(now=START + timedelta(seconds=30)),
+    )
+    assert state.cycle.waiting == {BUSES}
     snap = RealtimeSnapshot(fetched_at=START, trips={})
     state, effects = step(state, FeedFetched(feed=BUSES, snapshot=snap))
     assert any(isinstance(effect, Render) for effect in effects)
@@ -462,7 +470,7 @@ def test_step_feed_failure_keeps_timetable_and_retries() -> None:
     )
     state, _ = step(state, failure)
     later = START + timedelta(minutes=3)
-    state, effects = step(state, Tick(now=later))
+    state, effects = step_answered(state=state, event=Tick(now=later))
     assert FetchFeed(feed=BUSES) in effects
     assert isinstance(state.last_view, StopView)
     assert state.last_view.hero is not None
@@ -974,11 +982,19 @@ def test_idle_position_feeds_are_dropped_after_ten_minutes() -> None:
 
 def test_loaded_shapes_and_positions_are_drawn() -> None:
     """Shapes draw the route line and positions draw markers."""
-    state, _ = step(loaded(state=fresh(centre=CENTRE), shaped=True), PRESS)
+    state, effects = step(
+        loaded(state=fresh(centre=CENTRE), shaped=True), PRESS,
+    )
+    others = tuple(
+        effect
+        for effect in effects
+        if isinstance(effect, FetchFeed) and effect.feed != BUS_POSITIONS
+    )
+    state, _ = answer_fetches(state=state, effects=others)
+    assert state.cycle.waiting == {BUS_POSITIONS}
     line = make_shape(shape_id='b:0', points=[CENTRE, (-16_900.0, 1_000.0)])
     state, effects = step(state, ShapesLoaded(shapes={'b:0': line}))
-    assert isinstance(state.last_view, MapView)
-    assert state.last_view.base.route == (line.points,)
+    assert not effects_of(effects=effects, kind=Render)
     bus = vehicle(timestamp=int(START.timestamp()), point=CENTRE)
     positions = snapshot(fetched_at=START, vehicles=(bus,))
     event = PositionsFetched(feed=BUS_POSITIONS, snapshot=positions)
@@ -987,6 +1003,7 @@ def test_loaded_shapes_and_positions_are_drawn() -> None:
     renders = effects_of(effects=effects, kind=Render)
     assert len(renders) == 1
     assert isinstance(state.last_view, MapView)
+    assert state.last_view.base.route == (line.points,)
     assert [marker.live for marker in state.last_view.markers] == [True]
 
 
@@ -2105,7 +2122,8 @@ def run_tick(
     *, state: State, timetable: WindowedTimetable, now: datetime
 ) -> State:
     """
-    Tick, then answer any load request at once.
+    Tick, then answer any load request at once, and the feeds with
+    failures.
 
     Parameters
     ----------
@@ -2121,10 +2139,12 @@ def run_tick(
     State
         State after the tick and the load.
     """
-    state, effects = step(state, Tick(now=now))
+    state, effects = step_answered(state=state, event=Tick(now=now))
     for effect in effects:
         if isinstance(effect, LoadDepartures):
-            state, _ = step(state, timetable.load(effect=effect))
+            state, _ = step_answered(
+                state=state, event=timetable.load(effect=effect),
+            )
     return state
 
 
@@ -2161,9 +2181,13 @@ def test_late_service_timetabled_before_now_appears_after_load() -> None:
         ),
         start_date=None,
     )
-    state = run_tick(state=fresh(), timetable=timetable, now=START)
+    state = run_tick(
+        state=fresh(), timetable=timetable, now=START - timedelta(seconds=30),
+    )
+    state, _ = step(state, Tick(now=START))
     snapshot = RealtimeSnapshot(fetched_at=START, trips={late.trip_id: trip})
     state, _ = step(state, FeedFetched(feed=BUSES, snapshot=snapshot))
+    state, _ = step(state, FeedFailed(feed=ALERTS, at=START, reason='test'))
     assert isinstance(state.last_view, StopView)
     assert state.last_view.hero is not None
     assert state.last_view.hero.leaves_at == '8:04'

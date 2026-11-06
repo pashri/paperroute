@@ -34,6 +34,7 @@ from tests.core.alert_factories import (
     XPLORER,
     sydney,
 )
+from tests.core.steps import step_answered
 from tests.core.test_alert_state import (
     PARRAMATTA_CENTRAL,
     STRATHFIELD_TOWN_HALL,
@@ -200,7 +201,7 @@ def test_alerts_view_falls_back_when_empty() -> None:
     """When the only alert ends, the Alerts view becomes Stop."""
     state = on_alerts(alerts=(XPLORER,))
     later = sydney(day=24, hour=12, minute=30)
-    state, effects = step(state, Tick(now=later))
+    state, effects = step_answered(state=state, event=Tick(now=later))
     assert state.view is LiveView.STOP
     renders = [item for item in effects if isinstance(item, Render)]
     assert renders

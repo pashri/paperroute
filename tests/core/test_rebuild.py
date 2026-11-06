@@ -47,7 +47,7 @@ from paperroute.core.state import step
 from paperroute.core.state_model import Rebuild, State
 from tests.core.chooser_walks import DOWN, KINDS, NEXT, OPEN
 from tests.core.factories import START, begun, pin_at
-from tests.core.steps import step_untouched
+from tests.core.steps import answer_fetches, step_untouched
 from tests.fakes import device_facts
 
 OLD = TimetableSeen(version='v', schema='4')
@@ -440,6 +440,8 @@ def test_feeds_held_until_there_is_a_timetable() -> None:
         state=state,
         events=[CURRENT, Tick(now=state.now + timedelta(seconds=1))],
     )
+    state, answered = answer_fetches(state=state, effects=tuple(effects))
+    effects = list(answered)
     assert [e for e in effects if isinstance(e, FetchFeed)]
     views = [e.view for e in effects if isinstance(e, Render)]
     assert not any(isinstance(view, NoticeView) for view in views)

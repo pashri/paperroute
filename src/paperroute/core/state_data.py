@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 from paperroute.core.chooser_steps import chooser_event
-from paperroute.core.cycle import answered
+from paperroute.core.cycle import answered, answered_late
 from paperroute.core.map_state import failed, with_patterns
 from paperroute.core.messages import (
     ChooserEvent,
@@ -38,9 +38,10 @@ def on_map_event(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        New state and effects; a failure only records itself.
+        New state and effects; a failure only records itself, and
+        positions answering late are left for the next frame to draw.
     """
-    map_state = state.map
+    map_state, draw = state.map, True
     match event:
         case ShapesLoaded(shapes=shapes):
             map_state = replace(
@@ -56,6 +57,7 @@ def on_map_event(
                 pending_modes=map_state.pending_modes - {mpp},
             )
         case PositionsFetched(feed=feed, snapshot=snapshot):
+            draw = not answered_late(state=state, feed=feed)
             state = answered(state=state, feed=feed)
             map_state = replace(
                 map_state,
@@ -64,7 +66,7 @@ def on_map_event(
         case MapDataFailed():
             map_state = failed(map_state=map_state, event=event, now=state.now)
             return replace(state, map=map_state), ()
-    return settled(state=replace(state, map=map_state))
+    return settled(state=replace(state, map=map_state), draw=draw)
 
 
 def on_chooser_event(

@@ -46,6 +46,7 @@ from paperroute.core.strip_state import (
 )
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.factories import START, departure, place, snapshot, vehicle
+from tests.core.steps import answer_fetches
 from tests.core.strip_factories import (
     CENTRE,
     KEY,
@@ -285,7 +286,8 @@ def test_strip_scroll_is_separate_from_stop_scroll() -> None:
     """
     state, _ = on_view(view=LiveView.STOP, departures=trains(count=20))
     state, _ = step(state, turn(steps=2))
-    state, _ = run(state=state, events=[PRESS, PRESS])
+    state, effects = run(state=state, events=[PRESS, PRESS])
+    state, _ = answer_fetches(state=state, effects=effects)
     state, _ = step(state, StripLoaded(key=KEY, reach=long_reach()))
     assert first_name(state=state) == 'S10'
     state, _ = step(state, turn(steps=1))

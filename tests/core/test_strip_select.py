@@ -7,6 +7,7 @@ from typing import Final
 from hypothesis import given
 from hypothesis import strategies as st
 
+from paperroute.core.cycle import cycle_held
 from paperroute.core.messages import (
     Event,
     Knob,
@@ -317,14 +318,15 @@ def pick_events(draw: st.DrawFn) -> list[Event]:
 @given(events=pick_events())
 def test_pick_invariants(events: list[Event]) -> None:
     """The pick is always a panel train on the Strip, and nothing saved
-    changes for a turn while held; the panel marks it."""
+    changes for a turn while held; the panel marks it once drawn."""
     state = line_state(scroll=0)
     for event in events:
         before = state
         state, _ = step(before, event)
         check_selection(before=before, after=state, event=event)
         view = state.last_view
-        if isinstance(view, StripView) and state.chooser is None:
+        drawn = not cycle_held(state=state)
+        if drawn and isinstance(view, StripView) and state.chooser is None:
             trains = panel_trains(stop_view=live_stop_view(state=state))
             index = view.panel.selected
             assert (index is None) is (state.strip.selected is None)

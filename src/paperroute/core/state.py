@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import datetime
+from typing import Final
 
 from paperroute.core.alert_model import AlertsFetched, BetweenLoaded
 from paperroute.core.alert_state import (
@@ -17,7 +18,7 @@ from paperroute.core.chooser_steps import (
     chooser_retimed,
     picked_reloads,
 )
-from paperroute.core.cycle import answered
+from paperroute.core.cycle import answered, answered_late
 from paperroute.core.device import (
     on_device_event,
     power_guard,
@@ -128,6 +129,17 @@ from paperroute.core.state_model import (
 from paperroute.core.state_saves import saved_effects
 from paperroute.core.state_views import saved_of, settled
 from paperroute.core.wifi import setup_expired, setup_knob
+
+PERSON_EVENTS: Final[tuple[type, ...]] = (
+    KnobTurned,
+    KnobPressed,
+    KnobHeld,
+    KnobHeldTurned,
+    KnobsHeld,
+    ConfirmAsked,
+    PinSaved,
+    SettingsChanged,
+)
 
 
 def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
@@ -330,6 +342,8 @@ def on_feed(
     """
     Record a failed load or a realtime download, and redraw.
 
+    A feed answering late is left for the next frame to draw.
+
     Parameters
     ----------
     state : State
@@ -342,18 +356,15 @@ def on_feed(
     tuple[State, tuple[Effect, ...]]
         New state and effects.
     """
-    match event:
-        case DeparturesFailed():
-            board = replace(state.board, loading=False)
-            state = replace(state, board=board)
-        case FeedFetched(feed=feed, snapshot=snapshot):
-            state = replace(
-                answered(state=state, feed=feed),
-                snapshots={**state.snapshots, feed: snapshot},
-            )
-        case FeedFailed(feed=feed):
-            state = answered(state=state, feed=feed)
-    return settled(state=state)
+    if isinstance(event, DeparturesFailed):
+        board = replace(state.board, loading=False)
+        return settled(state=replace(state, board=board))
+    draw = not answered_late(state=state, feed=event.feed)
+    state = answered(state=state, feed=event.feed)
+    if isinstance(event, FeedFetched):
+        snapshots = {**state.snapshots, event.feed: event.snapshot}
+        state = replace(state, snapshots=snapshots)
+    return settled(state=state, draw=draw)
 
 
 def on_knob(
@@ -649,10 +660,15 @@ def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
     tuple[State, tuple[Effect, ...]]
         Next state and the effects to perform.
     """
-    after, effects = dispatched(state=state, event=event)
+    person = isinstance(event, PERSON_EVENTS)
+    after, effects = dispatched(
+        state=freed(state=state, free=person), event=event,
+    )
     after = noted(
         state=with_calls(
-            state=without_skipped(state=after, event=event),
+            state=without_skipped(
+                state=freed(state=after, free=False), event=event,
+            ),
             effects=effects,
         ),
         event=event,
@@ -662,6 +678,27 @@ def step(state: State, event: Event) -> tuple[State, tuple[Effect, ...]]:
         return after, effects
     saving = replace(after.saving, changed_at=after.now)
     return replace(after, saving=saving), effects
+
+
+def freed(*, state: State, free: bool) -> State:
+    """
+    Say whether the frame may be drawn at once, whatever the poll cycle.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    free : bool
+        True while a person's action is handled.
+
+    Returns
+    -------
+    State
+        State whose cycle is free or not.
+    """
+    if state.cycle.free == free:
+        return state
+    return replace(state, cycle=replace(state.cycle, free=free))
 
 
 def with_rebuild(
@@ -830,7 +867,10 @@ def live_result(
             result = on_feed(state=state, event=event)
         case AlertsFetched(feed=feed):
             answer = answered(state=state, feed=feed)
-            result = settled(state=on_alerts(state=answer, event=event))
+            result = settled(
+                state=on_alerts(state=answer, event=event),
+                draw=not answered_late(state=state, feed=feed),
+            )
         case BetweenLoaded():
             result = settled(state=on_alerts(state=state, event=event))
         case (

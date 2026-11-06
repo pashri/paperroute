@@ -32,6 +32,7 @@ from tests.core.factories import (
     place,
     train,
 )
+from tests.core.steps import step_answered
 
 WEST: Final[tuple[str, ...]] = ('C', 'J', 'W1', 'W2')
 SOUTH: Final[tuple[str, ...]] = ('C', 'J', 'R1', 'R2', 'R3')
@@ -164,7 +165,7 @@ def on_view(
     departures: tuple[Departure, ...] | None = None,
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Start on a view and load departures there.
+    Start on a view and load departures there, answering the feeds.
 
     Parameters
     ----------
@@ -184,9 +185,9 @@ def on_view(
         pins=(pin,), current=0, unpinned=None, view=view,
     )
     state = initial_state(saved=saved, now=START, stored=True)
-    return step(
-        state,
-        DeparturesLoaded(
+    return step_answered(
+        state=state,
+        event=DeparturesLoaded(
             pin=pin,
             departures=trains() if departures is None else departures,
             until=START + HORIZON,

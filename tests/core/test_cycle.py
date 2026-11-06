@@ -15,12 +15,23 @@ from paperroute.core.messages import (
     DeparturesLoaded,
     DeviceProbed,
     Effect,
+    Event,
     FeedFailed,
+    FeedFetched,
     FetchFeed,
+    Knob,
+    KnobTurned,
+    NoticeView,
     PositionsFetched,
+    PowerAction,
+    PowerRequested,
+    Render,
+    SettingsChanged,
     Tick,
 )
+from paperroute.core.panel_views import SleepView
 from paperroute.core.places import shown
+from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.sleep import slept
 from paperroute.core.state import step
 from paperroute.core.state_model import RELOAD_BEFORE, Cycle, State
@@ -318,3 +329,144 @@ def test_quiet_sleep_leaves_nothing_waiting() -> None:
     assert state.panel.asleep
     assert not _fetches(effects=effects)
     assert state.cycle == Cycle()
+
+
+HELD_AT: datetime = START + timedelta(seconds=5 * 60 + 2)
+
+
+def _renders(*, effects: tuple[Effect, ...]) -> list[Render]:
+    """Keep the Render effects."""
+    return [effect for effect in effects if isinstance(effect, Render)]
+
+
+def _answer(*, fetch: FetchFeed) -> Event:
+    """A download answering a fetch."""
+    match fetch.kind:
+        case FeedKind.POSITIONS:
+            return PositionsFetched(
+                feed=fetch.feed,
+                snapshot=snapshot(fetched_at=HELD_AT, vehicles=()),
+            )
+        case FeedKind.ALERTS:
+            return AlertsFetched(
+                feed=fetch.feed,
+                snapshot=AlertsSnapshot(
+                    feed=fetch.feed, fetched_at=HELD_AT, alerts=(),
+                ),
+            )
+    return FeedFetched(
+        feed=fetch.feed,
+        snapshot=RealtimeSnapshot(fetched_at=HELD_AT, trips={}),
+    )
+
+
+def _held(*, on_map: bool = True) -> tuple[State, list[FetchFeed]]:
+    """A cycle started on a boundary that moves the clock, on the Map."""
+    state = loaded(state=fresh())
+    if on_map:
+        state, _ = step(state, PRESS)
+    state, effects = step(state, Tick(now=HELD_AT))
+    assert not _renders(effects=effects)
+    return state, _fetches(effects=effects)
+
+
+def test_held_until_last_response() -> None:
+    """A cycle's frame is drawn once, when its last feed answers."""
+    state, fetches = _held()
+    assert {fetch.kind for fetch in fetches} == {
+        FeedKind.TRIPS,
+        FeedKind.POSITIONS,
+        FeedKind.ALERTS,
+    }
+    *first, last = fetches
+    for fetch in first:
+        state, effects = step(state, _answer(fetch=fetch))
+        assert not _renders(effects=effects)
+    _, effects = step(state, _answer(fetch=last))
+    assert len(_renders(effects=effects)) == 1
+
+
+def test_all_failed_releases_hold() -> None:
+    """Feeds all backing off still release the frame on the last one."""
+    state, fetches = _held()
+    *first, last = fetches
+    for fetch in first:
+        state, effects = step(
+            state,
+            FeedFailed(
+                feed=fetch.feed, at=HELD_AT, reason='backing off', sent=False,
+            ),
+        )
+        assert not _renders(effects=effects)
+    _, effects = step(
+        state,
+        FeedFailed(feed=last.feed, at=HELD_AT, reason='backing off', sent=False),
+    )
+    assert len(_renders(effects=effects)) == 1
+
+
+def test_hold_ends_at_deadline() -> None:
+    """With one feed never answering, the frame is drawn after 8 s."""
+    state, fetches = _held()
+    for fetch in fetches[1:]:
+        state, _ = step(state, _answer(fetch=fetch))
+    state, effects = step(state, Tick(now=HELD_AT + timedelta(seconds=5)))
+    assert not _renders(effects=effects)
+    _, effects = step(state, Tick(now=HELD_AT + timedelta(seconds=10)))
+    assert len(_renders(effects=effects)) == 1
+
+
+def test_late_response_waits_for_next_frame() -> None:
+    """A response after the hold is stored but drawn by the next frame."""
+    state, fetches = _held()
+    state, _ = step(state, Tick(now=HELD_AT + timedelta(seconds=10)))
+    late = next(
+        fetch for fetch in fetches if fetch.kind == FeedKind.TRIPS
+    )
+    before = state.last_view
+    state, effects = step(state, _answer(fetch=late))
+    assert not _renders(effects=effects)
+    assert late.feed in state.snapshots
+    assert state.last_view == before
+
+
+def test_response_outside_cycle_not_drawn() -> None:
+    """A response nothing waits on is stored without drawing."""
+    state, _ = step(loaded(state=fresh()), PRESS)
+    state = replace(state, cycle=Cycle(started=START))
+    state, effects = step(
+        state, _answer(fetch=FetchFeed(feed=BUSES)),
+    )
+    assert not _renders(effects=effects)
+    assert BUSES in state.snapshots
+
+
+def test_knob_turn_not_held() -> None:
+    """A knob turn during a held cycle draws at once."""
+    state, _ = _held()
+    state, effects = step(state, KnobTurned(knob=Knob.BOTTOM, steps=1))
+    assert len(_renders(effects=effects)) == 1
+    assert not state.cycle.free
+
+
+def test_settings_change_not_held() -> None:
+    """A Settings edit during a held cycle draws at once."""
+    state, _ = _held(on_map=False)
+    state, effects = step(state, SettingsChanged(larger_text=True))
+    assert len(_renders(effects=effects)) == 1
+    assert not state.cycle.free
+
+
+def test_sleep_screen_not_held() -> None:
+    """Quiet hours sleeping on a cycle's boundary draw the sleep screen."""
+    _, effects = step(evening(), Tick(now=quiet_at(23)))
+    [render] = _renders(effects=effects)
+    assert isinstance(render.view, SleepView)
+
+
+def test_notice_not_held() -> None:
+    """Shutting down during a held cycle shows its notice at once."""
+    state, _ = _held()
+    _, effects = step(state, PowerRequested(action=PowerAction.OFF))
+    [render] = _renders(effects=effects)
+    assert isinstance(render.view, NoticeView)

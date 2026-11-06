@@ -38,6 +38,7 @@ from paperroute.core.state import step
 from paperroute.core.state_model import Places, State
 from paperroute.core.stop_view import StopView
 from tests.core.factories import START, departure
+from tests.core.steps import step_answered
 from tests.core.test_menu import DOWN, run, turn
 from tests.core.test_state import BUSES, PINS, fresh
 from tests.fakes import device_facts
@@ -220,7 +221,9 @@ def test_my_hours_wrap_midnight() -> None:
     state, effects = step(state, Tick(now=at(0, 10, days=1)))
     assert state.panel.asleep
     assert not fetches(effects=effects)
-    state, effects = step(state, Tick(now=at(5, 30, days=1)))
+    state, effects = step_answered(
+        state=state, event=Tick(now=at(5, 30, days=1)),
+    )
     assert not state.panel.asleep
     assert isinstance(renders(effects=effects)[-1].view, StopView)
 
@@ -434,7 +437,9 @@ def test_quiet_waits_for_power() -> None:
 def test_quiet_wakes_from_a_tick_only_when_by_quiet() -> None:
     """A quiet sleep ends at the end of the hours with a fetch."""
     state = ticked(state=asleep_at_one(), times=(at(5, 29, days=1),))
-    state, effects = step(state, Tick(now=at(5, 30, days=1)))
+    state, effects = step_answered(
+        state=state, event=Tick(now=at(5, 30, days=1)),
+    )
     assert not state.panel.asleep
     assert FetchFeed(feed=BUSES) in effects
     assert len(renders(effects=effects)) == 1

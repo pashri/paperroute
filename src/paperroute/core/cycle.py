@@ -2,6 +2,7 @@
 
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import Final
 
 from paperroute.core.alert_state import ALERT_EVERY, alert_feeds
 from paperroute.core.banners import feeds_held
@@ -10,7 +11,9 @@ from paperroute.core.feeds import FeedKind
 from paperroute.core.map_requests import map_feeds, shows_vehicles
 from paperroute.core.messages import Effect, FetchFeed
 from paperroute.core.rhythm import poll_every
-from paperroute.core.state_model import Cycle, State
+from paperroute.core.state_model import Cycle, State, elapsed
+
+CYCLE_WAIT: Final[timedelta] = timedelta(seconds=8)
 
 
 def boundary(*, now: datetime, every: timedelta) -> datetime:
@@ -394,3 +397,45 @@ def answered(*, state: State, feed: str) -> State:
         return state
     cycle = replace(state.cycle, waiting=state.cycle.waiting - {feed})
     return replace(state, cycle=cycle)
+
+
+def cycle_held(*, state: State) -> bool:
+    """
+    Say whether the cycle's frame waits for its feeds to answer.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    bool
+        True while a feed asked for has not answered, `CYCLE_WAIT` has not
+        passed since the cycle started, and no person's action freed the
+        frame.
+    """
+    cycle = state.cycle
+    if cycle.free or not cycle.waiting:
+        return False
+    return not elapsed(since=cycle.started, now=state.now, span=CYCLE_WAIT)
+
+
+def answered_late(*, state: State, feed: str) -> bool:
+    """
+    Say whether a feed's answer comes after its cycle stopped waiting.
+
+    Parameters
+    ----------
+    state : State
+        State before the answer is noted.
+    feed : str
+        The feed that answered.
+
+    Returns
+    -------
+    bool
+        True when the cycle does not wait on the feed, or its frame is no
+        longer held, so the answer is drawn by the next frame.
+    """
+    return feed not in state.cycle.waiting or not cycle_held(state=state)

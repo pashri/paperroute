@@ -43,6 +43,7 @@ from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.alert_model import AlertsFetched
 from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
+from paperroute.core.cycle import CYCLE_WAIT
 from paperroute.core.device import NOTICE, on_reset
 from paperroute.core.device_model import DeviceStatus, ResetKind
 from paperroute.core.feeds import FeedKind
@@ -1961,7 +1962,7 @@ async def test_app_turns_panel_frames() -> None:
 
     def hook(post: Callable[[Event], None]) -> None:
         post(Tick(now=AT))
-        post(Tick(now=AT + LOADING_WAIT))
+        post(Tick(now=AT + CYCLE_WAIT))
 
     async with asyncio.timeout(5):
         await run(ports=ports, post_hook=hook, max_events=2)

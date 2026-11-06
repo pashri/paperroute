@@ -79,7 +79,7 @@ def on_settings(
     *, state: State, event: SettingsChanged
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Store the settings given; the next tick saves them.
+    Store the settings given and redraw; the next tick saves them.
 
     A change to rotate redraws the last view with a full refresh; a
     change to the school switch clears the board, so the next tick reads
@@ -96,7 +96,8 @@ def on_settings(
     -------
     tuple[State, tuple[Effect, ...]]
         State with the settings stored, and a full Render of the last
-        view when rotate changed and a view has been drawn.
+        view when rotate changed and a view has been drawn, else a Render
+        when the view changed.
     """
     given = {
         item.name: getattr(event, item.name)
@@ -116,9 +117,9 @@ def on_settings(
                 loading=False,
             ),
         )
-    if not turned or state.last_view is None:
-        return after, ()
-    return after, (Render(view=state.last_view, full=True),)
+    if turned and state.last_view is not None:
+        return after, (Render(view=state.last_view, full=True),)
+    return settled(state=after)
 
 
 def on_power(

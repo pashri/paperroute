@@ -1,12 +1,34 @@
 """Which requests the device's web server answers."""
 
 import ipaddress
+from collections.abc import Callable
+from http import HTTPStatus
 from typing import Final
 from urllib.parse import urlsplit
 
 from aiohttp import web
+from aiohttp.typedefs import Handler, Middleware
 
 HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
+
+RemoteOf = Callable[[web.BaseRequest], str | None]
+
+
+def peer_address(request: web.BaseRequest) -> str | None:
+    """
+    Get the address of the connected peer.
+
+    Parameters
+    ----------
+    request : web.BaseRequest
+        The incoming request.
+
+    Returns
+    -------
+    str | None
+        The peer's IP address, or None if it is unknown.
+    """
+    return request.remote
 
 
 def is_local(*, remote: str | None) -> bool:
@@ -77,3 +99,50 @@ def cross_site(*, request: web.Request) -> bool:
     if origin is None:
         return False
     return urlsplit(origin).netloc != request.host
+
+
+def local_only(*, remote_of: RemoteOf) -> Middleware:
+    """
+    Build a middleware that refuses peers outside the local network.
+
+    It also refuses requests for an unknown host and cross-site POSTs.
+
+    Parameters
+    ----------
+    remote_of : RemoteOf
+        Finds the peer address of a request.
+
+    Returns
+    -------
+    Middleware
+        The middleware; it answers 403 or passes the request on.
+    """
+
+    @web.middleware
+    async def guard(
+        request: web.Request, handler: Handler,
+    ) -> web.StreamResponse:
+        """
+        Refuse peers outside the local network and cross-site POSTs.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request.
+        handler : Handler
+            The route handler.
+
+        Returns
+        -------
+        web.StreamResponse
+            A 403 response, or the handler's response.
+        """
+        if not is_local(remote=remote_of(request)):
+            return web.Response(status=HTTPStatus.FORBIDDEN)
+        if not known_host(request=request):
+            return web.Response(status=HTTPStatus.FORBIDDEN)
+        if request.method == 'POST' and cross_site(request=request):
+            return web.Response(status=HTTPStatus.FORBIDDEN)
+        return await handler(request)
+
+    return guard

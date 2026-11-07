@@ -3,7 +3,7 @@
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Callable, Mapping
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Final
 
@@ -29,9 +29,9 @@ from paperroute_device.adapters.web_common import (
 )
 from paperroute_device.adapters.web_frame import shell_bytes, shell_text
 from paperroute_device.adapters.web_guard import (
-    cross_site,
-    is_local,
-    known_host,
+    RemoteOf,
+    local_only,
+    peer_address,
 )
 from paperroute_device.render.canvas import encode_png
 from paperroute_device.rss import max_rss_mb
@@ -59,8 +59,6 @@ VENDORED: Final[dict[str, str]] = {
 }
 BOTH: Final[str] = 'both'  # the knob name for both knobs together
 HELD_ACTIONS: Final[dict[str, int]] = {'hold-left': -1, 'hold-right': 1}
-
-Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 
 
 def knob_event(*, knob: str, action: str) -> Event | None:
@@ -205,23 +203,6 @@ def settings_event(
         ) from error
 
 
-def peer_address(request: web.BaseRequest) -> str | None:
-    """
-    Get the address of the connected peer.
-
-    Parameters
-    ----------
-    request : web.BaseRequest
-        The incoming request.
-
-    Returns
-    -------
-    str | None
-        The peer's IP address, or None if it is unknown.
-    """
-    return request.remote
-
-
 class WebDisplay:
     """
     A display that serves the latest frame over HTTP.
@@ -233,7 +214,7 @@ class WebDisplay:
     ----------
     status : Callable[[], dict[str, object]] | None
         Extra fields for the status page.
-    remote_of : Callable[[web.BaseRequest], str | None]
+    remote_of : RemoteOf
         Finds the peer address of a request.
     device : DevicePages | None
         The device's own pages, such as Wi-Fi setup, or None.
@@ -256,7 +237,7 @@ class WebDisplay:
         self,
         *,
         status: Callable[[], dict[str, object]] | None = None,
-        remote_of: Callable[[web.BaseRequest], str | None] = peer_address,
+        remote_of: RemoteOf = peer_address,
         device: 'DevicePages | None' = None,
         board: 'BoardPages | None' = None,
     ) -> None:
@@ -363,7 +344,8 @@ class WebDisplay:
             pages are served only when there are board pages; power and
             the device's own pages only when there are device pages.
         """
-        app = web.Application(middlewares=[self._guard])
+        guard = local_only(remote_of=self._remote_of)
+        app = web.Application(middlewares=[guard])
         app.on_shutdown.append(self._close)
         app.add_routes([
             web.get('/', self._page),
@@ -401,33 +383,6 @@ class WebDisplay:
         self.changed.set()
         if self._board is not None:
             await self._board.close()
-
-    @web.middleware
-    async def _guard(
-        self, request: web.Request, handler: Handler
-    ) -> web.StreamResponse:
-        """
-        Refuse peers outside the local network and cross-site POSTs.
-
-        Parameters
-        ----------
-        request : web.Request
-            The incoming request.
-        handler : Handler
-            The route handler.
-
-        Returns
-        -------
-        web.StreamResponse
-            A 403 response, or the handler's response.
-        """
-        if not is_local(remote=self._remote_of(request)):
-            return web.Response(status=HTTPStatus.FORBIDDEN)
-        if not known_host(request=request):
-            return web.Response(status=HTTPStatus.FORBIDDEN)
-        if request.method == 'POST' and cross_site(request=request):
-            return web.Response(status=HTTPStatus.FORBIDDEN)
-        return await handler(request)
 
     async def _page(self, request: web.Request) -> web.Response:
         """

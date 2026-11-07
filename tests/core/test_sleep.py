@@ -14,11 +14,6 @@ from paperroute.core.messages import (
     Effect,
     Event,
     FetchFeed,
-    Knob,
-    KnobHeld,
-    KnobPressed,
-    KnobsHeld,
-    KnobTurned,
     LoadPatterns,
     LoadShapes,
     PatternsLoaded,
@@ -36,6 +31,13 @@ from paperroute.core.state_views import live_stop_view
 from paperroute.core.stop_view import StopView
 from paperroute.render.sleep import BAND_H
 from paperroute.render.trip_marks import END_DISC, END_EDGE
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobHeld,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
 from paperroute_testkit.core.factories import START, departure, pattern, place
 from paperroute_testkit.fakes import device_facts
 from tests.core.test_connection import loaded as connection_loaded

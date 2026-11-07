@@ -8,6 +8,7 @@ from typing import Final
 from paperroute.core.auto_model import AutoState
 from paperroute.core.geo import to_metres
 from paperroute.core.model import Pin, RouteKind, StopPlace
+from paperroute_hardware.ports import CLEAN_AFTER
 
 
 class LiveView(StrEnum):
@@ -89,7 +90,6 @@ PEAK_WINDOWS: Final[tuple[Window, ...]] = (
     Window(start=time(15), end=time(19)),
 )
 MY_HOURS: Final[Window] = Window(start=time(23), end=time(5, 30))
-CLEAN_AFTER: Final[int] = 30  # quick patches
 CLEAN_CHOICES: Final[tuple[int, ...]] = (15, 30, 60, 120)  # quick patches
 
 

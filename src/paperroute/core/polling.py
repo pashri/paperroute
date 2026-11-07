@@ -2,10 +2,11 @@
 
 from paperroute.core.cycle import cycle_effects
 from paperroute.core.menu import on_asked
-from paperroute.core.messages import ConfirmAsked, Effect, KnobEvent, KnobsHeld
+from paperroute.core.messages import ConfirmAsked, Effect
 from paperroute.core.sleep import awake
 from paperroute.core.state_model import State
 from paperroute.core.state_views import settled
+from paperroute_hardware.core.knob_events import KnobEvent, KnobsHeld
 
 
 def woken(

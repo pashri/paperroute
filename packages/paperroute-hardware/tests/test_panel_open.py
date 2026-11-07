@@ -2,9 +2,9 @@
 
 import pytest
 
-from paperroute.adapters.panel_display import PanelDisplay
-from paperroute.observers import PanelTimes
-from paperroute.panel_open import panel_times_for
+from paperroute_hardware.adapters.panel_display import PanelDisplay
+from paperroute_hardware.panel_open import panel_times_for
+from paperroute_hardware.ports import PanelTimes
 from tests.adapters.test_panel_display import GatedController
 
 

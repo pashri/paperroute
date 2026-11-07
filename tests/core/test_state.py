@@ -53,12 +53,6 @@ from paperroute.core.messages import (
     FeedFetched,
     FetchFeed,
     HolidaysLoaded,
-    Knob,
-    KnobHeld,
-    KnobHeldTurned,
-    KnobPressed,
-    KnobsHeld,
-    KnobTurned,
     LineFailed,
     LineLoaded,
     LoadChooserDepartures,
@@ -167,6 +161,14 @@ from paperroute.core.strip_state import (
     strip_key,
 )
 from paperroute.core.tiles import CITY, ZOOMS
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobHeld,
+    KnobHeldTurned,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.core.factories import (
     START,

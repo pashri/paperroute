@@ -11,18 +11,17 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.adapters import panel_display
-from paperroute.adapters.epaper import PanelTimeout
-from paperroute.adapters.panel_display import (
+from paperroute_hardware.adapters import panel_display
+from paperroute_hardware.adapters.epaper import PanelTimeout
+from paperroute_hardware.adapters.panel_display import (
     CLEAN_QUIET,
     RETRY_AFTER,
     SCREEN,
     Displays,
     PanelDisplay,
 )
-from paperroute.core.saved import CLEAN_AFTER
-from paperroute.ports import PanelRefresh
-from paperroute.render.panel_bits import (
+from paperroute_hardware.ports import CLEAN_AFTER, PanelRefresh
+from paperroute_hardware.render.panel_bits import (
     Box,
     grey_planes,
     mono_patch,

@@ -25,12 +25,6 @@ from paperroute.core.messages import (
     DeviceProbed,
     Effect,
     Event,
-    Knob,
-    KnobHeld,
-    KnobHeldTurned,
-    KnobPressed,
-    KnobsHeld,
-    KnobTurned,
     NoticeView,
     PowerAction,
     ProbeDevice,
@@ -43,6 +37,14 @@ from paperroute.core.panel_views import ConfirmView, MenuView, PhoneView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobHeld,
+    KnobHeldTurned,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.fakes import device_facts
 from tests.core.test_rebuild import pinned

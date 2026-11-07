@@ -3,17 +3,16 @@
 import pytest
 
 from paperroute.adapters.tk_monitor import key_event
-from paperroute.core.knob_hold import HOLD_S, Chord, HoldKey
-from paperroute.core.messages import (
-    Event,
+from paperroute.core.messages import Event, QuitRequested
+from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
     KnobHeldTurned,
     KnobPressed,
     KnobsHeld,
     KnobTurned,
-    QuitRequested,
 )
+from paperroute_hardware.core.knob_hold import HOLD_S, Chord, HoldKey
 
 
 @pytest.mark.parametrize(('keysym', 'expected'), [

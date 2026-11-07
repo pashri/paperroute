@@ -20,12 +20,6 @@ from paperroute.adapters.settings_form import ERRORS
 from paperroute.adapters.web_display import WebDisplay, knob_event
 from paperroute.core.messages import (
     Event,
-    Knob,
-    KnobHeld,
-    KnobHeldTurned,
-    KnobPressed,
-    KnobsHeld,
-    KnobTurned,
     PowerAction,
     PowerRequested,
     SettingsChanged,
@@ -33,6 +27,14 @@ from paperroute.core.messages import (
 from paperroute.core.saved import LiveView, Lookahead, Rate, Window
 from paperroute.core.state import step
 from paperroute.render.canvas import encode_png
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobHeld,
+    KnobHeldTurned,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
 from tests.adapters.test_web_device import Device
 from tests.core.test_quiet import asleep_at_one
 from tests.page_markup import parse_page

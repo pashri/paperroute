@@ -3,9 +3,9 @@
 import logging
 from collections.abc import Callable
 
-from paperroute.adapters.knob_reader import KnobReader
-from paperroute.core.knob_decoder import KnobDecoder
-from paperroute.ports import KnobLines
+from paperroute_hardware.adapters.knob_reader import KnobReader
+from paperroute_hardware.core.knob_decoder import KnobDecoder
+from paperroute_hardware.ports import KnobLines
 
 __all__ = ['knobs_for', 'knobs_state_for']
 

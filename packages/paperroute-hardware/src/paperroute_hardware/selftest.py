@@ -10,11 +10,11 @@ from typing import Final, TextIO
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.adapters.epaper import Uc8179
-from paperroute.adapters.panel_bus import LinuxPanelBus
-from paperroute.adapters.panel_display import PanelController
-from paperroute.ports import PanelBus
-from paperroute.render.panel_bits import (
+from paperroute_hardware.adapters.epaper import Uc8179
+from paperroute_hardware.adapters.panel_bus import LinuxPanelBus
+from paperroute_hardware.adapters.panel_display import PanelController
+from paperroute_hardware.ports import PanelBus
+from paperroute_hardware.render.panel_bits import (
     HEIGHT,
     WIDTH,
     changed_box,

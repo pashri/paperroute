@@ -6,13 +6,7 @@ from typing import Final
 
 from paperroute.core.geo import Point
 from paperroute.core.map_view import DEFAULT_ZOOM
-from paperroute.core.messages import (
-    DeparturesLoaded,
-    Effect,
-    Event,
-    Knob,
-    KnobTurned,
-)
+from paperroute.core.messages import DeparturesLoaded, Effect, Event
 from paperroute.core.model import Departure, Mode, Pin, RouteKind, StopPlace
 from paperroute.core.reach import Reach, ReachRow, RowKind, StripKey
 from paperroute.core.saved import LiveView, Saved
@@ -21,6 +15,7 @@ from paperroute.core.state_model import State
 from paperroute.core.stop_view import HORIZON
 from paperroute.core.strip_model import StripInputs, StripRow
 from paperroute.core.strip_view import build_strip_view
+from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import (
     EAST,
     START,

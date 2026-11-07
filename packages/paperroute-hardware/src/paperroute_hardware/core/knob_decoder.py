@@ -5,15 +5,15 @@ from dataclasses import replace
 from enum import StrEnum
 from typing import Final
 
-from paperroute.core.knob_hold import Chord, HoldKey
-from paperroute.core.messages import (
-    Event,
+from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
     KnobHeldTurned,
+    KnobInput,
     KnobPressed,
     KnobTurned,
 )
+from paperroute_hardware.core.knob_hold import Chord, HoldKey
 
 
 class Encoder(StrEnum):
@@ -33,20 +33,20 @@ OTHER: Final[dict[Knob, Knob]] = {
 }
 
 
-def swapped_event(*, event: Event, swap: bool) -> Event:
+def swapped_event(*, event: KnobInput, swap: bool) -> KnobInput:
     """
     Trade the top and bottom knob in an event.
 
     Parameters
     ----------
-    event : Event
+    event : KnobInput
         A knob event.
     swap : bool
         Whether the knobs are swapped.
 
     Returns
     -------
-    Event
+    KnobInput
         The event with its knob traded when swapped; any event with no
         knob, such as `KnobsHeld`, as it is.
     """
@@ -88,7 +88,7 @@ class KnobDecoder:
 
     def turned(
         self, *, encoder: Encoder, clockwise: bool, now: float,
-    ) -> list[Event]:
+    ) -> list[KnobInput]:
         """
         Take one detent of a turn.
 
@@ -103,18 +103,18 @@ class KnobDecoder:
 
         Returns
         -------
-        list[Event]
+        list[KnobInput]
             One `KnobTurned`, or `KnobHeldTurned` while the knob is down.
         """
         del now
-        event: Event | None = KnobTurned(
+        event: KnobInput | None = KnobTurned(
             knob=PLACES[encoder], steps=1 if clockwise else -1,
         )
         for hold in self.holds.values():
             event = hold.steered(event)
         return self.placed(events=[event])
 
-    def pressed(self, *, encoder: Encoder, now: float) -> list[Event]:
+    def pressed(self, *, encoder: Encoder, now: float) -> list[KnobInput]:
         """
         Take a knob's switch going down.
 
@@ -127,14 +127,14 @@ class KnobDecoder:
 
         Returns
         -------
-        list[Event]
+        list[KnobInput]
             Nothing; a press is settled on release.
         """
         event = self.holds[encoder].down(now)
         self.chord.down(now=now)
         return self.placed(events=[event])
 
-    def released(self, *, encoder: Encoder, now: float) -> list[Event]:
+    def released(self, *, encoder: Encoder, now: float) -> list[KnobInput]:
         """
         Take a knob's switch coming up.
 
@@ -147,13 +147,13 @@ class KnobDecoder:
 
         Returns
         -------
-        list[Event]
+        list[KnobInput]
             The press or hold the release settles, if any.
         """
         self.holds[encoder].up(now)
         return self.poll(now=now)
 
-    def poll(self, *, now: float) -> list[Event]:
+    def poll(self, *, now: float) -> list[KnobInput]:
         """
         Send what time alone settles.
 
@@ -164,7 +164,7 @@ class KnobDecoder:
 
         Returns
         -------
-        list[Event]
+        list[KnobInput]
             `KnobsHeld` once both have been down for `HOLD_S`, and any
             press or hold a release has settled.
         """
@@ -172,18 +172,18 @@ class KnobDecoder:
         events += [hold.poll(now) for hold in self.holds.values()]
         return self.placed(events=events)
 
-    def placed(self, *, events: list[Event | None]) -> list[Event]:
+    def placed(self, *, events: list[KnobInput | None]) -> list[KnobInput]:
         """
         Drop the empty results and apply the swap.
 
         Parameters
         ----------
-        events : list[Event | None]
+        events : list[KnobInput | None]
             Results, some None.
 
         Returns
         -------
-        list[Event]
+        list[KnobInput]
             The events, with top and bottom traded when swapped.
         """
         swap = self.swapped()

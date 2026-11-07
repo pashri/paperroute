@@ -2,11 +2,11 @@
 
 from typing import Final
 
-from paperroute.core.messages import (
-    Event,
+from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
     KnobHeldTurned,
+    KnobInput,
     KnobPressed,
     KnobsHeld,
     KnobTurned,
@@ -60,7 +60,7 @@ class HoldKey:
         if self._down_at is not None:
             self._absorbed = True
 
-    def down(self, now: float) -> Event | None:
+    def down(self, now: float) -> KnobInput | None:
         """
         Record a key press; a press during autorepeat changes nothing.
 
@@ -71,7 +71,7 @@ class HoldKey:
 
         Returns
         -------
-        Event | None
+        KnobInput | None
             The event for an earlier release this press settles, if any.
         """
         event = self.poll(now)
@@ -99,18 +99,18 @@ class HoldKey:
         self._turned = False
         self._absorbed = False
 
-    def steered(self, event: Event | None) -> Event | None:
+    def steered[E](self, event: E) -> E | KnobHeldTurned:
         """
         Make this knob's turn a turn while held when the key is down.
 
         Parameters
         ----------
-        event : Event | None
-            The event of another key.
+        event : E
+            The event of another key, of any kind, or None.
 
         Returns
         -------
-        Event | None
+        E | KnobHeldTurned
             `KnobHeldTurned` for this knob's turn while held, which also
             stops the hold; else the event as it is.
         """
@@ -121,7 +121,7 @@ class HoldKey:
         self._turned = True
         return KnobHeldTurned(knob=self.knob, steps=event.steps)
 
-    def poll(self, now: float) -> Event | None:
+    def poll(self, now: float) -> KnobInput | None:
         """
         Settle a release once the repeat gap has passed.
 
@@ -132,7 +132,7 @@ class HoldKey:
 
         Returns
         -------
-        Event | None
+        KnobInput | None
             `KnobHeld` for a release after `HOLD_S` with no turn,
             `KnobPressed` for a tap, else None.
         """
@@ -186,7 +186,7 @@ class Chord:
         if self._started_at is None:
             self._started_at = now
 
-    def poll(self, *, now: float) -> Event | None:
+    def poll(self, *, now: float) -> KnobInput | None:
         """
         Send `KnobsHeld` once when both keys have stayed down.
 
@@ -197,7 +197,7 @@ class Chord:
 
         Returns
         -------
-        Event | None
+        KnobInput | None
             `KnobsHeld` the first time the hold time passes, else None.
         """
         if self._started_at is None:

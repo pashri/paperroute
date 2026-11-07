@@ -6,9 +6,9 @@ import io
 import numpy as np
 import pytest
 
-from paperroute.ports import PanelBus
-from paperroute.render.panel_bits import Box
-from paperroute.selftest import (
+from paperroute_hardware.ports import PanelBus
+from paperroute_hardware.render.panel_bits import Box
+from paperroute_hardware.selftest import (
     BUSY_MESSAGE,
     NO_PANEL_MESSAGE,
     card,

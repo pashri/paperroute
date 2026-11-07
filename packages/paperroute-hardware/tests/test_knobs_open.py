@@ -4,8 +4,8 @@ import logging
 
 import pytest
 
-from paperroute.knobs_open import knobs_for, knobs_state_for
-from paperroute.ports import KnobLines
+from paperroute_hardware.knobs_open import knobs_for, knobs_state_for
+from paperroute_hardware.ports import KnobLines
 from paperroute_testkit.fakes import FakeKnobLines
 
 

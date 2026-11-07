@@ -4,8 +4,8 @@ from datetime import timedelta
 from enum import StrEnum
 from typing import Any, Final
 
-from paperroute.core.knob_decoder import Encoder
-from paperroute.ports import LineEdge
+from paperroute_hardware.core.knob_decoder import Encoder
+from paperroute_hardware.ports import LineEdge
 
 
 class Role(StrEnum):

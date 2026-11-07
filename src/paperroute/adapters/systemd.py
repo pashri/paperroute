@@ -7,7 +7,7 @@ import socket
 from paperroute.core.device_model import DeviceStatus
 from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
-from paperroute.ports import PanelRefresh
+from paperroute_hardware.ports import PanelRefresh
 
 logger = logging.getLogger(__name__)
 

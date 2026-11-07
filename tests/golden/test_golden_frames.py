@@ -19,7 +19,7 @@ from paperroute.core.map_view import MapView
 from paperroute.core.messages import ScreenView
 from paperroute.core.strip_model import StripMapView, StripView
 from paperroute.render.canvas import encode_png
-from paperroute.render.panel_bits import grey_planes, oriented
+from paperroute_hardware.render.panel_bits import grey_planes, oriented
 from tests.golden.scenes import (
     GOLDEN,
     SCENES,

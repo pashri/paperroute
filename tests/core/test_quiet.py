@@ -19,10 +19,6 @@ from paperroute.core.messages import (
     Effect,
     Event,
     FetchFeed,
-    Knob,
-    KnobPressed,
-    KnobsHeld,
-    KnobTurned,
     LoadServiceSpan,
     PowerAction,
     Render,
@@ -37,6 +33,12 @@ from paperroute.core.sleep import WAKE_FOR, slept
 from paperroute.core.state import step
 from paperroute.core.state_model import Places, State
 from paperroute.core.stop_view import StopView
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
 from paperroute_testkit.core.factories import START, departure
 from paperroute_testkit.core.steps import step_answered
 from paperroute_testkit.fakes import device_facts

@@ -7,8 +7,8 @@ import time
 from collections.abc import Callable
 from typing import Final
 
-from paperroute.ports import PanelBus
-from paperroute.render.panel_bits import Box
+from paperroute_hardware.ports import PanelBus
+from paperroute_hardware.render.panel_bits import Box
 
 STATUS: Final[int] = 0x71
 POLL: Final[float] = 0.02  # seconds

@@ -12,15 +12,7 @@ from paperroute.core.alerts_view import (
     build_alerts_view,
 )
 from paperroute.core.feeds import FeedKind
-from paperroute.core.messages import (
-    FetchFeed,
-    Knob,
-    KnobHeld,
-    KnobPressed,
-    KnobTurned,
-    Render,
-    Tick,
-)
+from paperroute.core.messages import FetchFeed, Render, Tick
 from paperroute.core.model import Pin
 from paperroute.core.places import shown
 from paperroute.core.saved import LiveView, Lookahead
@@ -28,6 +20,12 @@ from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import saved_of
 from paperroute.core.stop_view import DOT, StopView
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobHeld,
+    KnobPressed,
+    KnobTurned,
+)
 from paperroute_testkit.core.alert_factories import (
     PENRITH_CENTRAL,
     WESTERN,

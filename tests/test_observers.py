@@ -10,13 +10,8 @@ from paperroute.adapters.settings_form import form_values
 from paperroute.core.device_model import DeviceStatus, WifiPhase, WifiSetup
 from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
-from paperroute.observers import (
-    NullObserver,
-    ObserverGroup,
-    PanelTimes,
-    Timings,
-)
-from paperroute.ports import PanelRefresh
+from paperroute.observers import NullObserver, ObserverGroup, Timings
+from paperroute_hardware.ports import PanelRefresh, PanelTimes
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import device_facts
 

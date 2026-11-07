@@ -10,10 +10,9 @@ from typing import Final, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.adapters.epaper import PanelTimeout
-from paperroute.core.saved import CLEAN_AFTER
-from paperroute.ports import Display, PanelRefresh
-from paperroute.render.panel_bits import (
+from paperroute_hardware.adapters.epaper import PanelTimeout
+from paperroute_hardware.ports import CLEAN_AFTER, Display, PanelRefresh
+from paperroute_hardware.render.panel_bits import (
     HEIGHT,
     WIDTH,
     Box,

@@ -18,11 +18,6 @@ from paperroute.core.device_model import (
 from paperroute.core.messages import (
     ConfirmAsked,
     Effect,
-    Knob,
-    KnobEvent,
-    KnobPressed,
-    KnobsHeld,
-    KnobTurned,
     PowerAction,
     PowerRequested,
 )
@@ -31,6 +26,13 @@ from paperroute.core.sleep import slept
 from paperroute.core.state_model import State
 from paperroute.core.state_views import settled
 from paperroute.core.wifi import setup_started
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobEvent,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
 
 CONFIRM_WAIT: Final[timedelta] = timedelta(seconds=60)
 MENU_IDLE: Final[timedelta] = timedelta(minutes=2)

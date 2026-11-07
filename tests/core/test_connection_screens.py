@@ -16,9 +16,6 @@ from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
     Event,
-    Knob,
-    KnobPressed,
-    KnobTurned,
     LoadDepartures,
     ScreenView,
     Tick,
@@ -35,6 +32,7 @@ from paperroute.core.saved import (
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import current_view, live_stop_view
+from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_testkit.core.alert_factories import alert
 from paperroute_testkit.core.connection_factories import (
     HOLLIS,

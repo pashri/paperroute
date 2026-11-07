@@ -9,10 +9,11 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.knob_hold import Chord, HoldKey
-from paperroute.core.messages import Event, Knob, KnobTurned, QuitRequested
-from paperroute.core.saved import CLEAN_AFTER
+from paperroute.core.messages import Event, QuitRequested
 from paperroute.render.canvas import HEIGHT, WIDTH, encode_png
+from paperroute_hardware.core.knob_events import Knob, KnobTurned
+from paperroute_hardware.core.knob_hold import Chord, HoldKey
+from paperroute_hardware.ports import CLEAN_AFTER
 
 KEYS: Final[dict[str, Event]] = {
     'a': KnobTurned(knob=Knob.TOP, steps=-1),
@@ -162,6 +163,7 @@ class TkMonitor:
         """
         now = time.monotonic()
         hold = self.holds.get(key.keysym.lower())
+        event: Event | None
         if hold is not None:
             event = hold.down(now)
             self.chord.down(now=now)

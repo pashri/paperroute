@@ -39,8 +39,8 @@ from paperroute.core.messages import (
     Event,
     JoinAsked,
 )
-from paperroute.observers import PanelTimes
 from paperroute.ports import KeyStore
+from paperroute_hardware.ports import PanelTimes
 
 logger = logging.getLogger(__name__)
 

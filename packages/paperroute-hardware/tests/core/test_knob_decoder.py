@@ -2,17 +2,21 @@
 
 import pytest
 
-from paperroute.core.knob_decoder import Encoder, KnobDecoder, swapped_event
-from paperroute.core.knob_hold import HOLD_S
-from paperroute.core.messages import (
-    Event,
+from paperroute_hardware.core.knob_decoder import (
+    Encoder,
+    KnobDecoder,
+    swapped_event,
+)
+from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
     KnobHeldTurned,
+    KnobInput,
     KnobPressed,
     KnobsHeld,
     KnobTurned,
 )
+from paperroute_hardware.core.knob_hold import HOLD_S
 
 
 def _decoder(*, swap: bool = False) -> KnobDecoder:
@@ -49,7 +53,9 @@ def test_pressed_then_released_quickly_is_a_press() -> None:
     (HOLD_S, KnobHeld(knob=Knob.BOTTOM)),
     (HOLD_S + 1, KnobHeld(knob=Knob.BOTTOM)),
 ])
-def test_released_at_the_hold_boundary(held: float, expected: Event) -> None:
+def test_released_at_the_hold_boundary(
+    held: float, expected: KnobInput,
+) -> None:
     """A release at 0.8 s or later is a hold; sooner is a press."""
     decoder = _decoder()
     decoder.pressed(encoder=Encoder.B, now=0)
@@ -161,7 +167,7 @@ def test_swap_is_read_at_each_event() -> None:
     ),
     (KnobsHeld(), KnobsHeld()),
 ])
-def test_swapped_event(event: Event, expected: Event) -> None:
+def test_swapped_event(event: KnobInput, expected: KnobInput) -> None:
     """The swap trades top and bottom and leaves KnobsHeld alone."""
     assert swapped_event(event=event, swap=True) == expected
     assert swapped_event(event=event, swap=False) == event

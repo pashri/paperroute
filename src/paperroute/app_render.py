@@ -30,7 +30,6 @@ from paperroute.core.panel_views import (
     SleepView,
     WifiSetupView,
 )
-from paperroute.core.saved import CLEAN_AFTER
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
 from paperroute.core.tiles import TileVariant
@@ -49,6 +48,7 @@ from paperroute.render.panel import draw_panel_view
 from paperroute.render.sleep import with_sleep_band
 from paperroute.render.stop_view import draw_stop_view
 from paperroute.render.strip_view import draw_strip_map_view, draw_strip_view
+from paperroute_hardware.ports import CLEAN_AFTER
 
 logger = logging.getLogger(__name__)
 

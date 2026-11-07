@@ -56,13 +56,6 @@ from paperroute.core.messages import (
     HotspotFailed,
     HotspotStarted,
     JoinAsked,
-    Knob,
-    KnobEvent,
-    KnobHeld,
-    KnobHeldTurned,
-    KnobPressed,
-    KnobsHeld,
-    KnobTurned,
     LineFailed,
     LineLoaded,
     LoadDepartures,
@@ -130,6 +123,15 @@ from paperroute.core.state_model import (
 from paperroute.core.state_saves import saved_effects
 from paperroute.core.state_views import saved_of, settled
 from paperroute.core.wifi import setup_expired, setup_knob
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobEvent,
+    KnobHeld,
+    KnobHeldTurned,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
 
 PERSON_EVENTS: Final[tuple[type, ...]] = (
     KnobTurned,

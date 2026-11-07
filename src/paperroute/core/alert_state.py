@@ -14,18 +14,17 @@ from paperroute.core.alert_model import (
 from paperroute.core.chains import all_departures
 from paperroute.core.connection import between_lists, board_facts, name_trips
 from paperroute.core.feeds import KIND_MODES, FeedKind, alert_feeds_for
-from paperroute.core.messages import (
-    Effect,
-    FetchFeed,
+from paperroute.core.messages import Effect, FetchFeed
+from paperroute.core.model import SYDNEY, Mode, Pin, same_place
+from paperroute.core.places import shown
+from paperroute.core.saved import LOOKAHEAD, LiveView
+from paperroute.core.state_model import State, elapsed
+from paperroute_hardware.core.knob_events import (
     Knob,
     KnobEvent,
     KnobPressed,
     KnobTurned,
 )
-from paperroute.core.model import SYDNEY, Mode, Pin, same_place
-from paperroute.core.places import shown
-from paperroute.core.saved import LOOKAHEAD, LiveView
-from paperroute.core.state_model import State, elapsed
 
 ALERT_EVERY: Final[timedelta] = timedelta(minutes=5)
 

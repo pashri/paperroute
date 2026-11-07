@@ -21,10 +21,6 @@ from paperroute.core.messages import (
     Effect,
     Event,
     FetchFeed,
-    Knob,
-    KnobPressed,
-    KnobsHeld,
-    KnobTurned,
     LoadColumn,
     NoticeView,
     RebuildTimetable,
@@ -45,6 +41,12 @@ from paperroute.core.rebuild import (
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import step
 from paperroute.core.state_model import Rebuild, State
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
 from paperroute_testkit.core.factories import START, begun, pin_at
 from paperroute_testkit.core.steps import answer_fetches, step_untouched
 from paperroute_testkit.fakes import device_facts

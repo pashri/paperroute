@@ -3,7 +3,7 @@
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.render.panel_bits import (
+from paperroute_hardware.render.panel_bits import (
     HEIGHT,
     WIDTH,
     Box,

@@ -41,8 +41,6 @@ from paperroute.adapters.checked_tiles import CheckedTiles
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import GuardedFeeds
-from paperroute.adapters.knob_reader import KnobReader
-from paperroute.adapters.panel_display import Displays
 from paperroute.adapters.power import NullPower, SystemctlPower
 from paperroute.adapters.rate_limit import tfnsw_limiter
 from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
@@ -58,19 +56,22 @@ from paperroute.build.gtfs_files import Source
 from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.geo import to_metres
-from paperroute.core.knob_decoder import KnobDecoder
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
-from paperroute.core.messages import Event, Knob, KnobTurned
+from paperroute.core.messages import Event
 from paperroute.core.model import SYDNEY
 from paperroute.core.tiles import TILE_STYLE, ZOOMS, TileVariant, levels_text
 from paperroute.observers import Timings
-from paperroute.panel_open import panel_for
-from paperroute.ports import LineEdge, PanelBus, PanelRefresh
 from paperroute.render.canvas import INK
 from paperroute.render.map_base import draw_map_base
-from paperroute.render.panel_bits import HEIGHT, WIDTH
 from paperroute.summary import Summary
 from paperroute.web_observer import web_observer
+from paperroute_hardware.adapters.knob_reader import KnobReader
+from paperroute_hardware.adapters.panel_display import Displays
+from paperroute_hardware.core.knob_decoder import KnobDecoder
+from paperroute_hardware.core.knob_events import Knob, KnobTurned
+from paperroute_hardware.panel_open import panel_for
+from paperroute_hardware.ports import LineEdge, PanelBus, PanelRefresh
+from paperroute_hardware.render.panel_bits import HEIGHT, WIDTH
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import (
     FakeKeys,

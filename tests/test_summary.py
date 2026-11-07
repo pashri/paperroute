@@ -11,7 +11,6 @@ from paperroute.adapters.tfnsw import (
     FeedTimedOut,
     FeedUnavailable,
 )
-from paperroute.ports import PanelRefresh
 from paperroute.summary import (
     SUMMARY_EVERY_S,
     FailReason,
@@ -19,6 +18,7 @@ from paperroute.summary import (
     failure_reason,
     spread,
 )
+from paperroute_hardware.ports import PanelRefresh
 
 BUSES: Final[str] = 'v1/gtfs/vehiclepos/buses'
 TRAINS: Final[str] = 'v2/gtfs/vehiclepos/sydneytrains'

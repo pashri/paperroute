@@ -1,7 +1,7 @@
 """Tests for the knobs' wiring."""
 
-from paperroute.adapters.knob_lines import DT_LINES, LINES, Role
-from paperroute.core.knob_decoder import Encoder
+from paperroute_hardware.adapters.knob_lines import DT_LINES, LINES, Role
+from paperroute_hardware.core.knob_decoder import Encoder
 
 
 def test_lines_match_the_wiring() -> None:

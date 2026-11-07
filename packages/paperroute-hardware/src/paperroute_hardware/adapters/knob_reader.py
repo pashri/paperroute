@@ -6,10 +6,10 @@ import time
 from collections.abc import Callable
 from typing import Final
 
-from paperroute.adapters.knob_lines import DT_LINES, LINES, Role
-from paperroute.core.knob_decoder import KnobDecoder
-from paperroute.core.messages import Event
-from paperroute.ports import KnobLines, LineEdge
+from paperroute_hardware.adapters.knob_lines import DT_LINES, LINES, Role
+from paperroute_hardware.core.knob_decoder import KnobDecoder
+from paperroute_hardware.core.knob_events import KnobInput
+from paperroute_hardware.ports import KnobLines, LineEdge
 
 logger = logging.getLogger(__name__)
 
@@ -66,13 +66,13 @@ class KnobReader:
         self._closed = False
         self.answering = True
 
-    def step(self) -> list[Event]:
+    def step(self) -> list[KnobInput]:
         """
         Read the lines once and decode what changed.
 
         Returns
         -------
-        list[Event]
+        list[KnobInput]
             The events the changes make, then any that time settles.
         """
         edges = self.lines.read(timeout=self.wait)
@@ -83,7 +83,7 @@ class KnobReader:
         ]
         return events + self.decoder.poll(now=self.clock())
 
-    def edge_events(self, *, edge: LineEdge) -> list[Event]:
+    def edge_events(self, *, edge: LineEdge) -> list[KnobInput]:
         """
         Decode one line change, at the time it happened.
 
@@ -94,7 +94,7 @@ class KnobReader:
 
         Returns
         -------
-        list[Event]
+        list[KnobInput]
             The events it makes; none for a CLK rise or a DT change.
         """
         encoder, role = LINES[edge.line]
@@ -111,13 +111,13 @@ class KnobReader:
                 return self.decoder.pressed(encoder=encoder, now=edge.at)
         return []
 
-    def run(self, *, post: Callable[[Event], None]) -> None:
+    def run(self, *, post: Callable[[KnobInput], None]) -> None:
         """
         Post knob events until stopped or the lines fail.
 
         Parameters
         ----------
-        post : Callable[[Event], None]
+        post : Callable[[KnobInput], None]
             Receives each event, on this thread.
         """
         try:
@@ -128,13 +128,13 @@ class KnobReader:
             self.answering = False
             logger.error('knobs stopped answering', exc_info=True)
 
-    def start(self, *, post: Callable[[Event], None]) -> None:
+    def start(self, *, post: Callable[[KnobInput], None]) -> None:
         """
         Start reading on a daemon thread.
 
         Parameters
         ----------
-        post : Callable[[Event], None]
+        post : Callable[[KnobInput], None]
             Receives each event, on the reader's thread, so it must be
             safe to call from there.
         """

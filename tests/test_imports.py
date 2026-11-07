@@ -16,6 +16,9 @@ SRC: Final[tuple[Path, ...]] = (
         if path.parent.name != 'paperroute_testkit'
     ),
 )
+HARDWARE: Final[Path] = (
+    ROOT / 'packages' / 'paperroute-hardware' / 'src' / 'paperroute_hardware'
+)
 DEVICE_IMPORTS: Final[str] = (
     'import paperroute.__main__, paperroute.app, sys; '
     "assert not {'osmium', 'shapely'} & set(sys.modules)"
@@ -30,6 +33,10 @@ REFRESH_RUN: Final[str] = (
     '    assert stop.code == 1, stop.code\n'
     "assert not {'osmium', 'shapely'} & set(sys.modules)\n"
     "assert 'pydantic' not in sys.modules\n"
+)
+SCREEN_IMPORTS: Final[str] = (
+    'import paperroute.screen, sys; '
+    'print(*sorted(sys.modules))'
 )
 
 
@@ -57,6 +64,24 @@ def test_refresh_never_imports_build_libraries(tmp_path: Path) -> None:
         },
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_screen_loads_no_board_modules() -> None:
+    """The screen command loads only the hardware package and itself."""
+    result = subprocess.run(
+        [sys.executable, '-c', SCREEN_IMPORTS],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    offenders = [
+        name
+        for name in result.stdout.split()
+        if name.split('.')[0].startswith('paperroute')
+        and name not in {'paperroute', 'paperroute.screen'}
+        and name.split('.')[0] != 'paperroute_hardware'
+    ]
+    assert not offenders
 
 
 def source_root(*, path: Path) -> Path:
@@ -215,11 +240,14 @@ def test_render_takes_only_faces_and_greys_from_build() -> None:
 
 def test_gpiod_only_in_the_line_adapters() -> None:
     """Only the Linux panel bus and the knobs' lines import gpiod."""
-    allowed = {'adapters/panel_bus.py', 'adapters/knob_lines.py'}
+    allowed = {
+        HARDWARE / 'adapters' / 'panel_bus.py',
+        HARDWARE / 'adapters' / 'knob_lines.py',
+    }
     offenders = [
         str(path)
         for path in sources()
-        if under(path=path) not in allowed
+        if path not in allowed
         and any(
             name.split('.')[0] == 'gpiod'
             for name in imported_names(path=path)

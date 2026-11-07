@@ -4,8 +4,8 @@ from typing import cast
 
 import pytest
 
-from paperroute.adapters.epaper import PanelTimeout, Uc8179
-from paperroute.render.panel_bits import Box
+from paperroute_hardware.adapters.epaper import PanelTimeout, Uc8179
+from paperroute_hardware.render.panel_bits import Box
 from paperroute_testkit.fakes import FakePanelBus
 
 WINDOW = bytes.fromhex('00C80257' '00A0013F' '01')

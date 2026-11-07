@@ -11,10 +11,6 @@ from paperroute.core.auto_pins import rule_holds
 from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
-    Knob,
-    KnobHeld,
-    KnobPressed,
-    KnobTurned,
     LoadDepartures,
     PinDeleted,
     StripLoaded,
@@ -25,6 +21,12 @@ from paperroute.core.places import shown
 from paperroute.core.saved import LiveView, Saved, seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import Places, State
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobHeld,
+    KnobPressed,
+    KnobTurned,
+)
 from paperroute_testkit.core.alert_factories import alert
 from paperroute_testkit.core.factories import START, departure, pin_at
 from paperroute_testkit.core.steps import wakeful

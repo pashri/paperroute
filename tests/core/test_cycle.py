@@ -19,8 +19,6 @@ from paperroute.core.messages import (
     FeedFailed,
     FeedFetched,
     FetchFeed,
-    Knob,
-    KnobTurned,
     NoticeView,
     PositionsFetched,
     PowerAction,
@@ -38,6 +36,7 @@ from paperroute.core.state import step
 from paperroute.core.state_model import RELOAD_BEFORE, Cycle, State
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.stop_view import HORIZON
+from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, departure, snapshot
 from paperroute_testkit.fakes import device_facts
 from tests.core.test_quiet import at as quiet_at

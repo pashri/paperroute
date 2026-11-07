@@ -12,8 +12,6 @@ from paperroute.core.messages import (
     HotspotStarted,
     JoinAsked,
     JoinWifi,
-    Knob,
-    KnobPressed,
     ProbeDevice,
     StartWifiSetup,
     StopWifiSetup,
@@ -24,6 +22,7 @@ from paperroute.core.messages import (
 from paperroute.core.panel_views import WifiSetupView
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import HINT_DOT, clock_text
+from paperroute_hardware.core.knob_events import Knob, KnobPressed
 
 SETUP_FOR: Final[timedelta] = timedelta(minutes=10)
 SETUP_SSID: Final[str] = 'paperroute-setup'

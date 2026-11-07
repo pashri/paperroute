@@ -19,9 +19,6 @@ from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
     Event,
-    Knob,
-    KnobHeld,
-    KnobTurned,
     LineFailed,
     LoadChooserDepartures,
     LoadColumn,
@@ -43,6 +40,7 @@ from paperroute.core.state_model import LOOKBACK, RELOAD_BEFORE, State
 from paperroute.core.state_views import saved_of
 from paperroute.core.stop_view import HORIZON, StopView
 from paperroute.core.strip_model import HINTS, StripView
+from paperroute_hardware.core.knob_events import Knob, KnobHeld, KnobTurned
 from paperroute_testkit.core.factories import (
     EIGHT,
     START,

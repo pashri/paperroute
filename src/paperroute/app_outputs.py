@@ -18,7 +18,7 @@ from paperroute.core.messages import (
     Render,
     ResetDevice,
 )
-from paperroute.core.saved import CLEAN_AFTER
+from paperroute_hardware.ports import CLEAN_AFTER
 
 logger = logging.getLogger(__name__)
 

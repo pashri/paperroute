@@ -33,8 +33,6 @@ from paperroute.core.messages import (
     ColumnLoaded,
     Effect,
     Event,
-    Knob,
-    KnobTurned,
     LoadChooserDepartures,
     LoadColumn,
     Tick,
@@ -46,6 +44,7 @@ from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import HORIZON
+from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, begun, pin_at, place
 from tests.core.chooser_walks import (
     NEXT,

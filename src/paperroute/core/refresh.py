@@ -5,9 +5,10 @@ from datetime import timedelta
 from typing import Final
 
 from paperroute.core.map_view import MapView
-from paperroute.core.messages import Event, KnobEvent, KnobsHeld, ScreenView
+from paperroute.core.messages import Event, ScreenView
 from paperroute.core.state_model import Refresh, State, elapsed
 from paperroute.core.strip_model import StripMapView
+from paperroute_hardware.core.knob_events import KnobEvent, KnobsHeld
 
 __all__ = [
     'Refresh',

@@ -8,15 +8,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from paperroute.core.cycle import cycle_held
-from paperroute.core.messages import (
-    Event,
-    Knob,
-    KnobHeld,
-    KnobHeldTurned,
-    KnobPressed,
-    KnobTurned,
-    Tick,
-)
+from paperroute.core.messages import Event, Tick
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
@@ -25,6 +17,13 @@ from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import StripInputs, StripView, trip_day
 from paperroute.core.strip_select import panel_trains
 from paperroute.core.strip_view import build_strip_view, marks_of
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobHeld,
+    KnobHeldTurned,
+    KnobPressed,
+    KnobTurned,
+)
 from paperroute_testkit.core.factories import START, line_pattern, live, train
 from tests.core.test_state import check_selection
 from tests.core.test_strip_follow import (

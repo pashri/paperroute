@@ -38,10 +38,6 @@ from paperroute.core.messages import (
     ColumnFailed,
     ColumnLoaded,
     Effect,
-    Knob,
-    KnobEvent,
-    KnobPressed,
-    KnobTurned,
     LineFailed,
     LineLoaded,
     LoadChooserDepartures,
@@ -71,6 +67,12 @@ from paperroute.core.strip_model import (
 )
 from paperroute.core.strip_state import folded_reach, picking_to
 from paperroute.core.strip_view import build_strip_view, line_reach
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobEvent,
+    KnobPressed,
+    KnobTurned,
+)
 
 LINE_FAILED: Final[str] = "Can't load the line"
 DEPARTURES_FAILED: Final[str] = "Can't load departures"

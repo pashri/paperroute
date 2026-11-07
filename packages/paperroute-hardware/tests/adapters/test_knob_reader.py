@@ -6,18 +6,18 @@ from collections.abc import Callable, Iterator
 
 import pytest
 
-from paperroute.adapters.knob_reader import KnobReader
-from paperroute.core.knob_decoder import KnobDecoder
-from paperroute.core.knob_hold import HOLD_S
-from paperroute.core.messages import (
-    Event,
+from paperroute_hardware.adapters.knob_reader import KnobReader
+from paperroute_hardware.core.knob_decoder import KnobDecoder
+from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
+    KnobInput,
     KnobPressed,
     KnobsHeld,
     KnobTurned,
 )
-from paperroute.ports import LineEdge
+from paperroute_hardware.core.knob_hold import HOLD_S
+from paperroute_hardware.ports import LineEdge
 from paperroute_testkit.fakes import FakeKnobLines
 
 A_CLK, A_DT, A_SW = 20, 21, 26
@@ -203,7 +203,7 @@ def test_start_posts_events_until_stopped() -> None:
     reader = KnobReader(
         lines=lines, decoder=KnobDecoder(swapped=lambda: False), wait=0.01,
     )
-    posted: list[Event] = []
+    posted: list[KnobInput] = []
     reader.start(post=posted.append)
     deadline = time.monotonic() + 2
     while not posted and time.monotonic() < deadline:
@@ -226,7 +226,7 @@ def test_run_logs_a_line_error_and_ends(
 ) -> None:
     """A read that fails ends the loop with one error logged."""
     lines = FakeKnobLines(error=OSError('gone'))
-    posted: list[Event] = []
+    posted: list[KnobInput] = []
     with caplog.at_level(logging.ERROR):
         _reader(lines=lines).run(post=posted.append)
     assert not posted

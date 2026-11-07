@@ -16,7 +16,7 @@ from paperroute.adapters.tfnsw import (
     FeedUnavailable,
 )
 from paperroute.observers import NullObserver
-from paperroute.ports import PanelRefresh
+from paperroute_hardware.ports import PanelRefresh
 
 SUMMARY_EVERY_S: Final[float] = 900.0
 DECILES: Final[int] = 10

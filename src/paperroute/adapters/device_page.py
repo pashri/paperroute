@@ -23,7 +23,7 @@ from paperroute.core.panel_screens import strength as dbm_strength
 from paperroute.core.panel_views import CANCEL_LINE, CONFIRM_COPY
 from paperroute.core.quota import DAILY_LIMIT
 from paperroute.core.stop_view import DOT, HINT_DOT, clock_text
-from paperroute.observers import PanelTimes
+from paperroute_hardware.ports import PanelTimes
 
 POWER_STATUS: Final[dict[PowerAction, str]] = {
     PowerAction.OFF: 'Shutting down...',

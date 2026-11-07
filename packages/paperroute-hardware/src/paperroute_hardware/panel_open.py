@@ -2,10 +2,9 @@
 
 from collections.abc import Callable
 
-from paperroute.adapters.epaper import Uc8179
-from paperroute.adapters.panel_display import PanelDisplay
-from paperroute.observers import PanelTimes
-from paperroute.ports import PanelBus, PanelRefresh
+from paperroute_hardware.adapters.epaper import Uc8179
+from paperroute_hardware.adapters.panel_display import PanelDisplay
+from paperroute_hardware.ports import PanelBus, PanelRefresh, PanelTimes
 
 __all__ = ['panel_for', 'panel_times_for']
 

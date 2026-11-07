@@ -57,11 +57,6 @@ from paperroute.core.messages import (
     FeedFetched,
     FeedJoined,
     FetchFeed,
-    Knob,
-    KnobHeld,
-    KnobPressed,
-    KnobsHeld,
-    KnobTurned,
     LoadPatterns,
     MapData,
     MapDataFailed,
@@ -87,7 +82,6 @@ from paperroute.core.panel_views import MenuView, SleepView
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.places import shown
 from paperroute.core.saved import (
-    CLEAN_AFTER,
     DEFAULT_SAVED,
     TOWN_HALL,
     LiveView,
@@ -108,7 +102,7 @@ from paperroute.core.tiles import (
 )
 from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, Timings
-from paperroute.ports import Observer, PanelRefresh
+from paperroute.ports import Observer
 from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.chrome import HEADER
 from paperroute.render.keep_out import KeepOut, keep_out
@@ -117,6 +111,14 @@ from paperroute.render.notice import draw_notice_view
 from paperroute.render.panel import draw_panel_view
 from paperroute.render.sleep import with_sleep_band
 from paperroute.render.tile_codec import pack_bits, pack_grey
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobHeld,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
+from paperroute_hardware.ports import CLEAN_AFTER, PanelRefresh
 from paperroute_testkit.app_factories import (
     AT,
     MAP_MPP,

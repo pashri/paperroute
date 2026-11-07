@@ -8,13 +8,7 @@ import pytest
 
 from paperroute.core.chooser import Stage, to_row, turned_to
 from paperroute.core.map_view import DEFAULT_ZOOM
-from paperroute.core.messages import (
-    Knob,
-    KnobPressed,
-    KnobTurned,
-    StripLoaded,
-    TimetableSeen,
-)
+from paperroute.core.messages import StripLoaded, TimetableSeen
 from paperroute.core.model import Pin, RouteKind
 from paperroute.core.reach import (
     Reach,
@@ -30,6 +24,7 @@ from paperroute.core.strip_folds import FOLD_MIN, folded
 from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import OPEN_TAG, StripMapView, StripView
 from paperroute.core.strip_view import build_strip_view, home_of, window_of
+from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_testkit.core.factories import (
     START,
     begun,

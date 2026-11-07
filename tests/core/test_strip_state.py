@@ -11,9 +11,6 @@ from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
     FetchFeed,
-    Knob,
-    KnobPressed,
-    KnobTurned,
     LoadModes,
     LoadPatterns,
     LoadShapes,
@@ -44,6 +41,7 @@ from paperroute.core.strip_state import (
     strip_key,
     strip_patterns,
 )
+from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_testkit.core.factories import (
     START,
     departure,

@@ -47,13 +47,13 @@ from paperroute.core.saved import (
 )
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
-
-
-class Knob(StrEnum):
-    """The two knobs."""
-
-    TOP = 'top'
-    BOTTOM = 'bottom'
+from paperroute_hardware.core.knob_events import (
+    KnobHeld,
+    KnobHeldTurned,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
 
 
 class PowerAction(StrEnum):
@@ -410,45 +410,10 @@ class FeedFailed:
 
 
 @dataclass(frozen=True)
-class KnobTurned:
-    """A knob turned by some detents (negative is anticlockwise)."""
-
-    knob: Knob
-    steps: int
-
-
-@dataclass(frozen=True)
-class KnobPressed:
-    """A knob was pressed."""
-
-    knob: Knob
-
-
-@dataclass(frozen=True)
-class KnobHeld:
-    """A knob was held down and let go, with no turn while held."""
-
-    knob: Knob
-
-
-@dataclass(frozen=True)
-class KnobsHeld:
-    """Both knobs were held down together for the hold time."""
-
-
-@dataclass(frozen=True)
 class ConfirmAsked:
     """A phone asked for something the panel must confirm."""
 
     action: ConfirmAction
-
-
-@dataclass(frozen=True)
-class KnobHeldTurned:
-    """A knob turned by some detents while held down."""
-
-    knob: Knob
-    steps: int
 
 
 @dataclass(frozen=True)
@@ -938,7 +903,6 @@ ChooserEvent = (
     | ChooserDeparturesLoaded
     | ChooserDeparturesFailed
 )
-KnobEvent = KnobTurned | KnobPressed | KnobHeld | KnobHeldTurned
 WifiEvent = (
     HotspotStarted
     | HotspotFailed

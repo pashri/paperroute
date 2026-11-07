@@ -33,7 +33,7 @@ from paperroute.core.model import (
 )
 from paperroute.core.patterns import TripPattern
 from paperroute.core.reach import ReachInput, StripKey
-from paperroute.core.saved import CLEAN_AFTER, DEFAULT_SAVED, Saved
+from paperroute.core.saved import DEFAULT_SAVED, Saved
 from paperroute.core.tiles import LabelKind, StreetLabel, TileVariant
 from paperroute.core.trip_search import (
     Journey,
@@ -41,7 +41,8 @@ from paperroute.core.trip_search import (
     PlannerUnavailable,
     TripSearch,
 )
-from paperroute.ports import LineEdge, Loaded, TileRepository
+from paperroute.ports import Loaded, TileRepository
+from paperroute_hardware.ports import CLEAN_AFTER, LineEdge
 
 STOP_POINT: Point = to_metres(lon=151.0036, lat=-33.8170)
 

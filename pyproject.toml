@@ -112,6 +112,14 @@ skip = [".venv"]
 py-version = "3.14"
 extension-pkg-allow-list = ["skia", "osmium"]
 
+[tool.pylint.imports]
+known-first-party = [
+    "paperroute",
+    "paperroute_hardware",
+    "paperroute_device",
+    "paperroute_transit",
+]
+
 [tool.pylint.format]
 max-line-length = 79
 

@@ -13,8 +13,6 @@ from paperroute.core.map_view import MapView
 from paperroute.core.messages import (
     Effect,
     FetchFeed,
-    Knob,
-    KnobPressed,
     LoadModes,
     LoadPatterns,
     LoadShapes,
@@ -29,6 +27,7 @@ from paperroute.core.state import step
 from paperroute.core.state_model import Cycle, State
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.tiles import ZOOMS
+from paperroute_hardware.core.knob_events import Knob, KnobPressed
 from paperroute_testkit.core.connection_factories import LEG1, LEG2
 from paperroute_testkit.core.factories import (
     EIGHT,

@@ -13,10 +13,6 @@ from paperroute.core.messages import (
     DeviceProbed,
     DeviceProbeFailed,
     FetchFeed,
-    Knob,
-    KnobPressed,
-    KnobsHeld,
-    KnobTurned,
     NoticeView,
     PowerAction,
     PowerFailed,
@@ -38,6 +34,12 @@ from paperroute.core.state_model import State
 from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import stop_view_of
 from paperroute.core.stop_view import StopView
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.core.steps import step_untouched
 from paperroute_testkit.fakes import device_facts

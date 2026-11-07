@@ -11,7 +11,6 @@ from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver
 from paperroute.ports import (
     Clock,
-    Display,
     FeedsClient,
     NetworkRepository,
     Observer,
@@ -21,6 +20,7 @@ from paperroute.ports import (
     TimetableBuilder,
     TimetableRepository,
 )
+from paperroute_hardware.ports import Display
 
 
 @dataclass(frozen=True)

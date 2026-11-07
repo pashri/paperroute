@@ -3,11 +3,16 @@
 from dataclasses import replace
 
 from paperroute.core.auto_model import AutoState, Before, Occurrence, running
-from paperroute.core.messages import Knob, KnobEvent, KnobHeld, KnobTurned
 from paperroute.core.model import pin_ref, same_place
 from paperroute.core.places import committed, pin_index, shown, with_place
 from paperroute.core.sleep import awake
 from paperroute.core.state_model import State
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobEvent,
+    KnobHeld,
+    KnobTurned,
+)
 
 
 def clock_trusted(*, state: State) -> bool:

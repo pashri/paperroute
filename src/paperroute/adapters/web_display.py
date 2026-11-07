@@ -31,20 +31,23 @@ from paperroute.adapters.web_ways import WaysPages
 from paperroute.core.messages import (
     POWER_ACTIONS,
     Event,
+    PowerAction,
+    PowerRequested,
+    SettingsChanged,
+)
+from paperroute.core.model import SYDNEY
+from paperroute.core.saved import Settings
+from paperroute.render.canvas import encode_png
+from paperroute.rss import max_rss_mb
+from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
     KnobHeldTurned,
     KnobPressed,
     KnobsHeld,
     KnobTurned,
-    PowerAction,
-    PowerRequested,
-    SettingsChanged,
 )
-from paperroute.core.model import SYDNEY
-from paperroute.core.saved import CLEAN_AFTER, Settings
-from paperroute.render.canvas import encode_png
-from paperroute.rss import max_rss_mb
+from paperroute_hardware.ports import CLEAN_AFTER
 
 if TYPE_CHECKING:
     from paperroute.adapters.web_device import DevicePages

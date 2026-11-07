@@ -14,7 +14,7 @@ from xml.etree import ElementTree
 import numpy as np
 import pytest
 
-from paperroute.screen import load_frame
+from paperroute_hardware.screen import load_frame
 
 ROOT: Final[Path] = Path(__file__).parents[1]
 DEPLOY: Final[Path] = ROOT / 'deploy'

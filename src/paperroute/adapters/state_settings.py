@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from paperroute.adapters.state_auto import CLOCK, CLOCK_FORMAT
 from paperroute.core.saved import (
-    CLEAN_AFTER,
     CLEAN_CHOICES,
     ConnectionMap,
     Lookahead,
@@ -16,6 +15,7 @@ from paperroute.core.saved import (
     Settings,
     Window,
 )
+from paperroute_hardware.ports import CLEAN_AFTER
 
 MAX_PEAK_WINDOWS: Final[int] = 2
 

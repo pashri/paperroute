@@ -9,7 +9,8 @@ from paperroute.adapters.settings_form import form_values
 from paperroute.core.device_model import DeviceStatus
 from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
-from paperroute.ports import Observer, PanelRefresh
+from paperroute.ports import Observer
+from paperroute_hardware.ports import PanelRefresh, PanelTimes
 
 logger = logging.getLogger(__name__)
 
@@ -69,26 +70,6 @@ class PinsSeen:
     pins: tuple[Pin, ...]
     shown: int | None
     revision: int
-
-
-@dataclass
-class PanelTimes:
-    """
-    The e-paper panel's latest refresh times.
-
-    Attributes
-    ----------
-    partial_s : float | None
-        Seconds the latest good patch took, or None before one.
-    full_s : float | None
-        Seconds the latest good full refresh took, or None before one.
-    ok : bool
-        False after a failed refresh, until the next good one.
-    """
-
-    partial_s: float | None = None
-    full_s: float | None = None
-    ok: bool = True
 
 
 @dataclass

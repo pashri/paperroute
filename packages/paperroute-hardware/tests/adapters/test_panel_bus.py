@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters.panel_bus import (
+from paperroute_hardware.adapters.panel_bus import (
     CHUNK,
     SPI_IOC_WR_MAX_SPEED_HZ,
     SPI_IOC_WR_MODE,

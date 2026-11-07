@@ -21,11 +21,7 @@ from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.device_probe import SystemProbe
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import GuardedFeeds
-from paperroute.adapters.knob_lines import GpiodKnobLines
-from paperroute.adapters.knob_reader import KnobReader
 from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.adapters.panel_bus import LinuxPanelBus
-from paperroute.adapters.panel_display import Displays
 from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.adapters.power import NullPower, SystemctlPower
 from paperroute.adapters.rate_limit import tfnsw_limiter
@@ -51,10 +47,8 @@ from paperroute.app_device import DevicePorts
 from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin, StopPlace
 from paperroute.core.tiles import TileVariant
-from paperroute.knobs_open import knobs_for, knobs_state_for
 from paperroute.logs import LastError, configure_logging
 from paperroute.observers import Timings
-from paperroute.panel_open import panel_for, panel_times_for
 from paperroute.ports import (
     Clock,
     FeedsClient,
@@ -65,9 +59,15 @@ from paperroute.ports import (
     TimetableBuilder,
     WifiControl,
 )
-from paperroute.selftest import selftest_main
 from paperroute.summary import Summary
 from paperroute.web_observer import web_observer
+from paperroute_hardware.adapters.knob_lines import GpiodKnobLines
+from paperroute_hardware.adapters.knob_reader import KnobReader
+from paperroute_hardware.adapters.panel_bus import LinuxPanelBus
+from paperroute_hardware.adapters.panel_display import Displays
+from paperroute_hardware.knobs_open import knobs_for, knobs_state_for
+from paperroute_hardware.panel_open import panel_for, panel_times_for
+from paperroute_hardware.selftest import selftest_main
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor

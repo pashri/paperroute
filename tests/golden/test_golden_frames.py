@@ -15,6 +15,7 @@ from paperroute.core.connection_strip import (
     ConnectionStripMapView,
     ConnectionStripView,
 )
+from paperroute.core.map_view import MapView
 from paperroute.core.messages import ScreenView
 from paperroute.core.strip_model import StripMapView, StripView
 from paperroute.render.canvas import encode_png
@@ -72,8 +73,11 @@ def mismatch(
     Returns
     -------
     str
-        Where the files are and how many pixels changed.
+        Where the files are and how many pixels changed; the two shapes
+        when they differ.
     """
+    if actual.shape != expected.shape:
+        return f'shape {actual.shape} is not {expected.shape}'
     changed = actual != expected
     diff = np.where(changed, 0, 255).astype(np.uint8)
     (out / 'actual.png').write_bytes(encode_png(grey=actual))
@@ -128,6 +132,12 @@ def test_strip_scenes_carry_pattern_data() -> None:
     assert isinstance(legs_map, ConnectionStripMapView)
     for section in (*legs.sections, *legs_map.pane.sections):
         assert section.stops and section.empty is None
+
+
+def test_map_panes_scene_has_panes() -> None:
+    """The two-change connection Map draws side panes."""
+    view = view_of(state=SCENES['map_panes']())
+    assert isinstance(view, MapView) and view.panes
 
 
 def test_png_round_trip_is_exact() -> None:

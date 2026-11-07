@@ -19,8 +19,6 @@ MAP_WIDTH: Final[int] = 520
 MAP_HEIGHT: Final[int] = 440
 STRIP_MAP_WIDTH: Final[int] = 480
 DEFAULT_ZOOM: Final[int] = 2
-POSITION_STALE_AFTER: Final[timedelta] = timedelta(minutes=2)
-TIMETABLE_STEP: Final[timedelta] = timedelta(seconds=30)
 NO_LOCATION: Final[str] = 'No location for this stop'
 VISIBLE_MARGIN: Final[float] = 20.0  # pixels
 NEARBY_SCALE: Final[int] = 3
@@ -163,7 +161,11 @@ class MapInputs:
     shapes : Mapping[str, Shape]
         Loaded shapes by shape ID.
     now : datetime
-        Current time.
+        The frame time, which ages, stale checks and timetable positions
+        are worked out at.
+    stale_after : timedelta
+        How old a position may be before it is drawn at its timetable
+        position instead.
     width : int
         Map width in pixels.
     vehicle_trips : frozenset[str] | None
@@ -184,6 +186,7 @@ class MapInputs:
     patterns: Mapping[str, TripPattern | None]
     shapes: Mapping[str, Shape]
     now: datetime
+    stale_after: timedelta
     width: int = MAP_WIDTH
     vehicle_trips: frozenset[str] | None = None
     ends: tuple[Point | None, Point | None] = (None, None)
@@ -317,7 +320,7 @@ def position_age(
     snapshot : PositionsSnapshot
         The download it came in.
     now : datetime
-        Current time.
+        The frame time.
 
     Returns
     -------
@@ -327,25 +330,6 @@ def position_age(
     """
     lag = snapshot.header_time - (vehicle.timestamp or snapshot.header_time)
     return lag + (now - snapshot.fetched_at).total_seconds()
-
-
-def timetable_moment(*, now: datetime) -> datetime:
-    """
-    Floor a time to the timetable position step.
-
-    Parameters
-    ----------
-    now : datetime
-        Aware time.
-
-    Returns
-    -------
-    datetime
-        The time floored to `TIMETABLE_STEP`, in the same zone.
-    """
-    step = TIMETABLE_STEP.total_seconds()
-    floored = math.floor(now.timestamp() / step) * step
-    return datetime.fromtimestamp(floored, tz=now.tzinfo)
 
 
 def pin_trips(*, departures: Sequence[Departure]) -> frozenset[str]:
@@ -470,7 +454,7 @@ def heard(*, inputs: MapInputs) -> tuple[tuple[VehiclePosition, float], ...]:
     return tuple(best.values())
 
 
-def is_fresh(*, age: float) -> bool:
+def is_fresh(*, age: float, limit: timedelta) -> bool:
     """
     Check whether a position is recent enough to draw where it is.
 
@@ -478,13 +462,15 @@ def is_fresh(*, age: float) -> bool:
     ----------
     age : float
         Seconds since the vehicle reported.
+    limit : timedelta
+        How old a position may be.
 
     Returns
     -------
     bool
-        True at 120 s or under.
+        True at `limit` or under.
     """
-    return age <= POSITION_STALE_AFTER.total_seconds()
+    return age <= limit.total_seconds()
 
 
 def uncovered_pins(
@@ -533,11 +519,16 @@ def needed_patterns(*, inputs: MapInputs) -> frozenset[str]:
         return frozenset()
     centre, mpp = inputs.centre, ZOOMS[inputs.zoom]
     vehicles = heard(inputs=inputs)
-    fresh = frozenset(v.trip_id for v, age in vehicles if is_fresh(age=age))
+    limit = inputs.stale_after
+    fresh = frozenset(
+        vehicle.trip_id
+        for vehicle, age in vehicles
+        if is_fresh(age=age, limit=limit)
+    )
     stale = frozenset(
         vehicle.trip_id
         for vehicle, age in vehicles
-        if not is_fresh(age=age)
+        if not is_fresh(age=age, limit=limit)
         and nearby(centre=centre, mpp=mpp, point=vehicle.point)
     )
     pins = uncovered_pins(departures=inputs.departures, covered=fresh)
@@ -621,7 +612,7 @@ def timetable_marker(
     point = timetable_point(
         pattern=pattern,
         shape=shape_of(pattern=pattern, shapes=inputs.shapes),
-        now=timetable_moment(now=inputs.now),
+        now=inputs.now,
     )
     if point is None:
         return None
@@ -669,9 +660,8 @@ def stale_marker(
     Returns
     -------
     Marker | None
-        A hollow marker carrying the age floored to whole minutes, so the
-        view only changes when the shown age does, or None when the trip
-        is unknown or not running.
+        A hollow marker carrying the age floored to whole minutes, or
+        None when the trip is unknown or not running.
     """
     return timetable_marker(
         pattern=inputs.patterns.get(vehicle.trip_id),
@@ -715,7 +705,7 @@ def vehicle_markers(
                 centre=centre,
                 pinned=pinned,
             )
-            if is_fresh(age=age)
+            if is_fresh(age=age, limit=inputs.stale_after)
             else stale_marker(
                 vehicle=vehicle,
                 age=age,

@@ -31,12 +31,14 @@ from paperroute.render.connection_strip import (
     row_step,
 )
 from tests.core.connection_factories import WORK, at
+from tests.core.factories import STALE_LIMIT
 from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
 
 VIEW: Final[ConnectionStripView] = build_connection_strip(
     stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS,
     positions={},
     now=at(7, 30),
+    stale_after=STALE_LIMIT,
 )
 LONG: Final[str] = 'Constitution Hill Interchange, North West Transitway ' * 2
 

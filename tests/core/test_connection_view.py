@@ -31,7 +31,7 @@ from tests.core.connection_factories import (
     run,
     work_chains,
 )
-from tests.core.factories import live, place
+from tests.core.factories import STALE_LIMIT, live, place
 
 CHAINS: Final[tuple[Chain, ...]] = work_chains()
 STOP: Final[StopView] = StopView(
@@ -160,6 +160,7 @@ def test_every_pair_surface_gets_the_count() -> None:
         patterns={},
         positions={},
         now=now,
+        stale_after=STALE_LIMIT,
     )
     sidebar = sidebar_rows(pin=WORK, chains=chains, now=now)
     assert view.rows[0].countdown == '12'

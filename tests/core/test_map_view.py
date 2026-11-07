@@ -15,6 +15,7 @@ from paperroute.core.map_view import (
     Marker,
     TripMarks,
     build_map_view,
+    is_fresh,
     map_window,
     needed_patterns,
     pin_trips,
@@ -22,7 +23,6 @@ from paperroute.core.map_view import (
     position_age,
     route_lines,
     screen_point,
-    timetable_moment,
     visible,
 )
 from paperroute.core.model import Departure, Mode
@@ -122,6 +122,7 @@ def inputs(
     fetched_at: datetime = NOW,
     departures: tuple[Departure, ...] = (),
     now: datetime = NOW,
+    stale_after: timedelta = timedelta(minutes=2),
 ) -> MapInputs:
     """
     Map inputs around the origin with the default pattern for 't1'.
@@ -135,7 +136,9 @@ def inputs(
     departures : tuple[Departure, ...]
         The pin's departures.
     now : datetime
-        Current time.
+        The frame time.
+    stale_after : timedelta
+        How old a position may be before it is stale.
 
     Returns
     -------
@@ -153,6 +156,7 @@ def inputs(
         patterns={'t1': pattern()},
         shapes={},
         now=now,
+        stale_after=stale_after,
     )
 
 
@@ -269,7 +273,7 @@ def test_vehicle_over_two_minutes_old_moves_to_timetable_position() -> None:
     point = timetable_point(
         pattern=pattern(),
         shape=None,
-        now=timetable_moment(now=NOW),
+        now=NOW,
     )
     assert point is not None
     (marker,) = view.markers
@@ -287,17 +291,34 @@ def test_stale_marker_carries_age() -> None:
     assert marker.age == 120.0
 
 
-def test_stale_marker_holds_still_within_a_minute() -> None:
-    """Two ticks in the same minute and timetable step give one view."""
-    bus = vehicle(timestamp=int(FETCHED.timestamp()) - 150)
-    first, second = (
-        build_map_view(
-            inputs=inputs(vehicles=(bus,), fetched_at=FETCHED, now=now),
-        )
-        for now in (NOW, NOW + timedelta(seconds=15))
+def test_vehicle_within_the_stale_limit_stays_live() -> None:
+    """A 150 s old vehicle is live under a 3 minute limit."""
+    bus = vehicle(timestamp=int(FETCHED.timestamp()) - 120, bearing=90.0)
+    view = build_map_view(
+        inputs=inputs(
+            vehicles=(bus,),
+            fetched_at=FETCHED,
+            stale_after=timedelta(minutes=3),
+        ),
     )
-    assert first.markers[0].age == 180.0
-    assert first == second
+    (marker,) = view.markers
+    assert (marker.live, marker.age) == (True, None)
+
+
+@pytest.mark.parametrize(
+    ('age', 'limit', 'fresh'),
+    [
+        (90.0, timedelta(seconds=90), True),
+        (90.5, timedelta(seconds=90), False),
+        (180.0, timedelta(minutes=3), True),
+        (181.0, timedelta(minutes=3), False),
+    ],
+)
+def test_is_fresh_up_to_the_limit(
+    age: float, limit: timedelta, fresh: bool
+) -> None:
+    """A position is fresh up to and including its limit."""
+    assert is_fresh(age=age, limit=limit) is fresh
 
 
 def test_live_marker_has_no_age() -> None:
@@ -471,7 +492,7 @@ def test_missing_shape_draws_no_route_line_and_uses_the_chord() -> None:
     point = timetable_point(
         pattern=pattern(),
         shape=None,
-        now=timetable_moment(now=NOW),
+        now=NOW,
     )
     assert point is not None
     assert (marker.x, marker.y) == pytest.approx(at(point=point))
@@ -484,14 +505,6 @@ def test_position_age_counts_header_lag_and_time_since_fetch() -> None:
     assert position_age(vehicle=bus, snapshot=feed, now=NOW) == 130.0
     unset = vehicle(timestamp=0)
     assert position_age(vehicle=unset, snapshot=feed, now=NOW) == 30.0
-
-
-def test_timetable_moment_floors_to_30_s() -> None:
-    """Now is floored to a 30 s step, keeping its zone."""
-    moment = timetable_moment(now=START + timedelta(seconds=59.5))
-    assert moment == START + timedelta(seconds=30)
-    assert moment.tzinfo == START.tzinfo
-    assert timetable_moment(now=START) == START
 
 
 def test_needed_patterns_lists_pin_and_nearby_stale_trips() -> None:

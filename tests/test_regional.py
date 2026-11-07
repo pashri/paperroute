@@ -14,7 +14,7 @@ from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolve
 from paperroute.core.model import SYDNEY, Mode
 from paperroute.core.realtime import RealtimeSnapshot
-from tests.core.factories import pin_of
+from tests.core.factories import STALE_LIMIT, pin_of
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
@@ -111,7 +111,12 @@ def resolved(*, db: Path, query: str) -> list[list[LiveDeparture]]:
             mine = [d for d in found if d.trip_id == trip]
             result.append(
                 [
-                    resolve(departure=d, snapshot=live, now=AT)
+                    resolve(
+                        departure=d,
+                        snapshot=live,
+                        now=AT,
+                        limit=STALE_LIMIT,
+                    )
                     for d in found
                     if mine
                     and abs((d.departs - mine[0].departs).total_seconds())

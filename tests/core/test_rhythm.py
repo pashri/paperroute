@@ -6,10 +6,16 @@ from datetime import date, datetime, time, timedelta
 import pytest
 
 from paperroute.core.model import SYDNEY
-from paperroute.core.rhythm import in_window, is_peak, poll_every
+from paperroute.core.rhythm import (
+    frame_time,
+    in_window,
+    is_peak,
+    poll_every,
+    stale_after,
+)
 from paperroute.core.saved import Quota, Rate, Settings, Window, seeded
 from paperroute.core.state import initial_state
-from paperroute.core.state_model import Calendar, State
+from paperroute.core.state_model import Calendar, Cycle, State
 from tests.core.factories import pin_of
 
 MONDAY = date(2026, 10, 19)
@@ -155,3 +161,75 @@ def test_poll_every_on_a_holiday_uses_offpeak() -> None:
     calendar = Calendar(holidays=frozenset({AUSTRALIA_DAY}))
     state = replace(state, calendar=calendar)
     assert poll_every(state=state) == timedelta(minutes=2)
+
+
+def cycled(*, now: datetime, started: datetime | None) -> State:
+    """
+    Make a state at a moment whose last cycle started at another.
+
+    Parameters
+    ----------
+    now : datetime
+        The moment.
+    started : datetime | None
+        When the cycle started; None before the first.
+
+    Returns
+    -------
+    State
+        The state.
+    """
+    return replace(state_at(now=now), cycle=Cycle(started=started))
+
+
+@pytest.mark.parametrize(
+    ('started', 'frame'),
+    [
+        (None, at(hour=12, minute=3)),
+        (at(hour=12, minute=2), at(hour=12, minute=3)),
+        (
+            at(hour=12, minute=3) + timedelta(seconds=4),
+            at(hour=12, minute=3) + timedelta(seconds=4),
+        ),
+        (at(hour=12, minute=4), at(hour=12, minute=3)),
+    ],
+)
+def test_frame_time_is_latest_cycle_start_or_minute(
+    started: datetime | None, frame: datetime
+) -> None:
+    """A cycle started this minute wins; none, older or future, the minute."""
+    now = at(hour=12, minute=3) + timedelta(seconds=41)
+    assert frame_time(state=cycled(now=now, started=started)) == frame
+
+
+def test_frame_time_holds_between_ticks() -> None:
+    """Ticks inside one minute after the cycle share a frame time."""
+    started = at(hour=12, minute=2) + timedelta(seconds=2)
+    frames = {
+        frame_time(
+            state=cycled(now=started + timedelta(seconds=s), started=started),
+        )
+        for s in range(0, 58, 5)
+    }
+    assert frames == {started}
+
+
+@pytest.mark.parametrize(
+    ('hour', 'rate', 'calls', 'limit'),
+    [
+        (8, Rate.FAST, 0, timedelta(seconds=90)),
+        (12, Rate.STEADY, 0, timedelta(minutes=2)),
+        (12, Rate.SLOW, 0, timedelta(minutes=3)),
+        (8, Rate.FAST, 57_001, timedelta(minutes=6)),
+    ],
+)
+def test_stale_after_is_poll_interval_plus_a_minute(
+    hour: int, rate: Rate, calls: int, limit: timedelta
+) -> None:
+    """Only a missed fetch makes data stale, at every rate and guard."""
+    state = state_at(
+        now=at(hour=hour),
+        settings=Settings(peak_rate=rate, offpeak_rate=rate),
+        quota=Quota(day=TUESDAY, calls=calls),
+    )
+    assert stale_after(state=state) == limit

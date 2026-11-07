@@ -291,6 +291,7 @@ def loaded(
         departures=repo.departures(pin=leg, start=start, end=end),
         snapshots={},
         now=start,
+        limit=timedelta(),
     )
     return tuple(sorted(items, key=lambda item: item.departs))
 

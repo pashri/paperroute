@@ -18,7 +18,15 @@ from paperroute.core.strip_times import (
     strip_trips,
     trip_ids,
 )
-from tests.core.factories import EIGHT, START, calls, departure, live, pattern
+from tests.core.factories import (
+    EIGHT,
+    STALE_LIMIT,
+    START,
+    calls,
+    departure,
+    live,
+    pattern,
+)
 
 TRAIN: Final[StripKey] = StripKey(
     station='C', kind=RouteKind.TRAIN, routes=(),
@@ -154,6 +162,7 @@ def approach_inputs(*, late: int = 0) -> TripInputs:
         },
         positions={},
         now=START,
+        stale_after=STALE_LIMIT,
         station_of={},
     )
 

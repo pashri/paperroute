@@ -40,6 +40,7 @@ from paperroute.core.stop_view import (
 from paperroute.core.strip_model import StripInputs
 
 START = datetime(2026, 10, 16, 8, 0, tzinfo=SYDNEY)
+STALE_LIMIT: Final[timedelta] = timedelta(minutes=2)
 EIGHT: int = 8 * 3600  # seconds into the service day
 TEN_MINUTES: int = 600  # seconds
 TRAIN: Final[StripKey] = StripKey(
@@ -513,6 +514,7 @@ def stop_view_of(
         destination=destination,
         departures=tuple(departures),
         now=now,
+        stale_after=STALE_LIMIT,
         scroll=0,
         live_since=now,
         has_feed=True,
@@ -558,6 +560,7 @@ def inputs_of(
         patterns=patterns or {},
         positions=positions or {},
         now=now,
+        stale_after=STALE_LIMIT,
         scroll=0,
         cursor=None,
         picking=None,

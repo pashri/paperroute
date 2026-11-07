@@ -50,7 +50,14 @@ from tests.core.connection_factories import (
     at,
     run,
 )
-from tests.core.factories import live, pattern, place, snapshot, vehicle
+from tests.core.factories import (
+    STALE_LIMIT,
+    live,
+    pattern,
+    place,
+    snapshot,
+    vehicle,
+)
 from tests.core.test_connection_screens import started
 from tests.core.test_connection_strip import CHAINS, STOP
 
@@ -117,6 +124,7 @@ def inputs_at(*, now: datetime, zoom: int = DEFAULT_ZOOM) -> MapInputs:
         patterns={},
         shapes={'s606': LEG_ONE, 's665': LEG_TWO},
         now=now,
+        stale_after=STALE_LIMIT,
     )
 
 

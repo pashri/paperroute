@@ -7,7 +7,7 @@ from enum import StrEnum
 from typing import Final
 
 from paperroute.core.alert_model import AlertBanner
-from paperroute.core.live import STALE_AFTER, LiveDeparture
+from paperroute.core.live import LiveDeparture
 from paperroute.core.model import SYDNEY, CarryOn, Departure, Mode, shifted
 
 VISIBLE_ROWS: Final[int] = 8
@@ -204,7 +204,7 @@ class StopInputs:
     departures : tuple[LiveDeparture, ...]
         Departures in timetable order.
     now : datetime
-        Current time.
+        The frame time.
     scroll : int
         Requested scroll offset.
     live_since : datetime | None
@@ -212,6 +212,8 @@ class StopInputs:
         missing.
     has_feed : bool
         Whether a live feed exists.
+    stale_after : timedelta
+        How old live data may be before the banner says so.
     loaded : bool
         Whether the timetable has been read yet; if not, an empty view
         says it is loading rather than that nothing runs.
@@ -238,6 +240,7 @@ class StopInputs:
     scroll: int
     live_since: datetime | None
     has_feed: bool
+    stale_after: timedelta
     loaded: bool = True
     tag: PinTag = NOT_PINNED
     missing: bool = False
@@ -368,7 +371,9 @@ def pills(
     return result
 
 
-def live_line(*, live_since: datetime | None, now: datetime) -> str | None:
+def live_line(
+    *, live_since: datetime | None, now: datetime, limit: timedelta
+) -> str | None:
     """
     Choose the banner about live data going missing, if one is needed.
 
@@ -378,7 +383,9 @@ def live_line(*, live_since: datetime | None, now: datetime) -> str | None:
         Fetch time of the oldest needed snapshot, or None when one is
         missing.
     now : datetime
-        Current time.
+        The frame time.
+    limit : timedelta
+        How old live data may be.
 
     Returns
     -------
@@ -388,7 +395,7 @@ def live_line(*, live_since: datetime | None, now: datetime) -> str | None:
     if live_since is None:
         return f'Timetable times{DOT}no live data yet'
     age = now.timestamp() - live_since.timestamp()
-    if age > STALE_AFTER.total_seconds():
+    if age > limit.total_seconds():
         return f'No live data since {clock_text(moment=live_since)}'
     return None
 
@@ -554,7 +561,9 @@ def alert_shown(*, inputs: StopInputs) -> AlertBanner | None:
     if inputs.notice or inputs.alert is None:
         return None
     if inputs.has_feed and live_line(
-        live_since=inputs.live_since, now=inputs.now,
+        live_since=inputs.live_since,
+        now=inputs.now,
+        limit=inputs.stale_after,
     ):
         return None
     return inputs.alert
@@ -580,7 +589,11 @@ def banner_text(*, inputs: StopInputs) -> str | None:
     if inputs.notice:
         return inputs.notice
     if inputs.has_feed:
-        line = live_line(live_since=inputs.live_since, now=inputs.now)
+        line = live_line(
+            live_since=inputs.live_since,
+            now=inputs.now,
+            limit=inputs.stale_after,
+        )
         if line:
             return line
     alert = alert_shown(inputs=inputs)

@@ -26,6 +26,7 @@ from paperroute.core.panel_views import PanelView, SleepView
 from paperroute.core.places import shown, shown_index
 from paperroute.core.rebuild import building_view
 from paperroute.core.refresh import needs_greys
+from paperroute.core.rhythm import frame_time, stale_after
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.sleep import sleep_view
 from paperroute.core.state_model import State, clock_waiting, elapsed
@@ -86,12 +87,14 @@ def live_departures(*, state: State) -> tuple[LiveDeparture, ...]:
     Returns
     -------
     tuple[LiveDeparture, ...]
-        Every departure, with its feed's live times where known.
+        Every departure, with its feed's live times where known at the
+        frame time.
     """
     return resolved(
         departures=state.board.departures,
         snapshots=state.snapshots,
-        now=state.now,
+        now=frame_time(state=state),
+        limit=stale_after(state=state),
     )
 
 
@@ -107,26 +110,28 @@ def stop_view_of(*, state: State) -> StopView:
     Returns
     -------
     StopView
-        View.
+        View, at the frame time.
     """
     pin = shown(state=state)
     destination = pin.destination
+    frame = frame_time(state=state)
     return build_stop_view(
         inputs=StopInputs(
             origin=pin.origin.name,
             destination=None if destination is None else destination.name,
             departures=live_departures(state=state),
-            now=state.now,
+            now=frame,
             scroll=state.scroll,
             live_since=live_since(
-                snapshots=state.snapshots, feeds=state.feeds, now=state.now,
+                snapshots=state.snapshots, feeds=state.feeds, now=frame,
             ),
             has_feed=bool(state.feeds) or not state.board.departures,
+            stale_after=stale_after(state=state),
             loaded=state.board.loaded_until is not None,
             missing=pin.missing,
             notice=device_banner(state=state),
             alert=alert_banner(
-                listed=shown_alerts(state=state), now=state.now,
+                listed=shown_alerts(state=state), now=frame,
             ),
             large=state.settings.larger_text,
             inverted=state.settings.inverted_lists,
@@ -260,7 +265,7 @@ def live_view(*, state: State, stop_view: StopView) -> ScreenView:
                 selected=state.alerts.selected,
                 page=state.alerts.page,
                 stop_view=stop_view,
-                now=state.now,
+                now=frame_time(state=state),
             )
     return stop_view
 

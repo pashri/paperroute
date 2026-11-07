@@ -20,6 +20,7 @@ from paperroute.render.canvas import HEIGHT, INK, PAPER
 from paperroute.render.chrome import HEADER
 from paperroute.render.connection_strip_map import draw_connection_strip_map
 from tests.core.connection_factories import WORK, at
+from tests.core.factories import STALE_LIMIT
 from tests.core.test_connection_map import SHAPED, inputs_at
 from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
 
@@ -31,7 +32,15 @@ VIEW: Final[ConnectionStripMapView] = ConnectionStripMapView(
         mode=ConnectionMap.CHANGES,
     ),
     pane=build_connection_strip(
-        stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS, positions={}, now=at(7, 30)),
+        stop_view=STOP,
+        pin=WORK,
+        chains=CHAINS,
+        selected=0,
+        patterns=PATTERNS,
+        positions={},
+        now=at(7, 30),
+        stale_after=STALE_LIMIT,
+    ),
 )
 BASE: Final[NDArray[np.uint8]] = np.full(
     (MAP_HEIGHT, STRIP_MAP_WIDTH), PAPER, dtype=np.uint8,

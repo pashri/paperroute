@@ -47,7 +47,10 @@ class TripInputs:
     positions : Mapping[str, PositionsSnapshot]
         The latest download of each positions feed in use.
     now : datetime
-        Current time.
+        The frame time.
+    stale_after : timedelta
+        How old a position may be before it is drawn at its timetable
+        position instead.
     station_of : Mapping[str, str]
         The station ID of each stop under a strip station.
     """
@@ -57,6 +60,7 @@ class TripInputs:
     patterns: Mapping[str, TripPattern | None]
     positions: Mapping[str, PositionsSnapshot]
     now: datetime
+    stale_after: timedelta
     station_of: Mapping[str, str]
 
 

@@ -45,6 +45,7 @@ from paperroute.core.wifi import setup_footer
 from tests.core.factories import (
     EAST,
     POINTS,
+    STALE_LIMIT,
     START,
     TRAIN,
     calls,
@@ -705,6 +706,7 @@ def test_line_reach_has_no_origin_and_from_cursor_tag() -> None:
         patterns={},
         positions={},
         now=START,
+        stale_after=STALE_LIMIT,
         scroll=0,
         cursor=1,
         picking='FROM',

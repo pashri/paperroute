@@ -13,6 +13,7 @@ from paperroute.core.connection_model import direct_leg
 from paperroute.core.live import LiveDeparture, resolved
 from paperroute.core.model import Departure, Pin, is_connection
 from paperroute.core.places import shown
+from paperroute.core.rhythm import frame_time, stale_after
 from paperroute.core.state_model import Board, State
 
 
@@ -41,7 +42,7 @@ def live_chains(*, state: State) -> tuple[Chain, ...]:
             for key, items in legs.lists.items()
         },
         direct=live_list(items=state.board.departures, state=state),
-        now=state.now,
+        now=frame_time(state=state),
     )
 
 
@@ -64,7 +65,10 @@ def live_list(
         The departures with live times, sorted by when they leave.
     """
     found = resolved(
-        departures=items, snapshots=state.snapshots, now=state.now,
+        departures=items,
+        snapshots=state.snapshots,
+        now=frame_time(state=state),
+        limit=stale_after(state=state),
     )
     return sorted(found, key=lambda item: item.departs)
 

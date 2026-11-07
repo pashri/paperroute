@@ -19,6 +19,7 @@ GUARDS: Final[tuple[tuple[float, timedelta], ...]] = (
     (0.8, timedelta(seconds=60)),
 )
 FRIDAY: Final[int] = 4
+STALE_MARGIN: Final[timedelta] = timedelta(minutes=1)
 
 
 def in_window(*, moment: time, window: Window) -> bool:
@@ -120,6 +121,48 @@ def poll_every(*, state: State) -> timedelta:
         every,
     )
     return max(every, floor)
+
+
+def stale_after(*, state: State) -> timedelta:
+    """
+    Give how old live data may be before it counts as stale.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    timedelta
+        The poll interval plus `STALE_MARGIN`, so only a missed fetch
+        makes data stale.
+    """
+    return poll_every(state=state) + STALE_MARGIN
+
+
+def frame_time(*, state: State) -> datetime:
+    """
+    Give the time the screen is drawn for.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    datetime
+        The later of the latest cycle's start and the current time
+        floored to the minute. A cycle start in the future, after the
+        clock stepped back, is ignored.
+    """
+    now = state.now
+    minute = now.replace(second=0, microsecond=0)
+    started = state.cycle.started
+    if started is None or started.timestamp() > now.timestamp():
+        return minute
+    return max(started, minute, key=lambda moment: moment.timestamp())
 
 
 def holidays_loaded(*, state: State, event: HolidaysLoaded) -> State:

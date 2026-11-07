@@ -3,13 +3,10 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
-from typing import Final
 
 from paperroute.core.feeds import feed_for
 from paperroute.core.model import Departure, shifted
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
-
-STALE_AFTER: Final[timedelta] = timedelta(minutes=2)
 
 
 @dataclass(frozen=True)
@@ -130,7 +127,9 @@ def delay_at(
     return last.arrival_delay
 
 
-def stale(*, snapshot: RealtimeSnapshot, now: datetime) -> bool:
+def stale(
+    *, snapshot: RealtimeSnapshot, now: datetime, limit: timedelta
+) -> bool:
     """
     Say whether a snapshot is too old to use.
 
@@ -139,15 +138,17 @@ def stale(*, snapshot: RealtimeSnapshot, now: datetime) -> bool:
     snapshot : RealtimeSnapshot
         Snapshot.
     now : datetime
-        Current time.
+        The frame time.
+    limit : timedelta
+        How old a snapshot may be.
 
     Returns
     -------
     bool
-        True when it was fetched more than STALE_AFTER of real time ago.
+        True when it was fetched more than `limit` of real time ago.
     """
     age = now.timestamp() - snapshot.fetched_at.timestamp()
-    return age > STALE_AFTER.total_seconds()
+    return age > limit.total_seconds()
 
 
 def resolve(
@@ -155,6 +156,7 @@ def resolve(
     departure: Departure,
     snapshot: RealtimeSnapshot | None,
     now: datetime,
+    limit: timedelta,
 ) -> LiveDeparture:
     """
     Apply live data to a departure when the snapshot is fresh.
@@ -170,7 +172,9 @@ def resolve(
     snapshot : RealtimeSnapshot | None
         Latest snapshot for its feed.
     now : datetime
-        Current time.
+        The frame time.
+    limit : timedelta
+        How old a snapshot may be.
 
     Returns
     -------
@@ -184,7 +188,9 @@ def resolve(
         live=False,
         cancelled=False,
     )
-    if snapshot is None or stale(snapshot=snapshot, now=now):
+    if snapshot is None or stale(
+        snapshot=snapshot, now=now, limit=limit,
+    ):
         return scheduled
     trip = trip_for(departure=departure, snapshot=snapshot)
     if trip is None or trip.start_date not in (None, departure.service_day):
@@ -244,6 +250,7 @@ def resolved(
     departures: Sequence[Departure],
     snapshots: Mapping[str, RealtimeSnapshot],
     now: datetime,
+    limit: timedelta,
 ) -> tuple[LiveDeparture, ...]:
     """
     Apply each departure's feed to it.
@@ -255,7 +262,9 @@ def resolved(
     snapshots : Mapping[str, RealtimeSnapshot]
         The latest download of each trip-updates feed.
     now : datetime
-        Current time.
+        The frame time.
+    limit : timedelta
+        How old a snapshot may be.
 
     Returns
     -------
@@ -267,6 +276,7 @@ def resolved(
             departure=dep,
             snapshot=snapshots.get(feed_for(mode=dep.mode) or ''),
             now=now,
+            limit=limit,
         )
         for dep in departures
     )

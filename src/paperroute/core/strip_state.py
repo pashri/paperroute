@@ -17,6 +17,7 @@ from paperroute.core.model import Departure, Pin, StopPlace, is_connection
 from paperroute.core.places import shown
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.reach import Reach, StripKey
+from paperroute.core.rhythm import frame_time, stale_after
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
@@ -320,16 +321,19 @@ def shown_reach(*, state: State) -> Reach | None:
     reach = folded_reach(state=state, key=key, destination=destination)
     if reach is None:
         return None
+    frame, limit = frame_time(state=state), stale_after(state=state)
     trips = TripInputs(
         departures=resolved(
             departures=state.board.departures,
             snapshots=state.snapshots,
-            now=state.now,
+            now=frame,
+            limit=limit,
         ),
         key=key,
         patterns=state.map.patterns,
         positions={},
-        now=state.now,
+        now=frame,
+        stale_after=limit,
         station_of=reach.station_of,
     )
     return followed_reach(
@@ -519,7 +523,8 @@ def strip_inputs(
         departures=departures,
         patterns=state.map.patterns,
         positions=positions,
-        now=state.now,
+        now=frame_time(state=state),
+        stale_after=stale_after(state=state),
         scroll=state.strip.scroll,
         cursor=None,
         picking=None,

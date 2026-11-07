@@ -13,6 +13,7 @@ from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolved
 from paperroute.core.model import SYDNEY, Mode, Pin
 from paperroute.core.realtime import RealtimeSnapshot
+from tests.core.factories import STALE_LIMIT
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 FEED: Final[Path] = REAL / 'v1_gtfs_realtime_buses_606.pb'
@@ -65,6 +66,7 @@ def live_from(
         departures=departures,
         snapshots={feed_for(mode=Mode.BUS) or '': snapshot},
         now=FETCHED,
+        limit=STALE_LIMIT,
     )
 
 

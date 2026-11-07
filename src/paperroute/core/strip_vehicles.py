@@ -3,14 +3,9 @@
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 
-from paperroute.core.map_view import (
-    Marker,
-    is_fresh,
-    position_age,
-    timetable_moment,
-)
+from paperroute.core.map_view import Marker, is_fresh, position_age
 from paperroute.core.model import Departure, service_seconds
 from paperroute.core.patterns import TripPattern, hop_at, hop_near
 from paperroute.core.positions import VehiclePosition
@@ -127,7 +122,7 @@ def legs_of(
     return first, Leg(pattern=after, found=heard.get(then.trip_id))
 
 
-def fresh_leg(*, legs: Sequence[Leg]) -> Leg | None:
+def fresh_leg(*, legs: Sequence[Leg], limit: timedelta) -> Leg | None:
     """
     Find the leg with the freshest fresh position.
 
@@ -135,6 +130,8 @@ def fresh_leg(*, legs: Sequence[Leg]) -> Leg | None:
     ----------
     legs : Sequence[Leg]
         The departure's legs.
+    limit : timedelta
+        How old a position may be.
 
     Returns
     -------
@@ -144,7 +141,7 @@ def fresh_leg(*, legs: Sequence[Leg]) -> Leg | None:
     fresh = [
         leg
         for leg in legs
-        if leg.found is not None and is_fresh(age=leg.found[1])
+        if leg.found is not None and is_fresh(age=leg.found[1], limit=limit)
     ]
     return min(
         fresh,
@@ -154,7 +151,11 @@ def fresh_leg(*, legs: Sequence[Leg]) -> Leg | None:
 
 
 def current_leg(
-    *, legs: Sequence[Leg], departure: Departure, now: datetime,
+    *,
+    legs: Sequence[Leg],
+    departure: Departure,
+    now: datetime,
+    limit: timedelta,
 ) -> tuple[Leg, tuple[int, float]] | None:
     """
     Find the leg a departure's vehicle is on now, and its hop.
@@ -166,7 +167,9 @@ def current_leg(
     departure : Departure
         The departure.
     now : datetime
-        Current time.
+        The frame time.
+    limit : timedelta
+        How old a position may be.
 
     Returns
     -------
@@ -179,11 +182,12 @@ def current_leg(
     """
     if not legs:
         return None
-    if (fresh := fresh_leg(legs=legs)) is not None and fresh.found:
+    fresh = fresh_leg(legs=legs, limit=limit)
+    if fresh is not None and fresh.found:
         hop = hop_near(pattern=fresh.pattern, point=fresh.found[0].point)
         return None if hop is None else (fresh, hop)
     seconds = service_seconds(
-        day=departure.service_day, moment=timetable_moment(now=now),
+        day=departure.service_day, moment=now,
     )
     return timetable_leg(legs=legs, seconds=seconds)
 
@@ -251,12 +255,17 @@ def trip_marker(
         or both of the hop's rows.
     """
     legs = legs_of(departure=departure, trips=trips, heard=heard)
-    current = current_leg(legs=legs, departure=departure, now=trips.now)
+    current = current_leg(
+        legs=legs,
+        departure=departure,
+        now=trips.now,
+        limit=trips.stale_after,
+    )
     if current is None:
         return None
     leg, (index, fraction) = current
     ages = [each.found[1] for each in legs if each.found is not None]
-    live = bool(ages) and is_fresh(age=min(ages))
+    live = bool(ages) and is_fresh(age=min(ages), limit=trips.stale_after)
     return hop_marker(
         route=leg.pattern.route,
         ends=tuple(

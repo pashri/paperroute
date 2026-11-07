@@ -24,7 +24,7 @@ from paperroute.core.model import Departure
 from paperroute.core.patterns import TripPattern
 from paperroute.core.stop_view import StopView
 from paperroute.core.tiles import ZOOMS
-from tests.core.factories import START, calls, departure, pattern
+from tests.core.factories import STALE_LIMIT, START, calls, departure, pattern
 
 FROM: Point = (0.0, 800.0)
 OTHER: Point = (30.0, 800.0)
@@ -103,6 +103,7 @@ def plain(
         patterns=patterns or {},
         shapes={},
         now=now,
+        stale_after=STALE_LIMIT,
         ends=ends,
     )
 

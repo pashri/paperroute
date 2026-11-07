@@ -22,6 +22,7 @@ from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import LOADING, NO_LEG_STOPS
 from tests.core.connection_factories import LEG1, WORK, at, run, work_chains
 from tests.core.factories import (
+    STALE_LIMIT,
     departure,
     live,
     pattern,
@@ -113,6 +114,7 @@ def test_sections_for_change_pair() -> None:
         stop_view=STOP, pin=WORK, chains=CHAINS, selected=0, patterns=PATTERNS,
         positions={},
         now=at(7, 30),
+        stale_after=STALE_LIMIT,
     )
     first, second = view.sections
     assert first.title == (
@@ -143,6 +145,7 @@ def test_leg_times_follow_delay() -> None:
         patterns=PATTERNS,
         positions={},
         now=at(7, 30),
+        stale_after=STALE_LIMIT,
     )
     first, second = view.sections
     assert [stop.time for stop in first.stops] == ['7:36', '', '7:42']
@@ -162,6 +165,7 @@ def test_leg_arrival_is_the_live_arrival_the_pair_was_made_with() -> None:
         patterns=PATTERNS,
         positions={},
         now=at(7, 30),
+        stale_after=STALE_LIMIT,
     )
     assert [stop.time for stop in view.sections[0].stops] == [
         '7:36', '', '7:40',
@@ -193,6 +197,7 @@ def test_rowless_leg_says_no_stops() -> None:
         patterns={'a0733': FIRST_LEG, 'b0746': trip},
         positions={},
         now=at(7, 30),
+        stale_after=STALE_LIMIT,
     )
     assert view.sections[1].stops == ()
     assert view.sections[1].empty == NO_LEG_STOPS
@@ -205,6 +210,7 @@ def test_unknown_trip_says_no_stops() -> None:
         patterns={'a0733': FIRST_LEG, 'b0746': None},
         positions={},
         now=at(7, 30),
+        stale_after=STALE_LIMIT,
     )
     assert view.sections[1].empty == NO_LEG_STOPS
 
@@ -223,6 +229,7 @@ def test_leg_follows_joined_trip_to_its_end() -> None:
         patterns={'a0733': FIRST_LEG, 'b0746': first, 'b0746x': joined},
         positions={},
         now=at(7, 30),
+        stale_after=STALE_LIMIT,
     )
     second = view.sections[1]
     assert second.empty is None
@@ -401,6 +408,7 @@ def test_strip_section_carries_vehicle_note() -> None:
         patterns={'t5': T5},
         positions={'f': feed},
         now=at(7, 30),
+        stale_after=STALE_LIMIT,
     )
     assert view.sections[0].vehicle == (
         'T5 3 stops before Leppington Station'
@@ -413,6 +421,7 @@ def test_strip_section_carries_vehicle_note() -> None:
         patterns={'t5': T5},
         positions={'f': feed},
         now=at(7, 45),
+        stale_after=STALE_LIMIT,
     )
     assert quiet.sections[0].vehicle is None
 
@@ -439,6 +448,7 @@ def test_stay_pair_one_section() -> None:
         patterns={'d0740': trip},
         positions={},
         now=at(7, 30),
+        stale_after=STALE_LIMIT,
     )
     (section,) = view.sections
     assert section.route == '609'
@@ -454,6 +464,7 @@ def test_missing_pattern_loading() -> None:
         patterns={'a0733': FIRST_LEG},
         positions={},
         now=at(7, 30),
+        stale_after=STALE_LIMIT,
     )
     second = view.sections[1]
     assert second.stops == ()
@@ -466,6 +477,7 @@ def test_selected_clamped() -> None:
         stop_view=STOP, pin=WORK, chains=CHAINS, selected=9, patterns={},
         positions={},
         now=at(7, 30),
+        stale_after=STALE_LIMIT,
     )
     assert len(view.pairs) == 5
     assert view.selected == 4
@@ -479,6 +491,7 @@ def test_no_pairs_no_sections() -> None:
         stop_view=STOP, pin=WORK, chains=(), selected=0, patterns={},
         positions={},
         now=at(7, 30),
+        stale_after=STALE_LIMIT,
     )
     assert view.sections == ()
     assert view.selected == 0

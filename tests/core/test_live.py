@@ -2,6 +2,9 @@
 
 from dataclasses import replace
 from datetime import date, datetime, timedelta
+from typing import Final
+
+import pytest
 
 from paperroute.core.live import resolve
 from paperroute.core.model import SYDNEY, CarryOn, TripFacts
@@ -17,6 +20,8 @@ BLANK = StopUpdate(
     arrival_time=None,
     departure_time=None,
 )
+
+LIMIT: Final[timedelta] = timedelta(minutes=2)
 
 
 def snapshot(
@@ -103,7 +108,10 @@ def test_resolve_applies_delay_at_origin_and_destination() -> None:
     """Delays at the origin and destination move both times."""
     updates = (update(seq=5, dep=120), update(seq=20, arr=240))
     live = resolve(
-        departure=DEP, snapshot=snapshot(updates=updates), now=START
+        departure=DEP,
+        snapshot=snapshot(updates=updates),
+        now=START,
+        limit=LIMIT,
     )
     assert live.live
     assert live.departs == DEP.departs + timedelta(seconds=120)
@@ -115,7 +123,10 @@ def test_resolve_absolute_time_wins() -> None:
     target = DEP.departs + timedelta(minutes=3)
     note = update(seq=5, dep=60, dep_time=int(target.timestamp()))
     live = resolve(
-        departure=DEP, snapshot=snapshot(updates=(note,)), now=START
+        departure=DEP,
+        snapshot=snapshot(updates=(note,)),
+        now=START,
+        limit=LIMIT,
     )
     assert live.departs == target
 
@@ -126,6 +137,7 @@ def test_resolve_propagates_earlier_delay() -> None:
         departure=DEP,
         snapshot=snapshot(updates=(update(seq=2, dep=180),)),
         now=START,
+        limit=LIMIT,
     )
     assert live.departs == DEP.departs + timedelta(seconds=180)
     assert live.arrives == DEP.arrives + timedelta(seconds=180)
@@ -137,6 +149,7 @@ def test_resolve_missing_trip_is_scheduled() -> None:
         departure=DEP,
         snapshot=snapshot(updates=(update(seq=5, dep=60),), trip_id='other'),
         now=START,
+        limit=LIMIT,
     )
     assert (live.departs, live.live) == (DEP.departs, False)
 
@@ -151,6 +164,7 @@ def test_resolve_alias_matches() -> None:
         departure=aliased,
         snapshot=snapshot(updates=(note,), trip_id='old'),
         now=START,
+        limit=LIMIT,
     )
     assert live.live
 
@@ -158,7 +172,10 @@ def test_resolve_alias_matches() -> None:
 def test_resolve_cancelled() -> None:
     """Cancelled trips are flagged."""
     live = resolve(
-        departure=DEP, snapshot=snapshot(cancelled=True), now=START
+        departure=DEP,
+        snapshot=snapshot(cancelled=True),
+        now=START,
+        limit=LIMIT,
     )
     assert live.cancelled
 
@@ -169,6 +186,7 @@ def test_resolve_not_cancelled_by_default() -> None:
         departure=DEP,
         snapshot=snapshot(updates=(update(seq=5, dep=60),)),
         now=START,
+        limit=LIMIT,
     )
     assert not live.cancelled
 
@@ -179,13 +197,33 @@ def test_resolve_ignores_stale_snapshot() -> None:
         departure=DEP,
         snapshot=snapshot(updates=(update(seq=5, dep=600),), age_s=200),
         now=START,
+        limit=LIMIT,
     )
     assert (live.departs, live.live) == (DEP.departs, False)
 
 
+@pytest.mark.parametrize(
+    ('limit', 'used'),
+    [(timedelta(minutes=2), False), (timedelta(minutes=3), True)],
+)
+def test_resolve_uses_a_snapshot_within_the_limit(
+    limit: timedelta, used: bool
+) -> None:
+    """A 150 s old snapshot is used under a 3 minute limit, not under 2."""
+    live = resolve(
+        departure=DEP,
+        snapshot=snapshot(updates=(update(seq=5, dep=600),), age_s=150),
+        now=START,
+        limit=limit,
+    )
+    assert live.live is used
+
+
 def test_resolve_without_snapshot_is_scheduled() -> None:
     """With no snapshot at all, times are scheduled."""
-    live = resolve(departure=DEP, snapshot=None, now=START)
+    live = resolve(
+        departure=DEP, snapshot=None, now=START, limit=LIMIT,
+    )
     assert (live.departs, live.live) == (DEP.departs, False)
 
 
@@ -194,7 +232,10 @@ def test_resolve_propagates_delay_not_absolute_time() -> None:
     early = int((DEP.departs - timedelta(minutes=20)).timestamp())
     stop = update(seq=2, dep=60, dep_time=early)
     live = resolve(
-        departure=DEP, snapshot=snapshot(updates=(stop,)), now=START
+        departure=DEP,
+        snapshot=snapshot(updates=(stop,)),
+        now=START,
+        limit=LIMIT,
     )
     assert live.departs == DEP.departs + timedelta(seconds=60)
 
@@ -207,12 +248,14 @@ def test_resolve_ignores_another_days_run() -> None:
         departure=DEP,
         snapshot=snapshot(updates=note, start_date=yesterday),
         now=START,
+        limit=LIMIT,
     )
     assert (other.departs, other.live) == (DEP.departs, False)
     today = resolve(
         departure=DEP,
         snapshot=snapshot(updates=note, start_date=DEP.service_day),
         now=START,
+        limit=LIMIT,
     )
     assert today.live
 
@@ -228,6 +271,7 @@ def test_resolve_alias_matches_by_stop_id() -> None:
         departure=aliased,
         snapshot=snapshot(updates=(other_copy, wrong_seq), trip_id='old'),
         now=START,
+        limit=LIMIT,
     )
     assert live.departs == DEP.departs + timedelta(seconds=90)
 
@@ -236,7 +280,10 @@ def test_resolve_carries_arrival_delay_when_no_departure_delay() -> None:
     """An earlier stop with only an arrival delay still carries forward."""
     updates = (update(seq=2, arr=120), update(seq=20))
     live = resolve(
-        departure=DEP, snapshot=snapshot(updates=updates), now=START
+        departure=DEP,
+        snapshot=snapshot(updates=updates),
+        now=START,
+        limit=LIMIT,
     )
     assert live.live
     assert live.departs == DEP.departs + timedelta(seconds=120)
@@ -249,6 +296,7 @@ def test_resolve_update_without_timing_is_not_live() -> None:
         departure=DEP,
         snapshot=snapshot(updates=(update(seq=5), update(seq=20))),
         now=START,
+        limit=LIMIT,
     )
     assert (live.departs, live.live) == (DEP.departs, False)
 
@@ -272,6 +320,7 @@ def test_resolve_delay_adds_real_seconds_over_fall_back() -> None:
             },
         ),
         now=now,
+        limit=LIMIT,
     )
     assert live.departs.timestamp() - before.timestamp() == 300
     assert live.arrives.timestamp() - dep.arrives.timestamp() == 300
@@ -294,6 +343,7 @@ def test_resolve_snapshot_age_counts_real_seconds() -> None:
         departure=dep,
         snapshot=RealtimeSnapshot(fetched_at=fetched, trips={'t': trip}),
         now=now,
+        limit=LIMIT,
     )
     assert not live.live
 
@@ -307,9 +357,13 @@ def test_carry_on_arrival_follows_boarded_delay() -> None:
         departure=onto,
         snapshot=snapshot(updates=(update(seq=20, arr=180),)),
         now=START,
+        limit=LIMIT,
     )
     assert late.arrives == onto.arrives + timedelta(minutes=3)
     cancelled = resolve(
-        departure=onto, snapshot=snapshot(cancelled=True), now=START,
+        departure=onto,
+        snapshot=snapshot(cancelled=True),
+        now=START,
+        limit=LIMIT,
     )
     assert cancelled.cancelled

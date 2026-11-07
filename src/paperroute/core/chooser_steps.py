@@ -51,6 +51,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import Departure, Pin
 from paperroute.core.places import committed, feeds_of, shown
 from paperroute.core.reach import Reach, RowKind
+from paperroute.core.rhythm import stale_after
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import State, load_window, runs_short
 from paperroute.core.stop_view import (
@@ -614,6 +615,7 @@ def from_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
         patterns={},
         positions={},
         now=state.now,
+        stale_after=stale_after(state=state),
         scroll=0,
         cursor=chooser.line_cursor if line else None,
         picking=PICK_FROM,
@@ -652,6 +654,7 @@ def picked_stop_view(*, state: State, chooser: ChooserState) -> StopView:
                 departures=departures,
                 snapshots=state.snapshots,
                 now=state.now,
+                limit=stale_after(state=state),
             ),
             now=state.now,
             scroll=0,
@@ -659,6 +662,7 @@ def picked_stop_view(*, state: State, chooser: ChooserState) -> StopView:
                 snapshots=state.snapshots, feeds=feeds, now=state.now,
             ),
             has_feed=bool(feeds) or not departures,
+            stale_after=stale_after(state=state),
             loaded=chooser.load.loaded_until is not None,
         ),
     )
@@ -717,10 +721,12 @@ def to_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
             departures=chooser.departures,
             snapshots=state.snapshots,
             now=state.now,
+            limit=stale_after(state=state),
         ),
         patterns=state.map.patterns,
         positions=polled_positions(state=state),
         now=state.now,
+        stale_after=stale_after(state=state),
         scroll=0,
         cursor=to_cursor_row(chooser=chooser, reach=reach),
         picking=PICK_TO,

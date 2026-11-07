@@ -28,6 +28,7 @@ from paperroute.core.stop_view import (
     build_stop_view,
     clock_text,
     countdown,
+    live_line,
     pin_tag,
     to_row,
 )
@@ -98,6 +99,7 @@ def view(
     large: bool = False,
     alert: AlertBanner | None = None,
     notice: str | None = None,
+    stale_after: timedelta = timedelta(minutes=2),
 ) -> StopView:
     """
     Build a view with fixed names and time.
@@ -120,6 +122,8 @@ def view(
         The pin's alert line, if any.
     notice : str | None
         A device warning, if any.
+    stale_after : timedelta
+        How old live data may be before it is stale.
 
     Returns
     -------
@@ -135,6 +139,7 @@ def view(
             scroll=scroll,
             live_since=None if age is None else START - age,
             has_feed=has_feed,
+            stale_after=stale_after,
             large=large,
             alert=alert,
             notice=notice,
@@ -325,6 +330,27 @@ def test_view_banner_when_stale() -> None:
     assert result.banner == 'No live data since 7:56'
 
 
+def test_live_line_waits_for_the_limit() -> None:
+    """Live data 150 s old is stale under a 2 minute limit, not under 3."""
+    since = START - timedelta(seconds=150)
+    assert live_line(
+        live_since=since, now=START, limit=timedelta(minutes=3),
+    ) is None
+    assert live_line(
+        live_since=since, now=START, limit=timedelta(minutes=2),
+    ) == 'No live data since 7:57'
+
+
+def test_view_banner_follows_the_stale_limit() -> None:
+    """The view's live line uses its inputs' stale limit."""
+    result = view(
+        departures=(live(minutes=5),),
+        age=timedelta(seconds=150),
+        stale_after=timedelta(minutes=3),
+    )
+    assert result.banner is None
+
+
 def test_view_no_banner_when_fresh() -> None:
     """Fresh live data needs no banner and shows a full page."""
     result = view(departures=many())
@@ -368,6 +394,7 @@ def test_view_empty_says_loading_before_the_timetable_loads() -> None:
             scroll=0,
             live_since=START,
             has_feed=True,
+            stale_after=timedelta(minutes=2),
             loaded=False,
         ),
     )
@@ -385,6 +412,7 @@ def test_view_without_a_destination_has_none_and_a_plain_empty() -> None:
             scroll=0,
             live_since=START,
             has_feed=True,
+            stale_after=timedelta(minutes=2),
         ),
     )
     assert result.destination is None
@@ -413,6 +441,7 @@ def test_view_carries_its_tag() -> None:
             scroll=0,
             live_since=START,
             has_feed=True,
+            stale_after=timedelta(minutes=2),
             tag=tag,
         ),
     )
@@ -491,6 +520,7 @@ def fall_back_view(
             scroll=0,
             live_since=now,
             has_feed=True,
+            stale_after=timedelta(minutes=2),
         ),
     )
 

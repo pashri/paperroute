@@ -33,6 +33,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import SYDNEY, Departure, is_connection
 from paperroute.core.places import shown
 from paperroute.core.positions import PositionsSnapshot
+from paperroute.core.rhythm import frame_time, stale_after
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
@@ -214,9 +215,9 @@ def pin_map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
     Returns
     -------
     MapInputs
-        Inputs at the Map's width, centred on the From at the resting
-        zoom, with only the positions of feeds the view polls and the
-        departures from `drawn_departures`.
+        Inputs at the Map's width and frame time, centred on the From
+        at the resting zoom, with only the positions of feeds the view
+        polls and the departures from `drawn_departures`.
     """
     return MapInputs(
         stop_view=stop_view,
@@ -226,7 +227,8 @@ def pin_map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
         positions=polled_positions(state=state),
         patterns=state.map.patterns,
         shapes=state.map.shapes,
-        now=state.now,
+        now=frame_time(state=state),
+        stale_after=stale_after(state=state),
         ends=pin_ends(state=state),
         step=state.map.step,
     )

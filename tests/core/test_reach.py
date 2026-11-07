@@ -23,6 +23,7 @@ from paperroute.core.reach import (
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_model import StripInputs
 from paperroute.core.strip_view import build_strip_view
+from tests.core.factories import STALE_LIMIT
 from tests.core.reach_factories import (
     BLACKTOWN,
     REAL_DB,
@@ -703,6 +704,7 @@ def test_blacktown_strip_opens_on_the_ride_to_parramatta() -> None:
         patterns={},
         positions={},
         now=datetime(2026, 10, 19, 8, 5, tzinfo=SYDNEY),
+        stale_after=STALE_LIMIT,
         scroll=0,
         cursor=None,
         picking=None,

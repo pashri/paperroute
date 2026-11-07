@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import StrEnum
 
 from paperroute.core.chains import Chain
@@ -343,6 +343,7 @@ def leg_vehicle(
     leg: LiveDeparture,
     positions: Mapping[str, PositionsSnapshot],
     now: datetime,
+    limit: timedelta,
 ) -> VehiclePosition | None:
     """
     Find a leg's vehicle while its position is fresh.
@@ -354,7 +355,9 @@ def leg_vehicle(
     positions : Mapping[str, PositionsSnapshot]
         The latest download of each positions feed.
     now : datetime
-        Current time.
+        The frame time.
+    limit : timedelta
+        How old a position may be.
 
     Returns
     -------
@@ -368,7 +371,7 @@ def leg_vehicle(
         for item in feed.vehicles
         if item.trip_id in trips
     ]
-    fresh = [pair for pair in found if is_fresh(age=pair[0])]
+    fresh = [pair for pair in found if is_fresh(age=pair[0], limit=limit)]
     return min(fresh, key=lambda pair: pair[0])[1] if fresh else None
 
 
@@ -596,6 +599,7 @@ def chain_sections(
     patterns: Mapping[str, TripPattern | None],
     positions: Mapping[str, PositionsSnapshot],
     now: datetime,
+    stale_after: timedelta,
 ) -> tuple[LegSection, ...]:
     """
     Build a section per ride of a chain.
@@ -611,7 +615,9 @@ def chain_sections(
     positions : Mapping[str, PositionsSnapshot]
         The latest download of each positions feed.
     now : datetime
-        Current time.
+        The frame time.
+    stale_after : timedelta
+        How old a position may be.
 
     Returns
     -------
@@ -624,7 +630,12 @@ def chain_sections(
         trip = patterns.get(trip_id)
         note = approach_note(
             leg=leg.item,
-            position=leg_vehicle(leg=leg.item, positions=positions, now=now),
+            position=leg_vehicle(
+                leg=leg.item,
+                positions=positions,
+                now=now,
+                limit=stale_after,
+            ),
             board=leg.start,
             pattern=trip,
         )
@@ -646,6 +657,7 @@ def build_connection_strip(
     patterns: Mapping[str, TripPattern | None],
     positions: Mapping[str, PositionsSnapshot],
     now: datetime,
+    stale_after: timedelta,
 ) -> ConnectionStripView:
     """
     Build the connection Strip.
@@ -665,7 +677,9 @@ def build_connection_strip(
     positions : Mapping[str, PositionsSnapshot]
         The latest download of each positions feed.
     now : datetime
-        Current time.
+        The frame time.
+    stale_after : timedelta
+        How old a position may be.
 
     Returns
     -------
@@ -679,6 +693,7 @@ def build_connection_strip(
         patterns=patterns,
         positions=positions,
         now=now,
+        stale_after=stale_after,
     )
     return ConnectionStripView(
         origin=stop_view.origin,

@@ -15,7 +15,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from paperroute.adapters.state_file import JsonStateRepository, write_atomic
+from paperroute.adapters.state_file import JsonStateRepository
 from paperroute.adapters.state_migrations import (
     SCHEMA_VERSION,
     regional_to_coach,
@@ -448,32 +448,6 @@ def test_written_file_is_world_readable(path: Path) -> None:
     """The file holds no secrets and is mode 0644."""
     JsonStateRepository(path=path).save(saved=sample())
     assert stat.S_IMODE(path.stat().st_mode) == 0o644
-
-
-def failing_sync(directory: Path) -> None:
-    """
-    Fail the way a directory fsync can.
-
-    Parameters
-    ----------
-    directory : Path
-        The directory.
-
-    Raises
-    ------
-    OSError
-        Always.
-    """
-    raise OSError(f'cannot sync {directory}')
-
-
-def test_directory_sync_failure_is_logged_not_raised(
-    path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    """The rename has landed, so a sync failure only warns."""
-    write_atomic(path=path, text='{}', sync=failing_sync)
-    assert path.read_text() == '{}'
-    assert [r.levelno for r in caplog.records] == [logging.WARNING]
 
 
 def test_directory_at_path_gives_defaults(

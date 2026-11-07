@@ -1,11 +1,10 @@
 """Draw the Device page's facts and news."""
 
 import html
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Final
 
-from paperroute.core.feeds import feed_label
 from paperroute.core.model import SYDNEY
 from paperroute.core.panel_screens import (
     LOCAL_NAME,
@@ -15,7 +14,6 @@ from paperroute.core.panel_screens import (
 )
 from paperroute.core.panel_screens import strength as dbm_strength
 from paperroute.core.panel_views import CANCEL_LINE, CONFIRM_COPY
-from paperroute.core.quota import DAILY_LIMIT
 from paperroute_device.core.device_model import (
     POWER_ACTIONS,
     ConfirmAction,
@@ -47,9 +45,6 @@ RESETS: Final[dict[str, ConfirmAction]] = {
     'erase': ConfirmAction.ERASE,
 }
 KEY_SAVED: Final[str] = 'Key saved.'
-KEY_REFUSED: Final[str] = (
-    "Not saved: that doesn't look like a TfNSW API key."
-)
 GB: Final[int] = 1_000_000_000  # bytes
 MB: Final[int] = 1_000_000  # bytes
 DEGREES_C: Final[str] = '\u00b0C'
@@ -307,7 +302,7 @@ def network_rows(*, facts: DeviceFacts | None) -> str:
     ))
 
 
-def data_rows(*, status: DeviceStatus | None) -> str:
+def data_rows(*, status: DeviceStatus | None, daily_limit: int) -> str:
     """
     Draw the Data section's facts.
 
@@ -315,6 +310,8 @@ def data_rows(*, status: DeviceStatus | None) -> str:
     ----------
     status : DeviceStatus | None
         The device status, or None before the app reports it.
+    daily_limit : int
+        The API calls allowed each day.
 
     Returns
     -------
@@ -325,7 +322,7 @@ def data_rows(*, status: DeviceStatus | None) -> str:
         timetable, calls = UNKNOWN, UNKNOWN
     else:
         timetable = timetable_text(status=status)
-        calls = f'{status.calls_today:,} of {DAILY_LIMIT:,}'
+        calls = f'{status.calls_today:,} of {daily_limit:,}'
     facts = None if status is None else status.facts
     return '\n'.join((
         row(label='Timetable', value=timetable),
@@ -434,7 +431,9 @@ def knob_rows(*, knobs: bool | None) -> str:
     return row(label='Knobs', value='on' if knobs else 'not answering')
 
 
-def feed_rows(*, feeds: Mapping[str, float], now: float) -> str:
+def feed_rows(
+    *, feeds: Mapping[str, float], now: float, label: Callable[[str], str],
+) -> str:
     """
     Draw the feed table's body.
 
@@ -444,6 +443,8 @@ def feed_rows(*, feeds: Mapping[str, float], now: float) -> str:
         Wall-clock time each feed last worked.
     now : float
         The wall-clock time now.
+    label : Callable[[str], str]
+        Names a feed for people.
 
     Returns
     -------
@@ -451,19 +452,16 @@ def feed_rows(*, feeds: Mapping[str, float], now: float) -> str:
         One row per feed, by name, with its time in Sydney and its
         age; one `none yet` row with no feeds.
     """
-    rows = sorted(
-        (feed_label(feed=feed), last)
-        for feed, last in feeds.items()
-    )
+    rows = sorted((label(feed), last) for feed, last in feeds.items())
     if not rows:
         return NO_FEEDS
     return '\n'.join(
         FEED_ROW.format(
-            label=html.escape(label),
+            label=html.escape(name),
             last=f'{datetime.fromtimestamp(last, tz=SYDNEY):%H:%M:%S}',
             age=ago_text(seconds=now - last),
         )
-        for label, last in rows
+        for name, last in rows
     )
 
 

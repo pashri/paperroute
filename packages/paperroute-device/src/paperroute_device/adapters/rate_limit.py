@@ -1,12 +1,10 @@
 """Space out the starts of requests to a rate-limited API."""
 
 import asyncio
-import functools
 import time
 from collections.abc import Awaitable, Callable
 from typing import Final
 
-TFNSW_STARTS_PER_S: Final[float] = 3.0  # TfNSW allows 5 a second per key
 MARGIN_S: Final[float] = 0.01  # keeps a closed one-second window to the limit
 
 
@@ -67,7 +65,7 @@ class StartLimiter:
     def __init__(
         self,
         *,
-        per_second: float = TFNSW_STARTS_PER_S,
+        per_second: float,
         clock: Callable[[], float] = time.monotonic,
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
     ) -> None:
@@ -106,18 +104,3 @@ class SyncStartLimiter:
     def wait(self) -> None:
         """Return when this caller's start slot arrives."""
         self.sleep(self.slots.delay())
-
-
-@functools.cache
-def tfnsw_limiter() -> StartLimiter:
-    """
-    Give the one limiter every TfNSW request in this process waits on.
-
-    The limit is per API key, so the feeds and the Trip Planner share it.
-
-    Returns
-    -------
-    StartLimiter
-        The process's limiter, at `TFNSW_STARTS_PER_S`.
-    """
-    return StartLimiter()

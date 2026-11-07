@@ -10,10 +10,13 @@ import pytest
 from aiohttp import ClientResponse, web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_device import DevicePages
 from paperroute.adapters.web_display import WebDisplay
+from paperroute.core.feeds import DAILY_LIMIT, feed_label
 from paperroute.core.messages import ApiKeyChanged, Event, JoinAsked
 from paperroute_device.core.device_model import (
+    Credential,
     DeviceStatus,
     JoinRequest,
     WifiNetwork,
@@ -60,6 +63,8 @@ class Setup:
         What the page reads.
     keys : FakeKeys
         The key store.
+    credential : Credential
+        How the pages name the key.
     posted : list[Event]
         Events posted so far.
     """
@@ -67,6 +72,7 @@ class Setup:
     def __init__(self) -> None:
         self.status: DeviceStatus | None = STATUS
         self.keys = FakeKeys(key='already-set-key-123')
+        self.credential = TFNSW_KEY
         self.posted: list[Event] = []
 
     def pages(self) -> DevicePages:
@@ -83,6 +89,9 @@ class Setup:
             feeds=dict,
             panel=lambda: None,
             key=self.keys,
+            credential=self.credential,
+            feed_label=feed_label,
+            daily_limit=DAILY_LIMIT,
             post=self.posted.append,
             error_log=None,
             state_file=None,
@@ -166,6 +175,35 @@ async def test_setup_page_asks_for_key_only_without_key(
     page = await (await client.get('/setup')).text()
     assert 'name="api_key"' in page
     assert 'TfNSW API key' in page
+
+
+async def test_setup_form_uses_credential_label(setup: Setup) -> None:
+    """The form asks for the key, and refuses it, in the app's words."""
+    setup.credential = Credential(
+        label='Test key',
+        refusal='Bad test key.',
+        not_saved='Test key not saved.',
+    )
+    assert setup.status is not None
+    setup.status = replace(setup.status, key_set=False)
+
+    def refuse(*, key: str) -> None:
+        del key
+        raise ValueError('not a valid API key')
+
+    setup.keys.write = refuse  # type: ignore[method-assign]
+    client = TestClient(TestServer(WebDisplay(device=setup.pages()).app()))
+    await client.start_server()
+    try:
+        page = await (await client.get('/setup')).text()
+        response = await _post(client=client, data={
+            'network': 'Home', 'password': 'pw12345678', 'api_key': 'short',
+        })
+        refused = await response.text()
+    finally:
+        await client.close()
+    assert 'Test key' in page
+    assert 'Bad test key.' in refused
 
 
 @pytest.mark.parametrize('phase', [None, WifiPhase.SCANNING])

@@ -4,8 +4,9 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
+from paperroute.core.feeds import DAILY_LIMIT
 from paperroute.core.messages import HolidaysLoaded
-from paperroute.core.quota import DAILY_LIMIT, calls_today
+from paperroute.core.quota import calls_today
 from paperroute.core.saved import Rate, Settings
 from paperroute.core.state_model import State
 from paperroute_device.core.device_settings import Window

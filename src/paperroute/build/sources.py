@@ -11,7 +11,7 @@ from typing import Final
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
-from paperroute.adapters.rate_limit import SyncStartLimiter
+from paperroute_device.adapters.rate_limit import SyncStartLimiter
 
 CHUNK_BYTES: Final[int] = 1 << 20
 

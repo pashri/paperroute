@@ -5,13 +5,13 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.rate_limit import (
+from paperroute_device.adapters.rate_limit import (
     StartLimiter,
     SyncStartLimiter,
-    tfnsw_limiter,
 )
 
-STEP: Final[float] = 1 / 3 + 0.01  # seconds between starts
+PER_SECOND: Final[float] = 3.0  # starts
+STEP: Final[float] = 1 / PER_SECOND + 0.01  # seconds between starts
 
 
 class FakeTime:
@@ -48,7 +48,9 @@ class FakeTime:
 async def test_starts_are_spaced() -> None:
     """Eight calls at once get slots just over a third of a second apart."""
     fake = FakeTime()
-    limiter = StartLimiter(clock=fake.clock, sleep=fake.sleep)
+    limiter = StartLimiter(
+        per_second=PER_SECOND, clock=fake.clock, sleep=fake.sleep,
+    )
     for _ in range(8):
         await limiter.wait()
     assert fake.slept_until == pytest.approx([i * STEP for i in range(8)])
@@ -57,7 +59,9 @@ async def test_starts_are_spaced() -> None:
 async def test_no_closed_second_holds_four_starts() -> None:
     """Any window of one second, ends included, holds at most three starts."""
     fake = FakeTime()
-    limiter = StartLimiter(clock=fake.clock, sleep=fake.sleep)
+    limiter = StartLimiter(
+        per_second=PER_SECOND, clock=fake.clock, sleep=fake.sleep,
+    )
     for _ in range(40):
         await limiter.wait()
     starts = fake.slept_until
@@ -74,7 +78,9 @@ async def test_idle_limiter_does_not_wait() -> None:
         seconds.append(delay)
         await fake.sleep(delay)
 
-    limiter = StartLimiter(clock=fake.clock, sleep=sleep)
+    limiter = StartLimiter(
+        per_second=PER_SECOND, clock=fake.clock, sleep=sleep,
+    )
     await limiter.wait()
     fake.now += 2
     await limiter.wait()
@@ -90,7 +96,9 @@ async def test_cancelled_waiter_leaves_later_slots_alone() -> None:
         await release.wait()
         await fake.sleep(delay)
 
-    limiter = StartLimiter(clock=fake.clock, sleep=sleep)
+    limiter = StartLimiter(
+        per_second=PER_SECOND, clock=fake.clock, sleep=sleep,
+    )
     tasks = [asyncio.create_task(limiter.wait()) for _ in range(3)]
     await asyncio.sleep(0)
     tasks[1].cancel()
@@ -100,11 +108,6 @@ async def test_cancelled_waiter_leaves_later_slots_alone() -> None:
     assert results[0] is None
     assert results[2] is None
     assert fake.slept_until == pytest.approx([0.0, 2 * STEP])
-
-
-def test_one_limiter_for_every_tfnsw_call() -> None:
-    """Each ask for the TfNSW limiter gets the same one."""
-    assert tfnsw_limiter() is tfnsw_limiter()
 
 
 def test_sync_limiter_spaces_blocking_starts() -> None:

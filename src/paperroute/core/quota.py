@@ -14,7 +14,6 @@ from paperroute.core.messages import (
 from paperroute.core.saved import Quota, Saved
 from paperroute.core.state_model import State
 
-DAILY_LIMIT: Final[int] = 60_000
 QUOTA_SAVE_EVERY: Final[timedelta] = timedelta(minutes=10)
 
 

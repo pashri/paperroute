@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 
+from paperroute.core.feeds import DAILY_LIMIT
 from paperroute.core.messages import (
     FeedFailed,
     FeedJoined,
@@ -14,7 +15,6 @@ from paperroute.core.messages import (
 )
 from paperroute.core.model import SYDNEY
 from paperroute.core.quota import (
-    DAILY_LIMIT,
     QUOTA_SAVE_EVERY,
     calls_today,
     counted,

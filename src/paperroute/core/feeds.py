@@ -7,6 +7,7 @@ from typing import Final
 from paperroute.core.geo import MetreBox, to_metres
 from paperroute.core.model import Mode, RouteKind
 
+DAILY_LIMIT: Final[int] = 60_000  # API calls a day
 FEEDS: Final[dict[Mode, str]] = {
     Mode.BUS: 'v1/gtfs/realtime/buses',
     Mode.TRAIN: 'v2/gtfs/realtime/sydneytrains',
@@ -207,7 +208,7 @@ def feed_kind(*, feed: str) -> FeedKind:
     return FeedKind.TRIPS
 
 
-def feed_label(*, feed: str) -> str:
+def feed_label(feed: str) -> str:
     """
     Name a feed path for people.
 

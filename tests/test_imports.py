@@ -287,3 +287,32 @@ def test_shell_screens_use_no_board_drawing() -> None:
         if imported_names(path=board / name) & modules
     }
     assert not offenders
+
+
+def test_device_kit_names_no_tfnsw() -> None:
+    """No file of the device kit names TfNSW."""
+    kit = ROOT / 'packages' / 'paperroute-device' / 'src'
+    offenders = [
+        str(path)
+        for path in kit.rglob('*')
+        if path.is_file()
+        and '__pycache__' not in path.parts
+        and 'tfnsw' in path.read_text(encoding='utf-8').lower()
+    ]
+    assert not offenders
+
+
+def test_device_pages_import_no_feed_config() -> None:
+    """The Device and setup pages take feed settings from the app."""
+    board = ROOT / 'src' / 'paperroute'
+    banned = {
+        'paperroute.core.feeds',
+        'paperroute.core.quota',
+        'paperroute.adapters.tfnsw',
+    }
+    offenders = {
+        name: sorted(imported_names(path=board / name) & banned)
+        for name in ('adapters/web_device.py', 'adapters/device_page.py')
+        if imported_names(path=board / name) & banned
+    }
+    assert not offenders

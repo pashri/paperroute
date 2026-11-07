@@ -7,6 +7,26 @@ from typing import Final
 
 
 @dataclass(frozen=True)
+class Credential:
+    """
+    How the device's pages name the API key and refuse a bad one.
+
+    Attributes
+    ----------
+    label : str
+        The key's name, such as a form field's label.
+    refusal : str
+        Why the setup page refused a key.
+    not_saved : str
+        Why the Device page didn't save a key.
+    """
+
+    label: str
+    refusal: str
+    not_saved: str
+
+
+@dataclass(frozen=True)
 class WifiNetwork:
     """
     A Wi-Fi network seen in a scan.
@@ -99,7 +119,7 @@ class DeviceFacts:
     tiles_built : str | None
         When the map tiles were built, or None with no tiles.
     key_set : bool
-        Whether a TfNSW API key is set.
+        Whether an API key is set.
     """
 
     wifi: WifiStatus
@@ -256,9 +276,9 @@ class DeviceStatus:
     rebuild_failed : bool
         Whether the last timetable rebuild failed.
     calls_today : int
-        API calls made this Sydney day.
+        API calls made today.
     key_set : bool | None
-        Whether a TfNSW API key is set; None until known.
+        Whether an API key is set; None until known.
     facts : DeviceFacts | None
         The latest probe, or None before the first.
     asked : ConfirmAction | None
@@ -305,7 +325,7 @@ class Panel:
     Attributes
     ----------
     key_set : bool | None
-        Whether a TfNSW API key is set; None until known.
+        Whether an API key is set; None until known.
     facts : DeviceFacts | None
         The latest probe, or None before the first.
     probed_at : datetime | None

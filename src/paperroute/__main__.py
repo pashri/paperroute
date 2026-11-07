@@ -23,17 +23,20 @@ from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import GuardedFeeds
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.pin_options import SqlitePinOptions
-from paperroute.adapters.rate_limit import tfnsw_limiter
 from paperroute.adapters.rebuild import (
     ChildRebuilder,
     NullBuilder,
     refresh_command,
     refresh_env,
 )
-from paperroute.adapters.secrets_file import SecretsFile, key_path_from_env
 from paperroute.adapters.state_file import DEFAULT_PATH as STATE_PATH
 from paperroute.adapters.state_file import JsonStateRepository
-from paperroute.adapters.tfnsw import AiohttpFeedsClient
+from paperroute.adapters.tfnsw import (
+    TFNSW_KEY,
+    AiohttpFeedsClient,
+    key_path_from_env,
+    tfnsw_limiter,
+)
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.trip_planner import trip_planner_for
@@ -42,6 +45,7 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports, run
 from paperroute.app_device import DevicePorts
 from paperroute.asset_root import use_app_assets
+from paperroute.core.feeds import DAILY_LIMIT, feed_label
 from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin, StopPlace
 from paperroute.core.tiles import TileVariant
@@ -52,6 +56,7 @@ from paperroute.summary import Summary
 from paperroute.web_observer import web_observer
 from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
+from paperroute_device.adapters.secrets_file import SecretsFile
 from paperroute_device.adapters.wifi import NmcliWifi, NullWifi
 from paperroute_device.ports import (
     Clock,
@@ -942,6 +947,9 @@ def device_pages_for(
         panel=lambda: timings.panel,
         feeds=lambda: timings.last_ok,
         key=SecretsFile(path=key_path_from_env()),
+        credential=TFNSW_KEY,
+        feed_label=feed_label,
+        daily_limit=DAILY_LIMIT,
         post=display.send,
         error_log=args.error_log,
         state_file=args.state,

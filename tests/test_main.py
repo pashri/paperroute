@@ -41,9 +41,8 @@ from paperroute.adapters.checked_tiles import CheckedTiles
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import GuardedFeeds
-from paperroute.adapters.rate_limit import tfnsw_limiter
 from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
-from paperroute.adapters.tfnsw import AiohttpFeedsClient
+from paperroute.adapters.tfnsw import AiohttpFeedsClient, tfnsw_limiter
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay

@@ -12,10 +12,16 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.device_page import ASKED as DEVICE_ASKED
-from paperroute.adapters.device_page import ago_text
+from paperroute.adapters.device_page import ago_text, data_rows
+from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_device import DevicePages
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.core.feeds import FEEDS, POSITION_FEEDS
+from paperroute.core.feeds import (
+    DAILY_LIMIT,
+    FEEDS,
+    POSITION_FEEDS,
+    feed_label,
+)
 from paperroute.core.messages import (
     ApiKeyChanged,
     ConfirmAsked,
@@ -27,6 +33,7 @@ from paperroute.core.panel_views import confirm_view
 from paperroute_device.core.device_model import (
     Confirm,
     ConfirmAction,
+    Credential,
     DeviceFacts,
     DeviceStatus,
     Origin,
@@ -92,6 +99,8 @@ class Device:
         When each feed last worked.
     keys : FakeKeys
         The key store.
+    credential : Credential
+        How the pages name the key.
     posted : list[Event]
         Events posted so far.
     error_log : Path | None
@@ -106,6 +115,7 @@ class Device:
         self.panel: PanelTimes | None = None
         self.knobs: bool | None = None
         self.keys = FakeKeys(key=KEY)
+        self.credential = TFNSW_KEY
         self.posted: list[Event] = []
         self.error_log: Path | None = None
         self.state_file: Path | None = None
@@ -125,6 +135,9 @@ class Device:
             panel=lambda: self.panel,
             knobs=lambda: self.knobs,
             key=self.keys,
+            credential=self.credential,
+            feed_label=feed_label,
+            daily_limit=DAILY_LIMIT,
             post=self.posted.append,
             error_log=self.error_log,
             state_file=self.state_file,
@@ -425,6 +438,37 @@ async def test_key_post_bad_400(device: Device, client: Client) -> None:
     assert 'x y' not in text
     assert device.keys.key == KEY
     assert not device.posted
+
+
+async def test_device_page_uses_credential_label(device: Device) -> None:
+    """The page names the key and refuses it in the app's words."""
+    device.credential = Credential(
+        label='Test key',
+        refusal='Bad test key.',
+        not_saved='Test key not saved.',
+    )
+
+    def refuse(*, key: str) -> None:
+        del key
+        raise ValueError('not a valid API key')
+
+    device.keys.write = refuse  # type: ignore[method-assign]
+    client, _ = await _start(device=device)
+    try:
+        page = await (await client.get('/device')).text()
+        response = await client.post('/device/key', data={'api_key': 'short'})
+        refused = await response.text()
+    finally:
+        await client.close()
+    assert 'Test key' in page
+    assert 'TfNSW' not in page
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert 'Test key not saved.' in refused
+
+
+def test_device_page_shows_given_daily_limit() -> None:
+    """The API calls row counts against the limit it is given."""
+    assert 'of 1,234' in data_rows(status=STATUS, daily_limit=1234)
 
 
 async def test_downloads_serve_files(

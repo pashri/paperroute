@@ -10,7 +10,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.rate_limit import SyncStartLimiter
 from paperroute.build.sources import (
     SOURCES,
     SourceError,
@@ -22,6 +21,7 @@ from paperroute.build.sources import (
     needs_download,
     save_states,
 )
+from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from tests.build.feed_server import (
     REDIRECT,
     TARGET,

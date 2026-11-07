@@ -13,8 +13,8 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from paperroute.adapters.rate_limit import StartLimiter
 from paperroute.adapters.tfnsw import (
+    TFNSW_STARTS_PER_S,
     AiohttpFeedsClient,
     FeedError,
     FeedThrottled,
@@ -23,7 +23,9 @@ from paperroute.adapters.tfnsw import (
     NoApiKey,
     api_key_from_env,
     read_retry_after,
+    tfnsw_limiter,
 )
+from paperroute_device.adapters.rate_limit import StartLimiter
 
 
 async def feed_handler(request: web.Request) -> web.Response:
@@ -180,7 +182,7 @@ async def test_burst_is_spaced_and_complete() -> None:
     client = AiohttpFeedsClient(
         key=lambda: 'secret',
         base_url=str(server.make_url('/')),
-        limiter=StartLimiter(),
+        limiter=StartLimiter(per_second=TFNSW_STARTS_PER_S),
     )
     names = ('buses', 'ferries', 'trains')
     try:
@@ -400,3 +402,8 @@ async def test_server_errors_are_unavailable(
         await server.close()
     assert str(caught.value) == f'v1/gtfs/realtime/buses: HTTP {status}'
     assert isinstance(caught.value, FeedUnavailable) is unavailable
+
+
+def test_one_limiter_for_every_tfnsw_call() -> None:
+    """Each ask for the TfNSW limiter gets the same one."""
+    assert tfnsw_limiter() is tfnsw_limiter()

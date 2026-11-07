@@ -10,7 +10,6 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Final
 
-from paperroute.adapters.rate_limit import SyncStartLimiter
 from paperroute.adapters.tfnsw import BASE_URL
 from paperroute.build.gtfs_files import Source
 from paperroute.build.handoff import (
@@ -44,6 +43,7 @@ from paperroute.build.timetable import (
     build_timetable,
     yesterday,
 )
+from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from paperroute_device.rss import max_rss_mb
 
 TIMEOUT_S: Final[float] = 60

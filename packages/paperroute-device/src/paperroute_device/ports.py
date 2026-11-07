@@ -234,7 +234,7 @@ class Clock(Protocol):
 
 
 class KeyStore(Protocol):
-    """Holds the TfNSW API key."""
+    """Holds the API key."""
 
     def read(self) -> str | None:
         """

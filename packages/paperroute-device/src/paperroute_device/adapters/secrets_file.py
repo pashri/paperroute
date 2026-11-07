@@ -1,14 +1,11 @@
-"""The file holding the TfNSW API key, read again whenever it changes."""
+"""The file holding an API key, read again whenever it changes."""
 
 import logging
 import re
 from pathlib import Path
 from typing import Final
 
-from paperroute.adapters.state_file import write_atomic
-from paperroute.adapters.tfnsw import key_path_from_env
-
-__all__ = ['KEY_PATTERN', 'SecretsFile', 'key_path_from_env']
+from paperroute_device.adapters.atomic_file import write_atomic
 
 KEY_PATTERN: Final[re.Pattern[str]] = re.compile(r'[\x21-\x7e]{16,4096}')
 SECRETS_MODE: Final[int] = 0o600

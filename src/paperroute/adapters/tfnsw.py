@@ -1,5 +1,6 @@
 """Fetch GTFS-realtime feeds from the TfNSW Open Data API."""
 
+import functools
 import os
 import sys
 from collections.abc import Callable
@@ -11,9 +12,16 @@ from typing import Final
 
 import aiohttp
 
-from paperroute.adapters.rate_limit import StartLimiter
+from paperroute_device.adapters.rate_limit import StartLimiter
+from paperroute_device.core.device_model import Credential
 
 BASE_URL: Final[str] = 'https://api.transport.nsw.gov.au/'
+TFNSW_STARTS_PER_S: Final[float] = 3.0  # TfNSW allows 5 a second per key
+TFNSW_KEY: Final[Credential] = Credential(
+    label='TfNSW API key',
+    refusal="That doesn't look like a TfNSW API key.",
+    not_saved="Not saved: that doesn't look like a TfNSW API key.",
+)
 
 
 class FeedError(Exception):
@@ -269,3 +277,18 @@ class AiohttpFeedsClient:
         if self.session and self.owns_session:
             await self.session.close()
             self.session = None
+
+
+@functools.cache
+def tfnsw_limiter() -> StartLimiter:
+    """
+    Give the one limiter every TfNSW request in this process waits on.
+
+    The limit is per API key, so the feeds and the Trip Planner share it.
+
+    Returns
+    -------
+    StartLimiter
+        The process's limiter, at `TFNSW_STARTS_PER_S`.
+    """
+    return StartLimiter(per_second=TFNSW_STARTS_PER_S)

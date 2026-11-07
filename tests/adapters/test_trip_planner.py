@@ -14,7 +14,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from paperroute.adapters.rate_limit import tfnsw_limiter
+from paperroute.adapters.tfnsw import tfnsw_limiter
 from paperroute.adapters.trip_planner import (
     KeyedTripPlanner,
     TfnswTripPlanner,

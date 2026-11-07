@@ -11,7 +11,6 @@ from typing import Final
 from aiohttp import web
 
 from paperroute.adapters.device_page import (
-    KEY_REFUSED,
     RESETS,
     data_rows,
     device_notice,
@@ -34,6 +33,7 @@ from paperroute.core.messages import (
 from paperroute_device.adapters.wifi import valid_password, valid_ssid
 from paperroute_device.core.device_model import (
     ConfirmAction,
+    Credential,
     DeviceStatus,
     JoinRequest,
     WifiNetwork,
@@ -48,6 +48,7 @@ HIDDEN: Final[str] = '__hidden__'  # the radio value for a hidden network
 STRONG: Final[int] = 67  # signal percent at or above which it is strong
 GOOD: Final[int] = 34  # signal percent at or above which it is good
 NOTICE_MARK: Final[str] = '{{notice}}'
+KEY_LABEL_MARK: Final[str] = '{{key_label}}'
 FORM_MARK: Final[str] = '{{form}}'
 DOWNLOAD_TYPES: Final[dict[str, str]] = {
     'errors.jsonl': 'application/x-ndjson',
@@ -67,11 +68,10 @@ BAD_SSID: Final[str] = (
     'bytes).'
 )
 BAD_PASSWORD: Final[str] = 'Wi-Fi passwords are 8 to 63 characters.'
-BAD_KEY: Final[str] = "That doesn't look like a TfNSW API key."
 UNSUPPORTED: Final[str] = 'That network is not supported.'
 KEY_NOT_SAVED: Final[str] = "Couldn't save the key on the device. Try again."
 KEY_FIELD: Final[str] = """
-      <label for="api-key">TfNSW API key</label>
+      <label for="api-key">{{key_label}}</label>
       <input id="api-key" name="api_key" type="text" autocomplete="off"
              autocapitalize="off" spellcheck="false">"""
 FORM: Final[str] = """<form method="post" action="/setup">
@@ -165,7 +165,7 @@ def network_radio(*, network: WifiNetwork) -> str:
     )
 
 
-def setup_form(*, status: DeviceStatus) -> str:
+def setup_form(*, status: DeviceStatus, key_label: str) -> str:
     """
     Draw the setup form.
 
@@ -173,6 +173,8 @@ def setup_form(*, status: DeviceStatus) -> str:
     ----------
     status : DeviceStatus
         The device status, with setup in HOTSPOT.
+    key_label : str
+        The key field's label; escaped here.
 
     Returns
     -------
@@ -184,7 +186,11 @@ def setup_form(*, status: DeviceStatus) -> str:
         networks='\n'.join(
             network_radio(network=network) for network in networks
         ),
-        key=KEY_FIELD if status.key_set is False else '',
+        key=(
+            KEY_FIELD.replace(KEY_LABEL_MARK, html.escape(key_label))
+            if status.key_set is False
+            else ''
+        ),
     )
 
 
@@ -236,7 +242,13 @@ class DevicePages:
     panel : Callable[[], PanelTimes | None]
         The panel's refresh times, or None when there is no panel.
     key : KeyStore
-        Where the TfNSW API key is kept.
+        Where the API key is kept.
+    credential : Credential
+        How the pages name the key and refuse a bad one.
+    feed_label : Callable[[str], str]
+        Names a feed for people.
+    daily_limit : int
+        The API calls allowed each day.
     post : Callable[[Event], None]
         Sends an event to the app; called at request time.
     error_log : Path | None
@@ -256,6 +268,9 @@ class DevicePages:
         feeds: Callable[[], Mapping[str, float]],
         panel: Callable[[], PanelTimes | None],
         key: KeyStore,
+        credential: Credential,
+        feed_label: Callable[[str], str],
+        daily_limit: int,
         post: Callable[[Event], None],
         error_log: Path | None,
         state_file: Path | None,
@@ -266,6 +281,9 @@ class DevicePages:
         self._feeds = feeds
         self._panel = panel
         self._key = key
+        self._credential = credential
+        self._feed_label = feed_label
+        self._daily_limit = daily_limit
         self._post = post
         self._error_log = error_log
         self._state_file = state_file
@@ -331,7 +349,9 @@ class DevicePages:
         if device is None:
             news, form = notice(text=NOT_RUNNING), ''
         else:
-            form = setup_form(status=device)
+            form = setup_form(
+                status=device, key_label=self._credential.label,
+            )
         page = asset(name='setup.html').replace(
             NOTICE_MARK, news,
         ).replace(FORM_MARK, form)
@@ -463,7 +483,7 @@ class DevicePages:
         try:
             self._key.write(key=key)
         except ValueError:
-            return self._refuse(reason=BAD_KEY)
+            return self._refuse(reason=self._credential.refusal)
         except OSError:
             logger.exception('could not save the API key file')
             return self._refuse(
@@ -498,10 +518,15 @@ class DevicePages:
         feeds = self._feeds()
         facts = None if device is None else device.facts
         marks = {
+            KEY_LABEL_MARK: html.escape(self._credential.label),
             NOTICE_MARK: news,
             '{{network}}': network_rows(facts=facts),
-            '{{data}}': data_rows(status=device),
-            '{{feeds}}': feed_rows(feeds=feeds, now=now),
+            '{{data}}': data_rows(
+                status=device, daily_limit=self._daily_limit,
+            ),
+            '{{feeds}}': feed_rows(
+                feeds=feeds, now=now, label=self._feed_label,
+            ),
             '{{system}}': system_rows(facts=facts),
             '{{panel}}': (
                 panel_rows(panel=self._panel())
@@ -645,7 +670,7 @@ class DevicePages:
             self._key.write(key=key)
         except ValueError:
             return self._device(
-                news=notice(text=KEY_REFUSED, alert=True),
+                news=notice(text=self._credential.not_saved, alert=True),
                 status=HTTPStatus.BAD_REQUEST,
             )
         except OSError:

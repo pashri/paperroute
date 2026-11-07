@@ -132,3 +132,14 @@ to pin. On the web page, double-click a Press button, or hold it for about
 `/var/lib/paperroute/state.json`. A new device starts on Town Hall's map.
 
 The timetable refreshes nightly at 03:30 Sydney time.
+
+## Data
+
+Timetable and real-time data come from Transport for NSW Open Data under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The recorded
+feeds and timetable slices in `tests/fixtures/real` are cut down from that
+data, and some of their stops are edited.
+
+Map data © [OpenStreetMap](https://www.openstreetmap.org/copyright)
+contributors, available under the
+[Open Database License (ODbL)](https://opendatacommons.org/licenses/odbl/).

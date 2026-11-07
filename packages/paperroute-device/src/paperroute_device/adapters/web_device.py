@@ -3,7 +3,7 @@
 import html
 import logging
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from datetime import tzinfo
 from http import HTTPStatus
 from pathlib import Path
@@ -25,7 +25,12 @@ from paperroute_device.adapters.device_page import (
     system_rows,
 )
 from paperroute_device.adapters.web_common import form_fields
-from paperroute_device.adapters.web_frame import shell_text
+from paperroute_device.adapters.web_frame import (
+    KIT_NAV,
+    NavItem,
+    page_frame,
+    shell_text,
+)
 from paperroute_device.adapters.wifi import valid_password, valid_ssid
 from paperroute_device.core.device_events import (
     ApiKeyChanged,
@@ -273,6 +278,8 @@ class DevicePages:
         The wall-clock time, as `time.time` gives it.
     knobs : Callable[[], bool | None]
         Whether the knobs' lines opened, or None when not asked for.
+    nav : Sequence[NavItem]
+        The links in each page's nav, in order.
     """
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -291,6 +298,7 @@ class DevicePages:
         state_file: Path | None,
         clock: Callable[[], float] = time.time,
         knobs: Callable[[], bool | None] = lambda: None,
+        nav: Sequence[NavItem] = KIT_NAV,
     ) -> None:
         self._status = status
         self._feeds = feeds
@@ -305,6 +313,7 @@ class DevicePages:
         self._state_file = state_file
         self._clock = clock
         self._knobs = knobs
+        self._nav = tuple(nav)
 
     def routes(self) -> list[web.RouteDef]:
         """
@@ -331,6 +340,24 @@ class DevicePages:
             web.get('/device/errors.jsonl', self._download),
             web.get('/device/state.json', self._download),
         ]
+
+    def _frame(self, *, name: str, current: str | None) -> str:
+        """
+        Read a page with this site's nav drawn in.
+
+        Parameters
+        ----------
+        name : str
+            The page's file name.
+        current : str | None
+            The href the nav marks as the open page, or None.
+
+        Returns
+        -------
+        str
+            The page, its other marks still unfilled.
+        """
+        return page_frame(name=name, nav=self._nav, current=current)
 
     def _hotspot(self) -> DeviceStatus | None:
         """
@@ -371,7 +398,7 @@ class DevicePages:
             form = setup_form(
                 status=device, key_label=self._credential.label,
             )
-        page = shell_text(name='setup.html').replace(
+        page = self._frame(name='setup.html', current=None).replace(
             NOTICE_MARK, news,
         ).replace(FORM_MARK, form)
         return web.Response(
@@ -393,7 +420,7 @@ class DevicePages:
             The page, or the joining news alone.
         """
         if request.query.get('joining') == '1':
-            page = shell_text(name='setup.html').replace(
+            page = self._frame(name='setup.html', current=None).replace(
                 NOTICE_MARK, notice(text=JOINING),
             ).replace(FORM_MARK, '')
             return web.Response(text=page, content_type='text/html')
@@ -563,7 +590,7 @@ class DevicePages:
             )),
             '{{device_status}}': html.escape(power),
         }
-        page = shell_text(name='device.html')
+        page = self._frame(name='device.html', current='/device')
         for mark, value in marks.items():
             page = page.replace(mark, value)
         return web.Response(
@@ -752,7 +779,7 @@ class DevicePages:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         question, confirm = CONFIRM[action]
         tone = ' class="danger"' if action is PowerAction.OFF else ''
-        page = shell_text(name='power.html').replace(
+        page = self._frame(name='power.html', current='/device').replace(
             '{{question}}', question,
         ).replace('{{action}}', action.value).replace(
             '{{confirm}}', confirm,

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Final
 
 from paperroute_device.adapters.web_device import DevicePages
+from paperroute_device.adapters.web_frame import KIT_NAV, NavItem
 from paperroute_device.core.device_events import DeviceRequest
 from paperroute_device.core.device_model import (
     Credential,
@@ -102,6 +103,8 @@ class DeviceSite:
         The error log.
     state_file : Path | None
         The saved state.
+    nav : tuple[NavItem, ...]
+        The links in each page's nav.
     """
 
     status: DeviceStatus | None = STATUS
@@ -118,6 +121,7 @@ class DeviceSite:
     posted: list[DeviceRequest] = field(default_factory=list)
     error_log: Path | None = None
     state_file: Path | None = None
+    nav: tuple[NavItem, ...] = KIT_NAV
 
     def pages(self) -> DevicePages:
         """
@@ -142,4 +146,5 @@ class DeviceSite:
             error_log=self.error_log,
             state_file=self.state_file,
             clock=lambda: NOW,
+            nav=self.nav,
         )

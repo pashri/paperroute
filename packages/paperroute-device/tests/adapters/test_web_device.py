@@ -388,3 +388,15 @@ async def test_power_unknown_action_400(
     response = await client.request(method, path, data={'action': 'halt'})
     assert response.status == HTTPStatus.BAD_REQUEST
     assert not device.posted
+
+
+async def test_device_pages_default_nav_is_kit_nav() -> None:
+    """Without an app's nav the pages link only Live and Device."""
+    client = await _start(device=DeviceSite())
+    try:
+        page = await (await client.get('/device')).text()
+    finally:
+        await client.close()
+    assert 'href="/"' in page
+    assert 'href="/device"' in page
+    assert 'href="/pins"' not in page

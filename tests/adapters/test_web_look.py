@@ -11,8 +11,9 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.web_board import SYDNEY_NAV
 from paperroute.adapters.web_display import WebDisplay
-from paperroute_device.adapters.web_frame import SHELL_WEB
+from paperroute_device.adapters.web_frame import SHELL_WEB, page_frame
 from paperroute_testkit.page_markup import (
     Node,
     by_id,
@@ -89,10 +90,13 @@ def page_text(*, name: str) -> str:
     Returns
     -------
     str
-        The page's HTML.
+        The page's HTML; a shell page with Sydney's nav drawn in.
     """
-    web = SHELL_WEB if name in SHELL_PAGES else WEB
-    return (web / name).read_text(encoding='utf-8')
+    if name in SHELL_PAGES:
+        return page_frame(
+            name=name, nav=SYDNEY_NAV, current=dict(PAGES)[name],
+        )
+    return (WEB / name).read_text(encoding='utf-8')
 
 
 def nav_html(*, text: str) -> str:

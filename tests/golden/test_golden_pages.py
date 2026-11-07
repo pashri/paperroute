@@ -10,7 +10,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.settings_form import form_values
 from paperroute.adapters.tfnsw import TFNSW_KEY
-from paperroute.adapters.web_board import SydneyPages
+from paperroute.adapters.web_board import SYDNEY_NAV, SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.feeds import DAILY_LIMIT, feed_label
 from paperroute_device.adapters.secrets_file import SecretsFile
@@ -76,6 +76,7 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
         error_log=None,
         state_file=None,
         clock=lambda: NOW,
+        nav=SYDNEY_NAV,
     )
     return WebDisplay(
         status=lambda: {'settings': form_values(settings=RICH_SAVED.settings)},

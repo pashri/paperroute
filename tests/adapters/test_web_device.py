@@ -10,6 +10,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.tfnsw import TFNSW_KEY
+from paperroute.adapters.web_board import SYDNEY_NAV
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.feeds import (
     DAILY_LIMIT,
@@ -17,7 +18,7 @@ from paperroute.core.feeds import (
     POSITION_FEEDS,
     feed_label,
 )
-from paperroute_device.adapters.web_frame import SHELL_WEB
+from paperroute_device.adapters.web_frame import page_frame
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_testkit.device_pages import KEY, NOW, DeviceSite
@@ -47,6 +48,7 @@ def sydney_site() -> DeviceSite:
         feed_label=feed_label,
         daily_limit=DAILY_LIMIT,
         zone=SYDNEY,
+        nav=SYDNEY_NAV,
     )
 
 
@@ -225,11 +227,14 @@ async def test_cross_site_refused_on_device_posts(
 ])
 def test_nav_on_every_page(name: str, current: str | None) -> None:
     """Every page links Live, Pins, Settings and Device, marking the open one."""
-    web_dir = (
-        SHELL_WEB if name in SHELL_PAGES
-        else files('paperroute') / 'assets' / 'web'
+    text = (
+        page_frame(name=name, nav=SYDNEY_NAV, current=current)
+        if name in SHELL_PAGES
+        else (files('paperroute') / 'assets' / 'web' / name).read_text(
+            encoding='utf-8',
+        )
     )
-    page = parse_page(text=(web_dir / name).read_text(encoding='utf-8'))
+    page = parse_page(text=text)
     assert page.navs == [{'aria-label': 'Pages'}]
     assert page.links == [
         (href, href == current, label)

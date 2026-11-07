@@ -311,3 +311,19 @@ async def test_setup_radios_required(client: Client) -> None:
     """The browser asks for a network before posting."""
     page = await (await client.get('/setup')).text()
     assert len(re.findall(r'name="network" value="[^"]*" required', page)) == 4
+
+
+async def test_ssid_with_nav_mark_stays_text(
+    setup: DeviceSite, client: Client
+) -> None:
+    """A network named like the nav mark is shown as its name."""
+    assert setup.status is not None and setup.status.setup is not None
+    mark = WifiNetwork(
+        ssid='{{nav}}', signal=90, secured=True, enterprise=False,
+    )
+    setup.status = replace(
+        setup.status, setup=replace(setup.status.setup, networks=(mark,)),
+    )
+    page = await (await client.get('/setup')).text()
+    assert 'value="{{nav}}"' in page
+    assert page.count('<nav') == 1

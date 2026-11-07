@@ -3,7 +3,7 @@
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
-from typing import Protocol
+from typing import Final, Protocol
 
 from aiohttp import web
 
@@ -15,7 +15,27 @@ from paperroute.core.messages import Event
 from paperroute.observers import PinsSeen
 from paperroute.planner_port import TripPlanner
 from paperroute.ports import PinOptions
+from paperroute_device.adapters.web_frame import DEVICE_NAV, LIVE_NAV, NavItem
 from paperroute_transit.core.model import SYDNEY
+
+PINS_NAV: Final[NavItem] = NavItem(
+    href='/pins',
+    label='Pins',
+    icon='<path d="M12 22s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z"/>'
+    '<circle cx="12" cy="10" r="2.5"/>',
+)
+SETTINGS_NAV: Final[NavItem] = NavItem(
+    href='/settings',
+    label='Settings',
+    icon='<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/>'
+    '<circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>',
+)
+SYDNEY_NAV: Final[tuple[NavItem, ...]] = (
+    LIVE_NAV,
+    PINS_NAV,
+    SETTINGS_NAV,
+    DEVICE_NAV,
+)
 
 
 class BoardPages(Protocol):

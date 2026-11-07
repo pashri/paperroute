@@ -19,6 +19,8 @@ from typing import TYPE_CHECKING, Final, cast
 import aiohttp
 import numpy as np
 import pytest
+from aiohttp import web
+from aiohttp.test_utils import TestClient, TestServer
 
 import paperroute.__main__ as cli
 import paperroute.adapters.tk_monitor as tk_monitor
@@ -68,6 +70,7 @@ from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_testkit.fakes import FakeNetwork, MemoryStates
 from paperroute_testkit.hardware_fakes import FakeKnobLines, FakePanelBus
+from paperroute_testkit.page_markup import parse_page
 from paperroute_transit.adapters.checked_tiles import CheckedTiles
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
@@ -122,6 +125,35 @@ def test_device_pages_only_for_live_feeds(
     assert device_pages_for(
         args=args, timings=timings, display=display,
     ) is None
+
+
+async def test_device_pages_link_sydney_pages(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The device pages' nav links all four of Sydney's pages."""
+    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    timings = Timings()
+    args = argparse.Namespace(
+        feeds='live', error_log=None, state=tmp_path / 'state.json',
+    )
+    pages = device_pages_for(
+        args=args,
+        timings=timings,
+        display=WebDisplay(status=timings.snapshot),
+    )
+    assert pages is not None
+    app = web.Application()
+    app.add_routes(pages.routes())
+    client = TestClient(TestServer(app))
+    await client.start_server()
+    try:
+        response = await client.get('/device/power?action=reboot')
+        text = await response.text()
+    finally:
+        await client.close()
+    assert [href for href, _, _ in parse_page(text=text).links] == [
+        '/', '/pins', '/settings', '/device',
+    ]
 
 
 def test_panel_for_off_never_opens() -> None:

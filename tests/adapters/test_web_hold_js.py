@@ -2,10 +2,11 @@
 
 import shutil
 import subprocess
-from importlib.resources import files
 from pathlib import Path
 
 import pytest
+
+from paperroute_device.adapters.web_frame import SHELL_WEB
 
 HARNESS = r"""
 import { pathToFileURL } from 'node:url';
@@ -123,10 +124,9 @@ def test_page_hold_timer_in_node(tmp_path: Path) -> None:
     Keys and Press: click presses, double or long holds, none stranded;
     a turn while held sends a held turn and no hold.
     """
-    web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'live.mjs'
     script.write_text(
-        (web_dir / 'live.js').read_text(encoding='utf-8'),
+        (SHELL_WEB / 'live.js').read_text(encoding='utf-8'),
         encoding='utf-8',
     )
     harness = tmp_path / 'harness.mjs'

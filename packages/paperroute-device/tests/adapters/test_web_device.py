@@ -12,6 +12,8 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters.device_page import ASKED as DEVICE_ASKED
 from paperroute_device.adapters.device_page import ago_text, data_rows
+from paperroute_device.adapters.web_live import LiveView
+from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.core.device_events import (
     ApiKeyChanged,
     ConfirmAsked,
@@ -62,8 +64,10 @@ def _device() -> DeviceSite:
 
 async def _start(*, device: DeviceSite) -> Client:
     """Start a client of an app serving only the device pages."""
-    app = web.Application()
-    app.add_routes(device.pages().routes())
+    app = web_app(
+        live=LiveView(knobs=lambda event: None),
+        device=device.pages(),
+    )
     client = TestClient(TestServer(app))
     await client.start_server()
     return client

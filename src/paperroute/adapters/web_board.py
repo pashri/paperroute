@@ -36,6 +36,17 @@ SYDNEY_NAV: Final[tuple[NavItem, ...]] = (
     SETTINGS_NAV,
     DEVICE_NAV,
 )
+SYDNEY_HINT: Final[str] = '\n'.join((
+    '        Keys: <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> for the top knob,',
+    '        <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> for the bottom knob;',
+    '        hold <kbd>K</kbd>, or double-click or hold Press, to pin.',
+    '        Hold <kbd>S</kbd> and <kbd>K</kbd> together, or both Press',
+    '        buttons, for Settings.',
+    '        On the Strip, turn while the bottom knob is held to pick a'
+    ' train:',
+    '        hold <kbd>K</kbd> or Press, then press <kbd>J</kbd> or',
+    '        <kbd>L</kbd>, or tap Left or Right with another finger.',
+))
 
 
 class BoardPages(Protocol):

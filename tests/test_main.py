@@ -19,7 +19,6 @@ from typing import TYPE_CHECKING, Final, cast
 import aiohttp
 import numpy as np
 import pytest
-from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 import paperroute.__main__ as cli
@@ -57,6 +56,7 @@ from paperroute.summary import Summary
 from paperroute.web_observer import web_observer
 from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
+from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.adapters.wifi import NmcliWifi, NullWifi
 from paperroute_device.render.canvas import INK
 from paperroute_hardware.adapters.knob_reader import KnobReader
@@ -120,7 +120,11 @@ def test_device_pages_only_for_live_feeds(
     )
     pages = device_pages_for(args=args, timings=timings, display=display)
     assert pages is not None
-    assert len(pages.routes()) == 13
+    served = web_app(live=display.live, device=pages).router.routes()
+    bare = web_app(live=display.live, device=None).router.routes()
+    assert sum(route.method != 'HEAD' for route in served) - sum(
+        route.method != 'HEAD' for route in bare
+    ) == 13
     args.feeds = str(tmp_path)
     assert device_pages_for(
         args=args, timings=timings, display=display,
@@ -136,14 +140,10 @@ async def test_device_pages_link_sydney_pages(
     args = argparse.Namespace(
         feeds='live', error_log=None, state=tmp_path / 'state.json',
     )
-    pages = device_pages_for(
-        args=args,
-        timings=timings,
-        display=WebDisplay(status=timings.snapshot),
-    )
+    display = WebDisplay(status=timings.snapshot)
+    pages = device_pages_for(args=args, timings=timings, display=display)
     assert pages is not None
-    app = web.Application()
-    app.add_routes(pages.routes())
+    app = web_app(live=display.live, device=pages)
     client = TestClient(TestServer(app))
     await client.start_server()
     try:

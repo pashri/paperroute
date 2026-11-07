@@ -3,10 +3,11 @@
 import json
 import shutil
 import subprocess
-from importlib.resources import files
 from pathlib import Path
 
 import pytest
+
+from paperroute_device.adapters.web_frame import SHELL_WEB
 
 HARNESS = r"""
 import { pathToFileURL } from 'node:url';
@@ -75,10 +76,9 @@ console.log(JSON.stringify(results));
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_page_chord_in_node(tmp_path: Path) -> None:
     """Both knobs held send one `both` hold and nothing of their own."""
-    web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'live.mjs'
     script.write_text(
-        (web_dir / 'live.js').read_text(encoding='utf-8'),
+        (SHELL_WEB / 'live.js').read_text(encoding='utf-8'),
         encoding='utf-8',
     )
     harness = tmp_path / 'harness.mjs'

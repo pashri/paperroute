@@ -10,6 +10,8 @@ import pytest
 from aiohttp import ClientResponse, web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute_device.adapters.web_live import LiveView
+from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.core.device_events import ApiKeyChanged, JoinAsked
 from paperroute_device.core.device_model import (
     Credential,
@@ -37,8 +39,10 @@ def _setup() -> DeviceSite:
 
 async def _start(*, setup: DeviceSite) -> Client:
     """Start a client of an app serving only the device pages."""
-    app = web.Application()
-    app.add_routes(setup.pages().routes())
+    app = web_app(
+        live=LiveView(knobs=lambda event: None),
+        device=setup.pages(),
+    )
     client = TestClient(TestServer(app))
     await client.start_server()
     return client

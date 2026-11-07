@@ -11,9 +11,10 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.web_board import SYDNEY_NAV
+from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
 from paperroute.adapters.web_display import WebDisplay
 from paperroute_device.adapters.web_frame import SHELL_WEB, page_frame
+from paperroute_device.adapters.web_live import live_page
 from paperroute_testkit.page_markup import (
     Node,
     by_id,
@@ -90,8 +91,11 @@ def page_text(*, name: str) -> str:
     Returns
     -------
     str
-        The page's HTML; a shell page with Sydney's nav drawn in.
+        The page's HTML; a shell page with Sydney's nav drawn in, and
+        the live page with Sydney's hint too.
     """
+    if name == 'live.html':
+        return live_page(nav=SYDNEY_NAV, hint=SYDNEY_HINT)
     if name in SHELL_PAGES:
         return page_frame(
             name=name, nav=SYDNEY_NAV, current=dict(PAGES)[name],

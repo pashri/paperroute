@@ -8,20 +8,21 @@ from dataclasses import replace
 from datetime import time as clock
 from html.parser import HTMLParser
 from http import HTTPStatus
-from importlib.resources import files
 
 import numpy as np
 import pytest
 from aiohttp import ClientResponse, web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters import web_display
 from paperroute.adapters.settings_form import ERRORS
-from paperroute.adapters.web_display import WebDisplay, knob_event
+from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
+from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.messages import Event, SettingsChanged
 from paperroute.core.saved import LiveView, Lookahead, Rate
 from paperroute.core.state import step
+from paperroute_device.adapters import web_live
 from paperroute_device.adapters.web_frame import SHELL_WEB
+from paperroute_device.adapters.web_live import knob_event, live_page
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_device.core.device_settings import Window
@@ -150,7 +151,7 @@ async def test_events_sends_current_frame_version_on_connect(
     response = await client.get('/events')
     assert response.content_type == 'text/event-stream'
     assert response.headers['Cache-Control'] == 'no-store'
-    assert await _read_event(response=response) == ('frame', f'{display.boot}-1')
+    assert await _read_event(response=response) == ('frame', f'{display.live.boot}-1')
 
 
 async def test_events_pushes_new_versions(
@@ -159,11 +160,11 @@ async def test_events_pushes_new_versions(
     """Each new frame is pushed to an open stream."""
     display.show(frame=FRAME)
     response = await client.get('/events')
-    assert await _read_event(response=response) == ('frame', f'{display.boot}-1')
+    assert await _read_event(response=response) == ('frame', f'{display.live.boot}-1')
     display.show(frame=FRAME)
-    assert await _read_event(response=response) == ('frame', f'{display.boot}-2')
+    assert await _read_event(response=response) == ('frame', f'{display.live.boot}-2')
     display.show(frame=FRAME)
-    assert await _read_event(response=response) == ('frame', f'{display.boot}-3')
+    assert await _read_event(response=response) == ('frame', f'{display.live.boot}-3')
 
 
 async def test_events_pings_when_idle(
@@ -172,12 +173,12 @@ async def test_events_pings_when_idle(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """A quiet stream gets a comment line to keep it open."""
-    monkeypatch.setattr(web_display, 'PING_S', 0.05)
+    monkeypatch.setattr(web_live, 'PING_S', 0.05)
     response = await client.get('/events')
     async with asyncio.timeout(2):
         line = await response.content.readline()
     assert line.decode().strip() == ': ping'
-    assert display.version == 0
+    assert display.live.version == 0
 
 
 async def test_knob_post_posts_event(
@@ -332,10 +333,9 @@ async def test_page_is_served(client: Client) -> None:
 
 def test_page_assets_are_packaged() -> None:
     """The three web files ship with the package."""
-    web_dir = files('paperroute') / 'assets' / 'web'
-    html = (web_dir / 'live.html').read_text(encoding='utf-8')
+    html = (SHELL_WEB / 'live.html').read_text(encoding='utf-8')
     assert (SHELL_WEB / 'live.css').is_file()
-    assert (web_dir / 'live.js').is_file()
+    assert (SHELL_WEB / 'live.js').is_file()
     assert 'live.css' in html
     assert 'live.js' in html
     assert 'role="status"' not in html
@@ -350,7 +350,7 @@ async def test_event_data_carries_a_boot_id(
     _, data = await _read_event(response=response)
     boot, version = data.split('-')
     assert int(boot, 16) >= 0
-    assert boot == display.boot
+    assert boot == display.live.boot
     assert version == '1'
 
 
@@ -447,8 +447,7 @@ def test_knob_event_held_turns(action: str, steps: int) -> None:
 
 def test_page_has_no_hold_buttons() -> None:
     """The page has two Press buttons, no Hold buttons, and the new hint."""
-    web_dir = files('paperroute') / 'assets' / 'web'
-    html = (web_dir / 'live.html').read_text(encoding='utf-8')
+    html = live_page(nav=SYDNEY_NAV, hint=SYDNEY_HINT)
     assert 'data-action="hold"' not in html
     assert html.count('aria-describedby="hint"') == 2
     assert 'id="hint"' in html
@@ -460,8 +459,7 @@ def test_page_has_no_hold_buttons() -> None:
 
 def test_page_click_handler_constants() -> None:
     """The script has a click listener, a zero-detail check and the timings."""
-    web_dir = files('paperroute') / 'assets' / 'web'
-    script = (web_dir / 'live.js').read_text(encoding='utf-8')
+    script = (SHELL_WEB / 'live.js').read_text(encoding='utf-8')
     assert "addEventListener('click'" in script
     assert 'event.detail === 0' in script
     assert 'HOLD_MS = 800' in script
@@ -533,8 +531,7 @@ async def test_settings_page_has_connection_map() -> None:
 
 def test_live_page_links_to_settings() -> None:
     """The Live page's header links to Settings."""
-    web_dir = files('paperroute') / 'assets' / 'web'
-    html = (web_dir / 'live.html').read_text(encoding='utf-8')
+    html = live_page(nav=SYDNEY_NAV, hint=SYDNEY_HINT)
     assert ('/settings', False, 'Settings') in parse_page(text=html).links
 
 
@@ -925,8 +922,7 @@ async def test_post_with_null_origin_is_refused(
 
 def test_page_hint_names_settings_chord() -> None:
     """The hint says how to open Settings from the page."""
-    web_dir = files('paperroute') / 'assets' / 'web'
-    html = (web_dir / 'live.html').read_text(encoding='utf-8')
+    html = live_page(nav=SYDNEY_NAV, hint=SYDNEY_HINT)
     plain = re.sub(r'<[^>]+>', '', ' '.join(html.split()))
     assert (
         'Hold S and K together, or both Press buttons, for Settings.'
@@ -1030,3 +1026,45 @@ async def test_board_pages_closed_on_shutdown() -> None:
     client = await _client(display=WebDisplay(board=board))
     await client.close()
     assert board.closes == 1
+
+
+async def test_knobs_reach_app_bound_after_app() -> None:
+    """A sink bound after the app is built still gets knob posts."""
+    display = WebDisplay()
+    client = TestClient(TestServer(display.app()))
+    got: list[Event] = []
+    display.bind(post=got.append)
+    await client.start_server()
+    try:
+        response = await client.post(
+            '/knob', data={'knob': 'top', 'action': 'press'},
+        )
+    finally:
+        await client.close()
+    assert response.status == HTTPStatus.NO_CONTENT
+    assert got == [KnobPressed(knob=Knob.TOP)]
+
+
+async def test_display_without_device_serves_shell_files() -> None:
+    """With no device pages the live page and shell files still serve."""
+    client = await _client(display=WebDisplay())
+    try:
+        statuses = {
+            path: (await client.get(path)).status
+            for path in (
+                '/',
+                '/live.css',
+                '/fonts/public-sans.woff2',
+                '/vendor/tom-select.css',
+                '/device',
+            )
+        }
+    finally:
+        await client.close()
+    assert statuses == {
+        '/': HTTPStatus.OK,
+        '/live.css': HTTPStatus.OK,
+        '/fonts/public-sans.woff2': HTTPStatus.OK,
+        '/vendor/tom-select.css': HTTPStatus.OK,
+        '/device': HTTPStatus.NOT_FOUND,
+    }

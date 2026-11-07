@@ -38,7 +38,7 @@ from paperroute.adapters.tfnsw import (
 )
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.trip_planner import trip_planner_for
-from paperroute.adapters.web_board import SYDNEY_NAV, SydneyPages
+from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports, run
 from paperroute.app_device import DevicePorts
@@ -1005,6 +1005,8 @@ def web_main(
     ):
         display = WebDisplay(
             status=timings.snapshot,
+            nav=SYDNEY_NAV,
+            hint=SYDNEY_HINT,
             board=SydneyPages(
                 pins=lambda: timings.pins,
                 options=SqlitePinOptions(network=network),

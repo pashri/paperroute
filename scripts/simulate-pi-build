@@ -63,25 +63,51 @@ assert asset_bytes(name='vendor/tom-select.css')
 EOF
 )
 kit_web=$(cat <<'EOF'
+import asyncio
 import sys
 import sysconfig
+from http import HTTPStatus
 from pathlib import Path
+
+import numpy as np
+from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters.web_frame import (
     SHELL_WEB,
     shell_bytes,
     shell_text,
 )
+from paperroute_device.adapters.web_live import LiveView
+from paperroute_device.adapters.web_shell import web_app
 
 purelib = Path(sysconfig.get_paths()['purelib'])
 assert Path(str(SHELL_WEB)) == purelib / 'paperroute_device' / 'web', SHELL_WEB
 for name in (
     'device.html', 'device.js', 'setup.html', 'setup.js', 'power.html',
-    'live.css',
+    'live.css', 'live.html', 'live.js',
 ):
     assert shell_text(name=name), name
 assert shell_bytes(name='fonts/public-sans.woff2')
 assert not (purelib / 'paperroute' / 'assets' / 'web' / 'device.html').exists()
+live = LiveView(knobs=[].append)
+app = web_app(live=live, device=None)
+
+
+async def main():
+    client = TestClient(TestServer(app, host='127.0.0.1', port=0))
+    await client.start_server()
+    try:
+        assert (await client.get('/')).status == HTTPStatus.OK
+        css = await client.get('/live.css')
+        assert await css.read() == shell_bytes(name='live.css')
+        live.show(frame=np.zeros((480, 800), np.uint8))
+        frame = await client.get('/frame.png')
+        assert frame.status == HTTPStatus.OK, frame.status
+    finally:
+        await client.close()
+
+
+asyncio.run(main())
 loaded = [
     name for name in sys.modules
     if name.split('.')[0] in {'paperroute', 'paperroute_transit'}

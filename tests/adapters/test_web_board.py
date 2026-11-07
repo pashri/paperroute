@@ -50,7 +50,6 @@ async def test_sydney_pages_close_without_a_planner() -> None:
 
 
 @pytest.mark.parametrize(('name', 'current'), [
-    ('live.html', '/'),
     ('settings.html', '/settings'),
     ('pins.html', '/pins'),
     ('pin-edit.html', '/pins'),

@@ -315,7 +315,7 @@ class DevicePages:
         self._knobs = knobs
         self._nav = tuple(nav)
 
-    def routes(self) -> list[web.RouteDef]:
+    def _routes(self) -> list[web.RouteDef]:
         """
         List the device pages' routes.
 

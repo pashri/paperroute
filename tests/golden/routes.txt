@@ -4,8 +4,6 @@ HEAD /live.css
 GET /live.css
 HEAD /fonts/public-sans.woff2
 GET /fonts/public-sans.woff2
-HEAD /vendor/{name}
-GET /vendor/{name}
 HEAD /live.js
 GET /live.js
 HEAD /frame.png
@@ -13,13 +11,15 @@ GET /frame.png
 HEAD /events
 GET /events
 POST /knob
+HEAD /status
+GET /status
+HEAD /vendor/{name}
+GET /vendor/{name}
 HEAD /settings
 GET /settings
 HEAD /settings.js
 GET /settings.js
 POST /settings
-HEAD /status
-GET /status
 HEAD /pins
 GET /pins
 HEAD /pins.js

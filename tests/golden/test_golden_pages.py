@@ -10,7 +10,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.settings_form import form_values
 from paperroute.adapters.tfnsw import TFNSW_KEY
-from paperroute.adapters.web_board import SYDNEY_NAV, SydneyPages
+from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.feeds import DAILY_LIMIT, feed_label
 from paperroute_device.adapters.secrets_file import SecretsFile
@@ -81,6 +81,8 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
     return WebDisplay(
         status=lambda: {'settings': form_values(settings=RICH_SAVED.settings)},
         device=device,
+        nav=SYDNEY_NAV,
+        hint=SYDNEY_HINT,
         board=SydneyPages(
             pins=Pins(pins=(WORK, HOME, ODD)).get,
             options=PLATFORMS,
@@ -176,3 +178,14 @@ def test_routes_match_baseline() -> None:
         if route.resource is not None
     ]
     check_text(path=GOLDEN / 'routes.txt', text='\n'.join(lines) + '\n')
+
+
+def test_only_vendor_route_is_dynamic() -> None:
+    """Every route but `/vendor/{name}` has a plain path."""
+    app = display(status=STATUS, keys=FakeKeys(key=KEY)).app()
+    dynamic = [
+        resource.canonical
+        for resource in app.router.resources()
+        if not isinstance(resource, web.PlainResource)
+    ]
+    assert dynamic == ['/vendor/{name}']

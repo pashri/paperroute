@@ -29,7 +29,7 @@ Client = TestClient[web.Request, web.Application]
 TRAINS = POSITION_FEEDS[Mode.TRAIN][0]
 BUSES = FEEDS[Mode.BUS]
 SHELL_PAGES: Final[frozenset[str]] = frozenset(
-    {'device.html', 'power.html', 'setup.html'},
+    {'device.html', 'power.html', 'setup.html', 'live.html'},
 )
 
 

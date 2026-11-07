@@ -12,7 +12,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.web_board import SydneyPages
+from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_pins import (
     SEEN_POLL_S,
@@ -111,7 +111,12 @@ async def _client(
     """Start a client of a display wired to the fake pins."""
     board = SydneyPages(pins=pins.get, options=options, planner=None)
     board.pins_sleep = pins.sleep
-    display = WebDisplay(device=sydney_site().pages(), board=board)
+    display = WebDisplay(
+        device=sydney_site().pages(),
+        board=board,
+        nav=SYDNEY_NAV,
+        hint=SYDNEY_HINT,
+    )
     display.bind(post=pins.posted.append)
     client = TestClient(TestServer(display.app()))
     await client.start_server()

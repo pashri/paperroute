@@ -5,7 +5,6 @@ from datetime import date, datetime, time, timedelta
 
 import pytest
 
-from paperroute.core.model import SYDNEY
 from paperroute.core.rhythm import (
     frame_time,
     in_window,
@@ -18,6 +17,7 @@ from paperroute.core.state import initial_state
 from paperroute.core.state_model import Calendar, Cycle, State
 from paperroute_device.core.device_settings import Window
 from paperroute_testkit.core.factories import pin_of
+from paperroute_transit.core.model import SYDNEY
 
 MONDAY = date(2026, 10, 19)
 TUESDAY = date(2026, 10, 20)

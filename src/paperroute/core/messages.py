@@ -5,11 +5,6 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
 
-from paperroute.core.alert_model import (
-    AlertsFetched,
-    BetweenLoaded,
-    LoadBetween,
-)
 from paperroute.core.alerts_view import AlertsView
 from paperroute.core.chains import Legs
 from paperroute.core.chooser import ChooserPath, Column
@@ -20,14 +15,8 @@ from paperroute.core.connection_strip import (
 )
 from paperroute.core.connection_view import ConnectionView
 from paperroute.core.feeds import FeedKind
-from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.map_view import MapView
-from paperroute.core.model import Departure, Mode, Pin, ServiceSpan, StopPlace
 from paperroute.core.panel_views import PanelView, SleepView
-from paperroute.core.patterns import TripPattern
-from paperroute.core.positions import PositionsSnapshot
-from paperroute.core.reach import Reach, StripKey
-from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import ConnectionMap, Lookahead, Rate, Saved
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
@@ -48,6 +37,23 @@ from paperroute_hardware.core.knob_events import (
     KnobsHeld,
     KnobTurned,
 )
+from paperroute_transit.core.alert_model import (
+    AlertsFetched,
+    BetweenLoaded,
+    LoadBetween,
+)
+from paperroute_transit.core.geo import MetreBox, Shape
+from paperroute_transit.core.model import (
+    Departure,
+    Mode,
+    Pin,
+    ServiceSpan,
+    StopPlace,
+)
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.positions import PositionsSnapshot
+from paperroute_transit.core.reach import Reach, StripKey
+from paperroute_transit.core.realtime import RealtimeSnapshot
 
 
 class MapData(StrEnum):

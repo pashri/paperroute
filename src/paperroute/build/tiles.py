@@ -10,21 +10,21 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.asset_root import use_app_assets
-from paperroute.build.features import FeatureStore, load_features
 from paperroute.build.labels import LabelIndex, place_labels
-from paperroute.build.osm_source import header_timestamp
 from paperroute.build.tile_draw import render_tile
-from paperroute.build.tile_set import (
+from paperroute_device.rss import BYTES_PER_MB, max_rss_mb
+from paperroute_transit.build.features import FeatureStore, load_features
+from paperroute_transit.build.osm_source import header_timestamp
+from paperroute_transit.build.tile_set import (
     BLOCK,
     coverage,
     coverage_lonlat,
     stop_points,
     tile_set,
 )
-from paperroute.build.tile_store import TileWriter
-from paperroute.core.geo import MetreBox, to_metres
-from paperroute.core.tiles import NSW_BBOX, TILE_STYLE, ZOOMS
-from paperroute_device.rss import BYTES_PER_MB, max_rss_mb
+from paperroute_transit.build.tile_store import TileWriter
+from paperroute_transit.core.geo import MetreBox, to_metres
+from paperroute_transit.core.tiles import NSW_BBOX, TILE_STYLE, ZOOMS
 
 STORE_NAME: Final[str] = 'features.db'
 SCRATCH_NAMES: Final[tuple[str, ...]] = (

@@ -11,9 +11,9 @@ from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolved
-from paperroute.core.model import SYDNEY, Mode, Pin
-from paperroute.core.realtime import RealtimeSnapshot
 from paperroute_testkit.core.factories import STALE_LIMIT
+from paperroute_transit.core.model import SYDNEY, Mode, Pin
+from paperroute_transit.core.realtime import RealtimeSnapshot
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 FEED: Final[Path] = REAL / 'v1_gtfs_realtime_buses_606.pb'

@@ -4,10 +4,10 @@ from collections import Counter
 from collections.abc import Collection, Mapping, Sequence
 from itertools import chain
 
-from paperroute.core.model import StopPlace
-from paperroute.core.reach import RunTail
-from paperroute.core.reach_layout import LineExit
 from paperroute_device.core.text import DOT
+from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.reach import RunTail
+from paperroute_transit.core.reach_layout import LineExit
 
 
 def first_off(*, tail: RunTail, line: Collection[str], origin: str

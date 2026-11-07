@@ -11,10 +11,10 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.core.model import SYDNEY
 from paperroute.core.trip_search import Journey, JourneyLeg, TripSearch
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.fakes import FakeTripPlanner
+from paperroute_transit.core.model import SYDNEY
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_device import Device
 from tests.adapters.test_web_pins import Pins

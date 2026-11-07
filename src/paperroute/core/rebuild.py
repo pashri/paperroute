@@ -11,10 +11,10 @@ from paperroute.core.messages import (
     RebuildTimetable,
     TimetableSeen,
 )
-from paperroute.core.model import TIMETABLE_SCHEMA
 from paperroute.core.state_model import Rebuild, State
 from paperroute.core.stop_view import clock_text
 from paperroute_device.core.text import DOT
+from paperroute_transit.core.model import TIMETABLE_SCHEMA
 
 BUILDING: Final[str] = 'Building the timetable'
 SETTINGS_HINT: Final[str] = 'Both knobs: hold to open Settings'

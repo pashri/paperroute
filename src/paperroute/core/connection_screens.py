@@ -16,12 +16,12 @@ from paperroute.core.connection_view import (
 )
 from paperroute.core.map_requests import pin_map_inputs, polled_positions
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapView
-from paperroute.core.model import Pin, is_connection
 from paperroute.core.places import shown
 from paperroute.core.rhythm import frame_time, stale_after
 from paperroute.core.saved import ConnectionMap, LiveView
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
+from paperroute_transit.core.model import Pin, is_connection
 
 type ConnectionScreen = (
     ConnectionView | MapView | ConnectionStripView | ConnectionStripMapView

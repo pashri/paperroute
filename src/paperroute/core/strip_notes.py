@@ -3,10 +3,10 @@
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
-from paperroute.core.reach import Reach, RowKind
 from paperroute.core.stop_view import not_departed
 from paperroute.core.strip_model import CarryNote
 from paperroute.core.strip_times import TripInputs, live_strip
+from paperroute_transit.core.reach import Reach, RowKind
 
 NOTE_KINDS: Final[frozenset[RowKind]] = frozenset({
     RowKind.MAIN, RowKind.BRANCH,

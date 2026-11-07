@@ -5,8 +5,12 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from paperroute.core.feeds import feed_for
-from paperroute.core.model import Departure, shifted
-from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
+from paperroute_transit.core.model import Departure, shifted
+from paperroute_transit.core.realtime import (
+    RealtimeSnapshot,
+    StopUpdate,
+    TripRealtime,
+)
 
 
 @dataclass(frozen=True)

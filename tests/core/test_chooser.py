@@ -23,9 +23,9 @@ from paperroute.core.chooser import (
 )
 from paperroute.core.chooser_station import knob_pressed
 from paperroute.core.chooser_view import build_chooser_view
-from paperroute.core.model import Pin, RouteKind
-from paperroute.core.reach import RowKind, StripKey
 from paperroute_testkit.core.factories import place
+from paperroute_transit.core.model import Pin, RouteKind
+from paperroute_transit.core.reach import RowKind, StripKey
 from tests.core.chooser_walks import (
     BUS_606,
     GROUPS,

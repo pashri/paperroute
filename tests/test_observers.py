@@ -7,7 +7,6 @@ from dataclasses import dataclass, field, replace
 import pytest
 
 from paperroute.adapters.settings_form import form_values
-from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
 from paperroute.observers import NullObserver, ObserverGroup, Timings
 from paperroute_device.core.device_model import (
@@ -23,6 +22,7 @@ from paperroute_hardware.ports import PanelRefresh, PanelTimes
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import device_facts
 from paperroute_testkit.hardware_fakes import FakeKnobLines
+from paperroute_transit.core.model import Pin
 
 STATUS: DeviceStatus = DeviceStatus(
     timetable='2026-10-21',

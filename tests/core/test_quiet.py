@@ -5,7 +5,6 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
-from paperroute.core.auto_model import AutoState
 from paperroute.core.messages import (
     ConfirmAsked,
     DeparturesLoaded,
@@ -17,7 +16,6 @@ from paperroute.core.messages import (
     ServiceSpanLoaded,
     Tick,
 )
-from paperroute.core.model import SYDNEY, AutoWindow, ServiceSpan, pin_ref
 from paperroute.core.panel_views import SleepView
 from paperroute.core.places import shown
 from paperroute.core.saved import Rate
@@ -43,6 +41,13 @@ from paperroute_hardware.core.knob_events import (
 from paperroute_testkit.core.factories import START, departure
 from paperroute_testkit.core.steps import step_answered
 from paperroute_testkit.fakes import device_facts
+from paperroute_transit.core.auto_model import AutoState
+from paperroute_transit.core.model import (
+    SYDNEY,
+    AutoWindow,
+    ServiceSpan,
+    pin_ref,
+)
 from tests.core.test_menu import DOWN, run, turn
 from tests.core.test_state import BUSES, PINS, fresh
 

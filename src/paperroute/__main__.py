@@ -16,7 +16,6 @@ from typing import TYPE_CHECKING, Final
 
 from aiohttp import web
 
-from paperroute.adapters.checked_tiles import CheckedTiles, warn_unfit
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.device_probe import SystemProbe
 from paperroute.adapters.feed_files import FileFeedsClient
@@ -37,7 +36,6 @@ from paperroute.adapters.tfnsw import (
     key_path_from_env,
     tfnsw_limiter,
 )
-from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.trip_planner import trip_planner_for
 from paperroute.adapters.web_board import SydneyPages
@@ -48,8 +46,6 @@ from paperroute.app_device import DevicePorts
 from paperroute.asset_root import use_app_assets
 from paperroute.core.feeds import DAILY_LIMIT, feed_label
 from paperroute.core.messages import Event, QuitRequested
-from paperroute.core.model import SYDNEY, Pin, StopPlace
-from paperroute.core.tiles import TileVariant
 from paperroute.logs import LastError, configure_logging
 from paperroute.observers import Timings
 from paperroute.ports import FeedsClient, TileRepository, TimetableBuilder
@@ -73,6 +69,13 @@ from paperroute_hardware.adapters.panel_display import Displays
 from paperroute_hardware.knobs_open import knobs_for, knobs_state_for
 from paperroute_hardware.panel_open import panel_for, panel_times_for
 from paperroute_hardware.selftest import selftest_main
+from paperroute_transit.adapters.checked_tiles import CheckedTiles, warn_unfit
+from paperroute_transit.adapters.tiles_db import (
+    NullTiles,
+    SqliteTileRepository,
+)
+from paperroute_transit.core.model import SYDNEY, Pin, StopPlace
+from paperroute_transit.core.tiles import TileVariant
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor

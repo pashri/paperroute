@@ -7,18 +7,18 @@ from itertools import chain
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import (
+from paperroute.core.stop_view import clock_text, not_departed
+from paperroute.core.strip_model import TripDay, trip_day
+from paperroute_transit.core.model import (
     Departure,
     RouteKind,
     service_seconds,
     service_time,
     shifted,
 )
-from paperroute.core.patterns import PatternStop, TripPattern
-from paperroute.core.positions import PositionsSnapshot
-from paperroute.core.reach import Reach, RowKind, StripKey, every_route
-from paperroute.core.stop_view import clock_text, not_departed
-from paperroute.core.strip_model import TripDay, trip_day
+from paperroute_transit.core.patterns import PatternStop, TripPattern
+from paperroute_transit.core.positions import PositionsSnapshot
+from paperroute_transit.core.reach import Reach, RowKind, StripKey, every_route
 
 STRIP_LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 STRIP_AHEAD: Final[timedelta] = timedelta(minutes=30)

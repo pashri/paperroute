@@ -22,8 +22,6 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.model import CarryOn, Departure, Mode, RouteKind
-from paperroute.core.reach import Reach, ReachRow, RowKind, StripKey
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import RETRY_AFTER, State
@@ -59,6 +57,8 @@ from paperroute_testkit.core.strip_factories import (
     trains,
     turn,
 )
+from paperroute_transit.core.model import CarryOn, Departure, Mode, RouteKind
+from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.test_connection_screens import started, with_legs
 

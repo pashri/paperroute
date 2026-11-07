@@ -10,10 +10,10 @@ from paperroute.core.messages import (
     PinSaved,
     PinsOrdered,
 )
-from paperroute.core.model import Pin, pin_ref, same_place
 from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.places import pin_index, with_place, with_unpinned
 from paperroute.core.state_model import Places, State
+from paperroute_transit.core.model import Pin, pin_ref, same_place
 
 
 def ref_index(*, places: Places, ref: str) -> int | None:

@@ -9,10 +9,11 @@ import pytest
 
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.chooser import Column, Level
-from paperroute.core.model import SYDNEY, Pin, RouteKind, StopPlace
+from paperroute_testkit.build.feed_zip import write_feed
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.model import SYDNEY, Pin, RouteKind, StopPlace
 from tests.adapters.test_network_db import (
     T1,
     build_network,
@@ -20,7 +21,7 @@ from tests.adapters.test_network_db import (
     set_runs,
 )
 from tests.build.network_feed import network_files
-from tests.helpers import schema_five, write_feed
+from tests.helpers import schema_five
 
 DAY: Final[date] = date(2026, 10, 5)
 ONE_WAY: Final[dict[tuple[str, str], tuple[str, str]]] = {

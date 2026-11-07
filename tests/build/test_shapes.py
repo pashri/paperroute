@@ -12,16 +12,17 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.build.gtfs_files import Source
-from paperroute.build.shapes import (
+from paperroute.build.timetable import Window, build_timetable, create_schema
+from paperroute_testkit.build.feed_zip import write_feed
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.shapes import (
     SIMPLIFY_M,
     load_shapes,
     shape_record,
     shape_runs,
     simplify,
 )
-from paperroute.build.timetable import Window, build_timetable, create_schema
-from paperroute.core.geo import (
+from paperroute_transit.core.geo import (
     METRES_PER_DEGREE_LAT,
     METRES_PER_DEGREE_LON,
     ORIGIN_LAT,
@@ -29,9 +30,8 @@ from paperroute.core.geo import (
     to_metres,
     unpack_shape,
 )
-from paperroute.core.model import Mode
+from paperroute_transit.core.model import Mode
 from tests.build.feeds import shape_rows, shaped_bus_feed
-from tests.helpers import write_feed
 
 ROUTE: Final[list[tuple[float, float]]] = [
     (150.9746, -33.7924),

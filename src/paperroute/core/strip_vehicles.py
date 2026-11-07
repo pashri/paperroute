@@ -6,12 +6,12 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 
 from paperroute.core.map_view import Marker, is_fresh, position_age
-from paperroute.core.model import Departure, service_seconds
-from paperroute.core.patterns import TripPattern, hop_at, hop_near
-from paperroute.core.positions import VehiclePosition
 from paperroute.core.strip_badges import Badge, Keepouts, Spot, pushed
 from paperroute.core.strip_model import ROW_H
 from paperroute.core.strip_times import TripInputs, window_departures
+from paperroute_transit.core.model import Departure, service_seconds
+from paperroute_transit.core.patterns import TripPattern, hop_at, hop_near
+from paperroute_transit.core.positions import VehiclePosition
 
 type Heard = Mapping[str, tuple[VehiclePosition, float]]
 

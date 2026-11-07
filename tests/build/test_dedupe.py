@@ -9,8 +9,9 @@ from typing import Final
 import pytest
 
 from paperroute.build.dedupe import MergeReport, merge_rail, relabel_trainlink
-from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import create_schema
+from paperroute_testkit.build.feed_zip import write_feed
+from paperroute_transit.build.gtfs_files import Source
 from tests.build.feeds import (
     DAILY,
     STATIONS,
@@ -21,7 +22,6 @@ from tests.build.feeds import (
     stop_times,
     sydneytrains_feed,
 )
-from tests.helpers import write_feed
 
 START = date(2026, 10, 16)
 TRAINS_ROUTE = [

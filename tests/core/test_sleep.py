@@ -3,7 +3,6 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from paperroute.core.geo import make_shape
 from paperroute.core.map_view import MAP_HEIGHT, MapView, screen_point
 from paperroute.core.messages import (
     ApiKeyChanged,
@@ -40,6 +39,7 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_testkit.core.factories import START, departure, pattern, place
 from paperroute_testkit.fakes import device_facts
+from paperroute_transit.core.geo import make_shape
 from tests.core.test_connection import loaded as connection_loaded
 from tests.core.test_menu import BOTH, DOWN, run, turn
 from tests.core.test_state import BUSES, CENTRE, PIN, fresh, loaded

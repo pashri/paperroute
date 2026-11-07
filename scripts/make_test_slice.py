@@ -12,7 +12,7 @@ from typing import Final, TextIO
 
 from google.transit import gtfs_realtime_pb2
 
-from paperroute.build.gtfs_files import read_rows
+from paperroute_transit.build.gtfs_files import read_rows
 
 BUS_ROUTES: Final[set[str]] = {'606'}
 RAIL_ROUTE: Final[str] = 'T1'

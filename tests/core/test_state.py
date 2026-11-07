@@ -11,7 +11,6 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from paperroute.core.alert_state import ALERT_EVERY, alert_feeds
-from paperroute.core.auto_model import AutoState
 from paperroute.core.chooser import (
     ChooserPath,
     ChooserState,
@@ -36,7 +35,6 @@ from paperroute.core.feeds import (
     feeds_near,
     position_feeds,
 )
-from paperroute.core.geo import Point, make_shape
 from paperroute.core.map_requests import map_feeds, shows_vehicles
 from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import DEFAULT_ZOOM, MAP_WIDTH, MapView
@@ -87,28 +85,9 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.model import (
-    SYDNEY,
-    Departure,
-    Mode,
-    Pin,
-    RouteKind,
-    is_connection,
-    pin_key,
-    same_place,
-    shifted,
-)
 from paperroute.core.panel_views import SleepView
 from paperroute.core.places import shown, stops_to_match
 from paperroute.core.quota import QUOTA_SAVE_EVERY, quota_only
-from paperroute.core.reach import (
-    Reach,
-    ReachInput,
-    RowKind,
-    RunTail,
-    build_reach,
-)
-from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 from paperroute.core.rebuild import building_view
 from paperroute.core.rhythm import poll_every
 from paperroute.core.saved import (
@@ -159,7 +138,6 @@ from paperroute.core.strip_state import (
     shown_reach,
     strip_key,
 )
-from paperroute.core.tiles import CITY, ZOOMS
 from paperroute_device.core.device_model import PowerAction
 from paperroute_device.core.device_settings import Window
 from paperroute_hardware.core.knob_events import (
@@ -187,6 +165,32 @@ from paperroute_testkit.core.steps import (
     step_untouched,
     wakeful,
 )
+from paperroute_transit.core.auto_model import AutoState
+from paperroute_transit.core.geo import Point, make_shape
+from paperroute_transit.core.model import (
+    SYDNEY,
+    Departure,
+    Mode,
+    Pin,
+    RouteKind,
+    is_connection,
+    pin_key,
+    same_place,
+    shifted,
+)
+from paperroute_transit.core.reach import (
+    Reach,
+    ReachInput,
+    RowKind,
+    RunTail,
+    build_reach,
+)
+from paperroute_transit.core.realtime import (
+    RealtimeSnapshot,
+    StopUpdate,
+    TripRealtime,
+)
+from paperroute_transit.core.tiles import CITY, ZOOMS
 from tests.core.chooser_walks import (
     BUS_606,
     CHOSEN,

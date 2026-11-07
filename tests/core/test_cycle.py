@@ -6,7 +6,6 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from paperroute.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute.core.alert_state import ALERT_EVERY
 from paperroute.core.cycle import alerts_due, answered, boundary, cycle_due
 from paperroute.core.feeds import FeedKind
@@ -28,7 +27,6 @@ from paperroute.core.messages import (
 )
 from paperroute.core.panel_views import SleepView
 from paperroute.core.places import shown
-from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 from paperroute.core.sleep import slept
 from paperroute.core.state import step
 from paperroute.core.state_model import RELOAD_BEFORE, Cycle, State
@@ -38,6 +36,12 @@ from paperroute_device.core.device_model import PowerAction, WifiStatus
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, departure, snapshot
 from paperroute_testkit.fakes import device_facts
+from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
+from paperroute_transit.core.realtime import (
+    RealtimeSnapshot,
+    StopUpdate,
+    TripRealtime,
+)
 from tests.core.test_quiet import at as quiet_at
 from tests.core.test_quiet import evening
 from tests.core.test_state import ALERTS, BUSES, CENTRE, PRESS, fresh, loaded

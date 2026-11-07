@@ -20,13 +20,13 @@ from paperroute.app_ports import Ports
 from paperroute.app_render import MapRenderer
 from paperroute.app_work import perform
 from paperroute.core.messages import Event, QuitRequested, Tick
-from paperroute.core.model import Pin
 from paperroute.core.refresh import quick_now
 from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
-from paperroute.core.tiles import TileVariant
 from paperroute.observers import ObserverGroup
+from paperroute_transit.core.model import Pin
+from paperroute_transit.core.tiles import TileVariant
 
 __all__ = [
     'MapRenderer',

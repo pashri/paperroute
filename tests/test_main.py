@@ -37,25 +37,18 @@ from paperroute.__main__ import (
     web_main,
     wifi_for,
 )
-from paperroute.adapters.checked_tiles import CheckedTiles
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import GuardedFeeds
 from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
 from paperroute.adapters.tfnsw import AiohttpFeedsClient, tfnsw_limiter
-from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
 from paperroute.app_render import MapRenderer
-from paperroute.build.gtfs_files import Source
-from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.geo import to_metres
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
 from paperroute.core.messages import Event
-from paperroute.core.model import SYDNEY
-from paperroute.core.tiles import TILE_STYLE, ZOOMS, TileVariant, levels_text
 from paperroute.observers import Timings
 from paperroute.render.map_base import draw_map_base
 from paperroute.summary import Summary
@@ -79,6 +72,21 @@ from paperroute_testkit.fakes import (
     MemoryStates,
 )
 from paperroute_testkit.hardware_fakes import FakeKnobLines, FakePanelBus
+from paperroute_transit.adapters.checked_tiles import CheckedTiles
+from paperroute_transit.adapters.tiles_db import (
+    NullTiles,
+    SqliteTileRepository,
+)
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.tile_store import TileWriter
+from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.model import SYDNEY
+from paperroute_transit.core.tiles import (
+    TILE_STYLE,
+    ZOOMS,
+    TileVariant,
+    levels_text,
+)
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor

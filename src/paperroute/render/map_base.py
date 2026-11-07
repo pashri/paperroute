@@ -8,18 +8,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.build.map_style import STREET_FACE, SUPERSAMPLE
-from paperroute.core.geo import Point
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MapBase,
     map_window,
     screen_point,
-)
-from paperroute.core.tiles import (
-    TILE,
-    StreetLabel,
-    TileVariant,
-    tiles_covering,
 )
 from paperroute.ports import TileRepository
 from paperroute.render.map_corners import (
@@ -39,9 +32,16 @@ from paperroute.render.map_marks import (
     draw_ridden_stops,
     draw_stop,
 )
-from paperroute.render.tile_codec import THRESHOLD, diffuse, quantise4
 from paperroute.render.trip_marks import draw_trip_ends, draw_trip_legs
 from paperroute_device.render.canvas import INK, PAPER, Canvas, text_width
+from paperroute_transit.core.geo import Point
+from paperroute_transit.core.tiles import (
+    TILE,
+    StreetLabel,
+    TileVariant,
+    tiles_covering,
+)
+from paperroute_transit.render.tile_codec import THRESHOLD, diffuse, quantise4
 
 BEAD_DASH: Final[tuple[float, float]] = (2.0, 7.0)
 HALO: Final[int] = 2

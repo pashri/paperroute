@@ -5,17 +5,10 @@ from datetime import date, datetime, timedelta
 from typing import Final
 
 from paperroute.core.alert_match import Listed, listed_alerts, matched_alerts
-from paperroute.core.alert_model import (
-    Alert,
-    AlertsFetched,
-    BetweenLoaded,
-    LoadBetween,
-)
 from paperroute.core.chains import all_departures
 from paperroute.core.connection import between_lists, board_facts, name_trips
 from paperroute.core.feeds import KIND_MODES, FeedKind, alert_feeds_for
 from paperroute.core.messages import Effect, FetchFeed
-from paperroute.core.model import SYDNEY, Mode, Pin, same_place
 from paperroute.core.places import shown
 from paperroute.core.saved import LOOKAHEAD, LiveView
 from paperroute.core.state_model import State, elapsed
@@ -25,6 +18,13 @@ from paperroute_hardware.core.knob_events import (
     KnobPressed,
     KnobTurned,
 )
+from paperroute_transit.core.alert_model import (
+    Alert,
+    AlertsFetched,
+    BetweenLoaded,
+    LoadBetween,
+)
+from paperroute_transit.core.model import SYDNEY, Mode, Pin, same_place
 
 ALERT_EVERY: Final[timedelta] = timedelta(minutes=5)
 

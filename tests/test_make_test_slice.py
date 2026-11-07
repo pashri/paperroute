@@ -8,8 +8,8 @@ from types import ModuleType
 
 import pytest
 
+from paperroute_testkit.build.feed_zip import write_feed
 from tests.build.feeds import shape_rows
-from tests.helpers import write_feed
 
 SCRIPT = Path(__file__).parent.parent / 'scripts' / 'make_test_slice.py'
 POINTS = [(151.0, -33.8), (151.1, -33.9)]

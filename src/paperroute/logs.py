@@ -9,7 +9,7 @@ from typing import Final
 
 from pythonjsonlogger.json import JsonFormatter
 
-from paperroute.core.model import SYDNEY
+from paperroute_transit.core.model import SYDNEY
 
 FORMAT: Final[str] = '{asctime}{levelname}{name}{message}'
 FIELD_NAMES: Final[dict[str, str]] = {

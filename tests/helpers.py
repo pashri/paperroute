@@ -1,62 +1,15 @@
-"""Shared helpers for writing real GTFS zip files in tests."""
+"""Shared helpers for building timetable files in tests."""
 
-import csv
-import io
 import sqlite3
-import zipfile
 from contextlib import closing
 from datetime import date
 from pathlib import Path
 from typing import Final
 
 from paperroute.build.dedupe import merge_rail
-from paperroute.build.gtfs_files import Source
+from paperroute_transit.build.gtfs_files import Source
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
-
-
-def to_csv(rows: list[dict[str, str]]) -> str:
-    """
-    Render rows as CSV with a header of every key used.
-
-    Parameters
-    ----------
-    rows : list[dict[str, str]]
-        Records.
-
-    Returns
-    -------
-    str
-        CSV text.
-    """
-    fields = list(dict.fromkeys(key for row in rows for key in row))
-    buffer = io.StringIO()
-    writer = csv.DictWriter(buffer, fieldnames=fields)
-    writer.writeheader()
-    writer.writerows(rows)
-    return buffer.getvalue()
-
-
-def write_feed(*, path: Path, files: dict[str, list[dict[str, str]]]) -> Path:
-    """
-    Write a GTFS zip with one CSV member per file name.
-
-    Parameters
-    ----------
-    path : Path
-        Zip file to create.
-    files : dict[str, list[dict[str, str]]]
-        Member name (for example 'stops.txt') to its rows.
-
-    Returns
-    -------
-    Path
-        The zip path.
-    """
-    with zipfile.ZipFile(path, 'w') as archive:
-        for name, rows in files.items():
-            archive.writestr(name, to_csv(rows))
-    return path
 
 
 def old_schema(*, path: Path) -> None:

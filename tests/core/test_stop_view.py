@@ -7,10 +7,8 @@ from typing import Final
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.core.alert_model import AlertBanner
 from paperroute.core.banners import NO_WIFI
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import SYDNEY, CarryOn, Mode, TripFacts
 from paperroute.core.stop_view import (
     HORIZON,
     LARGE_ROWS_UNDER_BANNER,
@@ -34,6 +32,8 @@ from paperroute.core.stop_view import (
 from paperroute_device.core.text import DOT
 from paperroute_testkit.core.alert_factories import WESTERN, XPLORER
 from paperroute_testkit.core.factories import START, departure
+from paperroute_transit.core.alert_model import AlertBanner
+from paperroute_transit.core.model import SYDNEY, CarryOn, Mode, TripFacts
 
 
 def live(

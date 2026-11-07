@@ -44,9 +44,7 @@ from paperroute.core.messages import (
     LoadColumn,
     LoadLine,
 )
-from paperroute.core.model import Departure, Pin
 from paperroute.core.places import committed, feeds_of, shown
-from paperroute.core.reach import Reach, RowKind
 from paperroute.core.rhythm import stale_after
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import State, load_window, runs_short
@@ -73,6 +71,8 @@ from paperroute_hardware.core.knob_events import (
     KnobPressed,
     KnobTurned,
 )
+from paperroute_transit.core.model import Departure, Pin
+from paperroute_transit.core.reach import Reach, RowKind
 
 LINE_FAILED: Final[str] = "Can't load the line"
 DEPARTURES_FAILED: Final[str] = "Can't load departures"

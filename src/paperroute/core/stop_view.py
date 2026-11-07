@@ -6,11 +6,17 @@ from datetime import datetime, timedelta
 from enum import StrEnum
 from typing import Final
 
-from paperroute.core.alert_model import AlertBanner
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import SYDNEY, CarryOn, Departure, Mode, shifted
 from paperroute_device.core.text import DOT
 from paperroute_device.core.text import clock_text as zoned_clock_text
+from paperroute_transit.core.alert_model import AlertBanner
+from paperroute_transit.core.model import (
+    SYDNEY,
+    CarryOn,
+    Departure,
+    Mode,
+    shifted,
+)
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7

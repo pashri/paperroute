@@ -14,7 +14,6 @@ from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app_connections import departures_read
 from paperroute.app_ports import Ports
-from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.chains import chains_of
 from paperroute.core.connection_strip import ConnectionStripView
@@ -27,7 +26,6 @@ from paperroute.core.messages import (
     ScreenView,
     Tick,
 )
-from paperroute.core.model import SYDNEY, Change, Pin, RouteKind, Way
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
@@ -35,6 +33,8 @@ from paperroute.ports import TimetableRepository
 from paperroute_testkit.app_factories import ports_of, posted_by
 from paperroute_testkit.core.factories import live
 from paperroute_testkit.fakes import FixedClock
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.model import SYDNEY, Change, Pin, RouteKind, Way
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 DAY: Final[date] = date(2026, 10, 16)

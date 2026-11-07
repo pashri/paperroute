@@ -5,9 +5,9 @@ from collections.abc import Mapping
 from typing import Final
 
 from paperroute.adapters.route_chips import chip_html, chip_route, named_routes
-from paperroute.core.model import Pin, pin_ref, ticked_ways
-from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
+from paperroute_transit.core.model import Pin, pin_ref, ticked_ways
+from paperroute_transit.core.route_colours import RouteColour
 
 EMPTY: Final[str] = (
     '<p>No pins yet. Search for a stop or station to add one.</p>'

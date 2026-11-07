@@ -9,8 +9,8 @@ from google.transit import gtfs_realtime_pb2
 
 from paperroute.adapters.gtfs_alerts import english, parse_alerts
 from paperroute.adapters.tfnsw import FeedError
-from paperroute.core.alert_model import Alert, AlertsSnapshot, Period
-from paperroute.core.model import SYDNEY
+from paperroute_transit.core.alert_model import Alert, AlertsSnapshot, Period
+from paperroute_transit.core.model import SYDNEY
 
 NOW = datetime(2026, 10, 24, 9, 0, tzinfo=SYDNEY)
 FIXTURE = (

@@ -17,26 +17,26 @@ from typing import Final
 
 from paperroute.build.dedupe import MergeReport, merge_rail, relabel_trainlink
 from paperroute.build.extras import build_extras
-from paperroute.build.gtfs_files import (
+from paperroute.build.handoff import Handoff, HandoffRecord, hand_over
+from paperroute.build.trainlink import trim_trainlink
+from paperroute_device.rss import current_rss_mb, max_rss_mb
+from paperroute_transit.build.gtfs_files import (
     Source,
     active_dates,
     insert_many,
     parse_time,
     read_rows,
 )
-from paperroute.build.handoff import Handoff, HandoffRecord, hand_over
-from paperroute.build.holidays import holiday_dates
-from paperroute.build.shapes import load_shapes
-from paperroute.build.trainlink import trim_trainlink
-from paperroute.core.model import (
+from paperroute_transit.build.holidays import holiday_dates
+from paperroute_transit.build.shapes import load_shapes
+from paperroute_transit.core.model import (
     HIDDEN_HEADSIGNS,
     SYDNEY,
     TIMETABLE_SCHEMA,
     Mode,
     mode_for,
 )
-from paperroute.core.tiles import NSW_BBOX
-from paperroute_device.rss import current_rss_mb, max_rss_mb
+from paperroute_transit.core.tiles import NSW_BBOX
 
 logger = logging.getLogger(__name__)
 

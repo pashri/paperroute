@@ -2,11 +2,11 @@
 
 from dataclasses import replace
 
-from paperroute.core.model import Departure
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import PANEL_ROWS, selected_index, trip_day
+from paperroute_transit.core.model import Departure
 
 
 def panel_trains(*, stop_view: StopView) -> tuple[Departure, ...]:

@@ -8,13 +8,13 @@ from typing import Final
 
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolve
-from paperroute.core.model import SYDNEY, Mode
-from paperroute.core.realtime import RealtimeSnapshot
 from paperroute_testkit.core.factories import STALE_LIMIT, pin_of
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.model import SYDNEY, Mode
+from paperroute_transit.core.realtime import RealtimeSnapshot
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)

@@ -13,8 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.build.gtfs_files import Source
-from paperroute.build.runs import (
+from paperroute.build.timetable import Window, build_timetable
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.runs import (
     RUN_SCHEMA,
     RUN_STOPS_INDEX,
     RunReport,
@@ -33,8 +34,7 @@ from paperroute.build.runs import (
     trip_joins,
     trip_skips,
 )
-from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.model import RouteKind
+from paperroute_transit.core.model import RouteKind
 from tests.build.feeds import regional_sources
 from tests.build.network_feed import EAST_WEST, network_feed
 

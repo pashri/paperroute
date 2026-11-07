@@ -9,7 +9,7 @@ from typing import Final
 from multidict import MultiMapping
 
 from paperroute.adapters.settings_form import BadInput, clock_of, clock_text
-from paperroute.core.model import DAY_NAMES, AutoWindow, Pin
+from paperroute_transit.core.model import DAY_NAMES, AutoWindow, Pin
 
 MAX_ROWS: Final[int] = 20
 NO_DAY: Final[str] = 'Tick at least one day for each window.'

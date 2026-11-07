@@ -13,7 +13,6 @@ from paperroute.core.messages import (
     Stop,
     Tick,
 )
-from paperroute.core.model import SYDNEY
 from paperroute.core.quota import (
     QUOTA_SAVE_EVERY,
     calls_today,
@@ -27,6 +26,7 @@ from paperroute.core.state_model import Cycle, State
 from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import saved_of
 from paperroute_testkit.core.steps import wakeful
+from paperroute_transit.core.model import SYDNEY
 from tests.core.test_state import BUSES, HOLD, at, fresh, loaded, pinned, saves
 
 DAY = date(2026, 10, 21)

@@ -21,10 +21,10 @@ from paperroute.build.handoff import (
     RefreshTail,
     read_handoff,
 )
-from paperroute.build.layout import Layout
 from paperroute.build.sources import SourceError, fsync_dir, save_states
 from paperroute.logs import configure_logging
 from paperroute_device.rss import max_rss_mb
+from paperroute_transit.build.layout import Layout
 
 logger = logging.getLogger(__name__)
 

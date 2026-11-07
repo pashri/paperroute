@@ -1,8 +1,8 @@
 """Tests for the route chips on the Pins list."""
 
 from paperroute.adapters.route_chips import chip_html, colour_sheet
-from paperroute.core.model import Pin, RouteKind, StopPlace
-from paperroute.core.route_colours import RouteColour
+from paperroute_transit.core.model import Pin, RouteKind, StopPlace
+from paperroute_transit.core.route_colours import RouteColour
 
 STOP: StopPlace = StopPlace(stop_id='a', name='A Stop', point=None)
 BLUE: RouteColour = RouteColour(fill='00b5ef', text='000000')

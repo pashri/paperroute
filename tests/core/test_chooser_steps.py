@@ -32,7 +32,6 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.model import Departure, Pin, shifted
 from paperroute.core.places import shown
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import step
@@ -51,6 +50,7 @@ from paperroute_testkit.core.factories import (
     pin_at,
     place,
 )
+from paperroute_transit.core.model import Departure, Pin, shifted
 from tests.core.chooser_walks import (
     BUS_606,
     CHOSEN,

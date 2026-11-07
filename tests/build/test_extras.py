@@ -13,9 +13,9 @@ import pytest
 
 from paperroute.build import extras, timetable
 from paperroute.build.extras import build_extras
-from paperroute.build.gtfs_files import Source
 from paperroute.build.handoff import HandoffRecord, write_handoff
 from paperroute.build.timetable import Window, build_timetable
+from paperroute_transit.build.gtfs_files import Source
 from tests.build.network_feed import network_feed
 
 RUN_TABLES: Final[set[str]] = {

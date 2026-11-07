@@ -44,11 +44,11 @@ from paperroute.core.messages import (
     PinSaved,
     PinsOrdered,
 )
-from paperroute.core.model import Pin, pin_ref, same_place
 from paperroute.core.pin_choices import PinDraft, PinEditor
-from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
+from paperroute_transit.core.model import Pin, pin_ref, same_place
+from paperroute_transit.core.route_colours import RouteColour
 
 __all__ = [
     'PinsPages',

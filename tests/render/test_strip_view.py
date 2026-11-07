@@ -6,7 +6,6 @@ from datetime import timedelta
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.geo import Point, to_metres
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     STRIP_MAP_WIDTH,
@@ -14,7 +13,6 @@ from paperroute.core.map_view import (
     MapView,
     Marker,
 )
-from paperroute.core.model import CarryOn
 from paperroute.core.stop_view import Pill, PinTag, Row
 from paperroute.core.strip_badges import HALF_WIDE
 from paperroute.core.strip_model import (
@@ -48,7 +46,6 @@ from paperroute.render.strip_view import (
     paint_strip_view,
 )
 from paperroute.render.strip_view import panel_row as paint_panel_row
-from paperroute.render.tile_codec import GREYS
 from paperroute_device.render.canvas import (
     INK,
     PAPER,
@@ -62,6 +59,9 @@ from paperroute_testkit.render.factories import STRIP_PANEL as PANEL
 from paperroute_testkit.render.factories import STRIP_ROWS as ROWS
 from paperroute_testkit.render.factories import STRIP_VIEW as VIEW
 from paperroute_testkit.render.factories import panel_row
+from paperroute_transit.core.geo import Point, to_metres
+from paperroute_transit.core.model import CarryOn
+from paperroute_transit.render.tile_codec import GREYS
 
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
 PANEL_TOP = 128

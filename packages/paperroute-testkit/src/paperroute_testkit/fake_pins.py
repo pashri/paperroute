@@ -4,9 +4,9 @@ from collections.abc import Collection
 from dataclasses import dataclass, field
 
 from paperroute.core.chooser import Choice
-from paperroute.core.model import RouteKind, StopPlace
 from paperroute.core.pin_choices import KIND_NAMES, ChangeStop, StopMatch
-from paperroute.core.route_colours import RouteColour
+from paperroute_transit.core.model import RouteKind, StopPlace
+from paperroute_transit.core.route_colours import RouteColour
 
 
 @dataclass

@@ -5,7 +5,7 @@ from datetime import date, timedelta
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import Change, Pin, StopPlace, Way
+from paperroute_transit.core.model import Change, Pin, StopPlace, Way
 
 LEG_EXTRA: Final[timedelta] = timedelta(hours=2)
 WALK_STEP: Final[int] = 10  # metres the walk is rounded up to

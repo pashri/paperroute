@@ -5,21 +5,21 @@ from typing import Final
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.core.model import StopPlace
-from paperroute.core.reach import Reach, RowKind, RunTail
 from paperroute.core.reach_exits import (
     exit_leads,
     exit_name,
     found_exits,
     grouped_exits,
 )
-from paperroute.core.reach_layout import LineExit
 from paperroute_testkit.core.reach_factories import (
     ids,
     random_tails,
     reach_of,
     tail,
 )
+from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.reach import Reach, RowKind, RunTail
+from paperroute_transit.core.reach_layout import LineExit
 
 LINE: Final[frozenset[str]] = frozenset({'C', 'J', 'E1'})
 OFF_IDS: Final[tuple[str, ...]] = tuple(f'X{k}' for k in range(6))

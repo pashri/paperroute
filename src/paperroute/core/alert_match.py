@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Final
 
-from paperroute.core.alert_model import (
+from paperroute.core.stop_view import clock_text
+from paperroute_device.core.text import DOT
+from paperroute_transit.core.alert_model import (
     Alert,
     AlertBanner,
     AlertTie,
@@ -14,10 +16,14 @@ from paperroute.core.alert_model import (
     Matched,
     Period,
 )
-from paperroute.core.model import SYDNEY, Departure, Mode, Pin, RouteKind
-from paperroute.core.patterns import TripPattern
-from paperroute.core.stop_view import clock_text
-from paperroute_device.core.text import DOT
+from paperroute_transit.core.model import (
+    SYDNEY,
+    Departure,
+    Mode,
+    Pin,
+    RouteKind,
+)
+from paperroute_transit.core.patterns import TripPattern
 
 BANNER_AHEAD: Final[timedelta] = timedelta(hours=24)
 NAME_SUFFIXES: Final[tuple[str, ...]] = (

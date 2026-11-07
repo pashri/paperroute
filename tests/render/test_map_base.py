@@ -11,13 +11,9 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
-from paperroute.build.features import FeatureStore
 from paperroute.build.map_style import DARK, LIGHT, STREET_FACE, SUPERSAMPLE
 from paperroute.build.tile_draw import Window as DrawWindow
 from paperroute.build.tile_draw import draw_window
-from paperroute.build.tile_store import PlacedLabel, TileWriter
-from paperroute.core.geo import Point, to_metres
 from paperroute.core.map_fit import CREDIT_ROOM
 from paperroute.core.map_view import (
     MAP_HEIGHT,
@@ -26,15 +22,6 @@ from paperroute.core.map_view import (
     MapBase,
     TripMarks,
     screen_point,
-)
-from paperroute.core.tiles import (
-    TILE,
-    LabelKind,
-    StreetLabel,
-    TileVariant,
-    tile_of,
-    tiles_covering,
-    to_pixels,
 )
 from paperroute.render.map_base import (
     HALO,
@@ -47,18 +34,34 @@ from paperroute.render.map_base import (
 )
 from paperroute.render.map_corners import BOX_FACE
 from paperroute.render.map_marks import ROUTE_STYLE
-from paperroute.render.tile_codec import (
-    diffuse,
-    pack_bits,
-    pack_grey,
-    quantise4,
-)
 from paperroute_device.render.canvas import (
     INK,
     PAPER,
     Canvas,
     Face,
     text_width,
+)
+from paperroute_transit.adapters.tiles_db import (
+    NullTiles,
+    SqliteTileRepository,
+)
+from paperroute_transit.build.features import FeatureStore
+from paperroute_transit.build.tile_store import PlacedLabel, TileWriter
+from paperroute_transit.core.geo import Point, to_metres
+from paperroute_transit.core.tiles import (
+    TILE,
+    LabelKind,
+    StreetLabel,
+    TileVariant,
+    tile_of,
+    tiles_covering,
+    to_pixels,
+)
+from paperroute_transit.render.tile_codec import (
+    diffuse,
+    pack_bits,
+    pack_grey,
+    quantise4,
 )
 
 MPP = 8

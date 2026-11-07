@@ -5,10 +5,10 @@ from collections.abc import Iterable
 from typing import Final
 
 from paperroute.core.chooser import KIND_LETTERS
-from paperroute.core.model import Pin, RouteKind
-from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
+from paperroute_transit.core.model import Pin, RouteKind
+from paperroute_transit.core.route_colours import RouteColour
 
 CHIP_LETTERS: Final[dict[RouteKind, str]] = {
     **KIND_LETTERS,

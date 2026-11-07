@@ -4,9 +4,9 @@ from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
 from paperroute.core.chooser import Choice
-from paperroute.core.model import Pin, RouteKind, StopPlace
 from paperroute.core.pin_choices import PinDraft, PinEditor, clean_nickname
 from paperroute.ports import PinOptions
+from paperroute_transit.core.model import Pin, RouteKind, StopPlace
 
 
 @dataclass(frozen=True)

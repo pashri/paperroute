@@ -19,16 +19,6 @@ from paperroute.adapters.state_migrations import (
     drop_zoom,
     v9_ref,
 )
-from paperroute.core.model import (
-    SYDNEY,
-    AutoWindow,
-    Change,
-    Pin,
-    RouteKind,
-    StopPlace,
-    Way,
-    pin_ref,
-)
 from paperroute.core.saved import DEFAULT_SAVED, ConnectionMap, Saved
 from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
@@ -38,6 +28,16 @@ from paperroute_testkit.core.connection_factories import (
     TWO_WAY,
     WESTMEAD,
     WORK,
+)
+from paperroute_transit.core.model import (
+    SYDNEY,
+    AutoWindow,
+    Change,
+    Pin,
+    RouteKind,
+    StopPlace,
+    Way,
+    pin_ref,
 )
 
 WINDOW: Final[dict[str, object]] = {

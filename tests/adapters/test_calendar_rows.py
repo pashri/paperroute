@@ -9,18 +9,22 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.calendar_rows import (
+from paperroute.adapters.timetable_db import SqliteTimetableRepository
+from paperroute.build.timetable import Window, build_timetable
+from paperroute_testkit.build.feed_zip import write_feed
+from paperroute_testkit.core.factories import pin_of
+from paperroute_transit.adapters.calendar_rows import (
     HAS_HOLIDAYS,
     connection_fetch,
     read_holidays,
 )
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.build.gtfs_files import Source
-from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.model import ServiceSpan, service_epoch, service_time
-from paperroute_testkit.core.factories import pin_of
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.model import (
+    ServiceSpan,
+    service_epoch,
+    service_time,
+)
 from tests.build.feeds import build_db, bus_files
-from tests.helpers import write_feed
 
 HOLIDAY: Final[date] = date(2026, 10, 16)
 REAL: Final[Path] = Path(__file__).parent.parent / 'fixtures' / 'real'

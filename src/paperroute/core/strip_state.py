@@ -13,15 +13,11 @@ from paperroute.core.messages import (
     StripFailed,
     StripLoaded,
 )
-from paperroute.core.model import Departure, Pin, StopPlace, is_connection
 from paperroute.core.places import shown
-from paperroute.core.positions import PositionsSnapshot
-from paperroute.core.reach import Reach, StripKey
 from paperroute.core.rhythm import frame_time, stale_after
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import RETRY_AFTER, State, elapsed
 from paperroute.core.stop_view import StopView
-from paperroute.core.strip_folds import folded
 from paperroute.core.strip_follow import followed_reach
 from paperroute.core.strip_model import NEEDS_UPDATE, StripInputs
 from paperroute.core.strip_times import (
@@ -32,6 +28,15 @@ from paperroute.core.strip_times import (
     window_departures,
 )
 from paperroute.core.strip_view import home_of, window_of
+from paperroute_transit.core.model import (
+    Departure,
+    Pin,
+    StopPlace,
+    is_connection,
+)
+from paperroute_transit.core.positions import PositionsSnapshot
+from paperroute_transit.core.reach import Reach, StripKey
+from paperroute_transit.core.strip_folds import folded
 
 STRIP_VIEWS: Final[frozenset[LiveView]] = frozenset(
     {LiveView.STRIP, LiveView.STRIP_MAP}

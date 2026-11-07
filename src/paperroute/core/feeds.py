@@ -4,8 +4,8 @@ from collections.abc import Iterable
 from enum import StrEnum
 from typing import Final
 
-from paperroute.core.geo import MetreBox, to_metres
-from paperroute.core.model import Mode, RouteKind
+from paperroute_transit.core.geo import MetreBox, to_metres
+from paperroute_transit.core.model import Mode, RouteKind
 
 DAILY_LIMIT: Final[int] = 60_000  # API calls a day
 FEEDS: Final[dict[Mode, str]] = {

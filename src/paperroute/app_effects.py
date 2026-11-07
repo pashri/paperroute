@@ -13,14 +13,6 @@ from typing import Final
 from paperroute.adapters.gtfs_alerts import parse_alerts
 from paperroute.adapters.gtfs_rt import parse_positions, parse_trip_updates
 from paperroute.app_connections import between_read
-from paperroute.core.alert_model import (
-    AlertPlaces,
-    AlertsFetched,
-    AlertsSnapshot,
-    BetweenLoaded,
-    Informed,
-    LoadBetween,
-)
 from paperroute.core.feeds import ALERT_FEEDS, FeedKind
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
@@ -56,15 +48,23 @@ from paperroute.core.messages import (
     StripLoaded,
     TimetableSeen,
 )
-from paperroute.core.model import Mode, Pin, StopPlace
-from paperroute.core.positions import PositionsSnapshot, with_labels
-from paperroute.core.reach import build_reach
 from paperroute.measures import StopMeasures
 from paperroute.ports import (
     NetworkRepository,
     StateRepository,
     TimetableRepository,
 )
+from paperroute_transit.core.alert_model import (
+    AlertPlaces,
+    AlertsFetched,
+    AlertsSnapshot,
+    BetweenLoaded,
+    Informed,
+    LoadBetween,
+)
+from paperroute_transit.core.model import Mode, Pin, StopPlace
+from paperroute_transit.core.positions import PositionsSnapshot, with_labels
+from paperroute_transit.core.reach import build_reach
 
 logger = logging.getLogger(__name__)
 

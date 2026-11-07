@@ -6,7 +6,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.model import Mode
 from paperroute.core.stop_view import Pill, Row, StopView, stops_text
 from paperroute.render.chrome import (
     ARROW_GAP,
@@ -32,6 +31,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER, finish
+from paperroute_transit.core.model import Mode
 
 SPLIT: Final[int] = 438
 ROW_H: Final[int] = 50

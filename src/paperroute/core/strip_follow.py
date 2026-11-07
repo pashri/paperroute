@@ -6,9 +6,6 @@ from datetime import datetime
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import StopPlace
-from paperroute.core.patterns import PatternStop
-from paperroute.core.reach import Reach, ReachRow, RowKind
 from paperroute.core.stop_view import not_departed
 from paperroute.core.strip_model import CarryNote, TripDay, trip_day
 from paperroute.core.strip_times import (
@@ -17,6 +14,9 @@ from paperroute.core.strip_times import (
     live_strip,
     stops_after,
 )
+from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.patterns import PatternStop
+from paperroute_transit.core.reach import Reach, ReachRow, RowKind
 
 FOLLOWED: Final[int] = 4  # next trains the rows below the From come from
 type Call = tuple[str, PatternStop]

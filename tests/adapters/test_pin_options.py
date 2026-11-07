@@ -12,10 +12,10 @@ from paperroute.adapters import pin_options
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.core.chooser import UNPICKED, Choice, Level, focusable
-from paperroute.core.model import RouteKind, StopPlace
 from paperroute.core.pin_choices import KIND_NAMES
-from paperroute.core.reach import RowKind, StripKey, build_reach
-from paperroute.core.route_colours import RouteColour
+from paperroute_transit.core.model import RouteKind, StopPlace
+from paperroute_transit.core.reach import RowKind, StripKey, build_reach
+from paperroute_transit.core.route_colours import RouteColour
 from tests.adapters.test_network_db import T1, build_network
 
 SCHOOL_RUN: str = (

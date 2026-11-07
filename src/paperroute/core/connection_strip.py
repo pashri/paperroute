@@ -10,7 +10,11 @@ from paperroute.core.connection_model import change_walk
 from paperroute.core.connection_view import PairRow, chain_rows, no_pair_text
 from paperroute.core.live import LiveDeparture
 from paperroute.core.map_view import MapView, is_fresh, position_age
-from paperroute.core.model import (
+from paperroute.core.rides import rides_of
+from paperroute.core.stop_view import PinTag, StopView, clock_text, stops_text
+from paperroute.core.strip_model import LOADING, NO_LEG_STOPS
+from paperroute.core.strip_times import from_call, joined_patterns
+from paperroute_transit.core.model import (
     Change,
     Mode,
     Pin,
@@ -19,12 +23,11 @@ from paperroute.core.model import (
     service_time,
     shifted,
 )
-from paperroute.core.patterns import PatternStop, TripPattern, hop_near
-from paperroute.core.positions import PositionsSnapshot, VehiclePosition
-from paperroute.core.rides import rides_of
-from paperroute.core.stop_view import PinTag, StopView, clock_text, stops_text
-from paperroute.core.strip_model import LOADING, NO_LEG_STOPS
-from paperroute.core.strip_times import from_call, joined_patterns
+from paperroute_transit.core.patterns import PatternStop, TripPattern, hop_near
+from paperroute_transit.core.positions import (
+    PositionsSnapshot,
+    VehiclePosition,
+)
 
 type LegCall = tuple[PatternStop, datetime]
 

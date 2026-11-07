@@ -5,7 +5,12 @@ from datetime import UTC, datetime
 from typing import Any
 
 from paperroute.adapters.gtfs_rt import feed_entities
-from paperroute.core.alert_model import Alert, AlertsSnapshot, Informed, Period
+from paperroute_transit.core.alert_model import (
+    Alert,
+    AlertsSnapshot,
+    Informed,
+    Period,
+)
 
 logger = logging.getLogger(__name__)
 HTML_SUFFIX = '/html'

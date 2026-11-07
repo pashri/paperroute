@@ -10,7 +10,6 @@ from paperroute.app import MapRenderer, Ports, perform
 from paperroute.app_effects import StateSaver
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, MapView, Marker
 from paperroute.core.messages import Effect, Event
-from paperroute.core.model import SYDNEY
 from paperroute.core.strip_model import StripMapView, StripPane
 from paperroute.ports import TimetableRepository
 from paperroute_testkit.core.factories import pin_of
@@ -23,6 +22,7 @@ from paperroute_testkit.fakes import (
 )
 from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_testkit.paths import FIXTURES
+from paperroute_transit.core.model import SYDNEY
 
 REAL = FIXTURES / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)

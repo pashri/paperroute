@@ -6,7 +6,6 @@ from dataclasses import replace
 from paperroute.core.chooser import Stage, to_row
 from paperroute.core.chooser_steps import chooser_reach, picked_stop_view
 from paperroute.core.places import shown
-from paperroute.core.reach import Reach, RowKind
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import FoldContext, State
 from paperroute.core.strip_follow import origin_of
@@ -19,6 +18,7 @@ from paperroute.core.strip_state import (
     strip_key,
 )
 from paperroute.core.strip_view import first_row, home_of, window_of
+from paperroute_transit.core.reach import Reach, RowKind
 
 type Opener = Callable[[State, bool], State | None]
 

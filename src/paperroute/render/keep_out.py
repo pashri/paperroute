@@ -5,14 +5,6 @@ from typing import Final
 
 from paperroute.build.map_style import STATION_FACE, SUBURB_FACE
 from paperroute.core.map_view import MAP_HEIGHT, MapBase
-from paperroute.core.tiles import (
-    POINT_HALF_HEIGHT,
-    STREET_HEIGHT,
-    SUBURB_ZOOMS,
-    LabelKind,
-    StreetLabel,
-    text_box,
-)
 from paperroute.ports import TileRepository
 from paperroute.render.map_base import HALO, window_of
 from paperroute.render.map_corners import corner_text, credit_box, scale_box
@@ -23,6 +15,14 @@ from paperroute.render.map_labels import (
 )
 from paperroute.render.map_marks import Window
 from paperroute_device.render.canvas import Box, Face
+from paperroute_transit.core.tiles import (
+    POINT_HALF_HEIGHT,
+    STREET_HEIGHT,
+    SUBURB_ZOOMS,
+    LabelKind,
+    StreetLabel,
+    text_box,
+)
 
 EDGE: Final[float] = 1.0  # the corner boxes' dark edge
 

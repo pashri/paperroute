@@ -9,12 +9,12 @@ from paperroute.core.connection_screens import connection_map
 from paperroute.core.map_requests import map_inputs
 from paperroute.core.map_state import awaiting
 from paperroute.core.map_view import MapView, build_map_view
-from paperroute.core.model import is_connection
 from paperroute.core.panel_views import SleepView, sleep_map
 from paperroute.core.places import shown
 from paperroute.core.state_model import State, restarted
 from paperroute.core.stop_view import StopView
 from paperroute_device.core.text import DOT
+from paperroute_transit.core.model import is_connection
 
 SLEEP_BAND: Final[str] = f'Asleep{DOT}turn or press a knob to wake'
 WAKE_FOR: Final[timedelta] = timedelta(minutes=5)

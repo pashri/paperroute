@@ -3,7 +3,6 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from paperroute.core.geo import Point
 from paperroute.core.map_fit import (
     BANNER_ROOM,
     CREDIT_ROOM,
@@ -20,10 +19,7 @@ from paperroute.core.map_view import (
     STRIP_MAP_WIDTH,
     MapInputs,
 )
-from paperroute.core.model import Departure
-from paperroute.core.patterns import TripPattern
 from paperroute.core.stop_view import StopView
-from paperroute.core.tiles import ZOOMS
 from paperroute_testkit.core.factories import (
     STALE_LIMIT,
     START,
@@ -31,6 +27,10 @@ from paperroute_testkit.core.factories import (
     departure,
     pattern,
 )
+from paperroute_transit.core.geo import Point
+from paperroute_transit.core.model import Departure
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.tiles import ZOOMS
 
 FROM: Point = (0.0, 800.0)
 OTHER: Point = (30.0, 800.0)

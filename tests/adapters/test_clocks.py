@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from paperroute.adapters.clocks import ReplayClock, SystemClock
-from paperroute.core.model import SYDNEY
+from paperroute_transit.core.model import SYDNEY
 
 
 def test_system_clock_is_sydney_aware() -> None:

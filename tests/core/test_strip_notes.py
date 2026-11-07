@@ -3,8 +3,6 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from paperroute.core.model import Mode, RouteKind
-from paperroute.core.reach import Reach, RowKind
 from paperroute.core.strip_model import CarryNote, StripInputs
 from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_view import strip_rows, trips_of
@@ -19,6 +17,8 @@ from paperroute_testkit.core.factories import (
     live,
     pattern,
 )
+from paperroute_transit.core.model import Mode, RouteKind
+from paperroute_transit.core.reach import Reach, RowKind
 
 T8_NOTE = CarryNote(route='T8', then='T2 Leppington')
 

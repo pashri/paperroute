@@ -8,7 +8,7 @@ from typing import Any, Final
 from paperroute.adapters.state_auto import add_auto
 from paperroute.adapters.state_change import add_connections, before_rewritten
 from paperroute.adapters.state_settings import default_settings
-from paperroute.core.model import TRAINLINK
+from paperroute_transit.core.model import TRAINLINK
 
 SCHEMA_VERSION: Final[int] = 11
 

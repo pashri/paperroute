@@ -6,8 +6,6 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.adapters.state_file import JsonStateRepository
-from paperroute.core.auto_model import AutoState, Before, running
-from paperroute.core.model import SYDNEY, AutoWindow, Pin, RouteKind
 from paperroute.core.saved import (
     BoardSettings,
     ConnectionMap,
@@ -25,6 +23,8 @@ from paperroute_device.core.device_settings import (
 )
 from paperroute_testkit.core.connection_factories import TWO_WAY, WORK
 from paperroute_testkit.core.factories import pin_at
+from paperroute_transit.core.auto_model import AutoState, Before, running
+from paperroute_transit.core.model import SYDNEY, AutoWindow, Pin, RouteKind
 from tests.golden.scenes import GOLDEN, baseline_bytes
 
 STATE: Final[Path] = GOLDEN / 'state.json'

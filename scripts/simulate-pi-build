@@ -2,7 +2,7 @@
 # Usage: scripts/simulate-pi-build
 # Builds the tree deploy would stage the way the Pi does, with today's
 # installer and with the provisioned one it replaces, and checks what
-# each venv can import. Stage the files with git add first.
+# each venv can import and run. Stage the files with git add first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -10,8 +10,55 @@ stage=$(mktemp -d); old=$(mktemp -d)
 trap 'rm -rf -- "$stage" "$old"' EXIT
 git ls-files -z src packages pyproject.toml uv.lock README.md | rsync -a --from0 --files-from=- ./ "$stage/"
 rsync -a "$stage/" "$old/"
-UV_LINK_MODE=copy uv sync --frozen --package paperroute --no-default-groups --no-editable --project "$stage"
-UV_LINK_MODE=copy uv sync --frozen --no-dev --no-editable --project "$old"
+UV_LINK_MODE=copy uv sync --quiet --frozen --package paperroute --no-default-groups --no-editable --project "$stage"
+UV_LINK_MODE=copy uv sync --quiet --frozen --no-dev --no-editable --project "$old"
 imports="import paperroute.__main__, paperroute.screen, paperroute_hardware, paperroute_device, paperroute_transit; from importlib.util import find_spec as f"
 "$stage/.venv/bin/python" -c "$imports; assert not any(f(m) for m in ('osmium', 'shapely', 'pytest', 'paperroute_testkit'))"
 "$old/.venv/bin/python" -c "$imports; assert not any(f(m) for m in ('pytest', 'paperroute_testkit'))"
+
+draw=$(cat <<'EOF'
+from paperroute.app_render import MapRenderer, drawing
+from paperroute.asset_root import APP_ASSETS, use_app_assets
+from paperroute.core.stop_view import PinTag, Row, StopView
+from paperroute_transit.core.model import Mode
+
+def row(minutes):
+    return Row(
+        route='606', mode=Mode.BUS, platform='', destination='Parramatta',
+        countdown=str(minutes), leaves_at=f'8:0{minutes}',
+        arrives_at=f'8:3{minutes}', ride_minutes=30, live=False, pill=None,
+    )
+
+use_app_assets()
+view = StopView(
+    origin='Hollis St', destination='Parramatta', clock='8:00',
+    hero=row(3), rows=(row(6), row(9)),
+    banner='Timetable times · no live data yet', empty=None, scroll=0,
+    tag=PinTag(text='pin 1/1', pinned=True, auto=False),
+    head_rows=(row(3), row(6), row(9)),
+)
+frame = drawing(view=view, maps=MapRenderer(tiles=None))()
+assert 'site-packages' in str(APP_ASSETS.fonts), APP_ASSETS.fonts
+assert frame.shape == (480, 800) and frame.min() == 0, frame.shape
+EOF
+)
+screen_only="import paperroute.screen, sys
+loaded = [
+    name for name in sys.modules
+    if name.split('.')[0].startswith('paperroute')
+    and name not in {'paperroute', 'paperroute.screen'}
+    and name.split('.')[0] != 'paperroute_hardware'
+]
+assert not loaded, loaded"
+
+for py in "$stage/.venv/bin/python" "$old/.venv/bin/python"; do
+    code=0
+    err=$("$py" -m paperroute.screen --image deploy/screens/on.raw --state /nonexistent 2>&1 >/dev/null) || code=$?
+    if [[ $code -ne 1 || $err != screen:* || $err == *Traceback* ]]; then
+        printf '%s: screen exited %s\n%s\n' "$py" "$code" "$err" >&2
+        exit 1
+    fi
+    "$py" -c "$draw"
+    "$py" -c "import paperroute.build.__main__"
+    "$py" -c "$screen_only"
+done

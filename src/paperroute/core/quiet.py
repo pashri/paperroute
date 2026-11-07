@@ -4,7 +4,6 @@ from dataclasses import replace
 from datetime import date, timedelta
 from typing import Final
 
-from paperroute.core.auto_model import holds_awake
 from paperroute.core.messages import (
     Effect,
     FetchFeed,
@@ -12,13 +11,14 @@ from paperroute.core.messages import (
     Render,
     ServiceSpanLoaded,
 )
-from paperroute.core.model import same_place
 from paperroute.core.places import shown
 from paperroute.core.rhythm import in_window
 from paperroute.core.sleep import awake, slept
 from paperroute.core.state_model import Calendar, State, elapsed
 from paperroute.core.state_views import settled
 from paperroute_device.core.device_settings import QuietMode
+from paperroute_transit.core.auto_model import holds_awake
+from paperroute_transit.core.model import same_place
 
 MARGIN: Final[timedelta] = timedelta(minutes=30)
 ONE_DAY: Final[timedelta] = timedelta(days=1)

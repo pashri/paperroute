@@ -5,7 +5,6 @@ from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Final
 
-from paperroute.core.model import SYDNEY
 from paperroute.core.panel_screens import (
     LOCAL_NAME,
     UNKNOWN,
@@ -23,6 +22,7 @@ from paperroute_device.core.device_model import (
 )
 from paperroute_device.core.text import DOT, HINT_DOT, clock_text
 from paperroute_hardware.ports import PanelTimes
+from paperroute_transit.core.model import SYDNEY
 
 POWER_STATUS: Final[dict[PowerAction, str]] = {
     PowerAction.OFF: 'Shutting down...',

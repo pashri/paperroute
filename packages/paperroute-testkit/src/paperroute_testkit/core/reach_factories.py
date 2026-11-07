@@ -9,17 +9,17 @@ from typing import Final
 from hypothesis import strategies as st
 
 from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.core.geo import Point
-from paperroute.core.model import RouteKind, StopPlace
-from paperroute.core.reach import (
+from paperroute_testkit.paths import ROOT
+from paperroute_transit.core.geo import Point
+from paperroute_transit.core.model import RouteKind, StopPlace
+from paperroute_transit.core.reach import (
     Reach,
     ReachInput,
     RunTail,
     StripKey,
     build_reach,
 )
-from paperroute.core.reach_layout import LineExit
-from paperroute_testkit.paths import ROOT
+from paperroute_transit.core.reach_layout import LineExit
 
 REAL_DB: Final[Path] = ROOT / 'data' / 'timetable.db'
 TOWN_HALL: Final[str] = '200070'

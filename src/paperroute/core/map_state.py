@@ -5,7 +5,6 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Final
 
-from paperroute.core.geo import MetreBox, Point, Shape
 from paperroute.core.map_fit import resting_zoom
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH
 from paperroute.core.messages import (
@@ -16,10 +15,11 @@ from paperroute.core.messages import (
     MapDataFailed,
     PatternsLoaded,
 )
-from paperroute.core.model import Mode
-from paperroute.core.patterns import TripPattern
-from paperroute.core.positions import PositionsSnapshot
-from paperroute.core.tiles import ZOOMS
+from paperroute_transit.core.geo import MetreBox, Point, Shape
+from paperroute_transit.core.model import Mode
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.positions import PositionsSnapshot
+from paperroute_transit.core.tiles import ZOOMS
 
 AREA_GROWTH: Final[float] = 1.1
 

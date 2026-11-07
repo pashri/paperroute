@@ -11,10 +11,10 @@ from paperroute.core.alert_match import (
 from paperroute.core.chains import Chain, Legs, chains_of, open_legs
 from paperroute.core.connection_model import direct_leg
 from paperroute.core.live import LiveDeparture, resolved
-from paperroute.core.model import Departure, Pin, is_connection
 from paperroute.core.places import shown
 from paperroute.core.rhythm import frame_time, stale_after
 from paperroute.core.state_model import Board, State
+from paperroute_transit.core.model import Departure, Pin, is_connection
 
 
 def live_chains(*, state: State) -> tuple[Chain, ...]:

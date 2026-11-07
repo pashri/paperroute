@@ -16,8 +16,6 @@ from paperroute.core.connection_strip import (
     walk_note,
 )
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import Change, StopPlace
-from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import LOADING, NO_LEG_STOPS
 from paperroute_testkit.core.connection_factories import (
@@ -36,6 +34,8 @@ from paperroute_testkit.core.factories import (
     snapshot,
     vehicle,
 )
+from paperroute_transit.core.model import Change, StopPlace
+from paperroute_transit.core.patterns import PatternStop, TripPattern
 
 STOP: Final[StopView] = StopView(
     origin='Hollis St Opp Constitution Hill Library',

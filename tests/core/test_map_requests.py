@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 
 from paperroute.core.cycle import cycle_effects
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
-from paperroute.core.geo import Point
 from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM
 from paperroute.core.map_requests import map_feeds, pin_ends
 from paperroute.core.map_state import area_box, area_frame
@@ -21,12 +20,10 @@ from paperroute.core.messages import (
     PatternsLoaded,
     Tick,
 )
-from paperroute.core.model import SYDNEY, Departure, Mode, Pin, RouteKind
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import Cycle, State
 from paperroute.core.state_views import current_view, live_stop_view
-from paperroute.core.tiles import ZOOMS
 from paperroute_hardware.core.knob_events import Knob, KnobPressed
 from paperroute_testkit.core.connection_factories import LEG1, LEG2
 from paperroute_testkit.core.factories import (
@@ -43,6 +40,15 @@ from paperroute_testkit.core.strip_factories import (
     trains,
     turn,
 )
+from paperroute_transit.core.geo import Point
+from paperroute_transit.core.model import (
+    SYDNEY,
+    Departure,
+    Mode,
+    Pin,
+    RouteKind,
+)
+from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_connection_screens import legs_loaded, started
 
 

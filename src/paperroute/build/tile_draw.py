@@ -8,8 +8,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.build.features import FeatureStore, envelope
-from paperroute.build.geometry import Line, Ring, clip_lines, clip_rings
 from paperroute.build.map_style import (
     AREA_GREYS,
     DARK,
@@ -23,22 +21,29 @@ from paperroute.build.map_style import (
     road_style,
     transit_style,
 )
-from paperroute.build.tile_store import PlacedLabel
-from paperroute.core.geo import MetreBox
-from paperroute.core.tiles import (
+from paperroute_device.render.canvas import INK, PAPER, Canvas, Point
+from paperroute_transit.build.features import FeatureStore, envelope
+from paperroute_transit.build.geometry import (
+    Line,
+    Ring,
+    clip_lines,
+    clip_rings,
+)
+from paperroute_transit.build.tile_store import PlacedLabel
+from paperroute_transit.core.geo import MetreBox
+from paperroute_transit.core.tiles import (
     GRID_ORIGIN,
     LABEL_REACH,
     TILE,
     LabelKind,
     from_pixels,
 )
-from paperroute.render.tile_codec import (
+from paperroute_transit.render.tile_codec import (
     diffuse,
     pack_bits,
     pack_grey,
     quantise4,
 )
-from paperroute_device.render.canvas import INK, PAPER, Canvas, Point
 
 GEOMETRY_MARGIN: Final[int] = 16  # pixels of geometry kept past the edge
 SMALLEST_AREA: Final[int] = 3  # pixels; smaller bounds are not filled

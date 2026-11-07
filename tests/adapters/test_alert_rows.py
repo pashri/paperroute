@@ -11,7 +11,7 @@ import pytest
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.dedupe import merge_rail
-from paperroute.build.gtfs_files import Source
+from paperroute_transit.build.gtfs_files import Source
 from tests.build.feeds import build_db
 
 REAL: Final[Path] = Path(__file__).parents[1] / 'fixtures' / 'real'

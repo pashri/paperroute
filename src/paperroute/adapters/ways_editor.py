@@ -13,7 +13,8 @@ from paperroute.core.connection_model import (
     walk_metres,
     way_legs,
 )
-from paperroute.core.model import (
+from paperroute.ports import PinOptions
+from paperroute_transit.core.model import (
     MAX_CHANGES,
     Change,
     Pin,
@@ -21,7 +22,6 @@ from paperroute.core.model import (
     Way,
     way_key,
 )
-from paperroute.ports import PinOptions
 
 CHANGE_SEP: Final[str] = '|'  # between the changes of an encoded way
 PART_SEP: Final[str] = ','  # between alight, board and allow

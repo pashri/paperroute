@@ -7,9 +7,13 @@ from typing import Final
 import pytest
 
 from paperroute.core.live import resolve
-from paperroute.core.model import SYDNEY, CarryOn, TripFacts
-from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 from paperroute_testkit.core.factories import START, departure
+from paperroute_transit.core.model import SYDNEY, CarryOn, TripFacts
+from paperroute_transit.core.realtime import (
+    RealtimeSnapshot,
+    StopUpdate,
+    TripRealtime,
+)
 
 DEP = departure(departs=START + timedelta(minutes=10), trip_id='t')
 BLANK = StopUpdate(

@@ -3,9 +3,7 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
-from paperroute.core.alert_model import BetweenLoaded
 from paperroute.core.feeds import feed_for
-from paperroute.core.geo import MetreBox
 from paperroute.core.map_state import MapState, area_box, area_frame
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
@@ -28,13 +26,6 @@ from paperroute.core.messages import (
     StripFailed,
     StripLoaded,
 )
-from paperroute.core.model import (
-    Departure,
-    Pin,
-    StopPlace,
-    pin_key,
-    same_place,
-)
 from paperroute.core.saved import DEFAULT_PLACE, Saved
 from paperroute.core.state_model import (
     RETRY_AFTER,
@@ -43,6 +34,15 @@ from paperroute.core.state_model import (
     State,
     elapsed,
     restarted,
+)
+from paperroute_transit.core.alert_model import BetweenLoaded
+from paperroute_transit.core.geo import MetreBox
+from paperroute_transit.core.model import (
+    Departure,
+    Pin,
+    StopPlace,
+    pin_key,
+    same_place,
 )
 
 

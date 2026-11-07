@@ -14,8 +14,8 @@ from pydantic import (
     model_validator,
 )
 
-from paperroute.core.auto_model import Occurrence
-from paperroute.core.model import DAY_NAMES, AutoWindow
+from paperroute_transit.core.auto_model import Occurrence
+from paperroute_transit.core.model import DAY_NAMES, AutoWindow
 
 logger = logging.getLogger(__name__)
 

@@ -12,7 +12,6 @@ from paperroute.core.feeds import (
     feeds_near,
     position_feeds,
 )
-from paperroute.core.geo import Point
 from paperroute.core.map_fit import resting_zoom, steady_frame
 from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import (
@@ -30,9 +29,7 @@ from paperroute.core.messages import (
     LoadShapes,
     MapData,
 )
-from paperroute.core.model import SYDNEY, Departure, is_connection
 from paperroute.core.places import shown
-from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.rhythm import frame_time, stale_after
 from paperroute.core.saved import LiveView
 from paperroute.core.state_model import RETRY_AFTER, State, elapsed
@@ -43,7 +40,10 @@ from paperroute.core.strip_state import (
     strip_patterns,
     strip_window,
 )
-from paperroute.core.tiles import ZOOMS
+from paperroute_transit.core.geo import Point
+from paperroute_transit.core.model import SYDNEY, Departure, is_connection
+from paperroute_transit.core.positions import PositionsSnapshot
+from paperroute_transit.core.tiles import ZOOMS
 
 MAP_VIEWS: Final[frozenset[LiveView]] = frozenset(
     {LiveView.MAP, LiveView.STRIP_MAP}

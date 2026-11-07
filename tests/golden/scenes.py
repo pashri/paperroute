@@ -14,7 +14,6 @@ from numpy.typing import NDArray
 from paperroute.app_render import MapRenderer, drawing
 from paperroute.core.chains import Legs, leg_key
 from paperroute.core.connection_model import way_legs
-from paperroute.core.geo import make_shape
 from paperroute.core.messages import (
     DeparturesLoaded,
     FetchFeed,
@@ -25,13 +24,10 @@ from paperroute.core.messages import (
     ShapesLoaded,
     StripLoaded,
 )
-from paperroute.core.model import Pin
-from paperroute.core.patterns import TripPattern
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import current_view, live_stop_view
-from paperroute.core.tiles import TILE, LabelKind, StreetLabel, TileVariant
 from paperroute_device.core.device_model import (
     Confirm,
     ConfirmAction,
@@ -66,6 +62,15 @@ from paperroute_testkit.core.strip_factories import (
     SOUTH,
     WEST,
     on_view,
+)
+from paperroute_transit.core.geo import make_shape
+from paperroute_transit.core.model import Pin
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.tiles import (
+    TILE,
+    LabelKind,
+    StreetLabel,
+    TileVariant,
 )
 from tests.adapters.test_web_device import FACTS
 from tests.core.chooser_walks import at_towards

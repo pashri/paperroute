@@ -12,13 +12,10 @@ import numpy as np
 import pytest
 from google.transit import gtfs_realtime_pb2
 
-from paperroute.adapters.tiles_db import NullTiles
 from paperroute.app import MapRenderer, run, ticker
 from paperroute.app_effects import VersionWatch, parse_feed
-from paperroute.core.alert_model import AlertPlaces, AlertsFetched
 from paperroute.core.chooser import Column, Level
 from paperroute.core.feeds import FeedKind
-from paperroute.core.geo import MetreBox
 from paperroute.core.map_state import area_box
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
@@ -48,8 +45,6 @@ from paperroute.core.messages import (
     StripLoaded,
     TimetableSeen,
 )
-from paperroute.core.model import Mode, Pin, RouteKind, ServiceSpan, StopPlace
-from paperroute.core.reach import ReachInput, RunTail, StripKey, build_reach
 from paperroute.core.saved import Saved, seeded
 from paperroute.render.chooser import draw_chooser_view
 from paperroute.render.stop_view import draw_stop_view
@@ -77,6 +72,22 @@ from paperroute_testkit.render.factories import (
     STRIP_VIEW,
     groups,
     view_of,
+)
+from paperroute_transit.adapters.tiles_db import NullTiles
+from paperroute_transit.core.alert_model import AlertPlaces, AlertsFetched
+from paperroute_transit.core.geo import MetreBox
+from paperroute_transit.core.model import (
+    Mode,
+    Pin,
+    RouteKind,
+    ServiceSpan,
+    StopPlace,
+)
+from paperroute_transit.core.reach import (
+    ReachInput,
+    RunTail,
+    StripKey,
+    build_reach,
 )
 
 

@@ -18,7 +18,6 @@ from paperroute.core.connection_view import (
     route_chips,
     via_text,
 )
-from paperroute.core.model import Change, Mode, Pin, Way
 from paperroute.core.rides import Ride
 from paperroute.core.stop_view import StopView, empty_text
 from paperroute_testkit.core.connection_factories import (
@@ -32,6 +31,7 @@ from paperroute_testkit.core.connection_factories import (
     work_chains,
 )
 from paperroute_testkit.core.factories import STALE_LIMIT, live, place
+from paperroute_transit.core.model import Change, Mode, Pin, Way
 
 CHAINS: Final[tuple[Chain, ...]] = work_chains()
 STOP: Final[StopView] = StopView(

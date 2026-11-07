@@ -6,9 +6,9 @@ from operator import itemgetter
 from typing import Final
 
 from paperroute.core.connection_model import walk_metres
-from paperroute.core.geo import Point, to_lonlat
-from paperroute.core.model import StopPlace
 from paperroute.core.pin_choices import ChangeStop
+from paperroute_transit.core.geo import Point, to_lonlat
+from paperroute_transit.core.model import StopPlace
 
 CHANGE_M: Final[int] = 500
 CHANGE_COUNT: Final[int] = 12

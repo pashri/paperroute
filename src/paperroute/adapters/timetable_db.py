@@ -9,56 +9,6 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.adapters.alert_rows import (
-    LineMemory,
-    alert_places,
-    read_trainlink,
-)
-from paperroute.adapters.calendar_rows import (
-    SERVICE_DAY_LENGTH,
-    read_holidays,
-    service_span,
-)
-from paperroute.adapters.carry_on_rows import (
-    CARRY_ONS,
-    carry_on_departure,
-    first_to_arrive,
-)
-from paperroute.adapters.departure_rows import (
-    DEPARTURES,
-    WHOLE_STOP,
-    to_departure,
-)
-from paperroute.adapters.pattern_rows import (
-    JOINED_TRIPS,
-    LABELS_BY_ALIAS,
-    LABELS_BY_TRIP,
-    PATTERN_STOPS,
-    RUNNING_DAYS,
-    pattern_of,
-)
-from paperroute.core.alert_model import AlertPlaces
-from paperroute.core.geo import (
-    MetreBox,
-    Point,
-    Shape,
-    to_lonlat,
-    to_metres,
-    unpack_shape,
-)
-from paperroute.core.model import (
-    HIDDEN_HEADSIGNS,
-    SYDNEY,
-    Departure,
-    Mode,
-    Pin,
-    ServiceSpan,
-    StopPlace,
-    service_epoch,
-    service_seconds,
-)
-from paperroute.core.patterns import PatternStop, TripPattern
-from paperroute.core.reach import StripKey
 from paperroute.core.strip_times import (
     board_departures,
     filtered,
@@ -69,6 +19,56 @@ from paperroute_device.adapters.sqlite_ro import (
     ReadOnlyDatabase,
     file_identity,
 )
+from paperroute_transit.adapters.alert_rows import (
+    LineMemory,
+    alert_places,
+    read_trainlink,
+)
+from paperroute_transit.adapters.calendar_rows import (
+    SERVICE_DAY_LENGTH,
+    read_holidays,
+    service_span,
+)
+from paperroute_transit.adapters.carry_on_rows import (
+    CARRY_ONS,
+    carry_on_departure,
+    first_to_arrive,
+)
+from paperroute_transit.adapters.departure_rows import (
+    DEPARTURES,
+    WHOLE_STOP,
+    to_departure,
+)
+from paperroute_transit.adapters.pattern_rows import (
+    JOINED_TRIPS,
+    LABELS_BY_ALIAS,
+    LABELS_BY_TRIP,
+    PATTERN_STOPS,
+    RUNNING_DAYS,
+    pattern_of,
+)
+from paperroute_transit.core.alert_model import AlertPlaces
+from paperroute_transit.core.geo import (
+    MetreBox,
+    Point,
+    Shape,
+    to_lonlat,
+    to_metres,
+    unpack_shape,
+)
+from paperroute_transit.core.model import (
+    HIDDEN_HEADSIGNS,
+    SYDNEY,
+    Departure,
+    Mode,
+    Pin,
+    ServiceSpan,
+    StopPlace,
+    service_epoch,
+    service_seconds,
+)
+from paperroute_transit.core.patterns import PatternStop, TripPattern
+from paperroute_transit.core.reach import StripKey
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/timetable.db')
 CHUNK: Final[int] = 500

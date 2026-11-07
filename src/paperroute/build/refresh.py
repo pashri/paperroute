@@ -11,14 +11,12 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.adapters.tfnsw import BASE_URL
-from paperroute.build.gtfs_files import Source
 from paperroute.build.handoff import (
     HANDOFF_NAME,
     Fetched,
     Handoff,
     RefreshTail,
 )
-from paperroute.build.layout import Layout
 from paperroute.build.sources import (
     SOURCES,
     SourceSpec,
@@ -45,6 +43,8 @@ from paperroute.build.timetable import (
 )
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from paperroute_device.rss import max_rss_mb
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.layout import Layout
 
 TIMEOUT_S: Final[float] = 60
 MIN_DAYS_LEFT: Final[int] = 7

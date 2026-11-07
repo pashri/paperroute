@@ -8,10 +8,7 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.adapters.tiles_db import SqliteTileRepository
-from paperroute.build.tile_store import TileWriter
 from paperroute.core.connection_view import PairRow
-from paperroute.core.geo import Point, to_metres
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
@@ -22,16 +19,7 @@ from paperroute.core.map_view import (
     TripMarks,
     screen_point,
 )
-from paperroute.core.model import Mode
 from paperroute.core.stop_view import Pill, Row, empty_text
-from paperroute.core.tiles import (
-    CITY,
-    TILE,
-    ZOOMS,
-    TileVariant,
-    tile_of,
-    to_pixels,
-)
 from paperroute.render.chrome import BANNER, badge, header
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_view import (
@@ -60,7 +48,6 @@ from paperroute.render.markers import (
     place,
 )
 from paperroute.render.stop_view import WIDEST_COUNT
-from paperroute.render.tile_codec import GREYS, pack_bits, pack_grey
 from paperroute_device.render.canvas import (
     HEIGHT,
     INK,
@@ -71,6 +58,19 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER
+from paperroute_transit.adapters.tiles_db import SqliteTileRepository
+from paperroute_transit.build.tile_store import TileWriter
+from paperroute_transit.core.geo import Point, to_metres
+from paperroute_transit.core.model import Mode
+from paperroute_transit.core.tiles import (
+    CITY,
+    TILE,
+    ZOOMS,
+    TileVariant,
+    tile_of,
+    to_pixels,
+)
+from paperroute_transit.render.tile_codec import GREYS, pack_bits, pack_grey
 
 MPP = 8
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)

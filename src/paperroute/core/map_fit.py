@@ -5,10 +5,10 @@ from dataclasses import replace
 from functools import partial
 from typing import Final
 
-from paperroute.core.geo import Point
 from paperroute.core.map_view import DEFAULT_ZOOM, MAP_HEIGHT, MapInputs
-from paperroute.core.ridden import ridden_stops, stops_window
-from paperroute.core.tiles import ZOOMS
+from paperroute_transit.core.geo import Point
+from paperroute_transit.core.ridden import ridden_stops, stops_window
+from paperroute_transit.core.tiles import ZOOMS
 
 CREDIT_ROOM: Final[int] = 28  # pixels kept clear above the map's bottom
 BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top

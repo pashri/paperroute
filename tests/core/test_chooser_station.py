@@ -38,7 +38,6 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.model import Pin, RouteKind, shifted
 from paperroute.core.places import feeds_of
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import step
@@ -46,6 +45,7 @@ from paperroute.core.state_model import State
 from paperroute.core.stop_view import HORIZON
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, begun, pin_at, place
+from paperroute_transit.core.model import Pin, RouteKind, shifted
 from tests.core.chooser_walks import (
     NEXT,
     OPEN,

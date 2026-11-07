@@ -8,18 +8,6 @@ from typing import Final
 import pytest
 from hypothesis import given
 
-from paperroute.core.geo import Point
-from paperroute.core.model import SYDNEY, RouteKind, StopPlace
-from paperroute.core.reach import (
-    Reach,
-    ReachInput,
-    RowKind,
-    RunTail,
-    StripKey,
-    build_reach,
-    cut_to_line,
-    every_route,
-)
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_model import StripInputs
 from paperroute.core.strip_view import build_strip_view
@@ -36,6 +24,18 @@ from paperroute_testkit.core.reach_factories import (
     reach_of,
     tail,
     train_reach,
+)
+from paperroute_transit.core.geo import Point
+from paperroute_transit.core.model import SYDNEY, RouteKind, StopPlace
+from paperroute_transit.core.reach import (
+    Reach,
+    ReachInput,
+    RowKind,
+    RunTail,
+    StripKey,
+    build_reach,
+    cut_to_line,
+    every_route,
 )
 
 STANMORE: Final[str] = '204810'

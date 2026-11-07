@@ -6,7 +6,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.adapters.tiles_db import NullTiles
 from paperroute.app_render import MapRenderer, drawing
 from paperroute.core.connection_map import build_connection_map
 from paperroute.core.connection_strip import (
@@ -21,6 +20,7 @@ from paperroute_device.render.canvas import HEIGHT, INK, PAPER
 from paperroute_device.render.frame import HEADER
 from paperroute_testkit.core.connection_factories import WORK, at
 from paperroute_testkit.core.factories import STALE_LIMIT
+from paperroute_transit.adapters.tiles_db import NullTiles
 from tests.core.test_connection_map import SHAPED, inputs_at
 from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
 

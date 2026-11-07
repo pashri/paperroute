@@ -9,9 +9,9 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.core.model import RouteKind, StopPlace
 from paperroute.core.pin_choices import StopMatch
 from paperroute_testkit.fake_pins import FakePinOptions
+from paperroute_transit.core.model import RouteKind, StopPlace
 from tests.adapters.test_web_device import Device
 
 Client = TestClient[web.Request, web.Application]

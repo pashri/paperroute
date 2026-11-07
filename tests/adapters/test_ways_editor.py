@@ -15,7 +15,6 @@ from paperroute.adapters.ways_editor import (
     ways_draft,
     ways_query,
 )
-from paperroute.core.model import Change, Way
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
     CONSTITUTION,
@@ -24,6 +23,7 @@ from paperroute_testkit.core.connection_factories import (
     WORK,
     WORK_CHANGE,
 )
+from paperroute_transit.core.model import Change, Way
 from tests.adapters.test_connection_editor import OPTIONS
 
 

@@ -8,7 +8,7 @@ from types import MappingProxyType
 
 from paperroute.core.connection_model import TripKey, trip_key, way_legs
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import Departure, Pin, Way, ticked_ways
+from paperroute_transit.core.model import Departure, Pin, Way, ticked_ways
 
 type LegKey = tuple[str, str]
 

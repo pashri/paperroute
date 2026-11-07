@@ -3,7 +3,6 @@
 from datetime import datetime
 from typing import Final
 
-from paperroute.core.model import SYDNEY
 from paperroute.core.panel_views import (
     MENU_VISIBLE,
     DeviceView,
@@ -23,6 +22,7 @@ from paperroute_device.core.device_model import (
     WifiStatus,
 )
 from paperroute_device.core.text import DOT, clock_text
+from paperroute_transit.core.model import SYDNEY
 
 LOCAL_NAME: Final[str] = 'paperroute.local'
 UNKNOWN: Final[str] = '-'

@@ -15,7 +15,8 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.build.catalogue import (
+from paperroute.build.timetable import Window, build_timetable, create_schema
+from paperroute_transit.build.catalogue import (
     CATALOGUE_SCHEMA,
     Entry,
     bucket_of,
@@ -26,8 +27,8 @@ from paperroute.build.catalogue import (
     merged_routes,
     route_order,
 )
-from paperroute.build.gtfs_files import Source
-from paperroute.build.route_tags import (
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.route_tags import (
     CENTRES,
     TAG_MAX,
     CatalogueRoute,
@@ -35,14 +36,13 @@ from paperroute.build.route_tags import (
     short_tag,
     tags_of,
 )
-from paperroute.build.runs import RUN_SCHEMA
-from paperroute.build.timetable import Window, build_timetable, create_schema
-from paperroute.core.geo import Point, to_metres
-from paperroute.core.model import RouteKind
+from paperroute_transit.build.runs import RUN_SCHEMA
+from paperroute_transit.core.geo import Point, to_metres
+from paperroute_transit.core.model import RouteKind
 from tests.build.network_feed import EAST_WEST, network_feed
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
-LOGGER: Final[str] = 'paperroute.build.route_tags'
+LOGGER: Final[str] = 'paperroute_transit.build.route_tags'
 FAR: Final[Point] = to_metres(lon=146.0, lat=-34.3)
 PLACES: Final[tuple[str, ...]] = (
     'Alpha', 'Bravo', 'Charlie', 'Delta Heights', 'Campbelltown North',

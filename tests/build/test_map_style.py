@@ -21,8 +21,8 @@ from paperroute.build.map_style import (
     road_style,
     transit_style,
 )
-from paperroute.core.tiles import STATION_ZOOMS, SUBURB_ZOOMS, ZOOMS
 from paperroute_device.render.canvas import INK, PAPER, Face
+from paperroute_transit.core.tiles import STATION_ZOOMS, SUBURB_ZOOMS, ZOOMS
 
 
 def test_minor_roads_hide_at_city_zoom() -> None:

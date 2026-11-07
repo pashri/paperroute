@@ -12,10 +12,10 @@ from paperroute.adapters.web_pins import PinsPages
 from paperroute.adapters.web_suggest import SuggestPages
 from paperroute.adapters.web_ways import WaysPages
 from paperroute.core.messages import Event
-from paperroute.core.model import SYDNEY
 from paperroute.observers import PinsSeen
 from paperroute.planner_port import TripPlanner
 from paperroute.ports import PinOptions
+from paperroute_transit.core.model import SYDNEY
 
 
 class BoardPages(Protocol):

@@ -10,7 +10,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.build.features import FeatureStore, load_features
 from paperroute.build.labels import TEXT_MARGIN
 from paperroute.build.map_style import (
     DARK,
@@ -27,23 +26,6 @@ from paperroute.build.tile_draw import (
     draw_window,
     render_tile,
 )
-from paperroute.build.tile_store import PlacedLabel
-from paperroute.core.geo import MetreBox, to_metres
-from paperroute.core.tiles import (
-    LABEL_REACH,
-    TILE,
-    LabelKind,
-    from_pixels,
-    tile_of,
-    to_pixels,
-)
-from paperroute.render.tile_codec import (
-    GREYS,
-    diffuse,
-    pack_bits,
-    quantise4,
-    unpack_grey,
-)
 from paperroute_device.render.canvas import (
     INK,
     PAPER,
@@ -52,6 +34,24 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
+from paperroute_transit.build.features import FeatureStore, load_features
+from paperroute_transit.build.tile_store import PlacedLabel
+from paperroute_transit.core.geo import MetreBox, to_metres
+from paperroute_transit.core.tiles import (
+    LABEL_REACH,
+    TILE,
+    LabelKind,
+    from_pixels,
+    tile_of,
+    to_pixels,
+)
+from paperroute_transit.render.tile_codec import (
+    GREYS,
+    diffuse,
+    pack_bits,
+    quantise4,
+    unpack_grey,
+)
 
 FRAME_HALF: Final[float] = 800.0  # metres
 SEAM_MPP: Final[int] = 3

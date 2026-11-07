@@ -4,8 +4,6 @@ from collections.abc import Sequence
 from dataclasses import replace
 
 from paperroute.core.map_view import Marker
-from paperroute.core.model import StopPlace
-from paperroute.core.reach import Reach, ReachRow, RowKind
 from paperroute.core.reach_exits import exit_name
 from paperroute.core.stop_view import clock_text
 from paperroute.core.strip_badges import (
@@ -53,6 +51,8 @@ from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_times import TripInputs, shown_item, trip_text
 from paperroute.core.strip_vehicles import vehicle_markers
 from paperroute_device.core.text import DOT
+from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.reach import Reach, ReachRow, RowKind
 
 
 def line_reach(*, line: Sequence[StopPlace]) -> Reach:

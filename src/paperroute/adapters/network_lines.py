@@ -9,10 +9,10 @@ from typing import Final, Protocol
 
 from paperroute.adapters.timetable_db import to_point
 from paperroute.core.chooser import Choice, Column, Level
-from paperroute.core.model import RouteKind, StopPlace, until_revisit
-from paperroute.core.reach import RunTail, StripKey, line_key_of
 from paperroute.core.reach_exits import exit_leads, found_exits, grouped_exits
-from paperroute.core.reach_layout import LineExit
+from paperroute_transit.core.model import RouteKind, StopPlace, until_revisit
+from paperroute_transit.core.reach import RunTail, StripKey, line_key_of
+from paperroute_transit.core.reach_layout import LineExit
 
 LINE_TABLES: Final[tuple[str, ...]] = ('line_stations', 'line_aliases')
 EXIT_TABLES: Final[tuple[str, ...]] = ('line_exits',)

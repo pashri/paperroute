@@ -15,7 +15,6 @@ from aiohttp.test_utils import TestClient, TestServer
 from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.messages import Event, PinSaved
-from paperroute.core.model import SYDNEY, RouteKind, StopPlace
 from paperroute.core.pin_choices import ChangeStop, StopMatch
 from paperroute.core.trip_search import Journey, JourneyLeg
 from paperroute.observers import PinsSeen
@@ -27,6 +26,7 @@ from paperroute_testkit.core.connection_factories import (
 from paperroute_testkit.core.factories import place
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_testkit.fakes import FakeTripPlanner
+from paperroute_transit.core.model import SYDNEY, RouteKind, StopPlace
 from tests.adapters.test_web_device import Device
 
 Client = TestClient[web.Request, web.Application]

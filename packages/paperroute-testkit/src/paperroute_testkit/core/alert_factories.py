@@ -3,8 +3,8 @@
 from datetime import datetime
 from typing import Final
 
-from paperroute.core.alert_model import Alert, Informed, Period
-from paperroute.core.model import SYDNEY, Pin, RouteKind, StopPlace
+from paperroute_transit.core.alert_model import Alert, Informed, Period
+from paperroute_transit.core.model import SYDNEY, Pin, RouteKind, StopPlace
 
 
 def sydney(

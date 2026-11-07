@@ -1115,8 +1115,7 @@ dev = [
     { name = "pytest-cov" },
 ]
 tiles = [
-    { name = "osmium" },
-    { name = "shapely" },
+    { name = "paperroute-transit", extra = ["tiles"] },
 ]
 
 [package.metadata]
@@ -1147,10 +1146,7 @@ dev = [
     { name = "pytest-asyncio", specifier = ">=0.25" },
     { name = "pytest-cov", specifier = ">=6.0" },
 ]
-tiles = [
-    { name = "osmium", specifier = ">=4.3" },
-    { name = "shapely", specifier = ">=2.2" },
-]
+tiles = [{ name = "paperroute-transit", extras = ["tiles"], editable = "packages/paperroute-transit" }]
 
 [[package]]
 name = "paperroute-device"
@@ -1216,11 +1212,20 @@ dependencies = [
     { name = "paperroute-device" },
 ]
 
+[package.optional-dependencies]
+tiles = [
+    { name = "osmium" },
+    { name = "shapely" },
+]
+
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.3" },
+    { name = "osmium", marker = "extra == 'tiles'", specifier = ">=4.3" },
     { name = "paperroute-device", editable = "packages/paperroute-device" },
+    { name = "shapely", marker = "extra == 'tiles'", specifier = ">=2.2" },
 ]
+provides-extras = ["tiles"]
 
 [[package]]
 name = "pathspec"

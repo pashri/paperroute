@@ -14,7 +14,6 @@ from paperroute.core.connection_map import (
     leg_line,
 )
 from paperroute.core.connection_model import way_legs
-from paperroute.core.geo import Point, Shape, make_shape
 from paperroute.core.map_fit import (
     BANNER_ROOM,
     CREDIT_ROOM,
@@ -30,15 +29,11 @@ from paperroute.core.map_view import (
     MapView,
 )
 from paperroute.core.messages import DeparturesLoaded, LoadShapes
-from paperroute.core.model import Change, Departure, Pin, StopPlace, Way
-from paperroute.core.patterns import PatternStop, TripPattern
-from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.rides import rides_of
 from paperroute.core.saved import ConnectionMap, LiveView
 from paperroute.core.state import step
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.stop_view import empty_text
-from paperroute.core.tiles import ZOOMS
 from paperroute_testkit.core.connection_factories import (
     HOLLIS,
     LEG1,
@@ -58,6 +53,17 @@ from paperroute_testkit.core.factories import (
     snapshot,
     vehicle,
 )
+from paperroute_transit.core.geo import Point, Shape, make_shape
+from paperroute_transit.core.model import (
+    Change,
+    Departure,
+    Pin,
+    StopPlace,
+    Way,
+)
+from paperroute_transit.core.patterns import PatternStop, TripPattern
+from paperroute_transit.core.positions import PositionsSnapshot
+from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_connection_screens import started
 from tests.core.test_connection_strip import CHAINS, STOP
 

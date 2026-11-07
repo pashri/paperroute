@@ -9,8 +9,8 @@ from paperroute.core.feeds import (
     feeds_near,
     position_feeds,
 )
-from paperroute.core.geo import MetreBox, to_metres
-from paperroute.core.model import Mode
+from paperroute_transit.core.geo import MetreBox, to_metres
+from paperroute_transit.core.model import Mode
 
 
 def box_around(*, lon: float, lat: float, half: float = 1000) -> MetreBox:

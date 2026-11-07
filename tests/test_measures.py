@@ -5,10 +5,10 @@ from typing import Final
 
 import pytest
 
-from paperroute.core.geo import Point, Shape, make_shape
-from paperroute.core.model import Mode
-from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.measures import StopMeasures
+from paperroute_transit.core.geo import Point, Shape, make_shape
+from paperroute_transit.core.model import Mode
+from paperroute_transit.core.patterns import PatternStop, TripPattern
 
 LINE: Final[Shape] = make_shape(
     shape_id='s1', points=[(0.0, 0.0), (300.0, 0.0)],

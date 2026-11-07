@@ -5,19 +5,19 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from typing import Final
 
-from paperroute.core.alert_model import AlertsState
-from paperroute.core.auto_model import AutoState
 from paperroute.core.chains import Legs
 from paperroute.core.chooser import ChooserState
 from paperroute.core.map_state import MapState
 from paperroute.core.messages import ScreenView
-from paperroute.core.model import Departure, Pin, ServiceSpan, shifted
-from paperroute.core.reach import Reach, StripKey
-from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import LiveView, Quota, Saved, Settings
 from paperroute.core.stop_view import HORIZON
 from paperroute.core.strip_model import TripDay
 from paperroute_device.core.device_model import Panel, PowerAction
+from paperroute_transit.core.alert_model import AlertsState
+from paperroute_transit.core.auto_model import AutoState
+from paperroute_transit.core.model import Departure, Pin, ServiceSpan, shifted
+from paperroute_transit.core.reach import Reach, StripKey
+from paperroute_transit.core.realtime import RealtimeSnapshot
 
 POLL_EVERY: Final[timedelta] = timedelta(seconds=30)
 RELOAD_BEFORE: Final[timedelta] = timedelta(minutes=30)

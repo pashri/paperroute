@@ -7,13 +7,16 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.core.connection_view import PairRow
-from paperroute.core.geo import Point, Shape
-from paperroute.core.model import Departure
-from paperroute.core.patterns import TripPattern, timetable_point
-from paperroute.core.positions import PositionsSnapshot, VehiclePosition
-from paperroute.core.ridden import route_stops, stops_window
 from paperroute.core.stop_view import NOT_PINNED, PinTag, Row, StopView
-from paperroute.core.tiles import ZOOMS, to_pixels
+from paperroute_transit.core.geo import Point, Shape
+from paperroute_transit.core.model import Departure
+from paperroute_transit.core.patterns import TripPattern, timetable_point
+from paperroute_transit.core.positions import (
+    PositionsSnapshot,
+    VehiclePosition,
+)
+from paperroute_transit.core.ridden import route_stops, stops_window
+from paperroute_transit.core.tiles import ZOOMS, to_pixels
 
 MAP_WIDTH: Final[int] = 520
 MAP_HEIGHT: Final[int] = 440

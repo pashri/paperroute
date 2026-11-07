@@ -6,16 +6,6 @@ from typing import Final
 
 from paperroute.core.live import LiveDeparture
 from paperroute.core.messages import Tick
-from paperroute.core.model import CarryOn, StopPlace
-from paperroute.core.patterns import TripPattern
-from paperroute.core.reach import (
-    Reach,
-    ReachInput,
-    RowKind,
-    RunTail,
-    build_reach,
-)
-from paperroute.core.reach_layout import LineExit
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
@@ -44,6 +34,16 @@ from paperroute_testkit.core.strip_factories import (
     trains,
     turn,
 )
+from paperroute_transit.core.model import CarryOn, StopPlace
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.reach import (
+    Reach,
+    ReachInput,
+    RowKind,
+    RunTail,
+    build_reach,
+)
+from paperroute_transit.core.reach_layout import LineExit
 
 FIXED: Final[tuple[str, ...]] = ('SP', 'ER', 'MV', 'CE', 'TH', 'WY', 'CQ')
 CITY: Final[tuple[str, ...]] = (

@@ -7,23 +7,23 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.tiles_db import SqliteTileRepository
-from paperroute.build.features import to_placed
 from paperroute.build.labels import label_box
-from paperroute.build.tile_store import TILE_FORMAT
 from paperroute.build.tiles import TileBuildConfig, TileReport, build_tiles
-from paperroute.core.geo import to_metres
-from paperroute.core.tiles import (
+from paperroute_testkit.build.osm_factory import (
+    TIMESTAMP,
+    TINY_BBOX,
+    write_tiny_osm,
+)
+from paperroute_transit.adapters.tiles_db import SqliteTileRepository
+from paperroute_transit.build.features import to_placed
+from paperroute_transit.build.tile_store import TILE_FORMAT
+from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.tiles import (
     TILE_STYLE,
     ZOOMS,
     TileVariant,
     tile_of,
     to_pixels,
-)
-from paperroute_testkit.build.osm_factory import (
-    TIMESTAMP,
-    TINY_BBOX,
-    write_tiny_osm,
 )
 from tests.build.tile_inputs import STOPS, write_timetable
 

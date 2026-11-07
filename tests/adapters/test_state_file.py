@@ -20,15 +20,6 @@ from paperroute.adapters.state_migrations import (
     SCHEMA_VERSION,
     regional_to_coach,
 )
-from paperroute.core.auto_model import AutoState, Before, Occurrence
-from paperroute.core.model import (
-    SYDNEY,
-    AutoWindow,
-    Pin,
-    RouteKind,
-    StopPlace,
-    Way,
-)
 from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
@@ -50,6 +41,15 @@ from paperroute_device.core.device_settings import (
 )
 from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE
 from paperroute_testkit.core.factories import pin_at
+from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
+from paperroute_transit.core.model import (
+    SYDNEY,
+    AutoWindow,
+    Pin,
+    RouteKind,
+    StopPlace,
+    Way,
+)
 from tests.core.test_auto_pins import is_shown, started, ticked, trusted
 
 ROTATED: Final[Settings] = Settings(device=DeviceSettings(rotate=True))

@@ -19,12 +19,12 @@ from paperroute.core.chooser import (
 )
 from paperroute.core.chooser_station import knob_pressed
 from paperroute.core.messages import ColumnLoaded, Event, LineLoaded
-from paperroute.core.model import Departure, Pin, RouteKind, StopPlace
-from paperroute.core.reach import Reach, ReachRow, RowKind, StripKey
 from paperroute.core.state_model import RELOAD_BEFORE
 from paperroute.core.stop_view import HORIZON
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_testkit.core.factories import START, departure, place
+from paperroute_transit.core.model import Departure, Pin, RouteKind, StopPlace
+from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 
 KINDS: Final[Column] = Column(
     level=Level.KIND,

@@ -18,7 +18,6 @@ from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import FeedBackingOff, JoinedBody
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.state_file import JsonStateRepository
-from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app import (
     MapRenderer,
@@ -36,16 +35,12 @@ from paperroute.app_effects import StateSaver, loaded_patterns
 from paperroute.app_outputs import carry_out, draw_pending
 from paperroute.app_render import drawing
 from paperroute.app_work import fetch
-from paperroute.build.gtfs_files import Source
 from paperroute.build.map_style import LIGHT
-from paperroute.build.tile_store import TileWriter
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.alert_model import AlertsFetched
 from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
 from paperroute.core.cycle import CYCLE_WAIT
 from paperroute.core.device import NOTICE, on_reset
 from paperroute.core.feeds import FeedKind
-from paperroute.core.geo import Point, Shape, make_shape
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
 from paperroute.core.messages import (
     ApiKeyChanged,
@@ -73,10 +68,8 @@ from paperroute.core.messages import (
     TimetableRebuilt,
     TimetableSeen,
 )
-from paperroute.core.model import Departure, Mode, Pin, StopPlace
 from paperroute.core.panel_screens import menu_view
 from paperroute.core.panel_views import MenuView, SleepView
-from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.places import shown
 from paperroute.core.saved import (
     DEFAULT_SAVED,
@@ -88,15 +81,6 @@ from paperroute.core.saved import (
 from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import LOADING_WAIT
 from paperroute.core.stop_view import NOT_PINNED
-from paperroute.core.tiles import (
-    TILE,
-    ZOOMS,
-    LabelKind,
-    StreetLabel,
-    TileVariant,
-    tile_of,
-    to_pixels,
-)
 from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
@@ -106,7 +90,6 @@ from paperroute.render.map_corners import NOT_INSTALLED, credit_box, scale_box
 from paperroute.render.notice import draw_notice_view
 from paperroute.render.panel import draw_panel_view
 from paperroute.render.sleep import with_sleep_band
-from paperroute.render.tile_codec import pack_bits, pack_grey
 from paperroute_device.adapters.resets import FileResets
 from paperroute_device.core.device_model import (
     DeviceStatus,
@@ -152,6 +135,26 @@ from paperroute_testkit.fakes import (
     SyncingClock,
 )
 from paperroute_testkit.hardware_fakes import FrameRecorder
+from paperroute_transit.adapters.tiles_db import (
+    NullTiles,
+    SqliteTileRepository,
+)
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.tile_store import TileWriter
+from paperroute_transit.core.alert_model import AlertsFetched
+from paperroute_transit.core.geo import Point, Shape, make_shape
+from paperroute_transit.core.model import Departure, Mode, Pin, StopPlace
+from paperroute_transit.core.patterns import PatternStop, TripPattern
+from paperroute_transit.core.tiles import (
+    TILE,
+    ZOOMS,
+    LabelKind,
+    StreetLabel,
+    TileVariant,
+    tile_of,
+    to_pixels,
+)
+from paperroute_transit.render.tile_codec import pack_bits, pack_grey
 
 
 @dataclass

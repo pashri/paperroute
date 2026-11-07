@@ -36,7 +36,6 @@ from paperroute.render.markers import (
     square,
 )
 from paperroute.render.pair_list import draw_pair_list
-from paperroute.render.tile_codec import THRESHOLD, quantise4
 from paperroute.render.trip_marks import draw_trip_points
 from paperroute_device.render.canvas import (
     HEIGHT,
@@ -50,6 +49,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER, wrap
+from paperroute_transit.render.tile_codec import THRESHOLD, quantise4
 
 SIDEBAR_LEFT: Final[int] = 520
 RULE_WIDTH: Final[int] = 3

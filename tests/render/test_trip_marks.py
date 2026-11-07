@@ -5,10 +5,7 @@ from typing import Final
 
 import numpy as np
 
-from paperroute.adapters.tiles_db import NullTiles
-from paperroute.core.geo import Point
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase, TripMarks
-from paperroute.core.tiles import TileVariant
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.trip_marks import (
     draw_trip_ends,
@@ -17,6 +14,9 @@ from paperroute.render.trip_marks import (
     draw_trip_points,
 )
 from paperroute_device.render.canvas import INK, PAPER, Canvas
+from paperroute_transit.adapters.tiles_db import NullTiles
+from paperroute_transit.core.geo import Point
+from paperroute_transit.core.tiles import TileVariant
 
 MPP: Final[int] = 8
 CENTRE: Final[Point] = (0.0, 0.0)

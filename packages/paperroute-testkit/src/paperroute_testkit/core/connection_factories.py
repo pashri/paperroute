@@ -6,7 +6,8 @@ from typing import Final
 
 from paperroute.core.chains import Chain, Legs, chains_of, leg_key
 from paperroute.core.connection_model import way_legs
-from paperroute.core.model import (
+from paperroute_testkit.core.factories import departure, live, place
+from paperroute_transit.core.model import (
     SYDNEY,
     Change,
     Departure,
@@ -15,7 +16,6 @@ from paperroute.core.model import (
     StopPlace,
     Way,
 )
-from paperroute_testkit.core.factories import departure, live, place
 
 
 def at(hour: int, minute: int, *, day: int = 27) -> datetime:

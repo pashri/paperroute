@@ -10,8 +10,8 @@ from paperroute.core.chooser import (
     turned,
 )
 from paperroute.core.chooser_view import build_chooser_view, route_title
-from paperroute.core.model import Pin
 from paperroute_testkit.core.factories import place
+from paperroute_transit.core.model import Pin
 from tests.core.chooser_walks import (
     BUS_606,
     GROUPS,

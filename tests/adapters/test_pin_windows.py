@@ -15,7 +15,7 @@ from paperroute.adapters.pin_windows import (
     windows_fieldset,
     windows_of,
 )
-from paperroute.core.model import AutoWindow
+from paperroute_transit.core.model import AutoWindow
 
 ROW: Final[WindowRow] = WindowRow(
     days=frozenset({0, 4}), start='07:30', end='09:00',

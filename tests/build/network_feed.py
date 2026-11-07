@@ -3,8 +3,8 @@
 from pathlib import Path
 from typing import Final
 
+from paperroute_testkit.build.feed_zip import write_feed
 from tests.build.feeds import DAILY, stop_times
-from tests.helpers import write_feed
 
 LAT: Final[float] = -33.88
 LON: Final[float] = 151.0

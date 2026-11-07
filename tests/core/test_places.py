@@ -3,10 +3,8 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from paperroute.core.geo import make_shape
 from paperroute.core.map_state import area_box
 from paperroute.core.messages import MapData, ModesLoaded
-from paperroute.core.model import Mode, Pin
 from paperroute.core.places import (
     flipped,
     is_stale,
@@ -17,11 +15,9 @@ from paperroute.core.places import (
     toggled,
     with_place,
 )
-from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved
 from paperroute.core.state import initial_state
 from paperroute.core.state_model import Board, State
-from paperroute.core.tiles import ZOOMS
 from paperroute_testkit.core.factories import (
     START,
     departure,
@@ -29,6 +25,10 @@ from paperroute_testkit.core.factories import (
     place,
     snapshot,
 )
+from paperroute_transit.core.geo import make_shape
+from paperroute_transit.core.model import Mode, Pin
+from paperroute_transit.core.realtime import RealtimeSnapshot
+from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_map_requests import fitted_on
 
 FIRST = pin_at('first', x=100.0)

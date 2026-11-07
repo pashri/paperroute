@@ -4,11 +4,8 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import Final
 
-from paperroute.core.geo import Point
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import DeparturesLoaded, Effect, Event
-from paperroute.core.model import Departure, Mode, Pin, RouteKind, StopPlace
-from paperroute.core.reach import Reach, ReachRow, RowKind, StripKey
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
@@ -28,6 +25,15 @@ from paperroute_testkit.core.factories import (
     train,
 )
 from paperroute_testkit.core.steps import step_answered
+from paperroute_transit.core.geo import Point
+from paperroute_transit.core.model import (
+    Departure,
+    Mode,
+    Pin,
+    RouteKind,
+    StopPlace,
+)
+from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 
 WEST: Final[tuple[str, ...]] = ('C', 'J', 'W1', 'W2')
 SOUTH: Final[tuple[str, ...]] = ('C', 'J', 'R1', 'R2', 'R3')

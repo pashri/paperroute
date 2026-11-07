@@ -11,16 +11,16 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.carry_on_rows import (
+from paperroute.adapters.timetable_db import SqliteTimetableRepository
+from paperroute.build.timetable import Window, build_timetable
+from paperroute_testkit.core.factories import START, departure
+from paperroute_transit.adapters.carry_on_rows import (
     CARRY_ONS,
     MAX_HOPS,
     first_to_arrive,
 )
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.build.gtfs_files import Source
-from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.model import SYDNEY, CarryOn, Departure, TripFacts
-from paperroute_testkit.core.factories import START, departure
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.model import SYDNEY, CarryOn, Departure, TripFacts
 from tests.build.network_feed import network_feed
 
 DAY: Final[date] = date(2026, 10, 6)

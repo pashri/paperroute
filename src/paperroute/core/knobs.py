@@ -5,7 +5,6 @@ from dataclasses import replace
 from paperroute.core.alert_state import has_alerts
 from paperroute.core.connection import live_chains
 from paperroute.core.map_state import zoomed
-from paperroute.core.model import is_connection
 from paperroute.core.places import flipped, shown, toggled
 from paperroute.core.saved import LIVE_VIEWS, LiveView
 from paperroute.core.state_model import State
@@ -19,6 +18,7 @@ from paperroute_hardware.core.knob_events import (
     KnobPressed,
     KnobTurned,
 )
+from paperroute_transit.core.model import is_connection
 
 
 def switched(*, state: State) -> State:

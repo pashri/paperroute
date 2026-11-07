@@ -2,8 +2,6 @@
 
 from paperroute.core.chooser import Choice, Level
 from paperroute.core.chooser_view import ChooserView, ColumnView
-from paperroute.core.model import CarryOn, Mode
-from paperroute.core.reach import RowKind
 from paperroute.core.stop_view import Pill, PinTag, Row, StopView
 from paperroute.core.strip_model import (
     ROW_H,
@@ -12,6 +10,8 @@ from paperroute.core.strip_model import (
     StripRow,
     StripView,
 )
+from paperroute_transit.core.model import CarryOn, Mode
+from paperroute_transit.core.reach import RowKind
 
 
 def stop_row(

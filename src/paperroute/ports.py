@@ -8,10 +8,13 @@ from typing import Protocol
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.alert_model import AlertPlaces
 from paperroute.core.chooser import Choice, ChooserPath, Column
-from paperroute.core.geo import MetreBox, Shape
-from paperroute.core.model import (
+from paperroute.core.pin_choices import ChangeStop, StopMatch
+from paperroute.core.saved import Saved, Settings
+from paperroute_device.ports import DeviceObserver
+from paperroute_transit.core.alert_model import AlertPlaces
+from paperroute_transit.core.geo import MetreBox, Shape
+from paperroute_transit.core.model import (
     Departure,
     Mode,
     Pin,
@@ -19,13 +22,10 @@ from paperroute.core.model import (
     ServiceSpan,
     StopPlace,
 )
-from paperroute.core.patterns import TripPattern
-from paperroute.core.pin_choices import ChangeStop, StopMatch
-from paperroute.core.reach import ReachInput, StripKey
-from paperroute.core.route_colours import RouteColour
-from paperroute.core.saved import Saved, Settings
-from paperroute.core.tiles import LabelKind, StreetLabel, TileVariant
-from paperroute_device.ports import DeviceObserver
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.reach import ReachInput, StripKey
+from paperroute_transit.core.route_colours import RouteColour
+from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
 
 
 class TimetableRepository(Protocol):

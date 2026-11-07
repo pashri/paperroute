@@ -18,7 +18,6 @@ from paperroute.core.messages import (
     WifiJoined,
     WifiJoinFailed,
 )
-from paperroute.core.model import SYDNEY
 from paperroute.core.panel_views import WifiSetupView
 from paperroute.core.state_model import State
 from paperroute_device.core.device_model import (
@@ -28,6 +27,7 @@ from paperroute_device.core.device_model import (
 )
 from paperroute_device.core.text import HINT_DOT, clock_text
 from paperroute_hardware.core.knob_events import Knob, KnobPressed
+from paperroute_transit.core.model import SYDNEY
 
 SETUP_FOR: Final[timedelta] = timedelta(minutes=10)
 SETUP_SSID: Final[str] = 'paperroute-setup'

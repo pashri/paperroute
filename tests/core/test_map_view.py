@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from paperroute.core.geo import Point, make_shape
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
@@ -25,11 +24,7 @@ from paperroute.core.map_view import (
     screen_point,
     visible,
 )
-from paperroute.core.model import Departure, Mode
-from paperroute.core.patterns import timetable_point
-from paperroute.core.positions import VehiclePosition
 from paperroute.core.stop_view import SIDEBAR_ROWS, Row, StopView
-from paperroute.core.tiles import ZOOMS
 from paperroute_testkit.core.factories import (
     START,
     calls,
@@ -38,6 +33,11 @@ from paperroute_testkit.core.factories import (
     snapshot,
     vehicle,
 )
+from paperroute_transit.core.geo import Point, make_shape
+from paperroute_transit.core.model import Departure, Mode
+from paperroute_transit.core.patterns import timetable_point
+from paperroute_transit.core.positions import VehiclePosition
+from paperroute_transit.core.tiles import ZOOMS
 
 CENTRE: Point = (0.0, 0.0)
 ZOOM: int = 2

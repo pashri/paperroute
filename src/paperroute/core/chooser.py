@@ -5,10 +5,10 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Final
 
-from paperroute.core.model import Departure, Pin, RouteKind, StopPlace
-from paperroute.core.reach import Reach, RowKind, StripKey
 from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import ALL_TAG
+from paperroute_transit.core.model import Departure, Pin, RouteKind, StopPlace
+from paperroute_transit.core.reach import Reach, RowKind, StripKey
 
 
 class Level(StrEnum):

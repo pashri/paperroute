@@ -9,18 +9,8 @@ import pytest
 from paperroute.core.chooser import Stage, to_row, turned_to
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import StripLoaded, TimetableSeen
-from paperroute.core.model import Pin, RouteKind
-from paperroute.core.reach import (
-    Reach,
-    ReachInput,
-    ReachRow,
-    RowKind,
-    RunTail,
-    build_reach,
-)
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state_model import State
-from paperroute.core.strip_folds import FOLD_MIN, folded
 from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import OPEN_TAG, StripMapView, StripView
 from paperroute.core.strip_view import build_strip_view, home_of, window_of
@@ -49,6 +39,16 @@ from paperroute_testkit.core.strip_factories import (
     run,
     turn,
 )
+from paperroute_transit.core.model import Pin, RouteKind
+from paperroute_transit.core.reach import (
+    Reach,
+    ReachInput,
+    ReachRow,
+    RowKind,
+    RunTail,
+    build_reach,
+)
+from paperroute_transit.core.strip_folds import FOLD_MIN, folded
 from tests.core.chooser_walks import CHOSEN_KEY, DOWN, TO_STAGE, at_to
 
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)

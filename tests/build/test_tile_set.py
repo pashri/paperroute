@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.build.tile_set import (
+from paperroute.build.timetable import SCHEMA
+from paperroute_transit.build.tile_set import (
     SEA_MARGIN_DEG,
     blocks,
     coverage,
@@ -13,9 +14,13 @@ from paperroute.build.tile_set import (
     stop_points,
     tile_set,
 )
-from paperroute.build.timetable import SCHEMA
-from paperroute.core.geo import to_lonlat, to_metres
-from paperroute.core.tiles import GRID_ORIGIN, NSW_BBOX, TILE, to_pixels
+from paperroute_transit.core.geo import to_lonlat, to_metres
+from paperroute_transit.core.tiles import (
+    GRID_ORIGIN,
+    NSW_BBOX,
+    TILE,
+    to_pixels,
+)
 
 
 def test_tile_set_covers_half_screen() -> None:

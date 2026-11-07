@@ -4,7 +4,6 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from paperroute.core.alert_match import Listed, listed_alerts
-from paperroute.core.alert_model import Alert, AlertTie, Matched, Period
 from paperroute.core.alerts_view import (
     ALERT_ROWS,
     AlertRow,
@@ -13,7 +12,6 @@ from paperroute.core.alerts_view import (
 )
 from paperroute.core.feeds import FeedKind
 from paperroute.core.messages import FetchFeed, Render, Tick
-from paperroute.core.model import Pin
 from paperroute.core.places import shown
 from paperroute.core.saved import LiveView, Lookahead
 from paperroute.core.state import step
@@ -34,6 +32,13 @@ from paperroute_testkit.core.alert_factories import (
     sydney,
 )
 from paperroute_testkit.core.steps import step_answered
+from paperroute_transit.core.alert_model import (
+    Alert,
+    AlertTie,
+    Matched,
+    Period,
+)
+from paperroute_transit.core.model import Pin
 from tests.core.test_alert_state import (
     PARRAMATTA_CENTRAL,
     STRATHFIELD_TOWN_HALL,

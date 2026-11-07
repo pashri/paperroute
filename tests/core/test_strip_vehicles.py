@@ -6,7 +6,6 @@ from datetime import timedelta
 import pytest
 
 from paperroute.core.map_view import Marker
-from paperroute.core.positions import VehiclePosition
 from paperroute.core.strip_badges import Spot
 from paperroute.core.strip_model import (
     INDENT,
@@ -28,6 +27,7 @@ from paperroute_testkit.core.factories import (
     vehicle,
 )
 from paperroute_testkit.core.strip_factories import row_named
+from paperroute_transit.core.positions import VehiclePosition
 
 
 def badge_at(

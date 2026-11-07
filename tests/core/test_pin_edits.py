@@ -13,12 +13,12 @@ from paperroute.core.messages import (
     SaveState,
     Tick,
 )
-from paperroute.core.model import AutoWindow, Pin, pin_ref
 from paperroute.core.pin_edits import on_pin_edit
 from paperroute.core.places import toggled
 from paperroute.core.state import step
 from paperroute.core.state_model import Places, State
 from paperroute_testkit.core.factories import START, departure
+from paperroute_transit.core.model import AutoWindow, Pin, pin_ref
 from tests.core.test_places import FIRST as A
 from tests.core.test_places import SECOND as B
 from tests.core.test_places import THIRD as C

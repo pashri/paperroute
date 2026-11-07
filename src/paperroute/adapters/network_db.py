@@ -18,7 +18,12 @@ from paperroute.core.chooser import (
     Column,
     Level,
 )
-from paperroute.core.model import (
+from paperroute_device.adapters.sqlite_ro import (
+    Identity,
+    ReadOnlyDatabase,
+    file_identity,
+)
+from paperroute_transit.core.model import (
     INTERCITY,
     STATION_FIRST,
     SYDNEY_FERRIES,
@@ -28,7 +33,7 @@ from paperroute.core.model import (
     StopPlace,
     until_revisit,
 )
-from paperroute.core.reach import (
+from paperroute_transit.core.reach import (
     LINE_KINDS,
     ReachInput,
     RunTail,
@@ -36,11 +41,6 @@ from paperroute.core.reach import (
     cut_to_line,
     every_route,
     merge_tails,
-)
-from paperroute_device.adapters.sqlite_ro import (
-    Identity,
-    ReadOnlyDatabase,
-    file_identity,
 )
 
 NETWORK_TABLES: Final[tuple[str, ...]] = (

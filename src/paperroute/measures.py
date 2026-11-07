@@ -5,8 +5,8 @@ from collections import OrderedDict
 from dataclasses import replace
 from typing import Final
 
-from paperroute.core.geo import Point, Shape
-from paperroute.core.patterns import TripPattern, measure
+from paperroute_transit.core.geo import Point, Shape
+from paperroute_transit.core.patterns import TripPattern, measure
 
 MAX_SHAPES: Final[int] = 64
 MAX_STOP_LISTS: Final[int] = 16  # per shape

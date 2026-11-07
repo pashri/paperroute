@@ -8,7 +8,6 @@ from typing import Final
 from paperroute.core.chains import Chain
 from paperroute.core.connection import chain_legs
 from paperroute.core.connection_view import PairRow, chain_rows, no_pair_text
-from paperroute.core.geo import Point, Shape, point_along, stop_distances
 from paperroute.core.map_fit import (
     banner_room,
     bottom_room,
@@ -25,11 +24,17 @@ from paperroute.core.map_view import (
     build_map_view,
     pin_trips,
 )
-from paperroute.core.model import Change, Departure, Pin, StopPlace
-from paperroute.core.ridden import SECOND_RIDE_WINDOW, route_stops
 from paperroute.core.rides import Ride, rides_of
 from paperroute.core.saved import ConnectionMap
-from paperroute.core.tiles import ZOOMS
+from paperroute_transit.core.geo import (
+    Point,
+    Shape,
+    point_along,
+    stop_distances,
+)
+from paperroute_transit.core.model import Change, Departure, Pin, StopPlace
+from paperroute_transit.core.ridden import SECOND_RIDE_WINDOW, route_stops
+from paperroute_transit.core.tiles import ZOOMS
 
 SIDEBAR_PAIRS: Final[int] = 4
 PANES_WIDTH: Final[int] = 800  # the whole frame, shared by change panes

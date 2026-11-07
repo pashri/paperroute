@@ -12,7 +12,6 @@ from multidict import MultiMapping
 from paperroute.adapters.web_common import asset
 from paperroute.adapters.web_pins import html_page
 from paperroute.adapters.web_ways import SUGGEST, WaysPages
-from paperroute.core.model import MAX_CHANGES, SYDNEY, StopPlace
 from paperroute.core.trip_search import (
     Journey,
     PlannerBusy,
@@ -22,6 +21,7 @@ from paperroute.core.trip_search import (
 )
 from paperroute.planner_port import TripPlanner
 from paperroute.ports import PinOptions
+from paperroute_transit.core.model import MAX_CHANGES, SYDNEY, StopPlace
 
 FAILURE: Final[str] = "Trip Planner didn't answer. Try again in a minute."
 BUSY: Final[str] = 'Trip Planner is busy. Try again in a minute.'

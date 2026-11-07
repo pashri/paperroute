@@ -26,7 +26,6 @@ from paperroute.core.messages import (
     Stop,
     WifiEvent,
 )
-from paperroute.core.model import shifted
 from paperroute.core.quota import calls_today
 from paperroute.core.saved import Settings, with_changes
 from paperroute.core.state_model import (
@@ -47,6 +46,7 @@ from paperroute_device.core.device_model import (
     PowerAction,
     ResetKind,
 )
+from paperroute_transit.core.model import shifted
 
 NOTICE: Final[dict[PowerAction, str]] = {
     PowerAction.OFF: 'Shutting down',

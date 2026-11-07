@@ -20,10 +20,13 @@ from paperroute.adapters.timetable_db import (
     SqliteTimetableRepository,
 )
 from paperroute.build.dedupe import merge_rail
-from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.geo import to_metres
-from paperroute.core.model import (
+from paperroute_device.adapters.sqlite_ro import file_identity
+from paperroute_testkit.build.feed_zip import write_feed
+from paperroute_testkit.core.factories import pin_of, place
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.model import (
     SYDNEY,
     CarryOn,
     Departure,
@@ -33,8 +36,6 @@ from paperroute.core.model import (
     StopPlace,
     TripFacts,
 )
-from paperroute_device.adapters.sqlite_ro import file_identity
-from paperroute_testkit.core.factories import pin_of, place
 from tests.build.feeds import (
     DAILY,
     STATIONS,
@@ -53,7 +54,6 @@ from tests.helpers import (
     schema_four,
     schema_three,
     slice_db,
-    write_feed,
 )
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'

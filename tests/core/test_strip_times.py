@@ -4,8 +4,6 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.core.model import CarryOn, Departure, RouteKind
-from paperroute.core.reach import StripKey
 from paperroute.core.strip_times import (
     STRIP_HOPS,
     TripInputs,
@@ -27,6 +25,8 @@ from paperroute_testkit.core.factories import (
     live,
     pattern,
 )
+from paperroute_transit.core.model import CarryOn, Departure, RouteKind
+from paperroute_transit.core.reach import StripKey
 
 TRAIN: Final[StripKey] = StripKey(
     station='C', kind=RouteKind.TRAIN, routes=(),

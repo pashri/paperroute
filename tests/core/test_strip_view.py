@@ -6,15 +6,6 @@ from datetime import datetime, timedelta
 import pytest
 
 from paperroute.core.map_view import Marker
-from paperroute.core.model import CarryOn, RouteKind, StopPlace
-from paperroute.core.reach import (
-    Reach,
-    ReachInput,
-    RowKind,
-    RunTail,
-    build_reach,
-)
-from paperroute.core.reach_layout import LineExit
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_badges import HALF_WIDE
 from paperroute.core.strip_model import (
@@ -69,6 +60,15 @@ from paperroute_testkit.core.strip_factories import (
     three_trains,
     times,
 )
+from paperroute_transit.core.model import CarryOn, RouteKind, StopPlace
+from paperroute_transit.core.reach import (
+    Reach,
+    ReachInput,
+    RowKind,
+    RunTail,
+    build_reach,
+)
+from paperroute_transit.core.reach_layout import LineExit
 
 
 def slot_of(*, row: StripRow) -> int:

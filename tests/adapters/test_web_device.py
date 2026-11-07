@@ -28,7 +28,6 @@ from paperroute.core.messages import (
     Event,
     PowerRequested,
 )
-from paperroute.core.model import SYDNEY, Mode
 from paperroute.core.panel_views import confirm_view
 from paperroute_device.core.device_model import (
     Confirm,
@@ -42,6 +41,7 @@ from paperroute_device.core.device_model import (
 )
 from paperroute_hardware.ports import PanelTimes
 from paperroute_testkit.fakes import FakeKeys
+from paperroute_transit.core.model import SYDNEY, Mode
 from tests.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]

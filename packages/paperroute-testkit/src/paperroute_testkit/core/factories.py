@@ -5,28 +5,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Final
 
-from paperroute.core.geo import Point
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import (
-    SYDNEY,
-    CarryOn,
-    Departure,
-    Mode,
-    Pin,
-    RouteKind,
-    StopPlace,
-    TripFacts,
-)
-from paperroute.core.patterns import PatternStop, TripPattern
-from paperroute.core.positions import PositionsSnapshot, VehiclePosition
-from paperroute.core.reach import (
-    Reach,
-    ReachInput,
-    RunTail,
-    StripKey,
-    build_reach,
-)
-from paperroute.core.reach_layout import LineExit
 from paperroute.core.saved import Saved
 from paperroute.core.state import initial_state
 from paperroute.core.state_model import State
@@ -38,6 +17,30 @@ from paperroute.core.stop_view import (
     build_stop_view,
 )
 from paperroute.core.strip_model import StripInputs
+from paperroute_transit.core.geo import Point
+from paperroute_transit.core.model import (
+    SYDNEY,
+    CarryOn,
+    Departure,
+    Mode,
+    Pin,
+    RouteKind,
+    StopPlace,
+    TripFacts,
+)
+from paperroute_transit.core.patterns import PatternStop, TripPattern
+from paperroute_transit.core.positions import (
+    PositionsSnapshot,
+    VehiclePosition,
+)
+from paperroute_transit.core.reach import (
+    Reach,
+    ReachInput,
+    RunTail,
+    StripKey,
+    build_reach,
+)
+from paperroute_transit.core.reach_layout import LineExit
 
 START = datetime(2026, 10, 16, 8, 0, tzinfo=SYDNEY)
 STALE_LIMIT: Final[timedelta] = timedelta(minutes=2)

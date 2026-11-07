@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Final
 
 from paperroute.core.chooser import KIND_LABELS, KIND_ORDER, Choice
-from paperroute.core.model import Pin, RouteKind, StopPlace
+from paperroute_transit.core.model import Pin, RouteKind, StopPlace
 
 NICKNAME_MAX: Final[int] = 24
 KIND_NAMES: Final[dict[RouteKind, str]] = {

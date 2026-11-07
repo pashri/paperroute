@@ -12,9 +12,9 @@ import pytest
 from paperroute.adapters.change_rows import CHANGE_COUNT, CHANGE_M
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.pin_options import SqlitePinOptions
-from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.core.model import StopPlace
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.model import StopPlace
 
 REAL = Path(__file__).parent.parent / 'fixtures' / 'real'
 

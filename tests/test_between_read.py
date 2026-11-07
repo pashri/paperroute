@@ -9,12 +9,16 @@ from typing import Final
 
 import pytest
 
-from paperroute.core.alert_model import AlertPlaces, BetweenLoaded, LoadBetween
-from paperroute.core.model import Mode, RouteKind
-from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute_testkit.app_factories import ports_of, posted_by
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import EmptyPlacedTimetable
+from paperroute_transit.core.alert_model import (
+    AlertPlaces,
+    BetweenLoaded,
+    LoadBetween,
+)
+from paperroute_transit.core.model import Mode, RouteKind
+from paperroute_transit.core.patterns import PatternStop, TripPattern
 
 STRATHFIELD_PLATFORM: Final[str] = '2135171'
 

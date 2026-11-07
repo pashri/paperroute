@@ -9,13 +9,17 @@ from google.protobuf.message import DecodeError
 from google.transit import gtfs_realtime_pb2
 
 from paperroute.adapters.tfnsw import FeedError
-from paperroute.core.geo import to_metres
-from paperroute.core.positions import (
+from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.positions import (
     PositionsSnapshot,
     VehiclePosition,
     fallback_label,
 )
-from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
+from paperroute_transit.core.realtime import (
+    RealtimeSnapshot,
+    StopUpdate,
+    TripRealtime,
+)
 
 logger = logging.getLogger(__name__)
 ENTITY_FIELD: Final[int] = 2

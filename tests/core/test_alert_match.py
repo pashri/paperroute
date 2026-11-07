@@ -22,16 +22,6 @@ from paperroute.core.alert_match import (
     time_line,
     timing_of,
 )
-from paperroute.core.alert_model import (
-    Alert,
-    AlertBanner,
-    AlertTie,
-    Informed,
-    Matched,
-    Period,
-)
-from paperroute.core.model import Departure, Mode, Pin, RouteKind
-from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute_testkit.core.alert_factories import (
     PENRITH_CENTRAL,
     RHODES,
@@ -44,6 +34,16 @@ from paperroute_testkit.core.alert_factories import (
     sydney,
 )
 from paperroute_testkit.core.factories import departure
+from paperroute_transit.core.alert_model import (
+    Alert,
+    AlertBanner,
+    AlertTie,
+    Informed,
+    Matched,
+    Period,
+)
+from paperroute_transit.core.model import Departure, Mode, Pin, RouteKind
+from paperroute_transit.core.patterns import PatternStop, TripPattern
 
 SAT_MORNING = sydney(day=24, hour=9, minute=39)
 MON_NOON = sydney(day=26, hour=12)

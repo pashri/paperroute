@@ -21,7 +21,6 @@ import pytest
 from paperroute.build import extras
 from paperroute.build import handoff as handoff_module
 from paperroute.build import swap, timetable
-from paperroute.build.gtfs_files import Source
 from paperroute.build.handoff import (
     Fetched,
     HandoffError,
@@ -32,6 +31,7 @@ from paperroute.build.handoff import (
 )
 from paperroute.build.sources import SourceState
 from paperroute.build.timetable import Window, build_timetable
+from paperroute_transit.build.gtfs_files import Source
 from tests.build.network_feed import network_feed
 
 LOCK_PROBE: Final[str] = (

@@ -9,8 +9,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.build.features import FeatureStore
-from paperroute.build.geometry import Line, merge_lines
 from paperroute.build.map_style import (
     CITY_PLACES,
     PLACE_KINDS,
@@ -22,10 +20,13 @@ from paperroute.build.map_style import (
     SUBURB_FACE,
     named_roads,
 )
-from paperroute.build.tile_set import BLOCK, blocks
-from paperroute.build.tile_store import PlacedLabel
-from paperroute.core.geo import MetreBox, Point
-from paperroute.core.tiles import (
+from paperroute_device.render.canvas import Face, text_width
+from paperroute_transit.build.features import FeatureStore
+from paperroute_transit.build.geometry import Line, merge_lines
+from paperroute_transit.build.tile_set import BLOCK, blocks
+from paperroute_transit.build.tile_store import PlacedLabel
+from paperroute_transit.core.geo import MetreBox, Point
+from paperroute_transit.core.tiles import (
     CITY,
     GRID_ORIGIN,
     POINT_HALF_HEIGHT,
@@ -39,7 +40,6 @@ from paperroute.core.tiles import (
     text_box,
     to_pixels,
 )
-from paperroute_device.render.canvas import Face, text_width
 
 BLOCK_PX: Final[int] = BLOCK * TILE
 TEXT_MARGIN: Final[int] = 6  # pixels added to the measured text width

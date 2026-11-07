@@ -7,7 +7,6 @@ from urllib.parse import urlencode
 
 from paperroute.adapters.pin_windows import DEFAULT_BUTTON
 from paperroute.adapters.web_common import asset
-from paperroute.core.model import STATION_FIRST, RouteKind, StopPlace
 from paperroute.core.pin_choices import (
     KIND_NAMES,
     NICKNAME_MAX,
@@ -15,6 +14,7 @@ from paperroute.core.pin_choices import (
     PinEditor,
     StopMatch,
 )
+from paperroute_transit.core.model import STATION_FIRST, RouteKind, StopPlace
 
 MIN_QUERY: Final[int] = 2
 TOO_SHORT: Final[str] = 'Type at least 2 letters.'

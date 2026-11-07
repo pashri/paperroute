@@ -7,24 +7,24 @@ from pathlib import Path
 
 import numpy as np
 
-from paperroute.adapters.tiles_db import SqliteTileRepository
 from paperroute.build.map_style import DARK
-from paperroute.build.tile_store import PlacedLabel
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
     TripMarks,
     screen_point,
 )
-from paperroute.core.tiles import (
+from paperroute.render.map_base import draw_map_base, window_of
+from paperroute_device.render.canvas import INK, PAPER
+from paperroute_transit.adapters.tiles_db import SqliteTileRepository
+from paperroute_transit.build.tile_store import PlacedLabel
+from paperroute_transit.core.tiles import (
     TILE,
     LabelKind,
     TileVariant,
     tiles_covering,
     to_pixels,
 )
-from paperroute.render.map_base import draw_map_base, window_of
-from paperroute_device.render.canvas import INK, PAPER
 from tests.render.test_map_base import (
     CENTRE,
     MPP,

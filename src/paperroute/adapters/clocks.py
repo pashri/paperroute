@@ -5,7 +5,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final
 
-from paperroute.core.model import SYDNEY, shifted
+from paperroute_transit.core.model import SYDNEY, shifted
 
 TIMESYNC_FLAG: Final[Path] = Path('/run/systemd/timesync/synchronized')
 

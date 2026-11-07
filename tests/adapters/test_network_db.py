@@ -14,23 +14,24 @@ import pytest
 
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.chooser import Choice, ChooserPath, Column, Level
-from paperroute.core.model import RouteKind, StopPlace
-from paperroute.core.reach import (
+from paperroute.core.strip_view import build_strip_view
+from paperroute.ports import NetworkRepository
+from paperroute_testkit.build.feed_zip import write_feed
+from paperroute_testkit.core.factories import inputs_of
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.model import RouteKind, StopPlace
+from paperroute_transit.core.reach import (
     ReachInput,
     RowKind,
     RunTail,
     StripKey,
     build_reach,
 )
-from paperroute.core.reach_layout import LineExit
-from paperroute.core.strip_view import build_strip_view
-from paperroute.ports import NetworkRepository
-from paperroute_testkit.core.factories import inputs_of
+from paperroute_transit.core.reach_layout import LineExit
 from tests.build.network_feed import network_feed, network_files
-from tests.helpers import old_schema, schema_four, schema_three, write_feed
+from tests.helpers import old_schema, schema_four, schema_three
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 TOWN_HALL: Final[str] = '200070'

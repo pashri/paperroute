@@ -8,8 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import SCHEMA_VERSION, Window, build_timetable
+from paperroute_testkit.build.feed_zip import write_feed
+from paperroute_transit.build.gtfs_files import Source
 from tests.build.feeds import (
     DAILY,
     build_db,
@@ -22,7 +23,6 @@ from tests.build.feeds import (
     sydneytrains_feed,
     sydneytrains_files,
 )
-from tests.helpers import write_feed
 
 
 def query(*, db: Path, sql: str) -> list[tuple[object, ...]]:

@@ -19,9 +19,9 @@ from paperroute.core.chooser import (
     pressed,
     previewed,
 )
-from paperroute.core.model import Pin
-from paperroute.core.reach import Reach
 from paperroute.core.strip_model import ALL_TAG
+from paperroute_transit.core.model import Pin
+from paperroute_transit.core.reach import Reach
 
 
 def focus_level(*, chooser: ChooserState) -> Level | None:

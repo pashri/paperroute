@@ -2,8 +2,8 @@
 
 from typing import Final
 
-from paperroute.core.tiles import CITY, ZOOMS
 from paperroute_device.render.canvas import INK, PAPER, Face
+from paperroute_transit.core.tiles import CITY, ZOOMS
 
 DARK: Final[int] = 85
 LIGHT: Final[int] = 170

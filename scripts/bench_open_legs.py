@@ -10,7 +10,6 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Final
 
-from paperroute.adapters.leg_cache import LegCache
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.core.chains import LegKey, chains_of, leg_key
 from paperroute.core.connection_model import (
@@ -21,7 +20,8 @@ from paperroute.core.connection_model import (
     way_legs,
 )
 from paperroute.core.live import LiveDeparture, resolved
-from paperroute.core.model import SYDNEY, Change, Pin, StopPlace, Way
+from paperroute_transit.adapters.leg_cache import LegCache
+from paperroute_transit.core.model import SYDNEY, Change, Pin, StopPlace, Way
 
 DEFAULT_DB: Final[Path] = Path('data/timetable.db')
 DEFAULT_REPEAT: Final[int] = 5

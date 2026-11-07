@@ -4,7 +4,6 @@ from dataclasses import replace
 from datetime import time
 from typing import Final
 
-from paperroute.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute.core.chooser import ChooserState
 from paperroute.core.connection_strip import (
     ConnectionStripMapView,
@@ -20,7 +19,6 @@ from paperroute.core.messages import (
     ScreenView,
     Tick,
 )
-from paperroute.core.model import AutoWindow, Departure, Pin, RouteKind
 from paperroute.core.places import shown
 from paperroute.core.saved import (
     BoardSettings,
@@ -46,6 +44,8 @@ from paperroute_testkit.core.connection_factories import (
 from paperroute_testkit.core.factories import place
 from paperroute_testkit.core.steps import wakeful
 from paperroute_testkit.fakes import device_facts
+from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
+from paperroute_transit.core.model import AutoWindow, Departure, Pin, RouteKind
 
 PLAIN: Final[Pin] = Pin(
     origin=place('200060', name='Central Station'), kind=RouteKind.TRAIN,

@@ -39,7 +39,7 @@ dev = [
     "pytest-asyncio>=0.25",
     "pytest-cov>=6.0",
 ]
-tiles = ["osmium>=4.3", "shapely>=2.2"]
+tiles = ["paperroute-transit[tiles]"]
 
 [tool.uv]
 python-preference = "only-managed"

@@ -7,11 +7,11 @@ from datetime import date
 from pathlib import Path
 from typing import Final
 
-from paperroute.build.gtfs_files import Source
-from paperroute.build.line_stations import Spot, station_aliases
 from paperroute.build.timetable import Window, build_timetable
+from paperroute_testkit.build.feed_zip import write_feed
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.line_stations import Spot, station_aliases
 from tests.build.network_feed import network_files
-from tests.helpers import write_feed
 
 SEYMOUR: Final[str] = 'Seymour Station'
 T1_TAIL: Final[list[tuple[str, str]]] = [

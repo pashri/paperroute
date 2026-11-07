@@ -4,9 +4,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute.core.feeds import FeedKind
-from paperroute.core.geo import Point
 from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
@@ -19,10 +17,7 @@ from paperroute.core.messages import (
     Render,
     Tick,
 )
-from paperroute.core.model import service_seconds
-from paperroute.core.patterns import TripPattern
 from paperroute.core.places import shown
-from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.state import step
 from paperroute.core.state_model import RELOAD_BEFORE, State
 from paperroute.core.stop_view import HORIZON
@@ -35,6 +30,11 @@ from paperroute_testkit.core.factories import (
     vehicle,
 )
 from paperroute_testkit.core.steps import wakeful
+from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
+from paperroute_transit.core.geo import Point
+from paperroute_transit.core.model import service_seconds
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.realtime import RealtimeSnapshot
 from tests.core.test_state import CENTRE, PRESS, fresh
 
 TICK: Final[timedelta] = timedelta(seconds=5)

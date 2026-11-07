@@ -6,10 +6,10 @@ from datetime import date, time, timedelta
 from enum import StrEnum
 from typing import Any, Final
 
-from paperroute.core.auto_model import AutoState
-from paperroute.core.geo import to_metres
-from paperroute.core.model import Pin, RouteKind, StopPlace
 from paperroute_device.core.device_settings import DeviceSettings, Window
+from paperroute_transit.core.auto_model import AutoState
+from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.model import Pin, RouteKind, StopPlace
 
 
 class LiveView(StrEnum):

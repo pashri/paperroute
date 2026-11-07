@@ -44,8 +44,12 @@ from paperroute.adapters.state_settings import (
     settings_from_model,
     settings_to_model,
 )
-from paperroute.core.auto_model import AutoState, Before
-from paperroute.core.model import (
+from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
+from paperroute.core.saved import DEFAULT_SAVED, LiveView, Quota, Saved
+from paperroute.ports import Loaded
+from paperroute_device.adapters.atomic_file import write_atomic
+from paperroute_transit.core.auto_model import AutoState, Before
+from paperroute_transit.core.model import (
     MAX_CHANGES,
     SYDNEY,
     Change,
@@ -54,10 +58,6 @@ from paperroute.core.model import (
     StopPlace,
     Way,
 )
-from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
-from paperroute.core.saved import DEFAULT_SAVED, LiveView, Quota, Saved
-from paperroute.ports import Loaded
-from paperroute_device.adapters.atomic_file import write_atomic
 
 logger = logging.getLogger(__name__)
 

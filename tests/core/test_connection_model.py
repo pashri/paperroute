@@ -10,7 +10,6 @@ from paperroute.core.connection_model import (
     walk_metres,
     way_legs,
 )
-from paperroute.core.model import Pin
 from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
     HAMMERS,
@@ -21,6 +20,7 @@ from paperroute_testkit.core.connection_factories import (
     WORK,
 )
 from paperroute_testkit.core.factories import place
+from paperroute_transit.core.model import Pin
 
 
 def test_walk_and_allow() -> None:

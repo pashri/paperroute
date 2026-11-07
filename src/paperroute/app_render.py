@@ -10,7 +10,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.adapters.tiles_db import NullTiles
 from paperroute.app_effects import timed_async
 from paperroute.app_ports import Ports
 from paperroute.core.alerts_view import AlertsView
@@ -32,7 +31,6 @@ from paperroute.core.panel_views import (
 )
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
-from paperroute.core.tiles import TileVariant
 from paperroute.ports import TileRepository
 from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.chooser import draw_chooser_view
@@ -49,6 +47,8 @@ from paperroute.render.sleep import with_sleep_band
 from paperroute.render.stop_view import draw_stop_view
 from paperroute.render.strip_view import draw_strip_map_view, draw_strip_view
 from paperroute_hardware.ports import CLEAN_AFTER
+from paperroute_transit.adapters.tiles_db import NullTiles
+from paperroute_transit.core.tiles import TileVariant
 
 logger = logging.getLogger(__name__)
 

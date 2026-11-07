@@ -7,12 +7,12 @@ from typing import Final
 
 from paperroute.core.live import LiveDeparture
 from paperroute.core.map_view import MapView, Marker
-from paperroute.core.model import Departure
-from paperroute.core.patterns import TripPattern
-from paperroute.core.positions import PositionsSnapshot
-from paperroute.core.reach import Reach, RowKind, StripKey
 from paperroute.core.stop_view import PinTag, Row, StopView
 from paperroute_device.core.text import HINT_DOT
+from paperroute_transit.core.model import Departure
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.positions import PositionsSnapshot
+from paperroute_transit.core.reach import Reach, RowKind, StripKey
 
 STRIP_TOP: Final[int] = 44
 ROW_H: Final[int] = 36

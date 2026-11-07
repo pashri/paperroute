@@ -6,7 +6,7 @@ from datetime import datetime
 from paperroute.core.chains import Chain
 from paperroute.core.connection_model import direct_leg, trip_key, way_legs
 from paperroute.core.live import LiveDeparture
-from paperroute.core.model import Change, Pin, StopPlace
+from paperroute_transit.core.model import Change, Pin, StopPlace
 
 
 @dataclass(frozen=True)

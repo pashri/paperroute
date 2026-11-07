@@ -4,7 +4,6 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Final
 
-from paperroute.core.alert_model import AlertsFetched, BetweenLoaded
 from paperroute.core.alert_state import (
     alerts_knob,
     between_requests,
@@ -88,7 +87,6 @@ from paperroute.core.messages import (
     WifiJoinFailed,
     WifiSetupStopped,
 )
-from paperroute.core.model import same_place
 from paperroute.core.pin_edits import on_pin_edit
 from paperroute.core.places import (
     feeds_of,
@@ -132,6 +130,8 @@ from paperroute_hardware.core.knob_events import (
     KnobsHeld,
     KnobTurned,
 )
+from paperroute_transit.core.alert_model import AlertsFetched, BetweenLoaded
+from paperroute_transit.core.model import same_place
 
 PERSON_EVENTS: Final[tuple[type, ...]] = (
     KnobTurned,

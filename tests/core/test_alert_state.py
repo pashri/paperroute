@@ -4,16 +4,6 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.core.alert_model import (
-    Alert,
-    AlertsFetched,
-    AlertsSnapshot,
-    AlertTie,
-    BetweenLoaded,
-    Informed,
-    LoadBetween,
-    Matched,
-)
 from paperroute.core.alert_state import alert_feeds, listed_ids, shown_alerts
 from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import MapView
@@ -25,9 +15,7 @@ from paperroute.core.messages import (
     Render,
     Tick,
 )
-from paperroute.core.model import Departure, Mode, Pin, RouteKind
 from paperroute.core.places import shown
-from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.saved import LiveView, seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import RELOAD_BEFORE, State
@@ -54,6 +42,18 @@ from paperroute_testkit.core.connection_factories import at as at_connection
 from paperroute_testkit.core.connection_factories import work_legs
 from paperroute_testkit.core.factories import departure
 from paperroute_testkit.core.steps import wakeful
+from paperroute_transit.core.alert_model import (
+    Alert,
+    AlertsFetched,
+    AlertsSnapshot,
+    AlertTie,
+    BetweenLoaded,
+    Informed,
+    LoadBetween,
+    Matched,
+)
+from paperroute_transit.core.model import Departure, Mode, Pin, RouteKind
+from paperroute_transit.core.realtime import RealtimeSnapshot
 from tests.core.test_quiet import asleep_at_one, at, evening, ticked
 
 NOW: Final[datetime] = sydney(day=24, hour=9, minute=39)

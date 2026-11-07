@@ -10,21 +10,8 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.alert_model import AlertPlaces
 from paperroute.core.chooser import ChooserPath, Column
-from paperroute.core.geo import MetreBox, Point, Shape, to_metres
-from paperroute.core.model import (
-    Departure,
-    Mode,
-    Pin,
-    RouteKind,
-    ServiceSpan,
-    StopPlace,
-)
-from paperroute.core.patterns import TripPattern
-from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.saved import DEFAULT_SAVED, Saved
-from paperroute.core.tiles import LabelKind, StreetLabel, TileVariant
 from paperroute.core.trip_search import (
     Journey,
     PlannerBusy,
@@ -42,6 +29,19 @@ from paperroute_device.core.device_model import (
     WifiStatus,
 )
 from paperroute_testkit.hardware_fakes import FrameRecorder
+from paperroute_transit.core.alert_model import AlertPlaces
+from paperroute_transit.core.geo import MetreBox, Point, Shape, to_metres
+from paperroute_transit.core.model import (
+    Departure,
+    Mode,
+    Pin,
+    RouteKind,
+    ServiceSpan,
+    StopPlace,
+)
+from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.reach import ReachInput, StripKey
+from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
 
 STOP_POINT: Point = to_metres(lon=151.0036, lat=-33.8170)
 

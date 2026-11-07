@@ -7,7 +7,6 @@ from typing import Final
 
 from paperroute.core.chains import Chain
 from paperroute.core.connection_model import change_walk
-from paperroute.core.model import Mode, Pin
 from paperroute.core.rides import Ride, rides_of
 from paperroute.core.stop_view import (
     HORIZON_TEXT,
@@ -17,6 +16,7 @@ from paperroute.core.stop_view import (
     countdown,
     empty_text,
 )
+from paperroute_transit.core.model import Mode, Pin
 
 NO_PAIRS: Final[str] = f'No connections in {HORIZON_TEXT}'
 PAIR_ROWS: Final[int] = 5

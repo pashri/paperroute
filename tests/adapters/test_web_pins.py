@@ -29,19 +29,19 @@ from paperroute.core.messages import (
     PinSaved,
     PinsOrdered,
 )
-from paperroute.core.model import (
+from paperroute.core.pin_choices import StopMatch
+from paperroute.observers import PinsSeen
+from paperroute_testkit.core.connection_factories import WORK as CONNECTION
+from paperroute_testkit.core.connection_factories import WORK_CHANGE
+from paperroute_testkit.fake_pins import FakePinOptions
+from paperroute_transit.core.model import (
     AutoWindow,
     Pin,
     RouteKind,
     StopPlace,
     pin_ref,
 )
-from paperroute.core.pin_choices import StopMatch
-from paperroute.core.route_colours import RouteColour
-from paperroute.observers import PinsSeen
-from paperroute_testkit.core.connection_factories import WORK as CONNECTION
-from paperroute_testkit.core.connection_factories import WORK_CHANGE
-from paperroute_testkit.fake_pins import FakePinOptions
+from paperroute_transit.core.route_colours import RouteColour
 from tests.adapters.test_web_device import Device
 from tests.page_markup import inside, parse_page, parse_tree
 

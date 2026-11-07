@@ -15,9 +15,9 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_pin_edit import MISFIT
 from paperroute.adapters.web_pin_list import pin_label
 from paperroute.core.messages import PinSaved
-from paperroute.core.model import pin_ref
 from paperroute.observers import PinsSeen
 from paperroute_testkit.core.connection_factories import CAMPBELLTOWN_WAY, WORK
+from paperroute_transit.core.model import pin_ref
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_connection import unlabelled
 from tests.adapters.test_web_device import Device

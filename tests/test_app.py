@@ -979,6 +979,69 @@ async def test_ticker_passes_synced_flag() -> None:
     assert [tick.synced for tick in ticks[:3]] == [False, False, True]
 
 
+@dataclass
+class SteppingClock:
+    """
+    A clock that steps forward when it reports itself synchronised.
+
+    Attributes
+    ----------
+    at : datetime
+        The time before the step.
+    step : timedelta
+        How far the clock steps.
+    """
+
+    at: datetime
+    step: timedelta
+
+    def now(self) -> datetime:
+        """
+        The current time.
+
+        Returns
+        -------
+        datetime
+            Time.
+        """
+        return self.at
+
+    def synced(self) -> bool:
+        """
+        Step the clock and report it synchronised.
+
+        Returns
+        -------
+        bool
+            Always True.
+        """
+        self.at += self.step
+        self.step = timedelta()
+        return True
+
+
+async def test_ticker_reads_synced_before_now() -> None:
+    """A synced Tick never carries the time from before the step."""
+    ports = Ports(
+        timetable=BrokenTimetable(),
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=SteppingClock(at=AT, step=timedelta(hours=3)),
+        network=FakeNetwork(),
+        states=MemoryStates(),
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    task = asyncio.create_task(
+        ticker(ports=ports, queue=queue, every=60.0, pump=None)
+    )
+    await asyncio.sleep(0.1)
+    task.cancel()
+    await asyncio.gather(task, return_exceptions=True)
+    posted = [queue.get_nowait() for _ in range(queue.qsize())]
+    ticks = [event for event in posted if isinstance(event, Tick)]
+    assert [tick.now for tick in ticks] == [AT + timedelta(hours=3)]
+
+
 async def test_run_sends_a_watchdog_for_each_handled_tick(
     tmp_path: Path,
 ) -> None:

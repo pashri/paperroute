@@ -121,7 +121,8 @@ async def tick(
     if seen is not None:
         await queue.put(seen)
     clock = ports.clock
-    await queue.put(Tick(now=clock.now(), synced=clock.synced()))
+    synced = clock.synced()
+    await queue.put(Tick(now=clock.now(), synced=synced))
 
 
 def starting_state(*, ports: Ports, seed: Pin | None = None) -> State:

@@ -1,0 +1,143 @@
+ | @font-face | font-family: 'Public Sans'; src: url('/fonts/public-sans.woff2') format('woff2'); font-weight: 400 700; font-display: swap
+ | :root | color-scheme: light dark; --masthead: #002664; --navy: #002664; --blue: #146cfd; --red: #d7153a; --page: #f4f4f7; --surface: #ffffff; --text: #22272b; --muted: #646974; --line: #dee3e5; --field: #646974; --heading: var(--navy); --main: var(--navy); --main-text: #ffffff; --secondary: var(--navy); --danger: var(--red); --current: var(--navy); --current-bg: #eef6fb; --focus: #146cfd; --shadow: 0 1px 2px rgb(0 0 0 / 18%); --font: 'Public Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; --rule-1: #f99d1c; --rule-2: #0098cd; --rule-3: #168388; --rule-4: #00b5ef; --rule-5: #ee343f; --mode-train: #f99d1c; --mode-metro: #168388; --mode-light-rail: #ee343f; --mode-bus: #00b5ef; --mode-ferry: #5ab031; --mode-coach: #732a82; --mode-other: #646974; --bar: 3.75rem; --gap: 1rem; --edge-start: max(var(--gap), env(safe-area-inset-left, 0px)); --edge-end: max(var(--gap), env(safe-area-inset-right, 0px))
+@media (prefers-color-scheme: dark) | :root | color-scheme: dark; --page: #0f1720; --surface: #1b2633; --text: #e2e8ee; --muted: #9fb0c0; --line: #2c3a48; --field: #9fb0c0; --blue: #5d9bff; --heading: var(--text); --main: #3a6fd8; --secondary: #cfe0ff; --current: var(--text); --current-bg: #22324a; --focus: #5d9bff
+ | *, *::before, *::after | box-sizing: border-box
+ | body | display: flex; flex-direction: column; min-height: 100vh; margin: 0; background: var(--page); color: var(--text); font-family: var(--font); font-size: 1rem; line-height: 1.5
+ | main | display: flex; flex-direction: column; gap: var(--gap); min-width: 0; padding-block: var(--gap); padding-inline: var(--edge-start) var(--edge-end); padding-block-end: calc(var(--bar) + env(safe-area-inset-bottom, 0px) + 1rem)
+ | main:has(~ footer) | padding-block-end: var(--gap)
+ | body > footer | padding-inline: var(--edge-start) var(--edge-end); padding-block-end: calc(var(--bar) + env(safe-area-inset-bottom, 0px) + 1rem)
+ | h1, h2, h3 | margin: 0; line-height: 1.25
+ | h1 | font-size: 1.25rem; font-weight: 700
+ | h2 | color: var(--heading); font-size: 1.125rem; font-weight: 700
+ | header | position: relative; padding-block: 0.75rem calc(0.75rem + 4px); padding-inline: var(--edge-start) var(--edge-end); background: var(--masthead); color: #ffffff
+ | header::after | position: absolute; inset-inline: 0; inset-block-end: 0; height: 4px; background: linear-gradient( 90deg, var(--rule-1) 0 20%, var(--rule-2) 20% 40%, var(--rule-3) 40% 60%, var(--rule-4) 60% 80%, var(--rule-5) 80% ); content: ''
+ | a | color: var(--blue)
+ | :focus-visible | outline: 3px solid var(--focus); outline-offset: 2px
+ | body > nav | position: fixed; z-index: 1; inset-inline: 0; inset-block-end: 0; min-height: var(--bar); padding-block-end: env(safe-area-inset-bottom, 0px); border-block-start: 1px solid var(--line); background: var(--surface)
+ | .pages | display: flex; margin: 0; padding: 0; list-style: none
+ | .pages li | flex: 1; min-width: 0
+ | .pages a | display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.125rem; min-height: var(--bar); color: var(--muted); font-size: 0.75rem; text-decoration: none; transition: color 150ms
+ | .pages a:hover | color: var(--current)
+ | .pages span | max-width: 100%; overflow: hidden; text-overflow: ellipsis
+ | .pages svg | flex: none; width: 1.25rem; height: 1.25rem; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round
+ | .pages a[aria-current='page'] | color: var(--current); font-weight: 700; box-shadow: inset 0 3px 0 var(--red)
+@media (min-width: 48em) | body | display: grid; grid-template-rows: auto auto 1fr; grid-template-columns: 12rem minmax(0, 1fr)
+@media (min-width: 48em) | header | grid-column: 1 / -1
+@media (min-width: 48em) | body > nav | position: static; grid-row: 2 / -1; grid-column: 1; padding-block: 0.75rem; padding-inline-start: env(safe-area-inset-left, 0px); border-block-start: 0; border-inline-end: 1px solid var(--line)
+@media (min-width: 48em) | .pages | position: sticky; inset-block-start: 0.75rem; flex-direction: column; gap: 0.125rem
+@media (min-width: 48em) | .pages a | flex-direction: row; justify-content: flex-start; gap: 0.5rem; min-height: 2.75rem; padding: 0.5rem 1rem; font-size: 1rem
+@media (min-width: 48em) | .pages a[aria-current='page'] | background: var(--current-bg); box-shadow: inset 3px 0 0 var(--red)
+@media (min-width: 48em) | main | grid-column: 2; width: 100%; max-width: 40rem; padding-inline-start: var(--gap); padding-block-end: var(--gap)
+@media (min-width: 48em) | main:has(> .frame-box) | max-width: calc(800px + 2px + var(--gap) + var(--edge-end))
+@media (min-width: 48em) | body > footer | grid-column: 2; max-width: 40rem; padding-inline-start: var(--gap); padding-block-end: var(--gap)
+ | .card | display: flex; flex-direction: column; gap: 0.75rem; min-width: 0; padding: 1rem; border-block-start: 4px solid var(--blue); border-radius: 6px; background: var(--surface); box-shadow: var(--shadow)
+ | .setting form | display: flex; flex-direction: column; align-items: flex-start; gap: 0.75rem; min-width: 0
+ | p | margin: 0
+ | .hint, #status, #settings-status, #device-status | margin: 0; color: var(--muted)
+ | .frame-box | max-width: 100%; overflow-x: auto
+ | .frame | display: block; width: 800px; height: 480px; max-width: none; image-rendering: pixelated; background: #ffffff; border: 1px solid var(--line); box-sizing: content-box
+ | .knob | display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem
+ | .knob h3 | grid-column: 1 / -1; color: var(--muted); font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase
+ | .knob button | min-width: 0
+ | .buttons | display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem
+ | button, .button | display: inline-flex; align-items: center; justify-content: center; min-width: 4.5rem; min-height: 2.75rem; padding: 0 1rem; border: 2px solid var(--main); border-radius: 4px; background: var(--main); color: var(--main-text); font: inherit; font-weight: 600; line-height: 1.25; text-align: center; text-decoration: none; cursor: pointer; transition: background-color 150ms, border-color 150ms, color 150ms
+ | button:hover, .button:hover | background: color-mix(in srgb, var(--main) 82%, #000000); border-color: color-mix(in srgb, var(--main) 82%, #000000)
+ | .secondary, .secondary:hover | border-color: currentColor; color: var(--secondary)
+ | .secondary | background: transparent
+ | .secondary:hover | background: var(--current-bg)
+ | .danger, .danger:hover | border-color: var(--danger); background: var(--danger); color: #ffffff
+ | .danger:hover | background: color-mix(in srgb, var(--danger) 82%, #000000)
+ | button[data-action='press'] | touch-action: manipulation; user-select: none; -webkit-touch-callout: none
+ | button:active, .button:active | transform: translateY(1px)
+ | label | overflow-wrap: anywhere
+ | label[for], label:has(select, input[type='time'], input[type='text']), legend | font-weight: 600
+ | label:has(select, input[type='time'], input[type='text']) | display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; min-width: 0; max-width: 100%
+ | input[type='text'], input[type='search'], input[type='password'], input[type='time'], input[type='number'], select | min-width: 0; max-width: 100%; min-height: 2.75rem; padding: 0 0.5rem; border: 2px solid var(--field); border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; font-weight: 400
+ | input[type='checkbox'], input[type='radio'] | display: inline-grid; flex: none; place-content: center; width: 1.25rem; height: 1.25rem; margin: 0; border: 2px solid var(--main); border-radius: 3px; background: var(--surface) center / 100% no-repeat; appearance: none; cursor: pointer
+ | input[type='checkbox']:checked | background-color: var(--main); background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='M3.5 8.5l3 3 6-7' fill='none' stroke='%23ffffff' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")
+ | input[type='radio'] | border-radius: 50%
+ | input[type='radio']:checked::before | width: 0.625rem; height: 0.625rem; border-radius: 50%; background: var(--main); content: ''
+ | input:disabled | opacity: 0.5; cursor: not-allowed
+ | label:has(input:disabled) | color: var(--muted)
+ | form:has(input[name="skip_school_buses"]:not(:checked)) .switch:has(input[name="skip_school_on_route_pins"]) | color: var(--muted); opacity: 0.5; pointer-events: none
+ | .switch | display: flex; align-items: center; gap: 0.5rem; font-weight: 400
+ | fieldset | display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; min-width: 0; max-width: 100%; margin: 0; padding: 0.5rem 0.75rem 0.75rem; border: 1px solid var(--line); border-radius: 4px
+ | dialog | max-width: calc(100% - 2rem); border: 0; border-block-start: 4px solid var(--blue); border-radius: 6px; background: var(--surface); color: var(--text); box-shadow: var(--shadow)
+ | dialog::backdrop | background: rgb(0 0 0 / 40%)
+ | dialog p | margin-block-end: 0.75rem
+ | .setup form | display: flex; flex-direction: column; align-items: stretch; gap: 0.5rem; min-width: 0; max-width: 28rem
+ | .setup fieldset | align-items: stretch
+ | .setup fieldset label | display: flex; align-items: center; gap: 0.5rem
+ | .setup form > button[type='submit'] | align-self: flex-start
+ | .password | display: flex; gap: 0.5rem
+ | .password input | flex: 1
+ | .notice | margin: 0; padding: 0.5rem 0.75rem; border: 1px solid var(--line); border-inline-start: 4px solid var(--blue); border-radius: 4px; overflow-wrap: anywhere
+ | main > .notice | font-weight: 600
+ | .facts | display: grid; grid-template-columns: max-content minmax(0, 1fr); margin: 0
+ | .facts div | display: contents
+ | .facts dt, .facts dd | padding-block: 0.375rem
+ | .facts div + div > * | border-block-start: 1px solid var(--line)
+ | .facts dt | padding-inline-end: 1rem; color: var(--muted)
+ | .facts dd | margin: 0; overflow-wrap: anywhere
+ | .table | max-width: 100%; overflow-x: auto
+ | .table table | border-collapse: collapse
+ | .table caption | text-align: start; font-weight: 600
+ | .table th, .table td | padding: 0.375rem 1rem 0.375rem 0; border-block-end: 1px solid var(--line); text-align: start; white-space: nowrap
+ | .table th[scope='row'] | font-weight: normal; white-space: normal; overflow-wrap: anywhere
+ | .downloads | display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin: 0; padding: 0; list-style: none
+ | .times | display: flex; flex-wrap: wrap; gap: 0.5rem 1rem
+ | .error | margin: 0; color: var(--danger); font-weight: 600
+ | .search | display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem
+ | .search label | flex-basis: 100%
+ | .search input | flex: 1 1 12rem
+ | .pins | display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none
+ | .pins li | display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding-block: 0.75rem
+ | .pins li + li | border-block-start: 1px solid var(--line)
+ | .pins .grip | flex: none; color: var(--muted); cursor: grab; touch-action: none; user-select: none
+ | .pins .pin | display: flex; flex: 1 1 6rem; flex-direction: column; min-width: 0; overflow-wrap: anywhere
+ | .pins .trip | overflow: hidden; text-overflow: ellipsis; white-space: nowrap
+ | .pins small, .pins .now, .pins .missing | color: var(--muted)
+ | .pins small, .pins .now | font-size: 0.875rem
+ | .pins .move | display: contents
+ | .pins .move button | flex: none; min-width: 2.75rem; padding: 0
+ | .pins .edit | display: inline-flex; flex: none; align-items: center; min-height: 2.75rem; font-weight: 600
+ | .pins li.dragging | opacity: 0.6
+ | .chip | --chip-fill: var(--mode-other); --chip-text: #ffffff; flex: none; width: 3.4em; padding-block: 0.125rem; overflow: hidden; border-radius: 4px; background: var(--chip-fill); color: var(--chip-text); font-size: 0.875rem; font-weight: 700; text-align: center; white-space: nowrap
+ | .mode-train | --chip-fill: var(--mode-train); --chip-text: #000000
+ | .mode-metro | --chip-fill: var(--mode-metro)
+ | .mode-light-rail | --chip-fill: var(--mode-light-rail); --chip-text: #000000
+ | .mode-bus, .mode-school, .mode-replacement | --chip-fill: var(--mode-bus); --chip-text: #000000
+ | .mode-ferry | --chip-fill: var(--mode-ferry); --chip-text: #000000
+ | .mode-coach | --chip-fill: var(--mode-coach)
+ | .default-submit | position: absolute; left: -100vw; width: 1px; height: 1px; overflow: hidden
+ | .editor | display: flex; flex-direction: column; gap: 0.75rem; min-width: 0
+ | .editor > p, .editor fieldset > p | display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; min-width: 0; max-width: 100%
+ | .editor > p.buttons | flex-direction: row
+ | .windows, .window | display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; min-width: 0
+ | .window .days, .window .times | display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin: 0
+ | .window .days label | display: flex; align-items: center; gap: 0.25rem
+ | .editor fieldset > label:has(input[type='checkbox'], input[type='radio']) | display: flex; align-items: center; gap: 0.5rem
+@media (prefers-reduced-motion: reduce) | *, *::before, *::after | transition: none !important; animation: none !important
+@media (prefers-reduced-motion: reduce) | button:active | transform: none
+ | .from-to > p | align-self: stretch
+ | .ts-wrapper | min-width: 0; max-width: 100%; width: 100%
+ | .ts-wrapper .ts-control | min-height: 2.75rem; padding: 0 0.5rem; border: 2px solid var(--field); border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; font-weight: 400; box-shadow: none
+ | .ts-wrapper.full .ts-control, .ts-wrapper.single.input-active .ts-control | background: var(--surface)
+ | .ts-wrapper .ts-control .item, .ts-wrapper .ts-control input | color: var(--text); font: inherit; opacity: 1
+ | .ts-wrapper .ts-control input::placeholder | color: var(--muted)
+ | .ts-wrapper.focus .ts-control | border-color: var(--focus); outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: none
+ | .ts-dropdown | border: 2px solid var(--field); border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; box-shadow: var(--shadow)
+ | .ts-dropdown .option | padding: 0.5rem
+ | .ts-dropdown .active | background: var(--current-bg); color: var(--text)
+ | .results .routes | display: block; color: var(--muted); font-size: 0.875rem
+ | .ts-dropdown .routes | display: flex; flex-wrap: wrap; gap: 0.25rem
+ | .ts-dropdown .chip | padding: 0 0.375rem; border-radius: 4px; background: var(--current-bg); color: var(--text); font-size: 0.875rem
+ | .window-preview | margin: 0; color: var(--muted); font-size: 0.875rem
+ | .window-preview:empty | display: none
+ | .suggestions .journeys | display: grid; gap: 0.5rem; margin: 0; padding: 0; list-style: none
+ | .suggestions .journey | display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem 0.5rem; min-width: 0; text-align: start
+ | .suggestions .greyed, .suggestions .failure | color: var(--muted)
+ | .suggestions .tag | font-size: 0.875rem; font-style: italic
+ | .ways .way | display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; min-width: 0
+ | [hidden] | display: none !important
+ | .danger-zone | border-block-start-color: var(--danger)

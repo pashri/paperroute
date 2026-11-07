@@ -1,0 +1,110 @@
+{
+  "/": {
+    "cache_control": null,
+    "content_type": "text/html; charset=utf-8",
+    "sha256": "cdd3b5ea9fc802b72cd883f33b5bac563585bac0c5e36420d90e107bcbbb883e",
+    "status": 200
+  },
+  "/board.css": {
+    "cache_control": null,
+    "content_type": "text/plain; charset=utf-8",
+    "sha256": "d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed",
+    "status": 404
+  },
+  "/device.js": {
+    "cache_control": null,
+    "content_type": "text/javascript; charset=utf-8",
+    "sha256": "13fb5ac102c5af858aaa58ab572768b403d6deb95146d654447838514f4fa0a7",
+    "status": 200
+  },
+  "/fonts/public-sans.woff2": {
+    "cache_control": "max-age=86400",
+    "content_type": "font/woff2",
+    "sha256": "c1b6da516e0062e9c2f341b3a51dd2d621d946da72f06c6cfe05fd9d2dd8622d",
+    "status": 200
+  },
+  "/live.css": {
+    "cache_control": null,
+    "content_type": "text/css; charset=utf-8",
+    "sha256": "dfdc5866cca3fc744a958e56288e525322a9d5cdc0768af5c50cfd57abf339ff",
+    "status": 200
+  },
+  "/live.js": {
+    "cache_control": null,
+    "content_type": "text/javascript; charset=utf-8",
+    "sha256": "77b1c770b25752478cda46584a9d9f66664bb6c2c7e546776b274f7b0b6eb1de",
+    "status": 200
+  },
+  "/pins.js": {
+    "cache_control": null,
+    "content_type": "text/javascript; charset=utf-8",
+    "sha256": "2e4d896398ed242a16118ed5ab6acab8293ac318d8941ebe754a467892576ab7",
+    "status": 200
+  },
+  "/route-colours.css": {
+    "cache_control": "no-store",
+    "content_type": "text/css; charset=utf-8",
+    "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "status": 200
+  },
+  "/settings.js": {
+    "cache_control": null,
+    "content_type": "text/javascript; charset=utf-8",
+    "sha256": "9b0e1c0b8a1044a7f26191a27d02fe1960a72bd7cbcac384ad4e127a32c23683",
+    "status": 200
+  },
+  "/setup.js": {
+    "cache_control": null,
+    "content_type": "text/javascript; charset=utf-8",
+    "sha256": "aad7587944839b53f160a5f3f81b491f25143dbd57e155b159f5caee9f94fb9a",
+    "status": 200
+  },
+  "/stop-search.js": {
+    "cache_control": null,
+    "content_type": "text/javascript; charset=utf-8",
+    "sha256": "294a26db845443f36f2ffddb0182f1fdfbfbc7b748cdee0af05a6a1814adedaa",
+    "status": 200
+  },
+  "/suggest.js": {
+    "cache_control": null,
+    "content_type": "text/javascript; charset=utf-8",
+    "sha256": "bb3b3d367c30bb8d96d74b94c299f650e365a85876d27622ac21f6b3a7259dec",
+    "status": 200
+  },
+  "/vendor/..%2Fdevice.html": {
+    "cache_control": null,
+    "content_type": "text/plain; charset=utf-8",
+    "sha256": "d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed",
+    "status": 404
+  },
+  "/vendor/nope.js": {
+    "cache_control": null,
+    "content_type": "text/plain; charset=utf-8",
+    "sha256": "d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed",
+    "status": 404
+  },
+  "/vendor/tom-select.complete.min.js": {
+    "cache_control": "max-age=86400",
+    "content_type": "text/javascript",
+    "sha256": "b797005cf23378fb38448b80dc57a33313a5c577b841765743bb1f289c4d53e6",
+    "status": 200
+  },
+  "/vendor/tom-select.css": {
+    "cache_control": "max-age=86400",
+    "content_type": "text/css",
+    "sha256": "7b29f39e2916acfb3d050e00df8fcdfca89279ead2d8e654afec307ca63b10f9",
+    "status": 200
+  },
+  "/ways.js": {
+    "cache_control": null,
+    "content_type": "text/javascript; charset=utf-8",
+    "sha256": "4e02c129a47cdd3e30fd327950155bddefdb23a070e5df199e37587273421c63",
+    "status": 200
+  },
+  "/windows.js": {
+    "cache_control": null,
+    "content_type": "text/javascript; charset=utf-8",
+    "sha256": "b4a8e51eb4a9bf89c336eed56c89c7111fa2c0e6bab179177ae904d92bda63a4",
+    "status": 200
+  }
+}

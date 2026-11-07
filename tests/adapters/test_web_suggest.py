@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.model import SYDNEY
 from paperroute.core.trip_search import Journey, JourneyLeg, TripSearch
@@ -98,9 +99,11 @@ async def started(
         A started client.
     """
     pins = Pins(pins=(WORK,))
+    board = SydneyPages(
+        pins=pins.get, options=PLATFORMS, planner=planner, now=lambda: NOW,
+    )
     display = WebDisplay(
-        device=Device().pages(), pins=pins.get, options=PLATFORMS,
-        planner=planner, now=lambda: NOW, status=lambda: status or {},
+        device=Device().pages(), board=board, status=lambda: status or {},
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()

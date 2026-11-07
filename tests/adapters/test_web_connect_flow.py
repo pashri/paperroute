@@ -12,6 +12,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.messages import Event, PinSaved
 from paperroute.core.model import SYDNEY, RouteKind, StopPlace
@@ -241,10 +242,13 @@ def _app() -> App:
 @pytest.fixture(name='client')
 async def _client(app: App) -> AsyncIterator[Client]:
     """A client of a display with the fake timetable and planner."""
-    display = WebDisplay(
-        device=Device().pages(), pins=app.get, options=OPTIONS,
-        planner=FakeTripPlanner(journeys=(JOURNEY,)), now=lambda: NOW,
+    board = SydneyPages(
+        pins=app.get,
+        options=OPTIONS,
+        planner=FakeTripPlanner(journeys=(JOURNEY,)),
+        now=lambda: NOW,
     )
+    display = WebDisplay(device=Device().pages(), board=board)
     display.bind(post=app.post)
     client = TestClient(TestServer(display.app()))
     await client.start_server()

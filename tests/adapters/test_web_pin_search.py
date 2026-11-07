@@ -7,6 +7,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.model import RouteKind, StopPlace
 from paperroute.core.pin_choices import StopMatch
@@ -36,8 +37,11 @@ async def _client() -> AsyncIterator[Client]:
     """
     display = WebDisplay(
         device=Device().pages(),
-        pins=lambda: None,
-        options=FakePinOptions(found=(MATCH,)),
+        board=SydneyPages(
+            pins=lambda: None,
+            options=FakePinOptions(found=(MATCH,)),
+            planner=None,
+        ),
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()
@@ -74,7 +78,10 @@ async def test_stops_json_short_query_is_empty(client: Client) -> None:
 
 async def test_stops_json_before_timetable() -> None:
     """Without a timetable the list is empty."""
-    display = WebDisplay(device=Device().pages(), pins=lambda: None)
+    display = WebDisplay(
+        device=Device().pages(),
+        board=SydneyPages(pins=lambda: None, options=None, planner=None),
+    )
     client = TestClient(TestServer(display.app()))
     await client.start_server()
     response = await client.get('/pins/stops.json?q=parra')
@@ -97,8 +104,7 @@ async def test_search_follows_school_switch() -> None:
     reported: dict[str, object] = {}
     display = WebDisplay(
         status=lambda: reported,
-        pins=lambda: None,
-        options=options,
+        board=SydneyPages(pins=lambda: None, options=options, planner=None),
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()

@@ -5,7 +5,6 @@ import ipaddress
 import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping
-from datetime import datetime
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Final
 from urllib.parse import urlsplit
@@ -24,12 +23,7 @@ from paperroute.adapters.settings_form import (
     posted_values,
 )
 from paperroute.adapters.web_common import asset, asset_bytes, form_fields
-from paperroute.adapters.web_connection import ConnectionPages
-from paperroute.adapters.web_pins import PinsPages
-from paperroute.adapters.web_suggest import SuggestPages
-from paperroute.adapters.web_ways import WaysPages
 from paperroute.core.messages import Event, PowerRequested, SettingsChanged
-from paperroute.core.model import SYDNEY
 from paperroute.core.saved import Settings
 from paperroute_device.core.device_model import POWER_ACTIONS, PowerAction
 from paperroute_device.render.canvas import encode_png
@@ -45,10 +39,8 @@ from paperroute_hardware.core.knob_events import (
 from paperroute_hardware.ports import CLEAN_AFTER
 
 if TYPE_CHECKING:
+    from paperroute.adapters.web_board import BoardPages
     from paperroute.adapters.web_device import DevicePages
-    from paperroute.observers import PinsSeen
-    from paperroute.planner_port import TripPlanner
-    from paperroute.ports import PinOptions
 
 logger = logging.getLogger(__name__)
 
@@ -316,21 +308,13 @@ class WebDisplay:
         Finds the peer address of a request.
     device : DevicePages | None
         The device's own pages, such as Wi-Fi setup, or None.
-    pins : Callable[[], PinsSeen | None] | None
-        Gives the pins the app last reported; None until it does.
-    options : PinOptions | None
-        The timetable's choices for the pin editor, or None.
-    planner : TripPlanner | None
-        The Trip Planner for suggested ways, or None.
-    now : Callable[[], datetime]
-        Gives the current time, for the default trip search.
+    board : BoardPages | None
+        The board's own pages, such as pins, or None.
 
     Attributes
     ----------
     device : DevicePages | None
         The device's own pages; set before `app` is called.
-    pins_sleep : Callable[[float], Awaitable[None]]
-        How the Pins page waits for a new report.
     boot : str
         Hex start time of this server, so a restart changes event data.
     version : int
@@ -339,23 +323,17 @@ class WebDisplay:
         Set, then replaced, each time a frame is shown.
     """
 
-    def __init__(  # pylint: disable=too-many-statements
+    def __init__(
         self,
         *,
         status: Callable[[], dict[str, object]] | None = None,
         remote_of: Callable[[web.BaseRequest], str | None] = peer_address,
         device: 'DevicePages | None' = None,
-        pins: Callable[[], 'PinsSeen | None'] | None = None,
-        options: 'PinOptions | None' = None,
-        planner: 'TripPlanner | None' = None,
-        now: Callable[[], datetime] = lambda: datetime.now(SYDNEY),
+        board: 'BoardPages | None' = None,
     ) -> None:
-        self._trips = planner, now
         self._status = status
         self.device = device
-        self._pins = pins or (lambda: None)
-        self._options = options
-        self.pins_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
+        self._board = board
         self._remote_of = remote_of
         self._post: Callable[[Event], None] = lambda event: None
         self._posted: dict[str, str] = {}
@@ -452,9 +430,9 @@ class WebDisplay:
         Returns
         -------
         web.Application
-            The routes, behind the local-network check. Power and the
-            device's own pages are served only when there are device
-            pages.
+            The routes, behind the local-network check. The board's
+            pages are served only when there are board pages; power and
+            the device's own pages only when there are device pages.
         """
         app = web.Application(middlewares=[self._guard])
         app.on_shutdown.append(self._close)
@@ -472,7 +450,10 @@ class WebDisplay:
             web.post('/settings', self._settings),
             web.get('/status', self._status_json),
         ])
-        app.add_routes(self._pin_routes())
+        if self._board is not None:
+            app.add_routes(self._board.routes(
+                send=self.send, reported=self._reported,
+            ))
         if self.device is not None:
             app.add_routes([
                 web.get('/device/power', self._power_page),
@@ -482,38 +463,9 @@ class WebDisplay:
             ])
         return app
 
-    def _pin_routes(self) -> list[web.RouteDef]:
-        """
-        List the routes of the pin, connection, ways and suggestion pages.
-
-        Returns
-        -------
-        list[web.RouteDef]
-            The routes.
-        """
-        pins = PinsPages(
-            post=self.send,
-            pins=self._pins,
-            options=self._options,
-            sleep=self.pins_sleep,
-            skip_school=self.skip_school,
-        )
-        ways = WaysPages(pages=pins, pins=self._pins, options=self._options)
-        planner, now = self._trips
-        suggest = SuggestPages(
-            ways=ways, planner=planner, now=now, skip_school=self.skip_school,
-        )
-        ways.card = suggest.card
-        return [
-            *pins.routes(),
-            *ConnectionPages(pins=self._pins, options=self._options).routes(),
-            *ways.routes(),
-            *suggest.routes(),
-        ]
-
     async def _close(self, app: web.Application) -> None:
         """
-        Release the open event streams and close the Trip Planner.
+        Release the open event streams and close the board's pages.
 
         Parameters
         ----------
@@ -523,9 +475,8 @@ class WebDisplay:
         del app
         self._closing = True
         self.changed.set()
-        planner, _ = self._trips
-        if planner is not None:
-            await planner.close()
+        if self._board is not None:
+            await self._board.close()
 
     @web.middleware
     async def _guard(
@@ -766,17 +717,6 @@ class WebDisplay:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         self._post(event)
         return web.Response(status=HTTPStatus.NO_CONTENT)
-
-    def skip_school(self) -> bool:
-        """
-        Say whether school buses are left out, as the app last reported.
-
-        Returns
-        -------
-        bool
-            The school switch; the default until the app reports.
-        """
-        return self._reported()['skip_school_buses'] == 'on'
 
     def _reported(self) -> dict[str, str]:
         """

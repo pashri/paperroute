@@ -12,6 +12,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_pins import (
     SEEN_POLL_S,
@@ -108,11 +109,10 @@ async def _client(
     *, pins: Pins, options: FakePinOptions | None = None,
 ) -> Client:
     """Start a client of a display wired to the fake pins."""
-    display = WebDisplay(
-        device=Device().pages(), pins=pins.get, options=options,
-    )
+    board = SydneyPages(pins=pins.get, options=options, planner=None)
+    board.pins_sleep = pins.sleep
+    display = WebDisplay(device=Device().pages(), board=board)
     display.bind(post=pins.posted.append)
-    display.pins_sleep = pins.sleep
     client = TestClient(TestServer(display.app()))
     await client.start_server()
     return client
@@ -423,7 +423,10 @@ async def test_nav_has_pins_on_every_page(client: Client) -> None:
 
 async def test_pins_routes_refuse_other_peers(pins: Pins) -> None:
     """A peer outside the local network is refused."""
-    display = WebDisplay(pins=pins.get, remote_of=lambda request: '8.8.8.8')
+    display = WebDisplay(
+        board=SydneyPages(pins=pins.get, options=None, planner=None),
+        remote_of=lambda request: '8.8.8.8',
+    )
     client = TestClient(TestServer(display.app()))
     await client.start_server()
     try:

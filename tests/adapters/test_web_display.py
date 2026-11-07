@@ -3,7 +3,7 @@
 import asyncio
 import re
 import time
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable, Mapping
 from dataclasses import replace
 from datetime import time as clock
 from html.parser import HTMLParser
@@ -963,3 +963,65 @@ async def test_web_wake_keeps_the_map_view(
 def test_settle_is_immediate(display: WebDisplay) -> None:
     """A browser copy is always settled."""
     assert display.settle(timeout=0)
+
+
+class Board:
+    """
+    Board pages that serve nothing and count how often they close.
+
+    Attributes
+    ----------
+    closes : int
+        Times `close` was awaited.
+    """
+
+    def __init__(self) -> None:
+        self.closes = 0
+
+    def routes(
+        self,
+        *,
+        send: Callable[[Event], None],
+        reported: Callable[[], Mapping[str, str]],
+    ) -> list[web.RouteDef]:
+        """
+        List no routes.
+
+        Parameters
+        ----------
+        send : Callable[[Event], None]
+            Ignored.
+        reported : Callable[[], Mapping[str, str]]
+            Ignored.
+
+        Returns
+        -------
+        list[web.RouteDef]
+            No routes.
+        """
+        del send, reported
+        return []
+
+    async def close(self) -> None:
+        """Count the close."""
+        self.closes += 1
+
+
+async def test_display_without_board_serves_no_pin_pages(
+    client: Client,
+) -> None:
+    """Without board pages there are no pins; the rest is served."""
+    pins = await client.get('/pins')
+    settings = await client.get('/settings')
+    device = await client.get('/device')
+    assert pins.status == HTTPStatus.NOT_FOUND
+    assert settings.status == HTTPStatus.OK
+    assert device.status == HTTPStatus.OK
+
+
+async def test_board_pages_closed_on_shutdown() -> None:
+    """The board pages are closed once when the app shuts down."""
+    board = Board()
+    client = await _client(display=WebDisplay(board=board))
+    await client.close()
+    assert board.closes == 1

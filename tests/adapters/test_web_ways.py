@@ -10,6 +10,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.pin_windows import NO_DAY
+from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_pin_edit import MISFIT
 from paperroute.adapters.web_pin_list import pin_label
@@ -42,11 +43,10 @@ def _pins() -> Pins:
 @pytest.fixture(name='client')
 async def _client(pins: Pins) -> AsyncIterator[Client]:
     """A client of a display with the fake timetable."""
-    display = WebDisplay(
-        device=Device().pages(), pins=pins.get, options=OPTIONS,
-    )
+    board = SydneyPages(pins=pins.get, options=OPTIONS, planner=None)
+    board.pins_sleep = pins.sleep
+    display = WebDisplay(device=Device().pages(), board=board)
     display.bind(post=pins.posted.append)
-    display.pins_sleep = pins.sleep
     client = TestClient(TestServer(display.app()))
     await client.start_server()
     yield client
@@ -146,7 +146,10 @@ async def test_refusals(pins: Pins, client: Client) -> None:
 
 async def test_before_timetable(pins: Pins) -> None:
     """Before the timetable is ready the page says so; saves go back."""
-    display = WebDisplay(device=Device().pages(), pins=pins.get, options=None)
+    display = WebDisplay(
+        device=Device().pages(),
+        board=SydneyPages(pins=pins.get, options=None, planner=None),
+    )
     client = TestClient(TestServer(display.app()))
     await client.start_server()
     text = await (await client.get(f'/pins/ways?ref={REF}')).text()

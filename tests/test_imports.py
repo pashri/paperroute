@@ -316,3 +316,18 @@ def test_device_pages_import_no_feed_config() -> None:
         if imported_names(path=board / name) & banned
     }
     assert not offenders
+
+
+def test_web_display_imports_no_board_pages() -> None:
+    """The web display takes Sydney's pages from the app."""
+    banned = {
+        'paperroute.planner_port',
+        'paperroute.adapters.web_pins',
+        'paperroute.adapters.web_ways',
+        'paperroute.adapters.web_connection',
+        'paperroute.adapters.web_suggest',
+    }
+    path = ROOT / 'src' / 'paperroute' / 'adapters' / 'web_display.py'
+    names = imported_names(path=path)
+    assert not names & banned
+    assert 'SYDNEY' not in path.read_text(encoding='utf-8')

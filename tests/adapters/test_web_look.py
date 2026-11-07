@@ -12,6 +12,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_display import WebDisplay
+from paperroute_device.adapters.web_frame import SHELL_WEB
 from paperroute_testkit.page_markup import (
     Node,
     by_id,
@@ -19,7 +20,7 @@ from paperroute_testkit.page_markup import (
     parse_page,
     parse_tree,
 )
-from tests.adapters.test_web_device import sydney_site
+from tests.adapters.test_web_device import SHELL_PAGES, sydney_site
 
 Client = TestClient[web.Request, web.Application]
 FONT_SHA256: Final[str] = (
@@ -73,7 +74,7 @@ def css_text() -> str:
     str
         The text of `live.css`.
     """
-    return (WEB / 'live.css').read_text(encoding='utf-8')
+    return (SHELL_WEB / 'live.css').read_text(encoding='utf-8')
 
 
 def page_text(*, name: str) -> str:
@@ -90,7 +91,8 @@ def page_text(*, name: str) -> str:
     str
         The page's HTML.
     """
-    return (WEB / name).read_text(encoding='utf-8')
+    web = SHELL_WEB if name in SHELL_PAGES else WEB
+    return (web / name).read_text(encoding='utf-8')
 
 
 def nav_html(*, text: str) -> str:
@@ -240,7 +242,7 @@ async def test_font_is_served(client: Client) -> None:
     assert response.headers['Cache-Control'] == 'max-age=86400'
     assert body.startswith(b'wOF2')
     assert hashlib.sha256(body).hexdigest() == FONT_SHA256
-    licence = (WEB / 'fonts' / 'OFL.txt').read_text(encoding='utf-8')
+    licence = (SHELL_WEB / 'fonts' / 'OFL.txt').read_text(encoding='utf-8')
     assert 'Public Sans' in licence
 
 
@@ -327,7 +329,8 @@ def test_focus_and_motion() -> None:
 
 def test_no_framework() -> None:
     """No page asset pulls in Bootstrap."""
-    for item in WEB.iterdir():
+    items = [*WEB.iterdir(), *SHELL_WEB.iterdir()]
+    for item in items:
         if item.is_file():
             assert 'bootstrap' not in item.read_bytes().decode(
                 encoding='utf-8',

@@ -15,7 +15,7 @@ class AssetRoot:
     fonts : Traversable
         Holds the Overpass ``.ttf`` files.
     web : Traversable
-        Holds the web pages' static files.
+        Holds the app's own web files.
     """
 
     fonts: Traversable

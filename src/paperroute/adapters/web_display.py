@@ -27,6 +27,7 @@ from paperroute_device.adapters.web_common import (
     asset_bytes,
     form_fields,
 )
+from paperroute_device.adapters.web_frame import shell_bytes, shell_text
 from paperroute_device.adapters.web_guard import (
     cross_site,
     is_local,
@@ -464,7 +465,7 @@ class WebDisplay:
         """
         del request
         return web.Response(
-            text=asset(name='live.css'),
+            text=shell_text(name='live.css'),
             content_type='text/css',
         )
 
@@ -484,7 +485,7 @@ class WebDisplay:
         """
         del request
         return web.Response(
-            body=asset_bytes(name='fonts/public-sans.woff2'),
+            body=shell_bytes(name='fonts/public-sans.woff2'),
             content_type='font/woff2',
             headers={'Cache-Control': 'max-age=86400'},
         )

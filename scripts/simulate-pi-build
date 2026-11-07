@@ -58,8 +58,35 @@ for found in (APP_ASSETS.fonts, APP_ASSETS.web):
 view = MenuView(clock='8:00', rows=('Wi-Fi', 'Device'), cursor=0, first=0)
 frame = draw_panel_view(view=view)
 assert frame.shape == (480, 800) and frame.min() == 0, frame.shape
-assert asset(name='device.html')
-assert asset_bytes(name='fonts/public-sans.woff2')
+assert asset(name='settings.html')
+assert asset_bytes(name='vendor/tom-select.css')
+EOF
+)
+kit_web=$(cat <<'EOF'
+import sys
+import sysconfig
+from pathlib import Path
+
+from paperroute_device.adapters.web_frame import (
+    SHELL_WEB,
+    shell_bytes,
+    shell_text,
+)
+
+purelib = Path(sysconfig.get_paths()['purelib'])
+assert Path(str(SHELL_WEB)) == purelib / 'paperroute_device' / 'web', SHELL_WEB
+for name in (
+    'device.html', 'device.js', 'setup.html', 'setup.js', 'power.html',
+    'live.css',
+):
+    assert shell_text(name=name), name
+assert shell_bytes(name='fonts/public-sans.woff2')
+assert not (purelib / 'paperroute' / 'assets' / 'web' / 'device.html').exists()
+loaded = [
+    name for name in sys.modules
+    if name.split('.')[0] in {'paperroute', 'paperroute_transit'}
+]
+assert not loaded, loaded
 EOF
 )
 no_root="from paperroute_device.render.canvas import Face, font
@@ -87,6 +114,7 @@ for py in "$stage/.venv/bin/python" "$old/.venv/bin/python"; do
     fi
     "$py" -c "$draw"
     "$py" -c "$device"
+    "$py" -c "$kit_web"
     "$py" -c "$no_root"
     "$py" -c "import paperroute.build.__main__"
     "$py" -c "$screen_only"

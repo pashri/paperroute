@@ -24,7 +24,8 @@ from paperroute_device.adapters.device_page import (
     power_status,
     system_rows,
 )
-from paperroute_device.adapters.web_common import asset, form_fields
+from paperroute_device.adapters.web_common import form_fields
+from paperroute_device.adapters.web_frame import shell_text
 from paperroute_device.adapters.wifi import valid_password, valid_ssid
 from paperroute_device.core.device_events import (
     ApiKeyChanged,
@@ -370,7 +371,7 @@ class DevicePages:
             form = setup_form(
                 status=device, key_label=self._credential.label,
             )
-        page = asset(name='setup.html').replace(
+        page = shell_text(name='setup.html').replace(
             NOTICE_MARK, news,
         ).replace(FORM_MARK, form)
         return web.Response(
@@ -392,7 +393,7 @@ class DevicePages:
             The page, or the joining news alone.
         """
         if request.query.get('joining') == '1':
-            page = asset(name='setup.html').replace(
+            page = shell_text(name='setup.html').replace(
                 NOTICE_MARK, notice(text=JOINING),
             ).replace(FORM_MARK, '')
             return web.Response(text=page, content_type='text/html')
@@ -418,7 +419,7 @@ class DevicePages:
         """
         del request
         return web.Response(
-            text=asset(name='setup.js'),
+            text=shell_text(name='setup.js'),
             content_type='text/javascript',
         )
 
@@ -562,7 +563,7 @@ class DevicePages:
             )),
             '{{device_status}}': html.escape(power),
         }
-        page = asset(name='device.html')
+        page = shell_text(name='device.html')
         for mark, value in marks.items():
             page = page.replace(mark, value)
         return web.Response(
@@ -604,7 +605,7 @@ class DevicePages:
         """
         del request
         return web.Response(
-            text=asset(name='device.js'),
+            text=shell_text(name='device.js'),
             content_type='text/javascript',
         )
 
@@ -751,7 +752,7 @@ class DevicePages:
             return web.Response(status=HTTPStatus.BAD_REQUEST)
         question, confirm = CONFIRM[action]
         tone = ' class="danger"' if action is PowerAction.OFF else ''
-        page = asset(name='power.html').replace(
+        page = shell_text(name='power.html').replace(
             '{{question}}', question,
         ).replace('{{action}}', action.value).replace(
             '{{confirm}}', confirm,

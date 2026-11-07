@@ -3,6 +3,7 @@
 from collections.abc import AsyncIterator
 from http import HTTPStatus
 from importlib.resources import files
+from typing import Final
 
 import pytest
 from aiohttp import web
@@ -16,6 +17,7 @@ from paperroute.core.feeds import (
     POSITION_FEEDS,
     feed_label,
 )
+from paperroute_device.adapters.web_frame import SHELL_WEB
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_testkit.device_pages import KEY, NOW, DeviceSite
@@ -25,6 +27,9 @@ from paperroute_transit.core.model import SYDNEY, Mode
 Client = TestClient[web.Request, web.Application]
 TRAINS = POSITION_FEEDS[Mode.TRAIN][0]
 BUSES = FEEDS[Mode.BUS]
+SHELL_PAGES: Final[frozenset[str]] = frozenset(
+    {'device.html', 'power.html', 'setup.html'},
+)
 
 
 def sydney_site() -> DeviceSite:
@@ -220,7 +225,10 @@ async def test_cross_site_refused_on_device_posts(
 ])
 def test_nav_on_every_page(name: str, current: str | None) -> None:
     """Every page links Live, Pins, Settings and Device, marking the open one."""
-    web_dir = files('paperroute') / 'assets' / 'web'
+    web_dir = (
+        SHELL_WEB if name in SHELL_PAGES
+        else files('paperroute') / 'assets' / 'web'
+    )
     page = parse_page(text=(web_dir / name).read_text(encoding='utf-8'))
     assert page.navs == [{'aria-label': 'Pages'}]
     assert page.links == [

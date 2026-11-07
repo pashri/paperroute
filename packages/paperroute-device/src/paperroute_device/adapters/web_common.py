@@ -10,12 +10,12 @@ from paperroute_device.assets import assets
 
 def asset(*, name: str) -> str:
     """
-    Read one of the packaged page files.
+    Read one of the app's web files.
 
     Parameters
     ----------
     name : str
-        File name within `assets/web`.
+        File name within the app's web directory.
 
     Returns
     -------
@@ -28,12 +28,13 @@ def asset(*, name: str) -> str:
 
 def asset_bytes(*, name: str) -> bytes:
     """
-    Read one of the packaged page files as bytes.
+    Read one of the app's web files as bytes.
 
     Parameters
     ----------
     name : str
-        Path within `assets/web`, such as `fonts/public-sans.woff2`.
+        Path within the app's web directory, such as
+        `vendor/tom-select.css`.
 
     Returns
     -------

@@ -21,6 +21,7 @@ from paperroute.adapters.web_display import WebDisplay, knob_event
 from paperroute.core.messages import Event, SettingsChanged
 from paperroute.core.saved import LiveView, Lookahead, Rate
 from paperroute.core.state import step
+from paperroute_device.adapters.web_frame import SHELL_WEB
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_device.core.device_settings import Window
@@ -333,7 +334,7 @@ def test_page_assets_are_packaged() -> None:
     """The three web files ship with the package."""
     web_dir = files('paperroute') / 'assets' / 'web'
     html = (web_dir / 'live.html').read_text(encoding='utf-8')
-    assert (web_dir / 'live.css').is_file()
+    assert (SHELL_WEB / 'live.css').is_file()
     assert (web_dir / 'live.js').is_file()
     assert 'live.css' in html
     assert 'live.js' in html

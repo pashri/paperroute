@@ -254,7 +254,10 @@ def stop_larger_inverted() -> State:
         State at `START`.
     """
     state = stop()
-    settings = replace(state.settings, larger_text=True, inverted_lists=True)
+    device = replace(
+        state.settings.device, larger_text=True, inverted_lists=True,
+    )
+    settings = replace(state.settings, device=device)
     return replace(state, settings=settings)
 
 

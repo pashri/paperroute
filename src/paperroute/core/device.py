@@ -28,7 +28,7 @@ from paperroute.core.messages import (
 )
 from paperroute.core.model import shifted
 from paperroute.core.quota import calls_today
-from paperroute.core.saved import Settings
+from paperroute.core.saved import Settings, with_changes
 from paperroute.core.state_model import (
     CLOCK_WAIT,
     Board,
@@ -78,8 +78,9 @@ def school_changed(*, before: Settings, after: Settings) -> bool:
         True when either school switch differs.
     """
     return (
-        before.skip_school_buses != after.skip_school_buses
-        or before.skip_school_on_route_pins != after.skip_school_on_route_pins
+        before.board.skip_school_buses != after.board.skip_school_buses
+        or before.board.skip_school_on_route_pins
+        != after.board.skip_school_on_route_pins
     )
 
 
@@ -112,8 +113,8 @@ def on_settings(
         for item in fields(event)
         if getattr(event, item.name) is not None
     }
-    settings = replace(state.settings, **given)
-    turned = settings.rotate != state.settings.rotate
+    settings = with_changes(settings=state.settings, changes=given)
+    turned = settings.device.rotate != state.settings.device.rotate
     after = replace(state, settings=settings)
     if school_changed(before=state.settings, after=settings):
         after = replace(

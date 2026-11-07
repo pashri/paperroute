@@ -263,7 +263,7 @@ def test_connection_map_change_becomes_changes(path: Path) -> None:
     """The v9 'change' map setting becomes 'changes'."""
     v9_file(path=path)
     settings = JsonStateRepository(path=path).load().saved.settings
-    assert settings.connection_map is ConnectionMap.CHANGES
+    assert settings.board.connection_map is ConnectionMap.CHANGES
 
 
 def test_connection_map_whole_stays() -> None:

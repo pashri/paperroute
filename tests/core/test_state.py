@@ -115,11 +115,11 @@ from paperroute.core.saved import (
     DEFAULT_SAVED,
     LIVE_VIEWS,
     TOWN_HALL,
+    BoardSettings,
     LiveView,
     Rate,
     Saved,
     Settings,
-    Window,
     seeded,
 )
 from paperroute.core.state import initial_state, step
@@ -161,6 +161,7 @@ from paperroute.core.strip_state import (
 )
 from paperroute.core.tiles import CITY, ZOOMS
 from paperroute_device.core.device_model import PowerAction
+from paperroute_device.core.device_settings import Window
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -364,9 +365,8 @@ def test_first_tick_loads_departures() -> None:
 def test_load_follows_school_switch() -> None:
     """The load asks to skip school buses as the settings say."""
     state = fresh()
-    state = replace(
-        state, settings=replace(state.settings, skip_school_buses=False),
-    )
+    board = replace(state.settings.board, skip_school_buses=False)
+    state = replace(state, settings=replace(state.settings, board=board))
     _, effects = step(state, Tick(now=START))
     loads = [e for e in effects if isinstance(e, LoadDepartures)]
     assert [load.skip_school for load in loads] == [False]
@@ -377,11 +377,12 @@ def test_load_follows_route_pin_school_switch() -> None:
     state = fresh()
     effective = []
     for main, second in ((True, True), (True, False), (False, True)):
-        settings = replace(
-            state.settings,
+        board = replace(
+            state.settings.board,
             skip_school_buses=main,
             skip_school_on_route_pins=second,
         )
+        settings = replace(state.settings, board=board)
         _, effects = step(replace(state, settings=settings), Tick(now=START))
         loads = [e for e in effects if isinstance(e, LoadDepartures)]
         effective.append(loads[0].skip_school_pins)
@@ -392,7 +393,9 @@ def test_load_for_other_route_pin_switch_is_stale() -> None:
     """Departures loaded under the other route-pin switch are ignored."""
     state = replace(
         fresh(),
-        settings=Settings(skip_school_on_route_pins=True),
+        settings=Settings(
+            board=BoardSettings(skip_school_on_route_pins=True),
+        ),
     )
     event = DeparturesLoaded(
         pin=shown(state=state),
@@ -3313,7 +3316,8 @@ def test_sleep_screen_held_during_clock_wait() -> None:
     """In quiet hours the sleep screen waits for the clock too."""
     quiet = Window(start=time(7), end=time(9))
     state = fresh()
-    state = replace(state, settings=replace(state.settings, my_hours=quiet))
+    device = replace(state.settings.device, my_hours=quiet)
+    state = replace(state, settings=replace(state.settings, device=device))
     state, effects = clock_waiting(state=state)
     state, more = step(
         state, Tick(now=START + timedelta(seconds=5), synced=False),

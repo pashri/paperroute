@@ -7,12 +7,16 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from paperroute.adapters.state_auto import CLOCK, CLOCK_FORMAT
 from paperroute.core.saved import (
-    CLEAN_CHOICES,
+    BoardSettings,
     ConnectionMap,
     Lookahead,
-    QuietMode,
     Rate,
     Settings,
+)
+from paperroute_device.core.device_settings import (
+    CLEAN_CHOICES,
+    DeviceSettings,
+    QuietMode,
     Window,
 )
 from paperroute_hardware.ports import CLEAN_AFTER
@@ -169,25 +173,27 @@ def settings_to_model(*, settings: Settings) -> SettingsModel:
     SettingsModel
         The stored settings.
     """
+    device = settings.device
+    board = settings.board
     return SettingsModel(
-        auto_rebuild=settings.auto_rebuild,
-        peak_rate=settings.peak_rate,
-        offpeak_rate=settings.offpeak_rate,
+        auto_rebuild=device.auto_rebuild,
+        peak_rate=board.peak_rate,
+        offpeak_rate=board.offpeak_rate,
         peak_windows=tuple(
             window_to_model(window=window)
-            for window in settings.peak_windows
+            for window in board.peak_windows
         ),
-        quiet_mode=settings.quiet_mode,
-        my_hours=window_to_model(window=settings.my_hours),
-        rotate=settings.rotate,
-        larger_text=settings.larger_text,
-        inverted_lists=settings.inverted_lists,
-        alert_lookahead=settings.alert_lookahead,
-        connection_map=settings.connection_map,
-        skip_school_buses=settings.skip_school_buses,
-        skip_school_on_route_pins=settings.skip_school_on_route_pins,
-        clean_after=settings.clean_after,
-        swap_knobs=settings.swap_knobs,
+        quiet_mode=device.quiet_mode,
+        my_hours=window_to_model(window=device.my_hours),
+        rotate=device.rotate,
+        larger_text=device.larger_text,
+        inverted_lists=device.inverted_lists,
+        alert_lookahead=board.alert_lookahead,
+        connection_map=board.connection_map,
+        skip_school_buses=board.skip_school_buses,
+        skip_school_on_route_pins=board.skip_school_on_route_pins,
+        clean_after=device.clean_after,
+        swap_knobs=device.swap_knobs,
     )
 
 
@@ -206,23 +212,28 @@ def settings_from_model(*, model: SettingsModel) -> Settings:
         The settings.
     """
     return Settings(
-        auto_rebuild=model.auto_rebuild,
-        peak_rate=model.peak_rate,
-        offpeak_rate=model.offpeak_rate,
-        peak_windows=tuple(
-            window_from_model(model=window) for window in model.peak_windows
+        device=DeviceSettings(
+            auto_rebuild=model.auto_rebuild,
+            quiet_mode=model.quiet_mode,
+            my_hours=window_from_model(model=model.my_hours),
+            rotate=model.rotate,
+            larger_text=model.larger_text,
+            inverted_lists=model.inverted_lists,
+            clean_after=model.clean_after,
+            swap_knobs=model.swap_knobs,
         ),
-        quiet_mode=model.quiet_mode,
-        my_hours=window_from_model(model=model.my_hours),
-        rotate=model.rotate,
-        larger_text=model.larger_text,
-        inverted_lists=model.inverted_lists,
-        alert_lookahead=model.alert_lookahead,
-        connection_map=model.connection_map,
-        skip_school_buses=model.skip_school_buses,
-        skip_school_on_route_pins=model.skip_school_on_route_pins,
-        clean_after=model.clean_after,
-        swap_knobs=model.swap_knobs,
+        board=BoardSettings(
+            peak_rate=model.peak_rate,
+            offpeak_rate=model.offpeak_rate,
+            peak_windows=tuple(
+                window_from_model(model=window)
+                for window in model.peak_windows
+            ),
+            alert_lookahead=model.alert_lookahead,
+            connection_map=model.connection_map,
+            skip_school_buses=model.skip_school_buses,
+            skip_school_on_route_pins=model.skip_school_on_route_pins,
+        ),
     )
 
 

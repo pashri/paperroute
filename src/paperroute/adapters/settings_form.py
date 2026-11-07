@@ -2,20 +2,23 @@
 
 import re
 from collections.abc import Mapping
-from dataclasses import replace
 from datetime import time
 from enum import StrEnum
 from html import escape
-from typing import Final
+from typing import Any, Final
 
 from paperroute.core.messages import SettingsChanged
 from paperroute.core.saved import (
-    CLEAN_CHOICES,
+    DEVICE_FIELDS,
     ConnectionMap,
     Lookahead,
-    QuietMode,
     Rate,
     Settings,
+    with_changes,
+)
+from paperroute_device.core.device_settings import (
+    CLEAN_CHOICES,
+    QuietMode,
     Window,
 )
 
@@ -110,17 +113,38 @@ def form_values(*, settings: Settings) -> dict[str, str]:
         empty strings.
     """
     values = {
-        name: 'on' if getattr(settings, name) else 'off'
+        name: 'on' if setting_of(settings=settings, name=name) else 'off'
         for name in SWITCHES
     }
     values |= {
-        name: getattr(settings, name).value
+        name: setting_of(settings=settings, name=name).value
         for name in (*CHOICES, *RADIOS)
     }
-    values['clean_after'] = str(settings.clean_after)
-    values['quiet_start'] = clock_text(moment=settings.my_hours.start)
-    values['quiet_end'] = clock_text(moment=settings.my_hours.end)
+    device = settings.device
+    values['clean_after'] = str(device.clean_after)
+    values['quiet_start'] = clock_text(moment=device.my_hours.start)
+    values['quiet_end'] = clock_text(moment=device.my_hours.end)
     return values | peak_values(settings=settings)
+
+
+def setting_of(*, settings: Settings, name: str) -> Any:
+    """
+    Read one setting by its flat Settings page name.
+
+    Parameters
+    ----------
+    settings : Settings
+        The settings.
+    name : str
+        The field's name, on either part.
+
+    Returns
+    -------
+    Any
+        The field's value.
+    """
+    part = settings.device if name in DEVICE_FIELDS else settings.board
+    return getattr(part, name)
 
 
 def peak_values(*, settings: Settings) -> dict[str, str]:
@@ -140,7 +164,7 @@ def peak_values(*, settings: Settings) -> dict[str, str]:
     """
     values: dict[str, str] = {}
     for index, slot in enumerate(SLOTS):
-        window = settings.peak_windows[index:index + 1]
+        window = settings.board.peak_windows[index:index + 1]
         values[f'{slot}_start'] = (
             clock_text(moment=window[0].start) if window else ''
         )
@@ -445,7 +469,9 @@ def posted_values(
         quiet pair is written for every slot, as the app keeps them.
     """
     given = {k: v for k, v in vars(event).items() if v is not None}
-    full = form_values(settings=replace(Settings(), **given))
+    full = form_values(
+        settings=with_changes(settings=Settings(), changes=given),
+    )
     keys = set(fields)
     if event.peak_windows is not None:
         keys |= {f'{slot}_{end}' for slot in SLOTS for end in ('start', 'end')}

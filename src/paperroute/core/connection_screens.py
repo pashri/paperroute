@@ -58,7 +58,7 @@ def connection_map(
     inputs = replace(
         pin_map_inputs(state=state, stop_view=stop_view), asleep=asleep,
     )
-    mode = state.settings.connection_map
+    mode = state.settings.board.connection_map
     if width is not None:
         inputs = replace(inputs, width=width)
     elif chains and mode is ConnectionMap.CHANGES:

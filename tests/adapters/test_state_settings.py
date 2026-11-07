@@ -9,12 +9,39 @@ from paperroute.adapters.state_settings import (
     settings_from_model,
     settings_to_model,
 )
-from paperroute.core.saved import CLEAN_CHOICES, ConnectionMap, Settings
+from paperroute.core.saved import BoardSettings, ConnectionMap, Settings
+from paperroute_device.core.device_settings import (
+    CLEAN_CHOICES,
+    DeviceSettings,
+)
+
+
+def test_settings_model_keys_unchanged() -> None:
+    """The stored settings keep today's fifteen flat keys."""
+    assert set(default_settings()) == {
+        'auto_rebuild',
+        'peak_rate',
+        'offpeak_rate',
+        'peak_windows',
+        'quiet_mode',
+        'my_hours',
+        'rotate',
+        'larger_text',
+        'inverted_lists',
+        'alert_lookahead',
+        'connection_map',
+        'skip_school_buses',
+        'skip_school_on_route_pins',
+        'clean_after',
+        'swap_knobs',
+    }
 
 
 def test_settings_round_trip_connection_map() -> None:
     """The connection map choice survives storing and reading back."""
-    settings = Settings(connection_map=ConnectionMap.WHOLE)
+    settings = Settings(
+        board=BoardSettings(connection_map=ConnectionMap.WHOLE),
+    )
     model = settings_to_model(settings=settings)
     assert settings_from_model(model=model) == settings
 
@@ -24,7 +51,7 @@ def test_settings_without_school_switch_skip_school() -> None:
     stored = default_settings()
     del stored['skip_school_buses']
     model = SettingsModel.model_validate(stored)
-    assert settings_from_model(model=model).skip_school_buses
+    assert settings_from_model(model=model).board.skip_school_buses
 
 
 def test_settings_without_route_pin_switch_keep_school() -> None:
@@ -32,26 +59,28 @@ def test_settings_without_route_pin_switch_keep_school() -> None:
     stored = default_settings()
     del stored['skip_school_on_route_pins']
     model = SettingsModel.model_validate(stored)
-    assert not settings_from_model(model=model).skip_school_on_route_pins
+    assert not settings_from_model(model=model).board.skip_school_on_route_pins
 
 
 def test_settings_round_trip_route_pin_switch() -> None:
     """The route-pin school switch survives storing and reading back."""
-    settings = Settings(skip_school_on_route_pins=True)
+    settings = Settings(
+        board=BoardSettings(skip_school_on_route_pins=True),
+    )
     model = settings_to_model(settings=settings)
     assert settings_from_model(model=model) == settings
 
 
 def test_settings_round_trip_school_switch() -> None:
     """The school switch survives storing and reading back."""
-    settings = Settings(skip_school_buses=False)
+    settings = Settings(board=BoardSettings(skip_school_buses=False))
     model = settings_to_model(settings=settings)
     assert settings_from_model(model=model) == settings
 
 
 def test_settings_clean_after_defaults_to_thirty() -> None:
     """The screen is cleaned after 30 changes unless told otherwise."""
-    assert Settings().clean_after == 30
+    assert Settings().device.clean_after == 30
 
 
 def test_settings_without_clean_after_clean_after_thirty() -> None:
@@ -59,13 +88,13 @@ def test_settings_without_clean_after_clean_after_thirty() -> None:
     stored = default_settings()
     del stored['clean_after']
     model = SettingsModel.model_validate(stored)
-    assert settings_from_model(model=model).clean_after == 30
+    assert settings_from_model(model=model).device.clean_after == 30
 
 
 @pytest.mark.parametrize('count', CLEAN_CHOICES)
 def test_settings_round_trip_clean_after(count: int) -> None:
     """Each cleaning choice survives storing and reading back."""
-    settings = Settings(clean_after=count)
+    settings = Settings(device=DeviceSettings(clean_after=count))
     model = settings_to_model(settings=settings)
     assert settings_from_model(model=model) == settings
 
@@ -80,7 +109,7 @@ def test_settings_refuse_unknown_clean_after(count: int) -> None:
 
 def test_settings_swap_knobs_defaults_off() -> None:
     """Knob A is the top knob unless told otherwise."""
-    assert Settings().swap_knobs is False
+    assert Settings().device.swap_knobs is False
 
 
 def test_settings_without_swap_knobs_leave_the_knobs() -> None:
@@ -88,11 +117,11 @@ def test_settings_without_swap_knobs_leave_the_knobs() -> None:
     stored = default_settings()
     del stored['swap_knobs']
     model = SettingsModel.model_validate(stored)
-    assert settings_from_model(model=model).swap_knobs is False
+    assert settings_from_model(model=model).device.swap_knobs is False
 
 
 def test_settings_round_trip_swap_knobs() -> None:
     """The swap switch survives storing and reading back."""
-    settings = Settings(swap_knobs=True)
+    settings = Settings(device=DeviceSettings(swap_knobs=True))
     model = settings_to_model(settings=settings)
     assert settings_from_model(model=model) == settings

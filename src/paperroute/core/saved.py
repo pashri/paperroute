@@ -1,14 +1,15 @@
 """The Live views, and what the device keeps between restarts."""
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass, field, fields, replace
 from datetime import date, time, timedelta
 from enum import StrEnum
-from typing import Final
+from typing import Any, Final
 
 from paperroute.core.auto_model import AutoState
 from paperroute.core.geo import to_metres
 from paperroute.core.model import Pin, RouteKind, StopPlace
-from paperroute_hardware.ports import CLEAN_AFTER
+from paperroute_device.core.device_settings import DeviceSettings, Window
 
 
 class LiveView(StrEnum):
@@ -35,30 +36,6 @@ class Rate(StrEnum):
     FAST = '30s'
     STEADY = '60s'
     SLOW = '2min'
-
-
-@dataclass(frozen=True, order=True)
-class Window:
-    """
-    A daily stretch of Sydney local time, from start up to end.
-
-    Attributes
-    ----------
-    start : time
-        The first moment inside.
-    end : time
-        The first moment after.
-    """
-
-    start: time
-    end: time
-
-
-class QuietMode(StrEnum):
-    """How quiet hours are chosen."""
-
-    MY_HOURS = 'my_hours'
-    TIMETABLE = 'timetable'
 
 
 class Lookahead(StrEnum):
@@ -89,35 +66,24 @@ PEAK_WINDOWS: Final[tuple[Window, ...]] = (
     Window(start=time(6, 30), end=time(10)),
     Window(start=time(15), end=time(19)),
 )
-MY_HOURS: Final[Window] = Window(start=time(23), end=time(5, 30))
-CLEAN_CHOICES: Final[tuple[int, ...]] = (15, 30, 60, 120)  # quick patches
 
 
 @dataclass(frozen=True)
-class Settings:  # pylint: disable=too-many-instance-attributes
+class BoardSettings:
     """
-    The choices made on the Settings page.
+    The transit board's choices on the Settings page.
+
+    These are `Settings.board`; the departures shown are `State.board`,
+    a different thing.
 
     Attributes
     ----------
-    auto_rebuild : bool
-        Whether an outdated timetable is rebuilt on the device.
     peak_rate : Rate
         The rate inside peak hours.
     offpeak_rate : Rate
         The rate outside peak hours.
     peak_windows : tuple[Window, ...]
         The weekday peak windows; none of them wraps midnight.
-    quiet_mode : QuietMode
-        How quiet hours are chosen.
-    my_hours : Window
-        The quiet hours chosen by hand; may wrap midnight.
-    rotate : bool
-        Whether the panel is turned 180 degrees.
-    larger_text : bool
-        Whether departure rows use larger text.
-    inverted_lists : bool
-        Whether departure rows are white on black.
     alert_lookahead : Lookahead
         How far ahead planned alerts are listed.
     connection_map : ConnectionMap
@@ -129,28 +95,15 @@ class Settings:  # pylint: disable=too-many-instance-attributes
     skip_school_on_route_pins : bool
         Whether school routes are also left out of pins without a To;
         it has no effect while `skip_school_buses` is off.
-    clean_after : int
-        Quick patches the panel draws before a cleaning full refresh;
-        one of `CLEAN_CHOICES`.
-    swap_knobs : bool
-        Whether knob A plays the bottom knob and knob B the top.
     """
 
-    auto_rebuild: bool = True
     peak_rate: Rate = Rate.FAST
     offpeak_rate: Rate = Rate.SLOW
     peak_windows: tuple[Window, ...] = PEAK_WINDOWS
-    quiet_mode: QuietMode = QuietMode.MY_HOURS
-    my_hours: Window = MY_HOURS
-    rotate: bool = False
-    larger_text: bool = False
-    inverted_lists: bool = False
     alert_lookahead: Lookahead = Lookahead.WEEK
     connection_map: ConnectionMap = ConnectionMap.CHANGES
     skip_school_buses: bool = True
     skip_school_on_route_pins: bool = False
-    clean_after: int = CLEAN_AFTER
-    swap_knobs: bool = False
 
     @property
     def school_off_route_pins(self) -> bool:
@@ -163,6 +116,62 @@ class Settings:  # pylint: disable=too-many-instance-attributes
             True when both school switches are on.
         """
         return self.skip_school_buses and self.skip_school_on_route_pins
+
+
+@dataclass(frozen=True)
+class Settings:
+    """
+    The choices made on the Settings page.
+
+    Attributes
+    ----------
+    device : DeviceSettings
+        The device's own choices.
+    board : BoardSettings
+        The transit board's choices.
+    """
+
+    device: DeviceSettings = field(default_factory=DeviceSettings)
+    board: BoardSettings = field(default_factory=BoardSettings)
+
+
+DEVICE_FIELDS: Final[frozenset[str]] = frozenset(
+    item.name for item in fields(DeviceSettings)
+)
+
+
+def with_changes(
+    *, settings: Settings, changes: Mapping[str, Any]
+) -> Settings:
+    """
+    Change settings named by their flat Settings page names.
+
+    Parameters
+    ----------
+    settings : Settings
+        The settings.
+    changes : Mapping[str, Any]
+        New values by field name, from either part.
+
+    Returns
+    -------
+    Settings
+        The settings with each value on its own part.
+    """
+    device = {
+        name: value
+        for name, value in changes.items()
+        if name in DEVICE_FIELDS
+    }
+    board = {
+        name: value
+        for name, value in changes.items()
+        if name not in DEVICE_FIELDS
+    }
+    return Settings(
+        device=replace(settings.device, **device),
+        board=replace(settings.board, **board),
+    )
 
 
 @dataclass(frozen=True)

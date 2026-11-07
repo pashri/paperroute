@@ -20,7 +20,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import SYDNEY, AutoWindow, ServiceSpan, pin_ref
 from paperroute.core.panel_views import SleepView
 from paperroute.core.places import shown
-from paperroute.core.saved import QuietMode, Rate, Window
+from paperroute.core.saved import Rate
 from paperroute.core.sleep import WAKE_FOR, slept
 from paperroute.core.state import step
 from paperroute.core.state_model import Places, State
@@ -33,6 +33,7 @@ from paperroute_device.core.device_model import (
     WifiPhase,
     WifiSetup,
 )
+from paperroute_device.core.device_settings import QuietMode, Window
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobPressed,
@@ -118,7 +119,8 @@ def evening(*, mode: QuietMode = QuietMode.MY_HOURS) -> State:
         State after a tick at 22:59.
     """
     state = fresh(now=at(22, 59))
-    settings = replace(state.settings, quiet_mode=mode)
+    device = replace(state.settings.device, quiet_mode=mode)
+    settings = replace(state.settings, device=device)
     state = boarded(state=replace(state, settings=settings))
     return step(state, Tick(now=at(22, 59)))[0]
 
@@ -233,7 +235,8 @@ def test_my_hours_wrap_midnight() -> None:
 def test_equal_hours_never_sleep() -> None:
     """Quiet hours that start and end together never sleep."""
     state = evening()
-    settings = replace(state.settings, my_hours=Window(time(0), time(0)))
+    device = replace(state.settings.device, my_hours=Window(time(0), time(0)))
+    settings = replace(state.settings, device=device)
     state = replace(state, settings=settings)
     for hour in (23, 0, 3, 5):
         state = step(state, Tick(now=at(hour, days=hour < 12)))[0]
@@ -324,7 +327,8 @@ def test_quiet_waits_for_phone_confirm() -> None:
 def test_awake_polls_at_rate() -> None:
     """A wake polls at once, then at the off-peak rate."""
     state = asleep_at_one()
-    settings = replace(state.settings, offpeak_rate=Rate.SLOW)
+    board = replace(state.settings.board, offpeak_rate=Rate.SLOW)
+    settings = replace(state.settings, board=board)
     state, effects = step(replace(state, settings=settings), DOWN)
     assert FetchFeed(feed=BUSES) in effects
     state, effects = step(state, Tick(now=at(1, 1, days=1)))
@@ -361,7 +365,8 @@ def followed(*, spans: dict[int, ServiceSpan | None]) -> State:
 def test_follow_asks_for_three_days() -> None:
     """Following the timetable asks for yesterday, today and tomorrow."""
     state = fresh(now=at(22, 59))
-    settings = replace(state.settings, quiet_mode=QuietMode.TIMETABLE)
+    device = replace(state.settings.device, quiet_mode=QuietMode.TIMETABLE)
+    settings = replace(state.settings, device=device)
     state, effects = step(
         replace(state, settings=settings), Tick(now=at(22, 59)),
     )
@@ -517,7 +522,10 @@ def windowed(
         state,
         places=places,
         panel=replace(state.panel, facts=device_facts()),
-        settings=replace(state.settings, quiet_mode=mode),
+        settings=replace(
+            state.settings,
+            device=replace(state.settings.device, quiet_mode=mode),
+        ),
     )
     return step(boarded(state=state), Tick(now=now))[0]
 

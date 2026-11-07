@@ -356,7 +356,10 @@ def test_building_screen_details() -> None:
     switched_off = building()
     idle = replace(
         switched_off,
-        settings=replace(switched_off.settings, auto_rebuild=True),
+        settings=replace(
+            switched_off.settings,
+            device=replace(switched_off.settings.device, auto_rebuild=True),
+        ),
     )
     running = replace(idle, rebuild=replace(idle.rebuild, running=True))
     no_key = replace(idle, panel=replace(idle.panel, key_set=False))

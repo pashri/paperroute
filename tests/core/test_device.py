@@ -1,11 +1,17 @@
 """Tests for the device's own settings and power."""
 
-from datetime import timedelta
+from datetime import time, timedelta
 
 import pytest
 
 from paperroute.core.banners import NO_KEY
-from paperroute.core.device import NOTICE, PROBE_EVERY, device_status, on_reset
+from paperroute.core.device import (
+    NOTICE,
+    PROBE_EVERY,
+    device_status,
+    on_reset,
+    on_settings,
+)
 from paperroute.core.messages import (
     ApiKeyChanged,
     ControlPower,
@@ -26,7 +32,13 @@ from paperroute.core.messages import (
     Stop,
     Tick,
 )
-from paperroute.core.saved import ConnectionMap, Lookahead, Rate, Settings
+from paperroute.core.saved import (
+    BoardSettings,
+    ConnectionMap,
+    Lookahead,
+    Rate,
+    Settings,
+)
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_saves import SAVE_AFTER
@@ -36,6 +48,11 @@ from paperroute_device.core.device_model import (
     DeviceStatus,
     PowerAction,
     ResetKind,
+)
+from paperroute_device.core.device_settings import (
+    DeviceSettings,
+    QuietMode,
+    Window,
 )
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -60,18 +77,67 @@ def test_settings_change_is_saved() -> None:
     _, effects = step(state, Tick(now=START + SAVE_AFTER * 2))
     saves = [effect for effect in effects if isinstance(effect, SaveState)]
     assert len(saves) == 1
-    assert saves[0].saved.settings.auto_rebuild is False
-    assert saves[0].saved.settings.rotate is True
+    assert saves[0].saved.settings.device.auto_rebuild is False
+    assert saves[0].saved.settings.device.rotate is True
 
 
 def test_settings_change_merges() -> None:
     """Only the fields given change; an empty change changes nothing."""
     state, effects = step(pinned(), SettingsChanged(peak_rate=Rate.STEADY))
     assert not effects
-    assert state.settings == Settings(peak_rate=Rate.STEADY)
+    assert state.settings == Settings(
+        board=BoardSettings(peak_rate=Rate.STEADY),
+    )
     unchanged, effects = step(state, SettingsChanged())
     assert not effects
     assert unchanged.settings == state.settings
+
+
+def test_on_settings_routes_every_field() -> None:
+    """Each changed field lands on its own part; an empty change none."""
+    quiet = Window(start=time(22), end=time(6))
+    peaks = (Window(start=time(7), end=time(9)),)
+    event = SettingsChanged(
+        auto_rebuild=False,
+        peak_rate=Rate.STEADY,
+        offpeak_rate=Rate.FAST,
+        peak_windows=peaks,
+        quiet_mode=QuietMode.TIMETABLE,
+        my_hours=quiet,
+        rotate=True,
+        larger_text=True,
+        inverted_lists=True,
+        alert_lookahead=Lookahead.DAY,
+        connection_map=ConnectionMap.WHOLE,
+        skip_school_buses=False,
+        skip_school_on_route_pins=True,
+        clean_after=120,
+        swap_knobs=True,
+    )
+    state, _ = on_settings(state=fresh(), event=event)
+    assert state.settings == Settings(
+        device=DeviceSettings(
+            auto_rebuild=False,
+            quiet_mode=QuietMode.TIMETABLE,
+            my_hours=quiet,
+            rotate=True,
+            larger_text=True,
+            inverted_lists=True,
+            clean_after=120,
+            swap_knobs=True,
+        ),
+        board=BoardSettings(
+            peak_rate=Rate.STEADY,
+            offpeak_rate=Rate.FAST,
+            peak_windows=peaks,
+            alert_lookahead=Lookahead.DAY,
+            connection_map=ConnectionMap.WHOLE,
+            skip_school_buses=False,
+            skip_school_on_route_pins=True,
+        ),
+    )
+    same, _ = on_settings(state=fresh(), event=SettingsChanged())
+    assert same.settings == Settings()
 
 
 def test_lookahead_change_merges() -> None:
@@ -82,7 +148,8 @@ def test_lookahead_change_merges() -> None:
     )
     assert not effects
     assert state.settings == Settings(
-        rotate=True, alert_lookahead=Lookahead.DAY,
+        device=DeviceSettings(rotate=True),
+        board=BoardSettings(alert_lookahead=Lookahead.DAY),
     )
 
 
@@ -403,7 +470,7 @@ def test_connection_map_changed() -> None:
     state, _ = step(
         pinned(), SettingsChanged(connection_map=ConnectionMap.WHOLE),
     )
-    assert state.settings.connection_map is ConnectionMap.WHOLE
+    assert state.settings.board.connection_map is ConnectionMap.WHOLE
 
 
 def test_off_notice_says_shutting_down() -> None:

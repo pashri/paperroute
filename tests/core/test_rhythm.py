@@ -13,9 +13,10 @@ from paperroute.core.rhythm import (
     poll_every,
     stale_after,
 )
-from paperroute.core.saved import Quota, Rate, Settings, Window, seeded
+from paperroute.core.saved import BoardSettings, Quota, Rate, Settings, seeded
 from paperroute.core.state import initial_state
 from paperroute.core.state_model import Calendar, Cycle, State
+from paperroute_device.core.device_settings import Window
 from paperroute_testkit.core.factories import pin_of
 
 MONDAY = date(2026, 10, 19)
@@ -110,7 +111,7 @@ def test_holiday_off_peak() -> None:
 
 def test_no_windows_never_peak() -> None:
     """With no peak windows it is never peak."""
-    settings = Settings(peak_windows=())
+    settings = Settings(board=BoardSettings(peak_windows=()))
     assert not is_peak(now=at(hour=8), settings=settings, holidays=frozenset())
 
 
@@ -127,7 +128,8 @@ def test_poll_every_follows_rate() -> None:
     """The peak and off-peak rates give the poll interval."""
     peak = state_at(now=at(hour=8))
     offpeak = state_at(now=at(hour=12))
-    steady = replace(offpeak, settings=Settings(offpeak_rate=Rate.STEADY))
+    settings = Settings(board=BoardSettings(offpeak_rate=Rate.STEADY))
+    steady = replace(offpeak, settings=settings)
     assert poll_every(state=peak) == timedelta(seconds=30)
     assert poll_every(state=offpeak) == timedelta(minutes=2)
     assert poll_every(state=steady) == timedelta(seconds=60)
@@ -149,7 +151,7 @@ def test_guard_only_slows(
     """Over 80% or 95% of the day's calls slows polling, never speeds it."""
     state = state_at(
         now=at(hour=8),
-        settings=Settings(peak_rate=rate),
+        settings=Settings(board=BoardSettings(peak_rate=rate)),
         quota=Quota(day=day, calls=calls),
     )
     assert poll_every(state=state) == every
@@ -229,7 +231,9 @@ def test_stale_after_is_poll_interval_plus_a_minute(
     """Only a missed fetch makes data stale, at every rate and guard."""
     state = state_at(
         now=at(hour=hour),
-        settings=Settings(peak_rate=rate, offpeak_rate=rate),
+        settings=Settings(
+            board=BoardSettings(peak_rate=rate, offpeak_rate=rate),
+        ),
         quota=Quota(day=TUESDAY, calls=calls),
     )
     assert stale_after(state=state) == limit

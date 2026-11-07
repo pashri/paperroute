@@ -15,10 +15,10 @@ from paperroute.core.messages import (
 from paperroute.core.model import same_place
 from paperroute.core.places import shown
 from paperroute.core.rhythm import in_window
-from paperroute.core.saved import QuietMode
 from paperroute.core.sleep import awake, slept
 from paperroute.core.state_model import Calendar, State, elapsed
 from paperroute.core.state_views import settled
+from paperroute_device.core.device_settings import QuietMode
 
 MARGIN: Final[timedelta] = timedelta(minutes=30)
 ONE_DAY: Final[timedelta] = timedelta(days=1)
@@ -66,9 +66,9 @@ def quiet_due(*, state: State) -> bool:
         By My hours, whether now is inside them; by the timetable,
         whether the pin's service is over for the night.
     """
-    if state.settings.quiet_mode is QuietMode.MY_HOURS:
+    if state.settings.device.quiet_mode is QuietMode.MY_HOURS:
         return in_window(
-            moment=state.now.time(), window=state.settings.my_hours,
+            moment=state.now.time(), window=state.settings.device.my_hours,
         )
     return between_spans(state=state)
 
@@ -253,7 +253,7 @@ def span_requests(*, state: State) -> tuple[State, tuple[Effect, ...]]:
         LoadServiceSpan for each of yesterday, today and tomorrow neither
         loaded nor pending; unchanged by My hours.
     """
-    if state.settings.quiet_mode is not QuietMode.TIMETABLE:
+    if state.settings.device.quiet_mode is not QuietMode.TIMETABLE:
         return state, ()
     calendar = spans_kept(state=state)
     wanted = tuple(

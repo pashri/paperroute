@@ -135,7 +135,8 @@ def held(*, state: State) -> bool:
         True with the setting off, while offline or with no API key.
     """
     no_key = state.panel.key_set is False
-    return not state.settings.auto_rebuild or no_key or offline(state=state)
+    switched_off = not state.settings.device.auto_rebuild
+    return switched_off or no_key or offline(state=state)
 
 
 def rebuild_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
@@ -230,7 +231,7 @@ def building_detail(*, state: State) -> str:
         return WAITING_WIFI
     if state.panel.key_set is False:
         return WAITING_KEY
-    if not state.settings.auto_rebuild:
+    if not state.settings.device.auto_rebuild:
         return REBUILD_OFF
     retry_at = rebuild.retry_at
     if rebuild.failures and retry_at is not None and state.now < retry_at:

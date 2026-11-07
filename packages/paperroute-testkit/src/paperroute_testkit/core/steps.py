@@ -4,9 +4,9 @@ from dataclasses import replace
 from datetime import time
 
 from paperroute.core.messages import Effect, Event, FeedFailed, FetchFeed
-from paperroute.core.saved import Window
 from paperroute.core.state import step
 from paperroute.core.state_model import State
+from paperroute_device.core.device_settings import Window
 
 
 def wakeful(*, state: State) -> State:
@@ -24,7 +24,8 @@ def wakeful(*, state: State) -> State:
         State whose My hours start and end together.
     """
     never = Window(start=time(0), end=time(0))
-    return replace(state, settings=replace(state.settings, my_hours=never))
+    device = replace(state.settings.device, my_hours=never)
+    return replace(state, settings=replace(state.settings, device=device))
 
 
 def untouched(*, state: State) -> State:

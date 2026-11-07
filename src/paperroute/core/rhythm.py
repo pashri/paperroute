@@ -6,8 +6,9 @@ from typing import Final
 
 from paperroute.core.messages import HolidaysLoaded
 from paperroute.core.quota import DAILY_LIMIT, calls_today
-from paperroute.core.saved import Rate, Settings, Window
+from paperroute.core.saved import Rate, Settings
 from paperroute.core.state_model import State
+from paperroute_device.core.device_settings import Window
 
 RATES: Final[dict[Rate, timedelta]] = {
     Rate.FAST: timedelta(seconds=30),
@@ -69,7 +70,7 @@ def is_peak(
     moment = now.time()
     return any(
         in_window(moment=moment, window=window)
-        for window in settings.peak_windows
+        for window in settings.board.peak_windows
     )
 
 
@@ -92,7 +93,8 @@ def rate_now(*, state: State) -> Rate:
         settings=state.settings,
         holidays=state.calendar.holidays,
     )
-    return state.settings.peak_rate if peak else state.settings.offpeak_rate
+    board = state.settings.board
+    return board.peak_rate if peak else board.offpeak_rate
 
 
 def poll_every(*, state: State) -> timedelta:

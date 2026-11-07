@@ -204,7 +204,7 @@ class Timings:
             The swap switch; False before the app reports its settings.
         """
         settings = self.settings
-        return settings is not None and settings.swap_knobs
+        return settings is not None and settings.device.swap_knobs
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
         """

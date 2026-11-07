@@ -9,7 +9,7 @@ from collections.abc import Iterator
 from dataclasses import replace
 from datetime import date, datetime, time
 from pathlib import Path
-from typing import Any
+from typing import Any, Final
 
 import pytest
 from hypothesis import given, settings
@@ -32,21 +32,27 @@ from paperroute.core.model import (
 from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
+    BoardSettings,
     ConnectionMap,
     LiveView,
     Lookahead,
-    QuietMode,
     Quota,
     Rate,
     Saved,
     Settings,
-    Window,
 )
 from paperroute.core.state import initial_state
 from paperroute.core.state_views import saved_of
+from paperroute_device.core.device_settings import (
+    DeviceSettings,
+    QuietMode,
+    Window,
+)
 from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE
 from paperroute_testkit.core.factories import pin_at
 from tests.core.test_auto_pins import is_shown, started, ticked, trusted
+
+ROTATED: Final[Settings] = Settings(device=DeviceSettings(rotate=True))
 
 NAMES = st.text(
     alphabet=st.characters(exclude_categories=['Cs']),
@@ -123,18 +129,22 @@ def settings_values(draw: st.DrawFn) -> Settings:
         for start, end in zip(ends[::2], ends[1::2])
     )
     return Settings(
-        auto_rebuild=draw(st.booleans()),
-        peak_rate=draw(st.sampled_from(Rate)),
-        offpeak_rate=draw(st.sampled_from(Rate)),
-        peak_windows=peak,
-        quiet_mode=draw(st.sampled_from(QuietMode)),
-        my_hours=Window(
+        device=DeviceSettings(
+            auto_rebuild=draw(st.booleans()),
+            quiet_mode=draw(st.sampled_from(QuietMode)),
+            my_hours=Window(
             start=clock(minute=draw(MINUTES)),
             end=clock(minute=draw(MINUTES)),
         ),
-        rotate=draw(st.booleans()),
-        larger_text=draw(st.booleans()),
-        inverted_lists=draw(st.booleans()),
+            rotate=draw(st.booleans()),
+            larger_text=draw(st.booleans()),
+            inverted_lists=draw(st.booleans()),
+        ),
+        board=BoardSettings(
+            peak_rate=draw(st.sampled_from(Rate)),
+            offpeak_rate=draw(st.sampled_from(Rate)),
+            peak_windows=peak,
+        ),
     )
 
 
@@ -565,7 +575,7 @@ def test_migrates_v2_with_auto_rebuild_on(path: Path) -> None:
     loaded = repository.load()
     assert loaded.stored
     assert loaded.saved == sample()
-    assert loaded.saved.settings.auto_rebuild is True
+    assert loaded.saved.settings.device.auto_rebuild is True
     repository.save(saved=loaded.saved)
     assert json.loads(path.read_text())['schema_version'] == SCHEMA_VERSION
 
@@ -573,9 +583,10 @@ def test_migrates_v2_with_auto_rebuild_on(path: Path) -> None:
 def test_round_trips_settings(path: Path) -> None:
     """A switched-off rebuild survives a save and a load."""
     repository = JsonStateRepository(path=path)
-    saved = replace(sample(), settings=Settings(auto_rebuild=False))
+    manual = Settings(device=DeviceSettings(auto_rebuild=False))
+    saved = replace(sample(), settings=manual)
     repository.save(saved=saved)
-    assert repository.load().saved.settings.auto_rebuild is False
+    assert repository.load().saved.settings.device.auto_rebuild is False
 
 
 def test_migrates_v3_to_v4_with_empty_quota(path: Path) -> None:
@@ -658,7 +669,9 @@ def test_migrates_v4_to_v5_with_defaults(path: Path) -> None:
     repository = JsonStateRepository(path=path)
     loaded = repository.load()
     assert loaded.stored
-    assert loaded.saved.settings == Settings(auto_rebuild=False)
+    assert loaded.saved.settings == Settings(
+        device=DeviceSettings(auto_rebuild=False),
+    )
     assert loaded.saved.pins == sample().pins
     repository.save(saved=loaded.saved)
     stored = json.loads(path.read_text())
@@ -672,15 +685,19 @@ def test_migrates_v4_to_v5_with_defaults(path: Path) -> None:
 def test_round_trips_all_settings(path: Path) -> None:
     """Every setting off its default survives a save and a load."""
     changed = Settings(
-        auto_rebuild=False,
-        peak_rate=Rate.SLOW,
-        offpeak_rate=Rate.STEADY,
-        peak_windows=(Window(start=time(7), end=time(9)),),
-        quiet_mode=QuietMode.TIMETABLE,
-        my_hours=Window(start=time(22, 15), end=time(6)),
-        rotate=True,
-        larger_text=True,
-        inverted_lists=True,
+        device=DeviceSettings(
+            auto_rebuild=False,
+            quiet_mode=QuietMode.TIMETABLE,
+            my_hours=Window(start=time(22, 15), end=time(6)),
+            rotate=True,
+            larger_text=True,
+            inverted_lists=True,
+        ),
+        board=BoardSettings(
+            peak_rate=Rate.SLOW,
+            offpeak_rate=Rate.STEADY,
+            peak_windows=(Window(start=time(7), end=time(9)),),
+        ),
     )
     repository = JsonStateRepository(path=path)
     repository.save(saved=replace(sample(), settings=changed))
@@ -692,14 +709,14 @@ def test_bad_time_falls_back(
 ) -> None:
     """A time that can't be read resets that setting and keeps the pins."""
     repository = JsonStateRepository(path=path)
-    repository.save(saved=replace(sample(), settings=Settings(rotate=True)))
+    repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
     data['settings']['peak_windows'][0]['start'] = '25:00'
     path.write_text(json.dumps(data))
     loaded = repository.load()
     assert loaded.stored
     assert loaded.saved.pins == sample().pins
-    assert loaded.saved.settings == Settings(rotate=True)
+    assert loaded.saved.settings == ROTATED
     assert caplog.records
 
 
@@ -722,7 +739,7 @@ def load_with_settings(
         The loaded state, which must still be stored.
     """
     repository = JsonStateRepository(path=path)
-    repository.save(saved=replace(sample(), settings=Settings(rotate=True)))
+    repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
     data['settings'].update(changes)
     path.write_text(json.dumps(data))
@@ -749,8 +766,8 @@ def test_bad_peak_windows_reset_only_them(
 ) -> None:
     """Wrapping, empty or overlapping peak windows reset to the default."""
     saved = load_with_settings(path=path, changes={'peak_windows': windows})
-    assert saved.settings == Settings(rotate=True)
-    assert saved.settings.my_hours == Window(
+    assert saved.settings == ROTATED
+    assert saved.settings.device.my_hours == Window(
         start=time(23),
         end=time(5, 30),
     )
@@ -772,7 +789,7 @@ def test_my_hours_may_wrap_or_be_empty(
     saved = load_with_settings(path=path, changes={'my_hours': hours})
     start = time.fromisoformat(hours['start'])
     end = time.fromisoformat(hours['end'])
-    assert saved.settings.my_hours == Window(start=start, end=end)
+    assert saved.settings.device.my_hours == Window(start=start, end=end)
     assert not caplog.records
 
 
@@ -781,22 +798,25 @@ def test_my_hours_may_wrap_or_be_empty(
     [
         (
             {'peak_rate': '10s', 'offpeak_rate': '60s'},
-            Settings(rotate=True, offpeak_rate=Rate.STEADY),
+            Settings(
+                device=DeviceSettings(rotate=True),
+                board=BoardSettings(offpeak_rate=Rate.STEADY),
+            ),
         ),
         (
             {
                 'my_hours': {'start': '7am', 'end': '05:30'},
                 'larger_text': True,
             },
-            Settings(rotate=True, larger_text=True),
+            Settings(device=DeviceSettings(rotate=True, larger_text=True)),
         ),
         (
             {'connection_map': 'first', 'larger_text': True},
-            Settings(rotate=True, larger_text=True),
+            Settings(device=DeviceSettings(rotate=True, larger_text=True)),
         ),
         (
             {'clean_after': 45, 'larger_text': True},
-            Settings(rotate=True, larger_text=True),
+            Settings(device=DeviceSettings(rotate=True, larger_text=True)),
         ),
     ],
     ids=['bad-rate', 'bad-my-hours', 'retired-first-map', 'bad-clean'],
@@ -812,19 +832,21 @@ def test_bad_setting_resets_only_itself(
 def test_file_without_clean_after_cleans_after_thirty(path: Path) -> None:
     """A state.json from before the cleaning choice loads with 30."""
     repository = JsonStateRepository(path=path)
-    repository.save(saved=replace(sample(), settings=Settings(rotate=True)))
+    repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
     del data['settings']['clean_after']
     path.write_text(json.dumps(data))
     loaded = repository.load()
     assert loaded.stored
-    assert loaded.saved.settings == Settings(rotate=True, clean_after=30)
+    assert loaded.saved.settings == Settings(
+        device=DeviceSettings(rotate=True, clean_after=30),
+    )
 
 
 def test_round_trips_clean_after(path: Path) -> None:
     """A cleaning choice survives a save and a load."""
     repository = JsonStateRepository(path=path)
-    changed = Settings(clean_after=120)
+    changed = Settings(device=DeviceSettings(clean_after=120))
     repository.save(saved=replace(sample(), settings=changed))
     assert repository.load().saved.settings == changed
 
@@ -854,7 +876,7 @@ def test_migrates_to_pin_fields(path: Path) -> None:
 def test_migrates_v6_to_v7_with_lookahead(path: Path) -> None:
     """A version 6 file keeps its settings and gains the lookahead."""
     repository = JsonStateRepository(path=path)
-    repository.save(saved=replace(sample(), settings=Settings(rotate=True)))
+    repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
     data['schema_version'] = 6
     del data['settings']['alert_lookahead']
@@ -862,8 +884,8 @@ def test_migrates_v6_to_v7_with_lookahead(path: Path) -> None:
     loaded = repository.load()
     assert loaded.stored
     assert loaded.saved.pins == sample().pins
-    assert loaded.saved.settings.rotate is True
-    assert loaded.saved.settings.alert_lookahead == Lookahead.WEEK
+    assert loaded.saved.settings.device.rotate is True
+    assert loaded.saved.settings.board.alert_lookahead == Lookahead.WEEK
     repository.save(saved=loaded.saved)
     assert json.loads(path.read_text())['schema_version'] == SCHEMA_VERSION
 
@@ -875,8 +897,8 @@ def test_bad_lookahead_repaired_alone(
     saved = load_with_settings(
         path=path, changes={'alert_lookahead': '2w'},
     )
-    assert saved.settings == Settings(rotate=True)
-    assert saved.settings.alert_lookahead == Lookahead.WEEK
+    assert saved.settings == ROTATED
+    assert saved.settings.board.alert_lookahead == Lookahead.WEEK
     assert any(
         record.levelno == logging.WARNING for record in caplog.records
     )
@@ -884,7 +906,7 @@ def test_bad_lookahead_repaired_alone(
 
 def test_round_trips_lookahead(path: Path) -> None:
     """The longest lookahead survives a save and a load."""
-    settings = Settings(alert_lookahead=Lookahead.ALL)
+    settings = Settings(board=BoardSettings(alert_lookahead=Lookahead.ALL))
     repository = JsonStateRepository(path=path)
     repository.save(saved=replace(sample(), settings=settings))
     assert repository.load().saved.settings == settings
@@ -1031,7 +1053,7 @@ def test_bad_window_dropped_alone(
     path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A window that can't be read goes; the rest of the file stays."""
-    settings = Settings(rotate=True)
+    settings = ROTATED
     quota = Quota(day=date(2026, 10, 16), calls=3)
     JsonStateRepository(path=path).save(
         saved=replace(sample(), settings=settings, quota=quota),
@@ -1141,7 +1163,7 @@ def test_migrates_v8_to_current(path: Path) -> None:
     assert loaded.stored
     assert loaded.saved == saved
     assert all(not pin.ways for pin in loaded.saved.pins)
-    assert loaded.saved.settings.connection_map is ConnectionMap.CHANGES
+    assert loaded.saved.settings.board.connection_map is ConnectionMap.CHANGES
 
 
 def stored_change(*, path: Path, change: dict[str, object]) -> None:
@@ -1166,7 +1188,7 @@ def test_bad_change_drops_way_alone(
     path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A change that can't be read drops its way with one warning."""
-    settings = Settings(rotate=True)
+    settings = ROTATED
     JsonStateRepository(path=path).save(
         saved=replace(sample(), pins=(sample().pins[0], WORK), settings=settings),
     )
@@ -1208,18 +1230,20 @@ def test_allow_not_a_number_drops_way(path: Path) -> None:
 def test_file_without_swap_knobs_leaves_the_knobs(path: Path) -> None:
     """A state.json from before the swap switch loads with it off."""
     repository = JsonStateRepository(path=path)
-    repository.save(saved=replace(sample(), settings=Settings(rotate=True)))
+    repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
     del data['settings']['swap_knobs']
     path.write_text(json.dumps(data))
     loaded = repository.load()
     assert loaded.stored
-    assert loaded.saved.settings == Settings(rotate=True, swap_knobs=False)
+    assert loaded.saved.settings == Settings(
+        device=DeviceSettings(rotate=True, swap_knobs=False),
+    )
 
 
 def test_round_trips_swap_knobs(path: Path) -> None:
     """The swap switch survives a save and a load."""
     repository = JsonStateRepository(path=path)
-    changed = Settings(swap_knobs=True)
+    changed = Settings(device=DeviceSettings(swap_knobs=True))
     repository.save(saved=replace(sample(), settings=changed))
     assert repository.load().saved.settings == changed

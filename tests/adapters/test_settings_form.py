@@ -1,6 +1,5 @@
 """Tests for the Settings form's fields."""
 
-from dataclasses import replace
 from datetime import time
 from typing import Final
 
@@ -16,28 +15,37 @@ from paperroute.adapters.settings_form import (
 from paperroute.adapters.web_common import asset
 from paperroute.core.messages import SettingsChanged
 from paperroute.core.saved import (
-    CLEAN_CHOICES,
+    BoardSettings,
     ConnectionMap,
     Lookahead,
-    QuietMode,
     Rate,
     Settings,
+    with_changes,
+)
+from paperroute_device.core.device_settings import (
+    CLEAN_CHOICES,
+    DeviceSettings,
+    QuietMode,
     Window,
 )
 
 ODD = Settings(
-    auto_rebuild=False,
-    peak_rate=Rate.STEADY,
-    offpeak_rate=Rate.FAST,
-    peak_windows=(Window(start=time(7), end=time(8, 15)),),
-    quiet_mode=QuietMode.TIMETABLE,
-    my_hours=Window(start=time(22, 45), end=time(4)),
-    rotate=True,
-    larger_text=True,
-    inverted_lists=True,
-    alert_lookahead=Lookahead.THREE_DAYS,
-    connection_map=ConnectionMap.WHOLE,
-    clean_after=60,
+    device=DeviceSettings(
+        auto_rebuild=False,
+        quiet_mode=QuietMode.TIMETABLE,
+        my_hours=Window(start=time(22, 45), end=time(4)),
+        rotate=True,
+        larger_text=True,
+        inverted_lists=True,
+        clean_after=60,
+    ),
+    board=BoardSettings(
+        peak_rate=Rate.STEADY,
+        offpeak_rate=Rate.FAST,
+        peak_windows=(Window(start=time(7), end=time(8, 15)),),
+        alert_lookahead=Lookahead.THREE_DAYS,
+        connection_map=ConnectionMap.WHOLE,
+    ),
 )
 PEAK = {
     'peak_1_start': '06:30',
@@ -50,7 +58,7 @@ PEAK = {
 def _applied(*, event: SettingsChanged) -> Settings:
     """Apply an event's set fields to the defaults."""
     given = {k: v for k, v in vars(event).items() if v is not None}
-    return replace(Settings(), **given)
+    return with_changes(settings=Settings(), changes=given)
 
 
 @pytest.mark.parametrize('settings', [Settings(), ODD])
@@ -75,7 +83,9 @@ def test_form_values_spell_out_each_field() -> None:
 def test_lookahead_form_round_trip() -> None:
     """The lookahead is written as its value and read back alone."""
     values = form_values(
-        settings=Settings(alert_lookahead=Lookahead.THREE_DAYS),
+        settings=Settings(
+            board=BoardSettings(alert_lookahead=Lookahead.THREE_DAYS),
+        ),
     )
     assert values['alert_lookahead'] == '3d'
     event = changed_from(fields={'alert_lookahead': '3d'})
@@ -182,9 +192,10 @@ def test_connection_map_four_choices() -> None:
         assert changed_from(fields={'connection_map': value}) == (
             SettingsChanged(connection_map=expected)
         )
+        settings = Settings(board=BoardSettings(connection_map=expected))
         text = page_text(
             template=template,
-            values=form_values(settings=Settings(connection_map=expected)),
+            values=form_values(settings=settings),
             error=None,
         )
         assert text.count(' checked') == 1
@@ -265,7 +276,8 @@ def test_school_switch_read_and_shown() -> None:
 @pytest.mark.parametrize('count', CLEAN_CHOICES)
 def test_clean_after_form_round_trip(count: int) -> None:
     """Each cleaning choice is written as its number and read back."""
-    values = form_values(settings=Settings(clean_after=count))
+    settings = Settings(device=DeviceSettings(clean_after=count))
+    values = form_values(settings=settings)
     assert values['clean_after'] == str(count)
     event = changed_from(fields={'clean_after': str(count)})
     assert event == SettingsChanged(clean_after=count)
@@ -283,7 +295,9 @@ def test_clean_after_selects_its_option() -> None:
     page = asset(name='settings.html')
     text = page_text(
         template=page,
-        values=form_values(settings=Settings(clean_after=15)),
+        values=form_values(
+            settings=Settings(device=DeviceSettings(clean_after=15)),
+        ),
         error=None,
     )
     plain = ' '.join(text.split())
@@ -298,7 +312,8 @@ def test_clean_after_selects_its_option() -> None:
 @pytest.mark.parametrize(('swap', 'value'), [(True, 'on'), (False, 'off')])
 def test_swap_knobs_form_round_trip(swap: bool, value: str) -> None:
     """The swap switch is written as on or off and read back."""
-    values = form_values(settings=Settings(swap_knobs=swap))
+    settings = Settings(device=DeviceSettings(swap_knobs=swap))
+    values = form_values(settings=settings)
     assert values['swap_knobs'] == value
     event = changed_from(fields={'swap_knobs': value})
     assert event == SettingsChanged(swap_knobs=swap)
@@ -309,7 +324,9 @@ def test_swap_knobs_switch_shown_checked() -> None:
     page = asset(name='settings.html')
     text = page_text(
         template=page,
-        values=form_values(settings=Settings(swap_knobs=True)),
+        values=form_values(
+            settings=Settings(device=DeviceSettings(swap_knobs=True)),
+        ),
         error=None,
     )
     plain = ' '.join(text.split())

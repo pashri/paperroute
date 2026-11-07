@@ -23,6 +23,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import AutoWindow, Departure, Pin, RouteKind
 from paperroute.core.places import shown
 from paperroute.core.saved import (
+    BoardSettings,
     ConnectionMap,
     LiveView,
     Saved,
@@ -80,7 +81,7 @@ def started(
         current=0,
         unpinned=None,
         view=view,
-        settings=Settings(connection_map=mode),
+        settings=Settings(board=BoardSettings(connection_map=mode)),
     )
     return wakeful(state=initial_state(
         saved=saved, now=at(7, 30), stored=True,

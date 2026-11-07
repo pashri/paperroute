@@ -295,7 +295,7 @@ def map_inputs(
             held_ends=state.map.frame_ends,
         )
     chains = live_chains(state=state)
-    mode = state.settings.connection_map
+    mode = state.settings.board.connection_map
     return panes_inputs(
         inputs=connection_inputs(
             inputs=inputs, pin=pin, chains=chains, mode=mode,

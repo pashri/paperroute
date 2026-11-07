@@ -113,6 +113,7 @@ from paperroute_device.core.device_model import (
     PowerAction,
     ResetKind,
 )
+from paperroute_device.core.device_settings import DeviceSettings
 from paperroute_device.render.frame import HEADER
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -603,8 +604,8 @@ async def test_app_reports_settings() -> None:
         max_events=2,
     )
     assert recorder.settings == [
-        Settings(auto_rebuild=True),
-        Settings(auto_rebuild=False),
+        Settings(device=DeviceSettings(auto_rebuild=True)),
+        Settings(device=DeviceSettings(auto_rebuild=False)),
     ]
 
 
@@ -2062,7 +2063,8 @@ async def test_queued_knob_turns_draw_one_frame() -> None:
 async def test_app_turns_panel_frames() -> None:
     """With rotate saved, the panel is asked to turn its frames."""
     display = FrameRecorder()
-    saved = replace(DEFAULT_SAVED, settings=Settings(rotate=True))
+    settings = Settings(device=DeviceSettings(rotate=True))
+    saved = replace(DEFAULT_SAVED, settings=settings)
     ports = ports_of(display=display, states=MemoryStates(stored=saved))
 
     def hook(post: Callable[[Event], None]) -> None:
@@ -2077,7 +2079,8 @@ async def test_app_turns_panel_frames() -> None:
 async def test_app_passes_clean_after_to_panel() -> None:
     """The saved cleaning count reaches the panel, and a change follows."""
     display = FrameRecorder()
-    saved = replace(DEFAULT_SAVED, settings=Settings(clean_after=60))
+    settings = Settings(device=DeviceSettings(clean_after=60))
+    saved = replace(DEFAULT_SAVED, settings=settings)
     ports = ports_of(display=display, states=MemoryStates(stored=saved))
     queue: asyncio.Queue[Event] = asyncio.Queue()
     tasks: set[asyncio.Task[None]] = set()

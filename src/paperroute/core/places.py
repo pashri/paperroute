@@ -387,8 +387,8 @@ def is_stale(*, state: State, event: Event) -> bool:
     """
     match event:
         case DeparturesLoaded(skip_school=skip, skip_school_pins=pins) if (
-            skip != state.settings.skip_school_buses
-            or pins != state.settings.school_off_route_pins
+            skip != state.settings.board.skip_school_buses
+            or pins != state.settings.board.school_off_route_pins
         ):
             return True
         case (

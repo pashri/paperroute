@@ -133,8 +133,8 @@ def stop_view_of(*, state: State) -> StopView:
             alert=alert_banner(
                 listed=shown_alerts(state=state), now=frame,
             ),
-            large=state.settings.larger_text,
-            inverted=state.settings.inverted_lists,
+            large=state.settings.device.larger_text,
+            inverted=state.settings.device.inverted_lists,
             tag=pin_tag(
                 index=shown_index(state=state),
                 total=len(state.places.pins),

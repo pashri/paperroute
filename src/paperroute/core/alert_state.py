@@ -315,7 +315,7 @@ def shown_alerts(*, state: State) -> tuple[Listed, ...]:
     return listed_alerts(
         matched=matched[1],
         now=state.now,
-        lookahead=LOOKAHEAD[state.settings.alert_lookahead],
+        lookahead=LOOKAHEAD[state.settings.board.alert_lookahead],
     )
 
 

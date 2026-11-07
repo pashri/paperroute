@@ -28,14 +28,7 @@ from paperroute.core.patterns import TripPattern
 from paperroute.core.positions import PositionsSnapshot
 from paperroute.core.reach import Reach, StripKey
 from paperroute.core.realtime import RealtimeSnapshot
-from paperroute.core.saved import (
-    ConnectionMap,
-    Lookahead,
-    QuietMode,
-    Rate,
-    Saved,
-    Window,
-)
+from paperroute.core.saved import ConnectionMap, Lookahead, Rate, Saved
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
 from paperroute_device.core.device_model import (
@@ -47,6 +40,7 @@ from paperroute_device.core.device_model import (
     ResetKind,
     WifiNetwork,
 )
+from paperroute_device.core.device_settings import QuietMode, Window
 from paperroute_hardware.core.knob_events import (
     KnobHeld,
     KnobHeldTurned,

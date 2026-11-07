@@ -67,7 +67,8 @@ def loaded(
         The state at `NOW`.
     """
     state = started(pins=pins)
-    settings = replace(state.settings, alert_lookahead=Lookahead.ALL)
+    board = replace(state.settings.board, alert_lookahead=Lookahead.ALL)
+    settings = replace(state.settings, board=board)
     state, _ = loaded_with(state=replace(state, settings=settings))
     return fresh_with(state=state, alerts=alerts)
 

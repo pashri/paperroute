@@ -19,9 +19,10 @@ from paperroute.adapters import web_display
 from paperroute.adapters.settings_form import ERRORS
 from paperroute.adapters.web_display import WebDisplay, knob_event
 from paperroute.core.messages import Event, PowerRequested, SettingsChanged
-from paperroute.core.saved import LiveView, Lookahead, Rate, Window
+from paperroute.core.saved import LiveView, Lookahead, Rate
 from paperroute.core.state import step
 from paperroute_device.core.device_model import PowerAction
+from paperroute_device.core.device_settings import Window
 from paperroute_device.render.canvas import encode_png
 from paperroute_hardware.core.knob_events import (
     Knob,

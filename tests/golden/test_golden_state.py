@@ -9,14 +9,18 @@ from paperroute.adapters.state_file import JsonStateRepository
 from paperroute.core.auto_model import AutoState, Before, running
 from paperroute.core.model import SYDNEY, AutoWindow, Pin, RouteKind
 from paperroute.core.saved import (
+    BoardSettings,
     ConnectionMap,
     LiveView,
     Lookahead,
-    QuietMode,
     Quota,
     Rate,
     Saved,
     Settings,
+)
+from paperroute_device.core.device_settings import (
+    DeviceSettings,
+    QuietMode,
     Window,
 )
 from paperroute_testkit.core.connection_factories import TWO_WAY, WORK
@@ -40,21 +44,25 @@ RICH_SAVED: Final[Saved] = Saved(
     unpinned=None,
     view=LiveView.STRIP,
     settings=Settings(
-        auto_rebuild=False,
-        peak_rate=Rate.SLOW,
-        offpeak_rate=Rate.STEADY,
-        peak_windows=(Window(start=time(7), end=time(9)),),
-        quiet_mode=QuietMode.TIMETABLE,
-        my_hours=Window(start=time(22, 15), end=time(6)),
-        rotate=True,
-        larger_text=True,
-        inverted_lists=True,
-        alert_lookahead=Lookahead.THREE_DAYS,
-        connection_map=ConnectionMap.WHOLE,
-        skip_school_buses=False,
-        skip_school_on_route_pins=True,
-        clean_after=60,
-        swap_knobs=True,
+        device=DeviceSettings(
+            auto_rebuild=False,
+            quiet_mode=QuietMode.TIMETABLE,
+            my_hours=Window(start=time(22, 15), end=time(6)),
+            rotate=True,
+            larger_text=True,
+            inverted_lists=True,
+            clean_after=60,
+            swap_knobs=True,
+        ),
+        board=BoardSettings(
+            peak_rate=Rate.SLOW,
+            offpeak_rate=Rate.STEADY,
+            peak_windows=(Window(start=time(7), end=time(9)),),
+            alert_lookahead=Lookahead.THREE_DAYS,
+            connection_map=ConnectionMap.WHOLE,
+            skip_school_buses=False,
+            skip_school_on_route_pins=True,
+        ),
     ),
     quota=Quota(day=date(2026, 10, 16), calls=1234),
     auto=AutoState(

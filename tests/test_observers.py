@@ -15,9 +15,14 @@ from paperroute_device.core.device_model import (
     WifiPhase,
     WifiSetup,
 )
+from paperroute_device.core.device_settings import DeviceSettings
+from paperroute_hardware.core.knob_decoder import Encoder
+from paperroute_hardware.core.knob_events import Knob, KnobTurned
+from paperroute_hardware.knobs_open import knobs_for
 from paperroute_hardware.ports import PanelRefresh, PanelTimes
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import device_facts
+from paperroute_testkit.hardware_fakes import FakeKnobLines
 
 STATUS: DeviceStatus = DeviceStatus(
     timetable='2026-10-21',
@@ -30,6 +35,7 @@ STATUS: DeviceStatus = DeviceStatus(
 )
 
 PINS: tuple[Pin, ...] = (pin_of('215020', '200060'),)
+MANUAL: Settings = Settings(device=DeviceSettings(auto_rebuild=False))
 
 
 @dataclass
@@ -37,28 +43,29 @@ class _DeviceRecorder:
     """A device observer that records the name of each event."""
 
     events: list[str] = field(default_factory=list)
+    prefix: str = ''
 
     def frame_drawn(self, *, render_ms: float) -> None:
         """Record a frame."""
-        self.events.append('frame_drawn')
+        self.events.append(f'{self.prefix}frame_drawn')
 
     def feed_parsed(
         self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
     ) -> None:
         """Record a feed."""
-        self.events.append('feed_parsed')
+        self.events.append(f'{self.prefix}feed_parsed')
 
     def ticked(self) -> None:
         """Record a tick."""
-        self.events.append('ticked')
+        self.events.append(f'{self.prefix}ticked')
 
     def status_seen(self, *, status: DeviceStatus) -> None:
         """Record a status."""
-        self.events.append('status_seen')
+        self.events.append(f'{self.prefix}status_seen')
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
         """Record a refresh."""
-        self.events.append('panel_refreshed')
+        self.events.append(f'{self.prefix}panel_refreshed')
 
 
 @dataclass
@@ -67,11 +74,11 @@ class _Recorder(_DeviceRecorder):
 
     def settings_seen(self, *, settings: Settings) -> None:
         """Record the settings."""
-        self.events.append('settings_seen')
+        self.events.append(f'{self.prefix}settings_seen')
 
     def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
         """Record the pins."""
-        self.events.append('pins_seen')
+        self.events.append(f'{self.prefix}pins_seen')
 
 
 class _Failing:
@@ -146,9 +153,9 @@ def test_timings_report_settings() -> None:
     """The settings appear in the snapshot once reported."""
     timings = Timings()
     assert 'settings' not in timings.snapshot()
-    timings.settings_seen(settings=Settings(auto_rebuild=False))
+    timings.settings_seen(settings=MANUAL)
     assert timings.snapshot()['settings'] == form_values(
-        settings=Settings(auto_rebuild=False),
+        settings=MANUAL,
     )
 
 
@@ -181,13 +188,13 @@ def test_observer_group_isolates_a_failing_observer(
         group.frame_drawn(render_ms=2.0)
         group.feed_parsed(feed='f', fetch_ms=1.0, parse_ms=1.0, trips=1)
         group.ticked()
-        group.settings_seen(settings=Settings(auto_rebuild=False))
+        group.settings_seen(settings=MANUAL)
     snap = timings.snapshot()
     assert snap['frames'] == 1
     assert 'f' in snap['feeds']  # type: ignore[operator]
     assert snap['tick_age_s'] is not None
     assert snap['settings'] == form_values(
-        settings=Settings(auto_rebuild=False),
+        settings=MANUAL,
     )
     assert len(caplog.records) == 4
 
@@ -319,10 +326,27 @@ def test_timings_knobs_swapped_follows_the_settings() -> None:
     """The knobs are not swapped until the settings in force say so."""
     timings = Timings()
     assert not timings.knobs_swapped()
-    timings.settings_seen(settings=Settings(swap_knobs=True))
+    timings.settings_seen(
+        settings=Settings(device=DeviceSettings(swap_knobs=True)),
+    )
     assert timings.knobs_swapped()
     timings.settings_seen(settings=Settings())
     assert not timings.knobs_swapped()
+
+
+def test_swap_setting_swaps_decoded_knobs() -> None:
+    """With the knobs swapped, a turn of knob A turns the bottom knob."""
+    timings = Timings()
+    timings.settings_seen(
+        settings=Settings(device=DeviceSettings(swap_knobs=True)),
+    )
+    reader = knobs_for(
+        enabled=True, opener=FakeKnobLines, swapped=timings.knobs_swapped,
+    )
+    assert reader is not None
+    events = reader.decoder.turned(encoder=Encoder.A, clockwise=True, now=0)
+    reader.stop()
+    assert events == [KnobTurned(knob=Knob.BOTTOM, steps=1)]
 
 
 def test_group_sends_device_events_to_devices() -> None:
@@ -362,9 +386,13 @@ def test_group_tells_observers_before_devices() -> None:
     """Each device event reaches the observers before the devices."""
     events: list[str] = []
     group = ObserverGroup(
-        observers=[_Recorder(events=events)],
-        devices=[_DeviceRecorder(events=events)],
+        observers=[_Recorder(events=events, prefix='observer:')],
+        devices=[_DeviceRecorder(events=events, prefix='device:')],
     )
     group.ticked()
     group.settings_seen(settings=Settings())
-    assert events == ['ticked', 'ticked', 'settings_seen']
+    assert events == [
+        'observer:ticked',
+        'device:ticked',
+        'observer:settings_seen',
+    ]

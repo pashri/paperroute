@@ -1,10 +1,28 @@
 """Stylesheets read as flat lists of rules, for comparing them."""
 
+import ast
 import re
+from collections.abc import Iterator, Sequence
 from dataclasses import dataclass, replace
+from importlib.resources.abc import Traversable
+from pathlib import Path
 from typing import Final
 
 COMMENT: Final[re.Pattern[str]] = re.compile(r'/\*.*?\*/', flags=re.DOTALL)
+ATTRIBUTE: Final[re.Pattern[str]] = re.compile(
+    r'(?<![\w-])(?:class|id)="([^"]*)"',
+)
+SCRIPT_CALL: Final[re.Pattern[str]] = re.compile(
+    r"(?:classList\.\w+|getElementById)\(\s*'([\w\s,'-]*)'\s*\)",
+)
+QUERY: Final[re.Pattern[str]] = re.compile(
+    r"querySelector(?:All)?\(\s*(['\"`])(.*?)\1",
+)
+SELECTOR_TOKEN: Final[re.Pattern[str]] = re.compile(
+    r'[.#](-?[A-Za-z_][\w-]*)',
+)
+BRACKETED: Final[re.Pattern[str]] = re.compile(r'\[[^\]]*\]')
+TAKES_ARGUMENT: Final[frozenset[str]] = frozenset({'has', 'not', 'is'})
 
 
 @dataclass(frozen=True)
@@ -141,3 +159,270 @@ def rule_line(*, rule: CssRule) -> str:
         Context, selector and declarations, separated by ' | '.
     """
     return f'{rule.context} | {rule.selector} | {"; ".join(rule.body)}'
+
+
+def top_level_split(*, text: str) -> list[str]:
+    """
+    Split a selector list at the commas outside brackets.
+
+    Parameters
+    ----------
+    text : str
+        A selector list.
+
+    Returns
+    -------
+    list[str]
+        Each selector, trimmed.
+    """
+    parts: list[str] = []
+    depth = 0
+    start = 0
+    for index, char in enumerate(text):
+        depth += {'(': 1, '[': 1, ')': -1, ']': -1}.get(char, 0)
+        if char == ',' and depth == 0:
+            parts.append(text[start:index].strip())
+            start = index + 1
+    parts.append(text[start:].strip())
+    return parts
+
+
+def selector_tokens(*, selector: str) -> frozenset[str]:
+    """
+    List the class and id names a selector names.
+
+    Attribute selectors are skipped, so a quoted value never counts.
+
+    Parameters
+    ----------
+    selector : str
+        One selector, or a selector list.
+
+    Returns
+    -------
+    frozenset[str]
+        The names, without their `.` or `#`.
+    """
+    return frozenset(
+        SELECTOR_TOKEN.findall(BRACKETED.sub('', selector)),
+    )
+
+
+def python_strings(*, path: Path) -> Iterator[str]:
+    """
+    Yield the string literals of a Python file, docstrings left out.
+
+    The literal parts of an f-string count; its fields do not.
+
+    Parameters
+    ----------
+    path : Path
+        A Python source file.
+
+    Yields
+    ------
+    str
+        Each string literal.
+    """
+    tree = ast.parse(path.read_text(encoding='utf-8'))
+    docstrings = {
+        id(node.body[0].value)
+        for node in ast.walk(tree)
+        if isinstance(
+            node,
+            ast.Module | ast.ClassDef | ast.FunctionDef | ast.AsyncFunctionDef,
+        )
+        and node.body
+        and isinstance(node.body[0], ast.Expr)
+        and isinstance(node.body[0].value, ast.Constant)
+    }
+    yield from (
+        node.value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Constant)
+        and isinstance(node.value, str)
+        and id(node) not in docstrings
+    )
+
+
+def script_tokens(*, script: str) -> set[str]:
+    """
+    Read the class and id names a script puts on or looks up in markup.
+
+    Parameters
+    ----------
+    script : str
+        A JavaScript file's text.
+
+    Returns
+    -------
+    set[str]
+        Arguments of `classList.*` and `getElementById`, and the `.x`
+        and `#x` names in `querySelector` strings.
+    """
+    called = {
+        name.strip(" '")
+        for arguments in SCRIPT_CALL.findall(script)
+        for name in arguments.split(',')
+    }
+    queried = {
+        name
+        for _, query in QUERY.findall(script)
+        for name in selector_tokens(selector=query)
+    }
+    return (called | queried) - {''}
+
+
+def web_files(*, root: Traversable) -> Iterator[Traversable]:
+    """
+    Walk a web directory's files.
+
+    Parameters
+    ----------
+    root : Traversable
+        The directory.
+
+    Yields
+    ------
+    Traversable
+        Every file under it, at any depth.
+    """
+    for entry in root.iterdir():
+        if entry.is_dir():
+            yield from web_files(root=entry)
+        else:
+            yield entry
+
+
+def markup_tokens(
+    *, root: Traversable, python: Sequence[Path],
+) -> frozenset[str]:
+    """
+    Read every class and id name that markup can carry.
+
+    Names come only from markup: `class` and `id` values in the
+    templates and in Python string literals, and the names scripts set
+    or query. Prose and code words never count.
+
+    Parameters
+    ----------
+    root : Traversable
+        The web directory holding `.html` templates and `.js` scripts.
+    python : Sequence[Path]
+        Python modules that build markup in strings.
+
+    Returns
+    -------
+    frozenset[str]
+        The names.
+    """
+    texts = [
+        (entry.name, entry.read_text(encoding='utf-8'))
+        for entry in web_files(root=root)
+        if entry.name.endswith(('.html', '.js'))
+    ]
+    strings = [
+        text
+        for path in python
+        for text in python_strings(path=path)
+    ]
+    markup = [text for name, text in texts if name.endswith('.html')]
+    return frozenset(
+        name
+        for text in [*markup, *strings]
+        for value in ATTRIBUTE.findall(text)
+        for name in value.split()
+        if not {'{', '}'} & set(name)
+    ) | frozenset(
+        name
+        for name_, text in texts
+        if name_.endswith('.js')
+        for name in script_tokens(script=text)
+    )
+
+
+def specificity(*, selector: str) -> tuple[int, int, int]:
+    """
+    Work out a selector's specificity.
+
+    `:has()`, `:not()` and `:is()` count as their most specific
+    argument; `:where()` counts as nothing.
+
+    Parameters
+    ----------
+    selector : str
+        One selector, not a list.
+
+    Returns
+    -------
+    tuple[int, int, int]
+        Ids, then classes, attributes and pseudo-classes, then types
+        and pseudo-elements.
+    """
+    ids = classes = types = 0
+    index = 0
+    while index < len(selector):
+        char = selector[index]
+        if char == '[':
+            classes += 1
+            index = selector.index(']', index) + 1
+        elif char in '.#':
+            match = re.match(r'[\w-]+', selector[index + 1:])
+            ids += char == '#'
+            classes += char == '.'
+            index += 1 + (len(match.group()) if match else 0)
+        elif selector.startswith('::', index):
+            types += 1
+            match = re.match(r'[\w-]+', selector[index + 2:])
+            index += 2 + (len(match.group()) if match else 0)
+        elif char == ':':
+            match = re.match(r'[\w-]+', selector[index + 1:])
+            name = match.group() if match else ''
+            index += 1 + len(name)
+            if index < len(selector) and selector[index] == '(':
+                end = closing_paren(text=selector, start=index)
+                inner = selector[index + 1:end]
+                index = end + 1
+                if name in TAKES_ARGUMENT:
+                    most = max(
+                        specificity(selector=part)
+                        for part in top_level_split(text=inner)
+                    )
+                    ids, classes, types = (
+                        ids + most[0], classes + most[1], types + most[2],
+                    )
+                    continue
+                if name == 'where':
+                    continue
+            classes += 1
+        elif re.match(r'[A-Za-z]', char):
+            match = re.match(r'[\w-]+', selector[index:])
+            types += 1
+            index += len(match.group()) if match else 1
+        else:
+            index += 1
+    return ids, classes, types
+
+
+def closing_paren(*, text: str, start: int) -> int:
+    """
+    Find the bracket that closes the one opened at `start`.
+
+    Parameters
+    ----------
+    text : str
+        A selector.
+    start : int
+        Index of an opening round bracket.
+
+    Returns
+    -------
+    int
+        Index of its closing bracket.
+    """
+    depth = 0
+    for index in range(start, len(text)):
+        depth += {'(': 1, ')': -1}.get(text[index], 0)
+        if depth == 0:
+            return index
+    raise ValueError(f'unclosed bracket at {start}')

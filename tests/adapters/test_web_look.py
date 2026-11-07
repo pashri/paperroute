@@ -79,6 +79,18 @@ def css_text() -> str:
     return (SHELL_WEB / 'live.css').read_text(encoding='utf-8')
 
 
+def board_css_text() -> str:
+    """
+    Read the board's stylesheet.
+
+    Returns
+    -------
+    str
+        The text of `board.css`.
+    """
+    return (WEB / 'board.css').read_text(encoding='utf-8')
+
+
 def page_text(*, name: str) -> str:
     """
     Read a packaged page.
@@ -314,7 +326,9 @@ def test_dark_block_only_sets_tokens() -> None:
 
 def test_font_sizes_are_rem() -> None:
     """No font size is set in pixels."""
-    sizes = re.findall(r'font-size:\s*([^;]+);', css_text())
+    sizes = re.findall(
+        r'font-size:\s*([^;]+);', css_text() + board_css_text(),
+    )
     assert sizes
     assert not [size for size in sizes if 'px' in size]
 
@@ -549,7 +563,9 @@ def test_live_has_one_knobs_card() -> None:
 
 def test_on_screen_now_matches_line_size() -> None:
     """'On the screen now' is set in the pin line's small size."""
-    body = rule_body(css=css_text(), selector='.pins small,\n.pins .now')
+    body = rule_body(
+        css=board_css_text(), selector='.pins small,\n.pins .now',
+    )
     assert 'font-size: 0.875rem' in declarations(body=body)
 
 
@@ -584,4 +600,23 @@ def test_hidden_beats_the_button_display() -> None:
 def test_danger_zone_rule() -> None:
     """The Delete card's top border is the danger colour."""
     rule = '.danger-zone {\n  border-block-start-color: var(--danger);\n}'
-    assert rule in css_text()
+    assert rule in board_css_text()
+
+
+def test_app_pages_link_board_css_after_live_css() -> None:
+    """Every app page that links the shell sheet links the board's next."""
+    pages = [
+        entry.read_text(encoding='utf-8').splitlines()
+        for entry in WEB.iterdir()
+        if entry.name.endswith('.html')
+    ]
+    links = [
+        [line.strip() for line in lines if line.strip().startswith('<link')]
+        for lines in pages
+    ]
+    shell = '<link rel="stylesheet" href="/live.css">'
+    linked = [found for found in links if shell in found]
+    assert linked
+    for found in linked:
+        after = found[found.index(shell) + 1:]
+        assert after[:1] == ['<link rel="stylesheet" href="/board.css">']

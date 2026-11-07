@@ -186,7 +186,7 @@ async def test_hand_way_carries_unsaved_edits(client: Client) -> None:
 async def test_stop_search_reads_as_field_text(client: Client) -> None:
     """Tom Select's chosen stop uses the page's text and surface tokens."""
     text = await (await client.get(f'/pins/ways?ref={REF}')).text()
-    sheet = await (await client.get('/live.css')).text()
+    sheet = await (await client.get('/board.css')).text()
     assert text.index('/vendor/tom-select.css') < text.index('/live.css')
     full = sheet.index('.ts-wrapper.full .ts-control,')
     assert 'background: var(--surface);' in sheet[full:full + 120]

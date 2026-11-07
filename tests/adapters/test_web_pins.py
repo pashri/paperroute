@@ -956,7 +956,9 @@ async def test_colour_sheet_without_timetable(pins: Pins) -> None:
 async def test_pins_page_links_colour_sheet(client: Client) -> None:
     """The Pins page links the colour sheet after the main one."""
     page = parse_page(text=await (await client.get('/pins')).text())
-    assert page.stylesheets == ['/live.css', '/route-colours.css']
+    assert page.stylesheets == [
+        '/live.css', '/board.css', '/route-colours.css',
+    ]
 
 
 def between(*, text: str, start: str) -> str:

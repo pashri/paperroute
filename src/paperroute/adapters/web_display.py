@@ -253,6 +253,7 @@ class WebDisplay:
         app = web_app(
             live=self.live,
             routes=[
+                web.get('/board.css', self._board_css),
                 web.get('/vendor/{name}', self._vendor),
                 web.get('/settings', self._settings_page),
                 web.get('/settings.js', self._settings_js),
@@ -277,6 +278,26 @@ class WebDisplay:
         del app
         if self._board is not None:
             await self._board.close()
+
+    async def _board_css(self, request: web.Request) -> web.Response:
+        """
+        Serve the board pages' stylesheet.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request.
+
+        Returns
+        -------
+        web.Response
+            The response.
+        """
+        del request
+        return web.Response(
+            text=asset(name='board.css'),
+            content_type='text/css',
+        )
 
     async def _vendor(self, request: web.Request) -> web.Response:
         """

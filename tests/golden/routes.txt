@@ -13,6 +13,8 @@ GET /events
 POST /knob
 HEAD /status
 GET /status
+HEAD /board.css
+GET /board.css
 HEAD /vendor/{name}
 GET /vendor/{name}
 HEAD /settings

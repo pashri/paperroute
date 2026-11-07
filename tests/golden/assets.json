@@ -7,9 +7,9 @@
   },
   "/board.css": {
     "cache_control": null,
-    "content_type": "text/plain; charset=utf-8",
-    "sha256": "d5558cd419c8d46bdc958064cb97f963d1ea793866414c025906ec15033512ed",
-    "status": 404
+    "content_type": "text/css; charset=utf-8",
+    "sha256": "550631ac5da4c54fc841469396d8ef495ec22f1c9d3972f0ddb65acd8511c121",
+    "status": 200
   },
   "/device.js": {
     "cache_control": null,
@@ -26,7 +26,7 @@
   "/live.css": {
     "cache_control": null,
     "content_type": "text/css; charset=utf-8",
-    "sha256": "dfdc5866cca3fc744a958e56288e525322a9d5cdc0768af5c50cfd57abf339ff",
+    "sha256": "77d4200f01cc4b1460f8ffe270ac595a88f1230d36523a5a4b5bc85451ce8da8",
     "status": 200
   },
   "/live.js": {

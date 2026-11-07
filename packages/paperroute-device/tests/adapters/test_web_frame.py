@@ -67,3 +67,16 @@ def test_nav_html_escapes_label() -> None:
     nav = nav_html(items=(item,), current=None)
     assert '<span>A&amp;B</span>' in nav
     assert 'A&B' not in nav
+
+
+def test_kit_never_names_board_css() -> None:
+    """No kit web file names the app's board stylesheet."""
+    pending = [SHELL_WEB]
+    found: list[str] = []
+    while pending:
+        for entry in pending.pop().iterdir():
+            if entry.is_dir():
+                pending.append(entry)
+            elif b'board.css' in entry.read_bytes():
+                found.append(entry.name)
+    assert not found

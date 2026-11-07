@@ -167,6 +167,7 @@ UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
                 '/opt/paperroute/current/.venv/bin/python'
                 ' -m paperroute.screen --image'
                 ' /usr/local/share/paperroute/deploy/screens/on.raw'
+                ' --state /var/lib/paperroute/state.json'
             ),
         },
         'Install': {'WantedBy': 'multi-user.target'},
@@ -2009,6 +2010,8 @@ def test_off_hook_draws_on_poweroff_only(
             'paperroute.screen',
             '--image',
             '/usr/local/share/paperroute/deploy/screens/off.raw',
+            '--state',
+            '/var/lib/paperroute/state.json',
         ]
 
 

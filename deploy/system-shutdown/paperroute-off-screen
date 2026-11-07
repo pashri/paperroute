@@ -7,7 +7,8 @@ poweroff | halt)
     "${PAPERROUTE_TIMEOUT:-/usr/bin/timeout}" 20 \
         "${PAPERROUTE_PYTHON:-/opt/paperroute/current/.venv/bin/python}" \
         -m paperroute.screen \
-        --image /usr/local/share/paperroute/deploy/screens/off.raw || true
+        --image /usr/local/share/paperroute/deploy/screens/off.raw \
+        --state /var/lib/paperroute/state.json || true
     ;;
 esac
 exit 0

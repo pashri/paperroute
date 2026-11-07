@@ -1528,6 +1528,20 @@ def test_starting_state_fills_the_pins_places() -> None:
     assert state.now == AT
 
 
+def test_starting_state_awaits_the_first_tick() -> None:
+    """The app starts not yet knowing whether the clock is set."""
+    ports = Ports(
+        timetable=PlacedTimetable(),
+        feeds=FileFeedsClient(directory=REAL),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
+        tiles=NullTiles(),
+    )
+    assert not starting_state(ports=ports, seed=MAP_PIN).clock_known
+
+
 def test_starting_state_keeps_no_destination() -> None:
     """A pin without a Destination starts with its From filled in."""
     ports = Ports(

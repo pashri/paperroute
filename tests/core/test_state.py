@@ -3241,6 +3241,40 @@ def test_synced_start_never_waits() -> None:
     assert state.clock_wait_until is None
 
 
+def test_events_before_the_first_tick_wait_for_it() -> None:
+    """Nothing is drawn or fetched until a tick reports the clock."""
+    state = replace(fresh(), clock_known=False)
+    deps = tuple(
+        departure(departs=START + timedelta(minutes=3 * (i + 1)))
+        for i in range(3)
+    )
+    state, effects = step(
+        state,
+        DeparturesLoaded(
+            pin=shown(state=state),
+            departures=deps,
+            until=START + HORIZON + RELOAD_BEFORE,
+        ),
+    )
+    assert drawn_or_fetched(effects=effects) == []
+    assert state.last_view is None
+    state, effects = step_answered(
+        state=state, event=Tick(now=START + timedelta(seconds=5)),
+    )
+    assert state.clock_known
+    assert any(isinstance(effect, FetchFeed) for effect in effects)
+    assert sum(isinstance(effect, Render) for effect in effects) == 1
+
+
+def test_unsynced_first_tick_starts_the_wait() -> None:
+    """An unsynced first tick after start-up waits as usual."""
+    state = replace(fresh(), clock_known=False)
+    state, effects = clock_waiting(state=state)
+    assert state.clock_known
+    assert state.clock_wait_until == START + CLOCK_WAIT
+    assert drawn_or_fetched(effects=effects) == []
+
+
 def test_unsynced_again_after_drawing_does_not_wait() -> None:
     """Once a frame is drawn, an unsynced tick starts no new wait."""
     state = loaded(state=fresh())

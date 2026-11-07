@@ -377,6 +377,9 @@ class State:
     clock_gave_up : bool
         True once the wait has run out unsynchronised; the hold is over
         for good, but a later sync still starts afresh.
+    clock_known : bool
+        False from start-up until the first tick says whether the clock
+        is synchronised; the app waits for the clock meanwhile.
     """
 
     now: datetime
@@ -405,6 +408,7 @@ class State:
     cycle: Cycle = field(default_factory=Cycle)
     clock_wait_until: datetime | None = None
     clock_gave_up: bool = False
+    clock_known: bool = True
 
 
 def clock_waiting(*, state: State) -> bool:
@@ -419,9 +423,11 @@ def clock_waiting(*, state: State) -> bool:
     Returns
     -------
     bool
-        True while a wait is set, has not been given up, and its end has
-        not come, in real time.
+        True before the first tick, and while a wait is set, has not been
+        given up, and its end has not come, in real time.
     """
+    if not state.clock_known:
+        return True
     until = state.clock_wait_until
     if until is None or state.clock_gave_up:
         return False

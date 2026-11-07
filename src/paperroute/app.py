@@ -131,7 +131,8 @@ def starting_state(*, ports: Ports, seed: Pin | None = None) -> State:
 
     Without saved state the seed becomes the one pin, its places filled
     in from the timetable; without either, the defaults show. State not
-    from the store is written on the first tick.
+    from the store is written on the first tick, and until that tick
+    says whether the clock is synchronised the app waits for it.
 
     Parameters
     ----------
@@ -152,9 +153,10 @@ def starting_state(*, ports: Ports, seed: Pin | None = None) -> State:
     elif seed is not None:
         saved = seeded(pin=filled(timetable=ports.timetable, pin=seed))
         logger.info('state seeded from the command line or environment')
-    return initial_state(
+    state = initial_state(
         saved=saved, now=ports.clock.now(), stored=loaded.stored
     )
+    return replace(state, clock_known=False)
 
 
 async def handle(

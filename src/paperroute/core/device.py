@@ -417,11 +417,15 @@ def clock_checked(*, state: State, now: datetime, synced: bool) -> State:
         the tick the wait runs out; `clock_set` on the first synced
         tick after unsynced ones; otherwise only the time moves on.
     """
-    after = replace(state, now=now)
+    after = replace(state, now=now, clock_known=True)
     waiting = state.clock_wait_until is not None
     if synced:
         return clock_set(state=after) if waiting else after
-    if clock_waiting(state=state) and not clock_waiting(state=after):
+    if (
+        waiting
+        and clock_waiting(state=state)
+        and not clock_waiting(state=after)
+    ):
         panel = replace(after.panel, probed_at=None)
         return replace(after, clock_gave_up=True, panel=panel)
     if waiting or state.last_view is not None:

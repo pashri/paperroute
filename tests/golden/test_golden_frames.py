@@ -11,7 +11,12 @@ import pytest
 import skia
 from numpy.typing import NDArray
 
+from paperroute.core.connection_strip import (
+    ConnectionStripMapView,
+    ConnectionStripView,
+)
 from paperroute.core.messages import ScreenView
+from paperroute.core.strip_model import StripMapView, StripView
 from paperroute.render.canvas import encode_png
 from paperroute.render.panel_bits import grey_planes, oriented
 from tests.golden.scenes import (
@@ -109,6 +114,20 @@ def test_scenes_cover_every_screen_view() -> None:
     """Some scene shows each kind of screen."""
     shown = {type(view_of(state=scene())) for scene in SCENES.values()}
     assert shown == set(get_args(ScreenView))
+
+
+def test_strip_scenes_carry_pattern_data() -> None:
+    """The Strip scenes draw train marks and real leg stops."""
+    strip = view_of(state=SCENES['strip']())
+    strip_map = view_of(state=SCENES['strip_map']())
+    assert isinstance(strip, StripView) and strip.markers
+    assert isinstance(strip_map, StripMapView) and strip_map.pane.markers
+    legs = view_of(state=SCENES['connection_strip']())
+    legs_map = view_of(state=SCENES['connection_strip_map']())
+    assert isinstance(legs, ConnectionStripView)
+    assert isinstance(legs_map, ConnectionStripMapView)
+    for section in (*legs.sections, *legs_map.pane.sections):
+        assert section.stops and section.empty is None
 
 
 def test_png_round_trip_is_exact() -> None:

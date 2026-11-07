@@ -27,6 +27,7 @@ from paperroute.core.geo import make_shape
 from paperroute.core.messages import (
     DeparturesLoaded,
     FetchFeed,
+    PatternsLoaded,
     PositionsFetched,
     PowerAction,
     PowerRequested,
@@ -35,6 +36,7 @@ from paperroute.core.messages import (
     StripLoaded,
 )
 from paperroute.core.model import Pin
+from paperroute.core.patterns import TripPattern
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
@@ -50,12 +52,21 @@ from tests.core.connection_factories import (
     WORK,
     at,
 )
-from tests.core.factories import START, snapshot, vehicle
+from tests.core.factories import (
+    EAST,
+    START,
+    example_reach,
+    line_pattern,
+    snapshot,
+    train,
+    vehicle,
+)
 from tests.core.steps import answer_fetches
-from tests.core.strip_factories import KEY, long_reach, on_view
+from tests.core.strip_factories import KEY, PIN, SOUTH, WEST, on_view
 from tests.core.test_alerts_view import on_alerts
 from tests.core.test_chains import TRAINS
 from tests.core.test_connection_screens import started, with_legs
+from tests.core.test_connection_strip import PATTERNS as LEG_PATTERNS
 from tests.core.test_state import BUS_POSITIONS, CENTRE, PRESS, fresh, loaded
 
 GOLDEN: Final[Path] = Path(__file__).parent
@@ -70,6 +81,12 @@ ROUTE: Final[list[tuple[float, float]]] = [
     (-15_000.0, -400.0),
 ]
 LABEL: Final[str] = 'Golden St'
+STRIP_TRIPS: Final[dict[str, tuple[tuple[str, ...], int]]] = {
+    'e0': (EAST, -2),
+    'e': (EAST, 0),
+    'w': (WEST, 3),
+    'r': (SOUTH, 4),
+}
 
 
 def baseline_bytes(*, path: Path, data: bytes) -> bytes:
@@ -301,7 +318,7 @@ def map_panes() -> State:
 
 def strip_scene(*, view: LiveView) -> State:
     """
-    Show a train line on a Strip view.
+    Show trains on a branching line on a Strip view.
 
     Parameters
     ----------
@@ -311,11 +328,64 @@ def strip_scene(*, view: LiveView) -> State:
     Returns
     -------
     State
-        State at `START`.
+        State at `START`, with the reach and every train's pattern.
     """
-    state, _ = on_view(view=view)
-    state, _ = step(state, StripLoaded(key=KEY, reach=long_reach()))
+    departures = tuple(
+        train(minutes=minutes, trip_id=trip)
+        for trip, (_, minutes) in STRIP_TRIPS.items()
+    )
+    state, _ = on_view(
+        view=view, pin=replace(PIN, destination=None), departures=departures,
+    )
+    state, _ = step(state, StripLoaded(key=KEY, reach=example_reach()))
+    patterns: dict[str, TripPattern | None] = {
+        trip: line_pattern(trip_id=trip, stations=line, minutes=minutes)
+        for trip, (line, minutes) in STRIP_TRIPS.items()
+    }
+    return patterns_loaded(state=state, patterns=patterns)
+
+
+def patterns_loaded(
+    *, state: State, patterns: dict[str, TripPattern | None],
+) -> State:
+    """
+    Load some trips' patterns.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    patterns : dict[str, TripPattern | None]
+        Patterns by trip ID.
+
+    Returns
+    -------
+    State
+        State after the load.
+    """
+    state, _ = step(state, PatternsLoaded(
+        trip_ids=frozenset(patterns), patterns=patterns, shapes={},
+    ))
     return state
+
+
+def connection_strip(*, view: LiveView) -> State:
+    """
+    Show the Work connection pin's legs on a Strip view.
+
+    Parameters
+    ----------
+    view : LiveView
+        The Strip or Strip + map.
+
+    Returns
+    -------
+    State
+        State at 7:30 on the connection's day, with both legs' patterns.
+    """
+    return patterns_loaded(
+        state=connection(view=view), patterns=dict(LEG_PATTERNS),
+    )
 
 
 def connection(*, view: LiveView) -> State:
@@ -426,8 +496,10 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'strip_map': lambda: strip_scene(view=LiveView.STRIP_MAP),
     'alerts': on_alerts,
     'connection': lambda: connection(view=LiveView.STOP),
-    'connection_strip': lambda: connection(view=LiveView.STRIP),
-    'connection_strip_map': lambda: connection(view=LiveView.STRIP_MAP),
+    'connection_strip': lambda: connection_strip(view=LiveView.STRIP),
+    'connection_strip_map': lambda: connection_strip(
+        view=LiveView.STRIP_MAP,
+    ),
     'chooser': chooser,
     'building': building,
     'notice': notice,

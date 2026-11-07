@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Device - paperroute</title>
+  <link rel="stylesheet" href="/live.css">
+  <script type="module" src="/device.js"></script>
+</head>
+<body>
+  <header>
+    <h1>paperroute</h1>
+  </header>
+  <nav aria-label="Pages">
+    <ul class="pages">
+      <li>
+        <a href="/">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <rect x="3" y="5" width="18" height="12" rx="1"/><path d="M8 21h8"/>
+          </svg>
+          <span>Live</span>
+        </a>
+      </li>
+      <li>
+        <a href="/pins">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <path d="M12 22s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>
+          </svg>
+          <span>Pins</span>
+        </a>
+      </li>
+      <li>
+        <a href="/settings">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>
+          </svg>
+          <span>Settings</span>
+        </a>
+      </li>
+      <li>
+        <a href="/device" aria-current="page">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <rect x="6" y="3" width="12" height="18" rx="2"/><path d="M10 18h4"/>
+          </svg>
+          <span>Device</span>
+        </a>
+      </li>
+    </ul>
+  </nav>
+  <main>
+    
+    <section class="card setting" aria-labelledby="network">
+      <h2 id="network">Network</h2>
+      <dl class="facts">
+        <div>
+          <dt>Wi-Fi</dt>
+          <dd>Home · strong (-52 dBm)</dd>
+        </div>
+        <div>
+          <dt>Address</dt>
+          <dd>192.168.1.40 · paperroute.local</dd>
+        </div>
+        <div>
+          <dt>Clock</dt>
+          <dd>Synced</dd>
+        </div>
+      </dl>
+      <form method="post" action="/device/wifi">
+        <button type="submit" class="secondary"
+                aria-describedby="wifi-hint">Join another network&hellip;</button>
+      </form>
+      <p id="wifi-hint" class="hint">Confirm on the device. Hidden networks and a show-password toggle are on the setup page.</p>
+    </section>
+    <section class="card setting" aria-labelledby="data">
+      <h2 id="data">Data</h2>
+      <dl class="facts">
+        <div>
+          <dt>Timetable</dt>
+          <dd>version 6 · built 21 Oct 21:45 · ok</dd>
+        </div>
+        <div>
+          <dt>Map tiles</dt>
+          <dd>built 19 Oct</dd>
+        </div>
+        <div>
+          <dt>API calls today</dt>
+          <dd>8,412 of 60,000</dd>
+        </div>
+      </dl>
+      <div class="table">
+        <table>
+          <caption>Feeds</caption>
+          <thead>
+            <tr><th scope="col">Feed</th><th scope="col">Last ok</th><th scope="col">Age</th></tr>
+          </thead>
+          <tbody>
+            <tr><th scope="row">Buses trip updates</th><td>21:44:20</td><td>40 s</td></tr>
+            <tr><th scope="row">Sydney Trains positions</th><td>21:44:48</td><td>12 s</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+    <section class="card setting" aria-labelledby="system">
+      <h2 id="system">System</h2>
+      <dl class="facts">
+        <div>
+          <dt>Software</dt>
+          <dd>abc1234</dd>
+        </div>
+        <div>
+          <dt>Up</dt>
+          <dd>2 h 14 min</dd>
+        </div>
+        <div>
+          <dt>CPU</dt>
+          <dd>48 °C</dd>
+        </div>
+        <div>
+          <dt>Free disk</dt>
+          <dd>21 GB · memory 134 MB</dd>
+        </div>
+        <div>
+          <dt>Last error</dt>
+          <dd>none</dd>
+        </div>
+
+      </dl>
+      <ul class="downloads">
+        <li><a href="/device/errors.jsonl">Download error log</a></li>
+        <li><a href="/device/state.json">Download state</a></li>
+      </ul>
+      <p class="hint">No secrets in either file.</p>
+    </section>
+    <section class="card setting" aria-labelledby="api-key-heading">
+      <h2 id="api-key-heading">TfNSW API key</h2>
+      <p>Key set · last used 12 s ago</p>
+      <form method="post" action="/device/key">
+        <label for="api-key">New key</label>
+        <input id="api-key" name="api_key" type="password" autocomplete="off"
+               autocapitalize="off" spellcheck="false" required>
+        <button type="submit">Save key</button>
+      </form>
+    </section>
+    <section class="card setting" aria-labelledby="device">
+      <h2 id="device">Device</h2>
+      <div class="buttons">
+        <form method="post" action="/device/power?action=reboot"
+              data-power="reboot">
+          <button type="submit" class="secondary">Restart</button>
+        </form>
+        <form method="post" action="/device/power?action=poweroff"
+              data-power="poweroff">
+          <button type="submit" class="danger">Shut down</button>
+        </form>
+      </div>
+      <p class="hint">These ask on this page first, then act.</p>
+      <p id="device-status" class="hint" aria-live="polite"></p>
+      <dialog id="reboot-dialog" data-power="reboot"
+              aria-labelledby="reboot-question">
+        <form method="dialog">
+          <p id="reboot-question">Restart now?</p>
+          <div class="buttons">
+            <button value="cancel" class="secondary" autofocus>Cancel</button>
+            <button value="confirm">Restart</button>
+          </div>
+        </form>
+      </dialog>
+      <dialog id="poweroff-dialog" data-power="poweroff"
+              aria-labelledby="poweroff-question">
+        <form method="dialog">
+          <p id="poweroff-question">Shut down now? The screen will show OFF when it's safe to unplug.</p>
+          <div class="buttons">
+            <button value="cancel" class="secondary" autofocus>Cancel</button>
+            <button value="confirm" class="danger">Shut down</button>
+          </div>
+        </form>
+      </dialog>
+    </section>
+    <section class="card setting" aria-labelledby="reset">
+      <h2 id="reset">Reset</h2>
+      <div class="buttons">
+        <form method="post" action="/device/reset">
+          <input type="hidden" name="kind" value="settings">
+          <button type="submit" class="danger">Reset settings</button>
+        </form>
+        <form method="post" action="/device/reset">
+          <input type="hidden" name="kind" value="erase">
+          <button type="submit" class="danger">Erase everything</button>
+        </form>
+      </div>
+      <p class="hint">Reset settings clears pins, settings, Wi-Fi and the key. Erase everything also deletes the timetable. The map is kept. Both are confirmed on the device.</p>
+    </section>
+  </main>
+</body>
+</html>

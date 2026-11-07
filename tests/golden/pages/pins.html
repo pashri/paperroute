@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pins - paperroute</title>
+  <link rel="stylesheet" href="/live.css">
+  <link rel="stylesheet" href="/route-colours.css">
+  <script type="module" src="/pins.js"></script>
+</head>
+<body>
+  <header>
+    <h1>paperroute</h1>
+  </header>
+  <nav aria-label="Pages">
+    <ul class="pages">
+      <li>
+        <a href="/">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <rect x="3" y="5" width="18" height="12" rx="1"/><path d="M8 21h8"/>
+          </svg>
+          <span>Live</span>
+        </a>
+      </li>
+      <li>
+        <a href="/pins" aria-current="page">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <path d="M12 22s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>
+          </svg>
+          <span>Pins</span>
+        </a>
+      </li>
+      <li>
+        <a href="/settings">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>
+          </svg>
+          <span>Settings</span>
+        </a>
+      </li>
+      <li>
+        <a href="/device">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <rect x="6" y="3" width="12" height="18" rx="2"/><path d="M10 18h4"/>
+          </svg>
+          <span>Device</span>
+        </a>
+      </li>
+    </ul>
+  </nav>
+  <main>
+    <section class="card" aria-labelledby="pins-heading">
+      <h2 id="pins-heading">Your pins</h2>
+      
+      <ol class="pins">
+      <li data-ref="d5e60f0f4c5f">
+        <span class="chip mode-any" aria-hidden="true">606</span>
+        <div class="pin">
+          <b>Work</b>
+          <small class="trip">Hollis St → Parramatta · 606</small>
+          <span class="now">On the screen now</span>
+        </div>
+        <form class="move" method="post"
+              action="/pins/move">
+          <input type="hidden" name="ref" value="d5e60f0f4c5f">
+          <input type="hidden" name="steps" value="-1">
+          <button type="submit" class="secondary"
+                  aria-label="Move Work up">↑</button>
+        </form>
+        <form class="move" method="post"
+              action="/pins/move">
+          <input type="hidden" name="ref" value="d5e60f0f4c5f">
+          <input type="hidden" name="steps" value="1">
+          <button type="submit" class="secondary"
+                  aria-label="Move Work down">↓</button>
+        </form>
+        <a class="edit" href="/pins/ways?ref=d5e60f0f4c5f"
+           aria-label="Edit Work">Edit</a>
+        <span class="grip" aria-hidden="true">⋮⋮</span>
+      </li>
+      <li data-ref="3bddd489f275">
+        <span class="chip mode-any" aria-hidden="true">All</span>
+        <div class="pin">
+          <b>Home Stop</b>
+          <small>Home Stop</small>
+        </div>
+        <form class="move" method="post"
+              action="/pins/move">
+          <input type="hidden" name="ref" value="3bddd489f275">
+          <input type="hidden" name="steps" value="-1">
+          <button type="submit" class="secondary"
+                  aria-label="Move Home Stop up">↑</button>
+        </form>
+        <form class="move" method="post"
+              action="/pins/move">
+          <input type="hidden" name="ref" value="3bddd489f275">
+          <input type="hidden" name="steps" value="1">
+          <button type="submit" class="secondary"
+                  aria-label="Move Home Stop down">↓</button>
+        </form>
+        <a class="edit" href="/pins/edit?ref=3bddd489f275"
+           aria-label="Edit Home Stop">Edit</a>
+        <span class="grip" aria-hidden="true">⋮⋮</span>
+      </li>
+      <li data-ref="2ddb3752a61e">
+        <span class="chip mode-any" aria-hidden="true">All</span>
+        <div class="pin">
+          <b>&lt;b&gt;&amp;</b>
+          <small>&lt;b&gt;&amp;</small>
+          <span class="missing">Stop not in the new timetable</span>
+        </div>
+        <form class="move" method="post"
+              action="/pins/move">
+          <input type="hidden" name="ref" value="2ddb3752a61e">
+          <input type="hidden" name="steps" value="-1">
+          <button type="submit" class="secondary"
+                  aria-label="Move &lt;b&gt;&amp; up">↑</button>
+        </form>
+        <form class="move" method="post"
+              action="/pins/move">
+          <input type="hidden" name="ref" value="2ddb3752a61e">
+          <input type="hidden" name="steps" value="1">
+          <button type="submit" class="secondary"
+                  aria-label="Move &lt;b&gt;&amp; down">↓</button>
+        </form>
+        <a class="edit" href="/pins/edit?ref=2ddb3752a61e"
+           aria-label="Edit &lt;b&gt;&amp;">Edit</a>
+        <span class="grip" aria-hidden="true">⋮⋮</span>
+      </li>
+    </ol>
+      <form class="search" method="get" action="/pins/new" role="search">
+        <label for="pin-search">Add a pin</label>
+        <input id="pin-search" type="search" name="q"
+               placeholder="Stop or station">
+        <button type="submit">Search</button>
+      </form>
+      <form method="get" action="/pins/ways">
+        <button type="submit" class="secondary">Add a connection</button>
+      </form>
+    </section>
+    <form id="order-form" method="post" action="/pins/order" hidden>
+      <input type="hidden" name="refs" value="">
+    </form>
+  </main>
+</body>
+</html>

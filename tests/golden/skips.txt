@@ -1,0 +1,2 @@
+tests/adapters/test_timetable_db.py::test_809_carries_on_as_811_at_merrylands: real timetable does not cover 19 October 2026
+tests/adapters/test_timetable_db.py::test_train_pin_to_blacktown_parramatta_lists_only_trains: real timetable does not cover 19 October 2026

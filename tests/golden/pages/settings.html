@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Settings - paperroute</title>
+  <link rel="stylesheet" href="/live.css">
+  <script type="module" src="/settings.js"></script>
+</head>
+<body>
+  <header>
+    <h1>paperroute</h1>
+  </header>
+  <nav aria-label="Pages">
+    <ul class="pages">
+      <li>
+        <a href="/">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <rect x="3" y="5" width="18" height="12" rx="1"/><path d="M8 21h8"/>
+          </svg>
+          <span>Live</span>
+        </a>
+      </li>
+      <li>
+        <a href="/pins">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <path d="M12 22s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z"/><circle cx="12" cy="10" r="2.5"/>
+          </svg>
+          <span>Pins</span>
+        </a>
+      </li>
+      <li>
+        <a href="/settings" aria-current="page">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <path d="M4 6h16M4 12h16M4 18h16"/><circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="8" cy="18" r="2"/>
+          </svg>
+          <span>Settings</span>
+        </a>
+      </li>
+      <li>
+        <a href="/device">
+          <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
+            <rect x="6" y="3" width="12" height="18" rx="2"/><path d="M10 18h4"/>
+          </svg>
+          <span>Device</span>
+        </a>
+      </li>
+    </ul>
+  </nav>
+  <main>
+    <section class="card setting" aria-labelledby="display">
+      <h2 id="display">Display</h2>
+      <form id="display-form" method="post" action="/settings">
+        <label>Peak rate
+          <select name="peak_rate">
+            <option value="30s">Every 30 s</option>
+            <option value="60s">Every 60 s</option>
+            <option value="2min" selected>Every 2 min</option>
+          </select>
+        </label>
+        <label>Off-peak rate
+          <select name="offpeak_rate">
+            <option value="30s">Every 30 s</option>
+            <option value="60s" selected>Every 60 s</option>
+            <option value="2min">Every 2 min</option>
+          </select>
+        </label>
+        <fieldset aria-describedby="peak-hint">
+          <legend>Peak hours</legend>
+          <p id="peak-hint" class="hint">
+            Weekdays, not public holidays. Leave a pair empty to drop it.
+          </p>
+          <div class="times">
+            <label>Morning from
+              <input type="time" name="peak_1_start" value="07:00">
+            </label>
+            <label>to
+              <input type="time" name="peak_1_end" value="09:00">
+            </label>
+          </div>
+          <div class="times">
+            <label>Afternoon from
+              <input type="time" name="peak_2_start" value="">
+            </label>
+            <label>to
+              <input type="time" name="peak_2_end" value="">
+            </label>
+          </div>
+          
+        </fieldset>
+        <input type="hidden" name="rotate" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="rotate"
+                 value="on" checked>
+          Rotate 180&deg;
+        </label>
+        <input type="hidden" name="swap_knobs" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="swap_knobs"
+                 value="on" checked>
+          Swap knobs
+        </label>
+        <input type="hidden" name="larger_text" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="larger_text"
+                 value="on" checked>
+          Larger text
+        </label>
+        <input type="hidden" name="inverted_lists" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="inverted_lists"
+                 value="on" checked>
+          White on black lists
+        </label>
+        <input type="hidden" name="skip_school_buses" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch" name="skip_school_buses"
+                 value="on">
+          Leave out school buses
+        </label>
+        <input type="hidden" name="skip_school_on_route_pins" value="off">
+        <label class="switch">
+          <input type="checkbox" role="switch"
+                 name="skip_school_on_route_pins"
+                 value="on" checked>
+          Also on pins without a To
+        </label>
+        <label>Clean screen after
+          <select name="clean_after" aria-describedby="clean-hint">
+            <option value="15">15 changes</option>
+            <option value="30">30 changes</option>
+            <option value="60" selected>60 changes</option>
+            <option value="120">120 changes</option>
+          </select>
+        </label>
+        <p id="clean-hint" class="hint">
+          A full refresh clears the faint marks quick updates leave behind.
+          It waits until the knobs have rested for 30 s.
+        </p>
+        <fieldset>
+          <legend>Connection map</legend>
+          <label class="switch">
+            <input type="radio" name="connection_map" value="changes" aria-describedby="map-changes-hint">
+            Changes
+          </label>
+          <p id="map-changes-hint" class="hint">Zoomed in on each place you change, showing the services that meet there.</p>
+          <label class="switch">
+            <input type="radio" name="connection_map" value="whole" checked aria-describedby="map-whole-hint">
+            Whole trip
+          </label>
+          <p id="map-whole-hint" class="hint">Everything from your stop to your destination.</p>
+          <label class="switch">
+            <input type="radio" name="connection_map" value="first_leg" aria-describedby="map-first-leg-hint">
+            First leg
+          </label>
+          <p id="map-first-leg-hint" class="hint">Your first bus or train from your stop to the first change, with the vehicle on its way.</p>
+          <label class="switch">
+            <input type="radio" name="connection_map" value="start" aria-describedby="map-start-hint">
+            Start only
+          </label>
+          <p id="map-start-hint" class="hint">Zoomed in on your stop, with the vehicles coming towards it.</p>
+        </fieldset>
+        <button type="submit">Save</button>
+        <p class="hint saved" aria-live="polite"></p>
+      </form>
+    </section>
+    <section class="card setting" aria-labelledby="quiet">
+      <h2 id="quiet">Quiet hours</h2>
+      <form id="quiet-form" method="post" action="/settings">
+        <fieldset>
+          <legend>When the screen sleeps</legend>
+          <label class="switch">
+            <input type="radio" name="quiet_mode" value="my_hours">
+            My hours
+          </label>
+          <div class="times">
+            <label>from
+              <input type="time" name="quiet_start" value="22:15">
+            </label>
+            <label>to
+              <input type="time" name="quiet_end" value="06:00">
+            </label>
+          </div>
+          <label class="switch">
+            <input type="radio" name="quiet_mode" value="timetable" checked>
+            Follow the timetable
+          </label>
+        </fieldset>
+        <p class="hint">
+          The screen sleeps and stops polling. The first touch only wakes it
+          (it isn't acted on); each touch keeps it awake 5 more minutes.
+        </p>
+        
+        <button type="submit">Save</button>
+        <p class="hint saved" aria-live="polite"></p>
+      </form>
+    </section>
+    <section class="card setting" aria-labelledby="alerts">
+      <h2 id="alerts">Alerts</h2>
+      <form id="alerts-form" method="post" action="/settings">
+        <label>Show planned alerts up to
+          <select name="alert_lookahead">
+            <option value="1d">1 day</option>
+            <option value="3d" selected>3 days</option>
+            <option value="7d">7 days</option>
+            <option value="all">Everything</option>
+          </select>
+        </label>
+        <p class="hint">
+          Alerts already in force always show. The banner shows planned
+          alerts from a day before they start.
+        </p>
+        <button type="submit">Save</button>
+        <p class="hint saved" aria-live="polite"></p>
+      </form>
+    </section>
+    <section class="card setting" aria-labelledby="timetable">
+      <h2 id="timetable">Timetable</h2>
+      <form id="timetable-form" method="post" action="/settings">
+        <input type="hidden" name="auto_rebuild" value="off">
+        <label class="switch">
+          <input id="auto-rebuild" type="checkbox" role="switch"
+                 name="auto_rebuild" value="on"
+                 aria-describedby="auto-rebuild-hint">
+          Rebuild timetable automatically
+        </label>
+        <p id="auto-rebuild-hint" class="hint">
+          Rebuilds an outdated timetable on the device when a new version
+          needs it.
+        </p>
+        <button type="submit">Save</button>
+        <p class="hint saved" aria-live="polite"></p>
+      </form>
+    </section>
+  </main>
+</body>
+</html>

@@ -34,6 +34,7 @@ from paperroute.__main__ import (
     seed_for,
     serve_or_exit,
     serve_web,
+    sydney_display,
     tiles_for,
     web_main,
     wifi_for,
@@ -41,9 +42,11 @@ from paperroute.__main__ import (
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import GuardedFeeds
+from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
 from paperroute.adapters.tfnsw import AiohttpFeedsClient, tfnsw_limiter
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
+from paperroute.adapters.web_board import SYDNEY_HINT
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
 from paperroute.app_render import MapRenderer
@@ -154,6 +157,27 @@ async def test_device_pages_link_sydney_pages(
     assert [href for href, _, _ in parse_page(text=text).links] == [
         '/', '/pins', '/settings', '/device',
     ]
+
+
+async def test_sydney_display_serves_sydney_nav_and_hint(
+    tmp_path: Path,
+) -> None:
+    """The live page `/` links all four Sydney pages and shows the hint."""
+    display = sydney_display(
+        timings=Timings(),
+        network=SqliteNetworkRepository(path=tmp_path / 'network.db'),
+        live=False,
+    )
+    client = TestClient(TestServer(display.app()))
+    await client.start_server()
+    try:
+        text = await (await client.get('/')).text()
+    finally:
+        await client.close()
+    hrefs = [href for href, _, _ in parse_page(text=text).links]
+    for href in ('/', '/pins', '/settings', '/device'):
+        assert href in hrefs
+    assert SYDNEY_HINT in text
 
 
 def test_panel_for_off_never_opens() -> None:

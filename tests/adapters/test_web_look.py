@@ -299,7 +299,7 @@ async def test_tom_select_is_served(
 
 async def test_vendor_unknown_name_is_missing(client: Client) -> None:
     """Only the vendored files are served."""
-    response = await client.get('/vendor/..%2Fdevice.html')
+    response = await client.get('/vendor/..%2Fsettings.html')
     assert response.status == HTTPStatus.NOT_FOUND
 
 

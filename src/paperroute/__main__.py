@@ -963,6 +963,38 @@ def device_pages_for(
     )
 
 
+def sydney_display(
+    *, timings: Timings, network: SqliteNetworkRepository, live: bool,
+) -> WebDisplay:
+    """
+    Build the web display with Sydney's nav, hint and board pages.
+
+    Parameters
+    ----------
+    timings : Timings
+        Feeds the status page and the pins.
+    network : SqliteNetworkRepository
+        Where the pin options look places up.
+    live : bool
+        Whether the feeds are live, which the trip planner needs.
+
+    Returns
+    -------
+    WebDisplay
+        The display, with no device pages yet.
+    """
+    return WebDisplay(
+        status=timings.snapshot,
+        nav=SYDNEY_NAV,
+        hint=SYDNEY_HINT,
+        board=SydneyPages(
+            pins=lambda: timings.pins,
+            options=SqlitePinOptions(network=network),
+            planner=trip_planner_for(live=live),
+        ),
+    )
+
+
 def web_main(
     *,
     args: argparse.Namespace,
@@ -1003,15 +1035,8 @@ def web_main(
         network_for(args=args) as network,
         tiles_for(args=args) as tiles,
     ):
-        display = WebDisplay(
-            status=timings.snapshot,
-            nav=SYDNEY_NAV,
-            hint=SYDNEY_HINT,
-            board=SydneyPages(
-                pins=lambda: timings.pins,
-                options=SqlitePinOptions(network=network),
-                planner=trip_planner_for(live=args.feeds == 'live'),
-            ),
+        display = sydney_display(
+            timings=timings, network=network, live=args.feeds == 'live',
         )
         display.device = device_pages_for(
             args=args,

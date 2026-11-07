@@ -178,27 +178,6 @@ async def bodies(*, app: web.Application) -> tuple[str, str]:
     return shell, board
 
 
-def served_rules(*, app: web.Application) -> list[str]:
-    """
-    Read the served stylesheets as one line per rule.
-
-    Parameters
-    ----------
-    app : web.Application
-        The app serving `/live.css` and `/board.css`.
-
-    Returns
-    -------
-    list[str]
-        Each rule of `/live.css`, in order, then each of `/board.css`.
-    """
-    return [
-        rule_line(rule=rule)
-        for rules in sheets(app=app)
-        for rule in rules
-    ]
-
-
 def is_subsequence(*, part: Sequence[str], whole: Sequence[str]) -> bool:
     """
     Check that `part` appears in `whole` in the same order.

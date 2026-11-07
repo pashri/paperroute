@@ -6,7 +6,7 @@ import pytest
 
 from paperroute.knobs_open import knobs_for, knobs_state_for
 from paperroute.ports import KnobLines
-from tests.fakes import FakeKnobLines
+from paperroute_testkit.fakes import FakeKnobLines
 
 
 def test_knobs_for_off_never_opens() -> None:

@@ -195,6 +195,18 @@ def test_problems_flags_upward_package_dependency(
     ]
 
 
+def test_problems_flags_unranked_package(
+    check_layers: ModuleType, tmp_path: Path,
+) -> None:
+    """A package with no layer is a problem, not exempt from the rules."""
+    name = 'packages/paperroute-extra/src/paperroute_extra/__init__.py'
+    root = build(root=tmp_path, extra={name: 'import paperroute\n'})
+    assert check_layers.problems(root=root) == [
+        'packages/paperroute-extra/src/paperroute_extra: '
+        'paperroute_extra has no layer',
+    ]
+
+
 def test_problems_empty_for_this_repo(check_layers: ModuleType) -> None:
     """This repository keeps its layers."""
     assert check_layers.problems(root=ROOT) == []

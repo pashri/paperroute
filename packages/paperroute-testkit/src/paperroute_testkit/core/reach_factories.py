@@ -19,8 +19,9 @@ from paperroute.core.reach import (
     build_reach,
 )
 from paperroute.core.reach_layout import LineExit
+from paperroute_testkit.paths import ROOT
 
-REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
+REAL_DB: Final[Path] = ROOT / 'data' / 'timetable.db'
 TOWN_HALL: Final[str] = '200070'
 STRATHFIELD: Final[str] = '213510'
 BLACKTOWN: Final[str] = '214810'

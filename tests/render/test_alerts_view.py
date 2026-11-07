@@ -18,7 +18,7 @@ from paperroute.render.alerts_view import (
 )
 from paperroute.render.canvas import INK, PAPER, WIDTH, Face, text_width
 from paperroute.render.chrome import HEADER
-from tests.core.alert_factories import STRATHFIELD_UPDATE, WESTERN
+from paperroute_testkit.core.alert_factories import STRATHFIELD_UPDATE, WESTERN
 
 ROW_H = 70
 TEXT_WIDTH: Final[int] = TEXT_RIGHT - TEXT_LEFT

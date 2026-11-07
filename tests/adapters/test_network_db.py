@@ -28,8 +28,8 @@ from paperroute.core.reach import (
 from paperroute.core.reach_layout import LineExit
 from paperroute.core.strip_view import build_strip_view
 from paperroute.ports import NetworkRepository
+from paperroute_testkit.core.factories import inputs_of
 from tests.build.network_feed import network_feed, network_files
-from tests.core.factories import inputs_of
 from tests.helpers import old_schema, schema_four, schema_three, write_feed
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'

@@ -29,9 +29,21 @@ from paperroute.core.state import step
 from paperroute.core.state_model import Cycle, State
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.tiles import ZOOMS
-from tests.core.connection_factories import LEG1, LEG2
-from tests.core.factories import EIGHT, START, calls, departure, pattern, place
-from tests.core.strip_factories import CENTRE, on_view, trains, turn
+from paperroute_testkit.core.connection_factories import LEG1, LEG2
+from paperroute_testkit.core.factories import (
+    EIGHT,
+    START,
+    calls,
+    departure,
+    pattern,
+    place,
+)
+from paperroute_testkit.core.strip_factories import (
+    CENTRE,
+    on_view,
+    trains,
+    turn,
+)
 from tests.core.test_connection_screens import legs_loaded, started
 
 

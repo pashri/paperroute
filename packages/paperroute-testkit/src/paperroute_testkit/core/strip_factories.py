@@ -21,7 +21,7 @@ from paperroute.core.state_model import State
 from paperroute.core.stop_view import HORIZON
 from paperroute.core.strip_model import StripInputs, StripRow
 from paperroute.core.strip_view import build_strip_view
-from tests.core.factories import (
+from paperroute_testkit.core.factories import (
     EAST,
     START,
     departure,
@@ -32,7 +32,7 @@ from tests.core.factories import (
     place,
     train,
 )
-from tests.core.steps import step_answered
+from paperroute_testkit.core.steps import step_answered
 
 WEST: Final[tuple[str, ...]] = ('C', 'J', 'W1', 'W2')
 SOUTH: Final[tuple[str, ...]] = ('C', 'J', 'R1', 'R2', 'R3')

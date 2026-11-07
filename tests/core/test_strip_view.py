@@ -42,7 +42,7 @@ from paperroute.core.strip_view import (
     line_reach,
 )
 from paperroute.core.wifi import setup_footer
-from tests.core.factories import (
+from paperroute_testkit.core.factories import (
     EAST,
     POINTS,
     STALE_LIMIT,
@@ -59,8 +59,8 @@ from tests.core.factories import (
     stop_view_of,
     train,
 )
-from tests.core.reach_factories import reach_of, tail
-from tests.core.strip_factories import (
+from paperroute_testkit.core.reach_factories import reach_of, tail
+from paperroute_testkit.core.strip_factories import (
     SOUTH,
     WEST,
     long_reach,

@@ -30,8 +30,8 @@ from paperroute.render.connection_strip import (
     name_room,
     row_step,
 )
-from tests.core.connection_factories import WORK, at
-from tests.core.factories import STALE_LIMIT
+from paperroute_testkit.core.connection_factories import WORK, at
+from paperroute_testkit.core.factories import STALE_LIMIT
 from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
 
 VIEW: Final[ConnectionStripView] = build_connection_strip(

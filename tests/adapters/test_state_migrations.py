@@ -30,7 +30,7 @@ from paperroute.core.model import (
     pin_ref,
 )
 from paperroute.core.saved import DEFAULT_SAVED, ConnectionMap, Saved
-from tests.core.connection_factories import (
+from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
     HAMMERS,
     HOLLIS,

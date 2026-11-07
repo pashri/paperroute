@@ -7,7 +7,15 @@ import sys
 from pathlib import Path
 from typing import Final
 
-SRC: Final[Path] = Path(__file__).parents[1] / 'src' / 'paperroute'
+ROOT: Final[Path] = Path(__file__).parents[1]
+SRC: Final[tuple[Path, ...]] = (
+    ROOT / 'src' / 'paperroute',
+    *sorted(
+        path.parent
+        for path in ROOT.glob('packages/*/src/*/__init__.py')
+        if path.parent.name != 'paperroute_testkit'
+    ),
+)
 DEVICE_IMPORTS: Final[str] = (
     'import paperroute.__main__, paperroute.app, sys; '
     "assert not {'osmium', 'shapely'} & set(sys.modules)"
@@ -51,6 +59,62 @@ def test_refresh_never_imports_build_libraries(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
 
 
+def source_root(*, path: Path) -> Path:
+    """
+    Find the source root holding a file.
+
+    Parameters
+    ----------
+    path : Path
+        A file under one of the source roots.
+
+    Returns
+    -------
+    Path
+        The import package directory, such as ``src/paperroute``.
+    """
+    return next(root for root in SRC if path.is_relative_to(root))
+
+
+def sources(*, sub: str = '') -> list[Path]:
+    """
+    List the Python files of every source root.
+
+    Parameters
+    ----------
+    sub : str
+        A subpackage to look in, such as ``core``; every file when empty.
+
+    Returns
+    -------
+    list[Path]
+        The files, by path.
+    """
+    return sorted(
+        path
+        for root in SRC
+        for path in (root / sub).glob('*.py' if sub else '**/*.py')
+    )
+
+
+def under(*, path: Path) -> str:
+    """
+    Give a source file's path inside its package.
+
+    Parameters
+    ----------
+    path : Path
+        A file under one of the source roots.
+
+    Returns
+    -------
+    str
+        The path below the import package, such as
+        ``adapters/state_file.py``.
+    """
+    return path.relative_to(source_root(path=path)).as_posix()
+
+
 def resolve_from(*, path: Path, node: ast.ImportFrom) -> str:
     """
     Give the absolute module name of a from-import.
@@ -70,7 +134,8 @@ def resolve_from(*, path: Path, node: ast.ImportFrom) -> str:
     module = node.module or ''
     if not node.level:
         return module
-    package = list(path.relative_to(SRC.parent).with_suffix('').parts)
+    parent = source_root(path=path).parent
+    package = list(path.relative_to(parent).with_suffix('').parts)
     base = package[: len(package) - node.level]
     return '.'.join([*base, module] if module else base)
 
@@ -102,9 +167,9 @@ def test_core_imports_only_core() -> None:
     """No core module imports adapters, pydantic, skia or numpy."""
     offenders = [
         f'{path.name}: {name}'
-        for path in sorted((SRC / 'core').glob('*.py'))
+        for path in sources(sub='core')
         for name in imported_names(path=path)
-        if name.startswith('paperroute.adapters')
+        if name.split('.')[1:2] == ['adapters']
         or name.split('.')[0] in {'pydantic', 'skia', 'numpy'}
     ]
     assert not offenders
@@ -113,7 +178,7 @@ def test_core_imports_only_core() -> None:
 def test_pydantic_only_in_state_file() -> None:
     """Only the state file and its helpers import pydantic."""
     allowed = {
-        SRC / 'adapters' / name
+        f'adapters/{name}'
         for name in (
             'state_file.py',
             'state_migrations.py',
@@ -123,8 +188,8 @@ def test_pydantic_only_in_state_file() -> None:
     }
     offenders = [
         str(path)
-        for path in sorted(SRC.rglob('*.py'))
-        if path not in allowed
+        for path in sources()
+        if under(path=path) not in allowed
         and any(
             name.split('.')[0] == 'pydantic'
             for name in imported_names(path=path)
@@ -138,10 +203,10 @@ def test_render_takes_only_faces_and_greys_from_build() -> None:
     allowed = {'DARK', 'LIGHT', 'SUPERSAMPLE'}
     offenders = [
         f'{path.name}: {alias.name}'
-        for path in sorted((SRC / 'render').glob('*.py'))
+        for path in sources(sub='render')
         for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
         if isinstance(node, ast.ImportFrom)
-        and resolve_from(path=path, node=node).startswith('paperroute.build')
+        and resolve_from(path=path, node=node).split('.')[1:2] == ['build']
         for alias in node.names
         if alias.name not in allowed and not alias.name.endswith('_FACE')
     ]
@@ -150,14 +215,11 @@ def test_render_takes_only_faces_and_greys_from_build() -> None:
 
 def test_gpiod_only_in_the_line_adapters() -> None:
     """Only the Linux panel bus and the knobs' lines import gpiod."""
-    allowed = {
-        SRC / 'adapters' / 'panel_bus.py',
-        SRC / 'adapters' / 'knob_lines.py',
-    }
+    allowed = {'adapters/panel_bus.py', 'adapters/knob_lines.py'}
     offenders = [
         str(path)
-        for path in sorted(SRC.rglob('*.py'))
-        if path not in allowed
+        for path in sources()
+        if under(path=path) not in allowed
         and any(
             name.split('.')[0] == 'gpiod'
             for name in imported_names(path=path)

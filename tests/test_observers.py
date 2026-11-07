@@ -17,8 +17,8 @@ from paperroute.observers import (
     Timings,
 )
 from paperroute.ports import PanelRefresh
-from tests.core.factories import pin_of
-from tests.fakes import device_facts
+from paperroute_testkit.core.factories import pin_of
+from paperroute_testkit.fakes import device_facts
 
 STATUS: DeviceStatus = DeviceStatus(
     timetable='2026-10-21',

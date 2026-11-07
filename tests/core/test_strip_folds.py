@@ -9,7 +9,7 @@ from paperroute.core.model import StopPlace
 from paperroute.core.reach import Reach, ReachRow, RowKind, RunTail
 from paperroute.core.reach_layout import LineExit
 from paperroute.core.strip_folds import floor_of, folded, folds_of
-from tests.core.reach_factories import (
+from paperroute_testkit.core.reach_factories import (
     STATIONS,
     ids,
     random_tails,

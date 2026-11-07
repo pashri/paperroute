@@ -44,10 +44,15 @@ from paperroute.core.strip_state import (
     strip_key,
     strip_patterns,
 )
-from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
-from tests.core.factories import START, departure, place, snapshot, vehicle
-from tests.core.steps import answer_fetches
-from tests.core.strip_factories import (
+from paperroute_testkit.core.factories import (
+    START,
+    departure,
+    place,
+    snapshot,
+    vehicle,
+)
+from paperroute_testkit.core.steps import answer_fetches
+from paperroute_testkit.core.strip_factories import (
     CENTRE,
     KEY,
     PIN,
@@ -56,6 +61,7 @@ from tests.core.strip_factories import (
     trains,
     turn,
 )
+from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.test_connection_screens import started, with_legs
 
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)

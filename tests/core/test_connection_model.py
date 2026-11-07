@@ -11,7 +11,7 @@ from paperroute.core.connection_model import (
     way_legs,
 )
 from paperroute.core.model import Pin
-from tests.core.connection_factories import (
+from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
     HAMMERS,
     HOLLIS,
@@ -20,7 +20,7 @@ from tests.core.connection_factories import (
     WESTMEAD,
     WORK,
 )
-from tests.core.factories import place
+from paperroute_testkit.core.factories import place
 
 
 def test_walk_and_allow() -> None:

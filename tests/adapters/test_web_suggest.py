@@ -12,11 +12,11 @@ from aiohttp.test_utils import TestClient, TestServer
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.model import SYDNEY
 from paperroute.core.trip_search import Journey, JourneyLeg, TripSearch
+from paperroute_testkit.core.connection_factories import WORK
+from paperroute_testkit.fakes import FakeTripPlanner
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_device import Device
 from tests.adapters.test_web_pins import Pins
-from tests.core.connection_factories import WORK
-from tests.fakes import FakeTripPlanner
 
 Client = TestClient[web.Request, web.Application]
 NOW: Final[datetime] = datetime(2026, 10, 27, 10, 0, tzinfo=SYDNEY)

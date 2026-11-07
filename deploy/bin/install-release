@@ -56,8 +56,8 @@ build() {
     runuser -u "$OWNER" -- env \
         UV_PYTHON_INSTALL_DIR="$OPT/python" UV_PYTHON_DOWNLOADS=never \
         UV_LINK_MODE=copy \
-        uv sync --frozen --no-dev --no-editable --compile-bytecode \
-        --project "$TREE" 9>&-
+        uv sync --frozen --package paperroute --no-default-groups \
+        --no-editable --compile-bytecode --project "$TREE" 9>&-
 }
 
 # Moves the tree out of the owner's reach before making it root's.

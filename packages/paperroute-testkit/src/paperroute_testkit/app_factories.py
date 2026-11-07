@@ -4,7 +4,6 @@ import asyncio
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
-from pathlib import Path
 
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.app import MapRenderer, Ports, perform
@@ -14,8 +13,8 @@ from paperroute.core.messages import Effect, Event
 from paperroute.core.model import SYDNEY
 from paperroute.core.strip_model import StripMapView, StripPane
 from paperroute.ports import TimetableRepository
-from tests.core.factories import pin_of
-from tests.fakes import (
+from paperroute_testkit.core.factories import pin_of
+from paperroute_testkit.fakes import (
     STOP_POINT,
     EmptyPlacedTimetable,
     FakeNetwork,
@@ -23,8 +22,9 @@ from tests.fakes import (
     FrameRecorder,
     MemoryStates,
 )
+from paperroute_testkit.paths import FIXTURES
 
-REAL = Path(__file__).parent / 'fixtures' / 'real'
+REAL = FIXTURES / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
 PIN = pin_of('215020', '200060')
 MAP_PIN = pin_of('2145615', '215020')

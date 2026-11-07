@@ -25,9 +25,9 @@ from paperroute.core.panel_views import (
 from paperroute.core.saved import Quota
 from paperroute.core.state_model import State
 from paperroute.core.wifi import wifi_escaped, wifi_qr
-from tests.core.factories import START
+from paperroute_testkit.core.factories import START
+from paperroute_testkit.fakes import device_facts
 from tests.core.test_rebuild import pinned
-from tests.fakes import device_facts
 
 
 def test_confirm_copy() -> None:

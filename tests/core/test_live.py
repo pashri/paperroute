@@ -9,7 +9,7 @@ import pytest
 from paperroute.core.live import resolve
 from paperroute.core.model import SYDNEY, CarryOn, TripFacts
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
-from tests.core.factories import START, departure
+from paperroute_testkit.core.factories import START, departure
 
 DEP = departure(departs=START + timedelta(minutes=10), trip_id='t')
 BLANK = StopUpdate(

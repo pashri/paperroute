@@ -34,7 +34,7 @@ from paperroute.core.messages import (
 from paperroute.core.model import SYDNEY, Mode
 from paperroute.core.panel_views import confirm_view
 from paperroute.observers import PanelTimes
-from tests.fakes import FakeKeys
+from paperroute_testkit.fakes import FakeKeys
 from tests.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]

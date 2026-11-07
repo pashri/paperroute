@@ -34,8 +34,8 @@ from paperroute.render.stop_view import (
     finish,
     list_row,
 )
-from tests.render.factories import STOP_VIEW as BASE
-from tests.render.factories import stop_row as row
+from paperroute_testkit.render.factories import STOP_VIEW as BASE
+from paperroute_testkit.render.factories import stop_row as row
 
 
 def test_frame_is_one_bit_800_by_480() -> None:

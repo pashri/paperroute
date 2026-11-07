@@ -167,6 +167,23 @@ from paperroute.core.strip_state import (
     strip_key,
 )
 from paperroute.core.tiles import CITY, ZOOMS
+from paperroute_testkit.core.connection_factories import WORK
+from paperroute_testkit.core.factories import (
+    START,
+    begun,
+    departure,
+    pattern,
+    pin_at,
+    place,
+    snapshot,
+    vehicle,
+)
+from paperroute_testkit.core.steps import (
+    answer_fetches,
+    step_answered,
+    step_untouched,
+    wakeful,
+)
 from tests.core.chooser_walks import (
     BUS_606,
     CHOSEN,
@@ -185,23 +202,6 @@ from tests.core.chooser_walks import (
     TRAIN_LINES,
     UNTIL,
     chooser_departures,
-)
-from tests.core.connection_factories import WORK
-from tests.core.factories import (
-    START,
-    begun,
-    departure,
-    pattern,
-    pin_at,
-    place,
-    snapshot,
-    vehicle,
-)
-from tests.core.steps import (
-    answer_fetches,
-    step_answered,
-    step_untouched,
-    wakeful,
 )
 
 PIN = Pin(

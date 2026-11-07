@@ -25,6 +25,7 @@ from paperroute.core.chooser_station import knob_pressed
 from paperroute.core.chooser_view import build_chooser_view
 from paperroute.core.model import Pin, RouteKind
 from paperroute.core.reach import RowKind, StripKey
+from paperroute_testkit.core.factories import place
 from tests.core.chooser_walks import (
     BUS_606,
     GROUPS,
@@ -46,7 +47,6 @@ from tests.core.chooser_walks import (
     opened_at_kind,
     row,
 )
-from tests.core.factories import place
 
 
 def test_opened_asks_for_kind_column() -> None:

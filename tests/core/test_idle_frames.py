@@ -26,7 +26,7 @@ from paperroute.core.realtime import RealtimeSnapshot
 from paperroute.core.state import step
 from paperroute.core.state_model import RELOAD_BEFORE, State
 from paperroute.core.stop_view import HORIZON
-from tests.core.factories import (
+from paperroute_testkit.core.factories import (
     START,
     calls,
     departure,
@@ -34,7 +34,7 @@ from tests.core.factories import (
     snapshot,
     vehicle,
 )
-from tests.core.steps import wakeful
+from paperroute_testkit.core.steps import wakeful
 from tests.core.test_state import CENTRE, PRESS, fresh
 
 TICK: Final[timedelta] = timedelta(seconds=5)

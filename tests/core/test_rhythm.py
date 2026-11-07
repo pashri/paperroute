@@ -16,7 +16,7 @@ from paperroute.core.rhythm import (
 from paperroute.core.saved import Quota, Rate, Settings, Window, seeded
 from paperroute.core.state import initial_state
 from paperroute.core.state_model import Calendar, Cycle, State
-from tests.core.factories import pin_of
+from paperroute_testkit.core.factories import pin_of
 
 MONDAY = date(2026, 10, 19)
 TUESDAY = date(2026, 10, 20)

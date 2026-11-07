@@ -28,7 +28,7 @@ from paperroute.render.panel_bits import (
     mono_patch,
     quick_planes,
 )
-from tests.fakes import FrameRecorder
+from paperroute_testkit.fakes import FrameRecorder
 
 WAIT: Final[float] = 5  # seconds
 BOX_A: Final[Box] = Box(left=16, top=10, right=32, bottom=20)

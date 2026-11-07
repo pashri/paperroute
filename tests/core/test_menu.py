@@ -43,9 +43,9 @@ from paperroute.core.panel_views import ConfirmView, MenuView, PhoneView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
-from tests.core.factories import START
+from paperroute_testkit.core.factories import START
+from paperroute_testkit.fakes import device_facts
 from tests.core.test_rebuild import pinned
-from tests.fakes import device_facts
 
 BOTH: Final[KnobsHeld] = KnobsHeld()
 DOWN: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)

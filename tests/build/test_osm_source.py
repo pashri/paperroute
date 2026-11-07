@@ -16,7 +16,7 @@ from paperroute.build.osm_source import (
     place_kind,
     read_osm,
 )
-from tests.build.osm_factory import (
+from paperroute_testkit.build.osm_factory import (
     TIMESTAMP,
     TINY_BBOX,
     write_bare_osm,

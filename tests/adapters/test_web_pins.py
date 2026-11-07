@@ -38,10 +38,10 @@ from paperroute.core.model import (
 from paperroute.core.pin_choices import StopMatch
 from paperroute.core.route_colours import RouteColour
 from paperroute.observers import PinsSeen
+from paperroute_testkit.core.connection_factories import WORK as CONNECTION
+from paperroute_testkit.core.connection_factories import WORK_CHANGE
+from paperroute_testkit.fake_pins import FakePinOptions
 from tests.adapters.test_web_device import Device
-from tests.core.connection_factories import WORK as CONNECTION
-from tests.core.connection_factories import WORK_CHANGE
-from tests.fake_pins import FakePinOptions
 from tests.page_markup import inside, parse_page, parse_tree
 
 Client = TestClient[web.Request, web.Application]

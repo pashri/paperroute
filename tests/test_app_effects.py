@@ -54,7 +54,7 @@ from paperroute.core.saved import Saved, seeded
 from paperroute.render.chooser import draw_chooser_view
 from paperroute.render.stop_view import draw_stop_view
 from paperroute.render.strip_view import draw_strip_view
-from tests.app_factories import (
+from paperroute_testkit.app_factories import (
     AT,
     MAP_PIN,
     REAL,
@@ -63,8 +63,8 @@ from tests.app_factories import (
     posted_by,
     strip_map_view,
 )
-from tests.core.factories import pin_of, place
-from tests.fakes import (
+from paperroute_testkit.core.factories import pin_of, place
+from paperroute_testkit.fakes import (
     STOP_POINT,
     BrokenTimetable,
     EmptyPlacedTimetable,
@@ -72,7 +72,12 @@ from tests.fakes import (
     FrameRecorder,
     MemoryStates,
 )
-from tests.render.factories import STOP_VIEW, STRIP_VIEW, groups, view_of
+from paperroute_testkit.render.factories import (
+    STOP_VIEW,
+    STRIP_VIEW,
+    groups,
+    view_of,
+)
 
 
 async def test_save_effect_writes_through_store() -> None:

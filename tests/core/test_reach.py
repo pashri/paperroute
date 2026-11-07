@@ -23,8 +23,8 @@ from paperroute.core.reach import (
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_model import StripInputs
 from paperroute.core.strip_view import build_strip_view
-from tests.core.factories import STALE_LIMIT
-from tests.core.reach_factories import (
+from paperroute_testkit.core.factories import STALE_LIMIT
+from paperroute_testkit.core.reach_factories import (
     BLACKTOWN,
     REAL_DB,
     STATIONS,

@@ -27,7 +27,7 @@ from paperroute.core.strip_follow import (
 from paperroute.core.strip_model import StripInputs
 from paperroute.core.strip_state import shown_reach
 from paperroute.core.strip_view import build_strip_view, marks_of, trips_of
-from tests.core.factories import (
+from paperroute_testkit.core.factories import (
     EAST,
     START,
     example_reach,
@@ -36,7 +36,7 @@ from tests.core.factories import (
     live,
     train,
 )
-from tests.core.strip_factories import (
+from paperroute_testkit.core.strip_factories import (
     KEY,
     PIN,
     long_reach,

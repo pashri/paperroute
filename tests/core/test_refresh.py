@@ -20,8 +20,8 @@ from paperroute.core.saved import LiveView, seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
-from tests.core.factories import START
-from tests.core.steps import step_answered
+from paperroute_testkit.core.factories import START
+from paperroute_testkit.core.steps import step_answered
 from tests.core.test_state import PIN, PRESS, effects_of, fresh, loaded
 
 IGNORED = KnobHeld(knob=Knob.TOP)

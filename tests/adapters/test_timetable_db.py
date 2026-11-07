@@ -34,6 +34,7 @@ from paperroute.core.model import (
     StopPlace,
     TripFacts,
 )
+from paperroute_testkit.core.factories import pin_of, place
 from tests.build.feeds import (
     DAILY,
     STATIONS,
@@ -46,7 +47,6 @@ from tests.build.feeds import (
     sydneytrains_feed,
 )
 from tests.build.network_feed import network_feed
-from tests.core.factories import pin_of, place
 from tests.helpers import (
     old_schema,
     schema_five,

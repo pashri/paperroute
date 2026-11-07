@@ -35,8 +35,8 @@ from paperroute.core.saved import (
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import current_view, live_stop_view
-from tests.core.alert_factories import alert
-from tests.core.connection_factories import (
+from paperroute_testkit.core.alert_factories import alert
+from paperroute_testkit.core.connection_factories import (
     HOLLIS,
     LEG1,
     LEG2,
@@ -44,9 +44,9 @@ from tests.core.connection_factories import (
     at,
     work_legs,
 )
-from tests.core.factories import place
-from tests.core.steps import wakeful
-from tests.fakes import device_facts
+from paperroute_testkit.core.factories import place
+from paperroute_testkit.core.steps import wakeful
+from paperroute_testkit.fakes import device_facts
 
 PLAIN: Final[Pin] = Pin(
     origin=place('200060', name='Central Station'), kind=RouteKind.TRAIN,

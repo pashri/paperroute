@@ -27,13 +27,13 @@ from paperroute.core.model import (
     way_key,
 )
 from paperroute.core.saved import TOWN_HALL
-from tests.core.connection_factories import (
+from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
     TWO_WAY,
     WORK,
     WORK_CHANGE,
 )
-from tests.core.factories import pin_of, place
+from paperroute_testkit.core.factories import pin_of, place
 
 
 @pytest.mark.parametrize(('route_type', 'agency_id', 'mode'), [

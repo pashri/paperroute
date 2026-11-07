@@ -38,11 +38,11 @@ from paperroute.core.state_model import State
 from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import stop_view_of
 from paperroute.core.stop_view import StopView
-from tests.core.factories import START
-from tests.core.steps import step_untouched
+from paperroute_testkit.core.factories import START
+from paperroute_testkit.core.steps import step_untouched
+from paperroute_testkit.fakes import device_facts
 from tests.core.test_rebuild import failed_at, pinned
 from tests.core.test_state import at, fresh, loaded
-from tests.fakes import device_facts
 
 
 def test_settings_change_is_saved() -> None:

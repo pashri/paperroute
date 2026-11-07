@@ -16,8 +16,7 @@ from paperroute.adapters.ways_editor import (
     ways_query,
 )
 from paperroute.core.model import Change, Way
-from tests.adapters.test_connection_editor import OPTIONS
-from tests.core.connection_factories import (
+from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
     CONSTITUTION,
     HAMMERS,
@@ -25,6 +24,7 @@ from tests.core.connection_factories import (
     WORK,
     WORK_CHANGE,
 )
+from tests.adapters.test_connection_editor import OPTIONS
 
 
 def test_same_stops_same_way() -> None:

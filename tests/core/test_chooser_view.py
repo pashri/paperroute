@@ -11,6 +11,7 @@ from paperroute.core.chooser import (
 )
 from paperroute.core.chooser_view import build_chooser_view, route_title
 from paperroute.core.model import Pin
+from paperroute_testkit.core.factories import place
 from tests.core.chooser_walks import (
     BUS_606,
     GROUPS,
@@ -20,7 +21,6 @@ from tests.core.chooser_walks import (
     fed,
     opened_at_kind,
 )
-from tests.core.factories import place
 
 
 def test_view_shows_last_three_columns_with_preview() -> None:

@@ -20,8 +20,14 @@ from paperroute.core.model import Change, StopPlace
 from paperroute.core.patterns import PatternStop, TripPattern
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import LOADING, NO_LEG_STOPS
-from tests.core.connection_factories import LEG1, WORK, at, run, work_chains
-from tests.core.factories import (
+from paperroute_testkit.core.connection_factories import (
+    LEG1,
+    WORK,
+    at,
+    run,
+    work_chains,
+)
+from paperroute_testkit.core.factories import (
     STALE_LIMIT,
     departure,
     live,

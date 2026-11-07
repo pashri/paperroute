@@ -45,7 +45,7 @@ from paperroute.render.tile_codec import (
     quantise4,
     unpack_grey,
 )
-from tests.build.osm_factory import TINY_BBOX, write_tiny_osm
+from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
 
 FRAME_HALF: Final[float] = 800.0  # metres
 SEAM_MPP: Final[int] = 3

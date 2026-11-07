@@ -13,7 +13,7 @@ from paperroute.adapters.epaper import PanelTimeout, Uc8179
 from paperroute.adapters.panel_bus import LinuxPanelBus
 from paperroute.render.panel_bits import HEIGHT, WIDTH, grey_planes, oriented
 from paperroute.screen import load_frame, screen_main, show_frame
-from tests.fakes import FakePanelBus
+from paperroute_testkit.fakes import FakePanelBus
 
 
 def test_load_frame_reads_raw_grey(tmp_path: Path) -> None:

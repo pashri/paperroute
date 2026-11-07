@@ -8,7 +8,7 @@ from paperroute.core.reach import Reach, RowKind
 from paperroute.core.strip_model import CarryNote, StripInputs
 from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_view import strip_rows, trips_of
-from tests.core.factories import (
+from paperroute_testkit.core.factories import (
     EIGHT,
     LINE,
     START,

@@ -26,7 +26,7 @@ from paperroute.core.state import step
 from paperroute.core.state_model import Cycle, State
 from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import saved_of
-from tests.core.steps import wakeful
+from paperroute_testkit.core.steps import wakeful
 from tests.core.test_state import BUSES, HOLD, at, fresh, loaded, pinned, saves
 
 DAY = date(2026, 10, 21)

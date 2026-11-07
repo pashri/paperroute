@@ -11,7 +11,7 @@ from paperroute.core.auto_model import (
     running,
 )
 from paperroute.core.model import SYDNEY, AutoWindow, Pin, pin_ref, same_place
-from tests.core.factories import START, pin_of
+from paperroute_testkit.core.factories import START, pin_of
 
 WEEKDAYS: Final[frozenset[int]] = frozenset(range(5))
 PIN_A: Final[Pin] = pin_of('A', None)

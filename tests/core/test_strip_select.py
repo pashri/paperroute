@@ -25,7 +25,7 @@ from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import StripInputs, StripView, trip_day
 from paperroute.core.strip_select import panel_trains
 from paperroute.core.strip_view import build_strip_view, marks_of
-from tests.core.factories import START, line_pattern, live, train
+from paperroute_testkit.core.factories import START, line_pattern, live, train
 from tests.core.test_state import check_selection
 from tests.core.test_strip_follow import (
     ALL_STOPS,

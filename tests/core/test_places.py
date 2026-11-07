@@ -22,7 +22,13 @@ from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved
 from paperroute.core.state import initial_state
 from paperroute.core.state_model import Board, State
 from paperroute.core.tiles import ZOOMS
-from tests.core.factories import START, departure, pin_at, place, snapshot
+from paperroute_testkit.core.factories import (
+    START,
+    departure,
+    pin_at,
+    place,
+    snapshot,
+)
 from tests.core.test_map_requests import fitted_on
 
 FIRST = pin_at('first', x=100.0)

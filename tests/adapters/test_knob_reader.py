@@ -18,7 +18,7 @@ from paperroute.core.messages import (
     KnobTurned,
 )
 from paperroute.ports import LineEdge
-from tests.fakes import FakeKnobLines
+from paperroute_testkit.fakes import FakeKnobLines
 
 A_CLK, A_DT, A_SW = 20, 21, 26
 B_CLK, B_DT, B_SW = 5, 6, 16

@@ -7,7 +7,13 @@ from paperroute.core.ridden import (
     ridden_stops,
     route_stops,
 )
-from tests.core.factories import EIGHT, START, calls, departure, pattern
+from paperroute_testkit.core.factories import (
+    EIGHT,
+    START,
+    calls,
+    departure,
+    pattern,
+)
 
 POINTS = {name: (index * 500.0, 0.0) for index, name in enumerate('ABCDEFG')}
 

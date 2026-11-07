@@ -12,7 +12,7 @@ from paperroute.core.chains import leg_key
 from paperroute.core.connection_model import direct_leg, way_legs
 from paperroute.core.messages import LoadDepartures
 from paperroute.core.model import Departure, Pin, RouteKind, Way
-from tests.core.connection_factories import (
+from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
     PARRAMATTA,
     TWO_WAY,
@@ -20,8 +20,8 @@ from tests.core.connection_factories import (
     WORK_CHANGE,
     at,
 )
-from tests.core.factories import departure, pin_of, place
-from tests.fakes import EmptyPlacedTimetable
+from paperroute_testkit.core.factories import departure, pin_of, place
+from paperroute_testkit.fakes import EmptyPlacedTimetable
 
 START: Final[datetime] = at(7, 0)
 END: Final[datetime] = at(10, 0)

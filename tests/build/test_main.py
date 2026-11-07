@@ -18,8 +18,8 @@ from paperroute.build.__main__ import main, parse_args, run_check_tiles
 from paperroute.build.tile_store import TileWriter
 from paperroute.core.model import SYDNEY
 from paperroute.core.tiles import TILE_STYLE
+from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
 from tests.build.network_feed import network_feed
-from tests.build.osm_factory import TINY_BBOX, write_tiny_osm
 from tests.build.tile_inputs import write_timetable
 
 

@@ -32,9 +32,9 @@ from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.ports import TimetableRepository
-from tests.app_factories import ports_of, posted_by
-from tests.core.factories import live
-from tests.fakes import FixedClock
+from paperroute_testkit.app_factories import ports_of, posted_by
+from paperroute_testkit.core.factories import live
+from paperroute_testkit.fakes import FixedClock
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 DAY: Final[date] = date(2026, 10, 16)

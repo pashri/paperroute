@@ -30,8 +30,7 @@ from paperroute.core.strip_folds import FOLD_MIN, folded
 from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import OPEN_TAG, StripMapView, StripView
 from paperroute.core.strip_view import build_strip_view, home_of, window_of
-from tests.core.chooser_walks import CHOSEN_KEY, DOWN, TO_STAGE, at_to
-from tests.core.factories import (
+from paperroute_testkit.core.factories import (
     START,
     begun,
     inputs_of,
@@ -40,7 +39,7 @@ from tests.core.factories import (
     place,
     train,
 )
-from tests.core.reach_factories import (
+from paperroute_testkit.core.reach_factories import (
     BLACKTOWN,
     REAL_DB,
     STRATHFIELD,
@@ -48,7 +47,14 @@ from tests.core.reach_factories import (
     has_runs,
     train_reach,
 )
-from tests.core.strip_factories import KEY, PIN, on_view, run, turn
+from paperroute_testkit.core.strip_factories import (
+    KEY,
+    PIN,
+    on_view,
+    run,
+    turn,
+)
+from tests.core.chooser_walks import CHOSEN_KEY, DOWN, TO_STAGE, at_to
 
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 TOP_PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.TOP)

@@ -71,8 +71,8 @@ from paperroute.render.map_base import draw_map_base
 from paperroute.render.panel_bits import HEIGHT, WIDTH
 from paperroute.summary import Summary
 from paperroute.web_observer import web_observer
-from tests.core.factories import pin_of
-from tests.fakes import (
+from paperroute_testkit.core.factories import pin_of
+from paperroute_testkit.fakes import (
     FakeKeys,
     FakeKnobLines,
     FakeNetwork,

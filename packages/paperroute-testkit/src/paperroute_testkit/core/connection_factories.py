@@ -15,7 +15,7 @@ from paperroute.core.model import (
     StopPlace,
     Way,
 )
-from tests.core.factories import departure, live, place
+from paperroute_testkit.core.factories import departure, live, place
 
 
 def at(hour: int, minute: int, *, day: int = 27) -> datetime:

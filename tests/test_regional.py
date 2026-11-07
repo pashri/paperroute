@@ -14,7 +14,7 @@ from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolve
 from paperroute.core.model import SYDNEY, Mode
 from paperroute.core.realtime import RealtimeSnapshot
-from tests.core.factories import STALE_LIMIT, pin_of
+from paperroute_testkit.core.factories import STALE_LIMIT, pin_of
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)

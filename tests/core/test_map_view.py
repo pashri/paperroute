@@ -30,7 +30,7 @@ from paperroute.core.patterns import timetable_point
 from paperroute.core.positions import VehiclePosition
 from paperroute.core.stop_view import SIDEBAR_ROWS, Row, StopView
 from paperroute.core.tiles import ZOOMS
-from tests.core.factories import (
+from paperroute_testkit.core.factories import (
     START,
     calls,
     departure,

@@ -4,7 +4,7 @@ from paperroute.adapters.pin_editor import edited
 from paperroute.core.chooser import Choice
 from paperroute.core.model import Pin, RouteKind, StopPlace
 from paperroute.core.pin_choices import PinDraft
-from tests.fake_pins import FakePinOptions
+from paperroute_testkit.fake_pins import FakePinOptions
 
 HOME = StopPlace(stop_id='H', name='Home', point=None)
 WORK = StopPlace(stop_id='W', name='Work', point=None)

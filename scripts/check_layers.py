@@ -15,7 +15,8 @@ RANKS: Final[dict[str, int]] = {
     'paperroute_transit': 2,
     'paperroute': 3,
 }
-TEST_ONLY: Final[frozenset[str]] = frozenset({'paperroute_testkit', 'tests'})
+TESTKIT: Final[str] = 'paperroute_testkit'
+TEST_ONLY: Final[frozenset[str]] = frozenset({TESTKIT, 'tests'})
 LOOKUPS: Final[frozenset[str]] = frozenset({'files', 'import_module'})
 DISTRIBUTION: Final[re.Pattern[str]] = re.compile(r'[A-Za-z0-9._-]+')
 
@@ -30,7 +31,8 @@ class Tree:
     name : str
         The import name, such as ``paperroute_device``.
     rank : int | None
-        The layer, lowest first; None for the testkit.
+        The layer, lowest first; None for the testkit or an unknown
+        package.
     src : Path
         The package directory.
     tests : Path | None
@@ -257,6 +259,29 @@ def allowed(*, tree: Tree, name: str, test: bool) -> bool:
     return RANKS[name] <= tree.rank
 
 
+def layer_problems(*, root: Path, tree: Tree) -> Iterator[str]:
+    """
+    Report a package that has no layer, unless it is the testkit.
+
+    Parameters
+    ----------
+    root : Path
+        The repository root, for relative paths.
+    tree : Tree
+        The tree to check.
+
+    Yields
+    ------
+    str
+        One line when the tree is unranked and not the testkit.
+    """
+    if tree.rank is None and tree.name != TESTKIT:
+        yield (
+            f'{tree.src.relative_to(root).as_posix()}: '
+            f'{tree.name} has no layer'
+        )
+
+
 def import_problems(*, root: Path, tree: Tree) -> Iterator[str]:
     """
     Report the imports in one tree's source and tests that break a rule.
@@ -334,7 +359,11 @@ def problems(*, root: Path) -> list[str]:
     return [
         line
         for tree in trees(root=root)
-        for check in (import_problems, dependency_problems)
+        for check in (
+            layer_problems,
+            import_problems,
+            dependency_problems,
+        )
         for line in check(root=root, tree=tree)
     ]
 

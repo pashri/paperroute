@@ -24,8 +24,8 @@ from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import Board, State
 from paperroute.core.stop_view import clock_text
-from tests.core.alert_factories import alert
-from tests.core.connection_factories import (
+from paperroute_testkit.core.alert_factories import alert
+from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
     LEG1,
     LEG2,
@@ -36,8 +36,8 @@ from tests.core.connection_factories import (
     at,
     work_legs,
 )
-from tests.core.factories import departure, place
-from tests.core.steps import wakeful
+from paperroute_testkit.core.factories import departure, place
+from paperroute_testkit.core.steps import wakeful
 
 FERRY_CHANGE: Final[Change] = replace(
     WORK_CHANGE, board=place('10102027', name='Parramatta Wharf'),

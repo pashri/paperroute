@@ -6,8 +6,8 @@ from typing import Final
 
 from paperroute.adapters.leg_cache import CACHE_LIMIT, LegCache
 from paperroute.core.model import CarryOn, Departure, Pin, TripFacts
-from tests.core.connection_factories import at
-from tests.core.factories import departure, pin_of
+from paperroute_testkit.core.connection_factories import at
+from paperroute_testkit.core.factories import departure, pin_of
 
 PIN: Final[Pin] = pin_of('a', 'b')
 

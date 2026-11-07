@@ -38,11 +38,11 @@ from paperroute.core.state import step
 from paperroute.core.state_model import RELOAD_BEFORE, Cycle, State
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.stop_view import HORIZON
-from tests.core.factories import START, departure, snapshot
+from paperroute_testkit.core.factories import START, departure, snapshot
+from paperroute_testkit.fakes import device_facts
 from tests.core.test_quiet import at as quiet_at
 from tests.core.test_quiet import evening
 from tests.core.test_state import ALERTS, BUSES, CENTRE, PRESS, fresh, loaded
-from tests.fakes import device_facts
 
 SYDNEY = ZoneInfo('Australia/Sydney')
 

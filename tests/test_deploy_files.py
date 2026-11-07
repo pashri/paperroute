@@ -33,6 +33,7 @@ SHELL_SCRIPTS: Final[tuple[Path, ...]] = (
     OFF_HOOK,
     ROOT / 'scripts' / 'provision',
     ROOT / 'scripts' / 'deploy',
+    ROOT / 'scripts' / 'simulate-pi-build',
     *(BIN / name for name in BIN_SCRIPTS),
 )
 SUDOERS_RULE: Final[str] = (
@@ -1202,6 +1203,29 @@ def test_install_release_builds_with_copied_files() -> None:
     found = commands(path=BIN / 'install-release', word='uv sync')
     assert len(found) == 1
     assert ' UV_LINK_MODE=copy ' in found[0]
+
+
+def test_install_release_syncs_only_the_app() -> None:
+    """The release installs the app and its packages, no dependency group."""
+    found = commands(path=BIN / 'install-release', word='uv sync')
+    assert len(found) == 1
+    words = found[0].split()
+    assert {
+        '--package',
+        'paperroute',
+        '--no-default-groups',
+        '--frozen',
+        '--no-editable',
+    } <= set(words)
+    assert words[words.index('--package') + 1] == 'paperroute'
+    assert '--no-dev' not in words
+
+
+def test_deploy_stages_packages() -> None:
+    """Deploy copies the workspace packages along with the app."""
+    found = commands(path=DEPLOY_SCRIPT, word='git ls-files')
+    assert len(found) == 1
+    assert 'packages' in found[0].split()
 
 
 def test_install_release_starts_without_timetable() -> None:

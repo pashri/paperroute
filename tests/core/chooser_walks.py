@@ -30,7 +30,7 @@ from paperroute.core.model import Departure, Pin, RouteKind, StopPlace
 from paperroute.core.reach import Reach, ReachRow, RowKind, StripKey
 from paperroute.core.state_model import RELOAD_BEFORE
 from paperroute.core.stop_view import HORIZON
-from tests.core.factories import START, departure, place
+from paperroute_testkit.core.factories import START, departure, place
 
 KINDS: Final[Column] = Column(
     level=Level.KIND,

@@ -15,7 +15,7 @@ from paperroute.adapters.connection_editor import (
 )
 from paperroute.core.model import Change, Way
 from paperroute.core.pin_choices import ChangeStop
-from tests.core.connection_factories import (
+from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN,
     CONSTITUTION,
     HAMMERS,
@@ -24,7 +24,7 @@ from tests.core.connection_factories import (
     WESTMEAD,
     WORK_CHANGE,
 )
-from tests.fake_pins import FakePinOptions
+from paperroute_testkit.fake_pins import FakePinOptions
 
 OPTIONS: Final[FakePinOptions] = FakePinOptions(
     places={

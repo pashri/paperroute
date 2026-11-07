@@ -18,8 +18,8 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.model import ServiceSpan, service_epoch, service_time
+from paperroute_testkit.core.factories import pin_of
 from tests.build.feeds import build_db, bus_files
-from tests.core.factories import pin_of
 from tests.helpers import write_feed
 
 HOLIDAY: Final[date] = date(2026, 10, 16)

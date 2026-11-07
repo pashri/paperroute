@@ -56,11 +56,11 @@ from paperroute.render.strip_view import (
 )
 from paperroute.render.strip_view import panel_row as paint_panel_row
 from paperroute.render.tile_codec import GREYS
-from tests.core.factories import START, east_inputs
-from tests.render.factories import STRIP_PANEL as PANEL
-from tests.render.factories import STRIP_ROWS as ROWS
-from tests.render.factories import STRIP_VIEW as VIEW
-from tests.render.factories import panel_row
+from paperroute_testkit.core.factories import START, east_inputs
+from paperroute_testkit.render.factories import STRIP_PANEL as PANEL
+from paperroute_testkit.render.factories import STRIP_ROWS as ROWS
+from paperroute_testkit.render.factories import STRIP_VIEW as VIEW
+from paperroute_testkit.render.factories import panel_row
 
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
 PANEL_TOP = 128

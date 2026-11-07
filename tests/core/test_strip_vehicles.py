@@ -17,7 +17,7 @@ from paperroute.core.strip_model import (
 )
 from paperroute.core.strip_vehicles import hop_marker
 from paperroute.core.strip_view import build_strip_view
-from tests.core.factories import (
+from paperroute_testkit.core.factories import (
     EIGHT,
     LINE,
     START,
@@ -27,7 +27,7 @@ from tests.core.factories import (
     pattern,
     vehicle,
 )
-from tests.core.strip_factories import row_named
+from paperroute_testkit.core.strip_factories import row_named
 
 
 def badge_at(

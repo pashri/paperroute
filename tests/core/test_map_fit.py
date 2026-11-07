@@ -24,7 +24,13 @@ from paperroute.core.model import Departure
 from paperroute.core.patterns import TripPattern
 from paperroute.core.stop_view import StopView
 from paperroute.core.tiles import ZOOMS
-from tests.core.factories import STALE_LIMIT, START, calls, departure, pattern
+from paperroute_testkit.core.factories import (
+    STALE_LIMIT,
+    START,
+    calls,
+    departure,
+    pattern,
+)
 
 FROM: Point = (0.0, 800.0)
 OTHER: Point = (30.0, 800.0)

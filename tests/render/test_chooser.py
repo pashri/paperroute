@@ -17,7 +17,12 @@ from paperroute.core.chooser_view import (
 from paperroute.core.strip_model import HINTS
 from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH
 from paperroute.render.chooser import COLUMN_WIDTHS, draw_chooser_view
-from tests.render.factories import column, groups, route_choice, view_of
+from paperroute_testkit.render.factories import (
+    column,
+    groups,
+    route_choice,
+    view_of,
+)
 
 LONG_NAME = 'Parramatta to Blacktown via a very long and winding road home'
 

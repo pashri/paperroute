@@ -28,13 +28,13 @@ from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import saved_of
 from paperroute.core.stop_view import DOT, StopView
-from tests.core.alert_factories import (
+from paperroute_testkit.core.alert_factories import (
     PENRITH_CENTRAL,
     WESTERN,
     XPLORER,
     sydney,
 )
-from tests.core.steps import step_answered
+from paperroute_testkit.core.steps import step_answered
 from tests.core.test_alert_state import (
     PARRAMATTA_CENTRAL,
     STRATHFIELD_TOWN_HALL,

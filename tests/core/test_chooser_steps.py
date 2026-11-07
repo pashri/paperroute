@@ -43,6 +43,16 @@ from paperroute.core.state_model import LOOKBACK, RELOAD_BEFORE, State
 from paperroute.core.state_views import saved_of
 from paperroute.core.stop_view import HORIZON, StopView
 from paperroute.core.strip_model import HINTS, StripView
+from paperroute_testkit.core.factories import (
+    EIGHT,
+    START,
+    begun,
+    calls,
+    departure,
+    pattern,
+    pin_at,
+    place,
+)
 from tests.core.chooser_walks import (
     BUS_606,
     CHOSEN,
@@ -56,16 +66,6 @@ from tests.core.chooser_walks import (
     TO_STAGE,
     UNTIL,
     chooser_departures,
-)
-from tests.core.factories import (
-    EIGHT,
-    START,
-    begun,
-    calls,
-    departure,
-    pattern,
-    pin_at,
-    place,
 )
 
 PINS: Final[tuple[Pin, ...]] = (

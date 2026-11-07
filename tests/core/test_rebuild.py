@@ -45,10 +45,10 @@ from paperroute.core.rebuild import (
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import step
 from paperroute.core.state_model import Rebuild, State
+from paperroute_testkit.core.factories import START, begun, pin_at
+from paperroute_testkit.core.steps import answer_fetches, step_untouched
+from paperroute_testkit.fakes import device_facts
 from tests.core.chooser_walks import DOWN, KINDS, NEXT, OPEN
-from tests.core.factories import START, begun, pin_at
-from tests.core.steps import answer_fetches, step_untouched
-from tests.fakes import device_facts
 
 OLD = TimetableSeen(version='v', schema='4')
 CURRENT = TimetableSeen(version='v', schema='7')

@@ -36,11 +36,11 @@ from paperroute.core.state_views import live_stop_view
 from paperroute.core.stop_view import StopView
 from paperroute.render.sleep import BAND_H
 from paperroute.render.trip_marks import END_DISC, END_EDGE
-from tests.core.factories import START, departure, pattern, place
+from paperroute_testkit.core.factories import START, departure, pattern, place
+from paperroute_testkit.fakes import device_facts
 from tests.core.test_connection import loaded as connection_loaded
 from tests.core.test_menu import BOTH, DOWN, run, turn
 from tests.core.test_state import BUSES, CENTRE, PIN, fresh, loaded
-from tests.fakes import device_facts
 
 
 def asleep() -> State:

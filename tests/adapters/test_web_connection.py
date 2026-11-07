@@ -15,10 +15,10 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_pin_edit import MISFIT
 from paperroute.core.model import pin_ref
 from paperroute.observers import PinsSeen
+from paperroute_testkit.core.connection_factories import WORK
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_device import Device
 from tests.adapters.test_web_pins import Pins
-from tests.core.connection_factories import WORK
 
 Client = TestClient[web.Request, web.Application]
 

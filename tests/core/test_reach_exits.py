@@ -14,7 +14,12 @@ from paperroute.core.reach_exits import (
     grouped_exits,
 )
 from paperroute.core.reach_layout import LineExit
-from tests.core.reach_factories import ids, random_tails, reach_of, tail
+from paperroute_testkit.core.reach_factories import (
+    ids,
+    random_tails,
+    reach_of,
+    tail,
+)
 
 LINE: Final[frozenset[str]] = frozenset({'C', 'J', 'E1'})
 OFF_IDS: Final[tuple[str, ...]] = tuple(f'X{k}' for k in range(6))

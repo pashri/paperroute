@@ -20,7 +20,11 @@ from paperroute.core.tiles import (
     tile_of,
     to_pixels,
 )
-from tests.build.osm_factory import TIMESTAMP, TINY_BBOX, write_tiny_osm
+from paperroute_testkit.build.osm_factory import (
+    TIMESTAMP,
+    TINY_BBOX,
+    write_tiny_osm,
+)
 from tests.build.tile_inputs import STOPS, write_timetable
 
 OLD_TILES: Final[bytes] = b'old tiles file'

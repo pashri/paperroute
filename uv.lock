@@ -6,6 +6,15 @@ resolution-markers = [
     "python_full_version < '3.15'",
 ]
 
+[manifest]
+members = [
+    "paperroute",
+    "paperroute-device",
+    "paperroute-hardware",
+    "paperroute-testkit",
+    "paperroute-transit",
+]
+
 [[package]]
 name = "aiohappyeyeballs"
 version = "2.7.1"
@@ -1083,6 +1092,9 @@ dependencies = [
     { name = "gpiod", marker = "sys_platform == 'linux'" },
     { name = "gtfs-realtime-bindings" },
     { name = "numpy" },
+    { name = "paperroute-device" },
+    { name = "paperroute-hardware" },
+    { name = "paperroute-transit" },
     { name = "pydantic" },
     { name = "python-json-logger" },
     { name = "segno" },
@@ -1096,6 +1108,7 @@ dev = [
     { name = "isort" },
     { name = "mypy" },
     { name = "numpydoc" },
+    { name = "paperroute-testkit" },
     { name = "pylint" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -1112,6 +1125,9 @@ requires-dist = [
     { name = "gpiod", marker = "sys_platform == 'linux'", specifier = "==2.5.0" },
     { name = "gtfs-realtime-bindings", specifier = ">=1.0" },
     { name = "numpy", specifier = ">=2.3" },
+    { name = "paperroute-device", editable = "packages/paperroute-device" },
+    { name = "paperroute-hardware", editable = "packages/paperroute-hardware" },
+    { name = "paperroute-transit", editable = "packages/paperroute-transit" },
     { name = "pydantic", specifier = ">=2.12" },
     { name = "python-json-logger", specifier = ">=3.2" },
     { name = "segno", specifier = ">=1.6.6" },
@@ -1125,6 +1141,7 @@ dev = [
     { name = "isort", specifier = ">=5.13" },
     { name = "mypy", specifier = ">=1.15" },
     { name = "numpydoc", specifier = ">=1.8" },
+    { name = "paperroute-testkit", editable = "packages/paperroute-testkit" },
     { name = "pylint", specifier = ">=3.3" },
     { name = "pytest", specifier = ">=8.3" },
     { name = "pytest-asyncio", specifier = ">=0.25" },
@@ -1133,6 +1150,70 @@ dev = [
 tiles = [
     { name = "osmium", specifier = ">=4.3" },
     { name = "shapely", specifier = ">=2.2" },
+]
+
+[[package]]
+name = "paperroute-device"
+version = "0.1.0"
+source = { editable = "packages/paperroute-device" }
+dependencies = [
+    { name = "paperroute-hardware" },
+]
+
+[package.metadata]
+requires-dist = [{ name = "paperroute-hardware", editable = "packages/paperroute-hardware" }]
+
+[[package]]
+name = "paperroute-hardware"
+version = "0.1.0"
+source = { editable = "packages/paperroute-hardware" }
+dependencies = [
+    { name = "gpiod", marker = "sys_platform == 'linux'" },
+    { name = "numpy" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "gpiod", marker = "sys_platform == 'linux'", specifier = "==2.5.0" },
+    { name = "numpy", specifier = ">=2.3" },
+]
+
+[[package]]
+name = "paperroute-testkit"
+version = "0.1.0"
+source = { editable = "packages/paperroute-testkit" }
+dependencies = [
+    { name = "numpy" },
+    { name = "paperroute" },
+    { name = "paperroute-device" },
+    { name = "paperroute-hardware" },
+    { name = "paperroute-transit" },
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.3" },
+    { name = "paperroute", editable = "." },
+    { name = "paperroute-device", editable = "packages/paperroute-device" },
+    { name = "paperroute-hardware", editable = "packages/paperroute-hardware" },
+    { name = "paperroute-transit", editable = "packages/paperroute-transit" },
+    { name = "pytest", specifier = ">=8.3" },
+]
+
+[[package]]
+name = "paperroute-transit"
+version = "0.1.0"
+source = { editable = "packages/paperroute-transit" }
+dependencies = [
+    { name = "numpy" },
+    { name = "paperroute-device" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.3" },
+    { name = "paperroute-device", editable = "packages/paperroute-device" },
 ]
 
 [[package]]

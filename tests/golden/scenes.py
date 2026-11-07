@@ -42,9 +42,7 @@ from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.tiles import TILE, LabelKind, StreetLabel, TileVariant
-from tests.adapters.test_web_device import FACTS
-from tests.core.chooser_walks import at_towards
-from tests.core.connection_factories import (
+from paperroute_testkit.core.connection_factories import (
     LEG1,
     LEG2,
     PARRAMATTA,
@@ -52,7 +50,7 @@ from tests.core.connection_factories import (
     WORK,
     at,
 )
-from tests.core.factories import (
+from paperroute_testkit.core.factories import (
     EAST,
     START,
     example_reach,
@@ -61,8 +59,16 @@ from tests.core.factories import (
     train,
     vehicle,
 )
-from tests.core.steps import answer_fetches
-from tests.core.strip_factories import KEY, PIN, SOUTH, WEST, on_view
+from paperroute_testkit.core.steps import answer_fetches
+from paperroute_testkit.core.strip_factories import (
+    KEY,
+    PIN,
+    SOUTH,
+    WEST,
+    on_view,
+)
+from tests.adapters.test_web_device import FACTS
+from tests.core.chooser_walks import at_towards
 from tests.core.test_alerts_view import on_alerts
 from tests.core.test_chains import TRAINS
 from tests.core.test_connection_screens import started, with_legs

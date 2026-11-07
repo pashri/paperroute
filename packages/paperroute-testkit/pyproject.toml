@@ -1,0 +1,26 @@
+[project]
+name = "paperroute-testkit"
+version = "0.1.0"
+license = "MIT"
+requires-python = ">=3.14"
+dependencies = [
+    "paperroute",
+    "paperroute-hardware",
+    "paperroute-device",
+    "paperroute-transit",
+    "pytest>=8.3",
+    "numpy>=2.3",
+]
+
+[build-system]
+requires = ["hatchling>=1.27"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/paperroute_testkit"]
+
+[tool.uv.sources]
+paperroute = { workspace = true }
+paperroute-hardware = { workspace = true }
+paperroute-device = { workspace = true }
+paperroute-transit = { workspace = true }

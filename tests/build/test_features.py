@@ -20,7 +20,7 @@ from paperroute.build.osm_source import OsmArea, OsmLine, OsmPlace
 from paperroute.build.tile_store import PlacedLabel
 from paperroute.core.geo import MetreBox, to_metres
 from paperroute.core.tiles import LabelKind
-from tests.build.osm_factory import TINY_BBOX, write_tiny_osm
+from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
 from tests.build.rings import inside
 
 

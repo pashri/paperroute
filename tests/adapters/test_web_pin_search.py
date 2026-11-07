@@ -10,8 +10,8 @@ from aiohttp.test_utils import TestClient, TestServer
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.model import RouteKind, StopPlace
 from paperroute.core.pin_choices import StopMatch
+from paperroute_testkit.fake_pins import FakePinOptions
 from tests.adapters.test_web_device import Device
-from tests.fake_pins import FakePinOptions
 
 Client = TestClient[web.Request, web.Application]
 PARRAMATTA = StopPlace(

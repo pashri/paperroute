@@ -32,7 +32,7 @@ from paperroute.core.alert_model import (
 )
 from paperroute.core.model import Departure, Mode, Pin, RouteKind
 from paperroute.core.patterns import PatternStop, TripPattern
-from tests.core.alert_factories import (
+from paperroute_testkit.core.alert_factories import (
     PENRITH_CENTRAL,
     RHODES,
     ROSE_BAY_PIN,
@@ -43,7 +43,7 @@ from tests.core.alert_factories import (
     station_pin,
     sydney,
 )
-from tests.core.factories import departure
+from paperroute_testkit.core.factories import departure
 
 SAT_MORNING = sydney(day=24, hour=9, minute=39)
 MON_NOON = sydney(day=26, hour=12)

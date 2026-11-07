@@ -14,6 +14,9 @@ dependencies = [
     "segno>=1.6.6",
     "skia-python>=138.0",
     "gpiod==2.5.0; sys_platform == 'linux'",
+    "paperroute-hardware",
+    "paperroute-device",
+    "paperroute-transit",
 ]
 
 [build-system]
@@ -30,6 +33,7 @@ dev = [
     "isort>=5.13",
     "mypy>=1.15",
     "numpydoc>=1.8",
+    "paperroute-testkit",
     "pylint>=3.3",
     "pytest>=8.3",
     "pytest-asyncio>=0.25",
@@ -40,6 +44,15 @@ tiles = ["osmium>=4.3", "shapely>=2.2"]
 [tool.uv]
 python-preference = "only-managed"
 default-groups = ["dev", "tiles"]
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+paperroute-hardware = { workspace = true }
+paperroute-device = { workspace = true }
+paperroute-transit = { workspace = true }
+paperroute-testkit = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -52,7 +65,14 @@ norecursedirs = [".*", "dist", "*.egg", "venv", "node_modules"]
 [tool.mypy]
 strict = true
 python_version = "3.14"
-files = ["src", "tests"]
+files = [
+    "src",
+    "tests",
+    "packages/paperroute-hardware/src",
+    "packages/paperroute-device/src",
+    "packages/paperroute-transit/src",
+    "packages/paperroute-testkit/src",
+]
 
 [[tool.mypy.overrides]]
 module = ["skia", "google.transit.*", "google.protobuf.*"]
@@ -70,8 +90,22 @@ ignore_missing_imports = true
 multi_line_output = 3
 include_trailing_comma = true
 line_length = 79
-known_first_party = ["paperroute", "tests"]
-src_paths = ["src", "tests"]
+known_first_party = [
+    "paperroute",
+    "paperroute_hardware",
+    "paperroute_device",
+    "paperroute_transit",
+    "paperroute_testkit",
+    "tests",
+]
+src_paths = [
+    "src",
+    "tests",
+    "packages/paperroute-hardware/src",
+    "packages/paperroute-device/src",
+    "packages/paperroute-transit/src",
+    "packages/paperroute-testkit/src",
+]
 skip = [".venv"]
 
 [tool.pylint.main]
@@ -97,7 +131,13 @@ checks = ["all", "EX01", "SA01", "ES01"]
 exclude = ['\.__init__$']
 
 [tool.coverage.run]
-source = ["paperroute"]
+source = [
+    "paperroute",
+    "paperroute_hardware",
+    "paperroute_device",
+    "paperroute_transit",
+]
+disable_warnings = ["module-not-imported", "no-data-collected"]
 omit = [
     "src/paperroute/adapters/tk_monitor.py",
     "src/paperroute/__main__.py",

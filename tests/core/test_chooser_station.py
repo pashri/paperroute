@@ -46,6 +46,7 @@ from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import HORIZON
+from paperroute_testkit.core.factories import START, begun, pin_at, place
 from tests.core.chooser_walks import (
     NEXT,
     OPEN,
@@ -64,7 +65,6 @@ from tests.core.chooser_walks import (
     fed,
     opened_at_kind,
 )
-from tests.core.factories import START, begun, pin_at, place
 
 PENRITH_PATH: Final = (*T1, (Level.STATION, 'E2'))
 

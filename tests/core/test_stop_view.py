@@ -32,8 +32,8 @@ from paperroute.core.stop_view import (
     pin_tag,
     to_row,
 )
-from tests.core.alert_factories import WESTERN, XPLORER
-from tests.core.factories import START, departure
+from paperroute_testkit.core.alert_factories import WESTERN, XPLORER
+from paperroute_testkit.core.factories import START, departure
 
 
 def live(

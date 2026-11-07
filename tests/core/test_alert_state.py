@@ -36,7 +36,7 @@ from paperroute.core.state_model import RELOAD_BEFORE, State
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.stop_view import DOT, HORIZON
 from paperroute.core.strip_model import StripMapView, StripView
-from tests.core.alert_factories import (
+from paperroute_testkit.core.alert_factories import (
     ABBOTSFORD,
     F9_ONGOING,
     RHODES,
@@ -49,11 +49,11 @@ from tests.core.alert_factories import (
     station_pin,
     sydney,
 )
-from tests.core.connection_factories import LEG1, LEG2, WORK
-from tests.core.connection_factories import at as at_connection
-from tests.core.connection_factories import work_legs
-from tests.core.factories import departure
-from tests.core.steps import wakeful
+from paperroute_testkit.core.connection_factories import LEG1, LEG2, WORK
+from paperroute_testkit.core.connection_factories import at as at_connection
+from paperroute_testkit.core.connection_factories import work_legs
+from paperroute_testkit.core.factories import departure
+from paperroute_testkit.core.steps import wakeful
 from tests.core.test_quiet import asleep_at_one, at, evening, ticked
 
 NOW: Final[datetime] = sydney(day=24, hour=9, minute=39)

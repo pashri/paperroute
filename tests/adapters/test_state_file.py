@@ -44,8 +44,8 @@ from paperroute.core.saved import (
 )
 from paperroute.core.state import initial_state
 from paperroute.core.state_views import saved_of
-from tests.core.connection_factories import WORK, WORK_CHANGE
-from tests.core.factories import pin_at
+from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE
+from paperroute_testkit.core.factories import pin_at
 from tests.core.test_auto_pins import is_shown, started, ticked, trusted
 
 NAMES = st.text(

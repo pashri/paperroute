@@ -14,12 +14,12 @@ from paperroute.adapters.web_device import DevicePages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.device_model import DeviceStatus
 from paperroute.ports import KeyStore
+from paperroute_testkit.fakes import FakeKeys, FakeTripPlanner
 from tests.adapters.test_web_device import BUSES, KEY, NOW, STATUS, TRAINS
 from tests.adapters.test_web_pins import HOME, ODD, WORK, Pins
 from tests.adapters.test_web_setup import STATUS as HOTSPOT
 from tests.adapters.test_web_suggest import NOW as SEARCH_NOW
 from tests.adapters.test_web_suggest import PLATFORMS
-from tests.fakes import FakeKeys, FakeTripPlanner
 from tests.golden.scenes import GOLDEN, baseline_bytes
 from tests.golden.test_golden_state import RICH_SAVED
 

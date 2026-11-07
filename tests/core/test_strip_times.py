@@ -18,7 +18,7 @@ from paperroute.core.strip_times import (
     strip_trips,
     trip_ids,
 )
-from tests.core.factories import (
+from paperroute_testkit.core.factories import (
     EIGHT,
     STALE_LIMIT,
     START,

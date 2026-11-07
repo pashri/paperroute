@@ -19,8 +19,8 @@ from paperroute.core.saved import (
     Settings,
     Window,
 )
-from tests.core.connection_factories import TWO_WAY, WORK
-from tests.core.factories import pin_at
+from paperroute_testkit.core.connection_factories import TWO_WAY, WORK
+from paperroute_testkit.core.factories import pin_at
 from tests.golden.scenes import GOLDEN, baseline_bytes
 
 STATE: Final[Path] = GOLDEN / 'state.json'

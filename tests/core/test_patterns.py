@@ -14,7 +14,12 @@ from paperroute.core.patterns import (
     point_at,
     timetable_point,
 )
-from tests.core.factories import EIGHT, START, TEN_MINUTES, pattern
+from paperroute_testkit.core.factories import (
+    EIGHT,
+    START,
+    TEN_MINUTES,
+    pattern,
+)
 
 CORNER = make_shape(
     shape_id='L',

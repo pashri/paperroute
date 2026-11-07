@@ -20,8 +20,8 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.gtfs_files import Source
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.core.model import SYDNEY, CarryOn, Departure, TripFacts
+from paperroute_testkit.core.factories import START, departure
 from tests.build.network_feed import network_feed
-from tests.core.factories import START, departure
 
 DAY: Final[date] = date(2026, 10, 6)
 CHAIN: Final[tuple[str, ...]] = (

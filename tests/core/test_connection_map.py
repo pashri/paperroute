@@ -39,7 +39,7 @@ from paperroute.core.state import step
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.stop_view import empty_text
 from paperroute.core.tiles import ZOOMS
-from tests.core.connection_factories import (
+from paperroute_testkit.core.connection_factories import (
     HOLLIS,
     LEG1,
     LEG2,
@@ -50,7 +50,7 @@ from tests.core.connection_factories import (
     at,
     run,
 )
-from tests.core.factories import (
+from paperroute_testkit.core.factories import (
     STALE_LIMIT,
     live,
     pattern,

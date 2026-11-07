@@ -18,11 +18,15 @@ from paperroute.core.model import SYDNEY, RouteKind, StopPlace
 from paperroute.core.pin_choices import ChangeStop, StopMatch
 from paperroute.core.trip_search import Journey, JourneyLeg
 from paperroute.observers import PinsSeen
+from paperroute_testkit.core.connection_factories import (
+    CONSTITUTION,
+    HAMMERS,
+    HOLLIS,
+)
+from paperroute_testkit.core.factories import place
+from paperroute_testkit.fake_pins import FakePinOptions
+from paperroute_testkit.fakes import FakeTripPlanner
 from tests.adapters.test_web_device import Device
-from tests.core.connection_factories import CONSTITUTION, HAMMERS, HOLLIS
-from tests.core.factories import place
-from tests.fake_pins import FakePinOptions
-from tests.fakes import FakeTripPlanner
 
 Client = TestClient[web.Request, web.Application]
 NOW: Final[datetime] = datetime(2026, 10, 27, 10, 0, tzinfo=SYDNEY)

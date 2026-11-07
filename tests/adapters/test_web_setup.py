@@ -20,7 +20,7 @@ from paperroute.core.device_model import (
     WifiSetup,
 )
 from paperroute.core.messages import ApiKeyChanged, Event, JoinAsked
-from tests.fakes import FakeKeys
+from paperroute_testkit.fakes import FakeKeys
 from tests.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]

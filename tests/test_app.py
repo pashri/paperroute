@@ -117,7 +117,7 @@ from paperroute.render.notice import draw_notice_view
 from paperroute.render.panel import draw_panel_view
 from paperroute.render.sleep import with_sleep_band
 from paperroute.render.tile_codec import pack_bits, pack_grey
-from tests.app_factories import (
+from paperroute_testkit.app_factories import (
     AT,
     MAP_MPP,
     MAP_PIN,
@@ -127,8 +127,8 @@ from tests.app_factories import (
     ports_of,
     strip_map_view,
 )
-from tests.core.factories import pin_of, place
-from tests.fakes import (
+from paperroute_testkit.core.factories import pin_of, place
+from paperroute_testkit.fakes import (
     STOP_POINT,
     BrokenTimetable,
     BuiltTimetable,

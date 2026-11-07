@@ -38,7 +38,7 @@ if ! ssh -- "$host" sudo -n -l "$INSTALL" >/dev/null 2>&1; then
     exit 1
 fi
 ssh -- "$host" rm -rf "$STAGE/$sha"
-git ls-files -z src pyproject.toml uv.lock README.md \
+git ls-files -z src packages pyproject.toml uv.lock README.md \
     | rsync -a --from0 --files-from=- ./ "$host:$STAGE/$sha/"
 if [[ -f data/tiles.db ]]; then
     if ! ssh -- "$host" sudo -n -l "$TILES" >/dev/null 2>&1; then

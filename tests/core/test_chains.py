@@ -24,7 +24,7 @@ from paperroute.core.connection_model import trip_key, way_legs
 from paperroute.core.live import LiveDeparture
 from paperroute.core.model import Change, Departure, Pin, Way
 from paperroute.core.stop_view import clock_text
-from tests.core.connection_factories import (
+from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN,
     CAMPBELLTOWN_WAY,
     CONSTITUTION,
@@ -40,7 +40,7 @@ from tests.core.connection_factories import (
     at,
     run,
 )
-from tests.core.factories import departure, live
+from paperroute_testkit.core.factories import departure, live
 
 FIRST: Final[LegKey] = (HOLLIS.stop_id, HAMMERS.stop_id)
 SECOND: Final[LegKey] = (CONSTITUTION.stop_id, WESTMEAD.stop_id)

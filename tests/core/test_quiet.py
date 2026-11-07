@@ -37,11 +37,11 @@ from paperroute.core.sleep import WAKE_FOR, slept
 from paperroute.core.state import step
 from paperroute.core.state_model import Places, State
 from paperroute.core.stop_view import StopView
-from tests.core.factories import START, departure
-from tests.core.steps import step_answered
+from paperroute_testkit.core.factories import START, departure
+from paperroute_testkit.core.steps import step_answered
+from paperroute_testkit.fakes import device_facts
 from tests.core.test_menu import DOWN, run, turn
 from tests.core.test_state import BUSES, PINS, fresh
-from tests.fakes import device_facts
 
 DAY: Final[date] = START.date()
 HALF_MINUTE: Final[timedelta] = timedelta(seconds=30)

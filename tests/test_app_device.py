@@ -39,8 +39,7 @@ from paperroute.core.messages import (
 )
 from paperroute.core.state import step
 from paperroute.observers import Timings
-from tests.core.test_state import fresh, loaded
-from tests.fakes import (
+from paperroute_testkit.fakes import (
     FakeBuilder,
     FakeKeys,
     FakeProbe,
@@ -50,6 +49,7 @@ from tests.fakes import (
     WatchingBuilder,
     device_facts,
 )
+from tests.core.test_state import fresh, loaded
 
 
 async def worked(*, ports: DevicePorts) -> tuple[list[Event], Event]:

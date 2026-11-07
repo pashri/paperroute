@@ -49,7 +49,7 @@ from paperroute.render.panel import (
 )
 from paperroute.render.qr import qr_image
 from paperroute.render.strip_view import HINT_FACE
-from tests.core.factories import START
+from paperroute_testkit.core.factories import START
 
 WIFI_QR = 'WIFI:T:WPA;S:paperroute-setup;P:7Q4K9W2M;;'
 ROWS = (

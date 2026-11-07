@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Usage: scripts/simulate-pi-build
+# Builds the tree deploy would stage the way the Pi does, with today's
+# installer and with the provisioned one it replaces, and checks what
+# each venv can import. Stage the files with git add first.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+stage=$(mktemp -d); old=$(mktemp -d)
+trap 'rm -rf -- "$stage" "$old"' EXIT
+git ls-files -z src packages pyproject.toml uv.lock README.md | rsync -a --from0 --files-from=- ./ "$stage/"
+rsync -a "$stage/" "$old/"
+UV_LINK_MODE=copy uv sync --frozen --package paperroute --no-default-groups --no-editable --project "$stage"
+UV_LINK_MODE=copy uv sync --frozen --no-dev --no-editable --project "$old"
+imports="import paperroute.__main__, paperroute.screen, paperroute_hardware, paperroute_device, paperroute_transit; from importlib.util import find_spec as f"
+"$stage/.venv/bin/python" -c "$imports; assert not any(f(m) for m in ('osmium', 'shapely', 'pytest', 'paperroute_testkit'))"
+"$old/.venv/bin/python" -c "$imports; assert not any(f(m) for m in ('pytest', 'paperroute_testkit'))"

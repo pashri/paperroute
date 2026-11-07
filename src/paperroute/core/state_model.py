@@ -374,6 +374,9 @@ class State:
     clock_wait_until : datetime | None
         When to stop waiting for the clock to be synchronised, or None
         when not waiting.
+    clock_gave_up : bool
+        True once the wait has run out unsynchronised; the hold is over
+        for good, but a later sync still starts afresh.
     """
 
     now: datetime
@@ -401,6 +404,7 @@ class State:
     auto: AutoState = field(default_factory=AutoState)
     cycle: Cycle = field(default_factory=Cycle)
     clock_wait_until: datetime | None = None
+    clock_gave_up: bool = False
 
 
 def clock_waiting(*, state: State) -> bool:
@@ -415,10 +419,13 @@ def clock_waiting(*, state: State) -> bool:
     Returns
     -------
     bool
-        True while a wait is set and its end has not come, in real time.
+        True while a wait is set, has not been given up, and its end has
+        not come, in real time.
     """
     until = state.clock_wait_until
-    return until is not None and state.now.timestamp() < until.timestamp()
+    if until is None or state.clock_gave_up:
+        return False
+    return state.now.timestamp() < until.timestamp()
 
 
 def restarted(*, state: State) -> State:

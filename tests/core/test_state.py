@@ -137,8 +137,9 @@ from paperroute.core.state_model import (
     RELOAD_BEFORE,
     RETRY_AFTER,
     State,
-    load_window,
 )
+from paperroute.core.state_model import clock_waiting as clock_held
+from paperroute.core.state_model import load_window
 from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import live_stop_view, saved_of
 from paperroute.core.stop_view import (
@@ -300,7 +301,7 @@ def loaded(
     event = DeparturesLoaded(
         pin=shown(state=state),
         departures=deps,
-        until=START + HORIZON + RELOAD_BEFORE,
+        until=max(START, state.now) + HORIZON + RELOAD_BEFORE,
     )
     return step_answered(state=state, event=event)[0]
 
@@ -3127,13 +3128,77 @@ def test_sync_jump_starts_afresh() -> None:
 
 
 def test_sync_jump_fires_a_cycle_on_the_tick() -> None:
-    """Departures loaded during the wait are fetched on the synced tick."""
+    """Feeds needed during the wait are fetched on the synced tick."""
     state, _ = clock_waiting()
     later = START + timedelta(hours=3, seconds=7)
     state, effects = step(state, Tick(now=later))
     assert state.cycle.started == later
     assert any(isinstance(effect, FetchFeed) for effect in effects)
     assert not any(isinstance(effect, Render) for effect in effects)
+
+
+def test_sync_clears_the_wrong_date_board() -> None:
+    """Departures loaded before the clock was set are dropped at once."""
+    state, _ = clock_waiting()
+    assert state.board.departures
+    later = START + timedelta(hours=3, seconds=7)
+    state, effects = step(state, Tick(now=later))
+    assert state.board.departures == ()
+    assert state.board.loading
+    assert not any(isinstance(effect, Render) for effect in effects)
+
+
+def test_load_ending_before_now_is_dropped() -> None:
+    """A load whose window has ended when it lands is not shown."""
+    state, _ = clock_waiting()
+    later = START + timedelta(hours=5, seconds=7)
+    state, _ = step(state, Tick(now=later))
+    old = DeparturesLoaded(
+        pin=shown(state=state),
+        departures=(departure(departs=START + timedelta(minutes=3)),),
+        until=START + HORIZON + RELOAD_BEFORE,
+    )
+    state, effects = step(state, old)
+    assert state.board.departures == ()
+    assert state.board.loaded_until is None
+    assert not any(isinstance(effect, Render) for effect in effects)
+    state, more = step(state, Tick(now=later + timedelta(seconds=5)))
+    assert any(isinstance(effect, LoadDepartures) for effect in more)
+
+
+def test_clock_wait_expiry_makes_probe_due() -> None:
+    """The device is probed on the tick the clock wait gives up."""
+    state, _ = clock_waiting()
+    state, _ = step(
+        state, Tick(now=START + timedelta(seconds=5), synced=False),
+    )
+    late = START + CLOCK_WAIT - timedelta(seconds=5)
+    state, _ = step(state, Tick(now=late, synced=False))
+    state = replace(
+        state,
+        panel=replace(state.panel, probed_at=late, probing=False),
+    )
+    state, effects = step(
+        state, Tick(now=START + CLOCK_WAIT, synced=False),
+    )
+    assert any(isinstance(effect, ProbeDevice) for effect in effects)
+    state, effects = step(
+        state,
+        Tick(now=START + CLOCK_WAIT + timedelta(seconds=5), synced=False),
+    )
+    assert not any(isinstance(effect, ProbeDevice) for effect in effects)
+
+
+def test_clock_wait_holds_only_once() -> None:
+    """A clock stepping back after the give-up does not hold again."""
+    state, _ = clock_waiting()
+    state, _ = step(state, Tick(now=START + CLOCK_WAIT, synced=False))
+    back = START + timedelta(seconds=30)
+    state, _ = step(state, Tick(now=back, synced=False))
+    assert not clock_held(state=state)
+    state, _ = step(state, Tick(now=back + timedelta(hours=3)))
+    assert state.refresh.started_at == back + timedelta(hours=3)
+    assert state.clock_wait_until is None
 
 
 def test_synced_start_never_waits() -> None:

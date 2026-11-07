@@ -1,7 +1,7 @@
 """Handlers for the device's own settings and power."""
 
 from dataclasses import fields, replace
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.core.alert_state import alert_clocks_cleared
@@ -37,7 +37,14 @@ from paperroute.core.messages import (
 from paperroute.core.model import shifted
 from paperroute.core.quota import calls_today
 from paperroute.core.saved import Settings
-from paperroute.core.state_model import CLOCK_WAIT, Cycle, State, restarted
+from paperroute.core.state_model import (
+    CLOCK_WAIT,
+    Board,
+    Cycle,
+    State,
+    clock_waiting,
+    restarted,
+)
 from paperroute.core.state_views import saved_of, settled
 from paperroute.core.wifi import on_wifi_event, setup_closed
 
@@ -386,9 +393,9 @@ def quiet_guard(
     return cleared, kept
 
 
-def clock_checked(*, state: State, synced: bool) -> State:
+def clock_checked(*, state: State, now: datetime, synced: bool) -> State:
     """
-    Start or end the wait for the clock to be synchronised.
+    Start, give up or end the wait for the clock to be synchronised.
 
     Only the first frame waits: an unsynced tick after a frame is drawn
     starts no wait.
@@ -396,24 +403,31 @@ def clock_checked(*, state: State, synced: bool) -> State:
     Parameters
     ----------
     state : State
-        State at the tick's time.
+        State before the tick.
+    now : datetime
+        The tick's time.
     synced : bool
         Whether the tick found the clock synchronised.
 
     Returns
     -------
     State
-        State waiting until `CLOCK_WAIT` from now after the first
-        unsynced tick; `clock_set` on the first synced tick after
-        unsynced ones; unchanged otherwise.
+        State at the tick's time: waiting until `CLOCK_WAIT` from now
+        after the first unsynced tick; given up, with a probe due, on
+        the tick the wait runs out; `clock_set` on the first synced
+        tick after unsynced ones; otherwise only the time moves on.
     """
+    after = replace(state, now=now)
     waiting = state.clock_wait_until is not None
     if synced:
-        return clock_set(state=state) if waiting else state
+        return clock_set(state=after) if waiting else after
+    if clock_waiting(state=state) and not clock_waiting(state=after):
+        panel = replace(after.panel, probed_at=None)
+        return replace(after, clock_gave_up=True, panel=panel)
     if waiting or state.last_view is not None:
-        return state
-    until = shifted(moment=state.now, seconds=int(CLOCK_WAIT.total_seconds()))
-    return replace(state, clock_wait_until=until)
+        return after
+    until = shifted(moment=now, seconds=int(CLOCK_WAIT.total_seconds()))
+    return replace(after, clock_wait_until=until)
 
 
 def clock_set(*, state: State) -> State:
@@ -428,14 +442,14 @@ def clock_set(*, state: State) -> State:
     Returns
     -------
     State
-        State with no clock wait, departures due to reload, the app
-        counted as started now, a fresh poll cycle and a probe due.
+        State with no clock wait, no departures and a load due, the
+        app counted as started now, a fresh poll cycle and a probe due.
     """
-    board = replace(state.board, loaded_until=None, loading=False)
     return replace(
         state,
         clock_wait_until=None,
-        board=board,
+        clock_gave_up=False,
+        board=Board(),
         refresh=replace(state.refresh, started_at=state.now),
         cycle=Cycle(),
         panel=replace(state.panel, probed_at=None),

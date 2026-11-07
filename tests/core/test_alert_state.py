@@ -133,7 +133,7 @@ def loaded_with(
     event = DeparturesLoaded(
         pin=shown(state=state),
         departures=departures,
-        until=NOW + HORIZON + RELOAD_BEFORE,
+        until=state.now + HORIZON + RELOAD_BEFORE,
     )
     return step(state, event)
 

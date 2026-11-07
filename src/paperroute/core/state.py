@@ -314,6 +314,9 @@ def on_loaded(
     """
     Store departures and the feeds their modes need.
 
+    A load whose window has already ended, as after the clock jumped
+    forward, is dropped and a new one becomes due.
+
     Parameters
     ----------
     state : State
@@ -326,6 +329,8 @@ def on_loaded(
     tuple[State, tuple[Effect, ...]]
         New state and effects.
     """
+    if event.until.timestamp() <= state.now.timestamp():
+        return replace(state, board=replace(state.board, loading=False)), ()
     board = Board(
         departures=event.departures, loaded_until=event.until, legs=event.legs,
     )
@@ -519,7 +524,7 @@ def on_ticked(
         New state and effects.
     """
     state = clock_checked(
-        state=replace(state, now=event.now), synced=event.synced,
+        state=state, now=event.now, synced=event.synced,
     )
     state, stops = setup_expired(state=state)
     state = menu_idle(state=confirm_expired(state=state))

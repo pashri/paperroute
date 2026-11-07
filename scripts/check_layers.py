@@ -248,7 +248,9 @@ def allowed(*, tree: Tree, name: str, test: bool) -> bool:
     Returns
     -------
     bool
-        True when the import keeps the layers.
+        True when the import keeps the layers: its own package or a
+        lower rank, so two apps at the same rank never import each
+        other.
     """
     if name == tree.name or (test and name in TEST_ONLY):
         return True
@@ -256,7 +258,7 @@ def allowed(*, tree: Tree, name: str, test: bool) -> bool:
         return False
     if name not in RANKS or tree.rank is None:
         return True
-    return RANKS[name] <= tree.rank
+    return RANKS[name] < tree.rank
 
 
 def layer_problems(*, root: Path, tree: Tree) -> Iterator[str]:
@@ -313,7 +315,7 @@ def import_problems(*, root: Path, tree: Tree) -> Iterator[str]:
 
 def dependency_problems(*, root: Path, tree: Tree) -> Iterator[str]:
     """
-    Report the higher-rank workspace distributions a package depends on.
+    Report the workspace distributions at or above a package's rank.
 
     Parameters
     ----------
@@ -334,7 +336,7 @@ def dependency_problems(*, root: Path, tree: Tree) -> Iterator[str]:
     for requirement in project.get('project', {}).get('dependencies', []):
         match = DISTRIBUTION.match(requirement)
         name = re.sub(r'[-_.]+', '_', match.group().lower()) if match else ''
-        if RANKS.get(name, -1) > tree.rank:
+        if name != tree.name and RANKS.get(name, -1) >= tree.rank:
             yield (
                 f'{pyproject.relative_to(root).as_posix()}: '
                 f'{tree.name} may not import {name}'

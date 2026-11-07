@@ -3,6 +3,7 @@
 import logging
 from collections.abc import Mapping
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -22,6 +23,8 @@ from paperroute_transit.build.osm_source import (
     place_kind,
     read_osm,
 )
+
+LOGGER: Final[str] = 'paperroute_transit.build.osm_source'
 
 
 @pytest.fixture(name='tiny_osm', scope='module')
@@ -176,7 +179,7 @@ def test_read_osm_logs_skipped_objects(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Broken ways and the self-crossing park are counted in the log."""
-    with caplog.at_level(logging.INFO, logger='paperroute_transit.build.osm_source'):
+    with caplog.at_level(logging.INFO, logger=LOGGER):
         list(read_osm(path=tiny_osm, bbox=TINY_BBOX, index='flex_mem'))
     assert [record.getMessage() for record in caplog.records] == [
         'skipped 2 ways without a usable line',

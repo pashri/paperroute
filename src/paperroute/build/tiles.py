@@ -432,6 +432,7 @@ def write_tiles(
             stack.enter_context(
                 ProcessPoolExecutor(
                     max_workers=workers,
+                    # Workers start without the asset root, so set it.
                     initializer=use_app_assets,
                 ),
             )

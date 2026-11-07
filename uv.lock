@@ -1097,7 +1097,6 @@ dependencies = [
     { name = "paperroute-transit" },
     { name = "pydantic" },
     { name = "python-json-logger" },
-    { name = "segno" },
     { name = "skia-python" },
 ]
 
@@ -1129,7 +1128,6 @@ requires-dist = [
     { name = "paperroute-transit", editable = "packages/paperroute-transit" },
     { name = "pydantic", specifier = ">=2.12" },
     { name = "python-json-logger", specifier = ">=3.2" },
-    { name = "segno", specifier = ">=1.6.6" },
     { name = "skia-python", specifier = ">=138.0" },
 ]
 

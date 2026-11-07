@@ -341,7 +341,6 @@ async def test_downloads_404_without_file(
         await other.close()
 
 
-
 async def test_device_page_feed_times_in_given_zone(client: Client) -> None:
     """Each feed's last good time is read in the pages' zone."""
     text = await (await client.get('/device')).text()

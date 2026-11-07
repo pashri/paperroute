@@ -207,6 +207,20 @@ def test_problems_flags_unranked_package(
     ]
 
 
+def test_problems_flags_sibling_app_import(
+    check_layers: ModuleType,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second app at the app rank may not import ``paperroute``."""
+    monkeypatch.setitem(check_layers.RANKS, 'paperroute_other', 3)
+    name = 'packages/paperroute-other/src/paperroute_other/__init__.py'
+    root = build(root=tmp_path, extra={name: 'import paperroute\n'})
+    assert check_layers.problems(root=root) == [
+        f'{name}: paperroute_other may not import paperroute',
+    ]
+
+
 def test_problems_empty_for_this_repo(check_layers: ModuleType) -> None:
     """This repository keeps its layers."""
     assert check_layers.problems(root=ROOT) == []

@@ -13,12 +13,12 @@ from paperroute_device.core.device_model import (
     WifiNetwork,
     WifiStatus,
 )
+from paperroute_device.core.wifi_text import SETUP_SSID
 
 logger = logging.getLogger(__name__)
 
 NMCLI: Final[str] = '/usr/bin/nmcli'
 IFACE: Final[str] = 'wlan0'
-HOTSPOT_NAME: Final[str] = 'paperroute-setup'
 HOTSPOT_ADDRESS: Final[str] = '10.42.0.1'
 JOIN_WAIT_S: Final[int] = 30
 COMMAND_TIMEOUT_S: Final[float] = 60.0
@@ -105,7 +105,7 @@ def scan_row(*, line: str) -> WifiNetwork | None:
             pass
         case _:
             return None
-    if not ssid or ssid == HOTSPOT_NAME:
+    if not ssid or ssid == SETUP_SSID:
         return None
     return WifiNetwork(
         ssid=ssid,
@@ -588,7 +588,7 @@ class NmcliWifi:
 
     async def start_hotspot(self, *, password: str) -> bool:
         """
-        Share a WPA2 hotspot named HOTSPOT_NAME on the interface.
+        Share a WPA2 hotspot named SETUP_SSID on the interface.
 
         Parameters
         ----------
@@ -602,7 +602,7 @@ class NmcliWifi:
         """
         ran = await self.run(
             'device', 'wifi', 'hotspot', 'ifname', self.iface,
-            'con-name', HOTSPOT_NAME, 'ssid', HOTSPOT_NAME,
+            'con-name', SETUP_SSID, 'ssid', SETUP_SSID,
             'band', 'bg', 'password', password,
             verb='hotspot',
         )
@@ -615,7 +615,7 @@ class NmcliWifi:
         """Take the hotspot down and delete its profile."""
         for action in ('down', 'delete'):
             ran = await self.run(
-                'connection', action, 'id', HOTSPOT_NAME, verb=action,
+                'connection', action, 'id', SETUP_SSID, verb=action,
             )
             if ran is None or ran[0] != 0:
                 logger.info('hotspot %s failed', action)
@@ -781,7 +781,7 @@ class NmcliWifi:
 
     async def hotspot_saved(self) -> bool:
         """
-        Say whether a profile named HOTSPOT_NAME exists.
+        Say whether a profile named SETUP_SSID exists.
 
         Returns
         -------
@@ -794,4 +794,4 @@ class NmcliWifi:
         if shown is None or shown[0] != 0:
             return False
         names = [split_terse(line=line) for line in shown[1].splitlines()]
-        return [HOTSPOT_NAME] in names
+        return [SETUP_SSID] in names

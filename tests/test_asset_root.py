@@ -1,6 +1,7 @@
 """Tests for how the app finds its package data."""
 
 import ast
+import re
 from pathlib import Path
 from typing import Final
 
@@ -10,6 +11,9 @@ ASSET_ROOT: Final[Path] = ROOT / 'src' / 'paperroute' / 'asset_root.py'
 ENTRY_POINTS: Final[tuple[Path, ...]] = (
     ROOT / 'src' / 'paperroute' / '__main__.py',
     ROOT / 'src' / 'paperroute' / 'build' / '__main__.py',
+)
+APP_FILES: Final[re.Pattern[str]] = re.compile(
+    r'''files\(\s*(['"])paperroute(\.[\w.]*)?\1''',
 )
 
 
@@ -21,7 +25,7 @@ def test_only_asset_root_reads_package_data() -> None:
             [*ROOT.glob('src/**/*.py'), *ROOT.glob('packages/*/src/**/*.py')],
         )
         if path != ASSET_ROOT
-        and "files('paperroute')" in path.read_text(encoding='utf-8')
+        and APP_FILES.search(path.read_text(encoding='utf-8'))
     ]
     assert not offenders
 

@@ -26,15 +26,17 @@ from paperroute.core.messages import (
     PowerAction,
     PowerRequested,
     Render,
+    ScreenView,
     SettingsChanged,
     Tick,
 )
 from paperroute.core.panel_views import SleepView
 from paperroute.core.places import shown
-from paperroute.core.realtime import RealtimeSnapshot
+from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 from paperroute.core.sleep import slept
 from paperroute.core.state import step
 from paperroute.core.state_model import RELOAD_BEFORE, Cycle, State
+from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.stop_view import HORIZON
 from tests.core.factories import START, departure, snapshot
 from tests.core.test_quiet import at as quiet_at
@@ -416,6 +418,37 @@ def test_hold_ends_at_deadline() -> None:
     assert len(_renders(effects=effects)) == 1
 
 
+def _delayed(*, state: State, feed: str) -> FeedFetched:
+    """A download delaying the first trip shown by six minutes."""
+    first = state.board.departures[0]
+    trip = TripRealtime(
+        trip_id=first.trip_id,
+        cancelled=False,
+        updates=(
+            StopUpdate(
+                sequence=first.origin_seq,
+                stop_id=None,
+                arrival_delay=None,
+                departure_delay=360,
+                arrival_time=None,
+                departure_time=None,
+            ),
+        ),
+        start_date=None,
+    )
+    return FeedFetched(
+        feed=feed,
+        snapshot=RealtimeSnapshot(
+            fetched_at=state.now, trips={first.trip_id: trip},
+        ),
+    )
+
+
+def _view_now(*, state: State) -> ScreenView:
+    """The view the state would draw now."""
+    return current_view(state=state, stop_view=live_stop_view(state=state))
+
+
 def test_late_response_waits_for_next_frame() -> None:
     """A response after the hold is stored but drawn by the next frame."""
     state, fetches = _held()
@@ -424,21 +457,28 @@ def test_late_response_waits_for_next_frame() -> None:
         fetch for fetch in fetches if fetch.kind == FeedKind.TRIPS
     )
     before = state.last_view
-    state, effects = step(state, _answer(fetch=late))
+    state, effects = step(state, _delayed(state=state, feed=late.feed))
     assert not _renders(effects=effects)
     assert late.feed in state.snapshots
     assert state.last_view == before
+    assert _view_now(state=state) != before
+    state, effects = step(state, Tick(now=HELD_AT + timedelta(seconds=15)))
+    [render] = _renders(effects=effects)
+    assert render.view == state.last_view != before
 
 
 def test_response_outside_cycle_not_drawn() -> None:
     """A response nothing waits on is stored without drawing."""
-    state, _ = step(loaded(state=fresh()), PRESS)
-    state = replace(state, cycle=Cycle(started=START))
-    state, effects = step(
-        state, _answer(fetch=FetchFeed(feed=BUSES)),
-    )
+    state, fetches = _held()
+    for fetch in fetches:
+        state, _ = step(state, _answer(fetch=fetch))
+    assert not state.cycle.waiting
+    before = state.last_view
+    state, effects = step(state, _delayed(state=state, feed=BUSES))
     assert not _renders(effects=effects)
-    assert BUSES in state.snapshots
+    assert not _fetches(effects=effects)
+    assert state.snapshots[BUSES].trips
+    assert _view_now(state=state) != before
 
 
 def test_knob_turn_not_held() -> None:

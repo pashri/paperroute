@@ -29,7 +29,7 @@ from paperroute.core.connection_strip import (
     ConnectionStripView,
 )
 from paperroute.core.connection_view import ConnectionView
-from paperroute.core.cycle import needed_feeds
+from paperroute.core.cycle import cycle_due, needed_feeds
 from paperroute.core.feeds import (
     ALL_POSITION_MODES,
     FeedKind,
@@ -117,6 +117,7 @@ from paperroute.core.reach import (
 )
 from paperroute.core.realtime import RealtimeSnapshot, StopUpdate, TripRealtime
 from paperroute.core.rebuild import building_view
+from paperroute.core.rhythm import poll_every
 from paperroute.core.saved import (
     DEFAULT_SAVED,
     LIVE_VIEWS,
@@ -1898,8 +1899,7 @@ def check_fetch(
     """
     Assert a fetch is needed and either starts a cycle or joins it once.
 
-    A timetable arriving, the panel waking or a new place shown starts
-    a cycle afresh.
+    A cycle starts on a boundary, or off it when `cycle_reset` says so.
 
     Parameters
     ----------
@@ -1918,13 +1918,47 @@ def check_fetch(
     assert effect.feed in needed
     assert effect.feed in after.cycle.asked
     assert effect.feed in after.cycle.waiting
-    restarted = (
-        after.cycle.started != before.cycle.started
-        or (before.rebuild.missing and not after.rebuild.missing)
+    started = after.cycle.started != before.cycle.started
+    assert not started or cycle_reset(before=before, after=after) or any(
+        cycle_due(
+            cycle=before.cycle, now=after.now, every=poll_every(state=state),
+        )
+        for state in (before, after)
+    )
+    assert (
+        started
+        or cycle_reset(before=before, after=after)
+        or effect.feed not in before.cycle.asked
+    )
+
+
+def cycle_reset(*, before: State, after: State) -> bool:
+    """
+    Say whether an event let a cycle start off its boundary.
+
+    Parameters
+    ----------
+    before : State
+        State before the event.
+    after : State
+        State after the event.
+
+    Returns
+    -------
+    bool
+        True when a timetable arrived, the panel woke, a key was set,
+        the clock was set or the place shown changed.
+    """
+    return (
+        (before.rebuild.missing and not after.rebuild.missing)
         or (before.panel.asleep and not after.panel.asleep)
+        or (before.panel.key_set is False and after.panel.key_set is True)
+        or (
+            before.clock_wait_until is not None
+            and after.clock_wait_until is None
+        )
         or not same_place(first=shown(state=before), second=shown(state=after))
     )
-    assert restarted or effect.feed not in before.cycle.asked
 
 
 def check_places(*, before: State, after: State, event: Event) -> None:

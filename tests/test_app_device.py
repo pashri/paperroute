@@ -7,19 +7,11 @@ from pathlib import Path
 import pytest
 
 from paperroute import app_device
-from paperroute.adapters.resets import FileResets
 from paperroute.app_device import (
     DevicePorts,
     Reported,
     device_work,
     report_status,
-)
-from paperroute.core.device_model import (
-    DeviceStatus,
-    JoinOutcome,
-    JoinRequest,
-    ResetKind,
-    WifiNetwork,
 )
 from paperroute.core.messages import (
     DeviceProbed,
@@ -39,6 +31,14 @@ from paperroute.core.messages import (
 )
 from paperroute.core.state import step
 from paperroute.observers import Timings
+from paperroute_device.adapters.resets import FileResets
+from paperroute_device.core.device_model import (
+    DeviceStatus,
+    JoinOutcome,
+    JoinRequest,
+    ResetKind,
+    WifiNetwork,
+)
 from paperroute_testkit.fakes import (
     FakeBuilder,
     FakeKeys,

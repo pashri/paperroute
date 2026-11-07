@@ -3,7 +3,7 @@
 import asyncio
 import logging
 
-from paperroute.core.messages import PowerAction
+from paperroute_device.core.device_model import PowerAction
 
 logger = logging.getLogger(__name__)
 

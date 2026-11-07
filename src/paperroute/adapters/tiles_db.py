@@ -8,7 +8,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.adapters.sqlite_ro import ReadOnlyDatabase
 from paperroute.core.tiles import (
     TILE_STYLE,
     ZOOMS,
@@ -18,6 +17,7 @@ from paperroute.core.tiles import (
     zooms_of,
 )
 from paperroute.render.tile_codec import unpack_bits, unpack_grey
+from paperroute_device.adapters.sqlite_ro import ReadOnlyDatabase
 
 DEFAULT_TILES: Final[Path] = Path('/var/lib/paperroute/tiles.db')
 GROW_X: Final[float] = 200.0

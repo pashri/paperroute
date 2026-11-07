@@ -28,17 +28,12 @@ from paperroute.adapters.web_connection import ConnectionPages
 from paperroute.adapters.web_pins import PinsPages
 from paperroute.adapters.web_suggest import SuggestPages
 from paperroute.adapters.web_ways import WaysPages
-from paperroute.core.messages import (
-    POWER_ACTIONS,
-    Event,
-    PowerAction,
-    PowerRequested,
-    SettingsChanged,
-)
+from paperroute.core.messages import Event, PowerRequested, SettingsChanged
 from paperroute.core.model import SYDNEY
 from paperroute.core.saved import Settings
-from paperroute.rss import max_rss_mb
+from paperroute_device.core.device_model import POWER_ACTIONS, PowerAction
 from paperroute_device.render.canvas import encode_png
+from paperroute_device.rss import max_rss_mb
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,

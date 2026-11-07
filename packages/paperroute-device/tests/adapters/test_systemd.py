@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters.systemd import SystemdNotifier, notify_address
+from paperroute_device.adapters.systemd import SystemdNotifier, notify_address
 
 
 @pytest.fixture(name='sock_dir')

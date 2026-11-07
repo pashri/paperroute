@@ -8,11 +8,6 @@ from pathlib import Path
 from typing import Final, cast
 
 from paperroute.adapters.network_lines import LineTables, Row
-from paperroute.adapters.sqlite_ro import (
-    Identity,
-    ReadOnlyDatabase,
-    file_identity,
-)
 from paperroute.adapters.timetable_db import DEFAULT_PATH, to_point
 from paperroute.core.chooser import (
     KIND_LABELS,
@@ -41,6 +36,11 @@ from paperroute.core.reach import (
     cut_to_line,
     every_route,
     merge_tails,
+)
+from paperroute_device.adapters.sqlite_ro import (
+    Identity,
+    ReadOnlyDatabase,
+    file_identity,
 )
 
 NETWORK_TABLES: Final[tuple[str, ...]] = (

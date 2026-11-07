@@ -6,7 +6,6 @@ import pytest
 
 from paperroute.core.banners import NO_KEY
 from paperroute.core.device import NOTICE, PROBE_EVERY, device_status, on_reset
-from paperroute.core.device_model import DeviceStatus, ResetKind
 from paperroute.core.messages import (
     ApiKeyChanged,
     ControlPower,
@@ -14,7 +13,6 @@ from paperroute.core.messages import (
     DeviceProbeFailed,
     FetchFeed,
     NoticeView,
-    PowerAction,
     PowerFailed,
     PowerRequested,
     ProbeDevice,
@@ -34,6 +32,11 @@ from paperroute.core.state_model import State
 from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import stop_view_of
 from paperroute.core.stop_view import StopView
+from paperroute_device.core.device_model import (
+    DeviceStatus,
+    PowerAction,
+    ResetKind,
+)
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobPressed,

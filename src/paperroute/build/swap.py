@@ -24,7 +24,7 @@ from paperroute.build.handoff import (
 from paperroute.build.layout import Layout
 from paperroute.build.sources import SourceError, fsync_dir, save_states
 from paperroute.logs import configure_logging
-from paperroute.rss import max_rss_mb
+from paperroute_device.rss import max_rss_mb
 
 logger = logging.getLogger(__name__)
 

@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters.power import NullPower, SystemctlPower
-from paperroute.core.messages import PowerAction
+from paperroute_device.adapters.power import NullPower, SystemctlPower
+from paperroute_device.core.device_model import PowerAction
 
 
 def stand_in(*, folder: Path, code: int) -> tuple[Path, Path]:

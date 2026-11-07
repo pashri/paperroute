@@ -15,24 +15,24 @@ from paperroute.adapters.device_page import ASKED as DEVICE_ASKED
 from paperroute.adapters.device_page import ago_text
 from paperroute.adapters.web_device import DevicePages
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.core.device_model import (
-    Confirm,
-    ConfirmAction,
-    DeviceFacts,
-    DeviceStatus,
-    Origin,
-    WifiStatus,
-)
 from paperroute.core.feeds import FEEDS, POSITION_FEEDS
 from paperroute.core.messages import (
     ApiKeyChanged,
     ConfirmAsked,
     Event,
-    PowerAction,
     PowerRequested,
 )
 from paperroute.core.model import SYDNEY, Mode
 from paperroute.core.panel_views import confirm_view
+from paperroute_device.core.device_model import (
+    Confirm,
+    ConfirmAction,
+    DeviceFacts,
+    DeviceStatus,
+    Origin,
+    PowerAction,
+    WifiStatus,
+)
 from paperroute_hardware.ports import PanelTimes
 from paperroute_testkit.fakes import FakeKeys
 from tests.page_markup import parse_page

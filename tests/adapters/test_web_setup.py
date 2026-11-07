@@ -12,14 +12,14 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_device import DevicePages
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.core.device_model import (
+from paperroute.core.messages import ApiKeyChanged, Event, JoinAsked
+from paperroute_device.core.device_model import (
     DeviceStatus,
     JoinRequest,
     WifiNetwork,
     WifiPhase,
     WifiSetup,
 )
-from paperroute.core.messages import ApiKeyChanged, Event, JoinAsked
 from paperroute_testkit.fakes import FakeKeys
 from tests.page_markup import parse_page
 

@@ -5,13 +5,7 @@ from collections.abc import Mapping
 from datetime import datetime
 from typing import Final
 
-from paperroute.core.device_model import (
-    ConfirmAction,
-    DeviceFacts,
-    DeviceStatus,
-)
 from paperroute.core.feeds import feed_label
-from paperroute.core.messages import POWER_ACTIONS, PowerAction
 from paperroute.core.model import SYDNEY
 from paperroute.core.panel_screens import (
     LOCAL_NAME,
@@ -22,6 +16,13 @@ from paperroute.core.panel_screens import (
 from paperroute.core.panel_screens import strength as dbm_strength
 from paperroute.core.panel_views import CANCEL_LINE, CONFIRM_COPY
 from paperroute.core.quota import DAILY_LIMIT
+from paperroute_device.core.device_model import (
+    POWER_ACTIONS,
+    ConfirmAction,
+    DeviceFacts,
+    DeviceStatus,
+    PowerAction,
+)
 from paperroute_device.core.text import DOT, HINT_DOT, clock_text
 from paperroute_hardware.ports import PanelTimes
 

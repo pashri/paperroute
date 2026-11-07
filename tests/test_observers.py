@@ -2,15 +2,19 @@
 
 import logging
 import time
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 
 import pytest
 
 from paperroute.adapters.settings_form import form_values
-from paperroute.core.device_model import DeviceStatus, WifiPhase, WifiSetup
 from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
 from paperroute.observers import NullObserver, ObserverGroup, Timings
+from paperroute_device.core.device_model import (
+    DeviceStatus,
+    WifiPhase,
+    WifiSetup,
+)
 from paperroute_hardware.ports import PanelRefresh, PanelTimes
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import device_facts
@@ -26,6 +30,48 @@ STATUS: DeviceStatus = DeviceStatus(
 )
 
 PINS: tuple[Pin, ...] = (pin_of('215020', '200060'),)
+
+
+@dataclass
+class _DeviceRecorder:
+    """A device observer that records the name of each event."""
+
+    events: list[str] = field(default_factory=list)
+
+    def frame_drawn(self, *, render_ms: float) -> None:
+        """Record a frame."""
+        self.events.append('frame_drawn')
+
+    def feed_parsed(
+        self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
+    ) -> None:
+        """Record a feed."""
+        self.events.append('feed_parsed')
+
+    def ticked(self) -> None:
+        """Record a tick."""
+        self.events.append('ticked')
+
+    def status_seen(self, *, status: DeviceStatus) -> None:
+        """Record a status."""
+        self.events.append('status_seen')
+
+    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
+        """Record a refresh."""
+        self.events.append('panel_refreshed')
+
+
+@dataclass
+class _Recorder(_DeviceRecorder):
+    """An app observer that records the name of each event."""
+
+    def settings_seen(self, *, settings: Settings) -> None:
+        """Record the settings."""
+        self.events.append('settings_seen')
+
+    def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
+        """Record the pins."""
+        self.events.append('pins_seen')
 
 
 class _Failing:
@@ -277,3 +323,48 @@ def test_timings_knobs_swapped_follows_the_settings() -> None:
     assert timings.knobs_swapped()
     timings.settings_seen(settings=Settings())
     assert not timings.knobs_swapped()
+
+
+def test_group_sends_device_events_to_devices() -> None:
+    """Devices get the five device events; observers get all seven."""
+    full = _Recorder()
+    device = _DeviceRecorder()
+    group = ObserverGroup(observers=[full], devices=[device])
+    group.frame_drawn(render_ms=1.0)
+    group.feed_parsed(feed='f', fetch_ms=1.0, parse_ms=1.0, trips=1)
+    group.ticked()
+    group.settings_seen(settings=Settings())
+    group.status_seen(status=STATUS)
+    group.pins_seen(pins=PINS, shown=0)
+    group.panel_refreshed(
+        refresh=PanelRefresh(full=False, seconds=0.5, ok=True),
+    )
+    device_events = [
+        'frame_drawn',
+        'feed_parsed',
+        'ticked',
+        'status_seen',
+        'panel_refreshed',
+    ]
+    assert device.events == device_events
+    assert full.events == [
+        'frame_drawn',
+        'feed_parsed',
+        'ticked',
+        'settings_seen',
+        'status_seen',
+        'pins_seen',
+        'panel_refreshed',
+    ]
+
+
+def test_group_tells_observers_before_devices() -> None:
+    """Each device event reaches the observers before the devices."""
+    events: list[str] = []
+    group = ObserverGroup(
+        observers=[_Recorder(events=events)],
+        devices=[_DeviceRecorder(events=events)],
+    )
+    group.ticked()
+    group.settings_seen(settings=Settings())
+    assert events == ['ticked', 'ticked', 'settings_seen']

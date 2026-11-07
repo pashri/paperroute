@@ -5,7 +5,6 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
-from paperroute.core.device_model import JoinOutcome, WifiPhase, WifiSetup
 from paperroute.core.messages import (
     Effect,
     HotspotFailed,
@@ -22,6 +21,11 @@ from paperroute.core.messages import (
 from paperroute.core.model import SYDNEY
 from paperroute.core.panel_views import WifiSetupView
 from paperroute.core.state_model import State
+from paperroute_device.core.device_model import (
+    JoinOutcome,
+    WifiPhase,
+    WifiSetup,
+)
 from paperroute_device.core.text import HINT_DOT, clock_text
 from paperroute_hardware.core.knob_events import Knob, KnobPressed
 

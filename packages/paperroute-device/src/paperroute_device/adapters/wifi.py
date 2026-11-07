@@ -7,7 +7,7 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Final
 
-from paperroute.core.device_model import (
+from paperroute_device.core.device_model import (
     JoinOutcome,
     JoinRequest,
     WifiNetwork,

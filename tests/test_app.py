@@ -17,7 +17,6 @@ from numpy.typing import NDArray
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import FeedBackingOff, JoinedBody
 from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.adapters.resets import FileResets
 from paperroute.adapters.state_file import JsonStateRepository
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
@@ -45,7 +44,6 @@ from paperroute.core.alert_model import AlertsFetched
 from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
 from paperroute.core.cycle import CYCLE_WAIT
 from paperroute.core.device import NOTICE, on_reset
-from paperroute.core.device_model import DeviceStatus, ResetKind
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import Point, Shape, make_shape
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
@@ -63,7 +61,6 @@ from paperroute.core.messages import (
     NoticeView,
     PinDeleted,
     PositionsFetched,
-    PowerAction,
     PowerFailed,
     PowerRequested,
     QuitRequested,
@@ -110,6 +107,12 @@ from paperroute.render.notice import draw_notice_view
 from paperroute.render.panel import draw_panel_view
 from paperroute.render.sleep import with_sleep_band
 from paperroute.render.tile_codec import pack_bits, pack_grey
+from paperroute_device.adapters.resets import FileResets
+from paperroute_device.core.device_model import (
+    DeviceStatus,
+    PowerAction,
+    ResetKind,
+)
 from paperroute_device.render.frame import HEADER
 from paperroute_hardware.core.knob_events import (
     Knob,

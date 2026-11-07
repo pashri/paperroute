@@ -3,7 +3,6 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from paperroute.core.device_model import ConfirmAction, MenuRow
 from paperroute.core.geo import make_shape
 from paperroute.core.map_view import MAP_HEIGHT, MapView, screen_point
 from paperroute.core.messages import (
@@ -31,6 +30,7 @@ from paperroute.core.state_views import live_stop_view
 from paperroute.core.stop_view import StopView
 from paperroute.render.sleep import BAND_H
 from paperroute.render.trip_marks import END_DISC, END_EDGE
+from paperroute_device.core.device_model import ConfirmAction, MenuRow
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,

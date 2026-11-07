@@ -4,12 +4,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.core.device_model import (
-    Confirm,
-    ConfirmAction,
-    Origin,
-    WifiPhase,
-)
 from paperroute.core.panel_views import (
     MENU_VISIBLE,
     DeviceView,
@@ -38,6 +32,12 @@ from paperroute.render.panel import (
 )
 from paperroute.render.qr import qr_image
 from paperroute.render.strip_view import HINT_FACE
+from paperroute_device.core.device_model import (
+    Confirm,
+    ConfirmAction,
+    Origin,
+    WifiPhase,
+)
 from paperroute_device.core.text import DOT, HINT_DOT
 from paperroute_device.render.canvas import (
     HEIGHT,

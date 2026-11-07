@@ -5,9 +5,10 @@ import shutil
 from pathlib import Path
 from typing import Final
 
-from paperroute.core.device_model import DeviceFacts, WifiStatus
 from paperroute.logs import LastError
-from paperroute.ports import KeyStore, TileRepository, WifiControl
+from paperroute.ports import TileRepository
+from paperroute_device.core.device_model import DeviceFacts, WifiStatus
+from paperroute_device.ports import KeyStore, WifiControl
 
 UPTIME: Final[str] = 'proc/uptime'
 TEMPERATURE: Final[str] = 'sys/class/thermal/thermal_zone0/temp'

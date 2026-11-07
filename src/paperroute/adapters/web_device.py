@@ -25,21 +25,21 @@ from paperroute.adapters.device_page import (
     system_rows,
 )
 from paperroute.adapters.web_common import asset, form_fields
-from paperroute.adapters.wifi import valid_password, valid_ssid
-from paperroute.core.device_model import (
-    ConfirmAction,
-    DeviceStatus,
-    JoinRequest,
-    WifiNetwork,
-    WifiPhase,
-)
 from paperroute.core.messages import (
     ApiKeyChanged,
     ConfirmAsked,
     Event,
     JoinAsked,
 )
-from paperroute.ports import KeyStore
+from paperroute_device.adapters.wifi import valid_password, valid_ssid
+from paperroute_device.core.device_model import (
+    ConfirmAction,
+    DeviceStatus,
+    JoinRequest,
+    WifiNetwork,
+    WifiPhase,
+)
+from paperroute_device.ports import KeyStore
 from paperroute_hardware.ports import PanelTimes
 
 logger = logging.getLogger(__name__)

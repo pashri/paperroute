@@ -1,14 +1,21 @@
 """The observers the web app reports to."""
 
-from paperroute.adapters.act_led import ActLed
-from paperroute.adapters.systemd import SystemdNotifier
+from pathlib import Path
+
 from paperroute.observers import ObserverGroup, Timings
 from paperroute.summary import Summary
+from paperroute_device.adapters.act_led import ActLed
+from paperroute_device.adapters.systemd import SystemdNotifier
 
 __all__ = ['web_observer']
 
 
-def web_observer(*, timings: Timings, summary: Summary) -> ObserverGroup:
+def web_observer(
+    *,
+    timings: Timings,
+    summary: Summary,
+    led_root: Path = Path('/sys/class/leds/ACT'),
+) -> ObserverGroup:
     """
     Gather the web app's observers.
 
@@ -18,6 +25,8 @@ def web_observer(*, timings: Timings, summary: Summary) -> ObserverGroup:
         Keeps the latest timings for the status page.
     summary : Summary
         Logs the periodic summary.
+    led_root : Path
+        The ACT LED's sysfs directory.
 
     Returns
     -------
@@ -25,10 +34,9 @@ def web_observer(*, timings: Timings, summary: Summary) -> ObserverGroup:
         The timings, the summary, the systemd notifier and the ACT LED.
     """
     return ObserverGroup(
-        observers=[
-            timings,
-            summary,
+        observers=[timings, summary],
+        devices=(
             SystemdNotifier.from_environment(),
-            ActLed(),
-        ]
+            ActLed(root=led_root),
+        ),
     )

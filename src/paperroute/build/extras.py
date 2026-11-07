@@ -11,7 +11,7 @@ from pathlib import Path
 from paperroute.build.catalogue import CATALOGUE_SCHEMA, load_catalogue
 from paperroute.build.runs import RUN_SCHEMA, load_runs
 from paperroute.build.swap import land
-from paperroute.rss import peak_rss_mb
+from paperroute_device.rss import peak_rss_mb
 
 
 def timed(*, phase: str, step: Callable[[], object]) -> None:

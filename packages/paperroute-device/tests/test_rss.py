@@ -8,11 +8,11 @@ from typing import Final
 
 import pytest
 
-from paperroute.rss import current_rss_mb, max_rss_mb, peak_rss_mb
+from paperroute_device.rss import current_rss_mb, max_rss_mb, peak_rss_mb
 
 CHILD_PEAK: Final[str] = (
     'import subprocess, sys\n'
-    'from paperroute.rss import max_rss_mb\n'
+    'from paperroute_device.rss import max_rss_mb\n'
     'assert max_rss_mb() < 100, max_rss_mb()\n'
     "subprocess.run([sys.executable, '-c', \"b'x' * (100 << 20)\"],"
     ' check=True)\n'

@@ -3,13 +3,13 @@
 from dataclasses import dataclass, field, replace
 from typing import Final
 
-from paperroute.core.device_model import (
+from paperroute.core.map_view import MapView
+from paperroute_device.core.device_model import (
     Confirm,
     ConfirmAction,
     Origin,
     WifiPhase,
 )
-from paperroute.core.map_view import MapView
 
 MENU_VISIBLE: Final[int] = 7
 PHONE_ASKED: Final[str] = 'Asked for from a phone on your Wi-Fi.'

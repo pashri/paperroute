@@ -3,12 +3,6 @@
 from datetime import datetime
 from typing import Final
 
-from paperroute.core.device_model import (
-    MENU_ROWS,
-    DeviceFacts,
-    PanelScreen,
-    WifiStatus,
-)
 from paperroute.core.model import SYDNEY
 from paperroute.core.panel_views import (
     MENU_VISIBLE,
@@ -22,6 +16,12 @@ from paperroute.core.panel_views import (
 from paperroute.core.quota import calls_today
 from paperroute.core.state_model import State
 from paperroute.core.wifi import wifi_setup_view
+from paperroute_device.core.device_model import (
+    MENU_ROWS,
+    DeviceFacts,
+    PanelScreen,
+    WifiStatus,
+)
 from paperroute_device.core.text import DOT, clock_text
 
 LOCAL_NAME: Final[str] = 'paperroute.local'

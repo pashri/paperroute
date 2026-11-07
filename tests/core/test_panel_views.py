@@ -5,13 +5,6 @@ from datetime import timedelta
 
 import pytest
 
-from paperroute.core.device_model import (
-    Confirm,
-    ConfirmAction,
-    Menu,
-    Origin,
-    WifiStatus,
-)
 from paperroute.core.map_view import MapView, Marker
 from paperroute.core.panel_screens import device_rows, panel_view, phone_view
 from paperroute.core.panel_views import (
@@ -25,6 +18,13 @@ from paperroute.core.panel_views import (
 from paperroute.core.saved import Quota
 from paperroute.core.state_model import State
 from paperroute.core.wifi import wifi_escaped, wifi_qr
+from paperroute_device.core.device_model import (
+    Confirm,
+    ConfirmAction,
+    Menu,
+    Origin,
+    WifiStatus,
+)
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.fakes import device_facts
 from tests.core.test_rebuild import pinned

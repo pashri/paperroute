@@ -1,7 +1,5 @@
 """Interfaces the core and app depend on; adapters implement them."""
 
-# pylint: disable=too-many-lines
-
 from collections.abc import Collection
 from dataclasses import dataclass
 from datetime import date, datetime
@@ -12,17 +10,7 @@ from numpy.typing import NDArray
 
 from paperroute.core.alert_model import AlertPlaces
 from paperroute.core.chooser import Choice, ChooserPath, Column
-from paperroute.core.device_model import (
-    DeviceFacts,
-    DeviceStatus,
-    JoinOutcome,
-    JoinRequest,
-    ResetKind,
-    WifiNetwork,
-    WifiStatus,
-)
 from paperroute.core.geo import MetreBox, Shape
-from paperroute.core.messages import PowerAction
 from paperroute.core.model import (
     Departure,
     Mode,
@@ -37,7 +25,7 @@ from paperroute.core.reach import ReachInput, StripKey
 from paperroute.core.route_colours import RouteColour
 from paperroute.core.saved import Saved, Settings
 from paperroute.core.tiles import LabelKind, StreetLabel, TileVariant
-from paperroute_hardware.ports import PanelRefresh
+from paperroute_device.ports import DeviceObserver
 
 
 class TimetableRepository(Protocol):
@@ -625,144 +613,6 @@ class TimetableBuilder(Protocol):
         """End a rebuild still running."""
 
 
-class PowerControl(Protocol):
-    """Shuts the device down or restarts it."""
-
-    async def control(self, *, action: PowerAction) -> bool:
-        """
-        Carry out a power action.
-
-        Parameters
-        ----------
-        action : PowerAction
-            Shut down or restart.
-
-        Returns
-        -------
-        bool
-            True when the action was accepted.
-        """
-
-
-class WifiControl(Protocol):
-    """Scans for, joins and shares Wi-Fi."""
-
-    async def status(self) -> WifiStatus:
-        """
-        Report the Wi-Fi link.
-
-        Returns
-        -------
-        WifiStatus
-            The joined network, signal and address; not managed when
-            Wi-Fi can't be controlled.
-        """
-
-    async def scan(self) -> tuple[WifiNetwork, ...]:
-        """
-        List the networks in range.
-
-        Returns
-        -------
-        tuple[WifiNetwork, ...]
-            Strongest first.
-        """
-
-    async def start_hotspot(self, *, password: str) -> bool:
-        """
-        Start the setup hotspot.
-
-        Parameters
-        ----------
-        password : str
-            WPA2 password for the hotspot.
-
-        Returns
-        -------
-        bool
-            True when the hotspot started.
-        """
-
-    async def stop_hotspot(self) -> None:
-        """Stop the setup hotspot and remove its profile."""
-
-    async def join(self, *, request: JoinRequest) -> JoinOutcome:
-        """
-        Join a network, keeping its profile only when it worked.
-
-        Parameters
-        ----------
-        request : JoinRequest
-            Network name, password and whether it is hidden.
-
-        Returns
-        -------
-        JoinOutcome
-            How the attempt ended.
-        """
-
-    async def forget_all(self) -> None:
-        """Delete every saved Wi-Fi profile."""
-
-    async def active_wifi(self) -> str | None:
-        """
-        Find the Wi-Fi connection in use.
-
-        Returns
-        -------
-        str | None
-            Its UUID, or None with none in use.
-        """
-
-    async def reconnect(self, *, uuid: str) -> None:
-        """
-        Bring a saved connection up again.
-
-        Parameters
-        ----------
-        uuid : str
-            The connection's UUID.
-        """
-
-    async def hotspot_saved(self) -> bool:
-        """
-        Say whether a setup hotspot profile exists.
-
-        Returns
-        -------
-        bool
-            True when one does.
-        """
-
-
-class Resets(Protocol):
-    """Resets the settings or erases everything."""
-
-    async def reset(self, *, kind: ResetKind) -> None:
-        """
-        Carry out a reset; a part that fails is logged, not raised.
-
-        Parameters
-        ----------
-        kind : ResetKind
-            The reset asked for.
-        """
-
-
-class DeviceProbe(Protocol):
-    """Finds out the device's facts."""
-
-    async def probe(self) -> DeviceFacts:
-        """
-        Gather the device's facts.
-
-        Returns
-        -------
-        DeviceFacts
-            What was found; a fact that can't be read is None.
-        """
-
-
 class FeedsClient(Protocol):
     """Fetches GTFS-realtime feeds."""
 
@@ -785,63 +635,8 @@ class FeedsClient(Protocol):
         """Release any connections."""
 
 
-class Clock(Protocol):
-    """The current time."""
-
-    def now(self) -> datetime:
-        """
-        The current Sydney time.
-
-        Returns
-        -------
-        datetime
-            Aware datetime.
-        """
-
-    def synced(self) -> bool:
-        """
-        Say whether the clock has been synchronised since boot.
-
-        Returns
-        -------
-        bool
-            True once the time can be trusted.
-        """
-
-
-class Observer(Protocol):
-    """Receives timing events from the running app."""
-
-    def frame_drawn(self, *, render_ms: float) -> None:
-        """
-        Record that a frame was rendered.
-
-        Parameters
-        ----------
-        render_ms : float
-            Time taken to render, in milliseconds.
-        """
-
-    def feed_parsed(
-        self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
-    ) -> None:
-        """
-        Record that a realtime feed was fetched and parsed.
-
-        Parameters
-        ----------
-        feed : str
-            Feed path.
-        fetch_ms : float
-            Download time in milliseconds.
-        parse_ms : float
-            Parse time in milliseconds.
-        trips : int
-            Number of trip updates found.
-        """
-
-    def ticked(self) -> None:
-        """Record that the app loop ran once."""
+class Observer(DeviceObserver, Protocol):
+    """Receives the device events plus the settings and pins."""
 
     def settings_seen(self, *, settings: Settings) -> None:
         """
@@ -851,16 +646,6 @@ class Observer(Protocol):
         ----------
         settings : Settings
             The settings, at start and after each change.
-        """
-
-    def status_seen(self, *, status: DeviceStatus) -> None:
-        """
-        Record the device status.
-
-        Parameters
-        ----------
-        status : DeviceStatus
-            The status, at start and after each change.
         """
 
     def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
@@ -874,16 +659,6 @@ class Observer(Protocol):
         shown : int | None
             Index of the pin on screen, or None when the unpinned place
             is.
-        """
-
-    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
-        """
-        Record an attempt to refresh the e-paper panel.
-
-        Parameters
-        ----------
-        refresh : PanelRefresh
-            The attempt.
         """
 
 
@@ -931,45 +706,3 @@ class StateRepository(Protocol):
         OSError
             When it can't be written.
         """
-
-
-class KeyStore(Protocol):
-    """Holds the TfNSW API key."""
-
-    def read(self) -> str | None:
-        """
-        Read the key.
-
-        Returns
-        -------
-        str | None
-            The key, or None when none is set.
-        """
-
-    def present(self) -> bool:
-        """
-        Say whether a key is set.
-
-        Returns
-        -------
-        bool
-            True when there is a key.
-        """
-
-    def write(self, *, key: str) -> None:
-        """
-        Store a key.
-
-        Parameters
-        ----------
-        key : str
-            The key.
-
-        Raises
-        ------
-        ValueError
-            When it is not a valid key.
-        """
-
-    def clear(self) -> None:
-        """Remove the key."""

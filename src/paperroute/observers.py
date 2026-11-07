@@ -6,10 +6,11 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 
 from paperroute.adapters.settings_form import form_values
-from paperroute.core.device_model import DeviceStatus
 from paperroute.core.model import Pin
 from paperroute.core.saved import Settings
 from paperroute.ports import Observer
+from paperroute_device.core.device_model import DeviceStatus
+from paperroute_device.ports import DeviceObserver
 from paperroute_hardware.ports import PanelRefresh, PanelTimes
 
 logger = logging.getLogger(__name__)
@@ -372,27 +373,45 @@ class NullObserver:
 
 class ObserverGroup:
     """
-    Pass each event to every observer, even if one fails.
+    Pass each event on to every observer, even if one fails.
+
+    The device events go to the observers first, then the devices. The
+    settings and pins go to the observers only.
 
     Parameters
     ----------
     observers : Sequence[Observer]
         Observers to notify, in order.
+    devices : Sequence[DeviceObserver]
+        Device observers to notify after them, in order.
     """
 
-    def __init__(self, *, observers: Sequence[Observer]) -> None:
+    def __init__(
+        self,
+        *,
+        observers: Sequence[Observer],
+        devices: Sequence[DeviceObserver] = (),
+    ) -> None:
         self._observers = list(observers)
+        self._everyone: list[DeviceObserver] = [*observers, *devices]
 
-    def _each(self, *, call: Callable[[Observer], None]) -> None:
+    @staticmethod
+    def _each[T: DeviceObserver](
+        *,
+        observers: Sequence[T],
+        call: Callable[[T], None],
+    ) -> None:
         """
-        Run a call on every observer, logging any that raise.
+        Run a call on each observer, logging any that raise.
 
         Parameters
         ----------
-        call : Callable[[Observer], None]
+        observers : Sequence[T]
+            Observers to call, in order.
+        call : Callable[[T], None]
             Call to make on each observer.
         """
-        for observer in self._observers:
+        for observer in observers:
             try:
                 call(observer)
             except Exception:  # pylint: disable=broad-exception-caught
@@ -407,7 +426,10 @@ class ObserverGroup:
         render_ms : float
             Render time in milliseconds.
         """
-        self._each(call=lambda o: o.frame_drawn(render_ms=render_ms))
+        self._each(
+            observers=self._everyone,
+            call=lambda o: o.frame_drawn(render_ms=render_ms),
+        )
 
     def feed_parsed(
         self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
@@ -427,6 +449,7 @@ class ObserverGroup:
             Number of trip updates found.
         """
         self._each(
+            observers=self._everyone,
             call=lambda o: o.feed_parsed(
                 feed=feed,
                 fetch_ms=fetch_ms,
@@ -437,7 +460,10 @@ class ObserverGroup:
 
     def ticked(self) -> None:
         """Pass on a tick."""
-        self._each(call=lambda o: o.ticked())
+        self._each(
+            observers=self._everyone,
+            call=lambda o: o.ticked(),
+        )
 
     def settings_seen(self, *, settings: Settings) -> None:
         """
@@ -448,7 +474,10 @@ class ObserverGroup:
         settings : Settings
             The settings.
         """
-        self._each(call=lambda o: o.settings_seen(settings=settings))
+        self._each(
+            observers=self._observers,
+            call=lambda o: o.settings_seen(settings=settings),
+        )
 
     def status_seen(self, *, status: DeviceStatus) -> None:
         """
@@ -459,7 +488,10 @@ class ObserverGroup:
         status : DeviceStatus
             The status.
         """
-        self._each(call=lambda o: o.status_seen(status=status))
+        self._each(
+            observers=self._everyone,
+            call=lambda o: o.status_seen(status=status),
+        )
 
     def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
         """
@@ -472,7 +504,10 @@ class ObserverGroup:
         shown : int | None
             Index of the pin on screen, or None.
         """
-        self._each(call=lambda o: o.pins_seen(pins=pins, shown=shown))
+        self._each(
+            observers=self._observers,
+            call=lambda o: o.pins_seen(pins=pins, shown=shown),
+        )
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
         """
@@ -483,4 +518,7 @@ class ObserverGroup:
         refresh : PanelRefresh
             The refresh.
         """
-        self._each(call=lambda o: o.panel_refreshed(refresh=refresh))
+        self._each(
+            observers=self._everyone,
+            call=lambda o: o.panel_refreshed(refresh=refresh),
+        )

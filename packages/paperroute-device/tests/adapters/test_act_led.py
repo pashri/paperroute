@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters.act_led import ActLed
+from paperroute_device.adapters.act_led import ActLed
 
 
 def test_led_goes_steady_on_first_frame(tmp_path: Path) -> None:

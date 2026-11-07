@@ -15,7 +15,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.sqlite_ro import file_identity
 from paperroute.adapters.timetable_db import (
     LABEL_LIMIT,
     SqliteTimetableRepository,
@@ -34,6 +33,7 @@ from paperroute.core.model import (
     StopPlace,
     TripFacts,
 )
+from paperroute_device.adapters.sqlite_ro import file_identity
 from paperroute_testkit.core.factories import pin_of, place
 from tests.build.feeds import (
     DAILY,

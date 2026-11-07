@@ -6,7 +6,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.device_model import WifiPhase
 from paperroute.core.panel_views import (
     MENU_VISIBLE,
     TIMEOUT_LINE,
@@ -26,6 +25,7 @@ from paperroute.core.wifi import (
     setup_footer,
 )
 from paperroute.render.qr import qr_image
+from paperroute_device.core.device_model import WifiPhase
 from paperroute_device.core.text import HINT_DOT
 from paperroute_device.render.canvas import INK, PAPER, WIDTH, Canvas, Face
 from paperroute_device.render.frame import HEADER, finish, wrap

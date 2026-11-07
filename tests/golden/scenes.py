@@ -14,22 +14,12 @@ from numpy.typing import NDArray
 from paperroute.app_render import MapRenderer, drawing
 from paperroute.core.chains import Legs, leg_key
 from paperroute.core.connection_model import way_legs
-from paperroute.core.device_model import (
-    Confirm,
-    ConfirmAction,
-    Menu,
-    Origin,
-    PanelScreen,
-    WifiPhase,
-    WifiSetup,
-)
 from paperroute.core.geo import make_shape
 from paperroute.core.messages import (
     DeparturesLoaded,
     FetchFeed,
     PatternsLoaded,
     PositionsFetched,
-    PowerAction,
     PowerRequested,
     ScreenView,
     ShapesLoaded,
@@ -42,6 +32,16 @@ from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.tiles import TILE, LabelKind, StreetLabel, TileVariant
+from paperroute_device.core.device_model import (
+    Confirm,
+    ConfirmAction,
+    Menu,
+    Origin,
+    PanelScreen,
+    PowerAction,
+    WifiPhase,
+    WifiSetup,
+)
 from paperroute_testkit.core.connection_factories import (
     LEG1,
     LEG2,

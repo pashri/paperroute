@@ -12,16 +12,7 @@ from numpy.typing import NDArray
 
 from paperroute.core.alert_model import AlertPlaces
 from paperroute.core.chooser import ChooserPath, Column
-from paperroute.core.device_model import (
-    DeviceFacts,
-    JoinOutcome,
-    JoinRequest,
-    ResetKind,
-    WifiNetwork,
-    WifiStatus,
-)
 from paperroute.core.geo import MetreBox, Point, Shape, to_metres
-from paperroute.core.messages import PowerAction
 from paperroute.core.model import (
     Departure,
     Mode,
@@ -41,6 +32,15 @@ from paperroute.core.trip_search import (
     TripSearch,
 )
 from paperroute.ports import Loaded, TileRepository
+from paperroute_device.core.device_model import (
+    DeviceFacts,
+    JoinOutcome,
+    JoinRequest,
+    PowerAction,
+    ResetKind,
+    WifiNetwork,
+    WifiStatus,
+)
 from paperroute_testkit.hardware_fakes import FrameRecorder
 
 STOP_POINT: Point = to_metres(lon=151.0036, lat=-33.8170)

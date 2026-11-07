@@ -285,6 +285,18 @@ class ResetKind(StrEnum):
     ERASE = 'erase'
 
 
+class PowerAction(StrEnum):
+    """What a power request does; the value is the systemctl verb."""
+
+    OFF = 'poweroff'
+    RESTART = 'reboot'
+
+
+POWER_ACTIONS: Final[dict[str, PowerAction]] = {
+    action.value: action for action in PowerAction
+}
+
+
 @dataclass(frozen=True)
 class Panel:
     """

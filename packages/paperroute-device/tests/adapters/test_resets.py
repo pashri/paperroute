@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters.resets import FileResets, NullResets
-from paperroute.core.device_model import ResetKind
+from paperroute_device.adapters.resets import FileResets, NullResets
+from paperroute_device.core.device_model import ResetKind
 from paperroute_testkit.fakes import FakeKeys, FakeWifi
 
 

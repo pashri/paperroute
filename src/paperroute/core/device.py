@@ -6,13 +6,6 @@ from typing import Final
 
 from paperroute.core.alert_state import alert_clocks_cleared
 from paperroute.core.banners import feeds_held
-from paperroute.core.device_model import (
-    ConfirmAction,
-    DeviceStatus,
-    Origin,
-    PanelScreen,
-    ResetKind,
-)
 from paperroute.core.messages import (
     ApiKeyChanged,
     ControlPower,
@@ -21,7 +14,6 @@ from paperroute.core.messages import (
     Effect,
     FetchFeed,
     NoticeView,
-    PowerAction,
     PowerFailed,
     PowerRequested,
     ProbeDevice,
@@ -47,6 +39,14 @@ from paperroute.core.state_model import (
 )
 from paperroute.core.state_views import saved_of, settled
 from paperroute.core.wifi import on_wifi_event, setup_closed
+from paperroute_device.core.device_model import (
+    ConfirmAction,
+    DeviceStatus,
+    Origin,
+    PanelScreen,
+    PowerAction,
+    ResetKind,
+)
 
 NOTICE: Final[dict[PowerAction, str]] = {
     PowerAction.OFF: 'Shutting down',

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters.wifi import (
+from paperroute_device.adapters.wifi import (
     PASSWORD_ALPHABET,
     PASSWORD_LENGTH,
     NmcliWifi,
@@ -17,7 +17,7 @@ from paperroute.adapters.wifi import (
     parse_scan,
     split_terse,
 )
-from paperroute.core.device_model import (
+from paperroute_device.core.device_model import (
     JoinOutcome,
     JoinRequest,
     WifiNetwork,

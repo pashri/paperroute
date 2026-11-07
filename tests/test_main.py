@@ -41,15 +41,12 @@ from paperroute.adapters.checked_tiles import CheckedTiles
 from paperroute.adapters.clocks import ReplayClock
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.adapters.feed_guard import GuardedFeeds
-from paperroute.adapters.power import NullPower, SystemctlPower
 from paperroute.adapters.rate_limit import tfnsw_limiter
 from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
-from paperroute.adapters.resets import FileResets, NullResets
 from paperroute.adapters.tfnsw import AiohttpFeedsClient
 from paperroute.adapters.tiles_db import NullTiles, SqliteTileRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.adapters.wifi import NmcliWifi, NullWifi
 from paperroute.app import Ports
 from paperroute.app_render import MapRenderer
 from paperroute.build.gtfs_files import Source
@@ -64,6 +61,9 @@ from paperroute.observers import Timings
 from paperroute.render.map_base import draw_map_base
 from paperroute.summary import Summary
 from paperroute.web_observer import web_observer
+from paperroute_device.adapters.power import NullPower, SystemctlPower
+from paperroute_device.adapters.resets import FileResets, NullResets
+from paperroute_device.adapters.wifi import NmcliWifi, NullWifi
 from paperroute_device.render.canvas import INK
 from paperroute_hardware.adapters.knob_reader import KnobReader
 from paperroute_hardware.adapters.panel_display import Displays

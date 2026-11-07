@@ -36,7 +36,7 @@ from paperroute.core.model import (
     mode_for,
 )
 from paperroute.core.tiles import NSW_BBOX
-from paperroute.rss import current_rss_mb, max_rss_mb
+from paperroute_device.rss import current_rss_mb, max_rss_mb
 
 logger = logging.getLogger(__name__)
 

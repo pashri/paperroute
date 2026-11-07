@@ -3,9 +3,7 @@
 import logging
 from pathlib import Path
 
-from paperroute.core.device_model import DeviceStatus
-from paperroute.core.model import Pin
-from paperroute.core.saved import Settings
+from paperroute_device.core.device_model import DeviceStatus
 from paperroute_hardware.ports import PanelRefresh
 
 logger = logging.getLogger(__name__)
@@ -70,16 +68,6 @@ class ActLed:
     def ticked(self) -> None:
         """Ignore a tick."""
 
-    def settings_seen(self, *, settings: Settings) -> None:
-        """
-        Ignore the settings.
-
-        Parameters
-        ----------
-        settings : Settings
-            The settings.
-        """
-
     def status_seen(self, *, status: DeviceStatus) -> None:
         """
         Ignore the device status.
@@ -88,18 +76,6 @@ class ActLed:
         ----------
         status : DeviceStatus
             The status.
-        """
-
-    def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
-        """
-        Ignore the pins.
-
-        Parameters
-        ----------
-        pins : tuple[Pin, ...]
-            The pins.
-        shown : int | None
-            Index of the pin on screen, or None.
         """
 
     def panel_refreshed(self, *, refresh: PanelRefresh) -> None:

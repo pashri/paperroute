@@ -8,7 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters.sqlite_ro import ReadOnlyDatabase, file_identity
+from paperroute_device.adapters.sqlite_ro import (
+    ReadOnlyDatabase,
+    file_identity,
+)
 
 PROBE = 'SELECT 1 FROM t LIMIT 1'
 

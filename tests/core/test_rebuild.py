@@ -6,13 +6,6 @@ from datetime import timedelta
 
 import pytest
 
-from paperroute.core.device_model import (
-    MENU_ROWS,
-    Menu,
-    MenuRow,
-    PanelScreen,
-    WifiStatus,
-)
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import (
     ApiKeyChanged,
@@ -41,6 +34,13 @@ from paperroute.core.rebuild import (
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import step
 from paperroute.core.state_model import Rebuild, State
+from paperroute_device.core.device_model import (
+    MENU_ROWS,
+    Menu,
+    MenuRow,
+    PanelScreen,
+    WifiStatus,
+)
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobPressed,

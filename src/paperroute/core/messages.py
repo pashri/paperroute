@@ -4,7 +4,6 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
-from typing import Final
 
 from paperroute.core.alert_model import (
     AlertsFetched,
@@ -20,14 +19,6 @@ from paperroute.core.connection_strip import (
     ConnectionStripView,
 )
 from paperroute.core.connection_view import ConnectionView
-from paperroute.core.device_model import (
-    ConfirmAction,
-    DeviceFacts,
-    JoinOutcome,
-    JoinRequest,
-    ResetKind,
-    WifiNetwork,
-)
 from paperroute.core.feeds import FeedKind
 from paperroute.core.geo import MetreBox, Shape
 from paperroute.core.map_view import MapView
@@ -47,6 +38,15 @@ from paperroute.core.saved import (
 )
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
+from paperroute_device.core.device_model import (
+    ConfirmAction,
+    DeviceFacts,
+    JoinOutcome,
+    JoinRequest,
+    PowerAction,
+    ResetKind,
+    WifiNetwork,
+)
 from paperroute_hardware.core.knob_events import (
     KnobHeld,
     KnobHeldTurned,
@@ -54,18 +54,6 @@ from paperroute_hardware.core.knob_events import (
     KnobsHeld,
     KnobTurned,
 )
-
-
-class PowerAction(StrEnum):
-    """What a power request does; the value is the systemctl verb."""
-
-    OFF = 'poweroff'
-    RESTART = 'reboot'
-
-
-POWER_ACTIONS: Final[dict[str, PowerAction]] = {
-    action.value: action for action in PowerAction
-}
 
 
 class MapData(StrEnum):

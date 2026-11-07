@@ -44,7 +44,7 @@ from paperroute.build.timetable import (
     build_timetable,
     yesterday,
 )
-from paperroute.rss import max_rss_mb
+from paperroute_device.rss import max_rss_mb
 
 TIMEOUT_S: Final[float] = 60
 MIN_DAYS_LEFT: Final[int] = 7

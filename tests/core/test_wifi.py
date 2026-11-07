@@ -5,16 +5,6 @@ from datetime import timedelta
 from typing import Final
 
 from paperroute.core.banners import NO_WIFI
-from paperroute.core.device_model import (
-    ConfirmAction,
-    JoinOutcome,
-    JoinRequest,
-    MenuRow,
-    WifiNetwork,
-    WifiPhase,
-    WifiSetup,
-    WifiStatus,
-)
 from paperroute.core.messages import (
     ConfirmAsked,
     DeviceProbed,
@@ -23,7 +13,6 @@ from paperroute.core.messages import (
     HotspotStarted,
     JoinAsked,
     JoinWifi,
-    PowerAction,
     PowerRequested,
     ProbeDevice,
     RebuildTimetable,
@@ -40,6 +29,17 @@ from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import stop_view_of
 from paperroute.core.wifi import SETUP_FOR, wifi_setup_view
+from paperroute_device.core.device_model import (
+    ConfirmAction,
+    JoinOutcome,
+    JoinRequest,
+    MenuRow,
+    PowerAction,
+    WifiNetwork,
+    WifiPhase,
+    WifiSetup,
+    WifiStatus,
+)
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.fakes import device_facts
 from tests.core.test_menu import BOTH, DOWN, UP, opened_at, renders, run

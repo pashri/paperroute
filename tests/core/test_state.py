@@ -73,7 +73,6 @@ from paperroute.core.messages import (
     PlacesFailed,
     PlacesMatched,
     PositionsFetched,
-    PowerAction,
     PowerRequested,
     ProbeDevice,
     QuitRequested,
@@ -161,6 +160,7 @@ from paperroute.core.strip_state import (
     strip_key,
 )
 from paperroute.core.tiles import CITY, ZOOMS
+from paperroute_device.core.device_model import PowerAction
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,

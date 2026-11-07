@@ -3,8 +3,8 @@
 import logging
 from pathlib import Path
 
-from paperroute.core.device_model import ResetKind
-from paperroute.ports import KeyStore, WifiControl
+from paperroute_device.core.device_model import ResetKind
+from paperroute_device.ports import KeyStore, WifiControl
 
 logger = logging.getLogger(__name__)
 

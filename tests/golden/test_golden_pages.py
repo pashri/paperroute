@@ -12,8 +12,8 @@ from paperroute.adapters.secrets_file import SecretsFile
 from paperroute.adapters.settings_form import form_values
 from paperroute.adapters.web_device import DevicePages
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.core.device_model import DeviceStatus
-from paperroute.ports import KeyStore
+from paperroute_device.core.device_model import DeviceStatus
+from paperroute_device.ports import KeyStore
 from paperroute_testkit.fakes import FakeKeys, FakeTripPlanner
 from tests.adapters.test_web_device import BUSES, KEY, NOW, STATUS, TRAINS
 from tests.adapters.test_web_pins import HOME, ODD, WORK, Pins

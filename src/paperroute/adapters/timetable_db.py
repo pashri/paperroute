@@ -37,11 +37,6 @@ from paperroute.adapters.pattern_rows import (
     RUNNING_DAYS,
     pattern_of,
 )
-from paperroute.adapters.sqlite_ro import (
-    Identity,
-    ReadOnlyDatabase,
-    file_identity,
-)
 from paperroute.core.alert_model import AlertPlaces
 from paperroute.core.geo import (
     MetreBox,
@@ -68,6 +63,11 @@ from paperroute.core.strip_times import (
     board_departures,
     filtered,
     strip_departures,
+)
+from paperroute_device.adapters.sqlite_ro import (
+    Identity,
+    ReadOnlyDatabase,
+    file_identity,
 )
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/timetable.db')

@@ -24,7 +24,7 @@ from paperroute.build.tile_set import (
 from paperroute.build.tile_store import TileWriter
 from paperroute.core.geo import MetreBox, to_metres
 from paperroute.core.tiles import NSW_BBOX, TILE_STYLE, ZOOMS
-from paperroute.rss import BYTES_PER_MB, max_rss_mb
+from paperroute_device.rss import BYTES_PER_MB, max_rss_mb
 
 STORE_NAME: Final[str] = 'features.db'
 SCRATCH_NAMES: Final[tuple[str, ...]] = (

@@ -9,7 +9,6 @@ import pytest
 from paperroute.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute.core.alert_state import ALERT_EVERY
 from paperroute.core.cycle import alerts_due, answered, boundary, cycle_due
-from paperroute.core.device_model import WifiStatus
 from paperroute.core.feeds import FeedKind
 from paperroute.core.messages import (
     DeparturesLoaded,
@@ -21,7 +20,6 @@ from paperroute.core.messages import (
     FetchFeed,
     NoticeView,
     PositionsFetched,
-    PowerAction,
     PowerRequested,
     Render,
     ScreenView,
@@ -36,6 +34,7 @@ from paperroute.core.state import step
 from paperroute.core.state_model import RELOAD_BEFORE, Cycle, State
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.stop_view import HORIZON
+from paperroute_device.core.device_model import PowerAction, WifiStatus
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, departure, snapshot
 from paperroute_testkit.fakes import device_facts

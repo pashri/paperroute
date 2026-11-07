@@ -37,7 +37,6 @@ from paperroute.core.messages import (
     LoadShapes,
     MapDataFailed,
     MapRequest,
-    PowerAction,
     PowerFailed,
     ProbeDevice,
     RebuildTimetable,
@@ -49,6 +48,7 @@ from paperroute.core.messages import (
     StopWifiSetup,
     TimetableRebuilt,
 )
+from paperroute_device.core.device_model import PowerAction
 
 logger = logging.getLogger(__name__)
 

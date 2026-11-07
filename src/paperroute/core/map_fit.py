@@ -6,6 +6,7 @@ from functools import partial
 from typing import Final
 
 from paperroute.core.map_view import DEFAULT_ZOOM, MAP_HEIGHT, MapInputs
+from paperroute_device.core.panel_views import SLEEP_BAND
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.ridden import ridden_stops, stops_window
 from paperroute_transit.core.tiles import ZOOMS
@@ -13,7 +14,6 @@ from paperroute_transit.core.tiles import ZOOMS
 CREDIT_ROOM: Final[int] = 28  # pixels kept clear above the map's bottom
 BANNER_ROOM: Final[int] = 34  # pixels a banner covers at the map's top
 KEEP_IN: Final[int] = 24  # pixels the From is kept inside the map
-SLEEP_BAND: Final[int] = 56  # pixels the sleep band covers at the bottom
 SLEEP_ROOM: Final[int] = SLEEP_BAND  # the margin clears a To disc above it
 
 

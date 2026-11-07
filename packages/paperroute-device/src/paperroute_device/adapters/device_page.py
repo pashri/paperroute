@@ -2,17 +2,9 @@
 
 import html
 from collections.abc import Callable, Mapping
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import Final
 
-from paperroute.core.panel_screens import (
-    LOCAL_NAME,
-    UNKNOWN,
-    day_text,
-    local_time,
-)
-from paperroute.core.panel_screens import strength as dbm_strength
-from paperroute.core.panel_views import CANCEL_LINE, CONFIRM_COPY
 from paperroute_device.core.device_model import (
     POWER_ACTIONS,
     ConfirmAction,
@@ -20,9 +12,21 @@ from paperroute_device.core.device_model import (
     DeviceStatus,
     PowerAction,
 )
-from paperroute_device.core.text import DOT, HINT_DOT, clock_text
+from paperroute_device.core.panel_views import (
+    CANCEL_LINE,
+    CONFIRM_COPY,
+    LOCAL_NAME,
+    UNKNOWN,
+)
+from paperroute_device.core.panel_views import strength as dbm_strength
+from paperroute_device.core.text import (
+    DOT,
+    HINT_DOT,
+    clock_text,
+    day_text,
+    local_time,
+)
 from paperroute_hardware.ports import PanelTimes
-from paperroute_transit.core.model import SYDNEY
 
 POWER_STATUS: Final[dict[PowerAction, str]] = {
     PowerAction.OFF: 'Shutting down...',
@@ -164,7 +168,7 @@ def clock_value(*, facts: DeviceFacts | None) -> str:
     return 'Synced' if facts.clock_synced else 'Not synced'
 
 
-def timetable_text(*, status: DeviceStatus) -> str:
+def timetable_text(*, status: DeviceStatus, zone: tzinfo) -> str:
     """
     Describe the timetable in use.
 
@@ -172,6 +176,8 @@ def timetable_text(*, status: DeviceStatus) -> str:
     ----------
     status : DeviceStatus
         The device status.
+    zone : tzinfo
+        Time zone whose wall clock to show.
 
     Returns
     -------
@@ -183,17 +189,17 @@ def timetable_text(*, status: DeviceStatus) -> str:
     failed = 'last build failed'
     if status.rebuilding:
         return 'rebuilding'
-    built = local_time(stamp=status.timetable)
+    built = local_time(stamp=status.timetable, zone=zone)
     if built is None:
         return failed if status.rebuild_failed else 'none yet'
     parts = [] if status.schema is None else [f'version {status.schema}']
-    clock = clock_text(moment=built, zone=SYDNEY)
+    clock = clock_text(moment=built, zone=zone)
     parts.append(f'built {day_text(moment=built)} {clock}')
     parts.append(failed if status.rebuild_failed else 'ok')
     return DOT.join(parts)
 
 
-def tiles_text(*, facts: DeviceFacts | None) -> str:
+def tiles_text(*, facts: DeviceFacts | None, zone: tzinfo) -> str:
     """
     Say when the map tiles were built.
 
@@ -201,6 +207,8 @@ def tiles_text(*, facts: DeviceFacts | None) -> str:
     ----------
     facts : DeviceFacts | None
         The latest probe, or None.
+    zone : tzinfo
+        Time zone whose calendar day to show.
 
     Returns
     -------
@@ -209,7 +217,7 @@ def tiles_text(*, facts: DeviceFacts | None) -> str:
     """
     if facts is None:
         return UNKNOWN
-    built = local_time(stamp=facts.tiles_built)
+    built = local_time(stamp=facts.tiles_built, zone=zone)
     return 'none' if built is None else f'built {day_text(moment=built)}'
 
 
@@ -302,7 +310,9 @@ def network_rows(*, facts: DeviceFacts | None) -> str:
     ))
 
 
-def data_rows(*, status: DeviceStatus | None, daily_limit: int) -> str:
+def data_rows(
+    *, status: DeviceStatus | None, daily_limit: int, zone: tzinfo,
+) -> str:
     """
     Draw the Data section's facts.
 
@@ -312,6 +322,8 @@ def data_rows(*, status: DeviceStatus | None, daily_limit: int) -> str:
         The device status, or None before the app reports it.
     daily_limit : int
         The API calls allowed each day.
+    zone : tzinfo
+        Time zone whose wall clock to show.
 
     Returns
     -------
@@ -321,12 +333,14 @@ def data_rows(*, status: DeviceStatus | None, daily_limit: int) -> str:
     if status is None:
         timetable, calls = UNKNOWN, UNKNOWN
     else:
-        timetable = timetable_text(status=status)
+        timetable = timetable_text(status=status, zone=zone)
         calls = f'{status.calls_today:,} of {daily_limit:,}'
     facts = None if status is None else status.facts
     return '\n'.join((
         row(label='Timetable', value=timetable),
-        row(label='Map tiles', value=tiles_text(facts=facts)),
+        row(
+            label='Map tiles', value=tiles_text(facts=facts, zone=zone),
+        ),
         row(label='API calls today', value=calls),
     ))
 
@@ -432,7 +446,11 @@ def knob_rows(*, knobs: bool | None) -> str:
 
 
 def feed_rows(
-    *, feeds: Mapping[str, float], now: float, label: Callable[[str], str],
+    *,
+    feeds: Mapping[str, float],
+    now: float,
+    label: Callable[[str], str],
+    zone: tzinfo,
 ) -> str:
     """
     Draw the feed table's body.
@@ -445,11 +463,13 @@ def feed_rows(
         The wall-clock time now.
     label : Callable[[str], str]
         Names a feed for people.
+    zone : tzinfo
+        Time zone whose wall clock to show.
 
     Returns
     -------
     str
-        One row per feed, by name, with its time in Sydney and its
+        One row per feed, by name, with its time in ``zone`` and its
         age; one `none yet` row with no feeds.
     """
     rows = sorted((label(feed), last) for feed, last in feeds.items())
@@ -458,7 +478,7 @@ def feed_rows(
     return '\n'.join(
         FEED_ROW.format(
             label=html.escape(name),
-            last=f'{datetime.fromtimestamp(last, tz=SYDNEY):%H:%M:%S}',
+            last=f'{datetime.fromtimestamp(last, tz=zone):%H:%M:%S}',
             age=ago_text(seconds=now - last),
         )
         for name, last in rows

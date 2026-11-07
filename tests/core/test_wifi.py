@@ -6,14 +6,11 @@ from typing import Final
 
 from paperroute.core.banners import NO_WIFI
 from paperroute.core.messages import (
-    ConfirmAsked,
     DeviceProbed,
     FetchFeed,
     HotspotFailed,
     HotspotStarted,
-    JoinAsked,
     JoinWifi,
-    PowerRequested,
     ProbeDevice,
     RebuildTimetable,
     StartWifiSetup,
@@ -23,12 +20,16 @@ from paperroute.core.messages import (
     WifiJoinFailed,
     WifiSetupStopped,
 )
-from paperroute.core.panel_views import WifiSetupView
 from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import stop_view_of
 from paperroute.core.wifi import SETUP_FOR, wifi_setup_view
+from paperroute_device.core.device_events import (
+    ConfirmAsked,
+    JoinAsked,
+    PowerRequested,
+)
 from paperroute_device.core.device_model import (
     ConfirmAction,
     JoinOutcome,
@@ -40,6 +41,7 @@ from paperroute_device.core.device_model import (
     WifiSetup,
     WifiStatus,
 )
+from paperroute_device.core.panel_views import WifiSetupView
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.fakes import device_facts
 from tests.core.test_menu import BOTH, DOWN, UP, opened_at, renders, run

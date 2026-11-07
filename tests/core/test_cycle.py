@@ -17,9 +17,7 @@ from paperroute.core.messages import (
     FeedFailed,
     FeedFetched,
     FetchFeed,
-    NoticeView,
     PositionsFetched,
-    PowerRequested,
     Render,
     ScreenView,
     SettingsChanged,
@@ -32,7 +30,9 @@ from paperroute.core.state import step
 from paperroute.core.state_model import RELOAD_BEFORE, Cycle, State
 from paperroute.core.state_views import current_view, live_stop_view
 from paperroute.core.stop_view import HORIZON
+from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction, WifiStatus
+from paperroute_device.core.panel_views import NoticeView
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, departure, snapshot
 from paperroute_testkit.fakes import device_facts

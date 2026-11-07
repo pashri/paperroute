@@ -43,7 +43,6 @@ from paperroute.core.device import NOTICE, on_reset
 from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
 from paperroute.core.messages import (
-    ApiKeyChanged,
     ControlPower,
     Event,
     FeedFailed,
@@ -53,11 +52,9 @@ from paperroute.core.messages import (
     LoadPatterns,
     MapData,
     MapDataFailed,
-    NoticeView,
     PinDeleted,
     PositionsFetched,
     PowerFailed,
-    PowerRequested,
     QuitRequested,
     RebuildTimetable,
     Render,
@@ -69,7 +66,7 @@ from paperroute.core.messages import (
     TimetableSeen,
 )
 from paperroute.core.panel_screens import menu_view
-from paperroute.core.panel_views import MenuView, SleepView
+from paperroute.core.panel_views import SleepView
 from paperroute.core.places import shown
 from paperroute.core.saved import (
     DEFAULT_SAVED,
@@ -87,17 +84,19 @@ from paperroute.ports import Observer
 from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.keep_out import KeepOut, keep_out
 from paperroute.render.map_corners import NOT_INSTALLED, credit_box, scale_box
-from paperroute.render.notice import draw_notice_view
-from paperroute.render.panel import draw_panel_view
-from paperroute.render.sleep import with_sleep_band
 from paperroute_device.adapters.resets import FileResets
+from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
     DeviceStatus,
     PowerAction,
     ResetKind,
 )
 from paperroute_device.core.device_settings import DeviceSettings
+from paperroute_device.core.panel_views import MenuView, NoticeView
 from paperroute_device.render.frame import HEADER
+from paperroute_device.render.notice import draw_notice_view
+from paperroute_device.render.panel import draw_panel_view
+from paperroute_device.render.sleep import with_sleep_band
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -117,16 +116,15 @@ from paperroute_testkit.app_factories import (
     strip_map_view,
 )
 from paperroute_testkit.core.factories import pin_of, place
+from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_testkit.fakes import (
     STOP_POINT,
     BrokenTimetable,
     BuiltTimetable,
     EmptyPlacedTimetable,
     FakeBuilder,
-    FakeKeys,
     FakeNetwork,
     FakePower,
-    FakeWifi,
     FixedClock,
     LabelCountingTiles,
     MemoryStates,

@@ -214,7 +214,7 @@ class Clock(Protocol):
 
     def now(self) -> datetime:
         """
-        The current Sydney time.
+        The current time.
 
         Returns
         -------

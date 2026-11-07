@@ -1,13 +1,11 @@
 """Serve the frame and knob buttons to a browser on the local network."""
 
 import asyncio
-import ipaddress
 import logging
 import time
 from collections.abc import Awaitable, Callable, Mapping
 from http import HTTPStatus
 from typing import TYPE_CHECKING, Final
-from urllib.parse import urlsplit
 
 import numpy as np
 from aiohttp import web
@@ -22,10 +20,18 @@ from paperroute.adapters.settings_form import (
     page_text,
     posted_values,
 )
-from paperroute.adapters.web_common import asset, asset_bytes, form_fields
-from paperroute.core.messages import Event, PowerRequested, SettingsChanged
+from paperroute.core.messages import Event, SettingsChanged
 from paperroute.core.saved import Settings
-from paperroute_device.core.device_model import POWER_ACTIONS, PowerAction
+from paperroute_device.adapters.web_common import (
+    asset,
+    asset_bytes,
+    form_fields,
+)
+from paperroute_device.adapters.web_guard import (
+    cross_site,
+    is_local,
+    known_host,
+)
 from paperroute_device.render.canvas import encode_png
 from paperroute_device.rss import max_rss_mb
 from paperroute_hardware.core.knob_events import (
@@ -40,7 +46,7 @@ from paperroute_hardware.ports import CLEAN_AFTER
 
 if TYPE_CHECKING:
     from paperroute.adapters.web_board import BoardPages
-    from paperroute.adapters.web_device import DevicePages
+    from paperroute_device.adapters.web_device import DevicePages
 
 logger = logging.getLogger(__name__)
 
@@ -52,14 +58,6 @@ VENDORED: Final[dict[str, str]] = {
 }
 BOTH: Final[str] = 'both'  # the knob name for both knobs together
 HELD_ACTIONS: Final[dict[str, int]] = {'hold-left': -1, 'hold-right': 1}
-HOSTNAMES: Final[frozenset[str]] = frozenset({'paperroute.local', 'localhost'})
-CONFIRM: Final[dict[PowerAction, tuple[str, str]]] = {
-    PowerAction.OFF: (
-        "Shut down now? The screen will show OFF when it's safe to unplug.",
-        'Shut down',
-    ),
-    PowerAction.RESTART: ('Restart now?', 'Restart'),
-}
 
 Handler = Callable[[web.Request], Awaitable[web.StreamResponse]]
 
@@ -221,76 +219,6 @@ def peer_address(request: web.BaseRequest) -> str | None:
         The peer's IP address, or None if it is unknown.
     """
     return request.remote
-
-
-def _is_local(*, remote: str | None) -> bool:
-    """
-    Check whether an address is private or loopback.
-
-    Parameters
-    ----------
-    remote : str | None
-        An IP address in text form.
-
-    Returns
-    -------
-    bool
-        False for a missing or unparsable address.
-    """
-    try:
-        address = ipaddress.ip_address(remote or '')
-    except ValueError:
-        return False
-    return address.is_private or address.is_loopback
-
-
-def _known_host(*, request: web.Request) -> bool:
-    """
-    Check the Host header names this device.
-
-    Parameters
-    ----------
-    request : web.Request
-        The incoming request.
-
-    Returns
-    -------
-    bool
-        True for `paperroute.local`, `localhost` or an IP address
-        literal (IPv6 in brackets), with or without a port.
-    """
-    try:
-        hostname = urlsplit(f'//{request.host}').hostname
-    except ValueError:
-        return False
-    if hostname in HOSTNAMES:
-        return True
-    try:
-        ipaddress.ip_address(hostname or '')
-    except ValueError:
-        return False
-    return True
-
-
-def _cross_site(*, request: web.Request) -> bool:
-    """
-    Check whether a POST names a different origin from its own host.
-
-    Parameters
-    ----------
-    request : web.Request
-        The incoming request.
-
-    Returns
-    -------
-    bool
-        True if an `Origin` header is present and its host differs
-        from the `Host` header.
-    """
-    origin = request.headers.get('Origin')
-    if origin is None:
-        return False
-    return urlsplit(origin).netloc != request.host
 
 
 class WebDisplay:
@@ -455,12 +383,7 @@ class WebDisplay:
                 send=self.send, reported=self._reported,
             ))
         if self.device is not None:
-            app.add_routes([
-                web.get('/device/power', self._power_page),
-                web.post('/device/power', self._power_page),
-                web.post('/power', self._power),
-                *self.device.routes(),
-            ])
+            app.add_routes(self.device.routes())
         return app
 
     async def _close(self, app: web.Application) -> None:
@@ -497,11 +420,11 @@ class WebDisplay:
         web.StreamResponse
             A 403 response, or the handler's response.
         """
-        if not _is_local(remote=self._remote_of(request)):
+        if not is_local(remote=self._remote_of(request)):
             return web.Response(status=HTTPStatus.FORBIDDEN)
-        if not _known_host(request=request):
+        if not known_host(request=request):
             return web.Response(status=HTTPStatus.FORBIDDEN)
-        if request.method == 'POST' and _cross_site(request=request):
+        if request.method == 'POST' and cross_site(request=request):
             return web.Response(status=HTTPStatus.FORBIDDEN)
         return await handler(request)
 
@@ -801,56 +724,6 @@ class WebDisplay:
         if as_json:
             return web.Response(status=HTTPStatus.NO_CONTENT)
         raise web.HTTPSeeOther(location='/settings')
-
-    async def _power_page(self, request: web.Request) -> web.Response:
-        """
-        Serve the page that confirms a shutdown or restart.
-
-        Parameters
-        ----------
-        request : web.Request
-            The incoming request; `action` in the query.
-
-        Returns
-        -------
-        web.Response
-            The page, or 400 for an unknown action.
-        """
-        action = POWER_ACTIONS.get(request.query.get('action', ''))
-        if action is None:
-            return web.Response(status=HTTPStatus.BAD_REQUEST)
-        question, confirm = CONFIRM[action]
-        tone = ' class="danger"' if action is PowerAction.OFF else ''
-        page = asset(name='power.html').replace(
-            '{{question}}', question,
-        ).replace('{{action}}', action.value).replace(
-            '{{confirm}}', confirm,
-        ).replace('{{tone}}', tone)
-        return web.Response(text=page, content_type='text/html')
-
-    async def _power(self, request: web.Request) -> web.Response:
-        """
-        Post a shutdown or restart from the browser.
-
-        Parameters
-        ----------
-        request : web.Request
-            The incoming request; `action` is `poweroff` or `reboot`.
-
-        Returns
-        -------
-        web.Response
-            400 for an unknown action; otherwise 204 to the script's
-            JSON, or 303 to the Device page for a plain form.
-        """
-        fields = await form_fields(request=request)
-        action = POWER_ACTIONS.get(fields.get('action', ''))
-        if action is None:
-            return web.Response(status=HTTPStatus.BAD_REQUEST)
-        self._post(PowerRequested(action=action))
-        if request.content_type == 'application/json':
-            return web.Response(status=HTTPStatus.NO_CONTENT)
-        raise web.HTTPSeeOther(location=f'/device?power={action.value}')
 
     async def _status_json(self, request: web.Request) -> web.Response:
         """

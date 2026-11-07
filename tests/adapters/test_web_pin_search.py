@@ -12,7 +12,7 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.pin_choices import StopMatch
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.core.model import RouteKind, StopPlace
-from tests.adapters.test_web_device import Device
+from tests.adapters.test_web_device import sydney_site
 
 Client = TestClient[web.Request, web.Application]
 PARRAMATTA = StopPlace(
@@ -36,7 +36,7 @@ async def _client() -> AsyncIterator[Client]:
         The client, closed after the test.
     """
     display = WebDisplay(
-        device=Device().pages(),
+        device=sydney_site().pages(),
         board=SydneyPages(
             pins=lambda: None,
             options=FakePinOptions(found=(MATCH,)),
@@ -79,7 +79,7 @@ async def test_stops_json_short_query_is_empty(client: Client) -> None:
 async def test_stops_json_before_timetable() -> None:
     """Without a timetable the list is empty."""
     display = WebDisplay(
-        device=Device().pages(),
+        device=sydney_site().pages(),
         board=SydneyPages(pins=lambda: None, options=None, planner=None),
     )
     client = TestClient(TestServer(display.app()))

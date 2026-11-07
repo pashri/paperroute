@@ -1,10 +1,18 @@
 """Tests for the panel's settings screens."""
 
+from datetime import UTC, datetime
+
 import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.core.panel_views import (
+from paperroute_device.core.device_model import (
+    Confirm,
+    ConfirmAction,
+    Origin,
+    WifiPhase,
+)
+from paperroute_device.core.panel_views import (
     MENU_VISIBLE,
     DeviceView,
     InfoRow,
@@ -13,8 +21,19 @@ from paperroute.core.panel_views import (
     WifiSetupView,
     confirm_view,
 )
-from paperroute.core.wifi import setup_footer
-from paperroute.render.panel import (
+from paperroute_device.core.text import DOT, HINT_DOT
+from paperroute_device.core.wifi_text import setup_footer
+from paperroute_device.render.canvas import (
+    HEIGHT,
+    INK,
+    PAPER,
+    WIDTH,
+    Canvas,
+    Face,
+    text_width,
+)
+from paperroute_device.render.frame import HEADER
+from paperroute_device.render.panel import (
     BODY_FACE,
     BUTTON_FACE,
     CUE_H,
@@ -30,27 +49,9 @@ from paperroute.render.panel import (
     TOP_BOX,
     draw_panel_view,
 )
-from paperroute.render.qr import qr_image
-from paperroute.render.strip_view import HINT_FACE
-from paperroute_device.core.device_model import (
-    Confirm,
-    ConfirmAction,
-    Origin,
-    WifiPhase,
-)
-from paperroute_device.core.text import DOT, HINT_DOT
-from paperroute_device.render.canvas import (
-    HEIGHT,
-    INK,
-    PAPER,
-    WIDTH,
-    Canvas,
-    Face,
-    text_width,
-)
-from paperroute_device.render.frame import HEADER
-from paperroute_testkit.core.factories import START
+from paperroute_device.render.qr import qr_image
 
+START = datetime(2026, 10, 16, 8, 0, tzinfo=UTC)
 WIFI_QR = 'WIFI:T:WPA;S:paperroute-setup;P:7Q4K9W2M;;'
 ROWS = (
     'Wi-Fi',
@@ -373,9 +374,8 @@ def separator_ink(*, mark: str, face: Face) -> int:
     return int((canvas.grey() == INK).sum())
 
 
-@pytest.mark.parametrize('face', [FOOTER_FACE, HINT_FACE])
-def test_hint_separator_is_heavier(face: Face) -> None:
+def test_hint_separator_is_heavier() -> None:
     """The hint bullet inks at least twice the middle dot."""
-    bullet = separator_ink(mark=HINT_DOT.strip(), face=face)
-    dot = separator_ink(mark=DOT.strip(), face=face)
+    bullet = separator_ink(mark=HINT_DOT.strip(), face=FOOTER_FACE)
+    dot = separator_ink(mark=DOT.strip(), face=FOOTER_FACE)
     assert bullet >= 2 * dot > 0

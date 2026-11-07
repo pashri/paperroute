@@ -1,17 +1,5 @@
 """Build the panel's settings screens from the state."""
 
-from datetime import datetime
-from typing import Final
-
-from paperroute.core.panel_views import (
-    MENU_VISIBLE,
-    DeviceView,
-    InfoRow,
-    MenuView,
-    PanelView,
-    PhoneView,
-    confirm_view,
-)
 from paperroute.core.quota import calls_today
 from paperroute.core.state_model import State
 from paperroute.core.wifi import wifi_setup_view
@@ -21,13 +9,20 @@ from paperroute_device.core.device_model import (
     PanelScreen,
     WifiStatus,
 )
-from paperroute_device.core.text import DOT, clock_text
+from paperroute_device.core.panel_views import (
+    LOCAL_NAME,
+    MENU_VISIBLE,
+    UNKNOWN,
+    DeviceView,
+    InfoRow,
+    MenuView,
+    PanelView,
+    PhoneView,
+    confirm_view,
+    strength,
+)
+from paperroute_device.core.text import DOT, clock_text, day_text, local_time
 from paperroute_transit.core.model import SYDNEY
-
-LOCAL_NAME: Final[str] = 'paperroute.local'
-UNKNOWN: Final[str] = '-'
-STRONG_DBM: Final[int] = -60
-GOOD_DBM: Final[int] = -70
 
 
 def menu_view(*, state: State) -> MenuView:
@@ -81,25 +76,6 @@ def phone_view(*, state: State) -> PhoneView:
     )
 
 
-def strength(*, dbm: int) -> str:
-    """
-    Name a signal level.
-
-    Parameters
-    ----------
-    dbm : int
-        Signal level in dBm.
-
-    Returns
-    -------
-    str
-        'strong', 'good' or 'weak'.
-    """
-    if dbm >= STRONG_DBM:
-        return 'strong'
-    return 'good' if dbm >= GOOD_DBM else 'weak'
-
-
 def wifi_value(*, wifi: WifiStatus) -> str:
     """
     Describe the Wi-Fi link.
@@ -121,45 +97,6 @@ def wifi_value(*, wifi: WifiStatus) -> str:
     return DOT.join(part for part in parts if part)
 
 
-def local_time(*, stamp: str | None) -> datetime | None:
-    """
-    Read an ISO time in Sydney.
-
-    Parameters
-    ----------
-    stamp : str | None
-        An ISO 8601 time, or None.
-
-    Returns
-    -------
-    datetime | None
-        The time in Sydney; None when missing or unreadable.
-    """
-    if stamp is None:
-        return None
-    try:
-        return datetime.fromisoformat(stamp).astimezone(SYDNEY)
-    except ValueError:
-        return None
-
-
-def day_text(*, moment: datetime) -> str:
-    """
-    Give a day as '21 Oct'.
-
-    Parameters
-    ----------
-    moment : datetime
-        The time.
-
-    Returns
-    -------
-    str
-        Day of the month and short month name.
-    """
-    return f'{moment.day} {moment:%b}'
-
-
 def timetable_value(*, state: State) -> str:
     """
     Describe the timetable in use.
@@ -179,7 +116,7 @@ def timetable_value(*, state: State) -> str:
     if state.rebuild.running:
         return 'rebuilding'
     parts = ['last build failed'] if state.rebuild.failed else []
-    built = local_time(stamp=state.saving.timetable)
+    built = local_time(stamp=state.saving.timetable, zone=SYDNEY)
     if built is None:
         return DOT.join(parts) or UNKNOWN
     clock = clock_text(moment=built, zone=SYDNEY)
@@ -249,7 +186,7 @@ def facts_values(*, facts: DeviceFacts | None) -> tuple[str, str, str, str]:
     if facts is None:
         return UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN
     synced = {True: 'synced', False: 'not synced', None: UNKNOWN}
-    tiles = local_time(stamp=facts.tiles_built)
+    tiles = local_time(stamp=facts.tiles_built, zone=SYDNEY)
     return (
         wifi_value(wifi=facts.wifi),
         synced[facts.clock_synced],

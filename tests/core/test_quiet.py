@@ -6,7 +6,6 @@ from datetime import date, datetime, time, timedelta
 from typing import Final
 
 from paperroute.core.messages import (
-    ConfirmAsked,
     DeparturesLoaded,
     Effect,
     Event,
@@ -23,6 +22,7 @@ from paperroute.core.sleep import WAKE_FOR, slept
 from paperroute.core.state import step
 from paperroute.core.state_model import Places, State
 from paperroute.core.stop_view import StopView
+from paperroute_device.core.device_events import ConfirmAsked
 from paperroute_device.core.device_model import (
     ConfirmAction,
     MenuRow,

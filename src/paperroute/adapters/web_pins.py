@@ -21,7 +21,6 @@ from paperroute.adapters.pin_windows import (
     windows_of,
 )
 from paperroute.adapters.route_chips import chip_colours, colour_sheet
-from paperroute.adapters.web_common import asset, form_fields
 from paperroute.adapters.web_pin_edit import (
     MISFIT,
     delete_form,
@@ -47,6 +46,7 @@ from paperroute.core.messages import (
 from paperroute.core.pin_choices import PinDraft, PinEditor
 from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
+from paperroute_device.adapters.web_common import asset, form_fields
 from paperroute_transit.core.model import Pin, pin_ref, same_place
 from paperroute_transit.core.route_colours import RouteColour
 

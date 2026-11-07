@@ -12,22 +12,20 @@ from paperroute.core.chooser_view import ChooserView
 from paperroute.core.device import device_status
 from paperroute.core.menu import CONFIRM_WAIT, MENU_IDLE
 from paperroute.core.messages import (
-    ConfirmAsked,
     ControlPower,
     DeviceProbed,
     Effect,
     Event,
-    NoticeView,
     ProbeDevice,
     Render,
     ResetDevice,
     SaveState,
     Tick,
 )
-from paperroute.core.panel_views import ConfirmView, MenuView, PhoneView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
+from paperroute_device.core.device_events import ConfirmAsked
 from paperroute_device.core.device_model import (
     ConfirmAction,
     Menu,
@@ -36,6 +34,12 @@ from paperroute_device.core.device_model import (
     PanelScreen,
     PowerAction,
     ResetKind,
+)
+from paperroute_device.core.panel_views import (
+    ConfirmView,
+    MenuView,
+    NoticeView,
+    PhoneView,
 )
 from paperroute_hardware.core.knob_events import (
     Knob,

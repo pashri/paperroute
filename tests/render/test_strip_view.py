@@ -46,6 +46,7 @@ from paperroute.render.strip_view import (
     paint_strip_view,
 )
 from paperroute.render.strip_view import panel_row as paint_panel_row
+from paperroute_device.core.text import DOT, HINT_DOT
 from paperroute_device.render.canvas import (
     INK,
     PAPER,
@@ -701,3 +702,14 @@ def test_strip_hints_fit_the_pill() -> None:
     room = HINT_BOX[2] - HINT_BOX[0] - 2 * HINT_PAD
     for hint in (*HINTS.values(), OPEN_HINT):
         assert text_width(text=hint, face=HINT_FACE) <= room, hint
+
+
+def test_hint_separator_is_heavier() -> None:
+    """In hint type the hint bullet inks at least twice the middle dot."""
+    inks = []
+    for mark in (HINT_DOT.strip(), DOT.strip()):
+        canvas = Canvas()
+        canvas.text(at=(100, 100), text=mark, face=HINT_FACE, grey=INK)
+        inks.append(int((canvas.grey() == INK).sum()))
+    bullet, dot = inks
+    assert bullet >= 2 * dot > 0

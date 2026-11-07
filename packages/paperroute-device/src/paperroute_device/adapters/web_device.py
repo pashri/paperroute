@@ -4,13 +4,14 @@ import html
 import logging
 import time
 from collections.abc import Callable, Mapping
+from datetime import tzinfo
 from http import HTTPStatus
 from pathlib import Path
 from typing import Final
 
 from aiohttp import web
 
-from paperroute.adapters.device_page import (
+from paperroute_device.adapters.device_page import (
     RESETS,
     data_rows,
     device_notice,
@@ -23,19 +24,22 @@ from paperroute.adapters.device_page import (
     power_status,
     system_rows,
 )
-from paperroute.adapters.web_common import asset, form_fields
-from paperroute.core.messages import (
+from paperroute_device.adapters.web_common import asset, form_fields
+from paperroute_device.adapters.wifi import valid_password, valid_ssid
+from paperroute_device.core.device_events import (
     ApiKeyChanged,
     ConfirmAsked,
-    Event,
+    DeviceRequest,
     JoinAsked,
+    PowerRequested,
 )
-from paperroute_device.adapters.wifi import valid_password, valid_ssid
 from paperroute_device.core.device_model import (
+    POWER_ACTIONS,
     ConfirmAction,
     Credential,
     DeviceStatus,
     JoinRequest,
+    PowerAction,
     WifiNetwork,
     WifiPhase,
 )
@@ -96,6 +100,13 @@ FORM: Final[str] = """<form method="post" action="/setup">
       </div>{key}
       <button type="submit">Join</button>
     </form>"""
+CONFIRM: Final[dict[PowerAction, tuple[str, str]]] = {
+    PowerAction.OFF: (
+        "Shut down now? The screen will show OFF when it's safe to unplug.",
+        'Shut down',
+    ),
+    PowerAction.RESTART: ('Restart now?', 'Restart'),
+}
 RADIO: Final[str] = """        <label>
           <input type="radio" name="network" value="{ssid}" required{disabled}>
           {label}
@@ -249,8 +260,10 @@ class DevicePages:
         Names a feed for people.
     daily_limit : int
         The API calls allowed each day.
-    post : Callable[[Event], None]
-        Sends an event to the app; called at request time.
+    post : Callable[[DeviceRequest], None]
+        Sends a request to the app; called at request time.
+    zone : tzinfo
+        Time zone whose wall clock the Device page shows.
     error_log : Path | None
         The error log, if any.
     state_file : Path | None
@@ -271,7 +284,8 @@ class DevicePages:
         credential: Credential,
         feed_label: Callable[[str], str],
         daily_limit: int,
-        post: Callable[[Event], None],
+        post: Callable[[DeviceRequest], None],
+        zone: tzinfo,
         error_log: Path | None,
         state_file: Path | None,
         clock: Callable[[], float] = time.time,
@@ -285,6 +299,7 @@ class DevicePages:
         self._feed_label = feed_label
         self._daily_limit = daily_limit
         self._post = post
+        self._zone = zone
         self._error_log = error_log
         self._state_file = state_file
         self._clock = clock
@@ -297,10 +312,13 @@ class DevicePages:
         Returns
         -------
         list[web.RouteDef]
-            The setup page, the Device page, their scripts, form posts
-            and downloads.
+            The power confirm page and post, the setup page, the Device
+            page, their scripts, form posts and downloads.
         """
         return [
+            web.get('/device/power', self._power_page),
+            web.post('/device/power', self._power_page),
+            web.post('/power', self._power),
             web.get('/setup', self._setup_page),
             web.get('/setup.js', self._setup_js),
             web.post('/setup', self._setup),
@@ -522,10 +540,15 @@ class DevicePages:
             NOTICE_MARK: news,
             '{{network}}': network_rows(facts=facts),
             '{{data}}': data_rows(
-                status=device, daily_limit=self._daily_limit,
+                status=device,
+                daily_limit=self._daily_limit,
+                zone=self._zone,
             ),
             '{{feeds}}': feed_rows(
-                feeds=feeds, now=now, label=self._feed_label,
+                feeds=feeds,
+                now=now,
+                label=self._feed_label,
+                zone=self._zone,
             ),
             '{{system}}': system_rows(facts=facts),
             '{{panel}}': (
@@ -708,3 +731,53 @@ class DevicePages:
             'Content-Disposition': f'attachment; filename="{name}"',
             'Cache-Control': 'no-store',
         })
+
+    async def _power_page(self, request: web.Request) -> web.Response:
+        """
+        Serve the page that confirms a shutdown or restart.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; `action` in the query.
+
+        Returns
+        -------
+        web.Response
+            The page, or 400 for an unknown action.
+        """
+        action = POWER_ACTIONS.get(request.query.get('action', ''))
+        if action is None:
+            return web.Response(status=HTTPStatus.BAD_REQUEST)
+        question, confirm = CONFIRM[action]
+        tone = ' class="danger"' if action is PowerAction.OFF else ''
+        page = asset(name='power.html').replace(
+            '{{question}}', question,
+        ).replace('{{action}}', action.value).replace(
+            '{{confirm}}', confirm,
+        ).replace('{{tone}}', tone)
+        return web.Response(text=page, content_type='text/html')
+
+    async def _power(self, request: web.Request) -> web.Response:
+        """
+        Post a shutdown or restart from the browser.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request; `action` is `poweroff` or `reboot`.
+
+        Returns
+        -------
+        web.Response
+            400 for an unknown action; otherwise 204 to the script's
+            JSON, or 303 to the Device page for a plain form.
+        """
+        fields = await form_fields(request=request)
+        action = POWER_ACTIONS.get(fields.get('action', ''))
+        if action is None:
+            return web.Response(status=HTTPStatus.BAD_REQUEST)
+        self._post(PowerRequested(action=action))
+        if request.content_type == 'application/json':
+            return web.Response(status=HTTPStatus.NO_CONTENT)
+        raise web.HTTPSeeOther(location=f'/device?power={action.value}')

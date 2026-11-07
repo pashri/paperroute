@@ -39,11 +39,10 @@ from paperroute_device.core.device_model import (
     ResetKind,
     WifiNetwork,
 )
+from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_testkit.fakes import (
     FakeBuilder,
-    FakeKeys,
     FakeProbe,
-    FakeWifi,
     HangingProbe,
     RecordingResets,
     WatchingBuilder,

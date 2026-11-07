@@ -8,7 +8,6 @@ from typing import Any, Final
 
 from paperroute.core.device import device_status
 from paperroute.core.messages import (
-    ApiKeyChanged,
     DeviceProbed,
     DeviceProbeFailed,
     Event,
@@ -29,6 +28,7 @@ from paperroute.core.state_model import Places, State
 from paperroute.ports import Observer, TimetableBuilder
 from paperroute_device.adapters.resets import NullResets
 from paperroute_device.adapters.wifi import NullWifi, hotspot_password
+from paperroute_device.core.device_events import ApiKeyChanged
 from paperroute_device.core.device_model import (
     DeviceFacts,
     DeviceStatus,

@@ -7,15 +7,12 @@ from typing import Final
 from paperroute.core.alert_state import alert_clocks_cleared
 from paperroute.core.banners import feeds_held
 from paperroute.core.messages import (
-    ApiKeyChanged,
     ControlPower,
     DeviceProbed,
     DeviceProbeFailed,
     Effect,
     FetchFeed,
-    NoticeView,
     PowerFailed,
-    PowerRequested,
     ProbeDevice,
     RebuildTimetable,
     Render,
@@ -38,6 +35,7 @@ from paperroute.core.state_model import (
 )
 from paperroute.core.state_views import saved_of, settled
 from paperroute.core.wifi import on_wifi_event, setup_closed
+from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
     ConfirmAction,
     DeviceStatus,
@@ -46,6 +44,7 @@ from paperroute_device.core.device_model import (
     PowerAction,
     ResetKind,
 )
+from paperroute_device.core.panel_views import NoticeView
 from paperroute_transit.core.model import shifted
 
 NOTICE: Final[dict[PowerAction, str]] = {

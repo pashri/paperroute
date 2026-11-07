@@ -5,7 +5,7 @@ from pathlib import Path
 from paperroute.adapters.device_probe import SystemProbe, mem_available
 from paperroute.logs import LastError
 from paperroute_device.core.device_model import WifiStatus
-from paperroute_testkit.fakes import FakeKeys, FakeWifi
+from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_transit.adapters.tiles_db import NullTiles
 
 LINK: WifiStatus = WifiStatus(managed=True, ssid='Home', dbm=-60)

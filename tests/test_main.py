@@ -65,12 +65,8 @@ from paperroute_hardware.panel_open import panel_for
 from paperroute_hardware.ports import LineEdge, PanelBus, PanelRefresh
 from paperroute_hardware.render.panel_bits import HEIGHT, WIDTH
 from paperroute_testkit.core.factories import pin_of
-from paperroute_testkit.fakes import (
-    FakeKeys,
-    FakeNetwork,
-    FakeWifi,
-    MemoryStates,
-)
+from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
+from paperroute_testkit.fakes import FakeNetwork, MemoryStates
 from paperroute_testkit.hardware_fakes import FakeKnobLines, FakePanelBus
 from paperroute_transit.adapters.checked_tiles import CheckedTiles
 from paperroute_transit.adapters.tiles_db import (
@@ -121,7 +117,7 @@ def test_device_pages_only_for_live_feeds(
     )
     pages = device_pages_for(args=args, timings=timings, display=display)
     assert pages is not None
-    assert len(pages.routes()) == 10
+    assert len(pages.routes()) == 13
     args.feeds = str(tmp_path)
     assert device_pages_for(
         args=args, timings=timings, display=display,

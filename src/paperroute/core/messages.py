@@ -16,12 +16,17 @@ from paperroute.core.connection_strip import (
 from paperroute.core.connection_view import ConnectionView
 from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import MapView
-from paperroute.core.panel_views import PanelView, SleepView
+from paperroute.core.panel_views import SleepView
 from paperroute.core.saved import ConnectionMap, Lookahead, Rate, Saved
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
+from paperroute_device.core.device_events import (
+    ApiKeyChanged,
+    ConfirmAsked,
+    JoinAsked,
+    PowerRequested,
+)
 from paperroute_device.core.device_model import (
-    ConfirmAction,
     DeviceFacts,
     JoinOutcome,
     JoinRequest,
@@ -30,6 +35,7 @@ from paperroute_device.core.device_model import (
     WifiNetwork,
 )
 from paperroute_device.core.device_settings import QuietMode, Window
+from paperroute_device.core.panel_views import NoticeView, PanelView
 from paperroute_hardware.core.knob_events import (
     KnobHeld,
     KnobHeldTurned,
@@ -161,23 +167,6 @@ class LoadServiceSpan:
     pin: Pin
     day: date
     timetable: str | None = None
-
-
-@dataclass(frozen=True)
-class NoticeView:
-    """
-    A screen showing a title and an optional line under it.
-
-    Attributes
-    ----------
-    title : str
-        The main line, such as the shutdown notice.
-    detail : str
-        A smaller line under the title, or empty.
-    """
-
-    title: str
-    detail: str = ''
 
 
 ScreenView = (
@@ -398,13 +387,6 @@ class FeedFailed:
 
 
 @dataclass(frozen=True)
-class ConfirmAsked:
-    """A phone asked for something the panel must confirm."""
-
-    action: ConfirmAction
-
-
-@dataclass(frozen=True)
 class QuitRequested:
     """The user asked to quit (development monitor only)."""
 
@@ -530,20 +512,6 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
 
 
 @dataclass(frozen=True)
-class ApiKeyChanged:
-    """
-    The TfNSW API key was found set or not set.
-
-    Attributes
-    ----------
-    present : bool
-        Whether a key is set.
-    """
-
-    present: bool
-
-
-@dataclass(frozen=True)
 class DeviceProbed:
     """
     The device's facts were gathered.
@@ -560,13 +528,6 @@ class DeviceProbed:
 @dataclass(frozen=True)
 class DeviceProbeFailed:
     """Gathering the device's facts failed."""
-
-
-@dataclass(frozen=True)
-class PowerRequested:
-    """Shutting down or restarting was asked for."""
-
-    action: PowerAction
 
 
 @dataclass(frozen=True)
@@ -603,13 +564,6 @@ class HotspotStarted:
 @dataclass(frozen=True)
 class HotspotFailed:
     """The setup hotspot did not start."""
-
-
-@dataclass(frozen=True)
-class JoinAsked:
-    """A phone on the setup hotspot asked to join a network."""
-
-    request: JoinRequest
 
 
 @dataclass(frozen=True)

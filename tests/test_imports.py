@@ -34,6 +34,9 @@ REFRESH_RUN: Final[str] = (
     "assert not {'osmium', 'shapely'} & set(sys.modules)\n"
     "assert 'pydantic' not in sys.modules\n"
 )
+KIT_TEXT: Final[frozenset[str]] = frozenset(
+    {'.py', '.html', '.css', '.js', '.toml', '.txt'},
+)
 SCREEN_IMPORTS: Final[str] = (
     'import paperroute.screen, sys; '
     'print(*sorted(sys.modules))'
@@ -260,61 +263,81 @@ def test_gpiod_only_in_the_line_adapters() -> None:
 def test_shell_screens_use_no_board_drawing() -> None:
     """Shell screens take their drawing and text from the device kit."""
     board = ROOT / 'src' / 'paperroute'
+    kit = (
+        ROOT / 'packages' / 'paperroute-device' / 'src' / 'paperroute_device'
+    )
+    drawing = {
+        'paperroute.render.stop_view',
+        'paperroute.render.map_view',
+        'paperroute.render.chrome',
+    }
     banned = {
-        'render/panel.py': {
-            'paperroute.render.stop_view',
-            'paperroute.render.map_view',
-            'paperroute.render.chrome',
-            'paperroute.core.stop_view',
-        },
-        'render/notice.py': {
-            'paperroute.render.stop_view',
-            'paperroute.render.map_view',
-            'paperroute.render.chrome',
-        },
-        'render/sleep.py': {
-            'paperroute.render.stop_view',
-            'paperroute.render.map_view',
-            'paperroute.render.chrome',
-        },
-        'core/wifi.py': {'paperroute.core.stop_view'},
-        'core/banners.py': {'paperroute.core.stop_view'},
-        'core/panel_screens.py': {'paperroute.core.stop_view'},
-        'adapters/device_page.py': {'paperroute.core.stop_view'},
+        kit / 'render' / 'panel.py': {*drawing, 'paperroute.core.stop_view'},
+        kit / 'render' / 'notice.py': drawing,
+        kit / 'render' / 'sleep.py': drawing,
+        board / 'core' / 'wifi.py': {'paperroute.core.stop_view'},
+        board / 'core' / 'banners.py': {'paperroute.core.stop_view'},
+        board / 'core' / 'panel_screens.py': {'paperroute.core.stop_view'},
+        kit / 'adapters' / 'device_page.py': {'paperroute.core.stop_view'},
     }
     offenders = {
-        name: sorted(imported_names(path=board / name) & modules)
-        for name, modules in banned.items()
-        if imported_names(path=board / name) & modules
+        path.name: sorted(imported_names(path=path) & modules)
+        for path, modules in banned.items()
+        if imported_names(path=path) & modules
     }
     assert not offenders
 
 
+def kit_texts() -> list[tuple[Path, str]]:
+    """
+    Read the device kit's text files.
+
+    Returns
+    -------
+    list[tuple[Path, str]]
+        Each source, page, style, script, TOML and text file under the
+        kit's ``src``, with its text; binary files are skipped.
+    """
+    kit = ROOT / 'packages' / 'paperroute-device' / 'src'
+    return [
+        (path, path.read_text(encoding='utf-8'))
+        for path in sorted(kit.rglob('*'))
+        if path.is_file() and path.suffix in KIT_TEXT
+    ]
+
+
 def test_device_kit_names_no_tfnsw() -> None:
     """No file of the device kit names TfNSW."""
-    kit = ROOT / 'packages' / 'paperroute-device' / 'src'
+    offenders = [
+        str(path) for path, text in kit_texts() if 'tfnsw' in text.lower()
+    ]
+    assert not offenders
+
+
+def test_device_kit_names_no_sydney() -> None:
+    """No file of the device kit names Sydney or its time zone."""
     offenders = [
         str(path)
-        for path in kit.rglob('*')
-        if path.is_file()
-        and '__pycache__' not in path.parts
-        and 'tfnsw' in path.read_text(encoding='utf-8').lower()
+        for path, text in kit_texts()
+        if 'SYDNEY' in text or 'Sydney' in text
     ]
     assert not offenders
 
 
 def test_device_pages_import_no_feed_config() -> None:
     """The Device and setup pages take feed settings from the app."""
-    board = ROOT / 'src' / 'paperroute'
+    kit = (
+        ROOT / 'packages' / 'paperroute-device' / 'src' / 'paperroute_device'
+    )
     banned = {
         'paperroute.core.feeds',
         'paperroute.core.quota',
         'paperroute.adapters.tfnsw',
     }
     offenders = {
-        name: sorted(imported_names(path=board / name) & banned)
+        name: sorted(imported_names(path=kit / name) & banned)
         for name in ('adapters/web_device.py', 'adapters/device_page.py')
-        if imported_names(path=board / name) & banned
+        if imported_names(path=kit / name) & banned
     }
     assert not offenders
 

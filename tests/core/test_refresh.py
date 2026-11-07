@@ -6,12 +6,13 @@ from datetime import datetime, timedelta
 from paperroute.core.chooser import ChooserState
 from paperroute.core.map_view import MapView
 from paperroute.core.messages import Effect, Render, Tick
-from paperroute.core.panel_views import MenuView, SleepView
+from paperroute.core.panel_views import SleepView
 from paperroute.core.refresh import quick_now
 from paperroute.core.saved import LiveView, seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import StopView
+from paperroute_device.core.panel_views import MenuView
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,

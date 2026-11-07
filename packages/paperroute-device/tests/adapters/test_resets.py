@@ -7,7 +7,7 @@ import pytest
 
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.core.device_model import ResetKind
-from paperroute_testkit.fakes import FakeKeys, FakeWifi
+from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
 
 
 def data_files(*, folder: Path) -> dict[str, Path]:

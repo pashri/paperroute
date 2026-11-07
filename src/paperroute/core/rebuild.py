@@ -5,14 +5,10 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.core.banners import offline
-from paperroute.core.messages import (
-    Effect,
-    NoticeView,
-    RebuildTimetable,
-    TimetableSeen,
-)
+from paperroute.core.messages import Effect, RebuildTimetable, TimetableSeen
 from paperroute.core.state_model import Rebuild, State
 from paperroute.core.stop_view import clock_text
+from paperroute_device.core.panel_views import NoticeView
 from paperroute_device.core.text import DOT
 from paperroute_transit.core.model import TIMETABLE_SCHEMA
 

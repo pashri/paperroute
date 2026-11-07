@@ -1153,15 +1153,19 @@ name = "paperroute-device"
 version = "0.1.0"
 source = { editable = "packages/paperroute-device" }
 dependencies = [
+    { name = "aiohttp" },
     { name = "numpy" },
     { name = "paperroute-hardware" },
+    { name = "segno" },
     { name = "skia-python" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "aiohttp", specifier = ">=3.12" },
     { name = "numpy", specifier = ">=2.3" },
     { name = "paperroute-hardware", editable = "packages/paperroute-hardware" },
+    { name = "segno", specifier = ">=1.6.6" },
     { name = "skia-python", specifier = ">=138.0" },
 ]
 

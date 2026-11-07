@@ -27,7 +27,7 @@ from paperroute_testkit.core.factories import place
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_testkit.fakes import FakeTripPlanner
 from paperroute_transit.core.model import SYDNEY, RouteKind, StopPlace
-from tests.adapters.test_web_device import Device
+from tests.adapters.test_web_device import sydney_site
 
 Client = TestClient[web.Request, web.Application]
 NOW: Final[datetime] = datetime(2026, 10, 27, 10, 0, tzinfo=SYDNEY)
@@ -248,7 +248,7 @@ async def _client(app: App) -> AsyncIterator[Client]:
         planner=FakeTripPlanner(journeys=(JOURNEY,)),
         now=lambda: NOW,
     )
-    display = WebDisplay(device=Device().pages(), board=board)
+    display = WebDisplay(device=sydney_site().pages(), board=board)
     display.bind(post=app.post)
     client = TestClient(TestServer(display.app()))
     await client.start_server()

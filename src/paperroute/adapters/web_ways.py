@@ -27,7 +27,6 @@ from paperroute.adapters.ways_editor import (
     never_choices,
     ways_draft,
 )
-from paperroute.adapters.web_common import asset
 from paperroute.adapters.web_pin_edit import (
     MIN_QUERY,
     MISFIT,
@@ -43,6 +42,7 @@ from paperroute.core.connection_model import way_legs
 from paperroute.core.pin_choices import NICKNAME_MAX
 from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
+from paperroute_device.adapters.web_common import asset
 from paperroute_transit.core.model import Pin, StopPlace, Way
 
 ADD_TITLE: Final[str] = 'Add a connection'

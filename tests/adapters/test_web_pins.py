@@ -34,6 +34,7 @@ from paperroute.observers import PinsSeen
 from paperroute_testkit.core.connection_factories import WORK as CONNECTION
 from paperroute_testkit.core.connection_factories import WORK_CHANGE
 from paperroute_testkit.fake_pins import FakePinOptions
+from paperroute_testkit.page_markup import inside, parse_page, parse_tree
 from paperroute_transit.core.model import (
     AutoWindow,
     Pin,
@@ -42,8 +43,7 @@ from paperroute_transit.core.model import (
     pin_ref,
 )
 from paperroute_transit.core.route_colours import RouteColour
-from tests.adapters.test_web_device import Device
-from tests.page_markup import inside, parse_page, parse_tree
+from tests.adapters.test_web_device import sydney_site
 
 Client = TestClient[web.Request, web.Application]
 
@@ -111,7 +111,7 @@ async def _client(
     """Start a client of a display wired to the fake pins."""
     board = SydneyPages(pins=pins.get, options=options, planner=None)
     board.pins_sleep = pins.sleep
-    display = WebDisplay(device=Device().pages(), board=board)
+    display = WebDisplay(device=sydney_site().pages(), board=board)
     display.bind(post=pins.posted.append)
     client = TestClient(TestServer(display.app()))
     await client.start_server()

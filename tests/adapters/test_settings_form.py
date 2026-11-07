@@ -12,7 +12,6 @@ from paperroute.adapters.settings_form import (
     form_values,
     page_text,
 )
-from paperroute.adapters.web_common import asset
 from paperroute.core.messages import SettingsChanged
 from paperroute.core.saved import (
     BoardSettings,
@@ -22,6 +21,7 @@ from paperroute.core.saved import (
     Settings,
     with_changes,
 )
+from paperroute_device.adapters.web_common import asset
 from paperroute_device.core.device_settings import (
     CLEAN_CHOICES,
     DeviceSettings,

@@ -37,12 +37,10 @@ from paperroute.core.menu import (
     touched,
 )
 from paperroute.core.messages import (
-    ApiKeyChanged,
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
     ColumnFailed,
     ColumnLoaded,
-    ConfirmAsked,
     DeparturesFailed,
     DeparturesLoaded,
     DeviceProbed,
@@ -54,7 +52,6 @@ from paperroute.core.messages import (
     HolidaysLoaded,
     HotspotFailed,
     HotspotStarted,
-    JoinAsked,
     LineFailed,
     LineLoaded,
     LoadDepartures,
@@ -71,7 +68,6 @@ from paperroute.core.messages import (
     PlacesMatched,
     PositionsFetched,
     PowerFailed,
-    PowerRequested,
     QuitRequested,
     ResetDone,
     ServiceSpanLoaded,
@@ -121,6 +117,12 @@ from paperroute.core.state_model import (
 from paperroute.core.state_saves import saved_effects
 from paperroute.core.state_views import saved_of, settled
 from paperroute.core.wifi import setup_expired, setup_knob
+from paperroute_device.core.device_events import (
+    ApiKeyChanged,
+    ConfirmAsked,
+    JoinAsked,
+    PowerRequested,
+)
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobEvent,

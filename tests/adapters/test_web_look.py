@@ -12,8 +12,14 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_display import WebDisplay
-from tests.adapters.test_web_device import Device
-from tests.page_markup import Node, by_id, inside, parse_page, parse_tree
+from paperroute_testkit.page_markup import (
+    Node,
+    by_id,
+    inside,
+    parse_page,
+    parse_tree,
+)
+from tests.adapters.test_web_device import sydney_site
 
 Client = TestClient[web.Request, web.Application]
 FONT_SHA256: Final[str] = (
@@ -461,7 +467,7 @@ def test_device_restart_tones() -> None:
 ])
 async def test_power_page_tone(action: str, danger: bool) -> None:
     """Shutting down asks with a danger button; restarting does not."""
-    display = WebDisplay(device=Device().pages())
+    display = WebDisplay(device=sydney_site().pages())
     client = TestClient(TestServer(display.app()))
     await client.start_server()
     try:

@@ -4,8 +4,10 @@ version = "0.1.0"
 license = "MIT"
 requires-python = ">=3.14"
 dependencies = [
+    "aiohttp>=3.12",
     "numpy>=2.3",
     "paperroute-hardware",
+    "segno>=1.6.6",
     "skia-python>=138.0",
 ]
 

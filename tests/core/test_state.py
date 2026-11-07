@@ -66,12 +66,10 @@ from paperroute.core.messages import (
     MapRequest,
     MatchPlaces,
     ModesLoaded,
-    NoticeView,
     PatternsLoaded,
     PlacesFailed,
     PlacesMatched,
     PositionsFetched,
-    PowerRequested,
     ProbeDevice,
     QuitRequested,
     Render,
@@ -138,8 +136,10 @@ from paperroute.core.strip_state import (
     shown_reach,
     strip_key,
 )
+from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_device.core.device_settings import Window
+from paperroute_device.core.panel_views import NoticeView
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,

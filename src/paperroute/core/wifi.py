@@ -9,7 +9,6 @@ from paperroute.core.messages import (
     Effect,
     HotspotFailed,
     HotspotStarted,
-    JoinAsked,
     JoinWifi,
     ProbeDevice,
     StartWifiSetup,
@@ -18,33 +17,30 @@ from paperroute.core.messages import (
     WifiJoined,
     WifiJoinFailed,
 )
-from paperroute.core.panel_views import WifiSetupView
 from paperroute.core.state_model import State
+from paperroute_device.core.device_events import JoinAsked
 from paperroute_device.core.device_model import (
     JoinOutcome,
     WifiPhase,
     WifiSetup,
 )
-from paperroute_device.core.text import HINT_DOT, clock_text
+from paperroute_device.core.panel_views import WifiSetupView
+from paperroute_device.core.text import clock_text
+from paperroute_device.core.wifi_text import (
+    SETUP_ADDRESS,
+    SETUP_SSID,
+    START_FAILED,
+)
 from paperroute_hardware.core.knob_events import Knob, KnobPressed
 from paperroute_transit.core.model import SYDNEY
 
 SETUP_FOR: Final[timedelta] = timedelta(minutes=10)
-SETUP_SSID: Final[str] = 'paperroute-setup'
-SETUP_ADDRESS: Final[str] = '10.42.0.1'
 WIFI_SPECIAL: Final[str] = '\\;,:"'
 JOIN_ERRORS: Final[dict[JoinOutcome, str]] = {
     JoinOutcome.WRONG_PASSWORD: "Couldn't join {ssid}: wrong password",
     JoinOutcome.NOT_FOUND: "Couldn't join {ssid}: not found",
     JoinOutcome.FAILED: "Couldn't join {ssid}",
 }
-START_FAILED: Final[str] = "Couldn't start Wi-Fi setup"
-SETUP_STEPS: Final[tuple[str, ...]] = (
-    f'1. Scan the code with your phone. It joins the network {SETUP_SSID}.',
-    f'2. Open {SETUP_ADDRESS}/setup, pick your Wi-Fi and type its password.',
-    '3. paperroute connects and this screen closes.',
-)
-SCANNING_LINE: Final[str] = 'Looking for Wi-Fi networks...'
 OPEN_PHASES: Final[frozenset[WifiPhase]] = frozenset(
     {WifiPhase.HOTSPOT, WifiPhase.FAILED},
 )
@@ -108,63 +104,6 @@ def shown_password(*, password: str) -> str:
         password[start:start + 4]
         for start in range(0, len(password), 4)
     )
-
-
-def no_camera_line(*, password: str) -> str:
-    """
-    Say how to join the hotspot without scanning the code.
-
-    Parameters
-    ----------
-    password : str
-        The password as shown.
-
-    Returns
-    -------
-    str
-        The line.
-    """
-    return (
-        f'No camera? Join {SETUP_SSID}, password {password},'
-        f' open {SETUP_ADDRESS}/setup'
-    )
-
-
-def setup_footer(*, minutes_left: int) -> str:
-    """
-    Say how long the hotspot stays up and how to cancel.
-
-    Parameters
-    ----------
-    minutes_left : int
-        Whole minutes until it closes.
-
-    Returns
-    -------
-    str
-        The footer.
-    """
-    return (
-        f'New password each time{HINT_DOT}closes in {minutes_left} min'
-        f'{HINT_DOT}Top: press to cancel'
-    )
-
-
-def joining_line(*, ssid: str | None) -> str:
-    """
-    Say which network is being joined.
-
-    Parameters
-    ----------
-    ssid : str | None
-        The network, or None.
-
-    Returns
-    -------
-    str
-        The line.
-    """
-    return f'Joining {ssid or "the network"}...'
 
 
 def wifi_setup_view(*, state: State) -> WifiSetupView:

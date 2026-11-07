@@ -8,14 +8,12 @@ import pytest
 
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import (
-    ApiKeyChanged,
     ColumnLoaded,
     DeviceProbed,
     Effect,
     Event,
     FetchFeed,
     LoadColumn,
-    NoticeView,
     RebuildTimetable,
     Render,
     SettingsChanged,
@@ -24,9 +22,9 @@ from paperroute.core.messages import (
     TimetableSeen,
 )
 from paperroute.core.panel_screens import device_rows
-from paperroute.core.panel_views import MenuView
 from paperroute.core.rebuild import (
     BACKOFF_MAX,
+    SETTINGS_HINT,
     building_view,
     forced,
     is_outdated,
@@ -34,6 +32,7 @@ from paperroute.core.rebuild import (
 from paperroute.core.saved import LiveView, Saved
 from paperroute.core.state import step
 from paperroute.core.state_model import Rebuild, State
+from paperroute_device.core.device_events import ApiKeyChanged
 from paperroute_device.core.device_model import (
     MENU_ROWS,
     Menu,
@@ -41,6 +40,9 @@ from paperroute_device.core.device_model import (
     PanelScreen,
     WifiStatus,
 )
+from paperroute_device.core.panel_views import MenuView, NoticeView
+from paperroute_device.render.canvas import WIDTH, text_width
+from paperroute_device.render.notice import DETAIL_FACE
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobPressed,
@@ -485,3 +487,10 @@ def test_forced_failure_keeps_the_backoff() -> None:
         before.retry_at,
     )
     assert not state.rebuild.running
+
+
+def test_settings_hint_fits_the_notice() -> None:
+    """The rebuild screen's Settings hint fits inside the border."""
+    assert SETTINGS_HINT == 'Both knobs: hold to open Settings'
+    width = text_width(text=SETTINGS_HINT, face=DETAIL_FACE)
+    assert width <= WIDTH - 64

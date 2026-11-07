@@ -42,6 +42,33 @@ assert 'site-packages' in str(APP_ASSETS.fonts), APP_ASSETS.fonts
 assert frame.shape == (480, 800) and frame.min() == 0, frame.shape
 EOF
 )
+device=$(cat <<'EOF'
+import sysconfig
+from pathlib import Path
+
+from paperroute.asset_root import APP_ASSETS, use_app_assets
+from paperroute_device.adapters.web_common import asset, asset_bytes
+from paperroute_device.core.panel_views import MenuView
+from paperroute_device.render.panel import draw_panel_view
+
+use_app_assets()
+packaged = Path(sysconfig.get_paths()['purelib']) / 'paperroute' / 'assets'
+for found in (APP_ASSETS.fonts, APP_ASSETS.web):
+    assert Path(str(found)).is_relative_to(packaged), found
+view = MenuView(clock='8:00', rows=('Wi-Fi', 'Device'), cursor=0, first=0)
+frame = draw_panel_view(view=view)
+assert frame.shape == (480, 800) and frame.min() == 0, frame.shape
+assert asset(name='device.html')
+assert asset_bytes(name='fonts/public-sans.woff2')
+EOF
+)
+no_root="from paperroute_device.render.canvas import Face, font
+try:
+    font(Face(weight=400, px=16))
+except RuntimeError as error:
+    assert 'no asset root' in str(error), error
+else:
+    raise AssertionError('font loaded with no asset root')"
 screen_only="import paperroute.screen, sys
 loaded = [
     name for name in sys.modules
@@ -59,6 +86,8 @@ for py in "$stage/.venv/bin/python" "$old/.venv/bin/python"; do
         exit 1
     fi
     "$py" -c "$draw"
+    "$py" -c "$device"
+    "$py" -c "$no_root"
     "$py" -c "import paperroute.build.__main__"
     "$py" -c "$screen_only"
 done

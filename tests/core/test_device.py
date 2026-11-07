@@ -13,14 +13,11 @@ from paperroute.core.device import (
     on_settings,
 )
 from paperroute.core.messages import (
-    ApiKeyChanged,
     ControlPower,
     DeviceProbed,
     DeviceProbeFailed,
     FetchFeed,
-    NoticeView,
     PowerFailed,
-    PowerRequested,
     ProbeDevice,
     QuitRequested,
     RebuildTimetable,
@@ -44,6 +41,7 @@ from paperroute.core.state_model import State
 from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import stop_view_of
 from paperroute.core.stop_view import StopView
+from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
     DeviceStatus,
     PowerAction,
@@ -54,6 +52,7 @@ from paperroute_device.core.device_settings import (
     QuietMode,
     Window,
 )
+from paperroute_device.core.panel_views import NoticeView
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobPressed,

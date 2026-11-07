@@ -18,9 +18,10 @@ from aiohttp.test_utils import TestClient, TestServer
 from paperroute.adapters import web_display
 from paperroute.adapters.settings_form import ERRORS
 from paperroute.adapters.web_display import WebDisplay, knob_event
-from paperroute.core.messages import Event, PowerRequested, SettingsChanged
+from paperroute.core.messages import Event, SettingsChanged
 from paperroute.core.saved import LiveView, Lookahead, Rate
 from paperroute.core.state import step
+from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_device.core.device_settings import Window
 from paperroute_device.render.canvas import encode_png
@@ -32,9 +33,10 @@ from paperroute_hardware.core.knob_events import (
     KnobsHeld,
     KnobTurned,
 )
-from tests.adapters.test_web_device import Device
+from paperroute_testkit.device_pages import DeviceSite
+from paperroute_testkit.page_markup import parse_page
+from tests.adapters.test_web_device import sydney_site
 from tests.core.test_quiet import asleep_at_one
-from tests.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]
 FRAME = np.full((480, 800), 255, dtype=np.uint8)
@@ -65,10 +67,16 @@ async def _client(*, display: WebDisplay) -> Client:
     return client
 
 
+@pytest.fixture(name='site')
+def _site() -> DeviceSite:
+    """Sydney's device pages, recording what they post."""
+    return sydney_site()
+
+
 @pytest.fixture(name='display')
-def _display() -> WebDisplay:
+def _display(site: DeviceSite) -> WebDisplay:
     """A display with device pages that has shown nothing yet."""
-    return WebDisplay(device=Device().pages())
+    return WebDisplay(device=site.pages())
 
 
 @pytest.fixture(name='client')
@@ -242,7 +250,7 @@ async def test_public_address_is_refused_on_every_route(
     """Only private and loopback peers are served."""
     display = WebDisplay(
         remote_of=lambda request: remote,
-        device=Device().pages(),
+        device=sydney_site().pages(),
     )
     client = await _client(display=display)
     try:
@@ -263,7 +271,7 @@ async def test_private_address_is_allowed(remote: str) -> None:
     """Private and loopback peers are served."""
     display = WebDisplay(
         remote_of=lambda request: remote,
-        device=Device().pages(),
+        device=sydney_site().pages(),
     )
     client = await _client(display=display)
     try:
@@ -836,11 +844,9 @@ async def test_page_works_without_script() -> None:
 
 
 async def test_power_post_posts_event(
-    display: WebDisplay, client: Client
+    site: DeviceSite, client: Client
 ) -> None:
     """A known action posts PowerRequested; others and other sites fail."""
-    posted: list[Event] = []
-    display.bind(post=posted.append)
     good = await client.post('/power', json={'action': 'reboot'})
     halt = await client.post('/power', json={'action': 'halt'})
     cross = await client.post(
@@ -856,7 +862,7 @@ async def test_power_post_posts_event(
     assert cross.status == HTTPStatus.FORBIDDEN
     assert form.status == HTTPStatus.SEE_OTHER
     assert form.headers['Location'] == '/device?power=poweroff'
-    assert posted == [
+    assert site.posted == [
         PowerRequested(action=PowerAction.RESTART),
         PowerRequested(action=PowerAction.OFF),
     ]
@@ -871,15 +877,13 @@ async def test_power_post_posts_event(
     ('reboot', 'Restart now?', 'Restart'),
 ])
 async def test_power_works_without_script(
-    display: WebDisplay,
+    site: DeviceSite,
     client: Client,
     action: str,
     question: str,
     button: str,
 ) -> None:
     """Button, confirm page, its form, then the page saying so."""
-    posted: list[Event] = []
-    display.bind(post=posted.append)
     confirm = await client.post(f'/device/power?action={action}')
     text = await confirm.text()
     assert f'<p>{question}</p>' in text
@@ -887,12 +891,12 @@ async def test_power_works_without_script(
     assert f'>{button}</button>' in text
     assert '<a class="button secondary" href="/device">Cancel</a>' in text
     assert '{{' not in text
-    assert not posted
+    assert not site.posted
     done = await client.post(
         '/power', data={'action': action}, allow_redirects=False,
     )
     assert done.headers['Location'] == f'/device?power={action}'
-    assert posted == [PowerRequested(action=PowerAction(action))]
+    assert site.posted == [PowerRequested(action=PowerAction(action))]
 
 
 async def test_power_page_rejects_unknown(client: Client) -> None:

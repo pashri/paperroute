@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from paperroute.render.sleep import BAND_H, with_sleep_band
 from paperroute_device.render.canvas import HEIGHT, INK, PAPER, WIDTH
+from paperroute_device.render.sleep import BAND_H, with_sleep_band
 
 
 def test_sleep_band_inverted() -> None:

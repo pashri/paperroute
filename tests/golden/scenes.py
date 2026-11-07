@@ -19,7 +19,6 @@ from paperroute.core.messages import (
     FetchFeed,
     PatternsLoaded,
     PositionsFetched,
-    PowerRequested,
     ScreenView,
     ShapesLoaded,
     StripLoaded,
@@ -28,6 +27,7 @@ from paperroute.core.saved import LiveView
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import current_view, live_stop_view
+from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import (
     Confirm,
     ConfirmAction,
@@ -63,6 +63,7 @@ from paperroute_testkit.core.strip_factories import (
     WEST,
     on_view,
 )
+from paperroute_testkit.device_pages import FACTS
 from paperroute_transit.core.geo import make_shape
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.patterns import TripPattern
@@ -72,7 +73,6 @@ from paperroute_transit.core.tiles import (
     StreetLabel,
     TileVariant,
 )
-from tests.adapters.test_web_device import FACTS
 from tests.core.chooser_walks import at_towards
 from tests.core.test_alerts_view import on_alerts
 from tests.core.test_chains import TRAINS

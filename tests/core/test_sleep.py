@@ -5,8 +5,6 @@ from datetime import timedelta
 
 from paperroute.core.map_view import MAP_HEIGHT, MapView, screen_point
 from paperroute.core.messages import (
-    ApiKeyChanged,
-    ConfirmAsked,
     DeparturesLoaded,
     DeviceProbed,
     Effect,
@@ -20,16 +18,18 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.panel_views import ConfirmView, SleepView
+from paperroute.core.panel_views import SleepView
 from paperroute.core.saved import seeded
 from paperroute.core.sleep import SLEEP_BAND, sleep_view, slept
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import live_stop_view
 from paperroute.core.stop_view import StopView
-from paperroute.render.sleep import BAND_H
 from paperroute.render.trip_marks import END_DISC, END_EDGE
+from paperroute_device.core.device_events import ApiKeyChanged, ConfirmAsked
 from paperroute_device.core.device_model import ConfirmAction, MenuRow
+from paperroute_device.core.panel_views import ConfirmView
+from paperroute_device.render.sleep import BAND_H
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,

@@ -20,9 +20,9 @@ from paperroute.core.map_requests import (
     polled_positions,
 )
 from paperroute.core.map_view import STRIP_MAP_WIDTH, build_map_view
-from paperroute.core.messages import Effect, NoticeView, Render, ScreenView
+from paperroute.core.messages import Effect, Render, ScreenView
 from paperroute.core.panel_screens import panel_view
-from paperroute.core.panel_views import PanelView, SleepView
+from paperroute.core.panel_views import SleepView
 from paperroute.core.places import shown, shown_index
 from paperroute.core.rebuild import building_view
 from paperroute.core.refresh import needs_greys
@@ -41,6 +41,7 @@ from paperroute.core.strip_opening import with_folds
 from paperroute.core.strip_select import kept_selection
 from paperroute.core.strip_state import clamped, request_strips, strip_inputs
 from paperroute.core.strip_view import build_strip_pane, build_strip_view
+from paperroute_device.core.panel_views import NoticeView, PanelView
 
 LOADING_WAIT: Final[timedelta] = timedelta(seconds=5)
 

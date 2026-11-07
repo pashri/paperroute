@@ -20,15 +20,8 @@ from paperroute.core.connection_strip import (
 )
 from paperroute.core.connection_view import ConnectionView
 from paperroute.core.map_view import MapBase, MapView
-from paperroute.core.messages import NoticeView, ScreenView
-from paperroute.core.panel_views import (
-    ConfirmView,
-    DeviceView,
-    MenuView,
-    PhoneView,
-    SleepView,
-    WifiSetupView,
-)
+from paperroute.core.messages import ScreenView
+from paperroute.core.panel_views import SleepView
 from paperroute.core.stop_view import StopView
 from paperroute.core.strip_model import StripMapView, StripView
 from paperroute.ports import TileRepository
@@ -41,11 +34,19 @@ from paperroute.render.keep_out import KeepOut, keep_out
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_panes import draw_map_panes
 from paperroute.render.map_view import draw_map_view
-from paperroute.render.notice import draw_notice_view
-from paperroute.render.panel import draw_panel_view
-from paperroute.render.sleep import with_sleep_band
 from paperroute.render.stop_view import draw_stop_view
 from paperroute.render.strip_view import draw_strip_map_view, draw_strip_view
+from paperroute_device.core.panel_views import (
+    ConfirmView,
+    DeviceView,
+    MenuView,
+    NoticeView,
+    PhoneView,
+    WifiSetupView,
+)
+from paperroute_device.render.notice import draw_notice_view
+from paperroute_device.render.panel import draw_panel_view
+from paperroute_device.render.sleep import with_sleep_band
 from paperroute_hardware.ports import CLEAN_AFTER
 from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.core.tiles import TileVariant

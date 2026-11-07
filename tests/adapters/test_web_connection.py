@@ -18,7 +18,7 @@ from paperroute.observers import PinsSeen
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_transit.core.model import pin_ref
 from tests.adapters.test_connection_editor import OPTIONS
-from tests.adapters.test_web_device import Device
+from tests.adapters.test_web_device import sydney_site
 from tests.adapters.test_web_pins import Pins
 
 Client = TestClient[web.Request, web.Application]
@@ -46,7 +46,7 @@ async def _client(pins: Pins) -> AsyncIterator[Client]:
     """A client of a display with the fake timetable."""
     board = SydneyPages(pins=pins.get, options=OPTIONS, planner=None)
     board.pins_sleep = pins.sleep
-    display = WebDisplay(device=Device().pages(), board=board)
+    display = WebDisplay(device=sydney_site().pages(), board=board)
     display.bind(post=pins.posted.append)
     client = TestClient(TestServer(display.app()))
     await client.start_server()
@@ -253,7 +253,7 @@ async def test_save_refuses_misfit(client: Client) -> None:
 async def test_starting_without_timetable(pins: Pins) -> None:
     """Before the timetable is ready the page says so; saves go back."""
     display = WebDisplay(
-        device=Device().pages(),
+        device=sydney_site().pages(),
         board=SydneyPages(pins=pins.get, options=None, planner=None),
     )
     client = TestClient(TestServer(display.app()))

@@ -5,7 +5,7 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.messages import NoticeView
+from paperroute_device.core.panel_views import NoticeView
 from paperroute_device.render.canvas import HEIGHT, INK, WIDTH, Canvas, Face
 from paperroute_device.render.frame import finish
 

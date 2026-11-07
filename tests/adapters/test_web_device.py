@@ -1,20 +1,14 @@
-"""Tests for the web Device page."""
+"""Tests for the Device page as Sydney's web display serves it."""
 
 from collections.abc import AsyncIterator
-from dataclasses import replace
-from datetime import datetime
 from http import HTTPStatus
 from importlib.resources import files
-from pathlib import Path
 
 import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.device_page import ASKED as DEVICE_ASKED
-from paperroute.adapters.device_page import ago_text, data_rows
 from paperroute.adapters.tfnsw import TFNSW_KEY
-from paperroute.adapters.web_device import DevicePages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.core.feeds import (
     DAILY_LIMIT,
@@ -22,148 +16,52 @@ from paperroute.core.feeds import (
     POSITION_FEEDS,
     feed_label,
 )
-from paperroute.core.messages import (
-    ApiKeyChanged,
-    ConfirmAsked,
-    Event,
-    PowerRequested,
-)
-from paperroute.core.panel_views import confirm_view
-from paperroute_device.core.device_model import (
-    Confirm,
-    ConfirmAction,
-    Credential,
-    DeviceFacts,
-    DeviceStatus,
-    Origin,
-    PowerAction,
-    WifiStatus,
-)
-from paperroute_hardware.ports import PanelTimes
-from paperroute_testkit.fakes import FakeKeys
+from paperroute_device.core.device_events import PowerRequested
+from paperroute_device.core.device_model import PowerAction
+from paperroute_testkit.device_pages import KEY, NOW, DeviceSite
+from paperroute_testkit.page_markup import parse_page
 from paperroute_transit.core.model import SYDNEY, Mode
-from tests.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]
-KEY = 'already-set-key-123'
-NOW = 1_761_043_500.0  # 21 Oct 2025 21:45 in Sydney
 TRAINS = POSITION_FEEDS[Mode.TRAIN][0]
 BUSES = FEEDS[Mode.BUS]
-ASKED_AT = datetime(2025, 10, 21, 21, 45, tzinfo=SYDNEY)
-FACTS = DeviceFacts(
-    wifi=WifiStatus(managed=True, ssid='Home', dbm=-52, ip='192.168.1.40'),
-    clock_synced=True,
-    uptime_s=2 * 3600 + 14 * 60 + 5,
-    cpu_c=48.2,
-    disk_free=21_400_000_000,
-    mem_free=134_000_000,
-    version='abc1234',
-    last_error=None,
-    tiles_built='2025-10-19T08:00:00+11:00',
-    key_set=True,
-)
-STATUS = DeviceStatus(
-    timetable='2025-10-21T21:45:00+11:00',
-    schema='6',
-    rebuilding=False,
-    rebuild_failed=False,
-    calls_today=8412,
-    key_set=True,
-    facts=FACTS,
-)
-ASKED = {
-    'join_wifi': (
-        'Confirm on the device. Bottom: press to start \u2022 '
-        'Top: press to cancel'
-    ),
-    'reset_settings': (
-        'Confirm on the device. Bottom: press to reset \u2022 '
-        'Top: press to cancel'
-    ),
-    'erase': (
-        'Confirm on the device. Bottom: press to erase \u2022 '
-        'Top: press to cancel'
-    ),
-}
 
 
-class Device:
+def sydney_site() -> DeviceSite:
     """
-    A Device page over a status, feeds, a key store and files.
+    Give the device pages as Sydney's app builds them.
 
-    Attributes
-    ----------
-    status : DeviceStatus | None
-        What the page reads.
-    feeds : dict[str, float]
-        When each feed last worked.
-    keys : FakeKeys
-        The key store.
-    credential : Credential
-        How the pages name the key.
-    posted : list[Event]
-        Events posted so far.
-    error_log : Path | None
-        The error log.
-    state_file : Path | None
-        The saved state.
+    Returns
+    -------
+    DeviceSite
+        Sydney's key, feeds, limit and zone over the fixed status.
     """
-
-    def __init__(self) -> None:
-        self.status: DeviceStatus | None = STATUS
-        self.feeds = {TRAINS: NOW - 12, BUSES: NOW - 40}
-        self.panel: PanelTimes | None = None
-        self.knobs: bool | None = None
-        self.keys = FakeKeys(key=KEY)
-        self.credential = TFNSW_KEY
-        self.posted: list[Event] = []
-        self.error_log: Path | None = None
-        self.state_file: Path | None = None
-
-    def pages(self) -> DevicePages:
-        """
-        Build the pages over this fixture.
-
-        Returns
-        -------
-        DevicePages
-            The pages.
-        """
-        return DevicePages(
-            status=lambda: self.status,
-            feeds=lambda: self.feeds,
-            panel=lambda: self.panel,
-            knobs=lambda: self.knobs,
-            key=self.keys,
-            credential=self.credential,
-            feed_label=feed_label,
-            daily_limit=DAILY_LIMIT,
-            post=self.posted.append,
-            error_log=self.error_log,
-            state_file=self.state_file,
-            clock=lambda: NOW,
-        )
+    return DeviceSite(
+        feeds={TRAINS: NOW - 12, BUSES: NOW - 40},
+        credential=TFNSW_KEY,
+        feed_label=feed_label,
+        daily_limit=DAILY_LIMIT,
+        zone=SYDNEY,
+    )
 
 
 @pytest.fixture(name='device')
-def _device() -> Device:
-    """A device with a status, two feeds and a key."""
-    return Device()
+def _device() -> DeviceSite:
+    """Sydney's device pages over a status, two feeds and a key."""
+    return sydney_site()
 
 
-async def _start(*, device: Device) -> tuple[Client, WebDisplay]:
+async def _start(*, device: DeviceSite) -> Client:
     """Start a client of a display serving the Device page."""
-    display = WebDisplay(device=device.pages())
-    display.bind(post=device.posted.append)
-    client = TestClient(TestServer(display.app()))
+    client = TestClient(TestServer(WebDisplay(device=device.pages()).app()))
     await client.start_server()
-    return client, display
+    return client
 
 
 @pytest.fixture(name='client')
-async def _client(device: Device) -> AsyncIterator[Client]:
+async def _client(device: DeviceSite) -> AsyncIterator[Client]:
     """A client of a display serving the Device page."""
-    client, _ = await _start(device=device)
+    client = await _start(device=device)
     yield client
     await client.close()
 
@@ -222,80 +120,6 @@ async def test_device_page_sections(client: Client) -> None:
     assert '{{' not in text
 
 
-@pytest.mark.parametrize(('change', 'label', 'value'), [
-    ({'rebuilding': True}, 'Timetable', 'rebuilding'),
-    ({'rebuild_failed': True, 'timetable': None}, 'Timetable',
-     'last build failed'),
-    ({'timetable': None}, 'Timetable', 'none yet'),
-    ({'rebuild_failed': True}, 'Timetable',
-     'version 6 · built 21 Oct 21:45 · last build failed'),
-    ({'facts': replace(FACTS, wifi=WifiStatus(managed=True))}, 'Wi-Fi',
-     'not connected'),
-    ({'facts': replace(FACTS, wifi=WifiStatus(managed=True))}, 'Address',
-     'paperroute.local'),
-    ({'facts': replace(FACTS, tiles_built=None)}, 'Map tiles', 'none'),
-    ({'facts': replace(FACTS, uptime_s=600)}, 'Up', '10 min'),
-    ({'facts': replace(FACTS, clock_synced=False)}, 'Clock', 'Not synced'),
-    ({'facts': replace(FACTS, clock_synced=None)}, 'Clock', 'Unknown'),
-    ({'facts': None}, 'Clock', 'Unknown'),
-    ({'facts': replace(FACTS, last_error='9:01 <boom>')}, 'Last error',
-     '9:01 &lt;boom&gt;'),
-    ({'facts': None}, 'Wi-Fi', '-'),
-])
-async def test_device_page_values(
-    device: Device,
-    client: Client,
-    change: dict[str, object],
-    label: str,
-    value: str,
-) -> None:
-    """Each row says what is known, escaped."""
-    device.status = replace(STATUS, **change)  # type: ignore[arg-type]
-    text = await (await client.get('/device')).text()
-    assert _row(label=label, value=value) in text
-
-
-@pytest.mark.parametrize(('panel', 'value'), [
-    (PanelTimes(partial_s=0.516, full_s=4.81), 'partial 0.52 s, full 4.81 s'),
-    (PanelTimes(full_s=4.81), 'full 4.81 s'),
-    (PanelTimes(partial_s=0.5), 'partial 0.50 s'),
-    (PanelTimes(), 'waiting for first refresh'),
-    (PanelTimes(partial_s=0.5, ok=False), 'not answering'),
-])
-async def test_device_page_panel_line(
-    device: Device, client: Client, panel: PanelTimes, value: str,
-) -> None:
-    """The Panel line says what the panel has done, or that it is silent."""
-    device.panel = panel
-    text = await (await client.get('/device')).text()
-    assert _row(label='Panel', value=value) in text
-
-
-async def test_device_page_without_panel_has_no_line(client: Client) -> None:
-    """No panel, no Panel line."""
-    text = await (await client.get('/device')).text()
-    assert '<dt>Panel</dt>' not in text
-
-
-@pytest.mark.parametrize(('knobs', 'value'), [
-    (True, 'on'),
-    (False, 'not answering'),
-])
-async def test_device_page_knobs_line(
-    device: Device, client: Client, knobs: bool, value: str,
-) -> None:
-    """The Knobs line says whether the knobs' lines opened."""
-    device.knobs = knobs
-    text = await (await client.get('/device')).text()
-    assert _row(label='Knobs', value=value) in text
-
-
-async def test_device_page_without_knobs_has_no_line(client: Client) -> None:
-    """No --knobs, no Knobs line."""
-    text = await (await client.get('/device')).text()
-    assert '<dt>Knobs</dt>' not in text
-
-
 async def test_device_page_feed_table(client: Client) -> None:
     """Each feed shows its name, when it last worked and how long ago."""
     text = await (await client.get('/device')).text()
@@ -312,118 +136,7 @@ async def test_device_page_feed_table(client: Client) -> None:
     ) in text
 
 
-
-@pytest.mark.parametrize(('seconds', 'shown'), [
-    (-5.0, '0 s'),
-    (59.9, '59 s'),
-    (60.0, '1 min'),
-    (3_599.0, '59 min'),
-    (7_300.0, '2 h'),
-])
-def test_ago_text_units(seconds: float, shown: str) -> None:
-    """Ages clamp at 0 and grow from seconds to minutes to hours."""
-    assert ago_text(seconds=seconds) == shown
-
-@pytest.mark.parametrize(('key', 'feeds', 'shown'), [
-    (KEY, {}, 'Key set · not used yet'),
-    (None, {}, 'No key set'),
-    (KEY, {TRAINS: NOW - 300}, 'Key set · last used 5 min ago'),
-])
-async def test_device_page_key_states(
-    device: Device,
-    client: Client,
-    key: str | None,
-    feeds: dict[str, float],
-    shown: str,
-) -> None:
-    """The key row says whether a key is set and when it was used."""
-    device.keys.key = key
-    device.feeds = feeds
-    assert shown in await (await client.get('/device')).text()
-
-
-async def test_device_page_never_shows_key(client: Client) -> None:
-    """The key in the store is never drawn into the page."""
-    text = await (await client.get('/device')).text()
-    assert KEY not in text
-
-
-async def test_join_another_network_asks_device(
-    device: Device, client: Client
-) -> None:
-    """The phone asks; the panel confirms."""
-    response = await client.post('/device/wifi', allow_redirects=False)
-    assert response.status == HTTPStatus.SEE_OTHER
-    assert response.headers['Location'] == '/device?asked=join_wifi'
-    assert device.posted == [ConfirmAsked(action=ConfirmAction.JOIN_WIFI)]
-    text = await (await client.get('/device?asked=join_wifi')).text()
-    assert ASKED['join_wifi'] in text
-
-
-@pytest.mark.parametrize(('kind', 'action'), [
-    ('settings', ConfirmAction.RESET_SETTINGS),
-    ('erase', ConfirmAction.ERASE),
-])
-async def test_reset_asks_device(
-    device: Device, client: Client, kind: str, action: ConfirmAction
-) -> None:
-    """Each reset asks the panel and says so."""
-    response = await client.post(
-        '/device/reset', data={'kind': kind}, allow_redirects=False,
-    )
-    assert response.status == HTTPStatus.SEE_OTHER
-    assert response.headers['Location'] == f'/device?asked={action.value}'
-    assert device.posted == [ConfirmAsked(action=action)]
-    text = await (await client.get(f'/device?asked={action.value}')).text()
-    assert ASKED[action.value] in text
-
-
-async def test_reset_unknown_kind_400(
-    device: Device, client: Client
-) -> None:
-    """An unknown kind asks nothing."""
-    response = await client.post('/device/reset', data={'kind': 'all'})
-    assert response.status == HTTPStatus.BAD_REQUEST
-    assert not device.posted
-
-
-async def test_asked_ignores_unknown_value(client: Client) -> None:
-    """Only the three asks are drawn."""
-    text = await (await client.get('/device?asked=restart')).text()
-    assert 'Confirm on the device. Bottom:' not in text
-
-
-@pytest.mark.parametrize('action', [
-    ConfirmAction.JOIN_WIFI,
-    ConfirmAction.RESET_SETTINGS,
-    ConfirmAction.ERASE,
-])
-def test_device_asks_name_the_confirm_buttons(action: ConfirmAction) -> None:
-    """The phone's ask names the buttons the panel draws."""
-    confirm = Confirm(action=action, origin=Origin.PHONE, asked_at=ASKED_AT)
-    view = confirm_view(confirm=confirm)
-    assert view.confirm in DEVICE_ASKED[action.value]
-    assert view.cancel in DEVICE_ASKED[action.value]
-
-
-async def test_key_post_saves_and_posts(
-    device: Device, client: Client
-) -> None:
-    """A good key replaces the old one and is never echoed."""
-    new = 'abcdefghij0123456789'
-    response = await client.post(
-        '/device/key', data={'api_key': f' {new} '}, allow_redirects=False,
-    )
-    assert response.status == HTTPStatus.SEE_OTHER
-    assert response.headers['Location'] == '/device?key=saved'
-    assert device.keys.key == new
-    assert device.posted == [ApiKeyChanged(present=True)]
-    text = await (await client.get('/device?key=saved')).text()
-    assert 'Key saved.' in text
-    assert new not in text
-
-
-async def test_key_post_bad_400(device: Device, client: Client) -> None:
+async def test_key_post_bad_400(device: DeviceSite, client: Client) -> None:
     """A bad key is refused and the old one kept."""
 
     def refuse(*, key: str) -> None:
@@ -440,81 +153,8 @@ async def test_key_post_bad_400(device: Device, client: Client) -> None:
     assert not device.posted
 
 
-async def test_device_page_uses_credential_label(device: Device) -> None:
-    """The page names the key and refuses it in the app's words."""
-    device.credential = Credential(
-        label='Test key',
-        refusal='Bad test key.',
-        not_saved='Test key not saved.',
-    )
-
-    def refuse(*, key: str) -> None:
-        del key
-        raise ValueError('not a valid API key')
-
-    device.keys.write = refuse  # type: ignore[method-assign]
-    client, _ = await _start(device=device)
-    try:
-        page = await (await client.get('/device')).text()
-        response = await client.post('/device/key', data={'api_key': 'short'})
-        refused = await response.text()
-    finally:
-        await client.close()
-    assert 'Test key' in page
-    assert 'TfNSW' not in page
-    assert response.status == HTTPStatus.BAD_REQUEST
-    assert 'Test key not saved.' in refused
-
-
-def test_device_page_shows_given_daily_limit() -> None:
-    """The API calls row counts against the limit it is given."""
-    assert 'of 1,234' in data_rows(status=STATUS, daily_limit=1234)
-
-
-async def test_downloads_serve_files(
-    device: Device, tmp_path: Path
-) -> None:
-    """Both files download as attachments, never cached."""
-    device.error_log = tmp_path / 'errors.jsonl'
-    device.error_log.write_text('{"message": "x"}\n', encoding='utf-8')
-    device.state_file = tmp_path / 'state.json'
-    device.state_file.write_text('{"schema": 4}', encoding='utf-8')
-    client, _ = await _start(device=device)
-    try:
-        for name, body, kind in (
-            ('errors.jsonl', '{"message": "x"}\n', 'application/x-ndjson'),
-            ('state.json', '{"schema": 4}', 'application/json'),
-        ):
-            response = await client.get(f'/device/{name}')
-            assert response.status == HTTPStatus.OK
-            assert response.content_type == kind
-            assert await response.text() == body
-            assert response.headers['Content-Disposition'] == (
-                f'attachment; filename="{name}"'
-            )
-            assert response.headers['Cache-Control'] == 'no-store'
-    finally:
-        await client.close()
-
-
-async def test_downloads_404_without_file(
-    device: Device, client: Client, tmp_path: Path
-) -> None:
-    """No file given, or a missing one, is 404."""
-    for name in ('errors.jsonl', 'state.json'):
-        response = await client.get(f'/device/{name}')
-        assert response.status == HTTPStatus.NOT_FOUND
-    device.error_log = tmp_path / 'gone.jsonl'
-    other, _ = await _start(device=device)
-    try:
-        response = await other.get('/device/errors.jsonl')
-        assert response.status == HTTPStatus.NOT_FOUND
-    finally:
-        await other.close()
-
-
 async def test_power_lives_on_device(
-    device: Device, client: Client
+    device: DeviceSite, client: Client
 ) -> None:
     """Restart and Shut down moved from Settings to Device."""
     settings = await (await client.get('/settings')).text()
@@ -557,7 +197,7 @@ async def test_power_lives_on_device(
     '/device/wifi', '/device/reset', '/device/key', '/device/power',
 ])
 async def test_cross_site_refused_on_device_posts(
-    device: Device, client: Client, path: str
+    device: DeviceSite, client: Client, path: str
 ) -> None:
     """Another site's form can't post to the Device routes."""
     response = await client.post(

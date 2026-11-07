@@ -5,7 +5,7 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.map_fit import SLEEP_BAND
+from paperroute_device.core.panel_views import SLEEP_BAND
 from paperroute_device.render.canvas import (
     HEIGHT,
     INK,

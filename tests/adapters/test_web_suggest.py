@@ -16,7 +16,7 @@ from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.fakes import FakeTripPlanner
 from paperroute_transit.core.model import SYDNEY
 from tests.adapters.test_connection_editor import OPTIONS
-from tests.adapters.test_web_device import Device
+from tests.adapters.test_web_device import sydney_site
 from tests.adapters.test_web_pins import Pins
 
 Client = TestClient[web.Request, web.Application]
@@ -103,7 +103,7 @@ async def started(
         pins=pins.get, options=PLATFORMS, planner=planner, now=lambda: NOW,
     )
     display = WebDisplay(
-        device=Device().pages(), board=board, status=lambda: status or {},
+        device=sydney_site().pages(), board=board, status=lambda: status or {},
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()

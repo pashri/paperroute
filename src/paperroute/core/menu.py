@@ -5,12 +5,13 @@ from datetime import timedelta
 from typing import Final
 
 from paperroute.core.device import on_power, on_reset, probe_effects
-from paperroute.core.messages import ConfirmAsked, Effect, PowerRequested
+from paperroute.core.messages import Effect
 from paperroute.core.rebuild import forced
 from paperroute.core.sleep import slept
 from paperroute.core.state_model import State
 from paperroute.core.state_views import settled
 from paperroute.core.wifi import setup_started
+from paperroute_device.core.device_events import ConfirmAsked, PowerRequested
 from paperroute_device.core.device_model import (
     MENU_ROWS,
     Confirm,

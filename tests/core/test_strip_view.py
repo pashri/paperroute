@@ -32,8 +32,8 @@ from paperroute.core.strip_view import (
     home_of,
     line_reach,
 )
-from paperroute.core.wifi import setup_footer
 from paperroute_device.core.text import DOT
+from paperroute_device.core.wifi_text import setup_footer
 from paperroute_testkit.core.factories import (
     EAST,
     POINTS,

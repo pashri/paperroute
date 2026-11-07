@@ -15,7 +15,7 @@ from paperroute_hardware.render.panel_bits import (
     oriented,
 )
 from paperroute_hardware.screen import load_frame, show_frame, show_image
-from paperroute_testkit.fakes import FakePanelBus
+from paperroute_testkit.hardware_fakes import FakePanelBus
 from paperroute_testkit.panel_frames import drawn_planes, stepped_frame
 
 

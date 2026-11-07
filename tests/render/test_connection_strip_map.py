@@ -16,9 +16,9 @@ from paperroute.core.connection_strip import (
 from paperroute.core.connection_view import build_connection_view
 from paperroute.core.map_view import MAP_HEIGHT, STRIP_MAP_WIDTH
 from paperroute.core.saved import ConnectionMap
-from paperroute.render.canvas import HEIGHT, INK, PAPER
-from paperroute.render.chrome import HEADER
 from paperroute.render.connection_strip_map import draw_connection_strip_map
+from paperroute_device.render.canvas import HEIGHT, INK, PAPER
+from paperroute_device.render.frame import HEADER
 from paperroute_testkit.core.connection_factories import WORK, at
 from paperroute_testkit.core.factories import STALE_LIMIT
 from tests.core.test_connection_map import SHAPED, inputs_at

@@ -2,8 +2,8 @@
 
 from paperroute.core.messages import NoticeView
 from paperroute.core.rebuild import SETTINGS_HINT
-from paperroute.render.canvas import HEIGHT, INK, WIDTH, text_width
 from paperroute.render.notice import DETAIL_FACE, draw_notice_view
+from paperroute_device.render.canvas import HEIGHT, INK, WIDTH, text_width
 
 BORDER = 40
 

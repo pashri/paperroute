@@ -22,7 +22,6 @@ from paperroute.core.tiles import (
     tiles_covering,
 )
 from paperroute.ports import TileRepository
-from paperroute.render.canvas import INK, PAPER, Canvas, text_width
 from paperroute.render.map_corners import (
     corner_regions,
     corner_text,
@@ -42,6 +41,7 @@ from paperroute.render.map_marks import (
 )
 from paperroute.render.tile_codec import THRESHOLD, diffuse, quantise4
 from paperroute.render.trip_marks import draw_trip_ends, draw_trip_legs
+from paperroute_device.render.canvas import INK, PAPER, Canvas, text_width
 
 BEAD_DASH: Final[tuple[float, float]] = (2.0, 7.0)
 HALO: Final[int] = 2

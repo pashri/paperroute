@@ -19,9 +19,9 @@ from paperroute_testkit.fakes import (
     EmptyPlacedTimetable,
     FakeNetwork,
     FixedClock,
-    FrameRecorder,
     MemoryStates,
 )
+from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_testkit.paths import FIXTURES
 
 REAL = FIXTURES / 'real'

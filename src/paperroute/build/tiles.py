@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
+from paperroute.asset_root import use_app_assets
 from paperroute.build.features import FeatureStore, load_features
 from paperroute.build.labels import LabelIndex, place_labels
 from paperroute.build.osm_source import header_timestamp
@@ -428,7 +429,12 @@ def write_tiles(
     """
     with ExitStack() as stack:
         pool = (
-            stack.enter_context(ProcessPoolExecutor(max_workers=workers))
+            stack.enter_context(
+                ProcessPoolExecutor(
+                    max_workers=workers,
+                    initializer=use_app_assets,
+                ),
+            )
             if workers > 1
             else None
         )

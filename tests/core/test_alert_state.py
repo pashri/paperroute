@@ -32,8 +32,9 @@ from paperroute.core.saved import LiveView, seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import RELOAD_BEFORE, State
 from paperroute.core.state_views import current_view, live_stop_view
-from paperroute.core.stop_view import DOT, HORIZON
+from paperroute.core.stop_view import HORIZON
 from paperroute.core.strip_model import StripMapView, StripView
+from paperroute_device.core.text import DOT
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.alert_factories import (
     ABBOTSFORD,

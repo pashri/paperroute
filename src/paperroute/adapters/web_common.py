@@ -2,9 +2,10 @@
 
 import json
 from collections.abc import Mapping
-from importlib.resources import files
 
 from aiohttp import web
+
+from paperroute_device.assets import assets
 
 
 def asset(*, name: str) -> str:
@@ -21,7 +22,7 @@ def asset(*, name: str) -> str:
     str
         The file contents.
     """
-    path = files('paperroute') / 'assets' / 'web' / name
+    path = assets().web / name
     return path.read_text(encoding='utf-8')
 
 
@@ -39,7 +40,7 @@ def asset_bytes(*, name: str) -> bytes:
     bytes
         The file contents.
     """
-    path = files('paperroute') / 'assets' / 'web'
+    path = assets().web
     for part in name.split('/'):
         path = path / part
     return path.read_bytes()

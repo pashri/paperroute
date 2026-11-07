@@ -8,7 +8,7 @@ import pytest
 from paperroute.screen import screen_main
 from paperroute_hardware.adapters.panel_bus import LinuxPanelBus
 from paperroute_hardware.render.panel_bits import grey_planes, oriented
-from paperroute_testkit.fakes import FakePanelBus
+from paperroute_testkit.hardware_fakes import FakePanelBus
 from paperroute_testkit.panel_frames import drawn_planes, stepped_frame
 
 

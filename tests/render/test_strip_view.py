@@ -32,14 +32,7 @@ from paperroute.core.strip_model import (
     StripView,
 )
 from paperroute.core.strip_view import build_strip_view
-from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
-from paperroute.render.chrome import (
-    ARROW_WIDTH,
-    BANNER,
-    HEADER,
-    badge,
-    route_pair,
-)
+from paperroute.render.chrome import ARROW_WIDTH, BANNER, badge, route_pair
 from paperroute.render.markers import badge_box
 from paperroute.render.stop_view import WIDEST_COUNT
 from paperroute.render.strip_view import (
@@ -56,6 +49,14 @@ from paperroute.render.strip_view import (
 )
 from paperroute.render.strip_view import panel_row as paint_panel_row
 from paperroute.render.tile_codec import GREYS
+from paperroute_device.render.canvas import (
+    INK,
+    PAPER,
+    Canvas,
+    Face,
+    text_width,
+)
+from paperroute_device.render.frame import HEADER
 from paperroute_testkit.core.factories import START, east_inputs
 from paperroute_testkit.render.factories import STRIP_PANEL as PANEL
 from paperroute_testkit.render.factories import STRIP_ROWS as ROWS

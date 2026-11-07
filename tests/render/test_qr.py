@@ -1,7 +1,7 @@
 """Tests for QR code images."""
 
-from paperroute.render.canvas import INK, PAPER
 from paperroute.render.qr import QUIET, qr_image
+from paperroute_device.render.canvas import INK, PAPER
 
 
 def test_qr_size_and_quiet_zone() -> None:

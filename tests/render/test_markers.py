@@ -10,15 +10,6 @@ import pytest
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, Marker
 from paperroute.core.strip_extents import age_text
 from paperroute.core.tiles import CITY, ZOOMS
-from paperroute.render.canvas import (
-    HEIGHT,
-    INK,
-    PAPER,
-    WIDTH,
-    Canvas,
-    Point,
-    text_width,
-)
 from paperroute.render.keep_out import KeepOut
 from paperroute.render.markers import (
     AGE_FACE,
@@ -36,6 +27,15 @@ from paperroute.render.markers import (
     square,
     tab_box,
     wedge_points,
+)
+from paperroute_device.render.canvas import (
+    HEIGHT,
+    INK,
+    PAPER,
+    WIDTH,
+    Canvas,
+    Point,
+    text_width,
 )
 
 BADGE_ZOOM = 8

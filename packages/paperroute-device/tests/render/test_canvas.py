@@ -6,7 +6,7 @@ import numpy as np
 import skia
 from numpy.typing import NDArray
 
-from paperroute.render.canvas import (
+from paperroute_device.render.canvas import (
     ELLIPSIS,
     HEIGHT,
     INK,
@@ -18,7 +18,6 @@ from paperroute.render.canvas import (
     font,
     text_width,
 )
-from paperroute.render.others import arrow_points
 
 LIGHT: Final[int] = 170
 
@@ -162,21 +161,6 @@ def test_polygons_fill_overlaps_whole() -> None:
     grey = canvas.grey()
     assert int(grey[35, 35]) == INK
     assert int(grey[70, 70]) == PAPER
-
-
-def test_overlapping_arrows_stay_filled() -> None:
-    """Two arrows crossing each other leave no paper where they cross."""
-    canvas = Canvas()
-    canvas.polygons(
-        polygons=[
-            arrow_points(centre=(50.0, 50.0), bearing=bearing, scale=3.0)
-            for bearing in (0.0, 180.0)
-        ],
-        grey=INK,
-    )
-    grey = canvas.grey()
-    assert int(grey[50, 50]) == INK
-    assert int(grey[50, 49]) == INK
 
 
 def test_squeezed_face_is_narrower() -> None:

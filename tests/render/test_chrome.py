@@ -13,19 +13,9 @@ import pytest
 from paperroute.core.model import Mode
 from paperroute.core.stop_view import NOT_PINNED, PinTag, Row
 from paperroute.core.stop_view import pin_tag as tag_of
-from paperroute.render.canvas import (
-    INK,
-    PAPER,
-    WIDTH,
-    Canvas,
-    Face,
-    Point,
-    text_width,
-)
 from paperroute.render.chrome import (
     BANNER,
     FROM_FLOOR,
-    HEADER,
     LINK_ARROW,
     LINK_WIDTH,
     MIN_SQUEEZE,
@@ -48,6 +38,16 @@ from paperroute.render.chrome import (
 )
 from paperroute.render.pair_list import CHIP_PX
 from paperroute.render.stop_view import LIST_PAIR_ROOM
+from paperroute_device.render.canvas import (
+    INK,
+    PAPER,
+    WIDTH,
+    Canvas,
+    Face,
+    Point,
+    text_width,
+)
+from paperroute_device.render.frame import HEADER
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 LONG_LABELS: Final[tuple[str, ...]] = ('SH100', '283S2', '772V8')

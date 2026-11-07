@@ -10,7 +10,8 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.core.map_view import Marker
-from paperroute.render.canvas import (
+from paperroute.render.keep_out import KeepOut
+from paperroute_device.render.canvas import (
     INK,
     PAPER,
     Box,
@@ -20,7 +21,6 @@ from paperroute.render.canvas import (
     font,
     text_width,
 )
-from paperroute.render.keep_out import KeepOut
 
 ARROW: Final[tuple[Point, ...]] = (
     (0.0, 5.0),

@@ -104,13 +104,13 @@ from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, Timings
 from paperroute.ports import Observer
 from paperroute.render.alerts_view import draw_alerts_view
-from paperroute.render.chrome import HEADER
 from paperroute.render.keep_out import KeepOut, keep_out
 from paperroute.render.map_corners import NOT_INSTALLED, credit_box, scale_box
 from paperroute.render.notice import draw_notice_view
 from paperroute.render.panel import draw_panel_view
 from paperroute.render.sleep import with_sleep_band
 from paperroute.render.tile_codec import pack_bits, pack_grey
+from paperroute_device.render.frame import HEADER
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -141,13 +141,13 @@ from paperroute_testkit.fakes import (
     FakePower,
     FakeWifi,
     FixedClock,
-    FrameRecorder,
     LabelCountingTiles,
     MemoryStates,
     PlacedTimetable,
     RecordingResets,
     SyncingClock,
 )
+from paperroute_testkit.hardware_fakes import FrameRecorder
 
 
 @dataclass

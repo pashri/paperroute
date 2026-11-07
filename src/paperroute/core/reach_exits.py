@@ -7,7 +7,7 @@ from itertools import chain
 from paperroute.core.model import StopPlace
 from paperroute.core.reach import RunTail
 from paperroute.core.reach_layout import LineExit
-from paperroute.core.stop_view import DOT
+from paperroute_device.core.text import DOT
 
 
 def first_off(*, tail: RunTail, line: Collection[str], origin: str

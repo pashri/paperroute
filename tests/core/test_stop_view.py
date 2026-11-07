@@ -12,7 +12,6 @@ from paperroute.core.banners import NO_WIFI
 from paperroute.core.live import LiveDeparture
 from paperroute.core.model import SYDNEY, CarryOn, Mode, TripFacts
 from paperroute.core.stop_view import (
-    DOT,
     HORIZON,
     LARGE_ROWS_UNDER_BANNER,
     LARGE_VISIBLE_ROWS,
@@ -32,6 +31,7 @@ from paperroute.core.stop_view import (
     pin_tag,
     to_row,
 )
+from paperroute_device.core.text import DOT
 from paperroute_testkit.core.alert_factories import WESTERN, XPLORER
 from paperroute_testkit.core.factories import START, departure
 
@@ -175,13 +175,6 @@ def many() -> tuple[LiveDeparture, ...]:
         Departures.
     """
     return tuple(live(minutes=minute) for minute in range(0, 60, 4))
-
-
-def test_clock_text_has_no_leading_zero() -> None:
-    """Clock times look like 8:05 and 13:40."""
-    assert clock_text(moment=START + timedelta(minutes=5)) == '8:05'
-    later = START + timedelta(hours=5, minutes=40)
-    assert clock_text(moment=later) == '13:40'
 
 
 def test_view_hero_and_rows() -> None:

@@ -6,7 +6,7 @@ import numpy as np
 import segno
 from numpy.typing import NDArray
 
-from paperroute.render.canvas import INK, PAPER
+from paperroute_device.render.canvas import INK, PAPER
 
 QUIET: Final[int] = 4  # modules of paper round the code
 

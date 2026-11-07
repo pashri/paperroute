@@ -16,7 +16,8 @@ from paperroute.core.alert_model import (
 )
 from paperroute.core.model import SYDNEY, Departure, Mode, Pin, RouteKind
 from paperroute.core.patterns import TripPattern
-from paperroute.core.stop_view import DOT, clock_text
+from paperroute.core.stop_view import clock_text
+from paperroute_device.core.text import DOT
 
 BANNER_AHEAD: Final[timedelta] = timedelta(hours=24)
 NAME_SUFFIXES: Final[tuple[str, ...]] = (

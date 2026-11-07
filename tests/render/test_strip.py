@@ -22,7 +22,6 @@ from paperroute.core.strip_model import (
     CarryNote,
     StripRow,
 )
-from paperroute.render.canvas import INK, PAPER, Canvas, Face
 from paperroute.render.strip import (
     MAIN_PX,
     NAME_ROOM,
@@ -35,6 +34,7 @@ from paperroute.render.strip import (
     hook_arrow,
     track_points,
 )
+from paperroute_device.render.canvas import INK, PAPER, Canvas, Face
 
 NAME_X = 52
 TIME_RIGHT = 424

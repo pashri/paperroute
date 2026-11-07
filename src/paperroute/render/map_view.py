@@ -14,21 +14,9 @@ from paperroute.core.map_view import (
     screen_point,
 )
 from paperroute.core.stop_view import Pill, Row, arrival_line
-from paperroute.render.canvas import (
-    HEIGHT,
-    INK,
-    PAPER,
-    WIDTH,
-    Box,
-    Canvas,
-    Face,
-    Point,
-    text_width,
-)
 from paperroute.render.chrome import (
     BANNER,
     FASTER,
-    HEADER,
     cancelled,
     leaves,
     pill,
@@ -50,6 +38,18 @@ from paperroute.render.markers import (
 from paperroute.render.pair_list import draw_pair_list
 from paperroute.render.tile_codec import THRESHOLD, quantise4
 from paperroute.render.trip_marks import draw_trip_points
+from paperroute_device.render.canvas import (
+    HEIGHT,
+    INK,
+    PAPER,
+    WIDTH,
+    Box,
+    Canvas,
+    Face,
+    Point,
+    text_width,
+)
+from paperroute_device.render.frame import HEADER, wrap
 
 SIDEBAR_LEFT: Final[int] = 520
 RULE_WIDTH: Final[int] = 3
@@ -91,34 +91,6 @@ PAIRS_HEAD: Final[str] = 'Connections · leave by'
 PAIRS_HEAD_Y: Final[int] = 70
 PAIRS_TOP: Final[int] = 84
 PAIR_STEP: Final[int] = 72
-
-
-def wrap(*, text: str, face: Face, width: float) -> tuple[str, ...]:
-    """
-    Break text into lines at spaces, filling each line greedily.
-
-    Parameters
-    ----------
-    text : str
-        Text.
-    face : Face
-        Font.
-    width : float
-        Available width in pixels.
-
-    Returns
-    -------
-    tuple[str, ...]
-        Lines; a single word wider than the width gets a line of its own.
-    """
-    lines: list[str] = []
-    for word in text.split():
-        joined = f'{lines[-1]} {word}' if lines else word
-        if lines and text_width(text=joined, face=face) <= width:
-            lines[-1] = joined
-        else:
-            lines.append(word)
-    return tuple(lines)
 
 
 def empty_lines(

@@ -26,7 +26,7 @@ from paperroute.core.messages import (
 )
 from paperroute.core.saved import LiveView, Lookahead, Rate, Window
 from paperroute.core.state import step
-from paperroute.render.canvas import encode_png
+from paperroute_device.render.canvas import encode_png
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,

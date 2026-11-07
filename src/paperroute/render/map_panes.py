@@ -7,10 +7,11 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.core.map_view import MapView
-from paperroute.render.canvas import HEIGHT, INK, WIDTH, Canvas
-from paperroute.render.chrome import HEADER, view_banner, view_header
+from paperroute.render.chrome import view_banner, view_header
 from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
 from paperroute.render.map_view import draw_overlay, snap
+from paperroute_device.render.canvas import HEIGHT, INK, WIDTH, Canvas
+from paperroute_device.render.frame import HEADER
 
 RULE_WIDTH: Final[int] = 3
 

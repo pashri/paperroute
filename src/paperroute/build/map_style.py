@@ -3,7 +3,7 @@
 from typing import Final
 
 from paperroute.core.tiles import CITY, ZOOMS
-from paperroute.render.canvas import INK, PAPER, Face
+from paperroute_device.render.canvas import INK, PAPER, Face
 
 DARK: Final[int] = 85
 LIGHT: Final[int] = 170

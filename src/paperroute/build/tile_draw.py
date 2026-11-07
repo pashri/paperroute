@@ -32,13 +32,13 @@ from paperroute.core.tiles import (
     LabelKind,
     from_pixels,
 )
-from paperroute.render.canvas import INK, PAPER, Canvas, Point
 from paperroute.render.tile_codec import (
     diffuse,
     pack_bits,
     pack_grey,
     quantise4,
 )
+from paperroute_device.render.canvas import INK, PAPER, Canvas, Point
 
 GEOMETRY_MARGIN: Final[int] = 16  # pixels of geometry kept past the edge
 SMALLEST_AREA: Final[int] = 3  # pixels; smaller bounds are not filled

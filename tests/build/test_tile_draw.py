@@ -37,13 +37,19 @@ from paperroute.core.tiles import (
     tile_of,
     to_pixels,
 )
-from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.tile_codec import (
     GREYS,
     diffuse,
     pack_bits,
     quantise4,
     unpack_grey,
+)
+from paperroute_device.render.canvas import (
+    INK,
+    PAPER,
+    Canvas,
+    Face,
+    text_width,
 )
 from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
 

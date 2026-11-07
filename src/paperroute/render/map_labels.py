@@ -12,8 +12,8 @@ from paperroute.core.tiles import (
     StreetLabel,
 )
 from paperroute.ports import TileRepository
-from paperroute.render.canvas import INK, PAPER, Canvas, text_width
 from paperroute.render.map_marks import Window
+from paperroute_device.render.canvas import INK, PAPER, Canvas, text_width
 
 Region = tuple[slice, slice]
 

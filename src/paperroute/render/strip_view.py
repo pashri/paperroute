@@ -14,11 +14,9 @@ from paperroute.core.strip_model import (
     StripPanel,
     StripView,
 )
-from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH, Canvas, Face
 from paperroute.render.chrome import (
     ARROW_WIDTH,
     BANNER,
-    HEADER,
     arrow,
     badge,
     countdown_slot,
@@ -28,9 +26,18 @@ from paperroute.render.chrome import (
     view_header,
 )
 from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
-from paperroute.render.map_view import draw_overlay, snap, wrap
-from paperroute.render.stop_view import TAG_FACE, finish
+from paperroute.render.map_view import draw_overlay, snap
+from paperroute.render.stop_view import TAG_FACE
 from paperroute.render.strip import draw_band, draw_rows, draw_strip_markers
+from paperroute_device.render.canvas import (
+    HEIGHT,
+    INK,
+    PAPER,
+    WIDTH,
+    Canvas,
+    Face,
+)
+from paperroute_device.render.frame import HEADER, finish, wrap
 
 NAME_X: Final[int] = TRACK_X + int(HALF_WIDE)
 TIME_RIGHT: Final[int] = 424

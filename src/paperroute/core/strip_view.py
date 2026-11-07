@@ -7,7 +7,7 @@ from paperroute.core.map_view import Marker
 from paperroute.core.model import StopPlace
 from paperroute.core.reach import Reach, ReachRow, RowKind
 from paperroute.core.reach_exits import exit_name
-from paperroute.core.stop_view import DOT, clock_text
+from paperroute.core.stop_view import clock_text
 from paperroute.core.strip_badges import (
     HALF_WIDE,
     NAME_REACH,
@@ -52,6 +52,7 @@ from paperroute.core.strip_model import (
 from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_times import TripInputs, shown_item, trip_text
 from paperroute.core.strip_vehicles import vehicle_markers
+from paperroute_device.core.text import DOT
 
 
 def line_reach(*, line: Sequence[StopPlace]) -> Reach:

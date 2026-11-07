@@ -61,10 +61,10 @@ from paperroute.core.messages import Event
 from paperroute.core.model import SYDNEY
 from paperroute.core.tiles import TILE_STYLE, ZOOMS, TileVariant, levels_text
 from paperroute.observers import Timings
-from paperroute.render.canvas import INK
 from paperroute.render.map_base import draw_map_base
 from paperroute.summary import Summary
 from paperroute.web_observer import web_observer
+from paperroute_device.render.canvas import INK
 from paperroute_hardware.adapters.knob_reader import KnobReader
 from paperroute_hardware.adapters.panel_display import Displays
 from paperroute_hardware.core.knob_decoder import KnobDecoder
@@ -75,12 +75,11 @@ from paperroute_hardware.render.panel_bits import HEIGHT, WIDTH
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import (
     FakeKeys,
-    FakeKnobLines,
     FakeNetwork,
-    FakePanelBus,
     FakeWifi,
     MemoryStates,
 )
+from paperroute_testkit.hardware_fakes import FakeKnobLines, FakePanelBus
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor

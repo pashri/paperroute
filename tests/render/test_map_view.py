@@ -32,16 +32,7 @@ from paperroute.core.tiles import (
     tile_of,
     to_pixels,
 )
-from paperroute.render.canvas import (
-    HEIGHT,
-    INK,
-    PAPER,
-    WIDTH,
-    Canvas,
-    Face,
-    text_width,
-)
-from paperroute.render.chrome import BANNER, HEADER, badge, header
+from paperroute.render.chrome import BANNER, badge, header
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_view import (
     BADGE_PX,
@@ -70,6 +61,16 @@ from paperroute.render.markers import (
 )
 from paperroute.render.stop_view import WIDEST_COUNT
 from paperroute.render.tile_codec import GREYS, pack_bits, pack_grey
+from paperroute_device.render.canvas import (
+    HEIGHT,
+    INK,
+    PAPER,
+    WIDTH,
+    Canvas,
+    Face,
+    text_width,
+)
+from paperroute_device.render.frame import HEADER
 
 MPP = 8
 CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)

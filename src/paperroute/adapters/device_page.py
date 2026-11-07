@@ -22,7 +22,7 @@ from paperroute.core.panel_screens import (
 from paperroute.core.panel_screens import strength as dbm_strength
 from paperroute.core.panel_views import CANCEL_LINE, CONFIRM_COPY
 from paperroute.core.quota import DAILY_LIMIT
-from paperroute.core.stop_view import DOT, HINT_DOT, clock_text
+from paperroute_device.core.text import DOT, HINT_DOT, clock_text
 from paperroute_hardware.ports import PanelTimes
 
 POWER_STATUS: Final[dict[PowerAction, str]] = {
@@ -191,7 +191,8 @@ def timetable_text(*, status: DeviceStatus) -> str:
     if built is None:
         return failed if status.rebuild_failed else 'none yet'
     parts = [] if status.schema is None else [f'version {status.schema}']
-    parts.append(f'built {day_text(moment=built)} {clock_text(moment=built)}')
+    clock = clock_text(moment=built, zone=SYDNEY)
+    parts.append(f'built {day_text(moment=built)} {clock}')
     parts.append(failed if status.rebuild_failed else 'ok')
     return DOT.join(parts)
 

@@ -5,7 +5,14 @@ from typing import Final
 
 from paperroute.build.map_style import DARK
 from paperroute.core.map_view import MAP_HEIGHT
-from paperroute.render.canvas import INK, PAPER, Box, Canvas, Face, text_width
+from paperroute_device.render.canvas import (
+    INK,
+    PAPER,
+    Box,
+    Canvas,
+    Face,
+    text_width,
+)
 
 SCALE_STEPS: Final[tuple[int, ...]] = (5000, 2000, 1000, 500, 200, 100)
 SCALE_REACH: Final[float] = 143.0  # pixels

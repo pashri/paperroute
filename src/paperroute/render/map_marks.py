@@ -5,7 +5,7 @@ from typing import Final
 from paperroute.core.geo import Point
 from paperroute.core.map_view import MapBase
 from paperroute.core.tiles import to_pixels
-from paperroute.render.canvas import INK, PAPER, Canvas
+from paperroute_device.render.canvas import INK, PAPER, Canvas
 
 Window = tuple[int, int]
 

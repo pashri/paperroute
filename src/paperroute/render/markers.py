@@ -7,7 +7,9 @@ from typing import Final
 
 from paperroute.core.map_view import Marker
 from paperroute.core.strip_extents import age_text
-from paperroute.render.canvas import (
+from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
+from paperroute.render.others import draw_others, mark_box
+from paperroute_device.render.canvas import (
     INK,
     PAPER,
     Box,
@@ -16,8 +18,6 @@ from paperroute.render.canvas import (
     Point,
     text_width,
 )
-from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
-from paperroute.render.others import draw_others, mark_box
 
 BADGE_FACE: Final[Face] = Face(weight=800, px=14)
 AGE_FACE: Final[Face] = Face(weight=800, px=10)

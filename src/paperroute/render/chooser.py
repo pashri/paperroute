@@ -13,8 +13,15 @@ from paperroute.core.chooser_view import (
     ChooserView,
     ColumnView,
 )
-from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH, Canvas, Face
-from paperroute.render.stop_view import finish
+from paperroute_device.render.canvas import (
+    HEIGHT,
+    INK,
+    PAPER,
+    WIDTH,
+    Canvas,
+    Face,
+)
+from paperroute_device.render.frame import finish
 
 COLUMN_WIDTHS: Final[dict[Level, int]] = {
     Level.KIND: 170,

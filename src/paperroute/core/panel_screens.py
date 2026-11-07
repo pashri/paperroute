@@ -21,8 +21,8 @@ from paperroute.core.panel_views import (
 )
 from paperroute.core.quota import calls_today
 from paperroute.core.state_model import State
-from paperroute.core.stop_view import DOT, clock_text
 from paperroute.core.wifi import wifi_setup_view
+from paperroute_device.core.text import DOT, clock_text
 
 LOCAL_NAME: Final[str] = 'paperroute.local'
 UNKNOWN: Final[str] = '-'
@@ -47,7 +47,7 @@ def menu_view(*, state: State) -> MenuView:
     """
     cursor = state.panel.menu.cursor if state.panel.menu else 0
     return MenuView(
-        clock=clock_text(moment=state.now),
+        clock=clock_text(moment=state.now, zone=SYDNEY),
         rows=tuple(row.value for row in MENU_ROWS),
         cursor=cursor,
         first=max(0, cursor - MENU_VISIBLE + 1),
@@ -74,7 +74,7 @@ def phone_view(*, state: State) -> PhoneView:
     url = f'http://{wifi.ip}/' if wifi.ip else f'http://{LOCAL_NAME}/'
     ips = (f'http://{wifi.ip}',) if wifi.ip else ()
     return PhoneView(
-        clock=clock_text(moment=state.now),
+        clock=clock_text(moment=state.now, zone=SYDNEY),
         url=url,
         addresses=(LOCAL_NAME, *ips),
         network=wifi.ssid,
@@ -182,7 +182,8 @@ def timetable_value(*, state: State) -> str:
     built = local_time(stamp=state.saving.timetable)
     if built is None:
         return DOT.join(parts) or UNKNOWN
-    parts += [day_text(moment=built), f'built {clock_text(moment=built)}']
+    clock = clock_text(moment=built, zone=SYDNEY)
+    parts += [day_text(moment=built), f'built {clock}']
     if state.rebuild.schema is not None:
         parts.append(f'version {state.rebuild.schema}')
     return DOT.join(parts)
@@ -301,7 +302,8 @@ def device_view(*, state: State) -> DeviceView:
         The clock and the lines.
     """
     return DeviceView(
-        clock=clock_text(moment=state.now), rows=device_rows(state=state),
+        clock=clock_text(moment=state.now, zone=SYDNEY),
+        rows=device_rows(state=state),
     )
 
 

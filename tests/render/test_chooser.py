@@ -15,8 +15,8 @@ from paperroute.core.chooser_view import (
     ColumnView,
 )
 from paperroute.core.strip_model import HINTS
-from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH
 from paperroute.render.chooser import COLUMN_WIDTHS, draw_chooser_view
+from paperroute_device.render.canvas import HEIGHT, INK, PAPER, WIDTH
 from paperroute_testkit.render.factories import (
     column,
     groups,

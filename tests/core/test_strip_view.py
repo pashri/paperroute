@@ -15,7 +15,7 @@ from paperroute.core.reach import (
     build_reach,
 )
 from paperroute.core.reach_layout import LineExit
-from paperroute.core.stop_view import DOT, NOT_PINNED
+from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_badges import HALF_WIDE
 from paperroute.core.strip_model import (
     HINTS,
@@ -42,6 +42,7 @@ from paperroute.core.strip_view import (
     line_reach,
 )
 from paperroute.core.wifi import setup_footer
+from paperroute_device.core.text import DOT
 from paperroute_testkit.core.factories import (
     EAST,
     POINTS,

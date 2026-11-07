@@ -14,7 +14,6 @@ from paperroute.core.tiles import (
     text_box,
 )
 from paperroute.ports import TileRepository
-from paperroute.render.canvas import Box, Face
 from paperroute.render.map_base import HALO, window_of
 from paperroute.render.map_corners import corner_text, credit_box, scale_box
 from paperroute.render.map_labels import (
@@ -23,6 +22,7 @@ from paperroute.render.map_labels import (
     label_query,
 )
 from paperroute.render.map_marks import Window
+from paperroute_device.render.canvas import Box, Face
 
 EDGE: Final[float] = 1.0  # the corner boxes' dark edge
 

@@ -11,17 +11,17 @@ from paperroute.core.connection_view import (
     ConnectionView,
     HeroLine,
 )
-from paperroute.render.canvas import HEIGHT, INK, WIDTH, Canvas, Face
 from paperroute.render.chrome import (
     BANNER,
-    HEADER,
     arrow,
     badge,
     view_banner,
     view_header,
 )
 from paperroute.render.pair_list import draw_pair_list
-from paperroute.render.stop_view import SPLIT, finish
+from paperroute.render.stop_view import SPLIT
+from paperroute_device.render.canvas import HEIGHT, INK, WIDTH, Canvas, Face
+from paperroute_device.render.frame import HEADER, finish
 
 HERO_LEFT: Final[int] = 18
 HERO_RIGHT: Final[int] = 418

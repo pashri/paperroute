@@ -3,7 +3,7 @@
 from typing import Final
 
 from paperroute.core.state_model import State
-from paperroute.core.stop_view import DOT
+from paperroute_device.core.text import DOT
 
 NO_KEY: Final[str] = f'No API key{DOT}set it on your phone'
 NO_WIFI: Final[str] = (

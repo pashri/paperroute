@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.adapters.tfnsw import api_key_from_env
+from paperroute.asset_root import use_app_assets
 from paperroute.build.gtfs_files import Source
 from paperroute.build.handoff import Handoff
 from paperroute.build.refresh import RefreshBusy, refresh
@@ -285,6 +286,7 @@ def run_check_tiles(*, args: argparse.Namespace) -> int:
 
 def main() -> None:
     """Run the chosen subcommand."""
+    use_app_assets()
     args = parse_args()
     if args.command == 'check-tiles':
         sys.exit(run_check_tiles(args=args))

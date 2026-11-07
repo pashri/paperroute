@@ -32,7 +32,6 @@ from paperroute.core.strip_model import (
     hook_straight,
 )
 from paperroute.core.strip_vehicles import hop_marker
-from paperroute.render.canvas import Box, Face, font
 from paperroute.render.markers import (
     badge_box,
     badge_half,
@@ -41,6 +40,7 @@ from paperroute.render.markers import (
 )
 from paperroute.render.strip import BASELINE_DROP, DISC_RADIUS, MAIN_PX
 from paperroute.render.strip_view import NAME_X
+from paperroute_device.render.canvas import Box, Face, font
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 NAME_GAP: Final[float] = NAME_X - TRACK_X  # a name's start past its track

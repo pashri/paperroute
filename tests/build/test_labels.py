@@ -26,7 +26,7 @@ from paperroute.core.tiles import (
     tiles_covering,
     to_pixels,
 )
-from paperroute.render.canvas import text_width
+from paperroute_device.render.canvas import text_width
 
 EDGE = 20480.0  # a block boundary at every zoom
 MIDDLE = EDGE + 1024.0

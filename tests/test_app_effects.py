@@ -69,9 +69,9 @@ from paperroute_testkit.fakes import (
     BrokenTimetable,
     EmptyPlacedTimetable,
     FakeNetwork,
-    FrameRecorder,
     MemoryStates,
 )
+from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_testkit.render.factories import (
     STOP_VIEW,
     STRIP_VIEW,

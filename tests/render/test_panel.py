@@ -19,18 +19,7 @@ from paperroute.core.panel_views import (
     WifiSetupView,
     confirm_view,
 )
-from paperroute.core.stop_view import DOT, HINT_DOT
 from paperroute.core.wifi import setup_footer
-from paperroute.render.canvas import (
-    HEIGHT,
-    INK,
-    PAPER,
-    WIDTH,
-    Canvas,
-    Face,
-    text_width,
-)
-from paperroute.render.chrome import HEADER
 from paperroute.render.panel import (
     BODY_FACE,
     BUTTON_FACE,
@@ -49,6 +38,17 @@ from paperroute.render.panel import (
 )
 from paperroute.render.qr import qr_image
 from paperroute.render.strip_view import HINT_FACE
+from paperroute_device.core.text import DOT, HINT_DOT
+from paperroute_device.render.canvas import (
+    HEIGHT,
+    INK,
+    PAPER,
+    WIDTH,
+    Canvas,
+    Face,
+    text_width,
+)
+from paperroute_device.render.frame import HEADER
 from paperroute_testkit.core.factories import START
 
 WIFI_QR = 'WIFI:T:WPA;S:paperroute-setup;P:7Q4K9W2M;;'

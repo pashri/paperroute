@@ -6,9 +6,9 @@ from typing import Final
 from paperroute.core.geo import Point
 from paperroute.core.map_view import MapBase, screen_point
 from paperroute.core.tiles import to_pixels
-from paperroute.render.canvas import INK, PAPER, Canvas
-from paperroute.render.chrome import HEADER
 from paperroute.render.map_marks import ROUTE_STYLE, Window, draw_stop
+from paperroute_device.render.canvas import INK, PAPER, Canvas
+from paperroute_device.render.frame import HEADER
 
 CASING: Final[int] = 4  # extra paper width under leg 2
 LEG_DASH: Final[tuple[float, float]] = (12.0, 7.0)

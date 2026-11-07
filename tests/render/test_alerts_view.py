@@ -16,8 +16,8 @@ from paperroute.render.alerts_view import (
     draw_alerts_view,
     pages_of,
 )
-from paperroute.render.canvas import INK, PAPER, WIDTH, Face, text_width
-from paperroute.render.chrome import HEADER
+from paperroute_device.render.canvas import INK, PAPER, WIDTH, Face, text_width
+from paperroute_device.render.frame import HEADER
 from paperroute_testkit.core.alert_factories import STRATHFIELD_UPDATE, WESTERN
 
 ROW_H = 70

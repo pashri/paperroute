@@ -44,6 +44,7 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.wifi import NmcliWifi, NullWifi
 from paperroute.app import Ports, run
 from paperroute.app_device import DevicePorts
+from paperroute.asset_root import use_app_assets
 from paperroute.core.messages import Event, QuitRequested
 from paperroute.core.model import SYDNEY, Pin, StopPlace
 from paperroute.core.tiles import TileVariant
@@ -1034,6 +1035,7 @@ def web_main(
 
 def main() -> None:  # pylint: disable=too-many-statements
     """Run the device software in a window or in browsers."""
+    use_app_assets()
     args = parse_args()
     if args.command == 'selftest':
         sys.exit(selftest_main())

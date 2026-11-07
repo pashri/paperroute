@@ -9,6 +9,8 @@ from typing import Final
 from paperroute.core.alert_model import AlertBanner
 from paperroute.core.live import LiveDeparture
 from paperroute.core.model import SYDNEY, CarryOn, Departure, Mode, shifted
+from paperroute_device.core.text import DOT
+from paperroute_device.core.text import clock_text as zoned_clock_text
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
@@ -17,8 +19,6 @@ LARGE_ROWS_UNDER_BANNER: Final[int] = 5
 SIDEBAR_ROWS: Final[int] = 5
 HORIZON: Final[timedelta] = timedelta(hours=3)
 HORIZON_TEXT: Final[str] = f'the next {HORIZON // timedelta(hours=1)} hours'
-DOT: Final[str] = ' \u00b7 '
-HINT_DOT: Final[str] = ' \u2022 '  # between the parts of a knob hint
 
 
 class Pill(StrEnum):
@@ -252,7 +252,7 @@ class StopInputs:
 
 def clock_text(*, moment: datetime) -> str:
     """
-    A 24-hour clock time without a leading zero.
+    A 24-hour Sydney clock time without a leading zero.
 
     Parameters
     ----------
@@ -264,8 +264,7 @@ def clock_text(*, moment: datetime) -> str:
     str
         For example '8:05'.
     """
-    local = moment.astimezone(SYDNEY)
-    return f'{local.hour}:{local.minute:02d}'
+    return zoned_clock_text(moment=moment, zone=SYDNEY)
 
 
 def countdown(*, departs: datetime, now: datetime) -> str:

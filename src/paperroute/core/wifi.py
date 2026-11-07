@@ -19,9 +19,10 @@ from paperroute.core.messages import (
     WifiJoined,
     WifiJoinFailed,
 )
+from paperroute.core.model import SYDNEY
 from paperroute.core.panel_views import WifiSetupView
 from paperroute.core.state_model import State
-from paperroute.core.stop_view import HINT_DOT, clock_text
+from paperroute_device.core.text import HINT_DOT, clock_text
 from paperroute_hardware.core.knob_events import Knob, KnobPressed
 
 SETUP_FOR: Final[timedelta] = timedelta(minutes=10)
@@ -182,7 +183,7 @@ def wifi_setup_view(*, state: State) -> WifiSetupView:
     if setup.until is not None:
         seconds = max((setup.until - state.now).total_seconds(), 0.0)
     return WifiSetupView(
-        clock=clock_text(moment=state.now),
+        clock=clock_text(moment=state.now, zone=SYDNEY),
         phase=setup.phase,
         qr=wifi_qr(password=setup.password),
         password=shown_password(password=setup.password),

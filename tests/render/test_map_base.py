@@ -36,7 +36,6 @@ from paperroute.core.tiles import (
     tiles_covering,
     to_pixels,
 )
-from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
 from paperroute.render.map_base import (
     HALO,
     compose_tiles,
@@ -53,6 +52,13 @@ from paperroute.render.tile_codec import (
     pack_bits,
     pack_grey,
     quantise4,
+)
+from paperroute_device.render.canvas import (
+    INK,
+    PAPER,
+    Canvas,
+    Face,
+    text_width,
 )
 
 MPP = 8

@@ -12,8 +12,6 @@ from paperroute.core.connection_strip import (
     StopMark,
     build_connection_strip,
 )
-from paperroute.render.canvas import ELLIPSIS, HEIGHT, INK, PAPER, Canvas
-from paperroute.render.chrome import HEADER
 from paperroute.render.connection_strip import (
     HEAD_FACE,
     HEAD_GAP,
@@ -30,6 +28,14 @@ from paperroute.render.connection_strip import (
     name_room,
     row_step,
 )
+from paperroute_device.render.canvas import (
+    ELLIPSIS,
+    HEIGHT,
+    INK,
+    PAPER,
+    Canvas,
+)
+from paperroute_device.render.frame import HEADER
 from paperroute_testkit.core.connection_factories import WORK, at
 from paperroute_testkit.core.factories import STALE_LIMIT
 from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP

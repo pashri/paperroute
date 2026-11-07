@@ -23,8 +23,8 @@ from paperroute.core.tiles import (
     tiles_covering,
     to_pixels,
 )
-from paperroute.render.canvas import INK, PAPER
 from paperroute.render.map_base import draw_map_base, window_of
+from paperroute_device.render.canvas import INK, PAPER
 from tests.render.test_map_base import (
     CENTRE,
     MPP,

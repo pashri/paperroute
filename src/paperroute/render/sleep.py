@@ -6,8 +6,15 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.core.map_fit import SLEEP_BAND
-from paperroute.render.canvas import HEIGHT, INK, PAPER, WIDTH, Canvas, Face
-from paperroute.render.stop_view import finish
+from paperroute_device.render.canvas import (
+    HEIGHT,
+    INK,
+    PAPER,
+    WIDTH,
+    Canvas,
+    Face,
+)
+from paperroute_device.render.frame import finish
 
 BAND_H: Final[int] = SLEEP_BAND
 BAND_FACE: Final[Face] = Face(weight=700, px=24)

@@ -1157,11 +1157,17 @@ name = "paperroute-device"
 version = "0.1.0"
 source = { editable = "packages/paperroute-device" }
 dependencies = [
+    { name = "numpy" },
     { name = "paperroute-hardware" },
+    { name = "skia-python" },
 ]
 
 [package.metadata]
-requires-dist = [{ name = "paperroute-hardware", editable = "packages/paperroute-hardware" }]
+requires-dist = [
+    { name = "numpy", specifier = ">=2.3" },
+    { name = "paperroute-hardware", editable = "packages/paperroute-hardware" },
+    { name = "skia-python", specifier = ">=138.0" },
+]
 
 [[package]]
 name = "paperroute-hardware"

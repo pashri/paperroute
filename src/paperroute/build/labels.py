@@ -39,7 +39,7 @@ from paperroute.core.tiles import (
     text_box,
     to_pixels,
 )
-from paperroute.render.canvas import Face, text_width
+from paperroute_device.render.canvas import Face, text_width
 
 BLOCK_PX: Final[int] = BLOCK * TILE
 TEXT_MARGIN: Final[int] = 6  # pixels added to the measured text width

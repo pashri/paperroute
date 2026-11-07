@@ -15,8 +15,8 @@ from paperroute.core.chooser import (
     preview_of,
 )
 from paperroute.core.chooser_station import focus_level
-from paperroute.core.stop_view import DOT
 from paperroute.core.strip_model import HINTS, PICK_TO
+from paperroute_device.core.text import DOT
 
 ROW_HEIGHTS: Final[dict[Level, int]] = {
     Level.KIND: 56,

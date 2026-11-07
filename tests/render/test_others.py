@@ -5,7 +5,6 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, Marker
-from paperroute.render.canvas import INK, PAPER, Box, Canvas, Face, text_width
 from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
 from paperroute.render.others import (
     MARK_HALF,
@@ -21,6 +20,14 @@ from paperroute.render.others import (
     overlaps_any,
     place_numbers,
     signed,
+)
+from paperroute_device.render.canvas import (
+    INK,
+    PAPER,
+    Box,
+    Canvas,
+    Face,
+    text_width,
 )
 
 SPOT = (100.0, 100.0)
@@ -320,3 +327,18 @@ def number_box(*, number: Number) -> tuple[Box, tuple[float, float]]:
     mark = (number.at[0] - gap, number.at[1] - NUMBER_DROP)
     spots = number_spots(route=number.route, mark=mark)
     return spots[0] if right else spots[1], mark
+
+
+def test_overlapping_arrows_stay_filled() -> None:
+    """Two arrows crossing each other leave no paper where they cross."""
+    canvas = Canvas()
+    canvas.polygons(
+        polygons=[
+            arrow_points(centre=(50.0, 50.0), bearing=bearing, scale=3.0)
+            for bearing in (0.0, 180.0)
+        ],
+        grey=INK,
+    )
+    grey = canvas.grey()
+    assert int(grey[50, 50]) == INK
+    assert int(grey[50, 49]) == INK

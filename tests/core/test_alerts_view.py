@@ -19,7 +19,8 @@ from paperroute.core.saved import LiveView, Lookahead
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.state_views import saved_of
-from paperroute.core.stop_view import DOT, StopView
+from paperroute.core.stop_view import StopView
+from paperroute_device.core.text import DOT
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,

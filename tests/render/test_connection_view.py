@@ -10,11 +10,11 @@ from paperroute.core.connection_view import (
     build_connection_view,
 )
 from paperroute.core.stop_view import StopView
-from paperroute.render.canvas import HEIGHT, Canvas
-from paperroute.render.chrome import HEADER
 from paperroute.render.connection_view import FOOTER_RULE, draw_connection_view
 from paperroute.render.pair_list import draw_pair_list
-from paperroute.render.stop_view import SPLIT, finish
+from paperroute.render.stop_view import SPLIT
+from paperroute_device.render.canvas import HEIGHT, Canvas
+from paperroute_device.render.frame import HEADER, finish
 from paperroute_testkit.core.connection_factories import WORK, at, work_chains
 from tests.core.test_connection_view import TWO, TWO_CHANGES
 

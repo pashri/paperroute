@@ -7,14 +7,7 @@ import pytest
 
 from paperroute.core.model import CarryOn, Mode
 from paperroute.core.stop_view import Pill
-from paperroute.render.canvas import INK, PAPER, Canvas, Face, text_width
-from paperroute.render.chrome import (
-    BANNER,
-    HEADER,
-    badge,
-    badge_width,
-    route_pair,
-)
+from paperroute.render.chrome import BANNER, badge, badge_width, route_pair
 from paperroute.render.stop_view import (
     FASTER_LEFT,
     LARGE_ROW_H,
@@ -31,9 +24,16 @@ from paperroute.render.stop_view import (
     draw_stop_view,
     faster_left,
     faster_width,
-    finish,
     list_row,
 )
+from paperroute_device.render.canvas import (
+    INK,
+    PAPER,
+    Canvas,
+    Face,
+    text_width,
+)
+from paperroute_device.render.frame import HEADER, finish
 from paperroute_testkit.render.factories import STOP_VIEW as BASE
 from paperroute_testkit.render.factories import stop_row as row
 

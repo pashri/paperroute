@@ -12,17 +12,16 @@ from paperroute.core.connection_strip import (
     LegStop,
     StopMark,
 )
-from paperroute.render.canvas import HEIGHT, INK, PAPER, Canvas, Face
 from paperroute.render.chrome import (
     BANNER,
-    HEADER,
     arrow,
     badge,
     view_banner,
     view_header,
 )
 from paperroute.render.pair_list import draw_pair_list
-from paperroute.render.stop_view import finish
+from paperroute_device.render.canvas import HEIGHT, INK, PAPER, Canvas, Face
+from paperroute_device.render.frame import HEADER, finish
 
 STRIP_RIGHT: Final[int] = 440
 RULE_WIDTH: Final[int] = 3

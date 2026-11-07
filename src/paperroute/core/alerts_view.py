@@ -12,7 +12,8 @@ from paperroute.core.alert_match import (
     window_key,
 )
 from paperroute.core.alert_model import Alert, Period
-from paperroute.core.stop_view import DOT, PinTag, StopView
+from paperroute.core.stop_view import PinTag, StopView
+from paperroute_device.core.text import DOT
 
 ALERT_ROWS: Final[int] = 6
 LINE_NAMES: Final[int] = 3  # route names put in front of a header

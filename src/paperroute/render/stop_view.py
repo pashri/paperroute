@@ -7,21 +7,12 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.core.model import Mode
-from paperroute.core.stop_view import DOT, Pill, Row, StopView, stops_text
-from paperroute.render.canvas import (
-    HEIGHT,
-    INK,
-    WIDTH,
-    Canvas,
-    Face,
-    text_width,
-)
+from paperroute.core.stop_view import Pill, Row, StopView, stops_text
 from paperroute.render.chrome import (
     ARROW_GAP,
     ARROW_WIDTH,
     BANNER,
     FASTER,
-    HEADER,
     arrow,
     cancelled,
     countdown_slot,
@@ -31,6 +22,16 @@ from paperroute.render.chrome import (
     view_banner,
     view_header,
 )
+from paperroute_device.core.text import DOT
+from paperroute_device.render.canvas import (
+    HEIGHT,
+    INK,
+    WIDTH,
+    Canvas,
+    Face,
+    text_width,
+)
+from paperroute_device.render.frame import HEADER, finish
 
 SPLIT: Final[int] = 438
 ROW_H: Final[int] = 50
@@ -536,24 +537,6 @@ def board_times(canvas: Canvas, *, row: Row, y: int, k: Scale) -> None:
             text=FASTER,
             px=k.px(11),
         )
-
-
-def finish(canvas: Canvas) -> NDArray[np.uint8]:
-    """
-    Threshold a canvas to a 1-bit frame.
-
-    Parameters
-    ----------
-    canvas : Canvas
-        Drawn canvas.
-
-    Returns
-    -------
-    NDArray[np.uint8]
-        480 by 800 pixels, 0 or 255.
-    """
-    grey = canvas.grey()
-    return np.where(grey < 128, 0, 255).astype(np.uint8)
 
 
 def draw_stop_view(*, view: StopView) -> NDArray[np.uint8]:

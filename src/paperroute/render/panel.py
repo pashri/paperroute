@@ -17,7 +17,6 @@ from paperroute.core.panel_views import (
     PhoneView,
     WifiSetupView,
 )
-from paperroute.core.stop_view import HINT_DOT
 from paperroute.core.wifi import (
     SCANNING_LINE,
     SETUP_STEPS,
@@ -26,11 +25,10 @@ from paperroute.core.wifi import (
     no_camera_line,
     setup_footer,
 )
-from paperroute.render.canvas import INK, PAPER, WIDTH, Canvas, Face
-from paperroute.render.chrome import HEADER
-from paperroute.render.map_view import wrap
 from paperroute.render.qr import qr_image
-from paperroute.render.stop_view import finish
+from paperroute_device.core.text import HINT_DOT
+from paperroute_device.render.canvas import INK, PAPER, WIDTH, Canvas, Face
+from paperroute_device.render.frame import HEADER, finish, wrap
 
 ROW_H: Final[int] = 46
 QR_PX: Final[int] = 8

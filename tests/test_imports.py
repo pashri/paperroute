@@ -254,3 +254,36 @@ def test_gpiod_only_in_the_line_adapters() -> None:
         )
     ]
     assert not offenders
+
+
+def test_shell_screens_use_no_board_drawing() -> None:
+    """Shell screens take their drawing and text from the device kit."""
+    board = ROOT / 'src' / 'paperroute'
+    banned = {
+        'render/panel.py': {
+            'paperroute.render.stop_view',
+            'paperroute.render.map_view',
+            'paperroute.render.chrome',
+            'paperroute.core.stop_view',
+        },
+        'render/notice.py': {
+            'paperroute.render.stop_view',
+            'paperroute.render.map_view',
+            'paperroute.render.chrome',
+        },
+        'render/sleep.py': {
+            'paperroute.render.stop_view',
+            'paperroute.render.map_view',
+            'paperroute.render.chrome',
+        },
+        'core/wifi.py': {'paperroute.core.stop_view'},
+        'core/banners.py': {'paperroute.core.stop_view'},
+        'core/panel_screens.py': {'paperroute.core.stop_view'},
+        'adapters/device_page.py': {'paperroute.core.stop_view'},
+    }
+    offenders = {
+        name: sorted(imported_names(path=board / name) & modules)
+        for name, modules in banned.items()
+        if imported_names(path=board / name) & modules
+    }
+    assert not offenders

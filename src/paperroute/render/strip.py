@@ -17,9 +17,9 @@ from paperroute.core.strip_model import (
     Band,
     StripRow,
 )
-from paperroute.render.canvas import INK, PAPER, Canvas, Face
 from paperroute.render.chrome import ARROW_WIDTH, arrow
 from paperroute.render.markers import draw_hollow, draw_live
+from paperroute_device.render.canvas import INK, PAPER, Canvas, Face
 
 TRACK_WIDTH: Final[int] = 3
 RIDE_WIDTH: Final[int] = 9

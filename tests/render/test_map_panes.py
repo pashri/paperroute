@@ -10,9 +10,9 @@ from paperroute.app_render import MapRenderer, drawing
 from paperroute.core.connection_map import change_panes
 from paperroute.core.map_view import MAP_HEIGHT, MapView
 from paperroute.core.saved import ConnectionMap
-from paperroute.render.canvas import HEIGHT, INK, PAPER
-from paperroute.render.chrome import HEADER
 from paperroute.render.map_panes import draw_map_panes
+from paperroute_device.render.canvas import HEIGHT, INK, PAPER
+from paperroute_device.render.frame import HEADER
 from tests.core.test_connection_map import TWO, TWO_CHAIN, two_inputs
 
 PANES: Final[tuple[MapView, ...]] = change_panes(

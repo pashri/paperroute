@@ -16,6 +16,7 @@ RANKS: Final[dict[str, int]] = {
     'paperroute': 3,
 }
 TESTKIT: Final[str] = 'paperroute_testkit'
+TESTKIT_RANK: Final[int] = 3
 TEST_ONLY: Final[frozenset[str]] = frozenset({TESTKIT, 'tests'})
 LOOKUPS: Final[frozenset[str]] = frozenset({'files', 'import_module'})
 DISTRIBUTION: Final[re.Pattern[str]] = re.compile(r'[A-Za-z0-9._-]+')
@@ -31,8 +32,7 @@ class Tree:
     name : str
         The import name, such as ``paperroute_device``.
     rank : int | None
-        The layer, lowest first; None for the testkit or an unknown
-        package.
+        The layer, lowest first; None for an unknown package.
     src : Path
         The package directory.
     tests : Path | None
@@ -69,7 +69,9 @@ def trees(*, root: Path) -> list[Tree]:
     return [
         Tree(
             name=src.name,
-            rank=RANKS.get(src.name),
+            rank=(
+                TESTKIT_RANK if src.name == TESTKIT else RANKS.get(src.name)
+            ),
             src=src,
             tests=(
                 src.parents[1] / 'tests'
@@ -263,7 +265,7 @@ def allowed(*, tree: Tree, name: str, test: bool) -> bool:
 
 def layer_problems(*, root: Path, tree: Tree) -> Iterator[str]:
     """
-    Report a package that has no layer, unless it is the testkit.
+    Report a package that has no layer.
 
     Parameters
     ----------
@@ -275,9 +277,9 @@ def layer_problems(*, root: Path, tree: Tree) -> Iterator[str]:
     Yields
     ------
     str
-        One line when the tree is unranked and not the testkit.
+        One line when the tree is unranked.
     """
-    if tree.rank is None and tree.name != TESTKIT:
+    if tree.rank is None:
         yield (
             f'{tree.src.relative_to(root).as_posix()}: '
             f'{tree.name} has no layer'
@@ -322,7 +324,7 @@ def dependency_problems(*, root: Path, tree: Tree) -> Iterator[str]:
     root : Path
         The repository root, for relative paths.
     tree : Tree
-        The tree to check; the testkit is exempt.
+        The tree to check.
 
     Yields
     ------

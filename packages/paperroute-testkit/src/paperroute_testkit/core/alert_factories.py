@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Final
 
-from paperroute.city import SYDNEY_ZONE, SydneyMode
+from paperroute_testkit.city_setting import city_under_test
 from paperroute_transit.core.alert_model import Alert, Informed, Period
 from paperroute_transit.core.model import Pin, StopPlace
 
@@ -40,7 +40,7 @@ def sydney(
         hour=hour,
         minute=minute,
         second=second,
-        tzinfo=SYDNEY_ZONE,
+        tzinfo=city_under_test().zone,
     )
 
 
@@ -101,7 +101,7 @@ def station_pin(
     origin_name: str,
     destination: str | None = None,
     destination_name: str = '',
-    kind: SydneyMode | None = SydneyMode.TRAIN,
+    kind: str | None = 'train',
 ) -> Pin:
     """
     A pin between named places.
@@ -116,7 +116,7 @@ def station_pin(
         To stop ID, or None.
     destination_name : str
         To name.
-    kind : SydneyMode | None
+    kind : str | None
         Kind of route.
 
     Returns
@@ -273,5 +273,5 @@ ABBOTSFORD: Final[Alert] = alert(
     route='F3',
 )
 ROSE_BAY_PIN: Final[Pin] = station_pin(
-    origin='202972', origin_name='Rose Bay Wharf', kind=SydneyMode.FERRY,
+    origin='202972', origin_name='Rose Bay Wharf', kind='ferry',
 )

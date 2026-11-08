@@ -22,7 +22,6 @@ from paperroute_testkit.core.connection_factories import (
 )
 from paperroute_testkit.core.factories import place
 from paperroute_testkit.fake_pins import FakePinOptions
-from paperroute_testkit.fakes import FakeTripPlanner
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.web_display import WebDisplay
@@ -31,6 +30,7 @@ from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import ChangeStop, StopMatch
 from paperroute_transit.observers import PinsSeen
 from tests.adapters.test_web_device import sydney_site
+from tests.planner_fakes import FakeTripPlanner
 
 Client = TestClient[web.Request, web.Application]
 NOW: Final[datetime] = datetime(2026, 10, 27, 10, 0, tzinfo=SYDNEY_ZONE)

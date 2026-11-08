@@ -5,7 +5,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
 
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute_testkit.city_setting import city_under_test
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import (
     STOP_POINT,
@@ -30,7 +30,7 @@ from paperroute_transit.core.strip_model import StripMapView, StripPane
 from paperroute_transit.ports import TimetableRepository
 
 REAL = FIXTURES / 'real'
-AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY_ZONE)
+AT = datetime(2026, 10, 16, 6, 25, tzinfo=city_under_test().zone)
 PIN = pin_of('215020', '200060')
 MAP_PIN = pin_of('2145615', '215020')
 MAP_MPP = 8
@@ -58,7 +58,7 @@ def map_view(*, markers: tuple[Marker, ...] = ()) -> MapView:
             centre=STOP_POINT,
             mpp=MAP_MPP,
             route=(),
-            projection=SYDNEY_PROJECTION,
+            projection=city_under_test().projection,
         ),
         zoom=2,
         markers=markers,

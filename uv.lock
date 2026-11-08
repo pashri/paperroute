@@ -1188,7 +1188,6 @@ version = "0.1.0"
 source = { editable = "packages/paperroute-testkit" }
 dependencies = [
     { name = "numpy" },
-    { name = "paperroute" },
     { name = "paperroute-device" },
     { name = "paperroute-hardware" },
     { name = "paperroute-transit" },
@@ -1198,7 +1197,6 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "numpy", specifier = ">=2.3" },
-    { name = "paperroute", editable = "." },
     { name = "paperroute-device", editable = "packages/paperroute-device" },
     { name = "paperroute-hardware", editable = "packages/paperroute-hardware" },
     { name = "paperroute-transit", editable = "packages/paperroute-transit" },

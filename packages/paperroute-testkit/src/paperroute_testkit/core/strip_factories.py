@@ -4,8 +4,8 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
+from paperroute_testkit.city_setting import city_under_test
 from paperroute_testkit.core.factories import (
     EAST,
     START,
@@ -36,10 +36,10 @@ CENTRE: Final[Point] = (-17_000.0, 1_000.0)
 PIN: Final[Pin] = Pin(
     origin=place('C', name='Central', point=CENTRE),
     destination=place('S5', name='S5'),
-    kind=SydneyMode.TRAIN,
+    kind='train',
 )
 KEY: Final[StripKey] = StripKey(
-    station='C', kind=SydneyMode.TRAIN, routes=(),
+    station='C', kind='train', routes=(),
 )
 
 
@@ -145,10 +145,10 @@ def trains(*, count: int = 3) -> tuple[Departure, ...]:
     return tuple(
         departure(
             departs=START + timedelta(minutes=5 * (i + 1)),
-            mode=SydneyFeed.TRAIN,
+            mode='train',
             route='T1',
             trip_id=f'train-{i}',
-            kind=SydneyMode.TRAIN,
+            kind='train',
         )
         for i in range(count)
     )
@@ -178,11 +178,11 @@ def on_view(
         State and effects after the load.
     """
     saved = Saved(
-        settings=default_settings(city=SYDNEY),
+        settings=default_settings(city=city_under_test()),
         pins=(pin,), current=0, unpinned=None, view=view,
     )
     state = initial_state(
-        saved=saved, now=START, stored=True, city=SYDNEY,
+        saved=saved, now=START, stored=True, city=city_under_test(),
     )
     return step_answered(
         state=state,

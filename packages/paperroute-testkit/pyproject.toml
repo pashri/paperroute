@@ -4,7 +4,6 @@ version = "0.1.0"
 license = "MIT"
 requires-python = ">=3.14"
 dependencies = [
-    "paperroute",
     "paperroute-hardware",
     "paperroute-device",
     "paperroute-transit",
@@ -20,7 +19,6 @@ build-backend = "hatchling.build"
 packages = ["src/paperroute_testkit"]
 
 [tool.uv.sources]
-paperroute = { workspace = true }
 paperroute-hardware = { workspace = true }
 paperroute-device = { workspace = true }
 paperroute-transit = { workspace = true }

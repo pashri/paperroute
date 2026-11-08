@@ -26,7 +26,7 @@ from paperroute.core.trip_search import (
     PlannerUnavailable,
     TripSearch,
 )
-from paperroute_testkit.fakes import FakeTripPlanner
+from tests.planner_fakes import FakeTripPlanner
 
 FIXTURES: Final[Path] = Path(__file__).parents[1] / 'fixtures' / 'trip_planner'
 WHEN: Final[datetime] = datetime(

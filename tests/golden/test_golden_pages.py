@@ -18,7 +18,6 @@ from paperroute_device.core.device_model import DeviceKey, DeviceStatus
 from paperroute_device.ports import KeyStore
 from paperroute_testkit.device_fakes import FakeKeys
 from paperroute_testkit.device_pages import HOTSPOT, KEY, NOW, STATUS
-from paperroute_testkit.fakes import FakeTripPlanner
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.settings_form import form_values
@@ -29,6 +28,7 @@ from tests.adapters.test_web_suggest import NOW as SEARCH_NOW
 from tests.adapters.test_web_suggest import PLATFORMS
 from tests.golden.scenes import GOLDEN, baseline_bytes
 from tests.golden.test_golden_state import RICH_SAVED
+from tests.planner_fakes import FakeTripPlanner
 
 Client = TestClient[web.Request, web.Application]
 PAGES: Final[dict[str, str]] = {

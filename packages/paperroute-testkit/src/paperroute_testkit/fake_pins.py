@@ -3,7 +3,7 @@
 from collections.abc import Collection
 from dataclasses import dataclass, field
 
-from paperroute.city import SYDNEY
+from paperroute_testkit.city_setting import city_under_test
 from paperroute_transit.core.chooser import Choice
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import (
@@ -138,7 +138,7 @@ class FakePinOptions:
         """
         return tuple(
             kind
-            for kind in kind_names(modes=SYDNEY.modes)
+            for kind in kind_names(modes=city_under_test().modes)
             if self.lines.get((stop_id, kind))
         )
 

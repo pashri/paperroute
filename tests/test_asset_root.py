@@ -6,8 +6,9 @@ from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Final
 
-from paperroute.asset_root import APP_ASSETS
+from paperroute.asset_root import APP_ASSETS, use_app_assets
 from paperroute_device.adapters.web_frame import SHELL_WEB
+from paperroute_device.assets import assets
 from paperroute_testkit.paths import ROOT
 
 ASSET_ROOT: Final[Path] = ROOT / 'src' / 'paperroute' / 'asset_root.py'
@@ -28,6 +29,12 @@ READERS: Final[dict[str, Traversable]] = {
     'shell_text': SHELL_WEB,
     'shell_bytes': SHELL_WEB,
 }
+
+
+def test_use_app_assets_sets_app_root() -> None:
+    """Pointing the device kit at the app gives the app's asset root."""
+    use_app_assets()
+    assert assets() == APP_ASSETS
 
 
 def test_only_asset_root_reads_package_data() -> None:

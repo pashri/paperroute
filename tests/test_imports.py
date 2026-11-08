@@ -52,6 +52,9 @@ APP: Final[Path] = ROOT / 'src' / 'paperroute'
 TRANSIT: Final[Path] = (
     ROOT / 'packages' / 'paperroute-transit' / 'src' / 'paperroute_transit'
 )
+TESTKIT: Final[Path] = (
+    ROOT / 'packages' / 'paperroute-testkit' / 'src' / 'paperroute_testkit'
+)
 CITY_DEFAULTS: Final[dict[str, str | None]] = {
     'Settings': None,
     'BoardSettings': 'peak_windows',
@@ -727,6 +730,24 @@ def test_app_holds_only_sydney_modules() -> None:
         if path.name != '__init__.py'
     }
     assert modules == SYDNEY_MODULES | {'paperroute.asset_root'}
+
+
+def test_testkit_imports_no_app() -> None:
+    """No testkit module imports the app, wherever the import sits."""
+    paths = sorted(TESTKIT.rglob('*.py'))
+    offenders = {
+        path.relative_to(ROOT).as_posix(): sorted(app)
+        for path in paths
+        if (
+            app := {
+                name
+                for name in imported_names(path=path)
+                if name == 'paperroute' or name.startswith('paperroute.')
+            }
+        )
+    }
+    assert paths
+    assert not offenders
 
 
 def test_imported_names_see_package_from_imports(tmp_path: Path) -> None:

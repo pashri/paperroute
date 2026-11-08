@@ -12,8 +12,8 @@ from paperroute.adapters.web_board import (
     sydney_suggest,
 )
 from paperroute_device.adapters.web_frame import nav_html
-from paperroute_testkit.fakes import FakeTripPlanner
 from paperroute_transit.adapters.board_head import BoardHead
+from tests.planner_fakes import FakeTripPlanner
 
 
 async def test_suggest_plug_closes_the_planner() -> None:

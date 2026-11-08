@@ -10,19 +10,13 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
-from paperroute.core.trip_search import (
-    Journey,
-    PlannerBusy,
-    PlannerUnavailable,
-    TripSearch,
-)
 from paperroute_device.core.device_model import (
     DeviceFacts,
     PowerAction,
     ResetKind,
     WifiStatus,
 )
+from paperroute_testkit.city_setting import city_under_test
 from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_transit.core.alert_model import AlertPlaces
 from paperroute_transit.core.chooser import ChooserPath, Column
@@ -43,7 +37,7 @@ from paperroute_transit.ports import Loaded, TileRepository
 STOP_POINT: Point = to_metres(
     lon=151.0036,
     lat=-33.8170,
-    projection=SYDNEY.projection,
+    projection=city_under_test().projection,
 )
 
 
@@ -166,7 +160,10 @@ class MemoryStates:
             The stored state, or the defaults not stored.
         """
         if self.stored is None:
-            return Loaded(saved=default_saved(city=SYDNEY), stored=False)
+            return Loaded(
+                saved=default_saved(city=city_under_test()),
+                stored=False,
+            )
         return Loaded(saved=self.stored, stored=True)
 
     def save(self, *, saved: Saved) -> None:
@@ -263,7 +260,7 @@ class BrokenTimetable:
     """A timetable whose departures query always fails."""
 
     calls: int = 0
-    city: City = SYDNEY
+    city: City = field(default_factory=city_under_test)
 
     def stop(self, *, stop_id: str) -> StopPlace:
         """
@@ -477,7 +474,7 @@ class BrokenTimetable:
         """
         return False
 
-    def modes_near(self, *, box: MetreBox) -> frozenset[SydneyFeed]:
+    def modes_near(self, *, box: MetreBox) -> frozenset[str]:
         """
         Know no shapes.
 
@@ -488,7 +485,7 @@ class BrokenTimetable:
 
         Returns
         -------
-        frozenset[SydneyFeed]
+        frozenset[str]
             Nothing.
         """
         return frozenset()
@@ -810,70 +807,6 @@ class RecordingResets:
             The reset asked for.
         """
         self.kinds.append(kind)
-
-
-@dataclass
-class FakeTripPlanner:
-    """
-    A Trip Planner that gives fixed journeys, or fails.
-
-    Attributes
-    ----------
-    journeys : tuple[Journey, ...]
-        What `trips` gives.
-    down : bool
-        True to raise `PlannerUnavailable`.
-    asked : list[tuple[str, str, TripSearch]]
-        The calls made.
-    closed : bool
-        True once closed.
-    busy : bool
-        True to raise `PlannerBusy`.
-    """
-
-    journeys: tuple[Journey, ...] = ()
-    down: bool = False
-    asked: list[tuple[str, str, TripSearch]] = field(default_factory=list)
-    closed: bool = False
-    busy: bool = False
-
-    async def close(self) -> None:
-        """Note that it was closed."""
-        self.closed = True
-
-    async def trips(
-        self, *, origin_id: str, destination_id: str, search: TripSearch,
-    ) -> tuple[Journey, ...]:
-        """
-        Give the fixed journeys.
-
-        Parameters
-        ----------
-        origin_id : str
-            Recorded.
-        destination_id : str
-            Recorded.
-        search : TripSearch
-            Recorded.
-
-        Returns
-        -------
-        tuple[Journey, ...]
-            The journeys.
-
-        Raises
-        ------
-        PlannerBusy
-            When `busy` is set.
-        PlannerUnavailable
-            When `down` is set.
-        """
-        self.asked.append((origin_id, destination_id, search))
-        if self.busy:
-            raise PlannerBusy('busy')
-        if self.down:
-            raise PlannerUnavailable('down')
-        return self.journeys
 
 
 @dataclass

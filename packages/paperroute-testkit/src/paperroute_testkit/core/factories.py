@@ -5,7 +5,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
+from paperroute_testkit.city_setting import city_under_test
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import (
@@ -41,12 +41,12 @@ from paperroute_transit.core.stop_view import (
 )
 from paperroute_transit.core.strip_model import StripInputs
 
-START = datetime(2026, 10, 16, 8, 0, tzinfo=SYDNEY_ZONE)
+START = datetime(2026, 10, 16, 8, 0, tzinfo=city_under_test().zone)
 STALE_LIMIT: Final[timedelta] = timedelta(minutes=2)
 EIGHT: int = 8 * 3600  # seconds into the service day
 TEN_MINUTES: int = 600  # seconds
 TRAIN: Final[StripKey] = StripKey(
-    station='C', kind=SydneyMode.TRAIN, routes=(),
+    station='C', kind='train', routes=(),
 )
 POINTS: Final[dict[str, Point]] = {
     'C': (0.0, 0.0),
@@ -85,7 +85,9 @@ def begun(*, saved: Saved, now: datetime = START) -> State:
     State
         The state.
     """
-    state = initial_state(saved=saved, now=now, stored=True, city=SYDNEY)
+    state = initial_state(
+        saved=saved, now=now, stored=True, city=city_under_test(),
+    )
     refresh = replace(state.refresh, started_at=now - LOADING_WAIT)
     return replace(state, refresh=refresh)
 
@@ -159,11 +161,11 @@ def departure(
     departs: datetime,
     ride: int = 30,
     route: str = '606',
-    mode: SydneyFeed = SydneyFeed.BUS,
+    mode: str = 'bus',
     trip_id: str | None = None,
     headsign: str = 'Parramatta Station',
     platform: str = '',
-    kind: SydneyMode | None = None,
+    kind: str | None = None,
     then: CarryOn | None = None,
 ) -> Departure:
     """
@@ -177,7 +179,7 @@ def departure(
         Minutes to the destination.
     route : str
         Route short name.
-    mode : SydneyFeed
+    mode : str
         Mode.
     trip_id : str | None
         Trip ID; defaults to one derived from the departure time.
@@ -185,7 +187,7 @@ def departure(
         Headsign.
     platform : str
         Platform or stand.
-    kind : SydneyMode | None
+    kind : str | None
         Kind of route.
     then : CarryOn | None
         The service the vehicle runs next.
@@ -285,7 +287,7 @@ def pattern(
     return TripPattern(
         trip_id=trip_id,
         route=route,
-        source=SydneyFeed.BUS,
+        source='bus',
         shape_id=shape_id,
         stops=(
             stops
@@ -400,7 +402,7 @@ def example_reach() -> Reach:
 
 
 def train(
-    *, minutes: int, trip_id: str, kind: SydneyMode = SydneyMode.TRAIN,
+    *, minutes: int, trip_id: str, kind: str = 'train',
 ) -> Departure:
     """
     Make a departure from C some minutes after 8:00.
@@ -411,7 +413,7 @@ def train(
         Minutes after 8:00.
     trip_id : str
         Trip ID.
-    kind : SydneyMode
+    kind : str
         Kind of route.
 
     Returns
@@ -516,9 +518,9 @@ def stop_view_of(
         destination=destination,
         departures=tuple(departures),
         now=now,
-        zone=SYDNEY_ZONE,
+        zone=city_under_test().zone,
         stale_after=STALE_LIMIT,
-        city=SYDNEY,
+        city=city_under_test(),
         scroll=0,
         live_since=now,
         has_feed=True,
@@ -564,9 +566,9 @@ def inputs_of(
         patterns=patterns or {},
         positions=positions or {},
         now=now,
-        zone=SYDNEY_ZONE,
+        zone=city_under_test().zone,
         stale_after=STALE_LIMIT,
-        line_kinds=line_modes(modes=SYDNEY.modes),
+        line_kinds=line_modes(modes=city_under_test().modes),
         scroll=0,
         cursor=None,
         picking=None,
@@ -685,8 +687,8 @@ def carry_on_inputs(
         stops=calls(stations='CD', start=EIGHT + 720, points=LINE),
     )
     item = departure(
-        departs=START, trip_id='a', route='T8', mode=SydneyFeed.TRAIN,
-        kind=SydneyMode.TRAIN, then=T2_ON,
+        departs=START, trip_id='a', route='T8', mode='train',
+        kind='train', then=T2_ON,
     )
     return inputs_of(
         reach=line_reach(off=off),

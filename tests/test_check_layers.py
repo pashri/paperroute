@@ -36,9 +36,11 @@ CLEAN: Final[dict[str, str]] = {
     f'{DEVICE}/src/paperroute_device/z.py': '',
     f'{TESTKIT}/pyproject.toml': (
         '[project]\nname = "paperroute-testkit"\n'
-        'dependencies = ["paperroute"]\n'
+        'dependencies = ["paperroute-device"]\n'
     ),
-    f'{TESTKIT}/src/paperroute_testkit/__init__.py': 'import paperroute\n',
+    f'{TESTKIT}/src/paperroute_testkit/__init__.py': (
+        'import paperroute_device\n'
+    ),
 }
 
 
@@ -218,6 +220,33 @@ def test_problems_flags_sibling_app_import(
     root = build(root=tmp_path, extra={name: 'import paperroute\n'})
     assert check_layers.problems(root=root) == [
         f'{name}: paperroute_other may not import paperroute',
+    ]
+
+
+def test_problems_flags_testkit_importing_app(
+    check_layers: ModuleType, tmp_path: Path,
+) -> None:
+    """The testkit may not import the app, even inside a function."""
+    name = f'{TESTKIT}/src/paperroute_testkit/__init__.py'
+    text = 'def go() -> None:\n    from paperroute import city\n'
+    root = build(root=tmp_path, extra={name: text})
+    assert check_layers.problems(root=root) == [
+        f'{name}: paperroute_testkit may not import paperroute',
+    ]
+
+
+def test_problems_flags_testkit_depending_on_app(
+    check_layers: ModuleType, tmp_path: Path,
+) -> None:
+    """The testkit distribution may not depend on the app."""
+    name = f'{TESTKIT}/pyproject.toml'
+    text = (
+        '[project]\nname = "paperroute-testkit"\n'
+        'dependencies = ["paperroute-device", "paperroute"]\n'
+    )
+    root = build(root=tmp_path, extra={name: text})
+    assert check_layers.problems(root=root) == [
+        f'{name}: paperroute_testkit may not import paperroute',
     ]
 
 

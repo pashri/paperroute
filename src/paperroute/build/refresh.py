@@ -1,4 +1,4 @@
-"""Refresh the timetable from TfNSW and swap it in atomically."""
+"""Refresh the timetable from the city's sources and swap it in."""
 
 import fcntl
 import sqlite3
@@ -6,11 +6,10 @@ import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
 from dataclasses import replace
-from datetime import date, timedelta
+from datetime import date, timedelta, tzinfo
 from pathlib import Path
 from typing import Final
 
-from paperroute.adapters.tfnsw import BASE_URL
 from paperroute.build.handoff import (
     HANDOFF_NAME,
     Fetched,
@@ -19,11 +18,10 @@ from paperroute.build.handoff import (
 )
 from paperroute.build.source_state import SourceState, load_states, save_states
 from paperroute.build.sources import (
-    SOURCES,
+    BuildParts,
+    Downloader,
     SourceSpec,
-    download,
     file_sha256,
-    head,
     needs_download,
 )
 from paperroute.build.swap import (
@@ -39,11 +37,11 @@ from paperroute.build.timetable import (
     build_timetable,
     yesterday,
 )
-from paperroute.city import SYDNEY, SYDNEY_REF
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from paperroute_device.rss import max_rss_mb
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.layout import Layout
+from paperroute_transit.core.city import City
 
 TIMEOUT_S: Final[float] = 60
 MIN_DAYS_LEFT: Final[int] = 7
@@ -85,32 +83,28 @@ def refresh_lock(*, path: Path) -> Iterator[int]:
         yield file.fileno()
 
 
-def head_all(*, base_url: str, api_key: str) -> dict[str, SourceState]:
+def head_all(*, parts: BuildParts) -> dict[str, SourceState]:
     """
     Read every source's validators.
 
     Parameters
     ----------
-    base_url : str
-        API root.
-    api_key : str
-        TfNSW API key.
+    parts : BuildParts
+        The city's sources and the downloader that asks for them.
 
     Returns
     -------
     dict[str, SourceState]
-        Fresh validators by source name.
+        Fresh validators by source name, in the sources' order.
     """
     progress(phase='head')
     return {
-        spec.name: head(
-            base_url=base_url,
+        spec.name: parts.downloader.head(
             spec=spec,
-            api_key=api_key,
             timeout_s=TIMEOUT_S,
             limiter=LIMITER,
         )
-        for spec in SOURCES
+        for spec in parts.sources
     }
 
 
@@ -145,8 +139,7 @@ def fetch_source(
     *,
     layout: Layout,
     spec: SourceSpec,
-    base_url: str,
-    api_key: str,
+    downloader: Downloader,
     fresh: SourceState,
     stored: SourceState | None,
     intact: str | None,
@@ -160,10 +153,8 @@ def fetch_source(
         Data paths.
     spec : SourceSpec
         Source.
-    base_url : str
-        API root.
-    api_key : str
-        TfNSW API key.
+    downloader : Downloader
+        Fetches the zip.
     fresh : SourceState
         Validators from a new HEAD.
     stored : SourceState | None
@@ -184,10 +175,8 @@ def fetch_source(
     ):
         return replace(fresh, sha256=intact), False
     progress(phase=f'download {spec.name}')
-    digest = download(
-        base_url=base_url,
+    digest = downloader.download(
         spec=spec,
-        api_key=api_key,
         out=layout.work / f'{spec.name}.zip',
         timeout_s=TIMEOUT_S,
         limiter=LIMITER,
@@ -198,8 +187,7 @@ def fetch_source(
 def download_changed(
     *,
     layout: Layout,
-    base_url: str,
-    api_key: str,
+    parts: BuildParts,
     fresh: dict[str, SourceState],
 ) -> Fetched:
     """
@@ -212,10 +200,8 @@ def download_changed(
     ----------
     layout : Layout
         Data paths.
-    base_url : str
-        API root.
-    api_key : str
-        TfNSW API key.
+    parts : BuildParts
+        The city's sources and their downloader.
     fresh : dict[str, SourceState]
         Validators from head_all.
 
@@ -227,19 +213,18 @@ def download_changed(
     stored = load_states(path=layout.states)
     intact = {
         spec.name: intact_sha(layout=layout, name=spec.name, stored=stored)
-        for spec in SOURCES
+        for spec in parts.sources
     }
     results = {
         spec.name: fetch_source(
             layout=layout,
             spec=spec,
-            base_url=base_url,
-            api_key=api_key,
+            downloader=parts.downloader,
             fresh=fresh[spec.name],
             stored=stored.get(spec.name),
             intact=intact[spec.name],
         )
-        for spec in SOURCES
+        for spec in parts.sources
     }
     downloaded = tuple(name for name, (_, got) in results.items() if got)
     return Fetched(
@@ -253,8 +238,15 @@ def download_changed(
     )
 
 
-def build_and_check(*, layout: Layout, changed: tuple[str, ...],
-                    days: int, handoff: Handoff | None) -> Path:
+def build_and_check(
+    *,
+    layout: Layout,
+    changed: tuple[str, ...],
+    days: int,
+    handoff: Handoff | None,
+    city: City,
+    parts: BuildParts,
+) -> Path:
     """
     Build a timetable in the scratch directory and check it.
 
@@ -266,10 +258,14 @@ def build_and_check(*, layout: Layout, changed: tuple[str, ...],
         Sources to take from the scratch directory; the rest come from
         the stored zips.
     days : int
-        Days the timetable covers, from yesterday in Sydney.
+        Days the timetable covers, from yesterday in the city's zone.
     handoff : Handoff | None
         When set, the build execs into the extras program, which checks
         and swaps in, and this never returns.
+    city : City
+        The city, for its time zone.
+    parts : BuildParts
+        The city's reference and its sources, in the order they load.
 
     Returns
     -------
@@ -286,10 +282,10 @@ def build_and_check(*, layout: Layout, changed: tuple[str, ...],
                     layout.work if spec.name in changed else layout.sources
                 ) / f'{spec.name}.zip',
             )
-            for spec in SOURCES
+            for spec in parts.sources
         ],
-        window=Window(start=yesterday(zone=SYDNEY.zone), days=days),
-        city_ref=SYDNEY_REF,
+        window=Window(start=yesterday(zone=city.zone), days=days),
+        city_ref=parts.city_ref,
         out=out,
         handoff=handoff,
     )
@@ -320,14 +316,16 @@ def read_meta(*, path: Path) -> dict[str, str]:
         return {}
 
 
-def days_left(*, meta: dict[str, str]) -> int:
+def days_left(*, meta: dict[str, str], zone: tzinfo) -> int:
     """
-    Count the days from today in Sydney to the end of a timetable window.
+    Count the days from today to the end of a timetable window.
 
     Parameters
     ----------
     meta : dict[str, str]
         The timetable's meta, from read_meta.
+    zone : tzinfo
+        The city's time zone, which says what today is.
 
     Returns
     -------
@@ -339,11 +337,19 @@ def days_left(*, meta: dict[str, str]) -> int:
     end = date.fromisoformat(meta['window_start']) + timedelta(
         days=int(meta['window_days']),
     )
-    return (end - yesterday(zone=SYDNEY.zone)).days - 1
+    return (end - yesterday(zone=zone)).days - 1
 
 
-def update(*, layout: Layout, fetched: Fetched, days: int,
-           force: bool, handoff: Handoff | None = None) -> bool:
+def update(
+    *,
+    layout: Layout,
+    fetched: Fetched,
+    days: int,
+    force: bool,
+    city: City,
+    parts: BuildParts,
+    handoff: Handoff | None = None,
+) -> bool:
     """
     Rebuild and swap in when needed, else just store the new validators.
 
@@ -357,6 +363,10 @@ def update(*, layout: Layout, fetched: Fetched, days: int,
         Days the timetable covers.
     force : bool
         Rebuild even when nothing changed.
+    city : City
+        The city, for its time zone and projection origin.
+    parts : BuildParts
+        The city's reference and its sources.
     handoff : Handoff | None
         Hand the rebuild over to the extras program; see build_and_check.
 
@@ -371,15 +381,21 @@ def update(*, layout: Layout, fetched: Fetched, days: int,
     meta = read_meta(path=layout.timetable)
     origin = meta.get('origin')
     stale = (
-        days_left(meta=meta) < MIN_DAYS_LEFT
+        days_left(meta=meta, zone=city.zone) < MIN_DAYS_LEFT
         or meta.get('schema_version') != SCHEMA_VERSION
-        or (origin is not None and origin != SYDNEY.projection.origin_text)
+        or (origin is not None and origin != city.projection.origin_text)
     )
     if not (fetched.changed or force or stale):
         save_states(path=layout.states, states=fetched.states)
         return False
-    built = build_and_check(layout=layout, changed=fetched.changed, days=days,
-                            handoff=handoff)
+    built = build_and_check(
+        layout=layout,
+        changed=fetched.changed,
+        days=days,
+        handoff=handoff,
+        city=city,
+        parts=parts,
+    )
     swap_in(layout=layout, built=built, fetched=fetched)
     return True
 
@@ -400,8 +416,8 @@ def fresh_work(*, layout: Layout) -> None:
 def refresh(
     *,
     data_dir: Path,
-    api_key: str,
-    base_url: str = BASE_URL,
+    city: City,
+    parts: BuildParts,
     days: int = 14,
     force: bool = False,
     error_log: Path | None = None,
@@ -417,12 +433,12 @@ def refresh(
     ----------
     data_dir : Path
         Holds timetable.db, sources/, work/ and refresh.lock.
-    api_key : str
-        TfNSW API key.
-    base_url : str
-        API root, ending in '/'.
+    city : City
+        The city, for its time zone and projection origin.
+    parts : BuildParts
+        The city's reference, its sources and their downloader.
     days : int
-        Days the timetable covers, from yesterday in Sydney.
+        Days the timetable covers, from yesterday in the city's zone.
     force : bool
         Rebuild even when no source changed.
     error_log : Path | None
@@ -445,9 +461,8 @@ def refresh(
         try:
             fetched = download_changed(
                 layout=layout,
-                base_url=base_url,
-                api_key=api_key,
-                fresh=head_all(base_url=base_url, api_key=api_key),
+                parts=parts,
+                fresh=head_all(parts=parts),
             )
             tail = RefreshTail(
                 data_dir=data_dir, fetched=fetched, started=started,
@@ -455,6 +470,7 @@ def refresh(
             )
             rebuilt = update(
                 layout=layout, fetched=fetched, days=days, force=force,
+                city=city, parts=parts,
                 handoff=(
                     Handoff(path=layout.work / HANDOFF_NAME, tail=tail)
                     if hand_over

@@ -26,19 +26,24 @@ DEVICE_IMPORTS: Final[str] = (
 )
 REFRESH_RUN: Final[str] = (
     'import sys\n'
+    'from pathlib import Path\n'
     'from paperroute.build.__main__ import main\n'
-    "sys.argv = ['build', 'refresh', '--data-dir', sys.argv[1]]\n"
+    'data = Path(sys.argv[1])\n'
+    "sys.argv = ['build', 'refresh', '--data-dir', str(data)]\n"
     'try:\n'
     '    main()\n'
     'except SystemExit as stop:\n'
     '    assert stop.code == 1, stop.code\n'
     "assert not {'osmium', 'shapely'} & set(sys.modules)\n"
     "assert 'pydantic' not in sys.modules\n"
+    "assert not (data / 'timetable.db').exists()\n"
+    "assert not any((data / 'sources').glob('*'))\n"
 )
 KIT_TEXT: Final[frozenset[str]] = frozenset(
     {'.py', '.html', '.css', '.js', '.toml', '.txt'},
 )
 NSW: Final[re.Pattern[str]] = re.compile(r'(?i)\bnsw')
+KEY_SCHEME: Final[re.Pattern[str]] = re.compile(r'(?i)\bapikey\b|BASE_URL')
 APP: Final[Path] = ROOT / 'src' / 'paperroute'
 CITY_DEFAULTS: Final[dict[str, str | None]] = {
     'Settings': None,
@@ -56,8 +61,7 @@ SYDNEY_MODULES: Final[frozenset[str]] = frozenset({
     'paperroute.core.trip_search',
     'paperroute.planner_port',
     'paperroute.build.__main__',
-    'paperroute.build.sources',
-    'paperroute.build.refresh',
+    'paperroute.build.tfnsw_sources',
     'paperroute.build.dedupe',
     'paperroute.build.trainlink',
 })
@@ -96,6 +100,19 @@ def test_refresh_never_imports_build_libraries(tmp_path: Path) -> None:
         },
     )
     assert result.returncode == 0, result.stderr
+
+
+def test_build_engine_names_no_key_scheme() -> None:
+    """The build engine leaves the key and the API root to the downloader."""
+    paths = [
+        APP / 'build' / f'{name}.py' for name in ('sources', 'refresh', 'cli')
+    ]
+    offenders = [
+        str(path.relative_to(APP))
+        for path in paths
+        if KEY_SCHEME.search(path.read_text(encoding='utf-8'))
+    ]
+    assert not offenders
 
 
 def test_city_loads_no_feed_parsers() -> None:

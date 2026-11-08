@@ -1,101 +1,18 @@
-"""Tests for the build command line."""
+"""Tests for Sydney's build entry."""
 
-import argparse
 import json
 import logging
-import os
 import sqlite3
 import subprocess
 import sys
 from collections.abc import Iterator
 from contextlib import closing
-from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
 
-from paperroute.build.__main__ import main, parse_args, run_check_tiles
-from paperroute.city import SYDNEY_ZONE
-from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
-from paperroute_transit.build.tile_store import TileWriter
-from paperroute_transit.core.tiles import TILE_STYLE
+from paperroute.build.__main__ import main
 from tests.build.network_feed import network_feed
-from tests.build.tile_inputs import write_timetable
-
-
-def test_start_defaults_to_yesterday(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The window starts a day early to keep NightRide trips."""
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        ['build', 'gtfs', '--bundle', 'b.zip', '--out', 'o.db'],
-    )
-    today = datetime.now(SYDNEY_ZONE).date()
-    start = parse_args().start
-    assert start in (
-        today - timedelta(days=1),
-        today - timedelta(days=2),
-    )
-
-
-def test_tiles_cli_parses_bbox_and_zooms(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The tiles subcommand reads its box, zooms and defaults."""
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        [
-            'build', 'tiles', '--osm', 'nsw.osm.pbf',
-            '--timetable', 'timetable.db', '--out', 'data/tiles.db',
-            '--bbox', '150.95,-33.84,151.03,-33.76', '--zooms', '8,45',
-        ],
-    )
-    args = parse_args()
-    assert args.bbox == (150.95, -33.84, 151.03, -33.76)
-    assert args.zooms == (8, 45)
-    assert args.work is None
-    assert args.jobs == (os.cpu_count() or 1)
-    assert args.index == 'flex_mem'
-
-
-def test_tiles_cli_refuses_a_short_bbox(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A box needs four numbers."""
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        [
-            'build', 'tiles', '--osm', 'a', '--timetable', 'b',
-            '--out', 'c', '--bbox', '150.95,-33.84,151.03',
-        ],
-    )
-    with pytest.raises(SystemExit):
-        parse_args()
-
-
-def test_refresh_takes_data_dir_and_error_log(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """The refresh subcommand reads its paths, days and force flag."""
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        [
-            'build',
-            'refresh',
-            '--data-dir',
-            '/var/lib/paperroute',
-            '--error-log',
-            '/var/lib/paperroute/log/errors.jsonl',
-        ],
-    )
-    args = parse_args()
-    assert args.data_dir == Path('/var/lib/paperroute')
-    assert args.error_log == Path('/var/lib/paperroute/log/errors.jsonl')
-    assert args.days == 14
-    assert not args.force
 
 
 @pytest.fixture(name='restored_logging')
@@ -115,7 +32,7 @@ def _restored_logging() -> Iterator[None]:
 def test_refresh_logs_a_missing_key_file_to_the_error_log(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A missing key file reaches errors.jsonl and exits 1."""
+    """A missing key file reaches errors.jsonl, exits 1 and builds nothing."""
     key_file = tmp_path / 'no-such-key'
     error_log = tmp_path / 'log' / 'errors.jsonl'
     monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(key_file))
@@ -123,7 +40,7 @@ def test_refresh_logs_a_missing_key_file_to_the_error_log(
         sys,
         'argv',
         [
-            'build', 'refresh', '--data-dir', str(tmp_path),
+            'paperroute-build', 'refresh', '--data-dir', str(tmp_path),
             '--error-log', str(error_log),
         ],
     )
@@ -135,73 +52,8 @@ def test_refresh_logs_a_missing_key_file_to_the_error_log(
     record = json.loads(lines[0])
     assert record['level'] == 'ERROR'
     assert f'No TfNSW API key in {key_file}' in record['exc_info']
-
-
-def tiles_argv(*, tmp_path: Path, osm: Path) -> list[str]:
-    """
-    Build a tiles command line over the tiny inputs.
-
-    Parameters
-    ----------
-    tmp_path : Path
-        Directory holding the timetable and the output.
-    osm : Path
-        The OSM file to read.
-
-    Returns
-    -------
-    list[str]
-        The arguments, with one job and the default work directory.
-    """
-    write_timetable(path=tmp_path / 'timetable.db')
-    return [
-        'build', 'tiles', '--osm', str(osm),
-        '--timetable', str(tmp_path / 'timetable.db'),
-        '--out', str(tmp_path / 'tiles.db'),
-        '--bbox', ','.join(str(value) for value in TINY_BBOX),
-        '--zooms', '8', '--jobs', '1',
-    ]
-
-
-@pytest.mark.usefixtures('restored_logging')
-def test_tiles_prints_a_json_report(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A finished build prints its report as the last line and exits 0."""
-    write_tiny_osm(path=tmp_path / 'tiny.osm.pbf')
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        tiles_argv(tmp_path=tmp_path, osm=tmp_path / 'tiny.osm.pbf'),
-    )
-    with pytest.raises(SystemExit) as info:
-        main()
-    assert info.value.code == 0
-    report = json.loads(capsys.readouterr().out.splitlines()[-1])
-    assert report['tiles'] > 0
-    assert (tmp_path / 'tiles-work').is_dir()
-
-
-@pytest.mark.usefixtures('restored_logging')
-def test_tiles_logs_a_failed_build(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A missing OSM file is logged and exits 1."""
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        tiles_argv(tmp_path=tmp_path, osm=tmp_path / 'missing.osm.pbf'),
-    )
-    with pytest.raises(SystemExit) as info:
-        main()
-    assert info.value.code == 1
-    lines = capsys.readouterr().err.splitlines()
-    assert json.loads(lines[-1])['msg'] == 'tile build failed'
-    assert not (tmp_path / 'tiles.db').exists()
+    assert not (tmp_path / 'timetable.db').exists()
+    assert not any((tmp_path / 'sources').glob('*'))
 
 
 def test_gtfs_execs_into_the_extras(tmp_path: Path) -> None:
@@ -224,82 +76,3 @@ def test_gtfs_execs_into_the_extras(tmp_path: Path) -> None:
     ]
     with closing(sqlite3.connect(out)) as conn:
         assert conn.execute('SELECT count(*) FROM runs').fetchone()[0] > 0
-
-
-def tiles_with(*, out: Path, meta: dict[str, str]) -> Path:
-    """
-    Write a tiles file with no tiles and the given meta.
-
-    Parameters
-    ----------
-    out : Path
-        Destination file.
-    meta : dict[str, str]
-        Meta rows.
-
-    Returns
-    -------
-    Path
-        The file.
-    """
-    with TileWriter(out=out) as writer:
-        writer.finish(meta=meta)
-    return out
-
-
-def test_check_tiles_accepts_this_release(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Tiles for this release's zooms and style pass quietly."""
-    out = tiles_with(
-        out=tmp_path / 'tiles.db',
-        meta={'zooms': '3,5,8,14,25,45', 'style': TILE_STYLE},
-    )
-    assert run_check_tiles(args=argparse.Namespace(path=out)) == 0
-    assert capsys.readouterr().err == ''
-
-
-def test_check_tiles_warns_on_other_zooms(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Other zooms fail with both lists and what the Pi will show."""
-    out = tiles_with(
-        out=tmp_path / 'tiles.db',
-        meta={'zooms': '3,5,8,14,45', 'style': TILE_STYLE},
-    )
-    assert run_check_tiles(args=argparse.Namespace(path=out)) == 1
-    assert capsys.readouterr().err == (
-        f'tiles: {out} has zoom levels 3,5,8,14,45 and style {TILE_STYLE}; '
-        f'this release needs 3,5,8,14,25,45 and {TILE_STYLE}. The Pi will '
-        'show "Map not installed" until you rebuild the tiles (README, '
-        'Map tiles).\n'
-    )
-
-
-def test_check_tiles_unreadable(
-    tmp_path: Path,
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """A file that isn't a tiles database fails with none for both."""
-    out = tmp_path / 'tiles.db'
-    out.write_bytes(b'not a database ' * 100)
-    assert run_check_tiles(args=argparse.Namespace(path=out)) == 1
-    err = capsys.readouterr().err
-    assert 'has zoom levels none and style none;' in err
-
-
-def test_check_tiles_from_the_command_line(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """check-tiles takes the path and exits with the check's status."""
-    out = tiles_with(
-        out=tmp_path / 'tiles.db',
-        meta={'zooms': '3,5,8,14,25,45', 'style': TILE_STYLE},
-    )
-    monkeypatch.setattr(sys, 'argv', ['build', 'check-tiles', str(out)])
-    with pytest.raises(SystemExit) as info:
-        main()
-    assert info.value.code == 0

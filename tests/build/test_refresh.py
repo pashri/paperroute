@@ -18,10 +18,11 @@ from paperroute.build import handoff as handoff_module
 from paperroute.build import refresh as refresh_module
 from paperroute.build import swap
 from paperroute.build.refresh import RefreshBusy, refresh
-from paperroute.build.source_state import SourceError
-from paperroute.build.sources import SOURCES
+from paperroute.build.source_state import SourceError, SourceState
+from paperroute.build.sources import BuildParts, SourceSpec
 from paperroute.build.swap import RefreshReport, TimetableCheckError
-from paperroute.city import SYDNEY_REF
+from paperroute.build.tfnsw_sources import SYDNEY_SOURCES, TfnswDownloader
+from paperroute.city import SYDNEY, SYDNEY_REF
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from tests.build.feed_server import FeedServer, Served, feed_server
 from tests.build.feeds import bus_feed
@@ -76,7 +77,7 @@ def _server(tmp_path: Path) -> Iterator[FeedServer]:
         'bundle': (REAL / 'bundle.zip').read_bytes(),
     }
     with feed_server() as server:
-        for spec in SOURCES:
+        for spec in SYDNEY_SOURCES:
             server.state.files['/' + spec.path] = Served(
                 body=bodies[spec.name],
             )
@@ -134,6 +135,27 @@ def _data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     return path
 
 
+def parts_for(*, server: FeedServer) -> BuildParts:
+    """
+    Sydney's build parts with a fake key, against the test server.
+
+    Parameters
+    ----------
+    server : FeedServer
+        Feed server.
+
+    Returns
+    -------
+    BuildParts
+        The parts.
+    """
+    return BuildParts(
+        city_ref=SYDNEY_REF,
+        sources=SYDNEY_SOURCES,
+        downloader=TfnswDownloader(key=lambda: KEY, base_url=server.base_url),
+    )
+
+
 def run(
     *,
     server: FeedServer,
@@ -159,8 +181,8 @@ def run(
     """
     return refresh(
         data_dir=data_dir,
-        api_key=KEY,
-        base_url=server.base_url,
+        city=SYDNEY,
+        parts=parts_for(server=server),
         days=DAYS,
         force=force,
     )
@@ -492,6 +514,91 @@ def test_update_rebuilds_on_other_origin(
     assert report.rebuilt is rebuilt
 
 
+class RecordingDownloader:
+    """A downloader that records the sources it is asked about."""
+
+    def __init__(self) -> None:
+        self.heads: list[str] = []
+
+    def head(
+        self,
+        *,
+        spec: SourceSpec,
+        timeout_s: float,
+        limiter: SyncStartLimiter | None,
+    ) -> SourceState:
+        """
+        Record a HEAD and give fixed validators.
+
+        Parameters
+        ----------
+        spec : SourceSpec
+            Source.
+        timeout_s : float
+            Socket timeout in seconds.
+        limiter : SyncStartLimiter | None
+            Spaces out request starts.
+
+        Returns
+        -------
+        SourceState
+            Validators naming the source.
+        """
+        assert timeout_s > 0
+        assert limiter is refresh_module.LIMITER
+        self.heads.append(spec.name)
+        return SourceState(etag=spec.name, last_modified=None, sha256=None)
+
+    def download(
+        self,
+        *,
+        spec: SourceSpec,
+        out: Path,
+        timeout_s: float,
+        limiter: SyncStartLimiter | None,
+    ) -> str:
+        """
+        Refuse to download.
+
+        Parameters
+        ----------
+        spec : SourceSpec
+            Source.
+        out : Path
+            File to write.
+        timeout_s : float
+            Socket timeout in seconds.
+        limiter : SyncStartLimiter | None
+            Spaces out request starts.
+
+        Raises
+        ------
+        AssertionError
+            Always; the HEAD test never downloads.
+        """
+        raise AssertionError(f'{spec.name} {out} {timeout_s} {limiter}')
+
+
+def test_head_all_asks_the_downloader_per_source() -> None:
+    """Each source is asked about once, in the parts' order."""
+    recording = RecordingDownloader()
+    sources = (
+        SourceSpec(name='c', path='z'),
+        SourceSpec(name='a', path='x'),
+        SourceSpec(name='b', path='y'),
+    )
+    fresh = refresh_module.head_all(
+        parts=BuildParts(
+            city_ref=SYDNEY_REF,
+            sources=sources,
+            downloader=recording,
+        ),
+    )
+    assert recording.heads == ['c', 'a', 'b']
+    assert list(fresh) == ['c', 'a', 'b']
+    assert fresh['a'].etag == 'a'
+
+
 def test_read_meta_of_missing_file_is_empty(tmp_path: Path) -> None:
     """An unreadable timetable has no meta."""
     assert not refresh_module.read_meta(path=tmp_path / 'missing.db')
@@ -521,7 +628,7 @@ def test_refresh_hands_over_after_the_load(
     monkeypatch.setattr(os, 'execv', execv)
     with pytest.raises(Execed):
         refresh(
-            data_dir=data_dir, api_key=KEY, base_url=server.base_url,
+            data_dir=data_dir, city=SYDNEY, parts=parts_for(server=server),
             days=DAYS, error_log=data_dir / 'log' / 'errors.jsonl',
             hand_over=True,
         )

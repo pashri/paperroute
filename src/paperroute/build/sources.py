@@ -1,4 +1,4 @@
-"""Check, download and record the TfNSW timetable zips."""
+"""Describe, check and download a city's timetable zips."""
 
 import hashlib
 import http.client
@@ -6,7 +6,7 @@ import os
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Final
+from typing import Final, Protocol
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
@@ -18,54 +18,94 @@ CHUNK_BYTES: Final[int] = 1 << 20
 
 @dataclass(frozen=True)
 class SourceSpec:
-    """One timetable zip and its API path."""
+    """One timetable zip and where the downloader finds it."""
 
     name: str
     path: str
 
 
-SOURCES: Final[tuple[SourceSpec, ...]] = (
-    SourceSpec(name='sydneytrains', path='v1/gtfs/schedule/sydneytrains'),
-    SourceSpec(name='metro', path='v2/gtfs/schedule/metro'),
-    SourceSpec(
-        name='bundle',
-        path='v1/publictransport/timetables/complete/gtfs',
-    ),
-)
+class Downloader(Protocol):
+    """Reads a source's validators and downloads its zip."""
+
+    def head(
+        self,
+        *,
+        spec: SourceSpec,
+        timeout_s: float,
+        limiter: SyncStartLimiter | None,
+    ) -> SourceState:
+        """
+        Read a source's ETag and Last-Modified.
+
+        Parameters
+        ----------
+        spec : SourceSpec
+            Source.
+        timeout_s : float
+            Socket timeout in seconds.
+        limiter : SyncStartLimiter | None
+            Spaces out request starts; none means no limit.
+
+        Returns
+        -------
+        SourceState
+            The validators, with sha256 None.
+        """
+
+    def download(
+        self,
+        *,
+        spec: SourceSpec,
+        out: Path,
+        timeout_s: float,
+        limiter: SyncStartLimiter | None,
+    ) -> str:
+        """
+        Download a source's zip.
+
+        Parameters
+        ----------
+        spec : SourceSpec
+            Source.
+        out : Path
+            File to write.
+        timeout_s : float
+            Socket timeout in seconds.
+        limiter : SyncStartLimiter | None
+            Spaces out request starts; none means no limit.
+
+        Returns
+        -------
+        str
+            SHA-256 hex digest of the zip.
+
+        Raises
+        ------
+        SourceError
+            On an HTTP error, a short body or a write failure. The message
+            holds the source name and the status or error class only.
+        """
 
 
-def request(
-    *,
-    base_url: str,
-    spec: SourceSpec,
-    api_key: str,
-    method: str,
-) -> Request:
+@dataclass(frozen=True)
+class BuildParts:
     """
-    Build an authorised request for a source.
+    What a city plugs into the timetable build.
 
-    The key is an unredirected header, so a redirect to another host
-    doesn't carry it.
-
-    Parameters
+    Attributes
     ----------
-    base_url : str
-        API root, ending in '/'.
-    spec : SourceSpec
-        Source.
-    api_key : str
-        TfNSW API key.
-    method : str
-        'HEAD' or 'GET'.
-
-    Returns
-    -------
-    Request
-        The request.
+    city_ref : str
+        The city's reference, such as ``package.module:NAME``.
+    sources : tuple[SourceSpec, ...]
+        The timetable zips, preferred first, so their trips win the
+        merge.
+    downloader : Downloader
+        Fetches the zips.
     """
-    built = Request(base_url + spec.path, method=method)
-    built.add_unredirected_header('Authorization', f'apikey {api_key}')
-    return built
+
+    city_ref: str
+    sources: tuple[SourceSpec, ...]
+    downloader: Downloader
 
 
 def open_source(
@@ -114,51 +154,6 @@ def open_source(
     except (URLError, OSError, http.client.HTTPException) as error:
         raise SourceError(f'{name}: {type(error).__name__}') from error
     return response
-
-
-def head(
-    *,
-    base_url: str,
-    spec: SourceSpec,
-    api_key: str,
-    timeout_s: float,
-    limiter: SyncStartLimiter | None = None,
-) -> SourceState:
-    """
-    Read a source's ETag and Last-Modified.
-
-    Parameters
-    ----------
-    base_url : str
-        API root, ending in '/'.
-    spec : SourceSpec
-        Source.
-    api_key : str
-        TfNSW API key.
-    timeout_s : float
-        Socket timeout in seconds.
-    limiter : SyncStartLimiter | None
-        Spaces out request starts; none means no limit.
-
-    Returns
-    -------
-    SourceState
-        The validators, with sha256 None.
-    """
-    built = request(
-        base_url=base_url,
-        spec=spec,
-        api_key=api_key,
-        method='HEAD',
-    )
-    with open_source(
-        built=built, name=spec.name, timeout_s=timeout_s, limiter=limiter,
-    ) as rsp:
-        return SourceState(
-            etag=rsp.headers.get('ETag'),
-            last_modified=rsp.headers.get('Last-Modified'),
-            sha256=None,
-        )
 
 
 def stream_to(*, response: http.client.HTTPResponse, out: Path) -> str:
@@ -213,62 +208,6 @@ def file_sha256(*, path: Path) -> str:
         for chunk in iter(partial(file.read, CHUNK_BYTES), b''):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def download(
-    *,
-    base_url: str,
-    spec: SourceSpec,
-    api_key: str,
-    out: Path,
-    timeout_s: float,
-    limiter: SyncStartLimiter | None = None,
-) -> str:
-    """
-    Download a source's zip.
-
-    Parameters
-    ----------
-    base_url : str
-        API root, ending in '/'.
-    spec : SourceSpec
-        Source.
-    api_key : str
-        TfNSW API key.
-    out : Path
-        File to write.
-    timeout_s : float
-        Socket timeout in seconds.
-    limiter : SyncStartLimiter | None
-        Spaces out request starts; none means no limit.
-
-    Returns
-    -------
-    str
-        SHA-256 hex digest of the zip.
-
-    Raises
-    ------
-    SourceError
-        On an HTTP error, a short body or a write failure. The message
-        holds the source name and the status or error class only.
-    """
-    built = request(
-        base_url=base_url,
-        spec=spec,
-        api_key=api_key,
-        method='GET',
-    )
-    try:
-        with open_source(
-            built=built,
-            name=spec.name,
-            timeout_s=timeout_s,
-            limiter=limiter,
-        ) as response:
-            return stream_to(response=response, out=out)
-    except (http.client.HTTPException, OSError) as error:
-        raise SourceError(f'{spec.name}: {type(error).__name__}') from error
 
 
 def needs_download(

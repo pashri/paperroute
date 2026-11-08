@@ -4,9 +4,9 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute_device.core.text import DOT
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
+from paperroute_sydney.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute_testkit.core.alert_factories import (
     ABBOTSFORD,
     F9_ONGOING,

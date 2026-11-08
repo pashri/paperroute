@@ -9,8 +9,8 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY_ZONE
 from paperroute_device.core.text import clock_text
+from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN,
     CAMPBELLTOWN_WAY,

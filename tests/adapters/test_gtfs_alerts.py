@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from google.transit import gtfs_realtime_pb2
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_transit.adapters.feed_errors import FeedError
 from paperroute_transit.adapters.gtfs_alerts import english, parse_alerts
 from paperroute_transit.core.alert_model import Alert, AlertsSnapshot, Period

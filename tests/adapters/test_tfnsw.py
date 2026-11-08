@@ -13,7 +13,8 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from paperroute.adapters.tfnsw import (
+from paperroute_device.adapters.rate_limit import StartLimiter
+from paperroute_sydney.adapters.tfnsw import (
     TFNSW_STARTS_PER_S,
     AiohttpFeedsClient,
     NoApiKey,
@@ -21,7 +22,6 @@ from paperroute.adapters.tfnsw import (
     read_retry_after,
     tfnsw_limiter,
 )
-from paperroute_device.adapters.rate_limit import StartLimiter
 from paperroute_transit.adapters.feed_errors import (
     FeedError,
     FeedThrottled,

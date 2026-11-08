@@ -5,9 +5,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_device.core.text import DOT
 from paperroute_device.core.wifi_text import setup_footer
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.factories import (
     EAST,
     POINTS,

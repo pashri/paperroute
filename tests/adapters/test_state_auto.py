@@ -4,7 +4,7 @@ import logging
 
 import pytest
 
-from paperroute.city import SYDNEY
+from paperroute_sydney.city import SYDNEY
 from paperroute_transit.adapters.state_auto import add_auto, repaired_windows
 
 GOOD: dict[str, object] = {

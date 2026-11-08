@@ -2,7 +2,7 @@
 
 import pytest
 
-from paperroute.city import SYDNEY
+from paperroute_sydney.city import SYDNEY
 from paperroute_transit.adapters.board_web import BOARD_WEB
 from paperroute_transit.adapters.mode_css import mode_css
 from paperroute_transit.core.modes import ModeSpec

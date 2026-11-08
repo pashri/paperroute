@@ -6,7 +6,7 @@ from contextlib import closing
 
 import pytest
 
-from paperroute.build.trainlink import (
+from paperroute_sydney.build.trainlink import (
     MATCH_SECONDS,
     Action,
     Cut,
@@ -16,7 +16,7 @@ from paperroute.build.trainlink import (
     load_trips,
     trim_trainlink,
 )
-from paperroute.city import REGIONAL_AGENCIES, TRAINLINK
+from paperroute_sydney.city import REGIONAL_AGENCIES, TRAINLINK
 from paperroute_transit.build.timetable import create_schema
 
 DAY = '20261020'

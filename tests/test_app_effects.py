@@ -12,8 +12,13 @@ import numpy as np
 import pytest
 from google.transit import gtfs_realtime_pb2
 
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyFeed, SydneyMode
-from paperroute.sydney_feeds import SydneyFeeds
+from paperroute_sydney.city import (
+    SYDNEY,
+    SYDNEY_PROJECTION,
+    SydneyFeed,
+    SydneyMode,
+)
+from paperroute_sydney.sydney_feeds import SydneyFeeds
 from paperroute_testkit.app_factories import (
     AT,
     MAP_PIN,

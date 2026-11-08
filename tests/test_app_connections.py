@@ -5,7 +5,7 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY_ZONE, SydneyMode
+from paperroute_sydney.city import SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
     PARRAMATTA,

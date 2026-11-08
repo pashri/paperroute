@@ -8,7 +8,7 @@ from typing import Any, Final
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
     HAMMERS,

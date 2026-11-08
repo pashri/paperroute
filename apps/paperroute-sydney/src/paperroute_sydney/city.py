@@ -7,10 +7,10 @@ from enum import StrEnum
 from typing import Final
 from zoneinfo import ZoneInfo
 
-from paperroute.build.dedupe import merge_rail, relabel_trainlink
-from paperroute.build.trainlink import trim_trainlink
-from paperroute.sydney_feeds import SydneyFeeds
 from paperroute_device.core.device_settings import Window
+from paperroute_sydney.build.dedupe import merge_rail, relabel_trainlink
+from paperroute_sydney.build.trainlink import trim_trainlink
+from paperroute_sydney.sydney_feeds import SydneyFeeds
 from paperroute_transit.core.city import (
     AgencyAlerts,
     AlertRules,
@@ -405,7 +405,7 @@ NOUN_OVERRIDES: Final[dict[tuple[str, str], Nouns]] = {
         vehicle='train', bay='platform', connection='train',
     ),
 }
-SYDNEY_REF: Final[str] = 'paperroute.city:SYDNEY'
+SYDNEY_REF: Final[str] = 'paperroute_sydney.city:SYDNEY'
 SYDNEY: Final[City] = City(
     name='Sydney',
     zone=SYDNEY_ZONE,

@@ -14,14 +14,14 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestServer
 
-from paperroute.adapters.tfnsw import tfnsw_limiter
-from paperroute.adapters.trip_planner import (
+from paperroute_sydney.adapters.tfnsw import tfnsw_limiter
+from paperroute_sydney.adapters.trip_planner import (
     KeyedTripPlanner,
     TfnswTripPlanner,
     parse_journeys,
     trip_planner_for,
 )
-from paperroute.core.trip_search import (
+from paperroute_sydney.core.trip_search import (
     PlannerBusy,
     PlannerUnavailable,
     TripSearch,

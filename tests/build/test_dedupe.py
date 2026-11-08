@@ -8,8 +8,8 @@ from typing import Final
 
 import pytest
 
-from paperroute.build.dedupe import merge_rail, relabel_trainlink
-from paperroute.city import REGIONAL_AGENCIES, TRAINLINK
+from paperroute_sydney.build.dedupe import merge_rail, relabel_trainlink
+from paperroute_sydney.city import REGIONAL_AGENCIES, TRAINLINK
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.timetable import create_schema

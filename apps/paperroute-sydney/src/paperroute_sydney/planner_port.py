@@ -2,7 +2,7 @@
 
 from typing import Protocol
 
-from paperroute.core.trip_search import Journey, TripSearch
+from paperroute_sydney.core.trip_search import Journey, TripSearch
 
 
 class TripPlanner(Protocol):

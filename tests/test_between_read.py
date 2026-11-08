@@ -9,7 +9,7 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SydneyFeed, SydneyMode
+from paperroute_sydney.city import SydneyFeed, SydneyMode
 from paperroute_testkit.app_factories import ports_of, posted_by
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import EmptyPlacedTimetable

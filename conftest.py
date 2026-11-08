@@ -19,8 +19,8 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     del config
     # pylint: disable=import-outside-toplevel
-    from paperroute.asset_root import APP_ASSETS
-    from paperroute.city import SYDNEY
+    from paperroute_sydney.asset_root import APP_ASSETS
+    from paperroute_sydney.city import SYDNEY
 
     # pylint: enable=import-outside-toplevel
     use_city_under_test(city=SYDNEY, assets=APP_ASSETS)

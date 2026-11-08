@@ -14,15 +14,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.city import (
-    PEAK_WINDOWS,
-    SYDNEY,
-    SYDNEY_PROJECTION,
-    SYDNEY_REF,
-    SYDNEY_ZONE,
-    TOWN_HALL,
-    SydneyFeed,
-)
 from paperroute_device.adapters.resets import FileResets
 from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
@@ -44,6 +35,15 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_hardware.ports import CLEAN_AFTER, PanelRefresh
+from paperroute_sydney.city import (
+    PEAK_WINDOWS,
+    SYDNEY,
+    SYDNEY_PROJECTION,
+    SYDNEY_REF,
+    SYDNEY_ZONE,
+    TOWN_HALL,
+    SydneyFeed,
+)
 from paperroute_testkit.app_factories import (
     AT,
     MAP_MPP,

@@ -11,7 +11,7 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
-from paperroute.city import SYDNEY
+from paperroute_sydney.city import SYDNEY
 from paperroute_transit.adapters.state_file import (
     BAD_PREFIX,
     JsonStateRepository,

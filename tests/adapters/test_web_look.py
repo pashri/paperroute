@@ -11,10 +11,10 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
-from paperroute.city import SYDNEY
 from paperroute_device.adapters.web_frame import SHELL_WEB, page_frame
 from paperroute_device.adapters.web_live import live_page
+from paperroute_sydney.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
+from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.page_markup import (
     Node,
     by_id,
@@ -37,7 +37,7 @@ TOM_SELECT_JS_SHA256: Final[str] = (
 TOM_SELECT_CSS_SHA256: Final[str] = (
     '7b29f39e2916acfb3d050e00df8fcdfca89279ead2d8e654afec307ca63b10f9'
 )
-APP_WEB: Final = files('paperroute') / 'assets' / 'web'
+APP_WEB: Final = files('paperroute_sydney') / 'assets' / 'web'
 PAGES: Final[list[tuple[str, str | None]]] = [
     ('live.html', '/'),
     ('pins.html', '/pins'),

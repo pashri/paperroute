@@ -7,7 +7,7 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
 from paperroute_testkit.core.factories import STALE_LIMIT
 from paperroute_transit.adapters.gtfs_rt import parse_trip_updates
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository

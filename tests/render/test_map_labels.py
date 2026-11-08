@@ -7,8 +7,8 @@ from pathlib import Path
 
 import numpy as np
 
-from paperroute.city import SYDNEY_PROJECTION
 from paperroute_device.render.canvas import INK, PAPER
+from paperroute_sydney.city import SYDNEY_PROJECTION
 from paperroute_transit.adapters.tiles_db import SqliteTileRepository
 from paperroute_transit.build.map_style import DARK
 from paperroute_transit.build.tile_store import PlacedLabel

@@ -5,7 +5,6 @@ from typing import Final
 
 import numpy as np
 
-from paperroute.city import SYDNEY_ZONE
 from paperroute_device.render.canvas import (
     ELLIPSIS,
     HEIGHT,
@@ -14,6 +13,7 @@ from paperroute_device.render.canvas import (
     Canvas,
 )
 from paperroute_device.render.frame import HEADER
+from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.connection_factories import WORK, at
 from paperroute_testkit.core.factories import STALE_LIMIT
 from paperroute_transit.core.connection_strip import (

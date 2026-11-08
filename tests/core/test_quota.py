@@ -3,8 +3,8 @@
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 
-from paperroute.city import SYDNEY_ZONE
-from paperroute.sydney_feeds import DAILY_LIMIT
+from paperroute_sydney.city import SYDNEY_ZONE
+from paperroute_sydney.sydney_feeds import DAILY_LIMIT
 from paperroute_testkit.core.steps import wakeful
 from paperroute_transit.core.messages import (
     FeedFailed,

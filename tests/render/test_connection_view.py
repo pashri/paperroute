@@ -3,9 +3,9 @@
 from dataclasses import replace
 from typing import Final
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute_device.render.canvas import HEIGHT, Canvas
 from paperroute_device.render.frame import HEADER, finish
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.connection_factories import WORK, at, work_chains
 from paperroute_transit.core.connection_view import (
     NO_PAIRS,

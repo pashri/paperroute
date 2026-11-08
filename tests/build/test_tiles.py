@@ -7,7 +7,7 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION
+from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute_testkit.build.osm_factory import (
     TIMESTAMP,
     TINY_BBOX,

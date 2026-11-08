@@ -4,7 +4,6 @@ from datetime import time, timedelta
 
 import pytest
 
-from paperroute.city import PEAK_WINDOWS, SYDNEY
 from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
     DeviceStatus,
@@ -23,6 +22,7 @@ from paperroute_hardware.core.knob_events import (
     KnobsHeld,
     KnobTurned,
 )
+from paperroute_sydney.city import PEAK_WINDOWS, SYDNEY
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.core.steps import step_untouched
 from paperroute_testkit.fakes import device_facts

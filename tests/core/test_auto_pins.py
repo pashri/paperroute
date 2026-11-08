@@ -5,13 +5,13 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
     KnobPressed,
     KnobTurned,
 )
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.alert_factories import alert
 from paperroute_testkit.core.factories import START, departure, pin_at
 from paperroute_testkit.core.steps import wakeful

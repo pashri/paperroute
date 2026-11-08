@@ -2,8 +2,11 @@
 
 from typing import Final
 
-from paperroute.build.tfnsw_sources import SYDNEY_SOURCES, TfnswDownloader
-from paperroute.city import SYDNEY, SYDNEY_REF
+from paperroute_sydney.build.tfnsw_sources import (
+    SYDNEY_SOURCES,
+    TfnswDownloader,
+)
+from paperroute_sydney.city import SYDNEY, SYDNEY_REF
 from paperroute_transit.build import cli
 from paperroute_transit.build.sources import BuildParts
 

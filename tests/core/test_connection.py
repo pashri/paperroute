@@ -3,9 +3,9 @@
 from dataclasses import replace
 from typing import Final
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
-from paperroute.sydney_feeds import ALERT_FEEDS
 from paperroute_device.core.text import clock_text
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
+from paperroute_sydney.sydney_feeds import ALERT_FEEDS
 from paperroute_testkit.core.alert_factories import alert
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,

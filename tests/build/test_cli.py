@@ -12,9 +12,9 @@ from typing import Final
 
 import pytest
 
-from paperroute.build.__main__ import SYDNEY_BUILD
-from paperroute.build.tfnsw_sources import TfnswDownloader
-from paperroute.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
+from paperroute_sydney.build.__main__ import SYDNEY_BUILD
+from paperroute_sydney.build.tfnsw_sources import TfnswDownloader
+from paperroute_sydney.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
 from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
 from paperroute_transit.build.cli import main, parse_args, run_check_tiles
 from paperroute_transit.build.sources import BuildParts, SourceSpec

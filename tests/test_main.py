@@ -23,20 +23,6 @@ from aiohttp.test_utils import TestClient, TestServer
 
 import paperroute_transit.adapters.tk_monitor as tk_monitor
 import paperroute_transit.board as cli
-from paperroute.__main__ import SYDNEY_PARTS, main, tfnsw_feeds
-from paperroute.adapters.tfnsw import (
-    TFNSW_KEY,
-    AiohttpFeedsClient,
-    tfnsw_limiter,
-)
-from paperroute.adapters.web_board import (
-    SYDNEY_HINT,
-    SYDNEY_NAV,
-    SuggestPlug,
-    sydney_status_line,
-)
-from paperroute.asset_root import APP_ASSETS
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF, SYDNEY_ZONE
 from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.web_shell import web_app
@@ -50,6 +36,25 @@ from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_hardware.panel_open import panel_for
 from paperroute_hardware.ports import LineEdge, PanelBus, PanelRefresh
 from paperroute_hardware.render.panel_bits import HEIGHT, WIDTH
+from paperroute_sydney.__main__ import SYDNEY_PARTS, main, tfnsw_feeds
+from paperroute_sydney.adapters.tfnsw import (
+    TFNSW_KEY,
+    AiohttpFeedsClient,
+    tfnsw_limiter,
+)
+from paperroute_sydney.adapters.web_board import (
+    SYDNEY_HINT,
+    SYDNEY_NAV,
+    SuggestPlug,
+    sydney_status_line,
+)
+from paperroute_sydney.asset_root import APP_ASSETS
+from paperroute_sydney.city import (
+    SYDNEY,
+    SYDNEY_PROJECTION,
+    SYDNEY_REF,
+    SYDNEY_ZONE,
+)
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_testkit.fakes import FakeNetwork, MemoryStates

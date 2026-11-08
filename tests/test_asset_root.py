@@ -6,13 +6,20 @@ from importlib.resources.abc import Traversable
 from pathlib import Path
 from typing import Final
 
-from paperroute.asset_root import APP_ASSETS, use_app_assets
 from paperroute_device.adapters.web_frame import SHELL_WEB
 from paperroute_device.assets import assets
+from paperroute_sydney.asset_root import APP_ASSETS, use_app_assets
 from paperroute_testkit.paths import ROOT
 from paperroute_transit.adapters.board_web import BOARD_WEB
 
-ASSET_ROOT: Final[Path] = ROOT / 'src' / 'paperroute' / 'asset_root.py'
+ASSET_ROOT: Final[Path] = (
+    ROOT
+    / 'apps'
+    / 'paperroute-sydney'
+    / 'src'
+    / 'paperroute_sydney'
+    / 'asset_root.py'
+)
 ENTRY_POINTS: Final[tuple[Path, ...]] = (
     ROOT
     / 'packages'
@@ -22,7 +29,7 @@ ENTRY_POINTS: Final[tuple[Path, ...]] = (
     / 'board.py',
 )
 APP_FILES: Final[re.Pattern[str]] = re.compile(
-    r'''files\(\s*(['"])paperroute(\.[\w.]*)?\1''',
+    r'''files\(\s*(['"])paperroute_sydney(\.[\w.]*)?\1''',
 )
 READERS: Final[dict[str, Traversable]] = {
     'asset': APP_ASSETS.web,
@@ -49,14 +56,14 @@ def test_app_web_holds_only_palette() -> None:
 
 def test_only_asset_root_reads_package_data() -> None:
     """No source file but the asset root names the app's package data."""
+    paths = source_files()
     offenders = [
         str(path.relative_to(ROOT))
-        for path in sorted(
-            [*ROOT.glob('src/**/*.py'), *ROOT.glob('packages/*/src/**/*.py')],
-        )
+        for path in paths
         if path != ASSET_ROOT
         and APP_FILES.search(path.read_text(encoding='utf-8'))
     ]
+    assert ASSET_ROOT in paths
     assert not offenders
 
 
@@ -112,10 +119,13 @@ def source_files() -> list[Path]:
     Returns
     -------
     list[Path]
-        Every ``.py`` file under ``src`` and ``packages/*/src``.
+        Every ``.py`` file under ``apps/*/src`` and ``packages/*/src``.
     """
     return sorted(
-        [*ROOT.glob('src/**/*.py'), *ROOT.glob('packages/*/src/**/*.py')],
+        [
+            *ROOT.glob('apps/*/src/**/*.py'),
+            *ROOT.glob('packages/*/src/**/*.py'),
+        ],
     )
 
 

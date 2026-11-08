@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 from typing import Final
 
-from paperroute.city import SYDNEY
+from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.timetable import (

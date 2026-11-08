@@ -9,8 +9,8 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.web_board import SuggestPlug
-from paperroute.city import SYDNEY
+from paperroute_sydney.adapters.web_board import SuggestPlug
+from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.connection_factories import CAMPBELLTOWN_WAY, WORK
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages

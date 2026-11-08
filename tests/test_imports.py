@@ -12,25 +12,30 @@ from typing import Final
 import pytest
 
 ROOT: Final[Path] = Path(__file__).parents[1]
-SRC: Final[tuple[Path, ...]] = (
-    ROOT / 'src' / 'paperroute',
-    *sorted(
+SRC: Final[tuple[Path, ...]] = tuple(
+    sorted(
         path.parent
-        for path in ROOT.glob('packages/*/src/*/__init__.py')
+        for path in [
+            *ROOT.glob('apps/*/src/*/__init__.py'),
+            *ROOT.glob('packages/*/src/*/__init__.py'),
+        ]
         if path.parent.name != 'paperroute_testkit'
     ),
+)
+APPS: Final[frozenset[str]] = frozenset(
+    {path.parent.name for path in ROOT.glob('apps/*/src/*/__init__.py')},
 )
 HARDWARE: Final[Path] = (
     ROOT / 'packages' / 'paperroute-hardware' / 'src' / 'paperroute_hardware'
 )
 DEVICE_IMPORTS: Final[str] = (
-    'import paperroute.__main__, paperroute_transit.app, sys; '
+    'import paperroute_sydney.__main__, paperroute_transit.app, sys; '
     "assert not {'osmium', 'shapely'} & set(sys.modules)"
 )
 REFRESH_RUN: Final[str] = (
     'import sys\n'
     'from pathlib import Path\n'
-    'from paperroute.build.__main__ import main\n'
+    'from paperroute_sydney.build.__main__ import main\n'
     'data = Path(sys.argv[1])\n'
     "sys.argv = ['build', 'refresh', '--data-dir', str(data)]\n"
     'try:\n'
@@ -48,7 +53,9 @@ KIT_TEXT: Final[frozenset[str]] = frozenset(
 STOP_VIEW: Final[str] = 'paperroute_transit.core.stop_view'
 NSW: Final[re.Pattern[str]] = re.compile(r'(?i)\bnsw')
 KEY_SCHEME: Final[re.Pattern[str]] = re.compile(r'(?i)\bapikey\b')
-APP: Final[Path] = ROOT / 'src' / 'paperroute'
+APP: Final[Path] = (
+    ROOT / 'apps' / 'paperroute-sydney' / 'src' / 'paperroute_sydney'
+)
 TRANSIT: Final[Path] = (
     ROOT / 'packages' / 'paperroute-transit' / 'src' / 'paperroute_transit'
 )
@@ -61,22 +68,22 @@ CITY_DEFAULTS: Final[dict[str, str | None]] = {
     'Saved': 'settings',
 }
 SYDNEY_MODULES: Final[frozenset[str]] = frozenset({
-    'paperroute.city',
-    'paperroute.sydney_feeds',
-    'paperroute.__main__',
-    'paperroute.adapters.tfnsw',
-    'paperroute.adapters.trip_planner',
-    'paperroute.adapters.web_suggest',
-    'paperroute.adapters.web_board',
-    'paperroute.core.trip_search',
-    'paperroute.planner_port',
-    'paperroute.build.__main__',
-    'paperroute.build.tfnsw_sources',
-    'paperroute.build.dedupe',
-    'paperroute.build.trainlink',
+    'paperroute_sydney.city',
+    'paperroute_sydney.sydney_feeds',
+    'paperroute_sydney.__main__',
+    'paperroute_sydney.adapters.tfnsw',
+    'paperroute_sydney.adapters.trip_planner',
+    'paperroute_sydney.adapters.web_suggest',
+    'paperroute_sydney.adapters.web_board',
+    'paperroute_sydney.core.trip_search',
+    'paperroute_sydney.planner_port',
+    'paperroute_sydney.build.__main__',
+    'paperroute_sydney.build.tfnsw_sources',
+    'paperroute_sydney.build.dedupe',
+    'paperroute_sydney.build.trainlink',
 })
 CITY_IMPORTS: Final[str] = (
-    'import paperroute.city, paperroute_transit.build.extras, sys; '
+    'import paperroute_sydney.city, paperroute_transit.build.extras, sys; '
     "loaded = sorted(name for name in sys.modules if name.startswith('google')); "
     'assert not loaded, loaded'
 )
@@ -253,6 +260,7 @@ def test_engine_lives_in_transit(module: str) -> None:
     """Each moved engine module is in transit and gone from the app."""
     assert find_spec(f'paperroute_transit.{module}') is not None
     assert absent(name=f'paperroute.{module}')
+    assert absent(name=f'paperroute_sydney.{module}')
 
 
 def test_device_never_imports_build_libraries() -> None:
@@ -322,7 +330,8 @@ def source_root(*, path: Path) -> Path:
     Returns
     -------
     Path
-        The import package directory, such as ``src/paperroute``.
+        The import package directory, such as
+        ``apps/paperroute-sydney/src/paperroute_sydney``.
     """
     return next(root for root in SRC if path.is_relative_to(root))
 
@@ -404,8 +413,8 @@ def imported_names(*, path: Path) -> set[str]:
     -------
     set[str]
         Dotted module names from import statements; a from-import also
-        gives each name it imports under its module, so ``from paperroute
-        import city`` gives ``paperroute.city``.
+        gives each name it imports under its module, so ``from
+        paperroute_sydney import city`` gives ``paperroute_sydney.city``.
     """
     names: set[str] = set()
     for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
@@ -460,7 +469,7 @@ def test_pydantic_only_in_state_file() -> None:
 def test_render_takes_only_faces_and_greys_from_build() -> None:
     """Render reads only face, grey and supersample constants from build."""
     allowed = {'DARK', 'LIGHT', 'SUPERSAMPLE'}
-    builds = {('paperroute', 'build'), ('paperroute_transit', 'build')}
+    builds = {('paperroute_sydney', 'build'), ('paperroute_transit', 'build')}
     offenders = [
         f'{path.name}: {alias.name}'
         for path in sources(sub='render')
@@ -604,9 +613,9 @@ def test_device_pages_import_no_feed_config() -> None:
         ROOT / 'packages' / 'paperroute-device' / 'src' / 'paperroute_device'
     )
     banned = {
-        'paperroute.sydney_feeds',
+        'paperroute_sydney.sydney_feeds',
         'paperroute_transit.core.quota',
-        'paperroute.adapters.tfnsw',
+        'paperroute_sydney.adapters.tfnsw',
     }
     offenders = {
         name: sorted(imported_names(path=kit / name) & banned)
@@ -619,11 +628,11 @@ def test_device_pages_import_no_feed_config() -> None:
 def test_web_display_imports_no_board_pages() -> None:
     """The web display takes Sydney's pages from the app."""
     banned = {
-        'paperroute.planner_port',
+        'paperroute_sydney.planner_port',
         'paperroute_transit.adapters.web_pins',
         'paperroute_transit.adapters.web_ways',
         'paperroute_transit.adapters.web_connection',
-        'paperroute.adapters.web_suggest',
+        'paperroute_sydney.adapters.web_suggest',
     }
     path = TRANSIT / 'adapters' / 'web_display.py'
     names = imported_names(path=path)
@@ -693,13 +702,13 @@ def app_module(*, path: Path) -> str:
     Parameters
     ----------
     path : Path
-        A file under ``src/paperroute``.
+        A file under the Sydney app's package.
 
     Returns
     -------
     str
-        The module name, such as ``paperroute.core.feeds``; a package's
-        ``__init__`` is named for the package.
+        The module name, such as ``paperroute_sydney.core.feeds``; a
+        package's ``__init__`` is named for the package.
     """
     parts = path.relative_to(APP.parent).with_suffix('').parts
     return '.'.join(parts[:-1] if parts[-1] == '__init__' else parts)
@@ -729,7 +738,7 @@ def test_app_holds_only_sydney_modules() -> None:
         for path in APP.rglob('*.py')
         if path.name != '__init__.py'
     }
-    assert modules == SYDNEY_MODULES | {'paperroute.asset_root'}
+    assert modules == SYDNEY_MODULES | {'paperroute_sydney.asset_root'}
 
 
 def test_testkit_imports_no_app() -> None:
@@ -742,11 +751,12 @@ def test_testkit_imports_no_app() -> None:
             app := {
                 name
                 for name in imported_names(path=path)
-                if name == 'paperroute' or name.startswith('paperroute.')
+                if name.split('.')[0] in APPS
             }
         )
     }
     assert paths
+    assert 'paperroute_sydney' in APPS
     assert not offenders
 
 
@@ -754,11 +764,11 @@ def test_imported_names_see_package_from_imports(tmp_path: Path) -> None:
     """Importing a module from its package names the module."""
     path = tmp_path / 'engine.py'
     path.write_text(
-        'from paperroute import city\n'
-        'from paperroute import sydney_feeds as feeds\n',
+        'from paperroute_sydney import city\n'
+        'from paperroute_sydney import sydney_feeds as feeds\n',
         encoding='utf-8',
     )
-    assert {'paperroute.city', 'paperroute.sydney_feeds'} <= (
+    assert {'paperroute_sydney.city', 'paperroute_sydney.sydney_feeds'} <= (
         imported_names(path=path)
     )
 

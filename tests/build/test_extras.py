@@ -11,7 +11,7 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_REF
+from paperroute_sydney.city import SYDNEY, SYDNEY_REF
 from paperroute_transit.build import extras, timetable
 from paperroute_transit.build.extras import build_extras
 from paperroute_transit.build.gtfs_files import Source
@@ -175,4 +175,4 @@ def test_city_named_imports_the_city() -> None:
     """A reference gives its city; one naming anything else is refused."""
     assert extras.city_named(ref=SYDNEY_REF) is SYDNEY
     with pytest.raises(ValueError, match='names no city'):
-        extras.city_named(ref='paperroute.city:SYDNEY_ZONE')
+        extras.city_named(ref='paperroute_sydney.city:SYDNEY_ZONE')

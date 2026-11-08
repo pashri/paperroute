@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_testkit.core.factories import (
     START,
     calls,

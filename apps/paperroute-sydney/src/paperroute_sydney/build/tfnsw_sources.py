@@ -6,8 +6,8 @@ from pathlib import Path
 from typing import Final
 from urllib.request import Request
 
-from paperroute.adapters.tfnsw import BASE_URL, api_key_from_env
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
+from paperroute_sydney.adapters.tfnsw import BASE_URL, api_key_from_env
 from paperroute_transit.build.source_state import SourceError, SourceState
 from paperroute_transit.build.sources import SourceSpec, open_source, stream_to
 

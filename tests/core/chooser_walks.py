@@ -3,8 +3,8 @@
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY, SydneyMode
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
+from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.core.factories import START, departure, place
 from paperroute_transit.core.chooser import (
     Choice,

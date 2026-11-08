@@ -12,8 +12,12 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SuggestPlug
-from paperroute.city import SYDNEY, SydneyMode
+from paperroute_sydney.adapters.web_board import (
+    SYDNEY_HINT,
+    SYDNEY_NAV,
+    SuggestPlug,
+)
+from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.core.connection_factories import WORK as CONNECTION
 from paperroute_testkit.core.connection_factories import WORK_CHANGE
 from paperroute_testkit.fake_pins import FakePinOptions

@@ -14,9 +14,12 @@ from typing import Final
 
 import pytest
 
-from paperroute.build.tfnsw_sources import SYDNEY_SOURCES, TfnswDownloader
-from paperroute.city import SYDNEY, SYDNEY_REF
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
+from paperroute_sydney.build.tfnsw_sources import (
+    SYDNEY_SOURCES,
+    TfnswDownloader,
+)
+from paperroute_sydney.city import SYDNEY, SYDNEY_REF
 from paperroute_transit.build import handoff as handoff_module
 from paperroute_transit.build import refresh as refresh_module
 from paperroute_transit.build import swap

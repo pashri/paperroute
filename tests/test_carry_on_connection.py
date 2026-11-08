@@ -10,7 +10,7 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import (
+from paperroute_sydney.city import (
     SYDNEY,
     SYDNEY_PROJECTION,
     SYDNEY_REF,

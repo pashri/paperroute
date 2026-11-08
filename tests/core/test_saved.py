@@ -2,8 +2,8 @@
 
 from datetime import time
 
-from paperroute.city import SYDNEY, TOWN_HALL
 from paperroute_device.core.device_settings import DeviceSettings, Window
+from paperroute_sydney.city import SYDNEY, TOWN_HALL
 from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,

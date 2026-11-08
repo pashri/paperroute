@@ -7,8 +7,8 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.web_board import SuggestPlug
-from paperroute.city import SYDNEY, SydneyMode
+from paperroute_sydney.adapters.web_board import SuggestPlug
+from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages

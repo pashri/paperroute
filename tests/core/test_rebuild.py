@@ -6,7 +6,6 @@ from datetime import timedelta
 
 import pytest
 
-from paperroute.city import SYDNEY
 from paperroute_device.core.device_events import ApiKeyChanged
 from paperroute_device.core.device_model import (
     MENU_ROWS,
@@ -24,6 +23,7 @@ from paperroute_hardware.core.knob_events import (
     KnobsHeld,
     KnobTurned,
 )
+from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import START, begun, pin_at
 from paperroute_testkit.core.steps import answer_fetches, step_untouched
 from paperroute_testkit.fakes import device_facts

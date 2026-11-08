@@ -7,8 +7,8 @@ from typing import Final
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute_device.core.text import DOT, clock_text
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute_testkit.core.alert_factories import WESTERN, XPLORER
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.core.alert_model import AlertBanner

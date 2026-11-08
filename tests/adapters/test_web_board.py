@@ -4,13 +4,13 @@ import re
 
 import pytest
 
-from paperroute.adapters.web_board import (
+from paperroute_device.adapters.web_frame import nav_html
+from paperroute_sydney.adapters.web_board import (
     SYDNEY_NAV,
     SuggestPlug,
     sydney_status_line,
     sydney_suggest,
 )
-from paperroute_device.adapters.web_frame import nav_html
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_web import BOARD_WEB
 from tests.planner_fakes import FakeTripPlanner

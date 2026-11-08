@@ -4,8 +4,8 @@ import math
 from contextlib import closing
 from pathlib import Path
 
-from paperroute.city import SYDNEY_PROJECTION
 from paperroute_device.render.canvas import Box
+from paperroute_sydney.city import SYDNEY_PROJECTION
 from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.build.map_style import STATION_FACE, SUBURB_FACE
 from paperroute_transit.build.tile_store import PlacedLabel

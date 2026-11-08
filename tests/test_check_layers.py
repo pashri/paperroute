@@ -13,12 +13,19 @@ SCRIPT: Final[Path] = ROOT / 'scripts' / 'check_layers.py'
 HARDWARE: Final[str] = 'packages/paperroute-hardware'
 DEVICE: Final[str] = 'packages/paperroute-device'
 TESTKIT: Final[str] = 'packages/paperroute-testkit'
+TRANSIT: Final[str] = 'packages/paperroute-transit'
+APP_A: Final[str] = 'apps/paperroute-a'
+APP_B: Final[str] = 'apps/paperroute-b'
 CLEAN: Final[dict[str, str]] = {
-    'src/paperroute/__init__.py': '',
-    'src/paperroute/build/__init__.py': '',
-    'src/paperroute/app.py': 'from paperroute_device import y\n',
+    f'{APP_A}/pyproject.toml': (
+        '[project]\nname = "paperroute-a"\n'
+        'dependencies = ["paperroute-device"]\n'
+    ),
+    f'{APP_A}/src/paperroute_a/__init__.py': '',
+    f'{APP_A}/src/paperroute_a/build/__init__.py': '',
+    f'{APP_A}/src/paperroute_a/app.py': 'from paperroute_device import y\n',
     'tests/__init__.py': '',
-    'tests/test_app.py': 'import paperroute_testkit\nimport paperroute\n',
+    'tests/test_app.py': 'import paperroute_testkit\nimport paperroute_a\n',
     f'{HARDWARE}/pyproject.toml': (
         '[project]\nname = "paperroute-hardware"\ndependencies = []\n'
     ),
@@ -119,7 +126,7 @@ def test_problems_flags_import_inside_function(
 def test_problems_tells_paperroute_from_paperroute_device(
     check_layers: ModuleType, tmp_path: Path,
 ) -> None:
-    """``paperroute_device`` is not the app just because of its prefix."""
+    """A kit importing its own modules is no problem."""
     name = f'{DEVICE}/src/paperroute_device/z.py'
     root = build(root=tmp_path, extra={name: 'import paperroute_device.y\n'})
     assert check_layers.problems(root=root) == []
@@ -156,11 +163,11 @@ def test_problems_flags_upward_resource_lookup(
     name = f'{DEVICE}/src/paperroute_device/z.py'
     text = (
         'from importlib.resources import files\n'
-        "FONTS = files('paperroute') / 'fonts'\n"
+        "FONTS = files('paperroute_a') / 'fonts'\n"
     )
     root = build(root=tmp_path, extra={name: text})
     assert check_layers.problems(root=root) == [
-        f'{name}: paperroute_device may not import paperroute',
+        f'{name}: paperroute_device may not import paperroute_a',
     ]
 
 
@@ -170,15 +177,15 @@ def test_problems_flags_upward_module_string(
     """A string naming an app module is a problem; a hostname is not."""
     name = f'{DEVICE}/src/paperroute_device/z.py'
     text = (
-        '"""Runs paperroute.build for the board."""\n'
-        "COMMAND = ('-m', 'paperroute.build')\n"
+        '"""Runs paperroute_a.build for the board."""\n'
+        "COMMAND = ('-m', 'paperroute_a.build')\n"
         "HOST = 'paperroute.local'\n"
         'def go(**kwargs: str) -> None:\n'
         "    go(consumer='paperroute')\n"
     )
     root = build(root=tmp_path, extra={name: text})
     assert check_layers.problems(root=root) == [
-        f'{name}: paperroute_device may not import paperroute',
+        f'{name}: paperroute_device may not import paperroute_a',
     ]
 
 
@@ -202,24 +209,81 @@ def test_problems_flags_unranked_package(
 ) -> None:
     """A package with no layer is a problem, not exempt from the rules."""
     name = 'packages/paperroute-extra/src/paperroute_extra/__init__.py'
-    root = build(root=tmp_path, extra={name: 'import paperroute\n'})
+    root = build(root=tmp_path, extra={name: 'import paperroute_a\n'})
     assert check_layers.problems(root=root) == [
         'packages/paperroute-extra/src/paperroute_extra: '
         'paperroute_extra has no layer',
     ]
 
 
-def test_problems_flags_sibling_app_import(
-    check_layers: ModuleType,
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
+def test_problems_flags_app_importing_app(
+    check_layers: ModuleType, tmp_path: Path,
 ) -> None:
-    """A second app at the app rank may not import ``paperroute``."""
-    monkeypatch.setitem(check_layers.RANKS, 'paperroute_other', 3)
-    name = 'packages/paperroute-other/src/paperroute_other/__init__.py'
-    root = build(root=tmp_path, extra={name: 'import paperroute\n'})
+    """One app may not import another."""
+    name = f'{APP_A}/src/paperroute_a/app.py'
+    root = build(
+        root=tmp_path,
+        extra={
+            name: 'import paperroute_b\n',
+            f'{APP_B}/src/paperroute_b/__init__.py': '',
+        },
+    )
     assert check_layers.problems(root=root) == [
-        f'{name}: paperroute_other may not import paperroute',
+        f'{name}: paperroute_a may not import paperroute_b',
+    ]
+
+
+def test_problems_flags_kit_importing_app(
+    check_layers: ModuleType, tmp_path: Path,
+) -> None:
+    """The transit kit may not import an app."""
+    name = f'{TRANSIT}/src/paperroute_transit/board.py'
+    root = build(
+        root=tmp_path,
+        extra={
+            f'{TRANSIT}/src/paperroute_transit/__init__.py': '',
+            name: 'from paperroute_a import app\n',
+        },
+    )
+    assert check_layers.problems(root=root) == [
+        f'{name}: paperroute_transit may not import paperroute_a',
+    ]
+
+
+def test_problems_allows_root_tests_any_app(
+    check_layers: ModuleType, tmp_path: Path,
+) -> None:
+    """The root tests may import every app and the testkit."""
+    text = (
+        'import paperroute_a\nimport paperroute_b\n'
+        'import paperroute_testkit\n'
+    )
+    root = build(
+        root=tmp_path,
+        extra={
+            f'{APP_B}/src/paperroute_b/__init__.py': '',
+            'tests/test_both.py': text,
+            'conftest.py': text,
+        },
+    )
+    assert check_layers.problems(root=root) == []
+
+
+def test_problems_flags_app_depending_on_app(
+    check_layers: ModuleType, tmp_path: Path,
+) -> None:
+    """An app distribution may not depend on another app."""
+    name = f'{APP_A}/pyproject.toml'
+    text = (
+        '[project]\nname = "paperroute-a"\n'
+        'dependencies = ["paperroute-device", "paperroute-b"]\n'
+    )
+    root = build(
+        root=tmp_path,
+        extra={name: text, f'{APP_B}/src/paperroute_b/__init__.py': ''},
+    )
+    assert check_layers.problems(root=root) == [
+        f'{name}: paperroute_a may not import paperroute_b',
     ]
 
 
@@ -228,10 +292,10 @@ def test_problems_flags_testkit_importing_app(
 ) -> None:
     """The testkit may not import the app, even inside a function."""
     name = f'{TESTKIT}/src/paperroute_testkit/__init__.py'
-    text = 'def go() -> None:\n    from paperroute import city\n'
+    text = 'def go() -> None:\n    from paperroute_a import city\n'
     root = build(root=tmp_path, extra={name: text})
     assert check_layers.problems(root=root) == [
-        f'{name}: paperroute_testkit may not import paperroute',
+        f'{name}: paperroute_testkit may not import paperroute_a',
     ]
 
 
@@ -242,11 +306,11 @@ def test_problems_flags_testkit_depending_on_app(
     name = f'{TESTKIT}/pyproject.toml'
     text = (
         '[project]\nname = "paperroute-testkit"\n'
-        'dependencies = ["paperroute-device", "paperroute"]\n'
+        'dependencies = ["paperroute-device", "paperroute-a"]\n'
     )
     root = build(root=tmp_path, extra={name: text})
     assert check_layers.problems(root=root) == [
-        f'{name}: paperroute_testkit may not import paperroute',
+        f'{name}: paperroute_testkit may not import paperroute_a',
     ]
 
 

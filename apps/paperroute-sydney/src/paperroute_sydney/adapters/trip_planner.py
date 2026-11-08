@@ -7,20 +7,20 @@ from typing import Final
 
 import aiohttp
 
-from paperroute.adapters.tfnsw import (
+from paperroute_device.adapters.rate_limit import StartLimiter
+from paperroute_device.adapters.secrets_file import SecretsFile
+from paperroute_sydney.adapters.tfnsw import (
     BASE_URL,
     key_path_from_env,
     tfnsw_limiter,
 )
-from paperroute.core.trip_search import (
+from paperroute_sydney.core.trip_search import (
     Journey,
     JourneyLeg,
     PlannerBusy,
     PlannerUnavailable,
     TripSearch,
 )
-from paperroute_device.adapters.rate_limit import StartLimiter
-from paperroute_device.adapters.secrets_file import SecretsFile
 
 TRIP_PATH: Final[str] = 'v1/tp/trip'
 WALK_CLASSES: Final[frozenset[int]] = frozenset({99, 100})

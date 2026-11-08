@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from paperroute.city import SYDNEY_ZONE, TOWN_HALL, SydneyMode
+from paperroute_sydney.city import SYDNEY_ZONE, TOWN_HALL, SydneyMode
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
     TWO_WAY,

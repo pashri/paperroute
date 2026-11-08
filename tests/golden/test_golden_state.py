@@ -5,12 +5,12 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Final
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_device.core.device_settings import (
     DeviceSettings,
     QuietMode,
     Window,
 )
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.connection_factories import TWO_WAY, WORK
 from paperroute_testkit.core.factories import pin_at
 from paperroute_transit.adapters.state_file import JsonStateRepository

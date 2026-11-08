@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute_testkit.core.alert_factories import (
     PENRITH_CENTRAL,
     RHODES,

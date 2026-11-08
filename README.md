@@ -8,11 +8,11 @@ Waveshare 7.5" V2 (800×480) and two push encoders.
 
     uv python install 3.14
     uv sync
-    uv run python -m paperroute.build gtfs --bundle data/raw/complete.zip \
+    uv run paperroute-build gtfs --bundle data/raw/complete.zip \
       --sydneytrains data/raw/st/sydneytrains.zip --metro data/raw/st/metro_v2.zip \
       --out data/timetable.db
     PAPERROUTE_API_KEY_FILE=~/tfnsw_api_key \
-      uv run python -m paperroute run --timetable data/timetable.db \
+      uv run paperroute-board run --timetable data/timetable.db \
       --tiles data/tiles.db --state data/state.json
 
 `--from` and `--to` (stop ids, for example `--from 215020 --to 200060`)
@@ -39,7 +39,7 @@ Replay recorded feeds with `--feeds tests/fixtures/real --at 2026-10-16T06:25`.
 Download Geofabrik's New South Wales `.osm.pbf` into `data/raw/nsw.osm.pbf`,
 then build the tiles on the Mac:
 
-    uv run python -m paperroute.build tiles --osm data/raw/nsw.osm.pbf \
+    uv run paperroute-build tiles --osm data/raw/nsw.osm.pbf \
       --timetable data/timetable.db --out data/tiles.db
 
 This builds all of NSW. It takes about 17 minutes on an Apple-silicon Mac,

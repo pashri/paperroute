@@ -8,8 +8,8 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.factories import START, begun, pin_at, place
 from paperroute_transit.core.chooser import (
     Choice,

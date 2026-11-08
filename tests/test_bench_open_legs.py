@@ -9,7 +9,7 @@ from types import ModuleType
 
 import pytest
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY_ZONE
 from tests.helpers import slice_db
 
 SCRIPT = Path(__file__).parent.parent / 'scripts' / 'bench_open_legs.py'

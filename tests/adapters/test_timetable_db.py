@@ -15,8 +15,9 @@ from typing import Final
 
 import pytest
 
-from paperroute.build.dedupe import merge_rail
-from paperroute.city import (
+from paperroute_device.adapters.sqlite_ro import file_identity
+from paperroute_sydney.build.dedupe import merge_rail
+from paperroute_sydney.city import (
     SYDNEY,
     SYDNEY_PROJECTION,
     SYDNEY_REF,
@@ -24,7 +25,6 @@ from paperroute.city import (
     SydneyFeed,
     SydneyMode,
 )
-from paperroute_device.adapters.sqlite_ro import file_identity
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import pin_of, place
 from paperroute_transit.adapters.timetable_db import (

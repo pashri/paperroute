@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field
 
-from paperroute.core.trip_search import (
+from paperroute_sydney.core.trip_search import (
     Journey,
     PlannerBusy,
     PlannerUnavailable,

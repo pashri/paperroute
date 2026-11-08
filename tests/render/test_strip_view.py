@@ -6,7 +6,6 @@ from datetime import timedelta
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.city import SYDNEY_PROJECTION
 from paperroute_device.core.text import DOT, HINT_DOT
 from paperroute_device.render.canvas import (
     INK,
@@ -16,6 +15,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER
+from paperroute_sydney.city import SYDNEY_PROJECTION
 from paperroute_testkit.core.factories import START, east_inputs
 from paperroute_testkit.render.factories import STRIP_PANEL as PANEL
 from paperroute_testkit.render.factories import STRIP_ROWS as ROWS

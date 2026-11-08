@@ -12,7 +12,12 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF, SydneyMode
+from paperroute_sydney.city import (
+    SYDNEY,
+    SYDNEY_PROJECTION,
+    SYDNEY_REF,
+    SydneyMode,
+)
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import inputs_of
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository

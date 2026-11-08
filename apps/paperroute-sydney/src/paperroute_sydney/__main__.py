@@ -2,22 +2,22 @@
 
 from typing import Final
 
-from paperroute.adapters.tfnsw import (
+from paperroute_device.adapters.secrets_file import SecretsFile
+from paperroute_device.core.device_model import DeviceKey
+from paperroute_sydney.adapters.tfnsw import (
     TFNSW_KEY,
     AiohttpFeedsClient,
     key_path_from_env,
     tfnsw_limiter,
 )
-from paperroute.adapters.web_board import (
+from paperroute_sydney.adapters.web_board import (
     SYDNEY_HINT,
     SYDNEY_NAV,
     sydney_status_line,
     sydney_suggest,
 )
-from paperroute.asset_root import APP_ASSETS
-from paperroute.city import SYDNEY
-from paperroute_device.adapters.secrets_file import SecretsFile
-from paperroute_device.core.device_model import DeviceKey
+from paperroute_sydney.asset_root import APP_ASSETS
+from paperroute_sydney.city import SYDNEY
 from paperroute_transit import board
 from paperroute_transit.ports import FeedsClient
 

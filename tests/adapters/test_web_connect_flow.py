@@ -12,9 +12,9 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.web_board import SuggestPlug
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
-from paperroute.core.trip_search import Journey, JourneyLeg
+from paperroute_sydney.adapters.web_board import SuggestPlug
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
+from paperroute_sydney.core.trip_search import Journey, JourneyLeg
 from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
     HAMMERS,

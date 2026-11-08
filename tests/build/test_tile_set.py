@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION
+from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute_transit.build.tile_set import (
     SEA_MARGIN_DEG,
     blocks,

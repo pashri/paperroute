@@ -8,18 +8,18 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.tfnsw import TFNSW_KEY
-from paperroute.adapters.web_board import SYDNEY_NAV
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
-from paperroute.sydney_feeds import (
+from paperroute_device.adapters.web_frame import page_frame
+from paperroute_device.core.device_events import PowerRequested
+from paperroute_device.core.device_model import PowerAction
+from paperroute_sydney.adapters.tfnsw import TFNSW_KEY
+from paperroute_sydney.adapters.web_board import SYDNEY_NAV
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
+from paperroute_sydney.sydney_feeds import (
     DAILY_LIMIT,
     FEEDS,
     POSITION_FEEDS,
     feed_label,
 )
-from paperroute_device.adapters.web_frame import page_frame
-from paperroute_device.core.device_events import PowerRequested
-from paperroute_device.core.device_model import PowerAction
 from paperroute_testkit.device_pages import KEY, NOW, DeviceSite
 from paperroute_testkit.page_markup import parse_page
 from paperroute_transit.adapters.board_head import BoardHead

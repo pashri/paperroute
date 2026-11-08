@@ -5,7 +5,6 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY_ZONE
 from paperroute_device.core.device_events import ConfirmAsked
 from paperroute_device.core.device_model import (
     ConfirmAction,
@@ -22,6 +21,7 @@ from paperroute_hardware.core.knob_events import (
     KnobsHeld,
     KnobTurned,
 )
+from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure
 from paperroute_testkit.core.steps import step_answered
 from paperroute_testkit.fakes import device_facts

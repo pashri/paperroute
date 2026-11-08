@@ -1,6 +1,6 @@
 """Tests for the route chooser screen's view-model."""
 
-from paperroute.city import SYDNEY
+from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import place
 from paperroute_transit.core.chooser import (
     Choice,

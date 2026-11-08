@@ -5,7 +5,7 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.connection_factories import (
     LEG1,
     WORK,

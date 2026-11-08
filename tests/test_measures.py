@@ -5,7 +5,7 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SydneyFeed
+from paperroute_sydney.city import SydneyFeed
 from paperroute_transit.core.geo import Point, Shape, make_shape
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.measures import StopMeasures

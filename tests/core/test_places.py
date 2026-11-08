@@ -3,7 +3,7 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from paperroute.city import SYDNEY, SydneyFeed
+from paperroute_sydney.city import SYDNEY, SydneyFeed
 from paperroute_testkit.core.factories import (
     START,
     departure,

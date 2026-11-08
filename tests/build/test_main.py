@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.build.__main__ import main
+from paperroute_sydney.build.__main__ import main
 from tests.build.network_feed import network_feed
 
 
@@ -61,7 +61,7 @@ def test_gtfs_execs_into_the_extras(tmp_path: Path) -> None:
     out = tmp_path / 'timetable.db'
     result = subprocess.run(
         [
-            sys.executable, '-m', 'paperroute.build', 'gtfs',
+            sys.executable, '-m', 'paperroute_sydney.build', 'gtfs',
             '--bundle', str(network_feed(path=tmp_path / 'network.zip')),
             '--out', str(out), '--start', '2026-10-05', '--days', '3',
         ],

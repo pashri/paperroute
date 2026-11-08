@@ -5,8 +5,8 @@ from typing import Final
 
 import numpy as np
 
-from paperroute.city import SYDNEY_PROJECTION
 from paperroute_device.render.canvas import INK, PAPER, Canvas
+from paperroute_sydney.city import SYDNEY_PROJECTION
 from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.map_view import (

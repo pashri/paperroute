@@ -4,13 +4,13 @@ from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Final
 
-from paperroute.adapters.trip_planner import trip_planner_for
-from paperroute.adapters.web_suggest import SuggestPages, sydney_now
-from paperroute.city import SydneyFeed
-from paperroute.planner_port import TripPlanner
-from paperroute.sydney_feeds import FEEDS
 from paperroute_device.adapters.web_frame import DEVICE_NAV, LIVE_NAV, NavItem
 from paperroute_device.adapters.web_live import status_number
+from paperroute_sydney.adapters.trip_planner import trip_planner_for
+from paperroute_sydney.adapters.web_suggest import SuggestPages, sydney_now
+from paperroute_sydney.city import SydneyFeed
+from paperroute_sydney.planner_port import TripPlanner
+from paperroute_sydney.sydney_feeds import FEEDS
 from paperroute_transit.adapters.web_ways import WaysPages
 
 PINS_NAV: Final[NavItem] = NavItem(

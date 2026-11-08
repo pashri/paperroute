@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF
+from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF
 from paperroute_transit.adapters.change_rows import CHANGE_COUNT, CHANGE_M
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.pin_options import SqlitePinOptions

@@ -8,7 +8,7 @@ from typing import Final
 import pytest
 from hypothesis import given
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.factories import STALE_LIMIT
 from paperroute_testkit.core.reach_factories import (
     BLACKTOWN,

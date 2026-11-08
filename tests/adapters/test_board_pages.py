@@ -8,9 +8,9 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from multidict import MultiMapping
 
-from paperroute.adapters.web_board import PINS_NAV
-from paperroute.city import SYDNEY
 from paperroute_device.adapters.web_frame import LIVE_NAV
+from paperroute_sydney.adapters.web_board import PINS_NAV
+from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.adapters.board_head import BoardHead

@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
+from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
 from paperroute_transit.adapters import pin_options
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.pin_options import SqlitePinOptions

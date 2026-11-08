@@ -8,12 +8,28 @@ resolution-markers = [
 
 [manifest]
 members = [
-    "paperroute",
     "paperroute-device",
     "paperroute-hardware",
+    "paperroute-sydney",
     "paperroute-testkit",
     "paperroute-transit",
 ]
+
+[manifest.dependency-groups]
+dev = [
+    { name = "fonttools", specifier = ">=4.55" },
+    { name = "hypothesis", specifier = ">=6.0" },
+    { name = "isort", specifier = ">=5.13" },
+    { name = "mypy", specifier = ">=1.15" },
+    { name = "numpydoc", specifier = ">=1.8" },
+    { name = "paperroute-sydney", editable = "apps/paperroute-sydney" },
+    { name = "paperroute-testkit", editable = "packages/paperroute-testkit" },
+    { name = "pylint", specifier = ">=3.3" },
+    { name = "pytest", specifier = ">=8.3" },
+    { name = "pytest-asyncio", specifier = ">=0.25" },
+    { name = "pytest-cov", specifier = ">=6.0" },
+]
+tiles = [{ name = "paperroute-transit", extras = ["tiles"], editable = "packages/paperroute-transit" }]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -1084,69 +1100,6 @@ wheels = [
 ]
 
 [[package]]
-name = "paperroute"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "aiohttp" },
-    { name = "gpiod", marker = "sys_platform == 'linux'" },
-    { name = "gtfs-realtime-bindings" },
-    { name = "numpy" },
-    { name = "paperroute-device" },
-    { name = "paperroute-hardware" },
-    { name = "paperroute-transit" },
-    { name = "pydantic" },
-    { name = "python-json-logger" },
-    { name = "skia-python" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "fonttools" },
-    { name = "hypothesis" },
-    { name = "isort" },
-    { name = "mypy" },
-    { name = "numpydoc" },
-    { name = "paperroute-testkit" },
-    { name = "pylint" },
-    { name = "pytest" },
-    { name = "pytest-asyncio" },
-    { name = "pytest-cov" },
-]
-tiles = [
-    { name = "paperroute-transit", extra = ["tiles"] },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "aiohttp", specifier = ">=3.12" },
-    { name = "gpiod", marker = "sys_platform == 'linux'", specifier = "==2.5.0" },
-    { name = "gtfs-realtime-bindings", specifier = ">=1.0" },
-    { name = "numpy", specifier = ">=2.3" },
-    { name = "paperroute-device", editable = "packages/paperroute-device" },
-    { name = "paperroute-hardware", editable = "packages/paperroute-hardware" },
-    { name = "paperroute-transit", editable = "packages/paperroute-transit" },
-    { name = "pydantic", specifier = ">=2.12" },
-    { name = "python-json-logger", specifier = ">=3.2" },
-    { name = "skia-python", specifier = ">=138.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [
-    { name = "fonttools", specifier = ">=4.55" },
-    { name = "hypothesis", specifier = ">=6.0" },
-    { name = "isort", specifier = ">=5.13" },
-    { name = "mypy", specifier = ">=1.15" },
-    { name = "numpydoc", specifier = ">=1.8" },
-    { name = "paperroute-testkit", editable = "packages/paperroute-testkit" },
-    { name = "pylint", specifier = ">=3.3" },
-    { name = "pytest", specifier = ">=8.3" },
-    { name = "pytest-asyncio", specifier = ">=0.25" },
-    { name = "pytest-cov", specifier = ">=6.0" },
-]
-tiles = [{ name = "paperroute-transit", extras = ["tiles"], editable = "packages/paperroute-transit" }]
-
-[[package]]
 name = "paperroute-device"
 version = "0.1.0"
 source = { editable = "packages/paperroute-device" }
@@ -1180,6 +1133,25 @@ dependencies = [
 requires-dist = [
     { name = "gpiod", marker = "sys_platform == 'linux'", specifier = "==2.5.0" },
     { name = "numpy", specifier = ">=2.3" },
+]
+
+[[package]]
+name = "paperroute-sydney"
+version = "0.1.0"
+source = { editable = "apps/paperroute-sydney" }
+dependencies = [
+    { name = "aiohttp" },
+    { name = "multidict" },
+    { name = "paperroute-device" },
+    { name = "paperroute-transit" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "aiohttp", specifier = ">=3.12" },
+    { name = "multidict", specifier = ">=6.0" },
+    { name = "paperroute-device", editable = "packages/paperroute-device" },
+    { name = "paperroute-transit", editable = "packages/paperroute-transit" },
 ]
 
 [[package]]

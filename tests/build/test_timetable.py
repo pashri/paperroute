@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_REF
+from paperroute_sydney.city import SYDNEY, SYDNEY_REF
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.handoff import Handoff, read_handoff

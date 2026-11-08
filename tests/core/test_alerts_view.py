@@ -3,7 +3,6 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from paperroute.city import SYDNEY_ZONE
 from paperroute_device.core.text import DOT
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -11,6 +10,7 @@ from paperroute_hardware.core.knob_events import (
     KnobPressed,
     KnobTurned,
 )
+from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.alert_factories import (
     PENRITH_CENTRAL,
     WESTERN,

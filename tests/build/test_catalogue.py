@@ -15,7 +15,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import (
+from paperroute_sydney.city import (
     CENTRES,
     SYDNEY,
     SYDNEY_PROJECTION,

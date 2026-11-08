@@ -9,12 +9,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-RANKS: Final[dict[str, int]] = {
+KIT_RANKS: Final[dict[str, int]] = {
     'paperroute_hardware': 0,
     'paperroute_device': 1,
     'paperroute_transit': 2,
-    'paperroute': 3,
 }
+APP_RANK: Final[int] = 3
 TESTKIT: Final[str] = 'paperroute_testkit'
 TESTKIT_RANK: Final[int] = 3
 TEST_ONLY: Final[frozenset[str]] = frozenset({TESTKIT, 'tests'})
@@ -33,21 +33,71 @@ class Tree:
         The import name, such as ``paperroute_device``.
     rank : int | None
         The layer, lowest first; None for an unknown package.
-    src : Path
-        The package directory.
+    src : Path | None
+        The package directory; None for the repository's own tests.
     tests : Path | None
         The package's tests directory, if it has one.
     """
 
     name: str
     rank: int | None
-    src: Path
+    src: Path | None
     tests: Path | None
+
+
+def package_dirs(*, root: Path) -> list[Path]:
+    """
+    List the package directories of every workspace package and app.
+
+    Parameters
+    ----------
+    root : Path
+        The repository root.
+
+    Returns
+    -------
+    list[Path]
+        Each ``packages/*/src/<name>`` and ``apps/*/src/<name>``, by
+        path.
+    """
+    return sorted(
+        path.parent
+        for pattern in (
+            'packages/*/src/*/__init__.py',
+            'apps/*/src/*/__init__.py',
+        )
+        for path in root.glob(pattern)
+    )
+
+
+def ranks(*, root: Path) -> dict[str, int]:
+    """
+    Give the layer of each package in a repository.
+
+    Parameters
+    ----------
+    root : Path
+        The repository root.
+
+    Returns
+    -------
+    dict[str, int]
+        The kits at their ranks, the testkit at ``TESTKIT_RANK`` and
+        each ``apps/*/src/<name>`` at ``APP_RANK``.
+    """
+    return {
+        **KIT_RANKS,
+        TESTKIT: TESTKIT_RANK,
+        **{
+            path.parent.name: APP_RANK
+            for path in root.glob('apps/*/src/*/__init__.py')
+        },
+    }
 
 
 def trees(*, root: Path) -> list[Tree]:
     """
-    Find the app and every workspace package under a repository.
+    Find every workspace package and app under a repository.
 
     Parameters
     ----------
@@ -57,29 +107,24 @@ def trees(*, root: Path) -> list[Tree]:
     Returns
     -------
     list[Tree]
-        The app first, then each ``packages/*/src/<name>`` by path.
+        Each package and app by path, then the repository's own tests.
     """
-    sources = [
-        root / 'src' / 'paperroute',
-        *sorted(
-            path.parent
-            for path in root.glob('packages/*/src/*/__init__.py')
-        ),
-    ]
+    known = ranks(root=root)
     return [
-        Tree(
-            name=src.name,
-            rank=(
-                TESTKIT_RANK if src.name == TESTKIT else RANKS.get(src.name)
-            ),
-            src=src,
-            tests=(
-                src.parents[1] / 'tests'
-                if (src.parents[1] / 'tests').is_dir()
-                else None
-            ),
-        )
-        for src in sources
+        *(
+            Tree(
+                name=src.name,
+                rank=known.get(src.name),
+                src=src,
+                tests=(
+                    src.parents[1] / 'tests'
+                    if (src.parents[1] / 'tests').is_dir()
+                    else None
+                ),
+            )
+            for src in package_dirs(root=root)
+        ),
+        Tree(name='tests', rank=APP_RANK, src=None, tests=root / 'tests'),
     ]
 
 
@@ -113,7 +158,7 @@ def module_exists(*, path: Path, dotted: str) -> bool:
     path : Path
         The file holding the name, used to find the repository root.
     dotted : str
-        A dotted name such as ``paperroute.build``.
+        A dotted name such as ``paperroute_sydney.build``.
 
     Returns
     -------
@@ -122,18 +167,14 @@ def module_exists(*, path: Path, dotted: str) -> bool:
         ``path`` and the rest of the name is a module or package in it.
     """
     root = next(
-        (
-            parent
-            for parent in path.parents
-            if (parent / 'src' / 'paperroute').is_dir()
-        ),
+        (parent for parent in path.parents if (parent / 'apps').is_dir()),
         None,
     )
     if root is None:
         return False
-    for tree in trees(root=root):
-        if tree.name == dotted.split('.')[0]:
-            target = tree.src.joinpath(*dotted.split('.')[1:])
+    for src in package_dirs(root=root):
+        if src.name == dotted.split('.')[0]:
+            target = src.joinpath(*dotted.split('.')[1:])
             return (
                 target.with_suffix('.py').is_file()
                 or (target / '__init__.py').is_file()
@@ -193,20 +234,26 @@ def named(*, node: ast.AST, path: Path) -> Iterator[str]:
         yield node.args[0].value
 
 
-def imported(*, path: Path) -> set[str]:
+def imported(
+    *,
+    path: Path,
+    ranks: dict[str, int],  # pylint: disable=redefined-outer-name
+) -> set[str]:
     """
     List the top-level names a file imports.
 
     Counts imports anywhere in the file, the first argument of
     ``files(...)`` and ``import_module(...)``, and any other string that
     names a module or package of a ranked tree, such as
-    ``'paperroute.build'``. Docstrings and strings that only share a
+    ``'paperroute_sydney.build'``. Docstrings and strings that only share a
     prefix, such as ``'paperroute.local'``, do not count.
 
     Parameters
     ----------
     path : Path
         A Python file.
+    ranks : dict[str, int]
+        The repository's ranked packages, whose module strings count.
 
     Returns
     -------
@@ -227,14 +274,16 @@ def imported(*, path: Path) -> set[str]:
         if isinstance(node, ast.Constant)
         and isinstance(node.value, str)
         and id(node) not in skip
-        and node.value.split('.')[0] in RANKS
+        and node.value.split('.')[0] in ranks
         and '.' in node.value
         and module_exists(path=path, dotted=node.value)
     )
     return names
 
 
-def allowed(*, tree: Tree, name: str, test: bool) -> bool:
+def allowed(
+    *, tree: Tree, name: str, test: bool, known: dict[str, int],
+) -> bool:
     """
     Tell whether code in a tree may import a name.
 
@@ -246,21 +295,23 @@ def allowed(*, tree: Tree, name: str, test: bool) -> bool:
         The top-level name imported.
     test : bool
         Whether the importing file is a test.
+    known : dict[str, int]
+        The repository's ranked packages.
 
     Returns
     -------
     bool
         True when the import keeps the layers: its own package or a
         lower rank, so two apps at the same rank never import each
-        other.
+        other. The repository's own tests may import anything.
     """
-    if name == tree.name or (test and name in TEST_ONLY):
+    if tree.src is None or name == tree.name or (test and name in TEST_ONLY):
         return True
     if name in TEST_ONLY:
         return False
-    if name not in RANKS or tree.rank is None:
+    if name not in known or tree.rank is None:
         return True
-    return RANKS[name] < tree.rank
+    return known[name] < tree.rank
 
 
 def layer_problems(*, root: Path, tree: Tree) -> Iterator[str]:
@@ -279,11 +330,42 @@ def layer_problems(*, root: Path, tree: Tree) -> Iterator[str]:
     str
         One line when the tree is unranked.
     """
-    if tree.rank is None:
+    if tree.rank is None and tree.src is not None:
         yield (
             f'{tree.src.relative_to(root).as_posix()}: '
             f'{tree.name} has no layer'
         )
+
+
+def checked_files(*, root: Path, tree: Tree) -> list[tuple[Path, bool]]:
+    """
+    List the Python files of one tree, each marked as test or source.
+
+    Parameters
+    ----------
+    root : Path
+        The repository root, for the root ``conftest.py``.
+    tree : Tree
+        The tree to list.
+
+    Returns
+    -------
+    list[tuple[Path, bool]]
+        Each file with True for a test; the repository's own tests also
+        hold the root ``conftest.py``.
+    """
+    found = []
+    if tree.src is not None:
+        found += [(path, False) for path in sorted(tree.src.rglob('*.py'))]
+    else:
+        found += [
+            (path, True)
+            for path in [root / 'conftest.py']
+            if path.is_file()
+        ]
+    if tree.tests is not None and tree.tests.is_dir():
+        found += [(path, True) for path in sorted(tree.tests.rglob('*.py'))]
+    return found
 
 
 def import_problems(*, root: Path, tree: Tree) -> Iterator[str]:
@@ -302,17 +384,14 @@ def import_problems(*, root: Path, tree: Tree) -> Iterator[str]:
     str
         One line per bad import.
     """
-    folders = [(tree.src, False)]
-    if tree.tests is not None:
-        folders.append((tree.tests, True))
-    for folder, test in folders:
-        for path in sorted(folder.rglob('*.py')):
-            for name in sorted(imported(path=path)):
-                if not allowed(tree=tree, name=name, test=test):
-                    yield (
-                        f'{path.relative_to(root).as_posix()}: '
-                        f'{tree.name} may not import {name}'
-                    )
+    known = ranks(root=root)
+    for path, test in checked_files(root=root, tree=tree):
+        for name in sorted(imported(path=path, ranks=known)):
+            if not allowed(tree=tree, name=name, test=test, known=known):
+                yield (
+                    f'{path.relative_to(root).as_posix()}: '
+                    f'{tree.name} may not import {name}'
+                )
 
 
 def dependency_problems(*, root: Path, tree: Tree) -> Iterator[str]:
@@ -331,14 +410,17 @@ def dependency_problems(*, root: Path, tree: Tree) -> Iterator[str]:
     str
         One line per bad dependency, naming its import name.
     """
-    pyproject = tree.src.parents[1] / 'pyproject.toml'
-    if tree.rank is None or not pyproject.is_file():
+    if tree.src is None or tree.rank is None:
         return
+    pyproject = tree.src.parents[1] / 'pyproject.toml'
+    if not pyproject.is_file():
+        return
+    known = ranks(root=root)
     project = tomllib.loads(pyproject.read_text(encoding='utf-8'))
     for requirement in project.get('project', {}).get('dependencies', []):
         match = DISTRIBUTION.match(requirement)
         name = re.sub(r'[-_.]+', '_', match.group().lower()) if match else ''
-        if name != tree.name and RANKS.get(name, -1) >= tree.rank:
+        if name != tree.name and known.get(name, -1) >= tree.rank:
             yield (
                 f'{pyproject.relative_to(root).as_posix()}: '
                 f'{tree.name} may not import {name}'

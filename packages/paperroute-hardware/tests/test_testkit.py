@@ -4,12 +4,20 @@ import subprocess
 import sys
 from typing import Final
 
+from paperroute_testkit.paths import ROOT
+
 FAKES_IMPORTS: Final[str] = (
     'import paperroute_testkit.hardware_fakes, sys; '
     'print(*sorted(sys.modules))'
 )
-HIGHER: Final[frozenset[str]] = frozenset(
-    {'paperroute', 'paperroute_device', 'paperroute_transit'},
+HIGHER: Final[frozenset[str]] = frozenset({
+    'paperroute_device',
+    'paperroute_transit',
+}) | frozenset(
+    {
+        path.parent.name
+        for path in ROOT.glob('apps/*/src/*/__init__.py')
+    },
 )
 
 
@@ -27,3 +35,8 @@ def test_hardware_fakes_load_no_higher_packages() -> None:
         if name.split('.')[0] in HIGHER
     ]
     assert not offenders
+
+
+def test_higher_includes_apps() -> None:
+    """The higher packages include every app."""
+    assert 'paperroute_sydney' in HIGHER

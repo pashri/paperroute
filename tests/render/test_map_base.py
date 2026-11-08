@@ -11,7 +11,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.city import SYDNEY_PROJECTION
 from paperroute_device.render.canvas import (
     INK,
     PAPER,
@@ -19,6 +18,7 @@ from paperroute_device.render.canvas import (
     Face,
     text_width,
 )
+from paperroute_sydney.city import SYDNEY_PROJECTION
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
     SqliteTileRepository,

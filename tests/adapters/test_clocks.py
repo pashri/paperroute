@@ -3,7 +3,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_transit.adapters.clocks import ReplayClock, SystemClock
 
 

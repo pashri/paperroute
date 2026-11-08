@@ -5,7 +5,7 @@ from contextlib import closing
 from datetime import date
 from pathlib import Path
 
-from paperroute.city import SYDNEY_REF
+from paperroute_sydney.city import SYDNEY_REF
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.timetable import Window, build_timetable
 from tests.build.feeds import bundle_rail_feed, bus_feed, sydneytrains_feed

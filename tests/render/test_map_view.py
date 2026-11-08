@@ -8,7 +8,6 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.city import SYDNEY_PROJECTION
 from paperroute_device.render.canvas import (
     HEIGHT,
     INK,
@@ -19,6 +18,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER
+from paperroute_sydney.city import SYDNEY_PROJECTION
 from paperroute_transit.adapters.tiles_db import SqliteTileRepository
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.connection_view import PairRow

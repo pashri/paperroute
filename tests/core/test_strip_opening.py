@@ -6,8 +6,8 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SYDNEY, SydneyMode
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
+from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.core.factories import (
     START,
     begun,

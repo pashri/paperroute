@@ -5,8 +5,8 @@ from datetime import date, datetime, time, timedelta
 
 import pytest
 
-from paperroute.city import PEAK_WINDOWS, SYDNEY, SYDNEY_ZONE
 from paperroute_device.core.device_settings import Window
+from paperroute_sydney.city import PEAK_WINDOWS, SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.factories import pin_of
 from paperroute_transit.core.rhythm import (
     frame_time,

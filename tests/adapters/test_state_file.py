@@ -15,11 +15,16 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from paperroute.city import PEAK_WINDOWS, SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_device.core.device_settings import (
     DeviceSettings,
     QuietMode,
     Window,
+)
+from paperroute_sydney.city import (
+    PEAK_WINDOWS,
+    SYDNEY,
+    SYDNEY_ZONE,
+    SydneyMode,
 )
 from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE
 from paperroute_testkit.core.factories import pin_at

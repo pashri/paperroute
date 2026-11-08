@@ -6,7 +6,6 @@ from dataclasses import dataclass, field, replace
 
 import pytest
 
-from paperroute.city import SYDNEY
 from paperroute_device.core.device_model import (
     DeviceStatus,
     WifiPhase,
@@ -17,6 +16,7 @@ from paperroute_hardware.core.knob_decoder import Encoder
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_hardware.knobs_open import knobs_for
 from paperroute_hardware.ports import PanelRefresh, PanelTimes
+from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import device_facts
 from paperroute_testkit.hardware_fakes import FakeKnobLines

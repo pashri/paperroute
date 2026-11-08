@@ -7,7 +7,7 @@ from typing import Any
 import pytest
 from google.transit import gtfs_realtime_pb2
 
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_testkit.adapters.rt_factory import RtStop, RtTrip, feed
 from paperroute_transit.adapters.feed_errors import FeedError
 from paperroute_transit.adapters.gtfs_rt import (

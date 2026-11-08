@@ -3,7 +3,7 @@
 from dataclasses import replace
 from typing import Final
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.connection_factories import (
     HOLLIS,
     PARRAMATTA,

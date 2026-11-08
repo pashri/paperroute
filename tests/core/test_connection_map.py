@@ -5,7 +5,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_testkit.core.connection_factories import (
     HOLLIS,
     LEG1,

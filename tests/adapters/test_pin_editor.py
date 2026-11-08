@@ -1,6 +1,6 @@
 """Tests for the pin editor's checking of the choices made."""
 
-from paperroute.city import SydneyMode
+from paperroute_sydney.city import SydneyMode
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.adapters.pin_editor import edited
 from paperroute_transit.core.chooser import Choice

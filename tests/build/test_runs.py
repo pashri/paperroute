@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.city import RAIL_TYPES, SYDNEY, SYDNEY_REF, SydneyMode
+from paperroute_sydney.city import RAIL_TYPES, SYDNEY, SYDNEY_REF, SydneyMode
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.runs import (
     RUN_SCHEMA,

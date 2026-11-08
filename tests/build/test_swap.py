@@ -18,7 +18,7 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SYDNEY_REF
+from paperroute_sydney.city import SYDNEY_REF
 from paperroute_transit.build import extras
 from paperroute_transit.build import handoff as handoff_module
 from paperroute_transit.build import swap, timetable

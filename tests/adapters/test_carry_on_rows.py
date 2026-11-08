@@ -11,7 +11,7 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.adapters.carry_on_rows import (
     CARRY_ONS,

@@ -5,7 +5,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SYDNEY
 from paperroute_device.adapters.web_common import asset
 from paperroute_device.core.device_settings import (
     CLEAN_CHOICES,
@@ -13,6 +12,7 @@ from paperroute_device.core.device_settings import (
     QuietMode,
     Window,
 )
+from paperroute_sydney.city import SYDNEY
 from paperroute_transit.adapters.board_web import board_text
 from paperroute_transit.adapters.settings_form import (
     BadInput,

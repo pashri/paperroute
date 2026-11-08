@@ -12,7 +12,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_REF, SydneyFeed
+from paperroute_sydney.city import SYDNEY_PROJECTION, SYDNEY_REF, SydneyFeed
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.shapes import (

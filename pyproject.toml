@@ -1,34 +1,3 @@
-[project]
-name = "paperroute"
-version = "0.1.0"
-description = "Two-knob e-paper tracker for Sydney public transport"
-readme = "README.md"
-license = "MIT"
-requires-python = ">=3.14"
-dependencies = [
-    "aiohttp>=3.12",
-    "gtfs-realtime-bindings>=1.0",
-    "numpy>=2.3",
-    "pydantic>=2.12",
-    "python-json-logger>=3.2",
-    "skia-python>=138.0",
-    "gpiod==2.5.0; sys_platform == 'linux'",
-    "paperroute-hardware",
-    "paperroute-device",
-    "paperroute-transit",
-]
-
-[project.scripts]
-paperroute-board = "paperroute.__main__:main"
-paperroute-build = "paperroute.build.__main__:main"
-
-[build-system]
-requires = ["hatchling>=1.27"]
-build-backend = "hatchling.build"
-
-[tool.hatch.build.targets.wheel]
-packages = ["src/paperroute"]
-
 [dependency-groups]
 dev = [
     "fonttools>=4.55",
@@ -36,6 +5,7 @@ dev = [
     "isort>=5.13",
     "mypy>=1.15",
     "numpydoc>=1.8",
+    "paperroute-sydney",
     "paperroute-testkit",
     "pylint>=3.3",
     "pytest>=8.3",
@@ -49,13 +19,14 @@ python-preference = "only-managed"
 default-groups = ["dev", "tiles"]
 
 [tool.uv.workspace]
-members = ["packages/*"]
+members = ["packages/*", "apps/*"]
 
 [tool.uv.sources]
 paperroute-hardware = { workspace = true }
 paperroute-device = { workspace = true }
 paperroute-transit = { workspace = true }
 paperroute-testkit = { workspace = true }
+paperroute-sydney = { workspace = true }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -70,8 +41,8 @@ strict = true
 python_version = "3.14"
 files = [
     "conftest.py",
-    "src",
     "tests",
+    "apps/paperroute-sydney/src",
     "packages/paperroute-hardware/src",
     "packages/paperroute-device/src",
     "packages/paperroute-transit/src",
@@ -95,7 +66,7 @@ multi_line_output = 3
 include_trailing_comma = true
 line_length = 79
 known_first_party = [
-    "paperroute",
+    "paperroute_sydney",
     "paperroute_hardware",
     "paperroute_device",
     "paperroute_transit",
@@ -103,7 +74,7 @@ known_first_party = [
     "tests",
 ]
 src_paths = [
-    "src",
+    "apps/paperroute-sydney/src",
     "tests",
     "packages/paperroute-hardware/src",
     "packages/paperroute-device/src",
@@ -118,7 +89,7 @@ extension-pkg-allow-list = ["skia", "osmium"]
 
 [tool.pylint.imports]
 known-first-party = [
-    "paperroute",
+    "paperroute_sydney",
     "paperroute_hardware",
     "paperroute_device",
     "paperroute_transit",
@@ -144,7 +115,7 @@ exclude = ['\.__init__$']
 
 [tool.coverage.run]
 source = [
-    "paperroute",
+    "paperroute_sydney",
     "paperroute_hardware",
     "paperroute_device",
     "paperroute_transit",
@@ -152,7 +123,7 @@ source = [
 disable_warnings = ["module-not-imported", "no-data-collected"]
 omit = [
     "packages/paperroute-transit/src/paperroute_transit/adapters/tk_monitor.py",
-    "src/paperroute/__main__.py",
+    "apps/paperroute-sydney/src/paperroute_sydney/__main__.py",
     "packages/paperroute-transit/src/paperroute_transit/board.py",
-    "src/paperroute/build/__main__.py",
+    "apps/paperroute-sydney/src/paperroute_sydney/build/__main__.py",
 ]

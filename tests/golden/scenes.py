@@ -11,7 +11,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.city import SydneyFeed, SydneyMode
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import (
     Confirm,
@@ -23,6 +22,7 @@ from paperroute_device.core.device_model import (
     WifiPhase,
     WifiSetup,
 )
+from paperroute_sydney.city import SydneyFeed, SydneyMode
 from paperroute_testkit.core.connection_factories import (
     LEG1,
     LEG2,

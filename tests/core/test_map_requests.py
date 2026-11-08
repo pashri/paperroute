@@ -5,8 +5,8 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute_hardware.core.knob_events import Knob, KnobPressed
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute_testkit.core.connection_factories import LEG1, LEG2
 from paperroute_testkit.core.factories import (
     EIGHT,

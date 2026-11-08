@@ -6,7 +6,16 @@ from typing import Final
 
 import pytest
 
-HIGHER: Final[frozenset[str]] = frozenset({'paperroute', 'paperroute_transit'})
+from paperroute_testkit.paths import ROOT
+
+HIGHER: Final[frozenset[str]] = frozenset({
+    'paperroute_transit',
+}) | frozenset(
+    {
+        path.parent.name
+        for path in ROOT.glob('apps/*/src/*/__init__.py')
+    },
+)
 
 
 @pytest.mark.parametrize('module', [
@@ -31,3 +40,8 @@ def test_device_fakes_load_no_higher_packages(module: str) -> None:
         if name.split('.')[0] in HIGHER
     ]
     assert not offenders
+
+
+def test_higher_includes_apps() -> None:
+    """The higher packages include every app."""
+    assert 'paperroute_sydney' in HIGHER

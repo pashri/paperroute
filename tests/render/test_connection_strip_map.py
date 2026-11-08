@@ -6,9 +6,9 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute_device.render.canvas import HEIGHT, INK, PAPER
 from paperroute_device.render.frame import HEADER
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.connection_factories import WORK, at
 from paperroute_testkit.core.factories import STALE_LIMIT
 from paperroute_transit.adapters.tiles_db import NullTiles

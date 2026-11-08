@@ -9,9 +9,9 @@ from urllib.parse import urlencode
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.web_board import SuggestPlug
-from paperroute.city import SYDNEY, SYDNEY_ZONE
-from paperroute.core.trip_search import Journey, JourneyLeg, TripSearch
+from paperroute_sydney.adapters.web_board import SuggestPlug
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
+from paperroute_sydney.core.trip_search import Journey, JourneyLeg, TripSearch
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages

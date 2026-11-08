@@ -11,14 +11,6 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import (
-    SYDNEY,
-    SYDNEY_PROJECTION,
-    SYDNEY_ZONE,
-    TOWN_HALL,
-    SydneyFeed,
-    SydneyMode,
-)
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_device.core.device_settings import Window
@@ -30,6 +22,14 @@ from paperroute_hardware.core.knob_events import (
     KnobPressed,
     KnobsHeld,
     KnobTurned,
+)
+from paperroute_sydney.city import (
+    SYDNEY,
+    SYDNEY_PROJECTION,
+    SYDNEY_ZONE,
+    TOWN_HALL,
+    SydneyFeed,
+    SydneyMode,
 )
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.core.factories import (

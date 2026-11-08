@@ -3,7 +3,6 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from paperroute.city import SYDNEY
 from paperroute_device.core.panel_views import MenuView
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -11,6 +10,7 @@ from paperroute_hardware.core.knob_events import (
     KnobsHeld,
     KnobTurned,
 )
+from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.core.steps import step_answered
 from paperroute_transit.core.chooser import ChooserState

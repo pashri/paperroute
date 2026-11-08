@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from paperroute.city import SYDNEY, SydneyMode
+from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.core.factories import place
 from paperroute_transit.core.chooser import (
     Choice,

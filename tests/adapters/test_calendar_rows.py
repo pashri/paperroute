@@ -9,7 +9,7 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
+from paperroute_sydney.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import pin_of
 from paperroute_transit.adapters.calendar_rows import (

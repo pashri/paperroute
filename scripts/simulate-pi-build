@@ -1,21 +1,17 @@
 #!/usr/bin/env bash
 # Usage: scripts/simulate-pi-build
-# Builds the tree deploy would stage the way the Pi does, with today's
-# installer and with the provisioned one it replaces, and checks what
-# each venv can import and run. Stage the files with git add first.
+# Builds the tree deploy would stage the way the Pi does and checks
+# what its venv can import and run. Stage the files with git add first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-stage=$(mktemp -d); old=$(mktemp -d)
-trap 'rm -rf -- "$stage" "$old"' EXIT
-git ls-files -z src packages pyproject.toml uv.lock README.md | rsync -a --from0 --files-from=- ./ "$stage/"
-rsync -a "$stage/" "$old/"
-UV_LINK_MODE=copy uv sync --quiet --frozen --package paperroute --no-default-groups --no-editable --project "$stage"
-UV_LINK_MODE=copy uv sync --quiet --frozen --no-dev --no-editable --project "$old"
-imports="import paperroute.__main__, paperroute_device.screen, paperroute_hardware, paperroute_device, paperroute_transit; from importlib.util import find_spec as f"
+stage=$(mktemp -d)
+trap 'rm -rf -- "$stage"' EXIT
+git ls-files -z packages apps/paperroute-sydney pyproject.toml uv.lock | rsync -a --from0 --files-from=- ./ "$stage/"
+UV_LINK_MODE=copy uv sync --quiet --frozen --package paperroute-sydney --no-default-groups --no-editable --project "$stage"
+imports="import paperroute_sydney.__main__, paperroute_device.screen, paperroute_hardware, paperroute_device, paperroute_transit; from importlib.util import find_spec as f"
 "$stage/.venv/bin/python" -c "$imports; assert not any(f(m) for m in ('osmium', 'shapely', 'pytest', 'paperroute_testkit'))"
-"$old/.venv/bin/python" -c "$imports; assert not any(f(m) for m in ('pytest', 'paperroute_testkit'))"
-"$stage/.venv/bin/python" -c "import paperroute_transit.build.extras as e, paperroute.city as c; assert e.city_named(ref='paperroute.city:SYDNEY').name == c.SYDNEY.name"
+"$stage/.venv/bin/python" -c "import paperroute_transit.build.extras as e, paperroute_sydney.city as c; assert e.city_named(ref='paperroute_sydney.city:SYDNEY').name == c.SYDNEY.name"
 
 draw=$(cat <<'EOF'
 import sysconfig
@@ -51,7 +47,7 @@ device=$(cat <<'EOF'
 import sysconfig
 from pathlib import Path
 
-from paperroute.asset_root import APP_ASSETS, use_app_assets
+from paperroute_sydney.asset_root import APP_ASSETS, use_app_assets
 from paperroute_device.adapters.web_common import asset
 from paperroute_device.core.panel_views import MenuView
 from paperroute_device.render.panel import draw_panel_view
@@ -64,7 +60,7 @@ from paperroute_transit.adapters.board_web import (
 
 use_app_assets()
 purelib = Path(sysconfig.get_paths()['purelib'])
-packaged = purelib / 'paperroute' / 'assets'
+packaged = purelib / 'paperroute_sydney' / 'assets'
 assert Path(str(APP_ASSETS.web)).is_relative_to(packaged), APP_ASSETS.web
 for weight in (400, 700, 800):
     ttf = purelib / 'paperroute_device' / 'fonts' / f'Overpass-{weight}.ttf'
@@ -116,7 +112,7 @@ for name in (
 ):
     assert shell_text(name=name), name
 assert shell_bytes(name='fonts/public-sans.woff2')
-assert not (purelib / 'paperroute' / 'assets' / 'web' / 'device.html').exists()
+assert not (purelib / 'paperroute_sydney' / 'assets' / 'web' / 'device.html').exists()
 live = LiveView(knobs=[].append)
 app = web_app(live=live, device=None)
 
@@ -142,9 +138,11 @@ async def main():
 
 
 asyncio.run(main())
+kits = {'paperroute_hardware', 'paperroute_device', 'paperroute_transit'}
 loaded = [
     name for name in sys.modules
-    if name.split('.')[0] in {'paperroute', 'paperroute_transit'}
+    if name.split('.')[0] == 'paperroute_transit'
+    or (name.startswith('paperroute_') and name.split('.')[0] not in kits)
 ]
 assert not loaded, loaded
 EOF
@@ -167,17 +165,16 @@ loaded = [
 ]
 assert not loaded, loaded"
 
-for py in "$stage/.venv/bin/python" "$old/.venv/bin/python"; do
-    code=0
-    err=$("$py" -m paperroute_device.screen --image deploy/screens/on.raw --state /nonexistent 2>&1 >/dev/null) || code=$?
-    if [[ $code -ne 1 || $err != screen:* || $err == *Traceback* ]]; then
-        printf '%s: screen exited %s\n%s\n' "$py" "$code" "$err" >&2
-        exit 1
-    fi
-    "$py" -c "$draw"
-    "$py" -c "$device"
-    "$py" -c "$kit_web"
-    "$py" -c "$no_root"
-    "$py" -c "import paperroute.build.__main__"
-    "$py" -c "$screen_only"
-done
+py="$stage/.venv/bin/python"
+code=0
+err=$("$py" -m paperroute_device.screen --image deploy/screens/on.raw --state /nonexistent 2>&1 >/dev/null) || code=$?
+if [[ $code -ne 1 || $err != screen:* || $err == *Traceback* ]]; then
+    printf '%s: screen exited %s\n%s\n' "$py" "$code" "$err" >&2
+    exit 1
+fi
+"$py" -c "$draw"
+"$py" -c "$device"
+"$py" -c "$kit_web"
+"$py" -c "$no_root"
+"$py" -c "import paperroute_sydney.build.__main__"
+"$py" -c "$screen_only"

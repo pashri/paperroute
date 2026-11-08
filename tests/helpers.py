@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 from typing import Final
 
-from paperroute.build.dedupe import merge_rail
+from paperroute_sydney.build.dedupe import merge_rail
 from paperroute_transit.build.gtfs_files import Source
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'

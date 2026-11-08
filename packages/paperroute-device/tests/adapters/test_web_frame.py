@@ -15,7 +15,14 @@ from paperroute_device.adapters.web_frame import (
 )
 from paperroute_testkit.paths import ROOT
 
-HIGHER: Final[frozenset[str]] = frozenset({'paperroute', 'paperroute_transit'})
+HIGHER: Final[frozenset[str]] = frozenset({
+    'paperroute_transit',
+}) | frozenset(
+    {
+        path.parent.name
+        for path in ROOT.glob('apps/*/src/*/__init__.py')
+    },
+)
 READ_SHELL: Final[str] = (
     'import sys\n'
     'from paperroute_device.adapters.web_frame import shell_bytes, '
@@ -94,3 +101,8 @@ def test_sheets_mark_filled_or_dropped() -> None:
     )
     assert live + '  <link rel="stylesheet" href="/a.css">\n' in linked
     assert '{{sheets}}' not in linked
+
+
+def test_higher_includes_apps() -> None:
+    """The higher packages include every app."""
+    assert 'paperroute_sydney' in HIGHER

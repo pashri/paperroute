@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from paperroute.core.trip_search import TripSearch, default_search
+from paperroute_sydney.core.trip_search import TripSearch, default_search
 
 SYDNEY: Final = ZoneInfo('Australia/Sydney')
 

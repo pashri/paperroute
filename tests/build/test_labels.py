@@ -8,8 +8,8 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from paperroute.city import SYDNEY_PROJECTION
 from paperroute_device.render.canvas import text_width
+from paperroute_sydney.city import SYDNEY_PROJECTION
 from paperroute_transit.build.features import FeatureStore
 from paperroute_transit.build.labels import (
     LabelIndex,

@@ -65,7 +65,7 @@ from paperroute_testkit.core.strip_factories import (
 )
 from paperroute_testkit.device_pages import FACTS
 from paperroute_transit.core.geo import make_shape
-from paperroute_transit.core.model import Pin
+from paperroute_transit.core.model import Mode, Pin, RouteKind
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.tiles import (
     TILE,
@@ -277,6 +277,29 @@ def stop_no_key() -> State:
     """
     state = stop()
     return replace(state, panel=replace(state.panel, key_set=False))
+
+
+def stop_trainlink() -> State:
+    """
+    Show three TrainLink trains on the Stop view.
+
+    Returns
+    -------
+    State
+        State at `START`.
+    """
+    state = stop()
+    departures = tuple(
+        replace(
+            departure,
+            mode=Mode.REGIONAL,
+            route='WST',
+            facts=replace(departure.facts, kind=RouteKind.TRAIN),
+        )
+        for departure in state.board.departures
+    )
+    board = replace(state.board, departures=departures)
+    return replace(state, board=board)
 
 
 def map_scene() -> State:
@@ -504,6 +527,7 @@ SCENES: Final[dict[str, Callable[[], State]]] = {
     'stop': stop,
     'stop_larger_inverted': stop_larger_inverted,
     'stop_no_key': stop_no_key,
+    'stop_trainlink': stop_trainlink,
     'map': map_scene,
     'map_panes': map_panes,
     'strip': lambda: strip_scene(view=LiveView.STRIP),

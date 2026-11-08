@@ -19,8 +19,38 @@ from paperroute.city import (
     SydneyFeed,
     SydneyMode,
 )
-from paperroute.core.alert_state import ALERT_EVERY, alert_feeds
-from paperroute.core.chooser import (
+from paperroute_device.core.device_events import PowerRequested
+from paperroute_device.core.device_model import PowerAction
+from paperroute_device.core.device_settings import Window
+from paperroute_device.core.panel_views import NoticeView
+from paperroute_hardware.core.knob_events import (
+    Knob,
+    KnobHeld,
+    KnobHeldTurned,
+    KnobPressed,
+    KnobsHeld,
+    KnobTurned,
+)
+from paperroute_testkit.core.connection_factories import WORK
+from paperroute_testkit.core.factories import (
+    START,
+    begun,
+    departure,
+    pattern,
+    pin_at,
+    place,
+    snapshot,
+    vehicle,
+)
+from paperroute_testkit.core.steps import (
+    answer_fetches,
+    step_answered,
+    step_untouched,
+    wakeful,
+)
+from paperroute_transit.core.alert_state import ALERT_EVERY, alert_feeds
+from paperroute_transit.core.auto_model import AutoState
+from paperroute_transit.core.chooser import (
     ChooserPath,
     ChooserState,
     Column,
@@ -30,18 +60,20 @@ from paperroute.core.chooser import (
     chosen_pin,
     focusable,
 )
-from paperroute.core.chooser_steps import trip_feeds
-from paperroute.core.chooser_view import ChooserView
-from paperroute.core.connection_strip import (
+from paperroute_transit.core.chooser_steps import trip_feeds
+from paperroute_transit.core.chooser_view import ChooserView
+from paperroute_transit.core.connection_strip import (
     ConnectionStripMapView,
     ConnectionStripView,
 )
-from paperroute.core.connection_view import ConnectionView
-from paperroute.core.cycle import cycle_due, needed_feeds
-from paperroute.core.map_requests import map_feeds, shows_vehicles
-from paperroute.core.map_state import area_box, area_frame
-from paperroute.core.map_view import DEFAULT_ZOOM, MAP_WIDTH, MapView
-from paperroute.core.messages import (
+from paperroute_transit.core.connection_view import ConnectionView
+from paperroute_transit.core.cycle import cycle_due, needed_feeds
+from paperroute_transit.core.feed_plan import FeedKind
+from paperroute_transit.core.geo import Point, make_shape
+from paperroute_transit.core.map_requests import map_feeds, shows_vehicles
+from paperroute_transit.core.map_state import area_box, area_frame
+from paperroute_transit.core.map_view import DEFAULT_ZOOM, MAP_WIDTH, MapView
+from paperroute_transit.core.messages import (
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
     ColumnFailed,
@@ -86,91 +118,6 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.panel_views import SleepView
-from paperroute.core.places import shown, stops_to_match
-from paperroute.core.quota import QUOTA_SAVE_EVERY, quota_only
-from paperroute.core.rebuild import building_view
-from paperroute.core.rhythm import poll_every
-from paperroute.core.saved import (
-    LIVE_VIEWS,
-    BoardSettings,
-    LiveView,
-    Rate,
-    Saved,
-    Settings,
-    default_saved,
-    default_settings,
-    seeded,
-)
-from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import (
-    CLOCK_WAIT,
-    FEED_IDLE,
-    LOOKBACK,
-    POLL_EVERY,
-    RELOAD_BEFORE,
-    RETRY_AFTER,
-    State,
-)
-from paperroute.core.state_model import clock_waiting as clock_held
-from paperroute.core.state_model import load_window
-from paperroute.core.state_saves import SAVE_AFTER
-from paperroute.core.state_views import live_stop_view, saved_of
-from paperroute.core.stop_view import (
-    HORIZON,
-    SIDEBAR_ROWS,
-    VISIBLE_ROWS,
-    StopView,
-)
-from paperroute.core.strip_follow import origin_of
-from paperroute.core.strip_model import (
-    PANE_ROWS,
-    STRIP_ROWS,
-    StripMapView,
-    StripView,
-    trip_day,
-)
-from paperroute.core.strip_select import panel_trains
-from paperroute.core.strip_state import (
-    STRIP_VIEWS,
-    keys_in_use,
-    picking_to,
-    scroll_range,
-    shown_reach,
-    strip_key,
-)
-from paperroute_device.core.device_events import PowerRequested
-from paperroute_device.core.device_model import PowerAction
-from paperroute_device.core.device_settings import Window
-from paperroute_device.core.panel_views import NoticeView
-from paperroute_hardware.core.knob_events import (
-    Knob,
-    KnobHeld,
-    KnobHeldTurned,
-    KnobPressed,
-    KnobsHeld,
-    KnobTurned,
-)
-from paperroute_testkit.core.connection_factories import WORK
-from paperroute_testkit.core.factories import (
-    START,
-    begun,
-    departure,
-    pattern,
-    pin_at,
-    place,
-    snapshot,
-    vehicle,
-)
-from paperroute_testkit.core.steps import (
-    answer_fetches,
-    step_answered,
-    step_untouched,
-    wakeful,
-)
-from paperroute_transit.core.auto_model import AutoState
-from paperroute_transit.core.feed_plan import FeedKind
-from paperroute_transit.core.geo import Point, make_shape
 from paperroute_transit.core.model import (
     Departure,
     Pin,
@@ -179,6 +126,9 @@ from paperroute_transit.core.model import (
     same_place,
     shifted,
 )
+from paperroute_transit.core.panel_views import SleepView
+from paperroute_transit.core.places import shown, stops_to_match
+from paperroute_transit.core.quota import QUOTA_SAVE_EVERY, quota_only
 from paperroute_transit.core.reach import (
     Reach,
     ReachInput,
@@ -190,6 +140,56 @@ from paperroute_transit.core.realtime import (
     RealtimeSnapshot,
     StopUpdate,
     TripRealtime,
+)
+from paperroute_transit.core.rebuild import building_view
+from paperroute_transit.core.rhythm import poll_every
+from paperroute_transit.core.saved import (
+    LIVE_VIEWS,
+    BoardSettings,
+    LiveView,
+    Rate,
+    Saved,
+    Settings,
+    default_saved,
+    default_settings,
+    seeded,
+)
+from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state_model import (
+    CLOCK_WAIT,
+    FEED_IDLE,
+    LOOKBACK,
+    POLL_EVERY,
+    RELOAD_BEFORE,
+    RETRY_AFTER,
+    State,
+)
+from paperroute_transit.core.state_model import clock_waiting as clock_held
+from paperroute_transit.core.state_model import load_window
+from paperroute_transit.core.state_saves import SAVE_AFTER
+from paperroute_transit.core.state_views import live_stop_view, saved_of
+from paperroute_transit.core.stop_view import (
+    HORIZON,
+    SIDEBAR_ROWS,
+    VISIBLE_ROWS,
+    StopView,
+)
+from paperroute_transit.core.strip_follow import origin_of
+from paperroute_transit.core.strip_model import (
+    PANE_ROWS,
+    STRIP_ROWS,
+    StripMapView,
+    StripView,
+    trip_day,
+)
+from paperroute_transit.core.strip_select import panel_trains
+from paperroute_transit.core.strip_state import (
+    STRIP_VIEWS,
+    keys_in_use,
+    picking_to,
+    scroll_range,
+    shown_reach,
+    strip_key,
 )
 from paperroute_transit.core.tiles import CITY, ZOOMS
 from tests.core.chooser_walks import (

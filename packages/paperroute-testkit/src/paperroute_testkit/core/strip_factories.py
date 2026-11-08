@@ -5,14 +5,6 @@ from datetime import timedelta
 from typing import Final
 
 from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
-from paperroute.core.map_view import DEFAULT_ZOOM
-from paperroute.core.messages import DeparturesLoaded, Effect, Event
-from paperroute.core.saved import LiveView, Saved, default_settings
-from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import State
-from paperroute.core.stop_view import HORIZON
-from paperroute.core.strip_model import StripInputs, StripRow
-from paperroute.core.strip_view import build_strip_view
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import (
     EAST,
@@ -27,8 +19,16 @@ from paperroute_testkit.core.factories import (
 )
 from paperroute_testkit.core.steps import step_answered
 from paperroute_transit.core.geo import Point
+from paperroute_transit.core.map_view import DEFAULT_ZOOM
+from paperroute_transit.core.messages import DeparturesLoaded, Effect, Event
 from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
+from paperroute_transit.core.saved import LiveView, Saved, default_settings
+from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.stop_view import HORIZON
+from paperroute_transit.core.strip_model import StripInputs, StripRow
+from paperroute_transit.core.strip_view import build_strip_view
 
 WEST: Final[tuple[str, ...]] = ('C', 'J', 'W1', 'W2')
 SOUTH: Final[tuple[str, ...]] = ('C', 'J', 'R1', 'R2', 'R3')

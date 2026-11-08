@@ -27,7 +27,6 @@ from paperroute.adapters.state_migrations import (
     v9_ref,
 )
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
-from paperroute.core.saved import ConnectionMap, Saved, default_saved
 from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
     HAMMERS,
@@ -45,6 +44,7 @@ from paperroute_transit.core.model import (
     Way,
     pin_ref,
 )
+from paperroute_transit.core.saved import ConnectionMap, Saved, default_saved
 from tests.adapters.state_layout import STATE_V11, STATE_V11_KINDS, flat_v11
 from tests.golden.scenes import GOLDEN
 

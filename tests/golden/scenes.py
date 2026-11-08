@@ -13,21 +13,6 @@ from numpy.typing import NDArray
 
 from paperroute.app_render import MapRenderer, drawing
 from paperroute.city import SydneyFeed, SydneyMode
-from paperroute.core.chains import Legs, leg_key
-from paperroute.core.connection_model import way_legs
-from paperroute.core.messages import (
-    DeparturesLoaded,
-    FetchFeed,
-    PatternsLoaded,
-    PositionsFetched,
-    ScreenView,
-    ShapesLoaded,
-    StripLoaded,
-)
-from paperroute.core.saved import LiveView
-from paperroute.core.state import step
-from paperroute.core.state_model import State
-from paperroute.core.state_views import current_view, live_stop_view
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import (
     Confirm,
@@ -65,9 +50,24 @@ from paperroute_testkit.core.strip_factories import (
     on_view,
 )
 from paperroute_testkit.device_pages import FACTS
+from paperroute_transit.core.chains import Legs, leg_key
+from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.geo import make_shape
+from paperroute_transit.core.messages import (
+    DeparturesLoaded,
+    FetchFeed,
+    PatternsLoaded,
+    PositionsFetched,
+    ScreenView,
+    ShapesLoaded,
+    StripLoaded,
+)
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.saved import LiveView
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.state_views import current_view, live_stop_view
 from paperroute_transit.core.tiles import (
     TILE,
     LabelKind,

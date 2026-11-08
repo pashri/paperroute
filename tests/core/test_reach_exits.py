@@ -5,12 +5,6 @@ from typing import Final
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.core.reach_exits import (
-    exit_leads,
-    exit_name,
-    found_exits,
-    grouped_exits,
-)
 from paperroute_testkit.core.reach_factories import (
     ids,
     random_tails,
@@ -19,6 +13,12 @@ from paperroute_testkit.core.reach_factories import (
 )
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import Reach, RowKind, RunTail
+from paperroute_transit.core.reach_exits import (
+    exit_leads,
+    exit_name,
+    found_exits,
+    grouped_exits,
+)
 from paperroute_transit.core.reach_layout import LineExit
 
 LINE: Final[frozenset[str]] = frozenset({'C', 'J', 'E1'})

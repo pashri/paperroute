@@ -4,7 +4,9 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.city import SYDNEY, SydneyMode
-from paperroute.core.chooser import (
+from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
+from paperroute_testkit.core.factories import START, departure, place
+from paperroute_transit.core.chooser import (
     Choice,
     ChooserPath,
     ChooserRequest,
@@ -18,14 +20,12 @@ from paperroute.core.chooser import (
     with_column,
     with_line,
 )
-from paperroute.core.chooser_station import knob_pressed
-from paperroute.core.messages import ColumnLoaded, Event, LineLoaded
-from paperroute.core.state_model import RELOAD_BEFORE
-from paperroute.core.stop_view import HORIZON
-from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
-from paperroute_testkit.core.factories import START, departure, place
+from paperroute_transit.core.chooser_station import knob_pressed
+from paperroute_transit.core.messages import ColumnLoaded, Event, LineLoaded
 from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
+from paperroute_transit.core.state_model import RELOAD_BEFORE
+from paperroute_transit.core.stop_view import HORIZON
 
 KINDS: Final[Column] = Column(
     level=Level.KIND,

@@ -2,9 +2,9 @@
 
 from typing import Final
 
-from paperroute.core.map_view import MapBase
 from paperroute_device.render.canvas import INK, PAPER, Canvas
 from paperroute_transit.core.geo import Point
+from paperroute_transit.core.map_view import MapBase
 from paperroute_transit.core.tiles import to_pixels
 
 Window = tuple[int, int]

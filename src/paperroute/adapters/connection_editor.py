@@ -7,10 +7,10 @@ from typing import Final
 from multidict import MultiMapping
 
 from paperroute.adapters.state_change import ALLOW_MAX, ALLOW_MIN
-from paperroute.core.connection_model import default_allow
-from paperroute.core.pin_choices import ChangeStop
-from paperroute.ports import PinOptions
+from paperroute_transit.core.connection_model import default_allow
 from paperroute_transit.core.model import Change, StopPlace, Way
+from paperroute_transit.core.pin_choices import ChangeStop
+from paperroute_transit.ports import PinOptions
 
 ALLOW_RANGE: Final[str] = 'Allow between 1 and 60 minutes.'
 

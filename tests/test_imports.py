@@ -5,8 +5,11 @@ import os
 import re
 import subprocess
 import sys
+from importlib.util import find_spec
 from pathlib import Path
 from typing import Final
+
+import pytest
 
 ROOT: Final[Path] = Path(__file__).parents[1]
 SRC: Final[tuple[Path, ...]] = (
@@ -42,9 +45,13 @@ REFRESH_RUN: Final[str] = (
 KIT_TEXT: Final[frozenset[str]] = frozenset(
     {'.py', '.html', '.css', '.js', '.toml', '.txt'},
 )
+STOP_VIEW: Final[str] = 'paperroute_transit.core.stop_view'
 NSW: Final[re.Pattern[str]] = re.compile(r'(?i)\bnsw')
 KEY_SCHEME: Final[re.Pattern[str]] = re.compile(r'(?i)\bapikey\b|BASE_URL')
 APP: Final[Path] = ROOT / 'src' / 'paperroute'
+TRANSIT: Final[Path] = (
+    ROOT / 'packages' / 'paperroute-transit' / 'src' / 'paperroute_transit'
+)
 CITY_DEFAULTS: Final[dict[str, str | None]] = {
     'Settings': None,
     'BoardSettings': 'peak_windows',
@@ -70,10 +77,99 @@ CITY_IMPORTS: Final[str] = (
     "loaded = sorted(name for name in sys.modules if name.startswith('google')); "
     'assert not loaded, loaded'
 )
+MOVED: Final[tuple[str, ...]] = (
+    'core.alert_match',
+    'core.alert_state',
+    'core.alerts_view',
+    'core.auto_pins',
+    'core.banners',
+    'core.chains',
+    'core.chooser',
+    'core.chooser_station',
+    'core.chooser_steps',
+    'core.chooser_view',
+    'core.connection',
+    'core.connection_map',
+    'core.connection_model',
+    'core.connection_screens',
+    'core.connection_strip',
+    'core.connection_view',
+    'core.cycle',
+    'core.device',
+    'core.knobs',
+    'core.live',
+    'core.map_fit',
+    'core.map_requests',
+    'core.map_state',
+    'core.map_view',
+    'core.menu',
+    'core.messages',
+    'core.panel_screens',
+    'core.panel_views',
+    'core.pin_choices',
+    'core.pin_edits',
+    'core.places',
+    'core.polling',
+    'core.quiet',
+    'core.quota',
+    'core.reach_exits',
+    'core.rebuild',
+    'core.refresh',
+    'core.rhythm',
+    'core.rides',
+    'core.saved',
+    'core.sleep',
+    'core.state',
+    'core.state_data',
+    'core.state_model',
+    'core.state_saves',
+    'core.state_views',
+    'core.stop_view',
+    'core.strip_badges',
+    'core.strip_extents',
+    'core.strip_follow',
+    'core.strip_model',
+    'core.strip_notes',
+    'core.strip_opening',
+    'core.strip_select',
+    'core.strip_state',
+    'core.strip_times',
+    'core.strip_vehicles',
+    'core.strip_view',
+    'core.wifi',
+    'ports',
+)
 SCREEN_IMPORTS: Final[str] = (
     'import paperroute_device.screen, sys; '
     'print(*sorted(sys.modules))'
 )
+
+
+def absent(*, name: str) -> bool:
+    """
+    Tell whether a module cannot be found.
+
+    Parameters
+    ----------
+    name : str
+        A dotted module name.
+
+    Returns
+    -------
+    bool
+        True when no spec is found, or when a parent package is gone.
+    """
+    try:
+        return find_spec(name) is None
+    except ModuleNotFoundError:
+        return True
+
+
+@pytest.mark.parametrize('module', MOVED)
+def test_engine_lives_in_transit(module: str) -> None:
+    """Each moved engine module is in transit and gone from the app."""
+    assert find_spec(f'paperroute_transit.{module}') is not None
+    assert absent(name=f'paperroute.{module}')
 
 
 def test_device_never_imports_build_libraries() -> None:
@@ -254,13 +350,15 @@ def imported_names(*, path: Path) -> set[str]:
 
 def test_core_imports_only_core() -> None:
     """No core module imports adapters, pydantic, skia or numpy."""
+    paths = sources(sub='core')
     offenders = [
         f'{path.name}: {name}'
-        for path in sources(sub='core')
+        for path in paths
         for name in imported_names(path=path)
         if name.split('.')[1:2] == ['adapters']
         or name.split('.')[0] in {'pydantic', 'skia', 'numpy'}
     ]
+    assert TRANSIT / 'core' / 'saved.py' in paths
     assert not offenders
 
 
@@ -323,7 +421,6 @@ def test_gpiod_only_in_the_line_adapters() -> None:
 
 def test_shell_screens_use_no_board_drawing() -> None:
     """Shell screens take their drawing and text from the device kit."""
-    board = ROOT / 'src' / 'paperroute'
     kit = (
         ROOT / 'packages' / 'paperroute-device' / 'src' / 'paperroute_device'
     )
@@ -333,14 +430,15 @@ def test_shell_screens_use_no_board_drawing() -> None:
         'paperroute.render.chrome',
     }
     banned = {
-        kit / 'render' / 'panel.py': {*drawing, 'paperroute.core.stop_view'},
+        kit / 'render' / 'panel.py': {*drawing, STOP_VIEW},
         kit / 'render' / 'notice.py': drawing,
         kit / 'render' / 'sleep.py': drawing,
-        board / 'core' / 'wifi.py': {'paperroute.core.stop_view'},
-        board / 'core' / 'banners.py': {'paperroute.core.stop_view'},
-        board / 'core' / 'panel_screens.py': {'paperroute.core.stop_view'},
-        kit / 'adapters' / 'device_page.py': {'paperroute.core.stop_view'},
+        TRANSIT / 'core' / 'wifi.py': {STOP_VIEW},
+        TRANSIT / 'core' / 'banners.py': {STOP_VIEW},
+        TRANSIT / 'core' / 'panel_screens.py': {STOP_VIEW},
+        kit / 'adapters' / 'device_page.py': {STOP_VIEW},
     }
+    assert all(path.is_file() for path in banned)
     offenders = {
         path.name: sorted(imported_names(path=path) & modules)
         for path, modules in banned.items()
@@ -431,7 +529,7 @@ def test_device_pages_import_no_feed_config() -> None:
     )
     banned = {
         'paperroute.sydney_feeds',
-        'paperroute.core.quota',
+        'paperroute_transit.core.quota',
         'paperroute.adapters.tfnsw',
     }
     offenders = {
@@ -499,14 +597,16 @@ def default_built(*, call: ast.Call) -> str | None:
 
 def test_settings_built_with_city_values() -> None:
     """Outside saved.py, settings and saved state carry the city's values."""
+    paths = sorted([*APP.rglob('*.py'), *TRANSIT.rglob('*.py')])
     offenders = [
-        f'{path.relative_to(APP)}:{node.lineno}: {name}'
-        for path in sorted(APP.rglob('*.py'))
-        if path != APP / 'core' / 'saved.py'
+        f'{path.relative_to(ROOT)}:{node.lineno}: {name}'
+        for path in paths
+        if path != TRANSIT / 'core' / 'saved.py'
         for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
         if isinstance(node, ast.Call)
         and (name := default_built(call=node)) is not None
     ]
+    assert TRANSIT / 'core' / 'saved.py' in paths
     assert not offenders
 
 

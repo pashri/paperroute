@@ -5,19 +5,6 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
-from paperroute.core.strip_times import (
-    STRIP_HOPS,
-    TripInputs,
-    arrivals_after,
-    board_departures,
-    board_modes,
-    call_delay,
-    calls_before,
-    filtered,
-    joined_ids,
-    strip_trips,
-    trip_ids,
-)
 from paperroute_testkit.core.factories import (
     EIGHT,
     STALE_LIMIT,
@@ -30,6 +17,19 @@ from paperroute_testkit.core.factories import (
 from paperroute_transit.core.model import CarryOn, Departure
 from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.reach import StripKey
+from paperroute_transit.core.strip_times import (
+    STRIP_HOPS,
+    TripInputs,
+    arrivals_after,
+    board_departures,
+    board_modes,
+    call_delay,
+    calls_before,
+    filtered,
+    joined_ids,
+    strip_trips,
+    trip_ids,
+)
 
 TRAIN: Final[StripKey] = StripKey(
     station='C', kind=SydneyMode.TRAIN, routes=(),

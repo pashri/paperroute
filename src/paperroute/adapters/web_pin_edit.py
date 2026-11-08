@@ -7,16 +7,16 @@ from urllib.parse import urlencode
 
 from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.pin_windows import DEFAULT_BUTTON
-from paperroute.core.pin_choices import (
+from paperroute_device.adapters.web_common import asset
+from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.modes import ModeSpec, spec_of
+from paperroute_transit.core.pin_choices import (
     NICKNAME_MAX,
     PinDraft,
     PinEditor,
     StopMatch,
     kind_names,
 )
-from paperroute_device.adapters.web_common import asset
-from paperroute_transit.core.model import StopPlace
-from paperroute_transit.core.modes import ModeSpec, spec_of
 
 MIN_QUERY: Final[int] = 2
 TOO_SHORT: Final[str] = 'Type at least 2 letters.'

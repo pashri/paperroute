@@ -37,20 +37,20 @@ from paperroute.adapters.web_pin_search import (
     search_page,
     stops_json,
 )
-from paperroute.core.messages import (
+from paperroute.observers import PinsSeen
+from paperroute_device.adapters.web_common import asset, form_fields
+from paperroute_transit.core.messages import (
     Event,
     PinDeleted,
     PinMoved,
     PinSaved,
     PinsOrdered,
 )
-from paperroute.core.pin_choices import PinDraft, PinEditor
-from paperroute.observers import PinsSeen
-from paperroute.ports import PinOptions
-from paperroute_device.adapters.web_common import asset, form_fields
 from paperroute_transit.core.model import Pin, pin_ref, same_place
 from paperroute_transit.core.modes import ModeSpec
+from paperroute_transit.core.pin_choices import PinDraft, PinEditor
 from paperroute_transit.core.route_colours import RouteColour
+from paperroute_transit.ports import PinOptions
 
 __all__ = [
     'PinsPages',

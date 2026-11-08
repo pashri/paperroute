@@ -5,12 +5,6 @@ from datetime import timedelta
 
 import pytest
 
-from paperroute.core.map_view import MapView, Marker
-from paperroute.core.panel_screens import device_rows, panel_view, phone_view
-from paperroute.core.panel_views import sleep_map
-from paperroute.core.saved import Quota
-from paperroute.core.state_model import State
-from paperroute.core.wifi import wifi_escaped, wifi_qr
 from paperroute_device.core.device_model import (
     Confirm,
     ConfirmAction,
@@ -27,6 +21,16 @@ from paperroute_device.core.panel_views import (
 )
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.fakes import device_facts
+from paperroute_transit.core.map_view import MapView, Marker
+from paperroute_transit.core.panel_screens import (
+    device_rows,
+    panel_view,
+    phone_view,
+)
+from paperroute_transit.core.panel_views import sleep_map
+from paperroute_transit.core.saved import Quota
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.wifi import wifi_escaped, wifi_qr
 from tests.core.test_rebuild import pinned
 
 

@@ -6,21 +6,6 @@ from dataclasses import replace
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.map_view import Marker
-from paperroute.core.strip_model import (
-    HOOK_GAP,
-    HOOK_LENGTH,
-    HOOK_RADIUS,
-    HOOK_TIP,
-    INDENT,
-    ROW_H,
-    STRIP_ROWS,
-    STRIP_TOP,
-    TRACK_X,
-    Band,
-    CarryNote,
-    StripRow,
-)
 from paperroute.render.strip import (
     MAIN_PX,
     NAME_ROOM,
@@ -34,7 +19,22 @@ from paperroute.render.strip import (
     track_points,
 )
 from paperroute_device.render.canvas import INK, PAPER, Canvas, Face
+from paperroute_transit.core.map_view import Marker
 from paperroute_transit.core.reach import RowKind
+from paperroute_transit.core.strip_model import (
+    HOOK_GAP,
+    HOOK_LENGTH,
+    HOOK_RADIUS,
+    HOOK_TIP,
+    INDENT,
+    ROW_H,
+    STRIP_ROWS,
+    STRIP_TOP,
+    TRACK_X,
+    Band,
+    CarryNote,
+    StripRow,
+)
 
 NAME_X = 52
 TIME_RIGHT = 424

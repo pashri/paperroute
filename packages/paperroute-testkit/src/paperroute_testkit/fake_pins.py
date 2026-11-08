@@ -4,9 +4,13 @@ from collections.abc import Collection
 from dataclasses import dataclass, field
 
 from paperroute.city import SYDNEY
-from paperroute.core.chooser import Choice
-from paperroute.core.pin_choices import ChangeStop, StopMatch, kind_names
+from paperroute_transit.core.chooser import Choice
 from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.pin_choices import (
+    ChangeStop,
+    StopMatch,
+    kind_names,
+)
 from paperroute_transit.core.route_colours import RouteColour
 
 

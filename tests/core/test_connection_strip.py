@@ -6,19 +6,6 @@ from datetime import timedelta
 from typing import Final
 
 from paperroute.city import SYDNEY_ZONE
-from paperroute.core.chains import Chain
-from paperroute.core.connection_strip import (
-    LegCall,
-    StopMark,
-    approach_note,
-    build_connection_strip,
-    fold_leg,
-    leg_calls,
-    walk_note,
-)
-from paperroute.core.live import LiveDeparture
-from paperroute.core.stop_view import StopView
-from paperroute.core.strip_model import LOADING, NO_LEG_STOPS
 from paperroute_testkit.core.connection_factories import (
     LEG1,
     WORK,
@@ -35,8 +22,21 @@ from paperroute_testkit.core.factories import (
     snapshot,
     vehicle,
 )
+from paperroute_transit.core.chains import Chain
+from paperroute_transit.core.connection_strip import (
+    LegCall,
+    StopMark,
+    approach_note,
+    build_connection_strip,
+    fold_leg,
+    leg_calls,
+    walk_note,
+)
+from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import Change, StopPlace
 from paperroute_transit.core.patterns import PatternStop, TripPattern
+from paperroute_transit.core.stop_view import StopView
+from paperroute_transit.core.strip_model import LOADING, NO_LEG_STOPS
 
 STOP: Final[StopView] = StopView(
     origin='Hollis St Opp Constitution Hill Library',

@@ -18,9 +18,6 @@ from paperroute.adapters.settings_form import ERRORS
 from paperroute.adapters.web_board import SETTINGS_NAV, SYDNEY_HINT, SYDNEY_NAV
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.city import SYDNEY
-from paperroute.core.messages import Event, SettingsChanged
-from paperroute.core.saved import LiveView, Lookahead, Rate
-from paperroute.core.state import step
 from paperroute_device.adapters import web_live
 from paperroute_device.adapters.web_frame import LIVE_NAV, SHELL_WEB
 from paperroute_device.adapters.web_live import knob_event, live_page
@@ -38,6 +35,9 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_testkit.device_pages import DeviceSite
 from paperroute_testkit.page_markup import parse_page
+from paperroute_transit.core.messages import Event, SettingsChanged
+from paperroute_transit.core.saved import LiveView, Lookahead, Rate
+from paperroute_transit.core.state import step
 from tests.adapters.test_web_device import sydney_site
 from tests.core.test_quiet import asleep_at_one
 

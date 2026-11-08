@@ -6,9 +6,22 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from paperroute.core.alert_state import ALERT_EVERY
-from paperroute.core.cycle import alerts_due, answered, boundary, cycle_due
-from paperroute.core.messages import (
+from paperroute_device.core.device_events import PowerRequested
+from paperroute_device.core.device_model import PowerAction, WifiStatus
+from paperroute_device.core.panel_views import NoticeView
+from paperroute_hardware.core.knob_events import Knob, KnobTurned
+from paperroute_testkit.core.factories import START, departure, snapshot
+from paperroute_testkit.fakes import device_facts
+from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
+from paperroute_transit.core.alert_state import ALERT_EVERY
+from paperroute_transit.core.cycle import (
+    alerts_due,
+    answered,
+    boundary,
+    cycle_due,
+)
+from paperroute_transit.core.feed_plan import FeedKind
+from paperroute_transit.core.messages import (
     DeparturesLoaded,
     DeviceProbed,
     Effect,
@@ -22,26 +35,18 @@ from paperroute.core.messages import (
     SettingsChanged,
     Tick,
 )
-from paperroute.core.panel_views import SleepView
-from paperroute.core.places import shown
-from paperroute.core.sleep import slept
-from paperroute.core.state import step
-from paperroute.core.state_model import RELOAD_BEFORE, Cycle, State
-from paperroute.core.state_views import current_view, live_stop_view
-from paperroute.core.stop_view import HORIZON
-from paperroute_device.core.device_events import PowerRequested
-from paperroute_device.core.device_model import PowerAction, WifiStatus
-from paperroute_device.core.panel_views import NoticeView
-from paperroute_hardware.core.knob_events import Knob, KnobTurned
-from paperroute_testkit.core.factories import START, departure, snapshot
-from paperroute_testkit.fakes import device_facts
-from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
-from paperroute_transit.core.feed_plan import FeedKind
+from paperroute_transit.core.panel_views import SleepView
+from paperroute_transit.core.places import shown
 from paperroute_transit.core.realtime import (
     RealtimeSnapshot,
     StopUpdate,
     TripRealtime,
 )
+from paperroute_transit.core.sleep import slept
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import RELOAD_BEFORE, Cycle, State
+from paperroute_transit.core.state_views import current_view, live_stop_view
+from paperroute_transit.core.stop_view import HORIZON
 from tests.core.test_quiet import at as quiet_at
 from tests.core.test_quiet import evening
 from tests.core.test_state import ALERTS, BUSES, CENTRE, PRESS, fresh, loaded

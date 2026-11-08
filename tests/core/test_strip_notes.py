@@ -4,9 +4,6 @@ from dataclasses import replace
 from datetime import timedelta
 
 from paperroute.city import SydneyFeed, SydneyMode
-from paperroute.core.strip_model import CarryNote, StripInputs
-from paperroute.core.strip_notes import carry_note
-from paperroute.core.strip_view import strip_rows, trips_of
 from paperroute_testkit.core.factories import (
     EIGHT,
     LINE,
@@ -19,6 +16,9 @@ from paperroute_testkit.core.factories import (
     pattern,
 )
 from paperroute_transit.core.reach import Reach, RowKind
+from paperroute_transit.core.strip_model import CarryNote, StripInputs
+from paperroute_transit.core.strip_notes import carry_note
+from paperroute_transit.core.strip_view import strip_rows, trips_of
 
 T8_NOTE = CarryNote(route='T8', then='T2 Leppington')
 

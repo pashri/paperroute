@@ -5,9 +5,9 @@ from types import MappingProxyType
 from typing import Final
 
 from paperroute.city import SYDNEY_ZONE, SydneyMode
-from paperroute.core.chains import Chain, Legs, chains_of, leg_key
-from paperroute.core.connection_model import way_legs
 from paperroute_testkit.core.factories import departure, live, place
+from paperroute_transit.core.chains import Chain, Legs, chains_of, leg_key
+from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.model import (
     Change,
     Departure,

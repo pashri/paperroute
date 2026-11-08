@@ -6,7 +6,16 @@ from datetime import datetime, timedelta
 import pytest
 
 from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
-from paperroute.core.map_view import (
+from paperroute_testkit.core.factories import (
+    START,
+    calls,
+    departure,
+    pattern,
+    snapshot,
+    vehicle,
+)
+from paperroute_transit.core.geo import Point, make_shape
+from paperroute_transit.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
     NO_LOCATION,
@@ -25,19 +34,10 @@ from paperroute.core.map_view import (
     screen_point,
     visible,
 )
-from paperroute.core.stop_view import SIDEBAR_ROWS, Row, StopView
-from paperroute_testkit.core.factories import (
-    START,
-    calls,
-    departure,
-    pattern,
-    snapshot,
-    vehicle,
-)
-from paperroute_transit.core.geo import Point, make_shape
 from paperroute_transit.core.model import Departure
 from paperroute_transit.core.patterns import timetable_point
 from paperroute_transit.core.positions import VehiclePosition
+from paperroute_transit.core.stop_view import SIDEBAR_ROWS, Row, StopView
 from paperroute_transit.core.tiles import ZOOMS
 
 CENTRE: Point = (0.0, 0.0)

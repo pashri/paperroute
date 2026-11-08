@@ -4,7 +4,9 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 from paperroute.city import SYDNEY_ZONE
-from paperroute.core.messages import (
+from paperroute.sydney_feeds import DAILY_LIMIT
+from paperroute_testkit.core.steps import wakeful
+from paperroute_transit.core.messages import (
     FeedFailed,
     FeedJoined,
     FetchFeed,
@@ -13,20 +15,18 @@ from paperroute.core.messages import (
     Stop,
     Tick,
 )
-from paperroute.core.quota import (
+from paperroute_transit.core.quota import (
     QUOTA_SAVE_EVERY,
     calls_today,
     counted,
     quota_only,
     with_calls,
 )
-from paperroute.core.saved import Quota
-from paperroute.core.state import step
-from paperroute.core.state_model import Cycle, State
-from paperroute.core.state_saves import SAVE_AFTER
-from paperroute.core.state_views import saved_of
-from paperroute.sydney_feeds import DAILY_LIMIT
-from paperroute_testkit.core.steps import wakeful
+from paperroute_transit.core.saved import Quota
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import Cycle, State
+from paperroute_transit.core.state_saves import SAVE_AFTER
+from paperroute_transit.core.state_views import saved_of
 from tests.core.test_state import BUSES, HOLD, at, fresh, loaded, pinned, saves
 
 DAY = date(2026, 10, 21)

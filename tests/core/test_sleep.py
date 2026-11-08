@@ -4,28 +4,6 @@ from dataclasses import replace
 from datetime import timedelta
 
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION
-from paperroute.core.map_view import MAP_HEIGHT, MapView, screen_point
-from paperroute.core.messages import (
-    DeparturesLoaded,
-    DeviceProbed,
-    Effect,
-    Event,
-    FetchFeed,
-    LoadPatterns,
-    LoadShapes,
-    PatternsLoaded,
-    Render,
-    ShapesLoaded,
-    Tick,
-    TimetableSeen,
-)
-from paperroute.core.panel_views import SleepView
-from paperroute.core.saved import seeded
-from paperroute.core.sleep import SLEEP_BAND, sleep_view, slept
-from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import State
-from paperroute.core.state_views import live_stop_view
-from paperroute.core.stop_view import StopView
 from paperroute.render.trip_marks import END_DISC, END_EDGE
 from paperroute_device.core.device_events import ApiKeyChanged, ConfirmAsked
 from paperroute_device.core.device_model import ConfirmAction, MenuRow
@@ -41,6 +19,28 @@ from paperroute_hardware.core.knob_events import (
 from paperroute_testkit.core.factories import START, departure, pattern, place
 from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.geo import make_shape
+from paperroute_transit.core.map_view import MAP_HEIGHT, MapView, screen_point
+from paperroute_transit.core.messages import (
+    DeparturesLoaded,
+    DeviceProbed,
+    Effect,
+    Event,
+    FetchFeed,
+    LoadPatterns,
+    LoadShapes,
+    PatternsLoaded,
+    Render,
+    ShapesLoaded,
+    Tick,
+    TimetableSeen,
+)
+from paperroute_transit.core.panel_views import SleepView
+from paperroute_transit.core.saved import seeded
+from paperroute_transit.core.sleep import SLEEP_BAND, sleep_view, slept
+from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.state_views import live_stop_view
+from paperroute_transit.core.stop_view import StopView
 from tests.core.test_connection import loaded as connection_loaded
 from tests.core.test_menu import BOTH, DOWN, run, turn
 from tests.core.test_state import BUSES, CENTRE, PIN, fresh, loaded

@@ -20,15 +20,19 @@ from paperroute.adapters.network_db import (
 )
 from paperroute.adapters.network_lines import Row
 from paperroute.adapters.timetable_db import to_point
-from paperroute.core.chooser import UNPICKED, Choice, focusable
-from paperroute.core.pin_choices import ChangeStop, StopMatch, kind_names
-from paperroute.core.strip_times import board_modes
 from paperroute_transit.build.catalogue import route_order
+from paperroute_transit.core.chooser import UNPICKED, Choice, focusable
 from paperroute_transit.core.geo import Projection, to_lonlat
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.modes import skippable_modes
+from paperroute_transit.core.pin_choices import (
+    ChangeStop,
+    StopMatch,
+    kind_names,
+)
 from paperroute_transit.core.reach import RowKind, StripKey, build_reach
 from paperroute_transit.core.route_colours import RouteColour, common_colours
+from paperroute_transit.core.strip_times import board_modes
 
 SEARCH_LIMIT: Final[int] = 20
 MIN_SEARCH: Final[int] = 2

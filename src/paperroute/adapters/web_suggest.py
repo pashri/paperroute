@@ -20,8 +20,8 @@ from paperroute.core.trip_search import (
     default_search,
 )
 from paperroute.planner_port import TripPlanner
-from paperroute.ports import PinOptions
 from paperroute_transit.core.model import MAX_CHANGES, StopPlace
+from paperroute_transit.ports import PinOptions
 
 FAILURE: Final[str] = "Trip Planner didn't answer. Try again in a minute."
 BUSY: Final[str] = 'Trip Planner is busy. Try again in a minute.'

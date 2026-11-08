@@ -11,7 +11,17 @@ from datetime import datetime
 from typing import Final
 
 from paperroute.app_connections import between_read
-from paperroute.core.messages import (
+from paperroute.measures import StopMeasures
+from paperroute_transit.core.alert_model import (
+    AlertPlaces,
+    AlertsFetched,
+    AlertsSnapshot,
+    BetweenLoaded,
+    Informed,
+    LoadBetween,
+)
+from paperroute_transit.core.feed_plan import FeedKind, FeedParsers, FeedPlan
+from paperroute_transit.core.messages import (
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
     ColumnFailed,
@@ -45,24 +55,14 @@ from paperroute.core.messages import (
     StripLoaded,
     TimetableSeen,
 )
-from paperroute.measures import StopMeasures
-from paperroute.ports import (
+from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.positions import PositionsSnapshot, with_labels
+from paperroute_transit.core.reach import build_reach
+from paperroute_transit.ports import (
     NetworkRepository,
     StateRepository,
     TimetableRepository,
 )
-from paperroute_transit.core.alert_model import (
-    AlertPlaces,
-    AlertsFetched,
-    AlertsSnapshot,
-    BetweenLoaded,
-    Informed,
-    LoadBetween,
-)
-from paperroute_transit.core.feed_plan import FeedKind, FeedParsers, FeedPlan
-from paperroute_transit.core.model import Pin, StopPlace
-from paperroute_transit.core.positions import PositionsSnapshot, with_labels
-from paperroute_transit.core.reach import build_reach
 
 logger = logging.getLogger(__name__)
 

@@ -36,8 +36,8 @@ from paperroute.adapters.web_pin_search import STARTING
 from paperroute.adapters.web_pins import html_page, notice_alert
 from paperroute.adapters.web_ways import posted_fields
 from paperroute.observers import PinsSeen
-from paperroute.ports import PinOptions
 from paperroute_transit.core.model import MAX_CHANGES, Pin, StopPlace
+from paperroute_transit.ports import PinOptions
 
 TITLE: Final[str] = 'Add a way by hand'
 PICK_STOP: Final[str] = 'Pick a stop'

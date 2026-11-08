@@ -3,7 +3,8 @@
 from datetime import time
 
 from paperroute.city import SYDNEY, TOWN_HALL
-from paperroute.core.saved import (
+from paperroute_device.core.device_settings import DeviceSettings, Window
+from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,
     Lookahead,
@@ -13,7 +14,6 @@ from paperroute.core.saved import (
     default_settings,
     seeded,
 )
-from paperroute_device.core.device_settings import DeviceSettings, Window
 
 
 def test_board_settings_defaults() -> None:

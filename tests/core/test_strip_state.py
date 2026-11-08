@@ -6,40 +6,6 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
-from paperroute.core.map_state import area_frame
-from paperroute.core.map_view import DEFAULT_ZOOM, MapView
-from paperroute.core.messages import (
-    DeparturesLoaded,
-    Effect,
-    FetchFeed,
-    LoadModes,
-    LoadPatterns,
-    LoadShapes,
-    LoadStrip,
-    PositionsFetched,
-    Render,
-    StripFailed,
-    StripLoaded,
-    Tick,
-    TimetableSeen,
-)
-from paperroute.core.saved import LiveView, Saved, default_settings
-from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import RETRY_AFTER, State
-from paperroute.core.stop_view import HORIZON
-from paperroute.core.strip_model import (
-    LOADING,
-    NEEDS_UPDATE,
-    STRIP_ROWS,
-    StripMapView,
-    StripView,
-)
-from paperroute.core.strip_state import (
-    keys_in_use,
-    request_strips,
-    strip_key,
-    strip_patterns,
-)
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_testkit.core.factories import (
     START,
@@ -59,8 +25,42 @@ from paperroute_testkit.core.strip_factories import (
     turn,
 )
 from paperroute_transit.core.feed_plan import FeedKind
+from paperroute_transit.core.map_state import area_frame
+from paperroute_transit.core.map_view import DEFAULT_ZOOM, MapView
+from paperroute_transit.core.messages import (
+    DeparturesLoaded,
+    Effect,
+    FetchFeed,
+    LoadModes,
+    LoadPatterns,
+    LoadShapes,
+    LoadStrip,
+    PositionsFetched,
+    Render,
+    StripFailed,
+    StripLoaded,
+    Tick,
+    TimetableSeen,
+)
 from paperroute_transit.core.model import CarryOn, Departure
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
+from paperroute_transit.core.saved import LiveView, Saved, default_settings
+from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state_model import RETRY_AFTER, State
+from paperroute_transit.core.stop_view import HORIZON
+from paperroute_transit.core.strip_model import (
+    LOADING,
+    NEEDS_UPDATE,
+    STRIP_ROWS,
+    StripMapView,
+    StripView,
+)
+from paperroute_transit.core.strip_state import (
+    keys_in_use,
+    request_strips,
+    strip_key,
+    strip_patterns,
+)
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.test_connection_screens import started, with_legs
 

@@ -46,49 +46,8 @@ from paperroute.city import (
     TOWN_HALL,
     SydneyFeed,
 )
-from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
-from paperroute.core.cycle import CYCLE_WAIT
-from paperroute.core.device import NOTICE, on_reset
-from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
-from paperroute.core.messages import (
-    ControlPower,
-    Event,
-    FeedFailed,
-    FeedFetched,
-    FeedJoined,
-    FetchFeed,
-    LoadPatterns,
-    MapData,
-    MapDataFailed,
-    PinDeleted,
-    PositionsFetched,
-    PowerFailed,
-    QuitRequested,
-    RebuildTimetable,
-    Render,
-    ResetDevice,
-    ResetDone,
-    SettingsChanged,
-    Tick,
-    TimetableRebuilt,
-    TimetableSeen,
-)
-from paperroute.core.panel_screens import menu_view
-from paperroute.core.panel_views import SleepView
-from paperroute.core.places import shown
-from paperroute.core.saved import (
-    BoardSettings,
-    LiveView,
-    Settings,
-    default_saved,
-    seeded,
-)
-from paperroute.core.state_saves import SAVE_AFTER
-from paperroute.core.state_views import LOADING_WAIT
-from paperroute.core.stop_view import NOT_PINNED
 from paperroute.measures import StopMeasures
 from paperroute.observers import NullObserver, Timings
-from paperroute.ports import Observer
 from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.keep_out import KeepOut, keep_out
 from paperroute.render.map_corners import NOT_INSTALLED, credit_box, scale_box
@@ -148,10 +107,50 @@ from paperroute_transit.adapters.tiles_db import (
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.alert_model import AlertsFetched
+from paperroute_transit.core.alerts_view import AlertRow, AlertsView, AlertText
+from paperroute_transit.core.cycle import CYCLE_WAIT
+from paperroute_transit.core.device import NOTICE, on_reset
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point, Shape, make_shape
+from paperroute_transit.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
+from paperroute_transit.core.messages import (
+    ControlPower,
+    Event,
+    FeedFailed,
+    FeedFetched,
+    FeedJoined,
+    FetchFeed,
+    LoadPatterns,
+    MapData,
+    MapDataFailed,
+    PinDeleted,
+    PositionsFetched,
+    PowerFailed,
+    QuitRequested,
+    RebuildTimetable,
+    Render,
+    ResetDevice,
+    ResetDone,
+    SettingsChanged,
+    Tick,
+    TimetableRebuilt,
+    TimetableSeen,
+)
 from paperroute_transit.core.model import Departure, Pin, StopPlace
+from paperroute_transit.core.panel_screens import menu_view
+from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.patterns import PatternStop, TripPattern
+from paperroute_transit.core.places import shown
+from paperroute_transit.core.saved import (
+    BoardSettings,
+    LiveView,
+    Settings,
+    default_saved,
+    seeded,
+)
+from paperroute_transit.core.state_saves import SAVE_AFTER
+from paperroute_transit.core.state_views import LOADING_WAIT
+from paperroute_transit.core.stop_view import NOT_PINNED
 from paperroute_transit.core.tiles import (
     TILE,
     ZOOMS,
@@ -161,6 +160,7 @@ from paperroute_transit.core.tiles import (
     tile_of,
     to_pixels,
 )
+from paperroute_transit.ports import Observer
 from paperroute_transit.render.tile_codec import pack_bits, pack_grey
 
 

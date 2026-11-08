@@ -6,14 +6,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.map_view import (
-    MAP_HEIGHT,
-    MAP_WIDTH,
-    MapBase,
-    MapView,
-    screen_point,
-)
-from paperroute.core.stop_view import Pill, Row, arrival_line
 from paperroute.render.chrome import (
     BANNER,
     FASTER,
@@ -49,6 +41,14 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER, wrap
+from paperroute_transit.core.map_view import (
+    MAP_HEIGHT,
+    MAP_WIDTH,
+    MapBase,
+    MapView,
+    screen_point,
+)
+from paperroute_transit.core.stop_view import Pill, Row, arrival_line
 from paperroute_transit.render.tile_codec import THRESHOLD, quantise4
 
 SIDEBAR_LEFT: Final[int] = 520

@@ -8,23 +8,6 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.core.chooser_view import ChooserView
-from paperroute.core.device import device_status
-from paperroute.core.menu import CONFIRM_WAIT, MENU_IDLE
-from paperroute.core.messages import (
-    ControlPower,
-    DeviceProbed,
-    Effect,
-    Event,
-    ProbeDevice,
-    Render,
-    ResetDevice,
-    SaveState,
-    Tick,
-)
-from paperroute.core.state import step
-from paperroute.core.state_model import State
-from paperroute.core.stop_view import StopView
 from paperroute_device.core.device_events import ConfirmAsked
 from paperroute_device.core.device_model import (
     ConfirmAction,
@@ -51,6 +34,23 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.fakes import device_facts
+from paperroute_transit.core.chooser_view import ChooserView
+from paperroute_transit.core.device import device_status
+from paperroute_transit.core.menu import CONFIRM_WAIT, MENU_IDLE
+from paperroute_transit.core.messages import (
+    ControlPower,
+    DeviceProbed,
+    Effect,
+    Event,
+    ProbeDevice,
+    Render,
+    ResetDevice,
+    SaveState,
+    Tick,
+)
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.stop_view import StopView
 from tests.core.test_rebuild import pinned
 
 BOTH: Final[KnobsHeld] = KnobsHeld()

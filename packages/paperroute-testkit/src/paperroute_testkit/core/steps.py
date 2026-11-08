@@ -3,10 +3,15 @@
 from dataclasses import replace
 from datetime import time
 
-from paperroute.core.messages import Effect, Event, FeedFailed, FetchFeed
-from paperroute.core.state import step
-from paperroute.core.state_model import State
 from paperroute_device.core.device_settings import Window
+from paperroute_transit.core.messages import (
+    Effect,
+    Event,
+    FeedFailed,
+    FetchFeed,
+)
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import State
 
 
 def wakeful(*, state: State) -> State:

@@ -15,37 +15,6 @@ from google.transit import gtfs_realtime_pb2
 from paperroute.app import MapRenderer, run, ticker
 from paperroute.app_effects import VersionWatch, parse_feed
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyFeed, SydneyMode
-from paperroute.core.chooser import Column, Level
-from paperroute.core.map_state import area_box
-from paperroute.core.messages import (
-    ChooserDeparturesFailed,
-    ChooserDeparturesLoaded,
-    ColumnFailed,
-    ColumnLoaded,
-    Event,
-    FetchFeed,
-    HolidaysLoaded,
-    LineFailed,
-    LineLoaded,
-    LoadChooserDepartures,
-    LoadColumn,
-    LoadHolidays,
-    LoadLine,
-    LoadModes,
-    LoadServiceSpan,
-    LoadStrip,
-    MatchPlaces,
-    ModesLoaded,
-    PlacesFailed,
-    PlacesMatched,
-    Render,
-    SaveState,
-    ServiceSpanLoaded,
-    StripFailed,
-    StripLoaded,
-    TimetableSeen,
-)
-from paperroute.core.saved import Saved, seeded
 from paperroute.render.chooser import draw_chooser_view
 from paperroute.render.stop_view import draw_stop_view
 from paperroute.render.strip_view import draw_strip_view
@@ -80,8 +49,38 @@ from paperroute_transit.core.alert_model import (
     AlertsFetched,
     AlertsSnapshot,
 )
+from paperroute_transit.core.chooser import Column, Level
 from paperroute_transit.core.feed_plan import FeedKind, FeedParsers
 from paperroute_transit.core.geo import MetreBox
+from paperroute_transit.core.map_state import area_box
+from paperroute_transit.core.messages import (
+    ChooserDeparturesFailed,
+    ChooserDeparturesLoaded,
+    ColumnFailed,
+    ColumnLoaded,
+    Event,
+    FetchFeed,
+    HolidaysLoaded,
+    LineFailed,
+    LineLoaded,
+    LoadChooserDepartures,
+    LoadColumn,
+    LoadHolidays,
+    LoadLine,
+    LoadModes,
+    LoadServiceSpan,
+    LoadStrip,
+    MatchPlaces,
+    ModesLoaded,
+    PlacesFailed,
+    PlacesMatched,
+    Render,
+    SaveState,
+    ServiceSpanLoaded,
+    StripFailed,
+    StripLoaded,
+    TimetableSeen,
+)
 from paperroute_transit.core.model import Pin, ServiceSpan, StopPlace
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.reach import (
@@ -91,6 +90,7 @@ from paperroute_transit.core.reach import (
     build_reach,
 )
 from paperroute_transit.core.realtime import RealtimeSnapshot
+from paperroute_transit.core.saved import Saved, seeded
 
 
 async def test_save_effect_writes_through_store() -> None:

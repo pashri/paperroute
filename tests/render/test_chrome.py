@@ -10,8 +10,6 @@ from typing import Any, Final
 import numpy as np
 import pytest
 
-from paperroute.core.stop_view import NOT_PINNED, PinTag, Row
-from paperroute.core.stop_view import pin_tag as tag_of
 from paperroute.render.chrome import (
     BANNER,
     FROM_FLOOR,
@@ -47,6 +45,8 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER
+from paperroute_transit.core.stop_view import NOT_PINNED, PinTag, Row
+from paperroute_transit.core.stop_view import pin_tag as tag_of
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 LONG_LABELS: Final[tuple[str, ...]] = ('SH100', '283S2', '772V8')

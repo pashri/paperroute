@@ -5,15 +5,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.stop_view import Pill, Row, arrival_line
-from paperroute.core.strip_badges import HALF_WIDE
-from paperroute.core.strip_model import (
-    PANE_TRACK_X,
-    TRACK_X,
-    StripMapView,
-    StripPanel,
-    StripView,
-)
 from paperroute.render.chrome import (
     ARROW_WIDTH,
     BANNER,
@@ -38,6 +29,15 @@ from paperroute_device.render.canvas import (
     Face,
 )
 from paperroute_device.render.frame import HEADER, finish, wrap
+from paperroute_transit.core.stop_view import Pill, Row, arrival_line
+from paperroute_transit.core.strip_badges import HALF_WIDE
+from paperroute_transit.core.strip_model import (
+    PANE_TRACK_X,
+    TRACK_X,
+    StripMapView,
+    StripPanel,
+    StripView,
+)
 
 NAME_X: Final[int] = TRACK_X + int(HALF_WIDE)
 TIME_RIGHT: Final[int] = 424

@@ -2,7 +2,6 @@
 
 from dataclasses import replace
 
-from paperroute.core.strip_view import build_strip_pane, build_strip_view
 from paperroute_testkit.core.factories import inputs_of, line_pattern, live
 from paperroute_testkit.core.strip_factories import (
     WEST,
@@ -10,6 +9,10 @@ from paperroute_testkit.core.strip_factories import (
     row_named,
     three_trains,
     times,
+)
+from paperroute_transit.core.strip_view import (
+    build_strip_pane,
+    build_strip_view,
 )
 
 

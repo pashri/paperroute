@@ -7,16 +7,6 @@ from typing import Final
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.core.cycle import cycle_held
-from paperroute.core.messages import Event, Tick
-from paperroute.core.saved import LiveView
-from paperroute.core.state import step
-from paperroute.core.state_model import State
-from paperroute.core.state_views import live_stop_view
-from paperroute.core.strip_follow import origin_of
-from paperroute.core.strip_model import StripInputs, StripView, trip_day
-from paperroute.core.strip_select import panel_trains
-from paperroute.core.strip_view import build_strip_view, marks_of
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -25,6 +15,20 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_testkit.core.factories import START, line_pattern, live, train
+from paperroute_transit.core.cycle import cycle_held
+from paperroute_transit.core.messages import Event, Tick
+from paperroute_transit.core.saved import LiveView
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.state_views import live_stop_view
+from paperroute_transit.core.strip_follow import origin_of
+from paperroute_transit.core.strip_model import (
+    StripInputs,
+    StripView,
+    trip_day,
+)
+from paperroute_transit.core.strip_select import panel_trains
+from paperroute_transit.core.strip_view import build_strip_view, marks_of
 from tests.core.test_state import check_selection
 from tests.core.test_strip_follow import (
     ALL_STOPS,

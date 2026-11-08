@@ -3,8 +3,6 @@
 import pytest
 
 from paperroute.build.map_style import DARK, LIGHT
-from paperroute.core.map_fit import CREDIT_ROOM
-from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, STRIP_MAP_WIDTH
 from paperroute.render.map_corners import (
     credit_box,
     draw_boxed_credit,
@@ -13,6 +11,12 @@ from paperroute.render.map_corners import (
     scale_text,
 )
 from paperroute_device.render.canvas import INK, PAPER, Canvas
+from paperroute_transit.core.map_fit import CREDIT_ROOM
+from paperroute_transit.core.map_view import (
+    MAP_HEIGHT,
+    MAP_WIDTH,
+    STRIP_MAP_WIDTH,
+)
 
 
 def ground(*, width: int) -> Canvas:

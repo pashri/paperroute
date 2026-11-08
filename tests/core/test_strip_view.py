@@ -6,33 +6,6 @@ from datetime import datetime, timedelta
 import pytest
 
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
-from paperroute.core.map_view import Marker
-from paperroute.core.stop_view import NOT_PINNED
-from paperroute.core.strip_badges import HALF_WIDE
-from paperroute.core.strip_model import (
-    HINTS,
-    INDENT,
-    LOADING,
-    NEEDS_UPDATE,
-    NO_STRIP,
-    OPEN_HINT,
-    PANE_TRACK_X,
-    ROW_H,
-    STRIP_ROWS,
-    STRIP_TOP,
-    TRACK_X,
-    StripInputs,
-    StripRow,
-    hook_straight,
-)
-from paperroute.core.strip_times import strip_trips
-from paperroute.core.strip_view import (
-    build_strip_pane,
-    build_strip_view,
-    first_row,
-    home_of,
-    line_reach,
-)
 from paperroute_device.core.text import DOT
 from paperroute_device.core.wifi_text import setup_footer
 from paperroute_testkit.core.factories import (
@@ -61,6 +34,7 @@ from paperroute_testkit.core.strip_factories import (
     three_trains,
     times,
 )
+from paperroute_transit.core.map_view import Marker
 from paperroute_transit.core.model import CarryOn, StopPlace
 from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.reach import (
@@ -71,6 +45,32 @@ from paperroute_transit.core.reach import (
     build_reach,
 )
 from paperroute_transit.core.reach_layout import LineExit
+from paperroute_transit.core.stop_view import NOT_PINNED
+from paperroute_transit.core.strip_badges import HALF_WIDE
+from paperroute_transit.core.strip_model import (
+    HINTS,
+    INDENT,
+    LOADING,
+    NEEDS_UPDATE,
+    NO_STRIP,
+    OPEN_HINT,
+    PANE_TRACK_X,
+    ROW_H,
+    STRIP_ROWS,
+    STRIP_TOP,
+    TRACK_X,
+    StripInputs,
+    StripRow,
+    hook_straight,
+)
+from paperroute_transit.core.strip_times import strip_trips
+from paperroute_transit.core.strip_view import (
+    build_strip_pane,
+    build_strip_view,
+    first_row,
+    home_of,
+    line_reach,
+)
 
 
 def slot_of(*, row: StripRow) -> int:

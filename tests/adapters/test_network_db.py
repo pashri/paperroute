@@ -16,12 +16,10 @@ from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF, SydneyMode
-from paperroute.core.chooser import Choice, ChooserPath, Column, Level
-from paperroute.core.strip_view import build_strip_view
-from paperroute.ports import NetworkRepository
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import inputs_of
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.chooser import Choice, ChooserPath, Column, Level
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import (
     ReachInput,
@@ -31,6 +29,8 @@ from paperroute_transit.core.reach import (
     build_reach,
 )
 from paperroute_transit.core.reach_layout import LineExit
+from paperroute_transit.core.strip_view import build_strip_view
+from paperroute_transit.ports import NetworkRepository
 from tests.build.network_feed import network_feed, network_files
 from tests.helpers import old_schema, schema_four, schema_three
 

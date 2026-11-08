@@ -7,8 +7,8 @@ from typing import Final
 import pytest
 
 from paperroute.city import SYDNEY_ZONE
-from paperroute.core.live import resolve
 from paperroute_testkit.core.factories import START, departure
+from paperroute_transit.core.live import resolve
 from paperroute_transit.core.model import CarryOn, TripFacts
 from paperroute_transit.core.realtime import (
     RealtimeSnapshot,

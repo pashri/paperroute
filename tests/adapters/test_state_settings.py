@@ -16,15 +16,15 @@ from paperroute.adapters.state_settings import (
     device_settings_to_model,
 )
 from paperroute.city import SYDNEY
-from paperroute.core.saved import (
+from paperroute_device.core.device_settings import (
+    CLEAN_CHOICES,
+    DeviceSettings,
+)
+from paperroute_transit.core.saved import (
     DEVICE_FIELDS,
     BoardSettings,
     ConnectionMap,
     Settings,
-)
-from paperroute_device.core.device_settings import (
-    CLEAN_CHOICES,
-    DeviceSettings,
 )
 
 

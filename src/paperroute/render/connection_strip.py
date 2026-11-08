@@ -6,12 +6,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.connection_strip import (
-    ConnectionStripView,
-    LegSection,
-    LegStop,
-    StopMark,
-)
 from paperroute.render.chrome import (
     BANNER,
     arrow,
@@ -22,6 +16,12 @@ from paperroute.render.chrome import (
 from paperroute.render.pair_list import draw_pair_list
 from paperroute_device.render.canvas import HEIGHT, INK, PAPER, Canvas, Face
 from paperroute_device.render.frame import HEADER, finish
+from paperroute_transit.core.connection_strip import (
+    ConnectionStripView,
+    LegSection,
+    LegStop,
+    StopMark,
+)
 
 STRIP_RIGHT: Final[int] = 440
 RULE_WIDTH: Final[int] = 3

@@ -7,14 +7,6 @@ from typing import Final
 import pytest
 
 from paperroute.city import SYDNEY, SydneyMode
-from paperroute.core.chooser import Stage, to_row, turned_to
-from paperroute.core.map_view import DEFAULT_ZOOM
-from paperroute.core.messages import StripLoaded, TimetableSeen
-from paperroute.core.saved import LiveView, Saved, default_settings
-from paperroute.core.state_model import State
-from paperroute.core.strip_follow import origin_of
-from paperroute.core.strip_model import OPEN_TAG, StripMapView, StripView
-from paperroute.core.strip_view import build_strip_view, home_of, window_of
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_testkit.core.factories import (
     START,
@@ -40,6 +32,9 @@ from paperroute_testkit.core.strip_factories import (
     run,
     turn,
 )
+from paperroute_transit.core.chooser import Stage, to_row, turned_to
+from paperroute_transit.core.map_view import DEFAULT_ZOOM
+from paperroute_transit.core.messages import StripLoaded, TimetableSeen
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.reach import (
     Reach,
@@ -49,7 +44,20 @@ from paperroute_transit.core.reach import (
     RunTail,
     build_reach,
 )
+from paperroute_transit.core.saved import LiveView, Saved, default_settings
+from paperroute_transit.core.state_model import State
 from paperroute_transit.core.strip_folds import FOLD_MIN, folded
+from paperroute_transit.core.strip_follow import origin_of
+from paperroute_transit.core.strip_model import (
+    OPEN_TAG,
+    StripMapView,
+    StripView,
+)
+from paperroute_transit.core.strip_view import (
+    build_strip_view,
+    home_of,
+    window_of,
+)
 from tests.core.chooser_walks import CHOSEN_KEY, DOWN, TO_STAGE, at_to
 
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)

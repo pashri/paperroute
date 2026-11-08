@@ -6,19 +6,8 @@ from datetime import date, datetime, timedelta
 from typing import Final
 
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
-from paperroute.core.live import LiveDeparture
-from paperroute.core.saved import Saved
-from paperroute.core.state import initial_state
-from paperroute.core.state_model import State
-from paperroute.core.state_views import LOADING_WAIT
-from paperroute.core.stop_view import (
-    NOT_PINNED,
-    StopInputs,
-    StopView,
-    build_stop_view,
-)
-from paperroute.core.strip_model import StripInputs
 from paperroute_transit.core.geo import Point
+from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import (
     CarryOn,
     Departure,
@@ -40,6 +29,17 @@ from paperroute_transit.core.reach import (
     build_reach,
 )
 from paperroute_transit.core.reach_layout import LineExit
+from paperroute_transit.core.saved import Saved
+from paperroute_transit.core.state import initial_state
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.state_views import LOADING_WAIT
+from paperroute_transit.core.stop_view import (
+    NOT_PINNED,
+    StopInputs,
+    StopView,
+    build_stop_view,
+)
+from paperroute_transit.core.strip_model import StripInputs
 
 START = datetime(2026, 10, 16, 8, 0, tzinfo=SYDNEY_ZONE)
 STALE_LIMIT: Final[timedelta] = timedelta(minutes=2)

@@ -9,11 +9,11 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.messages import Event, QuitRequested
 from paperroute_device.render.canvas import HEIGHT, WIDTH, encode_png
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_hardware.core.knob_hold import Chord, HoldKey
 from paperroute_hardware.ports import CLEAN_AFTER
+from paperroute_transit.core.messages import Event, QuitRequested
 
 KEYS: Final[dict[str, Event]] = {
     'a': KnobTurned(knob=Knob.TOP, steps=-1),

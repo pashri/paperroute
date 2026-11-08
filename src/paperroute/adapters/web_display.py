@@ -19,8 +19,6 @@ from paperroute.adapters.settings_form import (
     page_text,
     posted_values,
 )
-from paperroute.core.messages import Event, SettingsChanged
-from paperroute.core.saved import Settings, default_settings
 from paperroute_device.adapters.web_common import (
     asset,
     asset_bytes,
@@ -32,6 +30,8 @@ from paperroute_device.adapters.web_live import KNOB_HINT, LiveView
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_hardware.ports import CLEAN_AFTER
 from paperroute_transit.core.city import City
+from paperroute_transit.core.messages import Event, SettingsChanged
+from paperroute_transit.core.saved import Settings, default_settings
 
 if TYPE_CHECKING:
     from paperroute_device.adapters.web_device import DevicePages

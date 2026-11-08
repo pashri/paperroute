@@ -17,9 +17,9 @@ from paperroute.adapters.web_board import (
 )
 from paperroute.asset_root import APP_ASSETS
 from paperroute.city import SYDNEY
-from paperroute.ports import FeedsClient
 from paperroute_device.adapters.secrets_file import SecretsFile
 from paperroute_device.core.device_model import DeviceKey
+from paperroute_transit.ports import FeedsClient
 
 
 def tfnsw_feeds() -> FeedsClient:

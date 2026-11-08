@@ -6,12 +6,12 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.map_view import MapView
 from paperroute.render.chrome import view_banner, view_header
 from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
 from paperroute.render.map_view import draw_overlay, snap
 from paperroute_device.render.canvas import HEIGHT, INK, WIDTH, Canvas
 from paperroute_device.render.frame import HEADER
+from paperroute_transit.core.map_view import MapView
 
 RULE_WIDTH: Final[int] = 3
 

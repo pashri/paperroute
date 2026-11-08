@@ -2,9 +2,18 @@
 
 import pytest
 
-from paperroute.core.map_fit import resting_zoom, stepped
-from paperroute.core.map_state import MapState, area_box, area_frame, zoomed
-from paperroute.core.map_view import DEFAULT_ZOOM, MAP_HEIGHT, MAP_WIDTH
+from paperroute_transit.core.map_fit import resting_zoom, stepped
+from paperroute_transit.core.map_state import (
+    MapState,
+    area_box,
+    area_frame,
+    zoomed,
+)
+from paperroute_transit.core.map_view import (
+    DEFAULT_ZOOM,
+    MAP_HEIGHT,
+    MAP_WIDTH,
+)
 from paperroute_transit.core.tiles import ZOOMS
 
 FRAMED: MapState = MapState(centre=(1.0, 2.0), frame=((5.0, 6.0), 0))

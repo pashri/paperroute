@@ -17,9 +17,9 @@ from paperroute.city import (
     SYDNEY_ZONE,
     SydneyMode,
 )
-from paperroute.core.chooser import Column, Level
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.chooser import Column, Level
 from paperroute_transit.core.model import Pin, StopPlace
 from tests.adapters.test_network_db import (
     T1,

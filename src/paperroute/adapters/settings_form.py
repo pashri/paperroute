@@ -7,19 +7,19 @@ from enum import StrEnum
 from html import escape
 from typing import Any, Final
 
-from paperroute.core.messages import SettingsChanged
-from paperroute.core.saved import (
+from paperroute_device.core.device_settings import (
+    CLEAN_CHOICES,
+    QuietMode,
+    Window,
+)
+from paperroute_transit.core.messages import SettingsChanged
+from paperroute_transit.core.saved import (
     DEVICE_FIELDS,
     ConnectionMap,
     Lookahead,
     Rate,
     Settings,
     with_changes,
-)
-from paperroute_device.core.device_settings import (
-    CLEAN_CHOICES,
-    QuietMode,
-    Window,
 )
 
 SWITCHES: Final[tuple[str, ...]] = (

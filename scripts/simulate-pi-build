@@ -22,7 +22,7 @@ import sysconfig
 from pathlib import Path
 
 from paperroute.app_render import MapRenderer, drawing
-from paperroute.core.stop_view import PinTag, Row, StopView
+from paperroute_transit.core.stop_view import PinTag, Row, StopView
 from paperroute_device.render.canvas import PANEL_FONTS
 
 def row(minutes):

@@ -10,9 +10,9 @@ from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE, SydneyFeed
-from paperroute.core.live import LiveDeparture, resolve
 from paperroute_testkit.core.factories import STALE_LIMIT, pin_of
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.live import LiveDeparture, resolve
 from paperroute_transit.core.realtime import RealtimeSnapshot
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'

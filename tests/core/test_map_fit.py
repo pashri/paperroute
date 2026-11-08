@@ -4,23 +4,6 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
-from paperroute.core.map_fit import (
-    BANNER_ROOM,
-    CREDIT_ROOM,
-    KEEP_IN,
-    fitted,
-    plain_frame,
-    resting_zoom,
-    steady_frame,
-)
-from paperroute.core.map_view import (
-    DEFAULT_ZOOM,
-    MAP_HEIGHT,
-    MAP_WIDTH,
-    STRIP_MAP_WIDTH,
-    MapInputs,
-)
-from paperroute.core.stop_view import StopView
 from paperroute_testkit.core.factories import (
     STALE_LIMIT,
     START,
@@ -29,8 +12,25 @@ from paperroute_testkit.core.factories import (
     pattern,
 )
 from paperroute_transit.core.geo import Point
+from paperroute_transit.core.map_fit import (
+    BANNER_ROOM,
+    CREDIT_ROOM,
+    KEEP_IN,
+    fitted,
+    plain_frame,
+    resting_zoom,
+    steady_frame,
+)
+from paperroute_transit.core.map_view import (
+    DEFAULT_ZOOM,
+    MAP_HEIGHT,
+    MAP_WIDTH,
+    STRIP_MAP_WIDTH,
+    MapInputs,
+)
 from paperroute_transit.core.model import Departure
 from paperroute_transit.core.patterns import TripPattern
+from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.tiles import ZOOMS
 
 FROM: Point = (0.0, 800.0)

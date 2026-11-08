@@ -35,10 +35,8 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_display import RESET_HINT, StatusLine, WebDisplay
 from paperroute.app import Ports, run
 from paperroute.app_device import DevicePorts
-from paperroute.core.messages import Event, QuitRequested
 from paperroute.logs import LastError, configure_logging
 from paperroute.observers import Timings
-from paperroute.ports import FeedsClient, TileRepository, TimetableBuilder
 from paperroute.summary import Summary
 from paperroute.web_observer import web_observer
 from paperroute_device.adapters.power import NullPower, SystemctlPower
@@ -70,8 +68,14 @@ from paperroute_transit.adapters.tiles_db import (
     SqliteTileRepository,
 )
 from paperroute_transit.core.city import City
+from paperroute_transit.core.messages import Event, QuitRequested
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.tiles import TileVariant
+from paperroute_transit.ports import (
+    FeedsClient,
+    TileRepository,
+    TimetableBuilder,
+)
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor

@@ -21,8 +21,17 @@ from paperroute.adapters.state_migrations import (
     regional_to_coach,
 )
 from paperroute.city import PEAK_WINDOWS, SYDNEY, SYDNEY_ZONE, SydneyMode
-from paperroute.core.pin_choices import clean_nickname
-from paperroute.core.saved import (
+from paperroute_device.core.device_settings import (
+    DeviceSettings,
+    QuietMode,
+    Window,
+)
+from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE
+from paperroute_testkit.core.factories import pin_at
+from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
+from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, Way
+from paperroute_transit.core.pin_choices import clean_nickname
+from paperroute_transit.core.saved import (
     DEVICE_FIELDS,
     BoardSettings,
     ConnectionMap,
@@ -35,17 +44,8 @@ from paperroute.core.saved import (
     default_saved,
     default_settings,
 )
-from paperroute.core.state import initial_state
-from paperroute.core.state_views import saved_of
-from paperroute_device.core.device_settings import (
-    DeviceSettings,
-    QuietMode,
-    Window,
-)
-from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE
-from paperroute_testkit.core.factories import pin_at
-from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
-from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, Way
+from paperroute_transit.core.state import initial_state
+from paperroute_transit.core.state_views import saved_of
 from tests.adapters.state_layout import STATE_V11, STATE_V11_KINDS, flat_v11
 from tests.core.test_auto_pins import is_shown, started, ticked, trusted
 from tests.golden.scenes import GOLDEN

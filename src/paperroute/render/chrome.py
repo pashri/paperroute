@@ -3,8 +3,6 @@
 import math
 from typing import Final, Protocol
 
-from paperroute.core.stop_view import PinTag, Row
-from paperroute.core.strip_model import PICK_FROM
 from paperroute_device.core.text import DOT
 from paperroute_device.render.canvas import (
     INK,
@@ -16,6 +14,8 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER
+from paperroute_transit.core.stop_view import PinTag, Row
+from paperroute_transit.core.strip_model import PICK_FROM
 
 ARROW_WIDTH: Final[float] = 22.0
 ARROW_GAP: Final[int] = 4

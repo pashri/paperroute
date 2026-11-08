@@ -3,13 +3,6 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from paperroute.core.connection_model import (
-    LEG_EXTRA,
-    default_allow,
-    direct_leg,
-    walk_metres,
-    way_legs,
-)
 from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
     HAMMERS,
@@ -20,6 +13,13 @@ from paperroute_testkit.core.connection_factories import (
     WORK,
 )
 from paperroute_testkit.core.factories import place
+from paperroute_transit.core.connection_model import (
+    LEG_EXTRA,
+    default_allow,
+    direct_leg,
+    walk_metres,
+    way_legs,
+)
 from paperroute_transit.core.model import Pin
 
 

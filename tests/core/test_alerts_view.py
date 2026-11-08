@@ -4,20 +4,6 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from paperroute.city import SYDNEY_ZONE
-from paperroute.core.alert_match import Listed, listed_alerts
-from paperroute.core.alerts_view import (
-    ALERT_ROWS,
-    AlertRow,
-    also_line,
-    build_alerts_view,
-)
-from paperroute.core.messages import FetchFeed, Render, Tick
-from paperroute.core.places import shown
-from paperroute.core.saved import LiveView, Lookahead
-from paperroute.core.state import step
-from paperroute.core.state_model import State
-from paperroute.core.state_views import saved_of
-from paperroute.core.stop_view import StopView
 from paperroute_device.core.text import DOT
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -32,14 +18,28 @@ from paperroute_testkit.core.alert_factories import (
     sydney,
 )
 from paperroute_testkit.core.steps import step_answered
+from paperroute_transit.core.alert_match import Listed, listed_alerts
 from paperroute_transit.core.alert_model import (
     Alert,
     AlertTie,
     Matched,
     Period,
 )
+from paperroute_transit.core.alerts_view import (
+    ALERT_ROWS,
+    AlertRow,
+    also_line,
+    build_alerts_view,
+)
 from paperroute_transit.core.feed_plan import FeedKind
+from paperroute_transit.core.messages import FetchFeed, Render, Tick
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.places import shown
+from paperroute_transit.core.saved import LiveView, Lookahead
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.state_views import saved_of
+from paperroute_transit.core.stop_view import StopView
 from tests.core.test_alert_state import (
     PARRAMATTA_CENTRAL,
     STRATHFIELD_TOWN_HALL,

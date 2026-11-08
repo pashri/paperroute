@@ -7,30 +7,6 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.city import SYDNEY_PROJECTION
-from paperroute.core.map_view import (
-    MAP_HEIGHT,
-    STRIP_MAP_WIDTH,
-    MapBase,
-    MapView,
-    Marker,
-)
-from paperroute.core.stop_view import Pill, PinTag, Row
-from paperroute.core.strip_badges import HALF_WIDE
-from paperroute.core.strip_model import (
-    HINTS,
-    OPEN_HINT,
-    PANE_TRACK_X,
-    ROW_H,
-    STRIP_TOP,
-    TRACK_X,
-    Band,
-    StripMapView,
-    StripPane,
-    StripPanel,
-    StripRow,
-    StripView,
-)
-from paperroute.core.strip_view import build_strip_view
 from paperroute.render.chrome import ARROW_WIDTH, BANNER, badge, route_pair
 from paperroute.render.markers import badge_box
 from paperroute.render.stop_view import WIDEST_COUNT
@@ -62,7 +38,31 @@ from paperroute_testkit.render.factories import STRIP_ROWS as ROWS
 from paperroute_testkit.render.factories import STRIP_VIEW as VIEW
 from paperroute_testkit.render.factories import panel_row
 from paperroute_transit.core.geo import Point, to_metres
+from paperroute_transit.core.map_view import (
+    MAP_HEIGHT,
+    STRIP_MAP_WIDTH,
+    MapBase,
+    MapView,
+    Marker,
+)
 from paperroute_transit.core.model import CarryOn
+from paperroute_transit.core.stop_view import Pill, PinTag, Row
+from paperroute_transit.core.strip_badges import HALF_WIDE
+from paperroute_transit.core.strip_model import (
+    HINTS,
+    OPEN_HINT,
+    PANE_TRACK_X,
+    ROW_H,
+    STRIP_TOP,
+    TRACK_X,
+    Band,
+    StripMapView,
+    StripPane,
+    StripPanel,
+    StripRow,
+    StripView,
+)
+from paperroute_transit.core.strip_view import build_strip_view
 from paperroute_transit.render.tile_codec import GREYS
 
 CENTRE: Point = to_metres(

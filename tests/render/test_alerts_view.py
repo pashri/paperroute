@@ -4,8 +4,6 @@ from typing import Final
 
 import numpy as np
 
-from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
-from paperroute.core.stop_view import NOT_PINNED
 from paperroute.render.alerts_view import (
     ALERT_SPLIT,
     BODY_PITCH,
@@ -19,6 +17,8 @@ from paperroute_device.render.canvas import INK, PAPER, WIDTH, Face, text_width
 from paperroute_device.render.frame import HEADER
 from paperroute_testkit.core.alert_factories import STRATHFIELD_UPDATE, WESTERN
 from paperroute_transit.core.alert_model import Alert
+from paperroute_transit.core.alerts_view import AlertRow, AlertsView, AlertText
+from paperroute_transit.core.stop_view import NOT_PINNED
 
 ROW_H = 70
 TEXT_WIDTH: Final[int] = TEXT_RIGHT - TEXT_LEFT

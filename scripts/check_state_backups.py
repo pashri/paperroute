@@ -13,9 +13,9 @@ from typing import Final
 
 from paperroute.adapters.state_file import BAD_PREFIX, JsonStateRepository
 from paperroute.city import SYDNEY
-from paperroute.core.saved import Saved
 from paperroute_transit.core.auto_model import AutoState
 from paperroute_transit.core.model import Pin, pin_ref
+from paperroute_transit.core.saved import Saved
 
 BACKUPS: Final[Path] = Path('~/Code/pashri/paperroute-backups').expanduser()
 STATE_NAME: Final[str] = 'state.json'

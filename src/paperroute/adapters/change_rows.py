@@ -5,10 +5,10 @@ from collections.abc import Iterable
 from operator import itemgetter
 from typing import Final
 
-from paperroute.core.connection_model import walk_metres
-from paperroute.core.pin_choices import ChangeStop
+from paperroute_transit.core.connection_model import walk_metres
 from paperroute_transit.core.geo import Point, Projection, to_lonlat
 from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.pin_choices import ChangeStop
 
 CHANGE_M: Final[int] = 500
 CHANGE_COUNT: Final[int] = 12

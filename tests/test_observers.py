@@ -8,7 +8,6 @@ import pytest
 
 from paperroute.adapters.settings_form import form_values
 from paperroute.city import SYDNEY
-from paperroute.core.saved import Settings, default_settings
 from paperroute.observers import NullObserver, ObserverGroup, Timings
 from paperroute_device.core.device_model import (
     DeviceStatus,
@@ -24,6 +23,7 @@ from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import device_facts
 from paperroute_testkit.hardware_fakes import FakeKnobLines
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.saved import Settings, default_settings
 
 STATUS: DeviceStatus = DeviceStatus(
     timetable='2026-10-21',

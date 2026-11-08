@@ -11,11 +11,6 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.core.strip_times import (
-    board_departures,
-    filtered,
-    strip_departures,
-)
 from paperroute_device.adapters.sqlite_ro import (
     Identity,
     ReadOnlyDatabase,
@@ -72,6 +67,11 @@ from paperroute_transit.core.model import (
 from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.reach import StripKey
+from paperroute_transit.core.strip_times import (
+    board_departures,
+    filtered,
+    strip_departures,
+)
 
 DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/timetable.db')
 CHUNK: Final[int] = 500

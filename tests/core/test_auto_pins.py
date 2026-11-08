@@ -6,19 +6,6 @@ from datetime import date, datetime, time, timedelta
 from typing import Final
 
 from paperroute.city import SYDNEY, SYDNEY_ZONE
-from paperroute.core.auto_pins import rule_holds
-from paperroute.core.messages import (
-    DeparturesLoaded,
-    Effect,
-    LoadDepartures,
-    PinDeleted,
-    StripLoaded,
-    Tick,
-)
-from paperroute.core.places import shown
-from paperroute.core.saved import LiveView, Saved, default_settings, seeded
-from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import Places, State
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -31,7 +18,25 @@ from paperroute_testkit.core.steps import wakeful
 from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.alert_model import AlertTie, Matched, Period
 from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
+from paperroute_transit.core.auto_pins import rule_holds
+from paperroute_transit.core.messages import (
+    DeparturesLoaded,
+    Effect,
+    LoadDepartures,
+    PinDeleted,
+    StripLoaded,
+    Tick,
+)
 from paperroute_transit.core.model import AutoWindow, Pin, pin_ref
+from paperroute_transit.core.places import shown
+from paperroute_transit.core.saved import (
+    LiveView,
+    Saved,
+    default_settings,
+    seeded,
+)
+from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state_model import Places, State
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, NEXT, REACH, TO_STAGE
 from tests.core.test_chooser_steps import picked, run_events
 

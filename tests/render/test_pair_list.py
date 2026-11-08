@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.core.connection_view import PairRow
 from paperroute.render.chrome import LINK_WIDTH, badge_width
 from paperroute.render.pair_list import (
     ARRIVE_ROOM,
@@ -28,6 +27,7 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import finish
+from paperroute_transit.core.connection_view import PairRow
 
 LEFT: Final[int] = 450
 RIGHT: Final[int] = 790

@@ -8,11 +8,15 @@ from operator import itemgetter
 from typing import Final, Protocol
 
 from paperroute.adapters.timetable_db import to_point
-from paperroute.core.chooser import Choice, Column, Level
-from paperroute.core.reach_exits import exit_leads, found_exits, grouped_exits
+from paperroute_transit.core.chooser import Choice, Column, Level
 from paperroute_transit.core.geo import Projection
 from paperroute_transit.core.model import StopPlace, until_revisit
 from paperroute_transit.core.reach import RunTail, StripKey, line_key_of
+from paperroute_transit.core.reach_exits import (
+    exit_leads,
+    found_exits,
+    grouped_exits,
+)
 from paperroute_transit.core.reach_layout import LineExit
 
 LINE_TABLES: Final[tuple[str, ...]] = ('line_stations', 'line_aliases')

@@ -9,16 +9,16 @@ import numpy as np
 
 from paperroute.build.map_style import DARK
 from paperroute.city import SYDNEY_PROJECTION
-from paperroute.core.map_view import (
+from paperroute.render.map_base import draw_map_base, window_of
+from paperroute_device.render.canvas import INK, PAPER
+from paperroute_transit.adapters.tiles_db import SqliteTileRepository
+from paperroute_transit.build.tile_store import PlacedLabel
+from paperroute_transit.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
     TripMarks,
     screen_point,
 )
-from paperroute.render.map_base import draw_map_base, window_of
-from paperroute_device.render.canvas import INK, PAPER
-from paperroute_transit.adapters.tiles_db import SqliteTileRepository
-from paperroute_transit.build.tile_store import PlacedLabel
 from paperroute_transit.core.tiles import (
     TILE,
     LabelKind,

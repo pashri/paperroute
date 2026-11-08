@@ -52,15 +52,6 @@ from paperroute.adapters.state_settings import (
     device_settings_to_model,
     repaired_settings,
 )
-from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
-from paperroute.core.saved import (
-    LiveView,
-    Quota,
-    Saved,
-    Settings,
-    default_saved,
-)
-from paperroute.ports import Loaded
 from paperroute_device.adapters.atomic_file import write_atomic
 from paperroute_device.core.device_settings import DeviceSettings
 from paperroute_device.core.sections import DEVICE_SCHEMA
@@ -73,6 +64,15 @@ from paperroute_transit.core.model import (
     StopPlace,
     Way,
 )
+from paperroute_transit.core.pin_choices import NICKNAME_MAX, clean_nickname
+from paperroute_transit.core.saved import (
+    LiveView,
+    Quota,
+    Saved,
+    Settings,
+    default_saved,
+)
+from paperroute_transit.ports import Loaded
 
 logger = logging.getLogger(__name__)
 

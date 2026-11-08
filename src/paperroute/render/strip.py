@@ -5,8 +5,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from paperroute.core.map_view import Marker
-from paperroute.core.strip_model import (
+from paperroute.render.chrome import ARROW_WIDTH, arrow
+from paperroute.render.markers import draw_hollow, draw_live
+from paperroute_device.render.canvas import INK, PAPER, Canvas, Face
+from paperroute_transit.core.map_view import Marker
+from paperroute_transit.core.reach import RowKind
+from paperroute_transit.core.strip_model import (
     HOOK_GAP,
     HOOK_LENGTH,
     HOOK_RADIUS,
@@ -16,10 +20,6 @@ from paperroute.core.strip_model import (
     Band,
     StripRow,
 )
-from paperroute.render.chrome import ARROW_WIDTH, arrow
-from paperroute.render.markers import draw_hollow, draw_live
-from paperroute_device.render.canvas import INK, PAPER, Canvas, Face
-from paperroute_transit.core.reach import RowKind
 
 TRACK_WIDTH: Final[int] = 3
 RIDE_WIDTH: Final[int] = 9

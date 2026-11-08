@@ -7,13 +7,12 @@ from typing import Final
 from multidict import MultiMapping
 
 from paperroute.adapters.state_change import ALLOW_MAX, ALLOW_MIN
-from paperroute.core.connection_model import (
+from paperroute_transit.core.connection_model import (
     default_allow,
     direct_leg,
     walk_metres,
     way_legs,
 )
-from paperroute.ports import PinOptions
 from paperroute_transit.core.model import (
     MAX_CHANGES,
     Change,
@@ -22,6 +21,7 @@ from paperroute_transit.core.model import (
     Way,
     way_key,
 )
+from paperroute_transit.ports import PinOptions
 
 CHANGE_SEP: Final[str] = '|'  # between the changes of an encoded way
 PART_SEP: Final[str] = ','  # between alight, board and allow

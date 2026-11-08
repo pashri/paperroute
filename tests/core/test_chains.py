@@ -10,19 +10,6 @@ from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from paperroute.city import SYDNEY_ZONE
-from paperroute.core.chains import (
-    Chain,
-    LegKey,
-    LegList,
-    chains_of,
-    leg_key,
-    leg_list,
-    next_leg,
-    walked,
-    way_chains,
-)
-from paperroute.core.connection_model import trip_key, way_legs
-from paperroute.core.live import LiveDeparture
 from paperroute_device.core.text import clock_text
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN,
@@ -41,6 +28,19 @@ from paperroute_testkit.core.connection_factories import (
     run,
 )
 from paperroute_testkit.core.factories import departure, live
+from paperroute_transit.core.chains import (
+    Chain,
+    LegKey,
+    LegList,
+    chains_of,
+    leg_key,
+    leg_list,
+    next_leg,
+    walked,
+    way_chains,
+)
+from paperroute_transit.core.connection_model import trip_key, way_legs
+from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import Change, Departure, Pin, Way
 
 FIRST: Final[LegKey] = (HOLLIS.stop_id, HAMMERS.stop_id)

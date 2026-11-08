@@ -8,11 +8,25 @@ from typing import Final
 import pytest
 
 from paperroute.city import SYDNEY, SYDNEY_ZONE
-from paperroute.core.chooser import ChooserState, Level, Stage
-from paperroute.core.chooser_steps import DEPARTURES_FAILED, LINE_FAILED
-from paperroute.core.chooser_view import LOADING_LISTS, ChooserView
-from paperroute.core.map_view import DEFAULT_ZOOM
-from paperroute.core.messages import (
+from paperroute_hardware.core.knob_events import Knob, KnobHeld, KnobTurned
+from paperroute_testkit.core.factories import (
+    EIGHT,
+    START,
+    begun,
+    calls,
+    departure,
+    pattern,
+    pin_at,
+    place,
+)
+from paperroute_transit.core.chooser import ChooserState, Level, Stage
+from paperroute_transit.core.chooser_steps import (
+    DEPARTURES_FAILED,
+    LINE_FAILED,
+)
+from paperroute_transit.core.chooser_view import LOADING_LISTS, ChooserView
+from paperroute_transit.core.map_view import DEFAULT_ZOOM
+from paperroute_transit.core.messages import (
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
     ColumnFailed,
@@ -33,25 +47,14 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.places import shown
-from paperroute.core.saved import LiveView, Saved, default_settings
-from paperroute.core.state import step
-from paperroute.core.state_model import LOOKBACK, RELOAD_BEFORE, State
-from paperroute.core.state_views import saved_of
-from paperroute.core.stop_view import HORIZON, StopView
-from paperroute.core.strip_model import HINTS, StripView
-from paperroute_hardware.core.knob_events import Knob, KnobHeld, KnobTurned
-from paperroute_testkit.core.factories import (
-    EIGHT,
-    START,
-    begun,
-    calls,
-    departure,
-    pattern,
-    pin_at,
-    place,
-)
 from paperroute_transit.core.model import Departure, Pin, shifted
+from paperroute_transit.core.places import shown
+from paperroute_transit.core.saved import LiveView, Saved, default_settings
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import LOOKBACK, RELOAD_BEFORE, State
+from paperroute_transit.core.state_views import saved_of
+from paperroute_transit.core.stop_view import HORIZON, StopView
+from paperroute_transit.core.strip_model import HINTS, StripView
 from tests.core.chooser_walks import (
     BUS_606,
     CHOSEN,

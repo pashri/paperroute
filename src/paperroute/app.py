@@ -19,14 +19,14 @@ from paperroute.app_outputs import Outputs, carry_out, draw_pending
 from paperroute.app_ports import Ports
 from paperroute.app_render import MapRenderer
 from paperroute.app_work import perform
-from paperroute.core.messages import Event, QuitRequested, Tick
-from paperroute.core.refresh import quick_now
-from paperroute.core.saved import seeded
-from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import State
 from paperroute.observers import ObserverGroup
 from paperroute_transit.core.city import City
+from paperroute_transit.core.messages import Event, QuitRequested, Tick
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.refresh import quick_now
+from paperroute_transit.core.saved import seeded
+from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state_model import State
 from paperroute_transit.core.tiles import TileVariant
 
 __all__ = [

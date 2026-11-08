@@ -6,13 +6,13 @@ from pathlib import Path
 
 from paperroute.build.map_style import STATION_FACE, SUBURB_FACE
 from paperroute.city import SYDNEY_PROJECTION
-from paperroute.core.map_view import MapBase
 from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut, keep_out
 from paperroute.render.map_base import window_of
 from paperroute.render.map_corners import credit_box, scale_box
 from paperroute_device.render.canvas import Box
 from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.build.tile_store import PlacedLabel
+from paperroute_transit.core.map_view import MapBase
 from paperroute_transit.core.tiles import (
     POINT_HALF_HEIGHT,
     STREET_HEIGHT,

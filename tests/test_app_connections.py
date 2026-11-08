@@ -7,9 +7,6 @@ from typing import Final
 
 from paperroute.app_connections import between_read, departures_read
 from paperroute.city import SYDNEY_ZONE, SydneyMode
-from paperroute.core.chains import leg_key
-from paperroute.core.connection_model import direct_leg, way_legs
-from paperroute.core.messages import LoadDepartures
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
     PARRAMATTA,
@@ -22,6 +19,9 @@ from paperroute_testkit.core.factories import departure, pin_of, place
 from paperroute_testkit.fakes import EmptyPlacedTimetable
 from paperroute_transit.adapters.leg_cache import LegCache
 from paperroute_transit.core.alert_model import AlertPlaces, LoadBetween
+from paperroute_transit.core.chains import leg_key
+from paperroute_transit.core.connection_model import direct_leg, way_legs
+from paperroute_transit.core.messages import LoadDepartures
 from paperroute_transit.core.model import Departure, Pin, Way
 
 START: Final[datetime] = at(7, 0)

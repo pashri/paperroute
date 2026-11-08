@@ -12,9 +12,9 @@ from paperroute.adapters.board_pages import PinPages
 from paperroute.adapters.web_board import SuggestPlug
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.city import SYDNEY, SydneyMode
-from paperroute.core.pin_choices import StopMatch
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.pin_choices import StopMatch
 from tests.adapters.test_web_device import sydney_site
 
 Client = TestClient[web.Request, web.Application]

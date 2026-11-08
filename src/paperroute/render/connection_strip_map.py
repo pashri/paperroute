@@ -5,14 +5,14 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.connection_strip import ConnectionStripMapView
-from paperroute.core.map_view import STRIP_MAP_WIDTH
 from paperroute.render.chrome import BANNER, view_banner, view_header
 from paperroute.render.connection_strip import RULE_WIDTH, draw_strip_sections
 from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
 from paperroute.render.map_view import draw_overlay, snap
 from paperroute_device.render.canvas import HEIGHT, INK, Canvas
 from paperroute_device.render.frame import HEADER
+from paperroute_transit.core.connection_strip import ConnectionStripMapView
+from paperroute_transit.core.map_view import STRIP_MAP_WIDTH
 
 PANE_LEFT: Final[int] = STRIP_MAP_WIDTH + 16
 PANE_RIGHT: Final[int] = 786

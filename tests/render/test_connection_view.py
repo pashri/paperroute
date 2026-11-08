@@ -4,19 +4,19 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute.city import SYDNEY, SYDNEY_ZONE
-from paperroute.core.connection_view import (
-    NO_PAIRS,
-    ConnectionView,
-    PairRow,
-    build_connection_view,
-)
-from paperroute.core.stop_view import StopView
 from paperroute.render.connection_view import FOOTER_RULE, draw_connection_view
 from paperroute.render.pair_list import draw_pair_list
 from paperroute.render.stop_view import SPLIT
 from paperroute_device.render.canvas import HEIGHT, Canvas
 from paperroute_device.render.frame import HEADER, finish
 from paperroute_testkit.core.connection_factories import WORK, at, work_chains
+from paperroute_transit.core.connection_view import (
+    NO_PAIRS,
+    ConnectionView,
+    PairRow,
+    build_connection_view,
+)
+from paperroute_transit.core.stop_view import StopView
 from tests.core.test_connection_view import TWO, TWO_CHANGES
 
 ROW: Final[PairRow] = PairRow(

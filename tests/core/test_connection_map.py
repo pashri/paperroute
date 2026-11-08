@@ -6,35 +6,6 @@ from types import MappingProxyType
 from typing import Final
 
 from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
-from paperroute.core.chains import Chain, Legs, leg_key
-from paperroute.core.connection_map import (
-    build_connection_map,
-    change_panes,
-    change_points,
-    connection_inputs,
-    leg_line,
-)
-from paperroute.core.connection_model import way_legs
-from paperroute.core.map_fit import (
-    BANNER_ROOM,
-    CREDIT_ROOM,
-    KEEP_IN,
-    SLEEP_ROOM,
-    fit_zoom,
-)
-from paperroute.core.map_view import (
-    DEFAULT_ZOOM,
-    MAP_HEIGHT,
-    NO_LOCATION,
-    MapInputs,
-    MapView,
-)
-from paperroute.core.messages import DeparturesLoaded, LoadShapes
-from paperroute.core.rides import rides_of
-from paperroute.core.saved import ConnectionMap, LiveView
-from paperroute.core.state import step
-from paperroute.core.state_views import current_view, live_stop_view
-from paperroute.core.stop_view import empty_text
 from paperroute_testkit.core.connection_factories import (
     HOLLIS,
     LEG1,
@@ -54,7 +25,31 @@ from paperroute_testkit.core.factories import (
     snapshot,
     vehicle,
 )
+from paperroute_transit.core.chains import Chain, Legs, leg_key
+from paperroute_transit.core.connection_map import (
+    build_connection_map,
+    change_panes,
+    change_points,
+    connection_inputs,
+    leg_line,
+)
+from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.geo import Point, Shape, make_shape
+from paperroute_transit.core.map_fit import (
+    BANNER_ROOM,
+    CREDIT_ROOM,
+    KEEP_IN,
+    SLEEP_ROOM,
+    fit_zoom,
+)
+from paperroute_transit.core.map_view import (
+    DEFAULT_ZOOM,
+    MAP_HEIGHT,
+    NO_LOCATION,
+    MapInputs,
+    MapView,
+)
+from paperroute_transit.core.messages import DeparturesLoaded, LoadShapes
 from paperroute_transit.core.model import (
     Change,
     Departure,
@@ -64,6 +59,11 @@ from paperroute_transit.core.model import (
 )
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
+from paperroute_transit.core.rides import rides_of
+from paperroute_transit.core.saved import ConnectionMap, LiveView
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_views import current_view, live_stop_view
+from paperroute_transit.core.stop_view import empty_text
 from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_connection_screens import started
 from tests.core.test_connection_strip import CHAINS, STOP

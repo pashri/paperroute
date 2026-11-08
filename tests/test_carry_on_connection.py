@@ -22,10 +22,14 @@ from paperroute.city import (
     SYDNEY_ZONE,
     SydneyMode,
 )
-from paperroute.core.chains import chains_of
-from paperroute.core.connection_strip import ConnectionStripView
-from paperroute.core.map_view import DEFAULT_ZOOM
-from paperroute.core.messages import (
+from paperroute_testkit.app_factories import ports_of, posted_by
+from paperroute_testkit.core.factories import live
+from paperroute_testkit.fakes import FixedClock
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.chains import chains_of
+from paperroute_transit.core.connection_strip import ConnectionStripView
+from paperroute_transit.core.map_view import DEFAULT_ZOOM
+from paperroute_transit.core.messages import (
     Effect,
     Event,
     LoadDepartures,
@@ -33,15 +37,11 @@ from paperroute.core.messages import (
     ScreenView,
     Tick,
 )
-from paperroute.core.saved import LiveView, Saved, default_settings
-from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import State
-from paperroute.ports import TimetableRepository
-from paperroute_testkit.app_factories import ports_of, posted_by
-from paperroute_testkit.core.factories import live
-from paperroute_testkit.fakes import FixedClock
-from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.model import Change, Pin, Way
+from paperroute_transit.core.saved import LiveView, Saved, default_settings
+from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.ports import TimetableRepository
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 DAY: Final[date] = date(2026, 10, 16)

@@ -4,8 +4,8 @@ from collections.abc import Sequence
 from dataclasses import replace
 from typing import Final
 
-from paperroute.core.map_view import Marker
-from paperroute.core.strip_badges import (
+from paperroute_transit.core.map_view import Marker
+from paperroute_transit.core.strip_badges import (
     SLOT_SPAN,
     Badge,
     Keepouts,
@@ -14,7 +14,7 @@ from paperroute.core.strip_badges import (
     overlaps,
     pushed,
 )
-from paperroute.core.strip_vehicles import hop_marker
+from paperroute_transit.core.strip_vehicles import hop_marker
 
 STEP: Final[float] = 22.0  # two plain badges' centres, one under another
 BESIDE: Final[float] = 30 + SLOT_SPAN  # beside a badge on a disc at x 30

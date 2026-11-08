@@ -2,10 +2,10 @@
 
 from paperroute.adapters.pin_editor import edited
 from paperroute.city import SydneyMode
-from paperroute.core.chooser import Choice
-from paperroute.core.pin_choices import PinDraft
 from paperroute_testkit.fake_pins import FakePinOptions
+from paperroute_transit.core.chooser import Choice
 from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.pin_choices import PinDraft
 
 HOME = StopPlace(stop_id='H', name='Home', point=None)
 WORK = StopPlace(stop_id='W', name='Work', point=None)

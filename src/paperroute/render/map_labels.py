@@ -4,16 +4,16 @@ import math
 from typing import Final
 
 from paperroute.build.map_style import DARK, STATION_FACE, SUBURB_FACE
-from paperroute.core.map_view import MAP_HEIGHT, MapBase
-from paperroute.ports import TileRepository
 from paperroute.render.map_marks import Window
 from paperroute_device.render.canvas import INK, PAPER, Canvas, text_width
+from paperroute_transit.core.map_view import MAP_HEIGHT, MapBase
 from paperroute_transit.core.tiles import (
     LABEL_REACH,
     SUBURB_ZOOMS,
     LabelKind,
     StreetLabel,
 )
+from paperroute_transit.ports import TileRepository
 
 Region = tuple[slice, slice]
 

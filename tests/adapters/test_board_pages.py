@@ -14,10 +14,10 @@ from paperroute.adapters.web_board import PINS_NAV
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_ways import WaysPages
 from paperroute.city import SYDNEY
-from paperroute.core.messages import Event
 from paperroute_device.adapters.web_frame import LIVE_NAV
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.fake_pins import FakePinOptions
+from paperroute_transit.core.messages import Event
 from paperroute_transit.core.model import pin_ref
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_pin_search import MATCH

@@ -12,19 +12,6 @@ from numpy.typing import NDArray
 
 from paperroute.app_effects import timed_async
 from paperroute.app_ports import Ports
-from paperroute.core.alerts_view import AlertsView
-from paperroute.core.chooser_view import ChooserView
-from paperroute.core.connection_strip import (
-    ConnectionStripMapView,
-    ConnectionStripView,
-)
-from paperroute.core.connection_view import ConnectionView
-from paperroute.core.map_view import MapBase, MapView
-from paperroute.core.messages import ScreenView
-from paperroute.core.panel_views import SleepView
-from paperroute.core.stop_view import StopView
-from paperroute.core.strip_model import StripMapView, StripView
-from paperroute.ports import TileRepository
 from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.chooser import draw_chooser_view
 from paperroute.render.connection_strip import draw_connection_strip
@@ -49,7 +36,20 @@ from paperroute_device.render.panel import draw_panel_view
 from paperroute_device.render.sleep import with_sleep_band
 from paperroute_hardware.ports import CLEAN_AFTER
 from paperroute_transit.adapters.tiles_db import NullTiles
+from paperroute_transit.core.alerts_view import AlertsView
+from paperroute_transit.core.chooser_view import ChooserView
+from paperroute_transit.core.connection_strip import (
+    ConnectionStripMapView,
+    ConnectionStripView,
+)
+from paperroute_transit.core.connection_view import ConnectionView
+from paperroute_transit.core.map_view import MapBase, MapView
+from paperroute_transit.core.messages import ScreenView
+from paperroute_transit.core.panel_views import SleepView
+from paperroute_transit.core.stop_view import StopView
+from paperroute_transit.core.strip_model import StripMapView, StripView
 from paperroute_transit.core.tiles import TileVariant
+from paperroute_transit.ports import TileRepository
 
 logger = logging.getLogger(__name__)
 

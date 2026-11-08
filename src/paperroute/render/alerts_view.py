@@ -6,10 +6,10 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
 from paperroute.render.chrome import ALERT_TABS, view_header
 from paperroute_device.render.canvas import HEIGHT, INK, PAPER, Canvas, Face
 from paperroute_device.render.frame import HEADER, finish, wrap
+from paperroute_transit.core.alerts_view import AlertRow, AlertsView, AlertText
 
 ALERT_SPLIT: Final[int] = 330
 ALERT_ROW_H: Final[int] = 70

@@ -9,7 +9,9 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
-from paperroute.core.chooser import (
+from paperroute_hardware.core.knob_events import Knob, KnobTurned
+from paperroute_testkit.core.factories import START, begun, pin_at, place
+from paperroute_transit.core.chooser import (
     Choice,
     ChooserState,
     Column,
@@ -20,15 +22,15 @@ from paperroute.core.chooser import (
     pressed,
     turned,
 )
-from paperroute.core.chooser_station import knob_backed, knob_pressed
-from paperroute.core.chooser_steps import trip_feeds
-from paperroute.core.chooser_view import (
+from paperroute_transit.core.chooser_station import knob_backed, knob_pressed
+from paperroute_transit.core.chooser_steps import trip_feeds
+from paperroute_transit.core.chooser_view import (
     CANT_LOAD,
     NEEDS_UPDATE,
     ChooserView,
     build_chooser_view,
 )
-from paperroute.core.messages import (
+from paperroute_transit.core.messages import (
     ChooserDeparturesLoaded,
     ColumnFailed,
     ColumnLoaded,
@@ -39,14 +41,12 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.places import feeds_of
-from paperroute.core.saved import LiveView, Saved, default_settings
-from paperroute.core.state import step
-from paperroute.core.state_model import State
-from paperroute.core.stop_view import HORIZON
-from paperroute_hardware.core.knob_events import Knob, KnobTurned
-from paperroute_testkit.core.factories import START, begun, pin_at, place
 from paperroute_transit.core.model import Pin, shifted
+from paperroute_transit.core.places import feeds_of
+from paperroute_transit.core.saved import LiveView, Saved, default_settings
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.stop_view import HORIZON
 from tests.core.chooser_walks import (
     NEXT,
     OPEN,

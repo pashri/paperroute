@@ -6,8 +6,17 @@ from collections.abc import Coroutine
 from dataclasses import dataclass, field, replace
 from typing import Any, Final
 
-from paperroute.core.device import device_status
-from paperroute.core.messages import (
+from paperroute_device.adapters.resets import NullResets
+from paperroute_device.adapters.wifi import NullWifi, hotspot_password
+from paperroute_device.core.device_events import ApiKeyChanged
+from paperroute_device.core.device_model import (
+    DeviceFacts,
+    DeviceStatus,
+    JoinOutcome,
+)
+from paperroute_device.ports import DeviceProbe, KeyStore, Resets, WifiControl
+from paperroute_transit.core.device import device_status
+from paperroute_transit.core.messages import (
     DeviceProbed,
     DeviceProbeFailed,
     Event,
@@ -24,17 +33,8 @@ from paperroute.core.messages import (
     WifiJoinFailed,
     WifiSetupStopped,
 )
-from paperroute.core.state_model import Places, State
-from paperroute.ports import Observer, TimetableBuilder
-from paperroute_device.adapters.resets import NullResets
-from paperroute_device.adapters.wifi import NullWifi, hotspot_password
-from paperroute_device.core.device_events import ApiKeyChanged
-from paperroute_device.core.device_model import (
-    DeviceFacts,
-    DeviceStatus,
-    JoinOutcome,
-)
-from paperroute_device.ports import DeviceProbe, KeyStore, Resets, WifiControl
+from paperroute_transit.core.state_model import Places, State
+from paperroute_transit.ports import Observer, TimetableBuilder
 
 logger = logging.getLogger(__name__)
 

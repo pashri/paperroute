@@ -5,10 +5,10 @@ from collections.abc import Iterable, Sequence
 from typing import Final
 
 from paperroute.observers import PinsSeen
-from paperroute.ports import PinOptions
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.modes import ModeSpec, spec_of
 from paperroute_transit.core.route_colours import RouteColour
+from paperroute_transit.ports import PinOptions
 
 ANY_TEXT: Final[str] = 'All'
 ANY_KIND: Final[str] = 'any'

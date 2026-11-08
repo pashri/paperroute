@@ -15,15 +15,6 @@ from paperroute.build.map_style import DARK, LIGHT, STREET_FACE, SUPERSAMPLE
 from paperroute.build.tile_draw import Window as DrawWindow
 from paperroute.build.tile_draw import draw_window
 from paperroute.city import SYDNEY_PROJECTION
-from paperroute.core.map_fit import CREDIT_ROOM
-from paperroute.core.map_view import (
-    MAP_HEIGHT,
-    MAP_WIDTH,
-    STRIP_MAP_WIDTH,
-    MapBase,
-    TripMarks,
-    screen_point,
-)
 from paperroute.render.map_base import (
     HALO,
     compose_tiles,
@@ -49,6 +40,15 @@ from paperroute_transit.adapters.tiles_db import (
 from paperroute_transit.build.features import FeatureStore
 from paperroute_transit.build.tile_store import PlacedLabel, TileWriter
 from paperroute_transit.core.geo import Point, to_metres
+from paperroute_transit.core.map_fit import CREDIT_ROOM
+from paperroute_transit.core.map_view import (
+    MAP_HEIGHT,
+    MAP_WIDTH,
+    STRIP_MAP_WIDTH,
+    MapBase,
+    TripMarks,
+    screen_point,
+)
 from paperroute_transit.core.tiles import (
     TILE,
     LabelKind,

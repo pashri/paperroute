@@ -11,14 +11,14 @@ from paperroute.app_effects import StateSaver
 from paperroute.app_ports import Ports
 from paperroute.app_render import MapRenderer, View, render
 from paperroute.app_work import perform
-from paperroute.core.messages import (
+from paperroute_hardware.ports import CLEAN_AFTER
+from paperroute_transit.core.messages import (
     ControlPower,
     Effect,
     Event,
     Render,
     ResetDevice,
 )
-from paperroute_hardware.ports import CLEAN_AFTER
 
 logger = logging.getLogger(__name__)
 

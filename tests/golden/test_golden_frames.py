@@ -11,15 +11,15 @@ import pytest
 import skia
 from numpy.typing import NDArray
 
-from paperroute.core.connection_strip import (
+from paperroute_device.render.canvas import encode_png
+from paperroute_hardware.render.panel_bits import grey_planes, oriented
+from paperroute_transit.core.connection_strip import (
     ConnectionStripMapView,
     ConnectionStripView,
 )
-from paperroute.core.map_view import MapView
-from paperroute.core.messages import ScreenView
-from paperroute.core.strip_model import StripMapView, StripView
-from paperroute_device.render.canvas import encode_png
-from paperroute_hardware.render.panel_bits import grey_planes, oriented
+from paperroute_transit.core.map_view import MapView
+from paperroute_transit.core.messages import ScreenView
+from paperroute_transit.core.strip_model import StripMapView, StripView
 from tests.golden.scenes import (
     GOLDEN,
     SCENES,

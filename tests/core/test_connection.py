@@ -4,16 +4,6 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
-from paperroute.core.alert_match import tie_of
-from paperroute.core.connection import (
-    chain_legs,
-    connection_facts,
-    live_chains,
-)
-from paperroute.core.messages import DeparturesLoaded
-from paperroute.core.saved import seeded
-from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import Board, State
 from paperroute.sydney_feeds import ALERT_FEEDS
 from paperroute_device.core.text import clock_text
 from paperroute_testkit.core.alert_factories import alert
@@ -30,6 +20,7 @@ from paperroute_testkit.core.connection_factories import (
 )
 from paperroute_testkit.core.factories import departure, place
 from paperroute_testkit.core.steps import wakeful
+from paperroute_transit.core.alert_match import tie_of
 from paperroute_transit.core.alert_model import (
     Alert,
     AlertsFetched,
@@ -38,7 +29,16 @@ from paperroute_transit.core.alert_model import (
     BetweenLoaded,
     Informed,
 )
+from paperroute_transit.core.connection import (
+    chain_legs,
+    connection_facts,
+    live_chains,
+)
+from paperroute_transit.core.messages import DeparturesLoaded
 from paperroute_transit.core.model import Change, Departure, Pin, Way
+from paperroute_transit.core.saved import seeded
+from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state_model import Board, State
 
 FERRY_CHANGE: Final[Change] = replace(
     WORK_CHANGE, board=place('10102027', name='Parramatta Wharf'),

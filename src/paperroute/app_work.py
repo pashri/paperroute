@@ -21,7 +21,9 @@ from paperroute.app_effects import (
 )
 from paperroute.app_ports import Ports
 from paperroute.app_render import MapRenderer, render
-from paperroute.core.messages import (
+from paperroute_device.core.device_model import PowerAction
+from paperroute_transit.adapters.feed_errors import FeedError
+from paperroute_transit.core.messages import (
     ControlPower,
     DeparturesFailed,
     Effect,
@@ -47,8 +49,6 @@ from paperroute.core.messages import (
     StopWifiSetup,
     TimetableRebuilt,
 )
-from paperroute_device.core.device_model import PowerAction
-from paperroute_transit.adapters.feed_errors import FeedError
 
 logger = logging.getLogger(__name__)
 

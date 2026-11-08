@@ -4,19 +4,6 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
-from paperroute.core.live import LiveDeparture
-from paperroute.core.messages import Tick
-from paperroute.core.saved import LiveView
-from paperroute.core.state import step
-from paperroute.core.state_model import State
-from paperroute.core.strip_follow import (
-    common_pairs,
-    followed_reach,
-    origin_of,
-)
-from paperroute.core.strip_model import StripInputs
-from paperroute.core.strip_state import shown_reach
-from paperroute.core.strip_view import build_strip_view, marks_of, trips_of
 from paperroute_testkit.core.factories import (
     EAST,
     START,
@@ -34,6 +21,8 @@ from paperroute_testkit.core.strip_factories import (
     trains,
     turn,
 )
+from paperroute_transit.core.live import LiveDeparture
+from paperroute_transit.core.messages import Tick
 from paperroute_transit.core.model import CarryOn, StopPlace
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.reach import (
@@ -44,6 +33,21 @@ from paperroute_transit.core.reach import (
     build_reach,
 )
 from paperroute_transit.core.reach_layout import LineExit
+from paperroute_transit.core.saved import LiveView
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.strip_follow import (
+    common_pairs,
+    followed_reach,
+    origin_of,
+)
+from paperroute_transit.core.strip_model import StripInputs
+from paperroute_transit.core.strip_state import shown_reach
+from paperroute_transit.core.strip_view import (
+    build_strip_view,
+    marks_of,
+    trips_of,
+)
 
 FIXED: Final[tuple[str, ...]] = ('SP', 'ER', 'MV', 'CE', 'TH', 'WY', 'CQ')
 CITY: Final[tuple[str, ...]] = (

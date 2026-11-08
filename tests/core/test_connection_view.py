@@ -4,22 +4,6 @@ from dataclasses import replace
 from typing import Final
 
 from paperroute.city import SYDNEY, SYDNEY_ZONE
-from paperroute.core.chains import Chain
-from paperroute.core.connection_map import sidebar_rows
-from paperroute.core.connection_strip import build_connection_strip
-from paperroute.core.connection_view import (
-    NO_PAIRS,
-    PAIR_ROWS,
-    HeroLine,
-    build_connection_view,
-    chain_hero,
-    chain_row,
-    change_lines,
-    route_chips,
-    via_text,
-)
-from paperroute.core.rides import Ride
-from paperroute.core.stop_view import StopView, empty_text
 from paperroute_testkit.core.connection_factories import (
     HOLLIS,
     PARRAMATTA,
@@ -31,7 +15,23 @@ from paperroute_testkit.core.connection_factories import (
     work_chains,
 )
 from paperroute_testkit.core.factories import STALE_LIMIT, live, place
+from paperroute_transit.core.chains import Chain
+from paperroute_transit.core.connection_map import sidebar_rows
+from paperroute_transit.core.connection_strip import build_connection_strip
+from paperroute_transit.core.connection_view import (
+    NO_PAIRS,
+    PAIR_ROWS,
+    HeroLine,
+    build_connection_view,
+    chain_hero,
+    chain_row,
+    change_lines,
+    route_chips,
+    via_text,
+)
 from paperroute_transit.core.model import Change, Pin, Way
+from paperroute_transit.core.rides import Ride
+from paperroute_transit.core.stop_view import StopView, empty_text
 
 CHAINS: Final[tuple[Chain, ...]] = work_chains()
 STOP: Final[StopView] = StopView(

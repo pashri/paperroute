@@ -5,12 +5,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.connection_view import (
-    PAIR_ROWS,
-    ChainHero,
-    ConnectionView,
-    HeroLine,
-)
 from paperroute.render.chrome import (
     BANNER,
     arrow,
@@ -22,6 +16,12 @@ from paperroute.render.pair_list import draw_pair_list
 from paperroute.render.stop_view import SPLIT
 from paperroute_device.render.canvas import HEIGHT, INK, WIDTH, Canvas, Face
 from paperroute_device.render.frame import HEADER, finish
+from paperroute_transit.core.connection_view import (
+    PAIR_ROWS,
+    ChainHero,
+    ConnectionView,
+    HeroLine,
+)
 
 HERO_LEFT: Final[int] = 18
 HERO_RIGHT: Final[int] = 418

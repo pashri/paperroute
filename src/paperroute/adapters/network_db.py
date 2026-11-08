@@ -9,17 +9,17 @@ from typing import Final, cast
 
 from paperroute.adapters.network_lines import LineTables, Row
 from paperroute.adapters.timetable_db import DEFAULT_PATH, to_point
-from paperroute.core.chooser import (
+from paperroute_device.adapters.sqlite_ro import (
+    Identity,
+    ReadOnlyDatabase,
+    file_identity,
+)
+from paperroute_transit.core.chooser import (
     Choice,
     ChooserPath,
     Column,
     Level,
     kind_specs,
-)
-from paperroute_device.adapters.sqlite_ro import (
-    Identity,
-    ReadOnlyDatabase,
-    file_identity,
 )
 from paperroute_transit.core.city import City, LineGroup
 from paperroute_transit.core.model import StopPlace, until_revisit

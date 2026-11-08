@@ -39,12 +39,12 @@ from paperroute.adapters.web_pin_edit import (
 from paperroute.adapters.web_pin_list import pin_label
 from paperroute.adapters.web_pin_search import STARTING, STOPS_SHOWN
 from paperroute.adapters.web_pins import PinsPages, html_page, notice_alert
-from paperroute.core.connection_model import way_legs
-from paperroute.core.pin_choices import NICKNAME_MAX
 from paperroute.observers import PinsSeen
-from paperroute.ports import PinOptions
 from paperroute_device.adapters.web_common import asset
+from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.model import Pin, StopPlace, Way
+from paperroute_transit.core.pin_choices import NICKNAME_MAX
+from paperroute_transit.ports import PinOptions
 
 ADD_TITLE: Final[str] = 'Add a connection'
 EDIT_TITLE: Final[str] = 'Edit pin'

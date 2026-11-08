@@ -7,14 +7,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.core.chooser import Choice, Level
-from paperroute.core.chooser_view import (
-    CHOOSER_TOP,
-    FAILED_COLUMN,
-    ROW_HEIGHTS,
-    ColumnView,
-)
-from paperroute.core.strip_model import HINTS
 from paperroute.render.chooser import COLUMN_WIDTHS, draw_chooser_view
 from paperroute_device.render.canvas import HEIGHT, INK, PAPER, WIDTH
 from paperroute_testkit.render.factories import (
@@ -23,6 +15,14 @@ from paperroute_testkit.render.factories import (
     route_choice,
     view_of,
 )
+from paperroute_transit.core.chooser import Choice, Level
+from paperroute_transit.core.chooser_view import (
+    CHOOSER_TOP,
+    FAILED_COLUMN,
+    ROW_HEIGHTS,
+    ColumnView,
+)
+from paperroute_transit.core.strip_model import HINTS
 
 LONG_NAME = 'Parramatta to Blacktown via a very long and winding road home'
 

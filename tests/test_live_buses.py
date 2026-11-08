@@ -10,8 +10,8 @@ import pytest
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
-from paperroute.core.live import LiveDeparture, resolved
 from paperroute_testkit.core.factories import STALE_LIMIT
+from paperroute_transit.core.live import LiveDeparture, resolved
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.realtime import RealtimeSnapshot
 

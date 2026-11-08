@@ -3,7 +3,6 @@
 from collections.abc import Sequence
 from typing import Final
 
-from paperroute.core.connection_view import PairRow
 from paperroute.render.chrome import (
     LINK_GAP,
     badge,
@@ -12,6 +11,7 @@ from paperroute.render.chrome import (
     shared_width,
 )
 from paperroute_device.render.canvas import INK, Canvas, Face
+from paperroute_transit.core.connection_view import PairRow
 
 INSET: Final[int] = 6
 ROUTES_LEFT: Final[int] = 70  # from the list's left edge

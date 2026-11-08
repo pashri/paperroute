@@ -8,9 +8,15 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
-from paperroute.core.banners import NO_WIFI
-from paperroute.core.live import LiveDeparture
-from paperroute.core.stop_view import (
+from paperroute_device.core.text import DOT, clock_text
+from paperroute_testkit.core.alert_factories import WESTERN, XPLORER
+from paperroute_testkit.core.factories import START, departure
+from paperroute_transit.core.alert_model import AlertBanner
+from paperroute_transit.core.banners import NO_WIFI
+from paperroute_transit.core.city import Nouns
+from paperroute_transit.core.live import LiveDeparture
+from paperroute_transit.core.model import CarryOn, TripFacts
+from paperroute_transit.core.stop_view import (
     HORIZON,
     LARGE_ROWS_UNDER_BANNER,
     LARGE_VISIBLE_ROWS,
@@ -30,12 +36,6 @@ from paperroute.core.stop_view import (
     pin_tag,
     to_row,
 )
-from paperroute_device.core.text import DOT, clock_text
-from paperroute_testkit.core.alert_factories import WESTERN, XPLORER
-from paperroute_testkit.core.factories import START, departure
-from paperroute_transit.core.alert_model import AlertBanner
-from paperroute_transit.core.city import Nouns
-from paperroute_transit.core.model import CarryOn, TripFacts
 
 
 def live(

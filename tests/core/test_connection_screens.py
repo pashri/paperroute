@@ -5,33 +5,6 @@ from datetime import time
 from typing import Final
 
 from paperroute.city import SYDNEY, SydneyMode
-from paperroute.core.chooser import ChooserState
-from paperroute.core.connection_strip import (
-    ConnectionStripMapView,
-    ConnectionStripView,
-)
-from paperroute.core.connection_view import ConnectionView
-from paperroute.core.map_view import STRIP_MAP_WIDTH, MapView
-from paperroute.core.messages import (
-    DeparturesLoaded,
-    Effect,
-    Event,
-    LoadDepartures,
-    ScreenView,
-    Tick,
-)
-from paperroute.core.places import shown
-from paperroute.core.saved import (
-    BoardSettings,
-    ConnectionMap,
-    LiveView,
-    Saved,
-    Settings,
-    seeded,
-)
-from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import State
-from paperroute.core.state_views import current_view, live_stop_view
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_testkit.core.alert_factories import alert
 from paperroute_testkit.core.connection_factories import (
@@ -46,7 +19,34 @@ from paperroute_testkit.core.factories import place
 from paperroute_testkit.core.steps import wakeful
 from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
+from paperroute_transit.core.chooser import ChooserState
+from paperroute_transit.core.connection_strip import (
+    ConnectionStripMapView,
+    ConnectionStripView,
+)
+from paperroute_transit.core.connection_view import ConnectionView
+from paperroute_transit.core.map_view import STRIP_MAP_WIDTH, MapView
+from paperroute_transit.core.messages import (
+    DeparturesLoaded,
+    Effect,
+    Event,
+    LoadDepartures,
+    ScreenView,
+    Tick,
+)
 from paperroute_transit.core.model import AutoWindow, Departure, Pin
+from paperroute_transit.core.places import shown
+from paperroute_transit.core.saved import (
+    BoardSettings,
+    ConnectionMap,
+    LiveView,
+    Saved,
+    Settings,
+    seeded,
+)
+from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.state_views import current_view, live_stop_view
 
 PLAIN: Final[Pin] = Pin(
     origin=place('200060', name='Central Station'), kind=SydneyMode.TRAIN,

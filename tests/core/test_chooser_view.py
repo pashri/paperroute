@@ -1,7 +1,8 @@
 """Tests for the route chooser screen's view-model."""
 
 from paperroute.city import SYDNEY
-from paperroute.core.chooser import (
+from paperroute_testkit.core.factories import place
+from paperroute_transit.core.chooser import (
     Choice,
     Column,
     ColumnRequest,
@@ -10,8 +11,10 @@ from paperroute.core.chooser import (
     pressed,
     turned,
 )
-from paperroute.core.chooser_view import build_chooser_view, route_title
-from paperroute_testkit.core.factories import place
+from paperroute_transit.core.chooser_view import (
+    build_chooser_view,
+    route_title,
+)
 from paperroute_transit.core.model import Pin
 from tests.core.chooser_walks import (
     BUS_606,

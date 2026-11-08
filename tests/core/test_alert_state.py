@@ -5,23 +5,6 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
-from paperroute.core.alert_state import alert_feeds, listed_ids, shown_alerts
-from paperroute.core.map_view import MapView
-from paperroute.core.messages import (
-    DeparturesLoaded,
-    Effect,
-    FeedFetched,
-    FetchFeed,
-    Render,
-    Tick,
-)
-from paperroute.core.places import shown
-from paperroute.core.saved import LiveView, seeded
-from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import RELOAD_BEFORE, State
-from paperroute.core.state_views import current_view, live_stop_view
-from paperroute.core.stop_view import HORIZON
-from paperroute.core.strip_model import StripMapView, StripView
 from paperroute_device.core.text import DOT
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.alert_factories import (
@@ -52,10 +35,31 @@ from paperroute_transit.core.alert_model import (
     LoadBetween,
     Matched,
 )
+from paperroute_transit.core.alert_state import (
+    alert_feeds,
+    listed_ids,
+    shown_alerts,
+)
 from paperroute_transit.core.city import AgencyAlerts
 from paperroute_transit.core.feed_plan import FeedKind
+from paperroute_transit.core.map_view import MapView
+from paperroute_transit.core.messages import (
+    DeparturesLoaded,
+    Effect,
+    FeedFetched,
+    FetchFeed,
+    Render,
+    Tick,
+)
 from paperroute_transit.core.model import Departure, Pin
+from paperroute_transit.core.places import shown
 from paperroute_transit.core.realtime import RealtimeSnapshot
+from paperroute_transit.core.saved import LiveView, seeded
+from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state_model import RELOAD_BEFORE, State
+from paperroute_transit.core.state_views import current_view, live_stop_view
+from paperroute_transit.core.stop_view import HORIZON
+from paperroute_transit.core.strip_model import StripMapView, StripView
 from tests.core.test_quiet import asleep_at_one, at, evening, ticked
 
 NOW: Final[datetime] = sydney(day=24, hour=9, minute=39)

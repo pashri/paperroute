@@ -13,8 +13,15 @@ from paperroute.adapters.settings_form import (
     page_text,
 )
 from paperroute.city import SYDNEY
-from paperroute.core.messages import SettingsChanged
-from paperroute.core.saved import (
+from paperroute_device.adapters.web_common import asset
+from paperroute_device.core.device_settings import (
+    CLEAN_CHOICES,
+    DeviceSettings,
+    QuietMode,
+    Window,
+)
+from paperroute_transit.core.messages import SettingsChanged
+from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,
     Lookahead,
@@ -22,13 +29,6 @@ from paperroute.core.saved import (
     Settings,
     default_settings,
     with_changes,
-)
-from paperroute_device.adapters.web_common import asset
-from paperroute_device.core.device_settings import (
-    CLEAN_CHOICES,
-    DeviceSettings,
-    QuietMode,
-    Window,
 )
 
 ODD = Settings(

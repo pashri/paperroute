@@ -4,15 +4,6 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 
 from paperroute.city import SYDNEY
-from paperroute.core.chooser import ChooserState
-from paperroute.core.map_view import MapView
-from paperroute.core.messages import Effect, Render, Tick
-from paperroute.core.panel_views import SleepView
-from paperroute.core.refresh import quick_now
-from paperroute.core.saved import LiveView, seeded
-from paperroute.core.state import initial_state, step
-from paperroute.core.state_model import State
-from paperroute.core.stop_view import StopView
 from paperroute_device.core.panel_views import MenuView
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -22,6 +13,15 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.core.steps import step_answered
+from paperroute_transit.core.chooser import ChooserState
+from paperroute_transit.core.map_view import MapView
+from paperroute_transit.core.messages import Effect, Render, Tick
+from paperroute_transit.core.panel_views import SleepView
+from paperroute_transit.core.refresh import quick_now
+from paperroute_transit.core.saved import LiveView, seeded
+from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.stop_view import StopView
 from tests.core.test_state import PIN, PRESS, effects_of, fresh, loaded
 
 IGNORED = KnobHeld(knob=Knob.TOP)

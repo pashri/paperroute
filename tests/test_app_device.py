@@ -13,23 +13,6 @@ from paperroute.app_device import (
     device_work,
     report_status,
 )
-from paperroute.core.messages import (
-    DeviceProbed,
-    DeviceProbeFailed,
-    Event,
-    HotspotFailed,
-    HotspotStarted,
-    JoinWifi,
-    ProbeDevice,
-    ResetDevice,
-    ResetDone,
-    StartWifiSetup,
-    StopWifiSetup,
-    WifiJoined,
-    WifiJoinFailed,
-    WifiSetupStopped,
-)
-from paperroute.core.state import step
 from paperroute.observers import Timings
 from paperroute_device.adapters.resets import FileResets
 from paperroute_device.core.device_model import (
@@ -48,6 +31,23 @@ from paperroute_testkit.fakes import (
     WatchingBuilder,
     device_facts,
 )
+from paperroute_transit.core.messages import (
+    DeviceProbed,
+    DeviceProbeFailed,
+    Event,
+    HotspotFailed,
+    HotspotStarted,
+    JoinWifi,
+    ProbeDevice,
+    ResetDevice,
+    ResetDone,
+    StartWifiSetup,
+    StopWifiSetup,
+    WifiJoined,
+    WifiJoinFailed,
+    WifiSetupStopped,
+)
+from paperroute_transit.core.state import step
 from tests.core.test_state import fresh, loaded
 
 

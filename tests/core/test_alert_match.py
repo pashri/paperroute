@@ -7,7 +7,19 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
-from paperroute.core.alert_match import (
+from paperroute_testkit.core.alert_factories import (
+    PENRITH_CENTRAL,
+    RHODES,
+    ROSE_BAY_PIN,
+    STRATHFIELD_UPDATE,
+    WESTERN,
+    XPLORER,
+    alert,
+    station_pin,
+    sydney,
+)
+from paperroute_testkit.core.factories import departure
+from paperroute_transit.core.alert_match import (
     Listed,
     PinFacts,
     Timing,
@@ -23,18 +35,6 @@ from paperroute.core.alert_match import (
     time_line,
     timing_of,
 )
-from paperroute_testkit.core.alert_factories import (
-    PENRITH_CENTRAL,
-    RHODES,
-    ROSE_BAY_PIN,
-    STRATHFIELD_UPDATE,
-    WESTERN,
-    XPLORER,
-    alert,
-    station_pin,
-    sydney,
-)
-from paperroute_testkit.core.factories import departure
 from paperroute_transit.core.alert_model import (
     Alert,
     AlertBanner,

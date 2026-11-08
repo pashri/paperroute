@@ -5,44 +5,6 @@ from datetime import time, timedelta
 import pytest
 
 from paperroute.city import PEAK_WINDOWS, SYDNEY
-from paperroute.core.banners import NO_KEY
-from paperroute.core.device import (
-    NOTICE,
-    PROBE_EVERY,
-    device_status,
-    on_reset,
-    on_settings,
-)
-from paperroute.core.messages import (
-    ControlPower,
-    DeviceProbed,
-    DeviceProbeFailed,
-    FetchFeed,
-    PowerFailed,
-    ProbeDevice,
-    QuitRequested,
-    RebuildTimetable,
-    Render,
-    ResetDevice,
-    ResetDone,
-    SaveState,
-    SettingsChanged,
-    Stop,
-    Tick,
-)
-from paperroute.core.saved import (
-    BoardSettings,
-    ConnectionMap,
-    Lookahead,
-    Rate,
-    Settings,
-    default_settings,
-)
-from paperroute.core.state import step
-from paperroute.core.state_model import State
-from paperroute.core.state_saves import SAVE_AFTER
-from paperroute.core.state_views import stop_view_of
-from paperroute.core.stop_view import StopView
 from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
     DeviceStatus,
@@ -64,6 +26,44 @@ from paperroute_hardware.core.knob_events import (
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.core.steps import step_untouched
 from paperroute_testkit.fakes import device_facts
+from paperroute_transit.core.banners import NO_KEY
+from paperroute_transit.core.device import (
+    NOTICE,
+    PROBE_EVERY,
+    device_status,
+    on_reset,
+    on_settings,
+)
+from paperroute_transit.core.messages import (
+    ControlPower,
+    DeviceProbed,
+    DeviceProbeFailed,
+    FetchFeed,
+    PowerFailed,
+    ProbeDevice,
+    QuitRequested,
+    RebuildTimetable,
+    Render,
+    ResetDevice,
+    ResetDone,
+    SaveState,
+    SettingsChanged,
+    Stop,
+    Tick,
+)
+from paperroute_transit.core.saved import (
+    BoardSettings,
+    ConnectionMap,
+    Lookahead,
+    Rate,
+    Settings,
+    default_settings,
+)
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import State
+from paperroute_transit.core.state_saves import SAVE_AFTER
+from paperroute_transit.core.state_views import stop_view_of
+from paperroute_transit.core.stop_view import StopView
 from tests.core.test_rebuild import failed_at, pinned
 from tests.core.test_state import at, fresh, loaded
 

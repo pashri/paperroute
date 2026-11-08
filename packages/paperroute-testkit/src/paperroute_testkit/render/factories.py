@@ -1,17 +1,17 @@
 """Views to draw in tests: a Stop view, a Strip view and chooser columns."""
 
-from paperroute.core.chooser import Choice, Level
-from paperroute.core.chooser_view import ChooserView, ColumnView
-from paperroute.core.stop_view import Pill, PinTag, Row, StopView
-from paperroute.core.strip_model import (
+from paperroute_transit.core.chooser import Choice, Level
+from paperroute_transit.core.chooser_view import ChooserView, ColumnView
+from paperroute_transit.core.model import CarryOn
+from paperroute_transit.core.reach import RowKind
+from paperroute_transit.core.stop_view import Pill, PinTag, Row, StopView
+from paperroute_transit.core.strip_model import (
     ROW_H,
     STRIP_TOP,
     StripPanel,
     StripRow,
     StripView,
 )
-from paperroute_transit.core.model import CarryOn
-from paperroute_transit.core.reach import RowKind
 
 
 def stop_row(

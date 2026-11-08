@@ -6,23 +6,6 @@ from datetime import date, datetime, time, timedelta
 from typing import Final
 
 from paperroute.city import SYDNEY_ZONE
-from paperroute.core.messages import (
-    DeparturesLoaded,
-    Effect,
-    Event,
-    FetchFeed,
-    LoadServiceSpan,
-    Render,
-    ServiceSpanLoaded,
-    Tick,
-)
-from paperroute.core.panel_views import SleepView
-from paperroute.core.places import shown
-from paperroute.core.saved import Rate
-from paperroute.core.sleep import WAKE_FOR, slept
-from paperroute.core.state import step
-from paperroute.core.state_model import Places, State
-from paperroute.core.stop_view import StopView
 from paperroute_device.core.device_events import ConfirmAsked
 from paperroute_device.core.device_model import (
     ConfirmAction,
@@ -43,7 +26,24 @@ from paperroute_testkit.core.factories import START, departure
 from paperroute_testkit.core.steps import step_answered
 from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.auto_model import AutoState
+from paperroute_transit.core.messages import (
+    DeparturesLoaded,
+    Effect,
+    Event,
+    FetchFeed,
+    LoadServiceSpan,
+    Render,
+    ServiceSpanLoaded,
+    Tick,
+)
 from paperroute_transit.core.model import AutoWindow, ServiceSpan, pin_ref
+from paperroute_transit.core.panel_views import SleepView
+from paperroute_transit.core.places import shown
+from paperroute_transit.core.saved import Rate
+from paperroute_transit.core.sleep import WAKE_FOR, slept
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import Places, State
+from paperroute_transit.core.stop_view import StopView
 from tests.core.test_menu import DOWN, run, turn
 from tests.core.test_state import BUSES, PINS, fresh
 

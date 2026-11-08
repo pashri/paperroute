@@ -12,16 +12,16 @@ from typing import Final
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.city import SYDNEY, SYDNEY_ZONE
-from paperroute.core.chains import LegKey, chains_of, leg_key
-from paperroute.core.connection_model import (
+from paperroute_transit.adapters.leg_cache import LegCache
+from paperroute_transit.core.chains import LegKey, chains_of, leg_key
+from paperroute_transit.core.connection_model import (
     LEG_EXTRA,
     default_allow,
     direct_leg,
     walk_metres,
     way_legs,
 )
-from paperroute.core.live import LiveDeparture, resolved
-from paperroute_transit.adapters.leg_cache import LegCache
+from paperroute_transit.core.live import LiveDeparture, resolved
 from paperroute_transit.core.model import Change, Pin, StopPlace, Way
 
 DEFAULT_DB: Final[Path] = Path('data/timetable.db')

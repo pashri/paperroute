@@ -5,7 +5,6 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from paperroute.core.stop_view import Pill
 from paperroute.render.chrome import BANNER, badge, badge_width, route_pair
 from paperroute.render.stop_view import (
     FASTER_LEFT,
@@ -36,6 +35,7 @@ from paperroute_device.render.frame import HEADER, finish
 from paperroute_testkit.render.factories import STOP_VIEW as BASE
 from paperroute_testkit.render.factories import stop_row as row
 from paperroute_transit.core.model import CarryOn
+from paperroute_transit.core.stop_view import Pill
 
 
 def test_frame_is_one_bit_800_by_480() -> None:

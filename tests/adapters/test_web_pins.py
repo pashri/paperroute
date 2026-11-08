@@ -24,21 +24,21 @@ from paperroute.adapters.web_pins import (
     pin_line,
 )
 from paperroute.city import SYDNEY, SydneyMode
-from paperroute.core.chooser import Choice
-from paperroute.core.messages import (
+from paperroute.observers import PinsSeen
+from paperroute_testkit.core.connection_factories import WORK as CONNECTION
+from paperroute_testkit.core.connection_factories import WORK_CHANGE
+from paperroute_testkit.fake_pins import FakePinOptions
+from paperroute_testkit.page_markup import inside, parse_page, parse_tree
+from paperroute_transit.core.chooser import Choice
+from paperroute_transit.core.messages import (
     Event,
     PinDeleted,
     PinMoved,
     PinSaved,
     PinsOrdered,
 )
-from paperroute.core.pin_choices import StopMatch
-from paperroute.observers import PinsSeen
-from paperroute_testkit.core.connection_factories import WORK as CONNECTION
-from paperroute_testkit.core.connection_factories import WORK_CHANGE
-from paperroute_testkit.fake_pins import FakePinOptions
-from paperroute_testkit.page_markup import inside, parse_page, parse_tree
 from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, pin_ref
+from paperroute_transit.core.pin_choices import StopMatch
 from paperroute_transit.core.route_colours import RouteColour
 from tests.adapters.test_web_device import sydney_site
 

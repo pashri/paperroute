@@ -3,11 +3,11 @@
 from collections.abc import Sequence
 from typing import Final
 
-from paperroute.core.map_view import MapBase, screen_point
 from paperroute.render.map_marks import ROUTE_STYLE, Window, draw_stop
 from paperroute_device.render.canvas import INK, PAPER, Canvas
 from paperroute_device.render.frame import HEADER
 from paperroute_transit.core.geo import Point
+from paperroute_transit.core.map_view import MapBase, screen_point
 from paperroute_transit.core.tiles import to_pixels
 
 CASING: Final[int] = 4  # extra paper width under leg 2

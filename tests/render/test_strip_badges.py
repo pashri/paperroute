@@ -13,25 +13,6 @@ import skia
 from hypothesis import example, given
 from hypothesis import strategies as st
 
-from paperroute.core.map_view import Marker
-from paperroute.core.strip_badges import (
-    Badge,
-    Keepouts,
-    Spot,
-    overlaps,
-    pushed,
-)
-from paperroute.core.strip_extents import half_width, tab_half
-from paperroute.core.strip_model import (
-    HOOK_GAP,
-    HOOK_LENGTH,
-    HOOK_RADIUS,
-    HOOK_TIP,
-    ROW_H,
-    TRACK_X,
-    hook_straight,
-)
-from paperroute.core.strip_vehicles import hop_marker
 from paperroute.render.markers import (
     badge_box,
     badge_half,
@@ -41,6 +22,25 @@ from paperroute.render.markers import (
 from paperroute.render.strip import BASELINE_DROP, DISC_RADIUS, MAIN_PX
 from paperroute.render.strip_view import NAME_X
 from paperroute_device.render.canvas import Box, Face, font
+from paperroute_transit.core.map_view import Marker
+from paperroute_transit.core.strip_badges import (
+    Badge,
+    Keepouts,
+    Spot,
+    overlaps,
+    pushed,
+)
+from paperroute_transit.core.strip_extents import half_width, tab_half
+from paperroute_transit.core.strip_model import (
+    HOOK_GAP,
+    HOOK_LENGTH,
+    HOOK_RADIUS,
+    HOOK_TIP,
+    ROW_H,
+    TRACK_X,
+    hook_straight,
+)
+from paperroute_transit.core.strip_vehicles import hop_marker
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 NAME_GAP: Final[float] = NAME_X - TRACK_X  # a name's start past its track

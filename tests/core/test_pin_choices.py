@@ -1,7 +1,7 @@
 """Tests for the choices a pin's editor accepts."""
 
 from paperroute.city import SYDNEY
-from paperroute.core.pin_choices import (
+from paperroute_transit.core.pin_choices import (
     NICKNAME_MAX,
     clean_nickname,
     kind_names,

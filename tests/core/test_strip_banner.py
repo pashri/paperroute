@@ -3,17 +3,20 @@
 from dataclasses import replace
 from typing import Final
 
-from paperroute.core.strip_model import (
+from paperroute_testkit.core.factories import inputs_of
+from paperroute_testkit.core.strip_factories import long_reach
+from paperroute_transit.core.strip_model import (
     PANE_ROWS,
     ROW_H,
     STRIP_ROWS,
     STRIP_TOP,
     StripInputs,
 )
-from paperroute.core.strip_state import scroll_range
-from paperroute.core.strip_view import build_strip_pane, build_strip_view
-from paperroute_testkit.core.factories import inputs_of
-from paperroute_testkit.core.strip_factories import long_reach
+from paperroute_transit.core.strip_state import scroll_range
+from paperroute_transit.core.strip_view import (
+    build_strip_pane,
+    build_strip_view,
+)
 
 BANNER: Final[str] = 'No live data since 7:56'
 UNDER: Final[float] = STRIP_TOP + ROW_H  # top slot's top under a banner

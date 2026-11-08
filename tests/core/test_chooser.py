@@ -5,7 +5,8 @@ from dataclasses import replace
 import pytest
 
 from paperroute.city import SYDNEY, SydneyMode
-from paperroute.core.chooser import (
+from paperroute_testkit.core.factories import place
+from paperroute_transit.core.chooser import (
     Choice,
     Column,
     ColumnRequest,
@@ -23,9 +24,8 @@ from paperroute.core.chooser import (
     with_column,
     with_line,
 )
-from paperroute.core.chooser_station import knob_pressed
-from paperroute.core.chooser_view import build_chooser_view
-from paperroute_testkit.core.factories import place
+from paperroute_transit.core.chooser_station import knob_pressed
+from paperroute_transit.core.chooser_view import build_chooser_view
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.reach import RowKind, StripKey
 from tests.core.chooser_walks import (

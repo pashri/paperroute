@@ -64,11 +64,8 @@ from paperroute.board import (
 )
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF, SYDNEY_ZONE
-from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
-from paperroute.core.messages import Event
 from paperroute.logs import LastError
 from paperroute.observers import Timings
-from paperroute.ports import FeedsClient
 from paperroute.render.map_base import draw_map_base
 from paperroute.summary import Summary
 from paperroute.web_observer import web_observer
@@ -99,12 +96,15 @@ from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.city import City
 from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
+from paperroute_transit.core.messages import Event
 from paperroute_transit.core.tiles import (
     TILE_STYLE,
     ZOOMS,
     TileVariant,
     levels_text,
 )
+from paperroute_transit.ports import FeedsClient
 
 if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor

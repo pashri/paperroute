@@ -5,15 +5,15 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from types import MappingProxyType
 
-from paperroute.core.alert_match import between_names
-from paperroute.core.chains import Legs, open_legs
-from paperroute.core.connection_model import LEG_EXTRA, direct_leg
-from paperroute.core.messages import DeparturesLoaded, LoadDepartures
-from paperroute.ports import TimetableRepository
 from paperroute_transit.adapters.leg_cache import LegCache
+from paperroute_transit.core.alert_match import between_names
 from paperroute_transit.core.alert_model import BetweenLoaded, LoadBetween
+from paperroute_transit.core.chains import Legs, open_legs
+from paperroute_transit.core.connection_model import LEG_EXTRA, direct_leg
+from paperroute_transit.core.messages import DeparturesLoaded, LoadDepartures
 from paperroute_transit.core.model import Departure, Pin, is_connection
 from paperroute_transit.core.modes import skippable_modes
+from paperroute_transit.ports import TimetableRepository
 
 
 def departures_read(

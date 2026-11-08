@@ -9,8 +9,8 @@ from paperroute.adapters.web_pin_edit import (
     edit_page,
     search_results,
 )
-from paperroute.ports import PinOptions
 from paperroute_transit.core.modes import ModeSpec
+from paperroute_transit.ports import PinOptions
 
 STOPS_SHOWN: Final[int] = 20
 STARTING: Final[str] = '<p>Starting up. Reload in a moment.</p>'

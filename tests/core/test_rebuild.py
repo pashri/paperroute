@@ -7,32 +7,6 @@ from datetime import timedelta
 import pytest
 
 from paperroute.city import SYDNEY
-from paperroute.core.map_view import DEFAULT_ZOOM
-from paperroute.core.messages import (
-    ColumnLoaded,
-    DeviceProbed,
-    Effect,
-    Event,
-    FetchFeed,
-    LoadColumn,
-    RebuildTimetable,
-    Render,
-    SettingsChanged,
-    Tick,
-    TimetableRebuilt,
-    TimetableSeen,
-)
-from paperroute.core.panel_screens import device_rows
-from paperroute.core.rebuild import (
-    BACKOFF_MAX,
-    SETTINGS_HINT,
-    building_view,
-    forced,
-    is_outdated,
-)
-from paperroute.core.saved import LiveView, Saved, default_settings
-from paperroute.core.state import step
-from paperroute.core.state_model import Rebuild, State
 from paperroute_device.core.device_events import ApiKeyChanged
 from paperroute_device.core.device_model import (
     MENU_ROWS,
@@ -53,6 +27,32 @@ from paperroute_hardware.core.knob_events import (
 from paperroute_testkit.core.factories import START, begun, pin_at
 from paperroute_testkit.core.steps import answer_fetches, step_untouched
 from paperroute_testkit.fakes import device_facts
+from paperroute_transit.core.map_view import DEFAULT_ZOOM
+from paperroute_transit.core.messages import (
+    ColumnLoaded,
+    DeviceProbed,
+    Effect,
+    Event,
+    FetchFeed,
+    LoadColumn,
+    RebuildTimetable,
+    Render,
+    SettingsChanged,
+    Tick,
+    TimetableRebuilt,
+    TimetableSeen,
+)
+from paperroute_transit.core.panel_screens import device_rows
+from paperroute_transit.core.rebuild import (
+    BACKOFF_MAX,
+    SETTINGS_HINT,
+    building_view,
+    forced,
+    is_outdated,
+)
+from paperroute_transit.core.saved import LiveView, Saved, default_settings
+from paperroute_transit.core.state import step
+from paperroute_transit.core.state_model import Rebuild, State
 from tests.core.chooser_walks import DOWN, KINDS, NEXT, OPEN
 
 OLD = TimetableSeen(version='v', schema='4')

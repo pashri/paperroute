@@ -6,13 +6,6 @@ from typing import Final
 import numpy as np
 
 from paperroute.city import SYDNEY_ZONE
-from paperroute.core.connection_strip import (
-    ConnectionStripView,
-    LegSection,
-    LegStop,
-    StopMark,
-    build_connection_strip,
-)
 from paperroute.render.connection_strip import (
     HEAD_FACE,
     HEAD_GAP,
@@ -39,6 +32,13 @@ from paperroute_device.render.canvas import (
 from paperroute_device.render.frame import HEADER
 from paperroute_testkit.core.connection_factories import WORK, at
 from paperroute_testkit.core.factories import STALE_LIMIT
+from paperroute_transit.core.connection_strip import (
+    ConnectionStripView,
+    LegSection,
+    LegStop,
+    StopMark,
+    build_connection_strip,
+)
 from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
 
 VIEW: Final[ConnectionStripView] = build_connection_strip(

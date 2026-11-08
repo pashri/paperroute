@@ -12,11 +12,11 @@ from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.web_connection import ConnectionPages
 from paperroute.adapters.web_pins import PinsPages
 from paperroute.adapters.web_ways import WaysPages
-from paperroute.core.messages import Event
 from paperroute.observers import PinsSeen
-from paperroute.ports import PinOptions
 from paperroute_device.adapters.web_common import asset
+from paperroute_transit.core.messages import Event
 from paperroute_transit.core.modes import ModeSpec
+from paperroute_transit.ports import PinOptions
 
 SUGGEST_SCRIPT: Final[str] = 'suggest.js'
 

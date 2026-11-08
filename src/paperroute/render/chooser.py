@@ -5,14 +5,6 @@ from typing import Final, Protocol
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.core.chooser import Choice, Level
-from paperroute.core.chooser_view import (
-    CHOOSER_BOTTOM,
-    CHOOSER_TOP,
-    ROW_HEIGHTS,
-    ChooserView,
-    ColumnView,
-)
 from paperroute_device.render.canvas import (
     HEIGHT,
     INK,
@@ -22,6 +14,14 @@ from paperroute_device.render.canvas import (
     Face,
 )
 from paperroute_device.render.frame import finish
+from paperroute_transit.core.chooser import Choice, Level
+from paperroute_transit.core.chooser_view import (
+    CHOOSER_BOTTOM,
+    CHOOSER_TOP,
+    ROW_HEIGHTS,
+    ChooserView,
+    ColumnView,
+)
 
 COLUMN_WIDTHS: Final[dict[Level, int]] = {
     Level.KIND: 170,

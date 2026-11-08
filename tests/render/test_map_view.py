@@ -9,18 +9,6 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.city import SYDNEY_PROJECTION
-from paperroute.core.connection_view import PairRow
-from paperroute.core.map_view import (
-    MAP_HEIGHT,
-    MAP_WIDTH,
-    STRIP_MAP_WIDTH,
-    MapBase,
-    MapView,
-    Marker,
-    TripMarks,
-    screen_point,
-)
-from paperroute.core.stop_view import Pill, Row, empty_text
 from paperroute.render.chrome import BANNER, badge, header
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.map_view import (
@@ -61,7 +49,19 @@ from paperroute_device.render.canvas import (
 from paperroute_device.render.frame import HEADER
 from paperroute_transit.adapters.tiles_db import SqliteTileRepository
 from paperroute_transit.build.tile_store import TileWriter
+from paperroute_transit.core.connection_view import PairRow
 from paperroute_transit.core.geo import Point, to_metres
+from paperroute_transit.core.map_view import (
+    MAP_HEIGHT,
+    MAP_WIDTH,
+    STRIP_MAP_WIDTH,
+    MapBase,
+    MapView,
+    Marker,
+    TripMarks,
+    screen_point,
+)
+from paperroute_transit.core.stop_view import Pill, Row, empty_text
 from paperroute_transit.core.tiles import (
     CITY,
     TILE,

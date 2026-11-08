@@ -9,8 +9,8 @@ from urllib.parse import parse_qsl, urlencode
 from aiohttp import web
 from multidict import MultiDict
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.connection_editor import (
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.connection_editor import (
     ALLOW_RANGE,
     ChangeStep,
     ConnectionDraft,
@@ -18,25 +18,25 @@ from paperroute.adapters.connection_editor import (
     connection_draft,
     connection_edited,
 )
-from paperroute.adapters.pin_windows import DEFAULT_BUTTON
-from paperroute.adapters.ways_editor import (
+from paperroute_transit.adapters.pin_windows import DEFAULT_BUTTON
+from paperroute_transit.adapters.ways_editor import (
     WaysDraft,
     added_way,
     draft_pin,
     ways_draft,
     ways_query,
 )
-from paperroute.adapters.web_pin_edit import (
+from paperroute_transit.adapters.web_pin_edit import (
     MISFIT,
     edit_page,
     option,
     select_field,
 )
-from paperroute.adapters.web_pin_search import STARTING
-from paperroute.adapters.web_pins import html_page, notice_alert
-from paperroute.adapters.web_ways import posted_fields
-from paperroute.observers import PinsSeen
+from paperroute_transit.adapters.web_pin_search import STARTING
+from paperroute_transit.adapters.web_pins import html_page, notice_alert
+from paperroute_transit.adapters.web_ways import posted_fields
 from paperroute_transit.core.model import MAX_CHANGES, Pin, StopPlace
+from paperroute_transit.observers import PinsSeen
 from paperroute_transit.ports import PinOptions
 
 TITLE: Final[str] = 'Add a way by hand'

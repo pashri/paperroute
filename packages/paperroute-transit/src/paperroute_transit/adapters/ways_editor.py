@@ -6,7 +6,7 @@ from typing import Final
 
 from multidict import MultiMapping
 
-from paperroute.adapters.state_change import ALLOW_MAX, ALLOW_MIN
+from paperroute_transit.adapters.state_change import ALLOW_MAX, ALLOW_MIN
 from paperroute_transit.core.connection_model import (
     default_allow,
     direct_leg,

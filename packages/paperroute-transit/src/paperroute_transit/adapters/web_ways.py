@@ -10,8 +10,9 @@ from urllib.parse import urlencode
 from aiohttp import web
 from multidict import MultiDict, MultiMapping
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.pin_windows import (
+from paperroute_device.adapters.web_common import asset
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.pin_windows import (
     DEFAULT_BUTTON,
     WindowRow,
     query_rows,
@@ -20,7 +21,7 @@ from paperroute.adapters.pin_windows import (
     windows_fieldset,
     windows_of,
 )
-from paperroute.adapters.ways_editor import (
+from paperroute_transit.adapters.ways_editor import (
     WaysDraft,
     draft_pin,
     encode_way,
@@ -28,7 +29,7 @@ from paperroute.adapters.ways_editor import (
     never_choices,
     ways_draft,
 )
-from paperroute.adapters.web_pin_edit import (
+from paperroute_transit.adapters.web_pin_edit import (
     MIN_QUERY,
     MISFIT,
     NO_MATCH,
@@ -36,14 +37,17 @@ from paperroute.adapters.web_pin_edit import (
     edit_page,
     option,
 )
-from paperroute.adapters.web_pin_list import pin_label
-from paperroute.adapters.web_pin_search import STARTING, STOPS_SHOWN
-from paperroute.adapters.web_pins import PinsPages, html_page, notice_alert
-from paperroute.observers import PinsSeen
-from paperroute_device.adapters.web_common import asset
+from paperroute_transit.adapters.web_pin_list import pin_label
+from paperroute_transit.adapters.web_pin_search import STARTING, STOPS_SHOWN
+from paperroute_transit.adapters.web_pins import (
+    PinsPages,
+    html_page,
+    notice_alert,
+)
 from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.model import Pin, StopPlace, Way
 from paperroute_transit.core.pin_choices import NICKNAME_MAX
+from paperroute_transit.observers import PinsSeen
 from paperroute_transit.ports import PinOptions
 
 ADD_TITLE: Final[str] = 'Add a connection'

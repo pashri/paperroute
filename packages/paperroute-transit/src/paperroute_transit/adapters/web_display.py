@@ -8,17 +8,6 @@ import numpy as np
 from aiohttp import web
 from numpy.typing import NDArray
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.mode_css import board_css
-from paperroute.adapters.settings_form import (
-    ERRORS,
-    BadInput,
-    UnknownValue,
-    changed_from,
-    form_values,
-    page_text,
-    posted_values,
-)
 from paperroute_device.adapters.web_common import (
     asset,
     asset_bytes,
@@ -29,6 +18,17 @@ from paperroute_device.adapters.web_guard import RemoteOf, peer_address
 from paperroute_device.adapters.web_live import KNOB_HINT, LiveView
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_hardware.ports import CLEAN_AFTER
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.mode_css import board_css
+from paperroute_transit.adapters.settings_form import (
+    ERRORS,
+    BadInput,
+    UnknownValue,
+    changed_from,
+    form_values,
+    page_text,
+    posted_values,
+)
 from paperroute_transit.core.city import City
 from paperroute_transit.core.messages import Event, SettingsChanged
 from paperroute_transit.core.saved import Settings, default_settings

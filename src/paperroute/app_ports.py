@@ -2,15 +2,15 @@
 
 from dataclasses import dataclass, field
 
-from paperroute.adapters.rebuild import NullBuilder
 from paperroute.app_device import DevicePorts
-from paperroute.measures import StopMeasures
-from paperroute.observers import NullObserver
 from paperroute_device.adapters.power import NullPower
 from paperroute_device.ports import Clock, PowerControl
 from paperroute_hardware.ports import Display
 from paperroute_transit.adapters.leg_cache import LegCache
+from paperroute_transit.adapters.rebuild import NullBuilder
 from paperroute_transit.adapters.tiles_db import NullTiles
+from paperroute_transit.measures import StopMeasures
+from paperroute_transit.observers import NullObserver
 from paperroute_transit.ports import (
     FeedsClient,
     NetworkRepository,

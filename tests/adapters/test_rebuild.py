@@ -12,8 +12,8 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters import rebuild as rebuild_module
-from paperroute.adapters.rebuild import (
+from paperroute_transit.adapters import rebuild as rebuild_module
+from paperroute_transit.adapters.rebuild import (
     REBUILD_MIN_AVAILABLE,
     ChildRebuilder,
     NullBuilder,

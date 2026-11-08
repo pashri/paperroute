@@ -12,23 +12,22 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.board_pages import PinPages
 from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SuggestPlug
-from paperroute.adapters.web_display import WebDisplay
-from paperroute.adapters.web_pins import (
+from paperroute.city import SYDNEY, SydneyMode
+from paperroute_testkit.core.connection_factories import WORK as CONNECTION
+from paperroute_testkit.core.connection_factories import WORK_CHANGE
+from paperroute_testkit.fake_pins import FakePinOptions
+from paperroute_testkit.page_markup import inside, parse_page, parse_tree
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_pages import PinPages
+from paperroute_transit.adapters.web_display import WebDisplay
+from paperroute_transit.adapters.web_pins import (
     SEEN_POLL_S,
     SEEN_WAIT_S,
     draft_of,
     pin_label,
     pin_line,
 )
-from paperroute.city import SYDNEY, SydneyMode
-from paperroute.observers import PinsSeen
-from paperroute_testkit.core.connection_factories import WORK as CONNECTION
-from paperroute_testkit.core.connection_factories import WORK_CHANGE
-from paperroute_testkit.fake_pins import FakePinOptions
-from paperroute_testkit.page_markup import inside, parse_page, parse_tree
 from paperroute_transit.core.chooser import Choice
 from paperroute_transit.core.messages import (
     Event,
@@ -40,6 +39,7 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, pin_ref
 from paperroute_transit.core.pin_choices import StopMatch
 from paperroute_transit.core.route_colours import RouteColour
+from paperroute_transit.observers import PinsSeen
 from tests.adapters.test_web_device import sydney_site
 
 Client = TestClient[web.Request, web.Application]

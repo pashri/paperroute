@@ -5,9 +5,9 @@ from collections.abc import Mapping, Sequence
 from typing import Final
 from urllib.parse import urlencode
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.pin_windows import DEFAULT_BUTTON
 from paperroute_device.adapters.web_common import asset
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.pin_windows import DEFAULT_BUTTON
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.modes import ModeSpec, spec_of
 from paperroute_transit.core.pin_choices import (

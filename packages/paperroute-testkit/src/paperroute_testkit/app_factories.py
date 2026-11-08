@@ -5,7 +5,6 @@ from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
 
-from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.app import MapRenderer, Ports, perform
 from paperroute.app_effects import StateSaver
 from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
@@ -19,6 +18,7 @@ from paperroute_testkit.fakes import (
 )
 from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_testkit.paths import FIXTURES
+from paperroute_transit.adapters.feed_files import FileFeedsClient
 from paperroute_transit.core.map_view import (
     STRIP_MAP_WIDTH,
     MapBase,

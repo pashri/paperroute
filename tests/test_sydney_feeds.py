@@ -4,9 +4,9 @@ from datetime import datetime
 from pathlib import Path
 from typing import Final
 
-from paperroute.adapters.gtfs_rt import parse_positions
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE, SydneyFeed
 from paperroute.sydney_feeds import SydneyFeeds
+from paperroute_transit.adapters.gtfs_rt import parse_positions
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import MetreBox, to_metres
 

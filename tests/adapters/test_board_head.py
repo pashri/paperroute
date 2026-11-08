@@ -2,8 +2,8 @@
 
 import pytest
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.web_pin_edit import edit_page
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.web_pin_edit import edit_page
 
 LIVE_LINK = '  <link rel="stylesheet" href="/live.css">\n'
 

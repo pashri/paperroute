@@ -5,10 +5,10 @@ import time
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 
-from paperroute.adapters.settings_form import form_values
 from paperroute_device.core.device_model import DeviceStatus
 from paperroute_device.ports import DeviceObserver
 from paperroute_hardware.ports import PanelRefresh, PanelTimes
+from paperroute_transit.adapters.settings_form import form_values
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.saved import Settings
 from paperroute_transit.ports import Observer

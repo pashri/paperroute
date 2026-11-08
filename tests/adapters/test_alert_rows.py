@@ -9,9 +9,9 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.dedupe import merge_rail
 from paperroute.city import REGIONAL_AGENCIES, SYDNEY
+from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build.gtfs_files import Source
 from tests.build.feeds import build_db
 

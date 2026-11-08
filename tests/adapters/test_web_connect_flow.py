@@ -12,13 +12,9 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.board_pages import PinPages
 from paperroute.adapters.web_board import SuggestPlug
-from paperroute.adapters.web_display import WebDisplay
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute.core.trip_search import Journey, JourneyLeg
-from paperroute.observers import PinsSeen
 from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
     HAMMERS,
@@ -27,9 +23,13 @@ from paperroute_testkit.core.connection_factories import (
 from paperroute_testkit.core.factories import place
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_testkit.fakes import FakeTripPlanner
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_pages import PinPages
+from paperroute_transit.adapters.web_display import WebDisplay
 from paperroute_transit.core.messages import Event, PinSaved
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import ChangeStop, StopMatch
+from paperroute_transit.observers import PinsSeen
 from tests.adapters.test_web_device import sydney_site
 
 Client = TestClient[web.Request, web.Application]

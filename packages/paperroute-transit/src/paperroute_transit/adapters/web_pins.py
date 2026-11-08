@@ -11,9 +11,10 @@ from urllib.parse import urlencode
 from aiohttp import web
 from multidict import MultiDict
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.pin_editor import edited
-from paperroute.adapters.pin_windows import (
+from paperroute_device.adapters.web_common import asset, form_fields
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.pin_editor import edited
+from paperroute_transit.adapters.pin_windows import (
     WindowRow,
     query_rows,
     rows_of,
@@ -21,8 +22,8 @@ from paperroute.adapters.pin_windows import (
     windows_fieldset,
     windows_of,
 )
-from paperroute.adapters.route_chips import chip_colours, colour_sheet
-from paperroute.adapters.web_pin_edit import (
+from paperroute_transit.adapters.route_chips import chip_colours, colour_sheet
+from paperroute_transit.adapters.web_pin_edit import (
     MISFIT,
     delete_form,
     draft_of,
@@ -31,14 +32,16 @@ from paperroute.adapters.web_pin_edit import (
     origin_name,
     search_results,
 )
-from paperroute.adapters.web_pin_list import pin_label, pin_line, pins_list
-from paperroute.adapters.web_pin_search import (
+from paperroute_transit.adapters.web_pin_list import (
+    pin_label,
+    pin_line,
+    pins_list,
+)
+from paperroute_transit.adapters.web_pin_search import (
     STARTING,
     search_page,
     stops_json,
 )
-from paperroute.observers import PinsSeen
-from paperroute_device.adapters.web_common import asset, form_fields
 from paperroute_transit.core.messages import (
     Event,
     PinDeleted,
@@ -50,6 +53,7 @@ from paperroute_transit.core.model import Pin, pin_ref, same_place
 from paperroute_transit.core.modes import ModeSpec
 from paperroute_transit.core.pin_choices import PinDraft, PinEditor
 from paperroute_transit.core.route_colours import RouteColour
+from paperroute_transit.observers import PinsSeen
 from paperroute_transit.ports import PinOptions
 
 __all__ = [

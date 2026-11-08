@@ -5,13 +5,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.settings_form import (
-    BadInput,
-    UnknownValue,
-    changed_from,
-    form_values,
-    page_text,
-)
 from paperroute.city import SYDNEY
 from paperroute_device.adapters.web_common import asset
 from paperroute_device.core.device_settings import (
@@ -19,6 +12,13 @@ from paperroute_device.core.device_settings import (
     DeviceSettings,
     QuietMode,
     Window,
+)
+from paperroute_transit.adapters.settings_form import (
+    BadInput,
+    UnknownValue,
+    changed_from,
+    form_values,
+    page_text,
 )
 from paperroute_transit.core.messages import SettingsChanged
 from paperroute_transit.core.saved import (

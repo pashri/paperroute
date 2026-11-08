@@ -2,10 +2,10 @@
 
 from pathlib import Path
 
-from paperroute.observers import ObserverGroup, Timings
-from paperroute.summary import Summary
 from paperroute_device.adapters.act_led import ActLed
 from paperroute_device.adapters.systemd import SystemdNotifier
+from paperroute_transit.observers import ObserverGroup, Timings
+from paperroute_transit.summary import Summary
 
 __all__ = ['web_observer']
 

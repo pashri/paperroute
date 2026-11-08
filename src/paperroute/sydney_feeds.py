@@ -179,9 +179,12 @@ def gtfs_readers(*, projection: Projection) -> FeedParsers:
         The trip updates, positions and alerts readers.
     """
     # pylint: disable-next=import-outside-toplevel
-    from paperroute.adapters.gtfs_alerts import parse_alerts
+    from paperroute_transit.adapters.gtfs_alerts import parse_alerts
     # pylint: disable-next=import-outside-toplevel
-    from paperroute.adapters.gtfs_rt import parse_positions, parse_trip_updates
+    from paperroute_transit.adapters.gtfs_rt import (
+        parse_positions,
+        parse_trip_updates,
+    )
     return FeedParsers(
         trips=parse_trip_updates,
         positions=functools.partial(parse_positions, projection=projection),

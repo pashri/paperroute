@@ -15,30 +15,8 @@ from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.board_pages import PinPages, WaysPlug
-from paperroute.adapters.clocks import ReplayClock, SystemClock
-from paperroute.adapters.device_probe import SystemProbe
-from paperroute.adapters.feed_files import FileFeedsClient
-from paperroute.adapters.feed_guard import GuardedFeeds
-from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.adapters.pin_options import SqlitePinOptions
-from paperroute.adapters.rebuild import (
-    ChildRebuilder,
-    NullBuilder,
-    refresh_command,
-    refresh_env,
-)
-from paperroute.adapters.state_file import DEFAULT_PATH as STATE_PATH
-from paperroute.adapters.state_file import JsonStateRepository
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.adapters.web_display import RESET_HINT, StatusLine, WebDisplay
 from paperroute.app import Ports, run
 from paperroute.app_device import DevicePorts
-from paperroute.logs import LastError, configure_logging
-from paperroute.observers import Timings
-from paperroute.summary import Summary
-from paperroute.web_observer import web_observer
 from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.web_device import DevicePages
@@ -61,24 +39,50 @@ from paperroute_hardware.adapters.panel_display import Displays
 from paperroute_hardware.knobs_open import knobs_for, knobs_state_for
 from paperroute_hardware.panel_open import panel_for, panel_times_for
 from paperroute_hardware.selftest import selftest_main
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_pages import PinPages, WaysPlug
 from paperroute_transit.adapters.checked_tiles import CheckedTiles, warn_unfit
+from paperroute_transit.adapters.clocks import ReplayClock, SystemClock
+from paperroute_transit.adapters.device_probe import SystemProbe
+from paperroute_transit.adapters.feed_files import FileFeedsClient
+from paperroute_transit.adapters.feed_guard import GuardedFeeds
 from paperroute_transit.adapters.leg_cache import LegCache
+from paperroute_transit.adapters.network_db import SqliteNetworkRepository
+from paperroute_transit.adapters.pin_options import SqlitePinOptions
+from paperroute_transit.adapters.rebuild import (
+    ChildRebuilder,
+    NullBuilder,
+    refresh_command,
+    refresh_env,
+)
+from paperroute_transit.adapters.state_file import DEFAULT_PATH as STATE_PATH
+from paperroute_transit.adapters.state_file import JsonStateRepository
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
     SqliteTileRepository,
+)
+from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
+from paperroute_transit.adapters.web_display import (
+    RESET_HINT,
+    StatusLine,
+    WebDisplay,
 )
 from paperroute_transit.core.city import City
 from paperroute_transit.core.messages import Event, QuitRequested
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.tiles import TileVariant
+from paperroute_transit.logs import LastError, configure_logging
+from paperroute_transit.observers import Timings
 from paperroute_transit.ports import (
     FeedsClient,
     TileRepository,
     TimetableBuilder,
 )
+from paperroute_transit.summary import Summary
+from paperroute_transit.web_observer import web_observer
 
 if TYPE_CHECKING:
-    from paperroute.adapters.tk_monitor import TkMonitor
+    from paperroute_transit.adapters.tk_monitor import TkMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -912,7 +916,7 @@ def tk_main(
     last_error : LastError | None
         Holds the latest error logged; a new one by default.
     """
-    from paperroute.adapters.tk_monitor import (  # pylint: disable=C0415
+    from paperroute_transit.adapters.tk_monitor import (  # pylint: disable=C0415
         TkMonitor,
     )
 

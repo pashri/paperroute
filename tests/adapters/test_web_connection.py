@@ -10,16 +10,16 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.board_pages import PinPages
-from paperroute.adapters.connection_editor import ALLOW_RANGE
 from paperroute.adapters.web_board import SuggestPlug
-from paperroute.adapters.web_display import WebDisplay
-from paperroute.adapters.web_pin_edit import MISFIT
 from paperroute.city import SYDNEY
-from paperroute.observers import PinsSeen
 from paperroute_testkit.core.connection_factories import WORK
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_pages import PinPages
+from paperroute_transit.adapters.connection_editor import ALLOW_RANGE
+from paperroute_transit.adapters.web_display import WebDisplay
+from paperroute_transit.adapters.web_pin_edit import MISFIT
 from paperroute_transit.core.model import pin_ref
+from paperroute_transit.observers import PinsSeen
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_device import sydney_site
 from tests.adapters.test_web_pins import Pins

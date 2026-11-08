@@ -12,7 +12,6 @@ from pydantic import (
     field_validator,
 )
 
-from paperroute.adapters.state_auto import CLOCK, CLOCK_FORMAT
 from paperroute_device.core.device_settings import (
     CLEAN_CHOICES,
     DeviceSettings,
@@ -20,6 +19,7 @@ from paperroute_device.core.device_settings import (
     Window,
 )
 from paperroute_hardware.ports import CLEAN_AFTER
+from paperroute_transit.adapters.state_auto import CLOCK, CLOCK_FORMAT
 from paperroute_transit.core import saved
 from paperroute_transit.core.city import City
 from paperroute_transit.core.saved import (

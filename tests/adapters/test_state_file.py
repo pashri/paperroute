@@ -15,11 +15,6 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from paperroute.adapters.state_file import JsonStateRepository
-from paperroute.adapters.state_migrations import (
-    SCHEMA_VERSION,
-    regional_to_coach,
-)
 from paperroute.city import PEAK_WINDOWS, SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_device.core.device_settings import (
     DeviceSettings,
@@ -28,6 +23,11 @@ from paperroute_device.core.device_settings import (
 )
 from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE
 from paperroute_testkit.core.factories import pin_at
+from paperroute_transit.adapters.state_file import JsonStateRepository
+from paperroute_transit.adapters.state_migrations import (
+    SCHEMA_VERSION,
+    regional_to_coach,
+)
 from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
 from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, Way
 from paperroute_transit.core.pin_choices import clean_nickname

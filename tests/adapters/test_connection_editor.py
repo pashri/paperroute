@@ -5,14 +5,6 @@ from typing import Final
 
 from multidict import MultiDict
 
-from paperroute.adapters.connection_editor import (
-    ALLOW_RANGE,
-    ChangeDraft,
-    ConnectionDraft,
-    allow_minutes,
-    connection_draft,
-    connection_edited,
-)
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN,
     CONSTITUTION,
@@ -23,6 +15,14 @@ from paperroute_testkit.core.connection_factories import (
     WORK_CHANGE,
 )
 from paperroute_testkit.fake_pins import FakePinOptions
+from paperroute_transit.adapters.connection_editor import (
+    ALLOW_RANGE,
+    ChangeDraft,
+    ConnectionDraft,
+    allow_minutes,
+    connection_draft,
+    connection_edited,
+)
 from paperroute_transit.core.model import Change, Way
 from paperroute_transit.core.pin_choices import ChangeStop
 

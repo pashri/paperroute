@@ -7,13 +7,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Final
 
-from paperroute.summary import Summary, failure_reason
 from paperroute_transit.adapters.feed_errors import (
     FeedError,
     FeedThrottled,
     FeedUnavailable,
 )
 from paperroute_transit.ports import FeedsClient
+from paperroute_transit.summary import Summary, failure_reason
 
 FIRST_BACKOFF_S: Final[float] = 30.0
 MOST_BACKOFF_S: Final[float] = 300.0

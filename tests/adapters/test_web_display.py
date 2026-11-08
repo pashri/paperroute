@@ -14,9 +14,7 @@ import pytest
 from aiohttp import ClientResponse, web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.settings_form import ERRORS
 from paperroute.adapters.web_board import SETTINGS_NAV, SYDNEY_HINT, SYDNEY_NAV
-from paperroute.adapters.web_display import WebDisplay
 from paperroute.city import SYDNEY
 from paperroute_device.adapters import web_live
 from paperroute_device.adapters.web_frame import LIVE_NAV, SHELL_WEB
@@ -35,6 +33,8 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_testkit.device_pages import DeviceSite
 from paperroute_testkit.page_markup import parse_page
+from paperroute_transit.adapters.settings_form import ERRORS
+from paperroute_transit.adapters.web_display import WebDisplay
 from paperroute_transit.core.messages import Event, SettingsChanged
 from paperroute_transit.core.saved import LiveView, Lookahead, Rate
 from paperroute_transit.core.state import step

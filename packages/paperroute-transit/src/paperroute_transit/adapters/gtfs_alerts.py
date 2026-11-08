@@ -4,7 +4,7 @@ import logging
 from datetime import UTC, datetime
 from typing import Any
 
-from paperroute.adapters.gtfs_rt import feed_entities
+from paperroute_transit.adapters.gtfs_rt import feed_entities
 from paperroute_transit.core.alert_model import (
     Alert,
     AlertsSnapshot,

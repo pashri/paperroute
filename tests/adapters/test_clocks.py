@@ -3,8 +3,8 @@
 from datetime import datetime
 from pathlib import Path
 
-from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.city import SYDNEY_ZONE
+from paperroute_transit.adapters.clocks import ReplayClock, SystemClock
 
 
 def test_system_clock_is_sydney_aware() -> None:

@@ -17,11 +17,11 @@ from paperroute.build.refresh import RefreshBusy, refresh
 from paperroute.build.sources import BuildParts
 from paperroute.build.swap import guarded
 from paperroute.build.timetable import Window, build_timetable, yesterday
-from paperroute.logs import configure_logging
 from paperroute_transit.adapters.tiles_db import SqliteTileRepository
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.city import City
 from paperroute_transit.core.tiles import TILE_STYLE, ZOOMS, levels_text
+from paperroute_transit.logs import configure_logging
 
 logger = logging.getLogger(__name__)
 

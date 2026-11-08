@@ -5,15 +5,18 @@ import json
 from collections.abc import Mapping
 from typing import Any, Final, Protocol
 
-from paperroute.adapters.state_auto import add_auto
-from paperroute.adapters.state_change import add_connections, before_rewritten
-from paperroute.adapters.state_settings import default_settings
 from paperroute_device.core.sections import (
     DEVICE_MIGRATIONS,
     DEVICE_SCHEMA,
     SectionStep,
     migrate_section,
 )
+from paperroute_transit.adapters.state_auto import add_auto
+from paperroute_transit.adapters.state_change import (
+    add_connections,
+    before_rewritten,
+)
+from paperroute_transit.adapters.state_settings import default_settings
 from paperroute_transit.core.city import City
 
 SCHEMA_VERSION: Final[int] = 12

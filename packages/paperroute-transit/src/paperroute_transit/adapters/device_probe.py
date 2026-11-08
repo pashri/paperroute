@@ -5,9 +5,9 @@ import shutil
 from pathlib import Path
 from typing import Final
 
-from paperroute.logs import LastError
 from paperroute_device.core.device_model import DeviceFacts, WifiStatus
 from paperroute_device.ports import KeyStore, WifiControl
+from paperroute_transit.logs import LastError
 from paperroute_transit.ports import TileRepository
 
 UPTIME: Final[str] = 'proc/uptime'

@@ -7,13 +7,13 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.adapters.network_lines import LineTables, Row
-from paperroute.adapters.timetable_db import DEFAULT_PATH, to_point
 from paperroute_device.adapters.sqlite_ro import (
     Identity,
     ReadOnlyDatabase,
     file_identity,
 )
+from paperroute_transit.adapters.network_lines import LineTables, Row
+from paperroute_transit.adapters.timetable_db import DEFAULT_PATH, to_point
 from paperroute_transit.core.chooser import (
     Choice,
     ChooserPath,

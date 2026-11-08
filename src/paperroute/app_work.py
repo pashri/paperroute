@@ -7,7 +7,6 @@ import sqlite3
 from collections.abc import Coroutine
 from typing import Any
 
-from paperroute.adapters.feed_guard import FeedBackingOff, JoinedBody
 from paperroute.app_connections import departures_read
 from paperroute.app_device import DeviceEffect, device_work
 from paperroute.app_effects import (
@@ -23,6 +22,7 @@ from paperroute.app_ports import Ports
 from paperroute.app_render import MapRenderer, render
 from paperroute_device.core.device_model import PowerAction
 from paperroute_transit.adapters.feed_errors import FeedError
+from paperroute_transit.adapters.feed_guard import FeedBackingOff, JoinedBody
 from paperroute_transit.core.messages import (
     ControlPower,
     DeparturesFailed,

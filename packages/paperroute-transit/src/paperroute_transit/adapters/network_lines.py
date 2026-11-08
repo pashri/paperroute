@@ -7,7 +7,7 @@ from itertools import groupby
 from operator import itemgetter
 from typing import Final, Protocol
 
-from paperroute.adapters.timetable_db import to_point
+from paperroute_transit.adapters.timetable_db import to_point
 from paperroute_transit.core.chooser import Choice, Column, Level
 from paperroute_transit.core.geo import Projection
 from paperroute_transit.core.model import StopPlace, until_revisit

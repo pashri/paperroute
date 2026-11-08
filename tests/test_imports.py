@@ -78,6 +78,40 @@ CITY_IMPORTS: Final[str] = (
     'assert not loaded, loaded'
 )
 MOVED: Final[tuple[str, ...]] = (
+    'adapters.board_head',
+    'adapters.board_pages',
+    'adapters.change_rows',
+    'adapters.clocks',
+    'adapters.connection_editor',
+    'adapters.device_probe',
+    'adapters.feed_files',
+    'adapters.feed_guard',
+    'adapters.gtfs_alerts',
+    'adapters.gtfs_rt',
+    'adapters.mode_css',
+    'adapters.network_db',
+    'adapters.network_lines',
+    'adapters.pin_editor',
+    'adapters.pin_options',
+    'adapters.pin_windows',
+    'adapters.rebuild',
+    'adapters.route_chips',
+    'adapters.settings_form',
+    'adapters.state_auto',
+    'adapters.state_change',
+    'adapters.state_file',
+    'adapters.state_migrations',
+    'adapters.state_settings',
+    'adapters.timetable_db',
+    'adapters.tk_monitor',
+    'adapters.ways_editor',
+    'adapters.web_connection',
+    'adapters.web_display',
+    'adapters.web_pin_edit',
+    'adapters.web_pin_list',
+    'adapters.web_pin_search',
+    'adapters.web_pins',
+    'adapters.web_ways',
     'core.alert_match',
     'core.alert_state',
     'core.alerts_view',
@@ -137,7 +171,12 @@ MOVED: Final[tuple[str, ...]] = (
     'core.strip_vehicles',
     'core.strip_view',
     'core.wifi',
+    'logs',
+    'measures',
+    'observers',
     'ports',
+    'summary',
+    'web_observer',
 )
 SCREEN_IMPORTS: Final[str] = (
     'import paperroute_device.screen, sys; '
@@ -365,7 +404,7 @@ def test_core_imports_only_core() -> None:
 def test_pydantic_only_in_state_file() -> None:
     """Only the state file and its helpers import pydantic."""
     allowed = {
-        f'adapters/{name}'
+        TRANSIT / 'adapters' / name
         for name in (
             'state_file.py',
             'state_migrations.py',
@@ -373,15 +412,17 @@ def test_pydantic_only_in_state_file() -> None:
             'state_settings.py',
         )
     }
+    paths = sources()
     offenders = [
         str(path)
-        for path in sources()
-        if under(path=path) not in allowed
+        for path in paths
+        if path not in allowed
         and any(
             name.split('.')[0] == 'pydantic'
             for name in imported_names(path=path)
         )
     ]
+    assert allowed <= set(paths)
     assert not offenders
 
 
@@ -544,12 +585,12 @@ def test_web_display_imports_no_board_pages() -> None:
     """The web display takes Sydney's pages from the app."""
     banned = {
         'paperroute.planner_port',
-        'paperroute.adapters.web_pins',
-        'paperroute.adapters.web_ways',
-        'paperroute.adapters.web_connection',
+        'paperroute_transit.adapters.web_pins',
+        'paperroute_transit.adapters.web_ways',
+        'paperroute_transit.adapters.web_connection',
         'paperroute.adapters.web_suggest',
     }
-    path = ROOT / 'src' / 'paperroute' / 'adapters' / 'web_display.py'
+    path = TRANSIT / 'adapters' / 'web_display.py'
     names = imported_names(path=path)
     assert not names & banned
     assert 'SYDNEY' not in path.read_text(encoding='utf-8')

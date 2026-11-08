@@ -3,7 +3,7 @@
 from collections.abc import Callable
 from typing import Final
 
-from paperroute.adapters.state_settings import default_settings
+from paperroute_transit.adapters.state_settings import default_settings
 from paperroute_transit.core.city import City
 
 ALLOW_MIN: Final[int] = 1  # minutes

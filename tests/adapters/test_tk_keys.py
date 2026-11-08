@@ -2,7 +2,6 @@
 
 import pytest
 
-from paperroute.adapters.tk_monitor import key_event
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -12,6 +11,7 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_hardware.core.knob_hold import HOLD_S, Chord, HoldKey
+from paperroute_transit.adapters.tk_monitor import key_event
 from paperroute_transit.core.messages import Event, QuitRequested
 
 

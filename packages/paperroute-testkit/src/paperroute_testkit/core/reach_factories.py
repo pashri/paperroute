@@ -8,9 +8,9 @@ from typing import Final
 
 from hypothesis import strategies as st
 
-from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
 from paperroute_testkit.paths import ROOT
+from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import (

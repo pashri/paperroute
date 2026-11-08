@@ -15,10 +15,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.timetable_db import (
-    LABEL_LIMIT,
-    SqliteTimetableRepository,
-)
 from paperroute.build.dedupe import merge_rail
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import (
@@ -32,6 +28,10 @@ from paperroute.city import (
 from paperroute_device.adapters.sqlite_ro import file_identity
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import pin_of, place
+from paperroute_transit.adapters.timetable_db import (
+    LABEL_LIMIT,
+    SqliteTimetableRepository,
+)
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.geo import to_metres
 from paperroute_transit.core.model import (

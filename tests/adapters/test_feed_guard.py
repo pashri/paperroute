@@ -5,19 +5,19 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.feed_guard import (
-    FeedBackingOff,
-    GuardedFeeds,
-    JoinedBody,
-    backoff_s,
-)
-from paperroute.summary import Summary
 from paperroute_transit.adapters.feed_errors import (
     FeedError,
     FeedThrottled,
     FeedTimedOut,
     FeedUnavailable,
 )
+from paperroute_transit.adapters.feed_guard import (
+    FeedBackingOff,
+    GuardedFeeds,
+    JoinedBody,
+    backoff_s,
+)
+from paperroute_transit.summary import Summary
 
 BUSES: Final[str] = 'v1/gtfs/vehiclepos/buses'
 TRAINS: Final[str] = 'v2/gtfs/vehiclepos/sydneytrains'

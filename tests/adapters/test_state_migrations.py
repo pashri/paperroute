@@ -8,24 +8,6 @@ from typing import Any, Final
 
 import pytest
 
-from paperroute.adapters.state_file import (
-    JsonStateRepository,
-    PinModel,
-    from_model,
-    pin_from_model,
-    state_model_of,
-)
-from paperroute.adapters.state_migrations import (
-    BOARD_SCHEMA,
-    SCHEMA_VERSION,
-    V1_TRAINLINK_LINES,
-    add_ways,
-    coach_pin,
-    drop_zoom,
-    migrate,
-    split_sections,
-    v9_ref,
-)
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
@@ -35,6 +17,24 @@ from paperroute_testkit.core.connection_factories import (
     TWO_WAY,
     WESTMEAD,
     WORK,
+)
+from paperroute_transit.adapters.state_file import (
+    JsonStateRepository,
+    PinModel,
+    from_model,
+    pin_from_model,
+    state_model_of,
+)
+from paperroute_transit.adapters.state_migrations import (
+    BOARD_SCHEMA,
+    SCHEMA_VERSION,
+    V1_TRAINLINK_LINES,
+    add_ways,
+    coach_pin,
+    drop_zoom,
+    migrate,
+    split_sections,
+    v9_ref,
 )
 from paperroute_transit.core.model import (
     AutoWindow,

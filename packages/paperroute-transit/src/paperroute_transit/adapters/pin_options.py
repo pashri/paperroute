@@ -6,20 +6,20 @@ from collections.abc import Collection, Iterable, Sequence
 from operator import itemgetter
 from typing import Final
 
-from paperroute.adapters.change_rows import (
+from paperroute_transit.adapters.change_rows import (
     BETWEEN,
     REACHED,
     change_box,
     nearest_changes,
 )
-from paperroute.adapters.network_db import (
+from paperroute_transit.adapters.network_db import (
     ROUTE_COLUMNS,
     ROUTE_ORDER,
     SqliteNetworkRepository,
     route_choices,
 )
-from paperroute.adapters.network_lines import Row
-from paperroute.adapters.timetable_db import to_point
+from paperroute_transit.adapters.network_lines import Row
+from paperroute_transit.adapters.timetable_db import to_point
 from paperroute_transit.build.catalogue import route_order
 from paperroute_transit.core.chooser import UNPICKED, Choice, focusable
 from paperroute_transit.core.geo import Projection, to_lonlat

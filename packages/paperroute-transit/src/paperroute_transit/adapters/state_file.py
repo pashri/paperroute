@@ -17,7 +17,10 @@ from pydantic import (
     ValidationError,
 )
 
-from paperroute.adapters.state_auto import (
+from paperroute_device.adapters.atomic_file import write_atomic
+from paperroute_device.core.device_settings import DeviceSettings
+from paperroute_device.core.sections import DEVICE_SCHEMA
+from paperroute_transit.adapters.state_auto import (
     EMPTY_AUTO,
     AutoWindowModel,
     OccurrenceModel,
@@ -25,25 +28,25 @@ from paperroute.adapters.state_auto import (
     occurrence_to_model,
     repaired_windows,
 )
-from paperroute.adapters.state_auto import (
+from paperroute_transit.adapters.state_auto import (
     window_from_model as auto_window_from_model,
 )
-from paperroute.adapters.state_auto import (
+from paperroute_transit.adapters.state_auto import (
     window_to_model as auto_window_to_model,
 )
-from paperroute.adapters.state_change import (
+from paperroute_transit.adapters.state_change import (
     ALLOW_MAX,
     ALLOW_MIN,
     repaired_never,
     repaired_ways,
     route_names,
 )
-from paperroute.adapters.state_migrations import (
+from paperroute_transit.adapters.state_migrations import (
     BOARD_SCHEMA,
     SCHEMA_VERSION,
     migrate,
 )
-from paperroute.adapters.state_settings import (
+from paperroute_transit.adapters.state_settings import (
     BoardSettingsModel,
     DeviceSettingsModel,
     board_settings_from_model,
@@ -52,9 +55,6 @@ from paperroute.adapters.state_settings import (
     device_settings_to_model,
     repaired_settings,
 )
-from paperroute_device.adapters.atomic_file import write_atomic
-from paperroute_device.core.device_settings import DeviceSettings
-from paperroute_device.core.sections import DEVICE_SCHEMA
 from paperroute_transit.core.auto_model import AutoState, Before
 from paperroute_transit.core.city import City
 from paperroute_transit.core.model import (

@@ -9,7 +9,6 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final
 
-from paperroute.observers import NullObserver
 from paperroute_hardware.ports import PanelRefresh
 from paperroute_transit.adapters.feed_errors import (
     FeedError,
@@ -17,6 +16,7 @@ from paperroute_transit.adapters.feed_errors import (
     FeedTimedOut,
     FeedUnavailable,
 )
+from paperroute_transit.observers import NullObserver
 
 SUMMARY_EVERY_S: Final[float] = 900.0
 DECILES: Final[int] = 10

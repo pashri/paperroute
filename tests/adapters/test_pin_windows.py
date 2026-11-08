@@ -6,7 +6,7 @@ from typing import Final
 
 from multidict import MultiDict
 
-from paperroute.adapters.pin_windows import (
+from paperroute_transit.adapters.pin_windows import (
     NO_DAY,
     NO_TIME,
     SAME_TIME,

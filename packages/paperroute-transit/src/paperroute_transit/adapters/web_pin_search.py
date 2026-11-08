@@ -3,8 +3,8 @@
 from collections.abc import Mapping, Sequence
 from typing import Final, TypedDict
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.web_pin_edit import (
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.web_pin_edit import (
     MIN_QUERY,
     edit_page,
     search_results,

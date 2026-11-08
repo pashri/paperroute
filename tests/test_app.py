@@ -14,11 +14,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.adapters.feed_files import FileFeedsClient
-from paperroute.adapters.feed_guard import FeedBackingOff, JoinedBody
-from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.adapters.state_file import JsonStateRepository
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app import (
     MapRenderer,
     Outputs,
@@ -46,8 +41,6 @@ from paperroute.city import (
     TOWN_HALL,
     SydneyFeed,
 )
-from paperroute.measures import StopMeasures
-from paperroute.observers import NullObserver, Timings
 from paperroute.render.alerts_view import draw_alerts_view
 from paperroute.render.keep_out import KeepOut, keep_out
 from paperroute.render.map_corners import NOT_INSTALLED, credit_box, scale_box
@@ -100,10 +93,15 @@ from paperroute_testkit.fakes import (
     SyncingClock,
 )
 from paperroute_testkit.hardware_fakes import FrameRecorder
+from paperroute_transit.adapters.feed_files import FileFeedsClient
+from paperroute_transit.adapters.feed_guard import FeedBackingOff, JoinedBody
+from paperroute_transit.adapters.network_db import SqliteNetworkRepository
+from paperroute_transit.adapters.state_file import JsonStateRepository
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
     SqliteTileRepository,
 )
+from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.alert_model import AlertsFetched
@@ -160,6 +158,8 @@ from paperroute_transit.core.tiles import (
     tile_of,
     to_pixels,
 )
+from paperroute_transit.measures import StopMeasures
+from paperroute_transit.observers import NullObserver, Timings
 from paperroute_transit.ports import Observer
 from paperroute_transit.render.tile_codec import pack_bits, pack_grey
 

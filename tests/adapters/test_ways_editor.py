@@ -4,7 +4,15 @@ from dataclasses import replace
 
 from multidict import MultiDict
 
-from paperroute.adapters.ways_editor import (
+from paperroute_testkit.core.connection_factories import (
+    CAMPBELLTOWN_WAY,
+    CONSTITUTION,
+    HAMMERS,
+    TWO_WAY,
+    WORK,
+    WORK_CHANGE,
+)
+from paperroute_transit.adapters.ways_editor import (
     WaysDraft,
     added_way,
     decode_way,
@@ -14,14 +22,6 @@ from paperroute.adapters.ways_editor import (
     picked_way,
     ways_draft,
     ways_query,
-)
-from paperroute_testkit.core.connection_factories import (
-    CAMPBELLTOWN_WAY,
-    CONSTITUTION,
-    HAMMERS,
-    TWO_WAY,
-    WORK,
-    WORK_CHANGE,
 )
 from paperroute_transit.core.model import Change, Way
 from tests.adapters.test_connection_editor import OPTIONS

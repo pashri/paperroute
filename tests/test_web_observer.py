@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.observers import Timings
-from paperroute.summary import Summary
-from paperroute.web_observer import web_observer
+from paperroute_transit.observers import Timings
+from paperroute_transit.summary import Summary
+from paperroute_transit.web_observer import web_observer
 
 
 @pytest.fixture(name='sock_dir')

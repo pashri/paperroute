@@ -8,14 +8,14 @@ from typing import Final, Protocol
 from aiohttp import web
 from multidict import MultiMapping
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.web_connection import ConnectionPages
-from paperroute.adapters.web_pins import PinsPages
-from paperroute.adapters.web_ways import WaysPages
-from paperroute.observers import PinsSeen
 from paperroute_device.adapters.web_common import asset
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.web_connection import ConnectionPages
+from paperroute_transit.adapters.web_pins import PinsPages
+from paperroute_transit.adapters.web_ways import WaysPages
 from paperroute_transit.core.messages import Event
 from paperroute_transit.core.modes import ModeSpec
+from paperroute_transit.observers import PinsSeen
 from paperroute_transit.ports import PinOptions
 
 SUGGEST_SCRIPT: Final[str] = 'suggest.js'

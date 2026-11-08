@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters import pin_options
-from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
+from paperroute_transit.adapters import pin_options
+from paperroute_transit.adapters.network_db import SqliteNetworkRepository
+from paperroute_transit.adapters.pin_options import SqlitePinOptions
 from paperroute_transit.core.chooser import UNPICKED, Choice, Level, focusable
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import kind_names

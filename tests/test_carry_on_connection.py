@@ -10,8 +10,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app_connections import departures_read
 from paperroute.app_ports import Ports
 from paperroute.build.timetable import Window, build_timetable
@@ -25,6 +23,8 @@ from paperroute.city import (
 from paperroute_testkit.app_factories import ports_of, posted_by
 from paperroute_testkit.core.factories import live
 from paperroute_testkit.fakes import FixedClock
+from paperroute_transit.adapters.network_db import SqliteNetworkRepository
+from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.chains import chains_of
 from paperroute_transit.core.connection_strip import ConnectionStripView

@@ -7,7 +7,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.mode_css import MODES_MARK, board_css
 from paperroute.city import (
     SYDNEY,
     SYDNEY_MODES,
@@ -16,6 +15,7 @@ from paperroute.city import (
     SydneyMode,
     classify_sydney,
 )
+from paperroute_transit.adapters.mode_css import MODES_MARK, board_css
 from paperroute_transit.core.city import Nouns
 from paperroute_transit.core.modes import RouteClass, mode_problems
 from tests.css_rules import css_rules

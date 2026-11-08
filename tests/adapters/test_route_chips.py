@@ -1,7 +1,7 @@
 """Tests for the route chips on the Pins list."""
 
-from paperroute.adapters.route_chips import chip_html, colour_sheet
 from paperroute.city import SYDNEY, SydneyMode
+from paperroute_transit.adapters.route_chips import chip_html, colour_sheet
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.route_colours import RouteColour
 

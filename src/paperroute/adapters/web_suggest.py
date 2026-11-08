@@ -9,8 +9,6 @@ from typing import Final
 from aiohttp import web
 from multidict import MultiMapping
 
-from paperroute.adapters.web_pins import html_page
-from paperroute.adapters.web_ways import SUGGEST, WaysPages
 from paperroute.city import SYDNEY_ZONE
 from paperroute.core.trip_search import (
     Journey,
@@ -20,6 +18,8 @@ from paperroute.core.trip_search import (
     default_search,
 )
 from paperroute.planner_port import TripPlanner
+from paperroute_transit.adapters.web_pins import html_page
+from paperroute_transit.adapters.web_ways import SUGGEST, WaysPages
 from paperroute_transit.core.model import MAX_CHANGES, StopPlace
 from paperroute_transit.ports import PinOptions
 

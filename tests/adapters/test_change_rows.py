@@ -9,11 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.adapters.change_rows import CHANGE_COUNT, CHANGE_M
-from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF
+from paperroute_transit.adapters.change_rows import CHANGE_COUNT, CHANGE_M
+from paperroute_transit.adapters.network_db import SqliteNetworkRepository
+from paperroute_transit.adapters.pin_options import SqlitePinOptions
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.model import StopPlace
 

@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 
 from paperroute.city import SYDNEY_ZONE
-from paperroute.logs import LastError, configure_logging
+from paperroute_transit.logs import LastError, configure_logging
 
 
 @pytest.fixture(autouse=True)

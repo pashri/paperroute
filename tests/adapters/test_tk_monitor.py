@@ -2,8 +2,8 @@
 
 import numpy as np
 
-from paperroute.adapters.tk_monitor import turned_frame
 from paperroute_device.render.canvas import HEIGHT, WIDTH
+from paperroute_transit.adapters.tk_monitor import turned_frame
 
 
 def test_turned_frame_rotates() -> None:

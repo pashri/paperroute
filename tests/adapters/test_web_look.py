@@ -11,9 +11,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
-from paperroute.adapters.web_display import WebDisplay
 from paperroute.city import SYDNEY
 from paperroute_device.adapters.web_frame import SHELL_WEB, page_frame
 from paperroute_device.adapters.web_live import live_page
@@ -24,6 +22,8 @@ from paperroute_testkit.page_markup import (
     parse_page,
     parse_tree,
 )
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.web_display import WebDisplay
 from tests.adapters.test_web_device import SHELL_PAGES, sydney_site
 
 Client = TestClient[web.Request, web.Application]

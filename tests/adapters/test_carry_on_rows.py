@@ -11,7 +11,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure
@@ -20,6 +19,7 @@ from paperroute_transit.adapters.carry_on_rows import (
     MAX_HOPS,
     first_to_arrive,
 )
+from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.model import CarryOn, Departure, TripFacts
 from tests.build.network_feed import network_feed

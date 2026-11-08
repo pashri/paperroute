@@ -8,15 +8,15 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from multidict import MultiMapping
 
-from paperroute.adapters.board_head import BoardHead
-from paperroute.adapters.board_pages import PagePlug, PinPages
 from paperroute.adapters.web_board import PINS_NAV
-from paperroute.adapters.web_display import WebDisplay
-from paperroute.adapters.web_ways import WaysPages
 from paperroute.city import SYDNEY
 from paperroute_device.adapters.web_frame import LIVE_NAV
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.fake_pins import FakePinOptions
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_pages import PagePlug, PinPages
+from paperroute_transit.adapters.web_display import WebDisplay
+from paperroute_transit.adapters.web_ways import WaysPages
 from paperroute_transit.core.messages import Event
 from paperroute_transit.core.model import pin_ref
 from tests.adapters.test_connection_editor import OPTIONS

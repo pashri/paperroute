@@ -5,19 +5,19 @@ from typing import Final
 
 import pytest
 
-from paperroute.summary import (
-    SUMMARY_EVERY_S,
-    FailReason,
-    Summary,
-    failure_reason,
-    spread,
-)
 from paperroute_hardware.ports import PanelRefresh
 from paperroute_transit.adapters.feed_errors import (
     FeedError,
     FeedThrottled,
     FeedTimedOut,
     FeedUnavailable,
+)
+from paperroute_transit.summary import (
+    SUMMARY_EVERY_S,
+    FailReason,
+    Summary,
+    failure_reason,
+    spread,
 )
 
 BUSES: Final[str] = 'v1/gtfs/vehiclepos/buses'

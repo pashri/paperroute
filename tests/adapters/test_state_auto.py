@@ -4,8 +4,8 @@ import logging
 
 import pytest
 
-from paperroute.adapters.state_auto import add_auto, repaired_windows
 from paperroute.city import SYDNEY
+from paperroute_transit.adapters.state_auto import add_auto, repaired_windows
 
 GOOD: dict[str, object] = {
     'days': ['mon', 'fri'], 'start': '22:00', 'end': '01:00',

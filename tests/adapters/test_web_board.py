@@ -5,7 +5,6 @@ from importlib.resources import files
 
 import pytest
 
-from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.web_board import (
     SYDNEY_NAV,
     SuggestPlug,
@@ -14,6 +13,7 @@ from paperroute.adapters.web_board import (
 )
 from paperroute_device.adapters.web_frame import nav_html
 from paperroute_testkit.fakes import FakeTripPlanner
+from paperroute_transit.adapters.board_head import BoardHead
 
 
 async def test_suggest_plug_closes_the_planner() -> None:

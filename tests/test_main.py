@@ -21,27 +21,20 @@ import numpy as np
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
-import paperroute.adapters.tk_monitor as tk_monitor
 import paperroute.board as cli
+import paperroute_transit.adapters.tk_monitor as tk_monitor
 from paperroute.__main__ import SYDNEY_PARTS, main, tfnsw_feeds
-from paperroute.adapters.clocks import ReplayClock
-from paperroute.adapters.feed_files import FileFeedsClient
-from paperroute.adapters.feed_guard import GuardedFeeds
-from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
 from paperroute.adapters.tfnsw import (
     TFNSW_KEY,
     AiohttpFeedsClient,
     tfnsw_limiter,
 )
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.adapters.web_board import (
     SYDNEY_HINT,
     SYDNEY_NAV,
     SuggestPlug,
     sydney_status_line,
 )
-from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
 from paperroute.app_render import MapRenderer
 from paperroute.asset_root import APP_ASSETS
@@ -64,11 +57,7 @@ from paperroute.board import (
 )
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF, SYDNEY_ZONE
-from paperroute.logs import LastError
-from paperroute.observers import Timings
 from paperroute.render.map_base import draw_map_base
-from paperroute.summary import Summary
-from paperroute.web_observer import web_observer
 from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.web_shell import web_app
@@ -88,10 +77,17 @@ from paperroute_testkit.fakes import FakeNetwork, MemoryStates
 from paperroute_testkit.hardware_fakes import FakeKnobLines, FakePanelBus
 from paperroute_testkit.page_markup import parse_page
 from paperroute_transit.adapters.checked_tiles import CheckedTiles
+from paperroute_transit.adapters.clocks import ReplayClock
+from paperroute_transit.adapters.feed_files import FileFeedsClient
+from paperroute_transit.adapters.feed_guard import GuardedFeeds
+from paperroute_transit.adapters.network_db import SqliteNetworkRepository
+from paperroute_transit.adapters.rebuild import ChildRebuilder, NullBuilder
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
     SqliteTileRepository,
 )
+from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
+from paperroute_transit.adapters.web_display import WebDisplay
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.city import City
@@ -104,10 +100,14 @@ from paperroute_transit.core.tiles import (
     TileVariant,
     levels_text,
 )
+from paperroute_transit.logs import LastError
+from paperroute_transit.observers import Timings
 from paperroute_transit.ports import FeedsClient
+from paperroute_transit.summary import Summary
+from paperroute_transit.web_observer import web_observer
 
 if TYPE_CHECKING:
-    from paperroute.adapters.tk_monitor import TkMonitor
+    from paperroute_transit.adapters.tk_monitor import TkMonitor
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY_ZONE)

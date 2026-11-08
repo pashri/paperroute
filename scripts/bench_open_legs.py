@@ -10,9 +10,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Final
 
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute_transit.adapters.leg_cache import LegCache
+from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.core.chains import LegKey, chains_of, leg_key
 from paperroute_transit.core.connection_model import (
     LEG_EXTRA,

@@ -9,10 +9,8 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_board import SYDNEY_NAV
-from paperroute.adapters.web_display import RESET_HINT, WebDisplay
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
 from paperroute.sydney_feeds import (
     DAILY_LIMIT,
@@ -25,6 +23,8 @@ from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_testkit.device_pages import KEY, NOW, DeviceSite
 from paperroute_testkit.page_markup import parse_page
+from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.web_display import RESET_HINT, WebDisplay
 
 Client = TestClient[web.Request, web.Application]
 TRAINS = POSITION_FEEDS[SydneyFeed.TRAIN][0]

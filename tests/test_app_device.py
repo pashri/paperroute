@@ -13,7 +13,6 @@ from paperroute.app_device import (
     device_work,
     report_status,
 )
-from paperroute.observers import Timings
 from paperroute_device.adapters.resets import FileResets
 from paperroute_device.core.device_model import (
     DeviceStatus,
@@ -48,6 +47,7 @@ from paperroute_transit.core.messages import (
     WifiSetupStopped,
 )
 from paperroute_transit.core.state import step
+from paperroute_transit.observers import Timings
 from tests.core.test_state import fresh, loaded
 
 

@@ -22,9 +22,9 @@ from paperroute.build.handoff import (
     read_handoff,
 )
 from paperroute.build.source_state import SourceError, fsync_dir, save_states
-from paperroute.logs import configure_logging
 from paperroute_device.rss import max_rss_mb
 from paperroute_transit.build.layout import Layout
+from paperroute_transit.logs import configure_logging
 
 logger = logging.getLogger(__name__)
 

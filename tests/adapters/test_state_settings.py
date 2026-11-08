@@ -3,8 +3,13 @@
 import pytest
 from pydantic import ValidationError
 
-from paperroute.adapters.state_migrations import V11_DEVICE_FIELDS
-from paperroute.adapters.state_settings import (
+from paperroute.city import SYDNEY
+from paperroute_device.core.device_settings import (
+    CLEAN_CHOICES,
+    DeviceSettings,
+)
+from paperroute_transit.adapters.state_migrations import V11_DEVICE_FIELDS
+from paperroute_transit.adapters.state_settings import (
     BoardSettingsModel,
     DeviceSettingsModel,
     board_settings_from_model,
@@ -14,11 +19,6 @@ from paperroute.adapters.state_settings import (
     default_settings,
     device_settings_from_model,
     device_settings_to_model,
-)
-from paperroute.city import SYDNEY
-from paperroute_device.core.device_settings import (
-    CLEAN_CHOICES,
-    DeviceSettings,
 )
 from paperroute_transit.core.saved import (
     DEVICE_FIELDS,

@@ -61,6 +61,7 @@ SYDNEY_LIGHT: Final[dict[str, str]] = {
     '--masthead': '#002664',
     '--navy': '#002664',
     '--blue': '#146cfd',
+    '--focus': '#146cfd',
     '--red': '#d7153a',
     '--rule-1': '#f99d1c',
     '--rule-2': '#0098cd',
@@ -69,7 +70,11 @@ SYDNEY_LIGHT: Final[dict[str, str]] = {
     '--rule-5': '#ee343f',
     '--mode-other': '#646974',
 }
-SYDNEY_DARK: Final[dict[str, str]] = {**SYDNEY_LIGHT, '--blue': '#5d9bff'}
+SYDNEY_DARK: Final[dict[str, str]] = {
+    **SYDNEY_LIGHT,
+    '--blue': '#5d9bff',
+    '--focus': '#5d9bff',
+}
 ATTRIBUTE_VALUE: Final[re.Pattern[str]] = re.compile(
     r"""\[[\w-]+[~|^$*]?=\s*["']?([^"'\]]+)""",
 )
@@ -263,6 +268,15 @@ def test_kit_alone_defines_every_token() -> None:
         for name in SYDNEY_LIGHT
         if not name.startswith('--mode-') and name not in kit
     ]
+
+
+def test_kit_focus_is_not_sydneys() -> None:
+    """The kit draws focus in its own blue, in light and dark."""
+    app = display(status=STATUS, keys=FakeKeys(key=KEY)).app()
+    kit = served_rules(app=app)['/live.css']
+    light = resolved(rules=kit, dark=False)['--focus']
+    dark = resolved(rules=kit, dark=True)['--focus']
+    assert (light, dark) == ('#2f6db5', '#8ab4f8')
 
 
 def test_palette_rules_never_match_kit_markup() -> None:

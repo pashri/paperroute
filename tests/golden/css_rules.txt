@@ -1,6 +1,6 @@
  | @font-face | font-family: 'Public Sans'; src: url('/fonts/public-sans.woff2') format('woff2'); font-weight: 400 700; font-display: swap
- | :root | color-scheme: light dark; --masthead: #2b3035; --navy: #2b3035; --blue: #2f6db5; --red: #b42318; --page: #f4f4f7; --surface: #ffffff; --text: #22272b; --muted: #646974; --line: #dee3e5; --field: #646974; --heading: var(--navy); --main: var(--navy); --main-text: #ffffff; --secondary: var(--navy); --danger: var(--red); --current: var(--navy); --current-bg: #eef6fb; --focus: #146cfd; --shadow: 0 1px 2px rgb(0 0 0 / 18%); --font: 'Public Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; --rule-1: #9aa1a9; --rule-2: #9aa1a9; --rule-3: #9aa1a9; --rule-4: #9aa1a9; --rule-5: #9aa1a9; --bar: 3.75rem; --gap: 1rem; --edge-start: max(var(--gap), env(safe-area-inset-left, 0px)); --edge-end: max(var(--gap), env(safe-area-inset-right, 0px))
-@media (prefers-color-scheme: dark) | :root | color-scheme: dark; --page: #0f1720; --surface: #1b2633; --text: #e2e8ee; --muted: #9fb0c0; --line: #2c3a48; --field: #9fb0c0; --blue: #8ab4f8; --heading: var(--text); --main: #3a6fd8; --secondary: #cfe0ff; --current: var(--text); --current-bg: #22324a; --focus: #5d9bff
+ | :root | color-scheme: light dark; --masthead: #2b3035; --navy: #2b3035; --blue: #2f6db5; --red: #b42318; --page: #f4f4f7; --surface: #ffffff; --text: #22272b; --muted: #646974; --line: #dee3e5; --field: #646974; --heading: var(--navy); --main: var(--navy); --main-text: #ffffff; --secondary: var(--navy); --danger: var(--red); --current: var(--navy); --current-bg: #eef6fb; --focus: #2f6db5; --shadow: 0 1px 2px rgb(0 0 0 / 18%); --font: 'Public Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; --rule-1: #9aa1a9; --rule-2: #9aa1a9; --rule-3: #9aa1a9; --rule-4: #9aa1a9; --rule-5: #9aa1a9; --bar: 3.75rem; --gap: 1rem; --edge-start: max(var(--gap), env(safe-area-inset-left, 0px)); --edge-end: max(var(--gap), env(safe-area-inset-right, 0px))
+@media (prefers-color-scheme: dark) | :root | color-scheme: dark; --page: #0f1720; --surface: #1b2633; --text: #e2e8ee; --muted: #9fb0c0; --line: #2c3a48; --field: #9fb0c0; --blue: #8ab4f8; --heading: var(--text); --main: #3a6fd8; --secondary: #cfe0ff; --current: var(--text); --current-bg: #22324a; --focus: #8ab4f8
  | *, *::before, *::after | box-sizing: border-box
  | body | display: flex; flex-direction: column; min-height: 100vh; margin: 0; background: var(--page); color: var(--text); font-family: var(--font); font-size: 1rem; line-height: 1.5
  | main | display: flex; flex-direction: column; gap: var(--gap); min-width: 0; padding-block: var(--gap); padding-inline: var(--edge-start) var(--edge-end); padding-block-end: calc(var(--bar) + env(safe-area-inset-bottom, 0px) + 1rem)
@@ -86,8 +86,8 @@
 @media (prefers-reduced-motion: reduce) | *, *::before, *::after | transition: none !important; animation: none !important
 @media (prefers-reduced-motion: reduce) | button:active | transform: none
  | [hidden] | display: none !important
- | :root | --masthead: #002664; --navy: #002664; --blue: #146cfd; --red: #d7153a; --rule-1: #f99d1c; --rule-2: #0098cd; --rule-3: #168388; --rule-4: #00b5ef; --rule-5: #ee343f; --mode-other: #646974
-@media (prefers-color-scheme: dark) | :root | --blue: #5d9bff
+ | :root | --masthead: #002664; --navy: #002664; --blue: #146cfd; --focus: #146cfd; --red: #d7153a; --rule-1: #f99d1c; --rule-2: #0098cd; --rule-3: #168388; --rule-4: #00b5ef; --rule-5: #ee343f; --mode-other: #646974
+@media (prefers-color-scheme: dark) | :root | --blue: #5d9bff; --focus: #5d9bff
  | form:has(input[name="skip_school_buses"]:not(:checked)) .switch:has(input[name="skip_school_on_route_pins"]) | color: var(--muted); opacity: 0.5; pointer-events: none
  | .switch | display: flex; align-items: center; gap: 0.5rem; font-weight: 400
  | .times | display: flex; flex-wrap: wrap; gap: 0.5rem 1rem

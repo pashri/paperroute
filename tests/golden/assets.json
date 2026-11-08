@@ -26,7 +26,7 @@
   "/live.css": {
     "cache_control": null,
     "content_type": "text/css; charset=utf-8",
-    "sha256": "6ea5367d96089b0bbcdbb24e9e226606684e2a48e3ad244e8f5832dc016f4c2a",
+    "sha256": "60a76bbeecc8c56a0c7a2975ad5ddeb224e4836e89ced1f8b0ff3dfcb1d335a1",
     "status": 200
   },
   "/live.js": {
@@ -38,7 +38,7 @@
   "/palette.css": {
     "cache_control": null,
     "content_type": "text/css; charset=utf-8",
-    "sha256": "0efb04d56dfa3e77babb63c14e1e21f5c088d791e6426e2a20eaf6008c1bfdeb",
+    "sha256": "ded1cb47d842e364f883d04e5ada0176d90c2a33a98afac5b65bbe385e4e10b9",
     "status": 200
   },
   "/pins.js": {

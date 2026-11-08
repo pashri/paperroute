@@ -19,12 +19,11 @@ imports="import paperroute.__main__, paperroute.screen, paperroute_hardware, pap
 draw=$(cat <<'EOF'
 from paperroute.app_render import MapRenderer, drawing
 from paperroute.asset_root import APP_ASSETS, use_app_assets
-from paperroute.city import SydneyFeed
 from paperroute.core.stop_view import PinTag, Row, StopView
 
 def row(minutes):
     return Row(
-        route='606', mode=SydneyFeed.BUS, platform='',
+        route='606', vehicle='bus', bay='stand', platform='',
         destination='Parramatta',
         countdown=str(minutes), leaves_at=f'8:0{minutes}',
         arrives_at=f'8:3{minutes}', ride_minutes=30, live=False, pill=None,

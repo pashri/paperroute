@@ -14,6 +14,12 @@ import aiohttp
 
 from paperroute_device.adapters.rate_limit import StartLimiter
 from paperroute_device.core.device_model import Credential
+from paperroute_transit.adapters.feed_errors import (
+    FeedError,
+    FeedThrottled,
+    FeedTimedOut,
+    FeedUnavailable,
+)
 
 BASE_URL: Final[str] = 'https://api.transport.nsw.gov.au/'
 TFNSW_STARTS_PER_S: Final[float] = 3.0  # TfNSW allows 5 a second per key
@@ -22,35 +28,6 @@ TFNSW_KEY: Final[Credential] = Credential(
     refusal="That doesn't look like a TfNSW API key.",
     not_saved="Not saved: that doesn't look like a TfNSW API key.",
 )
-
-
-class FeedError(Exception):
-    """A feed couldn't be fetched."""
-
-
-class FeedUnavailable(FeedError):
-    """TfNSW timed out or answered with a server error (HTTP 5xx)."""
-
-
-class FeedTimedOut(FeedUnavailable):
-    """TfNSW took too long to answer."""
-
-
-class FeedThrottled(FeedError):
-    """
-    TfNSW refused a feed for going over the rate limit (HTTP 429).
-
-    Parameters
-    ----------
-    feed : str
-        Feed path.
-    retry_after_s : float | None
-        Seconds the server asked to wait, or None when it didn't say.
-    """
-
-    def __init__(self, *, feed: str, retry_after_s: float | None) -> None:
-        super().__init__(f'{feed}: HTTP {HTTPStatus.TOO_MANY_REQUESTS}')
-        self.retry_after_s = retry_after_s
 
 
 class NoApiKey(Exception):

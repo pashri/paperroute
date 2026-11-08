@@ -10,11 +10,11 @@ from paperroute.core.connection import (
     connection_facts,
     live_chains,
 )
-from paperroute.core.feeds import ALERT_FEEDS
 from paperroute.core.messages import DeparturesLoaded
 from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import Board, State
+from paperroute.sydney_feeds import ALERT_FEEDS
 from paperroute_device.core.text import clock_text
 from paperroute_testkit.core.alert_factories import alert
 from paperroute_testkit.core.connection_factories import (

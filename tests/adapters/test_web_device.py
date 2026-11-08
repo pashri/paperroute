@@ -13,7 +13,7 @@ from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_board import SYDNEY_NAV
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
-from paperroute.core.feeds import (
+from paperroute.sydney_feeds import (
     DAILY_LIMIT,
     FEEDS,
     POSITION_FEEDS,

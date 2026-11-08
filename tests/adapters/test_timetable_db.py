@@ -24,6 +24,7 @@ from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import (
     SYDNEY,
     SYDNEY_PROJECTION,
+    SYDNEY_REF,
     SYDNEY_ZONE,
     SydneyFeed,
     SydneyMode,
@@ -1127,7 +1128,7 @@ def _network_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     folder = tmp_path_factory.mktemp('network')
     out = folder / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
         sources=[
             Source(
                 name='sydneytrains',

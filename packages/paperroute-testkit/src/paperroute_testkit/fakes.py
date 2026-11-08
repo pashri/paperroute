@@ -29,13 +29,7 @@ from paperroute_device.core.device_model import (
 from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_transit.core.alert_model import AlertPlaces
 from paperroute_transit.core.city import City
-from paperroute_transit.core.geo import (
-    MetreBox,
-    Point,
-    Projection,
-    Shape,
-    to_metres,
-)
+from paperroute_transit.core.geo import MetreBox, Point, Shape, to_metres
 from paperroute_transit.core.model import (
     Departure,
     Pin,
@@ -270,7 +264,6 @@ class BrokenTimetable:
 
     calls: int = 0
     city: City = SYDNEY
-    projection: Projection = SYDNEY.projection
 
     def stop(self, *, stop_id: str) -> StopPlace:
         """

@@ -15,7 +15,7 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Final
 
-from paperroute.build.extras import build_extras
+from paperroute.build.extras import build_extras, city_named
 from paperroute.build.handoff import Handoff, HandoffRecord, hand_over
 from paperroute_device.rss import current_rss_mb, max_rss_mb
 from paperroute_transit.build.gtfs_files import (
@@ -748,7 +748,8 @@ def merged(
 
 
 def build_timetable(*, sources: list[Source], window: Window, out: Path,
-                    city: City, handoff: Handoff | None = None) -> MergeReport:
+                    city_ref: str,
+                    handoff: Handoff | None = None) -> MergeReport:
     """
     Build a timetable file from sources, replacing out only on success.
 
@@ -764,8 +765,9 @@ def build_timetable(*, sources: list[Source], window: Window, out: Path,
         Dates to cover.
     out : Path
         Timetable file to write.
-    city : City
-        The city the timetable is for.
+    city_ref : str
+        The city the timetable is for, as a reference such as
+        ``package.module:NAME``, so the extras program can import it.
     handoff : Handoff | None
         When set, write the handoff file and exec into the extras program
         instead of returning, so the load and the extras never share
@@ -776,6 +778,7 @@ def build_timetable(*, sources: list[Source], window: Window, out: Path,
     MergeReport
         Result of merging rail duplicates.
     """
+    city = city_named(ref=city_ref)
     scratch = out.with_suffix('.new')
     scratch.unlink(missing_ok=True)
     report = load_all(
@@ -792,8 +795,8 @@ def build_timetable(*, sources: list[Source], window: Window, out: Path,
             scratch=scratch, out=out, dropped=report.dropped,
             partial=report.partial, overnight=report.overnight,
             peak_mb=max_rss_mb(), tail=handoff.tail,
-        ))
-    build_extras(path=scratch)
+        ), city_ref=city_ref)
+    build_extras(path=scratch, city_ref=city_ref)
     os.replace(scratch, out)
     return report
 

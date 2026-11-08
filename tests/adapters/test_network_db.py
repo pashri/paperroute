@@ -15,7 +15,7 @@ import pytest
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF, SydneyMode
 from paperroute.core.chooser import Choice, ChooserPath, Column, Level
 from paperroute.core.strip_view import build_strip_view
 from paperroute.ports import NetworkRepository
@@ -105,7 +105,7 @@ def build_network(*, folder: Path) -> Path:
         ],
         window=Window(start=date(2026, 10, 5), days=3),
         out=out,
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
     )
     return out
 
@@ -991,7 +991,7 @@ def test_pass_through_station_stays_on_the_strip(tmp_path: Path) -> None:
         )],
         window=Window(start=date(2026, 10, 5), days=3),
         out=out,
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
     )
     found = line_input(path=out, station='C', line='T1')
     assert ('J', 'R1', 'R2', 'R3') in {tail.after for tail in found.tails}

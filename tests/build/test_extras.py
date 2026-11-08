@@ -15,7 +15,7 @@ from paperroute.build import extras, timetable
 from paperroute.build.extras import build_extras
 from paperroute.build.handoff import HandoffRecord, write_handoff
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SYDNEY_REF
 from paperroute_transit.build.gtfs_files import Source
 from tests.build.network_feed import network_feed
 
@@ -58,12 +58,12 @@ def network_build(*, folder: Path) -> Path:
     out = folder / 'timetable.db'
     source = Source(name='sydneytrains',
                     archive=network_feed(path=folder / 'network.zip'))
-    build_timetable(city=SYDNEY, sources=[source],
+    build_timetable(city_ref=SYDNEY_REF, sources=[source],
                     window=Window(start=date(2026, 10, 5), days=3), out=out)
     return out
 
 
-def skip_extras(*, path: Path) -> None:
+def skip_extras(*, path: Path, city_ref: str) -> None:
     """
     Stand in for build_extras and build nothing.
 
@@ -71,8 +71,10 @@ def skip_extras(*, path: Path) -> None:
     ----------
     path : Path
         Timetable file, ignored.
+    city_ref : str
+        The city's reference, ignored.
     """
-    del path
+    del path, city_ref
 
 
 def tables_of(*, db: Path) -> set[str]:
@@ -107,7 +109,7 @@ def test_run_extras_prints_each_phase(
     db = network_build(folder=tmp_path)
     assert not RUN_TABLES & tables_of(db=db)
     capsys.readouterr()
-    assert extras.main(argv=[str(db)]) == 0
+    assert extras.main(argv=[SYDNEY_REF, str(db)]) == 0
     lines = capsys.readouterr().out.splitlines()
     assert lines[0] == 'progress runs'
     assert lines[1].startswith('progress runs done ')
@@ -134,7 +136,7 @@ def test_extras_run_in_a_child(
     junk = tmp_path / 'junk.db'
     junk.write_bytes(b'not a timetable')
     with pytest.raises(RuntimeError, match='exit code'):
-        build_extras(path=junk)
+        build_extras(path=junk, city_ref=SYDNEY_REF)
 
 
 def test_extras_never_import_numpy(
@@ -157,8 +159,8 @@ def test_extras_never_import_numpy(
     shutil.copy(db, record.scratch)
     write_handoff(path=handed / 'handoff.json', record=record)
     for argv in (
-        [str(db)],
-        [str(record.scratch), str(handed / 'handoff.json')],
+        [SYDNEY_REF, str(db)],
+        [SYDNEY_REF, str(record.scratch), str(handed / 'handoff.json')],
     ):
         child = subprocess.run(
             [sys.executable, '-c', CHILD_RUN, *argv],
@@ -167,3 +169,10 @@ def test_extras_never_import_numpy(
         assert child.returncode == 0, child.stderr
     assert RUN_TABLES <= tables_of(db=db)
     assert RUN_TABLES <= tables_of(db=record.out)
+
+
+def test_city_named_imports_the_city() -> None:
+    """A reference gives its city; one naming anything else is refused."""
+    assert extras.city_named(ref=SYDNEY_REF) is SYDNEY
+    with pytest.raises(ValueError, match='names no city'):
+        extras.city_named(ref='paperroute.city:SYDNEY_ZONE')

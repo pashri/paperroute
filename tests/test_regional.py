@@ -9,8 +9,7 @@ from typing import Final
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
-from paperroute.core.feeds import feed_for
+from paperroute.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE, SydneyFeed
 from paperroute.core.live import LiveDeparture, resolve
 from paperroute_testkit.core.factories import STALE_LIMIT, pin_of
 from paperroute_transit.build.gtfs_files import Source
@@ -56,7 +55,7 @@ def build(*, tmp_path: Path, days: int = 1) -> Path:
     """
     db = tmp_path / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
@@ -139,7 +138,9 @@ def test_regional_coaches_are_live_from_nswtrains(tmp_path: Path) -> None:
     found = [item for group in groups for item in group]
     assert found
     assert all(item.departure.source == SydneyFeed.REGIONAL for item in found)
-    assert feed_for(mode=SydneyFeed.REGIONAL) == 'v1/gtfs/realtime/nswtrains'
+    assert SYDNEY.feeds.trip_feed(source=SydneyFeed.REGIONAL) == (
+        'v1/gtfs/realtime/nswtrains'
+    )
     assert any(
         item.live and item.departs != item.departure.departs
         for item in found

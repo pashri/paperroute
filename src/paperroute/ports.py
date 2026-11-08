@@ -14,7 +14,7 @@ from paperroute.core.saved import Saved, Settings
 from paperroute_device.ports import DeviceObserver
 from paperroute_transit.core.alert_model import AlertPlaces
 from paperroute_transit.core.city import City
-from paperroute_transit.core.geo import MetreBox, Projection, Shape
+from paperroute_transit.core.geo import MetreBox, Shape
 from paperroute_transit.core.model import (
     Departure,
     Pin,
@@ -39,17 +39,6 @@ class TimetableRepository(Protocol):
         -------
         City
             The city.
-        """
-
-    @property
-    def projection(self) -> Projection:
-        """
-        The projection the timetable's stop points are placed in.
-
-        Returns
-        -------
-        Projection
-            The city's projection.
         """
 
     def stop(self, *, stop_id: str) -> StopPlace:

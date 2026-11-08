@@ -1,11 +1,12 @@
 """Tests for the positions feeds the Map and Strip poll."""
 
+from collections.abc import Iterable
 from dataclasses import replace
 from datetime import datetime, timedelta
+from typing import Final
 
-from paperroute.city import SYDNEY_ZONE, SydneyFeed, SydneyMode
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute.core.cycle import cycle_effects
-from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM
 from paperroute.core.map_requests import map_feeds, pin_ends
 from paperroute.core.map_state import area_box, area_frame
@@ -41,10 +42,31 @@ from paperroute_testkit.core.strip_factories import (
     trains,
     turn,
 )
+from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_connection_screens import legs_loaded, started
+
+ALL_SOURCES: Final[frozenset[str]] = SYDNEY.feeds.position_sources()
+
+
+def positions_of(*, sources: Iterable[str]) -> tuple[str, ...]:
+    """
+    List Sydney's positions feeds of some feed sources, anywhere.
+
+    Parameters
+    ----------
+    sources : Iterable[str]
+        Feed sources.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Feed paths, sorted.
+    """
+    return SYDNEY.feeds.position_feeds(sources=sources, box=None)
+
 
 
 def bus_pin() -> tuple[Departure, ...]:
@@ -112,7 +134,7 @@ def every_feed_near() -> tuple[str, ...]:
     }
     return tuple(
         feed
-        for feed in position_feeds(modes=ALL_POSITION_MODES)
+        for feed in positions_of(sources=ALL_SOURCES)
         if feed not in far
     )
 
@@ -162,7 +184,7 @@ def test_map_polls_area_modes_when_known() -> None:
     modes = frozenset({SydneyFeed.TRAIN, SydneyFeed.BUS})
     event = ModesLoaded(mpp=request.mpp, box=request.box, modes=modes)
     state, _ = step(state, event)
-    assert map_feeds(state=state) == position_feeds(modes=modes)
+    assert map_feeds(state=state) == positions_of(sources=modes)
     assert len(map_feeds(state=state)) == 2
 
 
@@ -171,7 +193,7 @@ def test_strip_feeds_unchanged() -> None:
     state, _ = on_view(
         view=LiveView.STRIP, departures=(*bus_pin(), *trains()),
     )
-    assert map_feeds(state=state) == position_feeds(modes={SydneyFeed.TRAIN})
+    assert map_feeds(state=state) == positions_of(sources={SydneyFeed.TRAIN})
 
 
 def test_positions_follow_rate() -> None:
@@ -211,8 +233,8 @@ def test_connection_positions_union() -> None:
     state = replace(state, map=replace(
         state.map, area_modes={mpp: frozenset({SydneyFeed.FERRY})},
     ))
-    assert set(map_feeds(state=state)) == set(position_feeds(
-        modes={SydneyFeed.BUS, SydneyFeed.TRAIN, SydneyFeed.FERRY},
+    assert set(map_feeds(state=state)) == set(positions_of(
+        sources={SydneyFeed.BUS, SydneyFeed.TRAIN, SydneyFeed.FERRY},
     ))
 
 
@@ -224,8 +246,8 @@ def test_connection_legs_poll_their_light_rail_anywhere() -> None:
     state = replace(state, map=replace(
         state.map, area_modes={mpp: frozenset({SydneyFeed.BUS})},
     ))
-    assert set(map_feeds(state=state)) == set(position_feeds(
-        modes={SydneyFeed.BUS, SydneyFeed.LIGHT_RAIL},
+    assert set(map_feeds(state=state)) == set(positions_of(
+        sources={SydneyFeed.BUS, SydneyFeed.LIGHT_RAIL},
     ))
 
 
@@ -240,9 +262,9 @@ def test_connection_modes_around_drawn_map() -> None:
     state = replace(state, map=replace(
         state.map, area_modes={mpp: frozenset({SydneyFeed.FERRY})},
     ))
-    assert set(map_feeds(state=state)) >= set(position_feeds(
-        modes={SydneyFeed.FERRY},
-    ))
+    assert set(map_feeds(state=state)) >= set(
+        positions_of(sources={SydneyFeed.FERRY}),
+    )
     strip, _ = step(state, KnobPressed(knob=Knob.BOTTOM))
     assert strip.view is LiveView.STRIP
     assert strip.map.frame is None

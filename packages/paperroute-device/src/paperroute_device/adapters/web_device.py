@@ -42,14 +42,13 @@ from paperroute_device.core.device_events import (
 from paperroute_device.core.device_model import (
     POWER_ACTIONS,
     ConfirmAction,
-    Credential,
+    DeviceKey,
     DeviceStatus,
     JoinRequest,
     PowerAction,
     WifiNetwork,
     WifiPhase,
 )
-from paperroute_device.ports import KeyStore
 from paperroute_hardware.ports import PanelTimes
 
 logger = logging.getLogger(__name__)
@@ -80,6 +79,22 @@ BAD_SSID: Final[str] = (
 BAD_PASSWORD: Final[str] = 'Wi-Fi passwords are 8 to 63 characters.'
 UNSUPPORTED: Final[str] = 'That network is not supported.'
 KEY_NOT_SAVED: Final[str] = "Couldn't save the key on the device. Try again."
+KEY_SECTION: Final[str] = (
+    '<section class="card setting" '
+    'aria-labelledby="api-key-heading{id}">\n'
+    '      <h2 id="api-key-heading{id}">{label}</h2>\n'
+    '      <p>{status}</p>\n'
+    '      <form method="post" action="/device/key">{name}\n'
+    '        <label for="api-key{id}">New key</label>\n'
+    '        <input id="api-key{id}" name="api_key" type="password" '
+    'autocomplete="off"\n'
+    '               autocapitalize="off" spellcheck="false" required>\n'
+    '        <button type="submit">Save key</button>\n'
+    '      </form>\n'
+    '    </section>'
+)
+KEY_NAME: Final[str] = """
+        <input type="hidden" name="key" value="{name}">"""
 KEY_FIELD: Final[str] = """
       <label for="api-key">{{key_label}}</label>
       <input id="api-key" name="api_key" type="text" autocomplete="off"
@@ -211,6 +226,34 @@ def setup_form(*, status: DeviceStatus, key_label: str) -> str:
     )
 
 
+def key_section(*, key: DeviceKey, first: bool, status: str) -> str:
+    """
+    Draw one key's section of the Device page.
+
+    Parameters
+    ----------
+    key : DeviceKey
+        The key.
+    first : bool
+        True for the first key, whose ids carry no suffix and whose form
+        names no key.
+    status : str
+        Whether the key is set and when it was used; escaped here.
+
+    Returns
+    -------
+    str
+        The section; the key itself is never drawn.
+    """
+    name = html.escape(key.name)
+    return KEY_SECTION.format(
+        id='' if first else f'-{name}',
+        label=html.escape(key.credential.label),
+        status=html.escape(status),
+        name='' if first else KEY_NAME.format(name=name),
+    )
+
+
 def join_request(
     *, fields: Mapping[str, str], networks: tuple[WifiNetwork, ...] = ()
 ) -> JoinRequest | str:
@@ -258,10 +301,8 @@ class DevicePages:
         When each feed last worked.
     panel : Callable[[], PanelTimes | None]
         The panel's refresh times, or None when there is no panel.
-    key : KeyStore
-        Where the API key is kept.
-    credential : Credential
-        How the pages name the key and refuse a bad one.
+    keys : Sequence[DeviceKey]
+        The API keys, at least one; the setup page asks for the first.
     feed_label : Callable[[str], str]
         Names a feed for people.
     daily_limit : int
@@ -288,8 +329,7 @@ class DevicePages:
         status: Callable[[], DeviceStatus | None],
         feeds: Callable[[], Mapping[str, float]],
         panel: Callable[[], PanelTimes | None],
-        key: KeyStore,
-        credential: Credential,
+        keys: Sequence[DeviceKey],
         feed_label: Callable[[str], str],
         daily_limit: int,
         post: Callable[[DeviceRequest], None],
@@ -303,8 +343,9 @@ class DevicePages:
         self._status = status
         self._feeds = feeds
         self._panel = panel
-        self._key = key
-        self._credential = credential
+        if not keys:
+            raise ValueError('the device pages need at least one key')
+        self._keys = tuple(keys)
         self._feed_label = feed_label
         self._daily_limit = daily_limit
         self._post = post
@@ -396,7 +437,7 @@ class DevicePages:
             news, form = notice(text=NOT_RUNNING), ''
         else:
             form = setup_form(
-                status=device, key_label=self._credential.label,
+                status=device, key_label=self._keys[0].credential.label,
             )
         page = self._frame(name='setup.html', current=None).replace(
             NOTICE_MARK, news,
@@ -526,10 +567,11 @@ class DevicePages:
         """
         if not key:
             return None
+        first = self._keys[0]
         try:
-            self._key.write(key=key)
+            first.store.write(key=key)
         except ValueError:
-            return self._refuse(reason=self._credential.refusal)
+            return self._refuse(reason=first.credential.refusal)
         except OSError:
             logger.exception('could not save the API key file')
             return self._refuse(
@@ -564,7 +606,6 @@ class DevicePages:
         feeds = self._feeds()
         facts = None if device is None else device.facts
         marks = {
-            KEY_LABEL_MARK: html.escape(self._credential.label),
             NOTICE_MARK: news,
             '{{network}}': network_rows(facts=facts),
             '{{data}}': data_rows(
@@ -583,12 +624,19 @@ class DevicePages:
                 panel_rows(panel=self._panel())
                 + knob_rows(knobs=self._knobs())
             ),
-            '{{key_status}}': html.escape(key_text(
-                present=self._key.present(),
-                last_used=max(feeds.values(), default=None),
-                now=now,
-            )),
             '{{device_status}}': html.escape(power),
+            '{{keys}}': '\n    '.join(
+                key_section(
+                    key=key,
+                    first=index == 0,
+                    status=key_text(
+                        present=key.store.present(),
+                        last_used=max(feeds.values(), default=None),
+                        now=now,
+                    ),
+                )
+                for index, key in enumerate(self._keys)
+            ),
         }
         page = self._frame(name='device.html', current='/device')
         for mark, value in marks.items():
@@ -685,28 +733,42 @@ class DevicePages:
         Parameters
         ----------
         request : web.Request
-            The incoming request; `api_key` in the form.
+            The incoming request; `api_key` in the form, and `key`
+            naming which key, the first when absent.
 
         Returns
         -------
         web.Response
-            400 for a bad key, 500 when it can't be saved, otherwise
-            303 to the page saying it was saved.
+            400 for an unknown key name or a bad key, 500 when it can't
+            be saved, otherwise 303 to the page saying it was saved.
         """
         fields = await form_fields(request=request)
-        refusal = self._key_refusal(key=fields.get('api_key', '').strip())
+        name = fields.get('key')
+        key = self._keys[0] if name is None else next(
+            (key for key in self._keys if key.name == name), None,
+        )
+        if key is None:
+            return web.Response(status=HTTPStatus.BAD_REQUEST)
+        refusal = self._key_refusal(
+            key=key, value=fields.get('api_key', '').strip(),
+        )
         if refusal is not None:
             return refusal
-        self._post(ApiKeyChanged(present=True))
+        if key is self._keys[0]:
+            self._post(ApiKeyChanged(present=True))
         raise web.HTTPSeeOther(location='/device?key=saved')
 
-    def _key_refusal(self, *, key: str) -> web.Response | None:
+    def _key_refusal(
+        self, *, key: DeviceKey, value: str,
+    ) -> web.Response | None:
         """
         Save a key in place of any old one.
 
         Parameters
         ----------
-        key : str
+        key : DeviceKey
+            Which key.
+        value : str
             The key, trimmed.
 
         Returns
@@ -716,12 +778,12 @@ class DevicePages:
             500 when it can't be saved; None once saved.
         """
         try:
-            if not key:
+            if not value:
                 raise ValueError('no key given')
-            self._key.write(key=key)
+            key.store.write(key=value)
         except ValueError:
             return self._device(
-                news=notice(text=self._credential.not_saved, alert=True),
+                news=notice(text=key.credential.not_saved, alert=True),
                 status=HTTPStatus.BAD_REQUEST,
             )
         except OSError:

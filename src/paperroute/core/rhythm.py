@@ -4,7 +4,6 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
-from paperroute.core.feeds import DAILY_LIMIT
 from paperroute.core.messages import HolidaysLoaded
 from paperroute.core.quota import calls_today
 from paperroute.core.saved import Rate, Settings
@@ -111,15 +110,16 @@ def poll_every(*, state: State) -> timedelta:
     -------
     timedelta
         The rate's poll interval, raised to the floor of the first guard
-        whose share of `DAILY_LIMIT` today's calls are over.
+        whose share of the city's daily limit today's calls are over.
     """
     every = RATES[rate_now(state=state)]
+    limit = state.city.feeds.daily_limit
     calls = calls_today(quota=state.quota, day=state.now.date())
     floor = next(
         (
             floor
             for fraction, floor in GUARDS
-            if calls > fraction * DAILY_LIMIT
+            if calls > fraction * limit
         ),
         every,
     )

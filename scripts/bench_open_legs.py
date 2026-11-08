@@ -294,6 +294,7 @@ def loaded(
         now=start,
         limit=timedelta(),
         zone=SYDNEY_ZONE,
+        plan=SYDNEY.feeds,
     )
     return tuple(sorted(items, key=lambda item: item.departs))
 

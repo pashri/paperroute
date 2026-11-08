@@ -13,7 +13,7 @@ from paperroute.adapters.change_rows import CHANGE_COUNT, CHANGE_M
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.model import StopPlace
 
@@ -43,7 +43,7 @@ def _built(tmp_path_factory: pytest.TempPathFactory) -> Path:
         ],
         window=Window(start=date(2026, 10, 15), days=3),
         out=out,
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
     )
     return out
 

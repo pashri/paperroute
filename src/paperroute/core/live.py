@@ -4,7 +4,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, tzinfo
 
-from paperroute.core.feeds import feed_for
+from paperroute_transit.core.feed_plan import FeedPlan
 from paperroute_transit.core.model import Departure, shifted
 from paperroute_transit.core.realtime import (
     RealtimeSnapshot,
@@ -267,6 +267,7 @@ def resolved(
     now: datetime,
     limit: timedelta,
     zone: tzinfo,
+    plan: FeedPlan,
 ) -> tuple[LiveDeparture, ...]:
     """
     Apply each departure's feed to it.
@@ -283,6 +284,8 @@ def resolved(
         How old a snapshot may be.
     zone : tzinfo
         Local time zone of the live times.
+    plan : FeedPlan
+        The city's feeds, which name each departure's feed.
 
     Returns
     -------
@@ -292,7 +295,7 @@ def resolved(
     return tuple(
         resolve(
             departure=dep,
-            snapshot=snapshots.get(feed_for(mode=dep.source) or ''),
+            snapshot=snapshots.get(plan.trip_feed(source=dep.source) or ''),
             now=now,
             limit=limit,
             zone=zone,

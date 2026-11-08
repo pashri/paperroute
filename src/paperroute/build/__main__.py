@@ -17,7 +17,7 @@ from paperroute.build.handoff import Handoff
 from paperroute.build.refresh import RefreshBusy, refresh
 from paperroute.build.swap import guarded
 from paperroute.build.timetable import Window, build_timetable, yesterday
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SYDNEY_REF
 from paperroute.logs import configure_logging
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import tile_meta
@@ -175,7 +175,7 @@ def run_gtfs(*, args: argparse.Namespace) -> None:
     build_timetable(
         sources=[*preferred, Source(name='bundle', archive=args.bundle)],
         window=Window(start=args.start, days=args.days), out=args.out,
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
         handoff=Handoff(
             path=args.out.with_name(f'{args.out.stem}.handoff.json'),
         ),

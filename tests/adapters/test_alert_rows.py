@@ -11,12 +11,15 @@ import pytest
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.dedupe import merge_rail
-from paperroute.city import METRO_ROUTE_TYPE, REGIONAL_AGENCIES, SYDNEY
+from paperroute.city import REGIONAL_AGENCIES, SYDNEY
 from paperroute_transit.build.gtfs_files import Source
 from tests.build.feeds import build_db
 
 REAL: Final[Path] = Path(__file__).parents[1] / 'fixtures' / 'real'
 CENTRAL: Final[str] = '200060'
+METRO_TYPE: Final[int | None] = SYDNEY.feeds.single_line_type(
+    feed='v2/gtfs/alerts/metro',
+)
 SCHEMA: Final[str] = """
 CREATE TABLE stops (stop_id TEXT PRIMARY KEY, name TEXT NOT NULL,
   parent_station TEXT, lat REAL, lon REAL, platform TEXT NOT NULL);
@@ -158,7 +161,7 @@ def test_metro_route_read_from_timetable(tmp_path: Path) -> None:
         )
     ) as one:
         found = one.alert_places(
-            route_ids=[], stop_ids=[], route_type=METRO_ROUTE_TYPE,
+            route_ids=[], stop_ids=[], route_type=METRO_TYPE,
         )
         assert found.only_line == 'M1'
         assert one.alert_places(route_ids=[], stop_ids=[]).only_line is None
@@ -167,7 +170,7 @@ def test_metro_route_read_from_timetable(tmp_path: Path) -> None:
     lines = [('metro:SMNW_M1', 'M1', 401), ('metro:X_M2', 'M2', 401)]
     with closing(routes_repo(tmp_path=two_dir, lines=lines)) as two:
         found = two.alert_places(
-            route_ids=[], stop_ids=[], route_type=METRO_ROUTE_TYPE,
+            route_ids=[], stop_ids=[], route_type=METRO_TYPE,
         )
         assert found.only_line is None
 
@@ -177,7 +180,7 @@ def test_no_metro_route_gives_none(
 ) -> None:
     """A timetable without a type-401 route has no metro line."""
     found = slice_repo.alert_places(
-        route_ids=[], stop_ids=[], route_type=METRO_ROUTE_TYPE,
+        route_ids=[], stop_ids=[], route_type=METRO_TYPE,
     )
     assert found.only_line is None
 

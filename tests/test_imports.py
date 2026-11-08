@@ -45,6 +45,22 @@ CITY_DEFAULTS: Final[dict[str, str | None]] = {
     'BoardSettings': 'peak_windows',
     'Saved': 'settings',
 }
+SYDNEY_MODULES: Final[frozenset[str]] = frozenset({
+    'paperroute.city',
+    'paperroute.sydney_feeds',
+    'paperroute.__main__',
+    'paperroute.adapters.tfnsw',
+    'paperroute.adapters.trip_planner',
+    'paperroute.adapters.web_suggest',
+    'paperroute.adapters.web_board',
+    'paperroute.core.trip_search',
+    'paperroute.planner_port',
+    'paperroute.build.__main__',
+    'paperroute.build.sources',
+    'paperroute.build.refresh',
+    'paperroute.build.dedupe',
+    'paperroute.build.trainlink',
+})
 SCREEN_IMPORTS: Final[str] = (
     'import paperroute.screen, sys; '
     'print(*sorted(sys.modules))'
@@ -377,7 +393,7 @@ def test_device_pages_import_no_feed_config() -> None:
         ROOT / 'packages' / 'paperroute-device' / 'src' / 'paperroute_device'
     )
     banned = {
-        'paperroute.core.feeds',
+        'paperroute.sydney_feeds',
         'paperroute.core.quota',
         'paperroute.adapters.tfnsw',
     }
@@ -444,3 +460,39 @@ def test_settings_built_with_city_values() -> None:
         and (name := default_built(call=node)) is not None
     ]
     assert not offenders
+
+
+def app_module(*, path: Path) -> str:
+    """
+    Give the dotted name of an app source file.
+
+    Parameters
+    ----------
+    path : Path
+        A file under ``src/paperroute``.
+
+    Returns
+    -------
+    str
+        The module name, such as ``paperroute.core.feeds``; a package's
+        ``__init__`` is named for the package.
+    """
+    parts = path.relative_to(APP.parent).with_suffix('').parts
+    return '.'.join(parts[:-1] if parts[-1] == '__init__' else parts)
+
+
+def test_engine_imports_no_sydney_module() -> None:
+    """Only Sydney's own modules import Sydney's modules."""
+    offenders = {
+        module: sorted(imported_names(path=path) & SYDNEY_MODULES)
+        for path in sorted(APP.rglob('*.py'))
+        if (module := app_module(path=path)) not in SYDNEY_MODULES
+        and imported_names(path=path) & SYDNEY_MODULES
+    }
+    assert not offenders
+
+
+def test_sydney_modules_exist() -> None:
+    """Every module named Sydney's is an app module."""
+    modules = {app_module(path=path) for path in APP.rglob('*.py')}
+    assert SYDNEY_MODULES <= modules

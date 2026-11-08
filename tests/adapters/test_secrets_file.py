@@ -7,12 +7,9 @@ from typing import Final
 import pytest
 from aiohttp.test_utils import TestServer
 
-from paperroute.adapters.tfnsw import (
-    AiohttpFeedsClient,
-    FeedError,
-    key_path_from_env,
-)
+from paperroute.adapters.tfnsw import AiohttpFeedsClient, key_path_from_env
 from paperroute_device.adapters.secrets_file import SecretsFile
+from paperroute_transit.adapters.feed_errors import FeedError
 from tests.adapters.test_tfnsw import recording_server
 
 FAKE_KEY: Final[str] = 'fake-key-0123456789abcdef'

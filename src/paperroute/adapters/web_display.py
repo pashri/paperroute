@@ -2,7 +2,7 @@
 
 from collections.abc import Callable, Mapping, Sequence
 from http import HTTPStatus
-from typing import TYPE_CHECKING, Final
+from typing import TYPE_CHECKING, Final, Protocol
 
 import numpy as np
 from aiohttp import web
@@ -32,7 +32,6 @@ from paperroute_hardware.ports import CLEAN_AFTER
 from paperroute_transit.core.city import City
 
 if TYPE_CHECKING:
-    from paperroute.adapters.web_board import BoardPages
     from paperroute_device.adapters.web_device import DevicePages
 
 VENDORED: Final[dict[str, str]] = {
@@ -110,6 +109,35 @@ def settings_event(
         ) from error
 
 
+class BoardRoutes(Protocol):
+    """The pages a board adds to the web display."""
+
+    def routes(
+        self,
+        *,
+        send: Callable[[Event], None],
+        reported: Callable[[], Mapping[str, str]],
+    ) -> list[web.RouteDef]:
+        """
+        List the routes.
+
+        Parameters
+        ----------
+        send : Callable[[Event], None]
+            Sends an event to the app.
+        reported : Callable[[], Mapping[str, str]]
+            Gives the settings form values the app last reported.
+
+        Returns
+        -------
+        list[web.RouteDef]
+            The routes, in registration order.
+        """
+
+    async def close(self) -> None:
+        """Release anything the pages hold open."""
+
+
 class WebDisplay:
     """
     A display that serves the latest frame over HTTP.
@@ -127,7 +155,7 @@ class WebDisplay:
         Finds the peer address of a request.
     device : DevicePages | None
         The device's own pages, such as Wi-Fi setup, or None.
-    board : BoardPages | None
+    board : BoardRoutes | None
         The board's own pages, such as pins, or None.
     nav : Sequence[NavItem]
         The live page's nav links, in order.
@@ -149,7 +177,7 @@ class WebDisplay:
         status: Callable[[], dict[str, object]] | None = None,
         remote_of: RemoteOf = peer_address,
         device: 'DevicePages | None' = None,
-        board: 'BoardPages | None' = None,
+        board: BoardRoutes | None = None,
         nav: Sequence[NavItem] = KIT_NAV,
         hint: str = KNOB_HINT,
     ) -> None:

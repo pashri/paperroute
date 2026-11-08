@@ -4,7 +4,6 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 
 from paperroute.city import SYDNEY_ZONE
-from paperroute.core.feeds import DAILY_LIMIT
 from paperroute.core.messages import (
     FeedFailed,
     FeedJoined,
@@ -26,6 +25,7 @@ from paperroute.core.state import step
 from paperroute.core.state_model import Cycle, State
 from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import saved_of
+from paperroute.sydney_feeds import DAILY_LIMIT
 from paperroute_testkit.core.steps import wakeful
 from tests.core.test_state import BUSES, HOLD, at, fresh, loaded, pinned, saves
 

@@ -3,7 +3,6 @@
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
 
-from paperroute.core.feeds import feed_for
 from paperroute.core.map_state import MapState, area_box, area_frame
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
@@ -37,6 +36,7 @@ from paperroute.core.state_model import (
 )
 from paperroute_transit.core.alert_model import BetweenLoaded
 from paperroute_transit.core.city import City
+from paperroute_transit.core.feed_plan import FeedPlan
 from paperroute_transit.core.geo import MetreBox
 from paperroute_transit.core.model import (
     Departure,
@@ -110,7 +110,9 @@ def shown_index(*, state: State) -> int | None:
     return None if places.unpinned is not None else places.current
 
 
-def feeds_of(*, departures: Sequence[Departure]) -> tuple[str, ...]:
+def feeds_of(
+    *, departures: Sequence[Departure], plan: FeedPlan,
+) -> tuple[str, ...]:
     """
     List the trip-updates feeds some departures need.
 
@@ -118,6 +120,8 @@ def feeds_of(*, departures: Sequence[Departure]) -> tuple[str, ...]:
     ----------
     departures : Sequence[Departure]
         Departures.
+    plan : FeedPlan
+        The city's feeds.
 
     Returns
     -------
@@ -129,7 +133,7 @@ def feeds_of(*, departures: Sequence[Departure]) -> tuple[str, ...]:
             {
                 feed
                 for dep in departures
-                if (feed := feed_for(mode=dep.source)) is not None
+                if (feed := plan.trip_feed(source=dep.source)) is not None
             }
         )
     )
@@ -164,7 +168,7 @@ def with_place(
         due at once.
     """
     state = replace(state, places=replace(state.places, unpinned=pin))
-    feeds = feeds_of(departures=departures)
+    feeds = feeds_of(departures=departures, plan=state.city.feeds)
     old = state.map
     state = restarted(state=state)
     return replace(

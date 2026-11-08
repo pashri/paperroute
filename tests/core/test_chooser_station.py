@@ -254,7 +254,7 @@ def test_to_column_polls_its_departures_feeds() -> None:
     state, _ = run_events(
         state=started(), events=[*TO_COLUMN, penrith_departures()],
     )
-    wanted = feeds_of(departures=chooser_departures())
+    wanted = feeds_of(departures=chooser_departures(), plan=SYDNEY.feeds)
     assert wanted
     assert set(wanted) <= set(trip_feeds(state=state))
 

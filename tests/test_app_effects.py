@@ -6,7 +6,7 @@ import logging
 import sqlite3
 from collections.abc import Collection
 from dataclasses import dataclass, field, replace
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import pytest
@@ -14,9 +14,8 @@ from google.transit import gtfs_realtime_pb2
 
 from paperroute.app import MapRenderer, run, ticker
 from paperroute.app_effects import VersionWatch, parse_feed
-from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyFeed, SydneyMode
 from paperroute.core.chooser import Column, Level
-from paperroute.core.feeds import FeedKind
 from paperroute.core.map_state import area_box
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
@@ -50,6 +49,7 @@ from paperroute.core.saved import Saved, seeded
 from paperroute.render.chooser import draw_chooser_view
 from paperroute.render.stop_view import draw_stop_view
 from paperroute.render.strip_view import draw_strip_view
+from paperroute.sydney_feeds import SydneyFeeds
 from paperroute_testkit.app_factories import (
     AT,
     MAP_PIN,
@@ -75,15 +75,22 @@ from paperroute_testkit.render.factories import (
     view_of,
 )
 from paperroute_transit.adapters.tiles_db import NullTiles
-from paperroute_transit.core.alert_model import AlertPlaces, AlertsFetched
+from paperroute_transit.core.alert_model import (
+    AlertPlaces,
+    AlertsFetched,
+    AlertsSnapshot,
+)
+from paperroute_transit.core.feed_plan import FeedKind, FeedParsers
 from paperroute_transit.core.geo import MetreBox
 from paperroute_transit.core.model import Pin, ServiceSpan, StopPlace
+from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.reach import (
     ReachInput,
     RunTail,
     StripKey,
     build_reach,
 )
+from paperroute_transit.core.realtime import RealtimeSnapshot
 
 
 async def test_save_effect_writes_through_store() -> None:
@@ -710,6 +717,7 @@ def alert_event(
     """
     event, count = parse_feed(
         timetable=timetable,
+        plan=SYDNEY.feeds,
         effect=FetchFeed(feed=feed, kind=FeedKind.ALERTS),
         data=data,
         fetched_at=AT,
@@ -717,6 +725,127 @@ def alert_event(
     assert isinstance(event, AlertsFetched)
     assert count == len(event.snapshot.alerts)
     return event
+
+
+@dataclass
+class RecordingParsers:
+    """Readers that note each body they are given and find nothing."""
+
+    read: list[tuple[str, bytes]] = field(default_factory=list)
+
+    def trips(self, *, data: bytes, fetched_at: datetime) -> RealtimeSnapshot:
+        """
+        Note a trip-updates body.
+
+        Parameters
+        ----------
+        data : bytes
+            Feed body.
+        fetched_at : datetime
+            When it was downloaded.
+
+        Returns
+        -------
+        RealtimeSnapshot
+            No trips.
+        """
+        self.read.append(('trips', data))
+        return RealtimeSnapshot(fetched_at=fetched_at, trips={})
+
+    def positions(
+        self, *, data: bytes, fetched_at: datetime,
+    ) -> PositionsSnapshot:
+        """
+        Note a positions body.
+
+        Parameters
+        ----------
+        data : bytes
+            Feed body.
+        fetched_at : datetime
+            When it was downloaded.
+
+        Returns
+        -------
+        PositionsSnapshot
+            No vehicles.
+        """
+        self.read.append(('positions', data))
+        return PositionsSnapshot(
+            fetched_at=fetched_at, header_time=0, vehicles=(),
+        )
+
+    def alerts(
+        self, *, data: bytes, feed: str, fetched_at: datetime,
+    ) -> AlertsSnapshot:
+        """
+        Note an alerts body.
+
+        Parameters
+        ----------
+        data : bytes
+            Feed body.
+        feed : str
+            Feed path.
+        fetched_at : datetime
+            When it was downloaded.
+
+        Returns
+        -------
+        AlertsSnapshot
+            No alerts.
+        """
+        self.read.append(('alerts', data))
+        return AlertsSnapshot(feed=feed, fetched_at=fetched_at, alerts=())
+
+
+class RecordingPlan(SydneyFeeds):
+    """Sydney's feeds, read by recording readers."""
+
+    def __init__(self, *, recorder: RecordingParsers) -> None:
+        super().__init__(projection=SYDNEY_PROJECTION)
+        self.recorder = recorder
+
+    def parsers(self, *, feed: str) -> FeedParsers:
+        """
+        Give the recording readers for any feed.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path, ignored.
+
+        Returns
+        -------
+        FeedParsers
+            The recorder's readers.
+        """
+        del feed
+        return FeedParsers(
+            trips=self.recorder.trips,
+            positions=self.recorder.positions,
+            alerts=self.recorder.alerts,
+        )
+
+
+@pytest.mark.parametrize(('feed', 'kind'), [
+    (ALERTS_FEED, FeedKind.ALERTS),
+    ('v1/gtfs/vehiclepos/buses', FeedKind.POSITIONS),
+    ('v1/gtfs/realtime/buses', FeedKind.TRIPS),
+])
+def test_parse_uses_feed_parsers(feed: str, kind: FeedKind) -> None:
+    """Each feed's body goes to the plan's reader for what it carries."""
+    recorder = RecordingParsers()
+    event, count = parse_feed(
+        timetable=PlacesTimetable(),
+        plan=RecordingPlan(recorder=recorder),
+        effect=FetchFeed(feed=feed, kind=kind),
+        data=b'body',
+        fetched_at=AT,
+    )
+    assert recorder.read == [(kind.value, b'body')]
+    assert count == 0
+    assert event.feed == feed
 
 
 def test_alert_feed_parsed_to_event() -> None:

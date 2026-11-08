@@ -8,7 +8,6 @@ import pytest
 
 from paperroute.core.alert_state import ALERT_EVERY
 from paperroute.core.cycle import alerts_due, answered, boundary, cycle_due
-from paperroute.core.feeds import FeedKind
 from paperroute.core.messages import (
     DeparturesLoaded,
     DeviceProbed,
@@ -37,6 +36,7 @@ from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, departure, snapshot
 from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
+from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.realtime import (
     RealtimeSnapshot,
     StopUpdate,

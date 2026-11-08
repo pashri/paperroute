@@ -3,7 +3,10 @@
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
-from typing import Final
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from paperroute_device.ports import KeyStore
 
 
 @dataclass(frozen=True)
@@ -24,6 +27,26 @@ class Credential:
     label: str
     refusal: str
     not_saved: str
+
+
+@dataclass(frozen=True)
+class DeviceKey:
+    """
+    One API key the device keeps.
+
+    Attributes
+    ----------
+    name : str
+        The key's name in forms.
+    credential : Credential
+        How the pages name the key and refuse a bad one.
+    store : KeyStore
+        Where the key is kept.
+    """
+
+    name: str
+    credential: Credential
+    store: KeyStore
 
 
 @dataclass(frozen=True)

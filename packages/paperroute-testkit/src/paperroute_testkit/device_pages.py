@@ -12,6 +12,7 @@ from paperroute_device.core.device_events import DeviceRequest
 from paperroute_device.core.device_model import (
     Credential,
     DeviceFacts,
+    DeviceKey,
     DeviceStatus,
     WifiNetwork,
     WifiPhase,
@@ -88,9 +89,13 @@ class DeviceSite:
     knobs : bool | None
         Whether the knobs answer, or None.
     keys : FakeKeys
-        The key store.
+        The first key's store.
     credential : Credential
-        How the pages name the key.
+        How the pages name the first key.
+    key_name : str
+        The first key's name.
+    more_keys : tuple[DeviceKey, ...]
+        The keys after the first.
     feed_label : Callable[[str], str]
         Names a feed.
     daily_limit : int
@@ -115,6 +120,8 @@ class DeviceSite:
     knobs: bool | None = None
     keys: FakeKeys = field(default_factory=lambda: FakeKeys(key=KEY))
     credential: Credential = TEST_KEY
+    key_name: str = 'test'
+    more_keys: tuple[DeviceKey, ...] = ()
     feed_label: Callable[[str], str] = str.title
     daily_limit: int = 60_000
     zone: tzinfo = ZONE
@@ -137,8 +144,14 @@ class DeviceSite:
             feeds=lambda: self.feeds,
             panel=lambda: self.panel,
             knobs=lambda: self.knobs,
-            key=self.keys,
-            credential=self.credential,
+            keys=(
+                DeviceKey(
+                    name=self.key_name,
+                    credential=self.credential,
+                    store=self.keys,
+                ),
+                *self.more_keys,
+            ),
             feed_label=self.feed_label,
             daily_limit=self.daily_limit,
             post=self.posted.append,

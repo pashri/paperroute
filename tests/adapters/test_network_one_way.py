@@ -10,7 +10,13 @@ import pytest
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE, SydneyMode
+from paperroute.city import (
+    SYDNEY,
+    SYDNEY_PROJECTION,
+    SYDNEY_REF,
+    SYDNEY_ZONE,
+    SydneyMode,
+)
 from paperroute.core.chooser import Column, Level
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
@@ -148,7 +154,7 @@ def one_way_network(*, folder: Path) -> Path:
     build_timetable(
         sources=[Source(name='sydneytrains', archive=archive)],
         window=Window(start=DAY, days=3), out=out,
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
     )
     return out
 

@@ -13,10 +13,10 @@ from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.city import SYDNEY, SYDNEY_ZONE
-from paperroute.core.feeds import DAILY_LIMIT, feed_label
+from paperroute.sydney_feeds import DAILY_LIMIT, feed_label
 from paperroute_device.adapters.secrets_file import SecretsFile
 from paperroute_device.adapters.web_device import DevicePages
-from paperroute_device.core.device_model import DeviceStatus
+from paperroute_device.core.device_model import DeviceKey, DeviceStatus
 from paperroute_device.ports import KeyStore
 from paperroute_testkit.device_fakes import FakeKeys
 from paperroute_testkit.device_pages import HOTSPOT, KEY, NOW, STATUS
@@ -67,8 +67,7 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
         status=lambda: status,
         feeds=lambda: {TRAINS: NOW - 12, BUSES: NOW - 40},
         panel=lambda: None,
-        key=keys,
-        credential=TFNSW_KEY,
+        keys=(DeviceKey(name='tfnsw', credential=TFNSW_KEY, store=keys),),
         feed_label=feed_label,
         daily_limit=DAILY_LIMIT,
         post=lambda event: None,

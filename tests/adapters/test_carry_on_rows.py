@@ -13,7 +13,7 @@ import pytest
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.adapters.carry_on_rows import (
     CARRY_ONS,
@@ -50,7 +50,7 @@ def _network_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     folder = tmp_path_factory.mktemp('network')
     out = folder / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
         sources=[
             Source(
                 name='sydneytrains',

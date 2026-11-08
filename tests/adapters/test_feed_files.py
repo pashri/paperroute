@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from paperroute.adapters.feed_files import FileFeedsClient
-from paperroute.adapters.tfnsw import FeedError
+from paperroute_transit.adapters.feed_errors import FeedError
 
 
 async def test_file_client_reads_named_file(tmp_path: Path) -> None:

@@ -345,9 +345,12 @@ def on_loaded(
     board = Board(
         departures=event.departures, loaded_until=event.until, legs=event.legs,
     )
-    feeds = feeds_of(departures=all_departures(
-        departures=event.departures, legs=event.legs,
-    ))
+    feeds = feeds_of(
+        departures=all_departures(
+            departures=event.departures, legs=event.legs,
+        ),
+        plan=state.city.feeds,
+    )
     state = rematched(state=replace(state, board=board, feeds=feeds))
     state, asks = between_requests(state=state)
     return settled(state=state, effects=asks)

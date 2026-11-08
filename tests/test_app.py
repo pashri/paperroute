@@ -41,6 +41,7 @@ from paperroute.city import (
     PEAK_WINDOWS,
     SYDNEY,
     SYDNEY_PROJECTION,
+    SYDNEY_REF,
     SYDNEY_ZONE,
     TOWN_HALL,
     SydneyFeed,
@@ -48,7 +49,6 @@ from paperroute.city import (
 from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
 from paperroute.core.cycle import CYCLE_WAIT
 from paperroute.core.device import NOTICE, on_reset
-from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
 from paperroute.core.messages import (
     ControlPower,
@@ -148,6 +148,7 @@ from paperroute_transit.adapters.tiles_db import (
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.alert_model import AlertsFetched
+from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point, Shape, make_shape
 from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.patterns import PatternStop, TripPattern
@@ -314,7 +315,7 @@ async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
         ],
         window=Window(start=date(2026, 10, 16), days=1),
         out=db,
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
     )
     display = FrameRecorder()
     timetable = SqliteTimetableRepository(
@@ -350,7 +351,7 @@ async def test_run_reports_frames_feeds_and_ticks(tmp_path: Path) -> None:
         ],
         window=Window(start=date(2026, 10, 16), days=1),
         out=db,
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
     )
     timings = Timings()
     observer: Observer = timings
@@ -750,7 +751,7 @@ def _build_db(tmp_path: Path) -> Path:
         ],
         window=Window(start=date(2026, 10, 16), days=1),
         out=db,
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
     )
     return db
 
@@ -970,7 +971,7 @@ async def test_run_draws_when_every_feed_fails(
         ],
         window=Window(start=date(2026, 10, 16), days=1),
         out=db,
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
     )
     empty = tmp_path / 'empty'
     empty.mkdir()

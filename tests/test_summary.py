@@ -5,12 +5,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.adapters.tfnsw import (
-    FeedError,
-    FeedThrottled,
-    FeedTimedOut,
-    FeedUnavailable,
-)
 from paperroute.summary import (
     SUMMARY_EVERY_S,
     FailReason,
@@ -19,6 +13,12 @@ from paperroute.summary import (
     spread,
 )
 from paperroute_hardware.ports import PanelRefresh
+from paperroute_transit.adapters.feed_errors import (
+    FeedError,
+    FeedThrottled,
+    FeedTimedOut,
+    FeedUnavailable,
+)
 
 BUSES: Final[str] = 'v1/gtfs/vehiclepos/buses'
 TRAINS: Final[str] = 'v2/gtfs/vehiclepos/sydneytrains'

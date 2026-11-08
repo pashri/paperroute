@@ -11,7 +11,6 @@ from paperroute.core.alerts_view import (
     also_line,
     build_alerts_view,
 )
-from paperroute.core.feeds import FeedKind
 from paperroute.core.messages import FetchFeed, Render, Tick
 from paperroute.core.places import shown
 from paperroute.core.saved import LiveView, Lookahead
@@ -39,6 +38,7 @@ from paperroute_transit.core.alert_model import (
     Matched,
     Period,
 )
+from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.model import Pin
 from tests.core.test_alert_state import (
     PARRAMATTA_CENTRAL,

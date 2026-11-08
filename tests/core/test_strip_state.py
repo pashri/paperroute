@@ -1,11 +1,11 @@
 """Tests for the reducer's Strip and Strip + map views."""
 
+from collections.abc import Iterable
 from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
-from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.map_state import area_frame
 from paperroute.core.map_view import DEFAULT_ZOOM, MapView
 from paperroute.core.messages import (
@@ -58,14 +58,34 @@ from paperroute_testkit.core.strip_factories import (
     trains,
     turn,
 )
+from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.model import CarryOn, Departure
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.test_connection_screens import started, with_legs
 
+ALL_SOURCES: Final[frozenset[str]] = SYDNEY.feeds.position_sources()
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 TRAIN_POSITIONS: Final[str] = 'v2/gtfs/vehiclepos/sydneytrains'
 BUS_POSITIONS: Final[str] = 'v1/gtfs/vehiclepos/buses'
+
+
+def positions_of(*, sources: Iterable[str]) -> tuple[str, ...]:
+    """
+    List Sydney's positions feeds of some feed sources, anywhere.
+
+    Parameters
+    ----------
+    sources : Iterable[str]
+        Feed sources.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Feed paths, sorted.
+    """
+    return SYDNEY.feeds.position_feeds(sources=sources, box=None)
+
 
 
 def long_reach(*, size: int = 40, origin: int = 20) -> Reach:
@@ -363,7 +383,7 @@ def test_strip_map_polls_every_position_feed_until_modes_known() -> None:
     _, effects = on_view(view=LiveView.STRIP_MAP, departures=trains())
     fetches = kinds(effects=effects, kind=FetchFeed)
     assert {fetch.feed for fetch in fetches} >= {
-        *position_feeds(modes=ALL_POSITION_MODES - {SydneyFeed.LIGHT_RAIL}),
+        *positions_of(sources=ALL_SOURCES - {SydneyFeed.LIGHT_RAIL}),
         'v1/gtfs/vehiclepos/lightrail/parramatta',
     }
     assert 'v1/gtfs/vehiclepos/lightrail/newcastle' not in {

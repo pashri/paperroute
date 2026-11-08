@@ -8,7 +8,7 @@ from typing import Any, Final
 from google.protobuf.message import DecodeError
 from google.transit import gtfs_realtime_pb2
 
-from paperroute.adapters.tfnsw import FeedError
+from paperroute_transit.adapters.feed_errors import FeedError
 from paperroute_transit.core.geo import Projection, to_metres
 from paperroute_transit.core.positions import (
     PositionsSnapshot,

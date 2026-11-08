@@ -335,6 +335,7 @@ def shown_reach(*, state: State) -> Reach | None:
             now=frame,
             limit=limit,
             zone=state.city.zone,
+            plan=state.city.feeds,
         ),
         key=key,
         patterns=state.map.patterns,

@@ -4,11 +4,9 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta, tzinfo
 from typing import Final
 
-from paperroute.city import SydneyFeed
 from paperroute.core.alert_match import Listed, listed_alerts, matched_alerts
 from paperroute.core.chains import all_departures
 from paperroute.core.connection import between_lists, board_facts, name_trips
-from paperroute.core.feeds import KIND_MODES, FeedKind, alert_feeds_for
 from paperroute.core.messages import Effect, FetchFeed
 from paperroute.core.places import shown
 from paperroute.core.saved import LOOKAHEAD, LiveView
@@ -25,6 +23,8 @@ from paperroute_transit.core.alert_model import (
     BetweenLoaded,
     LoadBetween,
 )
+from paperroute_transit.core.city import AgencyAlerts
+from paperroute_transit.core.feed_plan import FeedKind, FeedPlan
 from paperroute_transit.core.model import Pin, same_place
 
 ALERT_EVERY: Final[timedelta] = timedelta(minutes=5)
@@ -42,19 +42,53 @@ def alert_feeds(*, state: State) -> tuple[str, ...]:
     Returns
     -------
     tuple[str, ...]
-        Feed paths of the pin's kind's modes and the modes of every leg's
-        loaded departures, sorted, with NSW TrainLink's for a train pin
-        it serves.
+        Feed paths of the pin's kind's feed sources and the sources of
+        every leg's loaded departures, sorted, with the agency alerts
+        source's for a pin it serves.
     """
     pin = shown(state=state)
-    kind_modes = frozenset() if pin.kind is None else KIND_MODES[pin.kind]
+    plan = state.city.feeds
+    kind_sources = (
+        frozenset() if pin.kind is None else plan.sources_of(mode=pin.kind)
+    )
     loaded = all_departures(
         departures=state.board.departures, legs=state.board.legs,
     )
-    modes = {*kind_modes, *(item.source for item in loaded)}
-    if SydneyFeed.TRAIN in modes and trainlink_known(state=state, pin=pin):
-        modes.add(SydneyFeed.REGIONAL)
-    return alert_feeds_for(modes=modes)
+    sources = {*kind_sources, *(item.source for item in loaded)}
+    agency = state.city.alerts.agency_alerts
+    if (
+        agency is not None
+        and agency_asked(agency=agency, plan=plan, sources=sources)
+        and trainlink_known(state=state, pin=pin)
+    ):
+        sources.add(agency.source)
+    return plan.alert_feeds(sources=sources)
+
+
+def agency_asked(
+    *, agency: AgencyAlerts, plan: FeedPlan, sources: set[str],
+) -> bool:
+    """
+    Say whether some feed sources belong to the agency alerts' modes.
+
+    Parameters
+    ----------
+    agency : AgencyAlerts
+        The agency alerts rule.
+    plan : FeedPlan
+        The city's feeds.
+    sources : set[str]
+        The pin's feed sources.
+
+    Returns
+    -------
+    bool
+        True when a source is one of the rule's modes' sources.
+    """
+    return any(
+        not sources.isdisjoint(plan.sources_of(mode=mode))
+        for mode in agency.modes
+    )
 
 
 def trainlink_known(*, state: State, pin: Pin) -> bool:

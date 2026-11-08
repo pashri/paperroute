@@ -12,6 +12,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters.device_page import ASKED as DEVICE_ASKED
 from paperroute_device.adapters.device_page import ago_text, data_rows
+from paperroute_device.adapters.web_device import DevicePages
 from paperroute_device.adapters.web_live import LiveView
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.core.device_events import (
@@ -23,12 +24,14 @@ from paperroute_device.core.device_model import (
     Confirm,
     ConfirmAction,
     Credential,
+    DeviceKey,
     Origin,
     PowerAction,
     WifiStatus,
 )
 from paperroute_device.core.panel_views import confirm_view
 from paperroute_hardware.ports import PanelTimes
+from paperroute_testkit.device_fakes import FakeKeys
 from paperroute_testkit.device_pages import (
     FACTS,
     KEY,
@@ -39,6 +42,13 @@ from paperroute_testkit.device_pages import (
 )
 
 Client = TestClient[web.Request, web.Application]
+GOOD_KEY = 'abcdefghij0123456789'
+EVIL = {'Origin': 'http://evil.example'}
+B_KEY = Credential(
+    label='Second key',
+    refusal='Bad second key.',
+    not_saved='Second key not saved.',
+)
 ASKED_AT = datetime(2025, 10, 21, 21, 45, tzinfo=ZONE)
 ASKED = {
     'join_wifi': (
@@ -404,3 +414,115 @@ async def test_device_pages_default_nav_is_kit_nav() -> None:
     assert 'href="/"' in page
     assert 'href="/device"' in page
     assert 'href="/pins"' not in page
+
+
+def two_keys() -> tuple[DeviceSite, FakeKeys]:
+    """
+    Give device pages with keys `a` and `b`.
+
+    Returns
+    -------
+    tuple[DeviceSite, FakeKeys]
+        The site, whose own store is key `a`'s, and key `b`'s store.
+    """
+    second = FakeKeys()
+    site = DeviceSite(
+        keys=FakeKeys(),
+        key_name='a',
+        more_keys=(DeviceKey(name='b', credential=B_KEY, store=second),),
+    )
+    return site, second
+
+
+@pytest.mark.parametrize(('form', 'headers', 'status', 'a', 'b'), [
+    ({'key': 'b'}, {}, HTTPStatus.SEE_OTHER, None, GOOD_KEY),
+    ({}, {}, HTTPStatus.SEE_OTHER, GOOD_KEY, None),
+    ({'key': 'a'}, {}, HTTPStatus.SEE_OTHER, GOOD_KEY, None),
+    ({'key': 'zz'}, {}, HTTPStatus.BAD_REQUEST, None, None),
+    ({'key': 'b'}, EVIL, HTTPStatus.FORBIDDEN, None, None),
+])
+async def test_second_key_saved_by_name(
+    form: dict[str, str],
+    headers: dict[str, str],
+    status: HTTPStatus,
+    a: str | None,
+    b: str | None,
+) -> None:
+    """A post writes only the key it names, the first when it names none."""
+    site, second = two_keys()
+    client = await _start(device=site)
+    try:
+        response = await client.post(
+            '/device/key',
+            data={**form, 'api_key': GOOD_KEY},
+            headers=headers,
+            allow_redirects=False,
+        )
+    finally:
+        await client.close()
+    assert response.status == status
+    assert (site.keys.key, second.key) == (a, b)
+
+
+async def test_second_key_posts_no_key_change() -> None:
+    """Saving a further key leaves the app's key state alone."""
+    site, _ = two_keys()
+    started = await _start(device=site)
+    try:
+        await started.post(
+            '/device/key',
+            data={'key': 'b', 'api_key': GOOD_KEY},
+            allow_redirects=False,
+        )
+    finally:
+        await started.close()
+    assert not site.posted
+
+
+async def test_second_key_refused_in_its_own_words() -> None:
+    """A bad further key is refused with that key's copy."""
+    site, _ = two_keys()
+    client = await _start(device=site)
+    try:
+        response = await client.post(
+            '/device/key', data={'key': 'b', 'api_key': ''},
+        )
+        refused = await response.text()
+    finally:
+        await client.close()
+    assert response.status == HTTPStatus.BAD_REQUEST
+    assert 'Second key not saved.' in refused
+
+
+async def test_two_keys_render_two_sections() -> None:
+    """Each key has its own form; the second's ids end in its name."""
+    site, _ = two_keys()
+    client = await _start(device=site)
+    try:
+        text = await (await client.get('/device')).text()
+    finally:
+        await client.close()
+    assert text.count('action="/device/key"') == 2
+    assert text.count('id="api-key"') == 1
+    assert 'id="api-key-b"' in text
+    assert 'id="api-key-heading-b">Second key</h2>' in text
+    assert '<input type="hidden" name="key" value="b">' in text
+    assert text.count('name="key"') == 1
+
+
+def test_device_pages_need_a_key() -> None:
+    """Device pages with no key are refused."""
+    site = DeviceSite()
+    with pytest.raises(ValueError, match='at least one key'):
+        DevicePages(
+            status=lambda: None,
+            feeds=dict,
+            panel=lambda: None,
+            keys=(),
+            feed_label=str,
+            daily_limit=1,
+            post=site.posted.append,
+            zone=ZONE,
+            error_log=None,
+            state_file=None,
+        )

@@ -6,7 +6,7 @@ from datetime import date
 from pathlib import Path
 
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY_REF
 from paperroute_transit.build.gtfs_files import Source
 from tests.build.feeds import bundle_rail_feed, bus_feed, sydneytrains_feed
 
@@ -17,7 +17,7 @@ def test_build_timetable_writes_file_and_meta(tmp_path: Path) -> None:
     """The output appears complete, with meta, and no '.new' file left."""
     out = tmp_path / 'timetable.db'
     report = build_timetable(
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
         sources=[
             Source(name='sydneytrains',
                    archive=sydneytrains_feed(path=tmp_path / 's.zip')),
@@ -38,7 +38,7 @@ def test_build_real_slice_has_no_duplicate_t1_departures(
     """Real data: no T1 run appears twice at Parramatta after merging."""
     out = tmp_path / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
         sources=[Source(name='sydneytrains',
                         archive=REAL / 'sydneytrains.zip'),
                  Source(name='bundle', archive=REAL / 'bundle.zip')],

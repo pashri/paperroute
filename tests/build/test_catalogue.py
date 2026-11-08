@@ -16,7 +16,13 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from paperroute.build.timetable import Window, build_timetable, create_schema
-from paperroute.city import CENTRES, SYDNEY, SYDNEY_PROJECTION, SydneyMode
+from paperroute.city import (
+    CENTRES,
+    SYDNEY,
+    SYDNEY_PROJECTION,
+    SYDNEY_REF,
+    SydneyMode,
+)
 from paperroute_transit.build.catalogue import (
     CATALOGUE_SCHEMA,
     Entry,
@@ -844,7 +850,7 @@ def build_network(*, path: Path) -> Path:
     out = path / 'timetable.db'
     source = Source(name='sydneytrains',
                     archive=network_feed(path=path / 'network.zip'))
-    build_timetable(city=SYDNEY, sources=[source],
+    build_timetable(city_ref=SYDNEY_REF, sources=[source],
                     window=Window(start=date(2026, 10, 5), days=3), out=out)
     return out
 
@@ -883,7 +889,7 @@ def test_catalogue_writes_line_stations_for_station_first_lines(
     out = tmp_path / 'timetable.db'
     source = Source(name='sydneytrains',
                     archive=network_feed(path=tmp_path / 'network.zip'))
-    build_timetable(city=SYDNEY, sources=[source],
+    build_timetable(city_ref=SYDNEY_REF, sources=[source],
                     window=Window(start=date(2026, 10, 5), days=3), out=out)
     with closing(sqlite3.connect(out)) as conn:
         t1 = conn.execute(
@@ -905,7 +911,7 @@ def test_catalogue_writes_line_exits(tmp_path: Path) -> None:
     out = tmp_path / 'timetable.db'
     source = Source(name='sydneytrains',
                     archive=network_feed(path=tmp_path / 'network.zip'))
-    build_timetable(city=SYDNEY, sources=[source],
+    build_timetable(city_ref=SYDNEY_REF, sources=[source],
                     window=Window(start=date(2026, 10, 5), days=3), out=out)
     with closing(sqlite3.connect(out)) as conn:
         rows = conn.execute(

@@ -31,7 +31,7 @@ from paperroute.build.handoff import (
 )
 from paperroute.build.source_state import SourceState
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY_REF
 from paperroute_transit.build.gtfs_files import Source
 from tests.build.network_feed import network_feed
 
@@ -75,8 +75,10 @@ def fixture_loaded(tmp_path_factory: pytest.TempPathFactory) -> Path:
     source = Source(name='sydneytrains',
                     archive=network_feed(path=folder / 'network.zip'))
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(timetable, 'build_extras', lambda *, path: None)
-        build_timetable(city=SYDNEY, sources=[source],
+        patch.setattr(
+            timetable, 'build_extras', lambda *, path, city_ref: None,
+        )
+        build_timetable(city_ref=SYDNEY_REF, sources=[source],
                         window=Window(start=date(2026, 10, 5), days=3),
                         out=folder / 'timetable.db')
     return folder / 'timetable.db'
@@ -264,7 +266,7 @@ def test_extras_program_runs_the_tail_and_swaps(
     shutil.copy(loaded, record.scratch)
     handoff = data_dir / 'work' / 'handoff.json'
     write_handoff(path=handoff, record=record)
-    assert extras.main(argv=[str(record.scratch), str(handoff)]) == 0
+    assert extras.main(argv=[SYDNEY_REF, str(record.scratch), str(handoff)]) == 0
     with closing(sqlite3.connect(data_dir / 'timetable.db')) as conn:
         assert conn.execute('SELECT count(*) FROM runs').fetchone()[0] > 0
     assert not list((data_dir / 'work').iterdir())
@@ -288,7 +290,7 @@ def test_failed_extras_keep_the_old_timetable(
     record.scratch.write_bytes(b'not a timetable')
     handoff = data_dir / 'work' / 'handoff.json'
     write_handoff(path=handoff, record=record)
-    assert extras.main(argv=[str(record.scratch), str(handoff)]) == 1
+    assert extras.main(argv=[SYDNEY_REF, str(record.scratch), str(handoff)]) == 1
     assert (data_dir / 'timetable.db').read_bytes() == b'old timetable'
     assert not (data_dir / 'sources' / 'sources.json').exists()
     assert not list((data_dir / 'work').iterdir())
@@ -305,7 +307,7 @@ def test_lost_lock_stops_the_swap(data_dir: Path, loaded: Path) -> None:
     shutil.copy(loaded, record.scratch)
     handoff = data_dir / 'work' / 'handoff.json'
     write_handoff(path=handoff, record=record)
-    assert extras.main(argv=[str(record.scratch), str(handoff)]) == 1
+    assert extras.main(argv=[SYDNEY_REF, str(record.scratch), str(handoff)]) == 1
     assert (data_dir / 'timetable.db').read_bytes() == b'old timetable'
     assert 'LockLostError' in (data_dir / 'log' / 'errors.jsonl').read_text(
         encoding='utf-8',
@@ -325,10 +327,10 @@ def test_plain_build_hand_over_replaces_out(
     handoff = tmp_path / 'timetable.handoff.json'
     write_handoff(path=handoff, record=record)
     with pytest.raises(HandoffError):
-        extras.main(argv=[str(tmp_path / 'other.new'), str(handoff)])
+        extras.main(argv=[SYDNEY_REF, str(tmp_path / 'other.new'), str(handoff)])
     assert not handoff.exists()
     write_handoff(path=handoff, record=record)
-    assert extras.main(argv=[str(record.scratch), str(handoff)]) == 0
+    assert extras.main(argv=[SYDNEY_REF, str(record.scratch), str(handoff)]) == 0
     assert not handoff.exists() and not record.scratch.exists()
     with closing(sqlite3.connect(out)) as conn:
         assert conn.execute('SELECT count(*) FROM runs').fetchone()[0] > 0
@@ -377,7 +379,7 @@ def test_unreadable_handoff_is_logged(
     handoff = tmp_path / 'handoff.json'
     handoff.write_text('[]', encoding='utf-8')
     for path in (tmp_path / 'missing.json', handoff):
-        assert extras.main(argv=[str(tmp_path / 'x.new'), str(path)]) == 1
+        assert extras.main(argv=[SYDNEY_REF, str(tmp_path / 'x.new'), str(path)]) == 1
     assert capsys.readouterr().err.count('handoff unreadable') == 2
 
 
@@ -391,7 +393,7 @@ def test_wrong_scratch_is_logged_and_work_cleared(
     handoff = data_dir / 'work' / 'handoff.json'
     write_handoff(path=handoff, record=record)
     other = str(data_dir / 'work' / 'other.new')
-    assert extras.main(argv=[other, str(handoff)]) == 1
+    assert extras.main(argv=[SYDNEY_REF, other, str(handoff)]) == 1
     assert not list((data_dir / 'work').iterdir())
     assert (data_dir / 'timetable.db').read_bytes() == b'old timetable'
     assert 'HandoffError' in (data_dir / 'log' / 'errors.jsonl').read_text(
@@ -409,7 +411,7 @@ def test_unchecked_lock_fd_is_left_open(
         shutil.copy(loaded, record.scratch)
         handoff = data_dir / 'work' / 'handoff.json'
         write_handoff(path=handoff, record=record)
-        assert extras.main(argv=[str(record.scratch), str(handoff)]) == 1
+        assert extras.main(argv=[SYDNEY_REF, str(record.scratch), str(handoff)]) == 1
         os.fstat(unrelated.fileno())
 
 

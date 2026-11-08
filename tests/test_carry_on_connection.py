@@ -15,7 +15,13 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app_connections import departures_read
 from paperroute.app_ports import Ports
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE, SydneyMode
+from paperroute.city import (
+    SYDNEY,
+    SYDNEY_PROJECTION,
+    SYDNEY_REF,
+    SYDNEY_ZONE,
+    SydneyMode,
+)
 from paperroute.core.chains import chains_of
 from paperroute.core.connection_strip import ConnectionStripView
 from paperroute.core.map_view import DEFAULT_ZOOM
@@ -66,7 +72,7 @@ def _built(tmp_path_factory: pytest.TempPathFactory) -> Path:
         ],
         window=Window(start=DAY, days=1),
         out=out,
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
     )
     return out
 

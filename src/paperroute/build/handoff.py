@@ -437,7 +437,9 @@ def exec_python(*, args: Sequence[str], keep: Sequence[int]) -> NoReturn:
     os.execv(sys.executable, [sys.executable, *args])
 
 
-def hand_over(*, handoff: Handoff, record: HandoffRecord) -> NoReturn:
+def hand_over(
+    *, handoff: Handoff, record: HandoffRecord, city_ref: str,
+) -> NoReturn:
     """
     Write the handoff file and exec into the extras program.
 
@@ -447,9 +449,14 @@ def hand_over(*, handoff: Handoff, record: HandoffRecord) -> NoReturn:
         Where to write the file.
     record : HandoffRecord
         What the extras program needs.
+    city_ref : str
+        The city's reference, such as ``package.module:NAME``.
     """
     write_handoff(path=handoff.path, record=record)
     exec_python(
-        args=['-m', EXTRAS_MODULE, str(record.scratch), str(handoff.path)],
+        args=[
+            '-m', EXTRAS_MODULE, city_ref, str(record.scratch),
+            str(handoff.path),
+        ],
         keep=() if record.tail is None else (record.tail.lock_fd,),
     )

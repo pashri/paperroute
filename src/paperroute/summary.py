@@ -9,14 +9,14 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Final
 
-from paperroute.adapters.tfnsw import (
+from paperroute.observers import NullObserver
+from paperroute_hardware.ports import PanelRefresh
+from paperroute_transit.adapters.feed_errors import (
     FeedError,
     FeedThrottled,
     FeedTimedOut,
     FeedUnavailable,
 )
-from paperroute.observers import NullObserver
-from paperroute_hardware.ports import PanelRefresh
 
 SUMMARY_EVERY_S: Final[float] = 900.0
 DECILES: Final[int] = 10

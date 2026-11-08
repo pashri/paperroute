@@ -590,7 +590,9 @@ def trip_feeds(*, state: State) -> tuple[str, ...]:
         need while it holds them, each once.
     """
     chooser = departures_chooser(state=state)
-    extra = () if chooser is None else feeds_of(departures=chooser.departures)
+    extra = () if chooser is None else feeds_of(
+        departures=chooser.departures, plan=state.city.feeds,
+    )
     return tuple(dict.fromkeys((*state.feeds, *extra)))
 
 
@@ -652,7 +654,7 @@ def picked_stop_view(*, state: State, chooser: ChooserState) -> StopView:
         `DEPARTURES_FAILED` as its empty text when the load failed.
     """
     departures: tuple[Departure, ...] = chooser.departures
-    feeds = feeds_of(departures=departures)
+    feeds = feeds_of(departures=departures, plan=state.city.feeds)
     board = build_stop_view(
         inputs=StopInputs(
             origin='' if chooser.origin is None else chooser.origin.name,
@@ -663,6 +665,7 @@ def picked_stop_view(*, state: State, chooser: ChooserState) -> StopView:
                 now=state.now,
                 limit=stale_after(state=state),
                 zone=state.city.zone,
+                plan=state.city.feeds,
             ),
             now=state.now,
             zone=state.city.zone,
@@ -733,6 +736,7 @@ def to_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
             now=state.now,
             limit=stale_after(state=state),
             zone=state.city.zone,
+            plan=state.city.feeds,
         ),
         patterns=state.map.patterns,
         positions=polled_positions(state=state),

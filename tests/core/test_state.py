@@ -1,6 +1,7 @@
 """Tests for the reducer."""
 
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
@@ -37,12 +38,6 @@ from paperroute.core.connection_strip import (
 )
 from paperroute.core.connection_view import ConnectionView
 from paperroute.core.cycle import cycle_due, needed_feeds
-from paperroute.core.feeds import (
-    ALL_POSITION_MODES,
-    FeedKind,
-    feeds_near,
-    position_feeds,
-)
 from paperroute.core.map_requests import map_feeds, shows_vehicles
 from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import DEFAULT_ZOOM, MAP_WIDTH, MapView
@@ -174,6 +169,7 @@ from paperroute_testkit.core.steps import (
     wakeful,
 )
 from paperroute_transit.core.auto_model import AutoState
+from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point, make_shape
 from paperroute_transit.core.model import (
     Departure,
@@ -216,6 +212,7 @@ from tests.core.chooser_walks import (
     chooser_departures,
 )
 
+ALL_SOURCES: Final[frozenset[str]] = SYDNEY.feeds.position_sources()
 PIN = Pin(
     origin=place('2145615', name='Hollis St'),
     destination=place('215020', name='Parramatta'),
@@ -238,6 +235,24 @@ POOL: Final[tuple[Pin, ...]] = (
     ELSEWHERE,
     Pin(origin=TOWN_HALL, kind=SydneyMode.TRAIN),
 )
+
+
+def positions_of(*, sources: Iterable[str]) -> tuple[str, ...]:
+    """
+    List Sydney's positions feeds of some feed sources, anywhere.
+
+    Parameters
+    ----------
+    sources : Iterable[str]
+        Feed sources.
+
+    Returns
+    -------
+    tuple[str, ...]
+        Feed paths, sorted.
+    """
+    return SYDNEY.feeds.position_feeds(sources=sources, box=None)
+
 
 
 def fresh(*, now: datetime = START, centre: Point | None = None) -> State:
@@ -271,7 +286,7 @@ def every_position_fetch() -> list[FetchFeed]:
     """
     return [
         FetchFeed(feed=feed, kind=FeedKind.POSITIONS)
-        for feed in position_feeds(modes=ALL_POSITION_MODES)
+        for feed in positions_of(sources=ALL_SOURCES)
     ]
 
 
@@ -809,10 +824,8 @@ def test_empty_area_modes_fall_back_to_every_mode() -> None:
     state, _ = step(state, empty)
     assert needed_feeds(state=state) == (
         BUSES,
-        *feeds_near(
-            feeds=position_feeds(modes=ALL_POSITION_MODES),
-            box=box,
-            projection=SYDNEY_PROJECTION,
+        *SYDNEY.feeds.position_feeds(
+            sources=ALL_SOURCES, box=box,
         ),
     )
     ferry = ModesLoaded(mpp=8, box=box, modes=frozenset({SydneyFeed.FERRY}))

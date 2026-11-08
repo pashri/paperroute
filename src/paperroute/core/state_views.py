@@ -97,6 +97,7 @@ def live_departures(*, state: State) -> tuple[LiveDeparture, ...]:
         now=frame_time(state=state),
         limit=stale_after(state=state),
         zone=state.city.zone,
+        plan=state.city.feeds,
     )
 
 

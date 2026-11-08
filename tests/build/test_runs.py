@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import RAIL_TYPES, SYDNEY, SydneyMode
+from paperroute.city import RAIL_TYPES, SYDNEY, SYDNEY_REF, SydneyMode
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.runs import (
     RUN_SCHEMA,
@@ -58,7 +58,7 @@ def fixture_network_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = folder / 'timetable.db'
     source = Source(name='sydneytrains',
                     archive=network_feed(path=folder / 'network.zip'))
-    build_timetable(city=SYDNEY, sources=[source],
+    build_timetable(city_ref=SYDNEY_REF, sources=[source],
                     window=Window(start=date(2026, 10, 5), days=3), out=out)
     return out
 
@@ -470,7 +470,7 @@ def test_load_runs_skips_hidden_block_trips_and_orphans(
 def test_merged_trainlink_train_gets_a_run(tmp_path: Path) -> None:
     """The feed's NRC trip, given the bundle's agency 711, still runs."""
     out = tmp_path / 'timetable.db'
-    build_timetable(city=SYDNEY, sources=regional_sources(tmp_path=tmp_path),
+    build_timetable(city_ref=SYDNEY_REF, sources=regional_sources(tmp_path=tmp_path),
                     window=Window(start=date(2026, 10, 16), days=2), out=out)
     with closing(sqlite3.connect(out)) as conn:
         agency, runs = conn.execute(

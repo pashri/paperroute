@@ -11,7 +11,7 @@ import pytest
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import pin_of
 from paperroute_transit.adapters.calendar_rows import (
@@ -63,7 +63,7 @@ def holiday_db(*, tmp_path: Path) -> Path:
     archive = write_feed(path=tmp_path / 'bundle.zip', files=files)
     out = tmp_path / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
         sources=[Source(name='bundle', archive=archive)],
         window=Window(start=HOLIDAY, days=3),
         out=out,
@@ -193,7 +193,7 @@ def test_service_span_counts_trips_after_midnight(tmp_path: Path) -> None:
     archive = write_feed(path=tmp_path / 'bundle.zip', files=bus_files())
     out = tmp_path / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
         sources=[Source(name='bundle', archive=archive)],
         window=Window(start=SERVICE, days=3),
         out=out,

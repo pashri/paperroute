@@ -4,6 +4,7 @@ import dataclasses
 import logging
 import os
 import sqlite3
+import sys
 from contextlib import closing
 from dataclasses import dataclass, field
 from datetime import date
@@ -13,7 +14,7 @@ import pytest
 
 from paperroute.build.handoff import Handoff, read_handoff
 from paperroute.build.timetable import SCHEMA_VERSION, Window, build_timetable
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SYDNEY_REF
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.city import MergeReport, TimetableRules
@@ -188,7 +189,7 @@ def built(*, tmp_path: Path, sources: list[Source]) -> Path:
         The timetable file.
     """
     out = tmp_path / 'timetable.db'
-    build_timetable(city=SYDNEY, sources=sources,
+    build_timetable(city_ref=SYDNEY_REF, sources=sources,
                     window=Window(start=date(2026, 10, 16), days=2), out=out)
     return out
 
@@ -522,9 +523,12 @@ def test_merge_hook_is_called_once(
         ),
         Source(name='bundle', archive=bus_feed(path=tmp_path / 'b.zip')),
     ]
+    monkeypatch.setattr(
+        sys.modules[__name__], 'MERGE_CITY', city, raising=False,
+    )
     with pytest.raises(Execed):
         build_timetable(
-            city=city,
+            city_ref=f'{__name__}:MERGE_CITY',
             sources=sources,
             window=Window(start=date(2026, 10, 16), days=2),
             out=tmp_path / 'timetable.db',

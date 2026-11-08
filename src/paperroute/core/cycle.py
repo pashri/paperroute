@@ -7,11 +7,11 @@ from typing import Final
 from paperroute.core.alert_state import ALERT_EVERY, alert_feeds
 from paperroute.core.banners import feeds_held
 from paperroute.core.chooser_steps import trip_feeds
-from paperroute.core.feeds import FeedKind
 from paperroute.core.map_requests import map_feeds, shows_vehicles
 from paperroute.core.messages import Effect, FetchFeed
 from paperroute.core.rhythm import poll_every
 from paperroute.core.state_model import Cycle, State, clock_waiting, elapsed
+from paperroute_transit.core.feed_plan import FeedKind
 
 CYCLE_WAIT: Final[timedelta] = timedelta(seconds=8)
 

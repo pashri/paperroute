@@ -54,16 +54,7 @@
       </ul>
       <p class="hint">No secrets in either file.</p>
     </section>
-    <section class="card setting" aria-labelledby="api-key-heading">
-      <h2 id="api-key-heading">{{key_label}}</h2>
-      <p>{{key_status}}</p>
-      <form method="post" action="/device/key">
-        <label for="api-key">New key</label>
-        <input id="api-key" name="api_key" type="password" autocomplete="off"
-               autocapitalize="off" spellcheck="false" required>
-        <button type="submit">Save key</button>
-      </form>
-    </section>
+    {{keys}}
     <section class="card setting" aria-labelledby="device">
       <h2 id="device">Device</h2>
       <div class="buttons">

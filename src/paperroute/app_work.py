@@ -8,7 +8,6 @@ from collections.abc import Coroutine
 from typing import Any
 
 from paperroute.adapters.feed_guard import FeedBackingOff, JoinedBody
-from paperroute.adapters.tfnsw import FeedError
 from paperroute.app_connections import departures_read
 from paperroute.app_device import DeviceEffect, device_work
 from paperroute.app_effects import (
@@ -49,6 +48,7 @@ from paperroute.core.messages import (
     TimetableRebuilt,
 )
 from paperroute_device.core.device_model import PowerAction
+from paperroute_transit.adapters.feed_errors import FeedError
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +112,7 @@ async def fetch(
             call=asyncio.to_thread(
                 parse_feed,
                 timetable=ports.timetable,
+                plan=ports.timetable.city.feeds,
                 effect=effect,
                 data=data,
                 fetched_at=ports.clock.now(),

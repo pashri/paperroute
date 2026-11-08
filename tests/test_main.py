@@ -51,7 +51,7 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
 from paperroute.app_render import MapRenderer
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF, SYDNEY_ZONE
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
 from paperroute.core.messages import Event
 from paperroute.observers import Timings
@@ -582,7 +582,7 @@ def build_db(*, path: Path) -> None:
         ],
         window=Window(start=date(2026, 10, 16), days=1),
         out=path,
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
     )
 
 

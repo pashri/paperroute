@@ -7,11 +7,6 @@ from typing import Final
 from paperroute.core.chains import all_departures
 from paperroute.core.connection import live_chains
 from paperroute.core.connection_map import connection_inputs, panes_inputs
-from paperroute.core.feeds import (
-    ALL_POSITION_MODES,
-    feeds_near,
-    position_feeds,
-)
 from paperroute.core.map_fit import resting_zoom, steady_frame
 from paperroute.core.map_state import area_box, area_frame
 from paperroute.core.map_view import (
@@ -134,25 +129,25 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
         connection pin; on the Strip, the modes of the strip's own
         departures. Sorted and unique.
     """
+    plan = state.city.feeds
     modes = frozenset(
         departure.source for departure in polled_departures(state=state)
     )
     if not map_shown(state=state):
-        return position_feeds(modes=modes)
+        return plan.position_feeds(sources=modes, box=None)
     centre, zoom = area_frame(map_state=state.map)
     mpp = ZOOMS[zoom]
-    area = position_feeds(
-        modes=state.map.area_modes.get(mpp) or ALL_POSITION_MODES,
+    area = plan.position_feeds(
+        sources=state.map.area_modes.get(mpp) or plan.position_sources(),
+        box=None if centre is None else area_box(centre=centre, mpp=mpp),
     )
-    if centre is not None:
-        area = feeds_near(
-            feeds=area,
-            box=area_box(centre=centre, mpp=mpp),
-            projection=state.city.projection,
-        )
     # A connection's legs can run beyond the area the modes were read
     # for, so its own modes are polled as well.
-    legs = () if state.board.legs is None else position_feeds(modes=modes)
+    legs = (
+        ()
+        if state.board.legs is None
+        else plan.position_feeds(sources=modes, box=None)
+    )
     return tuple(sorted({*area, *legs}))
 
 

@@ -14,7 +14,6 @@ from paperroute.core.connection_strip import (
     ConnectionStripView,
 )
 from paperroute.core.connection_view import ConnectionView
-from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import MapView
 from paperroute.core.panel_views import SleepView
 from paperroute.core.saved import ConnectionMap, Lookahead, Rate, Saved
@@ -48,6 +47,7 @@ from paperroute_transit.core.alert_model import (
     BetweenLoaded,
     LoadBetween,
 )
+from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import MetreBox, Shape
 from paperroute_transit.core.model import (
     Departure,

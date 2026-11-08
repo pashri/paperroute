@@ -11,13 +11,13 @@ from paperroute.adapters.feed_guard import (
     JoinedBody,
     backoff_s,
 )
-from paperroute.adapters.tfnsw import (
+from paperroute.summary import Summary
+from paperroute_transit.adapters.feed_errors import (
     FeedError,
     FeedThrottled,
     FeedTimedOut,
     FeedUnavailable,
 )
-from paperroute.summary import Summary
 
 BUSES: Final[str] = 'v1/gtfs/vehiclepos/buses'
 TRAINS: Final[str] = 'v2/gtfs/vehiclepos/sydneytrains'

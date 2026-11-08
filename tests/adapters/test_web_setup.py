@@ -11,7 +11,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.city import SYDNEY, SYDNEY_ZONE
-from paperroute.core.feeds import DAILY_LIMIT, feed_label
+from paperroute.sydney_feeds import DAILY_LIMIT, feed_label
 from paperroute_testkit.device_pages import HOTSPOT, DeviceSite
 
 Client = TestClient[web.Request, web.Application]

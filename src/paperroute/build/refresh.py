@@ -39,7 +39,7 @@ from paperroute.build.timetable import (
     build_timetable,
     yesterday,
 )
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SYDNEY_REF
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from paperroute_device.rss import max_rss_mb
 from paperroute_transit.build.gtfs_files import Source
@@ -289,7 +289,7 @@ def build_and_check(*, layout: Layout, changed: tuple[str, ...],
             for spec in SOURCES
         ],
         window=Window(start=yesterday(zone=SYDNEY.zone), days=days),
-        city=SYDNEY,
+        city_ref=SYDNEY_REF,
         out=out,
         handoff=handoff,
     )

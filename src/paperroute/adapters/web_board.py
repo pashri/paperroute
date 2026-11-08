@@ -3,7 +3,7 @@
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
-from typing import Final, Protocol
+from typing import Final
 
 from aiohttp import web
 
@@ -47,35 +47,6 @@ SYDNEY_HINT: Final[str] = '\n'.join((
     '        hold <kbd>K</kbd> or Press, then press <kbd>J</kbd> or',
     '        <kbd>L</kbd>, or tap Left or Right with another finger.',
 ))
-
-
-class BoardPages(Protocol):
-    """The pages a board adds to the web display."""
-
-    def routes(
-        self,
-        *,
-        send: Callable[[Event], None],
-        reported: Callable[[], Mapping[str, str]],
-    ) -> list[web.RouteDef]:
-        """
-        List the routes.
-
-        Parameters
-        ----------
-        send : Callable[[Event], None]
-            Sends an event to the app.
-        reported : Callable[[], Mapping[str, str]]
-            Gives the settings form values the app last reported.
-
-        Returns
-        -------
-        list[web.RouteDef]
-            The routes, in registration order.
-        """
-
-    async def close(self) -> None:
-        """Release anything the pages hold open."""
 
 
 class SydneyPages:

@@ -21,6 +21,7 @@ from paperroute.build.refresh import RefreshBusy, refresh
 from paperroute.build.source_state import SourceError
 from paperroute.build.sources import SOURCES
 from paperroute.build.swap import RefreshReport, TimetableCheckError
+from paperroute.city import SYDNEY_REF
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from tests.build.feed_server import FeedServer, Served, feed_server
 from tests.build.feeds import bus_feed
@@ -526,7 +527,7 @@ def test_refresh_hands_over_after_the_load(
         )
     work = data_dir / 'work'
     assert seen['argv'] == [
-        seen['path'], '-m', 'paperroute.build.extras',
+        seen['path'], '-m', 'paperroute.build.extras', SYDNEY_REF,
         str(work / 'timetable.new'), str(work / 'handoff.json'),
     ]
     assert seen['inheritable'] is True

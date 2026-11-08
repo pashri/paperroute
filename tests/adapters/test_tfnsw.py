@@ -16,16 +16,18 @@ from aiohttp.test_utils import TestServer
 from paperroute.adapters.tfnsw import (
     TFNSW_STARTS_PER_S,
     AiohttpFeedsClient,
-    FeedError,
-    FeedThrottled,
-    FeedTimedOut,
-    FeedUnavailable,
     NoApiKey,
     api_key_from_env,
     read_retry_after,
     tfnsw_limiter,
 )
 from paperroute_device.adapters.rate_limit import StartLimiter
+from paperroute_transit.adapters.feed_errors import (
+    FeedError,
+    FeedThrottled,
+    FeedTimedOut,
+    FeedUnavailable,
+)
 
 
 async def feed_handler(request: web.Request) -> web.Response:

@@ -6,13 +6,14 @@ import sys
 import time
 from collections.abc import Callable, Sequence
 from contextlib import closing
+from importlib import import_module
 from pathlib import Path
 
 from paperroute.build.swap import land
-from paperroute.city import SYDNEY
 from paperroute_device.rss import peak_rss_mb
 from paperroute_transit.build.catalogue import CATALOGUE_SCHEMA, load_catalogue
 from paperroute_transit.build.runs import RUN_SCHEMA, load_runs
+from paperroute_transit.core.city import City
 
 
 def timed(*, phase: str, step: Callable[[], object]) -> None:
@@ -33,7 +34,34 @@ def timed(*, phase: str, step: Callable[[], object]) -> None:
     print(f'progress {phase} done {elapsed:.1f}s', flush=True)
 
 
-def run_extras(*, path: Path) -> None:
+def city_named(*, ref: str) -> City:
+    """
+    Import a city from its reference.
+
+    Parameters
+    ----------
+    ref : str
+        The module and the name of the city in it, such as
+        ``package.module:NAME``.
+
+    Returns
+    -------
+    City
+        The city.
+
+    Raises
+    ------
+    ValueError
+        When the name in the module is not a city.
+    """
+    module, _, name = ref.partition(':')
+    city = getattr(import_module(module), name, None)
+    if not isinstance(city, City):
+        raise ValueError(f'{ref} names no city')
+    return city
+
+
+def run_extras(*, path: Path, city: City) -> None:
     """
     Add the run and chooser tables to a timetable and print the peak memory.
 
@@ -41,6 +69,8 @@ def run_extras(*, path: Path) -> None:
     ----------
     path : Path
         Timetable file.
+    city : City
+        The city the timetable is for.
     """
     with closing(sqlite3.connect(path)) as conn:
         conn.execute('PRAGMA cache_size = -2000')
@@ -50,25 +80,25 @@ def run_extras(*, path: Path) -> None:
             phase='runs',
             step=lambda: load_runs(
                 conn=conn,
-                classify=SYDNEY.classify,
-                rail_types=SYDNEY.catalogue.rail_types,
+                classify=city.classify,
+                rail_types=city.catalogue.rail_types,
             ),
         )
         timed(
             phase='catalogue',
             step=lambda: load_catalogue(
                 conn=conn,
-                projection=SYDNEY.projection,
-                classify=SYDNEY.classify,
-                modes=SYDNEY.modes,
-                rules=SYDNEY.catalogue,
+                projection=city.projection,
+                classify=city.classify,
+                modes=city.modes,
+                rules=city.catalogue,
             ),
         )
         conn.commit()
     print(f'progress extras peak {peak_rss_mb():.0f}MB', flush=True)
 
 
-def build_extras(*, path: Path) -> None:
+def build_extras(*, path: Path, city_ref: str) -> None:
     """
     Run run_extras in a fresh interpreter that loads only what it needs.
 
@@ -76,6 +106,8 @@ def build_extras(*, path: Path) -> None:
     ----------
     path : Path
         Timetable file.
+    city_ref : str
+        The city's reference, see `city_named`.
 
     Raises
     ------
@@ -83,7 +115,10 @@ def build_extras(*, path: Path) -> None:
         When the child exits with a non-zero code.
     """
     done = subprocess.run(
-        [sys.executable, '-m', 'paperroute.build.extras', str(path)],
+        [
+            sys.executable, '-m', 'paperroute.build.extras', city_ref,
+            str(path),
+        ],
         check=False,
     )
     if done.returncode != 0:
@@ -99,20 +134,22 @@ def main(*, argv: Sequence[str]) -> int:
     Parameters
     ----------
     argv : Sequence[str]
-        The scratch file, then the handoff file if any.
+        The city's reference (see `city_named`), the scratch file, then
+        the handoff file if any.
 
     Returns
     -------
     int
         Exit status.
     """
-    scratch = Path(argv[0])
-    if len(argv) == 1:
-        run_extras(path=scratch)
+    city = city_named(ref=argv[0])
+    scratch = Path(argv[1])
+    if len(argv) == 2:
+        run_extras(path=scratch, city=city)
         return 0
     return land(
-        scratch=scratch, path=Path(argv[1]),
-        build=lambda path: run_extras(path=path),
+        scratch=scratch, path=Path(argv[2]),
+        build=lambda path: run_extras(path=path, city=city),
     )
 
 

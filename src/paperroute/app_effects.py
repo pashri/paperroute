@@ -10,11 +10,7 @@ from dataclasses import replace
 from datetime import datetime
 from typing import Final
 
-from paperroute.adapters.gtfs_alerts import parse_alerts
-from paperroute.adapters.gtfs_rt import parse_positions, parse_trip_updates
 from paperroute.app_connections import between_read
-from paperroute.city import METRO_ROUTE_TYPE, SydneyFeed
-from paperroute.core.feeds import ALERT_FEEDS, FeedKind
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
     ChooserDeparturesLoaded,
@@ -63,6 +59,7 @@ from paperroute_transit.core.alert_model import (
     Informed,
     LoadBetween,
 )
+from paperroute_transit.core.feed_plan import FeedKind, FeedParsers, FeedPlan
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.positions import PositionsSnapshot, with_labels
 from paperroute_transit.core.reach import build_reach
@@ -608,6 +605,7 @@ async def worked(
 def labelled_positions(
     *,
     timetable: TimetableRepository,
+    parsers: FeedParsers,
     data: bytes,
     fetched_at: datetime,
 ) -> PositionsSnapshot:
@@ -617,7 +615,9 @@ def labelled_positions(
     Parameters
     ----------
     timetable : TimetableRepository
-        Where route labels and the projection come from.
+        Where route labels come from.
+    parsers : FeedParsers
+        The feed's readers.
     data : bytes
         Feed body.
     fetched_at : datetime
@@ -628,11 +628,7 @@ def labelled_positions(
     PositionsSnapshot
         Vehicles labelled with their routes' short names where known.
     """
-    snapshot = parse_positions(
-        data=data,
-        fetched_at=fetched_at,
-        projection=timetable.projection,
-    )
+    snapshot = parsers.positions(data=data, fetched_at=fetched_at)
     labels = timetable.route_labels(
         trip_ids={vehicle.trip_id for vehicle in snapshot.vehicles}
     )
@@ -640,7 +636,7 @@ def labelled_positions(
 
 
 def informed_with(
-    *, item: Informed, places: AlertPlaces, metro: bool
+    *, item: Informed, places: AlertPlaces, line: str | None
 ) -> Informed:
     """
     Fill in an informed entity's route and stops.
@@ -651,10 +647,9 @@ def informed_with(
         The entity as the feed gave it.
     places : AlertPlaces
         What the timetable knows about the feed's IDs.
-    metro : bool
-        True for an entity of the metro feed. Its routes the timetable
-        does not resolve are the one metro line, when the timetable has
-        exactly one.
+    line : str | None
+        The one line of a feed that serves a single line, which its
+        routes the timetable does not resolve are; None otherwise.
 
     Returns
     -------
@@ -663,8 +658,8 @@ def informed_with(
         stop family, where known.
     """
     route = places.routes.get(item.route_id or '')
-    if route is None and metro and item.route_id:
-        route = places.only_line
+    if route is None and item.route_id:
+        route = line
     return replace(
         item,
         route=route,
@@ -676,6 +671,7 @@ def informed_with(
 def labelled_alerts(
     *,
     timetable: TimetableRepository,
+    plan: FeedPlan,
     data: bytes,
     feed: str,
     fetched_at: datetime,
@@ -687,6 +683,9 @@ def labelled_alerts(
     ----------
     timetable : TimetableRepository
         Where route short names and stop families come from.
+    plan : FeedPlan
+        The city's feeds: the feed's reader, and whether it serves one
+        line.
     data : bytes
         Feed body.
     feed : str
@@ -700,21 +699,24 @@ def labelled_alerts(
         The alerts, each entity carrying its route short name and stop
         family where the timetable knows them.
     """
-    snapshot = parse_alerts(data=data, feed=feed, fetched_at=fetched_at)
+    snapshot = plan.parsers(feed=feed).alerts(
+        data=data, feed=feed, fetched_at=fetched_at,
+    )
     entities = [item for alert in snapshot.alerts for item in alert.informed]
-    metro = feed == ALERT_FEEDS[SydneyFeed.METRO]
+    route_type = plan.single_line_type(feed=feed)
     places = timetable.alert_places(
         route_ids={item.route_id for item in entities if item.route_id},
         stop_ids={item.stop_id for item in entities if item.stop_id},
-        route_type=METRO_ROUTE_TYPE if metro else None,
+        route_type=route_type,
     )
+    line = None if route_type is None else places.only_line
     return replace(
         snapshot,
         alerts=tuple(
             replace(
                 alert,
                 informed=tuple(
-                    informed_with(item=item, places=places, metro=metro)
+                    informed_with(item=item, places=places, line=line)
                     for item in alert.informed
                 ),
             )
@@ -726,6 +728,7 @@ def labelled_alerts(
 def parse_feed(
     *,
     timetable: TimetableRepository,
+    plan: FeedPlan,
     effect: FetchFeed,
     data: bytes,
     fetched_at: datetime,
@@ -737,6 +740,8 @@ def parse_feed(
     ----------
     timetable : TimetableRepository
         Where vehicles' route labels come from.
+    plan : FeedPlan
+        The city's feeds, which give each feed's readers.
     effect : FetchFeed
         The fetch request.
     data : bytes
@@ -752,6 +757,7 @@ def parse_feed(
     if effect.kind is FeedKind.ALERTS:
         alerts = labelled_alerts(
             timetable=timetable,
+            plan=plan,
             data=data,
             feed=effect.feed,
             fetched_at=fetched_at,
@@ -759,13 +765,17 @@ def parse_feed(
         return AlertsFetched(feed=effect.feed, snapshot=alerts), len(
             alerts.alerts
         )
+    parsers = plan.parsers(feed=effect.feed)
     if effect.kind is FeedKind.POSITIONS:
         positions = labelled_positions(
-            timetable=timetable, data=data, fetched_at=fetched_at
+            timetable=timetable,
+            parsers=parsers,
+            data=data,
+            fetched_at=fetched_at,
         )
         fetched = PositionsFetched(feed=effect.feed, snapshot=positions)
         return fetched, len(positions.vehicles)
-    trips = parse_trip_updates(data=data, fetched_at=fetched_at)
+    trips = parsers.trips(data=data, fetched_at=fetched_at)
     return FeedFetched(feed=effect.feed, snapshot=trips), len(trips.trips)
 
 

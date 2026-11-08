@@ -6,7 +6,6 @@ from typing import Final
 
 from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute.core.alert_state import alert_feeds, listed_ids, shown_alerts
-from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import MapView
 from paperroute.core.messages import (
     DeparturesLoaded,
@@ -53,6 +52,8 @@ from paperroute_transit.core.alert_model import (
     LoadBetween,
     Matched,
 )
+from paperroute_transit.core.city import AgencyAlerts
+from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from tests.core.test_quiet import asleep_at_one, at, evening, ticked
@@ -638,6 +639,48 @@ def test_bus_pin_ignores_trainlink() -> None:
     assert trainlink_fetches(
         pin=BUS_PIN, mode=SydneyFeed.BUS, trainlink=True,
     ) == [FetchFeed(feed=BUSES, kind=FeedKind.ALERTS)]
+
+
+def agency_feeds(*, agency: AgencyAlerts | None) -> tuple[str, ...]:
+    """
+    List a TrainLink-served train pin's alert feeds under another rule.
+
+    Parameters
+    ----------
+    agency : AgencyAlerts | None
+        The city's agency alerts rule.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The pin's alert feeds once the timetable says the agency serves
+        it.
+    """
+    pin = PARRAMATTA_CENTRAL
+    state, _ = loaded_with(
+        state=started(pins=(pin,)), modes=(SydneyFeed.TRAIN,),
+    )
+    state, _ = step(
+        state, BetweenLoaded(pin=pin, names=frozenset(), agency_alerts=True),
+    )
+    alerts = replace(SYDNEY.alerts, agency_alerts=agency)
+    return alert_feeds(
+        state=replace(state, city=replace(SYDNEY, alerts=alerts)),
+    )
+
+
+def test_agency_alerts_rule_is_the_citys() -> None:
+    """The agency's source and modes come from the city's rule."""
+    rule = SYDNEY.alerts.agency_alerts
+    assert rule is not None
+    assert agency_feeds(agency=rule) == (REGIONAL, TRAINS)
+    assert agency_feeds(agency=None) == (TRAINS,)
+    assert agency_feeds(
+        agency=replace(rule, source=SydneyFeed.FERRY),
+    ) == (FERRIES, TRAINS)
+    assert agency_feeds(
+        agency=replace(rule, modes=frozenset({SydneyMode.BUS})),
+    ) == (TRAINS,)
 
 
 def connection_asks(*, second: tuple[Departure, ...]) -> list[LoadBetween]:

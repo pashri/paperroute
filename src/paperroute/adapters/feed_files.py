@@ -3,7 +3,7 @@
 import asyncio
 from pathlib import Path
 
-from paperroute.adapters.tfnsw import FeedError
+from paperroute_transit.adapters.feed_errors import FeedError
 
 
 class FileFeedsClient:

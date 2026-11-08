@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 from typing import Final
 
 from paperroute.city import SYDNEY_ZONE
-from paperroute.core.feeds import FeedKind
 from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
@@ -32,6 +31,7 @@ from paperroute_testkit.core.factories import (
 )
 from paperroute_testkit.core.steps import wakeful
 from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
+from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.model import service_seconds
 from paperroute_transit.core.patterns import TripPattern

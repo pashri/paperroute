@@ -67,6 +67,7 @@ def live_list(
     """
     found = resolved(
         departures=items,
+        plan=state.city.feeds,
         snapshots=state.snapshots,
         now=frame_time(state=state),
         limit=stale_after(state=state),

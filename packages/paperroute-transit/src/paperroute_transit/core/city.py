@@ -8,6 +8,7 @@ from typing import Protocol
 from zoneinfo import ZoneInfo
 
 from paperroute_device.core.device_settings import Window
+from paperroute_transit.core.feed_plan import FeedPlan
 from paperroute_transit.core.geo import DegreeBox, Projection
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.modes import Classifier, ModeSpec, spec_of
@@ -249,6 +250,8 @@ class City:
     noun_overrides : Mapping[tuple[str, str], Nouns]
         The words for a departure by feed source and mode id, ahead of
         `source_nouns`.
+    feeds : FeedPlan
+        Its realtime feeds.
     """
 
     name: str
@@ -264,6 +267,7 @@ class City:
     peak_windows: tuple[Window, ...]
     source_nouns: Mapping[str, Nouns]
     noun_overrides: Mapping[tuple[str, str], Nouns]
+    feeds: FeedPlan
 
     def mode(self, *, mode_id: str | None) -> ModeSpec | None:
         """

@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY_REF
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.line_stations import Spot, station_aliases
@@ -42,7 +42,7 @@ def built(
     out = tmp_path / 'timetable.db'
     source = Source(name='sydneytrains',
                     archive=write_feed(path=tmp_path / 'n.zip', files=files))
-    build_timetable(city=SYDNEY, sources=[source],
+    build_timetable(city_ref=SYDNEY_REF, sources=[source],
                     window=Window(start=date(2026, 10, 5), days=3), out=out)
     return sqlite3.connect(out)
 

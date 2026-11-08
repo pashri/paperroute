@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo
 
 from paperroute.build.dedupe import merge_rail, relabel_trainlink
 from paperroute.build.trainlink import trim_trainlink
+from paperroute.sydney_feeds import SydneyFeeds
 from paperroute_device.core.device_settings import Window
 from paperroute_transit.core.city import (
     AgencyAlerts,
@@ -327,7 +328,6 @@ ROUTE_PREFIXES: Final[tuple[str, ...]] = (
     'metro:',
     'bundle:',
 )
-METRO_ROUTE_TYPE: Final[int] = 401
 SYDNEY_CATALOGUE: Final[CatalogueRules] = CatalogueRules(
     line_sort=LINE_SORT,
     replacement=REPLACEMENT,
@@ -400,6 +400,7 @@ NOUN_OVERRIDES: Final[dict[tuple[str, str], Nouns]] = {
         vehicle='train', bay='platform', connection='train',
     ),
 }
+SYDNEY_REF: Final[str] = 'paperroute.city:SYDNEY'
 SYDNEY: Final[City] = City(
     name='Sydney',
     zone=SYDNEY_ZONE,
@@ -414,4 +415,5 @@ SYDNEY: Final[City] = City(
     peak_windows=PEAK_WINDOWS,
     source_nouns=SOURCE_NOUNS,
     noun_overrides=NOUN_OVERRIDES,
+    feeds=SydneyFeeds(projection=SYDNEY_PROJECTION),
 )

@@ -15,6 +15,10 @@ WOFF: Final[str] = (
 LICENCE: Final[str] = ('https://raw.githubusercontent.com/google/fonts/main/'
                        'ofl/overpass/OFL.txt')
 WEIGHTS: Final[tuple[int, ...]] = (400, 700, 800)
+FONTS: Final[Path] = (
+    Path(__file__).parents[1] / 'packages' / 'paperroute-device' / 'src'
+    / 'paperroute_device' / 'fonts'
+)
 
 
 def download(*, url: str) -> bytes:
@@ -52,8 +56,8 @@ def save_ttf(*, weight: int, out: Path) -> None:
 
 
 def main() -> None:
-    """Write the fonts and licence into the directory given as argv[1]."""
-    out = Path(sys.argv[1])
+    """Write the fonts and licence into the device kit, or argv[1]."""
+    out = Path(sys.argv[1]) if len(sys.argv) > 1 else FONTS
     out.mkdir(parents=True, exist_ok=True)
     for weight in WEIGHTS:
         save_ttf(weight=weight, out=out)

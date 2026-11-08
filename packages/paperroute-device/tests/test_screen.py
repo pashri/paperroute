@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.screen import read_rotate, screen_main
+from paperroute_device.screen import read_rotate, screen_main
 from paperroute_hardware.adapters.panel_bus import LinuxPanelBus
 from paperroute_hardware.render.panel_bits import grey_planes, oriented
 from paperroute_testkit.hardware_fakes import FakePanelBus

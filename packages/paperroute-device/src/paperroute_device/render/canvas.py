@@ -4,13 +4,13 @@ from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import cache
+from importlib.resources import files
+from importlib.resources.abc import Traversable
 from typing import Final
 
 import numpy as np
 import skia
 from numpy.typing import NDArray
-
-from paperroute_device.assets import assets
 
 Point = tuple[float, float]
 Box = tuple[float, float, float, float]
@@ -19,6 +19,7 @@ PAPER: Final[int] = 255
 WIDTH: Final[int] = 800
 HEIGHT: Final[int] = 480
 ELLIPSIS: Final[str] = '\u2026'
+PANEL_FONTS: Final[Traversable] = files('paperroute_device') / 'fonts'
 
 
 @dataclass(frozen=True)
@@ -57,7 +58,7 @@ def font(face: Face, smooth: bool = False) -> skia.Font:
     skia.Font
         The font.
     """
-    ttf = assets().fonts / f'Overpass-{face.weight}.ttf'
+    ttf = PANEL_FONTS / f'Overpass-{face.weight}.ttf'
     loaded = skia.Font(
         skia.Typeface.MakeFromFile(str(ttf)), face.px, face.squeeze, 0,
     )

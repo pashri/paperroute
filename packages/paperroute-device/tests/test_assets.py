@@ -11,16 +11,18 @@ from paperroute_device import assets as assets_module
 from paperroute_device.assets import AssetRoot, assets, use_assets
 
 NO_ROOT: Final[str] = (
+    'from paperroute_device.assets import assets\n'
     'from paperroute_device.render.canvas import Face, font\n'
+    'font(Face(weight=400, px=16))\n'
     'try:\n'
-    '    font(Face(weight=700, px=20))\n'
+    '    assets()\n'
     'except RuntimeError as error:\n'
     '    print(error)\n'
 )
 
 
-def test_font_without_asset_root_raises() -> None:
-    """A font cannot load before the app sets an asset root."""
+def test_font_needs_no_asset_root() -> None:
+    """A font loads with no asset root set; the root is still unset."""
     result = subprocess.run(
         [sys.executable, '-c', NO_ROOT],
         check=True,
@@ -34,7 +36,7 @@ def test_font_without_asset_root_raises() -> None:
 
 def test_use_assets_rejects_a_second_root(tmp_path: Path) -> None:
     """A different root after the first is refused."""
-    other = AssetRoot(fonts=tmp_path, web=tmp_path)
+    other = AssetRoot(web=tmp_path)
     with pytest.raises(ValueError):
         use_assets(root=other)
     assert assets() != other
@@ -43,7 +45,7 @@ def test_use_assets_rejects_a_second_root(tmp_path: Path) -> None:
 def test_use_assets_accepts_the_same_root() -> None:
     """Setting the root in use again changes nothing."""
     root = assets()
-    use_assets(root=AssetRoot(fonts=root.fonts, web=root.web))
+    use_assets(root=AssetRoot(web=root.web))
     assert assets() == root
 
 

@@ -71,7 +71,7 @@ CITY_IMPORTS: Final[str] = (
     'assert not loaded, loaded'
 )
 SCREEN_IMPORTS: Final[str] = (
-    'import paperroute.screen, sys; '
+    'import paperroute_device.screen, sys; '
     'print(*sorted(sys.modules))'
 )
 
@@ -127,7 +127,7 @@ def test_city_loads_no_feed_parsers() -> None:
 
 
 def test_screen_loads_no_board_modules() -> None:
-    """The screen command loads only the hardware package and itself."""
+    """The screen command loads only the hardware kit and itself."""
     result = subprocess.run(
         [sys.executable, '-c', SCREEN_IMPORTS],
         check=True,
@@ -138,7 +138,7 @@ def test_screen_loads_no_board_modules() -> None:
         name
         for name in result.stdout.split()
         if name.split('.')[0].startswith('paperroute')
-        and name not in {'paperroute', 'paperroute.screen'}
+        and name not in {'paperroute_device', 'paperroute_device.screen'}
         and name.split('.')[0] != 'paperroute_hardware'
     ]
     assert not offenders

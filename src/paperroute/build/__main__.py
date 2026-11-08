@@ -2,7 +2,6 @@
 
 from typing import Final
 
-from paperroute.asset_root import use_app_assets
 from paperroute.build import cli
 from paperroute.build.sources import BuildParts
 from paperroute.build.tfnsw_sources import SYDNEY_SOURCES, TfnswDownloader
@@ -17,7 +16,6 @@ SYDNEY_BUILD: Final[BuildParts] = BuildParts(
 
 def main() -> None:
     """Run the build command line for Sydney."""
-    use_app_assets()
     cli.main(city=SYDNEY, parts=SYDNEY_BUILD)
 
 

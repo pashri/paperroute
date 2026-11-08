@@ -70,7 +70,9 @@ LED_PATTERNS: Final[dict[str, dict[str, str]]] = {
     'on': {'trigger': 'default-on'},
 }
 PYTHON: Final[str] = '/opt/paperroute/current/.venv/bin/python'
-FONTS_CONF: Final[str] = 'src/paperroute/assets/fontconfig/fonts.conf'
+FONTS_CONF: Final[str] = (
+    'packages/paperroute-device/src/paperroute_device/fontconfig/fonts.conf'
+)
 UNIT_ENVIRONMENT: Final[str] = (
     'PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets'
     f' FONTCONFIG_FILE=/opt/paperroute/current/{FONTS_CONF}'
@@ -166,7 +168,7 @@ UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
             'TimeoutStartSec': '30',
             'ExecStart': (
                 '/opt/paperroute/current/.venv/bin/python'
-                ' -m paperroute.screen --image'
+                ' -m paperroute_device.screen --image'
                 ' /usr/local/share/paperroute/deploy/screens/on.raw'
                 ' --state /var/lib/paperroute/state.json'
             ),
@@ -2031,7 +2033,7 @@ def test_off_hook_draws_on_poweroff_only(
             '20',
             '/py',
             '-m',
-            'paperroute.screen',
+            'paperroute_device.screen',
             '--image',
             '/usr/local/share/paperroute/deploy/screens/off.raw',
             '--state',

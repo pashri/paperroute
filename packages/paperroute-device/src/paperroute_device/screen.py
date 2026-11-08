@@ -57,7 +57,7 @@ def screen_main(*, argv: list[str]) -> int:
         0 when shown, 1 when the picture is bad or the panel is not
         usable (missing, busy or not answering).
     """
-    parser = argparse.ArgumentParser(prog='paperroute.screen')
+    parser = argparse.ArgumentParser(prog='paperroute_device.screen')
     parser.add_argument('--image', type=Path, required=True)
     parser.add_argument('--state', type=Path, default=None)
     args = parser.parse_args(argv)

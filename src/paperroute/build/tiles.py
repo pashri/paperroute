@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Final
 
-from paperroute.asset_root import use_app_assets
 from paperroute.build.labels import LabelIndex, place_labels
 from paperroute.build.tile_draw import render_tile
 from paperroute_device.rss import BYTES_PER_MB, max_rss_mb
@@ -483,11 +482,7 @@ def write_tiles(
     with ExitStack() as stack:
         pool = (
             stack.enter_context(
-                ProcessPoolExecutor(
-                    max_workers=workers,
-                    # Workers start without the asset root, so set it.
-                    initializer=use_app_assets,
-                ),
+                ProcessPoolExecutor(max_workers=workers),
             )
             if workers > 1
             else None

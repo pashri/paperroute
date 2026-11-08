@@ -1,5 +1,6 @@
 """Tests for the Skia canvas wrapper."""
 
+from pathlib import Path
 from typing import Final
 
 import numpy as np
@@ -10,6 +11,7 @@ from paperroute_device.render.canvas import (
     ELLIPSIS,
     HEIGHT,
     INK,
+    PANEL_FONTS,
     PAPER,
     WIDTH,
     Canvas,
@@ -18,8 +20,24 @@ from paperroute_device.render.canvas import (
     font,
     text_width,
 )
+from paperroute_testkit.paths import ROOT
 
 LIGHT: Final[int] = 170
+
+
+def test_panel_fonts_ship_in_kit() -> None:
+    """The Overpass files and their licence ship in the device kit."""
+    fonts = Path(str(PANEL_FONTS))
+    assert fonts == (
+        ROOT / 'packages' / 'paperroute-device' / 'src' / 'paperroute_device'
+        / 'fonts'
+    )
+    assert {path.name for path in fonts.iterdir()} == {
+        'Overpass-400.ttf',
+        'Overpass-700.ttf',
+        'Overpass-800.ttf',
+        'OFL.txt',
+    }
 
 
 def test_grey_is_paper_by_default() -> None:

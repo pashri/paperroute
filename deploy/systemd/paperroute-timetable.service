@@ -7,7 +7,7 @@ Wants=network-online.target
 Type=oneshot
 User=paperroute
 Group=paperroute
-Environment=PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets FONTCONFIG_FILE=/opt/paperroute/current/src/paperroute/assets/fontconfig/fonts.conf
+Environment=PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets FONTCONFIG_FILE=/opt/paperroute/current/packages/paperroute-device/src/paperroute_device/fontconfig/fonts.conf
 ExecStartPre=+/usr/local/bin/paperroute-led rebuild
 # TMPDIR keeps temp files off the RAM-backed /tmp; set here, not unit-wide,
 # so the root + lines never get a directory the service user can write

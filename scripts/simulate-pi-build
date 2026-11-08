@@ -12,15 +12,18 @@ git ls-files -z src packages pyproject.toml uv.lock README.md | rsync -a --from0
 rsync -a "$stage/" "$old/"
 UV_LINK_MODE=copy uv sync --quiet --frozen --package paperroute --no-default-groups --no-editable --project "$stage"
 UV_LINK_MODE=copy uv sync --quiet --frozen --no-dev --no-editable --project "$old"
-imports="import paperroute.__main__, paperroute.screen, paperroute_hardware, paperroute_device, paperroute_transit; from importlib.util import find_spec as f"
+imports="import paperroute.__main__, paperroute_device.screen, paperroute_hardware, paperroute_device, paperroute_transit; from importlib.util import find_spec as f"
 "$stage/.venv/bin/python" -c "$imports; assert not any(f(m) for m in ('osmium', 'shapely', 'pytest', 'paperroute_testkit'))"
 "$old/.venv/bin/python" -c "$imports; assert not any(f(m) for m in ('pytest', 'paperroute_testkit'))"
 "$stage/.venv/bin/python" -c "import paperroute.build.extras as e, paperroute.city as c; assert e.city_named(ref='paperroute.city:SYDNEY').name == c.SYDNEY.name"
 
 draw=$(cat <<'EOF'
+import sysconfig
+from pathlib import Path
+
 from paperroute.app_render import MapRenderer, drawing
-from paperroute.asset_root import APP_ASSETS, use_app_assets
 from paperroute.core.stop_view import PinTag, Row, StopView
+from paperroute_device.render.canvas import PANEL_FONTS
 
 def row(minutes):
     return Row(
@@ -30,7 +33,6 @@ def row(minutes):
         arrives_at=f'8:3{minutes}', ride_minutes=30, live=False, pill=None,
     )
 
-use_app_assets()
 view = StopView(
     origin='Hollis St', destination='Parramatta', clock='8:00',
     hero=row(3), rows=(row(6), row(9)),
@@ -39,7 +41,9 @@ view = StopView(
     head_rows=(row(3), row(6), row(9)),
 )
 frame = drawing(view=view, maps=MapRenderer(tiles=None))()
-assert 'site-packages' in str(APP_ASSETS.fonts), APP_ASSETS.fonts
+purelib = Path(sysconfig.get_paths()['purelib'])
+fonts = purelib / 'paperroute_device' / 'fonts'
+assert Path(str(PANEL_FONTS)) == fonts, PANEL_FONTS
 assert frame.shape == (480, 800) and frame.min() == 0, frame.shape
 EOF
 )
@@ -53,9 +57,12 @@ from paperroute_device.core.panel_views import MenuView
 from paperroute_device.render.panel import draw_panel_view
 
 use_app_assets()
-packaged = Path(sysconfig.get_paths()['purelib']) / 'paperroute' / 'assets'
-for found in (APP_ASSETS.fonts, APP_ASSETS.web):
-    assert Path(str(found)).is_relative_to(packaged), found
+purelib = Path(sysconfig.get_paths()['purelib'])
+packaged = purelib / 'paperroute' / 'assets'
+assert Path(str(APP_ASSETS.web)).is_relative_to(packaged), APP_ASSETS.web
+for weight in (400, 700, 800):
+    ttf = purelib / 'paperroute_device' / 'fonts' / f'Overpass-{weight}.ttf'
+    assert ttf.is_file(), ttf
 view = MenuView(clock='8:00', rows=('Wi-Fi', 'Device'), cursor=0, first=0)
 frame = draw_panel_view(view=view)
 assert frame.shape == (480, 800) and frame.min() == 0, frame.shape
@@ -121,25 +128,27 @@ loaded = [
 assert not loaded, loaded
 EOF
 )
-no_root="from paperroute_device.render.canvas import Face, font
+no_root="from paperroute_device.assets import assets
+from paperroute_device.render.canvas import Face, font
+font(Face(weight=400, px=16))
 try:
-    font(Face(weight=400, px=16))
+    assets()
 except RuntimeError as error:
     assert 'no asset root' in str(error), error
 else:
-    raise AssertionError('font loaded with no asset root')"
-screen_only="import paperroute.screen, sys
+    raise AssertionError('an asset root was set')"
+screen_only="import paperroute_device.screen, sys
 loaded = [
     name for name in sys.modules
     if name.split('.')[0].startswith('paperroute')
-    and name not in {'paperroute', 'paperroute.screen'}
+    and name not in {'paperroute_device', 'paperroute_device.screen'}
     and name.split('.')[0] != 'paperroute_hardware'
 ]
 assert not loaded, loaded"
 
 for py in "$stage/.venv/bin/python" "$old/.venv/bin/python"; do
     code=0
-    err=$("$py" -m paperroute.screen --image deploy/screens/on.raw --state /nonexistent 2>&1 >/dev/null) || code=$?
+    err=$("$py" -m paperroute_device.screen --image deploy/screens/on.raw --state /nonexistent 2>&1 >/dev/null) || code=$?
     if [[ $code -ne 1 || $err != screen:* || $err == *Traceback* ]]; then
         printf '%s: screen exited %s\n%s\n' "$py" "$code" "$err" >&2
         exit 1

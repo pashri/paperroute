@@ -139,7 +139,7 @@ class CityParts:
     Attributes
     ----------
     assets : AssetRoot
-        The city's fonts and web files.
+        The city's web files.
     live_feeds : LiveFeeds
         Makes the live feeds client; never called for replayed feeds.
     keys : DeviceKeys

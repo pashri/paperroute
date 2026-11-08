@@ -6,7 +6,7 @@ case ${1:-} in
 poweroff | halt)
     "${PAPERROUTE_TIMEOUT:-/usr/bin/timeout}" 20 \
         "${PAPERROUTE_PYTHON:-/opt/paperroute/current/.venv/bin/python}" \
-        -m paperroute.screen \
+        -m paperroute_device.screen \
         --image /usr/local/share/paperroute/deploy/screens/off.raw \
         --state /var/lib/paperroute/state.json || true
     ;;

@@ -1,4 +1,4 @@
-"""Where the fonts and web files are, as the app sets it."""
+"""Where the web files are, as the app sets it."""
 
 from dataclasses import dataclass
 from importlib.resources.abc import Traversable
@@ -8,17 +8,14 @@ from typing import Final
 @dataclass(frozen=True)
 class AssetRoot:
     """
-    The directories holding the app's package data.
+    The directory holding the app's package data.
 
     Attributes
     ----------
-    fonts : Traversable
-        Holds the Overpass ``.ttf`` files.
     web : Traversable
         Holds the app's own web files.
     """
 
-    fonts: Traversable
     web: Traversable
 
 
@@ -29,7 +26,7 @@ def use_assets(*, root: AssetRoot) -> None:
     """
     Set the asset root for the rest of the process.
 
-    Fonts are cached once loaded, so the root cannot change later.
+    The root cannot change once set.
 
     Parameters
     ----------

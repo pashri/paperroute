@@ -2,22 +2,26 @@
 
 import re
 import sqlite3
+from datetime import time
 from enum import StrEnum
 from typing import Final
 from zoneinfo import ZoneInfo
 
 from paperroute.build.dedupe import merge_rail, relabel_trainlink
 from paperroute.build.trainlink import trim_trainlink
+from paperroute_device.core.device_settings import Window
 from paperroute_transit.core.city import (
     AgencyAlerts,
     AlertRules,
     CatalogueRules,
     City,
     MergeReport,
+    Nouns,
     PlaceNames,
     TimetableRules,
 )
-from paperroute_transit.core.geo import DegreeBox, Projection
+from paperroute_transit.core.geo import DegreeBox, Projection, to_metres
+from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.modes import ModeSpec, RouteClass
 
 
@@ -357,6 +361,45 @@ SYDNEY_PROJECTION: Final[Projection] = Projection(
     grid_lat=-32.0,
 )
 SYDNEY_BBOX: Final[DegreeBox] = (140.99, -37.51, 153.64, -28.15)
+TOWN_HALL: Final[StopPlace] = StopPlace(
+    stop_id='200070',
+    name='Town Hall Station',
+    point=to_metres(
+        lon=151.206899293,
+        lat=-33.8735963257,
+        projection=SYDNEY_PROJECTION,
+    ),
+)
+DEFAULT_PIN: Final[Pin] = Pin(origin=TOWN_HALL, kind=SydneyMode.TRAIN)
+PEAK_WINDOWS: Final[tuple[Window, ...]] = (
+    Window(start=time(6, 30), end=time(10)),
+    Window(start=time(15), end=time(19)),
+)
+SOURCE_NOUNS: Final[dict[str, Nouns]] = {
+    SydneyFeed.BUS: Nouns(vehicle='bus', bay='stand', connection='bus'),
+    SydneyFeed.TRAIN: Nouns(
+        vehicle='train', bay='platform', connection='train',
+    ),
+    SydneyFeed.METRO: Nouns(
+        vehicle='metro', bay='platform', connection='metro',
+    ),
+    SydneyFeed.FERRY: Nouns(vehicle='ferry', bay='wharf', connection='ferry'),
+    SydneyFeed.LIGHT_RAIL: Nouns(
+        vehicle='light rail', bay='platform', connection='light rail',
+    ),
+    SydneyFeed.COACH: Nouns(vehicle='coach', bay='stand', connection='coach'),
+    SydneyFeed.REGIONAL: Nouns(
+        vehicle='service', bay='platform', connection='train',
+    ),
+    SydneyFeed.OTHER: Nouns(
+        vehicle='service', bay='platform', connection='service',
+    ),
+}
+NOUN_OVERRIDES: Final[dict[tuple[str, str], Nouns]] = {
+    (SydneyFeed.REGIONAL, SydneyMode.TRAIN): Nouns(
+        vehicle='train', bay='platform', connection='train',
+    ),
+}
 SYDNEY: Final[City] = City(
     name='Sydney',
     zone=SYDNEY_ZONE,
@@ -367,4 +410,8 @@ SYDNEY: Final[City] = City(
     catalogue=SYDNEY_CATALOGUE,
     timetable=TimetableRules(merge=merge_sydney, holiday_source='bundle'),
     alerts=SYDNEY_ALERTS,
+    default_pin=DEFAULT_PIN,
+    peak_windows=PEAK_WINDOWS,
+    source_nouns=SOURCE_NOUNS,
+    noun_overrides=NOUN_OVERRIDES,
 )

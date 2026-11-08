@@ -171,11 +171,12 @@ def initial_state(
     -------
     State
         State, the map with no knob step. A current pin out of range is
-        clamped, and with no place to show Town Hall is unpinned.
+        clamped, and with no place to show the city's default pin is
+        unpinned.
     """
     state = State(
         now=now,
-        places=places_of(saved=saved),
+        places=places_of(saved=saved, city=city),
         city=city,
         view=saved.view,
         saving=Saving(

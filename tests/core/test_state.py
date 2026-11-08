@@ -14,6 +14,7 @@ from paperroute.city import (
     SYDNEY,
     SYDNEY_PROJECTION,
     SYDNEY_ZONE,
+    TOWN_HALL,
     SydneyFeed,
     SydneyMode,
 )
@@ -96,14 +97,14 @@ from paperroute.core.quota import QUOTA_SAVE_EVERY, quota_only
 from paperroute.core.rebuild import building_view
 from paperroute.core.rhythm import poll_every
 from paperroute.core.saved import (
-    DEFAULT_SAVED,
     LIVE_VIEWS,
-    TOWN_HALL,
     BoardSettings,
     LiveView,
     Rate,
     Saved,
     Settings,
+    default_saved,
+    default_settings,
     seeded,
 )
 from paperroute.core.state import initial_state, step
@@ -256,7 +257,7 @@ def fresh(*, now: datetime = START, centre: Point | None = None) -> State:
         Initial state.
     """
     pin = replace(PIN, origin=replace(PIN.origin, point=centre))
-    return begun(saved=seeded(pin=pin), now=now)
+    return begun(saved=seeded(pin=pin, city=SYDNEY), now=now)
 
 
 def every_position_fetch() -> list[FetchFeed]:
@@ -327,7 +328,10 @@ def test_initial_state_centres_on_the_pins_point() -> None:
 def test_initial_state_carries_city() -> None:
     """The state carries the city it was started for, out of its repr."""
     state = initial_state(
-        saved=seeded(pin=PIN), now=START, stored=True, city=SYDNEY,
+        saved=seeded(
+            pin=PIN,
+            city=SYDNEY,
+        ), now=START, stored=True, city=SYDNEY,
     )
     assert state.city is SYDNEY
     assert 'city' not in repr(state)
@@ -352,7 +356,7 @@ def test_stop_view_names_the_pins_places() -> None:
 def test_header_shows_nickname() -> None:
     """The tag reads '<nickname> n/total'; unpinning drops it."""
     pins = (replace(PIN, nickname='Home'), PINS[0])
-    saved = replace(seeded(pin=PIN), pins=pins)
+    saved = replace(seeded(pin=PIN, city=SYDNEY), pins=pins)
     state = begun(saved=saved)
     state, _ = step(state, Tick(now=START))
     assert isinstance(state.last_view, StopView)
@@ -364,7 +368,7 @@ def test_header_shows_nickname() -> None:
 
 def test_stop_view_without_a_destination_names_none() -> None:
     """A pin with no Destination gives the view no destination."""
-    saved = seeded(pin=replace(PIN, destination=None))
+    saved = seeded(pin=replace(PIN, destination=None), city=SYDNEY)
     state = begun(saved=saved)
     state, _ = step(state, Tick(now=START))
     assert isinstance(state.last_view, StopView)
@@ -2090,11 +2094,12 @@ def start_saved(draw: st.DrawFn) -> Saved:
     centre = draw(st.sampled_from([None, CENTRE]))
     pin = replace(PIN, origin=replace(PIN.origin, point=centre))
     options = [
-        seeded(pin=pin),
-        seeded(pin=WORK),
-        DEFAULT_SAVED,
-        replace(DEFAULT_SAVED, unpinned=None, current=5),
+        seeded(pin=pin, city=SYDNEY),
+        seeded(pin=WORK, city=SYDNEY),
+        default_saved(city=SYDNEY),
+        replace(default_saved(city=SYDNEY), unpinned=None, current=5),
         Saved(
+            settings=default_settings(city=SYDNEY),
             pins=PINS,
             current=draw(st.integers(-1, 4)),
             unpinned=draw(st.sampled_from([None, ELSEWHERE])),
@@ -2111,7 +2116,10 @@ def test_step_invariants_asleep_on_a_view_without_a_map(
     """Falling asleep off the Map loads the sleep map, not positions."""
     night = datetime(2026, 4, 12, 1, 30, tzinfo=SYDNEY_ZONE)
     state = initial_state(
-        saved=replace(DEFAULT_SAVED, view=view), now=night, stored=True,
+        saved=replace(
+            default_saved(city=SYDNEY),
+            view=view,
+        ), now=night, stored=True,
         city=SYDNEY,
     )
     trip = replace(departure(departs=night), shape_id='b:1')
@@ -2487,7 +2495,7 @@ def test_no_destination_map_caps_patterns() -> None:
         destination=None,
     )
     state = initial_state(
-        saved=seeded(pin=pin),
+        saved=seeded(pin=pin, city=SYDNEY),
         now=START,
         stored=True,
         city=SYDNEY,
@@ -2519,7 +2527,7 @@ def no_destination_map(*, count: int) -> State:
         destination=None,
     )
     state = initial_state(
-        saved=seeded(pin=pin),
+        saved=seeded(pin=pin, city=SYDNEY),
         now=START,
         stored=True,
         city=SYDNEY,
@@ -2580,6 +2588,7 @@ def pinned(
         The state after its first tick.
     """
     saved = Saved(
+        settings=default_settings(city=SYDNEY),
         pins=PINS,
         current=current,
         unpinned=unpinned,
@@ -2647,7 +2656,7 @@ def test_top_turn_without_pins_does_nothing() -> None:
     """With only the unpinned place there is nothing to turn to."""
     state, _ = step(
         initial_state(
-            saved=DEFAULT_SAVED,
+            saved=default_saved(city=SYDNEY),
             now=START,
             stored=True,
             city=SYDNEY,
@@ -2867,7 +2876,7 @@ def test_save_waits_three_seconds_after_last_change() -> None:
 
 def test_first_tick_saves_when_never_stored() -> None:
     """With no file yet, the first tick writes one."""
-    saved = seeded(pin=PIN)
+    saved = seeded(pin=PIN, city=SYDNEY)
     state = initial_state(saved=saved, now=START, stored=False, city=SYDNEY)
     assert state.saving.saved is None
     state, effects = step(state, Tick(now=START))
@@ -2905,6 +2914,7 @@ def test_new_timetable_version_matches_every_place() -> None:
     far = place('far', name='Far', point=(5.0, 5.0))
     pins = (replace(PINS[0], destination=far), *PINS[1:])
     saved = Saved(
+        settings=default_settings(city=SYDNEY),
         pins=pins,
         current=0,
         unpinned=ELSEWHERE,
@@ -3097,7 +3107,7 @@ def test_auto_saved_and_restored() -> None:
     auto = AutoState(overridden_at=START)
     state = fresh()
     assert saved_of(state=replace(state, auto=auto)).auto == auto
-    saved = replace(seeded(pin=PIN), auto=auto)
+    saved = replace(seeded(pin=PIN, city=SYDNEY), auto=auto)
     assert initial_state(
         saved=saved,
         now=START,

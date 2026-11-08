@@ -3,7 +3,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 
-from paperroute.city import SydneyMode
 from paperroute.core.chooser import Choice
 from paperroute.core.pin_choices import PinDraft, PinEditor, clean_nickname
 from paperroute.ports import PinOptions
@@ -52,20 +51,20 @@ def pick(*, given: str, offered: Sequence[str]) -> Step:
     return Step(value=lone, kept=not given)
 
 
-def kind_of(*, kinds: Sequence[SydneyMode], value: str) -> SydneyMode | None:
+def kind_of(*, kinds: Sequence[str], value: str) -> str | None:
     """
     Find the kind with a name.
 
     Parameters
     ----------
-    kinds : Sequence[SydneyMode]
+    kinds : Sequence[str]
         Kinds to look in.
     value : str
         Name of a kind; '' for none.
 
     Returns
     -------
-    SydneyMode | None
+    str | None
         The kind, or None when none is named.
     """
     return next((kind for kind in kinds if kind == value), None)
@@ -73,7 +72,7 @@ def kind_of(*, kinds: Sequence[SydneyMode], value: str) -> SydneyMode | None:
 
 def kind_step(
     *, options: PinOptions, stop: str, given: str | None,
-) -> tuple[tuple[SydneyMode, ...], SydneyMode | None, bool]:
+) -> tuple[tuple[str, ...], str | None, bool]:
     """
     Check the kind against the kinds the From offers.
 
@@ -88,7 +87,7 @@ def kind_step(
 
     Returns
     -------
-    tuple[tuple[SydneyMode, ...], SydneyMode | None, bool]
+    tuple[tuple[str, ...], str | None, bool]
         The kinds offered, the kind chosen, and whether the given kind
         was kept.
     """
@@ -101,7 +100,7 @@ def line_step(
     *,
     options: PinOptions,
     stop: str,
-    kind: SydneyMode | None,
+    kind: str | None,
     given: str,
 ) -> tuple[tuple[Choice, ...], Choice | None, bool]:
     """
@@ -113,7 +112,7 @@ def line_step(
         What the timetable offers.
     stop : str
         The From's ID.
-    kind : SydneyMode | None
+    kind : str | None
         The kind chosen, or None for none.
     given : str
         The route number given; '' for none.
@@ -134,7 +133,7 @@ def to_step(
     *,
     options: PinOptions,
     origin: StopPlace,
-    kind: SydneyMode | None,
+    kind: str | None,
     line: Choice | None,
     given: str,
 ) -> tuple[tuple[StopPlace, ...], StopPlace | None]:
@@ -147,7 +146,7 @@ def to_step(
         What the timetable offers.
     origin : StopPlace
         The From.
-    kind : SydneyMode | None
+    kind : str | None
         The kind chosen, or None for none.
     line : Choice | None
         The line chosen, or None for none.
@@ -172,7 +171,7 @@ def filter_step(
     *,
     options: PinOptions,
     stop: str,
-    kind: SydneyMode | None,
+    kind: str | None,
     given: tuple[str, ...],
 ) -> tuple[tuple[str, ...], tuple[str, ...]]:
     """
@@ -184,7 +183,7 @@ def filter_step(
         What the timetable offers.
     stop : str
         The From's ID.
-    kind : SydneyMode | None
+    kind : str | None
         The kind chosen, or None for none.
     given : tuple[str, ...]
         The route numbers given.

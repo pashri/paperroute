@@ -26,6 +26,7 @@ from paperroute_transit.core.model import (
     StopPlace,
     TripFacts,
 )
+from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.positions import (
     PositionsSnapshot,
@@ -517,6 +518,7 @@ def stop_view_of(
         now=now,
         zone=SYDNEY_ZONE,
         stale_after=STALE_LIMIT,
+        city=SYDNEY,
         scroll=0,
         live_since=now,
         has_feed=True,
@@ -564,6 +566,7 @@ def inputs_of(
         now=now,
         zone=SYDNEY_ZONE,
         stale_after=STALE_LIMIT,
+        line_kinds=line_modes(modes=SYDNEY.modes),
         scroll=0,
         cursor=None,
         picking=None,

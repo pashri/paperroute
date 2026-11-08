@@ -9,7 +9,7 @@ from typing import Final
 from hypothesis import strategies as st
 
 from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.city import SYDNEY_PROJECTION, SydneyMode
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
 from paperroute_testkit.paths import ROOT
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.model import StopPlace
@@ -183,7 +183,7 @@ def train_reach(*, station: str) -> tuple[Reach, set[str]]:
     """
     with closing(SqliteNetworkRepository(
         path=REAL_DB,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         found = repo.reach_input(
             key=StripKey(station=station, kind=SydneyMode.TRAIN, routes=()),

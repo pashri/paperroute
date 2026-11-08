@@ -403,6 +403,7 @@ def vehicle_markers(*, trips: TripInputs, keep: Keepouts
         ],
         key=key,
         now=trips.now,
+        line_kinds=trips.line_kinds,
     ))
     placed = (
         trip_marker(

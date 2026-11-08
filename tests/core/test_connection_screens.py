@@ -313,7 +313,7 @@ def test_auto_window_shows_connection() -> None:
     )
     work = replace(WORK, windows=(window,))
     saved = replace(
-        seeded(pin=PLAIN), pins=(PLAIN, work), view=LiveView.MAP,
+        seeded(pin=PLAIN, city=SYDNEY), pins=(PLAIN, work), view=LiveView.MAP,
     )
     state = initial_state(saved=saved, now=at(7, 29), stored=True, city=SYDNEY)
     state = replace(state, panel=replace(state.panel, facts=device_facts()))

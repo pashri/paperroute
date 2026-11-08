@@ -691,6 +691,7 @@ def trips_of(*, inputs: StripInputs) -> TripInputs:
         zone=inputs.zone,
         stale_after=inputs.stale_after,
         station_of={} if inputs.reach is None else inputs.reach.station_of,
+        line_kinds=inputs.line_kinds,
     )
 
 

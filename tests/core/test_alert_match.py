@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY_ZONE, SydneyFeed, SydneyMode
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute.core.alert_match import (
     Listed,
     PinFacts,
@@ -138,6 +138,7 @@ def listed_for(
         pin=pin,
         departures=trains() if departures is None else departures,
         between=between,
+        city=SYDNEY,
     )
     return listed_alerts(
         matched=matched_alerts(alerts=[found], facts=facts),
@@ -148,23 +149,29 @@ def listed_for(
 
 def test_place_name() -> None:
     """Station suffixes are dropped."""
-    assert place_name(name='Central Station') == 'Central'
-    assert place_name(name='Olympic Park Station') == 'Olympic Park'
-    assert place_name(name='Rhodes Shops') == 'Rhodes Shops'
+    assert place_name(name='Central Station', city=SYDNEY) == 'Central'
+    assert place_name(
+        name='Olympic Park Station',
+        city=SYDNEY,
+    ) == 'Olympic Park'
+    assert place_name(name='Rhodes Shops', city=SYDNEY) == 'Rhodes Shops'
 
 
 def test_wharf_suffix_dropped() -> None:
     """A wharf's place name drops the Wharf suffix."""
-    assert place_name(name='Rose Bay Wharf') == 'Rose Bay'
+    assert place_name(name='Rose Bay Wharf', city=SYDNEY) == 'Rose Bay'
 
 
 def test_numbered_wharf_is_its_place() -> None:
     """A numbered wharf or a wharf side reduces to its place."""
-    assert place_name(name='Circular Quay, Wharf 2, Side A') == (
+    assert place_name(name='Circular Quay, Wharf 2, Side A', city=SYDNEY) == (
         'Circular Quay'
     )
-    assert place_name(name='Manly, Wharf 1') == 'Manly'
-    assert place_name(name='Balmain East Wharf, Side A') == 'Balmain East'
+    assert place_name(name='Manly, Wharf 1', city=SYDNEY) == 'Manly'
+    assert place_name(
+        name='Balmain East Wharf, Side A',
+        city=SYDNEY,
+    ) == 'Balmain East'
 
 
 def test_numbered_wharf_pin_takes_banner() -> None:
@@ -229,10 +236,11 @@ def test_train_pin_rejects_trailing_wharf() -> None:
 
 def test_ferry_pin_is_name_pin() -> None:
     """Ferry pins match alert text, by kind or by their departures."""
-    assert is_name_pin(pin=ROSE_BAY_PIN, departures=())
+    assert is_name_pin(pin=ROSE_BAY_PIN, departures=(), city=SYDNEY)
     kindless = replace(ROSE_BAY_PIN, kind=None)
     assert is_name_pin(
         pin=kindless, departures=trains(route='F9', mode=SydneyFeed.FERRY),
+        city=SYDNEY,
     )
 
 
@@ -389,7 +397,12 @@ def test_trip_alert_ranks_first() -> None:
         periods=XPLORER.periods,
         trip_id='alias-1',
     )
-    facts = pin_facts(pin=CENTRAL_PIN, departures=rides, between=frozenset())
+    facts = pin_facts(
+        pin=CENTRAL_PIN,
+        departures=rides,
+        between=frozenset(),
+        city=SYDNEY,
+    )
     listed = listed_alerts(
         matched=matched_alerts(alerts=[XPLORER, trip], facts=facts),
         now=sydney(day=24, hour=9),
@@ -631,9 +644,13 @@ def test_between_names() -> None:
         'one': line(trip_id='one', stations='ABCDE'),
         'two': line(trip_id='two', stations='AXY'),
     }
-    assert between_names(pin=pin, patterns=patterns) == {'B', 'C'}
+    assert between_names(pin=pin, patterns=patterns, city=SYDNEY) == {'B', 'C'}
     alone = station_pin(origin='A', origin_name='A')
-    assert between_names(pin=alone, patterns=patterns) == frozenset()
+    assert between_names(
+        pin=alone,
+        patterns=patterns,
+        city=SYDNEY,
+    ) == frozenset()
 
 
 def test_between_names_from_a_platform() -> None:
@@ -642,20 +659,30 @@ def test_between_names_from_a_platform() -> None:
         origin='a1', origin_name='A', destination='d1', destination_name='D',
     )
     patterns = {'one': line(trip_id='one', stations='ABCDE')}
-    assert between_names(pin=pin, patterns=patterns) == frozenset()
+    assert between_names(
+        pin=pin,
+        patterns=patterns,
+        city=SYDNEY,
+    ) == frozenset()
     families = {
         'a1': frozenset({'a1', 'A'}),
         'd1': frozenset({'d1', 'D'}),
     }
     assert between_names(
         pin=pin, patterns=patterns, families=families,
+        city=SYDNEY,
     ) == {'B', 'C'}
 
 
 def test_pin_facts_name_pin_by_modes() -> None:
     """A pin of any kind is a name pin when every departure is rail."""
     pin = replace(PARRAMATTA_CENTRAL, kind=None)
-    facts = pin_facts(pin=pin, departures=trains(), between=frozenset())
+    facts = pin_facts(
+        pin=pin,
+        departures=trains(),
+        between=frozenset(),
+        city=SYDNEY,
+    )
     assert facts == PinFacts(
         trips=frozenset({'trip-10', 'trip-11'}),
         stops=frozenset({'2150', '200060'}),
@@ -663,7 +690,12 @@ def test_pin_facts_name_pin_by_modes() -> None:
         names=frozenset({'Parramatta', 'Central'}),
     )
     mixed = trains() + trains(route='526', mode=SydneyFeed.BUS)
-    assert not pin_facts(pin=pin, departures=mixed, between=BETWEEN).names
+    assert not pin_facts(
+        pin=pin,
+        departures=mixed,
+        between=BETWEEN,
+        city=SYDNEY,
+    ).names
 
 
 def test_unmatched_alert_is_not_listed() -> None:
@@ -676,6 +708,7 @@ def test_plain_destination_pin_matches_any_loaded_route() -> None:
     bus = trains(route='526', mode=SydneyFeed.BUS)
     facts = pin_facts(
         pin=PARRAMATTA_CENTRAL, departures=trains() + bus, between=BETWEEN,
+        city=SYDNEY,
     )
     route = alert(alert_id='bus', header='x', route='526')
     assert tie_of(alert=route, facts=facts) is AlertTie.ROUTE
@@ -708,11 +741,13 @@ def test_stop_alert_for_a_route_the_pin_does_not_use_is_dropped() -> None:
     ))
     t1 = pin_facts(
         pin=PARRAMATTA_CENTRAL, departures=trains(), between=frozenset(),
+        city=SYDNEY,
     )
     regional = pin_facts(
         pin=replace(PARRAMATTA_CENTRAL, kind=None),
         departures=trains(route='WST', mode=SydneyFeed.REGIONAL),
         between=frozenset(),
+        city=SYDNEY,
     )
     assert tie_of(alert=xpt, facts=t1) is None
     assert tie_of(alert=xpt, facts=regional) is AlertTie.STOP
@@ -729,6 +764,7 @@ def test_route_alert_ties_by_the_line_the_departures_run_on() -> None:
     ]
     facts = pin_facts(
         pin=PARRAMATTA_CENTRAL, departures=western, between=frozenset(),
+        city=SYDNEY,
     )
     north_shore = informed_alert(entity=Informed(
         route_id='NSN_1a', route='T1', line='sydneytrains:NSN_1a',
@@ -744,6 +780,7 @@ def test_route_alert_listing_other_stops_is_dropped() -> None:
     """A route alert about stops off the pin does not count."""
     facts = pin_facts(
         pin=PARRAMATTA_CENTRAL, departures=trains(), between=frozenset(),
+        city=SYDNEY,
     )
     elsewhere = informed_alert(entity=Informed(
         route='T1', stop_id='9999', stops=frozenset({'9999'}),

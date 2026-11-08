@@ -16,7 +16,7 @@ from paperroute.core.messages import (
     Tick,
 )
 from paperroute.core.places import shown
-from paperroute.core.saved import LiveView, Saved, seeded
+from paperroute.core.saved import LiveView, Saved, default_settings, seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import Places, State
 from paperroute_hardware.core.knob_events import (
@@ -149,7 +149,11 @@ def started(
         State after a first tick with the shown place's departures.
     """
     when = at(7, 29) if now is None else now
-    saved = replace(seeded(pin=pins[0]), pins=pins, current=current)
+    saved = replace(
+        seeded(pin=pins[0], city=SYDNEY),
+        pins=pins,
+        current=current,
+    )
     state = trusted(
         state=initial_state(saved=saved, now=when, stored=True, city=SYDNEY),
     )
@@ -396,6 +400,7 @@ def restarted(*, auto: AutoState, current: int) -> State:
         Trusted state at 08:00.
     """
     saved = Saved(
+        settings=default_settings(city=SYDNEY),
         pins=(HOME, WORK),
         current=current,
         unpinned=None,

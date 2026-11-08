@@ -1,21 +1,38 @@
 """What a pin's editor accepts."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from paperroute.city import SydneyMode
-from paperroute.core.chooser import KIND_LABELS, KIND_ORDER, Choice
+from paperroute.core.chooser import Choice, kind_specs
 from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.modes import ModeSpec
 
 NICKNAME_MAX: Final[int] = 24
-KIND_NAMES: Final[dict[SydneyMode, str]] = {
-    kind: {**KIND_LABELS, SydneyMode.REPLACEMENT: 'Replacement buses'}[kind]
-    for kind in (
-        SydneyMode.BUS,
-        SydneyMode.REPLACEMENT,
-        *(kind for kind in KIND_ORDER if kind is not SydneyMode.BUS),
-    )
-}
+
+
+def kind_names(*, modes: Sequence[ModeSpec]) -> dict[str, str]:
+    """
+    Name the kinds a pin's editor offers, in its order.
+
+    Parameters
+    ----------
+    modes : Sequence[ModeSpec]
+        The city's modes.
+
+    Returns
+    -------
+    dict[str, str]
+        Each mode's label by its id: each mode of the KIND column,
+        followed by the modes under it.
+    """
+    return {
+        spec.id: spec.label
+        for top in kind_specs(modes=modes)
+        for spec in (
+            top, *(each for each in modes if each.under == top.id),
+        )
+    }
 
 
 @dataclass(frozen=True)
@@ -44,14 +61,14 @@ class StopMatch:
     ----------
     place : StopPlace
         The stop or station.
-    kinds : tuple[SydneyMode, ...]
-        The kinds of route that serve it, in `KIND_NAMES` order.
+    kinds : tuple[str, ...]
+        The kinds of route that serve it, in `kind_names` order.
     routes : tuple[str, ...]
         Some of the route numbers that serve it.
     """
 
     place: StopPlace
-    kinds: tuple[SydneyMode, ...]
+    kinds: tuple[str, ...]
     routes: tuple[str, ...]
 
 
@@ -98,7 +115,7 @@ class PinEditor:
         The choices that are offered, with the nickname and ref.
     origin : StopPlace | None
         The From place; None until a stop is chosen.
-    kinds : tuple[SydneyMode, ...]
+    kinds : tuple[str, ...]
         Kinds offered at the From.
     lines : tuple[Choice, ...]
         Lines or routes offered for the kind.
@@ -115,7 +132,7 @@ class PinEditor:
 
     draft: PinDraft
     origin: StopPlace | None
-    kinds: tuple[SydneyMode, ...]
+    kinds: tuple[str, ...]
     lines: tuple[Choice, ...]
     destinations: tuple[StopPlace, ...]
     filters: tuple[str, ...]

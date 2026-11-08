@@ -6,7 +6,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.city import SydneyFeed
 from paperroute.core.stop_view import Pill, Row, StopView, stops_text
 from paperroute.render.chrome import (
     ARROW_GAP,
@@ -38,11 +37,6 @@ ROW_H: Final[int] = 50
 LARGE_ROW_H: Final[int] = 64
 LARGE_SCALE: Final[float] = 1.25
 LIST_TOP: Final[int] = 30
-VEHICLE: Final[dict[str, str]] = {
-    SydneyFeed.BUS: 'bus', SydneyFeed.TRAIN: 'train',
-    SydneyFeed.METRO: 'metro', SydneyFeed.FERRY: 'ferry',
-    SydneyFeed.LIGHT_RAIL: 'light rail', SydneyFeed.COACH: 'coach',
-    SydneyFeed.REGIONAL: 'service', SydneyFeed.OTHER: 'service'}
 LIST_LEFT: Final[int] = 456
 LATER: Final[str] = 'LATER'
 LIST_WIDTH: Final[int] = 140
@@ -58,9 +52,6 @@ FASTER_GAP: Final[int] = 10
 TAG_FACE: Final[Face] = Face(weight=700, px=12)
 TAG_GAP: Final[int] = 8
 TAG_FLOOR: Final[int] = 40
-BAY: Final[dict[str, str]] = {
-    SydneyFeed.BUS: 'stand', SydneyFeed.COACH: 'stand',
-    SydneyFeed.FERRY: 'wharf'}
 
 
 def hero_headline(canvas: Canvas, *, row: Row, top: int) -> None:
@@ -76,9 +67,8 @@ def hero_headline(canvas: Canvas, *, row: Row, top: int) -> None:
     top : int
         Top of the panel.
     """
-    unit = VEHICLE[row.mode]
     canvas.text(
-        at=(18, top + 24), text=f'NEXT {unit.upper()}',
+        at=(18, top + 24), text=f'NEXT {row.vehicle.upper()}',
         face=Face(weight=700, px=12), grey=INK)
     width = route_pair(
         canvas, x=18, y=top + 50, route=row.route, onto=row.onto, px=20,
@@ -129,14 +119,13 @@ def hero_footer(canvas: Canvas, *, row: Row, top: int) -> None:
     canvas.text(
         at=(18, top + 216), text=f'arrives {row.arrives_at}',
         face=Face(weight=700, px=24), grey=INK)
-    bay = BAY.get(row.mode, 'platform')
-    where = f'{DOT}{bay} {row.platform}' if row.platform else ''
+    where = f'{DOT}{row.bay} {row.platform}' if row.platform else ''
     ride = Face(weight=400, px=15)
     count = (
         '' if row.stops is None else f'{DOT}{stops_text(stops=row.stops)}'
     )
     text = (
-        f'{row.ride_minutes} min on the {VEHICLE[row.mode]}{where}{count}'
+        f'{row.ride_minutes} min on the {row.vehicle}{where}{count}'
     )
     canvas.text(
         at=(18, top + 240), text=canvas.fit(text=text, face=ride, width=400),

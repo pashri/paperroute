@@ -6,6 +6,7 @@ from typing import Final
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from paperroute.adapters.state_auto import CLOCK, CLOCK_FORMAT
+from paperroute.core import saved
 from paperroute.core.saved import (
     BoardSettings,
     ConnectionMap,
@@ -20,6 +21,7 @@ from paperroute_device.core.device_settings import (
     Window,
 )
 from paperroute_hardware.ports import CLEAN_AFTER
+from paperroute_transit.core.city import City
 
 MAX_PEAK_WINDOWS: Final[int] = 2
 
@@ -237,13 +239,20 @@ def settings_from_model(*, model: SettingsModel) -> Settings:
     )
 
 
-def default_settings() -> dict[str, object]:
+def default_settings(*, city: City) -> dict[str, object]:
     """
-    Give the default settings as stored.
+    Give a city's default settings as stored.
+
+    Parameters
+    ----------
+    city : City
+        The city.
 
     Returns
     -------
     dict[str, object]
         The default settings as JSON data.
     """
-    return settings_to_model(settings=Settings()).model_dump(mode='json')
+    return settings_to_model(
+        settings=saved.default_settings(city=city),
+    ).model_dump(mode='json')

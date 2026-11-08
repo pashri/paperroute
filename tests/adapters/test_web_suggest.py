@@ -11,7 +11,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.trip_search import Journey, JourneyLeg, TripSearch
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.fakes import FakeTripPlanner
@@ -104,6 +104,7 @@ async def started(
     )
     display = WebDisplay(
         device=sydney_site().pages(), board=board, status=lambda: status or {},
+        city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()

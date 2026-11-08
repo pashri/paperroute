@@ -9,25 +9,21 @@ from typing import Final, cast
 
 from paperroute.adapters.network_lines import LineTables, Row
 from paperroute.adapters.timetable_db import DEFAULT_PATH, to_point
-from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.chooser import (
-    KIND_LABELS,
-    KIND_LETTERS,
-    KIND_ORDER,
     Choice,
     ChooserPath,
     Column,
     Level,
+    kind_specs,
 )
 from paperroute_device.adapters.sqlite_ro import (
     Identity,
     ReadOnlyDatabase,
     file_identity,
 )
-from paperroute_transit.core.city import LineGroup
-from paperroute_transit.core.geo import Projection
+from paperroute_transit.core.city import City, LineGroup
 from paperroute_transit.core.model import StopPlace, until_revisit
-from paperroute_transit.core.modes import line_modes
+from paperroute_transit.core.modes import ModeSpec, line_modes
 from paperroute_transit.core.reach import (
     ReachInput,
     RunTail,
@@ -37,7 +33,6 @@ from paperroute_transit.core.reach import (
     merge_tails,
 )
 
-LINE_KINDS: Final[frozenset[str]] = line_modes(modes=SYDNEY.modes)
 NETWORK_TABLES: Final[tuple[str, ...]] = (
     'runs', 'run_stops', 'chooser_routes', 'chooser_towards',
 )
@@ -62,20 +57,17 @@ ROUTES_IN_GROUP: Final[str] = (
 )
 REPLACEMENT_LINES: Final[str] = """
 SELECT r.line, r.line, COALESCE(t.name, r.line), ''
-FROM (SELECT DISTINCT line FROM chooser_routes WHERE kind = 'replacement') r
-LEFT JOIN chooser_routes t ON t.kind = 'train' AND t.number = r.line
+FROM (SELECT DISTINCT line FROM chooser_routes WHERE kind = :kind) r
+LEFT JOIN chooser_routes t ON t.kind = :replaces AND t.number = r.line
 ORDER BY COALESCE(t.sort, 1000000), r.line
 """
 HAS_REPLACEMENTS: Final[str] = (
-    "SELECT 1 FROM chooser_routes WHERE kind = 'replacement' LIMIT 1"
+    'SELECT 1 FROM chooser_routes WHERE kind = ? LIMIT 1'
 )
 REPLACEMENTS_OF: Final[str] = (
-    ROUTE_COLUMNS + "WHERE kind = 'replacement' AND line = ?" + ROUTE_ORDER
+    ROUTE_COLUMNS + 'WHERE kind = ? AND line = ?' + ROUTE_ORDER
 )
-REPLACEMENTS_ROW: Final[Choice] = Choice(
-    key='replacements', label='Trackwork', rule_above=True,
-    level=Level.REPLACEMENTS,
-)
+REPLACEMENTS_LABEL: Final[str] = 'Trackwork'
 TOWARDS: Final[str] = """
 SELECT towards_id, headsign, trips FROM chooser_towards
 WHERE route_key = ? ORDER BY trips DESC, towards_id
@@ -129,7 +121,9 @@ def unit_count(*, count: int, unit: str) -> str:
     return f'{count:,} {unit}{"" if count == 1 else "s"}'
 
 
-def kind_of(*, path: ChooserPath) -> SydneyMode | None:
+def kind_of(
+    *, path: ChooserPath, modes: Sequence[ModeSpec],
+) -> ModeSpec | None:
     """
     Read the kind a chooser path starts with.
 
@@ -137,16 +131,49 @@ def kind_of(*, path: ChooserPath) -> SydneyMode | None:
     ----------
     path : ChooserPath
         Chooser path.
+    modes : Sequence[ModeSpec]
+        The city's modes.
 
     Returns
     -------
-    SydneyMode | None
-        The kind of its first, KIND, step; None when it has none or the
-        kind is not offered.
+    ModeSpec | None
+        The spec of its first, KIND, step's mode; None when it has none
+        or the KIND column does not offer the mode.
     """
     if not path or path[0][0] is not Level.KIND:
         return None
-    return next((kind for kind in KIND_ORDER if kind == path[0][1]), None)
+    return next(
+        (spec for spec in kind_specs(modes=modes) if spec.id == path[0][1]),
+        None,
+    )
+
+
+def replacing_spec(
+    *, modes: Sequence[ModeSpec], under: str,
+) -> ModeSpec | None:
+    """
+    Find the mode whose routes stand in for lines, listed under a mode.
+
+    Parameters
+    ----------
+    modes : Sequence[ModeSpec]
+        The city's modes.
+    under : str
+        The mode the replacements row is listed under.
+
+    Returns
+    -------
+    ModeSpec | None
+        The first spec under that mode with `replaces` set, or None.
+    """
+    return next(
+        (
+            spec
+            for spec in modes
+            if spec.under == under and spec.replaces is not None
+        ),
+        None,
+    )
 
 
 def route_choices(*, rows: Iterable[Row]) -> tuple[Choice, ...]:
@@ -239,8 +266,9 @@ class SqliteNetworkRepository:
 
     Parameters
     ----------
-    projection : Projection
-        The projection stop points are placed in.
+    city : City
+        The city: its modes, line groups and the projection stop points
+        are placed in.
     path : Path | None
         Timetable file; None for the one on the device.
     connection : sqlite3.Connection | None
@@ -251,11 +279,13 @@ class SqliteNetworkRepository:
     def __init__(
         self,
         *,
-        projection: Projection,
+        city: City,
         path: Path | None = None,
         connection: sqlite3.Connection | None = None,
     ) -> None:
-        self.projection = projection
+        self.city = city
+        self.projection = city.projection
+        self.line_kinds = line_modes(modes=city.modes)
         self.db = ReadOnlyDatabase(
             path=path or DEFAULT_PATH,
             connection=connection,
@@ -269,7 +299,8 @@ class SqliteNetworkRepository:
         self.lines = LineTables(
             fetch=self.fetch,
             has_tables=self._has_tables,
-            projection=projection,
+            projection=city.projection,
+            line_kinds=self.line_kinds,
         )
 
     def fetch(
@@ -378,26 +409,52 @@ class SqliteNetworkRepository:
         Column | None
             The next column, possibly empty; None when nothing follows.
         """
-        kind = kind_of(path=path)
+        spec = kind_of(path=path, modes=self.city.modes)
+        if spec is None:
+            return None
+        return self._level_next(path=path, spec=spec)
+
+    def _level_next(
+        self, *, path: ChooserPath, spec: ModeSpec,
+    ) -> Column | None:
+        """
+        Work out the column after a path's last step, given its mode.
+
+        Parameters
+        ----------
+        path : ChooserPath
+            Steps chosen so far, not empty.
+        spec : ModeSpec
+            The mode the path starts with.
+
+        Returns
+        -------
+        Column | None
+            The next column, possibly empty; None when nothing follows.
+        """
+        kind = spec.id
+        replacing = replacing_spec(modes=self.city.modes, under=kind)
         level, key = path[-1]
-        match (level, kind):
-            case (Level.KIND, SydneyMode()):
-                return self._kind_next(kind=kind)
-            case (Level.GROUP, SydneyMode()):
+        match level:
+            case Level.KIND:
+                return self._kind_next(spec=spec)
+            case Level.GROUP:
                 return self.route_column(
                     sql=ROUTES_IN_GROUP, params=(kind, key),
                 )
-            case (Level.LINE | Level.STATION, SydneyMode()) if (
-                kind in LINE_KINDS
-            ):
+            case Level.LINE | Level.STATION if spec.by_line:
                 return self.station_first_column(path=path, kind=kind)
-            case (Level.REPLACEMENTS | Level.LINE, SydneyMode.BUS):
-                return self._replacement_next(level=level, key=key)
-            case (Level.ROUTE | Level.LINE, SydneyMode()):
+            case Level.REPLACEMENTS | Level.LINE if replacing is not None:
+                return self._replacement_next(
+                    level=level, key=key, spec=replacing,
+                )
+            case Level.ROUTE | Level.LINE:
                 return self.towards_column(route_key=key)
         return None
 
-    def _replacement_next(self, *, level: Level, key: str) -> Column:
+    def _replacement_next(
+        self, *, level: Level, key: str, spec: ModeSpec,
+    ) -> Column:
         """
         Work out the column after the replacements row or one of its lines.
 
@@ -407,6 +464,8 @@ class SqliteNetworkRepository:
             REPLACEMENTS or LINE.
         key : str
             The line's key.
+        spec : ModeSpec
+            The mode whose routes stand in for lines.
 
         Returns
         -------
@@ -414,37 +473,29 @@ class SqliteNetworkRepository:
             The replacement lines, or the routes replacing a line.
         """
         if level is Level.REPLACEMENTS:
-            return self.replacement_lines()
-        return self.route_column(sql=REPLACEMENTS_OF, params=(key,))
+            return self.replacement_lines(spec=spec)
+        return self.route_column(sql=REPLACEMENTS_OF, params=(spec.id, key))
 
-    def _kind_next(self, *, kind: SydneyMode) -> Column | None:
+    def _kind_next(self, *, spec: ModeSpec) -> Column:
         """
         Work out the column after a kind.
 
         Parameters
         ----------
-        kind : SydneyMode
-            The kind chosen.
+        spec : ModeSpec
+            The kind chosen, one the KIND column offers.
 
         Returns
         -------
-        Column | None
-            Groups for buses and school buses, routes for coaches, lines
-            for rail and ferries; None for any other kind.
+        Column
+            Groups for a mode whose route numbers are tagged, lines for
+            one chosen by line and routes for any other.
         """
-        match kind:
-            case SydneyMode.BUS | SydneyMode.SCHOOL:
-                return self.group_column(kind=kind)
-            case SydneyMode.COACH:
-                return self.route_column(sql=ROUTES_OF_KIND, params=(kind,))
-            case (
-                SydneyMode.TRAIN
-                | SydneyMode.METRO
-                | SydneyMode.LIGHT_RAIL
-                | SydneyMode.FERRY
-            ):
-                return self.line_column(kind=kind)
-        return None
+        if spec.tagged:
+            return self.group_column(kind=spec.id)
+        if spec.by_line:
+            return self.line_column(kind=spec.id)
+        return self.route_column(sql=ROUTES_OF_KIND, params=(spec.id,))
 
     def kind_column(self) -> Column:
         """
@@ -461,56 +512,69 @@ class SqliteNetworkRepository:
         }
         items = tuple(
             Choice(
-                key=kind, label=KIND_LABELS[kind], badge=KIND_LETTERS[kind],
+                key=spec.id, label=spec.label, badge=spec.letter,
                 detail=unit_count(
-                    count=counts[kind],
-                    unit='line' if kind in LINE_KINDS else 'route',
+                    count=counts[spec.id],
+                    unit='line' if spec.by_line else 'route',
                 ),
             )
-            for kind in KIND_ORDER
-            if kind in counts
+            for spec in kind_specs(modes=self.city.modes)
+            if spec.id in counts
         )
         return Column(level=Level.KIND, items=items)
 
-    def group_column(self, *, kind: SydneyMode) -> Column:
+    def group_column(self, *, kind: str) -> Column:
         """
         The GROUP column of a kind: its hundreds groups, counted.
 
         Parameters
         ----------
-        kind : SydneyMode
-            Bus or School.
+        kind : str
+            A mode whose route numbers are tagged.
 
         Returns
         -------
         Column
-            Groups in group order; Bus ends with Replacement buses when
-            any route has a line.
+            Groups in group order, ending with a replacements row keyed
+            by the mode listed under this one whose routes stand in for
+            lines, when it has any routes.
         """
         rows = self.fetch(sql=GROUPS, params=(kind,))
         items = tuple(
             Choice(key=str(grp), label=str(grp), detail=str(count))
             for grp, count in rows
         )
-        if kind == SydneyMode.BUS and self.fetch(
-            sql=HAS_REPLACEMENTS, params=(),
+        replacing = replacing_spec(modes=self.city.modes, under=kind)
+        if replacing is not None and self.fetch(
+            sql=HAS_REPLACEMENTS, params=(replacing.id,),
         ):
-            items = (*items, REPLACEMENTS_ROW)
+            items = (*items, Choice(
+                key=replacing.id, label=REPLACEMENTS_LABEL, rule_above=True,
+                level=Level.REPLACEMENTS,
+            ))
         return Column(level=Level.GROUP, items=items)
 
-    def replacement_lines(self) -> Column:
+    def replacement_lines(self, *, spec: ModeSpec) -> Column:
         """
-        The LINE column of Replacement buses: train lines with routes.
+        The LINE column of a replacing mode: the lines it stands in for.
+
+        Parameters
+        ----------
+        spec : ModeSpec
+            The mode whose routes stand in for lines.
 
         Returns
         -------
         Column
             Lines in line order, each group of lines ruled off.
         """
-        rows = self.fetch(sql=REPLACEMENT_LINES, params=())
+        rows = self.fetch(
+            sql=REPLACEMENT_LINES,
+            params={'kind': spec.id, 'replaces': spec.replaces},
+        )
         lines = ruled_off(
             lines=route_choices(rows=rows),
-            group_of=SYDNEY.catalogue.line_group,
+            group_of=self.city.catalogue.line_group,
         )
         return Column(level=Level.LINE, items=lines)
 
@@ -533,14 +597,14 @@ class SqliteNetworkRepository:
         rows = self.fetch(sql=sql, params=params)
         return Column(level=Level.ROUTE, items=route_choices(rows=rows))
 
-    def line_column(self, *, kind: SydneyMode) -> Column:
+    def line_column(self, *, kind: str) -> Column:
         """
         The LINE column of a kind, each group of lines ruled off.
 
         Parameters
         ----------
-        kind : SydneyMode
-            Train, Metro, Light rail or Ferry.
+        kind : str
+            A mode chosen by line.
 
         Returns
         -------
@@ -550,7 +614,7 @@ class SqliteNetworkRepository:
         rows = self.fetch(sql=ROUTES_OF_KIND, params=(kind,))
         lines = ruled_off(
             lines=route_choices(rows=rows),
-            group_of=SYDNEY.catalogue.line_group,
+            group_of=self.city.catalogue.line_group,
         )
         return Column(level=Level.LINE, items=lines)
 
@@ -577,7 +641,7 @@ class SqliteNetworkRepository:
         return Column(level=Level.TOWARDS, items=items)
 
     def station_first_column(
-        self, *, path: ChooserPath, kind: SydneyMode,
+        self, *, path: ChooserPath, kind: str,
     ) -> Column | None:
         """
         The STATION or TO column after a station-first line or station.
@@ -586,7 +650,7 @@ class SqliteNetworkRepository:
         ----------
         path : ChooserPath
             Steps chosen so far, ending in a LINE or STATION step.
-        kind : SydneyMode
+        kind : str
             The path's station-first kind.
 
         Returns
@@ -724,7 +788,7 @@ class SqliteNetworkRepository:
         rows = self.fetch(sql=RUNS_THROUGH, params={
             'station': station,
             'kind': None if key.kind is None else str(key.kind),
-            'any_route': every_route(key=key, line_kinds=LINE_KINDS),
+            'any_route': every_route(key=key, line_kinds=self.line_kinds),
             'routes': json.dumps(list(key.routes)),
         })
         return merged_tails(rows=rows)

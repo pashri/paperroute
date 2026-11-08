@@ -7,7 +7,7 @@ from typing import Final
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY_ZONE, SydneyFeed
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute.core.banners import NO_WIFI
 from paperroute.core.live import LiveDeparture
 from paperroute.core.stop_view import (
@@ -26,6 +26,7 @@ from paperroute.core.stop_view import (
     build_stop_view,
     countdown,
     live_line,
+    nouns,
     pin_tag,
     to_row,
 )
@@ -33,6 +34,7 @@ from paperroute_device.core.text import DOT, clock_text
 from paperroute_testkit.core.alert_factories import WESTERN, XPLORER
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.core.alert_model import AlertBanner
+from paperroute_transit.core.city import Nouns
 from paperroute_transit.core.model import CarryOn, TripFacts
 
 
@@ -144,6 +146,7 @@ def view(
             alert=alert,
             notice=notice,
             zone=SYDNEY_ZONE,
+            city=SYDNEY,
         ),
     )
 
@@ -190,7 +193,7 @@ def test_view_hero_and_rows() -> None:
 def test_view_row_fields() -> None:
     """A row carries the route, times, ride length and live flag."""
     row = hero(result=view(departures=(live(minutes=3, ride=25),)))
-    assert (row.route, row.mode) == ('606', 'bus')
+    assert (row.route, row.vehicle, row.bay) == ('606', 'bus', 'stand')
     assert row.destination == 'Parramatta'
     assert (row.leaves_at, row.arrives_at) == ('8:03', '8:28')
     assert (row.ride_minutes, row.live, row.pill) == (25, True, None)
@@ -393,6 +396,7 @@ def test_view_empty_says_loading_before_the_timetable_loads() -> None:
             stale_after=timedelta(minutes=2),
             loaded=False,
             zone=SYDNEY_ZONE,
+            city=SYDNEY,
         ),
     )
     assert result.empty == 'Loading timetable'
@@ -411,6 +415,7 @@ def test_view_without_a_destination_has_none_and_a_plain_empty() -> None:
             has_feed=True,
             stale_after=timedelta(minutes=2),
             zone=SYDNEY_ZONE,
+            city=SYDNEY,
         ),
     )
     assert result.destination is None
@@ -442,6 +447,7 @@ def test_view_carries_its_tag() -> None:
             stale_after=timedelta(minutes=2),
             tag=tag,
             zone=SYDNEY_ZONE,
+            city=SYDNEY,
         ),
     )
     assert result.tag == tag
@@ -515,6 +521,7 @@ def fall_back_view(
             has_feed=True,
             stale_after=timedelta(minutes=2),
             zone=SYDNEY_ZONE,
+            city=SYDNEY,
         ),
     )
 
@@ -632,10 +639,10 @@ def test_no_destination_has_no_hero_and_lists_every_departure() -> None:
     )
     assert result.hero is None
     assert [row.countdown for row in result.rows] == ['3', '6', '9']
-    assert [row.mode for row in result.rows] == [
-        SydneyFeed.TRAIN,
-        SydneyFeed.BUS,
-        SydneyFeed.LIGHT_RAIL,
+    assert [row.vehicle for row in result.rows] == [
+        'train',
+        'bus',
+        'light rail',
     ]
     assert result.empty is None
 
@@ -701,7 +708,13 @@ def test_row_for_carry_on() -> None:
     """A carry-on row names the route it becomes and where that goes."""
     onto = CarryOn(route='T2', headsign='Leppington Station')
     item = live(minutes=3, ride=40, facts=TripFacts(onto=onto))
-    row = to_row(item=item, now=START, pill=None, zone=SYDNEY_ZONE)
+    row = to_row(
+        item=item,
+        now=START,
+        pill=None,
+        zone=SYDNEY_ZONE,
+        city=SYDNEY,
+    )
     assert row.onto == 'T2'
     assert row.route == '606'
     assert row.destination == 'Leppington'
@@ -710,6 +723,7 @@ def test_row_for_carry_on() -> None:
     row = to_row(
         item=live(minutes=3, facts=TripFacts(onto=same)), now=START, pill=None,
         zone=SYDNEY_ZONE,
+        city=SYDNEY,
     )
     assert row.onto is None
     assert row.destination == 'Revesby'
@@ -726,6 +740,7 @@ def test_arrival_line_counts_stops() -> None:
         now=START,
         pill=None,
         zone=SYDNEY_ZONE,
+        city=SYDNEY,
     )
     assert row.stops == 6
     assert arrival_line(row=row) == f'arr {row.arrives_at} \u00b7 6 stops'
@@ -850,3 +865,32 @@ def test_destination_pin_rows_show_chip() -> None:
     assert result.hero is not None
     assert result.hero.route == '711'
     assert [row.route for row in result.rows] == ['606', '711']
+
+
+def test_nouns_by_source_with_trainlink_override() -> None:
+    """A TrainLink train reads train; other rows keep their source's words."""
+    trainlink = departure(
+        departs=START, mode=SydneyFeed.REGIONAL, kind=SydneyMode.TRAIN,
+    )
+    coach = replace(
+        trainlink, facts=replace(trainlink.facts, kind=SydneyMode.COACH),
+    )
+    kindless = replace(trainlink, facts=replace(trainlink.facts, kind=None))
+    bus = departure(departs=START, mode=SydneyFeed.BUS)
+    ferry = departure(departs=START, mode=SydneyFeed.FERRY)
+    unknown = replace(bus, source='hovercraft')
+    regional = Nouns(vehicle='service', bay='platform', connection='train')
+    assert nouns(departure=trainlink, city=SYDNEY) == Nouns(
+        vehicle='train', bay='platform', connection='train',
+    )
+    assert nouns(departure=coach, city=SYDNEY) == regional
+    assert nouns(departure=kindless, city=SYDNEY) == regional
+    assert nouns(departure=bus, city=SYDNEY) == Nouns(
+        vehicle='bus', bay='stand', connection='bus',
+    )
+    assert nouns(departure=ferry, city=SYDNEY) == Nouns(
+        vehicle='ferry', bay='wharf', connection='ferry',
+    )
+    assert nouns(departure=unknown, city=SYDNEY) == Nouns(
+        vehicle='service', bay='platform', connection='service',
+    )

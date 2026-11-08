@@ -6,11 +6,11 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SydneyMode
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.chooser import Stage, to_row, turned_to
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import StripLoaded, TimetableSeen
-from paperroute.core.saved import LiveView, Saved
+from paperroute.core.saved import LiveView, Saved, default_settings
 from paperroute.core.state_model import State
 from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import OPEN_TAG, StripMapView, StripView
@@ -388,6 +388,7 @@ def strip_with_end_open(*, pins: tuple[Pin, ...]) -> State:
         State on the Strip with fold 'S5' open.
     """
     saved = Saved(
+        settings=default_settings(city=SYDNEY),
         pins=pins, current=0, unpinned=None, view=LiveView.STRIP,
     )
     state = begun(saved=saved)

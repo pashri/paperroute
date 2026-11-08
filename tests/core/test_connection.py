@@ -75,7 +75,7 @@ def loaded(
         State after the load.
     """
     state = wakeful(state=initial_state(
-        saved=seeded(pin=pin), now=at(7, 30), stored=True,
+        saved=seeded(pin=pin, city=SYDNEY), now=at(7, 30), stored=True,
         city=SYDNEY,
     ))
     state, _ = step(state, DeparturesLoaded(
@@ -151,7 +151,7 @@ def test_direct_list_competes() -> None:
         departure(departs=at(7, 40), ride=10, route='609', trip_id='d1'),
     )
     state = wakeful(state=initial_state(
-        saved=seeded(pin=WORK), now=at(7, 30), stored=True,
+        saved=seeded(pin=WORK, city=SYDNEY), now=at(7, 30), stored=True,
         city=SYDNEY,
     ))
     state, _ = step(state, DeparturesLoaded(
@@ -170,6 +170,7 @@ def test_connection_alert_matches_both_legs() -> None:
         board=board_of(departures=LEG1, second=LEG2),
         between=frozenset(),
         families={},
+        city=SYDNEY,
     )
     change = alert(
         alert_id='change', header='x', stops=frozenset({'2145648'}),
@@ -190,6 +191,7 @@ def test_connection_names_per_leg() -> None:
         board=board_of(pin=FERRY_WORK, departures=LEG1, second=FERRY_LEG),
         between=frozenset(),
         families={},
+        city=SYDNEY,
     )
     assert {'Parramatta', 'Westmead'} <= ferry.names
     assert ferry.wharf
@@ -198,6 +200,7 @@ def test_connection_names_per_leg() -> None:
         board=board_of(departures=LEG1, second=LEG2),
         between=frozenset(),
         families={},
+        city=SYDNEY,
     )
     assert not bus.names
 
@@ -210,6 +213,7 @@ def test_direct_trips_matched() -> None:
         board=board_of(departures=(), direct=direct),
         between=frozenset(),
         families={},
+        city=SYDNEY,
     )
     assert 'd1' in facts.trips
     assert '609' in facts.routes
@@ -224,12 +228,14 @@ def test_open_leg_alert_by_loaded_route() -> None:
         board=board_of(departures=LEG1, second=without),
         between=frozenset(),
         families={},
+        city=SYDNEY,
     )
     after = connection_facts(
         pin=WORK,
         board=board_of(departures=LEG1, second=LEG2),
         between=frozenset(),
         families={},
+        city=SYDNEY,
     )
     assert tie_of(alert=route, facts=before) is None
     assert tie_of(alert=route, facts=after) is AlertTie.ROUTE
@@ -240,6 +246,7 @@ def test_second_change_stop_alert() -> None:
     pin = replace(WORK, destination=PARRAMATTA, ways=(TWO_WAY,))
     facts = connection_facts(
         pin=pin, board=Board(), between=frozenset(), families={},
+        city=SYDNEY,
     )
     found = alert(alert_id='change', header='x', stops=frozenset({'214510'}))
     assert tie_of(alert=found, facts=facts) is AlertTie.STOP
@@ -250,6 +257,7 @@ def test_every_ticked_way_matched() -> None:
     pin = replace(WORK, ways=(*WORK.ways, CAMPBELLTOWN_WAY))
     facts = connection_facts(
         pin=pin, board=Board(), between=frozenset(), families={},
+        city=SYDNEY,
     )
     assert '2560' in facts.stops
 
@@ -273,6 +281,7 @@ def test_connection_facts_merge_lines_and_loose() -> None:
         board=board_of(departures=first, second=second),
         between=frozenset(),
         families={},
+        city=SYDNEY,
     )
     assert facts.lines == {'bundle:606', 'sydneytrains:WST_2c'}
     assert facts.loose

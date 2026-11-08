@@ -154,6 +154,23 @@ def tagged_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
 
 
 
+def skippable_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
+    """
+    List the modes a setting may hide.
+
+    Parameters
+    ----------
+    modes : Sequence[ModeSpec]
+        Declared modes.
+
+    Returns
+    -------
+    frozenset[str]
+        Ids of the specs with `skippable` set.
+    """
+    return frozenset(spec.id for spec in modes if spec.skippable)
+
+
 def replacing_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
     """
     List the modes whose routes stand in for another mode's lines.

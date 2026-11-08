@@ -37,7 +37,14 @@ from paperroute.app_render import drawing
 from paperroute.app_work import fetch
 from paperroute.build.map_style import LIGHT
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE, SydneyFeed
+from paperroute.city import (
+    PEAK_WINDOWS,
+    SYDNEY,
+    SYDNEY_PROJECTION,
+    SYDNEY_ZONE,
+    TOWN_HALL,
+    SydneyFeed,
+)
 from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
 from paperroute.core.cycle import CYCLE_WAIT
 from paperroute.core.device import NOTICE, on_reset
@@ -70,10 +77,10 @@ from paperroute.core.panel_screens import menu_view
 from paperroute.core.panel_views import SleepView
 from paperroute.core.places import shown
 from paperroute.core.saved import (
-    DEFAULT_SAVED,
-    TOWN_HALL,
+    BoardSettings,
     LiveView,
     Settings,
+    default_saved,
     seeded,
 )
 from paperroute.core.state_saves import SAVE_AFTER
@@ -301,13 +308,13 @@ async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
     """The loop loads departures, fetches the train feed and draws frames."""
     db = tmp_path / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
         ],
         window=Window(start=date(2026, 10, 16), days=1),
         out=db,
+        city=SYDNEY,
     )
     display = FrameRecorder()
     timetable = SqliteTimetableRepository(
@@ -337,13 +344,13 @@ async def test_run_reports_frames_feeds_and_ticks(tmp_path: Path) -> None:
     """A Timings observer sees frames, the parsed train feed and ticks."""
     db = tmp_path / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
         ],
         window=Window(start=date(2026, 10, 16), days=1),
         out=db,
+        city=SYDNEY,
     )
     timings = Timings()
     observer: Observer = timings
@@ -627,8 +634,14 @@ async def test_app_reports_settings() -> None:
         city=SYDNEY,
     )
     assert recorder.settings == [
-        Settings(device=DeviceSettings(auto_rebuild=True)),
-        Settings(device=DeviceSettings(auto_rebuild=False)),
+        Settings(
+            board=BoardSettings(peak_windows=PEAK_WINDOWS),
+            device=DeviceSettings(auto_rebuild=True),
+        ),
+        Settings(
+            board=BoardSettings(peak_windows=PEAK_WINDOWS),
+            device=DeviceSettings(auto_rebuild=False),
+        ),
     ]
 
 
@@ -663,7 +676,7 @@ async def test_app_reports_pins() -> None:
     """The pins are reported at start, on a change and on a refused edit."""
     recorder = CallRecorder()
     unpinned = replace(MAP_PIN, nickname=None)
-    saved = replace(seeded(pin=PIN), unpinned=unpinned)
+    saved = replace(seeded(pin=PIN, city=SYDNEY), unpinned=unpinned)
     ports = replace(
         ports_of(states=MemoryStates(stored=saved)), observer=recorder
     )
@@ -731,13 +744,13 @@ def _build_db(tmp_path: Path) -> Path:
     """
     db = tmp_path / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
         ],
         window=Window(start=date(2026, 10, 16), days=1),
         out=db,
+        city=SYDNEY,
     )
     return db
 
@@ -951,13 +964,13 @@ async def test_run_draws_when_every_feed_fails(
     """Missing recordings are logged as failed feeds; frames still draw."""
     db = tmp_path / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
         ],
         window=Window(start=date(2026, 10, 16), days=1),
         out=db,
+        city=SYDNEY,
     )
     empty = tmp_path / 'empty'
     empty.mkdir()
@@ -2034,8 +2047,8 @@ async def test_run_starts_on_town_hall_map_without_state() -> None:
         city=SYDNEY,
     )
     assert states.saves
-    first = replace(states.saves[0], quota=DEFAULT_SAVED.quota)
-    assert first == DEFAULT_SAVED
+    first = replace(states.saves[0], quota=default_saved(city=SYDNEY).quota)
+    assert first == default_saved(city=SYDNEY)
     assert state.places.pins == ()
     assert shown(state=state).origin.stop_id == TOWN_HALL.stop_id
     assert state.view is LiveView.MAP
@@ -2068,7 +2081,7 @@ async def test_run_ignores_seed_when_state_exists(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """Saved state wins over a seed, and the seed is logged as ignored."""
-    stored = seeded(pin=pin_of('2145615', None))
+    stored = seeded(pin=pin_of('2145615', None), city=SYDNEY)
     with caplog.at_level(logging.INFO):
         state = await run(
             ports=ports_of(states=MemoryStates(stored=stored)),
@@ -2083,7 +2096,7 @@ async def test_run_ignores_seed_when_state_exists(
 
 async def test_quit_writes_unsaved_state() -> None:
     """A change followed at once by a quit is saved before the run ends."""
-    states = MemoryStates(stored=seeded(pin=MAP_PIN))
+    states = MemoryStates(stored=seeded(pin=MAP_PIN, city=SYDNEY))
 
     def hook(post: Callable[[Event], None]) -> None:
         post(KnobPressed(knob=Knob.BOTTOM))
@@ -2165,8 +2178,11 @@ async def test_queued_knob_turns_draw_one_frame() -> None:
 async def test_app_turns_panel_frames() -> None:
     """With rotate saved, the panel is asked to turn its frames."""
     display = FrameRecorder()
-    settings = Settings(device=DeviceSettings(rotate=True))
-    saved = replace(DEFAULT_SAVED, settings=settings)
+    settings = Settings(
+        board=BoardSettings(peak_windows=PEAK_WINDOWS),
+        device=DeviceSettings(rotate=True),
+    )
+    saved = replace(default_saved(city=SYDNEY), settings=settings)
     ports = ports_of(display=display, states=MemoryStates(stored=saved))
 
     def hook(post: Callable[[Event], None]) -> None:
@@ -2181,8 +2197,11 @@ async def test_app_turns_panel_frames() -> None:
 async def test_app_passes_clean_after_to_panel() -> None:
     """The saved cleaning count reaches the panel, and a change follows."""
     display = FrameRecorder()
-    settings = Settings(device=DeviceSettings(clean_after=60))
-    saved = replace(DEFAULT_SAVED, settings=settings)
+    settings = Settings(
+        board=BoardSettings(peak_windows=PEAK_WINDOWS),
+        device=DeviceSettings(clean_after=60),
+    )
+    saved = replace(default_saved(city=SYDNEY), settings=settings)
     ports = ports_of(display=display, states=MemoryStates(stored=saved))
     queue: asyncio.Queue[Event] = asyncio.Queue()
     tasks: set[asyncio.Task[None]] = set()
@@ -2545,7 +2564,7 @@ async def test_app_starts_without_a_timetable(tmp_path: Path) -> None:
     )
     network = SqliteNetworkRepository(
         path=missing,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     ports = replace(ports_of(), timetable=timetable, network=network)
     try:
@@ -2676,7 +2695,7 @@ async def test_app_runs_with_no_timetable(tmp_path: Path) -> None:
     )
     network = SqliteNetworkRepository(
         path=missing,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     building = draw_notice_view(
         view=NoticeView(
@@ -2795,7 +2814,7 @@ async def test_app_goes_live_when_the_timetable_arrives(
     )
     network = SqliteNetworkRepository(
         path=target,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     display = ArrivingDisplay(source=built, target=target)
     feeds = RecordingFeeds(directory=REAL)

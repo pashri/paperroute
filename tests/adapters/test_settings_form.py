@@ -12,6 +12,7 @@ from paperroute.adapters.settings_form import (
     form_values,
     page_text,
 )
+from paperroute.city import SYDNEY
 from paperroute.core.messages import SettingsChanged
 from paperroute.core.saved import (
     BoardSettings,
@@ -19,6 +20,7 @@ from paperroute.core.saved import (
     Lookahead,
     Rate,
     Settings,
+    default_settings,
     with_changes,
 )
 from paperroute_device.adapters.web_common import asset
@@ -58,10 +60,10 @@ PEAK = {
 def _applied(*, event: SettingsChanged) -> Settings:
     """Apply an event's set fields to the defaults."""
     given = {k: v for k, v in vars(event).items() if v is not None}
-    return with_changes(settings=Settings(), changes=given)
+    return with_changes(settings=default_settings(city=SYDNEY), changes=given)
 
 
-@pytest.mark.parametrize('settings', [Settings(), ODD])
+@pytest.mark.parametrize('settings', [default_settings(city=SYDNEY), ODD])
 def test_form_values_round_trip(settings: Settings) -> None:
     """Posting the page's own values gives the same settings back."""
     fields = form_values(settings=settings)
@@ -255,7 +257,7 @@ def test_route_pin_school_switch_read_and_shown() -> None:
     assert changed_from(fields={'skip_school_on_route_pins': 'on'}) == (
         SettingsChanged(skip_school_on_route_pins=True)
     )
-    values = form_values(settings=Settings())
+    values = form_values(settings=default_settings(city=SYDNEY))
     assert values['skip_school_on_route_pins'] == 'off'
     page = asset(name='settings.html')
     assert 'name="skip_school_on_route_pins"' in page
@@ -267,7 +269,9 @@ def test_school_switch_read_and_shown() -> None:
     assert changed_from(fields={'skip_school_buses': 'off'}) == (
         SettingsChanged(skip_school_buses=False)
     )
-    assert form_values(settings=Settings())['skip_school_buses'] == 'on'
+    assert form_values(
+        settings=default_settings(city=SYDNEY),
+    )['skip_school_buses'] == 'on'
     page = asset(name='settings.html')
     assert 'name="skip_school_buses"' in page
     assert 'Leave out school buses' in page

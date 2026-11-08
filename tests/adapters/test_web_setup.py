@@ -10,7 +10,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.feeds import DAILY_LIMIT, feed_label
 from paperroute_testkit.device_pages import HOTSPOT, DeviceSite
 
@@ -33,7 +33,9 @@ def _setup() -> DeviceSite:
 @pytest.fixture(name='client')
 async def _client(setup: DeviceSite) -> AsyncIterator[Client]:
     """A client of a display serving the setup page."""
-    client = TestClient(TestServer(WebDisplay(device=setup.pages()).app()))
+    client = TestClient(
+        TestServer(WebDisplay(device=setup.pages(), city=SYDNEY).app()),
+    )
     await client.start_server()
     yield client
     await client.close()
@@ -85,6 +87,7 @@ async def test_hotspot_address_is_allowed(setup: DeviceSite) -> None:
     """A phone on the hotspot reaches the page; other sites still can't."""
     display = WebDisplay(
         device=setup.pages(), remote_of=lambda request: '10.42.0.23',
+        city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()
@@ -112,7 +115,7 @@ async def test_hotspot_address_is_allowed(setup: DeviceSite) -> None:
 
 async def test_no_setup_routes_without_device() -> None:
     """A display built without device pages has no setup page."""
-    client = TestClient(TestServer(WebDisplay().app()))
+    client = TestClient(TestServer(WebDisplay(city=SYDNEY).app()))
     await client.start_server()
     try:
         response = await client.get('/setup')
@@ -132,6 +135,7 @@ async def test_setup_refuses_public_address(
     """A peer outside the local network can't reach the setup page."""
     display = WebDisplay(
         device=setup.pages(), remote_of=lambda request: '8.8.8.8',
+        city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()

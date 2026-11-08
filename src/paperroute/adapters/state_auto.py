@@ -15,6 +15,7 @@ from pydantic import (
 )
 
 from paperroute_transit.core.auto_model import Occurrence
+from paperroute_transit.core.city import City
 from paperroute_transit.core.model import DAY_NAMES, AutoWindow
 
 logger = logging.getLogger(__name__)
@@ -192,7 +193,9 @@ def with_windows(*, pin: object) -> object:
     return {'windows': [], **pin} if isinstance(pin, dict) else pin
 
 
-def add_auto(data: dict[str, object]) -> dict[str, object]:
+def add_auto(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
     """
     Give every pin windows and add an empty auto block.
 
@@ -200,6 +203,8 @@ def add_auto(data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Version 7 data.
+    city : City
+        The city; this step needs nothing from it.
 
     Returns
     -------
@@ -208,6 +213,7 @@ def add_auto(data: dict[str, object]) -> dict[str, object]:
         place, and `auto` with every field None.
     """
     pins = data.get('pins')
+    del city
     return {
         **data,
         'pins': (

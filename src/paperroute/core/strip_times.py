@@ -6,7 +6,6 @@ from datetime import date, datetime, timedelta, tzinfo
 from itertools import chain
 from typing import Final
 
-from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.live import LiveDeparture
 from paperroute.core.stop_view import not_departed
 from paperroute.core.strip_model import TripDay, trip_day
@@ -17,21 +16,14 @@ from paperroute_transit.core.model import (
     service_time,
     shifted,
 )
-from paperroute_transit.core.modes import line_modes
+from paperroute_transit.core.modes import ModeSpec, spec_of
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.reach import Reach, RowKind, StripKey, every_route
 
-LINE_KINDS: Final[frozenset[str]] = line_modes(modes=SYDNEY.modes)
 STRIP_LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 STRIP_AHEAD: Final[timedelta] = timedelta(minutes=30)
 STRIP_HOPS: Final[int] = 6  # joins followed past a trip's last stop
-BOARD_KINDS: Final[dict[str, frozenset[str]]] = {
-    **{kind: frozenset({kind}) for kind in SydneyMode},
-    SydneyMode.BUS: frozenset({
-        SydneyMode.BUS, SydneyMode.SCHOOL, SydneyMode.REPLACEMENT,
-    }),
-}
 
 
 @dataclass(frozen=True)
@@ -58,6 +50,8 @@ class TripInputs:
         Local time zone the times show in.
     station_of : Mapping[str, str]
         The station ID of each stop under a strip station.
+    line_kinds : frozenset[str]
+        The city's modes chosen by line, whose strips take every route.
     """
 
     departures: tuple[LiveDeparture, ...]
@@ -68,9 +62,12 @@ class TripInputs:
     stale_after: timedelta
     zone: tzinfo
     station_of: Mapping[str, str]
+    line_kinds: frozenset[str]
 
 
-def on_strip(*, departure: Departure, key: StripKey) -> bool:
+def on_strip(
+    *, departure: Departure, key: StripKey, line_kinds: frozenset[str],
+) -> bool:
     """
     Say whether a departure feeds a strip.
 
@@ -80,6 +77,8 @@ def on_strip(*, departure: Departure, key: StripKey) -> bool:
         Departure.
     key : StripKey
         Strip kind and routes.
+    line_kinds : frozenset[str]
+        The city's modes chosen by line.
 
     Returns
     -------
@@ -92,13 +91,16 @@ def on_strip(*, departure: Departure, key: StripKey) -> bool:
     if departure.facts.kind != key.kind:
         return False
     return (
-        every_route(key=key, line_kinds=LINE_KINDS)
+        every_route(key=key, line_kinds=line_kinds)
         or departure.route in key.routes
     )
 
 
 def strip_departures(
-    *, departures: Sequence[Departure], key: StripKey,
+    *,
+    departures: Sequence[Departure],
+    key: StripKey,
+    line_kinds: frozenset[str],
 ) -> tuple[Departure, ...]:
     """
     Keep the departures of a strip's own kind or routes.
@@ -109,6 +111,8 @@ def strip_departures(
         Every departure from the From.
     key : StripKey
         Strip kind and routes.
+    line_kinds : frozenset[str]
+        The city's modes chosen by line.
 
     Returns
     -------
@@ -118,7 +122,7 @@ def strip_departures(
     return tuple(
         departure
         for departure in departures
-        if on_strip(departure=departure, key=key)
+        if on_strip(departure=departure, key=key, line_kinds=line_kinds)
     )
 
 
@@ -149,8 +153,39 @@ def filtered(
     )
 
 
+def board_modes(
+    *, modes: Sequence[ModeSpec], kind: str, skip: bool,
+) -> frozenset[str]:
+    """
+    List the modes a pin's board shows.
+
+    Parameters
+    ----------
+    modes : Sequence[ModeSpec]
+        The city's modes.
+    kind : str
+        The pin's kind.
+    skip : bool
+        Whether the modes a setting may hide are left out.
+
+    Returns
+    -------
+    frozenset[str]
+        The kind and the modes its spec boards with, without the
+        skippable ones when `skip` is set.
+    """
+    spec = spec_of(modes=modes, mode=kind)
+    shown = {kind, *(() if spec is None else spec.board_with)}
+    if skip:
+        shown -= {each.id for each in modes if each.skippable}
+    return frozenset(shown)
+
+
 def board_departures(
-    *, departures: Sequence[Departure], kind: str | None,
+    *,
+    departures: Sequence[Departure],
+    kind: str | None,
+    modes: Sequence[ModeSpec],
 ) -> tuple[Departure, ...]:
     """
     Keep the departures a pin's board shows when it has no Destination.
@@ -161,25 +196,31 @@ def board_departures(
         Every departure from the From.
     kind : str | None
         The pin's kind.
+    modes : Sequence[ModeSpec]
+        The city's modes.
 
     Returns
     -------
     tuple[Departure, ...]
         Every departure for no kind; otherwise those whose route kind is
-        one of `BOARD_KINDS` for it, in order. A Bus board also keeps
-        school and replacement buses.
+        one of its `board_modes`, in order.
     """
     if kind is None:
         return tuple(departures)
+    shown = board_modes(modes=modes, kind=kind, skip=False)
     return tuple(
         departure
         for departure in departures
-        if departure.facts.kind in BOARD_KINDS[kind]
+        if departure.facts.kind in shown
     )
 
 
 def strip_trips(
-    *, departures: Sequence[Departure], key: StripKey, now: datetime,
+    *,
+    departures: Sequence[Departure],
+    key: StripKey,
+    now: datetime,
+    line_kinds: frozenset[str],
 ) -> frozenset[str]:
     """
     List the trips whose vehicles the strip draws.
@@ -192,6 +233,8 @@ def strip_trips(
         Strip kind and routes.
     now : datetime
         Current time.
+    line_kinds : frozenset[str]
+        The city's modes chosen by line.
 
     Returns
     -------
@@ -202,7 +245,7 @@ def strip_trips(
     """
     return trip_ids(
         departures=window_departures(
-            departures=departures, key=key, now=now,
+            departures=departures, key=key, now=now, line_kinds=line_kinds,
         ),
     )
 
@@ -294,7 +337,11 @@ def joined_patterns(
 
 
 def window_departures(
-    *, departures: Sequence[Departure], key: StripKey, now: datetime,
+    *,
+    departures: Sequence[Departure],
+    key: StripKey,
+    now: datetime,
+    line_kinds: frozenset[str],
 ) -> list[Departure]:
     """
     Keep a strip's departures timetabled near now, one per trip.
@@ -307,6 +354,8 @@ def window_departures(
         Strip kind and routes.
     now : datetime
         Current time.
+    line_kinds : frozenset[str]
+        The city's modes chosen by line.
 
     Returns
     -------
@@ -317,7 +366,9 @@ def window_departures(
     start = (now - STRIP_LOOKBACK).timestamp()
     end = (now + STRIP_AHEAD).timestamp()
     kept: dict[str, Departure] = {}
-    for departure in strip_departures(departures=departures, key=key):
+    for departure in strip_departures(
+        departures=departures, key=key, line_kinds=line_kinds,
+    ):
         if start <= departure.departs.timestamp() <= end:
             kept.setdefault(departure.trip_id, departure)
     return list(kept.values())
@@ -343,7 +394,9 @@ def live_strip(*, trips: TripInputs) -> list[LiveDeparture]:
     return [
         item
         for item in trips.departures
-        if on_strip(departure=item.departure, key=key)
+        if on_strip(
+            departure=item.departure, key=key, line_kinds=trips.line_kinds,
+        )
     ]
 
 

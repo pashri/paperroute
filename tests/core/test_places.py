@@ -16,7 +16,12 @@ from paperroute.core.places import (
     toggled,
     with_place,
 )
-from paperroute.core.saved import DEFAULT_SAVED, LiveView, Saved
+from paperroute.core.saved import (
+    LiveView,
+    Saved,
+    default_saved,
+    default_settings,
+)
 from paperroute.core.state import initial_state
 from paperroute.core.state_model import Board, State
 from paperroute_testkit.core.factories import (
@@ -64,6 +69,7 @@ def state_with(
         Initial state.
     """
     saved = Saved(
+        settings=default_settings(city=SYDNEY),
         pins=pins,
         current=current,
         unpinned=unpinned,
@@ -218,9 +224,9 @@ def test_matched_updates_the_unpinned_place() -> None:
 
 def test_initial_state_without_any_place_shows_the_default() -> None:
     """A saved file with no pins and no unpinned place shows Town Hall."""
-    saved = replace(DEFAULT_SAVED, unpinned=None, current=3)
+    saved = replace(default_saved(city=SYDNEY), unpinned=None, current=3)
     state = initial_state(saved=saved, now=START, stored=True, city=SYDNEY)
-    assert shown(state=state) == DEFAULT_SAVED.unpinned
+    assert shown(state=state) == default_saved(city=SYDNEY).unpinned
     assert state.places.current == 0
 
 

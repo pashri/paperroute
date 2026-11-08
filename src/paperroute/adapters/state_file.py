@@ -46,7 +46,7 @@ from paperroute.adapters.state_settings import (
     settings_to_model,
 )
 from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
-from paperroute.core.saved import DEFAULT_SAVED, LiveView, Quota, Saved
+from paperroute.core.saved import LiveView, Quota, Saved, default_saved
 from paperroute.ports import Loaded
 from paperroute_device.adapters.atomic_file import write_atomic
 from paperroute_transit.core.auto_model import AutoState, Before
@@ -426,7 +426,7 @@ def to_model(*, saved: Saved) -> StateModel:
     )
 
 
-def from_model(*, model: StateModel, zone: tzinfo) -> Saved:
+def from_model(*, model: StateModel, city: City) -> Saved:
     """
     Convert a stored state back, repairing what can be repaired.
 
@@ -434,14 +434,14 @@ def from_model(*, model: StateModel, zone: tzinfo) -> Saved:
     ----------
     model : StateModel
         The stored state.
-    zone : tzinfo
-        Local time zone.
+    city : City
+        The city: its time zone and default pin.
 
     Returns
     -------
     Saved
         The state. The current index is clamped into range, and no pins
-        with no unpinned place gives the default place.
+        with no unpinned place gives the city's default pin.
     """
     pins = tuple(pin_from_model(model=pin) for pin in model.pins)
     unpinned = (
@@ -450,7 +450,7 @@ def from_model(*, model: StateModel, zone: tzinfo) -> Saved:
         else pin_from_model(model=model.unpinned)
     )
     if not pins and unpinned is None:
-        unpinned = DEFAULT_SAVED.unpinned
+        unpinned = city.default_pin
     return Saved(
         pins=pins,
         current=min(model.current, max(len(pins) - 1, 0)),
@@ -458,7 +458,7 @@ def from_model(*, model: StateModel, zone: tzinfo) -> Saved:
         view=model.view,
         settings=settings_from_model(model=model.settings),
         quota=Quota(day=model.quota.day, calls=model.quota.calls),
-        auto=auto_from_model(model=model.auto, zone=zone),
+        auto=auto_from_model(model=model.auto, zone=city.zone),
     )
 
 
@@ -507,7 +507,9 @@ def repaired_auto(*, data: dict[str, object]) -> dict[str, object]:
     return data
 
 
-def repaired_settings(*, data: dict[str, object]) -> dict[str, object]:
+def repaired_settings(
+    *, data: dict[str, object], city: City,
+) -> dict[str, object]:
     """
     Reset each setting that cannot be read, so the rest are kept.
 
@@ -515,6 +517,8 @@ def repaired_settings(*, data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Migrated data.
+    city : City
+        The city, whose defaults reset settings take.
 
     Returns
     -------
@@ -526,13 +530,13 @@ def repaired_settings(*, data: dict[str, object]) -> dict[str, object]:
     settings = data.get('settings')
     if not isinstance(settings, dict):
         logger.warning('state.json settings unusable, resetting them')
-        return {**data, 'settings': default_settings()}
+        return {**data, 'settings': default_settings(city=city)}
     try:
         SettingsModel.model_validate(settings)
     except ValidationError as error:
         bad = {item['loc'][0] for item in error.errors() if item['loc']}
         logger.warning('state.json settings %s unusable, resetting', bad)
-        defaults = default_settings()
+        defaults = default_settings(city=city)
         kept = {
             name: value
             for name, value in settings.items()
@@ -712,7 +716,7 @@ def state_text(*, path: Path) -> str:
     return path.read_text(encoding='utf-8')
 
 
-def state_model_of(*, text: str, mode_ids: Collection[str]) -> StateModel:
+def state_model_of(*, text: str, city: City) -> StateModel:
     """
     Parse the file's text, migrating and repairing it first.
 
@@ -720,8 +724,9 @@ def state_model_of(*, text: str, mode_ids: Collection[str]) -> StateModel:
     ----------
     text : str
         The file's contents.
-    mode_ids : Collection[str]
-        The city's mode ids; pins of any other kind are dropped.
+    city : City
+        The city: pins of a kind it does not declare are dropped, and
+        missing or reset settings take its defaults.
 
     Returns
     -------
@@ -741,9 +746,10 @@ def state_model_of(*, text: str, mode_ids: Collection[str]) -> StateModel:
     migrated = repaired_auto(
         data=repaired_pins(
             data=repaired_settings(
-                data=repaired_quota(data=migrate(data=data)),
+                data=repaired_quota(data=migrate(data=data, city=city)),
+                city=city,
             ),
-            mode_ids=mode_ids,
+            mode_ids=city.mode_ids,
         ),
     )
     return StateModel.model_validate(migrated)
@@ -776,14 +782,14 @@ class JsonStateRepository:
         """
         self.remove_stale_temps()
         if not self.path.exists() and not self.path.is_symlink():
-            return Loaded(saved=DEFAULT_SAVED, stored=False)
+            return Loaded(saved=default_saved(city=self.city), stored=False)
         try:
             model = state_model_of(
-                text=state_text(path=self.path), mode_ids=self.city.mode_ids,
+                text=state_text(path=self.path), city=self.city,
             )
         except (OSError, UnicodeDecodeError, ValueError, RecursionError):
             return self.defaults_after_error()
-        saved = from_model(model=model, zone=self.city.zone)
+        saved = from_model(model=model, city=self.city)
         return Loaded(saved=saved, stored=True)
 
     def save(self, *, saved: Saved) -> None:
@@ -827,7 +833,7 @@ class JsonStateRepository:
                 self.path.with_name(f'{BAD_PREFIX}{int(time.time())}'),
             )
             self.remove_old_bad_files()
-        return Loaded(saved=DEFAULT_SAVED, stored=False)
+        return Loaded(saved=default_saved(city=self.city), stored=False)
 
     def remove_old_bad_files(self) -> None:
         """Delete all but the newest `BAD_KEPT` moved-aside files."""

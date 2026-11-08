@@ -130,6 +130,7 @@ def stop_view_of(*, state: State) -> StopView:
             ),
             has_feed=bool(state.feeds) or not state.board.departures,
             stale_after=stale_after(state=state),
+            city=state.city,
             loaded=state.board.loaded_until is not None,
             missing=pin.missing,
             notice=device_banner(state=state),

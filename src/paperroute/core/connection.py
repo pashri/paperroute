@@ -14,6 +14,7 @@ from paperroute.core.live import LiveDeparture, resolved
 from paperroute.core.places import shown
 from paperroute.core.rhythm import frame_time, stale_after
 from paperroute.core.state_model import Board, State
+from paperroute_transit.core.city import City
 from paperroute_transit.core.model import Departure, Pin, is_connection
 
 
@@ -128,6 +129,7 @@ def connection_facts(
     board: Board,
     between: frozenset[str],
     families: Mapping[str, frozenset[str]],
+    city: City,
 ) -> PinFacts:
     """
     Gather what alerts can name about every leg of a connection pin.
@@ -142,6 +144,8 @@ def connection_facts(
         Place names of stations between each leg's ends.
     families : Mapping[str, frozenset[str]]
         Stop families of every leg's ends.
+    city : City
+        The city, whose modes and alert rules say how alerts match.
 
     Returns
     -------
@@ -152,7 +156,11 @@ def connection_facts(
     """
     parts = [
         pin_facts(
-            pin=leg, departures=items, between=between, families=families,
+            pin=leg,
+            departures=items,
+            between=between,
+            families=families,
+            city=city,
         )
         for leg, items in leg_lists(pin=pin, board=board)
     ]
@@ -173,6 +181,7 @@ def board_facts(
     board: Board,
     between: frozenset[str],
     families: Mapping[str, frozenset[str]],
+    city: City,
 ) -> PinFacts:
     """
     Gather what alerts can name about the shown pin's loaded departures.
@@ -187,6 +196,8 @@ def board_facts(
         Place names of stations between its ends.
     families : Mapping[str, frozenset[str]]
         Stop families of its ends.
+    city : City
+        The city, whose modes and alert rules say how alerts match.
 
     Returns
     -------
@@ -199,13 +210,16 @@ def board_facts(
             departures=board.departures,
             between=between,
             families=families,
+            city=city,
         )
     return connection_facts(
-        pin=pin, board=board, between=between, families=families,
+        pin=pin, board=board, between=between, families=families, city=city,
     )
 
 
-def name_trips(*, pin: Pin, board: Board) -> tuple[bool, frozenset[str]]:
+def name_trips(
+    *, pin: Pin, board: Board, city: City,
+) -> tuple[bool, frozenset[str]]:
     """
     Say whether the shown pin needs stations between, and which trips.
 
@@ -215,6 +229,8 @@ def name_trips(*, pin: Pin, board: Board) -> tuple[bool, frozenset[str]]:
         The shown pin.
     board : Board
         Its loaded departures.
+    city : City
+        The city, whose modes and alert rules say how alerts match.
 
     Returns
     -------
@@ -226,7 +242,7 @@ def name_trips(*, pin: Pin, board: Board) -> tuple[bool, frozenset[str]]:
         items
         for leg, items in between_lists(pin=pin, board=board)
         if leg.destination is not None
-        and is_name_pin(pin=leg, departures=items)
+        and is_name_pin(pin=leg, departures=items, city=city)
     ]
     return bool(named), frozenset(
         item.trip_id for items in named for item in items

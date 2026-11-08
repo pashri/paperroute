@@ -97,7 +97,6 @@ def build_network(*, folder: Path) -> Path:
     """
     out = folder / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
         sources=[
             Source(
                 name='sydneytrains',
@@ -106,6 +105,7 @@ def build_network(*, folder: Path) -> Path:
         ],
         window=Window(start=date(2026, 10, 5), days=3),
         out=out,
+        city=SYDNEY,
     )
     return out
 
@@ -165,7 +165,7 @@ def _network(network_db: Path) -> Iterator[SqliteNetworkRepository]:
     """
     with closing(SqliteNetworkRepository(
         path=network_db,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         yield repo
 
@@ -306,7 +306,7 @@ def tails_from(
     """
     with closing(SqliteNetworkRepository(
         path=path,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         found = repo.reach_input(
             key=StripKey(station=station, kind=kind, routes=routes),
@@ -347,7 +347,7 @@ def test_kind_column_lists_seven_kinds_in_order(copy: Path) -> None:
     ])
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         column = repo.choices(path=())
     assert column == Column(level=Level.KIND, items=(
@@ -380,7 +380,7 @@ def test_bus_path_goes_group_route_towards(copy: Path) -> None:
     group = (*bus, (Level.GROUP, '800s'))
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         groups = repo.choices(path=bus)
         six = repo.choices(path=(*bus, (Level.GROUP, '600s')))
@@ -416,7 +416,7 @@ def test_train_lines_rule_off_intercity(copy: Path) -> None:
     ])
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         lines = repo.choices(path=TRAIN)
         ferries = repo.choices(path=((Level.KIND, 'ferry'),))
@@ -440,7 +440,7 @@ def test_towards_busiest_first(copy: Path) -> None:
         )
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         column = repo.choices(path=(
             (Level.KIND, 'bus'), (Level.GROUP, '800s'),
@@ -500,7 +500,7 @@ def test_to_column_treats_aliases_as_their_kept_station(copy: Path) -> None:
     merge_e2_into_r3(path=copy)
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         column = repo.choices(path=(*T1, (Level.STATION, 'W2')))
         merged = repo.choices(path=(*T1, (Level.STATION, 'R3')))
@@ -515,7 +515,7 @@ def test_to_column_stops_at_a_turn_back(copy: Path) -> None:
     set_runs(path=copy, runs=[('W2 W1 J C J R1 R2 R3', 4)])
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         column = repo.choices(path=(*T1, (Level.STATION, 'W2')))
     assert column is not None
@@ -529,7 +529,7 @@ def test_to_column_dims_a_station_runs_pass_through(copy: Path) -> None:
     set_runs(path=copy, runs=[('W2 W1 J ~C E1 E2', 4)])
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         column = repo.choices(path=(*T1, (Level.STATION, 'W2')))
     assert column is not None
@@ -543,7 +543,7 @@ def test_to_column_from_a_pass_through_reaches_nothing(copy: Path) -> None:
     set_runs(path=copy, runs=[('W2 W1 J ~C E1 E2', 4)])
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         column = repo.choices(path=(*T1, (Level.STATION, 'C')))
     assert column is not None
@@ -563,7 +563,7 @@ def test_to_column_keeps_one_trip_stopping_patterns_apart(
         conn.commit()
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         column = repo.choices(path=(*T1, (Level.STATION, 'C')))
     assert column is not None
@@ -578,7 +578,7 @@ def test_to_column_without_run_calls_counts_passes(copy: Path) -> None:
         conn.commit()
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         column = repo.choices(path=(*T1, (Level.STATION, 'W2')))
     assert column is not None
@@ -605,7 +605,7 @@ def test_to_column_for_a_station_off_the_line_is_none(copy: Path) -> None:
     merge_e2_into_r3(path=copy)
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         stale = repo.choices(path=(*T1, (Level.STATION, 'B2')))
         merged = repo.choices(path=(*T1, (Level.STATION, 'E2')))
@@ -620,7 +620,7 @@ def test_to_column_cuts_at_a_merged_revisit(copy: Path) -> None:
     set_runs(path=copy, runs=[('W2 J R3 C E2 E1', 4)])
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         column = repo.choices(path=(*T1, (Level.STATION, 'W2')))
     assert column is not None
@@ -633,7 +633,7 @@ def test_station_column_on_old_timetable_is_none(copy: Path) -> None:
     bus: ChooserPath = ((Level.KIND, 'bus'),)
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         assert repo.choices(path=T1) is None
         assert repo.choices(path=(*T1, (Level.STATION, 'W2'))) is None
@@ -650,7 +650,7 @@ def test_schema_four_file_serves_chooser_and_strip(copy: Path) -> None:
     schema_four(path=copy)
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         assert labels(column=repo.choices(path=())) == ['Bus', 'Train']
         assert repo.choices(path=T1) is not None
@@ -663,7 +663,7 @@ def test_schema_four_file_serves_chooser_and_strip(copy: Path) -> None:
 
 BUS: Final[ChooserPath] = ((Level.KIND, 'bus'),)
 REPLACEMENTS: Final[ChooserPath] = (
-    *BUS, (Level.REPLACEMENTS, 'replacements'),
+    *BUS, (Level.REPLACEMENTS, 'replacement'),
 )
 REPLACEMENT_ROWS: Final[tuple[RouteInsert, ...]] = (
     ('replacement:2T1:b', 'replacement', '', 0, '2T1', 2, 'Bee', 'Tg', 'T1'),
@@ -677,13 +677,13 @@ def test_bus_groups_end_with_replacement_buses(copy: Path) -> None:
     """Replacement buses close the Bus groups once any route has a line."""
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         before = repo.choices(path=BUS)
     add_routes(path=copy, rows=REPLACEMENT_ROWS)
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         after = repo.choices(path=BUS)
         school = repo.choices(path=((Level.KIND, 'school'),))
@@ -691,10 +691,10 @@ def test_bus_groups_end_with_replacement_buses(copy: Path) -> None:
     assert after is not None
     assert after.items[:-1] == before.items
     assert after.items[-1] == Choice(
-        key='replacements', label='Trackwork', rule_above=True,
+        key='replacement', label='Trackwork', rule_above=True,
         level=Level.REPLACEMENTS,
     )
-    assert school is None or school.items[-1].key != 'replacements'
+    assert school is None or school.items[-1].key != 'replacement'
 
 
 def test_replacement_path_lists_lines_then_routes(copy: Path) -> None:
@@ -705,7 +705,7 @@ def test_replacement_path_lists_lines_then_routes(copy: Path) -> None:
     lines = (*REPLACEMENTS, (Level.LINE, 'T1'))
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         line_column = repo.choices(path=REPLACEMENTS)
         routes = repo.choices(path=lines)
@@ -731,7 +731,7 @@ def test_train_line_has_no_replacement_row(copy: Path) -> None:
     add_routes(path=copy, rows=REPLACEMENT_ROWS)
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         assert repo.choices(path=(*T1, (Level.REPLACEMENTS, 'x'))) is None
         column = repo.choices(path=TRAIN)
@@ -765,7 +765,7 @@ def test_towards_line_has_names_and_points(network_db: Path) -> None:
     with (
         closing(SqliteNetworkRepository(
             path=network_db,
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         )) as repo,
         closing(
             SqliteTimetableRepository(
@@ -936,7 +936,7 @@ def line_input(*, path: Path, station: str, line: str) -> ReachInput:
     """
     with closing(SqliteNetworkRepository(
         path=path,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         found = repo.reach_input(
             key=StripKey(station=station, kind=SydneyMode.TRAIN,
@@ -985,13 +985,13 @@ def test_pass_through_station_stays_on_the_strip(tmp_path: Path) -> None:
     ]
     out = tmp_path / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
         sources=[Source(
             name='sydneytrains',
             archive=write_feed(path=tmp_path / 'n.zip', files=files),
         )],
         window=Window(start=date(2026, 10, 5), days=3),
         out=out,
+        city=SYDNEY,
     )
     found = line_input(path=out, station='C', line='T1')
     assert ('J', 'R1', 'R2', 'R3') in {tail.after for tail in found.tails}
@@ -1069,7 +1069,7 @@ def test_town_hall_train_strip_reaches_the_inner_west() -> None:
     """Town Hall's Train strip reaches Lewisham, Liverpool, Leppington."""
     with closing(SqliteNetworkRepository(
         path=REAL_DB,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         found = repo.reach_input(
             key=StripKey(station=TOWN_HALL, kind=SydneyMode.TRAIN, routes=()),
@@ -1091,7 +1091,7 @@ def test_old_schema_answers_none(copy: Path) -> None:
     old_schema(path=copy)
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         assert repo.choices(path=()) is None
         assert repo.choices(path=T1) is None
@@ -1111,7 +1111,7 @@ def test_reopens_after_replace(copy: Path, tmp_path: Path) -> None:
     os.replace(old, live)
     with closing(SqliteNetworkRepository(
         path=live,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         before = repo.choices(path=())
         os.replace(copy, live)
@@ -1125,7 +1125,7 @@ def test_injected_connection_is_read(network_db: Path) -> None:
     conn = sqlite3.connect(network_db, check_same_thread=False)
     with closing(SqliteNetworkRepository(
         connection=conn,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         port: NetworkRepository = repo
         assert labels(column=port.choices(path=())) == ['Bus', 'Train']
@@ -1141,7 +1141,7 @@ def test_train_lines_rule_off_each_group(copy: Path) -> None:
     ])
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         lines = repo.choices(path=TRAIN)
     assert lines is not None
@@ -1160,7 +1160,7 @@ def test_ferry_lines_rule_off_the_non_sydney_ferries(copy: Path) -> None:
     ])
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         ferries = repo.choices(path=((Level.KIND, 'ferry'),))
     assert ferries is not None
@@ -1177,7 +1177,7 @@ def test_coach_opens_a_route_column(copy: Path) -> None:
     ])
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         coaches = repo.choices(path=((Level.KIND, 'coach'),))
     assert coaches == Column(level=Level.ROUTE, items=(

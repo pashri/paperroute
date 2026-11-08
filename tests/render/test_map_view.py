@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.city import SYDNEY_PROJECTION, SydneyFeed
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute.core.connection_view import PairRow
 from paperroute.core.map_view import (
     MAP_HEIGHT,
@@ -116,7 +116,8 @@ def row(
     """
     return Row(
         route=route,
-        mode=SydneyFeed.BUS,
+        vehicle='bus',
+        bay='stand',
         platform='',
         destination='Parramatta',
         countdown=countdown,

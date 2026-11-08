@@ -5,7 +5,7 @@ from datetime import date, datetime, time, timedelta
 
 import pytest
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE
+from paperroute.city import PEAK_WINDOWS, SYDNEY, SYDNEY_ZONE
 from paperroute.core.rhythm import (
     frame_time,
     in_window,
@@ -13,7 +13,14 @@ from paperroute.core.rhythm import (
     poll_every,
     stale_after,
 )
-from paperroute.core.saved import BoardSettings, Quota, Rate, Settings, seeded
+from paperroute.core.saved import (
+    BoardSettings,
+    Quota,
+    Rate,
+    Settings,
+    default_settings,
+    seeded,
+)
 from paperroute.core.state import initial_state
 from paperroute.core.state_model import Calendar, Cycle, State
 from paperroute_device.core.device_settings import Window
@@ -69,11 +76,14 @@ def state_at(
         The state.
     """
     state = initial_state(
-        saved=seeded(pin=pin_of('A', None)), now=now, stored=True, city=SYDNEY
+        saved=seeded(
+            pin=pin_of('A', None),
+            city=SYDNEY,
+        ), now=now, stored=True, city=SYDNEY
     )
     return replace(
         state,
-        settings=settings or Settings(),
+        settings=settings or default_settings(city=SYDNEY),
         quota=quota or Quota(),
     )
 
@@ -92,21 +102,37 @@ def state_at(
 def test_peak_windows(hour: int, minute: int, peak: bool) -> None:
     """The default windows are 06:30-10:00 and 15:00-19:00 on weekdays."""
     now = at(hour=hour, minute=minute)
-    assert is_peak(now=now, settings=Settings(), holidays=frozenset()) is peak
+    assert is_peak(
+        now=now,
+        settings=default_settings(city=SYDNEY),
+        holidays=frozenset(),
+    ) is peak
 
 
 def test_weekend_off_peak() -> None:
     """A Saturday morning is off-peak."""
     now = at(day=date(2026, 10, 24), hour=8)
-    assert not is_peak(now=now, settings=Settings(), holidays=frozenset())
+    assert not is_peak(
+        now=now,
+        settings=default_settings(city=SYDNEY),
+        holidays=frozenset(),
+    )
 
 
 def test_holiday_off_peak() -> None:
     """A public holiday on a Monday is off-peak."""
     now = at(day=AUSTRALIA_DAY, hour=8)
     holidays = frozenset({AUSTRALIA_DAY})
-    assert not is_peak(now=now, settings=Settings(), holidays=holidays)
-    assert is_peak(now=now, settings=Settings(), holidays=frozenset())
+    assert not is_peak(
+        now=now,
+        settings=default_settings(city=SYDNEY),
+        holidays=holidays,
+    )
+    assert is_peak(
+        now=now,
+        settings=default_settings(city=SYDNEY),
+        holidays=frozenset(),
+    )
 
 
 def test_no_windows_never_peak() -> None:
@@ -128,7 +154,12 @@ def test_poll_every_follows_rate() -> None:
     """The peak and off-peak rates give the poll interval."""
     peak = state_at(now=at(hour=8))
     offpeak = state_at(now=at(hour=12))
-    settings = Settings(board=BoardSettings(offpeak_rate=Rate.STEADY))
+    settings = Settings(
+        board=BoardSettings(
+            peak_windows=PEAK_WINDOWS,
+            offpeak_rate=Rate.STEADY,
+        ),
+    )
     steady = replace(offpeak, settings=settings)
     assert poll_every(state=peak) == timedelta(seconds=30)
     assert poll_every(state=offpeak) == timedelta(minutes=2)
@@ -151,7 +182,9 @@ def test_guard_only_slows(
     """Over 80% or 95% of the day's calls slows polling, never speeds it."""
     state = state_at(
         now=at(hour=8),
-        settings=Settings(board=BoardSettings(peak_rate=rate)),
+        settings=Settings(
+            board=BoardSettings(peak_windows=PEAK_WINDOWS, peak_rate=rate),
+        ),
         quota=Quota(day=day, calls=calls),
     )
     assert poll_every(state=state) == every
@@ -232,7 +265,11 @@ def test_stale_after_is_poll_interval_plus_a_minute(
     state = state_at(
         now=at(hour=hour),
         settings=Settings(
-            board=BoardSettings(peak_rate=rate, offpeak_rate=rate),
+            board=BoardSettings(
+                peak_windows=PEAK_WINDOWS,
+                peak_rate=rate,
+                offpeak_rate=rate,
+            ),
         ),
         quota=Quota(day=TUESDAY, calls=calls),
     )

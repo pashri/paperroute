@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from typing import Final
 
-from paperroute.city import SydneyFeed
 from paperroute.core.chains import Chain
 from paperroute.core.connection_model import change_walk
 from paperroute.core.rides import Ride, rides_of
@@ -15,22 +14,14 @@ from paperroute.core.stop_view import (
     StopView,
     countdown,
     empty_text,
+    nouns,
 )
 from paperroute_device.core.text import clock_text
+from paperroute_transit.core.city import City
 from paperroute_transit.core.model import Pin
 
 NO_PAIRS: Final[str] = f'No connections in {HORIZON_TEXT}'
 PAIR_ROWS: Final[int] = 5
-MODE_NOUNS: Final[dict[str, str]] = {
-    SydneyFeed.BUS: 'bus',
-    SydneyFeed.TRAIN: 'train',
-    SydneyFeed.METRO: 'metro',
-    SydneyFeed.FERRY: 'ferry',
-    SydneyFeed.LIGHT_RAIL: 'light rail',
-    SydneyFeed.COACH: 'coach',
-    SydneyFeed.REGIONAL: 'train',
-    SydneyFeed.OTHER: 'service',
-}
 WAITING: Final[frozenset[str]] = frozenset({
     empty_text(destination=None, loaded=False),
     empty_text(destination=None, loaded=True, missing=True),
@@ -46,8 +37,9 @@ class HeroLine:
     ----------
     route : str | None
         The ride's route, or None for a plain step.
-    mode : str | None
-        The ride's mode, or None for a plain step.
+    noun : str | None
+        What the ride is called, such as 'train', or None for a plain
+        step.
     text : str
         The ride's headsign, or the step.
     at : str
@@ -55,7 +47,7 @@ class HeroLine:
     """
 
     route: str | None
-    mode: str | None
+    noun: str | None
     text: str
     at: str = ''
 
@@ -147,7 +139,7 @@ class ConnectionView:
     planned: bool
 
 
-def ride_line(*, ride: Ride, zone: tzinfo) -> HeroLine:
+def ride_line(*, ride: Ride, zone: tzinfo, city: City) -> HeroLine:
     """
     Make a ride's badge line.
 
@@ -157,16 +149,18 @@ def ride_line(*, ride: Ride, zone: tzinfo) -> HeroLine:
         The ride.
     zone : tzinfo
         Local time zone the times show in.
+    city : City
+        The city, which holds what each ride is called.
 
     Returns
     -------
     HeroLine
-        Its route, mode, headsign and departure time.
+        Its route, connection noun, headsign and departure time.
     """
     departure = ride.item.departure
     return HeroLine(
         route=departure.route,
-        mode=departure.source,
+        noun=nouns(city=city, departure=departure).connection,
         text=departure.headsign,
         at=clock_text(moment=ride.departs, zone=zone),
     )
@@ -194,18 +188,18 @@ def change_lines(*, ride: Ride, zone: tzinfo) -> tuple[HeroLine, ...]:
         return ()
     at = HeroLine(
         route=None,
-        mode=None,
+        noun=None,
         text=f'change at {change.board.name} '
         f'{clock_text(moment=ride.departs, zone=zone)}',
     )
     metres = change_walk(change=change)
     if metres is None:
         return (at,)
-    return at, HeroLine(route=None, mode=None, text=f'walk {metres} m')
+    return at, HeroLine(route=None, noun=None, text=f'walk {metres} m')
 
 
 def hero_lines(
-    *, chain: Chain, pin: Pin, zone: tzinfo,
+    *, chain: Chain, pin: Pin, zone: tzinfo, city: City,
 ) -> tuple[HeroLine, ...]:
     """
     List the hero's lines for a chain.
@@ -218,6 +212,8 @@ def hero_lines(
         Connection pin.
     zone : tzinfo
         Local time zone the times show in.
+    city : City
+        The city, which holds what each ride is called.
 
     Returns
     -------
@@ -231,18 +227,18 @@ def hero_lines(
         for ride in rides
         for line in (
             *change_lines(ride=ride, zone=zone),
-            ride_line(ride=ride, zone=zone),
+            ride_line(ride=ride, zone=zone, city=city),
         )
     )
     if len(rides) > 1:
         return lines
     to = '' if pin.destination is None else pin.destination.name
     lead = 'direct' if chain.way is None else 'stay on'
-    return (*lines, HeroLine(route=None, mode=None, text=f'{lead} to {to}'))
+    return (*lines, HeroLine(route=None, noun=None, text=f'{lead} to {to}'))
 
 
 def chain_hero(
-    *, chain: Chain, pin: Pin, now: datetime, zone: tzinfo,
+    *, chain: Chain, pin: Pin, now: datetime, zone: tzinfo, city: City,
 ) -> ChainHero:
     """
     Spell out the next chain.
@@ -257,6 +253,8 @@ def chain_hero(
         Current time.
     zone : tzinfo
         Local time zone the times show in.
+    city : City
+        The city, which holds what each ride is called.
 
     Returns
     -------
@@ -266,7 +264,7 @@ def chain_hero(
     return ChainHero(
         countdown=countdown(departs=chain.departs, now=now),
         leaves_at=clock_text(moment=chain.departs, zone=zone),
-        lines=hero_lines(chain=chain, pin=pin, zone=zone),
+        lines=hero_lines(chain=chain, pin=pin, zone=zone, city=city),
         arrives_at=clock_text(moment=chain.arrives, zone=zone),
         live=chain.legs[0].live,
     )
@@ -421,6 +419,7 @@ def build_connection_view(
     scroll: int,
     now: datetime,
     zone: tzinfo,
+    city: City,
 ) -> ConnectionView:
     """
     Build the connection Stop view.
@@ -440,6 +439,8 @@ def build_connection_view(
         Current time.
     zone : tzinfo
         Local time zone the times show in.
+    city : City
+        The city, which holds what each ride is called.
 
     Returns
     -------
@@ -454,7 +455,9 @@ def build_connection_view(
         clock=stop_view.clock,
         tag=stop_view.tag,
         hero=(
-            chain_hero(chain=chains[0], pin=pin, now=now, zone=zone)
+            chain_hero(
+                chain=chains[0], pin=pin, now=now, zone=zone, city=city,
+            )
             if chains
             else None
         ),

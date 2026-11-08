@@ -11,7 +11,7 @@ from paperroute.adapters.web_connection import ConnectionPages
 from paperroute.adapters.web_pins import PinsPages
 from paperroute.adapters.web_suggest import SuggestPages
 from paperroute.adapters.web_ways import WaysPages
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.messages import Event
 from paperroute.observers import PinsSeen
 from paperroute.planner_port import TripPlanner
@@ -150,6 +150,7 @@ class SydneyPages:
             post=send,
             pins=self._pins,
             options=self._options,
+            modes=SYDNEY.modes,
             sleep=self.pins_sleep,
             skip_school=skip_school,
         )

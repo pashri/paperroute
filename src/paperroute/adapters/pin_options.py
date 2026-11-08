@@ -2,7 +2,7 @@
 
 import json
 import math
-from collections.abc import Collection, Iterable
+from collections.abc import Collection, Iterable, Sequence
 from operator import itemgetter
 from typing import Final
 
@@ -20,18 +20,16 @@ from paperroute.adapters.network_db import (
 )
 from paperroute.adapters.network_lines import Row
 from paperroute.adapters.timetable_db import to_point
-from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.chooser import UNPICKED, Choice, focusable
-from paperroute.core.pin_choices import KIND_NAMES, ChangeStop, StopMatch
-from paperroute.core.strip_times import BOARD_KINDS
+from paperroute.core.pin_choices import ChangeStop, StopMatch, kind_names
+from paperroute.core.strip_times import board_modes
 from paperroute_transit.build.catalogue import route_order
 from paperroute_transit.core.geo import Projection, to_lonlat
 from paperroute_transit.core.model import StopPlace
-from paperroute_transit.core.modes import line_modes
+from paperroute_transit.core.modes import skippable_modes
 from paperroute_transit.core.reach import RowKind, StripKey, build_reach
 from paperroute_transit.core.route_colours import RouteColour, common_colours
 
-LINE_KINDS: Final[frozenset[str]] = line_modes(modes=SYDNEY.modes)
 SEARCH_LIMIT: Final[int] = 20
 MIN_SEARCH: Final[int] = 2
 SHOWN_ROUTES: Final[int] = 6
@@ -39,11 +37,6 @@ NEARBY_M: Final[float] = 400
 NEARBY_COUNT: Final[int] = 5
 LAST: Final[int] = 1_000_000
 FROM_TAG: Final[str] = 'ALL'
-STATION_FIRST_INDICES: Final[frozenset[int]] = frozenset(
-    index
-    for index, kind in enumerate(KIND_NAMES)
-    if kind in LINE_KINDS
-)
 SEARCH: Final[str] = r"""
 SELECT stop_id, name, lon, lat FROM stops
 WHERE name LIKE :any ESCAPE '\'
@@ -156,25 +149,11 @@ def place_of(*, row: Row, projection: Projection) -> StopPlace:
     )
 
 
-def kind_named(*, name: object) -> SydneyMode | None:
-    """
-    Read a run's kind.
-
-    Parameters
-    ----------
-    name : object
-        The runs table's kind column.
-
-    Returns
-    -------
-    SydneyMode | None
-        The kind; None when it is not one that is offered.
-    """
-    return next((kind for kind in KIND_NAMES if kind == name), None)
-
-
 def served_by(
-    *, rows: Iterable[Row], left_out: frozenset[SydneyMode] = frozenset(),
+    *,
+    rows: Iterable[Row],
+    kinds: Sequence[str],
+    left_out: frozenset[str] = frozenset(),
 ) -> dict[str, list[tuple[int, int, str]]]:
     """
     Group what serves each station.
@@ -183,21 +162,22 @@ def served_by(
     ----------
     rows : Iterable[Row]
         Station ID, kind, route and the route's sort position.
-    left_out : frozenset[SydneyMode]
+    kinds : Sequence[str]
+        The kinds offered, in the editor's order.
+    left_out : frozenset[str]
         Kinds whose rows are dropped.
 
     Returns
     -------
     dict[str, list[tuple[int, int, str]]]
-        For each station, the position of the kind in `KIND_NAMES`, the
+        For each station, the position of the kind in `kinds`, the
         route's sort position and the route; rows of an unoffered kind
         and of a kind left out are dropped.
     """
-    order = list(KIND_NAMES)
+    order = list(kinds)
     served: dict[str, list[tuple[int, int, str]]] = {}
-    for station, kind_name, route, pos in rows:
-        kind = kind_named(name=kind_name)
-        if kind is not None and kind not in left_out:
+    for station, kind, route, pos in rows:
+        if kind in order and kind not in left_out:
             served.setdefault(str(station), []).append(
                 (order.index(kind), int(str(pos)), str(route)),
             )
@@ -205,10 +185,10 @@ def served_by(
 
 
 def call_order(
-    call: tuple[int, int, str],
+    call: tuple[int, int, str], station_first: frozenset[int],
 ) -> tuple[bool, int, tuple[int, tuple[tuple[int, int | str], ...]]]:
     """
-    Sort a served route: rail and ferry kinds first, then by kind.
+    Sort a served route: station-first kinds first, then by kind.
 
     A station's bus stands share its ID, so without this a busy station
     lists only buses and reads as a bus stop.
@@ -217,6 +197,8 @@ def call_order(
     ----------
     call : tuple[int, int, str]
         Kind position, sort position and route, as `served_by` gives.
+    station_first : frozenset[int]
+        The positions of the kinds chosen by line.
 
     Returns
     -------
@@ -225,14 +207,18 @@ def call_order(
         position and the route's `route_order`.
     """
     return (
-        call[0] not in STATION_FIRST_INDICES,
+        call[0] not in station_first,
         call[0],
         route_order(number=call[2]),
     )
 
 
 def match_of(
-    *, place: StopPlace, calls: Iterable[tuple[int, int, str]],
+    *,
+    place: StopPlace,
+    calls: Iterable[tuple[int, int, str]],
+    kinds: Sequence[str],
+    line_kinds: frozenset[str],
 ) -> StopMatch:
     """
     Make the search result for a place.
@@ -243,15 +229,23 @@ def match_of(
         The place.
     calls : Iterable[tuple[int, int, str]]
         What serves it, as `served_by` gives.
+    kinds : Sequence[str]
+        The kinds offered, in the editor's order.
+    line_kinds : frozenset[str]
+        The kinds chosen by line.
 
     Returns
     -------
     StopMatch
-        The place with its kinds in `KIND_NAMES` order, and up to
+        The place with its kinds in `kinds` order, and up to
         `SHOWN_ROUTES` route numbers, in `call_order`.
     """
-    ordered = sorted(calls, key=call_order)
-    kinds = list(KIND_NAMES)
+    station_first = frozenset(
+        index for index, kind in enumerate(kinds) if kind in line_kinds
+    )
+    ordered = sorted(
+        calls, key=lambda call: call_order(call, station_first),
+    )
     return StopMatch(
         place=place,
         kinds=tuple(
@@ -312,6 +306,7 @@ class SqlitePinOptions:
 
     def __init__(self, *, network: SqliteNetworkRepository) -> None:
         self.network = network
+        self.kinds = tuple(kind_names(modes=network.city.modes))
 
     def placed(self, *, row: Row) -> StopPlace:
         """
@@ -367,12 +362,20 @@ class SqlitePinOptions:
         })
         served = served_by(
             rows=rows,
+            kinds=self.kinds,
             left_out=(
-                frozenset({SydneyMode.SCHOOL}) if skip_school else frozenset()
+                skippable_modes(modes=self.network.city.modes)
+                if skip_school
+                else frozenset()
             ),
         )
         return tuple(
-            match_of(place=place, calls=served.get(place.stop_id, ()))
+            match_of(
+                place=place,
+                calls=served.get(place.stop_id, ()),
+                kinds=self.kinds,
+                line_kinds=self.network.line_kinds,
+            )
             for place in places
         )
 
@@ -410,7 +413,7 @@ class SqlitePinOptions:
         rows = self.network.fetch(sql=TRIP_STOP, params=(stop_id,))
         return self.placed(row=rows[0]) if rows else None
 
-    def kinds_at(self, *, stop_id: str) -> tuple[SydneyMode, ...]:
+    def kinds_at(self, *, stop_id: str) -> tuple[str, ...]:
         """
         List the kinds of route that have a line or route at a stop.
 
@@ -421,17 +424,17 @@ class SqlitePinOptions:
 
         Returns
         -------
-        tuple[SydneyMode, ...]
-            Kinds in `KIND_NAMES` order.
+        tuple[str, ...]
+            Kinds in the editor's order.
         """
         return tuple(
             kind
-            for kind in KIND_NAMES
+            for kind in self.kinds
             if self.lines_at(stop_id=stop_id, kind=kind)
         )
 
     def lines_at(
-        self, *, stop_id: str, kind: SydneyMode,
+        self, *, stop_id: str, kind: str,
     ) -> tuple[Choice, ...]:
         """
         List the lines or routes of a kind that serve a stop.
@@ -444,7 +447,7 @@ class SqlitePinOptions:
         ----------
         stop_id : str
             Stop or station ID.
-        kind : SydneyMode
+        kind : str
             Kind of route.
 
         Returns
@@ -455,7 +458,7 @@ class SqlitePinOptions:
         if not self.network.has_network():
             return ()
         station = self.network.station_for(stop_id=stop_id)
-        if kind in LINE_KINDS:
+        if kind in self.network.line_kinds:
             if not self.network.has_lines():
                 return ()
             sql = STATION_LINES
@@ -467,7 +470,7 @@ class SqlitePinOptions:
         return unique_by_badge(lines=route_choices(rows=rows))
 
     def destinations(
-        self, *, origin: StopPlace, kind: SydneyMode, line: Choice,
+        self, *, origin: StopPlace, kind: str, line: Choice,
     ) -> tuple[StopPlace, ...]:
         """
         List the places the device offers as the To.
@@ -476,7 +479,7 @@ class SqlitePinOptions:
         ----------
         origin : StopPlace
             The From.
-        kind : SydneyMode
+        kind : str
             Kind of route.
         line : Choice
             The line or route, from `lines_at`.
@@ -490,7 +493,7 @@ class SqlitePinOptions:
             knob can stop on. Empty for a file without the network or
             line tables.
         """
-        if kind in LINE_KINDS:
+        if kind in self.network.line_kinds:
             return self.line_stations(origin=origin, kind=kind, line=line)
         data = self.network.reach_input(
             key=StripKey(
@@ -508,7 +511,7 @@ class SqlitePinOptions:
         }.values())
 
     def line_stations(
-        self, *, origin: StopPlace, kind: SydneyMode, line: Choice,
+        self, *, origin: StopPlace, kind: str, line: Choice,
     ) -> tuple[StopPlace, ...]:
         """
         List the stations the TO column of a line offers from a station.
@@ -517,7 +520,7 @@ class SqlitePinOptions:
         ----------
         origin : StopPlace
             The From.
-        kind : SydneyMode
+        kind : str
             A station-first kind.
         line : Choice
             The line.
@@ -543,7 +546,7 @@ class SqlitePinOptions:
         )
 
     def filters_at(
-        self, *, stop_id: str, kind: SydneyMode,
+        self, *, stop_id: str, kind: str,
     ) -> tuple[str, ...]:
         """
         List the route numbers a pin's departures can be limited to.
@@ -552,7 +555,7 @@ class SqlitePinOptions:
         ----------
         stop_id : str
             Stop or station ID.
-        kind : SydneyMode
+        kind : str
             Kind of route.
 
         Returns
@@ -565,7 +568,9 @@ class SqlitePinOptions:
             return ()
         rows = self.network.fetch(sql=FILTERS, params={
             'station': self.network.station_for(stop_id=stop_id),
-            'kinds': json.dumps([str(each) for each in BOARD_KINDS[kind]]),
+            'kinds': json.dumps(sorted(board_modes(
+                modes=self.network.city.modes, kind=kind, skip=False,
+            ))),
             'last': LAST,
         })
         return tuple(str(route) for route, in rows)

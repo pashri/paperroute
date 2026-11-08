@@ -14,7 +14,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.city import SYDNEY_ZONE, SydneyMode
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute.core.messages import Event, PinSaved
 from paperroute.core.pin_choices import ChangeStop, StopMatch
 from paperroute.core.trip_search import Journey, JourneyLeg
@@ -249,7 +249,11 @@ async def _client(app: App) -> AsyncIterator[Client]:
         planner=FakeTripPlanner(journeys=(JOURNEY,)),
         now=lambda: NOW,
     )
-    display = WebDisplay(device=sydney_site().pages(), board=board)
+    display = WebDisplay(
+        device=sydney_site().pages(),
+        board=board,
+        city=SYDNEY,
+    )
     display.bind(post=app.post)
     client = TestClient(TestServer(display.app()))
     await client.start_server()

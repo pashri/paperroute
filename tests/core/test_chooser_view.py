@@ -1,5 +1,6 @@
 """Tests for the route chooser screen's view-model."""
 
+from paperroute.city import SYDNEY
 from paperroute.core.chooser import (
     Choice,
     Column,
@@ -63,7 +64,7 @@ def test_trail_and_titles() -> None:
 
 
 def test_empty_text_while_loading_and_failed() -> None:
-    chooser, request = opened(shown=Pin(origin=place('X')))
+    chooser, request = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
     assert build_chooser_view(chooser=chooser).empty == 'Loading…'
     chooser, _ = fed(chooser, request, None)
     view = build_chooser_view(chooser=chooser)

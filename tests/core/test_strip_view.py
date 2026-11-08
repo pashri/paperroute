@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from paperroute.city import SYDNEY_ZONE, SydneyMode
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute.core.map_view import Marker
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_badges import HALF_WIDE
@@ -62,6 +62,7 @@ from paperroute_testkit.core.strip_factories import (
     times,
 )
 from paperroute_transit.core.model import CarryOn, StopPlace
+from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.reach import (
     Reach,
     ReachInput,
@@ -344,6 +345,7 @@ def test_whole_stop_buses_never_crowd_out_train_markers() -> None:
     everything = sorted([*buses, *trains], key=lambda item: item.departs)
     assert strip_trips(
         departures=everything, key=TRAIN, now=START,
+        line_kinds=line_modes(modes=SYDNEY.modes),
     ) == {f'train{i}' for i in range(5)}
     inputs = inputs_of(
         reach=example_reach(),
@@ -715,6 +717,7 @@ def test_line_reach_has_no_origin_and_from_cursor_tag() -> None:
         destination=None,
         tag=NOT_PINNED,
         zone=SYDNEY_ZONE,
+        line_kinds=line_modes(modes=SYDNEY.modes),
     ))
     assert view.band is None
     assert [row.tag for row in view.rows] == ['', 'FROM?', '']

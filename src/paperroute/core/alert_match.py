@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Final
 
-from paperroute.city import SYDNEY, SydneyMode
 from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.alert_model import (
     Alert,
@@ -16,20 +15,11 @@ from paperroute_transit.core.alert_model import (
     Matched,
     Period,
 )
+from paperroute_transit.core.city import City
 from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.patterns import TripPattern
 
 BANNER_AHEAD: Final[timedelta] = timedelta(hours=24)
-NAME_KINDS: Final[frozenset[SydneyMode]] = frozenset({
-    SydneyMode.TRAIN,
-    SydneyMode.METRO,
-    SydneyMode.LIGHT_RAIL,
-    SydneyMode.FERRY,
-})
-LOOSE_KINDS: Final[frozenset[SydneyMode]] = frozenset({
-    SydneyMode.COACH,
-    SydneyMode.LIGHT_RAIL,
-})
 BETWEEN_TRIPS: Final[int] = 12
 WEEK_DAYS: Final[int] = 6
 NAME_BEFORE: Final[str] = (
@@ -114,7 +104,7 @@ class Listed:
     banner: bool
 
 
-def place_name(*, name: str) -> str:
+def place_name(*, name: str, city: City) -> str:
     """
     A stop name without its station or wharf suffix.
 
@@ -125,6 +115,8 @@ def place_name(*, name: str) -> str:
     ----------
     name : str
         Stop name, such as 'Central Station'.
+    city : City
+        The city, whose alert rules give the suffixes cut.
 
     Returns
     -------
@@ -133,7 +125,7 @@ def place_name(*, name: str) -> str:
     """
     if 'Wharf' in name:
         name = name.partition(',')[0]
-    for suffix in SYDNEY.alerts.name_suffixes:
+    for suffix in city.alerts.name_suffixes:
         if name.endswith(suffix):
             return name.removesuffix(suffix)
     return name
@@ -175,7 +167,9 @@ def names_place(
     )
 
 
-def is_name_pin(*, pin: Pin, departures: Sequence[Departure]) -> bool:
+def is_name_pin(
+    *, pin: Pin, departures: Sequence[Departure], city: City,
+) -> bool:
     """
     Say whether a pin's places are matched against alert text.
 
@@ -185,22 +179,28 @@ def is_name_pin(*, pin: Pin, departures: Sequence[Departure]) -> bool:
         The pin.
     departures : Sequence[Departure]
         Its departures.
+    city : City
+        The city, whose modes and alert rules say which are matched.
 
     Returns
     -------
     bool
-        True for rail, metro, light rail and ferry pins.
+        True for a kind whose alerts name its lines, or for no kind and
+        only departures of feed sources whose alerts name stations.
     """
     if pin.kind is not None:
-        return pin.kind in NAME_KINDS
+        spec = city.mode(mode_id=pin.kind)
+        return spec is not None and spec.named_alerts
     return bool(departures) and all(
-        item.source in SYDNEY.alerts.name_sources for item in departures
+        item.source in city.alerts.name_sources for item in departures
     )
 
 
-def is_ferry_pin(*, pin: Pin, departures: Sequence[Departure]) -> bool:
+def is_ferry_pin(
+    *, pin: Pin, departures: Sequence[Departure], city: City,
+) -> bool:
     """
-    Say whether a pin is a ferry pin.
+    Say whether a pin's stops are named by wharf.
 
     Parameters
     ----------
@@ -208,20 +208,26 @@ def is_ferry_pin(*, pin: Pin, departures: Sequence[Departure]) -> bool:
         The pin.
     departures : Sequence[Departure]
         Its departures.
+    city : City
+        The city, whose modes and alert rules say which are.
 
     Returns
     -------
     bool
-        True for a ferry kind, or for no kind and only ferry departures.
+        True for a kind whose alerts name wharves, or for no kind and
+        only departures of feed sources whose alerts do.
     """
     if pin.kind is not None:
-        return pin.kind == SydneyMode.FERRY
+        spec = city.mode(mode_id=pin.kind)
+        return spec is not None and spec.wharf_names
     return bool(departures) and all(
-        item.source in SYDNEY.alerts.wharf_sources for item in departures
+        item.source in city.alerts.wharf_sources for item in departures
     )
 
 
-def pin_names(*, pin: Pin, between: frozenset[str]) -> frozenset[str]:
+def pin_names(
+    *, pin: Pin, between: frozenset[str], city: City,
+) -> frozenset[str]:
     """
     Place names of a pin's From, To and the stations between.
 
@@ -231,6 +237,8 @@ def pin_names(*, pin: Pin, between: frozenset[str]) -> frozenset[str]:
         The pin.
     between : frozenset[str]
         Place names of stations between From and To.
+    city : City
+        The city, whose alert rules give the suffixes cut.
 
     Returns
     -------
@@ -240,7 +248,9 @@ def pin_names(*, pin: Pin, between: frozenset[str]) -> frozenset[str]:
     places = [pin.origin] + ([] if pin.destination is None else [
         pin.destination,
     ])
-    return between | {place_name(name=place.name) for place in places}
+    return between | {
+        place_name(name=place.name, city=city) for place in places
+    }
 
 
 def pin_facts(
@@ -248,6 +258,7 @@ def pin_facts(
     pin: Pin,
     departures: Sequence[Departure],
     between: frozenset[str],
+    city: City,
     families: Mapping[str, frozenset[str]] | None = None,
 ) -> PinFacts:
     """
@@ -261,6 +272,8 @@ def pin_facts(
         Its loaded departures; may be empty.
     between : frozenset[str]
         Place names of stations between From and To.
+    city : City
+        The city, whose modes and alert rules say how alerts match.
     families : Mapping[str, frozenset[str]] | None
         Stop families of From and To, so a platform pin also matches its
         station and sibling platforms; None for none known.
@@ -274,7 +287,8 @@ def pin_facts(
     ends = [pin.origin] + ([] if pin.destination is None else [
         pin.destination,
     ])
-    named = is_name_pin(pin=pin, departures=departures)
+    named = is_name_pin(pin=pin, departures=departures, city=city)
+    spec = city.mode(mode_id=pin.kind)
     known = families or {}
     return PinFacts(
         trips=frozenset(
@@ -291,16 +305,20 @@ def pin_facts(
             frozenset((*pin.routes, *pin.only))
             | {item.route for item in departures}
         ),
-        names=pin_names(pin=pin, between=between) if named else frozenset(),
-        wharf=is_ferry_pin(pin=pin, departures=departures),
+        names=(
+            pin_names(pin=pin, between=between, city=city)
+            if named
+            else frozenset()
+        ),
+        wharf=is_ferry_pin(pin=pin, departures=departures, city=city),
         lines=frozenset(
             item.facts.route_id
             for item in departures
             if item.facts.route_id
         ),
-        loose=pin.kind in LOOSE_KINDS
+        loose=(spec is not None and spec.loose_alerts)
         or any(
-            item.source in SYDNEY.alerts.loose_sources for item in departures
+            item.source in city.alerts.loose_sources for item in departures
         ),
     )
 
@@ -309,6 +327,7 @@ def between_names(
     *,
     pin: Pin,
     patterns: Mapping[str, TripPattern],
+    city: City,
     families: Mapping[str, frozenset[str]] | None = None,
 ) -> frozenset[str]:
     """
@@ -320,6 +339,8 @@ def between_names(
         The pin.
     patterns : Mapping[str, TripPattern]
         Patterns of some of its trips.
+    city : City
+        The city, whose alert rules give the suffixes cut.
     families : Mapping[str, frozenset[str]] | None
         Stop families of From and To. A pin end on a platform is found
         through its parent station here; an end with no family must be
@@ -342,7 +363,7 @@ def between_names(
         span = end_indexes(pattern=pattern, start=ends[0], end=ends[1])
         if span is not None:
             names.update(
-                place_name(name=stop.name)
+                place_name(name=stop.name, city=city)
                 for stop in pattern.stops[span[0] + 1:span[1]]
             )
     return frozenset(names)

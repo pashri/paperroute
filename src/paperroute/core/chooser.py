@@ -1,14 +1,15 @@
 """The route chooser: its columns, stages, knob handling and view-model."""
 
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from datetime import datetime
 from enum import StrEnum
 from typing import Final
 
-from paperroute.city import SydneyMode
 from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import ALL_TAG
 from paperroute_transit.core.model import Departure, Pin, StopPlace
+from paperroute_transit.core.modes import ModeSpec, spec_of
 from paperroute_transit.core.reach import Reach, RowKind, StripKey
 
 
@@ -26,35 +27,6 @@ class Level(StrEnum):
 
 
 ChooserPath = tuple[tuple[Level, str], ...]
-
-KIND_ORDER: Final[tuple[SydneyMode, ...]] = (
-    SydneyMode.BUS,
-    SydneyMode.TRAIN,
-    SydneyMode.METRO,
-    SydneyMode.LIGHT_RAIL,
-    SydneyMode.FERRY,
-    SydneyMode.SCHOOL,
-    SydneyMode.COACH,
-)
-KIND_LABELS: Final[dict[SydneyMode, str]] = {
-    SydneyMode.BUS: 'Bus',
-    SydneyMode.TRAIN: 'Train',
-    SydneyMode.METRO: 'Metro',
-    SydneyMode.LIGHT_RAIL: 'Light rail',
-    SydneyMode.FERRY: 'Ferry',
-    SydneyMode.SCHOOL: 'School',
-    SydneyMode.COACH: 'Coach',
-}
-KIND_LETTERS: Final[dict[str, str]] = {
-    SydneyMode.BUS: 'B',
-    SydneyMode.TRAIN: 'T',
-    SydneyMode.METRO: 'M',
-    SydneyMode.LIGHT_RAIL: 'L',
-    SydneyMode.FERRY: 'F',
-    SydneyMode.SCHOOL: 'S',
-    SydneyMode.COACH: 'C',
-}
-
 
 @dataclass(frozen=True)
 class Choice:
@@ -449,24 +421,45 @@ def previewed(
     return replace(trimmed, waiting=path), ColumnRequest(path=path)
 
 
-def opened(*, shown: Pin) -> tuple[ChooserState, ChooserRequest]:
+def kind_specs(*, modes: Sequence[ModeSpec]) -> tuple[ModeSpec, ...]:
+    """
+    List the modes the KIND column offers.
+
+    Parameters
+    ----------
+    modes : Sequence[ModeSpec]
+        The city's modes.
+
+    Returns
+    -------
+    tuple[ModeSpec, ...]
+        The specs that sit under no other mode, in declared order.
+    """
+    return tuple(spec for spec in modes if spec.under is None)
+
+
+def opened(
+    *, shown: Pin, modes: Sequence[ModeSpec],
+) -> tuple[ChooserState, ChooserRequest]:
     """
     Open the chooser.
 
     Parameters
     ----------
     shown : Pin
-        The place on screen; its kind is the KIND cursor's start.
+        The place on screen; its kind, or the mode it sits under, is
+        the KIND cursor's start.
+    modes : Sequence[ModeSpec]
+        The city's modes.
 
     Returns
     -------
     tuple[ChooserState, ChooserRequest]
         The empty chooser and its request for the KIND column.
     """
-    return (
-        ChooserState(waiting=(), prefer=shown.kind),
-        ColumnRequest(path=()),
-    )
+    spec = spec_of(modes=modes, mode=shown.kind)
+    prefer = spec.under if spec is not None and spec.under else shown.kind
+    return ChooserState(waiting=(), prefer=prefer), ColumnRequest(path=())
 
 
 def first_cursor(*, column: Column, prefer: str | None) -> int:
@@ -483,14 +476,13 @@ def first_cursor(*, column: Column, prefer: str | None) -> int:
     Returns
     -------
     int
-        The preferred kind's row in the KIND column (Bus's for a
-        replacement bus place) or the From's row in a TO column; failing
-        those, the first row a cursor may rest on, else 0.
+        The preferred kind's row in the KIND column or the From's row in
+        a TO column; failing those, the first row a cursor may rest on,
+        else 0.
     """
-    wanted = SydneyMode.BUS if prefer == SydneyMode.REPLACEMENT else prefer
     match column.level:
         case Level.KIND:
-            first = [row.key == wanted for row in column.items]
+            first = [row.key == prefer for row in column.items]
         case Level.TO:
             first = [row.tag == ALL_TAG for row in column.items]
         case _:
@@ -959,8 +951,9 @@ def chosen_pin(
     Returns
     -------
     Pin
-        The place: the path's kind, or Replacement after a replacement
-        buses row, and the number of the last route or line chosen.
+        The place: the path's kind, or after a replacements row the mode
+        that row stands for, and the number of the last route or line
+        chosen.
 
     Raises
     ------
@@ -970,7 +963,10 @@ def chosen_pin(
     if chooser.origin is None:
         raise ValueError('The chooser has no From yet')
     path = path_to(chooser=chooser, index=chooser.focus)
-    replaced = any(level is Level.REPLACEMENTS for level, _ in path)
+    kind = next(
+        (key for level, key in path if level is Level.REPLACEMENTS),
+        path[0][1],
+    )
     badges = [
         chosen(chooser=chooser, index=index).badge
         for index in range(len(path))
@@ -979,6 +975,6 @@ def chosen_pin(
     return Pin(
         origin=chooser.origin,
         destination=destination,
-        kind=SydneyMode.REPLACEMENT if replaced else SydneyMode(path[0][1]),
+        kind=kind,
         routes=tuple(badges[-1:]),
     )

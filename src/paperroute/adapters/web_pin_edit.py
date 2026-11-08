@@ -6,19 +6,17 @@ from typing import Final
 from urllib.parse import urlencode
 
 from paperroute.adapters.pin_windows import DEFAULT_BUTTON
-from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.pin_choices import (
-    KIND_NAMES,
     NICKNAME_MAX,
     PinDraft,
     PinEditor,
     StopMatch,
+    kind_names,
 )
 from paperroute_device.adapters.web_common import asset
 from paperroute_transit.core.model import StopPlace
-from paperroute_transit.core.modes import line_modes
+from paperroute_transit.core.modes import ModeSpec, spec_of
 
-LINE_KINDS: Final[frozenset[str]] = line_modes(modes=SYDNEY.modes)
 MIN_QUERY: Final[int] = 2
 TOO_SHORT: Final[str] = 'Type at least 2 letters.'
 NO_MATCH: Final[str] = 'No stop or station matches “{text}”.'
@@ -67,7 +65,10 @@ DANGER_CARD: Final[str] = """
 
 
 def draft_of(
-    *, query: Mapping[str, str], only: Sequence[str],
+    *,
+    query: Mapping[str, str],
+    only: Sequence[str],
+    modes: Sequence[ModeSpec],
 ) -> PinDraft:
     """
     Read an editor's choices from form fields.
@@ -78,6 +79,8 @@ def draft_of(
         Fields: `ref`, `stop`, `kind`, `route`, `to` and `nickname`.
     only : Sequence[str]
         Every `only` field given.
+    modes : Sequence[ModeSpec]
+        The city's modes.
 
     Returns
     -------
@@ -87,7 +90,7 @@ def draft_of(
     kind = query.get('kind', '')
     return PinDraft(
         stop=query.get('stop', ''),
-        kind=SydneyMode(kind) if kind in SydneyMode else None,
+        kind=kind if spec_of(modes=modes, mode=kind) is not None else None,
         route=query.get('route', ''),
         to=query.get('to', ''),
         only=tuple(only),
@@ -96,7 +99,12 @@ def draft_of(
     )
 
 
-def match_item(*, match: StopMatch, target: str = '/pins/edit') -> str:
+def match_item(
+    *,
+    match: StopMatch,
+    modes: Sequence[ModeSpec],
+    target: str = '/pins/edit',
+) -> str:
     """
     Draw one search result.
 
@@ -104,6 +112,8 @@ def match_item(*, match: StopMatch, target: str = '/pins/edit') -> str:
     ----------
     match : StopMatch
         The stop found.
+    modes : Sequence[ModeSpec]
+        The city's modes, which name the kinds.
     target : str
         The editor the result opens.
 
@@ -112,7 +122,8 @@ def match_item(*, match: StopMatch, target: str = '/pins/edit') -> str:
     str
         An escaped list item linking to the stop's editor.
     """
-    kinds = ', '.join(KIND_NAMES[kind] for kind in match.kinds)
+    names = kind_names(modes=modes)
+    kinds = ', '.join(names[kind] for kind in match.kinds)
     routes = (
         f' <span class="routes">{html.escape(" ".join(match.routes))}</span>'
         if match.routes
@@ -130,6 +141,7 @@ def search_results(
     *,
     text: str,
     found: Sequence[StopMatch],
+    modes: Sequence[ModeSpec],
     target: str = '/pins/edit',
     extra: str = '',
 ) -> str:
@@ -142,6 +154,8 @@ def search_results(
         The text searched for.
     found : Sequence[StopMatch]
         The matches.
+    modes : Sequence[ModeSpec]
+        The city's modes, which name the kinds.
     target : str
         The editor each result opens.
     extra : str
@@ -159,7 +173,8 @@ def search_results(
         line = NO_MATCH.format(text=html.escape(text.strip()))
         return f'{form}\n    <p>{line}</p>'
     items = ''.join(
-        match_item(match=match, target=target) for match in found
+        match_item(match=match, modes=modes, target=target)
+        for match in found
     )
     return f'{form}\n    <ul class="results">{items}\n    </ul>'
 
@@ -189,7 +204,7 @@ def option(*, value: str, label: str, chosen: str) -> str:
     )
 
 
-def kind_fields(*, editor: PinEditor) -> str:
+def kind_fields(*, editor: PinEditor, modes: Sequence[ModeSpec]) -> str:
     """
     Draw the Mode radios.
 
@@ -197,6 +212,8 @@ def kind_fields(*, editor: PinEditor) -> str:
     ----------
     editor : PinEditor
         The editor.
+    modes : Sequence[ModeSpec]
+        The city's modes, which name the kinds.
 
     Returns
     -------
@@ -205,10 +222,11 @@ def kind_fields(*, editor: PinEditor) -> str:
     """
     if not editor.kinds:
         return ''
+    names = kind_names(modes=modes)
     radios = ''.join(
         f'\n        <label><input type="radio" name="kind" value="{kind}"'
-        f'{" checked" if kind is editor.draft.kind else ""}> '
-        f'{html.escape(KIND_NAMES[kind])}</label>'
+        f'{" checked" if kind == editor.draft.kind else ""}> '
+        f'{html.escape(names[kind])}</label>'
         for kind in editor.kinds
     )
     return (
@@ -252,7 +270,7 @@ def select_field(
     )
 
 
-def line_field(*, editor: PinEditor) -> str:
+def line_field(*, editor: PinEditor, modes: Sequence[ModeSpec]) -> str:
     """
     Draw the Line or Route select.
 
@@ -263,6 +281,8 @@ def line_field(*, editor: PinEditor) -> str:
     ----------
     editor : PinEditor
         The editor.
+    modes : Sequence[ModeSpec]
+        The city's modes; one chosen by line labels the select Line.
 
     Returns
     -------
@@ -271,7 +291,8 @@ def line_field(*, editor: PinEditor) -> str:
     """
     if not editor.lines:
         return ''
-    label = 'Line' if editor.draft.kind in LINE_KINDS else 'Route'
+    spec = spec_of(modes=modes, mode=editor.draft.kind)
+    label = 'Line' if spec is not None and spec.by_line else 'Route'
     open_ended = not editor.draft.to
     chosen = editor.draft.route
     options = option(value='', label=f'Pick a {label.lower()}', chosen=chosen)
@@ -398,7 +419,13 @@ def nearby_list(*, editor: PinEditor) -> str:
     )
 
 
-def editor_form(*, editor: PinEditor, origin: str, windows: str) -> str:
+def editor_form(
+    *,
+    editor: PinEditor,
+    origin: str,
+    windows: str,
+    modes: Sequence[ModeSpec],
+) -> str:
     """
     Draw the pin editor.
 
@@ -410,6 +437,8 @@ def editor_form(*, editor: PinEditor, origin: str, windows: str) -> str:
         The From name for the heading; not escaped.
     windows : str
         The Show automatically fieldset's HTML.
+    modes : Sequence[ModeSpec]
+        The city's modes.
 
     Returns
     -------
@@ -419,7 +448,8 @@ def editor_form(*, editor: PinEditor, origin: str, windows: str) -> str:
     """
     draft = editor.draft
     fields = (
-        kind_fields(editor=editor) + line_field(editor=editor)
+        kind_fields(editor=editor, modes=modes)
+        + line_field(editor=editor, modes=modes)
         + to_field(editor=editor) + filter_fields(editor=editor)
     )
     return EDITOR.format(

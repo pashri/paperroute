@@ -2,7 +2,7 @@
 
 import asyncio
 import html
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from http import HTTPStatus
 from typing import Final
@@ -48,6 +48,7 @@ from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
 from paperroute_device.adapters.web_common import asset, form_fields
 from paperroute_transit.core.model import Pin, pin_ref, same_place
+from paperroute_transit.core.modes import ModeSpec
 from paperroute_transit.core.route_colours import RouteColour
 
 __all__ = [
@@ -289,6 +290,8 @@ class PinsPages:
         Gives the pins the app last reported, or None before the first.
     options : PinOptions | None
         The timetable's choices for the editor, or None.
+    modes : Sequence[ModeSpec]
+        The city's modes.
     sleep : Callable[[float], Awaitable[None]]
         Waits for some seconds.
     skip_school : Callable[[], bool]
@@ -301,12 +304,14 @@ class PinsPages:
         post: Callable[[Event], None],
         pins: Callable[[], PinsSeen | None],
         options: PinOptions | None,
+        modes: Sequence[ModeSpec],
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         skip_school: Callable[[], bool] = lambda: True,
     ) -> None:
         self._post = post
         self._pins = pins
         self.options = options
+        self.modes = modes
         self._sleep = sleep
         self.skip_school = skip_school
 
@@ -370,7 +375,9 @@ class PinsPages:
         body = (
             STARTING
             if latest is None
-            else pins_list(seen=latest, colours=self._colours())
+            else pins_list(
+                seen=latest, colours=self._colours(), modes=self.modes,
+            )
         )
         notice = notice_html(done=request.query.get('done'))
         return web.Response(
@@ -653,6 +660,7 @@ class PinsPages:
         return html_page(text=search_page(
             options=self.options,
             query=request.query,
+            modes=self.modes,
             skip_school=self.skip_school(),
         ))
 
@@ -772,6 +780,7 @@ class PinsPages:
                 fallback=None if pin is None else pin.origin,
             ),
             windows=windows_fieldset(rows=rows),
+            modes=self.modes,
         )
 
     async def _edit(self, request: web.Request) -> web.Response:
@@ -789,7 +798,9 @@ class PinsPages:
             The editor page, or a 303 when the pin has gone.
         """
         draft = draft_of(
-            query=request.query, only=request.query.getall('only', []),
+            query=request.query,
+            only=request.query.getall('only', []),
+            modes=self.modes,
         )
         return self._editor(
             draft=draft, rows=query_rows(fields=request.query),
@@ -816,7 +827,9 @@ class PinsPages:
             for name, value in body.items()
             if isinstance(value, str)
         )
-        draft = draft_of(query=fields, only=fields.getall('only', []))
+        draft = draft_of(
+            query=fields, only=fields.getall('only', []), modes=self.modes,
+        )
         return self._checked(draft=draft, rows=rows_of(fields=fields))
 
     def _checked(

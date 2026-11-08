@@ -450,7 +450,7 @@ def optional_enum[E: StrEnum](
 
 
 def posted_values(
-    *, fields: Mapping[str, str], event: SettingsChanged
+    *, fields: Mapping[str, str], event: SettingsChanged, defaults: Settings,
 ) -> dict[str, str]:
     """
     Write the posted fields the way the app will report them.
@@ -461,6 +461,8 @@ def posted_values(
         The posted fields.
     event : SettingsChanged
         The change read from them.
+    defaults : Settings
+        The settings the change is applied to.
 
     Returns
     -------
@@ -470,7 +472,7 @@ def posted_values(
     """
     given = {k: v for k, v in vars(event).items() if v is not None}
     full = form_values(
-        settings=with_changes(settings=Settings(), changes=given),
+        settings=with_changes(settings=defaults, changes=given),
     )
     keys = set(fields)
     if event.peak_windows is not None:

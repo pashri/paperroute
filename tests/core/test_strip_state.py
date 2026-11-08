@@ -23,7 +23,7 @@ from paperroute.core.messages import (
     Tick,
     TimetableSeen,
 )
-from paperroute.core.saved import LiveView, Saved
+from paperroute.core.saved import LiveView, Saved, default_settings
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import RETRY_AFTER, State
 from paperroute.core.stop_view import HORIZON
@@ -329,6 +329,7 @@ def test_flip_resets_the_strip_scroll() -> None:
     """A new place starts its strip at the default rows."""
     other = replace(PIN, origin=place('D', name='D', point=CENTRE))
     saved = Saved(
+        settings=default_settings(city=SYDNEY),
         pins=(PIN, other),
         current=0,
         unpinned=None,

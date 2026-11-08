@@ -7,7 +7,7 @@ from typing import Final
 from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import DeparturesLoaded, Effect, Event
-from paperroute.core.saved import LiveView, Saved
+from paperroute.core.saved import LiveView, Saved, default_settings
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import HORIZON
@@ -178,6 +178,7 @@ def on_view(
         State and effects after the load.
     """
     saved = Saved(
+        settings=default_settings(city=SYDNEY),
         pins=(pin,), current=0, unpinned=None, view=view,
     )
     state = initial_state(

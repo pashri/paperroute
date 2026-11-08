@@ -3,9 +3,9 @@
 from collections.abc import Collection
 from dataclasses import dataclass, field
 
-from paperroute.city import SydneyMode
+from paperroute.city import SYDNEY
 from paperroute.core.chooser import Choice
-from paperroute.core.pin_choices import KIND_NAMES, ChangeStop, StopMatch
+from paperroute.core.pin_choices import ChangeStop, StopMatch, kind_names
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.route_colours import RouteColour
 
@@ -19,11 +19,11 @@ class FakePinOptions:
     ----------
     places : dict[str, StopPlace]
         The places that exist, by ID.
-    lines : dict[tuple[str, SydneyMode], tuple[Choice, ...]]
+    lines : dict[tuple[str, str], tuple[Choice, ...]]
         The lines at a stop, by stop ID and kind.
     to : dict[tuple[str, str], tuple[StopPlace, ...]]
         The To places, by stop ID and line key.
-    only : dict[tuple[str, SydneyMode], tuple[str, ...]]
+    only : dict[tuple[str, str], tuple[str, ...]]
         The route filter, by stop ID and kind.
     near : tuple[StopPlace, ...]
         What `nearby` gives.
@@ -44,13 +44,13 @@ class FakePinOptions:
     """
 
     places: dict[str, StopPlace] = field(default_factory=dict)
-    lines: dict[tuple[str, SydneyMode], tuple[Choice, ...]] = field(
+    lines: dict[tuple[str, str], tuple[Choice, ...]] = field(
         default_factory=dict,
     )
     to: dict[tuple[str, str], tuple[StopPlace, ...]] = field(
         default_factory=dict,
     )
-    only: dict[tuple[str, SydneyMode], tuple[str, ...]] = field(
+    only: dict[tuple[str, str], tuple[str, ...]] = field(
         default_factory=dict,
     )
     near: tuple[StopPlace, ...] = ()
@@ -118,7 +118,7 @@ class FakePinOptions:
         """
         return self.places.get(self.parents.get(stop_id, stop_id))
 
-    def kinds_at(self, *, stop_id: str) -> tuple[SydneyMode, ...]:
+    def kinds_at(self, *, stop_id: str) -> tuple[str, ...]:
         """
         Give the kinds that have lines at a stop.
 
@@ -129,14 +129,16 @@ class FakePinOptions:
 
         Returns
         -------
-        tuple[SydneyMode, ...]
+        tuple[str, ...]
             Kinds in display order.
         """
         return tuple(
-            kind for kind in KIND_NAMES if self.lines.get((stop_id, kind))
+            kind
+            for kind in kind_names(modes=SYDNEY.modes)
+            if self.lines.get((stop_id, kind))
         )
 
-    def lines_at(self, *, stop_id: str, kind: SydneyMode) -> tuple[Choice, ...]:
+    def lines_at(self, *, stop_id: str, kind: str) -> tuple[Choice, ...]:
         """
         Give the fixed lines of a stop and kind.
 
@@ -144,7 +146,7 @@ class FakePinOptions:
         ----------
         stop_id : str
             Stop ID.
-        kind : SydneyMode
+        kind : str
             Kind of route.
 
         Returns
@@ -155,7 +157,7 @@ class FakePinOptions:
         return self.lines.get((stop_id, kind), ())
 
     def destinations(
-        self, *, origin: StopPlace, kind: SydneyMode, line: Choice,
+        self, *, origin: StopPlace, kind: str, line: Choice,
     ) -> tuple[StopPlace, ...]:
         """
         Give the fixed To places of a stop and line.
@@ -164,7 +166,7 @@ class FakePinOptions:
         ----------
         origin : StopPlace
             The From.
-        kind : SydneyMode
+        kind : str
             Ignored.
         line : Choice
             The line.
@@ -177,7 +179,7 @@ class FakePinOptions:
         return self.to.get((origin.stop_id, line.key), ())
 
     def filters_at(
-        self, *, stop_id: str, kind: SydneyMode,
+        self, *, stop_id: str, kind: str,
     ) -> tuple[str, ...]:
         """
         Give the fixed route filter of a stop and kind.
@@ -186,7 +188,7 @@ class FakePinOptions:
         ----------
         stop_id : str
             Stop ID.
-        kind : SydneyMode
+        kind : str
             Kind of route.
 
         Returns

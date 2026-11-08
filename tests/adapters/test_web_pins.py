@@ -21,7 +21,7 @@ from paperroute.adapters.web_pins import (
     pin_label,
     pin_line,
 )
-from paperroute.city import SydneyMode
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.chooser import Choice
 from paperroute.core.messages import (
     Event,
@@ -111,6 +111,7 @@ async def _client(
         board=board,
         nav=SYDNEY_NAV,
         hint=SYDNEY_HINT,
+        city=SYDNEY,
     )
     display.bind(post=pins.posted.append)
     client = TestClient(TestServer(display.app()))
@@ -426,6 +427,7 @@ async def test_pins_routes_refuse_other_peers(pins: Pins) -> None:
     display = WebDisplay(
         board=SydneyPages(pins=pins.get, options=None, planner=None),
         remote_of=lambda request: '8.8.8.8',
+        city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()
@@ -565,10 +567,15 @@ def test_draft_of_reads_fields() -> None:
     """Fields are read and an unknown kind is dropped."""
     draft = draft_of(
         query={'stop': 'C', 'kind': 'boat', 'ref': 'x'}, only=['T1'],
+        modes=SYDNEY.modes,
     )
     assert (draft.stop, draft.kind, draft.ref) == ('C', None, 'x')
     assert draft.only == ('T1',)
-    assert draft_of(query={'kind': 'train'}, only=[]).kind == SydneyMode.TRAIN
+    assert draft_of(
+        query={'kind': 'train'},
+        only=[],
+        modes=SYDNEY.modes,
+    ).kind == SydneyMode.TRAIN
 
 
 async def test_search_lists_matches(editor: Client) -> None:

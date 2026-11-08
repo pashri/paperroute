@@ -34,6 +34,7 @@ from paperroute_transit.core.model import (
     StopPlace,
     is_connection,
 )
+from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.reach import Reach, StripKey
 from paperroute_transit.core.strip_folds import folded
@@ -342,6 +343,7 @@ def shown_reach(*, state: State) -> Reach | None:
         zone=state.city.zone,
         stale_after=limit,
         station_of=reach.station_of,
+        line_kinds=line_modes(modes=state.city.modes),
     )
     return followed_reach(
         reach=reach,
@@ -434,6 +436,7 @@ def strip_window(*, state: State) -> tuple[Departure, ...]:
             departures=state.board.departures,
             key=strip_key(pin=shown(state=state)),
             now=state.now,
+            line_kinds=line_modes(modes=state.city.modes),
         )
     )
 
@@ -458,7 +461,10 @@ def picked_window(*, state: State) -> tuple[Departure, ...]:
         return ()
     return tuple(
         window_departures(
-            departures=chooser.departures, key=chooser.key, now=state.now,
+            departures=chooser.departures,
+            key=chooser.key,
+            now=state.now,
+            line_kinds=line_modes(modes=state.city.modes),
         )
     )
 
@@ -487,6 +493,7 @@ def strip_patterns(*, state: State) -> frozenset[str]:
             departures=state.board.departures,
             key=strip_key(pin=shown(state=state)),
             now=state.now,
+            line_kinds=line_modes(modes=state.city.modes),
         )
     return wanted | joined_ids(starts=wanted, patterns=state.map.patterns)
 
@@ -533,6 +540,7 @@ def strip_inputs(
         now=frame_time(state=state),
         zone=state.city.zone,
         stale_after=stale_after(state=state),
+        line_kinds=line_modes(modes=state.city.modes),
         scroll=state.strip.scroll,
         cursor=None,
         picking=None,

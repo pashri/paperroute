@@ -5,7 +5,6 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 from enum import StrEnum
 
-from paperroute.city import SydneyFeed
 from paperroute.core.alerts_view import AlertsView
 from paperroute.core.chains import Legs
 from paperroute.core.chooser import ChooserPath, Column
@@ -703,7 +702,7 @@ class ModesLoaded:
 
     mpp: int
     box: MetreBox
-    modes: frozenset[SydneyFeed]
+    modes: frozenset[str]
 
 
 @dataclass(frozen=True)

@@ -37,13 +37,13 @@ def _built(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """
     out = tmp_path_factory.mktemp('changes') / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
         ],
         window=Window(start=date(2026, 10, 15), days=3),
         out=out,
+        city=SYDNEY,
     )
     return out
 
@@ -65,7 +65,7 @@ def _options(built: Path) -> Iterator[SqlitePinOptions]:
     """
     with closing(SqliteNetworkRepository(
         path=built,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as network:
         yield SqlitePinOptions(network=network)
 
@@ -150,7 +150,7 @@ def test_no_network_tables_empty(built: Path, tmp_path: Path) -> None:
         conn.commit()
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as network:
         old = SqlitePinOptions(network=network)
         place = StopPlace(stop_id='215020', name='P', point=(0.0, 0.0))

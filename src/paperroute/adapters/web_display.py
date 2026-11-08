@@ -18,7 +18,7 @@ from paperroute.adapters.settings_form import (
     posted_values,
 )
 from paperroute.core.messages import Event, SettingsChanged
-from paperroute.core.saved import Settings
+from paperroute.core.saved import Settings, default_settings
 from paperroute_device.adapters.web_common import (
     asset,
     asset_bytes,
@@ -29,6 +29,7 @@ from paperroute_device.adapters.web_guard import RemoteOf, peer_address
 from paperroute_device.adapters.web_live import KNOB_HINT, LiveView
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_hardware.ports import CLEAN_AFTER
+from paperroute_transit.core.city import City
 
 if TYPE_CHECKING:
     from paperroute.adapters.web_board import BoardPages
@@ -40,7 +41,9 @@ VENDORED: Final[dict[str, str]] = {
 }
 
 
-def status_settings(*, status: Mapping[str, object]) -> dict[str, str]:
+def status_settings(
+    *, status: Mapping[str, object], defaults: Settings,
+) -> dict[str, str]:
     """
     Read the settings fields the app reported, over the defaults.
 
@@ -48,13 +51,15 @@ def status_settings(*, status: Mapping[str, object]) -> dict[str, str]:
     ----------
     status : Mapping[str, object]
         The status page's extra fields.
+    defaults : Settings
+        The settings shown until the app reports.
 
     Returns
     -------
     dict[str, str]
         The form values; the defaults until the app reports.
     """
-    values = form_values(settings=Settings())
+    values = form_values(settings=defaults)
     reported = status.get('settings')
     if isinstance(reported, Mapping):
         values.update({
@@ -114,6 +119,8 @@ class WebDisplay:
 
     Parameters
     ----------
+    city : City
+        The city, whose default settings show until the app reports.
     status : Callable[[], dict[str, object]] | None
         Extra fields for the status page.
     remote_of : RemoteOf
@@ -138,6 +145,7 @@ class WebDisplay:
     def __init__(
         self,
         *,
+        city: City,
         status: Callable[[], dict[str, object]] | None = None,
         remote_of: RemoteOf = peer_address,
         device: 'DevicePages | None' = None,
@@ -145,6 +153,7 @@ class WebDisplay:
         nav: Sequence[NavItem] = KIT_NAV,
         hint: str = KNOB_HINT,
     ) -> None:
+        self.defaults = default_settings(city=city)
         self._status = status
         self.device = device
         self._board = board
@@ -336,7 +345,10 @@ class WebDisplay:
         dict[str, str]
             The form values.
         """
-        return status_settings(status=self._status() if self._status else {})
+        return status_settings(
+            status=self._status() if self._status else {},
+            defaults=self.defaults,
+        )
 
     async def _settings_page(self, request: web.Request) -> web.Response:
         """
@@ -405,7 +417,9 @@ class WebDisplay:
         if isinstance(event, web.Response):
             return event
         self._before = self._reported()
-        self._posted = posted_values(fields=fields, event=event)
+        self._posted = posted_values(
+            fields=fields, event=event, defaults=self.defaults,
+        )
         self._post(event)
         if as_json:
             return web.Response(status=HTTPStatus.NO_CONTENT)

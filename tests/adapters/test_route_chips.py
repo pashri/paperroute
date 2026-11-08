@@ -1,7 +1,7 @@
 """Tests for the route chips on the Pins list."""
 
 from paperroute.adapters.route_chips import chip_html, colour_sheet
-from paperroute.city import SydneyMode
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.route_colours import RouteColour
 
@@ -25,7 +25,7 @@ def chip_of(*, pin: Pin, colour: RouteColour | None = None) -> str:
     str
         The chip's markup.
     """
-    return chip_html(pin=pin, colour=colour)
+    return chip_html(pin=pin, colour=colour, modes=SYDNEY.modes)
 
 
 def test_chip_text() -> None:

@@ -118,7 +118,7 @@ def test_device_pages_only_for_live_feeds(
     """Live feeds get the setup and Device pages; replayed feeds none."""
     monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
     timings = Timings()
-    display = WebDisplay(status=timings.snapshot)
+    display = WebDisplay(status=timings.snapshot, city=SYDNEY)
     args = argparse.Namespace(
         feeds='live', error_log=None, state=tmp_path / 'state.json',
     )
@@ -144,7 +144,7 @@ async def test_device_pages_link_sydney_pages(
     args = argparse.Namespace(
         feeds='live', error_log=None, state=tmp_path / 'state.json',
     )
-    display = WebDisplay(status=timings.snapshot)
+    display = WebDisplay(status=timings.snapshot, city=SYDNEY)
     pages = device_pages_for(args=args, timings=timings, display=display)
     assert pages is not None
     app = web_app(live=display.live, device=pages)
@@ -168,7 +168,7 @@ async def test_sydney_display_serves_sydney_nav_and_hint(
         timings=Timings(),
         network=SqliteNetworkRepository(
             path=tmp_path / 'network.db',
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         ),
         live=False,
     )
@@ -231,7 +231,7 @@ def test_panel_open_failure_keeps_web(
     assert [refresh.ok for refresh in reports] == [False]
     errors = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert [r.getMessage() for r in errors] == ['panel refresh failed']
-    display = WebDisplay(status=Timings().snapshot)
+    display = WebDisplay(status=Timings().snapshot, city=SYDNEY)
     assert Displays(displays=[display]).settle(timeout=0)
 
 
@@ -576,13 +576,13 @@ def build_db(*, path: Path) -> None:
         Database file to create.
     """
     build_timetable(
-        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
         ],
         window=Window(start=date(2026, 10, 16), days=1),
         out=path,
+        city=SYDNEY,
     )
 
 
@@ -591,7 +591,7 @@ async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
     db = tmp_path / 'timetable.db'
     build_db(path=db)
     timings = Timings()
-    display = WebDisplay(status=timings.snapshot)
+    display = WebDisplay(status=timings.snapshot, city=SYDNEY)
     timetable = SqliteTimetableRepository(
         path=db,
         city=SYDNEY,
@@ -790,7 +790,7 @@ async def test_serve_web_posts_knob_events_then_stops_the_knobs(
         seen.append(await asyncio.wait_for(queue.get(), timeout=2))
 
     monkeypatch.setattr(cli, 'run', fake_run)
-    display = WebDisplay(status=Timings().snapshot)
+    display = WebDisplay(status=Timings().snapshot, city=SYDNEY)
     memory = SqliteTimetableRepository(
         connection=sqlite3.connect(':memory:'),
         city=SYDNEY,
@@ -826,7 +826,7 @@ async def test_serve_web_passes_the_tiles_variant_to_run(
         seen.append(kwargs['tiles_variant'])  # type: ignore[arg-type]
 
     monkeypatch.setattr(cli, 'run', fake_run)
-    display = WebDisplay(status=Timings().snapshot)
+    display = WebDisplay(status=Timings().snapshot, city=SYDNEY)
     memory = SqliteTimetableRepository(
         connection=sqlite3.connect(':memory:'),
         city=SYDNEY,
@@ -861,7 +861,7 @@ def test_serve_or_exit_passes_the_tiles_variant(
         seen.append(kwargs['tiles_variant'])  # type: ignore[arg-type]
 
     monkeypatch.setattr(cli, 'serve_web', fake_serve_web)
-    display = WebDisplay(status=Timings().snapshot)
+    display = WebDisplay(status=Timings().snapshot, city=SYDNEY)
     args = argparse.Namespace(
         origin=ORIGIN,
         destination=DESTINATION,
@@ -961,7 +961,7 @@ async def test_show_passes_the_tiles_variant_to_run(
         ports = Ports(
             timetable=timetable,
             feeds=FileFeedsClient(directory=REAL),
-            display=WebDisplay(status=Timings().snapshot),
+            display=WebDisplay(status=Timings().snapshot, city=SYDNEY),
             clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
             network=FakeNetwork(),
             states=MemoryStates(),

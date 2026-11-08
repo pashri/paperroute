@@ -72,6 +72,7 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_transit.core.model import Departure, Pin
+from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.reach import Reach, RowKind
 
 LINE_FAILED: Final[str] = "Can't load the line"
@@ -371,7 +372,9 @@ def chooser_knob(
     """
     chooser = state.chooser
     if chooser is None:
-        first, kinds = opened(shown=shown(state=state))
+        first, kinds = opened(
+            shown=shown(state=state), modes=state.city.modes,
+        )
         return moved(state=state, chooser=first, request=kinds)
     match event:
         case KnobPressed(knob=Knob.TOP):
@@ -619,6 +622,7 @@ def from_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
         now=state.now,
         zone=state.city.zone,
         stale_after=stale_after(state=state),
+        line_kinds=line_modes(modes=state.city.modes),
         scroll=0,
         cursor=chooser.line_cursor if line else None,
         picking=PICK_FROM,
@@ -668,6 +672,7 @@ def picked_stop_view(*, state: State, chooser: ChooserState) -> StopView:
             ),
             has_feed=bool(feeds) or not departures,
             stale_after=stale_after(state=state),
+            city=state.city,
             loaded=chooser.load.loaded_until is not None,
         ),
     )
@@ -734,6 +739,7 @@ def to_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
         now=state.now,
         zone=state.city.zone,
         stale_after=stale_after(state=state),
+        line_kinds=line_modes(modes=state.city.modes),
         scroll=0,
         cursor=to_cursor_row(chooser=chooser, reach=reach),
         picking=PICK_TO,

@@ -4,6 +4,7 @@ from datetime import time, timedelta
 
 import pytest
 
+from paperroute.city import PEAK_WINDOWS, SYDNEY
 from paperroute.core.banners import NO_KEY
 from paperroute.core.device import (
     NOTICE,
@@ -35,6 +36,7 @@ from paperroute.core.saved import (
     Lookahead,
     Rate,
     Settings,
+    default_settings,
 )
 from paperroute.core.state import step
 from paperroute.core.state_model import State
@@ -85,7 +87,7 @@ def test_settings_change_merges() -> None:
     state, effects = step(pinned(), SettingsChanged(peak_rate=Rate.STEADY))
     assert not effects
     assert state.settings == Settings(
-        board=BoardSettings(peak_rate=Rate.STEADY),
+        board=BoardSettings(peak_windows=PEAK_WINDOWS, peak_rate=Rate.STEADY),
     )
     unchanged, effects = step(state, SettingsChanged())
     assert not effects
@@ -136,7 +138,7 @@ def test_on_settings_routes_every_field() -> None:
         ),
     )
     same, _ = on_settings(state=fresh(), event=SettingsChanged())
-    assert same.settings == Settings()
+    assert same.settings == default_settings(city=SYDNEY)
 
 
 def test_lookahead_change_merges() -> None:
@@ -148,7 +150,10 @@ def test_lookahead_change_merges() -> None:
     assert not effects
     assert state.settings == Settings(
         device=DeviceSettings(rotate=True),
-        board=BoardSettings(alert_lookahead=Lookahead.DAY),
+        board=BoardSettings(
+            peak_windows=PEAK_WINDOWS,
+            alert_lookahead=Lookahead.DAY,
+        ),
     )
 
 

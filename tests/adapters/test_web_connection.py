@@ -14,6 +14,7 @@ from paperroute.adapters.connection_editor import ALLOW_RANGE
 from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_pin_edit import MISFIT
+from paperroute.city import SYDNEY
 from paperroute.observers import PinsSeen
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_transit.core.model import pin_ref
@@ -46,7 +47,11 @@ async def _client(pins: Pins) -> AsyncIterator[Client]:
     """A client of a display with the fake timetable."""
     board = SydneyPages(pins=pins.get, options=OPTIONS, planner=None)
     board.pins_sleep = pins.sleep
-    display = WebDisplay(device=sydney_site().pages(), board=board)
+    display = WebDisplay(
+        device=sydney_site().pages(),
+        board=board,
+        city=SYDNEY,
+    )
     display.bind(post=pins.posted.append)
     client = TestClient(TestServer(display.app()))
     await client.start_server()
@@ -255,6 +260,7 @@ async def test_starting_without_timetable(pins: Pins) -> None:
     display = WebDisplay(
         device=sydney_site().pages(),
         board=SydneyPages(pins=pins.get, options=None, planner=None),
+        city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()

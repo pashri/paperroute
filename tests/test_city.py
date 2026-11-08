@@ -16,6 +16,7 @@ from paperroute.city import (
     classify_sydney,
 )
 from paperroute_device.adapters.web_frame import SHELL_WEB
+from paperroute_transit.core.city import Nouns
 from paperroute_transit.core.modes import RouteClass, mode_problems
 from tests.css_rules import css_rules
 
@@ -51,6 +52,19 @@ CHIP_FILL: Final[re.Pattern[str]] = re.compile(
     r'^--chip-fill: var\((--mode-[\w-]+)\)$',
 )
 TOKEN: Final[re.Pattern[str]] = re.compile(r'^(--mode-[\w-]+): (#[0-9a-f]+)$')
+OLD_VEHICLE: Final[dict[str, str]] = {
+    'bus': 'bus', 'train': 'train', 'metro': 'metro', 'ferry': 'ferry',
+    'light_rail': 'light rail', 'coach': 'coach', 'regional': 'service',
+    'other': 'service',
+}
+OLD_BAY: Final[dict[str, str]] = {
+    'bus': 'stand', 'coach': 'stand', 'ferry': 'wharf',
+}
+OLD_MODE_NOUNS: Final[dict[str, str]] = {
+    'bus': 'bus', 'train': 'train', 'metro': 'metro', 'ferry': 'ferry',
+    'light_rail': 'light rail', 'coach': 'coach', 'regional': 'train',
+    'other': 'service',
+}
 
 
 def old_mode_for(*, route_type: int, agency_id: str | None) -> str:
@@ -310,3 +324,21 @@ def test_line_group_matches_today() -> None:
     assert [
         SYDNEY.catalogue.line_group(number=number) for number in numbers
     ] == [0, 0, 0, 1, 1, 2, 2, 3, 3]
+
+
+@pytest.mark.parametrize('feed', list(SydneyFeed))
+def test_source_nouns_match_old_tables(feed: SydneyFeed) -> None:
+    """Each feed source keeps the Stop and connection words it had."""
+    words = SYDNEY.source_nouns[feed]
+    assert words.vehicle == OLD_VEHICLE[feed]
+    assert words.bay == OLD_BAY.get(feed, 'platform')
+    assert words.connection == OLD_MODE_NOUNS[feed]
+
+
+def test_one_noun_override() -> None:
+    """Only TrainLink trains are worded apart from their source."""
+    assert dict(SYDNEY.noun_overrides) == {
+        ('regional', 'train'): Nouns(
+            vehicle='train', bay='platform', connection='train',
+        ),
+    }

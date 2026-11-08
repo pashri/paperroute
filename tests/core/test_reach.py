@@ -713,6 +713,7 @@ def test_blacktown_strip_opens_on_the_ride_to_parramatta() -> None:
         destination=PARRAMATTA,
         tag=NOT_PINNED,
         zone=SYDNEY_ZONE,
+        line_kinds=line_modes(modes=SYDNEY.modes),
     ))
     shown = [row.station for row in view.rows]
     assert BLACKTOWN in shown

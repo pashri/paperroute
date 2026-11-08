@@ -12,7 +12,7 @@ from numpy.typing import NDArray
 
 from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute.core.chooser import ChooserPath, Column
-from paperroute.core.saved import DEFAULT_SAVED, Saved
+from paperroute.core.saved import Saved, default_saved
 from paperroute.core.trip_search import (
     Journey,
     PlannerBusy,
@@ -28,6 +28,7 @@ from paperroute_device.core.device_model import (
 )
 from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_transit.core.alert_model import AlertPlaces
+from paperroute_transit.core.city import City
 from paperroute_transit.core.geo import (
     MetreBox,
     Point,
@@ -171,7 +172,7 @@ class MemoryStates:
             The stored state, or the defaults not stored.
         """
         if self.stored is None:
-            return Loaded(saved=DEFAULT_SAVED, stored=False)
+            return Loaded(saved=default_saved(city=SYDNEY), stored=False)
         return Loaded(saved=self.stored, stored=True)
 
     def save(self, *, saved: Saved) -> None:
@@ -268,6 +269,7 @@ class BrokenTimetable:
     """A timetable whose departures query always fails."""
 
     calls: int = 0
+    city: City = SYDNEY
     projection: Projection = SYDNEY.projection
 
     def stop(self, *, stop_id: str) -> StopPlace:

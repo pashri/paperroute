@@ -11,9 +11,9 @@ import pytest
 from paperroute.adapters import pin_options
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.pin_options import SqlitePinOptions
-from paperroute.city import SYDNEY_PROJECTION, SydneyMode
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
 from paperroute.core.chooser import UNPICKED, Choice, Level, focusable
-from paperroute.core.pin_choices import KIND_NAMES
+from paperroute.core.pin_choices import kind_names
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import RowKind, StripKey, build_reach
 from paperroute_transit.core.route_colours import RouteColour
@@ -65,7 +65,7 @@ def _network(built: Path) -> Iterator[SqliteNetworkRepository]:
     """
     with closing(SqliteNetworkRepository(
         path=built,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         yield repo
 
@@ -139,7 +139,7 @@ def test_search_lists_routes_naturally(built: Path, tmp_path: Path) -> None:
         conn.commit()
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as network:
         found = SqlitePinOptions(network=network).search(text='c st')
     assert found[0].routes == ('T1', 'T2', '3', '9', '10', '20')
@@ -161,7 +161,7 @@ def test_search_can_leave_out_school_routes(
         conn.commit()
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as network:
         options = SqlitePinOptions(network=network)
         skipped = {
@@ -288,7 +288,7 @@ def test_destinations_without_line_tables(
         conn.commit()
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as network:
         found = SqlitePinOptions(network=network).destinations(
             origin=StopPlace(stop_id='C', name='C Stop', point=None),
@@ -310,7 +310,7 @@ def test_filters_for_bus_include_school_and_replacement(
         conn.commit()
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as network:
         found = SqlitePinOptions(network=network).filters_at(
             stop_id='B2', kind=SydneyMode.BUS,
@@ -357,7 +357,7 @@ def test_old_file_offers_nothing(built: Path, tmp_path: Path) -> None:
         conn.commit()
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as network:
         old = SqlitePinOptions(network=network)
         centre = StopPlace(stop_id='C', name='C', point=(0.0, 0.0))
@@ -382,7 +382,7 @@ def test_route_colours_reads_timetable(built: Path, tmp_path: Path) -> None:
         conn.commit()
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as network:
         found = SqlitePinOptions(network=network).route_colours(
             names=('T1', 'T2', '809'),
@@ -399,13 +399,14 @@ def test_route_colours_without_network(built: Path, tmp_path: Path) -> None:
         conn.commit()
     with closing(SqliteNetworkRepository(
         path=copy,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as network:
         found = SqlitePinOptions(network=network).route_colours(names=('T1',))
     assert found == {}
 
 
 def test_call_order_unknown_kind_sorts_as_non_station() -> None:
-    """A kind position outside `KIND_NAMES` sorts after station kinds."""
-    unknown = len(KIND_NAMES) + 5
-    assert pin_options.call_order((unknown, 0, 'X'))[0] is True
+    """A kind position outside the editor's kinds sorts after station ones."""
+    unknown = len(kind_names(modes=SYDNEY.modes)) + 5
+    station_first = frozenset({2, 3, 4, 5})
+    assert pin_options.call_order((unknown, 0, 'X'), station_first)[0]

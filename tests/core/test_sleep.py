@@ -235,7 +235,7 @@ def test_sleep_map_keeps_both_ends_above_the_band() -> None:
     )
     state = slept(
         state=initial_state(
-            saved=seeded(pin=pin),
+            saved=seeded(pin=pin, city=SYDNEY),
             now=START,
             stored=True,
             city=SYDNEY,

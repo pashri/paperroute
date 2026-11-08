@@ -7,7 +7,8 @@ from dataclasses import dataclass, field, replace
 import pytest
 
 from paperroute.adapters.settings_form import form_values
-from paperroute.core.saved import Settings
+from paperroute.city import SYDNEY
+from paperroute.core.saved import Settings, default_settings
 from paperroute.observers import NullObserver, ObserverGroup, Timings
 from paperroute_device.core.device_model import (
     DeviceStatus,
@@ -172,7 +173,7 @@ def test_null_observer_does_nothing() -> None:
         ),
         null.ticked(),  # type: ignore[func-returns-value]
         null.settings_seen(  # type: ignore[func-returns-value]
-            settings=Settings(),
+            settings=default_settings(city=SYDNEY),
         ),
     ]
     assert results == [None, None, None, None]
@@ -330,7 +331,7 @@ def test_timings_knobs_swapped_follows_the_settings() -> None:
         settings=Settings(device=DeviceSettings(swap_knobs=True)),
     )
     assert timings.knobs_swapped()
-    timings.settings_seen(settings=Settings())
+    timings.settings_seen(settings=default_settings(city=SYDNEY))
     assert not timings.knobs_swapped()
 
 
@@ -357,7 +358,7 @@ def test_group_sends_device_events_to_devices() -> None:
     group.frame_drawn(render_ms=1.0)
     group.feed_parsed(feed='f', fetch_ms=1.0, parse_ms=1.0, trips=1)
     group.ticked()
-    group.settings_seen(settings=Settings())
+    group.settings_seen(settings=default_settings(city=SYDNEY))
     group.status_seen(status=STATUS)
     group.pins_seen(pins=PINS, shown=0)
     group.panel_refreshed(
@@ -390,7 +391,7 @@ def test_group_tells_observers_before_devices() -> None:
         devices=[_DeviceRecorder(events=events, prefix='device:')],
     )
     group.ticked()
-    group.settings_seen(settings=Settings())
+    group.settings_seen(settings=default_settings(city=SYDNEY))
     assert events == [
         'observer:ticked',
         'device:ticked',

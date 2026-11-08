@@ -1,20 +1,15 @@
 """Route chips on the Pins list, and the sheet of their colours."""
 
 import html
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from typing import Final
 
-from paperroute.city import SydneyMode
-from paperroute.core.chooser import KIND_LETTERS
 from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.modes import ModeSpec, spec_of
 from paperroute_transit.core.route_colours import RouteColour
 
-CHIP_LETTERS: Final[dict[str, str]] = {
-    **KIND_LETTERS,
-    SydneyMode.REPLACEMENT: 'R',
-}
 ANY_TEXT: Final[str] = 'All'
 ANY_KIND: Final[str] = 'any'
 CHIP: Final[str] = (
@@ -64,7 +59,9 @@ def chip_route(*, pin: Pin) -> str | None:
     return next(iter(named_routes(pin=pin)), None)
 
 
-def chip_html(*, pin: Pin, colour: RouteColour | None) -> str:
+def chip_html(
+    *, pin: Pin, colour: RouteColour | None, modes: Sequence[ModeSpec],
+) -> str:
     """
     Draw a pin's route chip.
 
@@ -74,6 +71,8 @@ def chip_html(*, pin: Pin, colour: RouteColour | None) -> str:
         The pin.
     colour : RouteColour | None
         The chip route's colours, or None to use the kind's.
+    modes : Sequence[ModeSpec]
+        The city's modes, whose letters stand in for a route.
 
     Returns
     -------
@@ -81,7 +80,8 @@ def chip_html(*, pin: Pin, colour: RouteColour | None) -> str:
         A span hidden from screen readers, its text escaped.
     """
     route = chip_route(pin=pin)
-    letter = None if pin.kind is None else CHIP_LETTERS[pin.kind]
+    spec = spec_of(modes=modes, mode=pin.kind)
+    letter = None if spec is None else spec.letter
     kind = ANY_KIND if pin.kind is None else pin.kind.replace('_', '-')
     classes = f'mode-{kind}'
     if colour is not None:

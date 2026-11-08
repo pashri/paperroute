@@ -9,7 +9,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.city import SydneyMode
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.pin_choices import StopMatch
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.core.model import StopPlace
@@ -43,6 +43,7 @@ async def _client() -> AsyncIterator[Client]:
             options=FakePinOptions(found=(MATCH,)),
             planner=None,
         ),
+        city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()
@@ -82,6 +83,7 @@ async def test_stops_json_before_timetable() -> None:
     display = WebDisplay(
         device=sydney_site().pages(),
         board=SydneyPages(pins=lambda: None, options=None, planner=None),
+        city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()
@@ -106,6 +108,7 @@ async def test_search_follows_school_switch() -> None:
     display = WebDisplay(
         status=lambda: reported,
         board=SydneyPages(pins=lambda: None, options=options, planner=None),
+        city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()

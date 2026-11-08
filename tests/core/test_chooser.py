@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from paperroute.city import SydneyMode
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.chooser import (
     Choice,
     Column,
@@ -15,6 +15,7 @@ from paperroute.core.chooser import (
     StripRequest,
     backed,
     chosen_pin,
+    kind_specs,
     opened,
     path_to,
     pressed,
@@ -53,6 +54,7 @@ from tests.core.chooser_walks import (
 def test_opened_asks_for_kind_column() -> None:
     chooser, request = opened(
         shown=Pin(origin=place('X'), kind=SydneyMode.TRAIN),
+        modes=SYDNEY.modes,
     )
     assert request == ColumnRequest(path=())
     assert chooser.waiting == ()
@@ -64,6 +66,7 @@ def test_opened_asks_for_kind_column() -> None:
 def test_kind_cursor_starts_on_current_kind() -> None:
     chooser, asked = opened(
         shown=Pin(origin=place('X'), kind=SydneyMode.TRAIN),
+        modes=SYDNEY.modes,
     )
     chooser, request = fed(chooser, asked, KINDS)
     assert chooser.cursors == (1,)
@@ -98,7 +101,7 @@ def test_press_before_preview_loaded_does_nothing() -> None:
     chooser = opened_at_kind()
     after, request = pressed(chooser=chooser, reach=None)
     assert (after, request) == (chooser, None)
-    empty, _ = opened(shown=Pin(origin=place('X')))
+    empty, _ = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
     assert pressed(chooser=empty, reach=None) == (empty, None)
     assert turned(chooser=empty, steps=1, reach=None) == (empty, None)
     loading, _ = pressed(chooser=at_towards(), reach=None)
@@ -245,7 +248,7 @@ def test_path_to_uses_choice_level() -> None:
     )
     replacements = Column(level=Level.GROUP, items=(
         Choice(
-            key='replacements', label='Trackwork',
+            key='replacement', label='Trackwork',
             level=Level.REPLACEMENTS,
         ),
     ))
@@ -253,12 +256,12 @@ def test_path_to_uses_choice_level() -> None:
         opened_at_kind(), ColumnRequest(path=BUS_606[:1]), replacements,
     )
     assert path_to(chooser=chooser, index=1)[-1] == (
-        Level.REPLACEMENTS, 'replacements',
+        Level.REPLACEMENTS, 'replacement',
     )
 
 
 def test_empty_column_is_never_focused() -> None:
-    chooser, _ = opened(shown=Pin(origin=place('X')))
+    chooser, _ = opened(shown=Pin(origin=place('X')), modes=SYDNEY.modes)
     empty = Column(level=Level.KIND, items=())
     chooser, request = with_column(chooser=chooser, path=(), column=empty)
     assert request is None
@@ -276,6 +279,7 @@ def test_empty_column_is_never_focused() -> None:
 def test_replacement_place_starts_on_bus() -> None:
     chooser, request = opened(
         shown=Pin(origin=place('X'), kind=SydneyMode.REPLACEMENT),
+        modes=SYDNEY.modes,
     )
     trains_first = replace(KINDS, items=KINDS.items[::-1])
     chooser, _ = fed(chooser, request, trains_first)
@@ -291,3 +295,23 @@ def test_to_press_off_the_strip_commits_no_destination() -> None:
     _, pin = pressed(chooser=replace(chooser, to_cursor=-1), reach=REACH)
     assert isinstance(pin, Pin)
     assert pin.destination is None
+
+
+def test_kind_column_from_specs() -> None:
+    """The KIND column lists a city's top modes in its declared order."""
+    specs = kind_specs(modes=SYDNEY.modes)
+    assert [spec.label for spec in specs] == [
+        'Bus', 'Train', 'Metro', 'Light rail', 'Ferry', 'School', 'Coach',
+    ]
+    assert ''.join(spec.letter for spec in specs) == 'BTMLFSC'
+    reordered = kind_specs(modes=tuple(reversed(SYDNEY.modes)))
+    assert [spec.label for spec in reordered] == [
+        'Coach', 'School', 'Ferry', 'Light rail', 'Metro', 'Train', 'Bus',
+    ]
+
+
+def test_replacement_place_starts_on_its_parent_row() -> None:
+    """A replacement bus place opens the chooser on Bus."""
+    shown = Pin(origin=place('X'), kind=SydneyMode.REPLACEMENT)
+    chooser, _ = opened(shown=shown, modes=SYDNEY.modes)
+    assert chooser.prefer == SydneyMode.BUS

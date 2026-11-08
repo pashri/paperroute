@@ -4,6 +4,7 @@ from collections.abc import Callable
 from typing import Final
 
 from paperroute.adapters.state_settings import default_settings
+from paperroute_transit.core.city import City
 
 ALLOW_MIN: Final[int] = 1  # minutes
 ALLOW_MAX: Final[int] = 60  # minutes
@@ -75,7 +76,9 @@ def with_before_change(*, auto: object) -> object:
     )
 
 
-def add_connections(data: dict[str, object]) -> dict[str, object]:
+def add_connections(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
     """
     Give every stored pin no change and add the new settings.
 
@@ -83,6 +86,8 @@ def add_connections(data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Version 8 data.
+    city : City
+        The city, whose defaults new settings take.
 
     Returns
     -------
@@ -102,7 +107,7 @@ def add_connections(data: dict[str, object]) -> dict[str, object]:
         'unpinned': with_change(pin=data.get('unpinned')),
         'auto': with_before_change(auto=data.get('auto')),
         'settings': (
-            {**default_settings(), **settings}
+            {**default_settings(city=city), **settings}
             if isinstance(settings, dict)
             else settings
         ),

@@ -19,10 +19,11 @@ from paperroute.adapters.state_migrations import (
     add_ways,
     coach_pin,
     drop_zoom,
+    migrate,
     v9_ref,
 )
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
-from paperroute.core.saved import DEFAULT_SAVED, ConnectionMap, Saved
+from paperroute.core.saved import ConnectionMap, Saved, default_saved
 from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
     HAMMERS,
@@ -151,7 +152,9 @@ def v9_file(*, path: Path, **fields: object) -> dict[str, Any]:
     dict[str, Any]
         The data written.
     """
-    JsonStateRepository(path=path, city=SYDNEY).save(saved=DEFAULT_SAVED)
+    JsonStateRepository(path=path, city=SYDNEY).save(
+        saved=default_saved(city=SYDNEY),
+    )
     data: dict[str, Any] = json.loads(path.read_text())
     data.update(
         schema_version=9,
@@ -249,6 +252,7 @@ def test_unknown_ref_kept() -> None:
             'auto': {'occurrence': occurrence},
             'settings': {},
         },
+        city=SYDNEY,
     )
     assert data['auto'] == {'occurrence': occurrence}
 
@@ -281,7 +285,7 @@ def test_connection_map_change_becomes_changes(path: Path) -> None:
 
 def test_connection_map_whole_stays() -> None:
     """The v9 'whole' map setting is kept."""
-    data = add_ways({'settings': {'connection_map': 'whole'}})
+    data = add_ways({'settings': {'connection_map': 'whole'}}, city=SYDNEY)
     assert data['settings'] == {'connection_map': 'whole'}
 
 
@@ -301,7 +305,7 @@ def saved_ways(*, path: Path, pin: Pin) -> dict[str, Any]:
     dict[str, Any]
         The stored data.
     """
-    saved = replace(DEFAULT_SAVED, pins=(pin,), current=0)
+    saved = replace(default_saved(city=SYDNEY), pins=(pin,), current=0)
     JsonStateRepository(path=path, city=SYDNEY).save(saved=saved)
     data: dict[str, Any] = json.loads(path.read_text())
     return data
@@ -386,7 +390,7 @@ def test_round_trip_two_changes(path: Path) -> None:
 
 def test_saved_pin_holds_no_change_field(path: Path) -> None:
     """A saved plain pin stores no ways and an empty never list."""
-    saved: Saved = replace(DEFAULT_SAVED)
+    saved: Saved = replace(default_saved(city=SYDNEY))
     JsonStateRepository(path=path, city=SYDNEY).save(saved=saved)
     data = json.loads(path.read_text())
     assert data['schema_version'] == SCHEMA_VERSION
@@ -407,6 +411,7 @@ def test_pins_sharing_identity_merged() -> None:
     }
     data = add_ways(
         {'pins': [PIN_3, twin, PIN_1, PIN_1], 'current': 2, 'settings': {}},
+        city=SYDNEY,
     )
     pins = data['pins']
     assert isinstance(pins, list)
@@ -518,11 +523,11 @@ def v10_data() -> dict[str, object]:
 def test_v10_zoom_is_dropped() -> None:
     """A schema 10 file with a zoom loads at 11 without it."""
     model = state_model_of(
-        text=json.dumps(v10_data()), mode_ids=SYDNEY.mode_ids,
+        text=json.dumps(v10_data()), city=SYDNEY,
     )
     assert model.schema_version == SCHEMA_VERSION == 11
     assert 'zoom' not in model.model_dump()
-    saved = from_model(model=model, zone=SYDNEY_ZONE)
+    saved = from_model(model=model, city=SYDNEY)
     assert len(saved.pins) == 6
     assert saved.current == 5
     assert len(saved.pins[5].ways) == 1
@@ -531,5 +536,42 @@ def test_v10_zoom_is_dropped() -> None:
 def test_drop_zoom_without_zoom() -> None:
     """Data with no zoom passes through unchanged."""
     data: dict[str, object] = {'view': 'stop'}
-    assert drop_zoom(data) == {'view': 'stop'}
-    assert drop_zoom({'zoom': 4, 'view': 'map'}) == {'view': 'map'}
+    assert drop_zoom(data, city=SYDNEY) == {'view': 'stop'}
+    assert drop_zoom(
+        {'zoom': 4, 'view': 'map'},
+        city=SYDNEY,
+    ) == {'view': 'map'}
+
+
+def v1_data() -> dict[str, object]:
+    """
+    Give a schema 1 file with no pins.
+
+    Returns
+    -------
+    dict[str, object]
+        The decoded file.
+    """
+    return {
+        'schema_version': 1,
+        'pins': [],
+        'current': 0,
+        'unpinned': None,
+        'view': 'strip',
+        'zoom': 0,
+    }
+
+
+def test_old_file_gets_city_peak_windows() -> None:
+    """Settings an old file lacks take the city's peak windows."""
+    sydney = migrate(data=v1_data(), city=SYDNEY)
+    plain = migrate(data=v1_data(), city=replace(SYDNEY, peak_windows=()))
+    sydney_settings = sydney['settings']
+    plain_settings = plain['settings']
+    assert isinstance(sydney_settings, dict)
+    assert isinstance(plain_settings, dict)
+    assert sydney_settings['peak_windows'] == [
+        {'start': '06:30', 'end': '10:00'},
+        {'start': '15:00', 'end': '19:00'},
+    ]
+    assert plain_settings['peak_windows'] == []

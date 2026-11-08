@@ -17,6 +17,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from paperroute.adapters.settings_form import ERRORS
 from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
 from paperroute.adapters.web_display import WebDisplay
+from paperroute.city import SYDNEY
 from paperroute.core.messages import Event, SettingsChanged
 from paperroute.core.saved import LiveView, Lookahead, Rate
 from paperroute.core.state import step
@@ -78,7 +79,7 @@ def _site() -> DeviceSite:
 @pytest.fixture(name='display')
 def _display(site: DeviceSite) -> WebDisplay:
     """A display with device pages that has shown nothing yet."""
-    return WebDisplay(device=site.pages())
+    return WebDisplay(device=site.pages(), city=SYDNEY)
 
 
 @pytest.fixture(name='client')
@@ -253,6 +254,7 @@ async def test_public_address_is_refused_on_every_route(
     display = WebDisplay(
         remote_of=lambda request: remote,
         device=sydney_site().pages(),
+        city=SYDNEY,
     )
     client = await _client(display=display)
     try:
@@ -274,6 +276,7 @@ async def test_private_address_is_allowed(remote: str) -> None:
     display = WebDisplay(
         remote_of=lambda request: remote,
         device=sydney_site().pages(),
+        city=SYDNEY,
     )
     client = await _client(display=display)
     try:
@@ -307,7 +310,7 @@ async def test_knob_cross_site_origin_is_refused(
 
 async def test_status_reports_version_and_rss() -> None:
     """The status JSON has the version, memory and the status dict."""
-    display = WebDisplay(status=lambda: {'frames': 7})
+    display = WebDisplay(status=lambda: {'frames': 7}, city=SYDNEY)
     client = await _client(display=display)
     try:
         display.show(frame=FRAME)
@@ -394,7 +397,10 @@ async def test_knob_post_rejects_invalid_utf8_json(
 
 async def test_status_built_in_keys_win() -> None:
     """Extras cannot overwrite the built-in status keys."""
-    display = WebDisplay(status=lambda: {'version': 99, 'uptime_s': 'x'})
+    display = WebDisplay(
+        status=lambda: {'version': 99, 'uptime_s': 'x'},
+        city=SYDNEY,
+    )
     client = await _client(display=display)
     try:
         body = await (await client.get('/status')).json()
@@ -494,7 +500,7 @@ async def test_settings_page_served(
     status: dict[str, object], checked: bool
 ) -> None:
     """The page has the switch, drawn as reported, and a link to Live."""
-    display = WebDisplay(status=lambda: status)
+    display = WebDisplay(status=lambda: status, city=SYDNEY)
     client = await _client(display=display)
     try:
         page = await client.get('/settings')
@@ -516,7 +522,7 @@ async def test_settings_page_served(
 
 async def test_settings_page_has_connection_map() -> None:
     """The Display form has the connection map radios, Changes checked."""
-    client = await _client(display=WebDisplay(status=dict))
+    client = await _client(display=WebDisplay(status=dict, city=SYDNEY))
     try:
         text = await (await client.get('/settings')).text()
     finally:
@@ -718,7 +724,7 @@ async def test_settings_cross_site_403(
 async def test_slot_two_save_overlay_clears() -> None:
     """Only Afternoon filled: the app reports it as the first slot."""
     status: dict[str, object] = {'settings': {'peak_1_start': '06:30'}}
-    display = WebDisplay(status=lambda: status)
+    display = WebDisplay(status=lambda: status, city=SYDNEY)
     client = await _client(display=display)
     fields = {
         'peak_1_start': '', 'peak_1_end': '',
@@ -741,7 +747,7 @@ async def test_slot_two_save_overlay_clears() -> None:
 async def test_later_panel_change_shows_on_page() -> None:
     """A change at the panel after a save is not hidden by the overlay."""
     status: dict[str, object] = {'settings': {'rotate': 'off'}}
-    display = WebDisplay(status=lambda: status)
+    display = WebDisplay(status=lambda: status, city=SYDNEY)
     client = await _client(display=display)
     try:
         await client.post('/settings', data={'rotate': 'on'})
@@ -756,7 +762,7 @@ async def test_later_panel_change_shows_on_page() -> None:
 async def test_page_shows_posted_before_status() -> None:
     """The posted value wins until the status reports it."""
     status: dict[str, object] = {'settings': {'rotate': 'off'}}
-    display = WebDisplay(status=lambda: status)
+    display = WebDisplay(status=lambda: status, city=SYDNEY)
     client = await _client(display=display)
     rotate = re.compile(r'name="rotate"\s+value="on" checked>')
     try:
@@ -824,7 +830,7 @@ class _Controls(HTMLParser):
 
 async def test_page_works_without_script() -> None:
     """Every control is in a post form with Save; each has a label."""
-    display = WebDisplay()
+    display = WebDisplay(city=SYDNEY)
     client = await _client(display=display)
     try:
         text = await (await client.get('/settings')).text()
@@ -933,7 +939,7 @@ def test_page_hint_names_settings_chord() -> None:
 @pytest.mark.parametrize(('method', 'path'), POWER_ROUTES)
 async def test_no_power_without_device_pages(method: str, path: str) -> None:
     """Without device pages, as in replay, power is not served."""
-    client = await _client(display=WebDisplay())
+    client = await _client(display=WebDisplay(city=SYDNEY))
     try:
         response = await client.request(method, path)
         assert response.status == HTTPStatus.NOT_FOUND
@@ -1023,14 +1029,14 @@ async def test_display_without_board_serves_no_pin_pages(
 async def test_board_pages_closed_on_shutdown() -> None:
     """The board pages are closed once when the app shuts down."""
     board = Board()
-    client = await _client(display=WebDisplay(board=board))
+    client = await _client(display=WebDisplay(board=board, city=SYDNEY))
     await client.close()
     assert board.closes == 1
 
 
 async def test_knobs_reach_app_bound_after_app() -> None:
     """A sink bound after the app is built still gets knob posts."""
-    display = WebDisplay()
+    display = WebDisplay(city=SYDNEY)
     client = TestClient(TestServer(display.app()))
     got: list[Event] = []
     display.bind(post=got.append)
@@ -1047,7 +1053,7 @@ async def test_knobs_reach_app_bound_after_app() -> None:
 
 async def test_display_without_device_serves_shell_files() -> None:
     """With no device pages the live page and shell files still serve."""
-    client = await _client(display=WebDisplay())
+    client = await _client(display=WebDisplay(city=SYDNEY))
     try:
         statuses = {
             path: (await client.get(path)).status

@@ -2,12 +2,12 @@
 
 import hashlib
 import json
-from collections.abc import Callable
-from typing import Any, Final
+from typing import Any, Final, Protocol
 
 from paperroute.adapters.state_auto import add_auto
 from paperroute.adapters.state_change import add_connections, before_rewritten
 from paperroute.adapters.state_settings import default_settings
+from paperroute_transit.core.city import City
 
 SCHEMA_VERSION: Final[int] = 11
 V1_TRAINLINK_LINES: Final[tuple[str, ...]] = ('NRC', 'NRW', 'STH', 'WST')
@@ -39,7 +39,9 @@ def coach_pin(*, pin: object) -> object:
     return {**pin, 'kind': 'train' if trainlink else 'coach'}
 
 
-def regional_to_coach(data: dict[str, object]) -> dict[str, object]:
+def regional_to_coach(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
     """
     Rewrite every Regional pin, and the unpinned place, as Coach or Train.
 
@@ -47,12 +49,15 @@ def regional_to_coach(data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Version 1 data.
+    city : City
+        The city; this step needs nothing from it.
 
     Returns
     -------
     dict[str, object]
         The data with its pins rewritten.
     """
+    del city
     pins = data.get('pins')
     return {
         **data,
@@ -65,7 +70,9 @@ def regional_to_coach(data: dict[str, object]) -> dict[str, object]:
     }
 
 
-def add_settings(data: dict[str, object]) -> dict[str, object]:
+def add_settings(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
     """
     Add the settings, with the timetable rebuilt automatically.
 
@@ -73,16 +80,21 @@ def add_settings(data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Version 2 data.
+    city : City
+        The city; this step needs nothing from it.
 
     Returns
     -------
     dict[str, object]
         The data with default settings.
     """
+    del city
     return {**data, 'settings': {'auto_rebuild': True}}
 
 
-def add_quota(data: dict[str, object]) -> dict[str, object]:
+def add_quota(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
     """
     Add the quota, with no calls counted.
 
@@ -90,16 +102,21 @@ def add_quota(data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Version 3 data.
+    city : City
+        The city; this step needs nothing from it.
 
     Returns
     -------
     dict[str, object]
         The data with an empty quota.
     """
+    del city
     return {**data, 'quota': {'day': None, 'calls': 0}}
 
 
-def add_display_settings(data: dict[str, object]) -> dict[str, object]:
+def add_display_settings(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
     """
     Add the rate, quiet-hours and display settings at their defaults.
 
@@ -107,6 +124,8 @@ def add_display_settings(data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Version 4 data.
+    city : City
+        The city, whose defaults new settings take.
 
     Returns
     -------
@@ -117,10 +136,12 @@ def add_display_settings(data: dict[str, object]) -> dict[str, object]:
     settings = data.get('settings')
     if not isinstance(settings, dict):
         return data
-    return {**data, 'settings': {**default_settings(), **settings}}
+    return {**data, 'settings': {**default_settings(city=city), **settings}}
 
 
-def add_pin_fields(data: dict[str, object]) -> dict[str, object]:
+def add_pin_fields(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
     """
     Give every pin an empty nickname and route filter.
 
@@ -128,6 +149,8 @@ def add_pin_fields(data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Version 5 data.
+    city : City
+        The city; this step needs nothing from it.
 
     Returns
     -------
@@ -136,6 +159,7 @@ def add_pin_fields(data: dict[str, object]) -> dict[str, object]:
         on the unpinned place; anything that is not an object is left
         for validation to fail.
     """
+    del city
     fields: dict[str, object] = {'nickname': None, 'only': []}
     pins = data.get('pins')
     unpinned = data.get('unpinned')
@@ -155,7 +179,9 @@ def add_pin_fields(data: dict[str, object]) -> dict[str, object]:
     }
 
 
-def add_alert_settings(data: dict[str, object]) -> dict[str, object]:
+def add_alert_settings(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
     """
     Add the alert lookahead at its default.
 
@@ -163,6 +189,8 @@ def add_alert_settings(data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Version 6 data.
+    city : City
+        The city, whose defaults new settings take.
 
     Returns
     -------
@@ -170,7 +198,7 @@ def add_alert_settings(data: dict[str, object]) -> dict[str, object]:
         The data with every new setting at its default; settings that
         are not an object are left for validation to fail.
     """
-    return add_display_settings(data)
+    return add_display_settings(data, city=city)
 
 
 def v9_ref(*, pin: object) -> str | None:
@@ -494,7 +522,9 @@ def moved_current(*, current: object, where: list[int]) -> object:
     return current
 
 
-def add_ways(data: dict[str, object]) -> dict[str, object]:
+def add_ways(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
     """
     Give pins ways and a never list, and rename the change map setting.
 
@@ -502,6 +532,8 @@ def add_ways(data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Version 9 data.
+    city : City
+        The city; this step needs nothing from it.
 
     Returns
     -------
@@ -511,6 +543,7 @@ def add_ways(data: dict[str, object]) -> dict[str, object]:
         the running occurrence keyed by its pin's new ref and the
         `change` map setting as `changes`.
     """
+    del city
     pins = data.get('pins')
     if not isinstance(pins, list):
         return ways_added(data=data, refs={})
@@ -551,7 +584,9 @@ def ways_added(
     }
 
 
-def drop_zoom(data: dict[str, object]) -> dict[str, object]:
+def drop_zoom(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
     """
     Drop the saved map zoom, which is no longer kept.
 
@@ -559,18 +594,42 @@ def drop_zoom(data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Version 10 data.
+    city : City
+        The city; this step needs nothing from it.
 
     Returns
     -------
     dict[str, object]
         The data without its ``zoom`` key, if it had one.
     """
+    del city
     return {key: value for key, value in data.items() if key != 'zoom'}
 
 
-MIGRATIONS: Final[
-    dict[int, Callable[[dict[str, object]], dict[str, object]]]
-] = {
+class MigrationStep(Protocol):
+    """Brings stored data up one schema version."""
+
+    def __call__(
+        self, data: dict[str, object], *, city: City,
+    ) -> dict[str, object]:
+        """
+        Migrate the data.
+
+        Parameters
+        ----------
+        data : dict[str, object]
+            Data at one version.
+        city : City
+            The city, whose defaults new settings take.
+
+        Returns
+        -------
+        dict[str, object]
+            The data at the next version.
+        """
+
+
+MIGRATIONS: Final[dict[int, MigrationStep]] = {
     1: regional_to_coach,
     2: add_settings,
     3: add_quota,
@@ -611,7 +670,7 @@ def stored_version(*, data: dict[str, object]) -> int:
     return version
 
 
-def migrate(*, data: dict[str, object]) -> dict[str, object]:
+def migrate(*, data: dict[str, object], city: City) -> dict[str, object]:
     """
     Bring stored data up to the current schema version.
 
@@ -619,6 +678,8 @@ def migrate(*, data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         The decoded file.
+    city : City
+        The city, whose defaults new settings take.
 
     Returns
     -------
@@ -635,7 +696,7 @@ def migrate(*, data: dict[str, object]) -> dict[str, object]:
     while version < SCHEMA_VERSION:
         if version not in MIGRATIONS:
             raise ValueError(f'no migration from version {version}')
-        data = MIGRATIONS[version](data)
+        data = MIGRATIONS[version](data, city=city)
         version += 1
         data['schema_version'] = version
     return data

@@ -1,12 +1,13 @@
 """Draw the list of pins on the Pins page."""
 
 import html
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Final
 
 from paperroute.adapters.route_chips import chip_html, chip_route, named_routes
 from paperroute.observers import PinsSeen
 from paperroute_transit.core.model import Pin, pin_ref, ticked_ways
+from paperroute_transit.core.modes import ModeSpec
 from paperroute_transit.core.route_colours import RouteColour
 
 EMPTY: Final[str] = (
@@ -114,7 +115,11 @@ def move_form(*, pin: Pin, steps: int) -> str:
 
 
 def pin_item(
-    *, pin: Pin, shown: bool, colour: RouteColour | None,
+    *,
+    pin: Pin,
+    shown: bool,
+    colour: RouteColour | None,
+    modes: Sequence[ModeSpec],
 ) -> str:
     """
     Draw one pin of the list.
@@ -127,6 +132,8 @@ def pin_item(
         Whether the pin is on the screen now.
     colour : RouteColour | None
         The colours of the pin's chip route, if the timetable has them.
+    modes : Sequence[ModeSpec]
+        The city's modes.
 
     Returns
     -------
@@ -141,7 +148,7 @@ def pin_item(
     return ITEM.format(
         ref=pin_ref(pin=pin),
         editor='/pins/edit' if pin.destination is None else '/pins/ways',
-        chip=chip_html(pin=pin, colour=colour),
+        chip=chip_html(pin=pin, colour=colour, modes=modes),
         label=html.escape(pin_label(pin=pin)),
         line=html.escape(pin_line(pin=pin)),
         trip='' if pin.destination is None else ' class="trip"',
@@ -152,7 +159,10 @@ def pin_item(
 
 
 def pins_list(
-    *, seen: PinsSeen, colours: Mapping[str, RouteColour],
+    *,
+    seen: PinsSeen,
+    colours: Mapping[str, RouteColour],
+    modes: Sequence[ModeSpec],
 ) -> str:
     """
     Draw the pins in knob order.
@@ -163,6 +173,8 @@ def pins_list(
         The pins the app reported.
     colours : Mapping[str, RouteColour]
         Route colours by short name.
+    modes : Sequence[ModeSpec]
+        The city's modes.
 
     Returns
     -------
@@ -176,6 +188,7 @@ def pins_list(
             pin=pin,
             shown=index == seen.shown,
             colour=colours.get(chip_route(pin=pin) or ''),
+            modes=modes,
         )
         for index, pin in enumerate(seen.pins)
     )

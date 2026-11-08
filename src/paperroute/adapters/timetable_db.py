@@ -11,7 +11,6 @@ from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
-from paperroute.city import SydneyFeed
 from paperroute.core.strip_times import (
     board_departures,
     filtered,
@@ -70,6 +69,7 @@ from paperroute_transit.core.model import (
     service_epoch,
     service_seconds,
 )
+from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.reach import StripKey
 
@@ -210,6 +210,7 @@ class SqliteTimetableRepository:
         self.projection = city.projection
         self.classify = city.classify
         self.route_prefixes = city.alerts.route_prefixes
+        self.city = city
         self.db = ReadOnlyDatabase(
             path=path or DEFAULT_PATH,
             connection=connection,
@@ -568,7 +569,7 @@ class SqliteTimetableRepository:
             for shape_id, blob in rows
         }
 
-    def modes_near(self, *, box: MetreBox) -> frozenset[SydneyFeed]:
+    def modes_near(self, *, box: MetreBox) -> frozenset[str]:
         """
         List the modes of the shapes that overlap an area.
 
@@ -579,8 +580,8 @@ class SqliteTimetableRepository:
 
         Returns
         -------
-        frozenset[SydneyFeed]
-            The modes; empty for a file built before shapes.
+        frozenset[str]
+            The feed sources; empty for a file built before shapes.
         """
         if not self.features().shapes:
             return frozenset()
@@ -594,7 +595,7 @@ class SqliteTimetableRepository:
                 'north': north,
             },
         )
-        return frozenset(SydneyFeed(str(row[0])) for row in rows)
+        return frozenset(str(row[0]) for row in rows)
 
     def resolve_trips(
         self, *, trip_ids: Collection[str]
@@ -952,7 +953,9 @@ class SqliteTimetableRepository:
             )
         ]
         if destination is None:
-            found = list(board_departures(departures=found, kind=pin.kind))
+            found = list(board_departures(
+                departures=found, kind=pin.kind, modes=self.city.modes,
+            ))
         else:
             found = list(strip_departures(
                 departures=first_to_arrive(departures=found),
@@ -961,6 +964,7 @@ class SqliteTimetableRepository:
                     kind=pin.kind,
                     routes=pin.routes,
                 ),
+                line_kinds=line_modes(modes=self.city.modes),
             ))
         return sorted(
             filtered(departures=found, only=pin.only),

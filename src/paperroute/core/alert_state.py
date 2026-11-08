@@ -137,7 +137,9 @@ def between_requests(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     pin = shown(state=state)
     lists = between_lists(pin=pin, board=state.board)
     departures = [item for _, items in lists for item in items]
-    wants, trip_ids = name_trips(pin=pin, board=state.board)
+    wants, trip_ids = name_trips(
+        pin=pin, board=state.board, city=state.city,
+    )
     unsure = any(
         leg.kind is None and leg.destination is not None for leg, _ in lists
     )
@@ -257,6 +259,7 @@ def rematched(*, state: State) -> State:
         board=state.board,
         between=between[1] if between is not None and known else frozenset(),
         families=alerts.families if known else {},
+        city=state.city,
     )
     if known:
         facts = replace(facts, lines=facts.lines | alerts.lines)

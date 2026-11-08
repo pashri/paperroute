@@ -5,6 +5,7 @@ import logging
 import pytest
 
 from paperroute.adapters.state_auto import add_auto, repaired_windows
+from paperroute.city import SYDNEY
 
 GOOD: dict[str, object] = {
     'days': ['mon', 'fri'], 'start': '22:00', 'end': '01:00',
@@ -13,7 +14,7 @@ GOOD: dict[str, object] = {
 
 def test_add_auto_gives_every_pin_windows() -> None:
     """The v7 to v8 step adds empty windows and an empty auto block."""
-    data = add_auto({'pins': [{'kind': None}, 5], 'unpinned': {}})
+    data = add_auto({'pins': [{'kind': None}, 5], 'unpinned': {}}, city=SYDNEY)
     assert data['pins'] == [{'kind': None, 'windows': []}, 5]
     assert data['unpinned'] == {'windows': []}
     assert data['auto'] == {

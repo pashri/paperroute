@@ -9,6 +9,7 @@ from typing import Final
 from paperroute.core.live import LiveDeparture
 from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.alert_model import AlertBanner
+from paperroute_transit.core.city import City, Nouns
 from paperroute_transit.core.model import CarryOn, Departure
 
 VISIBLE_ROWS: Final[int] = 8
@@ -18,6 +19,9 @@ LARGE_ROWS_UNDER_BANNER: Final[int] = 5
 SIDEBAR_ROWS: Final[int] = 5
 HORIZON: Final[timedelta] = timedelta(hours=3)
 HORIZON_TEXT: Final[str] = f'the next {HORIZON // timedelta(hours=1)} hours'
+FALLBACK_NOUNS: Final[Nouns] = Nouns(
+    vehicle='service', bay='platform', connection='service',
+)
 
 
 class Pill(StrEnum):
@@ -37,7 +41,8 @@ class Row:
     """
 
     route: str
-    mode: str
+    vehicle: str
+    bay: str
     platform: str
     destination: str
     countdown: str
@@ -190,6 +195,7 @@ class StopView:
 
 
 @dataclass(frozen=True)
+# pylint: disable-next=too-many-instance-attributes
 class StopInputs:
     """
     Everything the Stop view is built from.
@@ -215,6 +221,8 @@ class StopInputs:
         Whether a live feed exists.
     stale_after : timedelta
         How old live data may be before the banner says so.
+    city : City
+        The city, which holds the words rows are written with.
     loaded : bool
         Whether the timetable has been read yet; if not, an empty view
         says it is loading rather than that nothing runs.
@@ -243,6 +251,7 @@ class StopInputs:
     live_since: datetime | None
     has_feed: bool
     stale_after: timedelta
+    city: City
     loaded: bool = True
     tag: PinTag = NOT_PINNED
     missing: bool = False
@@ -276,8 +285,36 @@ def countdown(*, departs: datetime, now: datetime) -> str:
     return 'now' if minutes <= 0 else str(minutes)
 
 
+def nouns(*, city: City, departure: Departure) -> Nouns:
+    """
+    Find the words a departure is written with.
+
+    Parameters
+    ----------
+    city : City
+        The city, which holds the words.
+    departure : Departure
+        The departure.
+
+    Returns
+    -------
+    Nouns
+        The city's override for its feed source and kind, else its feed
+        source's words, else `FALLBACK_NOUNS`.
+    """
+    source, kind = departure.source, departure.facts.kind
+    if kind is not None and (source, kind) in city.noun_overrides:
+        return city.noun_overrides[source, kind]
+    return city.source_nouns.get(source, FALLBACK_NOUNS)
+
+
 def to_row(
-    *, item: LiveDeparture, now: datetime, pill: Pill | None, zone: tzinfo,
+    *,
+    item: LiveDeparture,
+    now: datetime,
+    pill: Pill | None,
+    zone: tzinfo,
+    city: City,
 ) -> Row:
     """
     Turn a departure into a row.
@@ -292,6 +329,8 @@ def to_row(
         Marker.
     zone : tzinfo
         Local time zone the times show in.
+    city : City
+        The city, which holds the words for the departure.
 
     Returns
     -------
@@ -301,9 +340,11 @@ def to_row(
     dep = item.departure
     onto = dep.facts.onto
     ride_s = item.arrives.timestamp() - item.departs.timestamp()
+    words = nouns(city=city, departure=dep)
     return Row(
         route=dep.route,
-        mode=dep.source,
+        vehicle=words.vehicle,
+        bay=words.bay,
         platform=dep.platform,
         destination=(onto.headsign if onto else dep.headsign).removesuffix(
             ' Station'
@@ -663,7 +704,13 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     """
     upcoming = in_view(departures=inputs.departures, now=inputs.now)
     rows = [
-        to_row(item=item, now=inputs.now, pill=pill, zone=inputs.zone)
+        to_row(
+            item=item,
+            now=inputs.now,
+            pill=pill,
+            zone=inputs.zone,
+            city=inputs.city,
+        )
         for item, pill in zip(
             upcoming,
             pills(items=upcoming, faster=inputs.destination is not None),

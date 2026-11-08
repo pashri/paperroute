@@ -161,4 +161,5 @@ def connection_screen(
         scroll=state.scroll,
         now=frame_time(state=state),
         zone=state.city.zone,
+        city=state.city,
     )

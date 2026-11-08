@@ -1,6 +1,6 @@
 """Draw the page that searches for a pin's first stop."""
 
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from typing import Final, TypedDict
 
 from paperroute.adapters.web_pin_edit import (
@@ -9,6 +9,7 @@ from paperroute.adapters.web_pin_edit import (
     search_results,
 )
 from paperroute.ports import PinOptions
+from paperroute_transit.core.modes import ModeSpec
 
 STOPS_SHOWN: Final[int] = 20
 STARTING: Final[str] = '<p>Starting up. Reload in a moment.</p>'
@@ -64,6 +65,7 @@ def search_page(
     *,
     options: PinOptions | None,
     query: Mapping[str, str],
+    modes: Sequence[ModeSpec],
     skip_school: bool = True,
 ) -> str:
     """
@@ -75,6 +77,8 @@ def search_page(
         The timetable's choices, or None while it is not ready.
     query : Mapping[str, str]
         The query: `q`.
+    modes : Sequence[ModeSpec]
+        The city's modes, which name each stop's kinds.
     skip_school : bool
         Whether school routes are left out of each stop's routes.
 
@@ -92,5 +96,6 @@ def search_page(
         body=search_results(
             text=text,
             found=options.search(text=text, skip_school=skip_school),
+            modes=modes,
         ),
     )

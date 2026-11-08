@@ -20,10 +20,9 @@ from paperroute.adapters.state_migrations import (
     SCHEMA_VERSION,
     regional_to_coach,
 )
-from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
+from paperroute.city import PEAK_WINDOWS, SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.saved import (
-    DEFAULT_SAVED,
     BoardSettings,
     ConnectionMap,
     LiveView,
@@ -32,6 +31,8 @@ from paperroute.core.saved import (
     Rate,
     Saved,
     Settings,
+    default_saved,
+    default_settings,
 )
 from paperroute.core.state import initial_state
 from paperroute.core.state_views import saved_of
@@ -46,7 +47,10 @@ from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
 from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, Way
 from tests.core.test_auto_pins import is_shown, started, ticked, trusted
 
-ROTATED: Final[Settings] = Settings(device=DeviceSettings(rotate=True))
+ROTATED: Final[Settings] = Settings(
+    board=BoardSettings(peak_windows=PEAK_WINDOWS),
+    device=DeviceSettings(rotate=True),
+)
 
 NAMES = st.text(
     alphabet=st.characters(exclude_categories=['Cs']),
@@ -187,6 +191,7 @@ def sample() -> Saved:
         current=1,
         unpinned=None,
         view=LiveView.STRIP,
+        settings=default_settings(city=SYDNEY),
     )
 
 
@@ -228,7 +233,7 @@ def test_missing_file_gives_defaults_quietly(
 ) -> None:
     """No file is normal: defaults, not stored, nothing logged."""
     loaded = JsonStateRepository(path=path, city=SYDNEY).load()
-    assert loaded.saved == DEFAULT_SAVED
+    assert loaded.saved == default_saved(city=SYDNEY)
     assert not loaded.stored
     assert not caplog.records
 
@@ -241,7 +246,7 @@ def test_truncated_file_gives_defaults(
     repository.save(saved=sample())
     path.write_text(path.read_text()[:40])
     loaded = repository.load()
-    assert loaded.saved == DEFAULT_SAVED
+    assert loaded.saved == default_saved(city=SYDNEY)
     assert not loaded.stored
     assert [r.levelno for r in caplog.records] == [logging.ERROR]
 
@@ -256,7 +261,7 @@ def test_garbage_and_wrong_types_give_defaults(
     """Unusable content gives the defaults."""
     path.write_bytes(text.encode('utf-8', errors='surrogatepass'))
     loaded = JsonStateRepository(path=path, city=SYDNEY).load()
-    assert loaded.saved == DEFAULT_SAVED
+    assert loaded.saved == default_saved(city=SYDNEY)
     assert not loaded.stored
     assert [r.levelno for r in caplog.records] == [logging.ERROR]
 
@@ -268,7 +273,7 @@ def test_wrong_field_type_gives_defaults(path: Path) -> None:
     data = json.loads(path.read_text())
     data['current'] = 'big'
     path.write_text(json.dumps(data))
-    assert repository.load().saved == DEFAULT_SAVED
+    assert repository.load().saved == default_saved(city=SYDNEY)
 
 
 def test_future_schema_falls_back(
@@ -281,7 +286,7 @@ def test_future_schema_falls_back(
     data['schema_version'] = SCHEMA_VERSION + 1
     path.write_text(json.dumps(data))
     loaded = repository.load()
-    assert loaded.saved == DEFAULT_SAVED
+    assert loaded.saved == default_saved(city=SYDNEY)
     assert not loaded.stored
     assert caplog.records
 
@@ -331,7 +336,7 @@ def test_no_pins_and_no_unpinned_gives_default_place(path: Path) -> None:
     data['pins'] = []
     path.write_text(json.dumps(data))
     loaded = repository.load().saved
-    assert loaded.unpinned == DEFAULT_SAVED.unpinned
+    assert loaded.unpinned == default_saved(city=SYDNEY).unpinned
     assert loaded.current == 0
 
 
@@ -365,7 +370,7 @@ def test_failed_write_keeps_old_file(locked: Path) -> None:
     before = locked.read_text()
     repository = JsonStateRepository(path=locked, city=SYDNEY)
     with pytest.raises(OSError):
-        repository.save(saved=DEFAULT_SAVED)
+        repository.save(saved=default_saved(city=SYDNEY))
     assert locked.read_text() == before
     assert [p.name for p in locked.parent.iterdir()] == ['state.json']
 
@@ -453,7 +458,7 @@ def test_directory_at_path_gives_defaults(
     """Something that isn't a file at the path gives defaults and a log."""
     path.mkdir()
     loaded = JsonStateRepository(path=path, city=SYDNEY).load()
-    assert loaded.saved == DEFAULT_SAVED
+    assert loaded.saved == default_saved(city=SYDNEY)
     assert not loaded.stored
     assert [r.levelno for r in caplog.records] == [logging.ERROR]
 
@@ -462,7 +467,7 @@ def test_deeply_nested_json_gives_defaults(path: Path) -> None:
     """JSON nested past the recursion limit gives defaults."""
     path.write_text('[' * 100000)
     loaded = JsonStateRepository(path=path, city=SYDNEY).load()
-    assert loaded.saved == DEFAULT_SAVED
+    assert loaded.saved == default_saved(city=SYDNEY)
     assert not loaded.stored
 
 
@@ -532,7 +537,7 @@ def test_migrate_regional_with_no_unpinned_place(path: Path) -> None:
 def test_regional_to_coach_leaves_a_malformed_pin_list_alone() -> None:
     """Data the migration cannot read is passed on for validation to fail."""
     data: dict[str, object] = {'pins': 'oops', 'unpinned': 3}
-    assert regional_to_coach(data) == data
+    assert regional_to_coach(data, city=SYDNEY) == data
 
 
 def test_migrates_v2_with_auto_rebuild_on(path: Path) -> None:
@@ -554,7 +559,10 @@ def test_migrates_v2_with_auto_rebuild_on(path: Path) -> None:
 def test_round_trips_settings(path: Path) -> None:
     """A switched-off rebuild survives a save and a load."""
     repository = JsonStateRepository(path=path, city=SYDNEY)
-    manual = Settings(device=DeviceSettings(auto_rebuild=False))
+    manual = Settings(
+        board=BoardSettings(peak_windows=PEAK_WINDOWS),
+        device=DeviceSettings(auto_rebuild=False),
+    )
     saved = replace(sample(), settings=manual)
     repository.save(saved=saved)
     assert repository.load().saved.settings.device.auto_rebuild is False
@@ -613,7 +621,7 @@ def test_future_schema_is_not_guessed_at(path: Path) -> None:
     data = json.loads(path.read_text())
     data['schema_version'] = SCHEMA_VERSION + 1
     path.write_text(json.dumps(data))
-    assert repository.load().saved == DEFAULT_SAVED
+    assert repository.load().saved == default_saved(city=SYDNEY)
 
 
 def write_v4(*, path: Path, auto_rebuild: bool) -> None:
@@ -641,6 +649,7 @@ def test_migrates_v4_to_v5_with_defaults(path: Path) -> None:
     loaded = repository.load()
     assert loaded.stored
     assert loaded.saved.settings == Settings(
+        board=BoardSettings(peak_windows=PEAK_WINDOWS),
         device=DeviceSettings(auto_rebuild=False),
     )
     assert loaded.saved.pins == sample().pins
@@ -771,7 +780,10 @@ def test_my_hours_may_wrap_or_be_empty(
             {'peak_rate': '10s', 'offpeak_rate': '60s'},
             Settings(
                 device=DeviceSettings(rotate=True),
-                board=BoardSettings(offpeak_rate=Rate.STEADY),
+                board=BoardSettings(
+                    peak_windows=PEAK_WINDOWS,
+                    offpeak_rate=Rate.STEADY,
+                ),
             ),
         ),
         (
@@ -779,15 +791,24 @@ def test_my_hours_may_wrap_or_be_empty(
                 'my_hours': {'start': '7am', 'end': '05:30'},
                 'larger_text': True,
             },
-            Settings(device=DeviceSettings(rotate=True, larger_text=True)),
+            Settings(
+                board=BoardSettings(peak_windows=PEAK_WINDOWS),
+                device=DeviceSettings(rotate=True, larger_text=True),
+            ),
         ),
         (
             {'connection_map': 'first', 'larger_text': True},
-            Settings(device=DeviceSettings(rotate=True, larger_text=True)),
+            Settings(
+                board=BoardSettings(peak_windows=PEAK_WINDOWS),
+                device=DeviceSettings(rotate=True, larger_text=True),
+            ),
         ),
         (
             {'clean_after': 45, 'larger_text': True},
-            Settings(device=DeviceSettings(rotate=True, larger_text=True)),
+            Settings(
+                board=BoardSettings(peak_windows=PEAK_WINDOWS),
+                device=DeviceSettings(rotate=True, larger_text=True),
+            ),
         ),
     ],
     ids=['bad-rate', 'bad-my-hours', 'retired-first-map', 'bad-clean'],
@@ -810,6 +831,7 @@ def test_file_without_clean_after_cleans_after_thirty(path: Path) -> None:
     loaded = repository.load()
     assert loaded.stored
     assert loaded.saved.settings == Settings(
+        board=BoardSettings(peak_windows=PEAK_WINDOWS),
         device=DeviceSettings(rotate=True, clean_after=30),
     )
 
@@ -817,7 +839,10 @@ def test_file_without_clean_after_cleans_after_thirty(path: Path) -> None:
 def test_round_trips_clean_after(path: Path) -> None:
     """A cleaning choice survives a save and a load."""
     repository = JsonStateRepository(path=path, city=SYDNEY)
-    changed = Settings(device=DeviceSettings(clean_after=120))
+    changed = Settings(
+        board=BoardSettings(peak_windows=PEAK_WINDOWS),
+        device=DeviceSettings(clean_after=120),
+    )
     repository.save(saved=replace(sample(), settings=changed))
     assert repository.load().saved.settings == changed
 
@@ -877,7 +902,12 @@ def test_bad_lookahead_repaired_alone(
 
 def test_round_trips_lookahead(path: Path) -> None:
     """The longest lookahead survives a save and a load."""
-    settings = Settings(board=BoardSettings(alert_lookahead=Lookahead.ALL))
+    settings = Settings(
+        board=BoardSettings(
+            peak_windows=PEAK_WINDOWS,
+            alert_lookahead=Lookahead.ALL,
+        ),
+    )
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=settings))
     assert repository.load().saved.settings == settings
@@ -890,7 +920,7 @@ def test_round_trips_nickname_and_filter(path: Path) -> None:
         nickname='Work',
         only=('606', '607X'),
     )
-    saved = replace(DEFAULT_SAVED, pins=(pin,), unpinned=pin)
+    saved = replace(default_saved(city=SYDNEY), pins=(pin,), unpinned=pin)
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=saved)
     assert repository.load().saved.pins == (pin,)
@@ -1211,6 +1241,7 @@ def test_file_without_swap_knobs_leaves_the_knobs(path: Path) -> None:
     loaded = repository.load()
     assert loaded.stored
     assert loaded.saved.settings == Settings(
+        board=BoardSettings(peak_windows=PEAK_WINDOWS),
         device=DeviceSettings(rotate=True, swap_knobs=False),
     )
 
@@ -1218,6 +1249,9 @@ def test_file_without_swap_knobs_leaves_the_knobs(path: Path) -> None:
 def test_round_trips_swap_knobs(path: Path) -> None:
     """The swap switch survives a save and a load."""
     repository = JsonStateRepository(path=path, city=SYDNEY)
-    changed = Settings(device=DeviceSettings(swap_knobs=True))
+    changed = Settings(
+        board=BoardSettings(peak_windows=PEAK_WINDOWS),
+        device=DeviceSettings(swap_knobs=True),
+    )
     repository.save(saved=replace(sample(), settings=changed))
     assert repository.load().saved.settings == changed

@@ -95,7 +95,7 @@ def started(*, pins: tuple[Pin, ...] = (PARRAMATTA_CENTRAL,)) -> State:
     State
         The state at `NOW`.
     """
-    saved = replace(seeded(pin=pins[0]), pins=pins)
+    saved = replace(seeded(pin=pins[0], city=SYDNEY), pins=pins)
     return wakeful(
         state=initial_state(saved=saved, now=NOW, stored=True, city=SYDNEY),
     )
@@ -656,7 +656,7 @@ def connection_asks(*, second: tuple[Departure, ...]) -> list[LoadBetween]:
     """
     now = at_connection(7, 30)
     state = wakeful(state=initial_state(
-        saved=seeded(pin=WORK), now=now, stored=True,
+        saved=seeded(pin=WORK, city=SYDNEY), now=now, stored=True,
         city=SYDNEY,
     ))
     _, effects = step(state, DeparturesLoaded(

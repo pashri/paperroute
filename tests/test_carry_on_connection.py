@@ -27,7 +27,7 @@ from paperroute.core.messages import (
     ScreenView,
     Tick,
 )
-from paperroute.core.saved import LiveView, Saved
+from paperroute.core.saved import LiveView, Saved, default_settings
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.ports import TimetableRepository
@@ -60,13 +60,13 @@ def _built(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """
     out = tmp_path_factory.mktemp('carry') / 'timetable.db'
     build_timetable(
-        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'carry_on.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
         ],
         window=Window(start=DAY, days=1),
         out=out,
+        city=SYDNEY,
     )
     return out
 
@@ -210,7 +210,7 @@ def connection_strip(
         ) as timetable,
         closing(SqliteNetworkRepository(
             path=path,
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         )) as network,
     ):
         ports = replace(
@@ -220,6 +220,7 @@ def connection_strip(
         )
         state = initial_state(
             saved=Saved(
+                settings=default_settings(city=SYDNEY),
                 pins=pins,
                 current=current,
                 unpinned=None,

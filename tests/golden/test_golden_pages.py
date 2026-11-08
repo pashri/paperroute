@@ -12,7 +12,7 @@ from paperroute.adapters.settings_form import form_values
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SydneyPages
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.feeds import DAILY_LIMIT, feed_label
 from paperroute_device.adapters.secrets_file import SecretsFile
 from paperroute_device.adapters.web_device import DevicePages
@@ -89,6 +89,7 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
             planner=FakeTripPlanner(),
             now=lambda: SEARCH_NOW,
         ),
+        city=SYDNEY,
     )
 
 

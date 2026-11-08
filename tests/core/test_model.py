@@ -6,9 +6,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from paperroute.city import SYDNEY_ZONE, SydneyMode
-from paperroute.core.chooser import KIND_LABELS, KIND_LETTERS, KIND_ORDER
-from paperroute.core.saved import TOWN_HALL
+from paperroute.city import SYDNEY_ZONE, TOWN_HALL, SydneyMode
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
     TWO_WAY,
@@ -115,17 +113,6 @@ def test_same_place_ignores_names_and_points() -> None:
 def test_same_place_tells_pins_apart(other: Pin) -> None:
     """A different stop, kind or route list is a different pin."""
     assert not same_place(first=pin_of('A', 'B'), second=other)
-
-
-def test_kind_order_is_bus_train_metro_lr_ferry_school_coach() -> None:
-    """The chooser lists kinds in its fixed order, with Coach last."""
-    assert KIND_ORDER == (
-        SydneyMode.BUS, SydneyMode.TRAIN, SydneyMode.METRO,
-        SydneyMode.LIGHT_RAIL, SydneyMode.FERRY, SydneyMode.SCHOOL,
-        SydneyMode.COACH,
-    )
-    assert KIND_LABELS[SydneyMode.COACH] == 'Coach'
-    assert KIND_LETTERS[SydneyMode.COACH] == 'C'
 
 
 def test_pin_key_includes_filter_not_nickname() -> None:

@@ -89,7 +89,7 @@ from paperroute_transit.core.reach import (
 async def test_save_effect_writes_through_store() -> None:
     """SaveState writes the saved state to the store and posts nothing."""
     states = MemoryStates()
-    saved = seeded(pin=MAP_PIN)
+    saved = seeded(pin=MAP_PIN, city=SYDNEY)
     posted = await posted_by(
         ports=ports_of(states=states), effects=[SaveState(saved=saved)]
     )
@@ -102,7 +102,7 @@ async def test_save_failure_is_logged_not_raised(
 ) -> None:
     """A failing write is logged once for the same message, never raised."""
     states = MemoryStates(error=OSError(30, 'Read-only file system'))
-    save = SaveState(saved=seeded(pin=MAP_PIN))
+    save = SaveState(saved=seeded(pin=MAP_PIN, city=SYDNEY))
     with caplog.at_level(logging.ERROR):
         await posted_by(ports=ports_of(states=states), effects=[save, save])
     failures = [
@@ -466,7 +466,7 @@ async def test_save_failure_naming_new_temp_files_logs_once(
 ) -> None:
     """The same write error is logged once whatever temp file it names."""
     states = TempNamingStates()
-    save = SaveState(saved=seeded(pin=MAP_PIN))
+    save = SaveState(saved=seeded(pin=MAP_PIN, city=SYDNEY))
     with caplog.at_level(logging.ERROR):
         await posted_by(
             ports=ports_of(states=states), effects=[save, save, save]

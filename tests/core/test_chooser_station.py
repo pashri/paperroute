@@ -8,7 +8,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY_ZONE, SydneyMode
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute.core.chooser import (
     Choice,
     ChooserState,
@@ -40,7 +40,7 @@ from paperroute.core.messages import (
     TimetableSeen,
 )
 from paperroute.core.places import feeds_of
-from paperroute.core.saved import LiveView, Saved
+from paperroute.core.saved import LiveView, Saved, default_settings
 from paperroute.core.state import step
 from paperroute.core.state_model import State
 from paperroute.core.stop_view import HORIZON
@@ -97,6 +97,7 @@ def started() -> State:
         The state after its first tick.
     """
     saved = Saved(
+        settings=default_settings(city=SYDNEY),
         pins=(pin_at('first', x=100.0),),
         current=0,
         unpinned=None,

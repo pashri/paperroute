@@ -26,7 +26,7 @@ from paperroute.core.messages import (
     StripFailed,
     StripLoaded,
 )
-from paperroute.core.saved import DEFAULT_PLACE, Saved
+from paperroute.core.saved import Saved
 from paperroute.core.state_model import (
     RETRY_AFTER,
     Board,
@@ -36,6 +36,7 @@ from paperroute.core.state_model import (
     restarted,
 )
 from paperroute_transit.core.alert_model import BetweenLoaded
+from paperroute_transit.core.city import City
 from paperroute_transit.core.geo import MetreBox
 from paperroute_transit.core.model import (
     Departure,
@@ -46,7 +47,7 @@ from paperroute_transit.core.model import (
 )
 
 
-def places_of(*, saved: Saved) -> Places:
+def places_of(*, saved: Saved, city: City) -> Places:
     """
     Take the pins and the place shown from what was saved.
 
@@ -54,18 +55,20 @@ def places_of(*, saved: Saved) -> Places:
     ----------
     saved : Saved
         What was saved, possibly from a damaged file.
+    city : City
+        The city, whose default pin shows when nothing else would.
 
     Returns
     -------
     Places
-        The saved places with `current` clamped onto the pins, and Town
-        Hall unpinned when there would be no place to show.
+        The saved places with `current` clamped onto the pins, and the
+        city's default pin unpinned when there would be no place to show.
     """
     pins = saved.pins
     current = min(max(saved.current, 0), max(len(pins) - 1, 0))
     unpinned = saved.unpinned
     if unpinned is None and not pins:
-        unpinned = DEFAULT_PLACE
+        unpinned = city.default_pin
     return Places(pins=pins, current=current, unpinned=unpinned)
 
 

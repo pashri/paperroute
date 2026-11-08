@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.city import SydneyMode
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.chooser import (
     Choice,
     ChooserPath,
@@ -61,7 +61,7 @@ REPLACEMENT_GROUPS: Final[Column] = Column(
     items=(
         *GROUPS.items,
         Choice(
-            key='replacements', label='Trackwork', rule_above=True,
+            key='replacement', label='Trackwork', rule_above=True,
             level=Level.REPLACEMENTS,
         ),
     ),
@@ -76,7 +76,7 @@ REPLACEMENT_ROUTES: Final[Column] = Column(
 )
 BUS: Final[ChooserPath] = ((Level.KIND, 'bus'),)
 REPLACEMENTS_PATH: Final[ChooserPath] = (
-    *BUS, (Level.REPLACEMENTS, 'replacements'),
+    *BUS, (Level.REPLACEMENTS, 'replacement'),
 )
 METRO_LINES: Final[Column] = Column(
     level=Level.LINE,
@@ -303,7 +303,10 @@ def opened_at_kind(kind: SydneyMode | None = None) -> ChooserState:
     ChooserState
         The chooser, waiting for the KIND cursor's preview.
     """
-    chooser, request = opened(shown=Pin(origin=place('X'), kind=kind))
+    chooser, request = opened(
+        shown=Pin(origin=place('X'), kind=kind),
+        modes=SYDNEY.modes,
+    )
     chooser, _ = fed(chooser, request, KINDS)
     return chooser
 

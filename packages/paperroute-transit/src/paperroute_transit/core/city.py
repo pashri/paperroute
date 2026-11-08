@@ -7,7 +7,9 @@ from dataclasses import dataclass
 from typing import Protocol
 from zoneinfo import ZoneInfo
 
+from paperroute_device.core.device_settings import Window
 from paperroute_transit.core.geo import DegreeBox, Projection
+from paperroute_transit.core.model import Pin
 from paperroute_transit.core.modes import Classifier, ModeSpec, spec_of
 
 
@@ -194,6 +196,26 @@ class AlertRules:
 
 
 @dataclass(frozen=True)
+class Nouns:
+    """
+    The words a departure's mode is written with.
+
+    Attributes
+    ----------
+    vehicle : str
+        What is ridden, as in 'NEXT TRAIN' and 'min on the train'.
+    bay : str
+        Where it is boarded, as in 'platform 3'.
+    connection : str
+        What a connection's ride is called.
+    """
+
+    vehicle: str
+    bay: str
+    connection: str
+
+
+@dataclass(frozen=True)
 class City:
     """
     One city's settings.
@@ -218,6 +240,15 @@ class City:
         How its timetable is built.
     alerts : AlertRules
         How alerts are tied to stops and routes.
+    default_pin : Pin
+        The place shown when there is nothing else to show.
+    peak_windows : tuple[Window, ...]
+        The weekday peak windows a new board starts with.
+    source_nouns : Mapping[str, Nouns]
+        The words for a departure, by feed source.
+    noun_overrides : Mapping[tuple[str, str], Nouns]
+        The words for a departure by feed source and mode id, ahead of
+        `source_nouns`.
     """
 
     name: str
@@ -229,6 +260,10 @@ class City:
     catalogue: CatalogueRules
     timetable: TimetableRules
     alerts: AlertRules
+    default_pin: Pin
+    peak_windows: tuple[Window, ...]
+    source_nouns: Mapping[str, Nouns]
+    noun_overrides: Mapping[tuple[str, str], Nouns]
 
     def mode(self, *, mode_id: str | None) -> ModeSpec | None:
         """

@@ -3,7 +3,7 @@
 from dataclasses import replace
 from typing import Final
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.connection_view import (
     NO_PAIRS,
     ConnectionView,
@@ -43,6 +43,7 @@ VIEW: Final[ConnectionView] = build_connection_view(
     scroll=0,
     now=at(7, 30),
     zone=SYDNEY_ZONE,
+    city=SYDNEY,
 )
 
 
@@ -122,6 +123,7 @@ def test_two_change_hero_fits_above_footer() -> None:
         scroll=0,
         now=at(7, 30),
         zone=SYDNEY_ZONE,
+        city=SYDNEY,
     )
     frame = draw_connection_view(view=view)
     rule = HEADER + FOOTER_RULE

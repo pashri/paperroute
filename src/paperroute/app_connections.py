@@ -5,7 +5,6 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from types import MappingProxyType
 
-from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.alert_match import between_names
 from paperroute.core.chains import Legs, open_legs
 from paperroute.core.connection_model import LEG_EXTRA, direct_leg
@@ -14,6 +13,7 @@ from paperroute.ports import TimetableRepository
 from paperroute_transit.adapters.leg_cache import LegCache
 from paperroute_transit.core.alert_model import BetweenLoaded, LoadBetween
 from paperroute_transit.core.model import Departure, Pin, is_connection
+from paperroute_transit.core.modes import skippable_modes
 
 
 def departures_read(
@@ -51,6 +51,7 @@ def departures_read(
     """
     pin = effect.pin
     read = reader(timetable=timetable, effect=effect, cache=cache)
+    skipped = skippable_modes(modes=timetable.city.modes)
     loaded = DeparturesLoaded(
         pin=pin,
         departures=(),
@@ -65,10 +66,14 @@ def departures_read(
             departures=usable(
                 items=read(pin=pin, end=effect.end),
                 pin=replace(pin, never=()),
-                skip_school=effect.skip_school_pins,
+                skipped=skipped if effect.skip_school_pins else frozenset(),
             ),
         )
-    keep = functools.partial(usable, pin=pin, skip_school=effect.skip_school)
+    keep = functools.partial(
+        usable,
+        pin=pin,
+        skipped=skipped if effect.skip_school else frozenset(),
+    )
     direct = read(pin=direct_leg(pin=pin), end=effect.end)
     loaded = replace(loaded, departures=keep(items=direct))
     if not is_connection(pin=pin):
@@ -117,7 +122,7 @@ def reader(
 
 
 def usable(
-    *, items: Sequence[Departure], pin: Pin, skip_school: bool,
+    *, items: Sequence[Departure], pin: Pin, skipped: frozenset[str],
 ) -> tuple[Departure, ...]:
     """
     Drop departures on routes a pin never uses.
@@ -128,8 +133,8 @@ def usable(
         Departures.
     pin : Pin
         Pin with its never list.
-    skip_school : bool
-        Whether school routes are dropped too.
+    skipped : frozenset[str]
+        Modes whose departures are dropped too.
 
     Returns
     -------
@@ -140,7 +145,7 @@ def usable(
         item
         for item in items
         if item.route not in pin.never
-        and not (skip_school and item.facts.kind == SydneyMode.SCHOOL)
+        and item.facts.kind not in skipped
     )
 
 
@@ -231,11 +236,13 @@ def leg_between(
         if effect.trip_ids
         else {}
     )
-    names = between_names(pin=pin, patterns=patterns, families=families)
+    names = between_names(
+        pin=pin, patterns=patterns, families=families, city=timetable.city,
+    )
     stop_ids = {
         stop for end in ends for stop in families.get(end, frozenset({end}))
     }
-    rule = SYDNEY.alerts.agency_alerts
+    rule = timetable.city.alerts.agency_alerts
     return BetweenLoaded(
         pin=pin,
         names=names,

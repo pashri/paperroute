@@ -7,7 +7,7 @@ from typing import Final
 
 import pytest
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.chooser import ChooserState, Level, Stage
 from paperroute.core.chooser_steps import DEPARTURES_FAILED, LINE_FAILED
 from paperroute.core.chooser_view import LOADING_LISTS, ChooserView
@@ -34,7 +34,7 @@ from paperroute.core.messages import (
     TimetableSeen,
 )
 from paperroute.core.places import shown
-from paperroute.core.saved import LiveView, Saved
+from paperroute.core.saved import LiveView, Saved, default_settings
 from paperroute.core.state import step
 from paperroute.core.state_model import LOOKBACK, RELOAD_BEFORE, State
 from paperroute.core.state_views import saved_of
@@ -90,6 +90,7 @@ def pinned(*, view: LiveView = LiveView.STOP) -> State:
         The state after its first tick.
     """
     saved = Saved(
+        settings=default_settings(city=SYDNEY),
         pins=PINS, current=0, unpinned=None, view=view,
     )
     state = begun(saved=saved)
@@ -391,6 +392,7 @@ def test_commit_makes_unpinned_place_on_stop_view() -> None:
 def test_commit_matching_pin_selects_it() -> None:
     """Choosing a pinned place selects that pin."""
     saved = Saved(
+        settings=default_settings(city=SYDNEY),
         pins=(PINS[0], CHOSEN, PINS[2]),
         current=0,
         unpinned=None,

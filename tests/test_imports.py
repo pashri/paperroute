@@ -39,6 +39,12 @@ KIT_TEXT: Final[frozenset[str]] = frozenset(
     {'.py', '.html', '.css', '.js', '.toml', '.txt'},
 )
 NSW: Final[re.Pattern[str]] = re.compile(r'(?i)\bnsw')
+APP: Final[Path] = ROOT / 'src' / 'paperroute'
+CITY_DEFAULTS: Final[dict[str, str | None]] = {
+    'Settings': None,
+    'BoardSettings': 'peak_windows',
+    'Saved': 'settings',
+}
 SCREEN_IMPORTS: Final[str] = (
     'import paperroute.screen, sys; '
     'print(*sorted(sys.modules))'
@@ -396,3 +402,45 @@ def test_web_display_imports_no_board_pages() -> None:
     names = imported_names(path=path)
     assert not names & banned
     assert 'SYDNEY' not in path.read_text(encoding='utf-8')
+
+
+def default_built(*, call: ast.Call) -> str | None:
+    """
+    Name a settings or saved state built without the city's values.
+
+    Parameters
+    ----------
+    call : ast.Call
+        A call.
+
+    Returns
+    -------
+    str | None
+        The class called, when it is `Settings` with no arguments,
+        `BoardSettings` without ``peak_windows`` or `Saved` without
+        ``settings``; None otherwise.
+    """
+    func = call.func
+    name = func.attr if isinstance(func, ast.Attribute) else getattr(
+        func, 'id', None,
+    )
+    if name not in CITY_DEFAULTS:
+        return None
+    needed = CITY_DEFAULTS[name]
+    given = {keyword.arg for keyword in call.keywords}
+    if needed is None:
+        return name if not call.args and not call.keywords else None
+    return None if needed in given else name
+
+
+def test_settings_built_with_city_values() -> None:
+    """Outside saved.py, settings and saved state carry the city's values."""
+    offenders = [
+        f'{path.relative_to(APP)}:{node.lineno}: {name}'
+        for path in sorted(APP.rglob('*.py'))
+        if path != APP / 'core' / 'saved.py'
+        for node in ast.walk(ast.parse(path.read_text(encoding='utf-8')))
+        if isinstance(node, ast.Call)
+        and (name := default_built(call=node)) is not None
+    ]
+    assert not offenders

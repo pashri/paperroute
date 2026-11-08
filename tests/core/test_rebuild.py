@@ -30,7 +30,7 @@ from paperroute.core.rebuild import (
     forced,
     is_outdated,
 )
-from paperroute.core.saved import LiveView, Saved
+from paperroute.core.saved import LiveView, Saved, default_settings
 from paperroute.core.state import step
 from paperroute.core.state_model import Rebuild, State
 from paperroute_device.core.device_events import ApiKeyChanged
@@ -70,6 +70,7 @@ def pinned() -> State:
         The state after its first tick.
     """
     saved = Saved(
+        settings=default_settings(city=SYDNEY),
         pins=(pin_at('first', x=100.0),),
         current=0,
         unpinned=None,

@@ -156,7 +156,9 @@ def starting_state(
     if seed is not None and loaded.stored:
         logger.info('seed ignored: the saved state is used')
     elif seed is not None:
-        saved = seeded(pin=filled(timetable=ports.timetable, pin=seed))
+        saved = seeded(
+            pin=filled(timetable=ports.timetable, pin=seed), city=city,
+        )
         logger.info('state seeded from the command line or environment')
     state = initial_state(
         saved=saved, now=ports.clock.now(), stored=loaded.stored, city=city,

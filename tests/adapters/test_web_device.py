@@ -12,7 +12,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_board import SYDNEY_NAV
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.city import SYDNEY_ZONE, SydneyFeed
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
 from paperroute.core.feeds import (
     DAILY_LIMIT,
     FEEDS,
@@ -60,7 +60,9 @@ def _device() -> DeviceSite:
 
 async def _start(*, device: DeviceSite) -> Client:
     """Start a client of a display serving the Device page."""
-    client = TestClient(TestServer(WebDisplay(device=device.pages()).app()))
+    client = TestClient(
+        TestServer(WebDisplay(device=device.pages(), city=SYDNEY).app()),
+    )
     await client.start_server()
     return client
 

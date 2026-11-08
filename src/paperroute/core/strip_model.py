@@ -301,6 +301,7 @@ class StripMapView:
 
 
 @dataclass(frozen=True)
+# pylint: disable-next=too-many-instance-attributes
 class StripInputs:
     """
     Everything the Strip views are built from.
@@ -324,6 +325,8 @@ class StripInputs:
     stale_after : timedelta
         How old a position may be before it is drawn at its timetable
         position instead.
+    line_kinds : frozenset[str]
+        The city's modes chosen by line, whose strips take every route.
     scroll : int
         Rows scrolled down from the default.
     cursor : int | None
@@ -351,6 +354,7 @@ class StripInputs:
     now: datetime
     zone: tzinfo
     stale_after: timedelta
+    line_kinds: frozenset[str]
     scroll: int
     cursor: int | None
     picking: str | None

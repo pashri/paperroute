@@ -8,16 +8,13 @@ from operator import itemgetter
 from typing import Final, Protocol
 
 from paperroute.adapters.timetable_db import to_point
-from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.chooser import Choice, Column, Level
 from paperroute.core.reach_exits import exit_leads, found_exits, grouped_exits
 from paperroute_transit.core.geo import Projection
 from paperroute_transit.core.model import StopPlace, until_revisit
-from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.reach import RunTail, StripKey, line_key_of
 from paperroute_transit.core.reach_layout import LineExit
 
-LINE_KINDS: Final[frozenset[str]] = line_modes(modes=SYDNEY.modes)
 LINE_TABLES: Final[tuple[str, ...]] = ('line_stations', 'line_aliases')
 EXIT_TABLES: Final[tuple[str, ...]] = ('line_exits',)
 TRACK_TABLES: Final[tuple[str, ...]] = ('line_track',)
@@ -300,6 +297,8 @@ class LineTables:
         Says whether the file has some tables.
     projection : Projection
         The projection stop points are placed in.
+    line_kinds : frozenset[str]
+        The city's modes chosen by line.
     """
 
     def __init__(
@@ -308,10 +307,12 @@ class LineTables:
         fetch: Fetch,
         has_tables: HasTables,
         projection: Projection,
+        line_kinds: frozenset[str],
     ) -> None:
         self.fetch = fetch
         self.has_tables = has_tables
         self.projection = projection
+        self.line_kinds = line_kinds
 
     def has_lines(self) -> bool:
         """
@@ -345,7 +346,7 @@ class LineTables:
         )
 
     def to_column(
-        self, *, line_key: str, origin: str, kind: SydneyMode,
+        self, *, line_key: str, origin: str, kind: str,
     ) -> Column | None:
         """
         The TO column of a line from a station.
@@ -356,7 +357,7 @@ class LineTables:
             Chooser row key of the line.
         origin : str
             The From station ID.
-        kind : SydneyMode
+        kind : str
             The line's kind.
 
         Returns
@@ -422,7 +423,7 @@ class LineTables:
             no line, a line the file does not list, or a file without
             the line tables.
         """
-        line_key = line_key_of(key=key, line_kinds=LINE_KINDS)
+        line_key = line_key_of(key=key, line_kinds=self.line_kinds)
         if line_key is None or not self.has_lines():
             return frozenset()
         track = self.has_tables(tables=TRACK_TABLES)
@@ -457,7 +458,7 @@ class LineTables:
             turnoff are merged (see `exit_leads`). Empty without a line
             or without the line_exits table.
         """
-        line_key = line_key_of(key=key, line_kinds=LINE_KINDS)
+        line_key = line_key_of(key=key, line_kinds=self.line_kinds)
         if not line or line_key is None or not self.has_tables(
             tables=EXIT_TABLES,
         ):

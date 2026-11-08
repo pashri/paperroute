@@ -4,12 +4,13 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY_ZONE, SydneyMode
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute.core.strip_times import (
     STRIP_HOPS,
     TripInputs,
     arrivals_after,
     board_departures,
+    board_modes,
     call_delay,
     calls_before,
     filtered,
@@ -27,6 +28,7 @@ from paperroute_testkit.core.factories import (
     pattern,
 )
 from paperroute_transit.core.model import CarryOn, Departure
+from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.reach import StripKey
 
 TRAIN: Final[StripKey] = StripKey(
@@ -77,6 +79,7 @@ def test_strip_trips_keep_every_trip_in_the_window() -> None:
     ]
     assert strip_trips(
         departures=[*kept, *dropped], key=TRAIN, now=now,
+        line_kinds=line_modes(modes=SYDNEY.modes),
     ) == {f'k{i}' for i in range(150)}
 
 
@@ -90,9 +93,24 @@ def test_strip_trips_follow_the_routes_rule() -> None:
     every = StripKey(station='C', kind=SydneyMode.BUS, routes=())
     anything = StripKey(station='C', kind=None, routes=())
     both = [ours, theirs]
-    assert strip_trips(departures=both, key=chosen, now=START) == {'a'}
-    assert strip_trips(departures=both, key=every, now=START) == {'a', 'b'}
-    assert strip_trips(departures=both, key=anything, now=START) == {
+    assert strip_trips(
+        departures=both,
+        key=chosen,
+        now=START,
+        line_kinds=line_modes(modes=SYDNEY.modes),
+    ) == {'a'}
+    assert strip_trips(
+        departures=both,
+        key=every,
+        now=START,
+        line_kinds=line_modes(modes=SYDNEY.modes),
+    ) == {'a', 'b'}
+    assert strip_trips(
+        departures=both,
+        key=anything,
+        now=START,
+        line_kinds=line_modes(modes=SYDNEY.modes),
+    ) == {
         'a', 'b',
     }
 
@@ -106,7 +124,12 @@ def test_strip_trips_include_next_trips() -> None:
         kind=SydneyMode.TRAIN,
         then=CarryOn(route='T2', headsign='Leppington', trip_id='b'),
     )
-    assert strip_trips(departures=[t8], key=TRAIN, now=START) == {'a', 'b'}
+    assert strip_trips(
+        departures=[t8],
+        key=TRAIN,
+        now=START,
+        line_kinds=line_modes(modes=SYDNEY.modes),
+    ) == {'a', 'b'}
 
 
 def test_bus_board_keeps_school_and_replacement() -> None:
@@ -122,7 +145,11 @@ def test_bus_board_keeps_school_and_replacement() -> None:
     boards = {
         kind: [
             item.trip_id
-            for item in board_departures(departures=every, kind=kind)
+            for item in board_departures(
+                departures=every,
+                kind=kind,
+                modes=SYDNEY.modes,
+            )
         ]
         for kind in kinds
     }
@@ -166,6 +193,7 @@ def approach_inputs(*, late: int = 0) -> TripInputs:
         stale_after=STALE_LIMIT,
         station_of={},
         zone=SYDNEY_ZONE,
+        line_kinds=line_modes(modes=SYDNEY.modes),
     )
 
 
@@ -345,3 +373,16 @@ def test_calls_before_leave_out_calls_already_made() -> None:
         approach_inputs(), now=START + timedelta(minutes=6),
     )
     assert approach_times(trips=trips, origin='C', stations={'A'}) == {}
+
+
+def test_board_modes_from_specs() -> None:
+    """A bus pin boards school and replacement buses unless skipping."""
+    assert board_modes(
+        modes=SYDNEY.modes, kind=SydneyMode.BUS, skip=False,
+    ) == {'bus', 'school', 'replacement'}
+    assert board_modes(
+        modes=SYDNEY.modes, kind=SydneyMode.BUS, skip=True,
+    ) == {'bus', 'replacement'}
+    assert board_modes(
+        modes=SYDNEY.modes, kind=SydneyMode.TRAIN, skip=False,
+    ) == {'train'}

@@ -68,7 +68,7 @@ def to_column(*, path: Path, origin: str) -> Column:
     """
     with closing(SqliteNetworkRepository(
         path=path,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         column = repo.choices(path=(*T1, (Level.STATION, origin)))
     assert column is not None
@@ -146,9 +146,9 @@ def one_way_network(*, folder: Path) -> Path:
     out = folder / 'timetable.db'
     archive = write_feed(path=folder / 'network.zip', files=files)
     build_timetable(
-        city=SYDNEY,
         sources=[Source(name='sydneytrains', archive=archive)],
         window=Window(start=DAY, days=3), out=out,
+        city=SYDNEY,
     )
     return out
 

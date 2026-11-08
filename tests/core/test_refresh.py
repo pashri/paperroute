@@ -131,7 +131,7 @@ def test_loaded_start_draws_at_once() -> None:
 def test_loading_screen_waits_five_seconds() -> None:
     """Still loading, the first frame waits 5 s, then is drawn full."""
     state = initial_state(
-        saved=seeded(pin=PIN),
+        saved=seeded(pin=PIN, city=SYDNEY),
         now=START,
         stored=True,
         city=SYDNEY,
@@ -149,7 +149,7 @@ def test_loading_screen_waits_five_seconds() -> None:
 def test_loading_hold_ends_when_clock_steps_back() -> None:
     """A clock stepped back past the start stops holding the screen."""
     state = initial_state(
-        saved=seeded(pin=PIN),
+        saved=seeded(pin=PIN, city=SYDNEY),
         now=START,
         stored=True,
         city=SYDNEY,

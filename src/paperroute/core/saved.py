@@ -2,15 +2,14 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, fields, replace
-from datetime import date, time, timedelta
+from datetime import date, timedelta
 from enum import StrEnum
 from typing import Any, Final
 
-from paperroute.city import SYDNEY_PROJECTION, SydneyMode
 from paperroute_device.core.device_settings import DeviceSettings, Window
 from paperroute_transit.core.auto_model import AutoState
-from paperroute_transit.core.geo import to_metres
-from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.city import City
+from paperroute_transit.core.model import Pin
 
 
 class LiveView(StrEnum):
@@ -63,10 +62,6 @@ LOOKAHEAD: Final[dict[Lookahead, timedelta | None]] = {
     Lookahead.WEEK: timedelta(days=7),
     Lookahead.ALL: None,
 }
-PEAK_WINDOWS: Final[tuple[Window, ...]] = (
-    Window(start=time(6, 30), end=time(10)),
-    Window(start=time(15), end=time(19)),
-)
 
 
 @dataclass(frozen=True)
@@ -84,7 +79,8 @@ class BoardSettings:
     offpeak_rate : Rate
         The rate outside peak hours.
     peak_windows : tuple[Window, ...]
-        The weekday peak windows; none of them wraps midnight.
+        The weekday peak windows; none of them wraps midnight. A city's
+        defaults come from `default_settings`.
     alert_lookahead : Lookahead
         How far ahead planned alerts are listed.
     connection_map : ConnectionMap
@@ -100,7 +96,7 @@ class BoardSettings:
 
     peak_rate: Rate = Rate.FAST
     offpeak_rate: Rate = Rate.SLOW
-    peak_windows: tuple[Window, ...] = PEAK_WINDOWS
+    peak_windows: tuple[Window, ...] = ()
     alert_lookahead: Lookahead = Lookahead.WEEK
     connection_map: ConnectionMap = ConnectionMap.CHANGES
     skip_school_buses: bool = True
@@ -224,25 +220,48 @@ class Saved:
     auto: AutoState = field(default_factory=AutoState)
 
 
-TOWN_HALL: Final[StopPlace] = StopPlace(
-    stop_id='200070',
-    name='Town Hall Station',
-    point=to_metres(
-        lon=151.206899293,
-        lat=-33.8735963257,
-        projection=SYDNEY_PROJECTION,
-    ),
-)
-DEFAULT_PLACE: Final[Pin] = Pin(origin=TOWN_HALL, kind=SydneyMode.TRAIN)
-DEFAULT_SAVED: Final[Saved] = Saved(
-    pins=(),
-    current=0,
-    unpinned=DEFAULT_PLACE,
-    view=LiveView.MAP,
-)
+def default_settings(*, city: City) -> Settings:
+    """
+    Give a city's default settings.
+
+    Parameters
+    ----------
+    city : City
+        The city.
+
+    Returns
+    -------
+    Settings
+        The defaults, with the city's peak windows.
+    """
+    return Settings(board=BoardSettings(peak_windows=city.peak_windows))
 
 
-def seeded(*, pin: Pin) -> Saved:
+def default_saved(*, city: City) -> Saved:
+    """
+    Give what a device starts with when nothing is saved.
+
+    Parameters
+    ----------
+    city : City
+        The city.
+
+    Returns
+    -------
+    Saved
+        No pins, the city's default pin unpinned, the Map view and the
+        city's default settings.
+    """
+    return Saved(
+        pins=(),
+        current=0,
+        unpinned=city.default_pin,
+        view=LiveView.MAP,
+        settings=default_settings(city=city),
+    )
+
+
+def seeded(*, pin: Pin, city: City) -> Saved:
     """
     Start with one pin, selected, on the Stop view.
 
@@ -250,6 +269,8 @@ def seeded(*, pin: Pin) -> Saved:
     ----------
     pin : Pin
         The pin.
+    city : City
+        The city, whose default settings it starts with.
 
     Returns
     -------
@@ -261,4 +282,5 @@ def seeded(*, pin: Pin) -> Saved:
         current=0,
         unpinned=None,
         view=LiveView.STOP,
+        settings=default_settings(city=city),
     )

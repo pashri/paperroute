@@ -551,10 +551,7 @@ def network_for(
     SqliteNetworkRepository
         The open reader.
     """
-    network = SqliteNetworkRepository(
-        path=args.timetable,
-        projection=SYDNEY.projection,
-    )
+    network = SqliteNetworkRepository(path=args.timetable, city=SYDNEY)
     try:
         yield network
     finally:
@@ -996,6 +993,7 @@ def sydney_display(
         The display, with no device pages yet.
     """
     return WebDisplay(
+        city=SYDNEY,
         status=timings.snapshot,
         nav=SYDNEY_NAV,
         hint=SYDNEY_HINT,

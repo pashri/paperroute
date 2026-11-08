@@ -1,10 +1,11 @@
 """Interfaces to the panel and the knobs, and the panel's timings."""
 
 from dataclasses import dataclass
-from typing import Final, Protocol
+from typing import TYPE_CHECKING, Final, Protocol
 
-import numpy as np
-from numpy.typing import NDArray
+if TYPE_CHECKING:
+    import numpy as np
+    from numpy.typing import NDArray
 
 CLEAN_AFTER: Final[int] = 30  # quick patches
 

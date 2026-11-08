@@ -13,6 +13,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
 from paperroute.adapters.web_display import WebDisplay
+from paperroute.city import SYDNEY
 from paperroute_device.adapters.web_frame import SHELL_WEB, page_frame
 from paperroute_device.adapters.web_live import live_page
 from paperroute_testkit.page_markup import (
@@ -247,7 +248,7 @@ def declarations(*, body: str) -> list[str]:
 @pytest.fixture(name='client')
 async def _client() -> AsyncIterator[Client]:
     """A client of a display with no device pages."""
-    client = TestClient(TestServer(WebDisplay().app()))
+    client = TestClient(TestServer(WebDisplay(city=SYDNEY).app()))
     await client.start_server()
     yield client
     await client.close()
@@ -492,7 +493,7 @@ def test_device_restart_tones() -> None:
 ])
 async def test_power_page_tone(action: str, danger: bool) -> None:
     """Shutting down asks with a danger button; restarting does not."""
-    display = WebDisplay(device=sydney_site().pages())
+    display = WebDisplay(device=sydney_site().pages(), city=SYDNEY)
     client = TestClient(TestServer(display.app()))
     await client.start_server()
     try:

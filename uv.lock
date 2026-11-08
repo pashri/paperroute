@@ -1185,6 +1185,7 @@ dependencies = [
     { name = "multidict" },
     { name = "numpy" },
     { name = "paperroute-device" },
+    { name = "paperroute-hardware" },
     { name = "pydantic" },
     { name = "python-json-logger" },
 ]
@@ -1203,6 +1204,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.3" },
     { name = "osmium", marker = "extra == 'tiles'", specifier = ">=4.3" },
     { name = "paperroute-device", editable = "packages/paperroute-device" },
+    { name = "paperroute-hardware", editable = "packages/paperroute-hardware" },
     { name = "pydantic", specifier = ">=2.12" },
     { name = "python-json-logger", specifier = ">=3.2" },
     { name = "shapely", marker = "extra == 'tiles'", specifier = ">=2.2" },

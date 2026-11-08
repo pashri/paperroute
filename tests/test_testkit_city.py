@@ -3,10 +3,12 @@
 import subprocess
 import sys
 from dataclasses import replace
+from pathlib import Path
 from typing import Final
 
 import pytest
 
+from paperroute_device.assets import AssetRoot, assets
 from paperroute_sydney.asset_root import APP_ASSETS
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.city_setting import (
@@ -50,9 +52,17 @@ def test_same_city_accepted() -> None:
 
 def test_second_city_refused() -> None:
     """Once Sydney is under test, another city cannot replace it."""
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match='different city'):
         use_city_under_test(
             city=replace(SYDNEY, name='Other'),
             assets=APP_ASSETS,
         )
     assert city_under_test() is SYDNEY
+
+
+def test_second_asset_root_refused(tmp_path: Path) -> None:
+    """The same city with another asset root is refused; nothing moves."""
+    with pytest.raises(ValueError, match='different asset root'):
+        use_city_under_test(city=SYDNEY, assets=AssetRoot(web=tmp_path))
+    assert city_under_test() is SYDNEY
+    assert assets() == APP_ASSETS

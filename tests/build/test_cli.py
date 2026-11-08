@@ -16,7 +16,12 @@ from paperroute_sydney.build.__main__ import SYDNEY_BUILD
 from paperroute_sydney.build.tfnsw_sources import TfnswDownloader
 from paperroute_sydney.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
 from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
-from paperroute_transit.build.cli import main, parse_args, run_check_tiles
+from paperroute_transit.build.cli import (
+    OneLine,
+    main,
+    parse_args,
+    run_check_tiles,
+)
 from paperroute_transit.build.sources import BuildParts, SourceSpec
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.tiles import TILE_STYLE
@@ -327,12 +332,29 @@ def test_check_tiles_unreadable(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
-    """A file that isn't a tiles database fails with none for each."""
+    """A file that isn't a tiles database fails in two plain lines."""
     out = tmp_path / 'tiles.db'
     out.write_bytes(b'not a database ' * 100)
     assert checked(path=out) == 1
     err = capsys.readouterr().err
+    assert err.startswith('tiles file unusable: file is not a database\n')
+    assert 'Traceback' not in err
+    assert len(err.splitlines()) == 2
     assert 'has zoom levels none, style none and origin none;' in err
+
+
+def test_one_line_keeps_a_plain_message() -> None:
+    """A record with no exception formats as its message alone."""
+    record = logging.LogRecord(
+        name='x',
+        level=logging.WARNING,
+        pathname=__file__,
+        lineno=1,
+        msg='%s file unusable',
+        args=('tiles',),
+        exc_info=None,
+    )
+    assert OneLine().format(record=record) == 'tiles file unusable'
 
 
 def test_check_tiles_from_the_command_line(tmp_path: Path) -> None:

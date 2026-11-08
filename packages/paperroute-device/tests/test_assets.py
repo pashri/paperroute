@@ -13,7 +13,7 @@ from paperroute_device.assets import AssetRoot, assets, use_assets
 NO_ROOT: Final[str] = (
     'from paperroute_device.assets import assets\n'
     'from paperroute_device.render.canvas import Face, font\n'
-    'font(Face(weight=400, px=16))\n'
+    'print(font(Face(weight=400, px=16)).getTypeface().getFamilyName())\n'
     'try:\n'
     '    assets()\n'
     'except RuntimeError as error:\n'
@@ -22,16 +22,22 @@ NO_ROOT: Final[str] = (
 
 
 def test_font_needs_no_asset_root() -> None:
-    """A font loads with no asset root set; the root is still unset."""
+    """
+    Overpass loads with no asset root set; the root is still unset.
+
+    Skia falls back to a system face without raising when a font file
+    is missing, so the family name is checked.
+    """
     result = subprocess.run(
         [sys.executable, '-c', NO_ROOT],
         check=True,
         capture_output=True,
         text=True,
     )
-    assert result.stdout.strip() == (
-        'no asset root: the app must call use_assets first'
-    )
+    assert result.stdout.splitlines() == [
+        'Overpass',
+        'no asset root: the app must call use_assets first',
+    ]
 
 
 def test_use_assets_rejects_a_second_root(tmp_path: Path) -> None:

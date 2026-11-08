@@ -123,7 +123,7 @@ def test_problems_flags_import_inside_function(
     ]
 
 
-def test_problems_tells_paperroute_from_paperroute_device(
+def test_problems_allows_kit_importing_itself(
     check_layers: ModuleType, tmp_path: Path,
 ) -> None:
     """A kit importing its own modules is no problem."""

@@ -52,7 +52,7 @@ KIT_TEXT: Final[frozenset[str]] = frozenset(
 )
 STOP_VIEW: Final[str] = 'paperroute_transit.core.stop_view'
 NSW: Final[re.Pattern[str]] = re.compile(r'(?i)\bnsw')
-KEY_SCHEME: Final[re.Pattern[str]] = re.compile(r'(?i)\bapikey\b')
+KEY_SCHEME: Final[re.Pattern[str]] = re.compile(r'(?i)\bapikey\b|BASE_URL')
 APP: Final[Path] = (
     ROOT / 'apps' / 'paperroute-sydney' / 'src' / 'paperroute_sydney'
 )
@@ -259,7 +259,6 @@ def absent(*, name: str) -> bool:
 def test_engine_lives_in_transit(module: str) -> None:
     """Each moved engine module is in transit and gone from the app."""
     assert find_spec(f'paperroute_transit.{module}') is not None
-    assert absent(name=f'paperroute.{module}')
     assert absent(name=f'paperroute_sydney.{module}')
 
 
@@ -566,7 +565,7 @@ def transit_texts() -> list[tuple[Path, str]]:
 
 
 def test_transit_names_no_tfnsw() -> None:
-    """No file of the transit package names TfNSW, NSW or its key scheme."""
+    """No transit file names TfNSW, NSW, its key scheme or `BASE_URL`."""
     texts = transit_texts()
     offenders = [
         str(path)
@@ -707,8 +706,8 @@ def app_module(*, path: Path) -> str:
     Returns
     -------
     str
-        The module name, such as ``paperroute_sydney.core.feeds``; a
-        package's ``__init__`` is named for the package.
+        The module name, such as ``paperroute_sydney.adapters.tfnsw``;
+        a package's ``__init__`` is named for the package.
     """
     parts = path.relative_to(APP.parent).with_suffix('').parts
     return '.'.join(parts[:-1] if parts[-1] == '__init__' else parts)

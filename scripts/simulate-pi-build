@@ -131,9 +131,6 @@ use_app_assets()
 purelib = Path(sysconfig.get_paths()['purelib'])
 packaged = purelib / 'paperroute_sydney' / 'assets'
 assert Path(str(APP_ASSETS.web)).is_relative_to(packaged), APP_ASSETS.web
-for weight in (400, 700, 800):
-    ttf = purelib / 'paperroute_device' / 'fonts' / f'Overpass-{weight}.ttf'
-    assert ttf.is_file(), ttf
 view = MenuView(clock='8:00', rows=('Wi-Fi', 'Device'), cursor=0, first=0)
 frame = draw_panel_view(view=view)
 assert frame.shape == (480, 800) and frame.min() == 0, frame.shape
@@ -218,7 +215,8 @@ EOF
 )
 no_root="from paperroute_device.assets import assets
 from paperroute_device.render.canvas import Face, font
-font(Face(weight=400, px=16))
+family = font(Face(weight=400, px=16)).getTypeface().getFamilyName()
+assert family == 'Overpass', family
 try:
     assets()
 except RuntimeError as error:

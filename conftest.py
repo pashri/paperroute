@@ -9,8 +9,8 @@ def pytest_configure(config: pytest.Config) -> None:
     """
     Set the city under test and its asset root before any test runs.
 
-    The app is imported here, not at the top, so that coverage, which
-    starts after this file loads, measures it.
+    Coverage starts before this file loads and before this hook runs,
+    so it measures the app imported here.
 
     Parameters
     ----------

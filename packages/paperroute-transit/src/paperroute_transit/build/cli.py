@@ -6,7 +6,8 @@ import logging
 import os
 import sqlite3
 import sys
-from collections.abc import Sequence
+from collections.abc import Iterator, Sequence
+from contextlib import contextmanager
 from dataclasses import asdict
 from datetime import date
 from pathlib import Path
@@ -315,6 +316,50 @@ def run_tiles(*, args: argparse.Namespace, city: City) -> int:
     return 0
 
 
+class OneLine(logging.Formatter):
+    """Format a record as its message and its exception's, on one line."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        """
+        Format the record without a traceback.
+
+        Parameters
+        ----------
+        record : logging.LogRecord
+            The record.
+
+        Returns
+        -------
+        str
+            The message, then the exception's message after a colon when
+            the record carries one.
+        """
+        message = record.getMessage()
+        if record.exc_info is not None and record.exc_info[1] is not None:
+            return f'{message}: {record.exc_info[1]}'
+        return message
+
+
+@contextmanager
+def one_line_logs() -> Iterator[None]:
+    """
+    Print log records to stderr on one line each while the block runs.
+
+    Yields
+    ------
+    None
+        Once, while the handler is attached to the root logger.
+    """
+    handler = logging.StreamHandler(stream=sys.stderr)
+    handler.setFormatter(OneLine())
+    root = logging.getLogger()
+    root.addHandler(handler)
+    try:
+        yield
+    finally:
+        root.removeHandler(handler)
+
+
 def run_check_tiles(*, args: argparse.Namespace, city: City) -> int:
     """
     Check a tiles file was built for this release and this city.
@@ -330,15 +375,17 @@ def run_check_tiles(*, args: argparse.Namespace, city: City) -> int:
     -------
     int
         Exit status: 0 when the zooms and style match and the origin, if
-        recorded, is the city's; 1 (after a message) otherwise.
+        recorded, is the city's; 1 (after a message) otherwise. A file
+        that cannot be read is reported in one line, with no traceback.
     """
     origin = city.projection.origin_text
-    tiles = SqliteTileRepository(path=args.path)
-    try:
-        fits = tiles.fits(origin=origin)
-        zooms, style, built_origin = tiles.built_for()
-    finally:
-        tiles.close()
+    with one_line_logs():
+        tiles = SqliteTileRepository(path=args.path)
+        try:
+            fits = tiles.fits(origin=origin)
+            zooms, style, built_origin = tiles.built_for()
+        finally:
+            tiles.close()
     if fits:
         return 0
     print(

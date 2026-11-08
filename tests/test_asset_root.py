@@ -10,7 +10,7 @@ from paperroute_device.adapters.web_frame import SHELL_WEB
 from paperroute_device.assets import assets
 from paperroute_sydney.asset_root import APP_ASSETS, use_app_assets
 from paperroute_testkit.paths import ROOT
-from paperroute_transit.adapters.board_web import BOARD_WEB
+from paperroute_transit.adapters.board_web import BOARD_WEB, board_path
 
 ASSET_ROOT: Final[Path] = (
     ROOT
@@ -190,6 +190,33 @@ def relative_files(*, root: Traversable, prefix: str = '') -> set[str]:
     return found
 
 
+def findable(*, called: str, name: str) -> bool:
+    """
+    Tell whether a web file is where its reader looks.
+
+    Parameters
+    ----------
+    called : str
+        The reader's name, a key of `READERS`.
+    name : str
+        The file's ``/``-separated path within a web directory.
+
+    Returns
+    -------
+    bool
+        True when the reader finds the file; the board readers look in
+        the app's web directory, then transit's, as `board_path` does.
+    """
+    if called.startswith('board_'):
+        try:
+            board_path(name=name)
+        except FileNotFoundError:
+            return False
+        else:
+            return True
+    return READERS[called].joinpath(*name.split('/')).is_file()
+
+
 def test_named_web_files_exist() -> None:
     """Every web file named in the source is where its reader looks."""
     calls = [
@@ -200,14 +227,19 @@ def test_named_web_files_exist() -> None:
     missing = [
         (called, name)
         for called, name in calls
-        if not READERS[called].joinpath(*name.split('/')).is_file()
+        if not findable(called=called, name=name)
     ]
     assert calls
     assert not missing
 
 
 def test_no_web_file_in_both_places() -> None:
-    """No web file is in more than one of the shell, transit and the app."""
+    """
+    No web file is in more than one of the shell, transit and the app.
+
+    This records Sydney's choice under Ruling 3: its web directory
+    overrides no transit board file. Another city may override one.
+    """
     shell = relative_files(root=SHELL_WEB)
     board = relative_files(root=BOARD_WEB)
     app = relative_files(root=APP_ASSETS.web)

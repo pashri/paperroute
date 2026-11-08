@@ -5,6 +5,7 @@ license = "MIT"
 requires-python = ">=3.14"
 dependencies = [
     "paperroute-device",
+    "paperroute-hardware",
     "aiohttp>=3.12",
     "gtfs-realtime-bindings>=1.0",
     "multidict>=6.0",
@@ -25,3 +26,4 @@ packages = ["src/paperroute_transit"]
 
 [tool.uv.sources]
 paperroute-device = { workspace = true }
+paperroute-hardware = { workspace = true }

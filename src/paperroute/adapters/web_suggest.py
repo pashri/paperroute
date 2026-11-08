@@ -75,6 +75,18 @@ GREYED: Final[str] = """
               <span class="tag">{tag}</span></li>"""
 
 
+def sydney_now() -> datetime:
+    """
+    Give the time now in Sydney.
+
+    Returns
+    -------
+    datetime
+        Aware Sydney time.
+    """
+    return datetime.now(SYDNEY_ZONE)
+
+
 @dataclass(frozen=True)
 class SuggestionRow:
     """
@@ -390,7 +402,7 @@ class SuggestPages:
     planner : TripPlanner | None
         The Trip Planner, or None when there is no key.
     now : Callable[[], datetime]
-        Gives the current time.
+        Gives the current time; Sydney's clock by default.
     skip_school : Callable[[], bool]
         Says whether journeys on a school bus are greyed.
     """
@@ -400,7 +412,7 @@ class SuggestPages:
         *,
         ways: WaysPages,
         planner: TripPlanner | None,
-        now: Callable[[], datetime],
+        now: Callable[[], datetime] = sydney_now,
         skip_school: Callable[[], bool] = lambda: True,
     ) -> None:
         self._ways = ways

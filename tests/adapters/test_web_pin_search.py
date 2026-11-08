@@ -7,7 +7,8 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.web_board import SydneyPages
+from paperroute.adapters.board_pages import PinPages
+from paperroute.adapters.web_board import SuggestPlug
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.pin_choices import StopMatch
@@ -38,10 +39,11 @@ async def _client() -> AsyncIterator[Client]:
     """
     display = WebDisplay(
         device=sydney_site().pages(),
-        board=SydneyPages(
+        board=PinPages(
             pins=lambda: None,
             options=FakePinOptions(found=(MATCH,)),
-            planner=None,
+            modes=SYDNEY.modes,
+            plug=SuggestPlug(planner=None),
         ),
         city=SYDNEY,
     )
@@ -82,7 +84,12 @@ async def test_stops_json_before_timetable() -> None:
     """Without a timetable the list is empty."""
     display = WebDisplay(
         device=sydney_site().pages(),
-        board=SydneyPages(pins=lambda: None, options=None, planner=None),
+        board=PinPages(
+            pins=lambda: None,
+            options=None,
+            modes=SYDNEY.modes,
+            plug=SuggestPlug(planner=None),
+        ),
         city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))
@@ -107,7 +114,12 @@ async def test_search_follows_school_switch() -> None:
     reported: dict[str, object] = {}
     display = WebDisplay(
         status=lambda: reported,
-        board=SydneyPages(pins=lambda: None, options=options, planner=None),
+        board=PinPages(
+            pins=lambda: None,
+            options=options,
+            modes=SYDNEY.modes,
+            plug=SuggestPlug(planner=None),
+        ),
         city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))

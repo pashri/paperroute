@@ -18,6 +18,10 @@ dependencies = [
     "paperroute-transit",
 ]
 
+[project.scripts]
+paperroute-board = "paperroute.__main__:main"
+paperroute-build = "paperroute.build.__main__:main"
+
 [build-system]
 requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
@@ -148,5 +152,6 @@ disable_warnings = ["module-not-imported", "no-data-collected"]
 omit = [
     "src/paperroute/adapters/tk_monitor.py",
     "src/paperroute/__main__.py",
+    "src/paperroute/board.py",
     "src/paperroute/build/__main__.py",
 ]

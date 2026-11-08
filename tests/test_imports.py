@@ -529,3 +529,76 @@ def test_imported_names_see_package_from_imports(tmp_path: Path) -> None:
     assert {'paperroute.city', 'paperroute.sydney_feeds'} <= (
         imported_names(path=path)
     )
+
+
+def engine_texts() -> list[tuple[Path, str]]:
+    """
+    Read the app's engine modules.
+
+    Returns
+    -------
+    list[tuple[Path, str]]
+        Each app module that is not one of Sydney's, not the asset root
+        and not a package ``__init__``, with its text.
+    """
+    return [
+        (path, path.read_text(encoding='utf-8'))
+        for path in sorted(APP.rglob('*.py'))
+        if app_module(path=path) not in SYDNEY_MODULES
+        and app_module(path=path) != 'paperroute.asset_root'
+        and path.name != '__init__.py'
+    ]
+
+
+def test_engine_names_no_city() -> None:
+    """No engine module names Sydney, TfNSW or NSW."""
+    texts = engine_texts()
+    offenders = [
+        str(path.relative_to(APP))
+        for path, text in texts
+        if 'sydney' in text.lower()
+        or 'tfnsw' in text.lower()
+        or NSW.search(text)
+    ]
+    assert texts
+    assert not offenders
+
+
+def defined_names(*, path: Path) -> list[str]:
+    """
+    List the names a module defines at its top level.
+
+    Parameters
+    ----------
+    path : Path
+        The source file.
+
+    Returns
+    -------
+    list[str]
+        Each function, class and assigned name, in order.
+    """
+    names: list[str] = []
+    for node in ast.parse(path.read_text(encoding='utf-8')).body:
+        if isinstance(
+            node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef,
+        ):
+            names.append(node.name)
+        elif isinstance(node, ast.AnnAssign | ast.Assign):
+            targets = (
+                [node.target] if isinstance(node, ast.AnnAssign)
+                else node.targets
+            )
+            names += [
+                target.id
+                for target in targets
+                if isinstance(target, ast.Name)
+            ]
+    return names
+
+
+def test_app_main_is_thin() -> None:
+    """The app's entry defines only Sydney's parts and main."""
+    assert defined_names(path=APP / '__main__.py') == [
+        'tfnsw_feeds', 'tfnsw_keys', 'SYDNEY_PARTS', 'main',
+    ]

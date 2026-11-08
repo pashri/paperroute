@@ -10,8 +10,9 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.board_pages import PinPages
 from paperroute.adapters.connection_editor import ALLOW_RANGE
-from paperroute.adapters.web_board import SydneyPages
+from paperroute.adapters.web_board import SuggestPlug
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_pin_edit import MISFIT
 from paperroute.city import SYDNEY
@@ -45,7 +46,12 @@ def _pins() -> Pins:
 @pytest.fixture(name='client')
 async def _client(pins: Pins) -> AsyncIterator[Client]:
     """A client of a display with the fake timetable."""
-    board = SydneyPages(pins=pins.get, options=OPTIONS, planner=None)
+    board = PinPages(
+        pins=pins.get,
+        options=OPTIONS,
+        modes=SYDNEY.modes,
+        plug=SuggestPlug(planner=None),
+    )
     board.pins_sleep = pins.sleep
     display = WebDisplay(
         device=sydney_site().pages(),
@@ -259,7 +265,12 @@ async def test_starting_without_timetable(pins: Pins) -> None:
     """Before the timetable is ready the page says so; saves go back."""
     display = WebDisplay(
         device=sydney_site().pages(),
-        board=SydneyPages(pins=pins.get, options=None, planner=None),
+        board=PinPages(
+            pins=pins.get,
+            options=None,
+            modes=SYDNEY.modes,
+            plug=SuggestPlug(planner=None),
+        ),
         city=SYDNEY,
     )
     client = TestClient(TestServer(display.app()))

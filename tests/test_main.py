@@ -10,7 +10,7 @@ import sqlite3
 import sys
 from collections.abc import Callable, Iterator
 from contextlib import closing
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import date, datetime
 from http import HTTPStatus
 from pathlib import Path
@@ -21,40 +21,49 @@ import numpy as np
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
-import paperroute.__main__ as cli
 import paperroute.adapters.tk_monitor as tk_monitor
-from paperroute.__main__ import (
+import paperroute.board as cli
+from paperroute.__main__ import SYDNEY_PARTS, main, tfnsw_feeds
+from paperroute.adapters.clocks import ReplayClock
+from paperroute.adapters.feed_files import FileFeedsClient
+from paperroute.adapters.feed_guard import GuardedFeeds
+from paperroute.adapters.network_db import SqliteNetworkRepository
+from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
+from paperroute.adapters.tfnsw import (
+    TFNSW_KEY,
+    AiohttpFeedsClient,
+    tfnsw_limiter,
+)
+from paperroute.adapters.timetable_db import SqliteTimetableRepository
+from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SuggestPlug
+from paperroute.adapters.web_display import WebDisplay
+from paperroute.app import Ports
+from paperroute.app_render import MapRenderer
+from paperroute.asset_root import APP_ASSETS
+from paperroute.board import (
+    CityParts,
+    board_display,
     builder_for,
+    device_for,
     device_pages_for,
     feeds_client,
-    main,
     parse_args,
     power_for,
     resets_for,
     seed_for,
     serve_or_exit,
     serve_web,
-    sydney_display,
     tiles_for,
     web_main,
     wifi_for,
 )
-from paperroute.adapters.clocks import ReplayClock
-from paperroute.adapters.feed_files import FileFeedsClient
-from paperroute.adapters.feed_guard import GuardedFeeds
-from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.adapters.rebuild import ChildRebuilder, NullBuilder
-from paperroute.adapters.tfnsw import AiohttpFeedsClient, tfnsw_limiter
-from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.adapters.web_board import SYDNEY_HINT
-from paperroute.adapters.web_display import WebDisplay
-from paperroute.app import Ports
-from paperroute.app_render import MapRenderer
 from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF, SYDNEY_ZONE
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
 from paperroute.core.messages import Event
+from paperroute.logs import LastError
 from paperroute.observers import Timings
+from paperroute.ports import FeedsClient
 from paperroute.render.map_base import draw_map_base
 from paperroute.summary import Summary
 from paperroute.web_observer import web_observer
@@ -62,6 +71,7 @@ from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.adapters.wifi import NmcliWifi, NullWifi
+from paperroute_device.core.device_model import DeviceKey
 from paperroute_device.render.canvas import INK
 from paperroute_hardware.adapters.knob_reader import KnobReader
 from paperroute_hardware.adapters.panel_display import Displays
@@ -122,7 +132,13 @@ def test_device_pages_only_for_live_feeds(
     args = argparse.Namespace(
         feeds='live', error_log=None, state=tmp_path / 'state.json',
     )
-    pages = device_pages_for(args=args, timings=timings, display=display)
+    pages = device_pages_for(
+        args=args,
+        timings=timings,
+        display=display,
+        city=SYDNEY,
+        parts=SYDNEY_PARTS,
+    )
     assert pages is not None
     served = web_app(live=display.live, device=pages).router.routes()
     bare = web_app(live=display.live, device=None).router.routes()
@@ -131,7 +147,11 @@ def test_device_pages_only_for_live_feeds(
     ) == 13
     args.feeds = str(tmp_path)
     assert device_pages_for(
-        args=args, timings=timings, display=display,
+        args=args,
+        timings=timings,
+        display=display,
+        city=SYDNEY,
+        parts=SYDNEY_PARTS,
     ) is None
 
 
@@ -145,7 +165,13 @@ async def test_device_pages_link_sydney_pages(
         feeds='live', error_log=None, state=tmp_path / 'state.json',
     )
     display = WebDisplay(status=timings.snapshot, city=SYDNEY)
-    pages = device_pages_for(args=args, timings=timings, display=display)
+    pages = device_pages_for(
+        args=args,
+        timings=timings,
+        display=display,
+        city=SYDNEY,
+        parts=SYDNEY_PARTS,
+    )
     assert pages is not None
     app = web_app(live=display.live, device=pages)
     client = TestClient(TestServer(app))
@@ -164,13 +190,15 @@ async def test_sydney_display_serves_sydney_nav_and_hint(
     tmp_path: Path,
 ) -> None:
     """The live page `/` links all four Sydney pages and shows the hint."""
-    display = sydney_display(
+    display = board_display(
         timings=Timings(),
         network=SqliteNetworkRepository(
             path=tmp_path / 'network.db',
             city=SYDNEY,
         ),
         live=False,
+        city=SYDNEY,
+        parts=SYDNEY_PARTS,
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()
@@ -360,10 +388,14 @@ def test_tiles_arguments_parse(monkeypatch: pytest.MonkeyPatch) -> None:
 
 def test_tiles_for_tolerates_a_missing_file(tmp_path: Path) -> None:
     """A missing tiles file opens as an empty build; no file gives none."""
-    with tiles_for(args=argparse.Namespace(tiles=tmp_path / 'no.db')) as tiles:
+    with tiles_for(
+        args=argparse.Namespace(tiles=tmp_path / 'no.db'), city=SYDNEY,
+    ) as tiles:
         assert isinstance(tiles, CheckedTiles)
         assert tiles.version() is None
-    with tiles_for(args=argparse.Namespace(tiles=None)) as tiles:
+    with tiles_for(
+        args=argparse.Namespace(tiles=None), city=SYDNEY,
+    ) as tiles:
         assert isinstance(tiles, NullTiles)
 
 
@@ -404,7 +436,9 @@ def test_mismatched_tiles_open_as_no_tiles(
     out = old_tiles(out=tmp_path / 'tiles.db')
     with (
         caplog.at_level(logging.WARNING),
-        tiles_for(args=argparse.Namespace(tiles=out)) as tiles,
+        tiles_for(
+            args=argparse.Namespace(tiles=out), city=SYDNEY,
+        ) as tiles,
     ):
         assert isinstance(tiles, NullTiles)
         assert closed == [True]
@@ -422,7 +456,9 @@ def test_tiles_installed_while_running_are_checked(
     out = tmp_path / 'tiles.db'
     with (
         caplog.at_level(logging.WARNING),
-        tiles_for(args=argparse.Namespace(tiles=out)) as tiles,
+        tiles_for(
+            args=argparse.Namespace(tiles=out), city=SYDNEY,
+        ) as tiles,
     ):
         assert tiles.version() is None
         old_tiles(out=out)
@@ -439,7 +475,9 @@ def test_matching_tiles_installed_while_running_are_read(
 ) -> None:
     """A matching file that appears after start-up is read."""
     out = tmp_path / 'tiles.db'
-    with tiles_for(args=argparse.Namespace(tiles=out)) as tiles:
+    with tiles_for(
+        args=argparse.Namespace(tiles=out), city=SYDNEY,
+    ) as tiles:
         assert tiles.version() is None
         with TileWriter(out=out) as writer:
             writer.finish(meta={
@@ -466,7 +504,9 @@ def test_mismatched_tiles_draw_map_not_installed(tmp_path: Path) -> None:
         projection=SYDNEY_PROJECTION,
     )
     out = old_tiles(out=tmp_path / 'tiles.db')
-    with tiles_for(args=argparse.Namespace(tiles=out)) as tiles:
+    with tiles_for(
+        args=argparse.Namespace(tiles=out), city=SYDNEY,
+    ) as tiles:
         grey = MapRenderer(tiles=tiles).cached(base=base)
     expected = draw_map_base(
         base=base,
@@ -613,6 +653,7 @@ async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
             seed=PIN,
             host='127.0.0.1',
             port=port,
+            city=SYDNEY,
             tick_every=0.01,
         )
     )
@@ -657,7 +698,12 @@ def test_web_main_logs_a_bind_failure(
         held.listen()
         args.port = held.getsockname()[1]
         with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as info:
-            web_main(args=args, feeds=FileFeedsClient(directory=REAL))
+            web_main(
+                args=args,
+                feeds=FileFeedsClient(directory=REAL),
+                city=SYDNEY,
+                parts=SYDNEY_PARTS,
+            )
     assert info.value.code == 1
     assert f'cannot serve on 127.0.0.1:{args.port}' in caplog.text
 
@@ -810,6 +856,7 @@ async def test_serve_web_posts_knob_events_then_stops_the_knobs(
             seed=PIN,
             host='127.0.0.1',
             port=free_port(),
+            city=SYDNEY,
             knobs=knobs,
         )
     assert seen == [KnobTurned(knob=Knob.TOP, steps=1)]
@@ -846,6 +893,7 @@ async def test_serve_web_passes_the_tiles_variant_to_run(
             seed=PIN,
             host='127.0.0.1',
             port=free_port(),
+            city=SYDNEY,
             tiles_variant=TileVariant.BITS,
         )
     assert seen == [TileVariant.BITS]
@@ -882,7 +930,7 @@ def test_serve_or_exit_passes_the_tiles_variant(
             network=FakeNetwork(),
             states=MemoryStates(),
         )
-        serve_or_exit(args=args, ports=ports, display=display)
+        serve_or_exit(args=args, ports=ports, display=display, city=SYDNEY)
     assert seen == [TileVariant.BITS]
 
 
@@ -938,7 +986,12 @@ def test_tk_main_passes_the_tiles_variant(
         version_file=None,
         feeds=str(REAL),
     )
-    cli.tk_main(args=args, feeds=FileFeedsClient(directory=REAL))
+    cli.tk_main(
+        args=args,
+        feeds=FileFeedsClient(directory=REAL),
+        city=SYDNEY,
+        parts=SYDNEY_PARTS,
+    )
     assert seen == [TileVariant.BITS]
     assert monitor.closed
 
@@ -970,6 +1023,7 @@ async def test_show_passes_the_tiles_variant_to_run(
             ports=ports,
             seed=PIN,
             monitor=cast('TkMonitor', FakeMonitor()),
+            city=SYDNEY,
             tiles_variant=TileVariant.BITS,
         )
     assert seen == [TileVariant.BITS]
@@ -980,7 +1034,7 @@ def test_live_feeds_are_guarded_and_share_the_tfnsw_limiter(
 ) -> None:
     """Live feeds back off on 429 and wait on the process's one limiter."""
     monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
-    client = feeds_client(choice='live')
+    client = feeds_client(choice='live', live=tfnsw_feeds)
     assert isinstance(client, GuardedFeeds)
     assert isinstance(client.inner, AiohttpFeedsClient)
     assert client.inner.limiter is tfnsw_limiter()
@@ -992,7 +1046,9 @@ def test_live_feeds_count_into_the_summary_given(
     """The live client reports its requests to the run summary."""
     monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
     summary = Summary()
-    client = feeds_client(choice='live', summary=summary)
+    client = feeds_client(
+        choice='live', live=tfnsw_feeds, summary=summary,
+    )
     assert isinstance(client, GuardedFeeds)
     assert client.summary is summary
 
@@ -1008,7 +1064,8 @@ def test_web_observer_feeds_frames_and_ticks_to_the_summary() -> None:
 
 def test_replayed_feeds_are_read_as_they_are(tmp_path: Path) -> None:
     """Replayed feeds need no guard."""
-    assert isinstance(feeds_client(choice=str(tmp_path)), FileFeedsClient)
+    client = feeds_client(choice=str(tmp_path), live=tfnsw_feeds)
+    assert isinstance(client, FileFeedsClient)
 
 
 def test_parse_args_selftest_needs_nothing(
@@ -1017,3 +1074,87 @@ def test_parse_args_selftest_needs_nothing(
     """The selftest command parses with no other arguments."""
     monkeypatch.setattr(sys, 'argv', ['paperroute', 'selftest'])
     assert parse_args().command == 'selftest'
+
+
+def test_feeds_client_calls_live_only_when_live(tmp_path: Path) -> None:
+    """Replayed feeds never make the live client; live feeds guard it."""
+    made: list[FeedsClient] = []
+
+    def live() -> FeedsClient:
+        """
+        Make a stand-in live client and note it.
+
+        Returns
+        -------
+        FeedsClient
+            A client reading the real recordings.
+        """
+        made.append(FileFeedsClient(directory=REAL))
+        return made[-1]
+
+    replayed = feeds_client(choice=str(tmp_path), live=live)
+    assert isinstance(replayed, FileFeedsClient)
+    assert not made
+    guarded = feeds_client(choice='live', live=live)
+    assert isinstance(guarded, GuardedFeeds)
+    assert made == [guarded.inner]
+
+
+async def test_sydney_parts_wire_sydney(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sydney's parts carry its nav, hint, assets, key and plug."""
+    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    assert SYDNEY_PARTS.nav == SYDNEY_NAV
+    assert SYDNEY_PARTS.hint == SYDNEY_HINT
+    assert SYDNEY_PARTS.assets == APP_ASSETS
+    assert [key.name for key in SYDNEY_PARTS.keys()] == ['tfnsw']
+    plug = SYDNEY_PARTS.suggest(live=False)
+    assert isinstance(plug, SuggestPlug)
+    await plug.close()
+
+
+def parts_with(*, keys: tuple[DeviceKey, ...]) -> CityParts:
+    """
+    Give Sydney's parts with other device keys.
+
+    Parameters
+    ----------
+    keys : tuple[DeviceKey, ...]
+        The keys.
+
+    Returns
+    -------
+    CityParts
+        The parts.
+    """
+    return replace(SYDNEY_PARTS, keys=lambda: keys)
+
+
+def test_device_for_uses_first_city_key(tmp_path: Path) -> None:
+    """Live feeds keep the city's first key; a city with none is refused."""
+    store = FakeKeys(key='k' * 32)
+    key = DeviceKey(name='city', credential=TFNSW_KEY, store=store)
+    args = argparse.Namespace(
+        feeds='live',
+        wifi=False,
+        power=False,
+        state=tmp_path / 'state.json',
+        timetable=tmp_path / 'timetable.db',
+        version_file=None,
+    )
+    last_error = LastError(zone=SYDNEY_ZONE)
+    device = device_for(
+        args=args,
+        tiles=NullTiles(),
+        last_error=last_error,
+        parts=parts_with(keys=(key,)),
+    )
+    assert device.key is store
+    with pytest.raises(ValueError, match='the city gives no device key'):
+        device_for(
+            args=args,
+            tiles=NullTiles(),
+            last_error=last_error,
+            parts=parts_with(keys=()),
+        )

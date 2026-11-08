@@ -12,7 +12,8 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SydneyPages
+from paperroute.adapters.board_pages import PinPages
+from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SuggestPlug
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_pins import (
     SEEN_POLL_S,
@@ -104,7 +105,12 @@ async def _client(
     *, pins: Pins, options: FakePinOptions | None = None,
 ) -> Client:
     """Start a client of a display wired to the fake pins."""
-    board = SydneyPages(pins=pins.get, options=options, planner=None)
+    board = PinPages(
+        pins=pins.get,
+        options=options,
+        modes=SYDNEY.modes,
+        plug=SuggestPlug(planner=None),
+    )
     board.pins_sleep = pins.sleep
     display = WebDisplay(
         device=sydney_site().pages(),
@@ -425,7 +431,12 @@ async def test_nav_has_pins_on_every_page(client: Client) -> None:
 async def test_pins_routes_refuse_other_peers(pins: Pins) -> None:
     """A peer outside the local network is refused."""
     display = WebDisplay(
-        board=SydneyPages(pins=pins.get, options=None, planner=None),
+        board=PinPages(
+            pins=pins.get,
+            options=None,
+            modes=SYDNEY.modes,
+            plug=SuggestPlug(planner=None),
+        ),
         remote_of=lambda request: '8.8.8.8',
         city=SYDNEY,
     )

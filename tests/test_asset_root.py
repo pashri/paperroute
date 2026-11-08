@@ -12,7 +12,7 @@ from paperroute_testkit.paths import ROOT
 
 ASSET_ROOT: Final[Path] = ROOT / 'src' / 'paperroute' / 'asset_root.py'
 ENTRY_POINTS: Final[tuple[Path, ...]] = (
-    ROOT / 'src' / 'paperroute' / '__main__.py',
+    ROOT / 'src' / 'paperroute' / 'board.py',
     ROOT / 'src' / 'paperroute' / 'build' / '__main__.py',
 )
 APP_FILES: Final[re.Pattern[str]] = re.compile(
@@ -79,9 +79,9 @@ def first_call(*, path: Path) -> str | None:
 
 
 def test_entry_points_set_assets() -> None:
-    """The app and the build command set the asset root first."""
+    """The board and the build command set the asset root first."""
     assert [first_call(path=path) for path in ENTRY_POINTS] == [
-        'use_app_assets',
+        'use_assets',
         'use_app_assets',
     ]
 

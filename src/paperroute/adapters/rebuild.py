@@ -18,6 +18,7 @@ CHILD_OOM_SCORE: Final[bytes] = b'1000'
 MEMINFO: Final[Path] = Path('/proc/meminfo')
 OOM_SCORE_ADJ: Final[str] = '/proc/self/oom_score_adj'
 KIB: Final[int] = 1024
+BUILD_SCRIPT: Final[str] = 'paperroute-build'
 
 
 def mem_available(*, meminfo: Path = MEMINFO) -> int | None:
@@ -95,6 +96,8 @@ def refresh_command(
     """
     Give the command that refreshes a timetable file.
 
+    It runs the build script installed beside the running interpreter.
+
     Parameters
     ----------
     timetable : Path
@@ -108,9 +111,7 @@ def refresh_command(
         The command line.
     """
     command = (
-        sys.executable,
-        '-m',
-        'paperroute.build',
+        str(Path(sys.executable).parent / BUILD_SCRIPT),
         'refresh',
         '--data-dir',
         str(timetable.parent),

@@ -8,6 +8,7 @@ import signal
 import sys
 import time
 from pathlib import Path
+from typing import Final
 
 import pytest
 
@@ -21,6 +22,8 @@ from paperroute.adapters.rebuild import (
     refresh_command,
     refresh_env,
 )
+
+BUILD_SCRIPT: Final[Path] = Path(sys.executable).parent / 'paperroute-build'
 
 
 def child(*, code: str) -> ChildRebuilder:
@@ -132,9 +135,7 @@ def test_refresh_command_shape() -> None:
     timetable = Path('/var/lib/paperroute/timetable.db')
     error_log = Path('/var/lib/paperroute/log/errors.jsonl')
     assert refresh_command(timetable=timetable, error_log=error_log) == (
-        sys.executable,
-        '-m',
-        'paperroute.build',
+        str(BUILD_SCRIPT),
         'refresh',
         '--data-dir',
         '/var/lib/paperroute',
@@ -147,6 +148,23 @@ def test_refresh_command_shape() -> None:
     assert refresh_env(timetable=timetable)['TMPDIR'] == (
         '/var/lib/paperroute/work'
     )
+
+
+def test_refresh_runs_build_script() -> None:
+    """The refresh is the build script beside the running interpreter."""
+    assert refresh_command(
+        timetable=Path('/d/timetable.db'), error_log=None,
+    ) == (
+        str(Path(sys.executable).parent / 'paperroute-build'),
+        'refresh',
+        '--data-dir',
+        '/d',
+    )
+
+
+def test_build_script_installed() -> None:
+    """The build script is installed beside the interpreter."""
+    assert BUILD_SCRIPT.exists()
 
 
 async def test_child_rebuilder_force_flag(tmp_path: Path) -> None:

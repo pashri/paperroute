@@ -59,7 +59,7 @@ def alert_feeds(*, state: State) -> tuple[str, ...]:
     if (
         agency is not None
         and agency_asked(agency=agency, plan=plan, sources=sources)
-        and trainlink_known(state=state, pin=pin)
+        and agency_known(state=state, pin=pin)
     ):
         sources.add(agency.source)
     return plan.alert_feeds(sources=sources)
@@ -91,7 +91,7 @@ def agency_asked(
     )
 
 
-def trainlink_known(*, state: State, pin: Pin) -> bool:
+def agency_known(*, state: State, pin: Pin) -> bool:
     """
     Say whether the timetable said the agency alerts source serves a pin.
 

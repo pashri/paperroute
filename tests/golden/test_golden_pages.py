@@ -8,9 +8,10 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.board_pages import PinPages
 from paperroute.adapters.settings_form import form_values
 from paperroute.adapters.tfnsw import TFNSW_KEY
-from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SydneyPages
+from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SuggestPlug
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.sydney_feeds import DAILY_LIMIT, feed_label
@@ -82,11 +83,13 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
         device=device,
         nav=SYDNEY_NAV,
         hint=SYDNEY_HINT,
-        board=SydneyPages(
+        board=PinPages(
             pins=Pins(pins=(WORK, HOME, ODD)).get,
             options=PLATFORMS,
-            planner=FakeTripPlanner(),
-            now=lambda: SEARCH_NOW,
+            modes=SYDNEY.modes,
+            plug=SuggestPlug(
+                planner=FakeTripPlanner(), now=lambda: SEARCH_NOW,
+            ),
         ),
         city=SYDNEY,
     )

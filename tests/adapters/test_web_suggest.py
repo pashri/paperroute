@@ -307,3 +307,24 @@ async def test_direct_journey_not_pickable() -> None:
     assert '<li class="greyed">' in text
     assert 'Direct trips always show on the panel.' in text
     assert 'name="pick"' not in text
+
+
+async def test_list_names_its_endpoint_and_failure() -> None:
+    """The card's list and a list alone name the endpoint and failure."""
+    query = urlencode([*SEARCH, ('part', 'suggestions')])
+    client = await started(planner=FakeTripPlanner(journeys=(GOOD,)))
+    try:
+        card = await (await client.get(
+            '/pins/ways?from=G2145615&to=214510',
+        )).text()
+        alone = await (
+            await client.get(f'/pins/ways/suggest?{query}')
+        ).text()
+    finally:
+        await client.close()
+    for text in (card, alone):
+        assert 'data-suggest-url="/pins/ways/suggest"' in text
+        assert (
+            'data-failure="Trip Planner didn&#x27;t answer.'
+            ' Try again in a minute."'
+        ) in text

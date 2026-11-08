@@ -84,7 +84,7 @@ def search_page(
     skip_school : bool
         Whether school routes are left out of each stop's routes.
     head : BoardHead
-        The extra stylesheets the page links.
+        The extra stylesheets and scripts the page links, and its nav.
 
     Returns
     -------

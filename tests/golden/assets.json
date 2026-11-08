@@ -74,7 +74,7 @@
   "/suggest.js": {
     "cache_control": null,
     "content_type": "text/javascript; charset=utf-8",
-    "sha256": "bb3b3d367c30bb8d96d74b94c299f650e365a85876d27622ac21f6b3a7259dec",
+    "sha256": "788cfdf61beabdb8d68247d54da52338629e411db122363009f45450dd7548ed",
     "status": 200
   },
   "/vendor/..%2Fdevice.html": {

@@ -1,5 +1,6 @@
 """Tests for the pin pages and their suggestion plug."""
 
+import re
 from collections.abc import Callable
 from http import HTTPStatus
 
@@ -9,10 +10,12 @@ from multidict import MultiMapping
 
 from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.board_pages import PagePlug, PinPages
+from paperroute.adapters.web_board import PINS_NAV
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_ways import WaysPages
 from paperroute.city import SYDNEY
 from paperroute.core.messages import Event
+from paperroute_device.adapters.web_frame import LIVE_NAV
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.core.model import pin_ref
@@ -22,6 +25,8 @@ from tests.adapters.test_web_pins import Pins
 
 Client = TestClient[web.Request, web.Application]
 PLUGGED = '<p id="plugged">'
+SUGGEST_LINE = '  <script type="module" src="/suggest.js"></script>\n'
+WAYS_LINE = '  <script type="module" src="/ways.js"></script>\n'
 
 
 class PluggedCard:
@@ -174,3 +179,71 @@ async def test_pin_pages_close_without_a_plug() -> None:
         head=BoardHead(),
         pins=lambda: None, options=None, modes=SYDNEY.modes, plug=None,
     ).close()
+
+
+def nav_links(*, page: str) -> list[tuple[str, bool]]:
+    """
+    List a page's nav links.
+
+    Parameters
+    ----------
+    page : str
+        The page's HTML.
+
+    Returns
+    -------
+    list[tuple[str, bool]]
+        Each link's href, and whether it is marked current.
+    """
+    found = re.search(r'<nav\b.*?</nav>', page, flags=re.DOTALL)
+    assert found is not None
+    return [
+        (href, bool(mark))
+        for href, mark in re.findall(
+            r'<a href="([^"]*)"( aria-current="page")?>', found.group(0),
+        )
+    ]
+
+
+async def test_scripts_follow_the_plug() -> None:
+    """Only a plug names the suggestion script and serves it."""
+    for plug in (RecordingPlug(), None):
+        board = PinPages(
+            head=BoardHead(),
+            pins=lambda: None, options=OPTIONS, modes=SYDNEY.modes,
+            plug=plug,
+        )
+        client = await started(board=board)
+        try:
+            page = await (await client.get('/pins/new')).text()
+            script = await client.get('/suggest.js')
+        finally:
+            await client.close()
+        if plug is not None:
+            assert SUGGEST_LINE in page
+            assert script.status == HTTPStatus.OK
+            assert script.content_type == 'text/javascript'
+        else:
+            assert 'suggest.js' not in page
+            assert f'{WAYS_LINE}</head>' in page
+            assert script.status == HTTPStatus.NOT_FOUND
+
+
+async def test_board_nav_comes_from_the_city() -> None:
+    """The pins page and the editor list the city's links, Pins current."""
+    pins = Pins(pins=(WORK,))
+    board = PinPages(
+        head=BoardHead(nav=(LIVE_NAV, PINS_NAV)),
+        pins=pins.get, options=OPTIONS, modes=SYDNEY.modes, plug=None,
+    )
+    board.pins_sleep = pins.sleep
+    client = await started(board=board)
+    try:
+        pages = [
+            await (await client.get(path)).text()
+            for path in ('/pins', '/pins/new')
+        ]
+    finally:
+        await client.close()
+    for page in pages:
+        assert nav_links(page=page) == [('/', False), ('/pins', True)]

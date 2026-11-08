@@ -504,7 +504,7 @@ class WaysPages:
     card : CardOf
         Draws the Trip Planner controls for a query.
     head : BoardHead
-        The extra stylesheets each page links.
+        The extra stylesheets and scripts each page links, and its nav.
     """
 
     def __init__(

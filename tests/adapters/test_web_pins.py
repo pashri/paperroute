@@ -107,7 +107,7 @@ async def _client(
 ) -> Client:
     """Start a client of a display wired to the fake pins."""
     board = PinPages(
-        head=BoardHead(),
+        head=BoardHead(nav=SYDNEY_NAV),
         pins=pins.get,
         options=options,
         modes=SYDNEY.modes,

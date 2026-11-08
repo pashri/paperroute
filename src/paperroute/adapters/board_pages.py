@@ -2,7 +2,8 @@
 
 import asyncio
 from collections.abc import Awaitable, Callable, Mapping, Sequence
-from typing import Protocol
+from dataclasses import replace
+from typing import Final, Protocol
 
 from aiohttp import web
 from multidict import MultiMapping
@@ -14,7 +15,10 @@ from paperroute.adapters.web_ways import WaysPages
 from paperroute.core.messages import Event
 from paperroute.observers import PinsSeen
 from paperroute.ports import PinOptions
+from paperroute_device.adapters.web_common import asset
 from paperroute_transit.core.modes import ModeSpec
+
+SUGGEST_SCRIPT: Final[str] = 'suggest.js'
 
 
 class PagePlug(Protocol):
@@ -72,9 +76,32 @@ class WaysPlug(Protocol):
         """Release anything the plug holds open."""
 
 
+async def suggest_script(request: web.Request) -> web.Response:
+    """
+    Serve the suggestion script.
+
+    Parameters
+    ----------
+    request : web.Request
+        The incoming request.
+
+    Returns
+    -------
+    web.Response
+        The script.
+    """
+    del request
+    return web.Response(
+        text=asset(name=SUGGEST_SCRIPT), content_type='text/javascript',
+    )
+
+
 class PinPages:
     """
     The pin, connection and ways pages, and a plug's pages after them.
+
+    With a plug, the pin editor also loads the suggestion script, served
+    after the plug's own routes.
 
     Parameters
     ----------
@@ -87,7 +114,7 @@ class PinPages:
     plug : WaysPlug | None
         Adds pages and the ways page's card, or None for neither.
     head : BoardHead
-        The extra stylesheets every page links.
+        The extra stylesheets and scripts every page links, and its nav.
 
     Attributes
     ----------
@@ -108,7 +135,11 @@ class PinPages:
         self._options = options
         self._modes = modes
         self._plug = plug
-        self._head = head
+        self._head = (
+            head
+            if plug is None
+            else replace(head, scripts=(*head.scripts, SUGGEST_SCRIPT))
+        )
         self.pins_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
 
     def routes(
@@ -172,7 +203,11 @@ class PinPages:
                 pins=self._pins, options=self._options, head=self._head,
             ).routes(),
             *ways.routes(),
-            *(plugged.routes() if plugged is not None else []),
+            *(
+                [*plugged.routes(), web.get('/suggest.js', suggest_script)]
+                if plugged is not None
+                else []
+            ),
         ]
 
     async def close(self) -> None:

@@ -1,24 +1,36 @@
-const SUGGEST_URL = '/pins/ways/suggest';
-const FAILURE = "Trip Planner didn't answer. Try again in a minute.";
-
 /**
  * Build the address that asks for the suggestion list alone.
- * @param {HTMLFormElement} form The ways page's form.
+ * @param {HTMLFormElement} form The ways page's form, whose
+ *   `[data-suggestions]` list names the endpoint in `data-suggest-url`.
  * @param {string} page `earlier`, `later` or '' for the search typed.
  * @returns {string} The GET address with `part=suggestions`.
  */
 export function suggestionsUrl(form, page = '') {
+  const list = form.querySelector('[data-suggestions]');
   const params = new URLSearchParams(new FormData(form));
   params.set('part', 'suggestions');
   if (page) {
     params.set('page', page);
   }
-  return `${SUGGEST_URL}?${params}`;
+  return `${list.dataset.suggestUrl}?${params}`;
 }
 
 /**
- * Fetch the suggestion list and swap it in, or show the failure line.
- * The form's inputs are never changed.
+ * Replace a list's contents with its failure line, as plain text.
+ * @param {HTMLElement} list The `[data-suggestions]` list, whose
+ *   `data-failure` holds the line.
+ * @returns {void}
+ */
+function showFailure(list) {
+  const line = document.createElement('p');
+  line.className = 'failure';
+  line.textContent = list.dataset.failure;
+  list.replaceChildren(line);
+}
+
+/**
+ * Fetch the suggestion list and swap it in, or show the list's failure
+ * line. The form's inputs are never changed.
  * @param {HTMLFormElement} form The ways page's form.
  * @param {string} page `earlier`, `later` or '' for the search typed.
  * @returns {Promise<void>} Settles once the list is replaced.
@@ -32,7 +44,7 @@ export async function loadSuggestions(form, page = '') {
     }
     list.outerHTML = await response.text();
   } catch {
-    list.innerHTML = `<p class="failure">${FAILURE}</p>`;
+    showFailure(list);
   }
 }
 

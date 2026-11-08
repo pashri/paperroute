@@ -112,8 +112,8 @@ def page_html(*, notice: str, body: str, head: BoardHead) -> str:
     body : str
         The HTML of the list, or of a confirmation.
     head : BoardHead
-        The extra stylesheets the page links; filled first, so text
-        that reads like its mark stays as text.
+        The page's extra stylesheets and its nav; filled first, so text
+        that reads like their marks stays as text.
 
     Returns
     -------
@@ -121,7 +121,7 @@ def page_html(*, notice: str, body: str, head: BoardHead) -> str:
         The page.
     """
     return (
-        head.fill(page=asset(name='pins.html'))
+        head.fill(page=asset(name='pins.html'), current='/pins')
         .replace('{{notice}}', notice)
         .replace('{{pins}}', body)
     )
@@ -271,7 +271,7 @@ def confirm_page(*, pin: Pin, ref: str, head: BoardHead) -> web.Response:
     ref : str
         Its ref.
     head : BoardHead
-        The extra stylesheets the page links.
+        The extra stylesheets and scripts the page links, and its nav.
 
     Returns
     -------
@@ -304,7 +304,7 @@ class PinsPages:
     skip_school : Callable[[], bool]
         Says whether the stop search leaves school routes out.
     head : BoardHead
-        The extra stylesheets each page links.
+        The extra stylesheets and scripts each page links, and its nav.
     """
 
     def __init__(

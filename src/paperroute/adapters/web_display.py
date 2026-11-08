@@ -184,7 +184,7 @@ class WebDisplay:
     board : BoardRoutes | None
         The board's own pages, such as pins, or None.
     nav : Sequence[NavItem]
-        The live page's nav links, in order.
+        The live and settings pages' nav links, in order.
     hint : str
         The live page's knob hint lines, indented; trusted markup.
     status_line : StatusLine | None
@@ -217,7 +217,7 @@ class WebDisplay:
     ) -> None:
         self.defaults = default_settings(city=city)
         self._modes = city.modes
-        self._head = BoardHead(sheets=tuple(sheets))
+        self._head = BoardHead(sheets=tuple(sheets), nav=tuple(nav))
         self._status = status
         self._status_line = status_line
         self.device = device
@@ -472,7 +472,9 @@ class WebDisplay:
         if self._posted.items() <= status.items() or status != self._before:
             self._posted = {}
         page = page_text(
-            template=self._head.fill(page=asset(name='settings.html')),
+            template=self._head.fill(
+                page=asset(name='settings.html'), current='/settings',
+            ),
             values={**status, **self._posted},
             error=request.query.get('error'),
         )

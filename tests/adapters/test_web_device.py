@@ -9,6 +9,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_board import SYDNEY_NAV
 from paperroute.adapters.web_display import RESET_HINT, WebDisplay
@@ -233,8 +234,11 @@ def test_nav_on_every_page(name: str, current: str | None) -> None:
     text = (
         page_frame(name=name, nav=SYDNEY_NAV, current=current)
         if name in SHELL_PAGES
-        else (files('paperroute') / 'assets' / 'web' / name).read_text(
-            encoding='utf-8',
+        else BoardHead(nav=SYDNEY_NAV).fill(
+            page=(files('paperroute') / 'assets' / 'web' / name).read_text(
+                encoding='utf-8',
+            ),
+            current=current,
         )
     )
     page = parse_page(text=text)

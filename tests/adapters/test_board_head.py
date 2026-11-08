@@ -28,3 +28,22 @@ def test_pin_name_with_sheets_mark_stays_text() -> None:
         page
     )
     assert page.count('/palette.css') == 1
+
+
+def test_bad_script_name_refused() -> None:
+    """A script name that is not a plain `.js` file is refused."""
+    with pytest.raises(ValueError, match='script'):
+        BoardHead(scripts=('../x.js',))
+
+
+def test_pin_name_with_scripts_mark_stays_text() -> None:
+    """A body reading like the scripts or nav mark stays as written."""
+    page = edit_page(
+        title='Edit pin',
+        notice='',
+        body='<p>{{scripts}} {{nav}}</p>',
+        head=BoardHead(scripts=('suggest.js',)),
+    )
+    assert '<p>{{scripts}} {{nav}}</p>' in page
+    assert page.count('<script type="module" src="/suggest.js"></script>') == 1
+    assert page.count('<nav ') == 1

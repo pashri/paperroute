@@ -412,7 +412,7 @@ class ConnectionPages:
     options : PinOptions | None
         The timetable's choices for the editor, or None.
     head : BoardHead
-        The extra stylesheets each page links.
+        The extra stylesheets and scripts each page links, and its nav.
     """
 
     def __init__(

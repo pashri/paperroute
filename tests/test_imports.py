@@ -457,6 +457,17 @@ def test_web_display_imports_no_board_pages() -> None:
     assert 'SYDNEY' not in path.read_text(encoding='utf-8')
 
 
+def test_board_pages_hold_no_nav_markup() -> None:
+    """The board's page files leave their nav to the city."""
+    pages = sorted((APP / 'assets' / 'web').glob('*.html'))
+    assert pages
+    assert [
+        page.name
+        for page in pages
+        if '<nav' in page.read_text(encoding='utf-8')
+    ] == []
+
+
 def default_built(*, call: ast.Call) -> str | None:
     """
     Name a settings or saved state built without the city's values.

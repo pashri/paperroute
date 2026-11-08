@@ -17,13 +17,22 @@ globalThis.FormData = class {
 const results = {};
 const forms = [];
 globalThis.document = {
+  createElement: (tag) => ({ tagName: tag.toUpperCase(), className: '', textContent: '' }),
   querySelectorAll: (selector) => {
     results.selector = selector;
     return [{ closest: () => { const f = { addEventListener: (type) => { results.listens = type; } }; forms.push(f); return f; } }];
   },
 };
 const mod = await import(pathToFileURL(process.argv[2]).href);
-const list = { outerHTML: '<div data-suggestions></div>', innerHTML: '' };
+const list = {
+  outerHTML: '<div data-suggestions></div>',
+  dataset: { suggestUrl: '/x/suggest', failure: 'No <b>answer</b>' },
+  children: [],
+  replaceChildren(...children) { this.children = children; },
+};
+const shown = () => list.children.map(
+  (child) => [child.tagName, child.className, child.textContent],
+);
 const day = { value: '2026-10-28' };
 const form = {
   fields: [['from', 'A'], ['day', day.value]],
@@ -37,23 +46,20 @@ await mod.loadSuggestions(form, 'later');
 results.swapped = list.outerHTML;
 globalThis.fetch = async () => { throw new Error('offline'); };
 await mod.loadSuggestions(form);
-results.failed = list.innerHTML;
-list.innerHTML = '';
+results.failed = shown();
+list.children = [];
 globalThis.fetch = async () => ({ ok: false, status: 429 });
 await mod.loadSuggestions(form);
-results.limited = list.innerHTML;
+results.limited = shown();
 results.day = day.value;
 console.log(JSON.stringify(results));
 """
-FAILURE = (
-    '<p class="failure">'
-    "Trip Planner didn't answer. Try again in a minute.</p>"
-)
+FAILURE = [['P', 'failure', 'No <b>answer</b>']]
 
 
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_load_suggestions_in_node(tmp_path: Path) -> None:
-    """The list is swapped in; a failed fetch shows the failure line."""
+    """The list is swapped in; a failed fetch shows the list's failure text."""
     web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'suggest.mjs'
     script.write_text(
@@ -72,7 +78,7 @@ def test_load_suggestions_in_node(tmp_path: Path) -> None:
         'selector': '[data-suggestions]',
         'listens': 'click',
         'url': (
-            '/pins/ways/suggest?from=A&day=2026-10-28'
+            '/x/suggest?from=A&day=2026-10-28'
             '&part=suggestions&page=later'
         ),
         'found': '[data-suggestions]',

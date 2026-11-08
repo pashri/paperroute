@@ -1084,7 +1084,7 @@ def board_display(
             options=SqlitePinOptions(network=network),
             modes=city.modes,
             plug=parts.suggest(live=live),
-            head=BoardHead(sheets=parts.sheets),
+            head=BoardHead(sheets=parts.sheets, nav=parts.nav),
         ),
     )
 

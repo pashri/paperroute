@@ -94,7 +94,7 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
             plug=SuggestPlug(
                 planner=FakeTripPlanner(), now=lambda: SEARCH_NOW,
             ),
-            head=BoardHead(sheets=('palette.css',)),
+            head=BoardHead(sheets=('palette.css',), nav=SYDNEY_NAV),
         ),
         city=SYDNEY,
     )

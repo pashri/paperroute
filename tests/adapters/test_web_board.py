@@ -5,6 +5,7 @@ from importlib.resources import files
 
 import pytest
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.web_board import (
     SYDNEY_NAV,
     SuggestPlug,
@@ -54,13 +55,15 @@ def test_sydney_status_line_matches_old_js() -> None:
     ('pins.html', '/pins'),
     ('pin-edit.html', '/pins'),
 ])
-def test_sydney_nav_matches_board_templates(
+def test_sydney_nav_drawn_into_board_templates(
     name: str, current: str
 ) -> None:
-    """The app's own templates carry exactly the nav Sydney gives the kit."""
+    """Each board template draws exactly the nav Sydney gives the kit."""
     text = (files('paperroute') / 'assets' / 'web' / name).read_text(
         encoding='utf-8',
     )
-    found = re.search(r'<nav\b.*?</nav>', text, flags=re.DOTALL)
+    page = BoardHead(nav=SYDNEY_NAV).fill(page=text, current=current)
+    found = re.search(r'<nav\b.*?</nav>', page, flags=re.DOTALL)
+    assert text.count('\n  {{nav}}\n') == 1
     assert found is not None
     assert found.group(0) == nav_html(items=SYDNEY_NAV, current=current)

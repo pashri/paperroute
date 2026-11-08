@@ -21,7 +21,6 @@ from paperroute.core.trip_search import (
 )
 from paperroute.planner_port import TripPlanner
 from paperroute.ports import PinOptions
-from paperroute_device.adapters.web_common import asset
 from paperroute_transit.core.model import MAX_CHANGES, StopPlace
 
 FAILURE: Final[str] = "Trip Planner didn't answer. Try again in a minute."
@@ -52,7 +51,9 @@ CONTROLS: Final[str] = """
           </p>
         </fieldset>"""
 LIST: Final[str] = """
-        <div class="suggestions" aria-live="polite" data-suggestions>{body}
+        <div class="suggestions" aria-live="polite" data-suggestions
+             data-suggest-url="/pins/ways/suggest"
+             data-failure="{failure}">{body}
         </div>"""
 EDGES: Final[str] = """
           <input type="hidden" name="first" value="{first}">
@@ -73,6 +74,24 @@ PICK: Final[str] = """
 GREYED: Final[str] = """
             <li class="greyed"><span class="journey">{text}</span>
               <span class="tag">{tag}</span></li>"""
+
+
+def list_div(*, body: str) -> str:
+    """
+    Wrap a suggestion list's body in the list the script fills.
+
+    Parameters
+    ----------
+    body : str
+        The list's HTML.
+
+    Returns
+    -------
+    str
+        The list, naming its endpoint and its failure line for the
+        script.
+    """
+    return LIST.format(body=body, failure=html.escape(FAILURE))
 
 
 def sydney_now() -> datetime:
@@ -358,7 +377,7 @@ def list_html(
         The list with Earlier and Later, or the empty line.
     """
     if not journeys:
-        return LIST.format(body=f'\n          <p>{NO_TRIPS}</p>')
+        return list_div(body=f'\n          <p>{NO_TRIPS}</p>')
     rows = ''.join(
         row_html(row=school_row(
             row=row_of(options=options, journey=journey),
@@ -370,7 +389,7 @@ def list_html(
     last = max(journey.legs[0].departs for journey in journeys)
     body = EDGES.format(first=first.isoformat(), last=last.isoformat())
     body += f'\n          <ol class="journeys">{rows}\n          </ol>'
-    return LIST.format(body=body + PAGE_BUTTONS)
+    return list_div(body=body + PAGE_BUTTONS)
 
 
 def failure_html(*, line: str = FAILURE) -> str:
@@ -388,7 +407,7 @@ def failure_html(*, line: str = FAILURE) -> str:
         The list holding only the failure line.
     """
     text = html.escape(line, quote=False)
-    return LIST.format(body=f'\n          <p class="failure">{text}</p>')
+    return list_div(body=f'\n          <p class="failure">{text}</p>')
 
 
 class SuggestPages:
@@ -427,12 +446,9 @@ class SuggestPages:
         Returns
         -------
         list[web.RouteDef]
-            The suggestions and their script.
+            The suggestions.
         """
-        return [
-            web.get('/pins/ways/suggest', self._suggest),
-            web.get('/suggest.js', self._script),
-        ]
+        return [web.get('/pins/ways/suggest', self._suggest)]
 
     def card(self, query: MultiMapping[str]) -> str:
         """
@@ -450,26 +466,7 @@ class SuggestPages:
         """
         search = search_of(query=query, now=self._now())
         return controls(search=search) + SUGGEST.format(
-            suggestions=LIST.format(body=''),
-        )
-
-    async def _script(self, request: web.Request) -> web.Response:
-        """
-        Serve the suggestion script.
-
-        Parameters
-        ----------
-        request : web.Request
-            The incoming request.
-
-        Returns
-        -------
-        web.Response
-            The script.
-        """
-        del request
-        return web.Response(
-            text=asset(name='suggest.js'), content_type='text/javascript',
+            suggestions=list_div(body=''),
         )
 
     async def _suggest(self, request: web.Request) -> web.Response:

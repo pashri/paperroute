@@ -15,14 +15,14 @@ from aiohttp import ClientResponse, web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.settings_form import ERRORS
-from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
+from paperroute.adapters.web_board import SETTINGS_NAV, SYDNEY_HINT, SYDNEY_NAV
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.city import SYDNEY
 from paperroute.core.messages import Event, SettingsChanged
 from paperroute.core.saved import LiveView, Lookahead, Rate
 from paperroute.core.state import step
 from paperroute_device.adapters import web_live
-from paperroute_device.adapters.web_frame import SHELL_WEB
+from paperroute_device.adapters.web_frame import LIVE_NAV, SHELL_WEB
 from paperroute_device.adapters.web_live import knob_event, live_page
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
@@ -553,6 +553,23 @@ async def test_settings_page_links_sheets_once() -> None:
         '  <link rel="stylesheet" href="/palette.css">\n'
         '  <link rel="stylesheet" href="/board.css">\n'
     ) in text
+
+
+async def test_settings_nav_comes_from_the_city() -> None:
+    """The settings page lists the city's links, Settings current."""
+    display = WebDisplay(
+        status=dict, city=SYDNEY, nav=(LIVE_NAV, SETTINGS_NAV),
+    )
+    client = await _client(display=display)
+    try:
+        text = await (await client.get('/settings')).text()
+    finally:
+        await client.close()
+    found = re.search(r'<nav\b.*?</nav>', text, flags=re.DOTALL)
+    assert found is not None
+    assert re.findall(
+        r'<a href="([^"]*)"( aria-current="page")?>', found.group(0),
+    ) == [('/', ''), ('/settings', ' aria-current="page"')]
 
 
 async def test_settings_page_has_connection_map() -> None:

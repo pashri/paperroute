@@ -507,8 +507,8 @@ def edit_page(
         The Delete card's HTML after the editor's card, or an empty
         string.
     head : BoardHead
-        The extra stylesheets the page links; filled first, so text
-        that reads like its mark stays as text.
+        The page's extra stylesheets, its scripts and its nav; filled
+        first, so text that reads like their marks stays as text.
 
     Returns
     -------
@@ -516,7 +516,7 @@ def edit_page(
         The page.
     """
     return (
-        head.fill(page=asset(name='pin-edit.html'))
+        head.fill(page=asset(name='pin-edit.html'), current='/pins')
         .replace('{{title}}', html.escape(title))
         .replace('{{notice}}', notice)
         .replace('{{body}}', body)

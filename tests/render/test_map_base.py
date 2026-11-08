@@ -11,21 +11,7 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.build.map_style import DARK, LIGHT, STREET_FACE, SUPERSAMPLE
-from paperroute.build.tile_draw import Window as DrawWindow
-from paperroute.build.tile_draw import draw_window
 from paperroute.city import SYDNEY_PROJECTION
-from paperroute.render.map_base import (
-    HALO,
-    compose_tiles,
-    draw_map_base,
-    name_region,
-    on_route,
-    redraw_name,
-    window_of,
-)
-from paperroute.render.map_corners import BOX_FACE
-from paperroute.render.map_marks import ROUTE_STYLE
 from paperroute_device.render.canvas import (
     INK,
     PAPER,
@@ -38,6 +24,14 @@ from paperroute_transit.adapters.tiles_db import (
     SqliteTileRepository,
 )
 from paperroute_transit.build.features import FeatureStore
+from paperroute_transit.build.map_style import (
+    DARK,
+    LIGHT,
+    STREET_FACE,
+    SUPERSAMPLE,
+)
+from paperroute_transit.build.tile_draw import Window as DrawWindow
+from paperroute_transit.build.tile_draw import draw_window
 from paperroute_transit.build.tile_store import PlacedLabel, TileWriter
 from paperroute_transit.core.geo import Point, to_metres
 from paperroute_transit.core.map_fit import CREDIT_ROOM
@@ -58,6 +52,17 @@ from paperroute_transit.core.tiles import (
     tiles_covering,
     to_pixels,
 )
+from paperroute_transit.render.map_base import (
+    HALO,
+    compose_tiles,
+    draw_map_base,
+    name_region,
+    on_route,
+    redraw_name,
+    window_of,
+)
+from paperroute_transit.render.map_corners import BOX_FACE
+from paperroute_transit.render.map_marks import ROUTE_STYLE
 from paperroute_transit.render.tile_codec import (
     diffuse,
     pack_bits,

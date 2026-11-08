@@ -152,6 +152,6 @@ disable_warnings = ["module-not-imported", "no-data-collected"]
 omit = [
     "packages/paperroute-transit/src/paperroute_transit/adapters/tk_monitor.py",
     "src/paperroute/__main__.py",
-    "src/paperroute/board.py",
+    "packages/paperroute-transit/src/paperroute_transit/board.py",
     "src/paperroute/build/__main__.py",
 ]

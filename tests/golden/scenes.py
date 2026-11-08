@@ -11,7 +11,6 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.app_render import MapRenderer, drawing
 from paperroute.city import SydneyFeed, SydneyMode
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import (
@@ -50,6 +49,7 @@ from paperroute_testkit.core.strip_factories import (
     on_view,
 )
 from paperroute_testkit.device_pages import FACTS
+from paperroute_transit.app_render import MapRenderer, drawing
 from paperroute_transit.core.chains import Legs, leg_key
 from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.geo import make_shape

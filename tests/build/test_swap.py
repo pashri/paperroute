@@ -18,10 +18,12 @@ from typing import Final
 
 import pytest
 
-from paperroute.build import extras
-from paperroute.build import handoff as handoff_module
-from paperroute.build import swap, timetable
-from paperroute.build.handoff import (
+from paperroute.city import SYDNEY_REF
+from paperroute_transit.build import extras
+from paperroute_transit.build import handoff as handoff_module
+from paperroute_transit.build import swap, timetable
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.handoff import (
     Fetched,
     HandoffError,
     HandoffRecord,
@@ -29,24 +31,22 @@ from paperroute.build.handoff import (
     read_handoff,
     write_handoff,
 )
-from paperroute.build.source_state import SourceState
-from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_REF
-from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.source_state import SourceState
+from paperroute_transit.build.timetable import Window, build_timetable
 from tests.build.network_feed import network_feed
 
 LOCK_PROBE: Final[str] = (
     'import sys\n'
     'from pathlib import Path\n'
-    'from paperroute.build.swap import holds_lock\n'
+    'from paperroute_transit.build.swap import holds_lock\n'
     'sys.exit(0 if holds_lock(fd=int(sys.argv[2]), path=Path(sys.argv[1]))'
     ' else 3)\n'
 )
 LOCK_AND_EXEC: Final[str] = (
     'import sys\n'
     'from pathlib import Path\n'
-    'from paperroute.build.refresh import refresh_lock\n'
-    'from paperroute.build.handoff import exec_python\n'
+    'from paperroute_transit.build.refresh import refresh_lock\n'
+    'from paperroute_transit.build.handoff import exec_python\n'
     'lock = Path(sys.argv[1])\n'
     'with refresh_lock(path=lock) as fd:\n'
     '    exec_python(\n'

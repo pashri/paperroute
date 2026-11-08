@@ -14,24 +14,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.app import (
-    MapRenderer,
-    Outputs,
-    Ports,
-    handle,
-    perform,
-    run,
-    starting_state,
-    stop,
-    ticker,
-)
-from paperroute.app_device import DevicePorts
-from paperroute.app_effects import StateSaver, loaded_patterns
-from paperroute.app_outputs import carry_out, draw_pending
-from paperroute.app_render import drawing
-from paperroute.app_work import fetch
-from paperroute.build.map_style import LIGHT
-from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import (
     PEAK_WINDOWS,
     SYDNEY,
@@ -41,9 +23,6 @@ from paperroute.city import (
     TOWN_HALL,
     SydneyFeed,
 )
-from paperroute.render.alerts_view import draw_alerts_view
-from paperroute.render.keep_out import KeepOut, keep_out
-from paperroute.render.map_corners import NOT_INSTALLED, credit_box, scale_box
 from paperroute_device.adapters.resets import FileResets
 from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
@@ -102,8 +81,26 @@ from paperroute_transit.adapters.tiles_db import (
     SqliteTileRepository,
 )
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
+from paperroute_transit.app import (
+    MapRenderer,
+    Outputs,
+    Ports,
+    handle,
+    perform,
+    run,
+    starting_state,
+    stop,
+    ticker,
+)
+from paperroute_transit.app_device import DevicePorts
+from paperroute_transit.app_effects import StateSaver, loaded_patterns
+from paperroute_transit.app_outputs import carry_out, draw_pending
+from paperroute_transit.app_render import drawing
+from paperroute_transit.app_work import fetch
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.map_style import LIGHT
 from paperroute_transit.build.tile_store import TileWriter
+from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.alert_model import AlertsFetched
 from paperroute_transit.core.alerts_view import AlertRow, AlertsView, AlertText
 from paperroute_transit.core.cycle import CYCLE_WAIT
@@ -161,6 +158,13 @@ from paperroute_transit.core.tiles import (
 from paperroute_transit.measures import StopMeasures
 from paperroute_transit.observers import NullObserver, Timings
 from paperroute_transit.ports import Observer
+from paperroute_transit.render.alerts_view import draw_alerts_view
+from paperroute_transit.render.keep_out import KeepOut, keep_out
+from paperroute_transit.render.map_corners import (
+    NOT_INSTALLED,
+    credit_box,
+    scale_box,
+)
 from paperroute_transit.render.tile_codec import pack_bits, pack_grey
 
 

@@ -7,7 +7,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import (
     SYDNEY,
     SYDNEY_PROJECTION,
@@ -19,6 +18,7 @@ from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.chooser import Column, Level
 from paperroute_transit.core.model import Pin, StopPlace
 from tests.adapters.test_network_db import (

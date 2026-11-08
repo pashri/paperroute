@@ -12,7 +12,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.build.timetable import Window, build_timetable, create_schema
 from paperroute.city import SYDNEY_PROJECTION, SYDNEY_REF, SydneyFeed
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
@@ -22,6 +21,11 @@ from paperroute_transit.build.shapes import (
     shape_record,
     shape_runs,
     simplify,
+)
+from paperroute_transit.build.timetable import (
+    Window,
+    build_timetable,
+    create_schema,
 )
 from paperroute_transit.core.geo import to_lonlat, to_metres, unpack_shape
 from tests.build.feeds import shape_rows, shaped_bus_feed

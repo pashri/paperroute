@@ -12,11 +12,15 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.build.handoff import Handoff, read_handoff
-from paperroute.build.timetable import SCHEMA_VERSION, Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_REF
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.handoff import Handoff, read_handoff
+from paperroute_transit.build.timetable import (
+    SCHEMA_VERSION,
+    Window,
+    build_timetable,
+)
 from paperroute_transit.core.city import MergeReport, TimetableRules
 from tests.build.feeds import (
     DAILY,
@@ -414,7 +418,7 @@ def test_hidden_trip_kept_as_non_service(
     tmp_path: Path, caplog: pytest.LogCaptureFixture,
 ) -> None:
     """A Z35 trip on a non-revenue route stays, with its stop times."""
-    with caplog.at_level(logging.INFO, logger='paperroute.build.timetable'):
+    with caplog.at_level(logging.INFO, logger='paperroute_transit.build.timetable'):
         db = build_db(tmp_path=tmp_path, start=date(2026, 10, 16), days=1,
                       sources=categorised_bus(tmp_path=tmp_path,
                                               categories=['A8']))

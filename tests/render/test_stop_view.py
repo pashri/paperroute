@@ -5,8 +5,25 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
-from paperroute.render.chrome import BANNER, badge, badge_width, route_pair
-from paperroute.render.stop_view import (
+from paperroute_device.render.canvas import (
+    INK,
+    PAPER,
+    Canvas,
+    Face,
+    text_width,
+)
+from paperroute_device.render.frame import HEADER, finish
+from paperroute_testkit.render.factories import STOP_VIEW as BASE
+from paperroute_testkit.render.factories import stop_row as row
+from paperroute_transit.core.model import CarryOn
+from paperroute_transit.core.stop_view import Pill
+from paperroute_transit.render.chrome import (
+    BANNER,
+    badge,
+    badge_width,
+    route_pair,
+)
+from paperroute_transit.render.stop_view import (
     FASTER_LEFT,
     LARGE_ROW_H,
     LIST_LEAVE_RIGHT,
@@ -24,18 +41,6 @@ from paperroute.render.stop_view import (
     faster_width,
     list_row,
 )
-from paperroute_device.render.canvas import (
-    INK,
-    PAPER,
-    Canvas,
-    Face,
-    text_width,
-)
-from paperroute_device.render.frame import HEADER, finish
-from paperroute_testkit.render.factories import STOP_VIEW as BASE
-from paperroute_testkit.render.factories import stop_row as row
-from paperroute_transit.core.model import CarryOn
-from paperroute_transit.core.stop_view import Pill
 
 
 def test_frame_is_one_bit_800_by_480() -> None:

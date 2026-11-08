@@ -13,11 +13,11 @@ from typing import Final
 import pytest
 
 from paperroute.build.__main__ import SYDNEY_BUILD
-from paperroute.build.cli import main, parse_args, run_check_tiles
-from paperroute.build.sources import BuildParts, SourceSpec
 from paperroute.build.tfnsw_sources import TfnswDownloader
 from paperroute.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
 from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
+from paperroute_transit.build.cli import main, parse_args, run_check_tiles
+from paperroute_transit.build.sources import BuildParts, SourceSpec
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.tiles import TILE_STYLE
 from tests.build.tile_inputs import write_timetable

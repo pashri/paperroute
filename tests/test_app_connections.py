@@ -5,7 +5,6 @@ from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta
 from typing import Final
 
-from paperroute.app_connections import between_read, departures_read
 from paperroute.city import SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
@@ -18,6 +17,7 @@ from paperroute_testkit.core.connection_factories import (
 from paperroute_testkit.core.factories import departure, pin_of, place
 from paperroute_testkit.fakes import EmptyPlacedTimetable
 from paperroute_transit.adapters.leg_cache import LegCache
+from paperroute_transit.app_connections import between_read, departures_read
 from paperroute_transit.core.alert_model import AlertPlaces, LoadBetween
 from paperroute_transit.core.chains import leg_key
 from paperroute_transit.core.connection_model import direct_leg, way_legs

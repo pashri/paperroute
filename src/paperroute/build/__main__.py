@@ -2,10 +2,10 @@
 
 from typing import Final
 
-from paperroute.build import cli
-from paperroute.build.sources import BuildParts
 from paperroute.build.tfnsw_sources import SYDNEY_SOURCES, TfnswDownloader
 from paperroute.city import SYDNEY, SYDNEY_REF
+from paperroute_transit.build import cli
+from paperroute_transit.build.sources import BuildParts
 
 SYDNEY_BUILD: Final[BuildParts] = BuildParts(
     city_ref=SYDNEY_REF,

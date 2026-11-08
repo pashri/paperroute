@@ -5,7 +5,7 @@ from contextlib import closing
 from pathlib import Path
 from typing import Final
 
-from paperroute.build.timetable import SCHEMA
+from paperroute_transit.build.timetable import SCHEMA
 
 STOPS: Final[tuple[tuple[str, float, float], ...]] = (
     ('s1', 151.000, -33.800),

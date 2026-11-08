@@ -6,22 +6,6 @@ from typing import Final
 import numpy as np
 
 from paperroute.city import SYDNEY_ZONE
-from paperroute.render.connection_strip import (
-    HEAD_FACE,
-    HEAD_GAP,
-    HEAD_STEP,
-    NAME_FACE,
-    PAIR_STEP,
-    PAIRS_LEFT,
-    PAIRS_RIGHT,
-    SIDE,
-    STRIP_RIGHT,
-    draw_connection_strip,
-    draw_strip_sections,
-    heading_parts,
-    name_room,
-    row_step,
-)
 from paperroute_device.render.canvas import (
     ELLIPSIS,
     HEIGHT,
@@ -38,6 +22,22 @@ from paperroute_transit.core.connection_strip import (
     LegStop,
     StopMark,
     build_connection_strip,
+)
+from paperroute_transit.render.connection_strip import (
+    HEAD_FACE,
+    HEAD_GAP,
+    HEAD_STEP,
+    NAME_FACE,
+    PAIR_STEP,
+    PAIRS_LEFT,
+    PAIRS_RIGHT,
+    SIDE,
+    STRIP_RIGHT,
+    draw_connection_strip,
+    draw_strip_sections,
+    heading_parts,
+    name_room,
+    row_step,
 )
 from tests.core.test_connection_strip import CHAINS, PATTERNS, STOP
 

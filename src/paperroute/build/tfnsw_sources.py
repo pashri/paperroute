@@ -7,9 +7,9 @@ from typing import Final
 from urllib.request import Request
 
 from paperroute.adapters.tfnsw import BASE_URL, api_key_from_env
-from paperroute.build.source_state import SourceError, SourceState
-from paperroute.build.sources import SourceSpec, open_source, stream_to
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
+from paperroute_transit.build.source_state import SourceError, SourceState
+from paperroute_transit.build.sources import SourceSpec, open_source, stream_to
 
 SYDNEY_SOURCES: Final[tuple[SourceSpec, ...]] = (
     SourceSpec(name='sydneytrains', path='v1/gtfs/schedule/sydneytrains'),

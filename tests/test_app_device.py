@@ -6,13 +6,6 @@ from pathlib import Path
 
 import pytest
 
-from paperroute import app_device
-from paperroute.app_device import (
-    DevicePorts,
-    Reported,
-    device_work,
-    report_status,
-)
 from paperroute_device.adapters.resets import FileResets
 from paperroute_device.core.device_model import (
     DeviceStatus,
@@ -29,6 +22,13 @@ from paperroute_testkit.fakes import (
     RecordingResets,
     WatchingBuilder,
     device_facts,
+)
+from paperroute_transit import app_device
+from paperroute_transit.app_device import (
+    DevicePorts,
+    Reported,
+    device_work,
+    report_status,
 )
 from paperroute_transit.core.messages import (
     DeviceProbed,

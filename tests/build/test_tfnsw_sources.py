@@ -11,12 +11,12 @@ from typing import Final
 import pytest
 
 from paperroute.build.__main__ import SYDNEY_BUILD
-from paperroute.build.extras import city_named
-from paperroute.build.source_state import SourceError, SourceState
-from paperroute.build.sources import SourceSpec
 from paperroute.build.tfnsw_sources import SYDNEY_SOURCES, TfnswDownloader
 from paperroute.city import SYDNEY
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
+from paperroute_transit.build.extras import city_named
+from paperroute_transit.build.source_state import SourceError, SourceState
+from paperroute_transit.build.sources import SourceSpec
 from tests.build.feed_server import (
     REDIRECT,
     TARGET,

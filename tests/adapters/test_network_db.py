@@ -12,13 +12,13 @@ from typing import Final
 
 import pytest
 
-from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF, SydneyMode
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import inputs_of
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.chooser import Choice, ChooserPath, Column, Level
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import (

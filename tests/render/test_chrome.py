@@ -10,7 +10,19 @@ from typing import Any, Final
 import numpy as np
 import pytest
 
-from paperroute.render.chrome import (
+from paperroute_device.render.canvas import (
+    INK,
+    PAPER,
+    WIDTH,
+    Canvas,
+    Face,
+    Point,
+    text_width,
+)
+from paperroute_device.render.frame import HEADER
+from paperroute_transit.core.stop_view import NOT_PINNED, PinTag, Row
+from paperroute_transit.core.stop_view import pin_tag as tag_of
+from paperroute_transit.render.chrome import (
     BANNER,
     FROM_FLOOR,
     LINK_ARROW,
@@ -33,20 +45,8 @@ from paperroute.render.chrome import (
     two_titles,
     view_header,
 )
-from paperroute.render.pair_list import CHIP_PX
-from paperroute.render.stop_view import LIST_PAIR_ROOM
-from paperroute_device.render.canvas import (
-    INK,
-    PAPER,
-    WIDTH,
-    Canvas,
-    Face,
-    Point,
-    text_width,
-)
-from paperroute_device.render.frame import HEADER
-from paperroute_transit.core.stop_view import NOT_PINNED, PinTag, Row
-from paperroute_transit.core.stop_view import pin_tag as tag_of
+from paperroute_transit.render.pair_list import CHIP_PX
+from paperroute_transit.render.stop_view import LIST_PAIR_ROOM
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
 LONG_LABELS: Final[tuple[str, ...]] = ('SH100', '283S2', '772V8')

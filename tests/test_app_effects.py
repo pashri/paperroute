@@ -12,12 +12,7 @@ import numpy as np
 import pytest
 from google.transit import gtfs_realtime_pb2
 
-from paperroute.app import MapRenderer, run, ticker
-from paperroute.app_effects import VersionWatch, parse_feed
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyFeed, SydneyMode
-from paperroute.render.chooser import draw_chooser_view
-from paperroute.render.stop_view import draw_stop_view
-from paperroute.render.strip_view import draw_strip_view
 from paperroute.sydney_feeds import SydneyFeeds
 from paperroute_testkit.app_factories import (
     AT,
@@ -44,6 +39,8 @@ from paperroute_testkit.render.factories import (
     view_of,
 )
 from paperroute_transit.adapters.tiles_db import NullTiles
+from paperroute_transit.app import MapRenderer, run, ticker
+from paperroute_transit.app_effects import VersionWatch, parse_feed
 from paperroute_transit.core.alert_model import (
     AlertPlaces,
     AlertsFetched,
@@ -91,6 +88,9 @@ from paperroute_transit.core.reach import (
 )
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.saved import Saved, seeded
+from paperroute_transit.render.chooser import draw_chooser_view
+from paperroute_transit.render.stop_view import draw_stop_view
+from paperroute_transit.render.strip_view import draw_strip_view
 
 
 async def test_save_effect_writes_through_store() -> None:

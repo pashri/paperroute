@@ -15,7 +15,6 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.build.timetable import Window, build_timetable, create_schema
 from paperroute.city import (
     CENTRES,
     SYDNEY,
@@ -43,6 +42,11 @@ from paperroute_transit.build.route_tags import (
     tags_of,
 )
 from paperroute_transit.build.runs import RUN_SCHEMA
+from paperroute_transit.build.timetable import (
+    Window,
+    build_timetable,
+    create_schema,
+)
 from paperroute_transit.core.city import PlaceNames
 from paperroute_transit.core.geo import Point, to_metres
 from paperroute_transit.core.modes import replacing_modes

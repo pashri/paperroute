@@ -15,13 +15,13 @@ UV_LINK_MODE=copy uv sync --quiet --frozen --no-dev --no-editable --project "$ol
 imports="import paperroute.__main__, paperroute_device.screen, paperroute_hardware, paperroute_device, paperroute_transit; from importlib.util import find_spec as f"
 "$stage/.venv/bin/python" -c "$imports; assert not any(f(m) for m in ('osmium', 'shapely', 'pytest', 'paperroute_testkit'))"
 "$old/.venv/bin/python" -c "$imports; assert not any(f(m) for m in ('pytest', 'paperroute_testkit'))"
-"$stage/.venv/bin/python" -c "import paperroute.build.extras as e, paperroute.city as c; assert e.city_named(ref='paperroute.city:SYDNEY').name == c.SYDNEY.name"
+"$stage/.venv/bin/python" -c "import paperroute_transit.build.extras as e, paperroute.city as c; assert e.city_named(ref='paperroute.city:SYDNEY').name == c.SYDNEY.name"
 
 draw=$(cat <<'EOF'
 import sysconfig
 from pathlib import Path
 
-from paperroute.app_render import MapRenderer, drawing
+from paperroute_transit.app_render import MapRenderer, drawing
 from paperroute_transit.core.stop_view import PinTag, Row, StopView
 from paperroute_device.render.canvas import PANEL_FONTS
 

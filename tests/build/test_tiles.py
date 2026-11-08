@@ -7,8 +7,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.build.labels import label_box
-from paperroute.build.tiles import TileBuildConfig, TileReport, build_tiles
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute_testkit.build.osm_factory import (
     TIMESTAMP,
@@ -17,7 +15,13 @@ from paperroute_testkit.build.osm_factory import (
 )
 from paperroute_transit.adapters.tiles_db import SqliteTileRepository
 from paperroute_transit.build.features import to_placed
+from paperroute_transit.build.labels import label_box
 from paperroute_transit.build.tile_store import TILE_FORMAT
+from paperroute_transit.build.tiles import (
+    TileBuildConfig,
+    TileReport,
+    build_tiles,
+)
 from paperroute_transit.core.geo import to_metres
 from paperroute_transit.core.tiles import (
     TILE_STYLE,

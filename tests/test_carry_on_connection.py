@@ -10,9 +10,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.app_connections import departures_read
-from paperroute.app_ports import Ports
-from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import (
     SYDNEY,
     SYDNEY_PROJECTION,
@@ -25,7 +22,10 @@ from paperroute_testkit.core.factories import live
 from paperroute_testkit.fakes import FixedClock
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
+from paperroute_transit.app_connections import departures_read
+from paperroute_transit.app_ports import Ports
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.chains import chains_of
 from paperroute_transit.core.connection_strip import ConnectionStripView
 from paperroute_transit.core.map_view import DEFAULT_ZOOM

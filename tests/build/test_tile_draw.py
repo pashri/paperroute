@@ -10,22 +10,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.build.labels import TEXT_MARGIN
-from paperroute.build.map_style import (
-    DARK,
-    LIGHT,
-    STATION_FACE,
-    STREET_FACE,
-    SUBURB_FACE,
-    SUPERSAMPLE,
-)
-from paperroute.build.tile_draw import (
-    HALO,
-    Window,
-    big_enough,
-    draw_window,
-    render_tile,
-)
 from paperroute.city import SYDNEY_PROJECTION
 from paperroute_device.render.canvas import (
     INK,
@@ -36,6 +20,22 @@ from paperroute_device.render.canvas import (
 )
 from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
 from paperroute_transit.build.features import FeatureStore, load_features
+from paperroute_transit.build.labels import TEXT_MARGIN
+from paperroute_transit.build.map_style import (
+    DARK,
+    LIGHT,
+    STATION_FACE,
+    STREET_FACE,
+    SUBURB_FACE,
+    SUPERSAMPLE,
+)
+from paperroute_transit.build.tile_draw import (
+    HALO,
+    Window,
+    big_enough,
+    draw_window,
+    render_tile,
+)
 from paperroute_transit.build.tile_store import PlacedLabel
 from paperroute_transit.core.geo import MetreBox, to_metres
 from paperroute_transit.core.tiles import (

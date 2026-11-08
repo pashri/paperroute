@@ -13,7 +13,6 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import RAIL_TYPES, SYDNEY, SYDNEY_REF, SydneyMode
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.runs import (
@@ -35,6 +34,7 @@ from paperroute_transit.build.runs import (
     trip_joins,
     trip_skips,
 )
+from paperroute_transit.build.timetable import Window, build_timetable
 from tests.build.feeds import regional_sources
 from tests.build.network_feed import EAST_WEST, network_feed
 

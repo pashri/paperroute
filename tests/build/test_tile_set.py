@@ -5,7 +5,6 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.build.timetable import SCHEMA
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute_transit.build.tile_set import (
     SEA_MARGIN_DEG,
@@ -15,6 +14,7 @@ from paperroute_transit.build.tile_set import (
     stop_points,
     tile_set,
 )
+from paperroute_transit.build.timetable import SCHEMA
 from paperroute_transit.core.geo import to_lonlat, to_metres
 from paperroute_transit.core.tiles import TILE, to_pixels
 

@@ -4,13 +4,10 @@ import math
 from contextlib import closing
 from pathlib import Path
 
-from paperroute.build.map_style import STATION_FACE, SUBURB_FACE
 from paperroute.city import SYDNEY_PROJECTION
-from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut, keep_out
-from paperroute.render.map_base import window_of
-from paperroute.render.map_corners import credit_box, scale_box
 from paperroute_device.render.canvas import Box
 from paperroute_transit.adapters.tiles_db import NullTiles
+from paperroute_transit.build.map_style import STATION_FACE, SUBURB_FACE
 from paperroute_transit.build.tile_store import PlacedLabel
 from paperroute_transit.core.map_view import MapBase
 from paperroute_transit.core.tiles import (
@@ -20,6 +17,9 @@ from paperroute_transit.core.tiles import (
     text_box,
     to_pixels,
 )
+from paperroute_transit.render.keep_out import NO_KEEP_OUT, KeepOut, keep_out
+from paperroute_transit.render.map_base import window_of
+from paperroute_transit.render.map_corners import credit_box, scale_box
 from tests.render.test_map_base import CENTRE, MPP, base, build, street
 from tests.render.test_map_labels import place_label
 

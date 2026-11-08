@@ -6,15 +6,15 @@ from datetime import date
 from pathlib import Path
 from typing import Final
 
-from paperroute.build.timetable import (
+from paperroute.city import SYDNEY
+from paperroute_testkit.build.feed_zip import write_feed
+from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.timetable import (
     Window,
     create_indexes,
     create_schema,
     load_source,
 )
-from paperroute.city import SYDNEY
-from paperroute_testkit.build.feed_zip import write_feed
-from paperroute_transit.build.gtfs_files import Source
 
 DAILY: Final[dict[str, str]] = {
     'monday': '1', 'tuesday': '1', 'wednesday': '1', 'thursday': '1',

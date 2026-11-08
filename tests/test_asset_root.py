@@ -12,7 +12,12 @@ from paperroute_testkit.paths import ROOT
 
 ASSET_ROOT: Final[Path] = ROOT / 'src' / 'paperroute' / 'asset_root.py'
 ENTRY_POINTS: Final[tuple[Path, ...]] = (
-    ROOT / 'src' / 'paperroute' / 'board.py',
+    ROOT
+    / 'packages'
+    / 'paperroute-transit'
+    / 'src'
+    / 'paperroute_transit'
+    / 'board.py',
 )
 APP_FILES: Final[re.Pattern[str]] = re.compile(
     r'''files\(\s*(['"])paperroute(\.[\w.]*)?\1''',
@@ -79,6 +84,7 @@ def first_call(*, path: Path) -> str | None:
 
 def test_entry_points_set_assets() -> None:
     """The board sets the asset root first."""
+    assert all(path.is_file() for path in ENTRY_POINTS)
     assert [first_call(path=path) for path in ENTRY_POINTS] == ['use_assets']
 
 

@@ -5,8 +5,12 @@ from typing import Final
 
 import pytest
 
-from paperroute.build.source_state import SourceState, load_states, save_states
-from paperroute.build.sources import needs_download
+from paperroute_transit.build.source_state import (
+    SourceState,
+    load_states,
+    save_states,
+)
+from paperroute_transit.build.sources import needs_download
 
 SAME: Final[SourceState] = SourceState(
     etag='"1"',

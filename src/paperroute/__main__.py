@@ -2,7 +2,6 @@
 
 from typing import Final
 
-from paperroute import board
 from paperroute.adapters.tfnsw import (
     TFNSW_KEY,
     AiohttpFeedsClient,
@@ -19,6 +18,7 @@ from paperroute.asset_root import APP_ASSETS
 from paperroute.city import SYDNEY
 from paperroute_device.adapters.secrets_file import SecretsFile
 from paperroute_device.core.device_model import DeviceKey
+from paperroute_transit import board
 from paperroute_transit.ports import FeedsClient
 
 

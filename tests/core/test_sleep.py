@@ -4,7 +4,6 @@ from dataclasses import replace
 from datetime import timedelta
 
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION
-from paperroute.render.trip_marks import END_DISC, END_EDGE
 from paperroute_device.core.device_events import ApiKeyChanged, ConfirmAsked
 from paperroute_device.core.device_model import ConfirmAction, MenuRow
 from paperroute_device.core.panel_views import ConfirmView
@@ -41,6 +40,7 @@ from paperroute_transit.core.state import initial_state, step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import live_stop_view
 from paperroute_transit.core.stop_view import StopView
+from paperroute_transit.render.trip_marks import END_DISC, END_EDGE
 from tests.core.test_connection import loaded as connection_loaded
 from tests.core.test_menu import BOTH, DOWN, run, turn
 from tests.core.test_state import BUSES, CENTRE, PIN, fresh, loaded

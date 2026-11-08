@@ -11,12 +11,12 @@ from typing import Final
 
 import pytest
 
-from paperroute.build import extras, timetable
-from paperroute.build.extras import build_extras
-from paperroute.build.handoff import HandoffRecord, write_handoff
-from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_REF
+from paperroute_transit.build import extras, timetable
+from paperroute_transit.build.extras import build_extras
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.handoff import HandoffRecord, write_handoff
+from paperroute_transit.build.timetable import Window, build_timetable
 from tests.build.network_feed import network_feed
 
 RUN_TABLES: Final[set[str]] = {
@@ -24,14 +24,14 @@ RUN_TABLES: Final[set[str]] = {
     'trip_joins', 'route_patterns', 'chooser_routes', 'chooser_towards',
 }
 IMPORTS_ONLY: Final[str] = (
-    'import paperroute.build.extras, sys; '
+    'import paperroute_transit.build.extras, sys; '
     "assert not {'numpy', 'aiohttp'} & set(sys.modules)"
 )
 CHILD_RUN: Final[str] = (
     'import runpy, sys\n'
     "sys.argv = ['extras', *sys.argv[1:]]\n"
     'try:\n'
-    "    runpy.run_module('paperroute.build.extras', run_name='__main__')\n"
+    "    runpy.run_module('paperroute_transit.build.extras', run_name='__main__')\n"
     'except SystemExit as stop:\n'
     '    assert stop.code == 0, stop.code\n'
     'else:\n'

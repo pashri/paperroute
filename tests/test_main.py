@@ -21,8 +21,8 @@ import numpy as np
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
-import paperroute.board as cli
 import paperroute_transit.adapters.tk_monitor as tk_monitor
+import paperroute_transit.board as cli
 from paperroute.__main__ import SYDNEY_PARTS, main, tfnsw_feeds
 from paperroute.adapters.tfnsw import (
     TFNSW_KEY,
@@ -35,29 +35,8 @@ from paperroute.adapters.web_board import (
     SuggestPlug,
     sydney_status_line,
 )
-from paperroute.app import Ports
-from paperroute.app_render import MapRenderer
 from paperroute.asset_root import APP_ASSETS
-from paperroute.board import (
-    CityParts,
-    board_display,
-    builder_for,
-    device_for,
-    device_pages_for,
-    feeds_client,
-    parse_args,
-    power_for,
-    resets_for,
-    seed_for,
-    serve_or_exit,
-    serve_web,
-    tiles_for,
-    web_main,
-    wifi_for,
-)
-from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_REF, SYDNEY_ZONE
-from paperroute.render.map_base import draw_map_base
 from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.web_shell import web_app
@@ -88,8 +67,28 @@ from paperroute_transit.adapters.tiles_db import (
 )
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.adapters.web_display import WebDisplay
+from paperroute_transit.app import Ports
+from paperroute_transit.app_render import MapRenderer
+from paperroute_transit.board import (
+    CityParts,
+    board_display,
+    builder_for,
+    device_for,
+    device_pages_for,
+    feeds_client,
+    parse_args,
+    power_for,
+    resets_for,
+    seed_for,
+    serve_or_exit,
+    serve_web,
+    tiles_for,
+    web_main,
+    wifi_for,
+)
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
+from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.city import City
 from paperroute_transit.core.geo import to_metres
 from paperroute_transit.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
@@ -103,6 +102,7 @@ from paperroute_transit.core.tiles import (
 from paperroute_transit.logs import LastError
 from paperroute_transit.observers import Timings
 from paperroute_transit.ports import FeedsClient
+from paperroute_transit.render.map_base import draw_map_base
 from paperroute_transit.summary import Summary
 from paperroute_transit.web_observer import web_observer
 

@@ -4,8 +4,17 @@ import numpy as np
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut
-from paperroute.render.others import (
+from paperroute_device.render.canvas import (
+    INK,
+    PAPER,
+    Box,
+    Canvas,
+    Face,
+    text_width,
+)
+from paperroute_transit.core.map_view import MAP_HEIGHT, MAP_WIDTH, Marker
+from paperroute_transit.render.keep_out import NO_KEEP_OUT, KeepOut
+from paperroute_transit.render.others import (
     MARK_HALF,
     NUMBER_DROP,
     NUMBER_FACE,
@@ -20,15 +29,6 @@ from paperroute.render.others import (
     place_numbers,
     signed,
 )
-from paperroute_device.render.canvas import (
-    INK,
-    PAPER,
-    Box,
-    Canvas,
-    Face,
-    text_width,
-)
-from paperroute_transit.core.map_view import MAP_HEIGHT, MAP_WIDTH, Marker
 
 SPOT = (100.0, 100.0)
 

@@ -6,13 +6,6 @@ from typing import Final
 import numpy as np
 
 from paperroute.city import SYDNEY_PROJECTION
-from paperroute.render.map_base import draw_map_base
-from paperroute.render.trip_marks import (
-    draw_trip_ends,
-    draw_trip_legs,
-    draw_trip_lines,
-    draw_trip_points,
-)
 from paperroute_device.render.canvas import INK, PAPER, Canvas
 from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.core.geo import Point
@@ -23,6 +16,13 @@ from paperroute_transit.core.map_view import (
     TripMarks,
 )
 from paperroute_transit.core.tiles import TileVariant
+from paperroute_transit.render.map_base import draw_map_base
+from paperroute_transit.render.trip_marks import (
+    draw_trip_ends,
+    draw_trip_legs,
+    draw_trip_lines,
+    draw_trip_points,
+)
 
 MPP: Final[int] = 8
 CENTRE: Final[Point] = (0.0, 0.0)

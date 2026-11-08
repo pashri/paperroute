@@ -2,7 +2,8 @@
 
 import pytest
 
-from paperroute.build.map_style import (
+from paperroute_device.render.canvas import INK, PAPER, Face
+from paperroute_transit.build.map_style import (
     AREA_GREYS,
     CITY_PLACES,
     DARK,
@@ -21,7 +22,6 @@ from paperroute.build.map_style import (
     road_style,
     transit_style,
 )
-from paperroute_device.render.canvas import INK, PAPER, Face
 from paperroute_transit.core.tiles import STATION_ZOOMS, SUBURB_ZOOMS, ZOOMS
 
 

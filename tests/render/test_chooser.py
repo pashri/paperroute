@@ -7,7 +7,6 @@ import numpy as np
 import pytest
 from numpy.typing import NDArray
 
-from paperroute.render.chooser import COLUMN_WIDTHS, draw_chooser_view
 from paperroute_device.render.canvas import HEIGHT, INK, PAPER, WIDTH
 from paperroute_testkit.render.factories import (
     column,
@@ -23,6 +22,7 @@ from paperroute_transit.core.chooser_view import (
     ColumnView,
 )
 from paperroute_transit.core.strip_model import HINTS
+from paperroute_transit.render.chooser import COLUMN_WIDTHS, draw_chooser_view
 
 LONG_NAME = 'Parramatta to Blacktown via a very long and winding road home'
 

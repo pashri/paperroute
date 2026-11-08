@@ -14,16 +14,16 @@ from typing import Final
 
 import pytest
 
-from paperroute.build import handoff as handoff_module
-from paperroute.build import refresh as refresh_module
-from paperroute.build import swap
-from paperroute.build.refresh import RefreshBusy, refresh
-from paperroute.build.source_state import SourceError, SourceState
-from paperroute.build.sources import BuildParts, SourceSpec
-from paperroute.build.swap import RefreshReport, TimetableCheckError
 from paperroute.build.tfnsw_sources import SYDNEY_SOURCES, TfnswDownloader
 from paperroute.city import SYDNEY, SYDNEY_REF
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
+from paperroute_transit.build import handoff as handoff_module
+from paperroute_transit.build import refresh as refresh_module
+from paperroute_transit.build import swap
+from paperroute_transit.build.refresh import RefreshBusy, refresh
+from paperroute_transit.build.source_state import SourceError, SourceState
+from paperroute_transit.build.sources import BuildParts, SourceSpec
+from paperroute_transit.build.swap import RefreshReport, TimetableCheckError
 from tests.build.feed_server import FeedServer, Served, feed_server
 from tests.build.feeds import bus_feed
 
@@ -634,7 +634,7 @@ def test_refresh_hands_over_after_the_load(
         )
     work = data_dir / 'work'
     assert seen['argv'] == [
-        seen['path'], '-m', 'paperroute.build.extras', SYDNEY_REF,
+        seen['path'], '-m', 'paperroute_transit.build.extras', SYDNEY_REF,
         str(work / 'timetable.new'), str(work / 'handoff.json'),
     ]
     assert seen['inheritable'] is True

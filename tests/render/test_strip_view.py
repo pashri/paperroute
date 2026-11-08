@@ -7,22 +7,6 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.city import SYDNEY_PROJECTION
-from paperroute.render.chrome import ARROW_WIDTH, BANNER, badge, route_pair
-from paperroute.render.markers import badge_box
-from paperroute.render.stop_view import WIDEST_COUNT
-from paperroute.render.strip_view import (
-    CARRY_GAP,
-    HINT_BOX,
-    HINT_FACE,
-    HINT_PAD,
-    NAME_X,
-    PANE_NAME_X,
-    TEXT_RIGHT,
-    draw_strip_map_view,
-    draw_strip_view,
-    paint_strip_view,
-)
-from paperroute.render.strip_view import panel_row as paint_panel_row
 from paperroute_device.core.text import DOT, HINT_DOT
 from paperroute_device.render.canvas import (
     INK,
@@ -63,6 +47,27 @@ from paperroute_transit.core.strip_model import (
     StripView,
 )
 from paperroute_transit.core.strip_view import build_strip_view
+from paperroute_transit.render.chrome import (
+    ARROW_WIDTH,
+    BANNER,
+    badge,
+    route_pair,
+)
+from paperroute_transit.render.markers import badge_box
+from paperroute_transit.render.stop_view import WIDEST_COUNT
+from paperroute_transit.render.strip_view import (
+    CARRY_GAP,
+    HINT_BOX,
+    HINT_FACE,
+    HINT_PAD,
+    NAME_X,
+    PANE_NAME_X,
+    TEXT_RIGHT,
+    draw_strip_map_view,
+    draw_strip_view,
+    paint_strip_view,
+)
+from paperroute_transit.render.strip_view import panel_row as paint_panel_row
 from paperroute_transit.render.tile_codec import GREYS
 
 CENTRE: Point = to_metres(

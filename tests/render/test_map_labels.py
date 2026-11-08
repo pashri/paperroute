@@ -7,11 +7,10 @@ from pathlib import Path
 
 import numpy as np
 
-from paperroute.build.map_style import DARK
 from paperroute.city import SYDNEY_PROJECTION
-from paperroute.render.map_base import draw_map_base, window_of
 from paperroute_device.render.canvas import INK, PAPER
 from paperroute_transit.adapters.tiles_db import SqliteTileRepository
+from paperroute_transit.build.map_style import DARK
 from paperroute_transit.build.tile_store import PlacedLabel
 from paperroute_transit.core.map_view import (
     MAP_HEIGHT,
@@ -26,6 +25,7 @@ from paperroute_transit.core.tiles import (
     tiles_covering,
     to_pixels,
 )
+from paperroute_transit.render.map_base import draw_map_base, window_of
 from tests.render.test_map_base import (
     CENTRE,
     MPP,

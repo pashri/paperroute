@@ -9,7 +9,6 @@ from typing import Final
 
 import pytest
 
-from paperroute.build.timetable import Window, build_timetable
 from paperroute.city import SYDNEY, SYDNEY_REF, SYDNEY_ZONE
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import pin_of
@@ -20,6 +19,7 @@ from paperroute_transit.adapters.calendar_rows import (
 )
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.model import (
     ServiceSpan,
     service_epoch,

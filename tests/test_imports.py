@@ -24,7 +24,7 @@ HARDWARE: Final[Path] = (
     ROOT / 'packages' / 'paperroute-hardware' / 'src' / 'paperroute_hardware'
 )
 DEVICE_IMPORTS: Final[str] = (
-    'import paperroute.__main__, paperroute.app, sys; '
+    'import paperroute.__main__, paperroute_transit.app, sys; '
     "assert not {'osmium', 'shapely'} & set(sys.modules)"
 )
 REFRESH_RUN: Final[str] = (
@@ -47,7 +47,7 @@ KIT_TEXT: Final[frozenset[str]] = frozenset(
 )
 STOP_VIEW: Final[str] = 'paperroute_transit.core.stop_view'
 NSW: Final[re.Pattern[str]] = re.compile(r'(?i)\bnsw')
-KEY_SCHEME: Final[re.Pattern[str]] = re.compile(r'(?i)\bapikey\b|BASE_URL')
+KEY_SCHEME: Final[re.Pattern[str]] = re.compile(r'(?i)\bapikey\b')
 APP: Final[Path] = ROOT / 'src' / 'paperroute'
 TRANSIT: Final[Path] = (
     ROOT / 'packages' / 'paperroute-transit' / 'src' / 'paperroute_transit'
@@ -73,7 +73,7 @@ SYDNEY_MODULES: Final[frozenset[str]] = frozenset({
     'paperroute.build.trainlink',
 })
 CITY_IMPORTS: Final[str] = (
-    'import paperroute.city, paperroute.build.extras, sys; '
+    'import paperroute.city, paperroute_transit.build.extras, sys; '
     "loaded = sorted(name for name in sys.modules if name.startswith('google')); "
     'assert not loaded, loaded'
 )
@@ -112,6 +112,27 @@ MOVED: Final[tuple[str, ...]] = (
     'adapters.web_pin_search',
     'adapters.web_pins',
     'adapters.web_ways',
+    'app',
+    'app_connections',
+    'app_device',
+    'app_effects',
+    'app_outputs',
+    'app_ports',
+    'app_render',
+    'app_work',
+    'board',
+    'build.cli',
+    'build.extras',
+    'build.handoff',
+    'build.labels',
+    'build.map_style',
+    'build.refresh',
+    'build.source_state',
+    'build.sources',
+    'build.swap',
+    'build.tile_draw',
+    'build.tiles',
+    'build.timetable',
     'core.alert_match',
     'core.alert_state',
     'core.alerts_view',
@@ -175,6 +196,26 @@ MOVED: Final[tuple[str, ...]] = (
     'measures',
     'observers',
     'ports',
+    'render.alerts_view',
+    'render.chooser',
+    'render.chrome',
+    'render.connection_strip',
+    'render.connection_strip_map',
+    'render.connection_view',
+    'render.keep_out',
+    'render.map_base',
+    'render.map_corners',
+    'render.map_labels',
+    'render.map_marks',
+    'render.map_panes',
+    'render.map_view',
+    'render.markers',
+    'render.others',
+    'render.pair_list',
+    'render.stop_view',
+    'render.strip',
+    'render.strip_view',
+    'render.trip_marks',
     'summary',
     'web_observer',
 )
@@ -235,19 +276,6 @@ def test_refresh_never_imports_build_libraries(tmp_path: Path) -> None:
         },
     )
     assert result.returncode == 0, result.stderr
-
-
-def test_build_engine_names_no_key_scheme() -> None:
-    """The build engine leaves the key and the API root to the downloader."""
-    paths = [
-        APP / 'build' / f'{name}.py' for name in ('sources', 'refresh', 'cli')
-    ]
-    offenders = [
-        str(path.relative_to(APP))
-        for path in paths
-        if KEY_SCHEME.search(path.read_text(encoding='utf-8'))
-    ]
-    assert not offenders
 
 
 def test_city_loads_no_feed_parsers() -> None:
@@ -466,9 +494,9 @@ def test_shell_screens_use_no_board_drawing() -> None:
         ROOT / 'packages' / 'paperroute-device' / 'src' / 'paperroute_device'
     )
     drawing = {
-        'paperroute.render.stop_view',
-        'paperroute.render.map_view',
-        'paperroute.render.chrome',
+        'paperroute_transit.render.stop_view',
+        'paperroute_transit.render.map_view',
+        'paperroute_transit.render.chrome',
     }
     banned = {
         kit / 'render' / 'panel.py': {*drawing, STOP_VIEW},
@@ -526,12 +554,16 @@ def transit_texts() -> list[tuple[Path, str]]:
 
 
 def test_transit_names_no_tfnsw() -> None:
-    """No file of the transit package names TfNSW or NSW."""
+    """No file of the transit package names TfNSW, NSW or its key scheme."""
+    texts = transit_texts()
     offenders = [
         str(path)
-        for path, text in transit_texts()
-        if 'tfnsw' in text.lower() or NSW.search(text)
+        for path, text in texts
+        if 'tfnsw' in text.lower()
+        or NSW.search(text)
+        or KEY_SCHEME.search(text)
     ]
+    assert texts
     assert not offenders
 
 
@@ -687,6 +719,16 @@ def test_sydney_modules_exist() -> None:
     assert SYDNEY_MODULES <= modules
 
 
+def test_app_holds_only_sydney_modules() -> None:
+    """The app's modules are Sydney's and its asset root."""
+    modules = {
+        app_module(path=path)
+        for path in APP.rglob('*.py')
+        if path.name != '__init__.py'
+    }
+    assert modules == SYDNEY_MODULES | {'paperroute.asset_root'}
+
+
 def test_imported_names_see_package_from_imports(tmp_path: Path) -> None:
     """Importing a module from its package names the module."""
     path = tmp_path / 'engine.py'
@@ -698,39 +740,6 @@ def test_imported_names_see_package_from_imports(tmp_path: Path) -> None:
     assert {'paperroute.city', 'paperroute.sydney_feeds'} <= (
         imported_names(path=path)
     )
-
-
-def engine_texts() -> list[tuple[Path, str]]:
-    """
-    Read the app's engine modules.
-
-    Returns
-    -------
-    list[tuple[Path, str]]
-        Each app module that is not one of Sydney's, not the asset root
-        and not a package ``__init__``, with its text.
-    """
-    return [
-        (path, path.read_text(encoding='utf-8'))
-        for path in sorted(APP.rglob('*.py'))
-        if app_module(path=path) not in SYDNEY_MODULES
-        and app_module(path=path) != 'paperroute.asset_root'
-        and path.name != '__init__.py'
-    ]
-
-
-def test_engine_names_no_city() -> None:
-    """No engine module names Sydney, TfNSW or NSW."""
-    texts = engine_texts()
-    offenders = [
-        str(path.relative_to(APP))
-        for path, text in texts
-        if 'sydney' in text.lower()
-        or 'tfnsw' in text.lower()
-        or NSW.search(text)
-    ]
-    assert texts
-    assert not offenders
 
 
 def defined_names(*, path: Path) -> list[str]:

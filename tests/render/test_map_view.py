@@ -9,34 +9,6 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.city import SYDNEY_PROJECTION
-from paperroute.render.chrome import BANNER, badge, header
-from paperroute.render.map_base import draw_map_base
-from paperroute.render.map_view import (
-    BADGE_PX,
-    COUNTDOWN_FACE,
-    EMPTY_MARGIN,
-    PAIR_STEP,
-    PAIRS_TOP,
-    SIDEBAR_LEFT,
-    SIDEBAR_PAIR_ROOM,
-    SIDEBAR_RIGHT,
-    SIDEBAR_TEXT,
-    draw_map_view,
-    edge_boxes,
-    empty_lines,
-    end_boxes,
-    snap,
-    stop_boxes,
-)
-from paperroute.render.markers import (
-    END_HALF,
-    badge_half,
-    grown_box,
-    nearest_first,
-    overlaps,
-    place,
-)
-from paperroute.render.stop_view import WIDEST_COUNT
 from paperroute_device.render.canvas import (
     HEIGHT,
     INK,
@@ -70,6 +42,34 @@ from paperroute_transit.core.tiles import (
     tile_of,
     to_pixels,
 )
+from paperroute_transit.render.chrome import BANNER, badge, header
+from paperroute_transit.render.map_base import draw_map_base
+from paperroute_transit.render.map_view import (
+    BADGE_PX,
+    COUNTDOWN_FACE,
+    EMPTY_MARGIN,
+    PAIR_STEP,
+    PAIRS_TOP,
+    SIDEBAR_LEFT,
+    SIDEBAR_PAIR_ROOM,
+    SIDEBAR_RIGHT,
+    SIDEBAR_TEXT,
+    draw_map_view,
+    edge_boxes,
+    empty_lines,
+    end_boxes,
+    snap,
+    stop_boxes,
+)
+from paperroute_transit.render.markers import (
+    END_HALF,
+    badge_half,
+    grown_box,
+    nearest_first,
+    overlaps,
+    place,
+)
+from paperroute_transit.render.stop_view import WIDEST_COUNT
 from paperroute_transit.render.tile_codec import GREYS, pack_bits, pack_grey
 
 MPP = 8

@@ -8,16 +8,16 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from paperroute.build.labels import (
+from paperroute.city import SYDNEY_PROJECTION
+from paperroute_device.render.canvas import text_width
+from paperroute_transit.build.features import FeatureStore
+from paperroute_transit.build.labels import (
     LabelIndex,
     fit_street,
     label_box,
     place_labels,
 )
-from paperroute.build.map_style import STATION_FACE, STREET_FACE
-from paperroute.city import SYDNEY_PROJECTION
-from paperroute_device.render.canvas import text_width
-from paperroute_transit.build.features import FeatureStore
+from paperroute_transit.build.map_style import STATION_FACE, STREET_FACE
 from paperroute_transit.build.osm_source import OsmPlace
 from paperroute_transit.build.tile_store import PlacedLabel
 from paperroute_transit.core.geo import Point, to_lonlat

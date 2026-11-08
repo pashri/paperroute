@@ -6,18 +6,6 @@ from dataclasses import replace
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.render.strip import (
-    MAIN_PX,
-    NAME_ROOM,
-    NOTE_MAX,
-    TAG_GAP,
-    TAG_HALF,
-    draw_band,
-    draw_rows,
-    draw_strip_markers,
-    hook_arrow,
-    track_points,
-)
 from paperroute_device.render.canvas import INK, PAPER, Canvas, Face
 from paperroute_transit.core.map_view import Marker
 from paperroute_transit.core.reach import RowKind
@@ -34,6 +22,18 @@ from paperroute_transit.core.strip_model import (
     Band,
     CarryNote,
     StripRow,
+)
+from paperroute_transit.render.strip import (
+    MAIN_PX,
+    NAME_ROOM,
+    NOTE_MAX,
+    TAG_GAP,
+    TAG_HALF,
+    draw_band,
+    draw_rows,
+    draw_strip_markers,
+    hook_arrow,
+    track_points,
 )
 
 NAME_X = 52

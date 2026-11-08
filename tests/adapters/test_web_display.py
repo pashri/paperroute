@@ -395,6 +395,25 @@ async def test_knob_post_rejects_invalid_utf8_json(
     assert response.status == HTTPStatus.BAD_REQUEST
 
 
+async def test_status_carries_line() -> None:
+    """The status JSON carries the app's line, and none without one."""
+    lined = WebDisplay(
+        status=lambda: {'frames': 7},
+        status_line=lambda *, status: f'{status["frames"]} frames',
+        city=SYDNEY,
+    )
+    bodies = []
+    for display in (lined, WebDisplay(status=dict, city=SYDNEY)):
+        client = await _client(display=display)
+        try:
+            bodies.append(await (await client.get('/status')).json())
+        finally:
+            await client.close()
+    assert bodies[0]['line'] == '7 frames'
+    assert bodies[0]['frames'] == 7
+    assert 'line' not in bodies[1]
+
+
 async def test_status_built_in_keys_win() -> None:
     """Extras cannot overwrite the built-in status keys."""
     display = WebDisplay(

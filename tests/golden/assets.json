@@ -32,7 +32,7 @@
   "/live.js": {
     "cache_control": null,
     "content_type": "text/javascript; charset=utf-8",
-    "sha256": "77b1c770b25752478cda46584a9d9f66664bb6c2c7e546776b274f7b0b6eb1de",
+    "sha256": "d87c7947e78c8ada90ffcd47c947c76344eb3b6bad0f0a18d36e8211c25aa4c7",
     "status": 200
   },
   "/pins.js": {

@@ -59,6 +59,12 @@ GOOD: Final[int] = 34  # signal percent at or above which it is good
 NOTICE_MARK: Final[str] = '{{notice}}'
 KEY_LABEL_MARK: Final[str] = '{{key_label}}'
 FORM_MARK: Final[str] = '{{form}}'
+RESET_MARK: Final[str] = '{{reset_hint}}'
+KIT_RESET_HINT: Final[str] = (
+    'Reset settings clears the settings, Wi-Fi and the keys. Erase '
+    'everything also deletes the saved data. Both are confirmed on the '
+    'device.'
+)
 DOWNLOAD_TYPES: Final[dict[str, str]] = {
     'errors.jsonl': 'application/x-ndjson',
     'state.json': 'application/json',
@@ -321,6 +327,9 @@ class DevicePages:
         Whether the knobs' lines opened, or None when not asked for.
     nav : Sequence[NavItem]
         The links in each page's nav, in order.
+    reset_hint : str
+        The Device page's sentence on what each reset clears; plain
+        text, escaped.
     """
 
     def __init__(  # pylint: disable=too-many-arguments
@@ -339,6 +348,7 @@ class DevicePages:
         clock: Callable[[], float] = time.time,
         knobs: Callable[[], bool | None] = lambda: None,
         nav: Sequence[NavItem] = KIT_NAV,
+        reset_hint: str = KIT_RESET_HINT,
     ) -> None:
         self._status = status
         self._feeds = feeds
@@ -355,6 +365,7 @@ class DevicePages:
         self._clock = clock
         self._knobs = knobs
         self._nav = tuple(nav)
+        self._reset_hint = reset_hint
 
     def _routes(self) -> list[web.RouteDef]:
         """
@@ -638,7 +649,9 @@ class DevicePages:
                 for index, key in enumerate(self._keys)
             ),
         }
-        page = self._frame(name='device.html', current='/device')
+        page = self._frame(name='device.html', current='/device').replace(
+            RESET_MARK, html.escape(self._reset_hint),
+        )
         for mark, value in marks.items():
             page = page.replace(mark, value)
         return web.Response(

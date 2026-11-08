@@ -35,7 +35,12 @@ from paperroute.adapters.tfnsw import (
     tfnsw_limiter,
 )
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SuggestPlug
+from paperroute.adapters.web_board import (
+    SYDNEY_HINT,
+    SYDNEY_NAV,
+    SuggestPlug,
+    sydney_status_line,
+)
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
 from paperroute.app_render import MapRenderer
@@ -1103,10 +1108,11 @@ def test_feeds_client_calls_live_only_when_live(tmp_path: Path) -> None:
 async def test_sydney_parts_wire_sydney(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Sydney's parts carry its nav, hint, assets, key and plug."""
+    """Sydney's parts carry its nav, hint, line, assets, key and plug."""
     monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
     assert SYDNEY_PARTS.nav == SYDNEY_NAV
     assert SYDNEY_PARTS.hint == SYDNEY_HINT
+    assert SYDNEY_PARTS.status_line is sydney_status_line
     assert SYDNEY_PARTS.assets == APP_ASSETS
     assert [key.name for key in SYDNEY_PARTS.keys()] == ['tfnsw']
     plug = SYDNEY_PARTS.suggest(live=False)

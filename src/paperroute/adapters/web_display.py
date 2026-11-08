@@ -38,6 +38,30 @@ VENDORED: Final[dict[str, str]] = {
     'tom-select.complete.min.js': 'text/javascript',
     'tom-select.css': 'text/css',
 }
+RESET_HINT: Final[str] = (
+    'Reset settings clears pins, settings, Wi-Fi and the key. Erase '
+    'everything also deletes the timetable. The map is kept. Both are '
+    'confirmed on the device.'
+)
+
+
+class StatusLine(Protocol):
+    """Writes the live page's status line from the status fields."""
+
+    def __call__(self, *, status: Mapping[str, object]) -> str:
+        """
+        Write the line.
+
+        Parameters
+        ----------
+        status : Mapping[str, object]
+            The status fields the app reported.
+
+        Returns
+        -------
+        str
+            The line, as plain text.
+        """
 
 
 def status_settings(
@@ -161,6 +185,9 @@ class WebDisplay:
         The live page's nav links, in order.
     hint : str
         The live page's knob hint lines, indented; trusted markup.
+    status_line : StatusLine | None
+        Writes the live page's status line into the status as `line`,
+        or None for no line.
 
     Attributes
     ----------
@@ -180,9 +207,11 @@ class WebDisplay:
         board: BoardRoutes | None = None,
         nav: Sequence[NavItem] = KIT_NAV,
         hint: str = KNOB_HINT,
+        status_line: StatusLine | None = None,
     ) -> None:
         self.defaults = default_settings(city=city)
         self._status = status
+        self._status_line = status_line
         self.device = device
         self._board = board
         self._remote_of = remote_of
@@ -191,10 +220,24 @@ class WebDisplay:
         self._before: dict[str, str] = {}
         self.live = LiveView(
             knobs=self.send,
-            status=status or dict,
+            status=self._live_status,
             nav=nav,
             hint=hint,
         )
+
+    def _live_status(self) -> dict[str, object]:
+        """
+        Give the live view's status fields, with the status line.
+
+        Returns
+        -------
+        dict[str, object]
+            The status fields, plus `line` when there is a status line.
+        """
+        snapshot = self._status() if self._status else {}
+        if self._status_line is None:
+            return snapshot
+        return {**snapshot, 'line': self._status_line(status=snapshot)}
 
     def show(
         self,

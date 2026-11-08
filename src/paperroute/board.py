@@ -31,7 +31,7 @@ from paperroute.adapters.rebuild import (
 from paperroute.adapters.state_file import DEFAULT_PATH as STATE_PATH
 from paperroute.adapters.state_file import JsonStateRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.adapters.web_display import WebDisplay
+from paperroute.adapters.web_display import RESET_HINT, StatusLine, WebDisplay
 from paperroute.app import Ports, run
 from paperroute.app_device import DevicePorts
 from paperroute.core.messages import Event, QuitRequested
@@ -150,6 +150,8 @@ class CityParts:
         The live page's knob hint.
     suggest : SuggestFor
         Makes the ways page's suggestion plug.
+    status_line : StatusLine
+        Writes the live page's status line.
     """
 
     assets: AssetRoot
@@ -158,6 +160,7 @@ class CityParts:
     nav: tuple[NavItem, ...]
     hint: str
     suggest: SuggestFor
+    status_line: StatusLine
 
 
 def add_pin_arguments(parser: argparse.ArgumentParser) -> None:
@@ -1030,6 +1033,7 @@ def device_pages_for(
         state_file=args.state,
         knobs=knob_state,
         nav=parts.nav,
+        reset_hint=RESET_HINT,
     )
 
 
@@ -1042,7 +1046,7 @@ def board_display(
     parts: CityParts,
 ) -> WebDisplay:
     """
-    Build the web display with the city's nav, hint and board pages.
+    Build the web display with the city's nav, hint, line and board pages.
 
     Parameters
     ----------
@@ -1055,7 +1059,7 @@ def board_display(
     city : City
         The city.
     parts : CityParts
-        The city's nav, hint and suggestion plug.
+        The city's nav, hint, status line and suggestion plug.
 
     Returns
     -------
@@ -1067,6 +1071,7 @@ def board_display(
         status=timings.snapshot,
         nav=parts.nav,
         hint=parts.hint,
+        status_line=parts.status_line,
         board=PinPages(
             pins=lambda: timings.pins,
             options=SqlitePinOptions(network=network),

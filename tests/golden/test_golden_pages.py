@@ -12,7 +12,7 @@ from paperroute.adapters.board_pages import PinPages
 from paperroute.adapters.settings_form import form_values
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SuggestPlug
-from paperroute.adapters.web_display import WebDisplay
+from paperroute.adapters.web_display import RESET_HINT, WebDisplay
 from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.sydney_feeds import DAILY_LIMIT, feed_label
 from paperroute_device.adapters.secrets_file import SecretsFile
@@ -77,6 +77,7 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
         state_file=None,
         clock=lambda: NOW,
         nav=SYDNEY_NAV,
+        reset_hint=RESET_HINT,
     )
     return WebDisplay(
         status=lambda: {'settings': form_values(settings=RICH_SAVED.settings)},

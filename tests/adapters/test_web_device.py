@@ -11,7 +11,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_board import SYDNEY_NAV
-from paperroute.adapters.web_display import WebDisplay
+from paperroute.adapters.web_display import RESET_HINT, WebDisplay
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
 from paperroute.sydney_feeds import (
     DAILY_LIMIT,
@@ -49,6 +49,7 @@ def sydney_site() -> DeviceSite:
         daily_limit=DAILY_LIMIT,
         zone=SYDNEY_ZONE,
         nav=SYDNEY_NAV,
+        reset_hint=RESET_HINT,
     )
 
 
@@ -122,9 +123,9 @@ async def test_device_page_sections(client: Client) -> None:
     for label in ('Reset settings', 'Erase everything'):
         assert f'<button type="submit" class="danger">{label}</button>' in text
     assert (
-        'Reset settings clears pins, settings, Wi-Fi and the key. Erase '
-        'everything also deletes the timetable. The map is kept. Both are '
-        'confirmed on the device.'
+        '<p class="hint">Reset settings clears pins, settings, Wi-Fi and the '
+        'key. Erase everything also deletes the timetable. The map is kept. '
+        'Both are confirmed on the device.</p>'
     ) in text
     assert '{{' not in text
 

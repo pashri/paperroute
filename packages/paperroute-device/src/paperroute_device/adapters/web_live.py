@@ -2,8 +2,10 @@
 
 import asyncio
 import logging
+import math
 import time
 from collections.abc import Callable, Mapping, Sequence
+from decimal import ROUND_HALF_UP, Decimal
 from http import HTTPStatus
 from typing import Final
 
@@ -41,6 +43,28 @@ KNOB_HINT: Final[str] = '\n'.join((
     '        Keys: <kbd>A</kbd> <kbd>S</kbd> <kbd>D</kbd> for the top knob,',
     '        <kbd>J</kbd> <kbd>K</kbd> <kbd>L</kbd> for the bottom knob.',
 ))
+
+
+def status_number(value: object) -> str:
+    """
+    Write a status number as a whole number, for a status line.
+
+    Parameters
+    ----------
+    value : object
+        The number, if known.
+
+    Returns
+    -------
+    str
+        The number rounded half up, or a dash unless it is a finite
+        `int` or `float` (a `bool` is not a number here).
+    """
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return '-'
+    if not math.isfinite(value):
+        return '-'
+    return str(Decimal(value).quantize(Decimal(1), rounding=ROUND_HALF_UP))
 
 
 def knob_event(*, knob: str, action: str) -> KnobInput | None:

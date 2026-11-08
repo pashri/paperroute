@@ -12,6 +12,7 @@ from paperroute.adapters.tfnsw import (
 from paperroute.adapters.web_board import (
     SYDNEY_HINT,
     SYDNEY_NAV,
+    sydney_status_line,
     sydney_suggest,
 )
 from paperroute.asset_root import APP_ASSETS
@@ -65,6 +66,7 @@ SYDNEY_PARTS: Final[board.CityParts] = board.CityParts(
     nav=SYDNEY_NAV,
     hint=SYDNEY_HINT,
     suggest=sydney_suggest,
+    status_line=sydney_status_line,
 )
 
 

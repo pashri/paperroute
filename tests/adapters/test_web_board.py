@@ -8,6 +8,7 @@ import pytest
 from paperroute.adapters.web_board import (
     SYDNEY_NAV,
     SuggestPlug,
+    sydney_status_line,
     sydney_suggest,
 )
 from paperroute_device.adapters.web_frame import nav_html
@@ -31,6 +32,21 @@ async def test_sydney_suggest_is_always_a_plug() -> None:
     plug = sydney_suggest(live=False)
     assert isinstance(plug, SuggestPlug)
     await plug.close()
+
+
+def test_sydney_status_line_matches_old_js() -> None:
+    """The status line reads as the page script wrote it, rounded half up."""
+    status = {
+        'frame_age_s': 2.5,
+        'last_render_ms': 118.4,
+        'feeds': {'v1/gtfs/realtime/buses': {'parse_ms': 41.5}},
+    }
+    blank = 'Frame age - s, render - ms, bus parse - ms'
+    assert sydney_status_line(status=status) == (
+        'Frame age 3 s, render 118 ms, bus parse 42 ms'
+    )
+    assert sydney_status_line(status={}) == blank
+    assert sydney_status_line(status={'frame_age_s': True}) == blank
 
 
 @pytest.mark.parametrize(('name', 'current'), [

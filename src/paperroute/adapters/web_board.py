@@ -1,14 +1,17 @@
-"""Sydney's board pages: its nav, hint and Trip Planner suggestions."""
+"""Sydney's board pages: nav, hint, status line, Trip Planner suggestions."""
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import datetime
 from typing import Final
 
 from paperroute.adapters.trip_planner import trip_planner_for
 from paperroute.adapters.web_suggest import SuggestPages, sydney_now
 from paperroute.adapters.web_ways import WaysPages
+from paperroute.city import SydneyFeed
 from paperroute.planner_port import TripPlanner
+from paperroute.sydney_feeds import FEEDS
 from paperroute_device.adapters.web_frame import DEVICE_NAV, LIVE_NAV, NavItem
+from paperroute_device.adapters.web_live import status_number
 
 PINS_NAV: Final[NavItem] = NavItem(
     href='/pins',
@@ -39,6 +42,34 @@ SYDNEY_HINT: Final[str] = '\n'.join((
     '        hold <kbd>K</kbd> or Press, then press <kbd>J</kbd> or',
     '        <kbd>L</kbd>, or tap Left or Right with another finger.',
 ))
+
+
+def sydney_status_line(*, status: Mapping[str, object]) -> str:
+    """
+    Write the live page's status line: frame age, render and bus parse.
+
+    Parameters
+    ----------
+    status : Mapping[str, object]
+        The status fields; a missing or malformed part shows as a dash.
+
+    Returns
+    -------
+    str
+        The line, each number rounded half up to a whole one.
+    """
+    feeds = status.get('feeds')
+    buses = (
+        feeds.get(FEEDS[SydneyFeed.BUS])
+        if isinstance(feeds, Mapping)
+        else None
+    )
+    parse = buses.get('parse_ms') if isinstance(buses, Mapping) else None
+    return (
+        f'Frame age {status_number(status.get("frame_age_s"))} s, '
+        f'render {status_number(status.get("last_render_ms"))} ms, '
+        f'bus parse {status_number(parse)} ms'
+    )
 
 
 class SuggestPlug:

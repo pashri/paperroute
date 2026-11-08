@@ -42,26 +42,13 @@ function sendKnob(knob, action) {
 }
 
 /**
- * Format a number for the status line.
- * @param {number | null | undefined} value The number, if known.
- * @param {number} digits Decimal places.
- * @returns {string} The number, or a dash when absent.
- */
-function formatNumber(value, digits) {
-  return typeof value === 'number' ? value.toFixed(digits) : '-';
-}
-
-/**
  * Write the status line from the `/status` JSON.
- * @param {object} status The parsed response.
+ * @param {object} status The parsed response, whose `line` the app wrote.
  * @returns {void}
  */
 function renderStatus(status) {
-  const parse = status.feeds?.['v1/gtfs/realtime/buses']?.parse_ms;
   statusLine.textContent =
-    `Frame age ${formatNumber(status.frame_age_s, 0)} s, ` +
-    `render ${formatNumber(status.last_render_ms, 0)} ms, ` +
-    `bus parse ${formatNumber(parse, 0)} ms`;
+    typeof status.line === 'string' ? status.line : 'Status: -';
 }
 
 /**

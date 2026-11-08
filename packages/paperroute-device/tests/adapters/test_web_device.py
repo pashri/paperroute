@@ -12,7 +12,11 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters.device_page import ASKED as DEVICE_ASKED
 from paperroute_device.adapters.device_page import ago_text, data_rows
-from paperroute_device.adapters.web_device import DevicePages
+from paperroute_device.adapters.web_device import (
+    KIT_RESET_HINT,
+    RESET_MARK,
+    DevicePages,
+)
 from paperroute_device.adapters.web_live import LiveView
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.core.device_events import (
@@ -526,3 +530,30 @@ def test_device_pages_need_a_key() -> None:
             error_log=None,
             state_file=None,
         )
+
+
+async def test_reset_hint_is_a_parameter() -> None:
+    """The reset wording is the kit's own unless the app gives its own."""
+    texts = []
+    for site in (DeviceSite(), DeviceSite(reset_hint='Wipes <it> all.')):
+        client = await _start(device=site)
+        try:
+            texts.append(await (await client.get('/device')).text())
+        finally:
+            await client.close()
+    assert f'<p class="hint">{KIT_RESET_HINT}</p>' in texts[0]
+    assert '<p class="hint">Wipes &lt;it&gt; all.</p>' in texts[1]
+    assert KIT_RESET_HINT not in texts[1]
+    assert RESET_MARK not in texts[0] + texts[1]
+
+
+async def test_error_with_reset_mark_stays_text(
+    device: DeviceSite, client: Client,
+) -> None:
+    """A last error reading like the reset mark is shown as written."""
+    device.status = replace(
+        STATUS, facts=replace(FACTS, last_error=RESET_MARK),
+    )
+    text = await (await client.get('/device')).text()
+    assert _row(label='Last error', value=RESET_MARK) in text
+    assert text.count(KIT_RESET_HINT) == 1

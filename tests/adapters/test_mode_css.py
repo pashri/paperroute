@@ -1,10 +1,9 @@
 """Tests for writing a city's mode chip colours as CSS."""
 
-from importlib.resources import files
-
 import pytest
 
 from paperroute.city import SYDNEY
+from paperroute_transit.adapters.board_web import BOARD_WEB
 from paperroute_transit.adapters.mode_css import mode_css
 from paperroute_transit.core.modes import ModeSpec
 from tests.css_rules import css_rules
@@ -70,9 +69,7 @@ def test_bad_colour_refused() -> None:
 
 def test_chip_text_default_matches_css() -> None:
     """The board's plain chip text is the mode spec's default."""
-    css = (files('paperroute') / 'assets' / 'web' / 'board.css').read_text(
-        encoding='utf-8',
-    )
+    css = (BOARD_WEB / 'board.css').read_text(encoding='utf-8')
     default = ModeSpec(id='x', label='X', letter='X', chip='#000000')
     assert declared(css=css, selector='.chip')['--chip-text'] == (
         default.chip_text

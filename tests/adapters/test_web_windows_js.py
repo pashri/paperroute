@@ -3,10 +3,11 @@
 import json
 import shutil
 import subprocess
-from importlib.resources import files
 from pathlib import Path
 
 import pytest
+
+from paperroute_transit.adapters.board_web import BOARD_WEB
 
 HARNESS = r"""
 import { pathToFileURL } from 'node:url';
@@ -64,10 +65,9 @@ console.log(JSON.stringify(results));
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_windows_script_in_node(tmp_path: Path) -> None:
     """Summaries read well, and the preview follows typing."""
-    web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'windows.mjs'
     script.write_text(
-        (web_dir / 'windows.js').read_text(encoding='utf-8'),
+        (BOARD_WEB / 'windows.js').read_text(encoding='utf-8'),
         encoding='utf-8',
     )
     harness = tmp_path / 'harness.mjs'

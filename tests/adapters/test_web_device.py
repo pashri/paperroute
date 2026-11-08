@@ -2,7 +2,6 @@
 
 from collections.abc import AsyncIterator
 from http import HTTPStatus
-from importlib.resources import files
 from typing import Final
 
 import pytest
@@ -24,6 +23,7 @@ from paperroute_device.core.device_model import PowerAction
 from paperroute_testkit.device_pages import KEY, NOW, DeviceSite
 from paperroute_testkit.page_markup import parse_page
 from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_web import BOARD_WEB
 from paperroute_transit.adapters.web_display import RESET_HINT, WebDisplay
 
 Client = TestClient[web.Request, web.Application]
@@ -235,9 +235,7 @@ def test_nav_on_every_page(name: str, current: str | None) -> None:
         page_frame(name=name, nav=SYDNEY_NAV, current=current)
         if name in SHELL_PAGES
         else BoardHead(nav=SYDNEY_NAV).fill(
-            page=(files('paperroute') / 'assets' / 'web' / name).read_text(
-                encoding='utf-8',
-            ),
+            page=(BOARD_WEB / name).read_text(encoding='utf-8'),
             current=current,
         )
     )

@@ -8,8 +8,8 @@ from typing import Final, Protocol
 from aiohttp import web
 from multidict import MultiMapping
 
-from paperroute_device.adapters.web_common import asset
 from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_web import board_text
 from paperroute_transit.adapters.web_connection import ConnectionPages
 from paperroute_transit.adapters.web_pins import PinsPages
 from paperroute_transit.adapters.web_ways import WaysPages
@@ -92,7 +92,7 @@ async def suggest_script(request: web.Request) -> web.Response:
     """
     del request
     return web.Response(
-        text=asset(name=SUGGEST_SCRIPT), content_type='text/javascript',
+        text=board_text(name=SUGGEST_SCRIPT), content_type='text/javascript',
     )
 
 

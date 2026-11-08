@@ -13,6 +13,7 @@ from paperroute_device.core.device_settings import (
     QuietMode,
     Window,
 )
+from paperroute_transit.adapters.board_web import board_text
 from paperroute_transit.adapters.settings_form import (
     BadInput,
     UnknownValue,
@@ -232,7 +233,7 @@ MAP_HINTS: Final[tuple[tuple[str, str], ...]] = (
 
 def test_settings_page_offers_four_map_choices() -> None:
     """The page lists the four radios in order, each with its hint."""
-    page = ' '.join(asset(name='settings.html').split())
+    page = ' '.join(board_text(name='settings.html').split())
     positions = []
     for (label, hint), value in zip(MAP_HINTS, MAP_VALUES, strict=True):
         radio = (
@@ -259,7 +260,7 @@ def test_route_pin_school_switch_read_and_shown() -> None:
     )
     values = form_values(settings=default_settings(city=SYDNEY))
     assert values['skip_school_on_route_pins'] == 'off'
-    page = asset(name='settings.html')
+    page = board_text(name='settings.html')
     assert 'name="skip_school_on_route_pins"' in page
     assert 'Also on pins without a To' in page
 
@@ -272,7 +273,7 @@ def test_school_switch_read_and_shown() -> None:
     assert form_values(
         settings=default_settings(city=SYDNEY),
     )['skip_school_buses'] == 'on'
-    page = asset(name='settings.html')
+    page = board_text(name='settings.html')
     assert 'name="skip_school_buses"' in page
     assert 'Leave out school buses' in page
 
@@ -296,7 +297,7 @@ def test_clean_after_refuses_other_values(bad: str) -> None:
 
 def test_clean_after_selects_its_option() -> None:
     """The page's cleaning choice is drawn with the saved count selected."""
-    page = asset(name='settings.html')
+    page = board_text(name='settings.html')
     text = page_text(
         template=page,
         values=form_values(
@@ -325,7 +326,7 @@ def test_swap_knobs_form_round_trip(swap: bool, value: str) -> None:
 
 def test_swap_knobs_switch_shown_checked() -> None:
     """The page draws the swap switch, checked when on."""
-    page = asset(name='settings.html')
+    page = board_text(name='settings.html')
     text = page_text(
         template=page,
         values=form_values(

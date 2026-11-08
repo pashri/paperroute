@@ -10,6 +10,7 @@ from paperroute.asset_root import APP_ASSETS, use_app_assets
 from paperroute_device.adapters.web_frame import SHELL_WEB
 from paperroute_device.assets import assets
 from paperroute_testkit.paths import ROOT
+from paperroute_transit.adapters.board_web import BOARD_WEB
 
 ASSET_ROOT: Final[Path] = ROOT / 'src' / 'paperroute' / 'asset_root.py'
 ENTRY_POINTS: Final[tuple[Path, ...]] = (
@@ -26,6 +27,8 @@ APP_FILES: Final[re.Pattern[str]] = re.compile(
 READERS: Final[dict[str, Traversable]] = {
     'asset': APP_ASSETS.web,
     'asset_bytes': APP_ASSETS.web,
+    'board_text': BOARD_WEB,
+    'board_bytes': BOARD_WEB,
     'shell_text': SHELL_WEB,
     'shell_bytes': SHELL_WEB,
 }
@@ -35,6 +38,13 @@ def test_use_app_assets_sets_app_root() -> None:
     """Pointing the device kit at the app gives the app's asset root."""
     use_app_assets()
     assert assets() == APP_ASSETS
+
+
+def test_app_web_holds_only_palette() -> None:
+    """The app's web directory keeps only its own palette."""
+    assert sorted(p.name for p in Path(str(APP_ASSETS.web)).iterdir()) == [
+        'palette.css',
+    ]
 
 
 def test_only_asset_root_reads_package_data() -> None:
@@ -187,7 +197,12 @@ def test_named_web_files_exist() -> None:
 
 
 def test_no_web_file_in_both_places() -> None:
-    """No web file is both in the shell and in the app."""
+    """No web file is in more than one of the shell, transit and the app."""
     shell = relative_files(root=SHELL_WEB)
+    board = relative_files(root=BOARD_WEB)
+    app = relative_files(root=APP_ASSETS.web)
     assert shell
-    assert not shell & relative_files(root=APP_ASSETS.web)
+    assert board
+    assert not shell & app
+    assert not board & app
+    assert not board & shell

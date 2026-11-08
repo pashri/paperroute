@@ -11,8 +11,9 @@ from urllib.parse import urlencode
 from aiohttp import web
 from multidict import MultiDict
 
-from paperroute_device.adapters.web_common import asset, form_fields
+from paperroute_device.adapters.web_common import form_fields
 from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_web import board_text
 from paperroute_transit.adapters.pin_editor import edited
 from paperroute_transit.adapters.pin_windows import (
     WindowRow,
@@ -125,7 +126,7 @@ def page_html(*, notice: str, body: str, head: BoardHead) -> str:
         The page.
     """
     return (
-        head.fill(page=asset(name='pins.html'), current='/pins')
+        head.fill(page=board_text(name='pins.html'), current='/pins')
         .replace('{{notice}}', notice)
         .replace('{{pins}}', body)
     )
@@ -416,7 +417,7 @@ class PinsPages:
         """
         del request
         return web.Response(
-            text=asset(name='pins.js'),
+            text=board_text(name='pins.js'),
             content_type='text/javascript',
         )
 
@@ -436,7 +437,7 @@ class PinsPages:
         """
         del request
         return web.Response(
-            text=asset(name='windows.js'),
+            text=board_text(name='windows.js'),
             content_type='text/javascript',
         )
 
@@ -716,7 +717,7 @@ class PinsPages:
         """
         del request
         return web.Response(
-            text=asset(name='stop-search.js'),
+            text=board_text(name='stop-search.js'),
             content_type='text/javascript',
         )
 

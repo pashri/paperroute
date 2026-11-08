@@ -10,8 +10,8 @@ from urllib.parse import urlencode
 from aiohttp import web
 from multidict import MultiDict, MultiMapping
 
-from paperroute_device.adapters.web_common import asset
 from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_web import board_text
 from paperroute_transit.adapters.pin_windows import (
     DEFAULT_BUTTON,
     WindowRow,
@@ -558,7 +558,7 @@ class WaysPages:
         """
         del request
         return web.Response(
-            text=asset(name='ways.js'), content_type='text/javascript',
+            text=board_text(name='ways.js'), content_type='text/javascript',
         )
 
     async def _hand(self, request: web.Request) -> web.Response:

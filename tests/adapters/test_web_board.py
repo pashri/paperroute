@@ -1,7 +1,6 @@
 """Tests for Sydney's board pages."""
 
 import re
-from importlib.resources import files
 
 import pytest
 
@@ -13,6 +12,7 @@ from paperroute.adapters.web_board import (
 )
 from paperroute_device.adapters.web_frame import nav_html
 from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_web import BOARD_WEB
 from tests.planner_fakes import FakeTripPlanner
 
 
@@ -59,9 +59,7 @@ def test_sydney_nav_drawn_into_board_templates(
     name: str, current: str
 ) -> None:
     """Each board template draws exactly the nav Sydney gives the kit."""
-    text = (files('paperroute') / 'assets' / 'web' / name).read_text(
-        encoding='utf-8',
-    )
+    text = (BOARD_WEB / name).read_text(encoding='utf-8')
     page = BoardHead(nav=SYDNEY_NAV).fill(page=text, current=current)
     found = re.search(r'<nav\b.*?</nav>', page, flags=re.DOTALL)
     assert text.count('\n  {{nav}}\n') == 1

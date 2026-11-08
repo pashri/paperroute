@@ -3,10 +3,11 @@
 import json
 import shutil
 import subprocess
-from importlib.resources import files
 from pathlib import Path
 
 import pytest
+
+from paperroute_transit.adapters.board_web import BOARD_WEB
 
 HARNESS = r"""
 import { pathToFileURL } from 'node:url';
@@ -60,10 +61,9 @@ FAILURE = [['P', 'failure', 'No <b>answer</b>']]
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_load_suggestions_in_node(tmp_path: Path) -> None:
     """The list is swapped in; a failed fetch shows the list's failure text."""
-    web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'suggest.mjs'
     script.write_text(
-        (web_dir / 'suggest.js').read_text(encoding='utf-8'),
+        (BOARD_WEB / 'suggest.js').read_text(encoding='utf-8'),
         encoding='utf-8',
     )
     harness = tmp_path / 'harness.mjs'

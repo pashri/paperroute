@@ -5,8 +5,8 @@ from collections.abc import Mapping, Sequence
 from typing import Final
 from urllib.parse import urlencode
 
-from paperroute_device.adapters.web_common import asset
 from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_web import board_text
 from paperroute_transit.adapters.pin_windows import DEFAULT_BUTTON
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.modes import ModeSpec, spec_of
@@ -516,7 +516,7 @@ def edit_page(
         The page.
     """
     return (
-        head.fill(page=asset(name='pin-edit.html'), current='/pins')
+        head.fill(page=board_text(name='pin-edit.html'), current='/pins')
         .replace('{{title}}', html.escape(title))
         .replace('{{notice}}', notice)
         .replace('{{body}}', body)

@@ -633,7 +633,7 @@ def test_web_display_imports_no_board_pages() -> None:
 
 def test_board_pages_hold_no_nav_markup() -> None:
     """The board's page files leave their nav to the city."""
-    pages = sorted((APP / 'assets' / 'web').glob('*.html'))
+    pages = sorted((TRANSIT / 'web').glob('*.html'))
     assert pages
     assert [
         page.name

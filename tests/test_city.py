@@ -2,7 +2,6 @@
 
 import itertools
 import re
-from importlib.resources import files
 from typing import Final
 
 import pytest
@@ -15,6 +14,7 @@ from paperroute.city import (
     SydneyMode,
     classify_sydney,
 )
+from paperroute_transit.adapters.board_web import BOARD_WEB
 from paperroute_transit.adapters.mode_css import MODES_MARK, board_css
 from paperroute_transit.core.city import Nouns
 from paperroute_transit.core.modes import RouteClass, mode_problems
@@ -175,9 +175,7 @@ def test_classifier_matches_old_functions() -> None:
 def test_board_css_has_a_chip_per_mode() -> None:
     """Sydney's served board sheet has a chip rule for every mode."""
     css = board_css(
-        text=(files('paperroute') / 'assets' / 'web' / 'board.css').read_text(
-            encoding='utf-8',
-        ),
+        text=(BOARD_WEB / 'board.css').read_text(encoding='utf-8'),
         modes=SYDNEY_MODES,
     )
     selectors = {rule.selector for rule in css_rules(css=css)}

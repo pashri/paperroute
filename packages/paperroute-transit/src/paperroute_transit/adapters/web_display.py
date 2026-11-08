@@ -8,17 +8,14 @@ import numpy as np
 from aiohttp import web
 from numpy.typing import NDArray
 
-from paperroute_device.adapters.web_common import (
-    asset,
-    asset_bytes,
-    form_fields,
-)
+from paperroute_device.adapters.web_common import asset, form_fields
 from paperroute_device.adapters.web_frame import KIT_NAV, NavItem
 from paperroute_device.adapters.web_guard import RemoteOf, peer_address
 from paperroute_device.adapters.web_live import KNOB_HINT, LiveView
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_hardware.ports import CLEAN_AFTER
 from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_web import board_bytes, board_text
 from paperroute_transit.adapters.mode_css import board_css
 from paperroute_transit.adapters.settings_form import (
     ERRORS,
@@ -389,7 +386,10 @@ class WebDisplay:
         """
         del request
         return web.Response(
-            text=board_css(text=asset(name='board.css'), modes=self._modes),
+            text=board_css(
+                text=board_text(name='board.css'),
+                modes=self._modes,
+            ),
             content_type='text/css',
         )
 
@@ -435,7 +435,7 @@ class WebDisplay:
         if name not in VENDORED:
             raise web.HTTPNotFound
         return web.Response(
-            body=asset_bytes(name=f'vendor/{name}'),
+            body=board_bytes(name=f'vendor/{name}'),
             content_type=VENDORED[name],
             headers={'Cache-Control': 'max-age=86400'},
         )
@@ -473,7 +473,7 @@ class WebDisplay:
             self._posted = {}
         page = page_text(
             template=self._head.fill(
-                page=asset(name='settings.html'), current='/settings',
+                page=board_text(name='settings.html'), current='/settings',
             ),
             values={**status, **self._posted},
             error=request.query.get('error'),
@@ -496,7 +496,7 @@ class WebDisplay:
         """
         del request
         return web.Response(
-            text=asset(name='settings.js'),
+            text=board_text(name='settings.js'),
             content_type='text/javascript',
         )
 

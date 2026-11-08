@@ -23,6 +23,7 @@ from paperroute_testkit.page_markup import (
     parse_tree,
 )
 from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_web import BOARD_WEB
 from paperroute_transit.adapters.web_display import WebDisplay
 from tests.adapters.test_web_device import SHELL_PAGES, sydney_site
 
@@ -36,7 +37,7 @@ TOM_SELECT_JS_SHA256: Final[str] = (
 TOM_SELECT_CSS_SHA256: Final[str] = (
     '7b29f39e2916acfb3d050e00df8fcdfca89279ead2d8e654afec307ca63b10f9'
 )
-WEB: Final = files('paperroute') / 'assets' / 'web'
+APP_WEB: Final = files('paperroute') / 'assets' / 'web'
 PAGES: Final[list[tuple[str, str | None]]] = [
     ('live.html', '/'),
     ('pins.html', '/pins'),
@@ -90,7 +91,7 @@ def board_css_text() -> str:
     str
         The text of `board.css`.
     """
-    return (WEB / 'board.css').read_text(encoding='utf-8')
+    return (BOARD_WEB / 'board.css').read_text(encoding='utf-8')
 
 
 def page_text(*, name: str) -> str:
@@ -115,7 +116,7 @@ def page_text(*, name: str) -> str:
             name=name, nav=SYDNEY_NAV, current=dict(PAGES)[name],
         )
     return BoardHead(nav=SYDNEY_NAV).fill(
-        page=(WEB / name).read_text(encoding='utf-8'),
+        page=(BOARD_WEB / name).read_text(encoding='utf-8'),
         current=dict(PAGES).get(name),
     )
 
@@ -295,7 +296,7 @@ async def test_tom_select_is_served(
     assert response.content_type == kind
     assert response.headers['Cache-Control'] == 'max-age=86400'
     assert hashlib.sha256(body).hexdigest() == digest
-    licence = (WEB / 'vendor' / 'LICENSE-tom-select.txt').read_text(
+    licence = (BOARD_WEB / 'vendor' / 'LICENSE-tom-select.txt').read_text(
         encoding='utf-8',
     )
     assert 'Apache License' in licence
@@ -314,7 +315,7 @@ def test_tokens_on_root() -> None:
     root = declarations(body=block_after(css=css, start=css.index(':root')))
     for token in ('--navy: ', '--blue: ', '--red: '):
         assert [line for line in root if line.startswith(token)]
-    palette = (WEB / 'palette.css').read_text(encoding='utf-8')
+    palette = (APP_WEB / 'palette.css').read_text(encoding='utf-8')
     nsw = declarations(
         body=block_after(css=palette, start=palette.index(':root')),
     )
@@ -362,7 +363,7 @@ def test_focus_and_motion() -> None:
 
 def test_no_framework() -> None:
     """No page asset pulls in Bootstrap."""
-    items = [*WEB.iterdir(), *SHELL_WEB.iterdir()]
+    items = [*APP_WEB.iterdir(), *BOARD_WEB.iterdir(), *SHELL_WEB.iterdir()]
     for item in items:
         if item.is_file():
             assert 'bootstrap' not in item.read_bytes().decode(
@@ -618,7 +619,7 @@ def test_app_pages_link_board_css_after_live_css() -> None:
     """Every app page that links the shell sheet links the board's next."""
     pages = [
         entry.read_text(encoding='utf-8').splitlines()
-        for entry in WEB.iterdir()
+        for entry in BOARD_WEB.iterdir()
         if entry.name.endswith('.html')
     ]
     links = [

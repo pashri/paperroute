@@ -3,10 +3,11 @@
 import json
 import shutil
 import subprocess
-from importlib.resources import files
 from pathlib import Path
 
 import pytest
+
+from paperroute_transit.adapters.board_web import BOARD_WEB
 
 HARNESS = r"""
 import { pathToFileURL } from 'node:url';
@@ -123,10 +124,9 @@ console.log(JSON.stringify(results));
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_settings_script_in_node(tmp_path: Path) -> None:
     """Each card saves on change, one post at a time, and says how."""
-    web_dir = files('paperroute') / 'assets' / 'web'
     script = tmp_path / 'settings.mjs'
     script.write_text(
-        (web_dir / 'settings.js').read_text(encoding='utf-8'),
+        (BOARD_WEB / 'settings.js').read_text(encoding='utf-8'),
         encoding='utf-8',
     )
     harness = tmp_path / 'harness.mjs'

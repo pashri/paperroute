@@ -12,7 +12,7 @@ from typing import Final
 
 from paperroute_transit.core.geo import Point
 
-TIMETABLE_SCHEMA: Final[str] = '7'
+TIMETABLE_SCHEMA: Final[str] = '8'
 REGIONAL_AGENCIES: Final[frozenset[str]] = frozenset({'711'})
 DAY_NAMES: Final[tuple[str, ...]] = (
     'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun',

@@ -11,6 +11,7 @@ import pytest
 from paperroute.adapters import pin_options
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.pin_options import SqlitePinOptions
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute.core.chooser import UNPICKED, Choice, Level, focusable
 from paperroute.core.pin_choices import KIND_NAMES
 from paperroute_transit.core.model import RouteKind, StopPlace
@@ -62,7 +63,10 @@ def _network(built: Path) -> Iterator[SqliteNetworkRepository]:
     SqliteNetworkRepository
         Repository, closed after the test.
     """
-    with closing(SqliteNetworkRepository(path=built)) as repo:
+    with closing(SqliteNetworkRepository(
+        path=built,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         yield repo
 
 
@@ -133,7 +137,10 @@ def test_search_lists_routes_naturally(built: Path, tmp_path: Path) -> None:
             )
             conn.execute(f"INSERT INTO run_stops VALUES ('C', {number}, 0)")
         conn.commit()
-    with closing(SqliteNetworkRepository(path=copy)) as network:
+    with closing(SqliteNetworkRepository(
+        path=copy,
+        projection=SYDNEY_PROJECTION,
+    )) as network:
         found = SqlitePinOptions(network=network).search(text='c st')
     assert found[0].routes == ('T1', 'T2', '3', '9', '10', '20')
     assert found[0].kinds == (RouteKind.BUS, RouteKind.TRAIN)
@@ -152,7 +159,10 @@ def test_search_can_leave_out_school_routes(
         )
         conn.execute("INSERT INTO run_stops VALUES ('SO', 90, 2)")
         conn.commit()
-    with closing(SqliteNetworkRepository(path=copy)) as network:
+    with closing(SqliteNetworkRepository(
+        path=copy,
+        projection=SYDNEY_PROJECTION,
+    )) as network:
         options = SqlitePinOptions(network=network)
         skipped = {
             m.place.stop_id: m
@@ -276,7 +286,10 @@ def test_destinations_without_line_tables(
     with closing(sqlite3.connect(copy)) as conn:
         conn.execute('DROP TABLE line_stations')
         conn.commit()
-    with closing(SqliteNetworkRepository(path=copy)) as network:
+    with closing(SqliteNetworkRepository(
+        path=copy,
+        projection=SYDNEY_PROJECTION,
+    )) as network:
         found = SqlitePinOptions(network=network).destinations(
             origin=StopPlace(stop_id='C', name='C Stop', point=None),
             kind=RouteKind.TRAIN,
@@ -295,7 +308,10 @@ def test_filters_for_bus_include_school_and_replacement(
         conn.execute(REPLACEMENT_RUN)
         conn.execute(STOP_ROWS)
         conn.commit()
-    with closing(SqliteNetworkRepository(path=copy)) as network:
+    with closing(SqliteNetworkRepository(
+        path=copy,
+        projection=SYDNEY_PROJECTION,
+    )) as network:
         found = SqlitePinOptions(network=network).filters_at(
             stop_id='B2', kind=RouteKind.BUS,
         )
@@ -339,7 +355,10 @@ def test_old_file_offers_nothing(built: Path, tmp_path: Path) -> None:
     with closing(sqlite3.connect(copy)) as conn:
         conn.execute('DROP TABLE chooser_routes')
         conn.commit()
-    with closing(SqliteNetworkRepository(path=copy)) as network:
+    with closing(SqliteNetworkRepository(
+        path=copy,
+        projection=SYDNEY_PROJECTION,
+    )) as network:
         old = SqlitePinOptions(network=network)
         centre = StopPlace(stop_id='C', name='C', point=(0.0, 0.0))
         assert old.search(text='stop') == ()
@@ -361,7 +380,10 @@ def test_route_colours_reads_timetable(built: Path, tmp_path: Path) -> None:
             [('x:1', '0098CD'), ('x:2', 'f99d1c'), ('x:3', 'bad')],
         )
         conn.commit()
-    with closing(SqliteNetworkRepository(path=copy)) as network:
+    with closing(SqliteNetworkRepository(
+        path=copy,
+        projection=SYDNEY_PROJECTION,
+    )) as network:
         found = SqlitePinOptions(network=network).route_colours(
             names=('T1', 'T2', '809'),
         )
@@ -375,7 +397,10 @@ def test_route_colours_without_network(built: Path, tmp_path: Path) -> None:
         conn.execute("UPDATE routes SET color = 'F99D1C'")
         conn.execute('DROP TABLE chooser_routes')
         conn.commit()
-    with closing(SqliteNetworkRepository(path=copy)) as network:
+    with closing(SqliteNetworkRepository(
+        path=copy,
+        projection=SYDNEY_PROJECTION,
+    )) as network:
         found = SqlitePinOptions(network=network).route_colours(names=('T1',))
     assert found == {}
 

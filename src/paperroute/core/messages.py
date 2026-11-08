@@ -402,10 +402,13 @@ class TimetableSeen:
         The build time.
     schema : str | None
         The file's schema version, or None when it records none.
+    origin : str | None
+        The file's projection origin text, or None when it records none.
     """
 
     version: str | None
     schema: str | None = None
+    origin: str | None = None
 
 
 @dataclass(frozen=True)

@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 
 from paperroute.build.map_style import DARK
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
@@ -71,7 +72,7 @@ def place_label(
 
 def test_route_stays_whole_through_a_station_name(tmp_path: Path) -> None:
     """A station name under the route loses the letters the line covers."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = place_label(
         kind=LabelKind.STATION, name='Westmead', at=(gx + 120.0, gy),
     )
@@ -98,7 +99,7 @@ def test_route_stays_whole_through_the_to_station_name(
     tmp_path: Path,
 ) -> None:
     """The To's station name is not drawn again over the route."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = place_label(
         kind=LabelKind.STATION, name='Westmead', at=(gx + 120.0, gy),
     )
@@ -124,7 +125,7 @@ def test_route_stays_whole_through_the_to_station_name(
 
 def test_station_square_is_ink_in_paper(tmp_path: Path) -> None:
     """A station's square is 10 px of ink on a 14 px paper square."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = place_label(
         kind=LabelKind.STATION, name='Westmead', at=(gx + 120.0, gy - 80.0),
     )
@@ -136,6 +137,7 @@ def test_station_square_is_ink_in_paper(tmp_path: Path) -> None:
         centre=CENTRE,
         mpp=MPP,
         point=(CENTRE[0] + 120.0 * MPP, CENTRE[1] + 60.0 * MPP),
+        projection=SYDNEY_PROJECTION,
     )
     column, row = math.floor(x), math.floor(y)
     assert grey[row, column] == INK
@@ -172,7 +174,7 @@ def inked(
 
 def test_suburb_name_knocked_out_off_the_route(tmp_path: Path) -> None:
     """Off the route, a suburb name is dark grey on a 3 px paper halo."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = place_label(
         kind=LabelKind.SUBURB, name='Westmead', at=(gx - 120.0, gy - 80.0),
     )
@@ -195,7 +197,7 @@ def test_suburb_name_knocked_out_off_the_route(tmp_path: Path) -> None:
 
 def test_bits_suburb_name_is_dithered(tmp_path: Path) -> None:
     """In BITS a knocked-out dark grey suburb name is dithered, not ink."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = place_label(
         kind=LabelKind.SUBURB, name='Westmead', at=(gx - 120.0, gy - 80.0),
     )

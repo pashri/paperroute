@@ -13,7 +13,7 @@ import pytest
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.adapters.carry_on_rows import (
     CARRY_ONS,
@@ -156,7 +156,11 @@ def chain_departures(*, db: Path, dest: str) -> list[Departure]:
     list[Departure]
         Departures of chain trips, early in the morning.
     """
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         found = repo.on_day(
             ends=('E2', dest),
             day=DAY,
@@ -382,7 +386,11 @@ def test_carry_on_uses_first_destination_call(chain_db: Path) -> None:
 def test_patterns_name_the_trip_joined_onto(chain_db: Path) -> None:
     """A chain trip's pattern names the next; the last names none."""
     with closing(
-        SqliteTimetableRepository(path=chain_db, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=chain_db,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         found = repo.patterns(trip_ids=['c1', 'c8'], around=DAY)
     assert (found['c1'].next_trip, found['c8'].next_trip) == ('c2', None)
@@ -393,7 +401,11 @@ def test_carry_ons_reach_destination_through_the_chain(
 ) -> None:
     """Destination calls are found per chained trip, not by stop."""
     with closing(
-        SqliteTimetableRepository(path=chain_db, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=chain_db,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         sql = CARRY_ONS.format(
             shape=repo.shape_column(), service=repo.service_filter(),
@@ -412,7 +424,11 @@ def test_carry_ons_reach_destination_through_the_chain(
 def test_leg_lines_follow_the_trip_a_vehicle_becomes(chain_db: Path) -> None:
     """E2 to C stays on c1 as c2, so both lines ride the leg."""
     with closing(
-        SqliteTimetableRepository(path=chain_db, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=chain_db,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         found = repo.leg_lines(ends=('E2', 'C'), day=date(2026, 10, 6))
     assert found == {'sydneytrains:T1', 'sydneytrains:T2'}
@@ -426,7 +442,11 @@ def test_leg_lines_skip_a_next_trip_not_running(chain_db: Path) -> None:
         sql="UPDATE trips SET service_id = 'other' WHERE trip_id = 'c2'",
     )
     with closing(
-        SqliteTimetableRepository(path=chain_db, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=chain_db,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         found = repo.leg_lines(ends=('E2', 'C'), day=date(2026, 10, 6))
     assert found == {'sydneytrains:T1'}

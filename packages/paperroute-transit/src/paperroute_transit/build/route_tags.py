@@ -8,7 +8,7 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
-from paperroute_transit.core.geo import Point, to_metres
+from paperroute_transit.core.geo import Point, Projection, to_metres
 from paperroute_transit.core.model import RouteKind
 
 logger = logging.getLogger(__name__)
@@ -179,7 +179,7 @@ def agency_towns(*, routes: Sequence[CatalogueRoute]) -> dict[str, str]:
     }
 
 
-def centre_of(*, middle: Point) -> str | None:
+def centre_of(*, middle: Point, projection: Projection) -> str | None:
     """
     Find the big centre a point belongs to, if any.
 
@@ -187,6 +187,8 @@ def centre_of(*, middle: Point) -> str | None:
     ----------
     middle : Point
         Position in metres.
+    projection : Projection
+        The projection the position is in.
 
     Returns
     -------
@@ -196,14 +198,20 @@ def centre_of(*, middle: Point) -> str | None:
     """
     reach = []
     for label, lon, lat, radius in CENTRES:
-        reached = math.dist(middle, to_metres(lon=lon, lat=lat))
+        reached = math.dist(
+            middle,
+            to_metres(lon=lon, lat=lat, projection=projection),
+        )
         if (share := reached / (radius * 1000)) < 1:
             reach.append((share, label))
     return min(reach)[1] if reach else None
 
 
 def level_values(
-    *, route: CatalogueRoute, towns: Mapping[str, str],
+    *,
+    route: CatalogueRoute,
+    towns: Mapping[str, str],
+    projection: Projection,
 ) -> tuple[str, str, str, str]:
     """
     Give a route's candidate tags, level by level.
@@ -214,6 +222,8 @@ def level_values(
         Route.
     towns : Mapping[str, str]
         Place by operator ID.
+    projection : Projection
+        The projection route middles are in.
 
     Returns
     -------
@@ -221,7 +231,11 @@ def level_values(
         Region (centre, else operator town, else '?'), first place, last
         place and via place; '' where there is none.
     """
-    centre = None if route.middle is None else centre_of(middle=route.middle)
+    centre = (
+        None
+        if route.middle is None
+        else centre_of(middle=route.middle, projection=projection)
+    )
     places = end_places(long_name=route.long_name) or ['']
     return (
         centre or towns.get(route.agency, UNKNOWN_TOWN),
@@ -438,7 +452,10 @@ def clashes(
 
 
 def group_tags(
-    *, group: Sequence[CatalogueRoute], towns: Mapping[str, str],
+    *,
+    group: Sequence[CatalogueRoute],
+    towns: Mapping[str, str],
+    projection: Projection,
 ) -> dict[str, str]:
     """
     Tag the routes of one repeated number.
@@ -452,6 +469,8 @@ def group_tags(
         Routes sharing a kind and number.
     towns : Mapping[str, str]
         Place by operator ID.
+    projection : Projection
+        The projection route middles are in.
 
     Returns
     -------
@@ -459,7 +478,11 @@ def group_tags(
         Tags by route key.
     """
     values = {
-        route.route_key: level_values(route=route, towns=towns)
+        route.route_key: level_values(
+            route=route,
+            towns=towns,
+            projection=projection,
+        )
         for route in group
     }
     tags: dict[str, str] = {}
@@ -483,7 +506,10 @@ def group_tags(
 
 
 def tags_of(
-    *, routes: Sequence[CatalogueRoute], towns: Mapping[str, str],
+    *,
+    routes: Sequence[CatalogueRoute],
+    towns: Mapping[str, str],
+    projection: Projection,
 ) -> dict[str, str]:
     """
     Tag every route whose kind and number repeat.
@@ -494,6 +520,8 @@ def tags_of(
         Merged routes.
     towns : Mapping[str, str]
         Place by operator ID.
+    projection : Projection
+        The projection route middles are in.
 
     Returns
     -------
@@ -508,5 +536,7 @@ def tags_of(
     tags: dict[str, str] = {}
     for group in groups.values():
         if len(group) > 1:
-            tags.update(group_tags(group=group, towns=towns))
+            tags.update(
+                group_tags(group=group, towns=towns, projection=projection),
+            )
     return tags

@@ -526,7 +526,7 @@ def timetable_for(
         The open timetable.
     """
     timetable = SqliteTimetableRepository(
-        path=args.timetable, zone=SYDNEY.zone,
+        path=args.timetable, zone=SYDNEY.zone, projection=SYDNEY.projection,
     )
     try:
         yield timetable
@@ -551,7 +551,10 @@ def network_for(
     SqliteNetworkRepository
         The open reader.
     """
-    network = SqliteNetworkRepository(path=args.timetable)
+    network = SqliteNetworkRepository(
+        path=args.timetable,
+        projection=SYDNEY.projection,
+    )
     try:
         yield network
     finally:
@@ -572,21 +575,23 @@ def tiles_for(*, args: argparse.Namespace) -> Iterator[TileRepository]:
     ------
     TileRepository
         The tiles file, which may be missing. No tiles without --tiles,
-        or when the file was built for other zoom levels or another map
-        style; the maps then say "Map not installed". A file installed
-        while the app runs is checked when it is first seen.
+        or when the file was built for other zoom levels, another map
+        style or another projection origin; the maps then say "Map not
+        installed". A file installed while the app runs is checked when
+        it is first seen.
     """
     if args.tiles is None:
         yield NullTiles()
         return
     tiles = SqliteTileRepository(path=args.tiles)
-    if args.tiles.exists() and not tiles.fits():
+    origin = SYDNEY.projection.origin_text
+    if args.tiles.exists() and not tiles.fits(origin=origin):
         built = tiles.built_for()
         tiles.close()
-        warn_unfit(path=args.tiles, built=built)
+        warn_unfit(path=args.tiles, built=built, origin=origin)
         yield NullTiles()
         return
-    checked = CheckedTiles(tiles=tiles, path=args.tiles)
+    checked = CheckedTiles(tiles=tiles, path=args.tiles, origin=origin)
     try:
         yield checked
     finally:

@@ -11,7 +11,7 @@ import pytest
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.dedupe import merge_rail
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_transit.build.gtfs_files import Source
 from tests.build.feeds import build_db
 
@@ -54,7 +54,11 @@ def _slice_repo(
     )
     with closing(sqlite3.connect(db)) as conn:
         merge_rail(conn=conn)
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         yield repo
 
 
@@ -84,7 +88,11 @@ def routes_repo(
             lines,
         )
         conn.commit()
-    return SqliteTimetableRepository(path=path, zone=SYDNEY_ZONE)
+    return SqliteTimetableRepository(
+        path=path,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )
 
 
 def test_alert_places_resolve_routes(

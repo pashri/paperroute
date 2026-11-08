@@ -246,7 +246,18 @@ def test_meta_records_schema_version(tmp_path: Path) -> None:
     assert query(db=db, sql="SELECT value FROM meta "
                             "WHERE key = 'schema_version'") == [
         (SCHEMA_VERSION,)]
-    assert SCHEMA_VERSION == '7'
+    assert SCHEMA_VERSION == '8'
+
+
+def test_meta_records_origin(tmp_path: Path) -> None:
+    """The build writes the schema version and projection origin."""
+    db = built(tmp_path=tmp_path, sources=bundle_bus(tmp_path=tmp_path))
+    rows = query(
+        db=db,
+        sql="SELECT key, value FROM meta"
+            " WHERE key IN ('schema_version', 'origin') ORDER BY key",
+    )
+    assert rows == [('origin', '151.2093,-33.8688'), ('schema_version', '8')]
 
 
 def test_partly_merged_trip_keeps_its_shape(tmp_path: Path) -> None:

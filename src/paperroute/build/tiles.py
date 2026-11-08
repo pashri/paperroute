@@ -23,15 +23,19 @@ from paperroute_transit.build.tile_set import (
     tile_set,
 )
 from paperroute_transit.build.tile_store import TileWriter
-from paperroute_transit.core.geo import MetreBox, to_metres
-from paperroute_transit.core.tiles import NSW_BBOX, TILE_STYLE, ZOOMS
+from paperroute_transit.core.geo import (
+    DegreeBox,
+    MetreBox,
+    Projection,
+    to_metres,
+)
+from paperroute_transit.core.tiles import TILE_STYLE, ZOOMS
 
 STORE_NAME: Final[str] = 'features.db'
 SCRATCH_NAMES: Final[tuple[str, ...]] = (
     STORE_NAME,
     STORE_NAME + '-journal',
 )
-ORIGIN: Final[str] = '151.2093,-33.8688'
 PROGRESS_EVERY: Final[int] = 1000  # tiles
 EVERYWHERE: Final[tuple[float, float, float, float]] = (
     -math.inf,
@@ -63,6 +67,11 @@ class TileBuildConfig:
     bbox : tuple[float, float, float, float]
         West, south, east and north in degrees; stops outside it are
         left out.
+    projection : Projection
+        The city's projection and pixel grid.
+    area : DegreeBox
+        The city's area; features are read only inside it and a margin
+        of sea.
     zooms : tuple[int, ...]
         Metres per pixel to build.
     jobs : int
@@ -75,7 +84,9 @@ class TileBuildConfig:
     timetable: Path
     out: Path
     work: Path
-    bbox: tuple[float, float, float, float] = NSW_BBOX
+    bbox: tuple[float, float, float, float]
+    projection: Projection
+    area: DegreeBox
     zooms: tuple[int, ...] = ZOOMS
     jobs: int = 1
     index: str = 'flex_mem'
@@ -120,11 +131,14 @@ class BlockJob:
         Metres per pixel.
     tiles : tuple[tuple[int, int], ...]
         Column and row of each tile to draw.
+    projection : Projection
+        The projection whose pixel grid the tiles sit on.
     """
 
     store: Path
     mpp: int
     tiles: tuple[tuple[int, int], ...]
+    projection: Projection
 
 
 def progress(*, phase: str) -> None:
@@ -176,7 +190,13 @@ def render_block(job: BlockJob) -> Rendered:
             (
                 col,
                 row,
-                *render_tile(store=store, mpp=job.mpp, col=col, row=row),
+                *render_tile(
+                    store=store,
+                    mpp=job.mpp,
+                    col=col,
+                    row=row,
+                    projection=job.projection,
+                ),
             )
             for col, row in job.tiles
         ]
@@ -189,6 +209,7 @@ def block_jobs(
     store: Path,
     mpp: int,
     wanted: set[tuple[int, int]],
+    projection: Projection,
 ) -> list[BlockJob]:
     """
     Split a zoom's tiles into blocks of ``BLOCK`` by ``BLOCK``.
@@ -201,6 +222,8 @@ def block_jobs(
         Metres per pixel.
     wanted : set[tuple[int, int]]
         Tiles to draw.
+    projection : Projection
+        The projection whose pixel grid the tiles sit on.
 
     Returns
     -------
@@ -211,7 +234,12 @@ def block_jobs(
     for col, row in sorted(wanted):
         groups.setdefault((col // BLOCK, row // BLOCK), []).append((col, row))
     return [
-        BlockJob(store=store, mpp=mpp, tiles=tuple(groups[block]))
+        BlockJob(
+            store=store,
+            mpp=mpp,
+            tiles=tuple(groups[block]),
+            projection=projection,
+        )
         for block in sorted(groups)
     ]
 
@@ -236,13 +264,24 @@ def wanted_tiles(*, config: TileBuildConfig) -> Tiles:
         When the box holds no stops.
     """
     progress(phase='stops')
-    stops = stop_points(timetable=config.timetable, bbox=config.bbox)
+    stops = stop_points(
+        timetable=config.timetable,
+        bbox=config.bbox,
+        projection=config.projection,
+    )
     if not stops:
         raise ValueError(f'no stops in the bbox {config.bbox}')
-    return {mpp: tile_set(stops=stops, mpp=mpp) for mpp in config.zooms}
+    return {
+        mpp: tile_set(stops=stops, mpp=mpp, projection=config.projection)
+        for mpp in config.zooms
+    }
 
 
-def metre_box(*, bbox: tuple[float, float, float, float]) -> MetreBox:
+def metre_box(
+    *,
+    bbox: tuple[float, float, float, float],
+    projection: Projection,
+) -> MetreBox:
     """
     Turn a box in degrees into metres.
 
@@ -250,14 +289,16 @@ def metre_box(*, bbox: tuple[float, float, float, float]) -> MetreBox:
     ----------
     bbox : tuple[float, float, float, float]
         West, south, east and north in degrees.
+    projection : Projection
+        The projection to use.
 
     Returns
     -------
     MetreBox
         West, south, east and north in metres.
     """
-    west, south = to_metres(lon=bbox[0], lat=bbox[1])
-    east, north = to_metres(lon=bbox[2], lat=bbox[3])
+    west, south = to_metres(lon=bbox[0], lat=bbox[1], projection=projection)
+    east, north = to_metres(lon=bbox[2], lat=bbox[3], projection=projection)
     return (west, south, east, north)
 
 
@@ -290,13 +331,18 @@ def read_features(
     progress(phase='features')
     if not config.osm.is_file():
         raise FileNotFoundError(f'no OSM file at {config.osm}')
-    bbox = coverage_lonlat(box=coverage(tiles=tiles))
+    bbox = coverage_lonlat(
+        box=coverage(tiles=tiles, projection=config.projection),
+        projection=config.projection,
+        area=config.area,
+    )
     load_features(
         osm=config.osm,
         bbox=bbox,
         store=store,
-        frame=metre_box(bbox=bbox),
+        frame=metre_box(bbox=bbox, projection=config.projection),
         index=config.index,
+        projection=config.projection,
     )
 
 
@@ -304,6 +350,7 @@ def add_labels(
     *,
     store: FeatureStore,
     tiles: Tiles,
+    projection: Projection,
 ) -> int:
     """
     Place the labels at each zoom and commit them to the store.
@@ -314,6 +361,8 @@ def add_labels(
         The store holding the features.
     tiles : Tiles
         Tiles at each zoom.
+    projection : Projection
+        The projection whose pixel grid the tiles sit on.
 
     Returns
     -------
@@ -329,6 +378,7 @@ def add_labels(
                 store=store,
                 tiles={mpp: wanted},
                 index=index,
+                projection=projection,
             ),
         )
         store.add_labels(labels=labels)
@@ -407,6 +457,7 @@ def write_tiles(
     store: Path,
     tiles: Tiles,
     workers: int,
+    projection: Projection,
 ) -> int:
     """
     Draw and write every tile.
@@ -421,6 +472,8 @@ def write_tiles(
         Tiles at each zoom.
     workers : int
         Worker processes; 1 draws in this process.
+    projection : Projection
+        The projection whose pixel grid the tiles sit on.
 
     Returns
     -------
@@ -444,7 +497,12 @@ def write_tiles(
                 writer=writer,
                 mpp=mpp,
                 blocks=drawn(
-                    jobs=block_jobs(store=store, mpp=mpp, wanted=wanted),
+                    jobs=block_jobs(
+                        store=store,
+                        mpp=mpp,
+                        wanted=wanted,
+                        projection=projection,
+                    ),
                     pool=pool,
                     workers=workers,
                 ),
@@ -506,7 +564,7 @@ def swap(
         meta={
             'bbox': ','.join(str(value) for value in config.bbox),
             'zooms': ','.join(str(mpp) for mpp in config.zooms),
-            'origin': ORIGIN,
+            'origin': config.projection.origin_text,
             'osm_timestamp': header_timestamp(path=config.osm),
             'tiles': str(count),
             'style': TILE_STYLE,
@@ -536,13 +594,18 @@ def build_in(
     """
     tiles = wanted_tiles(config=config)
     read_features(config=config, store=store, tiles=tiles)
-    labels = add_labels(store=store, tiles=tiles)
+    labels = add_labels(
+        store=store,
+        tiles=tiles,
+        projection=config.projection,
+    )
     with TileWriter(out=config.out) as writer:
         count = write_tiles(
             writer=writer,
             store=config.work / STORE_NAME,
             tiles=tiles,
             workers=config.jobs,
+            projection=config.projection,
         )
         check_count(
             writer=writer,

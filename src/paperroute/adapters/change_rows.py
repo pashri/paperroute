@@ -7,7 +7,7 @@ from typing import Final
 
 from paperroute.core.connection_model import walk_metres
 from paperroute.core.pin_choices import ChangeStop
-from paperroute_transit.core.geo import Point, to_lonlat
+from paperroute_transit.core.geo import Point, Projection, to_lonlat
 from paperroute_transit.core.model import StopPlace
 
 CHANGE_M: Final[int] = 500
@@ -33,7 +33,7 @@ ORDER BY MIN(COALESCE(c.sort, :last)), r.route
 """
 
 
-def change_box(*, point: Point) -> dict[str, object]:
+def change_box(*, point: Point, projection: Projection) -> dict[str, object]:
     """
     Give the query parameters for stops around a point.
 
@@ -41,6 +41,8 @@ def change_box(*, point: Point) -> dict[str, object]:
     ----------
     point : Point
         Position in metres.
+    projection : Projection
+        The projection the position is in.
 
     Returns
     -------
@@ -49,8 +51,14 @@ def change_box(*, point: Point) -> dict[str, object]:
         place itself kept and any kind of route.
     """
     x, y = point
-    west, south = to_lonlat(point=(x - CHANGE_M, y - CHANGE_M))
-    east, north = to_lonlat(point=(x + CHANGE_M, y + CHANGE_M))
+    west, south = to_lonlat(
+        point=(x - CHANGE_M, y - CHANGE_M),
+        projection=projection,
+    )
+    east, north = to_lonlat(
+        point=(x + CHANGE_M, y + CHANGE_M),
+        projection=projection,
+    )
     return {
         'west': west, 'east': east, 'south': south, 'north': north,
         'own': '', 'any_kind': True, 'kind': None,

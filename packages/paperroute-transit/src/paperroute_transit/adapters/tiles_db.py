@@ -19,6 +19,8 @@ from paperroute_transit.core.tiles import (
 )
 from paperroute_transit.render.tile_codec import unpack_bits, unpack_grey
 
+Built = tuple[tuple[int, ...] | None, str | None, str | None]
+
 DEFAULT_TILES: Final[Path] = Path('/var/lib/paperroute/tiles.db')
 GROW_X: Final[float] = 200.0
 GROW_Y: Final[float] = 30.0
@@ -152,36 +154,53 @@ class SqliteTileRepository:
         )
         return str(rows[0][0]) if rows else None
 
-    def built_for(self) -> tuple[tuple[int, ...] | None, str | None]:
+    def built_for(self) -> Built:
         """
-        Say which zoom levels and map style the file was built for.
+        Say which zoom levels, map style and origin the file was built for.
 
         Returns
         -------
-        tuple[tuple[int, ...] | None, str | None]
-            The zoom levels and the style; each is None when the file,
-            the key or a readable value is missing.
+        Built
+            The zoom levels, the style and the projection origin text;
+            each is None when the file, the key or a readable value is
+            missing.
         """
         try:
             rows = self.db.fetch(
-                sql="SELECT key, value FROM meta WHERE key IN (?, ?)",
-                params=('zooms', 'style'),
+                sql="SELECT key, value FROM meta WHERE key IN (?, ?, ?)",
+                params=('zooms', 'style', 'origin'),
             )
         except sqlite3.Error:
-            return (None, None)
+            return (None, None, None)
         values = {str(key): str(value) for key, value in rows}
-        return (zooms_of(text=values.get('zooms')), values.get('style'))
+        return (
+            zooms_of(text=values.get('zooms')),
+            values.get('style'),
+            values.get('origin'),
+        )
 
-    def fits(self) -> bool:
+    def fits(self, *, origin: str) -> bool:
         """
         Say whether the file was built for this release's map.
+
+        Parameters
+        ----------
+        origin : str
+            The city's projection origin text. A file that records no
+            origin is taken to have it.
 
         Returns
         -------
         bool
-            True when its zoom levels and style match this release.
+            True when its zoom levels and style match this release and
+            its origin, if recorded, is the city's.
         """
-        return self.built_for() == (ZOOMS, TILE_STYLE)
+        zooms, style, built_origin = self.built_for()
+        return (
+            zooms == ZOOMS
+            and style == TILE_STYLE
+            and built_origin in (None, origin)
+        )
 
     def close(self) -> None:
         """Close the database connection."""

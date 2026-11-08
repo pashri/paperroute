@@ -169,7 +169,11 @@ def stop_at(*, base: MapBase) -> tuple[float, float] | None:
     if centre is None or point is None:
         return None
     return screen_point(
-        centre=centre, mpp=base.mpp, point=point, width=base.width,
+        centre=centre,
+        mpp=base.mpp,
+        point=point,
+        projection=base.projection,
+        width=base.width,
     )
 
 
@@ -194,7 +198,11 @@ def map_pixels(*, base: MapBase, points: Sequence[Point]) -> list[Point]:
         return []
     return [
         screen_point(
-            centre=centre, mpp=base.mpp, point=point, width=base.width,
+            centre=centre,
+            mpp=base.mpp,
+            point=point,
+            projection=base.projection,
+            width=base.width,
         )
         for point in points
     ]

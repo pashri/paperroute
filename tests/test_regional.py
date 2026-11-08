@@ -9,7 +9,7 @@ from typing import Final
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolve
 from paperroute_testkit.core.factories import STALE_LIMIT, pin_of
@@ -100,7 +100,11 @@ def resolved(*, db: Path, query: str) -> list[list[LiveDeparture]]:
     with closing(sqlite3.connect(db)) as conn:
         pins = conn.execute(query).fetchall()
     live = snapshot()
-    repo = SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
+    repo = SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )
     try:
         result = []
         for trip, origin, destination in pins:
@@ -157,6 +161,7 @@ def test_central_to_casino_xpt_listed_once(tmp_path: Path) -> None:
     repo = SqliteTimetableRepository(
         path=build(tmp_path=tmp_path, days=3),
         zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
     )
     try:
         days = [

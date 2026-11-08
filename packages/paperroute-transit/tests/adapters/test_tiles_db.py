@@ -20,6 +20,7 @@ from paperroute_transit.core.tiles import (
     TileVariant,
 )
 from paperroute_transit.render.tile_codec import pack_bits, pack_grey
+from tests.projection import ORIGIN
 
 
 def label(*, kind: LabelKind, name: str, x: float, y: float) -> PlacedLabel:
@@ -330,7 +331,24 @@ def test_fits_this_release(tmp_path: Path) -> None:
         meta={'zooms': '3,5,8,14,25,45', 'style': TILE_STYLE},
     )
     with closing(SqliteTileRepository(path=out)) as repo:
-        assert repo.fits()
+        assert repo.fits(origin=ORIGIN)
+
+
+@pytest.mark.parametrize(
+    ('origin', 'fits'),
+    [(ORIGIN, True), (None, True), ('0.0,51.5', False)],
+)
+def test_fit_follows_the_origin(
+    tmp_path: Path, origin: str | None, fits: bool,
+) -> None:
+    """A recorded origin must be the city's; a missing one is accepted."""
+    meta = {'zooms': '3,5,8,14,25,45', 'style': TILE_STYLE}
+    if origin is not None:
+        meta['origin'] = origin
+    out = with_meta(out=tmp_path / 'tiles.db', meta=meta)
+    with closing(SqliteTileRepository(path=out)) as repo:
+        assert repo.fits(origin=ORIGIN) is fits
+        assert repo.built_for()[2] == origin
 
 
 def test_other_zooms_do_not_fit(tmp_path: Path) -> None:
@@ -340,7 +358,7 @@ def test_other_zooms_do_not_fit(tmp_path: Path) -> None:
         meta={'zooms': '3,5,8,14,45', 'style': TILE_STYLE},
     )
     with closing(SqliteTileRepository(path=out)) as repo:
-        assert not repo.fits()
+        assert not repo.fits(origin=ORIGIN)
 
 
 def test_missing_style_does_not_fit(tmp_path: Path) -> None:
@@ -350,19 +368,19 @@ def test_missing_style_does_not_fit(tmp_path: Path) -> None:
         meta={
             'bbox': '140.99,-37.51,153.64,-28.15',
             'zooms': '3,5,8,14,25,45',
-            'origin': '149.5,-32.0',
+            'origin': ORIGIN,
             'osm_timestamp': '2026-10-01T00:00:00Z',
             'tiles': '1',
         },
     )
     with closing(SqliteTileRepository(path=out)) as repo:
-        assert not repo.fits()
+        assert not repo.fits(origin=ORIGIN)
 
 
 def test_missing_file_does_not_fit(tmp_path: Path) -> None:
     """No file doesn't fit."""
     with closing(SqliteTileRepository(path=tmp_path / 'no.db')) as repo:
-        assert not repo.fits()
+        assert not repo.fits(origin=ORIGIN)
 
 
 def test_bad_zooms_do_not_fit(tmp_path: Path) -> None:
@@ -372,7 +390,7 @@ def test_bad_zooms_do_not_fit(tmp_path: Path) -> None:
         meta={'zooms': '3,five', 'style': TILE_STYLE},
     )
     with closing(SqliteTileRepository(path=out)) as repo:
-        assert not repo.fits()
+        assert not repo.fits(origin=ORIGIN)
 
 
 def test_unreadable_meta_does_not_fit(tmp_path: Path) -> None:
@@ -380,4 +398,4 @@ def test_unreadable_meta_does_not_fit(tmp_path: Path) -> None:
     with closing(sqlite3.connect(':memory:')) as conn:
         conn.execute('CREATE TABLE meta (k TEXT)')
         repo = SqliteTileRepository(connection=conn)
-        assert not repo.fits()
+        assert not repo.fits(origin=ORIGIN)

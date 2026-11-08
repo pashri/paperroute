@@ -26,6 +26,7 @@ from paperroute.build.tile_draw import (
     draw_window,
     render_tile,
 )
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute_device.render.canvas import (
     INK,
     PAPER,
@@ -82,7 +83,7 @@ def around(*, lon: float, lat: float, half: float) -> MetreBox:
     MetreBox
         West, south, east and north in metres.
     """
-    x, y = to_metres(lon=lon, lat=lat)
+    x, y = to_metres(lon=lon, lat=lat, projection=SYDNEY_PROJECTION)
     return (x - half, y - half, x + half, y + half)
 
 
@@ -110,7 +111,11 @@ def tile_pixel(
         The tile's window, and the column and row of the pixel holding
         the point.
     """
-    pixel = to_pixels(point=to_metres(lon=lon, lat=lat), mpp=mpp)
+    pixel = to_pixels(
+        point=to_metres(lon=lon, lat=lat, projection=SYDNEY_PROJECTION),
+        mpp=mpp,
+        projection=SYDNEY_PROJECTION,
+    )
     col, row = tile_of(pixel=pixel)
     window = Window(
         mpp=mpp,
@@ -118,6 +123,7 @@ def tile_pixel(
         top=row * TILE,
         width=TILE,
         height=TILE,
+        projection=SYDNEY_PROJECTION,
     )
     local = (
         math.floor(pixel[0]) - window.left,
@@ -176,6 +182,7 @@ def _store(
         store=store,
         frame=around(lon=151.005, lat=-33.8, half=FRAME_HALF),
         index='flex_mem',
+        projection=SYDNEY_PROJECTION,
     )
     yield store
     store.conn.close()
@@ -222,6 +229,7 @@ def seam_windows(*, mpp: int) -> tuple[Window, Window, Window]:
         top=window.top,
         width=TILE,
         height=TILE,
+        projection=SYDNEY_PROJECTION,
     )
     whole = Window(
         mpp=mpp,
@@ -229,6 +237,7 @@ def seam_windows(*, mpp: int) -> tuple[Window, Window, Window]:
         top=window.top,
         width=2 * TILE,
         height=TILE,
+        projection=SYDNEY_PROJECTION,
     )
     return window, right, whole
 
@@ -334,7 +343,11 @@ def add_pixel_line(
     store.add_line(
         layer=layer,
         name='',
-        points=np.array([from_pixels(pixel=p, mpp=mpp) for p in pixels]),
+        points=np.array([from_pixels(
+            pixel=p,
+            mpp=mpp,
+            projection=SYDNEY_PROJECTION,
+        ) for p in pixels]),
     )
 
 
@@ -358,6 +371,7 @@ def tile_window(*, mpp: int) -> Window:
         top=30 * TILE,
         width=TILE,
         height=TILE,
+        projection=SYDNEY_PROJECTION,
     )
 
 
@@ -392,7 +406,11 @@ def add_pixel_area(
     ]
     store.add_area(
         layer=layer,
-        rings=[np.array([from_pixels(pixel=p, mpp=mpp) for p in corners])],
+        rings=[np.array([from_pixels(
+            pixel=p,
+            mpp=mpp,
+            projection=SYDNEY_PROJECTION,
+        ) for p in corners])],
     )
 
 
@@ -637,7 +655,14 @@ def test_long_label_reaches_the_next_tile(empty: FeatureStore) -> None:
 def test_label_too_wide_for_the_reach_is_not_drawn(
     empty: FeatureStore,
 ) -> None:
-    window = Window(mpp=SEAM_MPP, left=0, top=0, width=TILE, height=TILE)
+    window = Window(
+        mpp=SEAM_MPP,
+        left=0,
+        top=0,
+        width=TILE,
+        height=TILE,
+        projection=SYDNEY_PROJECTION,
+    )
     wide = street_label(name='Wide ' * 60, centre=(128.0, 64.0), angle=0.0)
     fits = street_label(name='Fits ' * 18, centre=(128.0, 192.0), angle=0.0)
     empty.add_labels(labels=[wide, fits])
@@ -1007,6 +1032,7 @@ def test_render_tile_round_trips(store: FeatureStore) -> None:
         mpp=3,
         col=window.left // TILE,
         row=window.top // TILE,
+        projection=SYDNEY_PROJECTION,
     )
     np.testing.assert_array_equal(
         unpack_grey(blob=grey),
@@ -1018,6 +1044,13 @@ def test_render_tile_round_trips(store: FeatureStore) -> None:
 
 
 def test_empty_window_is_paper(empty: FeatureStore) -> None:
-    window = Window(mpp=8, left=0, top=0, width=TILE, height=TILE)
+    window = Window(
+        mpp=8,
+        left=0,
+        top=0,
+        width=TILE,
+        height=TILE,
+        projection=SYDNEY_PROJECTION,
+    )
     tile = draw_window(store=empty, window=window)
     assert (tile == PAPER).all()

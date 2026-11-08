@@ -15,6 +15,7 @@ from paperroute.build.labels import (
     place_labels,
 )
 from paperroute.build.map_style import STATION_FACE, STREET_FACE
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute_device.render.canvas import text_width
 from paperroute_transit.build.features import FeatureStore
 from paperroute_transit.build.osm_source import OsmPlace
@@ -30,7 +31,11 @@ from paperroute_transit.core.tiles import (
 
 EDGE = 20480.0  # a block boundary at every zoom
 MIDDLE = EDGE + 1024.0
-ANCHOR = from_pixels(pixel=(MIDDLE, MIDDLE), mpp=3)
+ANCHOR = from_pixels(
+    pixel=(MIDDLE, MIDDLE),
+    mpp=3,
+    projection=SYDNEY_PROJECTION,
+)
 
 Box = tuple[float, float, float, float]
 
@@ -82,7 +87,11 @@ def add_street(
     store.add_line(
         layer=layer,
         name=name,
-        points=np.array([from_pixels(pixel=p, mpp=mpp) for p in pixels]),
+        points=np.array([from_pixels(
+            pixel=p,
+            mpp=mpp,
+            projection=SYDNEY_PROJECTION,
+        ) for p in pixels]),
     )
 
 
@@ -110,9 +119,10 @@ def add_place(
     point : Point
         Position in metres.
     """
-    lon, lat = to_lonlat(point=point)
+    lon, lat = to_lonlat(point=point, projection=SYDNEY_PROJECTION)
     store.add(
         feature=OsmPlace(kind=kind, name=name, rank=rank, lon=lon, lat=lat),
+        projection=SYDNEY_PROJECTION,
     )
 
 
@@ -156,11 +166,16 @@ def place(
     """
     tiles: dict[int, set[tuple[int, int]]] = {}
     for mpp in zooms:
-        x, y = to_pixels(point=ANCHOR, mpp=mpp)
+        x, y = to_pixels(point=ANCHOR, mpp=mpp, projection=SYDNEY_PROJECTION)
         tiles[mpp] = around(box=(x - 3072, y - 1024, x + 3072, y + 1024))
     index = LabelIndex(conn=store.conn)
     return list(
-        place_labels(store=store, tiles=tiles, index=index),
+        place_labels(
+            store=store,
+            tiles=tiles,
+            index=index,
+            projection=SYDNEY_PROJECTION,
+        ),
     )
 
 
@@ -177,7 +192,11 @@ def add_blocker(*, store: FeatureStore) -> None:
         store=store,
         kind='station',
         name='Q',
-        point=from_pixels(pixel=(MIDDLE, MIDDLE + 15), mpp=3),
+        point=from_pixels(
+            pixel=(MIDDLE, MIDDLE + 15),
+            mpp=3,
+            projection=SYDNEY_PROJECTION,
+        ),
     )
 
 
@@ -344,14 +363,14 @@ def test_station_wins_over_suburb(store: FeatureStore) -> None:
     assert [label.kind for label in labels] == [LabelKind.STATION]
     label = labels[0]
     assert label.start == label.end
-    x, y = to_pixels(point=ANCHOR, mpp=8)
+    x, y = to_pixels(point=ANCHOR, mpp=8, projection=SYDNEY_PROJECTION)
     assert label.start == pytest.approx((x, y))
     assert (label.x, label.y) == (round(x), round(y - 15))
 
 
 def test_station_rank_zero_comes_first(store: FeatureStore) -> None:
     """Of two stations at one spot, the full station is named."""
-    lon, lat = to_lonlat(point=ANCHOR)
+    lon, lat = to_lonlat(point=ANCHOR, projection=SYDNEY_PROJECTION)
     for rank, name in ((1, 'Bus Stop'), (0, 'Rail Station')):
         store.add(
             feature=OsmPlace(
@@ -361,6 +380,7 @@ def test_station_rank_zero_comes_first(store: FeatureStore) -> None:
                 lon=lon,
                 lat=lat,
             ),
+            projection=SYDNEY_PROJECTION,
         )
     labels = place(store=store, zooms=[8])
     assert [(label.name, label.rank) for label in labels] == [
@@ -392,7 +412,12 @@ def test_street_labels_stay_in_their_block(store: FeatureStore) -> None:
     tiles = {3: around(box=(EDGE, EDGE, EDGE + 2048, EDGE + 2048))}
     index = LabelIndex(conn=store.conn)
     labels = list(
-        place_labels(store=store, tiles=tiles, index=index),
+        place_labels(
+            store=store,
+            tiles=tiles,
+            index=index,
+            projection=SYDNEY_PROJECTION,
+        ),
     )
     assert len(labels) >= 4
     assert all(EDGE <= label.x < EDGE + 2048 for label in labels)
@@ -403,15 +428,25 @@ def test_label_belongs_to_the_block_holding_its_centre(
 ) -> None:
     """A station just below the block is named; a suburb there is not."""
     for kind, x in (('station', MIDDLE), ('suburb', MIDDLE + 500)):
-        below = from_pixels(pixel=(x, EDGE + 2048 + 10), mpp=8)
-        lon, lat = to_lonlat(point=below)
+        below = from_pixels(
+            pixel=(x, EDGE + 2048 + 10),
+            mpp=8,
+            projection=SYDNEY_PROJECTION,
+        )
+        lon, lat = to_lonlat(point=below, projection=SYDNEY_PROJECTION)
         store.add(
             feature=OsmPlace(kind=kind, name='Edge', rank=0, lon=lon, lat=lat),
+            projection=SYDNEY_PROJECTION,
         )
     tiles = {8: around(box=(EDGE, EDGE, EDGE + 2048, EDGE + 2048))}
     index = LabelIndex(conn=store.conn)
     labels = list(
-        place_labels(store=store, tiles=tiles, index=index),
+        place_labels(
+            store=store,
+            tiles=tiles,
+            index=index,
+            projection=SYDNEY_PROJECTION,
+        ),
     )
     assert [(label.kind, label.y) for label in labels] == [
         (LabelKind.STATION, EDGE + 2048 - 5),
@@ -572,7 +607,12 @@ def test_street_pieces_reach_past_the_block(store: FeatureStore) -> None:
     tiles = {3: around(box=(EDGE, EDGE, EDGE + 2048, EDGE + 2048))}
     index = LabelIndex(conn=store.conn)
     labels = list(
-        place_labels(store=store, tiles=tiles, index=index),
+        place_labels(
+            store=store,
+            tiles=tiles,
+            index=index,
+            projection=SYDNEY_PROJECTION,
+        ),
     )
     assert [label.x for label in labels] == [EDGE + 56, EDGE + 376]
 
@@ -594,7 +634,11 @@ def test_station_keeps_its_label_across_a_block_edge(
         store=store,
         kind='station',
         name='Westmead',
-        point=from_pixels(pixel=(EDGE + 20, MIDDLE + 15), mpp=3),
+        point=from_pixels(
+            pixel=(EDGE + 20, MIDDLE + 15),
+            mpp=3,
+            projection=SYDNEY_PROJECTION,
+        ),
     )
     labels = place(store=store, zooms=[3])
     assert sorted((label.kind, label.x) for label in labels) == [

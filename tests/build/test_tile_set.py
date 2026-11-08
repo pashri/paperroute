@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from paperroute.build.timetable import SCHEMA
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute_transit.build.tile_set import (
     SEA_MARGIN_DEG,
     blocks,
@@ -15,19 +16,14 @@ from paperroute_transit.build.tile_set import (
     tile_set,
 )
 from paperroute_transit.core.geo import to_lonlat, to_metres
-from paperroute_transit.core.tiles import (
-    GRID_ORIGIN,
-    NSW_BBOX,
-    TILE,
-    to_pixels,
-)
+from paperroute_transit.core.tiles import TILE, to_pixels
 
 
 def test_tile_set_covers_half_screen() -> None:
     """One stop's tiles fill the box half a screen either side of it."""
-    stop = to_metres(lon=151.0, lat=-33.8)
-    x, y = to_pixels(point=stop, mpp=8)
-    tiles = tile_set(stops=[stop], mpp=8)
+    stop = to_metres(lon=151.0, lat=-33.8, projection=SYDNEY_PROJECTION)
+    x, y = to_pixels(point=stop, mpp=8, projection=SYDNEY_PROJECTION)
+    tiles = tile_set(stops=[stop], mpp=8, projection=SYDNEY_PROJECTION)
     cols = [col for col, _ in tiles]
     rows = [row for _, row in tiles]
     assert min(cols) * TILE <= x - 400
@@ -40,10 +36,10 @@ def test_tile_set_covers_half_screen() -> None:
 
 def test_tile_set_joins_nearby_stops() -> None:
     """Two stops a tile apart share most of their tiles."""
-    first = to_metres(lon=151.0, lat=-33.8)
+    first = to_metres(lon=151.0, lat=-33.8, projection=SYDNEY_PROJECTION)
     second = (first[0] + 256 * 8, first[1])
-    one = tile_set(stops=[first], mpp=8)
-    both = tile_set(stops=[first, second], mpp=8)
+    one = tile_set(stops=[first], mpp=8, projection=SYDNEY_PROJECTION)
+    both = tile_set(stops=[first, second], mpp=8, projection=SYDNEY_PROJECTION)
     assert one < both
     assert len(both) == len(one) + len({row for _, row in one})
 
@@ -66,10 +62,14 @@ def test_stop_points_reads_stops_in_the_box(tmp_path: Path) -> None:
             "INSERT INTO stops VALUES ('none', 'None', NULL, NULL, NULL, '')",
         )
     conn.close()
-    points = stop_points(timetable=path, bbox=(150.9, -33.9, 151.1, -33.7))
+    points = stop_points(
+        timetable=path,
+        bbox=(150.9, -33.9, 151.1, -33.7),
+        projection=SYDNEY_PROJECTION,
+    )
     expected = [
-        to_metres(lon=151.0, lat=-33.8),
-        to_metres(lon=151.01, lat=-33.81),
+        to_metres(lon=151.0, lat=-33.8, projection=SYDNEY_PROJECTION),
+        to_metres(lon=151.01, lat=-33.81, projection=SYDNEY_PROJECTION),
     ]
     assert points == sorted(
         (float(round(x)), float(round(y))) for x, y in expected
@@ -105,11 +105,16 @@ def test_stop_points_ignore_stops_outside_nsw(tmp_path: Path) -> None:
             rows,
         )
     conn.close()
-    points = stop_points(timetable=path, bbox=NSW_BBOX)
+    points = stop_points(
+        timetable=path,
+        bbox=SYDNEY.bbox,
+        projection=SYDNEY_PROJECTION,
+    )
     expected = sorted(
         (float(round(x)), float(round(y)))
         for x, y in (
-            to_metres(lon=lon, lat=lat) for lat, lon in inside.values()
+            to_metres(lon=lon, lat=lat, projection=SYDNEY_PROJECTION)
+            for lat, lon in inside.values()
         )
     )
     assert points == expected
@@ -117,8 +122,11 @@ def test_stop_points_ignore_stops_outside_nsw(tmp_path: Path) -> None:
 
 def test_coverage_bounds_every_tile_at_every_zoom() -> None:
     """The coverage box holds each tile at each zoom."""
-    x0, y0 = GRID_ORIGIN
-    box = coverage(tiles={8: {(1, 2)}, 3: {(100, 1), (101, 9)}})
+    x0, y0 = SYDNEY_PROJECTION.grid_origin
+    box = coverage(
+        tiles={8: {(1, 2)}, 3: {(100, 1), (101, 9)}},
+        projection=SYDNEY_PROJECTION,
+    )
     assert box == (
         x0 + 256 * 8,
         y0 - 10 * 256 * 3,
@@ -129,36 +137,48 @@ def test_coverage_bounds_every_tile_at_every_zoom() -> None:
 
 def test_coverage_lonlat_is_clipped_to_nsw_with_a_sea_margin() -> None:
     """A huge box is cut back to NSW grown by the sea margin."""
-    west, south = to_metres(lon=100.0, lat=-60.0)
-    east, north = to_metres(lon=170.0, lat=-10.0)
-    clipped = coverage_lonlat(box=(west, south, east, north))
+    west, south = to_metres(lon=100.0, lat=-60.0, projection=SYDNEY_PROJECTION)
+    east, north = to_metres(lon=170.0, lat=-10.0, projection=SYDNEY_PROJECTION)
+    clipped = coverage_lonlat(
+        box=(west, south, east, north),
+        projection=SYDNEY_PROJECTION,
+        area=SYDNEY.bbox,
+    )
     assert clipped == pytest.approx(
         (
-            NSW_BBOX[0] - SEA_MARGIN_DEG,
-            NSW_BBOX[1] - SEA_MARGIN_DEG,
-            NSW_BBOX[2] + SEA_MARGIN_DEG,
-            NSW_BBOX[3] + SEA_MARGIN_DEG,
+            SYDNEY.bbox[0] - SEA_MARGIN_DEG,
+            SYDNEY.bbox[1] - SEA_MARGIN_DEG,
+            SYDNEY.bbox[2] + SEA_MARGIN_DEG,
+            SYDNEY.bbox[3] + SEA_MARGIN_DEG,
         ),
     )
 
 
 def test_coverage_lonlat_keeps_a_small_box() -> None:
     """A box inside NSW keeps its corners."""
-    west, south = to_metres(lon=151.0, lat=-33.9)
-    east, north = to_metres(lon=151.1, lat=-33.8)
-    clipped = coverage_lonlat(box=(west, south, east, north))
+    west, south = to_metres(lon=151.0, lat=-33.9, projection=SYDNEY_PROJECTION)
+    east, north = to_metres(lon=151.1, lat=-33.8, projection=SYDNEY_PROJECTION)
+    clipped = coverage_lonlat(
+        box=(west, south, east, north),
+        projection=SYDNEY_PROJECTION,
+        area=SYDNEY.bbox,
+    )
     assert clipped == (
-        *to_lonlat(point=(west, south)),
-        *to_lonlat(point=(east, north)),
+        *to_lonlat(point=(west, south), projection=SYDNEY_PROJECTION),
+        *to_lonlat(point=(east, north), projection=SYDNEY_PROJECTION),
     )
 
 
 def test_coverage_lonlat_refuses_a_box_outside_nsw() -> None:
     """A box wholly outside NSW has nothing to build."""
-    west, south = to_metres(lon=130.0, lat=-31.0)
-    east, north = to_metres(lon=131.0, lat=-30.0)
-    with pytest.raises(ValueError, match='outside NSW'):
-        coverage_lonlat(box=(west, south, east, north))
+    west, south = to_metres(lon=130.0, lat=-31.0, projection=SYDNEY_PROJECTION)
+    east, north = to_metres(lon=131.0, lat=-30.0, projection=SYDNEY_PROJECTION)
+    with pytest.raises(ValueError, match="outside the city's area"):
+        coverage_lonlat(
+            box=(west, south, east, north),
+            projection=SYDNEY_PROJECTION,
+            area=SYDNEY.bbox,
+        )
 
 
 def test_blocks_are_sorted_and_unique() -> None:

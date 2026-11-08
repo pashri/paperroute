@@ -13,7 +13,7 @@ from paperroute.core.pin_choices import ChangeStop, StopMatch
 from paperroute.core.saved import Saved, Settings
 from paperroute_device.ports import DeviceObserver
 from paperroute_transit.core.alert_model import AlertPlaces
-from paperroute_transit.core.geo import MetreBox, Shape
+from paperroute_transit.core.geo import MetreBox, Projection, Shape
 from paperroute_transit.core.model import (
     Departure,
     Mode,
@@ -30,6 +30,17 @@ from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
 
 class TimetableRepository(Protocol):
     """Read access to the built timetable."""
+
+    @property
+    def projection(self) -> Projection:
+        """
+        The projection the timetable's stop points are placed in.
+
+        Returns
+        -------
+        Projection
+            The city's projection.
+        """
 
     def stop(self, *, stop_id: str) -> StopPlace:
         """
@@ -85,6 +96,16 @@ class TimetableRepository(Protocol):
         -------
         str | None
             The schema version, or None when the file records none.
+        """
+
+    def origin(self) -> str | None:
+        """
+        Say which projection origin the file's metres are from.
+
+        Returns
+        -------
+        str | None
+            The origin text, or None when the file records none.
         """
 
     def holidays(self) -> frozenset[date]:

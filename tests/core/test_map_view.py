@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
@@ -159,6 +159,7 @@ def inputs(
         now=now,
         stale_after=stale_after,
         zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
     )
 
 
@@ -193,17 +194,32 @@ def at(*, point: Point) -> tuple[float, float]:
     tuple[float, float]
         Map pixels.
     """
-    return screen_point(centre=CENTRE, mpp=MPP, point=point)
+    return screen_point(
+        centre=CENTRE,
+        mpp=MPP,
+        point=point,
+        projection=SYDNEY_PROJECTION,
+    )
 
 
 def test_screen_point_centre_is_map_middle_and_north_is_up() -> None:
     """The centre lands mid-map and 100 m north is 100 / mpp px up."""
     centre = (1234.5, -678.9)
-    x, y = screen_point(centre=centre, mpp=MPP, point=centre)
+    x, y = screen_point(
+        centre=centre,
+        mpp=MPP,
+        point=centre,
+        projection=SYDNEY_PROJECTION,
+    )
     assert abs(x - MAP_WIDTH / 2) <= 1
     assert abs(y - MAP_HEIGHT / 2) <= 1
     north = (centre[0], centre[1] + 100.0)
-    nx, ny = screen_point(centre=centre, mpp=MPP, point=north)
+    nx, ny = screen_point(
+        centre=centre,
+        mpp=MPP,
+        point=north,
+        projection=SYDNEY_PROJECTION,
+    )
     assert nx == pytest.approx(x)
     assert ny == pytest.approx(y - 100 / MPP)
 
@@ -216,10 +232,16 @@ def test_map_window_centres_at_width() -> None:
         mpp=MPP,
         point=centre,
         width=STRIP_MAP_WIDTH,
+        projection=SYDNEY_PROJECTION,
     )
     assert abs(x - STRIP_MAP_WIDTH / 2) <= 1
-    wide, _ = map_window(centre=centre, mpp=MPP)
-    narrow, _ = map_window(centre=centre, mpp=MPP, width=STRIP_MAP_WIDTH)
+    wide, _ = map_window(centre=centre, mpp=MPP, projection=SYDNEY_PROJECTION)
+    narrow, _ = map_window(
+        centre=centre,
+        mpp=MPP,
+        width=STRIP_MAP_WIDTH,
+        projection=SYDNEY_PROJECTION,
+    )
     assert narrow - wide == (MAP_WIDTH - STRIP_MAP_WIDTH) // 2
 
 

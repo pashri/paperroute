@@ -34,7 +34,7 @@ from paperroute.render.map_marks import (
 )
 from paperroute.render.trip_marks import draw_trip_ends, draw_trip_legs
 from paperroute_device.render.canvas import INK, PAPER, Canvas, text_width
-from paperroute_transit.core.geo import Point
+from paperroute_transit.core.geo import Point, Projection
 from paperroute_transit.core.tiles import (
     TILE,
     StreetLabel,
@@ -75,6 +75,7 @@ def window_of(*, base: MapBase) -> Window:
     return map_window(
         centre=base.centre,
         mpp=base.mpp,
+        projection=base.projection,
         width=base.width,
     )
 
@@ -187,6 +188,7 @@ def route_pixels(
     centre: Point,
     mpp: int,
     width: int,
+    projection: Projection,
 ) -> list[NDArray[np.float64]]:
     """
     Convert route lines to map pixels.
@@ -201,6 +203,8 @@ def route_pixels(
         Metres per pixel.
     width : int
         Map width in pixels.
+    projection : Projection
+        The projection whose pixel grid the map sits on.
 
     Returns
     -------
@@ -215,6 +219,7 @@ def route_pixels(
                     centre=centre,
                     mpp=mpp,
                     point=point,
+                    projection=projection,
                     width=width,
                 )
                 for point in line
@@ -487,6 +492,7 @@ def draw_line_and_names(
         centre=centre,
         mpp=base.mpp,
         width=base.width,
+        projection=base.projection,
     )
     draw_route(canvas, routes=routes, mpp=base.mpp)
     second = route_pixels(
@@ -494,6 +500,7 @@ def draw_line_and_names(
         centre=centre,
         mpp=base.mpp,
         width=base.width,
+        projection=base.projection,
     )
     draw_trip_legs(canvas, base=base, window=window)
     labels = tiles.street_labels(
@@ -595,6 +602,7 @@ def draw_marks(
                 centre=base.centre,
                 mpp=base.mpp,
                 point=base.centre,
+                projection=base.projection,
                 width=base.width,
             ),
         )

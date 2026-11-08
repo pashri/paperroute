@@ -10,7 +10,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute.core.alert_state import ALERT_EVERY, alert_feeds
 from paperroute.core.chooser import (
     ChooserPath,
@@ -801,7 +801,11 @@ def test_empty_area_modes_fall_back_to_every_mode() -> None:
     state, _ = step(state, empty)
     assert needed_feeds(state=state) == (
         BUSES,
-        *feeds_near(feeds=position_feeds(modes=ALL_POSITION_MODES), box=box),
+        *feeds_near(
+            feeds=position_feeds(modes=ALL_POSITION_MODES),
+            box=box,
+            projection=SYDNEY_PROJECTION,
+        ),
     )
     ferry = ModesLoaded(mpp=8, box=box, modes=frozenset({Mode.FERRY}))
     state, _ = step(state, ferry)

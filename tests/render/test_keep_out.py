@@ -5,6 +5,7 @@ from contextlib import closing
 from pathlib import Path
 
 from paperroute.build.map_style import STATION_FACE, SUBURB_FACE
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute.core.map_view import MapBase
 from paperroute.render.keep_out import NO_KEEP_OUT, KeepOut, keep_out
 from paperroute.render.map_base import window_of
@@ -86,7 +87,7 @@ def corners(*, mpp: int = MPP) -> tuple[Box, ...]:
 
 def test_station_name_and_square_boxes(tmp_path: Path) -> None:
     """A station keeps out its name on a 3 px halo and its 7 px square."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = place_label(
         kind=LabelKind.STATION, name='Westmead', at=(gx + 120.0, gy - 80.0),
     )
@@ -109,7 +110,7 @@ def test_station_name_and_square_boxes(tmp_path: Path) -> None:
 
 def test_turned_street_box_bounds_the_text(tmp_path: Path) -> None:
     """A street name at 30 degrees keeps out its turned text's bounds."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = street(name='Darcy Road', x=gx + 60.0, y=gy - 60.0, angle=30.0)
     with closing(build(out=tmp_path / 'tiles.db', labels=[label])) as tiles:
         boxes = keep_out(base=base(), tiles=tiles)
@@ -132,7 +133,7 @@ def test_suburb_box_only_at_suburb_zooms(tmp_path: Path) -> None:
     """A suburb name keeps out a box at 8 m/px but not at 5 m/px."""
     labels = []
     for mpp in (5, 8):
-        gx, gy = to_pixels(point=CENTRE, mpp=mpp)
+        gx, gy = to_pixels(point=CENTRE, mpp=mpp, projection=SYDNEY_PROJECTION)
         labels.append(PlacedLabel(
             zoom=mpp,
             kind=LabelKind.SUBURB,
@@ -180,7 +181,7 @@ def test_note_box_kept_out_without_tiles() -> None:
 
 def test_labels_off_the_map_are_left_out(tmp_path: Path) -> None:
     """A label fetched near the map but wholly off it keeps nothing out."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = street(name='Far Road', x=gx + 600.0, y=gy)
     with closing(build(out=tmp_path / 'tiles.db', labels=[label])) as tiles:
         boxes = keep_out(base=base(), tiles=tiles)
@@ -190,7 +191,12 @@ def test_labels_off_the_map_are_left_out(tmp_path: Path) -> None:
 def test_no_centre_keeps_out_the_corners_only(tmp_path: Path) -> None:
     """A map with no location keeps out only its corner boxes."""
     with closing(build(out=tmp_path / 'tiles.db')) as tiles:
-        boxes = keep_out(base=MapBase(centre=None, mpp=MPP, route=()), tiles=tiles)
+        boxes = keep_out(base=MapBase(
+            centre=None,
+            mpp=MPP,
+            route=(),
+            projection=SYDNEY_PROJECTION,
+        ), tiles=tiles)
     assert boxes == KeepOut(
         places=corners(), streets=(), corners=corners(),
     )

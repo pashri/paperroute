@@ -51,7 +51,7 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
 from paperroute.app_render import MapRenderer
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
 from paperroute.core.messages import Event
 from paperroute.observers import Timings
@@ -82,7 +82,7 @@ from paperroute_transit.adapters.tiles_db import (
 )
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
-from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.geo import Projection, to_metres
 from paperroute_transit.core.tiles import (
     TILE_STYLE,
     ZOOMS,
@@ -165,7 +165,10 @@ async def test_sydney_display_serves_sydney_nav_and_hint(
     """The live page `/` links all four Sydney pages and shows the hint."""
     display = sydney_display(
         timings=Timings(),
-        network=SqliteNetworkRepository(path=tmp_path / 'network.db'),
+        network=SqliteNetworkRepository(
+            path=tmp_path / 'network.db',
+            projection=SYDNEY_PROJECTION,
+        ),
         live=False,
     )
     client = TestClient(TestServer(display.app()))
@@ -405,9 +408,9 @@ def test_mismatched_tiles_open_as_no_tiles(
         assert isinstance(tiles, NullTiles)
         assert closed == [True]
     assert (
-        f'tiles: {out} was built for zoom levels 3,5,8,14,45 and style '
-        f'none; this release needs 3,5,8,14,25,45 and {TILE_STYLE}, so '
-        'the map is off'
+        f'tiles: {out} was built for zoom levels 3,5,8,14,45, style none '
+        'and origin none; this release needs 3,5,8,14,25,45, '
+        f'{TILE_STYLE} and 151.2093,-33.8688, so the map is off'
     ) in caplog.text
 
 
@@ -449,12 +452,17 @@ def test_matching_tiles_installed_while_running_are_read(
 
 def test_mismatched_tiles_draw_map_not_installed(tmp_path: Path) -> None:
     """The map says it isn't installed but keeps the From and route."""
-    centre = to_metres(lon=151.0036, lat=-33.8170)
+    centre = to_metres(
+        lon=151.0036,
+        lat=-33.8170,
+        projection=SYDNEY_PROJECTION,
+    )
     x, y = centre
     base = MapBase(
         centre=centre,
         mpp=8,
         route=(((x - 3000.0, y), (x + 3000.0, y)),),
+        projection=SYDNEY_PROJECTION,
     )
     out = old_tiles(out=tmp_path / 'tiles.db')
     with tiles_for(args=argparse.Namespace(tiles=out)) as tiles:
@@ -582,7 +590,11 @@ async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
     build_db(path=db)
     timings = Timings()
     display = WebDisplay(status=timings.snapshot)
-    timetable = SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
+    timetable = SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )
     ports = Ports(
         timetable=timetable,
         feeds=FileFeedsClient(directory=REAL),
@@ -662,7 +674,9 @@ def _restored_logging() -> Iterator[None]:
     root.setLevel(level)
 
 
-def unopenable(*, path: Path, zone: tzinfo) -> SqliteTimetableRepository:
+def unopenable(
+    *, path: Path, zone: tzinfo, projection: Projection,
+) -> SqliteTimetableRepository:
     """
     Fail to open a timetable.
 
@@ -671,6 +685,8 @@ def unopenable(*, path: Path, zone: tzinfo) -> SqliteTimetableRepository:
     path : Path
         Ignored.
     zone : tzinfo
+        Ignored.
+    projection : Projection
         Ignored.
 
     Raises
@@ -779,6 +795,7 @@ async def test_serve_web_posts_knob_events_then_stops_the_knobs(
     memory = SqliteTimetableRepository(
         connection=sqlite3.connect(':memory:'),
         zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
     )
     with closing(memory) as timetable:
         ports = Ports(
@@ -815,6 +832,7 @@ async def test_serve_web_passes_the_tiles_variant_to_run(
     memory = SqliteTimetableRepository(
         connection=sqlite3.connect(':memory:'),
         zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
     )
     with closing(memory) as timetable:
         ports = Ports(
@@ -857,6 +875,7 @@ def test_serve_or_exit_passes_the_tiles_variant(
     memory = SqliteTimetableRepository(
         connection=sqlite3.connect(':memory:'),
         zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
     )
     with closing(memory) as timetable:
         ports = Ports(
@@ -941,6 +960,7 @@ async def test_show_passes_the_tiles_variant_to_run(
     memory = SqliteTimetableRepository(
         connection=sqlite3.connect(':memory:'),
         zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
     )
     with closing(memory) as timetable:
         ports = Ports(

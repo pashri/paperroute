@@ -11,7 +11,7 @@ import pytest
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import pin_of
 from paperroute_transit.adapters.calendar_rows import (
@@ -75,7 +75,11 @@ def test_holidays_round_trip(tmp_path: Path) -> None:
     db = holiday_db(tmp_path=tmp_path)
     with closing(sqlite3.connect(db)) as conn:
         assert read_holidays(fetch=connection_fetch(conn=conn)) == {HOLIDAY}
-    repo = SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
+    repo = SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )
     try:
         assert repo.holidays() == {HOLIDAY}
     finally:
@@ -89,7 +93,11 @@ def test_holidays_absent_table(tmp_path: Path) -> None:
         conn.execute('DROP TABLE holidays')
         conn.commit()
         assert read_holidays(fetch=connection_fetch(conn=conn)) == frozenset()
-    repo = SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
+    repo = SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )
     try:
         assert repo.holidays() == frozenset()
     finally:
@@ -130,7 +138,11 @@ def _bundle_repo(
         start=SERVICE,
         days=1,
     )
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         yield repo
 
 
@@ -188,7 +200,11 @@ def test_service_span_counts_trips_after_midnight(tmp_path: Path) -> None:
         out=out,
     )
     with closing(
-        SqliteTimetableRepository(path=out, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=out,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         span = repo.service_span(pin=pin_of('2145615', '215020'), day=SERVICE)
     assert span == ServiceSpan(

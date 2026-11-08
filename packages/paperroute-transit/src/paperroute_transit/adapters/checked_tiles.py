@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute_transit.adapters.tiles_db import SqliteTileRepository
+from paperroute_transit.adapters.tiles_db import Built, SqliteTileRepository
 from paperroute_transit.core.tiles import (
     TILE_STYLE,
     ZOOMS,
@@ -19,9 +19,7 @@ from paperroute_transit.core.tiles import (
 logger = logging.getLogger(__name__)
 
 
-def warn_unfit(
-    *, path: Path, built: tuple[tuple[int, ...] | None, str | None]
-) -> None:
+def warn_unfit(*, path: Path, built: Built, origin: str) -> None:
     """
     Log that a tiles file doesn't fit this release, so the map is off.
 
@@ -29,18 +27,22 @@ def warn_unfit(
     ----------
     path : Path
         The tiles file.
-    built : tuple[tuple[int, ...] | None, str | None]
-        The zoom levels and style it was built for.
+    built : Built
+        The zoom levels, style and origin it was built for.
+    origin : str
+        The city's projection origin text.
     """
-    zooms, style = built
+    zooms, style, built_origin = built
     logger.warning(
-        'tiles: %s was built for zoom levels %s and style %s; this '
-        'release needs %s and %s, so the map is off',
+        'tiles: %s was built for zoom levels %s, style %s and origin %s; '
+        'this release needs %s, %s and %s, so the map is off',
         path,
         levels_text(zooms=zooms),
         style or 'none',
+        built_origin or 'none',
         levels_text(zooms=ZOOMS),
         TILE_STYLE,
+        origin,
     )
 
 
@@ -48,7 +50,7 @@ class CheckedTiles:
     """
     A tiles file that reads as empty while it doesn't fit this release.
 
-    The file may be missing at first. Its zoom levels and style are
+    The file may be missing at first. Its zoom levels, style and origin are
     checked again each time `version` sees a new build, so a file
     installed while the app runs is checked too. Reads between two
     `version` calls follow the last check. A build is marked as seen
@@ -61,11 +63,20 @@ class CheckedTiles:
         The file, which fitted or was missing when opened.
     path : Path
         Its path, for the warning.
+    origin : str
+        The city's projection origin text the file must match.
     """
 
-    def __init__(self, *, tiles: SqliteTileRepository, path: Path) -> None:
+    def __init__(
+        self,
+        *,
+        tiles: SqliteTileRepository,
+        path: Path,
+        origin: str,
+    ) -> None:
         self.tiles = tiles
         self.path = path
+        self.origin = origin
         self.seen = tiles.version()
         self.fit = True
 
@@ -91,11 +102,15 @@ class CheckedTiles:
         Returns
         -------
         bool
-            True when its zoom levels and style match this release.
+            True when its zoom levels, style and origin match.
         """
-        if self.tiles.fits():
+        if self.tiles.fits(origin=self.origin):
             return True
-        warn_unfit(path=self.path, built=self.tiles.built_for())
+        warn_unfit(
+            path=self.path,
+            built=self.tiles.built_for(),
+            origin=self.origin,
+        )
         return False
 
     def tile(

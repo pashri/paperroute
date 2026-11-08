@@ -6,6 +6,7 @@ from datetime import date, time, timedelta
 from enum import StrEnum
 from typing import Any, Final
 
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute_device.core.device_settings import DeviceSettings, Window
 from paperroute_transit.core.auto_model import AutoState
 from paperroute_transit.core.geo import to_metres
@@ -226,7 +227,11 @@ class Saved:
 TOWN_HALL: Final[StopPlace] = StopPlace(
     stop_id='200070',
     name='Town Hall Station',
-    point=to_metres(lon=151.206899293, lat=-33.8735963257),
+    point=to_metres(
+        lon=151.206899293,
+        lat=-33.8735963257,
+        projection=SYDNEY_PROJECTION,
+    ),
 )
 DEFAULT_PLACE: Final[Pin] = Pin(origin=TOWN_HALL, kind=RouteKind.TRAIN)
 DEFAULT_SAVED: Final[Saved] = Saved(

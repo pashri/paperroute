@@ -21,7 +21,7 @@ from paperroute_transit.build.tile_store import (
     LABELS_TABLE,
     PlacedLabel,
 )
-from paperroute_transit.core.geo import MetreBox, Point, to_metres
+from paperroute_transit.core.geo import MetreBox, Point, Projection, to_metres
 from paperroute_transit.core.tiles import LabelKind
 
 FEATURES_SCHEMA: Final[str] = LABELS_TABLE + """
@@ -61,17 +61,11 @@ FROM labels WHERE zoom = ? AND x BETWEEN ? AND ? AND y BETWEEN ? AND ?
 ORDER BY id
 """
 SEA_CELL: Final[float] = 8192.0  # metres; the sea is stored in squares
-LONLAT_ORIGIN: Final[NDArray[np.float64]] = np.array(
-    to_metres(lon=0.0, lat=0.0),
-)
-LONLAT_SCALE: Final[NDArray[np.float64]] = (
-    np.array(to_metres(lon=1.0, lat=1.0)) - LONLAT_ORIGIN
-)
 COUNT: Final[np.dtype[np.int32]] = np.dtype('<i4')
 COORD: Final[np.dtype[np.float64]] = np.dtype('<f8')
 
 
-def project(*, lonlat: Line) -> Line:
+def project(*, lonlat: Line, projection: Projection) -> Line:
     """
     Project longitude and latitude vertices to metres.
 
@@ -79,13 +73,23 @@ def project(*, lonlat: Line) -> Line:
     ----------
     lonlat : Line
         Vertices in degrees.
+    projection : Projection
+        The projection to use.
 
     Returns
     -------
     Line
         The same vertices as ``to_metres`` places them.
     """
-    return lonlat * LONLAT_SCALE + LONLAT_ORIGIN
+    origin: NDArray[np.float64] = np.array(
+        to_metres(lon=0.0, lat=0.0, projection=projection),
+    )
+    scale: NDArray[np.float64] = (
+        np.array(to_metres(lon=1.0, lat=1.0, projection=projection))
+        - origin
+    )
+    projected: Line = lonlat * scale + origin
+    return projected
 
 
 def pack_rings(*, rings: Sequence[Ring]) -> bytes:
@@ -254,7 +258,12 @@ class FeatureStore:
             self.conn.executescript(FEATURES_SCHEMA)
         self.coast: list[Line] = []
 
-    def add(self, *, feature: OsmLine | OsmArea | OsmPlace) -> None:
+    def add(
+        self,
+        *,
+        feature: OsmLine | OsmArea | OsmPlace,
+        projection: Projection,
+    ) -> None:
         """
         Project and store one feature.
 
@@ -263,20 +272,30 @@ class FeatureStore:
         feature : OsmLine | OsmArea | OsmPlace
             The feature in longitude and latitude. Coastline is kept
             apart until `finish`.
+        projection : Projection
+            The projection to store it in.
         """
         match feature:
             case OsmLine(layer='coastline'):
-                self.coast.append(project(lonlat=feature.lonlat))
+                self.coast.append(
+                    project(lonlat=feature.lonlat, projection=projection),
+                )
             case OsmLine():
                 self.add_line(
                     layer=feature.layer,
                     name=feature.name,
-                    points=project(lonlat=feature.lonlat),
+                    points=project(
+                        lonlat=feature.lonlat,
+                        projection=projection,
+                    ),
                 )
             case OsmArea():
                 self.add_area(
                     layer=feature.layer,
-                    rings=[project(lonlat=ring) for ring in feature.rings],
+                    rings=[
+                        project(lonlat=ring, projection=projection)
+                        for ring in feature.rings
+                    ],
                 )
             case OsmPlace():
                 self.conn.execute(
@@ -286,7 +305,11 @@ class FeatureStore:
                         feature.kind,
                         feature.name,
                         feature.rank,
-                        *to_metres(lon=feature.lon, lat=feature.lat),
+                        *to_metres(
+                            lon=feature.lon,
+                            lat=feature.lat,
+                            projection=projection,
+                        ),
                     ),
                 )
 
@@ -471,6 +494,7 @@ def load_features(
     store: FeatureStore,
     frame: MetreBox,
     index: str,
+    projection: Projection,
 ) -> int:
     """
     Read an OSM file's features into a store, then add the sea.
@@ -488,6 +512,8 @@ def load_features(
         West, south, east and north in metres to fill with sea.
     index : str
         Osmium node location store, such as ``flex_mem``.
+    projection : Projection
+        The projection to store the features in.
 
     Returns
     -------
@@ -496,7 +522,7 @@ def load_features(
     """
     count = 0
     for feature in read_osm(path=osm, bbox=bbox, index=index):
-        store.add(feature=feature)
+        store.add(feature=feature, projection=projection)
         count += 1
     store.finish(frame=frame)
     return count

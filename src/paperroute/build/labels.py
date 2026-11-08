@@ -25,10 +25,9 @@ from paperroute_transit.build.features import FeatureStore
 from paperroute_transit.build.geometry import Line, merge_lines
 from paperroute_transit.build.tile_set import BLOCK, blocks
 from paperroute_transit.build.tile_store import PlacedLabel
-from paperroute_transit.core.geo import MetreBox, Point
+from paperroute_transit.core.geo import MetreBox, Point, Projection
 from paperroute_transit.core.tiles import (
     CITY,
-    GRID_ORIGIN,
     POINT_HALF_HEIGHT,
     STATION_ZOOMS,
     STREET_HEIGHT,
@@ -36,7 +35,7 @@ from paperroute_transit.core.tiles import (
     TILE,
     LabelKind,
     PixelBox,
-    from_pixels,
+    metres_of,
     text_box,
     to_pixels,
 )
@@ -186,11 +185,14 @@ class Block:
         Block column.
     row : int
         Block row.
+    projection : Projection
+        The projection whose pixel grid the block sits on.
     """
 
     mpp: int
     col: int
     row: int
+    projection: Projection
 
     def holds(self, *, x: float, y: float) -> bool:
         """
@@ -227,12 +229,16 @@ class Block:
         """
         left = self.col * BLOCK_PX - grow
         top = self.row * BLOCK_PX - grow
-        west, north = from_pixels(pixel=(left, top), mpp=self.mpp)
-        east, south = from_pixels(
-            pixel=(left + BLOCK_PX + 2 * grow, top + BLOCK_PX + 2 * grow),
+        return metres_of(
+            box=(
+                left,
+                top,
+                left + BLOCK_PX + 2 * grow,
+                top + BLOCK_PX + 2 * grow,
+            ),
             mpp=self.mpp,
+            projection=self.projection,
         )
-        return (west, south, east, north)
 
 
 @dataclass(frozen=True, eq=False)
@@ -474,7 +480,11 @@ def point_label(
         box is taken.
     """
     _, name, rank, point = place
-    pixel = to_pixels(point=point, mpp=block.mpp)
+    pixel = to_pixels(
+        point=point,
+        mpp=block.mpp,
+        projection=block.projection,
+    )
     rise = STATION_RISE if kind == LabelKind.STATION else 0
     x, y = float(round(pixel[0])), float(round(pixel[1] - rise))
     if not block.holds(x=x, y=y):
@@ -577,7 +587,7 @@ def place_names(
             yield label
 
 
-def to_global(*, points: Line, mpp: int) -> Line:
+def to_global(*, points: Line, mpp: int, projection: Projection) -> Line:
     """
     Convert a line from metres to a zoom's global pixels.
 
@@ -587,16 +597,19 @@ def to_global(*, points: Line, mpp: int) -> Line:
         Vertices in metres.
     mpp : int
         Metres per pixel.
+    projection : Projection
+        The projection whose grid origin is pixel zero.
 
     Returns
     -------
     Line
         Vertices in global pixels.
     """
+    grid = projection.grid_origin
     return np.column_stack(
         (
-            (points[:, 0] - GRID_ORIGIN[0]) / mpp,
-            (GRID_ORIGIN[1] - points[:, 1]) / mpp,
+            (points[:, 0] - grid[0]) / mpp,
+            (grid[1] - points[:, 1]) / mpp,
         ),
     )
 
@@ -629,7 +642,13 @@ def named_lines(
     ):
         if name and layer in layers:
             rank, lines = streets.get(name, (-1, []))
-            lines.append(to_global(points=points, mpp=block.mpp))
+            lines.append(
+                to_global(
+                    points=points,
+                    mpp=block.mpp,
+                    projection=block.projection,
+                ),
+            )
             streets[name] = (max(rank, ROAD_LAYERS.index(layer)), lines)
     return streets
 
@@ -806,6 +825,7 @@ def place_labels(
     store: FeatureStore,
     tiles: Mapping[int, set[tuple[int, int]]],
     index: LabelIndex,
+    projection: Projection,
 ) -> Iterator[PlacedLabel]:
     """
     Place every label once per zoom, block by block.
@@ -823,6 +843,8 @@ def place_labels(
         Tiles to build, keyed by metres per pixel.
     index : LabelIndex
         Scratch index, emptied for each zoom.
+    projection : Projection
+        The projection whose pixel grid the tiles sit on.
 
     Yields
     ------
@@ -832,7 +854,7 @@ def place_labels(
     for mpp, wanted in tiles.items():
         index.reset()
         zoom_blocks = [
-            Block(mpp=mpp, col=col, row=row)
+            Block(mpp=mpp, col=col, row=row, projection=projection)
             for col, row in blocks(tiles=wanted)
         ]
         for placer in (station_labels, place_names, street_labels):

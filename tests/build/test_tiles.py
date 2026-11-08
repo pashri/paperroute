@@ -9,6 +9,7 @@ import pytest
 
 from paperroute.build.labels import label_box
 from paperroute.build.tiles import TileBuildConfig, TileReport, build_tiles
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute_testkit.build.osm_factory import (
     TIMESTAMP,
     TINY_BBOX,
@@ -52,6 +53,8 @@ def config_for(*, tmp_path: Path, jobs: int) -> TileBuildConfig:
         out=tmp_path / f'tiles-{jobs}.db',
         work=tmp_path / f'work-{jobs}',
         bbox=TINY_BBOX,
+        projection=SYDNEY.projection,
+        area=SYDNEY.bbox,
         jobs=jobs,
     )
 
@@ -110,7 +113,11 @@ def test_build_tiles_end_to_end(inputs: Path, serial: TileReport) -> None:
     labels = read_rows(path=out, sql='SELECT count(*) FROM labels')
     assert labels == [(serial.labels,)]
     _, lon, lat = STOPS[0]
-    pixel = to_pixels(point=to_metres(lon=lon, lat=lat), mpp=8)
+    pixel = to_pixels(
+        point=to_metres(lon=lon, lat=lat, projection=SYDNEY_PROJECTION),
+        mpp=8,
+        projection=SYDNEY_PROJECTION,
+    )
     col, row = tile_of(pixel=pixel)
     repo = SqliteTileRepository(path=out)
     try:
@@ -130,6 +137,16 @@ def test_build_writes_the_style(inputs: Path, serial: TileReport) -> None:
     assert rows == [(TILE_STYLE,)]
 
 
+def test_meta_origin_is_sydney(inputs: Path, serial: TileReport) -> None:
+    """The meta records the projection origin the tiles are drawn in."""
+    assert serial.tiles > 0
+    rows = read_rows(
+        path=inputs / 'tiles-1.db',
+        sql="SELECT value FROM meta WHERE key = 'origin'",
+    )
+    assert rows == [('151.2093,-33.8688',)]
+
+
 @pytest.mark.parametrize('mpp', [3, 5, 8])
 def test_street_is_named_through_a_stop(
     inputs: Path,
@@ -144,7 +161,11 @@ def test_street_is_named_through_a_stop(
         " bx, by FROM labels WHERE name = 'Hollis Street'",
     )
     _, lon, lat = STOPS[0]
-    x, y = to_pixels(point=to_metres(lon=lon, lat=lat), mpp=mpp)
+    x, y = to_pixels(
+        point=to_metres(lon=lon, lat=lat, projection=SYDNEY_PROJECTION),
+        mpp=mpp,
+        projection=SYDNEY_PROJECTION,
+    )
     boxes = [
         label_box(label=to_placed(row=row))
         for row in rows
@@ -185,6 +206,8 @@ def test_failed_build_keeps_old_tiles(inputs: Path, tmp_path: Path) -> None:
         out=out,
         work=work,
         bbox=TINY_BBOX,
+        projection=SYDNEY.projection,
+        area=SYDNEY.bbox,
     )
     with pytest.raises(FileNotFoundError):
         build_tiles(config=config)
@@ -204,6 +227,8 @@ def test_build_tiles_refuses_a_bbox_without_stops(
         out=tmp_path / 'tiles.db',
         work=tmp_path / 'work',
         bbox=(150.0, -34.0, 150.01, -33.99),
+        projection=SYDNEY.projection,
+        area=SYDNEY.bbox,
     )
     with pytest.raises(ValueError, match='no stops'):
         build_tiles(config=config)
@@ -219,6 +244,8 @@ def test_build_writes_the_25_level(inputs: Path, tmp_path: Path) -> None:
         out=out,
         work=tmp_path / 'work',
         bbox=TINY_BBOX,
+        projection=SYDNEY.projection,
+        area=SYDNEY.bbox,
         zooms=(25,),
     )
     build_tiles(config=config)

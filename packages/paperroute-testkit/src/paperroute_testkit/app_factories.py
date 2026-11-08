@@ -8,7 +8,7 @@ from datetime import datetime
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.app import MapRenderer, Ports, perform
 from paperroute.app_effects import StateSaver
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, MapView, Marker
 from paperroute.core.messages import Effect, Event
 from paperroute.core.strip_model import StripMapView, StripPane
@@ -49,7 +49,12 @@ def map_view(*, markers: tuple[Marker, ...] = ()) -> MapView:
         origin='Here',
         destination='There',
         clock='6:25',
-        base=MapBase(centre=STOP_POINT, mpp=MAP_MPP, route=()),
+        base=MapBase(
+            centre=STOP_POINT,
+            mpp=MAP_MPP,
+            route=(),
+            projection=SYDNEY_PROJECTION,
+        ),
         zoom=2,
         markers=markers,
         sidebar=(),

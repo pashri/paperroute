@@ -3,6 +3,7 @@
 import math
 
 from paperroute_transit.core.geo import (
+    Projection,
     make_shape,
     pack_shape,
     point_along,
@@ -11,6 +12,7 @@ from paperroute_transit.core.geo import (
     to_metres,
     unpack_shape,
 )
+from tests.projection import PROJECTION
 
 TOWN_HALL = (151.2070, -33.8732)
 PARRAMATTA = (151.00533, -33.81749)
@@ -31,21 +33,41 @@ def haversine(*, a: tuple[float, float], b: tuple[float, float]) -> float:
 
 def test_to_metres_origin_is_zero() -> None:
     """The projection origin maps to (0, 0)."""
-    assert to_metres(lon=151.2093, lat=-33.8688) == (0.0, 0.0)
+    assert to_metres(
+        lon=151.2093,
+        lat=-33.8688,
+        projection=PROJECTION,
+    ) == (0.0, 0.0)
 
 
 def test_round_trip_lonlat() -> None:
     """Projecting and unprojecting returns the same degrees."""
-    point = to_metres(lon=PARRAMATTA[0], lat=PARRAMATTA[1])
-    lon, lat = to_lonlat(point=point)
+    point = to_metres(
+        lon=PARRAMATTA[0],
+        lat=PARRAMATTA[1],
+        projection=PROJECTION,
+    )
+    lon, lat = to_lonlat(point=point, projection=PROJECTION)
     assert abs(lon - PARRAMATTA[0]) < 1e-9
     assert abs(lat - PARRAMATTA[1]) < 1e-9
 
 
+def test_round_trip_with_projection() -> None:
+    """Another projection's origin is metre zero and round-trips."""
+    london = Projection(
+        origin_lon=0.0, origin_lat=51.5, grid_lon=-1.0, grid_lat=52.0,
+    )
+    point = to_metres(lon=151.0, lat=-33.5, projection=london)
+    lon, lat = to_lonlat(point=point, projection=london)
+    assert abs(lon - 151.0) < 1e-9
+    assert abs(lat - -33.5) < 1e-9
+    assert to_metres(lon=0.0, lat=51.5, projection=london) == (0.0, 0.0)
+
+
 def test_to_metres_matches_great_circle() -> None:
     """Town Hall to Parramatta is within 1% of the haversine."""
-    a = to_metres(lon=TOWN_HALL[0], lat=TOWN_HALL[1])
-    b = to_metres(lon=PARRAMATTA[0], lat=PARRAMATTA[1])
+    a = to_metres(lon=TOWN_HALL[0], lat=TOWN_HALL[1], projection=PROJECTION)
+    b = to_metres(lon=PARRAMATTA[0], lat=PARRAMATTA[1], projection=PROJECTION)
     flat = math.hypot(b[0] - a[0], b[1] - a[1])
     great = haversine(a=TOWN_HALL, b=PARRAMATTA)
     assert abs(flat - great) / great < 0.01

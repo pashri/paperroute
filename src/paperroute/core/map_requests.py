@@ -145,7 +145,11 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
         modes=state.map.area_modes.get(mpp) or ALL_POSITION_MODES,
     )
     if centre is not None:
-        area = feeds_near(feeds=area, box=area_box(centre=centre, mpp=mpp))
+        area = feeds_near(
+            feeds=area,
+            box=area_box(centre=centre, mpp=mpp),
+            projection=state.city.projection,
+        )
     # A connection's legs can run beyond the area the modes were read
     # for, so its own modes are polled as well.
     legs = () if state.board.legs is None else position_feeds(modes=modes)
@@ -229,6 +233,7 @@ def pin_map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
         shapes=state.map.shapes,
         now=frame_time(state=state),
         zone=state.city.zone,
+        projection=state.city.projection,
         stale_after=stale_after(state=state),
         ends=pin_ends(state=state),
         step=state.map.step,

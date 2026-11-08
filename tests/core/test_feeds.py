@@ -1,5 +1,6 @@
 """Tests for feed selection by mode."""
 
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute.core.feeds import (
     FeedKind,
     alert_feeds_for,
@@ -31,7 +32,7 @@ def box_around(*, lon: float, lat: float, half: float = 1000) -> MetreBox:
     MetreBox
         West, south, east and north in metres.
     """
-    x, y = to_metres(lon=lon, lat=lat)
+    x, y = to_metres(lon=lon, lat=lat, projection=SYDNEY_PROJECTION)
     return (x - half, y - half, x + half, y + half)
 
 
@@ -122,7 +123,11 @@ def test_feeds_near_keeps_the_light_rail_line_in_the_area() -> None:
     """Around Parramatta only the Parramatta light rail feed is kept."""
     parramatta = box_around(lon=151.003, lat=-33.817)
     feeds = position_feeds(modes=[Mode.LIGHT_RAIL, Mode.BUS])
-    assert feeds_near(feeds=feeds, box=parramatta) == (
+    assert feeds_near(
+        feeds=feeds,
+        box=parramatta,
+        projection=SYDNEY_PROJECTION,
+    ) == (
         'v1/gtfs/vehiclepos/buses',
         'v1/gtfs/vehiclepos/lightrail/parramatta',
     )
@@ -133,6 +138,7 @@ def test_feeds_near_keeps_both_lines_that_meet() -> None:
     central = box_around(lon=151.206, lat=-33.884)
     assert feeds_near(
         feeds=position_feeds(modes=[Mode.LIGHT_RAIL]), box=central,
+        projection=SYDNEY_PROJECTION,
     ) == (
         'v1/gtfs/vehiclepos/lightrail/cbdandsoutheast',
         'v2/gtfs/vehiclepos/lightrail/innerwest',
@@ -145,5 +151,10 @@ def test_feeds_near_drops_newcastle_from_a_city_wide_map() -> None:
     feeds = position_feeds(modes=[Mode.LIGHT_RAIL])
     assert 'v1/gtfs/vehiclepos/lightrail/newcastle' not in feeds_near(
         feeds=feeds, box=sydney,
+        projection=SYDNEY_PROJECTION,
     )
-    assert len(feeds_near(feeds=feeds, box=sydney)) == 3
+    assert len(feeds_near(
+        feeds=feeds,
+        box=sydney,
+        projection=SYDNEY_PROJECTION,
+    )) == 3

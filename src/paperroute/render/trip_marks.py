@@ -22,7 +22,7 @@ END_EDGE: Final[int] = 3  # paper round the To's disc
 
 
 def on_map(
-    *, points: Sequence[Point], mpp: int, window: Window,
+    *, points: Sequence[Point], base: MapBase, window: Window,
 ) -> list[Point]:
     """
     Convert metres to map pixels from the map's corner.
@@ -31,8 +31,8 @@ def on_map(
     ----------
     points : Sequence[Point]
         Points in metres.
-    mpp : int
-        Metres per pixel.
+    base : MapBase
+        The base map key, for its zoom and projection.
     window : Window
         The map's top-left corner in global pixels.
 
@@ -41,7 +41,10 @@ def on_map(
     list[Point]
         Pixels from the map's left and top edges.
     """
-    found = [to_pixels(point=point, mpp=mpp) for point in points]
+    found = [
+        to_pixels(point=point, mpp=base.mpp, projection=base.projection)
+        for point in points
+    ]
     return [(x - window[0], y - window[1]) for x, y in found]
 
 
@@ -130,7 +133,7 @@ def draw_trip_legs(canvas: Canvas, *, base: MapBase, window: Window) -> None:
     for line in trip.second:
         cased_line(
             canvas,
-            points=on_map(points=line, mpp=base.mpp, window=window),
+            points=on_map(points=line, base=base, window=window),
             widths=(width, width + CASING),
             dash=LEG_DASH,
         )
@@ -138,7 +141,7 @@ def draw_trip_legs(canvas: Canvas, *, base: MapBase, window: Window) -> None:
     for ends in (*walks, *trip.others):
         cased_line(
             canvas,
-            points=on_map(points=ends, mpp=base.mpp, window=window),
+            points=on_map(points=ends, base=base, window=window),
             widths=(WALK_WIDTH, WALK_CASING),
             dash=WALK_DASH,
         )
@@ -165,11 +168,11 @@ def draw_trip_ends(canvas: Canvas, *, base: MapBase, window: Window) -> None:
         ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2) for a, b in trip.others
     )
     for change in on_map(
-        points=(*changes, *others), mpp=base.mpp, window=window,
+        points=(*changes, *others), base=base, window=window,
     ):
         draw_change(canvas, at=change)
     if trip.end is not None:
-        (end,) = on_map(points=(trip.end,), mpp=base.mpp, window=window)
+        (end,) = on_map(points=(trip.end,), base=base, window=window)
         draw_end(canvas, at=end)
 
 
@@ -205,6 +208,10 @@ def draw_trip_points(canvas: Canvas, *, base: MapBase) -> None:
     if base.centre is None or trip is None or trip.origin is None:
         return
     x, y = screen_point(
-        centre=base.centre, mpp=base.mpp, point=trip.origin, width=base.width,
+        centre=base.centre,
+        mpp=base.mpp,
+        point=trip.origin,
+        projection=base.projection,
+        width=base.width,
     )
     draw_stop(canvas, at=(x, y + HEADER))

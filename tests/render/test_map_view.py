@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute.core.connection_view import PairRow
 from paperroute.core.map_view import (
     MAP_HEIGHT,
@@ -73,7 +74,11 @@ from paperroute_transit.core.tiles import (
 from paperroute_transit.render.tile_codec import GREYS, pack_bits, pack_grey
 
 MPP = 8
-CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
+CENTRE: Point = to_metres(
+    lon=151.0036,
+    lat=-33.8170,
+    projection=SYDNEY_PROJECTION,
+)
 ROW_TOPS = (110, 182, 254, 326, 398)
 EMPTY = 'No more services today'
 LONG_EMPTY = empty_text(
@@ -129,7 +134,12 @@ VIEW = MapView(
     origin='Hollis St Opp Constitution Hill Library',
     destination='Parramatta Station',
     clock='8:00',
-    base=MapBase(centre=CENTRE, mpp=MPP, route=()),
+    base=MapBase(
+        centre=CENTRE,
+        mpp=MPP,
+        route=(),
+        projection=SYDNEY_PROJECTION,
+    ),
     zoom=2,
     markers=(),
     sidebar=(row(),) * 5,
@@ -185,7 +195,12 @@ def stop_pixel() -> tuple[int, int]:
     tuple[int, int]
         Column and row.
     """
-    x, y = screen_point(centre=CENTRE, mpp=MPP, point=CENTRE)
+    x, y = screen_point(
+        centre=CENTRE,
+        mpp=MPP,
+        point=CENTRE,
+        projection=SYDNEY_PROJECTION,
+    )
     return math.floor(x), math.floor(y + HEADER)
 
 
@@ -396,7 +411,12 @@ def test_banner_is_drawn_over_the_map() -> None:
 
 def test_stop_marker_is_drawn_over_badges() -> None:
     """A badge stuck on the stop is covered by the stop marker again."""
-    x, y = screen_point(centre=CENTRE, mpp=MPP, point=CENTRE)
+    x, y = screen_point(
+        centre=CENTRE,
+        mpp=MPP,
+        point=CENTRE,
+        projection=SYDNEY_PROJECTION,
+    )
     view = replace(VIEW, markers=(live(at=(x, y)),) * 40)
     frame = draw_map_view(view=view, base=paper())
     sx, sy = stop_pixel()
@@ -410,7 +430,12 @@ def test_stop_marker_is_drawn_over_badges() -> None:
 
 def test_of_crowded_badges_the_one_nearest_the_stop_shows() -> None:
     """Two overlapping badges draw only the one nearer the From."""
-    x, y = screen_point(centre=CENTRE, mpp=MPP, point=CENTRE)
+    x, y = screen_point(
+        centre=CENTRE,
+        mpp=MPP,
+        point=CENTRE,
+        projection=SYDNEY_PROJECTION,
+    )
     far = live(at=(x + 100, y + 60))
     near = live(at=(x + 100, y + 52))
     both = draw_map_view(view=replace(VIEW, markers=(far, near)), base=paper())
@@ -459,7 +484,12 @@ def test_no_location_says_so_without_a_stop() -> None:
     """With no centre the empty text shows and no stop is drawn."""
     view = replace(
         VIEW,
-        base=MapBase(centre=None, mpp=MPP, route=()),
+        base=MapBase(
+            centre=None,
+            mpp=MPP,
+            route=(),
+            projection=SYDNEY_PROJECTION,
+        ),
         empty='No location for this stop',
     )
     frame = draw_map_view(view=view, base=paper())
@@ -479,7 +509,7 @@ def test_snap_thresholds_outside_the_map() -> None:
 def test_markers_and_tiles_share_one_transform(tmp_path: Path) -> None:
     """A tile pixel and a dot marker at one metre point coincide."""
     point = (CENTRE[0] + 4000.0, CENTRE[1] - 3000.0)
-    gx, gy = to_pixels(point=point, mpp=CITY)
+    gx, gy = to_pixels(point=point, mpp=CITY, projection=SYDNEY_PROJECTION)
     col, tile_row = tile_of(pixel=(gx, gy))
     dot = np.full((TILE, TILE), PAPER, dtype=np.uint8)
     dot[math.floor(gy) - tile_row * TILE, math.floor(gx) - col * TILE] = INK
@@ -492,12 +522,22 @@ def test_markers_and_tiles_share_one_transform(tmp_path: Path) -> None:
             bits=pack_bits(paper=dot >= 128),
         )
         writer.finish(meta={})
-    city = MapBase(centre=CENTRE, mpp=CITY, route=())
+    city = MapBase(
+        centre=CENTRE,
+        mpp=CITY,
+        route=(),
+        projection=SYDNEY_PROJECTION,
+    )
     with closing(SqliteTileRepository(path=tmp_path / 'tiles.db')) as tiles:
         base = draw_map_base(base=city, tiles=tiles, variant=TileVariant.GREY)
     view = replace(VIEW, base=city, zoom=ZOOMS.index(CITY))
     tiled = draw_map_view(view=view, base=base)
-    sx, sy = screen_point(centre=CENTRE, mpp=CITY, point=point)
+    sx, sy = screen_point(
+        centre=CENTRE,
+        mpp=CITY,
+        point=point,
+        projection=SYDNEY_PROJECTION,
+    )
     ty, tx = math.floor(sy) + HEADER, math.floor(sx)
     assert tiled[ty, tx] == INK
     marked = draw_map_view(
@@ -719,7 +759,12 @@ def test_badges_keep_clear_of_the_to() -> None:
         origin=CENTRE, second=(), walk=None, change=None, end=end,
     )
     map_base = replace(VIEW.base, trip=trip)
-    x, y = screen_point(centre=CENTRE, mpp=MPP, point=end)
+    x, y = screen_point(
+        centre=CENTRE,
+        mpp=MPP,
+        point=end,
+        projection=SYDNEY_PROJECTION,
+    )
     boxes = end_boxes(base=map_base)
     assert (x - END_HALF, y - END_HALF, x + END_HALF, y + END_HALF) in boxes
     (placed,) = place(markers=[live(at=(x, y + 6))], reserved=boxes)
@@ -745,7 +790,12 @@ def test_stop_boxes_are_one_px_wider_than_the_ring() -> None:
     """At 8 m/px each ridden stop's 7 px ring gets a box 8 px each side."""
     stop = (CENTRE[0] + 80.0, CENTRE[1])
     map_base = replace(VIEW.base, stops=(stop,))
-    x, y = screen_point(centre=CENTRE, mpp=MPP, point=stop)
+    x, y = screen_point(
+        centre=CENTRE,
+        mpp=MPP,
+        point=stop,
+        projection=SYDNEY_PROJECTION,
+    )
     assert stop_boxes(base=map_base) == [(x - 8, y - 8, x + 8, y + 8)]
 
 

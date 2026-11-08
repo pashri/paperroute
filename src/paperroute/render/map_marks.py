@@ -91,7 +91,8 @@ def draw_ridden_stops(
     points = [
         (x - window[0], y - window[1])
         for x, y in (
-            to_pixels(point=point, mpp=base.mpp) for point in base.stops
+            to_pixels(point=point, mpp=base.mpp, projection=base.projection)
+            for point in base.stops
         )
     ]
     ring, hole = ridden_ring(mpp=base.mpp)

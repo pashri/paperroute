@@ -179,7 +179,8 @@ class Rebuild:
     Attributes
     ----------
     outdated : bool
-        True when the timetable's schema is older than the app's.
+        True when the timetable's schema is older than the app's, or it
+        was built for another projection origin.
     running : bool
         True while a rebuild runs.
     failures : int
@@ -188,6 +189,8 @@ class Rebuild:
         The earliest time for the next rebuild, or None for now.
     schema : str | None
         The schema version of the timetable seen last.
+    origin : str | None
+        The projection origin text of the timetable seen last.
     missing : bool
         True when there is no timetable.
     forced : bool
@@ -201,6 +204,7 @@ class Rebuild:
     failures: int = 0
     retry_at: datetime | None = None
     schema: str | None = None
+    origin: str | None = None
     missing: bool = False
     forced: bool = False
     failed: bool = False

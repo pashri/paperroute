@@ -367,12 +367,14 @@ def update(*, layout: Layout, fetched: Fetched, days: int,
         Whether the timetable was rebuilt. It is rebuilt when a source
         changed, when forced, when there is no timetable or fewer than
         MIN_DAYS_LEFT days remain in its window, or when it was built with
-        another SCHEMA_VERSION.
+        another SCHEMA_VERSION or records another projection origin.
     """
     meta = read_meta(path=layout.timetable)
+    origin = meta.get('origin')
     stale = (
         days_left(meta=meta) < MIN_DAYS_LEFT
         or meta.get('schema_version') != SCHEMA_VERSION
+        or (origin is not None and origin != SYDNEY.projection.origin_text)
     )
     if not (fetched.changed or force or stale):
         save_states(path=layout.states, states=fetched.states)

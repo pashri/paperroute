@@ -3,7 +3,7 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute.core.map_view import MAP_HEIGHT, MapView, screen_point
 from paperroute.core.messages import (
     DeparturesLoaded,
@@ -248,6 +248,7 @@ def test_sleep_map_keeps_both_ends_above_the_band() -> None:
         assert point is not None
         _, y = screen_point(
             centre=base.centre, mpp=base.mpp, point=point, width=base.width,
+            projection=SYDNEY_PROJECTION,
         )
         assert y + END_DISC + END_EDGE <= MAP_HEIGHT - BAND_H
 

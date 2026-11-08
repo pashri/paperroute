@@ -6,6 +6,7 @@ from datetime import timedelta
 
 import pytest
 
+from paperroute.city import SYDNEY
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import (
     ColumnLoaded,
@@ -144,12 +145,38 @@ def failed_at(*, minutes: int) -> State:
 
 @pytest.mark.parametrize(
     ('schema', 'expected'),
-    [('4', True), ('5', True), ('6', True), ('7', False), ('8', False),
-     (None, False), ('x', False)],
+    [('4', True), ('5', True), ('6', True), ('7', True), ('8', False),
+     ('9', False), (None, False), ('x', False)],
 )
 def test_is_outdated(schema: str | None, expected: bool) -> None:
     """Only a whole-number schema below the app's is outdated."""
-    assert is_outdated(schema=schema) is expected
+    assert is_outdated(schema=schema, origin=None, city=SYDNEY) is expected
+
+
+@pytest.mark.parametrize(
+    ('schema', 'origin', 'expected'),
+    [
+        ('7', None, True),
+        ('8', None, False),
+        ('8', '151.2093,-33.8688', False),
+        ('8', '0.0,51.5', True),
+        (None, None, False),
+    ],
+)
+def test_outdated_by_schema_or_origin(
+    schema: str | None, origin: str | None, expected: bool,
+) -> None:
+    """An older schema or another city's origin is outdated."""
+    assert is_outdated(schema=schema, origin=origin, city=SYDNEY) is expected
+
+
+def test_other_origin_starts_rebuild() -> None:
+    """A current file built for another origin asks for a rebuild."""
+    seen = TimetableSeen(version='v', schema='8', origin='0.0,51.5')
+    state, effects = step(pinned(), seen)
+    assert rebuilds(effects=effects) == 1
+    assert state.rebuild.outdated
+    assert state.rebuild.origin == '0.0,51.5'
 
 
 def test_outdated_timetable_starts_rebuild() -> None:
@@ -241,13 +268,13 @@ def test_rebuilt_ok_waits_before_any_retry() -> None:
 
 
 def test_current_schema_clears_outdated() -> None:
-    """A later schema-7 file is no longer outdated."""
+    """A later schema-8 file is no longer outdated."""
     state, _ = run_events(
         state=pinned(),
         events=[
             OLD,
             TimetableRebuilt(ok=True),
-            TimetableSeen(version='w', schema='7'),
+            TimetableSeen(version='w', schema='8'),
         ],
     )
     assert not state.rebuild.outdated

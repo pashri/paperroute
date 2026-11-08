@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from enum import StrEnum
 from typing import Final
 
-from paperroute_transit.core.geo import MetreBox, to_metres
+from paperroute_transit.core.geo import MetreBox, Projection, to_metres
 from paperroute_transit.core.model import Mode, RouteKind
 
 DAILY_LIMIT: Final[int] = 60_000  # API calls a day
@@ -120,7 +120,12 @@ def position_feeds(*, modes: Iterable[Mode]) -> tuple[str, ...]:
     )
 
 
-def feeds_near(*, feeds: Iterable[str], box: MetreBox) -> tuple[str, ...]:
+def feeds_near(
+    *,
+    feeds: Iterable[str],
+    box: MetreBox,
+    projection: Projection,
+) -> tuple[str, ...]:
     """
     Drop the single-line feeds whose line is nowhere near an area.
 
@@ -130,6 +135,8 @@ def feeds_near(*, feeds: Iterable[str], box: MetreBox) -> tuple[str, ...]:
         Feed paths.
     box : MetreBox
         The area: west, south, east and north in metres.
+    projection : Projection
+        The projection the box is in.
 
     Returns
     -------
@@ -137,10 +144,14 @@ def feeds_near(*, feeds: Iterable[str], box: MetreBox) -> tuple[str, ...]:
         The feeds in their order, without those in `LINE_AREAS` whose
         area misses the box.
     """
-    return tuple(feed for feed in feeds if line_near(feed=feed, box=box))
+    return tuple(
+        feed
+        for feed in feeds
+        if line_near(feed=feed, box=box, projection=projection)
+    )
 
 
-def line_near(*, feed: str, box: MetreBox) -> bool:
+def line_near(*, feed: str, box: MetreBox, projection: Projection) -> bool:
     """
     Say whether a feed's line comes near an area.
 
@@ -150,6 +161,8 @@ def line_near(*, feed: str, box: MetreBox) -> bool:
         Feed path.
     box : MetreBox
         The area: west, south, east and north in metres.
+    projection : Projection
+        The projection the box is in.
 
     Returns
     -------
@@ -160,8 +173,16 @@ def line_near(*, feed: str, box: MetreBox) -> bool:
     if feed not in LINE_AREAS:
         return True
     west_lon, south_lat, east_lon, north_lat = LINE_AREAS[feed]
-    west, south = to_metres(lon=west_lon, lat=south_lat)
-    east, north = to_metres(lon=east_lon, lat=north_lat)
+    west, south = to_metres(
+        lon=west_lon,
+        lat=south_lat,
+        projection=projection,
+    )
+    east, north = to_metres(
+        lon=east_lon,
+        lat=north_lat,
+        projection=projection,
+    )
     left, bottom, right, top = box
     return west <= right and east >= left and south <= top and north >= bottom
 

@@ -13,6 +13,7 @@ from paperroute.adapters.change_rows import CHANGE_COUNT, CHANGE_M
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.model import StopPlace
 
@@ -61,7 +62,10 @@ def _options(built: Path) -> Iterator[SqlitePinOptions]:
     SqlitePinOptions
         Options, closed after the test.
     """
-    with closing(SqliteNetworkRepository(path=built)) as network:
+    with closing(SqliteNetworkRepository(
+        path=built,
+        projection=SYDNEY_PROJECTION,
+    )) as network:
         yield SqlitePinOptions(network=network)
 
 
@@ -143,7 +147,10 @@ def test_no_network_tables_empty(built: Path, tmp_path: Path) -> None:
             'DROP TABLE run_stops;',
         )
         conn.commit()
-    with closing(SqliteNetworkRepository(path=copy)) as network:
+    with closing(SqliteNetworkRepository(
+        path=copy,
+        projection=SYDNEY_PROJECTION,
+    )) as network:
         old = SqlitePinOptions(network=network)
         place = StopPlace(stop_id='215020', name='P', point=(0.0, 0.0))
         assert old.change_stops(place=place) == ()

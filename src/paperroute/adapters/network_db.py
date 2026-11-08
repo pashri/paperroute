@@ -23,6 +23,7 @@ from paperroute_device.adapters.sqlite_ro import (
     ReadOnlyDatabase,
     file_identity,
 )
+from paperroute_transit.core.geo import Projection
 from paperroute_transit.core.model import (
     INTERCITY,
     STATION_FIRST,
@@ -264,6 +265,8 @@ class SqliteNetworkRepository:
 
     Parameters
     ----------
+    projection : Projection
+        The projection stop points are placed in.
     path : Path | None
         Timetable file; None for the one on the device.
     connection : sqlite3.Connection | None
@@ -274,9 +277,11 @@ class SqliteNetworkRepository:
     def __init__(
         self,
         *,
+        projection: Projection,
         path: Path | None = None,
         connection: sqlite3.Connection | None = None,
     ) -> None:
+        self.projection = projection
         self.db = ReadOnlyDatabase(
             path=path or DEFAULT_PATH,
             connection=connection,
@@ -287,7 +292,11 @@ class SqliteNetworkRepository:
         self.schema: dict[
             tuple[str, ...], tuple[Identity | None, bool]
         ] = {}
-        self.lines = LineTables(fetch=self.fetch, has_tables=self._has_tables)
+        self.lines = LineTables(
+            fetch=self.fetch,
+            has_tables=self._has_tables,
+            projection=projection,
+        )
 
     def fetch(
         self, *, sql: str, params: tuple[object, ...] | dict[str, object]
@@ -639,7 +648,11 @@ class SqliteNetworkRepository:
         line = tuple(
             StopPlace(
                 stop_id=str(stop_id), name=str(name),
-                point=to_point(lon=lon, lat=lat),
+                point=to_point(
+                    lon=lon,
+                    lat=lat,
+                    projection=self.projection,
+                ),
             )
             for stop_id, name, lon, lat in rows
         )
@@ -680,7 +693,11 @@ class SqliteNetworkRepository:
         return {
             str(stop_id): StopPlace(
                 stop_id=str(stop_id), name=str(name),
-                point=to_point(lon=lon, lat=lat),
+                point=to_point(
+                    lon=lon,
+                    lat=lat,
+                    projection=self.projection,
+                ),
             )
             for stop_id, name, lon, lat in rows
         }

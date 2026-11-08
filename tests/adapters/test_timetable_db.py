@@ -21,7 +21,7 @@ from paperroute.adapters.timetable_db import (
 )
 from paperroute.build.dedupe import merge_rail
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_device.adapters.sqlite_ro import file_identity
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import pin_of, place
@@ -95,7 +95,11 @@ def _repo(tmp_path: Path) -> Iterator[SqliteTimetableRepository]:
     )
     with closing(sqlite3.connect(db)) as conn:
         merge_rail(conn=conn)
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         yield repo
 
 
@@ -176,6 +180,55 @@ def test_departures_includes_previous_service_day_after_midnight(
     ]
 
 
+def test_reads_timetable_without_origin(tmp_path: Path) -> None:
+    """A schema-7 file with no origin meta still answers departures."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[
+            Source(name='bundle', archive=bus_feed(path=tmp_path / 'b.zip')),
+        ],
+    )
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute("INSERT INTO meta VALUES ('schema_version', '7')")
+        conn.commit()
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
+        found = repo.departures(
+            pin=HOLLIS_TO_PARRA,
+            start=at(hour=8, minute=0),
+            end=at(hour=9, minute=0),
+        )
+        assert [d.trip_id for d in found] == ['bus-0803']
+        assert repo.schema_version() == '7'
+        assert repo.origin() is None
+
+
+def test_origin_reads_the_recorded_origin(tmp_path: Path) -> None:
+    """The origin is read from the file's meta."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=1,
+        sources=[
+            Source(name='bundle', archive=bus_feed(path=tmp_path / 'b.zip')),
+        ],
+    )
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute("INSERT INTO meta VALUES ('origin', '0.0,51.5')")
+        conn.commit()
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
+        assert repo.origin() == '0.0,51.5'
+
+
 def test_stop_name_and_unknown_stop(repo: SqliteTimetableRepository) -> None:
     """Names come from stops; unknown IDs raise KeyError."""
     assert repo.stop(stop_id='215020').name == 'Parramatta Station'
@@ -193,7 +246,11 @@ def test_departures_kept_xpt_stays_regional(tmp_path: Path) -> None:
     )
     with closing(sqlite3.connect(db)) as conn:
         merge_rail(conn=conn)
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         found = repo.departures(
             pin=pin_of('200060', '215020'),
             start=at(hour=7, minute=0),
@@ -222,7 +279,11 @@ def test_departures_partial_xpt_listed_once_per_day(
         conn.commit()
         merge_rail(conn=conn)
     pin = pin_of('200060', '215020')
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         found = [
             repo.departures(
                 pin=pin,
@@ -259,7 +320,11 @@ def test_departures_before_daylight_saving_jump(tmp_path: Path) -> None:
         days=3,
         sources=[Source(name='bundle', archive=archive)],
     )
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         found = repo.departures(
             pin=pin_of('215020', '200060'),
             start=at(hour=23, minute=0, day=3),
@@ -384,7 +449,11 @@ def test_departures_reopens_after_file_replaced(
     """A rebuilt timetable moved over the file is seen by the next query."""
     live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
     with closing(
-        SqliteTimetableRepository(path=live, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=live,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         assert trip_ids(repo=repo) == ['A-0810']
         replace_with(live=live, trip='B-0810')
@@ -401,7 +470,11 @@ def test_departures_keeps_old_data_when_replacement_is_junk(
     """A replacement that isn't a timetable is refused with a warning."""
     live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
     with closing(
-        SqliteTimetableRepository(path=live, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=live,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         junk = live.with_name('timetable.new')
         junk.write_bytes(b'not a database' * 100)
@@ -417,7 +490,11 @@ def test_stop_reopens_after_file_replaced(tmp_path: Path) -> None:
     """stop() also reopens a replaced file."""
     live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
     with closing(
-        SqliteTimetableRepository(path=live, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=live,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         replace_with(live=live, trip='B-0810')
         assert repo.stop(stop_id='215020').name == 'Parramatta Station'
@@ -428,7 +505,11 @@ def test_missing_file_keeps_old_connection(tmp_path: Path) -> None:
     """With the file deleted, queries still answer from the open file."""
     live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
     with closing(
-        SqliteTimetableRepository(path=live, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=live,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         live.unlink()
         assert trip_ids(repo=repo) == ['A-0810']
@@ -439,7 +520,11 @@ def test_injected_connection_never_reopens(tmp_path: Path) -> None:
     live = single_trip_db(directory=tmp_path / 'a', trip='A-0810')
     conn = sqlite3.connect(f'file:{live}?mode=ro', uri=True)
     with closing(
-        SqliteTimetableRepository(connection=conn, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            connection=conn,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         replace_with(live=live, trip='B-0810')
         assert trip_ids(repo=repo) == ['A-0810']
@@ -460,7 +545,11 @@ def test_departures_threads_survive_replacement(tmp_path: Path) -> None:
             errors.append(error)
 
     with closing(
-        SqliteTimetableRepository(path=live, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=live,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         threads = [threading.Thread(target=loop) for _ in range(2)]
         for thread in threads:
@@ -497,7 +586,11 @@ def _slice_repo(
         Repository, closed after the tests.
     """
     db = slice_db(tmp_path=tmp_path_factory.mktemp('slice'))
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         yield repo
 
 
@@ -554,7 +647,11 @@ def test_stop_has_projected_point(
     assert found.stop_id == HOLLIS
     assert found.name == row[0]
     lon, lat = (float(str(value)) for value in row[1:])
-    assert found.point == to_metres(lon=lon, lat=lat)
+    assert found.point == to_metres(
+        lon=lon,
+        lat=lat,
+        projection=SYDNEY_PROJECTION,
+    )
     with pytest.raises(KeyError):
         slice_repo.stop(stop_id='nope')
 
@@ -585,7 +682,11 @@ def test_stop_without_coordinates_has_no_point(tmp_path: Path) -> None:
         days=1,
         sources=[Source(name='bundle', archive=archive)],
     )
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         assert repo.stop(stop_id='X1') == StopPlace(
             stop_id='X1', name='Nowhere', point=None
         )
@@ -786,7 +887,11 @@ def test_route_labels_reset_when_file_replaced(tmp_path: Path) -> None:
         ],
     )
     with closing(
-        SqliteTimetableRepository(path=live, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=live,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         assert repo.route_labels(trip_ids=['bus-0803']) == {
             'bus-0803': '606'
@@ -843,7 +948,11 @@ def test_patterns_partial_bundle_trip_shares_the_feed_days(
         conn.commit()
         merge_rail(conn=conn)
     day = date(2026, 10, 17)
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         found = repo.patterns(
             trip_ids=['NT31-bundle', 'NT31-feed'], around=day
         )
@@ -875,7 +984,7 @@ def test_modes_near_finds_bus_at_the_606_stop(
     x, y = slice_repo.stop(stop_id=HOLLIS).point or (0.0, 0.0)
     box = (x - 2000.0, y - 2000.0, x + 2000.0, y + 2000.0)
     assert Mode.BUS in slice_repo.modes_near(box=box)
-    sx, sy = to_metres(lon=155.0, lat=-33.0)
+    sx, sy = to_metres(lon=155.0, lat=-33.0, projection=SYDNEY_PROJECTION)
     far = (sx - 2000.0, sy - 2000.0, sx + 2000.0, sy + 2000.0)
     assert slice_repo.modes_near(box=far) == frozenset()
 
@@ -897,7 +1006,11 @@ def test_old_schema_timetable_still_answers(tmp_path: Path) -> None:
         conn.execute('ALTER TABLE trips DROP COLUMN shape_id')
         conn.execute('DROP TABLE shapes')
         conn.commit()
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         found = repo.departures(
             pin=HOLLIS_TO_PARRA,
             start=at(hour=8, minute=0),
@@ -942,7 +1055,11 @@ def test_old_schema_checked_after_reopen(tmp_path: Path) -> None:
         ],
     )
     with closing(
-        SqliteTimetableRepository(path=old, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=old,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         assert repo.shapes(shape_ids=['bundle:S1']) == {}
         os.replace(new, old)
@@ -995,7 +1112,11 @@ def _network(network_db: Path) -> Iterator[SqliteTimetableRepository]:
         Repository, closed after the test.
     """
     with closing(
-        SqliteTimetableRepository(path=network_db, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=network_db,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         yield repo
 
@@ -1023,7 +1144,11 @@ def _old_network(
     shutil.copy(network_db, copy)
     old_schema(path=copy)
     with closing(
-        SqliteTimetableRepository(path=copy, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=copy,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         yield repo
 
@@ -1117,7 +1242,11 @@ def test_no_destination_covers_every_platform(tmp_path: Path) -> None:
         days=3,
         sources=[Source(name='sydneytrains', archive=archive)],
     )
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         found = repo.departures(
             pin=pin_of('P', None),
             start=at(hour=8, minute=0),
@@ -1199,7 +1328,11 @@ def test_carry_on_without_next_trip_column(
     shutil.copy(network_db, copy)
     schema_three(path=copy)
     with closing(
-        SqliteTimetableRepository(path=copy, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=copy,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         found = repo.departures(
             pin=pin_of('B1', None),
@@ -1273,7 +1406,11 @@ def test_809_carries_on_as_811_at_merrylands() -> None:
     """20 of the 46 809s carry on as the 811; the 9:04 and 15:29 don't."""
     stops = real_809_stops()
     with closing(
-        SqliteTimetableRepository(path=REAL_DB, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=REAL_DB,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         found = [
             departure
@@ -1318,7 +1455,11 @@ def test_version_reads_built_at(
         ],
     )
     with closing(
-        SqliteTimetableRepository(path=bare, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=bare,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         assert repo.version() is None
 
@@ -1411,7 +1552,11 @@ def edited_network(
     with closing(sqlite3.connect(copy)) as conn:
         conn.executescript(script)
         conn.commit()
-    return SqliteTimetableRepository(path=copy, zone=SYDNEY_ZONE)
+    return SqliteTimetableRepository(
+        path=copy,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )
 
 
 def test_no_destination_skips_no_pickup_and_skipped_trips(
@@ -1456,7 +1601,11 @@ def test_train_pin_to_blacktown_parramatta_lists_only_trains() -> None:
     """The 8:09 706 bus between the stations' stands is not listed."""
     require_real_monday()
     with closing(
-        SqliteTimetableRepository(path=REAL_DB, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=REAL_DB,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         pin = Pin(
             origin=repo.stop(stop_id='214810'),
@@ -1546,7 +1695,11 @@ def test_destination_keeps_the_pins_kind(tmp_path: Path) -> None:
     train = Pin(
         origin=place('P'), destination=place('Q'), kind=RouteKind.TRAIN,
     )
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         trains = repo.departures(pin=train, **window)
         every = repo.departures(pin=pin_of('P', 'Q'), **window)
     assert [d.trip_id for d in trains] == ['a']
@@ -1565,7 +1718,11 @@ def test_whole_stop_board_only_pin_kind(tmp_path: Path) -> None:
     )
     window = {'start': at(hour=8, minute=0), 'end': at(hour=9, minute=0)}
     train = Pin(origin=place('P'), kind=RouteKind.TRAIN, routes=('T1',))
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         trains = repo.departures(pin=train, **window)
         every = repo.departures(
             pin=dataclasses.replace(train, kind=None, routes=()), **window,
@@ -1591,7 +1748,11 @@ def test_destination_keeps_the_pins_bus_routes(tmp_path: Path) -> None:
         kind=RouteKind.BUS,
         routes=('606',),
     )
-    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
+    with closing(SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         found = repo.departures(pin=bus, **window)
     assert [d.trip_id for d in found] == ['c']
 
@@ -1654,7 +1815,11 @@ def platform_repo(
         days=3,
         sources=[Source(name='sydneytrains', archive=archive)],
     )
-    return SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
+    return SqliteTimetableRepository(
+        path=db,
+        zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
+    )
 
 
 def p_departures(
@@ -1799,6 +1964,7 @@ def test_departures_on_schema_four_file(tmp_path: Path) -> None:
         SqliteTimetableRepository(
             path=tmp_path / 'timetable.db',
             zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
         )
     ) as old:
         for destination in (None, 'Q'):
@@ -1845,7 +2011,11 @@ def test_departures_without_trip_joins(
     shutil.copy(network_db, copy)
     schema_five(path=copy)
     with closing(
-        SqliteTimetableRepository(path=copy, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=copy,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         found = e2_to_w1(repo=repo)
     assert found

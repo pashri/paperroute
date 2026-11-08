@@ -9,7 +9,7 @@ import pytest
 
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolved
 from paperroute_testkit.core.factories import STALE_LIMIT
@@ -58,7 +58,11 @@ def live_from(
         The departures, with live times where the feed has them.
     """
     with closing(
-        SqliteTimetableRepository(path=M9B_DB, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=M9B_DB,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as timetable:
         pin = Pin(
             origin=timetable.stop(stop_id=origin),

@@ -9,7 +9,7 @@ from google.protobuf.message import DecodeError
 from google.transit import gtfs_realtime_pb2
 
 from paperroute.adapters.tfnsw import FeedError
-from paperroute_transit.core.geo import to_metres
+from paperroute_transit.core.geo import Projection, to_metres
 from paperroute_transit.core.positions import (
     PositionsSnapshot,
     VehiclePosition,
@@ -450,7 +450,12 @@ def vehicle_bearing(*, position: Any) -> float | None:
     return float(position.bearing)
 
 
-def to_vehicle(*, vehicle: Any, header_time: int) -> VehiclePosition:
+def to_vehicle(
+    *,
+    vehicle: Any,
+    header_time: int,
+    projection: Projection,
+) -> VehiclePosition:
     """
     Convert one VehiclePosition message.
 
@@ -460,6 +465,8 @@ def to_vehicle(*, vehicle: Any, header_time: int) -> VehiclePosition:
         A gtfs_realtime_pb2.VehiclePosition with a position.
     header_time : int
         Timestamp used when the vehicle has none.
+    projection : Projection
+        The projection to place the vehicle in.
 
     Returns
     -------
@@ -472,7 +479,9 @@ def to_vehicle(*, vehicle: Any, header_time: int) -> VehiclePosition:
         route_id=route_id,
         label=fallback_label(route_id=route_id),
         point=to_metres(
-            lon=vehicle.position.longitude, lat=vehicle.position.latitude
+            lon=vehicle.position.longitude,
+            lat=vehicle.position.latitude,
+            projection=projection,
         ),
         bearing=vehicle_bearing(position=vehicle.position),
         timestamp=int(vehicle.timestamp) or header_time,
@@ -481,7 +490,7 @@ def to_vehicle(*, vehicle: Any, header_time: int) -> VehiclePosition:
 
 
 def parse_positions(
-    *, data: bytes, fetched_at: datetime
+    *, data: bytes, fetched_at: datetime, projection: Projection
 ) -> PositionsSnapshot:
     """
     Read every positioned vehicle in a vehicle-positions feed.
@@ -492,6 +501,8 @@ def parse_positions(
         Serialised FeedMessage.
     fetched_at : datetime
         When it was downloaded.
+    projection : Projection
+        The projection to place the vehicles in.
 
     Returns
     -------
@@ -510,7 +521,11 @@ def parse_positions(
         fetched_at=fetched_at,
         header_time=header_time,
         vehicles=tuple(
-            to_vehicle(vehicle=entity.vehicle, header_time=header_time)
+            to_vehicle(
+                vehicle=entity.vehicle,
+                header_time=header_time,
+                projection=projection,
+            )
             for entity in entities
             if entity.HasField('vehicle')
             and entity.vehicle.HasField('position')

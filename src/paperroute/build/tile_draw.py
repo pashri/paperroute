@@ -30,13 +30,12 @@ from paperroute_transit.build.geometry import (
     clip_rings,
 )
 from paperroute_transit.build.tile_store import PlacedLabel
-from paperroute_transit.core.geo import MetreBox
+from paperroute_transit.core.geo import MetreBox, Projection
 from paperroute_transit.core.tiles import (
-    GRID_ORIGIN,
     LABEL_REACH,
     TILE,
     LabelKind,
-    from_pixels,
+    metres_of,
 )
 from paperroute_transit.render.tile_codec import (
     diffuse,
@@ -68,6 +67,8 @@ class Window:
         Width in pixels.
     height : int
         Height in pixels.
+    projection : Projection
+        The projection whose grid origin is pixel zero.
     """
 
     mpp: int
@@ -75,6 +76,7 @@ class Window:
     top: int
     width: int
     height: int
+    projection: Projection
 
     def pixels(self, *, grow: int) -> tuple[float, float, float, float]:
         """
@@ -111,10 +113,11 @@ class Window:
         MetreBox
             West, south, east and north.
         """
-        left, top, right, bottom = self.pixels(grow=grow)
-        west, north = from_pixels(pixel=(left, top), mpp=self.mpp)
-        east, south = from_pixels(pixel=(right, bottom), mpp=self.mpp)
-        return (west, south, east, north)
+        return metres_of(
+            box=self.pixels(grow=grow),
+            mpp=self.mpp,
+            projection=self.projection,
+        )
 
     def local(self, *, points: Line) -> list[Point]:
         """
@@ -130,8 +133,9 @@ class Window:
         list[Point]
             Each vertex as x and y from the window's top left corner.
         """
-        xs = (points[:, 0] - GRID_ORIGIN[0]) / self.mpp - self.left
-        ys = (GRID_ORIGIN[1] - points[:, 1]) / self.mpp - self.top
+        grid = self.projection.grid_origin
+        xs = (points[:, 0] - grid[0]) / self.mpp - self.left
+        ys = (grid[1] - points[:, 1]) / self.mpp - self.top
         return list(zip(xs.tolist(), ys.tolist(), strict=True))
 
 
@@ -449,6 +453,7 @@ def render_tile(
     mpp: int,
     col: int,
     row: int,
+    projection: Projection,
 ) -> tuple[bytes, bytes]:
     """
     Draw one tile and pack both of its renderings.
@@ -463,6 +468,8 @@ def render_tile(
         Tile column.
     row : int
         Tile row.
+    projection : Projection
+        The projection whose pixel grid the tile sits on.
 
     Returns
     -------
@@ -477,6 +484,7 @@ def render_tile(
             top=row * TILE,
             width=TILE,
             height=TILE,
+            projection=projection,
         ),
     )
     return pack_grey(grey=grey), pack_bits(paper=diffuse(grey=grey))

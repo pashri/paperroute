@@ -53,6 +53,7 @@ from paperroute_transit.core.alert_model import AlertPlaces
 from paperroute_transit.core.geo import (
     MetreBox,
     Point,
+    Projection,
     Shape,
     to_lonlat,
     to_metres,
@@ -181,6 +182,8 @@ class SqliteTimetableRepository:
     ----------
     zone : tzinfo
         Local time zone the timetable's service days are in.
+    projection : Projection
+        The projection stop points are placed in.
     path : Path | None
         Timetable file; defaults to the device location.
     connection : sqlite3.Connection | None
@@ -199,10 +202,12 @@ class SqliteTimetableRepository:
         self,
         *,
         zone: tzinfo,
+        projection: Projection,
         path: Path | None = None,
         connection: sqlite3.Connection | None = None,
     ) -> None:
         self.zone = zone
+        self.projection = projection
         self.db = ReadOnlyDatabase(
             path=path or DEFAULT_PATH,
             connection=connection,
@@ -371,6 +376,21 @@ class SqliteTimetableRepository:
         )
         return str(rows[0][0]) if rows else None
 
+    def origin(self) -> str | None:
+        """
+        Say which projection origin the file's metres are from.
+
+        Returns
+        -------
+        str | None
+            The origin text, or None when the file doesn't record one.
+        """
+        rows = self.fetch(
+            sql='SELECT value FROM meta WHERE key = ?',
+            params=('origin',),
+        )
+        return str(rows[0][0]) if rows else None
+
     def holidays(self) -> frozenset[date]:
         """
         The public holidays the file records.
@@ -442,7 +462,7 @@ class SqliteTimetableRepository:
         return StopPlace(
             stop_id=stop_id,
             name=str(name),
-            point=to_point(lon=lon, lat=lat),
+            point=to_point(lon=lon, lat=lat, projection=self.projection),
         )
 
     def match_stop(self, *, place: StopPlace) -> StopPlace | None:
@@ -486,9 +506,11 @@ class SqliteTimetableRepository:
         """
         west, south = to_lonlat(
             point=(point[0] - MATCH_RADIUS, point[1] - MATCH_RADIUS),
+            projection=self.projection,
         )
         east, north = to_lonlat(
             point=(point[0] + MATCH_RADIUS, point[1] + MATCH_RADIUS),
+            projection=self.projection,
         )
         rows = self.fetch(
             sql=NAMED_NEAR,
@@ -503,7 +525,11 @@ class SqliteTimetableRepository:
         near = sorted(
             (math.dist(found, point), str(stop_id), found)
             for stop_id, lon, lat in rows
-            if (found := to_point(lon=lon, lat=lat)) is not None
+            if (found := to_point(
+                lon=lon,
+                lat=lat,
+                projection=self.projection,
+            )) is not None
         )
         if not near or near[0][0] > MATCH_RADIUS:
             return None
@@ -706,7 +732,11 @@ class SqliteTimetableRepository:
                 PatternStop(
                     arrives=int(str(arr)),
                     departs=int(str(dep)),
-                    point=to_point(lon=lon, lat=lat),
+                    point=to_point(
+                        lon=lon,
+                        lat=lat,
+                        projection=self.projection,
+                    ),
                     station=str(station),
                     name=str(name),
                     passes=bool(passes),
@@ -987,7 +1017,12 @@ class SqliteTimetableRepository:
         self.db.close()
 
 
-def to_point(*, lon: object, lat: object) -> Point | None:
+def to_point(
+    *,
+    lon: object,
+    lat: object,
+    projection: Projection,
+) -> Point | None:
     """
     Project a stop's coordinates.
 
@@ -997,6 +1032,8 @@ def to_point(*, lon: object, lat: object) -> Point | None:
         Longitude column.
     lat : object
         Latitude column.
+    projection : Projection
+        The projection to place the stop in.
 
     Returns
     -------
@@ -1005,4 +1042,8 @@ def to_point(*, lon: object, lat: object) -> Point | None:
     """
     if lon is None or lat is None:
         return None
-    return to_metres(lon=float(str(lon)), lat=float(str(lat)))
+    return to_metres(
+        lon=float(str(lon)),
+        lat=float(str(lat)),
+        projection=projection,
+    )

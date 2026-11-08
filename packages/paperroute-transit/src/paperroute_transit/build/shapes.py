@@ -19,6 +19,7 @@ from numpy.typing import NDArray
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.geo import (
     DECIMETRES,
+    Projection,
     make_shape,
     pack_shape,
     to_metres,
@@ -316,7 +317,13 @@ def simplify(
     return points[keep]
 
 
-def shape_record(*, shape_id: str, mode: Mode, run: Run) -> ShapeRow:
+def shape_record(
+    *,
+    shape_id: str,
+    mode: Mode,
+    run: Run,
+    projection: Projection,
+) -> ShapeRow:
     """
     Turn one shape's points into a shapes row.
 
@@ -328,6 +335,8 @@ def shape_record(*, shape_id: str, mode: Mode, run: Run) -> ShapeRow:
         Mode of the trips that use it.
     run : Run
         (sequence, lon, lat) points in order.
+    projection : Projection
+        The projection to store the points in.
 
     Returns
     -------
@@ -337,7 +346,10 @@ def shape_record(*, shape_id: str, mode: Mode, run: Run) -> ShapeRow:
     """
     kept = simplify(
         points=np.array(
-            [to_metres(lon=lon, lat=lat) for _, lon, lat in run],
+            [
+                to_metres(lon=lon, lat=lat, projection=projection)
+                for _, lon, lat in run
+            ],
             dtype=np.float64,
         ),
         tolerance=SIMPLIFY_M,
@@ -387,6 +399,7 @@ def load_shapes(
     conn: sqlite3.Connection,
     source: Source,
     modes: Mapping[str, Mode],
+    projection: Projection,
 ) -> int:
     """
     Store the simplified shapes one feed's trips use.
@@ -401,6 +414,8 @@ def load_shapes(
         Feed; its name prefixes the stored shape IDs.
     modes : Mapping[str, Mode]
         Raw shape ID to mode, for the shapes to load.
+    projection : Projection
+        The projection to store the points in.
 
     Returns
     -------
@@ -413,6 +428,7 @@ def load_shapes(
             shape_id=f'{source.name}:{shape_id}',
             mode=modes[shape_id],
             run=run,
+            projection=projection,
         )
         for shape_id, run in shape_runs(
             archive=source.archive,

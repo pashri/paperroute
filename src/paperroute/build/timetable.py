@@ -19,6 +19,7 @@ from paperroute.build.dedupe import MergeReport, merge_rail, relabel_trainlink
 from paperroute.build.extras import build_extras
 from paperroute.build.handoff import Handoff, HandoffRecord, hand_over
 from paperroute.build.trainlink import trim_trainlink
+from paperroute.city import SYDNEY
 from paperroute_device.rss import current_rss_mb, max_rss_mb
 from paperroute_transit.build.gtfs_files import (
     Source,
@@ -35,7 +36,6 @@ from paperroute_transit.core.model import (
     Mode,
     mode_for,
 )
-from paperroute_transit.core.tiles import NSW_BBOX
 
 logger = logging.getLogger(__name__)
 
@@ -505,9 +505,9 @@ def mark_short_suspects(
     -------
     int
         Trips marked: those with fewer than two stopping calls, or with
-        a stopping call outside NSW_BBOX.
+        a stopping call outside the city's area.
     """
-    west, south, east, north = NSW_BBOX
+    west, south, east, north = SYDNEY.bbox
     short = [
         trip_id
         for (trip_id,) in conn.execute(SHORT_SUSPECTS, {
@@ -615,14 +615,20 @@ def load_source(*, conn: sqlite3.Connection, source: Source,
         logger.info('kept %d %s trips out of service',
                     trips.hidden + short, source.name)
     load_shapes(conn=conn, source=source,
-                modes=shape_modes(conn=conn, source=source))
+                modes=shape_modes(conn=conn, source=source),
+                projection=SYDNEY.projection)
     conn.commit()
     return len(trips.inserted)
 
 
-def write_meta(*, conn: sqlite3.Connection, window: Window) -> None:
+def write_meta(
+    *,
+    conn: sqlite3.Connection,
+    window: Window,
+    origin: str,
+) -> None:
     """
-    Record the window, schema version and build time.
+    Record the window, schema version, projection origin and build time.
 
     Parameters
     ----------
@@ -630,11 +636,14 @@ def write_meta(*, conn: sqlite3.Connection, window: Window) -> None:
         Timetable being built.
     window : Window
         Dates covered.
+    origin : str
+        The projection origin text the timetable's metres are from.
     """
     conn.executemany('INSERT INTO meta VALUES (?, ?)', [
         ('window_start', window.start.isoformat()),
         ('window_days', str(window.days)),
         ('schema_version', SCHEMA_VERSION),
+        ('origin', origin),
         ('built_at', datetime.now(timezone.utc).isoformat())])
 
 
@@ -716,7 +725,11 @@ def merged(*, conn: sqlite3.Connection, window: Window) -> MergeReport:
     relabel_trainlink(conn=conn)
     conn.execute(DROP_UNUSED_SHAPES)
     create_indexes(conn=conn)
-    write_meta(conn=conn, window=window)
+    write_meta(
+        conn=conn,
+        window=window,
+        origin=SYDNEY.projection.origin_text,
+    )
     conn.commit()
     return report
 

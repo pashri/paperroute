@@ -14,12 +14,7 @@ Point = tuple[float, float]
 MetreBox = tuple[float, float, float, float]
 DegreeBox = tuple[float, float, float, float]  # west, south, east, north
 
-ORIGIN_LON: Final[float] = 151.2093
-ORIGIN_LAT: Final[float] = -33.8688
 METRES_PER_DEGREE_LAT: Final[float] = 110_574.0
-METRES_PER_DEGREE_LON: Final[float] = 111_320.0 * math.cos(
-    math.radians(ORIGIN_LAT),
-)
 DECIMETRES: Final[int] = 10
 
 
@@ -67,9 +62,10 @@ class Projection:
         Point
             Metres east and north of the origin.
         """
-        return (
-            (self.grid_lon - self.origin_lon) * self.metres_per_degree_lon,
-            (self.grid_lat - self.origin_lat) * METRES_PER_DEGREE_LAT,
+        return to_metres(
+            lon=self.grid_lon,
+            lat=self.grid_lat,
+            projection=self,
         )
 
     @property
@@ -104,7 +100,7 @@ class Shape:
     along: tuple[float, ...]
 
 
-def to_metres(*, lon: float, lat: float) -> Point:
+def to_metres(*, lon: float, lat: float, projection: Projection) -> Point:
     """Project a longitude and latitude to metres from the origin.
 
     Parameters
@@ -113,6 +109,8 @@ def to_metres(*, lon: float, lat: float) -> Point:
         Longitude in degrees.
     lat : float
         Latitude in degrees.
+    projection : Projection
+        The projection whose origin is metre zero.
 
     Returns
     -------
@@ -120,18 +118,24 @@ def to_metres(*, lon: float, lat: float) -> Point:
         Metres east and north of the origin.
     """
     return (
-        (lon - ORIGIN_LON) * METRES_PER_DEGREE_LON,
-        (lat - ORIGIN_LAT) * METRES_PER_DEGREE_LAT,
+        (lon - projection.origin_lon) * projection.metres_per_degree_lon,
+        (lat - projection.origin_lat) * METRES_PER_DEGREE_LAT,
     )
 
 
-def to_lonlat(*, point: Point) -> tuple[float, float]:
+def to_lonlat(
+    *,
+    point: Point,
+    projection: Projection,
+) -> tuple[float, float]:
     """Unproject metres from the origin to a longitude and latitude.
 
     Parameters
     ----------
     point : Point
         Metres east and north of the origin.
+    projection : Projection
+        The projection whose origin is metre zero.
 
     Returns
     -------
@@ -139,8 +143,8 @@ def to_lonlat(*, point: Point) -> tuple[float, float]:
         Longitude and latitude in degrees.
     """
     return (
-        ORIGIN_LON + point[0] / METRES_PER_DEGREE_LON,
-        ORIGIN_LAT + point[1] / METRES_PER_DEGREE_LAT,
+        projection.origin_lon + point[0] / projection.metres_per_degree_lon,
+        projection.origin_lat + point[1] / METRES_PER_DEGREE_LAT,
     )
 
 

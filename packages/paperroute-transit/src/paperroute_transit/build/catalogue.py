@@ -21,7 +21,7 @@ from paperroute_transit.build.route_tags import (
     agency_towns,
     tags_of,
 )
-from paperroute_transit.core.geo import Point, to_metres
+from paperroute_transit.core.geo import Point, Projection, to_metres
 from paperroute_transit.core.model import (
     INTERCITY,
     STATION_FIRST,
@@ -296,7 +296,10 @@ def write_keys(
 
 
 def middles(
-    *, conn: sqlite3.Connection, sources: Sequence[RouteSource],
+    *,
+    conn: sqlite3.Connection,
+    sources: Sequence[RouteSource],
+    projection: Projection,
 ) -> dict[str, Point]:
     """
     Find each merged route's median station point.
@@ -307,6 +310,8 @@ def middles(
         Timetable with the run tables.
     sources : Sequence[RouteSource]
         Route IDs to merge.
+    projection : Projection
+        The projection to place the points in.
 
     Returns
     -------
@@ -322,6 +327,7 @@ def middles(
         found[key] = to_metres(
             lon=statistics.median(lon for lon, _ in spots),
             lat=statistics.median(lat for _, lat in spots),
+            projection=projection,
         )
     return found
 
@@ -370,7 +376,10 @@ def busiest_names(*, sources: Sequence[RouteSource]) -> dict[str, str]:
 
 
 def merged_routes(
-    *, conn: sqlite3.Connection, sources: Sequence[RouteSource] | None = None,
+    *,
+    conn: sqlite3.Connection,
+    projection: Projection,
+    sources: Sequence[RouteSource] | None = None,
 ) -> list[CatalogueRoute]:
     """
     Merge the route IDs that make one route.
@@ -379,6 +388,8 @@ def merged_routes(
     ----------
     conn : sqlite3.Connection
         Timetable with the run tables.
+    projection : Projection
+        The projection to place route middles in.
     sources : Sequence[RouteSource] | None
         Route IDs from route_sources; None to read them.
 
@@ -391,7 +402,7 @@ def merged_routes(
         long name.
     """
     sources = route_sources(conn=conn) if sources is None else sources
-    points = middles(conn=conn, sources=sources)
+    points = middles(conn=conn, sources=sources, projection=projection)
     agencies = busiest_agencies(sources=sources)
     names = busiest_names(sources=sources)
     routes = {
@@ -789,7 +800,11 @@ def rows_by_kind(*, entries: Sequence[Entry]) -> list[RouteRow]:
     ]
 
 
-def load_catalogue(*, conn: sqlite3.Connection) -> int:
+def load_catalogue(
+    *,
+    conn: sqlite3.Connection,
+    projection: Projection,
+) -> int:
     """
     Write the chooser and line tables.
 
@@ -799,6 +814,8 @@ def load_catalogue(*, conn: sqlite3.Connection) -> int:
     ----------
     conn : sqlite3.Connection
         Timetable with the run tables and the CATALOGUE_SCHEMA tables.
+    projection : Projection
+        The projection to place route middles in.
 
     Returns
     -------
@@ -806,9 +823,17 @@ def load_catalogue(*, conn: sqlite3.Connection) -> int:
         Number of chooser_routes rows written.
     """
     sources = route_sources(conn=conn)
-    routes = merged_routes(conn=conn, sources=sources)
+    routes = merged_routes(
+        conn=conn,
+        projection=projection,
+        sources=sources,
+    )
     tagged = [route for route in routes if route.kind in TAGGED_KINDS]
-    tags = tags_of(routes=tagged, towns=agency_towns(routes=tagged))
+    tags = tags_of(
+        routes=tagged,
+        towns=agency_towns(routes=tagged),
+        projection=projection,
+    )
     entries = [
         *line_entries(
             routes=[r for r in routes if r.kind in LINE_KINDS],

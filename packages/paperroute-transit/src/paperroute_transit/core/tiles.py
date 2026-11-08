@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
-from paperroute_transit.core.geo import Point, to_metres
+from paperroute_transit.core.geo import MetreBox, Point, Projection
 
 TILE: Final[int] = 256
 LABEL_REACH: Final[int] = TILE  # pixels a baked label may reach past
@@ -14,13 +14,6 @@ CITY: Final[int] = 45
 TILE_STYLE: Final[str] = 'm9d'  # bump when the tiles' look changes
 SUBURB_ZOOMS: Final[frozenset[int]] = frozenset({8, 14, 25, 45})
 STATION_ZOOMS: Final[frozenset[int]] = frozenset({3, 5, 8, 14, 25, 45})
-NSW_BBOX: Final[tuple[float, float, float, float]] = (
-    140.99,
-    -37.51,
-    153.64,
-    -28.15,
-)
-GRID_ORIGIN: Final[Point] = to_metres(lon=149.5, lat=-32.0)
 STREET_HEIGHT: Final[int] = 14
 POINT_HALF_HEIGHT: Final[float] = 0.7  # of the face's pixel size
 
@@ -73,7 +66,12 @@ class StreetLabel:
     end: tuple[float, float]
 
 
-def to_pixels(*, point: Point, mpp: int) -> tuple[float, float]:
+def to_pixels(
+    *,
+    point: Point,
+    mpp: int,
+    projection: Projection,
+) -> tuple[float, float]:
     """Convert metres to global pixels at a zoom.
 
     Parameters
@@ -82,19 +80,27 @@ def to_pixels(*, point: Point, mpp: int) -> tuple[float, float]:
         Metres east and north of the projection origin.
     mpp : int
         Metres per pixel.
+    projection : Projection
+        The projection whose grid origin is pixel zero.
 
     Returns
     -------
     tuple[float, float]
         Pixels right of and below the grid origin.
     """
+    grid = projection.grid_origin
     return (
-        (point[0] - GRID_ORIGIN[0]) / mpp,
-        (GRID_ORIGIN[1] - point[1]) / mpp,
+        (point[0] - grid[0]) / mpp,
+        (grid[1] - point[1]) / mpp,
     )
 
 
-def from_pixels(*, pixel: tuple[float, float], mpp: int) -> Point:
+def from_pixels(
+    *,
+    pixel: tuple[float, float],
+    mpp: int,
+    projection: Projection,
+) -> Point:
     """Convert global pixels at a zoom back to metres.
 
     Parameters
@@ -103,16 +109,56 @@ def from_pixels(*, pixel: tuple[float, float], mpp: int) -> Point:
         Pixels right of and below the grid origin.
     mpp : int
         Metres per pixel.
+    projection : Projection
+        The projection whose grid origin is pixel zero.
 
     Returns
     -------
     Point
         Metres east and north of the projection origin.
     """
+    grid = projection.grid_origin
     return (
-        GRID_ORIGIN[0] + pixel[0] * mpp,
-        GRID_ORIGIN[1] - pixel[1] * mpp,
+        grid[0] + pixel[0] * mpp,
+        grid[1] - pixel[1] * mpp,
     )
+
+
+def metres_of(
+    *,
+    box: PixelBox,
+    mpp: int,
+    projection: Projection,
+) -> MetreBox:
+    """
+    Convert a box of global pixels at a zoom to metres.
+
+    Parameters
+    ----------
+    box : PixelBox
+        Left, top, right and bottom in global pixels.
+    mpp : int
+        Metres per pixel.
+    projection : Projection
+        The projection whose grid origin is pixel zero.
+
+    Returns
+    -------
+    MetreBox
+        West, south, east and north.
+    """
+    left, top, right, bottom = box
+    west, north = from_pixels(
+        pixel=(left, top),
+        mpp=mpp,
+        projection=projection,
+    )
+    east, south = from_pixels(
+        pixel=(right, bottom),
+        mpp=mpp,
+        projection=projection,
+    )
+    return (west, south, east, north)
 
 
 def tile_of(*, pixel: tuple[float, float]) -> tuple[int, int]:

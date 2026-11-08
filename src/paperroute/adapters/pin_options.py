@@ -24,7 +24,7 @@ from paperroute.core.chooser import UNPICKED, Choice, focusable
 from paperroute.core.pin_choices import KIND_NAMES, ChangeStop, StopMatch
 from paperroute.core.strip_times import BOARD_KINDS
 from paperroute_transit.build.catalogue import route_order
-from paperroute_transit.core.geo import to_lonlat
+from paperroute_transit.core.geo import Projection, to_lonlat
 from paperroute_transit.core.model import STATION_FIRST, RouteKind, StopPlace
 from paperroute_transit.core.reach import RowKind, StripKey, build_reach
 from paperroute_transit.core.route_colours import RouteColour, common_colours
@@ -129,7 +129,7 @@ def escaped(*, text: str) -> str:
     )
 
 
-def place_of(*, row: Row) -> StopPlace:
+def place_of(*, row: Row, projection: Projection) -> StopPlace:
     """
     Make a place from a stop ID, name, longitude and latitude.
 
@@ -137,6 +137,8 @@ def place_of(*, row: Row) -> StopPlace:
     ----------
     row : Row
         Stops columns.
+    projection : Projection
+        The projection to place the stop in.
 
     Returns
     -------
@@ -145,7 +147,9 @@ def place_of(*, row: Row) -> StopPlace:
     """
     stop_id, name, lon, lat = row
     return StopPlace(
-        stop_id=str(stop_id), name=str(name), point=to_point(lon=lon, lat=lat),
+        stop_id=str(stop_id),
+        name=str(name),
+        point=to_point(lon=lon, lat=lat, projection=projection),
     )
 
 
@@ -306,6 +310,22 @@ class SqlitePinOptions:
     def __init__(self, *, network: SqliteNetworkRepository) -> None:
         self.network = network
 
+    def placed(self, *, row: Row) -> StopPlace:
+        """
+        Make a place from a stop row, in the network's projection.
+
+        Parameters
+        ----------
+        row : Row
+            Stop ID, name, longitude and latitude.
+
+        Returns
+        -------
+        StopPlace
+            The place.
+        """
+        return place_of(row=row, projection=self.network.projection)
+
     def search(
         self, *, text: str, skip_school: bool = False,
     ) -> tuple[StopMatch, ...]:
@@ -337,7 +357,7 @@ class SqlitePinOptions:
             'word': f'% {safe}%',
             'limit': SEARCH_LIMIT,
         })
-        places = [place_of(row=row) for row in found]
+        places = [self.placed(row=row) for row in found]
         rows = self.network.fetch(sql=SERVED, params={
             'ids': json.dumps([place.stop_id for place in places]),
             'last': LAST,
@@ -368,7 +388,7 @@ class SqlitePinOptions:
             The place; None when the timetable does not know it.
         """
         rows = self.network.fetch(sql=PLACE, params=(stop_id,))
-        return place_of(row=rows[0]) if rows else None
+        return self.placed(row=rows[0]) if rows else None
 
     def trip_stop(self, *, stop_id: str) -> StopPlace | None:
         """
@@ -385,7 +405,7 @@ class SqlitePinOptions:
             The stop, lifted to its parent station; None when unknown.
         """
         rows = self.network.fetch(sql=TRIP_STOP, params=(stop_id,))
-        return place_of(row=rows[0]) if rows else None
+        return self.placed(row=rows[0]) if rows else None
 
     def kinds_at(self, *, stop_id: str) -> tuple[RouteKind, ...]:
         """
@@ -567,8 +587,15 @@ class SqlitePinOptions:
         if place.point is None or not self.network.has_network():
             return ()
         x, y = place.point
-        west, south = to_lonlat(point=(x - NEARBY_M, y - NEARBY_M))
-        east, north = to_lonlat(point=(x + NEARBY_M, y + NEARBY_M))
+        projection = self.network.projection
+        west, south = to_lonlat(
+            point=(x - NEARBY_M, y - NEARBY_M),
+            projection=projection,
+        )
+        east, north = to_lonlat(
+            point=(x + NEARBY_M, y + NEARBY_M),
+            projection=projection,
+        )
         rows = self.network.fetch(sql=CLOSE, params={
             'west': west, 'east': east, 'south': south, 'north': north,
             'own': place.stop_id,
@@ -578,7 +605,7 @@ class SqlitePinOptions:
         close = sorted(
             (
                 (math.dist(place.point, found.point), found.stop_id, found)
-                for found in (place_of(row=row) for row in rows)
+                for found in (self.placed(row=row) for row in rows)
                 if found.point is not None
             ),
             key=itemgetter(0, 1),
@@ -605,11 +632,14 @@ class SqlitePinOptions:
         point = place.point
         if point is None or not self.network.has_network():
             return ()
-        rows = self.network.fetch(sql=CLOSE, params=change_box(point=point))
+        rows = self.network.fetch(sql=CLOSE, params=change_box(
+            point=point,
+            projection=self.network.projection,
+        ))
         return nearest_changes(
             place=place,
             point=point,
-            found=(place_of(row=row) for row in rows),
+            found=(self.placed(row=row) for row in rows),
         )
 
     def reached_from(self, *, place: StopPlace) -> tuple[StopPlace, ...]:
@@ -632,7 +662,7 @@ class SqlitePinOptions:
         rows = self.network.fetch(sql=REACHED, params={
             'station': self.network.station_for(stop_id=place.stop_id),
         })
-        return tuple(place_of(row=row) for row in rows)
+        return tuple(self.placed(row=row) for row in rows)
 
     def routes_between(
         self, *, origin: StopPlace, destination: StopPlace,

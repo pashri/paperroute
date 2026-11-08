@@ -9,6 +9,7 @@ from paperroute.core.messages import Effect, RebuildTimetable, TimetableSeen
 from paperroute.core.state_model import Rebuild, State
 from paperroute_device.core.panel_views import NoticeView
 from paperroute_device.core.text import DOT, clock_text
+from paperroute_transit.core.city import City
 from paperroute_transit.core.model import TIMETABLE_SCHEMA
 
 BUILDING: Final[str] = 'Building the timetable'
@@ -26,21 +27,28 @@ BACKOFF_FIRST: Final[timedelta] = timedelta(hours=1)
 BACKOFF_MAX: Final[timedelta] = timedelta(hours=24)
 
 
-def is_outdated(*, schema: str | None) -> bool:
+def is_outdated(*, schema: str | None, origin: str | None, city: City) -> bool:
     """
-    Say whether a timetable's schema is older than the app's.
+    Say whether a timetable is older than the app's or for another place.
 
     Parameters
     ----------
     schema : str | None
         The file's schema version.
+    origin : str | None
+        The projection origin text the file records.
+    city : City
+        The city the app runs for.
 
     Returns
     -------
     bool
-        True only for a whole number below `TIMETABLE_SCHEMA`; a newer,
-        missing or unreadable schema is never outdated.
+        True for a whole-number schema below `TIMETABLE_SCHEMA`, or for a
+        recorded origin other than the city's. A newer, missing or
+        unreadable schema, or a missing origin, is not outdated by itself.
     """
+    if origin is not None and origin != city.projection.origin_text:
+        return True
     if schema is None or not schema.isdigit():
         return False
     return int(schema) < int(TIMETABLE_SCHEMA)
@@ -191,13 +199,18 @@ def seen_schema(*, state: State, seen: TimetableSeen) -> State:
     Returns
     -------
     State
-        State with the schema noted and `rebuild.outdated` and
+        State with the schema and origin noted and `rebuild.outdated` and
         `rebuild.missing` set from it.
     """
     rebuild = replace(
         state.rebuild,
-        outdated=is_outdated(schema=seen.schema),
+        outdated=is_outdated(
+            schema=seen.schema,
+            origin=seen.origin,
+            city=state.city,
+        ),
         schema=seen.schema,
+        origin=seen.origin,
         missing=seen.version is None,
     )
     return replace(state, rebuild=rebuild)

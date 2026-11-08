@@ -14,7 +14,7 @@ from paperroute.adapters.gtfs_rt import (
     parse_trip_updates,
 )
 from paperroute.adapters.tfnsw import FeedError
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_testkit.adapters.rt_factory import RtStop, RtTrip, feed
 
 NOW = datetime(2026, 10, 16, 6, 30, tzinfo=SYDNEY_ZONE)
@@ -182,7 +182,11 @@ def vehicle_feed(
 def test_parse_positions_reads_the_bus_recording() -> None:
     """The bus recording gives every positioned entity as a vehicle."""
     data = (REAL / 'v1_gtfs_vehiclepos_buses.pb').read_bytes()
-    snapshot = parse_positions(data=data, fetched_at=NOW)
+    snapshot = parse_positions(
+        data=data,
+        fetched_at=NOW,
+        projection=SYDNEY_PROJECTION,
+    )
     assert snapshot.header_time == 1792092232
     assert len(snapshot.vehicles) == 1380
     found = [v for v in snapshot.vehicles if v.trip_id == '2662023']
@@ -194,7 +198,11 @@ def test_parse_positions_reads_the_bus_recording() -> None:
 def test_trains_without_speed_have_no_bearing() -> None:
     """The Sydney Trains recording leaves bearing and speed unset."""
     data = (REAL / 'v2_gtfs_vehiclepos_sydneytrains.pb').read_bytes()
-    snapshot = parse_positions(data=data, fetched_at=NOW)
+    snapshot = parse_positions(
+        data=data,
+        fetched_at=NOW,
+        projection=SYDNEY_PROJECTION,
+    )
     assert snapshot.vehicles
     assert all(v.bearing is None for v in snapshot.vehicles)
 
@@ -202,14 +210,22 @@ def test_trains_without_speed_have_no_bearing() -> None:
 def test_bearing_zero_without_speed_is_none() -> None:
     """A bearing of 0 with no speed is not a heading."""
     data = vehicle_feed(vehicles=[{'lat': -33.8, 'bearing': 0.0}])
-    snapshot = parse_positions(data=data, fetched_at=NOW)
+    snapshot = parse_positions(
+        data=data,
+        fetched_at=NOW,
+        projection=SYDNEY_PROJECTION,
+    )
     assert snapshot.vehicles[0].bearing is None
 
 
 def test_bearing_unset_with_speed_is_none() -> None:
     """A speed alone gives no heading."""
     data = vehicle_feed(vehicles=[{'lat': -33.8, 'speed': 5.0}])
-    snapshot = parse_positions(data=data, fetched_at=NOW)
+    snapshot = parse_positions(
+        data=data,
+        fetched_at=NOW,
+        projection=SYDNEY_PROJECTION,
+    )
     assert snapshot.vehicles[0].bearing is None
 
 
@@ -218,7 +234,11 @@ def test_start_date_is_read() -> None:
     data = vehicle_feed(
         vehicles=[{'lat': -33.8, 'start_date': '20261016'}, {'lat': -33.8}]
     )
-    snapshot = parse_positions(data=data, fetched_at=NOW)
+    snapshot = parse_positions(
+        data=data,
+        fetched_at=NOW,
+        projection=SYDNEY_PROJECTION,
+    )
     assert snapshot.vehicles[0].start_date == date(2026, 10, 16)
     assert snapshot.vehicles[1].start_date is None
 
@@ -228,7 +248,11 @@ def test_zero_vehicle_timestamp_uses_header_time() -> None:
     data = vehicle_feed(
         vehicles=[{'lat': -33.8, 'timestamp': 0}], timestamp=1000
     )
-    snapshot = parse_positions(data=data, fetched_at=NOW)
+    snapshot = parse_positions(
+        data=data,
+        fetched_at=NOW,
+        projection=SYDNEY_PROJECTION,
+    )
     assert snapshot.vehicles[0].timestamp == 1000
 
 
@@ -237,7 +261,11 @@ def test_bearing_zero_with_speed_is_north() -> None:
     data = vehicle_feed(
         vehicles=[{'lat': -33.8, 'bearing': 0.0, 'speed': 5.0}]
     )
-    snapshot = parse_positions(data=data, fetched_at=NOW)
+    snapshot = parse_positions(
+        data=data,
+        fetched_at=NOW,
+        projection=SYDNEY_PROJECTION,
+    )
     assert snapshot.vehicles[0].bearing == 0.0
 
 
@@ -247,21 +275,33 @@ def test_missing_vehicle_timestamp_uses_header_time() -> None:
         vehicles=[{'lat': -33.8}, {'lat': -33.8, 'timestamp': 42}],
         timestamp=1000,
     )
-    snapshot = parse_positions(data=data, fetched_at=NOW)
+    snapshot = parse_positions(
+        data=data,
+        fetched_at=NOW,
+        projection=SYDNEY_PROJECTION,
+    )
     assert [v.timestamp for v in snapshot.vehicles] == [1000, 42]
 
 
 def test_vehicle_without_position_is_skipped() -> None:
     """Entities with no position produce no vehicle."""
     data = vehicle_feed(vehicles=[{}, {'lat': -33.8}])
-    snapshot = parse_positions(data=data, fetched_at=NOW)
+    snapshot = parse_positions(
+        data=data,
+        fetched_at=NOW,
+        projection=SYDNEY_PROJECTION,
+    )
     assert [v.trip_id for v in snapshot.vehicles] == ['t1']
 
 
 def test_entity_fallback_uses_fetch_time_as_header() -> None:
     """When whole-message decoding fails, the fetch time stands in."""
     data = vehicle_feed(vehicles=[{'lat': -33.8}, {'lat': -33.8}])
-    snapshot = parse_positions(data=data[:-3], fetched_at=NOW)
+    snapshot = parse_positions(
+        data=data[:-3],
+        fetched_at=NOW,
+        projection=SYDNEY_PROJECTION,
+    )
     assert snapshot.header_time == int(NOW.timestamp())
     assert len(snapshot.vehicles) == 1
     assert snapshot.vehicles[0].timestamp == int(NOW.timestamp())

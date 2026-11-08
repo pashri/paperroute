@@ -5,7 +5,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute.core.chains import Chain, Legs, leg_key
 from paperroute.core.connection_map import (
     build_connection_map,
@@ -133,6 +133,7 @@ def inputs_at(*, now: datetime, zoom: int = DEFAULT_ZOOM) -> MapInputs:
         now=now,
         stale_after=STALE_LIMIT,
         zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
     )
 
 

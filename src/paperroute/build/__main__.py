@@ -21,12 +21,7 @@ from paperroute.city import SYDNEY
 from paperroute.logs import configure_logging
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import tile_meta
-from paperroute_transit.core.tiles import (
-    NSW_BBOX,
-    TILE_STYLE,
-    ZOOMS,
-    levels_text,
-)
+from paperroute_transit.core.tiles import TILE_STYLE, ZOOMS, levels_text
 
 logger = logging.getLogger(__name__)
 
@@ -128,7 +123,7 @@ def add_tiles(*, command: argparse.ArgumentParser) -> None:
     command.add_argument('--timetable', type=Path, required=True)
     command.add_argument('--out', type=Path, required=True)
     command.add_argument('--work', type=Path)
-    command.add_argument('--bbox', type=parse_bbox, default=NSW_BBOX)
+    command.add_argument('--bbox', type=parse_bbox, default=SYDNEY.bbox)
     command.add_argument('--zooms', type=parse_zooms, default=ZOOMS)
     command.add_argument('--jobs', type=int, default=os.cpu_count() or 1)
     command.add_argument('--index', default='flex_mem')
@@ -249,6 +244,8 @@ def run_tiles(*, args: argparse.Namespace) -> int:
         out=args.out,
         work=args.work or args.out.parent / 'tiles-work',
         bbox=args.bbox,
+        projection=SYDNEY.projection,
+        area=SYDNEY.bbox,
         zooms=args.zooms,
         jobs=args.jobs,
         index=args.index,

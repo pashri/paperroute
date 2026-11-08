@@ -8,7 +8,7 @@ from typing import Final
 
 from paperroute.core.connection_view import PairRow
 from paperroute.core.stop_view import NOT_PINNED, PinTag, Row, StopView
-from paperroute_transit.core.geo import Point, Shape
+from paperroute_transit.core.geo import Point, Projection, Shape
 from paperroute_transit.core.model import Departure
 from paperroute_transit.core.patterns import TripPattern, timetable_point
 from paperroute_transit.core.positions import (
@@ -68,6 +68,8 @@ class MapBase:
         Metres per pixel.
     route : tuple[tuple[Point, ...], ...]
         The pin's route lines in metres.
+    projection : Projection
+        The projection the metres are in.
     width : int
         Map width in pixels.
     trip : TripMarks | None
@@ -80,6 +82,7 @@ class MapBase:
     centre: Point | None
     mpp: int
     route: tuple[tuple[Point, ...], ...]
+    projection: Projection
     width: int = MAP_WIDTH
     trip: TripMarks | None = None
     stops: tuple[Point, ...] = ()
@@ -168,6 +171,8 @@ class MapInputs:
         are worked out at.
     zone : tzinfo
         Local time zone the timetable's times count in.
+    projection : Projection
+        The projection the metres are in.
     stale_after : timedelta
         How old a position may be before it is drawn at its timetable
         position instead.
@@ -192,6 +197,7 @@ class MapInputs:
     shapes: Mapping[str, Shape]
     now: datetime
     zone: tzinfo
+    projection: Projection
     stale_after: timedelta
     width: int = MAP_WIDTH
     vehicle_trips: frozenset[str] | None = None
@@ -204,6 +210,7 @@ def map_window(
     *,
     centre: Point,
     mpp: int,
+    projection: Projection,
     width: int = MAP_WIDTH,
 ) -> tuple[int, int]:
     """
@@ -215,6 +222,8 @@ def map_window(
         The map centre in metres.
     mpp : int
         Metres per pixel.
+    projection : Projection
+        The projection whose pixel grid the map sits on.
     width : int
         Map width in pixels.
 
@@ -223,7 +232,7 @@ def map_window(
     tuple[int, int]
         Left and top, in whole global pixels.
     """
-    x, y = to_pixels(point=centre, mpp=mpp)
+    x, y = to_pixels(point=centre, mpp=mpp, projection=projection)
     return math.floor(x - width / 2), math.floor(y - MAP_HEIGHT / 2)
 
 
@@ -232,6 +241,7 @@ def screen_point(
     centre: Point,
     mpp: int,
     point: Point,
+    projection: Projection,
     width: int = MAP_WIDTH,
 ) -> tuple[float, float]:
     """
@@ -248,6 +258,8 @@ def screen_point(
         Metres per pixel.
     point : Point
         The point in metres.
+    projection : Projection
+        The projection whose pixel grid the map sits on.
     width : int
         Map width in pixels.
 
@@ -256,8 +268,13 @@ def screen_point(
     tuple[float, float]
         Pixels from the map's left and top edges.
     """
-    left, top = map_window(centre=centre, mpp=mpp, width=width)
-    x, y = to_pixels(point=point, mpp=mpp)
+    left, top = map_window(
+        centre=centre,
+        mpp=mpp,
+        projection=projection,
+        width=width,
+    )
+    x, y = to_pixels(point=point, mpp=mpp, projection=projection)
     return x - left, y - top
 
 
@@ -283,7 +300,13 @@ def visible(*, at: tuple[float, float], width: int = MAP_WIDTH) -> bool:
     )
 
 
-def nearby(*, centre: Point, mpp: int, point: Point) -> bool:
+def nearby(
+    *,
+    centre: Point,
+    mpp: int,
+    point: Point,
+    projection: Projection,
+) -> bool:
     """
     Check whether a point lies within three times the map rectangle.
 
@@ -295,6 +318,8 @@ def nearby(*, centre: Point, mpp: int, point: Point) -> bool:
         Metres per pixel.
     point : Point
         The point in metres.
+    projection : Projection
+        The projection whose pixel grid the map sits on.
 
     Returns
     -------
@@ -302,7 +327,12 @@ def nearby(*, centre: Point, mpp: int, point: Point) -> bool:
         True inside a rectangle three map widths by three map heights,
         centred on the map.
     """
-    x, y = screen_point(centre=centre, mpp=mpp, point=point)
+    x, y = screen_point(
+        centre=centre,
+        mpp=mpp,
+        point=point,
+        projection=projection,
+    )
     reach = (NEARBY_SCALE - 1) / 2
     return (
         -MAP_WIDTH * reach <= x <= MAP_WIDTH * (1 + reach)
@@ -535,7 +565,12 @@ def needed_patterns(*, inputs: MapInputs) -> frozenset[str]:
         vehicle.trip_id
         for vehicle, age in vehicles
         if not is_fresh(age=age, limit=limit)
-        and nearby(centre=centre, mpp=mpp, point=vehicle.point)
+        and nearby(
+            centre=centre,
+            mpp=mpp,
+            point=vehicle.point,
+            projection=inputs.projection,
+        )
     )
     pins = uncovered_pins(departures=inputs.departures, covered=fresh)
     return stale | {departure.trip_id for departure in pins}
@@ -571,6 +606,7 @@ def live_marker(
         centre=centre,
         mpp=ZOOMS[inputs.zoom],
         point=vehicle.point,
+        projection=inputs.projection,
         width=inputs.width,
     )
     return Marker(
@@ -627,6 +663,7 @@ def timetable_marker(
         centre=centre,
         mpp=ZOOMS[inputs.zoom],
         point=point,
+        projection=inputs.projection,
         width=inputs.width,
     )
     return Marker(
@@ -801,6 +838,7 @@ def markers_for(*, inputs: MapInputs, centre: Point) -> tuple[Marker, ...]:
         centre=centre,
         mpp=ZOOMS[inputs.zoom],
         point=centre,
+        projection=inputs.projection,
         width=inputs.width,
     )
     shown = [
@@ -870,6 +908,7 @@ def build_map_view(*, inputs: MapInputs) -> MapView:
                 departures=inputs.departures,
                 shapes=inputs.shapes,
             ),
+            projection=inputs.projection,
             width=inputs.width,
             trip=plain_marks(inputs=inputs),
             stops=route_stops(

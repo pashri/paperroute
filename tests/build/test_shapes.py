@@ -13,6 +13,7 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.build.timetable import Window, build_timetable, create_schema
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.shapes import (
@@ -22,14 +23,7 @@ from paperroute_transit.build.shapes import (
     shape_runs,
     simplify,
 )
-from paperroute_transit.core.geo import (
-    METRES_PER_DEGREE_LAT,
-    METRES_PER_DEGREE_LON,
-    ORIGIN_LAT,
-    ORIGIN_LON,
-    to_metres,
-    unpack_shape,
-)
+from paperroute_transit.core.geo import to_lonlat, to_metres, unpack_shape
 from paperroute_transit.core.model import Mode
 from tests.build.feeds import shape_rows, shaped_bus_feed
 
@@ -202,7 +196,8 @@ def stored_shapes(*, archive: Path, modes: dict[str, Mode]) -> list[str]:
     with closing(sqlite3.connect(':memory:')) as conn:
         create_schema(conn=conn)
         count = load_shapes(conn=conn, modes=modes,
-                            source=Source(name='bundle', archive=archive))
+                            source=Source(name='bundle', archive=archive),
+                            projection=SYDNEY_PROJECTION)
         stored = [row[0] for row in conn.execute(
             'SELECT shape_id FROM shapes ORDER BY shape_id')]
     assert count == len(stored)
@@ -271,8 +266,7 @@ def lonlat(*, x: float, y: float) -> tuple[float, float]:
     tuple[float, float]
         Longitude and latitude.
     """
-    return (ORIGIN_LON + x / METRES_PER_DEGREE_LON,
-            ORIGIN_LAT + y / METRES_PER_DEGREE_LAT)
+    return to_lonlat(point=(x, y), projection=SYDNEY_PROJECTION)
 
 
 def test_shape_record_widens_bounds_to_whole_decimetres() -> None:
@@ -280,7 +274,8 @@ def test_shape_record_widens_bounds_to_whole_decimetres() -> None:
     run = [(1, *lonlat(x=1000.04, y=2000.04)),
            (2, *lonlat(x=1500.06, y=2500.06))]
     shape_id, mode, west, south, east, north, blob = shape_record(
-        shape_id='bundle:S1', mode=Mode.BUS, run=run)
+        shape_id='bundle:S1', mode=Mode.BUS, run=run,
+        projection=SYDNEY_PROJECTION)
     assert (shape_id, mode) == ('bundle:S1', 'bus')
     assert (west, south, east, north) == (1000.0, 2000.0, 1500.1, 2500.1)
     points = unpack_shape(shape_id=shape_id, blob=blob).points
@@ -313,7 +308,11 @@ def test_build_stores_shapes_with_mode_and_bounds(tmp_path: Path) -> None:
     assert (shape_id, mode) == ('bundle:S1', 'bus')
     expected = simplify(
         points=np.array(
-            [to_metres(lon=lon, lat=lat) for lon, lat in ROUTE],
+            [to_metres(
+                lon=lon,
+                lat=lat,
+                projection=SYDNEY_PROJECTION,
+            ) for lon, lat in ROUTE],
             dtype=np.float64,
         ),
         tolerance=SIMPLIFY_M,

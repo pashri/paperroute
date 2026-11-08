@@ -5,6 +5,7 @@ from typing import Final
 
 import numpy as np
 
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase, TripMarks
 from paperroute.render.map_base import draw_map_base
 from paperroute.render.trip_marks import (
@@ -45,7 +46,13 @@ def drawn(*, trip: TripMarks | None) -> np.ndarray:
         The base's grey levels.
     """
     return draw_map_base(
-        base=MapBase(centre=CENTRE, mpp=MPP, route=(), trip=trip),
+        base=MapBase(
+            centre=CENTRE,
+            mpp=MPP,
+            route=(),
+            trip=trip,
+            projection=SYDNEY_PROJECTION,
+        ),
         tiles=NullTiles(),
         variant=TileVariant.GREY,
     )
@@ -93,7 +100,13 @@ def test_from_drawn_at_origin() -> None:
     canvas = Canvas()
     draw_trip_points(
         canvas,
-        base=MapBase(centre=CENTRE, mpp=MPP, route=(), trip=TRIP),
+        base=MapBase(
+            centre=CENTRE,
+            mpp=MPP,
+            route=(),
+            trip=TRIP,
+            projection=SYDNEY_PROJECTION,
+        ),
     )
     grey = canvas.grey()
     x, y = MIDDLE[0] - 200, MIDDLE[1] - 100 + 40
@@ -105,14 +118,25 @@ def test_no_trip_draws_no_from() -> None:
     """Without trip marks, no From is drawn."""
     canvas = Canvas()
     draw_trip_points(
-        canvas, base=MapBase(centre=CENTRE, mpp=MPP, route=()),
+        canvas, base=MapBase(
+            centre=CENTRE,
+            mpp=MPP,
+            route=(),
+            projection=SYDNEY_PROJECTION,
+        ),
     )
     assert canvas.grey().min() == PAPER
 
 
 def test_lines_are_legs_then_ends() -> None:
     """The lines are the legs, drawn before names, then the ends."""
-    base = MapBase(centre=CENTRE, mpp=MPP, route=(), trip=TRIP)
+    base = MapBase(
+        centre=CENTRE,
+        mpp=MPP,
+        route=(),
+        trip=TRIP,
+        projection=SYDNEY_PROJECTION,
+    )
     whole, split = Canvas(width=MAP_WIDTH), Canvas(width=MAP_WIDTH)
     window = (0, 0)
     draw_trip_lines(whole, base=base, window=window)

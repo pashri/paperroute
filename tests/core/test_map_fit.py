@@ -3,7 +3,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute.core.map_fit import (
     BANNER_ROOM,
     CREDIT_ROOM,
@@ -113,6 +113,7 @@ def plain(
         stale_after=STALE_LIMIT,
         ends=ends,
         zone=SYDNEY_ZONE,
+        projection=SYDNEY_PROJECTION,
     )
 
 

@@ -15,7 +15,7 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app_connections import departures_read
 from paperroute.app_ports import Ports
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute.core.chains import chains_of
 from paperroute.core.connection_strip import ConnectionStripView
 from paperroute.core.map_view import DEFAULT_ZOOM
@@ -86,7 +86,11 @@ def _timetable(built: Path) -> Iterator[SqliteTimetableRepository]:
         The timetable.
     """
     with closing(
-        SqliteTimetableRepository(path=built, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=built,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as timetable:
         yield timetable
 
@@ -199,9 +203,16 @@ def connection_strip(
     """
     with (
         closing(
-            SqliteTimetableRepository(path=path, zone=SYDNEY_ZONE),
+            SqliteTimetableRepository(
+                path=path,
+                zone=SYDNEY_ZONE,
+                projection=SYDNEY_PROJECTION,
+            ),
         ) as timetable,
-        closing(SqliteNetworkRepository(path=path)) as network,
+        closing(SqliteNetworkRepository(
+            path=path,
+            projection=SYDNEY_PROJECTION,
+        )) as network,
     ):
         ports = replace(
             ports_of(timetable=timetable),
@@ -315,7 +326,11 @@ def test_connection_strip_follows_carry_on_to_town_hall(
 def test_m9b_connection_strips_load_their_lines() -> None:
     """Both carry-on connections show every leg's stops."""
     with closing(
-        SqliteTimetableRepository(path=M9B_DB, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=M9B_DB,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as timetable:
         stop = timetable.stop
         pins = (

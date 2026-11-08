@@ -152,42 +152,46 @@ class VersionWatch:
 
     def __init__(self, *, timetable: TimetableRepository) -> None:
         self.timetable = timetable
-        self.seen: tuple[str | None, str | None] | None = None
+        self.seen: tuple[str | None, str | None, str | None] | None = None
         self.failing = False
 
     async def check(self) -> TimetableSeen | None:
         """
-        Read the version and schema, giving an event when either changes.
+        Read the version, schema and origin, giving an event on a change.
 
         Returns
         -------
         TimetableSeen | None
-            The version and schema the first time and on a change; None
-            when unchanged or unreadable.
+            The version, schema and origin the first time and on a
+            change; None when unchanged or unreadable.
         """
         try:
-            version, schema = await asyncio.to_thread(self.read)
+            version, schema, origin = await asyncio.to_thread(self.read)
         except sqlite3.Error:
             if not self.failing:
                 logger.exception('reading the timetable version failed')
             self.failing = True
             return None
         self.failing = False
-        if self.seen == (version, schema):
+        if self.seen == (version, schema, origin):
             return None
-        self.seen = (version, schema)
-        return TimetableSeen(version=version, schema=schema)
+        self.seen = (version, schema, origin)
+        return TimetableSeen(version=version, schema=schema, origin=origin)
 
-    def read(self) -> tuple[str | None, str | None]:
+    def read(self) -> tuple[str | None, str | None, str | None]:
         """
-        Read the build time and schema version.
+        Read the build time, schema version and projection origin.
 
         Returns
         -------
-        tuple[str | None, str | None]
-            The build time and the schema version.
+        tuple[str | None, str | None, str | None]
+            The build time, the schema version and the origin text.
         """
-        return self.timetable.version(), self.timetable.schema_version()
+        return (
+            self.timetable.version(),
+            self.timetable.schema_version(),
+            self.timetable.origin(),
+        )
 
 
 def matches(
@@ -612,7 +616,7 @@ def labelled_positions(
     Parameters
     ----------
     timetable : TimetableRepository
-        Where route labels come from.
+        Where route labels and the projection come from.
     data : bytes
         Feed body.
     fetched_at : datetime
@@ -623,7 +627,11 @@ def labelled_positions(
     PositionsSnapshot
         Vehicles labelled with their routes' short names where known.
     """
-    snapshot = parse_positions(data=data, fetched_at=fetched_at)
+    snapshot = parse_positions(
+        data=data,
+        fetched_at=fetched_at,
+        projection=timetable.projection,
+    )
     labels = timetable.route_labels(
         trip_ids={vehicle.trip_id for vehicle in snapshot.vehicles}
     )

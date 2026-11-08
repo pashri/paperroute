@@ -22,6 +22,7 @@ from paperroute_transit.build.tile_store import PlacedLabel
 from paperroute_transit.core.geo import MetreBox, to_metres
 from paperroute_transit.core.tiles import LabelKind
 from tests.build.rings import inside
+from tests.projection import PROJECTION
 
 
 def around(*, lon: float, lat: float, half: float) -> MetreBox:
@@ -42,7 +43,7 @@ def around(*, lon: float, lat: float, half: float) -> MetreBox:
     MetreBox
         West, south, east and north in metres.
     """
-    x, y = to_metres(lon=lon, lat=lat)
+    x, y = to_metres(lon=lon, lat=lat, projection=PROJECTION)
     return (x - half, y - half, x + half, y + half)
 
 
@@ -72,6 +73,7 @@ def _store(
         store=store,
         frame=around(lon=151.005, lat=-33.8, half=800.0),
         index='flex_mem',
+        projection=PROJECTION,
     )
     assert count == 7
     yield store
@@ -86,7 +88,7 @@ def test_store_projects_and_indexes(store: FeatureStore) -> None:
         ('road_minor', 'Hollis Street'),
     ]
     assert near[0][2][0].tolist() == pytest.approx(
-        list(to_metres(lon=150.995, lat=-33.8)),
+        list(to_metres(lon=150.995, lat=-33.8, projection=PROJECTION)),
     )
     assert not far
 
@@ -111,7 +113,7 @@ def test_store_places_in_box(store: FeatureStore) -> None:
 
 def test_sea_lies_east_of_the_coast(store: FeatureStore) -> None:
     """The sea areas sit east of the coastline at 151.008."""
-    coast_x = to_metres(lon=151.008, lat=-33.8)[0]
+    coast_x = to_metres(lon=151.008, lat=-33.8, projection=PROJECTION)[0]
     sea = [
         ring
         for layer, rings in store.areas_in(
@@ -188,23 +190,34 @@ def test_add_projects_areas_and_places(tmp_path: Path) -> None:
     """Added areas and places are stored in metres."""
     store = FeatureStore(path=tmp_path / 'features.db')
     ring = np.array([[151.0, -33.8], [151.001, -33.8], [151.0, -33.801]])
-    store.add(feature=OsmArea(layer='water', rings=(ring,)))
+    store.add(
+        feature=OsmArea(layer='water', rings=(ring,)),
+        projection=PROJECTION,
+    )
     store.add(
         feature=OsmPlace(kind='town', name='Town', rank=0, lon=151, lat=-33),
+        projection=PROJECTION,
     )
-    store.add(feature=OsmLine(layer='ferry', name='', lonlat=ring))
+    store.add(
+        feature=OsmLine(layer='ferry', name='', lonlat=ring),
+        projection=PROJECTION,
+    )
     store.finish(frame=around(lon=151.0, lat=-33.8, half=100.0))
     ((layer, (stored,)),) = store.areas_in(
         box=around(lon=151.0, lat=-33.8, half=10.0),
     )
     assert layer == 'water'
     assert stored[1].tolist() == pytest.approx(
-        list(to_metres(lon=151.001, lat=-33.8)),
+        list(to_metres(lon=151.001, lat=-33.8, projection=PROJECTION)),
     )
     ((_, _, _, point),) = store.places_in(
         box=around(lon=151.0, lat=-33.0, half=10.0),
     )
-    assert point == pytest.approx(to_metres(lon=151.0, lat=-33.0))
+    assert point == pytest.approx(to_metres(
+        lon=151.0,
+        lat=-33.0,
+        projection=PROJECTION,
+    ))
     store.conn.close()
 
 

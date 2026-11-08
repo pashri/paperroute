@@ -14,6 +14,7 @@ from numpy.typing import NDArray
 from paperroute.build.map_style import DARK, LIGHT, STREET_FACE, SUPERSAMPLE
 from paperroute.build.tile_draw import Window as DrawWindow
 from paperroute.build.tile_draw import draw_window
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute.core.map_fit import CREDIT_ROOM
 from paperroute.core.map_view import (
     MAP_HEIGHT,
@@ -65,7 +66,11 @@ from paperroute_transit.render.tile_codec import (
 )
 
 MPP = 8
-CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
+CENTRE: Point = to_metres(
+    lon=151.0036,
+    lat=-33.8170,
+    projection=SYDNEY_PROJECTION,
+)
 OFFSET = (1000, 2000)
 ROUTE: list[NDArray[np.float64]] = [
     np.array([[0.0, 100.0], [400.0, 100.0]], dtype=np.float64),
@@ -93,7 +98,12 @@ def base(
     MapBase
         The base.
     """
-    return MapBase(centre=CENTRE, mpp=mpp, route=route)
+    return MapBase(
+        centre=CENTRE,
+        mpp=mpp,
+        route=route,
+        projection=SYDNEY_PROJECTION,
+    )
 
 
 def across(*, half: float) -> tuple[tuple[Point, ...], ...]:
@@ -201,7 +211,11 @@ def stop_tile() -> tuple[int, int]:
     tuple[int, int]
         Column and row.
     """
-    return tile_of(pixel=to_pixels(point=CENTRE, mpp=MPP))
+    return tile_of(pixel=to_pixels(
+        point=CENTRE,
+        mpp=MPP,
+        projection=SYDNEY_PROJECTION,
+    ))
 
 
 def centre_row(*, mpp: int = MPP) -> int:
@@ -219,7 +233,12 @@ def centre_row(*, mpp: int = MPP) -> int:
         Map pixel row.
     """
     return math.floor(
-        screen_point(centre=CENTRE, mpp=mpp, point=CENTRE)[1],
+        screen_point(
+            centre=CENTRE,
+            mpp=mpp,
+            point=CENTRE,
+            projection=SYDNEY_PROJECTION,
+        )[1],
     )
 
 
@@ -243,8 +262,13 @@ def pattern(*, values: NDArray[np.uint8]) -> str:
 def test_window_of_matches_screen_point() -> None:
     """The stop's global pixel minus the window is its map pixel."""
     left, top = window_of(base=base())
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
-    sx, sy = screen_point(centre=CENTRE, mpp=MPP, point=CENTRE)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
+    sx, sy = screen_point(
+        centre=CENTRE,
+        mpp=MPP,
+        point=CENTRE,
+        projection=SYDNEY_PROJECTION,
+    )
     assert (gx - left, gy - top) == pytest.approx((sx, sy))
 
 
@@ -280,12 +304,17 @@ def test_missing_tiles_are_paper(tmp_path: Path) -> None:
 def test_tiles_and_route_share_one_transform(tmp_path: Path) -> None:
     """A tile's pixel at a point and the route at it land together."""
     point = (CENTRE[0] + 600.0, CENTRE[1] - 400.0)
-    gx, gy = to_pixels(point=point, mpp=MPP)
+    gx, gy = to_pixels(point=point, mpp=MPP, projection=SYDNEY_PROJECTION)
     col, row = tile_of(pixel=(gx, gy))
     dot = np.full((TILE, TILE), PAPER, dtype=np.uint8)
     dot[math.floor(gy) - row * TILE, math.floor(gx) - col * TILE] = INK
     tiles = build(out=tmp_path / 'tiles.db', tiles={(col, row): dot})
-    sx, sy = screen_point(centre=CENTRE, mpp=MPP, point=point)
+    sx, sy = screen_point(
+        centre=CENTRE,
+        mpp=MPP,
+        point=point,
+        projection=SYDNEY_PROJECTION,
+    )
     with closing(tiles):
         grey = compose_tiles(
             tiles=tiles,
@@ -472,7 +501,7 @@ def draw_with(
 
 def test_names_over_the_line_are_redrawn(tmp_path: Path) -> None:
     """A street along the route is redrawn over the stroke."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = street(name='Church Street', x=gx + LABEL_SHIFT, y=gy)
     named = draw_with(out=tmp_path / 'named.db', labels=[label])
     plain = draw_with(out=tmp_path / 'plain.db', labels=[])
@@ -489,7 +518,7 @@ def test_names_over_the_line_are_redrawn(tmp_path: Path) -> None:
 
 def test_route_street_names_redrawn_in_ink(tmp_path: Path) -> None:
     """A name redrawn along the route is ink letters over the stroke."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = street(name='Church Street', x=gx + LABEL_SHIFT, y=gy)
     named = draw_with(out=tmp_path / 'named.db', labels=[label])
     plain = draw_with(out=tmp_path / 'plain.db', labels=[])
@@ -543,6 +572,7 @@ def test_redrawn_name_matches_the_baked_name(tmp_path: Path) -> None:
                 top=OFFSET[1],
                 width=TILE,
                 height=TILE,
+                projection=SYDNEY_PROJECTION,
             ),
         )
     redrawn = np.full((TILE, TILE), PAPER, dtype=np.uint8)
@@ -586,7 +616,7 @@ def test_redrawn_names_are_smoothed_like_baked_ones(
     angle: float,
 ) -> None:
     """A redrawn name is drawn at 4x, averaged and snapped to 4 levels."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = street(
         name='Church Street',
         x=gx + LABEL_SHIFT + 0.3,
@@ -609,7 +639,7 @@ def test_redrawn_names_are_smoothed_like_baked_ones(
 
 def test_crossing_names_are_not_redrawn(tmp_path: Path) -> None:
     """A street crossing the route is left under the line."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = street(name='George St', x=gx + LABEL_SHIFT, y=gy, angle=90.0)
     named = draw_with(out=tmp_path / 'named.db', labels=[label])
     plain = draw_with(out=tmp_path / 'plain.db', labels=[])
@@ -618,7 +648,7 @@ def test_crossing_names_are_not_redrawn(tmp_path: Path) -> None:
 
 def test_base_has_four_levels(tmp_path: Path) -> None:
     """The grey base holds only the four panel levels."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     light = np.full((TILE, TILE), LIGHT, dtype=np.uint8)
     light[:, :40] = 0
     tiles = build(
@@ -639,7 +669,7 @@ def test_base_has_four_levels(tmp_path: Path) -> None:
 
 def test_bits_variant_is_black_and_white(tmp_path: Path) -> None:
     """The BITS base holds only ink and paper, as uint8."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     light = np.full((TILE, TILE), LIGHT, dtype=np.uint8)
     tiles = build(
         out=tmp_path / 'tiles.db',
@@ -659,7 +689,12 @@ def test_bits_variant_is_black_and_white(tmp_path: Path) -> None:
 def test_no_centre_is_paper() -> None:
     """A stop with no location gives a plain paper base."""
     grey = draw_map_base(
-        base=MapBase(centre=None, mpp=MPP, route=()),
+        base=MapBase(
+            centre=None,
+            mpp=MPP,
+            route=(),
+            projection=SYDNEY_PROJECTION,
+        ),
         tiles=NullTiles(),
         variant=TileVariant.GREY,
     )
@@ -671,7 +706,12 @@ def test_no_centre_is_paper() -> None:
 def test_window_of_needs_a_centre() -> None:
     """A base with no centre has no window."""
     with pytest.raises(ValueError, match='centre'):
-        window_of(base=MapBase(centre=None, mpp=MPP, route=()))
+        window_of(base=MapBase(
+            centre=None,
+            mpp=MPP,
+            route=(),
+            projection=SYDNEY_PROJECTION,
+        ))
 
 
 def test_no_tiles_says_map_not_installed_in_the_credit_corner() -> None:
@@ -922,7 +962,7 @@ def test_on_route_keeps_a_label_straddling_a_turn() -> None:
 
 def test_names_reaching_in_from_above_are_redrawn(tmp_path: Path) -> None:
     """A long upright name centred 60 px above the map still shows."""
-    gx, _ = to_pixels(point=CENTRE, mpp=MPP)
+    gx, _ = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     _, top = window_of(base=base())
     x = CENTRE[0] + 40 * MPP
     upright = ((x, CENTRE[1] + 5000.0), (x, CENTRE[1] - 5000.0))
@@ -949,7 +989,7 @@ def test_names_reaching_in_from_above_are_redrawn(tmp_path: Path) -> None:
 
 def test_bits_names_over_the_line_are_dithered(tmp_path: Path) -> None:
     """In BITS a redrawn name is dithered like a baked one, not solid."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = street(name='Church Street', x=gx + LABEL_SHIFT, y=gy)
     drawn = {}
     for variant in TileVariant:
@@ -971,7 +1011,7 @@ def test_bits_names_over_the_line_are_dithered(tmp_path: Path) -> None:
 
 def test_bits_names_dither_the_four_level_name(tmp_path: Path) -> None:
     """In BITS a redrawn name is the dithered copy of its grey name."""
-    gx, gy = to_pixels(point=CENTRE, mpp=MPP)
+    gx, gy = to_pixels(point=CENTRE, mpp=MPP, projection=SYDNEY_PROJECTION)
     label = street(name='Church Street', x=gx + LABEL_SHIFT, y=gy)
     drawn = {}
     for variant in TileVariant:
@@ -1022,7 +1062,12 @@ def test_ridden_stops_are_rings(tmp_path: Path) -> None:
             tiles=tiles,
             variant=TileVariant.GREY,
         )
-    x, y = screen_point(centre=CENTRE, mpp=MPP, point=stop)
+    x, y = screen_point(
+        centre=CENTRE,
+        mpp=MPP,
+        point=stop,
+        projection=SYDNEY_PROJECTION,
+    )
     column, row = math.floor(x), math.floor(y)
     assert grey[row, column] == PAPER
     assert grey[row, column + 3] == PAPER
@@ -1046,7 +1091,12 @@ def test_ridden_stop_ring_shows_outside_the_route(
             tiles=tiles,
             variant=TileVariant.GREY,
         )
-    x, y = screen_point(centre=CENTRE, mpp=mpp, point=stop)
+    x, y = screen_point(
+        centre=CENTRE,
+        mpp=mpp,
+        point=stop,
+        projection=SYDNEY_PROJECTION,
+    )
     column, row = math.floor(x), math.floor(y)
     reach = math.floor(ROUTE_STYLE[mpp][0] / 2) + 1
     assert grey[row - reach, column] == INK
@@ -1067,7 +1117,12 @@ def test_to_disc_is_12_px(tmp_path: Path) -> None:
             tiles=tiles,
             variant=TileVariant.GREY,
         )
-    x, y = screen_point(centre=CENTRE, mpp=MPP, point=end)
+    x, y = screen_point(
+        centre=CENTRE,
+        mpp=MPP,
+        point=end,
+        projection=SYDNEY_PROJECTION,
+    )
     column, row = math.floor(x), math.floor(y)
     assert grey[row, column + 11] == INK
     assert grey[row, column - 11] == INK

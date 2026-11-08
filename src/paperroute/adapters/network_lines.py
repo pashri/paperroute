@@ -10,6 +10,7 @@ from typing import Final, Protocol
 from paperroute.adapters.timetable_db import to_point
 from paperroute.core.chooser import Choice, Column, Level
 from paperroute.core.reach_exits import exit_leads, found_exits, grouped_exits
+from paperroute_transit.core.geo import Projection
 from paperroute_transit.core.model import RouteKind, StopPlace, until_revisit
 from paperroute_transit.core.reach import RunTail, StripKey, line_key_of
 from paperroute_transit.core.reach_layout import LineExit
@@ -131,7 +132,11 @@ def short_name(*, name: object) -> str:
     return str(name).removesuffix(' Station')
 
 
-def station_choices(*, rows: Iterable[Row]) -> tuple[Choice, ...]:
+def station_choices(
+    *,
+    rows: Iterable[Row],
+    projection: Projection,
+) -> tuple[Choice, ...]:
     """
     Turn line_stations rows into station rows under block headings.
 
@@ -140,6 +145,8 @@ def station_choices(*, rows: Iterable[Row]) -> tuple[Choice, ...]:
     rows : Iterable[Row]
         Station ID, head, name, longitude, latitude and head name, in
         line order. A row with a head opens a block.
+    projection : Projection
+        The projection to place the stations in.
 
     Returns
     -------
@@ -157,7 +164,7 @@ def station_choices(*, rows: Iterable[Row]) -> tuple[Choice, ...]:
             key=str(station), label=short_name(name=name),
             place=StopPlace(
                 stop_id=str(station), name=str(name),
-                point=to_point(lon=lon, lat=lat),
+                point=to_point(lon=lon, lat=lat, projection=projection),
             ),
         ))
     return tuple(items)
@@ -288,11 +295,20 @@ class LineTables:
         Runs queries against the timetable file.
     has_tables : HasTables
         Says whether the file has some tables.
+    projection : Projection
+        The projection stop points are placed in.
     """
 
-    def __init__(self, *, fetch: Fetch, has_tables: HasTables) -> None:
+    def __init__(
+        self,
+        *,
+        fetch: Fetch,
+        has_tables: HasTables,
+        projection: Projection,
+    ) -> None:
         self.fetch = fetch
         self.has_tables = has_tables
+        self.projection = projection
 
     def has_lines(self) -> bool:
         """
@@ -320,7 +336,10 @@ class LineTables:
             Block headings and stations in line order.
         """
         rows = self.fetch(sql=LINE_STATIONS, params=(line_key,))
-        return Column(level=Level.STATION, items=station_choices(rows=rows))
+        return Column(
+            level=Level.STATION,
+            items=station_choices(rows=rows, projection=self.projection),
+        )
 
     def to_column(
         self, *, line_key: str, origin: str, kind: RouteKind,

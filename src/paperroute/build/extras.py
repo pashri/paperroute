@@ -9,6 +9,7 @@ from contextlib import closing
 from pathlib import Path
 
 from paperroute.build.swap import land
+from paperroute.city import SYDNEY
 from paperroute_device.rss import peak_rss_mb
 from paperroute_transit.build.catalogue import CATALOGUE_SCHEMA, load_catalogue
 from paperroute_transit.build.runs import RUN_SCHEMA, load_runs
@@ -46,7 +47,13 @@ def run_extras(*, path: Path) -> None:
         conn.executescript(RUN_SCHEMA)
         conn.executescript(CATALOGUE_SCHEMA)
         timed(phase='runs', step=lambda: load_runs(conn=conn))
-        timed(phase='catalogue', step=lambda: load_catalogue(conn=conn))
+        timed(
+            phase='catalogue',
+            step=lambda: load_catalogue(
+                conn=conn,
+                projection=SYDNEY.projection,
+            ),
+        )
         conn.commit()
     print(f'progress extras peak {peak_rss_mb():.0f}MB', flush=True)
 

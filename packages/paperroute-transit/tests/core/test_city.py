@@ -2,8 +2,7 @@
 
 import math
 
-from paperroute_transit.core.geo import Projection
-from paperroute_transit.core.tiles import GRID_ORIGIN
+from paperroute_transit.core.geo import Projection, to_metres
 
 
 def test_projection_matches_old_constants() -> None:
@@ -15,5 +14,9 @@ def test_projection_matches_old_constants() -> None:
     assert projection.metres_per_degree_lon == 111_320.0 * math.cos(
         math.radians(-33.8688),
     )
-    assert projection.grid_origin == GRID_ORIGIN
+    assert projection.metres_per_degree_lon == 92430.76354589846
+    assert projection.grid_origin == to_metres(
+        lon=149.5, lat=-32.0, projection=projection,
+    )
+    assert projection.grid_origin == (-157991.90412900544, 206640.69120000003)
     assert projection.origin_text == '151.2093,-33.8688'

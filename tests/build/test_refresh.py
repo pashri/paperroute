@@ -463,6 +463,33 @@ def test_refresh_rebuilds_when_schema_version_differs(
     assert report.rebuilt
 
 
+@pytest.mark.parametrize(
+    ('origin', 'rebuilt'),
+    [('0.0,51.5', True), ('151.2093,-33.8688', False), (None, False)],
+)
+def test_update_rebuilds_on_other_origin(
+    server: FeedServer,
+    data_dir: Path,
+    origin: str | None,
+    rebuilt: bool,
+) -> None:
+    """A current-schema timetable from another origin is rebuilt."""
+    run(server=server, data_dir=data_dir)
+    with closing(sqlite3.connect(data_dir / 'timetable.db')) as conn:
+        conn.execute("DELETE FROM meta WHERE key = 'origin'")
+        if origin is not None:
+            conn.execute(
+                "INSERT INTO meta VALUES ('origin', ?)",
+                (origin,),
+            )
+        conn.commit()
+    server.state.hits.clear()
+    report = run(server=server, data_dir=data_dir)
+    assert server.state.hits == {'HEAD': 3}
+    assert report.changed == ()
+    assert report.rebuilt is rebuilt
+
+
 def test_read_meta_of_missing_file_is_empty(tmp_path: Path) -> None:
     """An unreadable timetable has no meta."""
     assert not refresh_module.read_meta(path=tmp_path / 'missing.db')

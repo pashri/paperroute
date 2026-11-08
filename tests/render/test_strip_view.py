@@ -6,6 +6,7 @@ from datetime import timedelta
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute.city import SYDNEY_PROJECTION
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     STRIP_MAP_WIDTH,
@@ -64,7 +65,11 @@ from paperroute_transit.core.geo import Point, to_metres
 from paperroute_transit.core.model import CarryOn
 from paperroute_transit.render.tile_codec import GREYS
 
-CENTRE: Point = to_metres(lon=151.0036, lat=-33.8170)
+CENTRE: Point = to_metres(
+    lon=151.0036,
+    lat=-33.8170,
+    projection=SYDNEY_PROJECTION,
+)
 PANEL_TOP = 128
 PANEL_STEP = 70
 
@@ -270,7 +275,13 @@ def map_view() -> MapView:
     """
     return MapView(
         origin='Town Hall', destination='Parramatta', clock='8:05',
-        base=MapBase(centre=CENTRE, mpp=8, route=(), width=STRIP_MAP_WIDTH),
+        base=MapBase(
+            centre=CENTRE,
+            mpp=8,
+            route=(),
+            width=STRIP_MAP_WIDTH,
+            projection=SYDNEY_PROJECTION,
+        ),
         zoom=2, markers=(), sidebar=(), banner=None, empty=None,
         tag=PinTag(text='pin 2/3', pinned=True))
 

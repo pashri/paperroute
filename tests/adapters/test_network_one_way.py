@@ -10,7 +10,7 @@ import pytest
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute.core.chooser import Column, Level
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
@@ -66,7 +66,10 @@ def to_column(*, path: Path, origin: str) -> Column:
     Column
         The column.
     """
-    with closing(SqliteNetworkRepository(path=path)) as repo:
+    with closing(SqliteNetworkRepository(
+        path=path,
+        projection=SYDNEY_PROJECTION,
+    )) as repo:
         column = repo.choices(path=(*T1, (Level.STATION, origin)))
     assert column is not None
     return column
@@ -189,7 +192,11 @@ def test_every_bright_to_has_a_departure(tmp_path: Path) -> None:
     }
     assert 'E1' in dim_keys(column=columns['W2'])
     with closing(
-        SqliteTimetableRepository(path=path, zone=SYDNEY_ZONE),
+        SqliteTimetableRepository(
+            path=path,
+            zone=SYDNEY_ZONE,
+            projection=SYDNEY_PROJECTION,
+        ),
     ) as repo:
         missing = [
             (origin, choice.key)

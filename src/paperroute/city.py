@@ -79,15 +79,17 @@ EXACT_KINDS: Final[dict[int, SydneyMode]] = {
     714: SydneyMode.REPLACEMENT,
 }
 BUS_CHIP: Final[str] = '#00b5ef'
+DARK_TEXT: Final[str] = '#000000'
 SYDNEY_MODES: Final[tuple[ModeSpec, ...]] = (
     ModeSpec(
         id=SydneyMode.BUS, label='Bus', letter='B', chip=BUS_CHIP,
         tagged=True,
         board_with=(SydneyMode.SCHOOL, SydneyMode.REPLACEMENT),
+        chip_text=DARK_TEXT,
     ),
     ModeSpec(
         id=SydneyMode.TRAIN, label='Train', letter='T', chip='#f99d1c',
-        by_line=True, named_alerts=True,
+        by_line=True, named_alerts=True, chip_text=DARK_TEXT,
     ),
     ModeSpec(
         id=SydneyMode.METRO, label='Metro', letter='M', chip='#168388',
@@ -96,14 +98,16 @@ SYDNEY_MODES: Final[tuple[ModeSpec, ...]] = (
     ModeSpec(
         id=SydneyMode.LIGHT_RAIL, label='Light rail', letter='L',
         chip='#ee343f', by_line=True, named_alerts=True, loose_alerts=True,
+        chip_text=DARK_TEXT,
     ),
     ModeSpec(
         id=SydneyMode.FERRY, label='Ferry', letter='F', chip='#5ab031',
         by_line=True, named_alerts=True, wharf_names=True,
+        chip_text=DARK_TEXT,
     ),
     ModeSpec(
         id=SydneyMode.SCHOOL, label='School', letter='S', chip=BUS_CHIP,
-        tagged=True, skippable=True,
+        tagged=True, skippable=True, chip_text=DARK_TEXT,
     ),
     ModeSpec(
         id=SydneyMode.COACH, label='Coach', letter='C', chip='#732a82',
@@ -112,6 +116,7 @@ SYDNEY_MODES: Final[tuple[ModeSpec, ...]] = (
     ModeSpec(
         id=SydneyMode.REPLACEMENT, label='Replacement buses', letter='R',
         chip=BUS_CHIP, under=SydneyMode.BUS, replaces=SydneyMode.TRAIN,
+        chip_text=DARK_TEXT,
     ),
 )
 

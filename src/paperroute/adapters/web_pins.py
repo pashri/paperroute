@@ -11,6 +11,7 @@ from urllib.parse import urlencode
 from aiohttp import web
 from multidict import MultiDict
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.pin_editor import edited
 from paperroute.adapters.pin_windows import (
     WindowRow,
@@ -100,7 +101,7 @@ def whole_number(*, text: str) -> int | None:
         return None
 
 
-def page_html(*, notice: str, body: str) -> str:
+def page_html(*, notice: str, body: str, head: BoardHead) -> str:
     """
     Fill in the Pins page.
 
@@ -110,6 +111,9 @@ def page_html(*, notice: str, body: str) -> str:
         The notice's HTML, or an empty string.
     body : str
         The HTML of the list, or of a confirmation.
+    head : BoardHead
+        The extra stylesheets the page links; filled first, so text
+        that reads like its mark stays as text.
 
     Returns
     -------
@@ -117,7 +121,7 @@ def page_html(*, notice: str, body: str) -> str:
         The page.
     """
     return (
-        asset(name='pins.html')
+        head.fill(page=asset(name='pins.html'))
         .replace('{{notice}}', notice)
         .replace('{{pins}}', body)
     )
@@ -256,7 +260,7 @@ def notice_html(*, done: str | None) -> str:
     return f'<p class="notice" role="status">{html.escape(text)}</p>'
 
 
-def confirm_page(*, pin: Pin, ref: str) -> web.Response:
+def confirm_page(*, pin: Pin, ref: str, head: BoardHead) -> web.Response:
     """
     Draw the page asking before a pin is deleted.
 
@@ -266,6 +270,8 @@ def confirm_page(*, pin: Pin, ref: str) -> web.Response:
         The pin.
     ref : str
         Its ref.
+    head : BoardHead
+        The extra stylesheets the page links.
 
     Returns
     -------
@@ -274,7 +280,8 @@ def confirm_page(*, pin: Pin, ref: str) -> web.Response:
     """
     body = CONFIRM.format(label=html.escape(pin_label(pin=pin)), ref=ref)
     return web.Response(
-        text=page_html(notice='', body=body), content_type='text/html',
+        text=page_html(notice='', body=body, head=head),
+        content_type='text/html',
     )
 
 
@@ -296,6 +303,8 @@ class PinsPages:
         Waits for some seconds.
     skip_school : Callable[[], bool]
         Says whether the stop search leaves school routes out.
+    head : BoardHead
+        The extra stylesheets each page links.
     """
 
     def __init__(
@@ -307,6 +316,7 @@ class PinsPages:
         modes: Sequence[ModeSpec],
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
         skip_school: Callable[[], bool] = lambda: True,
+        head: BoardHead = BoardHead(),
     ) -> None:
         self._post = post
         self._pins = pins
@@ -314,6 +324,7 @@ class PinsPages:
         self.modes = modes
         self._sleep = sleep
         self.skip_school = skip_school
+        self.head = head
 
     def routes(self) -> list[web.RouteDef]:
         """
@@ -381,7 +392,7 @@ class PinsPages:
         )
         notice = notice_html(done=request.query.get('done'))
         return web.Response(
-            text=page_html(notice=notice, body=body),
+            text=page_html(notice=notice, body=body, head=self.head),
             content_type='text/html',
         )
 
@@ -627,7 +638,7 @@ class PinsPages:
             raise web.HTTPSeeOther(location='/pins?done=gone')
         latest, pin = found
         if fields.get('confirm') != 'yes':
-            return confirm_page(pin=pin, ref=ref)
+            return confirm_page(pin=pin, ref=ref, head=self.head)
         raise self._finish(
             event=PinDeleted(ref=ref),
             revision=latest.revision,
@@ -662,6 +673,7 @@ class PinsPages:
             query=request.query,
             modes=self.modes,
             skip_school=self.skip_school(),
+            head=self.head,
         ))
 
     async def _stops(self, request: web.Request) -> web.Response:
@@ -743,6 +755,7 @@ class PinsPages:
                 notice=notice,
                 body=body,
                 danger=danger,
+                head=self.head,
             ),
             status=status,
         )

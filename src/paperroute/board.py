@@ -15,6 +15,7 @@ from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.board_pages import PinPages, WaysPlug
 from paperroute.adapters.clocks import ReplayClock, SystemClock
 from paperroute.adapters.device_probe import SystemProbe
@@ -152,6 +153,9 @@ class CityParts:
         Makes the ways page's suggestion plug.
     status_line : StatusLine
         Writes the live page's status line.
+    sheets : tuple[str, ...]
+        The city's stylesheets in its web directory, linked by every
+        page straight after `/live.css`.
     """
 
     assets: AssetRoot
@@ -161,6 +165,7 @@ class CityParts:
     hint: str
     suggest: SuggestFor
     status_line: StatusLine
+    sheets: tuple[str, ...]
 
 
 def add_pin_arguments(parser: argparse.ArgumentParser) -> None:
@@ -1034,6 +1039,7 @@ def device_pages_for(
         knobs=knob_state,
         nav=parts.nav,
         reset_hint=RESET_HINT,
+        sheets=parts.sheets,
     )
 
 
@@ -1072,11 +1078,13 @@ def board_display(
         nav=parts.nav,
         hint=parts.hint,
         status_line=parts.status_line,
+        sheets=parts.sheets,
         board=PinPages(
             pins=lambda: timings.pins,
             options=SqlitePinOptions(network=network),
             modes=city.modes,
             plug=parts.suggest(live=live),
+            head=BoardHead(sheets=parts.sheets),
         ),
     )
 

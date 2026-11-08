@@ -305,11 +305,17 @@ async def test_vendor_unknown_name_is_missing(client: Client) -> None:
 
 
 def test_tokens_on_root() -> None:
-    """The NSW colours are tokens on the first `:root`, beside the font."""
+    """The colours are tokens on `:root`; Sydney's sheet gives NSW's."""
     css = css_text()
     root = declarations(body=block_after(css=css, start=css.index(':root')))
+    for token in ('--navy: ', '--blue: ', '--red: '):
+        assert [line for line in root if line.startswith(token)]
+    palette = (WEB / 'palette.css').read_text(encoding='utf-8')
+    nsw = declarations(
+        body=block_after(css=palette, start=palette.index(':root')),
+    )
     for token in ('--navy: #002664', '--blue: #146cfd', '--red: #d7153a'):
-        assert token in root
+        assert token in nsw
     face = block_after(css=css, start=css.index('@font-face'))
     assert "url('/fonts/public-sans.woff2')" in face
 

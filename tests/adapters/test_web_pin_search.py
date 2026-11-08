@@ -7,6 +7,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.board_pages import PinPages
 from paperroute.adapters.web_board import SuggestPlug
 from paperroute.adapters.web_display import WebDisplay
@@ -40,6 +41,7 @@ async def _client() -> AsyncIterator[Client]:
     display = WebDisplay(
         device=sydney_site().pages(),
         board=PinPages(
+            head=BoardHead(),
             pins=lambda: None,
             options=FakePinOptions(found=(MATCH,)),
             modes=SYDNEY.modes,
@@ -85,6 +87,7 @@ async def test_stops_json_before_timetable() -> None:
     display = WebDisplay(
         device=sydney_site().pages(),
         board=PinPages(
+            head=BoardHead(),
             pins=lambda: None,
             options=None,
             modes=SYDNEY.modes,
@@ -115,6 +118,7 @@ async def test_search_follows_school_switch() -> None:
     display = WebDisplay(
         status=lambda: reported,
         board=PinPages(
+            head=BoardHead(),
             pins=lambda: None,
             options=options,
             modes=SYDNEY.modes,

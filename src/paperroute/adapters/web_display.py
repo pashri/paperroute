@@ -8,6 +8,8 @@ import numpy as np
 from aiohttp import web
 from numpy.typing import NDArray
 
+from paperroute.adapters.board_head import BoardHead
+from paperroute.adapters.mode_css import board_css
 from paperroute.adapters.settings_form import (
     ERRORS,
     BadInput,
@@ -188,6 +190,9 @@ class WebDisplay:
     status_line : StatusLine | None
         Writes the live page's status line into the status as `line`,
         or None for no line.
+    sheets : Sequence[str]
+        The city's stylesheets in its web directory, each served at
+        `/<name>` and linked by every page straight after `/live.css`.
 
     Attributes
     ----------
@@ -197,7 +202,7 @@ class WebDisplay:
         The live view, which serves the frames and the knob buttons.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         *,
         city: City,
@@ -208,8 +213,11 @@ class WebDisplay:
         nav: Sequence[NavItem] = KIT_NAV,
         hint: str = KNOB_HINT,
         status_line: StatusLine | None = None,
+        sheets: Sequence[str] = (),
     ) -> None:
         self.defaults = default_settings(city=city)
+        self._modes = city.modes
+        self._head = BoardHead(sheets=tuple(sheets))
         self._status = status
         self._status_line = status_line
         self.device = device
@@ -223,6 +231,7 @@ class WebDisplay:
             status=self._live_status,
             nav=nav,
             hint=hint,
+            sheets=self._head.sheets,
         )
 
     def _live_status(self) -> dict[str, object]:
@@ -334,6 +343,10 @@ class WebDisplay:
             live=self.live,
             routes=[
                 web.get('/board.css', self._board_css),
+                *(
+                    web.get(f'/{name}', self._sheet)
+                    for name in self._head.sheets
+                ),
                 web.get('/vendor/{name}', self._vendor),
                 web.get('/settings', self._settings_page),
                 web.get('/settings.js', self._settings_js),
@@ -371,11 +384,31 @@ class WebDisplay:
         Returns
         -------
         web.Response
-            The response.
+            The stylesheet, its modes mark filled with the city's chip
+            rules.
         """
         del request
         return web.Response(
-            text=asset(name='board.css'),
+            text=board_css(text=asset(name='board.css'), modes=self._modes),
+            content_type='text/css',
+        )
+
+    async def _sheet(self, request: web.Request) -> web.Response:
+        """
+        Serve one of the city's stylesheets.
+
+        Parameters
+        ----------
+        request : web.Request
+            The incoming request, for a sheet's path.
+
+        Returns
+        -------
+        web.Response
+            The stylesheet from the app's web directory.
+        """
+        return web.Response(
+            text=asset(name=request.path.removeprefix('/')),
             content_type='text/css',
         )
 
@@ -439,7 +472,7 @@ class WebDisplay:
         if self._posted.items() <= status.items() or status != self._before:
             self._posted = {}
         page = page_text(
-            template=asset(name='settings.html'),
+            template=self._head.fill(page=asset(name='settings.html')),
             values={**status, **self._posted},
             error=request.query.get('error'),
         )

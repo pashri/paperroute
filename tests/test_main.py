@@ -1114,6 +1114,7 @@ async def test_sydney_parts_wire_sydney(
     assert SYDNEY_PARTS.hint == SYDNEY_HINT
     assert SYDNEY_PARTS.status_line is sydney_status_line
     assert SYDNEY_PARTS.assets == APP_ASSETS
+    assert SYDNEY_PARTS.sheets == ('palette.css',)
     assert [key.name for key in SYDNEY_PARTS.keys()] == ['tfnsw']
     plug = SYDNEY_PARTS.suggest(live=False)
     assert isinstance(plug, SuggestPlug)

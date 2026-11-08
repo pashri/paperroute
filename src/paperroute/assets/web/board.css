@@ -1,10 +1,3 @@
-form:has(input[name="skip_school_buses"]:not(:checked))
-  .switch:has(input[name="skip_school_on_route_pins"]) {
-  color: var(--muted);
-  opacity: 0.5;
-  pointer-events: none;
-}
-
 .switch {
   display: flex;
   align-items: center;
@@ -115,7 +108,7 @@ form:has(input[name="skip_school_buses"]:not(:checked))
 }
 
 .chip {
-  --chip-fill: var(--mode-other);
+  --chip-fill: var(--mode-other, #646974);
   --chip-text: #ffffff;
   flex: none;
   width: 3.4em;
@@ -130,35 +123,7 @@ form:has(input[name="skip_school_buses"]:not(:checked))
   white-space: nowrap;
 }
 
-.mode-train {
-  --chip-fill: var(--mode-train);
-  --chip-text: #000000;
-}
-
-.mode-metro {
-  --chip-fill: var(--mode-metro);
-}
-
-.mode-light-rail {
-  --chip-fill: var(--mode-light-rail);
-  --chip-text: #000000;
-}
-
-.mode-bus,
-.mode-school,
-.mode-replacement {
-  --chip-fill: var(--mode-bus);
-  --chip-text: #000000;
-}
-
-.mode-ferry {
-  --chip-fill: var(--mode-ferry);
-  --chip-text: #000000;
-}
-
-.mode-coach {
-  --chip-fill: var(--mode-coach);
-}
+/* {{modes}} */
 
 .default-submit {
   position: absolute;

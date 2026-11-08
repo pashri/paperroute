@@ -7,6 +7,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from multidict import MultiMapping
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.board_pages import PagePlug, PinPages
 from paperroute.adapters.web_display import WebDisplay
 from paperroute.adapters.web_ways import WaysPages
@@ -110,6 +111,7 @@ async def test_pin_pages_without_plug_serve_no_suggest() -> None:
     """With no plug the pin pages answer and suggestions are not found."""
     pins = Pins(pins=(WORK,))
     board = PinPages(
+        head=BoardHead(),
         pins=pins.get, options=None, modes=SYDNEY.modes, plug=None,
     )
     board.pins_sleep = pins.sleep
@@ -128,6 +130,7 @@ async def test_plug_card_on_ways_page() -> None:
     pins = Pins(pins=(WORK,))
     plug = RecordingPlug()
     board = PinPages(
+        head=BoardHead(),
         pins=pins.get, options=OPTIONS, modes=SYDNEY.modes, plug=plug,
     )
     board.pins_sleep = pins.sleep
@@ -148,6 +151,7 @@ async def test_pin_pages_follow_reported_school_switch() -> None:
     reported = {'skip_school_buses': 'on'}
     posted: list[Event] = []
     board = PinPages(
+        head=BoardHead(),
         pins=lambda: None, options=options, modes=SYDNEY.modes, plug=None,
     )
     app = web.Application()
@@ -167,5 +171,6 @@ async def test_pin_pages_follow_reported_school_switch() -> None:
 async def test_pin_pages_close_without_a_plug() -> None:
     """Closing pages with no plug does nothing."""
     await PinPages(
+        head=BoardHead(),
         pins=lambda: None, options=None, modes=SYDNEY.modes, plug=None,
     ).close()

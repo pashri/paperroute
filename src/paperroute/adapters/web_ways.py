@@ -10,6 +10,7 @@ from urllib.parse import urlencode
 from aiohttp import web
 from multidict import MultiDict, MultiMapping
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.pin_windows import (
     DEFAULT_BUTTON,
     WindowRow,
@@ -502,6 +503,8 @@ class WaysPages:
         The timetable's choices, or None.
     card : CardOf
         Draws the Trip Planner controls for a query.
+    head : BoardHead
+        The extra stylesheets each page links.
     """
 
     def __init__(
@@ -511,11 +514,13 @@ class WaysPages:
         pins: Callable[[], PinsSeen | None],
         options: PinOptions | None,
         card: CardOf = plain_card,
+        head: BoardHead = BoardHead(),
     ) -> None:
         self._pages = pages
         self._pins = pins
         self.options = options
         self.card = card
+        self.head = head
 
     def routes(self) -> list[web.RouteDef]:
         """
@@ -617,7 +622,7 @@ class WaysPages:
         title = EDIT_TITLE if draft.ref else ADD_TITLE
         if self.options is None:
             return html_page(text=edit_page(
-                title=title, notice=notice, body=STARTING,
+                title=title, notice=notice, body=STARTING, head=self.head,
             ), status=status)
         pin = self._pin(
             options=self.options, draft=draft, base=base,
@@ -633,6 +638,7 @@ class WaysPages:
         return html_page(
             text=edit_page(
                 title=title, notice=notice, body=body, danger=danger,
+                head=self.head,
             ),
             status=status,
         )

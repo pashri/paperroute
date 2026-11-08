@@ -67,6 +67,7 @@ SYDNEY_PARTS: Final[board.CityParts] = board.CityParts(
     hint=SYDNEY_HINT,
     suggest=sydney_suggest,
     status_line=sydney_status_line,
+    sheets=('palette.css',),
 )
 
 

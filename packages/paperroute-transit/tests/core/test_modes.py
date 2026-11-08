@@ -62,3 +62,11 @@ def test_line_and_tagged_modes_come_from_flags() -> None:
     """Line modes are the by-line specs; tagged modes the tagged ones."""
     assert line_modes(modes=[BUS, TRAIN]) == frozenset({'train'})
     assert tagged_modes(modes=[BUS, TRAIN]) == frozenset({'bus'})
+
+
+def test_css_unsafe_values_are_problems() -> None:
+    """An id or chip colour unsafe to write into CSS is a problem each."""
+    upper = ModeSpec(id='Bus', label='Bus', letter='B', chip='#00b5ef')
+    loose = ModeSpec(id='bus', label='Bus', letter='B', chip='#00B5EF;')
+    assert len(mode_problems(modes=[upper])) == 1
+    assert len(mode_problems(modes=[loose])) == 1

@@ -331,3 +331,22 @@ async def test_ssid_with_nav_mark_stays_text(
     page = await (await client.get('/setup')).text()
     assert 'value="{{nav}}"' in page
     assert page.count('<nav') == 1
+
+
+async def test_ssid_with_sheets_mark_stays_text(setup: DeviceSite) -> None:
+    """A network named like the sheets mark is shown as its name."""
+    assert setup.status is not None and setup.status.setup is not None
+    mark = WifiNetwork(
+        ssid='{{sheets}}', signal=90, secured=True, enterprise=False,
+    )
+    setup.status = replace(
+        setup.status, setup=replace(setup.status.setup, networks=(mark,)),
+    )
+    setup.sheets = ('a.css',)
+    client = await _start(setup=setup)
+    try:
+        page = await (await client.get('/setup')).text()
+    finally:
+        await client.close()
+    assert 'value="{{sheets}}"' in page
+    assert page.count('href="/a.css"') == 1

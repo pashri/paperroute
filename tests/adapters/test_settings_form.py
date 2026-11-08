@@ -245,7 +245,7 @@ def test_settings_page_offers_four_map_choices() -> None:
 
 def test_route_pin_switch_dimmed_by_css() -> None:
     """The route pin switch is dimmed while the school switch is off."""
-    css = ' '.join(asset(name='board.css').split())
+    css = ' '.join(asset(name='palette.css').split())
     assert (
         ':has(input[name="skip_school_buses"]:not(:checked)) '
         '.switch:has(input[name="skip_school_on_route_pins"])'

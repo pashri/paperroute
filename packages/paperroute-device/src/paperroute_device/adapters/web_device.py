@@ -330,9 +330,11 @@ class DevicePages:
     reset_hint : str
         The Device page's sentence on what each reset clears; plain
         text, escaped.
+    sheets : Sequence[str]
+        Extra stylesheets each page links straight after `/live.css`.
     """
 
-    def __init__(  # pylint: disable=too-many-arguments
+    def __init__(  # pylint: disable=too-many-arguments,too-many-locals
         self,
         *,
         status: Callable[[], DeviceStatus | None],
@@ -349,6 +351,7 @@ class DevicePages:
         knobs: Callable[[], bool | None] = lambda: None,
         nav: Sequence[NavItem] = KIT_NAV,
         reset_hint: str = KIT_RESET_HINT,
+        sheets: Sequence[str] = (),
     ) -> None:
         self._status = status
         self._feeds = feeds
@@ -366,6 +369,7 @@ class DevicePages:
         self._knobs = knobs
         self._nav = tuple(nav)
         self._reset_hint = reset_hint
+        self._sheets = tuple(sheets)
 
     def _routes(self) -> list[web.RouteDef]:
         """
@@ -409,7 +413,9 @@ class DevicePages:
         str
             The page, its other marks still unfilled.
         """
-        return page_frame(name=name, nav=self._nav, current=current)
+        return page_frame(
+            name=name, nav=self._nav, current=current, sheets=self._sheets,
+        )
 
     def _hotspot(self) -> DeviceStatus | None:
         """

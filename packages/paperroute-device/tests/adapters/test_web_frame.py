@@ -11,6 +11,7 @@ from paperroute_device.adapters.web_frame import (
     SHELL_WEB,
     NavItem,
     nav_html,
+    page_frame,
 )
 from paperroute_testkit.paths import ROOT
 
@@ -80,3 +81,16 @@ def test_kit_never_names_board_css() -> None:
             elif b'board.css' in entry.read_bytes():
                 found.append(entry.name)
     assert not found
+
+
+def test_sheets_mark_filled_or_dropped() -> None:
+    """No sheets leave no line; a sheet links straight after live.css."""
+    live = '  <link rel="stylesheet" href="/live.css">\n'
+    bare = page_frame(name='device.html', nav=(), current=None)
+    assert '{{sheets}}' not in bare
+    assert live + '  <script' in bare
+    linked = page_frame(
+        name='device.html', nav=(), current=None, sheets=('a.css',),
+    )
+    assert live + '  <link rel="stylesheet" href="/a.css">\n' in linked
+    assert '{{sheets}}' not in linked

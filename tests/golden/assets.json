@@ -2,13 +2,13 @@
   "/": {
     "cache_control": null,
     "content_type": "text/html; charset=utf-8",
-    "sha256": "cdd3b5ea9fc802b72cd883f33b5bac563585bac0c5e36420d90e107bcbbb883e",
+    "sha256": "acff88cbb03e4184f2605e92e0683df5fad53de6168ad5ac748dca072a12d557",
     "status": 200
   },
   "/board.css": {
     "cache_control": null,
     "content_type": "text/css; charset=utf-8",
-    "sha256": "550631ac5da4c54fc841469396d8ef495ec22f1c9d3972f0ddb65acd8511c121",
+    "sha256": "49eaed7ab689eff556d660d7ee2783708ca9fd969723f43483892bfda3dd7523",
     "status": 200
   },
   "/device.js": {
@@ -26,13 +26,19 @@
   "/live.css": {
     "cache_control": null,
     "content_type": "text/css; charset=utf-8",
-    "sha256": "77d4200f01cc4b1460f8ffe270ac595a88f1230d36523a5a4b5bc85451ce8da8",
+    "sha256": "6ea5367d96089b0bbcdbb24e9e226606684e2a48e3ad244e8f5832dc016f4c2a",
     "status": 200
   },
   "/live.js": {
     "cache_control": null,
     "content_type": "text/javascript; charset=utf-8",
     "sha256": "d87c7947e78c8ada90ffcd47c947c76344eb3b6bad0f0a18d36e8211c25aa4c7",
+    "status": 200
+  },
+  "/palette.css": {
+    "cache_control": null,
+    "content_type": "text/css; charset=utf-8",
+    "sha256": "0efb04d56dfa3e77babb63c14e1e21f5c088d791e6426e2a20eaf6008c1bfdeb",
     "status": 200
   },
   "/pins.js": {

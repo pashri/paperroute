@@ -3,6 +3,7 @@
 from collections.abc import Mapping, Sequence
 from typing import Final, TypedDict
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.web_pin_edit import (
     MIN_QUERY,
     edit_page,
@@ -67,6 +68,7 @@ def search_page(
     query: Mapping[str, str],
     modes: Sequence[ModeSpec],
     skip_school: bool = True,
+    head: BoardHead = BoardHead(),
 ) -> str:
     """
     Search for a stop or station and draw what was found.
@@ -81,6 +83,8 @@ def search_page(
         The city's modes, which name each stop's kinds.
     skip_school : bool
         Whether school routes are left out of each stop's routes.
+    head : BoardHead
+        The extra stylesheets the page links.
 
     Returns
     -------
@@ -89,7 +93,7 @@ def search_page(
     """
     text = query.get('q', '')
     if options is None:
-        return edit_page(title=TITLE, notice='', body=STARTING)
+        return edit_page(title=TITLE, notice='', body=STARTING, head=head)
     return edit_page(
         title=TITLE,
         notice='',
@@ -98,4 +102,5 @@ def search_page(
             found=options.search(text=text, skip_school=skip_school),
             modes=modes,
         ),
+        head=head,
     )

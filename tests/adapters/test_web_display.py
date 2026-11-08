@@ -539,6 +539,22 @@ async def test_settings_page_served(
     }
 
 
+async def test_settings_page_links_sheets_once() -> None:
+    """The settings page links the city's sheet once, between the others."""
+    display = WebDisplay(status=dict, city=SYDNEY, sheets=('palette.css',))
+    client = await _client(display=display)
+    try:
+        text = await (await client.get('/settings')).text()
+    finally:
+        await client.close()
+    assert text.count('href="/palette.css"') == 1
+    assert (
+        '  <link rel="stylesheet" href="/live.css">\n'
+        '  <link rel="stylesheet" href="/palette.css">\n'
+        '  <link rel="stylesheet" href="/board.css">\n'
+    ) in text
+
+
 async def test_settings_page_has_connection_map() -> None:
     """The Display form has the connection map radios, Changes checked."""
     client = await _client(display=WebDisplay(status=dict, city=SYDNEY))

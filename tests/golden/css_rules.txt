@@ -1,6 +1,6 @@
  | @font-face | font-family: 'Public Sans'; src: url('/fonts/public-sans.woff2') format('woff2'); font-weight: 400 700; font-display: swap
- | :root | color-scheme: light dark; --masthead: #002664; --navy: #002664; --blue: #146cfd; --red: #d7153a; --page: #f4f4f7; --surface: #ffffff; --text: #22272b; --muted: #646974; --line: #dee3e5; --field: #646974; --heading: var(--navy); --main: var(--navy); --main-text: #ffffff; --secondary: var(--navy); --danger: var(--red); --current: var(--navy); --current-bg: #eef6fb; --focus: #146cfd; --shadow: 0 1px 2px rgb(0 0 0 / 18%); --font: 'Public Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; --rule-1: #f99d1c; --rule-2: #0098cd; --rule-3: #168388; --rule-4: #00b5ef; --rule-5: #ee343f; --mode-train: #f99d1c; --mode-metro: #168388; --mode-light-rail: #ee343f; --mode-bus: #00b5ef; --mode-ferry: #5ab031; --mode-coach: #732a82; --mode-other: #646974; --bar: 3.75rem; --gap: 1rem; --edge-start: max(var(--gap), env(safe-area-inset-left, 0px)); --edge-end: max(var(--gap), env(safe-area-inset-right, 0px))
-@media (prefers-color-scheme: dark) | :root | color-scheme: dark; --page: #0f1720; --surface: #1b2633; --text: #e2e8ee; --muted: #9fb0c0; --line: #2c3a48; --field: #9fb0c0; --blue: #5d9bff; --heading: var(--text); --main: #3a6fd8; --secondary: #cfe0ff; --current: var(--text); --current-bg: #22324a; --focus: #5d9bff
+ | :root | color-scheme: light dark; --masthead: #2b3035; --navy: #2b3035; --blue: #2f6db5; --red: #b42318; --page: #f4f4f7; --surface: #ffffff; --text: #22272b; --muted: #646974; --line: #dee3e5; --field: #646974; --heading: var(--navy); --main: var(--navy); --main-text: #ffffff; --secondary: var(--navy); --danger: var(--red); --current: var(--navy); --current-bg: #eef6fb; --focus: #146cfd; --shadow: 0 1px 2px rgb(0 0 0 / 18%); --font: 'Public Sans', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif; --rule-1: #9aa1a9; --rule-2: #9aa1a9; --rule-3: #9aa1a9; --rule-4: #9aa1a9; --rule-5: #9aa1a9; --bar: 3.75rem; --gap: 1rem; --edge-start: max(var(--gap), env(safe-area-inset-left, 0px)); --edge-end: max(var(--gap), env(safe-area-inset-right, 0px))
+@media (prefers-color-scheme: dark) | :root | color-scheme: dark; --page: #0f1720; --surface: #1b2633; --text: #e2e8ee; --muted: #9fb0c0; --line: #2c3a48; --field: #9fb0c0; --blue: #8ab4f8; --heading: var(--text); --main: #3a6fd8; --secondary: #cfe0ff; --current: var(--text); --current-bg: #22324a; --focus: #5d9bff
  | *, *::before, *::after | box-sizing: border-box
  | body | display: flex; flex-direction: column; min-height: 100vh; margin: 0; background: var(--page); color: var(--text); font-family: var(--font); font-size: 1rem; line-height: 1.5
  | main | display: flex; flex-direction: column; gap: var(--gap); min-width: 0; padding-block: var(--gap); padding-inline: var(--edge-start) var(--edge-end); padding-block-end: calc(var(--bar) + env(safe-area-inset-bottom, 0px) + 1rem)
@@ -59,8 +59,6 @@
  | input[type='radio']:checked::before | width: 0.625rem; height: 0.625rem; border-radius: 50%; background: var(--main); content: ''
  | input:disabled | opacity: 0.5; cursor: not-allowed
  | label:has(input:disabled) | color: var(--muted)
- | form:has(input[name="skip_school_buses"]:not(:checked)) .switch:has(input[name="skip_school_on_route_pins"]) | color: var(--muted); opacity: 0.5; pointer-events: none
- | .switch | display: flex; align-items: center; gap: 0.5rem; font-weight: 400
  | fieldset | display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; min-width: 0; max-width: 100%; margin: 0; padding: 0.5rem 0.75rem 0.75rem; border: 1px solid var(--line); border-radius: 4px
  | dialog | max-width: calc(100% - 2rem); border: 0; border-block-start: 4px solid var(--blue); border-radius: 6px; background: var(--surface); color: var(--text); box-shadow: var(--shadow)
  | dialog::backdrop | background: rgb(0 0 0 / 40%)
@@ -85,6 +83,13 @@
  | .table th, .table td | padding: 0.375rem 1rem 0.375rem 0; border-block-end: 1px solid var(--line); text-align: start; white-space: nowrap
  | .table th[scope='row'] | font-weight: normal; white-space: normal; overflow-wrap: anywhere
  | .downloads | display: flex; flex-wrap: wrap; gap: 0.5rem 1rem; margin: 0; padding: 0; list-style: none
+@media (prefers-reduced-motion: reduce) | *, *::before, *::after | transition: none !important; animation: none !important
+@media (prefers-reduced-motion: reduce) | button:active | transform: none
+ | [hidden] | display: none !important
+ | :root | --masthead: #002664; --navy: #002664; --blue: #146cfd; --red: #d7153a; --rule-1: #f99d1c; --rule-2: #0098cd; --rule-3: #168388; --rule-4: #00b5ef; --rule-5: #ee343f; --mode-other: #646974
+@media (prefers-color-scheme: dark) | :root | --blue: #5d9bff
+ | form:has(input[name="skip_school_buses"]:not(:checked)) .switch:has(input[name="skip_school_on_route_pins"]) | color: var(--muted); opacity: 0.5; pointer-events: none
+ | .switch | display: flex; align-items: center; gap: 0.5rem; font-weight: 400
  | .times | display: flex; flex-wrap: wrap; gap: 0.5rem 1rem
  | .error | margin: 0; color: var(--danger); font-weight: 600
  | .search | display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.5rem
@@ -102,13 +107,16 @@
  | .pins .move button | flex: none; min-width: 2.75rem; padding: 0
  | .pins .edit | display: inline-flex; flex: none; align-items: center; min-height: 2.75rem; font-weight: 600
  | .pins li.dragging | opacity: 0.6
- | .chip | --chip-fill: var(--mode-other); --chip-text: #ffffff; flex: none; width: 3.4em; padding-block: 0.125rem; overflow: hidden; border-radius: 4px; background: var(--chip-fill); color: var(--chip-text); font-size: 0.875rem; font-weight: 700; text-align: center; white-space: nowrap
+ | .chip | --chip-fill: var(--mode-other, #646974); --chip-text: #ffffff; flex: none; width: 3.4em; padding-block: 0.125rem; overflow: hidden; border-radius: 4px; background: var(--chip-fill); color: var(--chip-text); font-size: 0.875rem; font-weight: 700; text-align: center; white-space: nowrap
+ | :root | --mode-bus: #00b5ef; --mode-train: #f99d1c; --mode-metro: #168388; --mode-light-rail: #ee343f; --mode-ferry: #5ab031; --mode-school: #00b5ef; --mode-coach: #732a82; --mode-replacement: #00b5ef
+ | .mode-bus | --chip-fill: var(--mode-bus); --chip-text: #000000
  | .mode-train | --chip-fill: var(--mode-train); --chip-text: #000000
  | .mode-metro | --chip-fill: var(--mode-metro)
  | .mode-light-rail | --chip-fill: var(--mode-light-rail); --chip-text: #000000
- | .mode-bus, .mode-school, .mode-replacement | --chip-fill: var(--mode-bus); --chip-text: #000000
  | .mode-ferry | --chip-fill: var(--mode-ferry); --chip-text: #000000
+ | .mode-school | --chip-fill: var(--mode-school); --chip-text: #000000
  | .mode-coach | --chip-fill: var(--mode-coach)
+ | .mode-replacement | --chip-fill: var(--mode-replacement); --chip-text: #000000
  | .default-submit | position: absolute; left: -100vw; width: 1px; height: 1px; overflow: hidden
  | .editor | display: flex; flex-direction: column; gap: 0.75rem; min-width: 0
  | .editor > p, .editor fieldset > p | display: flex; flex-direction: column; align-items: flex-start; gap: 0.25rem; min-width: 0; max-width: 100%
@@ -117,8 +125,6 @@
  | .window .days, .window .times | display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.75rem; margin: 0
  | .window .days label | display: flex; align-items: center; gap: 0.25rem
  | .editor fieldset > label:has(input[type='checkbox'], input[type='radio']) | display: flex; align-items: center; gap: 0.5rem
-@media (prefers-reduced-motion: reduce) | *, *::before, *::after | transition: none !important; animation: none !important
-@media (prefers-reduced-motion: reduce) | button:active | transform: none
  | .from-to > p | align-self: stretch
  | .ts-wrapper | min-width: 0; max-width: 100%; width: 100%
  | .ts-wrapper .ts-control | min-height: 2.75rem; padding: 0 0.5rem; border: 2px solid var(--field); border-radius: 4px; background: var(--surface); color: var(--text); font: inherit; font-weight: 400; box-shadow: none
@@ -139,5 +145,4 @@
  | .suggestions .greyed, .suggestions .failure | color: var(--muted)
  | .suggestions .tag | font-size: 0.875rem; font-style: italic
  | .ways .way | display: flex; flex-wrap: wrap; align-items: center; gap: 0.25rem; min-width: 0
- | [hidden] | display: none !important
  | .danger-zone | border-block-start-color: var(--danger)

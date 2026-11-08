@@ -5,6 +5,7 @@ from collections.abc import Mapping, Sequence
 from typing import Final
 from urllib.parse import urlencode
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.pin_windows import DEFAULT_BUTTON
 from paperroute.core.pin_choices import (
     NICKNAME_MAX,
@@ -489,7 +490,7 @@ def delete_form(*, ref: str, label: str) -> str:
 
 
 def edit_page(
-    *, title: str, notice: str, body: str, danger: str = '',
+    *, title: str, notice: str, body: str, danger: str = '', head: BoardHead,
 ) -> str:
     """
     Fill in the search and editor page.
@@ -505,6 +506,9 @@ def edit_page(
     danger : str
         The Delete card's HTML after the editor's card, or an empty
         string.
+    head : BoardHead
+        The extra stylesheets the page links; filled first, so text
+        that reads like its mark stays as text.
 
     Returns
     -------
@@ -512,7 +516,7 @@ def edit_page(
         The page.
     """
     return (
-        asset(name='pin-edit.html')
+        head.fill(page=asset(name='pin-edit.html'))
         .replace('{{title}}', html.escape(title))
         .replace('{{notice}}', notice)
         .replace('{{body}}', body)

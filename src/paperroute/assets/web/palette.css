@@ -1,0 +1,25 @@
+:root {
+  --masthead: #002664;
+  --navy: #002664;
+  --blue: #146cfd;
+  --red: #d7153a;
+  --rule-1: #f99d1c;
+  --rule-2: #0098cd;
+  --rule-3: #168388;
+  --rule-4: #00b5ef;
+  --rule-5: #ee343f;
+  --mode-other: #646974;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --blue: #5d9bff;
+  }
+}
+
+form:has(input[name="skip_school_buses"]:not(:checked))
+  .switch:has(input[name="skip_school_on_route_pins"]) {
+  color: var(--muted);
+  opacity: 0.5;
+  pointer-events: none;
+}

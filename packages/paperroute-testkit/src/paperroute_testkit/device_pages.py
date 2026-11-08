@@ -112,6 +112,8 @@ class DeviceSite:
         The links in each page's nav.
     reset_hint : str
         The Device page's reset wording.
+    sheets : tuple[str, ...]
+        Extra stylesheets each page links.
     """
 
     status: DeviceStatus | None = STATUS
@@ -132,6 +134,7 @@ class DeviceSite:
     state_file: Path | None = None
     nav: tuple[NavItem, ...] = KIT_NAV
     reset_hint: str = KIT_RESET_HINT
+    sheets: tuple[str, ...] = ()
 
     def pages(self) -> DevicePages:
         """
@@ -164,4 +167,5 @@ class DeviceSite:
             clock=lambda: NOW,
             nav=self.nav,
             reset_hint=self.reset_hint,
+            sheets=self.sheets,
         )

@@ -12,6 +12,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.board_pages import PinPages
 from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SuggestPlug
 from paperroute.adapters.web_display import WebDisplay
@@ -106,6 +107,7 @@ async def _client(
 ) -> Client:
     """Start a client of a display wired to the fake pins."""
     board = PinPages(
+        head=BoardHead(),
         pins=pins.get,
         options=options,
         modes=SYDNEY.modes,
@@ -432,6 +434,7 @@ async def test_pins_routes_refuse_other_peers(pins: Pins) -> None:
     """A peer outside the local network is refused."""
     display = WebDisplay(
         board=PinPages(
+            head=BoardHead(),
             pins=pins.get,
             options=None,
             modes=SYDNEY.modes,

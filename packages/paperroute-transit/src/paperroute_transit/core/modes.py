@@ -1,9 +1,13 @@
 """The modes a city declares and how its routes are sorted into them."""
 
+import re
 from collections import Counter
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Final, Protocol
+
+MODE_ID: Final[re.Pattern[str]] = re.compile(r'^[a-z][a-z0-9_]*$')
+HEX_COLOUR: Final[re.Pattern[str]] = re.compile(r'^#[0-9a-f]{6}$')
 
 
 @dataclass(frozen=True)
@@ -20,7 +24,7 @@ class ModeSpec:
     letter : str
         One-character chip letter.
     chip : str
-        Chip colour, as a CSS hex colour.
+        Chip colour, as a lower-case six-digit CSS hex colour.
     by_line : bool
         True when its routes are chosen as lines, station first.
     under : str | None
@@ -39,6 +43,8 @@ class ModeSpec:
         True when repeated route numbers get place tags.
     skippable : bool
         True when a setting may hide it.
+    chip_text : str
+        Chip text colour, as a lower-case six-digit CSS hex colour.
     """
 
     id: str
@@ -54,6 +60,7 @@ class ModeSpec:
     wharf_names: bool = False
     tagged: bool = False
     skippable: bool = False
+    chip_text: str = '#ffffff'
 
 
 @dataclass(frozen=True)
@@ -236,8 +243,10 @@ def mode_problems(*, modes: Sequence[ModeSpec]) -> list[str]:
     -------
     list[str]
         One message per duplicate id, per `under`, `replaces` or
-        `board_with` naming an undeclared id, and per letter that is not
-        one character; empty when sound.
+        `board_with` naming an undeclared id, per letter that is not one
+        character, per id that is not lower-case letters, digits and
+        underscores, and per chip colour that is not a lower-case
+        six-digit hex colour; empty when sound.
     """
     ids = Counter(spec.id for spec in modes)
     problems = [
@@ -261,4 +270,37 @@ def mode_problems(*, modes: Sequence[ModeSpec]) -> list[str]:
                 f'mode {spec.id!r} letter {spec.letter!r} is not one '
                 'character',
             )
+        problems.extend(css_problems(spec=spec))
+    return problems
+
+
+def css_problems(*, spec: ModeSpec) -> list[str]:
+    """
+    Find the values of one mode that are unsafe to write into CSS.
+
+    Parameters
+    ----------
+    spec : ModeSpec
+        The mode.
+
+    Returns
+    -------
+    list[str]
+        One message for an id that is not lower-case letters, digits and
+        underscores, and one per chip colour that is not a lower-case
+        six-digit hex colour; empty when safe.
+    """
+    problems = (
+        []
+        if MODE_ID.fullmatch(spec.id)
+        else [f'mode {spec.id!r} id is not lower-case letters and digits']
+    )
+    problems.extend(
+        f'mode {spec.id!r} {field} {value!r} is not a #rrggbb colour'
+        for field, value in (
+            ('chip', spec.chip),
+            ('chip_text', spec.chip_text),
+        )
+        if not HEX_COLOUR.fullmatch(value)
+    )
     return problems

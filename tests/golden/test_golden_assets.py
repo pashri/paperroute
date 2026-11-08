@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import re
 from collections.abc import Sequence
 from hashlib import sha256
 from pathlib import Path
@@ -20,8 +21,8 @@ from tests.css_rules import (
     markup_tokens,
     rule_line,
     selector_tokens,
-    specificity,
     top_level_split,
+    web_files,
 )
 from tests.golden.scenes import GOLDEN
 from tests.golden.test_golden_pages import check_text, display
@@ -31,6 +32,7 @@ STATIC: Final[tuple[str, ...]] = (
     '/',
     '/live.css',
     '/board.css',
+    '/palette.css',
     '/live.js',
     '/fonts/public-sans.woff2',
     '/vendor/tom-select.css',
@@ -53,26 +55,24 @@ KIT_PAGES: Final[tuple[Path, ...]] = tuple(
         'web_device.py', 'device_page.py', 'web_live.py', 'web_frame.py',
     )
 )
-SKIP_SCHOOL: Final[str] = (
-    'form:has(input[name="skip_school_buses"]:not(:checked)) '
-    '.switch:has(input[name="skip_school_on_route_pins"])'
+SHEETS: Final[tuple[str, ...]] = ('/live.css', '/palette.css', '/board.css')
+DARK: Final[str] = '@media (prefers-color-scheme: dark)'
+SYDNEY_LIGHT: Final[dict[str, str]] = {
+    '--masthead': '#002664',
+    '--navy': '#002664',
+    '--blue': '#146cfd',
+    '--red': '#d7153a',
+    '--rule-1': '#f99d1c',
+    '--rule-2': '#0098cd',
+    '--rule-3': '#168388',
+    '--rule-4': '#00b5ef',
+    '--rule-5': '#ee343f',
+    '--mode-other': '#646974',
+}
+SYDNEY_DARK: Final[dict[str, str]] = {**SYDNEY_LIGHT, '--blue': '#5d9bff'}
+ATTRIBUTE_VALUE: Final[re.Pattern[str]] = re.compile(
+    r"""\[[\w-]+[~|^$*]?=\s*["']?([^"'\]]+)""",
 )
-NOT_A_SWITCH: Final[dict[str, str]] = {
-    'fieldset': 'a toggle switch is never a fieldset',
-    '.password': 'the Wi-Fi password box is not a switch',
-    '.facts': "the Device page's facts list holds no switch",
-    '.facts dt': 'a facts term is not a switch',
-    '.downloads': "the Device page's download list holds no switch",
-    'dialog': 'a switch is never a dialog',
-}
-REVIEWED_PAIRS: Final[dict[tuple[str, str], str]] = {
-    ('.switch', 'fieldset'): NOT_A_SWITCH['fieldset'],
-    ('.switch', '.password'): NOT_A_SWITCH['.password'],
-    ('.switch', '.facts'): NOT_A_SWITCH['.facts'],
-    ('.switch', '.downloads'): NOT_A_SWITCH['.downloads'],
-    (SKIP_SCHOOL, '.facts dt'): NOT_A_SWITCH['.facts dt'],
-    (SKIP_SCHOOL, 'dialog'): NOT_A_SWITCH['dialog'],
-}
 
 
 async def fetched(
@@ -135,124 +135,92 @@ async def body(*, app: web.Application, path: str) -> str:
         await client.close()
 
 
-def sheets(*, app: web.Application) -> tuple[list[CssRule], list[CssRule]]:
+def served_rules(*, app: web.Application) -> dict[str, list[CssRule]]:
     """
-    Read the shell's and the board's served stylesheets.
+    Read the served stylesheets in load order.
 
     Parameters
     ----------
     app : web.Application
-        The app serving `/live.css` and `/board.css`.
+        The app serving `/live.css`, `/palette.css` and `/board.css`.
 
     Returns
     -------
-    tuple[list[CssRule], list[CssRule]]
-        The rules of `/live.css`, then those of `/board.css`, each in
-        order.
+    dict[str, list[CssRule]]
+        Each sheet's rules, in order, by path, in the order pages load
+        them.
     """
-    shell, board = asyncio.run(bodies(app=app))
-    return css_rules(css=shell), css_rules(css=board)
+    texts = asyncio.run(bodies(app=app))
+    return {path: css_rules(css=texts[path]) for path in SHEETS}
 
 
-async def bodies(*, app: web.Application) -> tuple[str, str]:
+async def bodies(*, app: web.Application) -> dict[str, str]:
     """
-    Get the two stylesheets' text from one running app.
+    Get the stylesheets' text from one running app.
 
     Parameters
     ----------
     app : web.Application
-        The app serving `/live.css` and `/board.css`.
+        The app serving the stylesheets.
 
     Returns
     -------
-    tuple[str, str]
-        The text of `/live.css`, then of `/board.css`.
+    dict[str, str]
+        The text of each of `SHEETS`, by path.
     """
     client: Client = TestClient(TestServer(app))
     await client.start_server()
     try:
-        shell = await (await client.get('/live.css')).text()
-        board = await (await client.get('/board.css')).text()
+        return {
+            path: await (await client.get(path)).text()
+            for path in SHEETS
+        }
     finally:
         await client.close()
-    return shell, board
 
 
-def is_subsequence(*, part: Sequence[str], whole: Sequence[str]) -> bool:
+def resolved(*, rules: Sequence[CssRule], dark: bool) -> dict[str, str]:
     """
-    Check that `part` appears in `whole` in the same order.
+    Resolve the custom properties that `:root` rules set, in order.
 
     Parameters
     ----------
-    part : Sequence[str]
-        The shorter list.
-    whole : Sequence[str]
-        The longer list.
+    rules : Sequence[CssRule]
+        Rules in cascade order.
+    dark : bool
+        Whether the dark colour scheme's `:root` rules apply too.
 
     Returns
     -------
-    bool
-        Whether every item of `part` appears in `whole`, in order.
+    dict[str, str]
+        The last value each custom property is given.
     """
-    items = iter(whole)
-    return all(item in items for item in part)
-
-
-def properties(*, rule: CssRule) -> dict[str, bool]:
-    """
-    Read the properties a rule sets.
-
-    Parameters
-    ----------
-    rule : CssRule
-        The rule.
-
-    Returns
-    -------
-    dict[str, bool]
-        Whether each property is `!important`, by property name.
-    """
+    contexts = {'', DARK} if dark else {''}
     return {
-        line.split(':', 1)[0].strip(): '!important' in line
-        for line in rule.body
+        name.strip(): value.strip()
+        for rule in rules
+        if rule.selector == ':root' and rule.context in contexts
+        for name, value in (line.split(':', 1) for line in rule.body)
+        if name.startswith('--')
     }
 
 
-def overriding_pairs(
-    *, board: CssRule, shell: CssRule,
-) -> set[tuple[str, str]]:
+def kit_text() -> str:
     """
-    Find where a board rule loaded later could now override a shell rule.
-
-    Parameters
-    ----------
-    board : CssRule
-        A board rule that came before `shell` in the single sheet.
-    shell : CssRule
-        A shell rule.
+    Read every kit web file and markup-building module as one text.
 
     Returns
     -------
-    set[tuple[str, str]]
-        Each (board selector, shell selector) pair where the board
-        selector is at least as specific; empty when the rules sit in
-        different `@media` blocks or share no property that the shell
-        rule does not set as `!important`.
+    str
+        The kit's `.html` and `.js` files and page modules, joined.
     """
-    shell_properties = properties(rule=shell)
-    shared = {
-        name
-        for name in properties(rule=board)
-        if name in shell_properties and not shell_properties[name]
-    }
-    if board.context != shell.context or not shared:
-        return set()
-    return {
-        (later, earlier)
-        for later in top_level_split(text=board.selector)
-        for earlier in top_level_split(text=shell.selector)
-        if specificity(selector=later) >= specificity(selector=earlier)
-    }
+    files = [
+        entry.read_text(encoding='utf-8')
+        for entry in web_files(root=SHELL_WEB)
+        if entry.name.endswith(('.html', '.js'))
+    ]
+    modules = [path.read_text(encoding='utf-8') for path in KIT_PAGES]
+    return '\n'.join((*files, *modules))
 
 
 def test_static_responses_match_baseline() -> None:
@@ -263,63 +231,70 @@ def test_static_responses_match_baseline() -> None:
     check_text(path=GOLDEN / 'assets.json', text=text)
 
 
-def baseline() -> list[str]:
-    """
-    Read the baseline rule lines.
-
-    Returns
-    -------
-    list[str]
-        One line per rule of the single stylesheet, in order.
-    """
-    return (GOLDEN / 'css_rules.txt').read_text(encoding='utf-8').splitlines()
-
-
-def test_split_keeps_every_rule() -> None:
-    """The two sheets hold the baseline's rules, each in its order."""
+def test_css_rules_match_baseline() -> None:
+    """The served sheets' rules, in load order, match the baseline."""
     app = display(status=STATUS, keys=FakeKeys(key=KEY)).app()
-    shell, board = (
-        [rule_line(rule=rule) for rule in rules]
-        for rules in sheets(app=app)
-    )
-    base = baseline()
-    assert sorted(shell + board) == sorted(base)
-    assert is_subsequence(part=shell, whole=base)
-    assert is_subsequence(part=board, whole=base)
-    assert board
+    lines = [
+        rule_line(rule=rule)
+        for rules in served_rules(app=app).values()
+        for rule in rules
+    ]
+    check_text(path=GOLDEN / 'css_rules.txt', text='\n'.join(lines) + '\n')
 
 
-def test_split_keeps_the_cascade() -> None:
-    """A board rule now loaded later overrides only reviewed shell rules."""
+def test_sydney_palette_resolves_as_before() -> None:
+    """The kit's tokens, then Sydney's sheet, give today's colours."""
     app = display(status=STATUS, keys=FakeKeys(key=KEY)).app()
-    shell_rules, board_rules = sheets(app=app)
-    board = {rule_line(rule=rule) for rule in board_rules}
-    order = baseline()
-    by_line = {
-        rule_line(rule=rule): rule
-        for rule in [*shell_rules, *board_rules]
-    }
-    flagged = {
-        pair
-        for index, line in enumerate(order)
-        if line in board
-        for later in order[index + 1:]
-        if later not in board
-        for pair in overriding_pairs(
-            board=by_line[line], shell=by_line[later],
+    sheets = served_rules(app=app)
+    rules = [*sheets['/live.css'], *sheets['/palette.css']]
+    light = resolved(rules=rules, dark=False)
+    dark = resolved(rules=rules, dark=True)
+    assert {name: light[name] for name in SYDNEY_LIGHT} == SYDNEY_LIGHT
+    assert {name: dark[name] for name in SYDNEY_DARK} == SYDNEY_DARK
+
+
+def test_kit_alone_defines_every_token() -> None:
+    """A page with no city sheet still has every palette token."""
+    app = display(status=STATUS, keys=FakeKeys(key=KEY)).app()
+    kit = resolved(rules=served_rules(app=app)['/live.css'], dark=False)
+    assert not any(name.startswith('--mode-') for name in kit)
+    assert not [
+        name
+        for name in SYDNEY_LIGHT
+        if not name.startswith('--mode-') and name not in kit
+    ]
+
+
+def test_palette_rules_never_match_kit_markup() -> None:
+    """Each palette rule is `:root` or names something no kit page has."""
+    app = display(status=STATUS, keys=FakeKeys(key=KEY)).app()
+    tokens = markup_tokens(root=SHELL_WEB, python=KIT_PAGES)
+    text = kit_text()
+    palette = served_rules(app=app)['/palette.css']
+    matching = [
+        selector
+        for rule in palette
+        for selector in top_level_split(text=rule.selector)
+        if selector != ':root'
+        and selector_tokens(selector=selector) <= tokens
+        and all(
+            value in text
+            for value in ATTRIBUTE_VALUE.findall(selector)
         )
-    }
-    assert flagged == set(REVIEWED_PAIRS)
+    ]
+    assert palette
+    assert not matching
 
 
 def test_kit_markup_needs_no_board_rule() -> None:
-    """Every board selector names a class or id no kit markup carries."""
+    """Every board selector but `:root` names a class or id kit lacks."""
     app = display(status=STATUS, keys=FakeKeys(key=KEY)).app()
     tokens = markup_tokens(root=SHELL_WEB, python=KIT_PAGES)
     matching = [
         selector
-        for rule in sheets(app=app)[1]
+        for rule in served_rules(app=app)['/board.css']
         for selector in top_level_split(text=rule.selector)
-        if selector_tokens(selector=selector) <= tokens
+        if selector != ':root'
+        and selector_tokens(selector=selector) <= tokens
     ]
     assert not matching

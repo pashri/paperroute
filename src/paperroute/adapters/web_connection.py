@@ -9,6 +9,7 @@ from urllib.parse import parse_qsl, urlencode
 from aiohttp import web
 from multidict import MultiDict
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.connection_editor import (
     ALLOW_RANGE,
     ChangeStep,
@@ -410,6 +411,8 @@ class ConnectionPages:
         Gives the pins the app last reported, or None before the first.
     options : PinOptions | None
         The timetable's choices for the editor, or None.
+    head : BoardHead
+        The extra stylesheets each page links.
     """
 
     def __init__(
@@ -417,9 +420,11 @@ class ConnectionPages:
         *,
         pins: Callable[[], PinsSeen | None],
         options: PinOptions | None,
+        head: BoardHead = BoardHead(),
     ) -> None:
         self._pins = pins
         self._options = options
+        self._head = head
 
     def routes(self) -> list[web.RouteDef]:
         """
@@ -484,7 +489,9 @@ class ConnectionPages:
         else:
             body = self._form(draft=draft, options=self._options)
         return html_page(
-            text=edit_page(title=TITLE, notice=notice, body=body),
+            text=edit_page(
+                title=TITLE, notice=notice, body=body, head=self._head,
+            ),
             status=status,
         )
 

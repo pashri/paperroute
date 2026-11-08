@@ -10,6 +10,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.board_pages import PinPages
 from paperroute.adapters.connection_editor import ALLOW_RANGE
 from paperroute.adapters.web_board import SuggestPlug
@@ -47,6 +48,7 @@ def _pins() -> Pins:
 async def _client(pins: Pins) -> AsyncIterator[Client]:
     """A client of a display with the fake timetable."""
     board = PinPages(
+        head=BoardHead(),
         pins=pins.get,
         options=OPTIONS,
         modes=SYDNEY.modes,
@@ -266,6 +268,7 @@ async def test_starting_without_timetable(pins: Pins) -> None:
     display = WebDisplay(
         device=sydney_site().pages(),
         board=PinPages(
+            head=BoardHead(),
             pins=pins.get,
             options=None,
             modes=SYDNEY.modes,

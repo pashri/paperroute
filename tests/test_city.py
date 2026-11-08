@@ -7,6 +7,7 @@ from typing import Final
 
 import pytest
 
+from paperroute.adapters.mode_css import MODES_MARK, board_css
 from paperroute.city import (
     SYDNEY,
     SYDNEY_MODES,
@@ -15,7 +16,6 @@ from paperroute.city import (
     SydneyMode,
     classify_sydney,
 )
-from paperroute_device.adapters.web_frame import SHELL_WEB
 from paperroute_transit.core.city import Nouns
 from paperroute_transit.core.modes import RouteClass, mode_problems
 from tests.css_rules import css_rules
@@ -48,10 +48,6 @@ ROUTE_TYPES: Final[tuple[int, ...]] = (
 )
 AGENCIES: Final[tuple[str | None, ...]] = (None, '711', 'SydneyTrains')
 SHORT_NAMES: Final[tuple[str, ...]] = ('', 'T1', 'BMT', 'WST', 'X', '606')
-CHIP_FILL: Final[re.Pattern[str]] = re.compile(
-    r'^--chip-fill: var\((--mode-[\w-]+)\)$',
-)
-TOKEN: Final[re.Pattern[str]] = re.compile(r'^(--mode-[\w-]+): (#[0-9a-f]+)$')
 OLD_VEHICLE: Final[dict[str, str]] = {
     'bus': 'bus', 'train': 'train', 'metro': 'metro', 'ferry': 'ferry',
     'light_rail': 'light rail', 'coach': 'coach', 'regional': 'service',
@@ -128,46 +124,6 @@ def old_kind_for(
     return OLD_EXACT_KINDS.get(route_type)
 
 
-def mode_tokens() -> dict[str, str]:
-    """
-    Read the kit's mode colour tokens.
-
-    Returns
-    -------
-    dict[str, str]
-        Colour by `--mode-*` token, from `live.css`'s `:root`.
-    """
-    css = (SHELL_WEB / 'live.css').read_text(encoding='utf-8')
-    return {
-        found.group(1): found.group(2)
-        for rule in css_rules(css=css)
-        if rule.selector == ':root' and not rule.context
-        for line in rule.body
-        if (found := TOKEN.match(line))
-    }
-
-
-def chip_tokens() -> dict[str, str]:
-    """
-    Read which token each board mode class fills its chip with.
-
-    Returns
-    -------
-    dict[str, str]
-        `--mode-*` token by `.mode-*` class.
-    """
-    css = (files('paperroute') / 'assets' / 'web' / 'board.css').read_text(
-        encoding='utf-8',
-    )
-    return {
-        selector.strip(): found.group(1)
-        for rule in css_rules(css=css)
-        for line in rule.body
-        if (found := CHIP_FILL.match(line))
-        for selector in rule.selector.split(',')
-    }
-
-
 def test_sydney_city_values() -> None:
     """Sydney runs on Sydney time and covers today's NSW box."""
     assert SYDNEY.zone.key == 'Australia/Sydney'
@@ -216,16 +172,19 @@ def test_classifier_matches_old_functions() -> None:
         ), (route_type, agency_id, short_name)
 
 
-def test_chip_colours_match_kit_css() -> None:
-    """Each mode's chip is the colour its board class takes from the kit."""
-    tokens = mode_tokens()
-    chips = chip_tokens()
+def test_board_css_has_a_chip_per_mode() -> None:
+    """Sydney's served board sheet has a chip rule for every mode."""
+    css = board_css(
+        text=(files('paperroute') / 'assets' / 'web' / 'board.css').read_text(
+            encoding='utf-8',
+        ),
+        modes=SYDNEY_MODES,
+    )
+    selectors = {rule.selector for rule in css_rules(css=css)}
+    assert MODES_MARK not in css
     assert {
-        spec.id: spec.chip for spec in SYDNEY_MODES
-    } == {
-        spec.id: tokens[chips[f".mode-{spec.id.replace('_', '-')}"]]
-        for spec in SYDNEY_MODES
-    }
+        f".mode-{spec.id.replace('_', '-')}" for spec in SYDNEY_MODES
+    } <= selectors
 
 
 @pytest.mark.parametrize(('route_type', 'agency_id', 'source'), [

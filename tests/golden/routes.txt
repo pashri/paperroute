@@ -15,6 +15,8 @@ HEAD /status
 GET /status
 HEAD /board.css
 GET /board.css
+HEAD /palette.css
+GET /palette.css
 HEAD /vendor/{name}
 GET /vendor/{name}
 HEAD /settings

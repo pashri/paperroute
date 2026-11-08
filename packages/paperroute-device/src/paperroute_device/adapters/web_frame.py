@@ -9,6 +9,7 @@ from typing import Final
 
 SHELL_WEB: Final[Traversable] = files('paperroute_device') / 'web'
 NAV_MARK: Final[str] = '{{nav}}'
+SHEETS_LINE: Final[str] = '  {{sheets}}\n'
 NAV_ITEM: Final[str] = """      <li>
         <a href="{href}"{mark}>
           <svg aria-hidden="true" focusable="false" viewBox="0 0 24 24">
@@ -142,11 +143,39 @@ def nav_html(*, items: Sequence[NavItem], current: str | None) -> str:
     ))
 
 
+def fill_sheets(*, page: str, sheets: Sequence[str]) -> str:
+    """
+    Link a page to extra stylesheets in place of its sheets line.
+
+    Parameters
+    ----------
+    page : str
+        The page, holding one sheets line.
+    sheets : Sequence[str]
+        Stylesheet names, served at the site root, in load order.
+
+    Returns
+    -------
+    str
+        The page with one `<link>` line per sheet where the sheets line
+        was; with no sheets the line goes, leaving no blank line.
+    """
+    links = ''.join(
+        f'  <link rel="stylesheet" href="/{html.escape(name)}">\n'
+        for name in sheets
+    )
+    return page.replace(SHEETS_LINE, links, 1)
+
+
 def page_frame(
-    *, name: str, nav: Sequence[NavItem], current: str | None
+    *,
+    name: str,
+    nav: Sequence[NavItem],
+    current: str | None,
+    sheets: Sequence[str] = (),
 ) -> str:
     """
-    Read one of the shell's pages with its nav drawn in.
+    Read one of the shell's pages with its sheets and nav drawn in.
 
     Parameters
     ----------
@@ -156,12 +185,15 @@ def page_frame(
         The nav's links, in order.
     current : str | None
         The href of the open page; None marks none.
+    sheets : Sequence[str]
+        Extra stylesheets the page links straight after `/live.css`.
 
     Returns
     -------
     str
-        The page, its other marks still unfilled.
+        The page, its other marks still unfilled. The sheets fill
+        first, so text filled in later that reads like the sheets mark
+        stays as text.
     """
-    return shell_text(name=name).replace(
-        NAV_MARK, nav_html(items=nav, current=current), 1,
-    )
+    page = fill_sheets(page=shell_text(name=name), sheets=sheets)
+    return page.replace(NAV_MARK, nav_html(items=nav, current=current), 1)

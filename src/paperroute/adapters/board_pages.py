@@ -7,6 +7,7 @@ from typing import Protocol
 from aiohttp import web
 from multidict import MultiMapping
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.web_connection import ConnectionPages
 from paperroute.adapters.web_pins import PinsPages
 from paperroute.adapters.web_ways import WaysPages
@@ -85,6 +86,8 @@ class PinPages:
         The city's modes, for the pins' route chips.
     plug : WaysPlug | None
         Adds pages and the ways page's card, or None for neither.
+    head : BoardHead
+        The extra stylesheets every page links.
 
     Attributes
     ----------
@@ -99,11 +102,13 @@ class PinPages:
         options: PinOptions | None,
         modes: Sequence[ModeSpec],
         plug: WaysPlug | None,
+        head: BoardHead,
     ) -> None:
         self._pins = pins
         self._options = options
         self._modes = modes
         self._plug = plug
+        self._head = head
         self.pins_sleep: Callable[[float], Awaitable[None]] = asyncio.sleep
 
     def routes(
@@ -146,8 +151,14 @@ class PinPages:
             modes=self._modes,
             sleep=self.pins_sleep,
             skip_school=skip_school,
+            head=self._head,
         )
-        ways = WaysPages(pages=pins, pins=self._pins, options=self._options)
+        ways = WaysPages(
+            pages=pins,
+            pins=self._pins,
+            options=self._options,
+            head=self._head,
+        )
         plugged = (
             self._plug.pages(ways=ways, skip_school=skip_school)
             if self._plug is not None
@@ -157,7 +168,9 @@ class PinPages:
             ways.card = plugged.card
         return [
             *pins.routes(),
-            *ConnectionPages(pins=self._pins, options=self._options).routes(),
+            *ConnectionPages(
+                pins=self._pins, options=self._options, head=self._head,
+            ).routes(),
             *ways.routes(),
             *(plugged.routes() if plugged is not None else []),
         ]

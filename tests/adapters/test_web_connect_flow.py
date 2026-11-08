@@ -12,6 +12,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.board_pages import PinPages
 from paperroute.adapters.web_board import SuggestPlug
 from paperroute.adapters.web_display import WebDisplay
@@ -245,6 +246,7 @@ def _app() -> App:
 async def _client(app: App) -> AsyncIterator[Client]:
     """A client of a display with the fake timetable and planner."""
     board = PinPages(
+        head=BoardHead(),
         pins=app.get,
         options=OPTIONS,
         modes=SYDNEY.modes,

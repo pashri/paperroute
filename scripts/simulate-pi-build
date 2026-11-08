@@ -107,7 +107,10 @@ async def main():
     client = TestClient(TestServer(app, host='127.0.0.1', port=0))
     await client.start_server()
     try:
-        assert (await client.get('/')).status == HTTPStatus.OK
+        page = await client.get('/')
+        assert page.status == HTTPStatus.OK
+        text = await page.text()
+        assert '{{' not in text and 'palette.css' not in text
         css = await client.get('/live.css')
         assert await css.read() == shell_bytes(name='live.css')
         for path in ('/board.css', '/vendor/tom-select.css'):

@@ -9,6 +9,7 @@ from urllib.parse import urlencode
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute.adapters.board_head import BoardHead
 from paperroute.adapters.board_pages import PinPages
 from paperroute.adapters.web_board import SuggestPlug
 from paperroute.adapters.web_display import WebDisplay
@@ -101,6 +102,7 @@ async def started(
     """
     pins = Pins(pins=(WORK,))
     board = PinPages(
+        head=BoardHead(),
         pins=pins.get,
         options=PLATFORMS,
         modes=SYDNEY.modes,

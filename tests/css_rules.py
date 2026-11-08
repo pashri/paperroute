@@ -22,7 +22,6 @@ SELECTOR_TOKEN: Final[re.Pattern[str]] = re.compile(
     r'[.#](-?[A-Za-z_][\w-]*)',
 )
 BRACKETED: Final[re.Pattern[str]] = re.compile(r'\[[^\]]*\]')
-TAKES_ARGUMENT: Final[frozenset[str]] = frozenset({'has', 'not', 'is'})
 
 
 @dataclass(frozen=True)
@@ -340,89 +339,3 @@ def markup_tokens(
         for name in script_tokens(script=text)
     )
 
-
-def specificity(*, selector: str) -> tuple[int, int, int]:
-    """
-    Work out a selector's specificity.
-
-    `:has()`, `:not()` and `:is()` count as their most specific
-    argument; `:where()` counts as nothing.
-
-    Parameters
-    ----------
-    selector : str
-        One selector, not a list.
-
-    Returns
-    -------
-    tuple[int, int, int]
-        Ids, then classes, attributes and pseudo-classes, then types
-        and pseudo-elements.
-    """
-    ids = classes = types = 0
-    index = 0
-    while index < len(selector):
-        char = selector[index]
-        if char == '[':
-            classes += 1
-            index = selector.index(']', index) + 1
-        elif char in '.#':
-            match = re.match(r'[\w-]+', selector[index + 1:])
-            ids += char == '#'
-            classes += char == '.'
-            index += 1 + (len(match.group()) if match else 0)
-        elif selector.startswith('::', index):
-            types += 1
-            match = re.match(r'[\w-]+', selector[index + 2:])
-            index += 2 + (len(match.group()) if match else 0)
-        elif char == ':':
-            match = re.match(r'[\w-]+', selector[index + 1:])
-            name = match.group() if match else ''
-            index += 1 + len(name)
-            if index < len(selector) and selector[index] == '(':
-                end = closing_paren(text=selector, start=index)
-                inner = selector[index + 1:end]
-                index = end + 1
-                if name in TAKES_ARGUMENT:
-                    most = max(
-                        specificity(selector=part)
-                        for part in top_level_split(text=inner)
-                    )
-                    ids, classes, types = (
-                        ids + most[0], classes + most[1], types + most[2],
-                    )
-                    continue
-                if name == 'where':
-                    continue
-            classes += 1
-        elif re.match(r'[A-Za-z]', char):
-            match = re.match(r'[\w-]+', selector[index:])
-            types += 1
-            index += len(match.group()) if match else 1
-        else:
-            index += 1
-    return ids, classes, types
-
-
-def closing_paren(*, text: str, start: int) -> int:
-    """
-    Find the bracket that closes the one opened at `start`.
-
-    Parameters
-    ----------
-    text : str
-        A selector.
-    start : int
-        Index of an opening round bracket.
-
-    Returns
-    -------
-    int
-        Index of its closing bracket.
-    """
-    depth = 0
-    for index in range(start, len(text)):
-        depth += {'(': 1, ')': -1}.get(text[index], 0)
-        if depth == 0:
-            return index
-    raise ValueError(f'unclosed bracket at {start}')

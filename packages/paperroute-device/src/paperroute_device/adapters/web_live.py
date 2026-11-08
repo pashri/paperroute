@@ -144,9 +144,11 @@ async def pinged_wait(
     return True
 
 
-def live_page(*, nav: Sequence[NavItem], hint: str) -> str:
+def live_page(
+    *, nav: Sequence[NavItem], hint: str, sheets: Sequence[str] = (),
+) -> str:
     """
-    Draw the live page with its nav and knob hint.
+    Draw the live page with its nav, knob hint and extra stylesheets.
 
     Parameters
     ----------
@@ -154,6 +156,8 @@ def live_page(*, nav: Sequence[NavItem], hint: str) -> str:
         The nav's links, in order.
     hint : str
         The knob hint's lines, indented; trusted markup, not escaped.
+    sheets : Sequence[str]
+        Extra stylesheets linked straight after `/live.css`.
 
     Returns
     -------
@@ -161,7 +165,7 @@ def live_page(*, nav: Sequence[NavItem], hint: str) -> str:
         The page. The hint fills the last hint mark, so a nav label
         that reads like the mark stays as text.
     """
-    page = page_frame(name='live.html', nav=nav, current='/')
+    page = page_frame(name='live.html', nav=nav, current='/', sheets=sheets)
     return hint.join(page.rsplit(HINT_MARK, 1))
 
 
@@ -182,6 +186,8 @@ class LiveView:  # pylint: disable=too-many-instance-attributes
         The page's nav links, in order.
     hint : str
         The knob hint's lines, indented; trusted markup.
+    sheets : Sequence[str]
+        Extra stylesheets the page links straight after `/live.css`.
 
     Attributes
     ----------
@@ -200,11 +206,13 @@ class LiveView:  # pylint: disable=too-many-instance-attributes
         status: Callable[[], Mapping[str, object]] = dict,
         nav: Sequence[NavItem] = KIT_NAV,
         hint: str = KNOB_HINT,
+        sheets: Sequence[str] = (),
     ) -> None:
         self._knobs = knobs
         self._status = status
         self._nav = tuple(nav)
         self._hint = hint
+        self._sheets = tuple(sheets)
         self._png: bytes | None = None
         self._started = time.monotonic()
         self._closing = False
@@ -276,7 +284,9 @@ class LiveView:  # pylint: disable=too-many-instance-attributes
         """
         del request
         return web.Response(
-            text=live_page(nav=self._nav, hint=self._hint),
+            text=live_page(
+                nav=self._nav, hint=self._hint, sheets=self._sheets,
+            ),
             content_type='text/html',
         )
 

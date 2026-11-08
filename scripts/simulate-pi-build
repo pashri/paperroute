@@ -1,17 +1,86 @@
 #!/usr/bin/env bash
 # Usage: scripts/simulate-pi-build
-# Builds the tree deploy would stage the way the Pi does and checks
-# what its venv can import and run. Stage the files with git add first.
+# Builds the tree deploy would stage for Sydney the way install-release
+# does, moves it as take_over does, then checks what the moved venv can
+# import and run. Stage the files with git add first.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+city=sydney
+app=paperroute-$city
 stage=$(mktemp -d)
-trap 'rm -rf -- "$stage"' EXIT
-git ls-files -z packages apps/paperroute-sydney pyproject.toml uv.lock | rsync -a --from0 --files-from=- ./ "$stage/"
-UV_LINK_MODE=copy uv sync --quiet --frozen --package paperroute-sydney --no-default-groups --no-editable --project "$stage"
-imports="import paperroute_sydney.__main__, paperroute_device.screen, paperroute_hardware, paperroute_device, paperroute_transit; from importlib.util import find_spec as f"
-"$stage/.venv/bin/python" -c "$imports; assert not any(f(m) for m in ('osmium', 'shapely', 'pytest', 'paperroute_testkit'))"
-"$stage/.venv/bin/python" -c "import paperroute_transit.build.extras as e, paperroute_sydney.city as c; assert e.city_named(ref='paperroute_sydney.city:SYDNEY').name == c.SYDNEY.name"
+release=$(mktemp -d)
+trap 'rm -rf -- "$stage" "$release"' EXIT
+tree=$stage/tree
+moved=$release/tree
+git ls-files -z packages "apps/$app" pyproject.toml uv.lock \
+    | rsync -a --from0 --files-from=- ./ "$tree/"
+UV_PYTHON_DOWNLOADS=never uv venv --quiet --relocatable --project "$tree" "$tree/.venv"
+UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy uv sync --quiet --frozen --package "$app" --no-default-groups --no-editable --compile-bytecode --project "$tree"
+mv -- "$tree" "$moved"
+
+fail() {
+    printf 'simulate-pi-build: %s\n' "$1" >&2
+    exit 1
+}
+
+bin=$moved/.venv/bin
+py=$bin/python
+python_dir=$(realpath "$(uv python dir)")
+case $(realpath "$py") in
+    "$python_dir"/*) ;;
+    *) fail "$py is not a uv-managed python" ;;
+esac
+for script in paperroute-board paperroute-build; do
+    [[ $(head -n 1 "$bin/$script") == '#!/bin/sh' ]] \
+        || fail "$script does not start #!/bin/sh"
+    "$bin/$script" --help >/dev/null || fail "$script --help failed"
+done
+zone=$("$bin/paperroute-board" zone)
+[[ $zone == Australia/Sydney ]] || fail "paperroute-board zone printed $zone"
+for unit in paperroute.service paperroute-timetable.service; do
+    conf=$(sed -n 's#.*FONTCONFIG_FILE=/opt/paperroute/current/\([^ ]*\).*#\1#p' "deploy/systemd/$unit")
+    [[ -n $conf && -f $moved/$conf ]] || fail "$unit names no fonts.conf in the tree"
+done
+
+installed=$(cat <<'EOF'
+from importlib.metadata import distributions
+from importlib.util import find_spec
+
+names = sorted(
+    {
+        dist.metadata['Name']
+        for dist in distributions()
+        if dist.metadata['Name'].startswith('paperroute')
+    }
+)
+assert names == [
+    'paperroute-device',
+    'paperroute-hardware',
+    'paperroute-sydney',
+    'paperroute-transit',
+], names
+absent = ('pytest', 'paperroute_testkit', 'osmium', 'shapely')
+assert not [name for name in absent if find_spec(name)], absent
+EOF
+)
+handoff=$(cat <<'EOF'
+import os
+from pathlib import Path
+
+import paperroute_sydney.city as c
+import paperroute_transit.build.extras as e
+from paperroute_transit.adapters.rebuild import refresh_command
+
+script = Path(refresh_command(timetable=Path('/x/t.db'), error_log=None)[0])
+assert script.is_file() and os.access(script, os.X_OK), script
+assert e.city_named(ref='paperroute_sydney.city:SYDNEY') is c.SYDNEY
+EOF
+)
+imports="import paperroute_sydney.__main__, paperroute_device.screen, paperroute_hardware, paperroute_device, paperroute_transit"
+"$py" -c "$imports"
+"$py" -c "$installed"
+"$py" -c "$handoff"
 
 draw=$(cat <<'EOF'
 import sysconfig
@@ -165,7 +234,6 @@ loaded = [
 ]
 assert not loaded, loaded"
 
-py="$stage/.venv/bin/python"
 code=0
 err=$("$py" -m paperroute_device.screen --image deploy/screens/on.raw --state /nonexistent 2>&1 >/dev/null) || code=$?
 if [[ $code -ne 1 || $err != screen:* || $err == *Traceback* ]]; then

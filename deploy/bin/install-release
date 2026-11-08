@@ -1,8 +1,9 @@
 #!/bin/bash
 # Installed as /usr/local/sbin/paperroute-install-release (root).
-# Usage: paperroute-install-release SHA
-# Builds the staged release as its owner, takes it over as root, switches
-# current to it, and rolls back if the app doesn't come up.
+# Usage: paperroute-install-release SHA CITY
+# Builds the staged release of the city's app as its owner, takes it over
+# as root, switches current to it, and rolls back if the app doesn't come
+# up. Once it is healthy, moves the nightly timer to the city's zone.
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C
@@ -16,6 +17,9 @@ LOCK=/run/paperroute-install.lock
 KEEP=3
 HEALTH_WAIT=90
 SHA_RE='^[0-9a-f]{7,12}$'
+CITY_RE='^[a-z][a-z0-9]*$'
+ZONE_RE='^[A-Za-z]+(/[A-Za-z0-9_+-]+)*$'
+ZONE_CONF=/etc/systemd/system/paperroute-timetable.timer.d/city-zone.conf
 INCOMING=
 prev=
 
@@ -30,13 +34,23 @@ cleanup() {
     fi
 }
 
-# Checks the staged tree; sets TREE and OWNER.
+# Checks the city and the staged tree; sets APP, TREE and OWNER.
 validate() {
-    local uid bad
+    local uid bad project
+    [[ $CITY =~ $CITY_RE ]] \
+        || fail 'the city must be lowercase letters and digits'
+    APP=paperroute-$CITY
     TREE=$STAGE/$SHA
     if [[ ! -d $TREE || -L $TREE ]]; then
         fail 'the staged tree is not a real directory'
     fi
+    project=$TREE/apps/$APP/pyproject.toml
+    if [[ ! -f $project || -L $project || -L $TREE/apps/$APP ]]; then
+        fail "the staged tree has no app $APP"
+    fi
+    bad=$(find "$TREE/apps" -mindepth 1 -maxdepth 1 ! -name "$APP" \
+        -print -quit) || fail 'cannot read the staged tree'
+    [[ -z $bad ]] || fail 'the staged tree holds another app'
     OWNER=${SUDO_USER:-$(id -un)}
     uid=$(id -u -- "$OWNER" 2>/dev/null) || fail 'unknown user'
     bad=$(find "$TREE" ! -user "$uid" -print -quit) \
@@ -51,13 +65,24 @@ validate() {
     [[ $uid -ne 0 ]] || fail 'refusing to build the release as root'
 }
 
-# Runs the project's build backend, so never as root.
+# Runs the project's build backend, so never as root. The venv is
+# relocatable, so its scripts still run once the tree has moved. Sets ZONE.
 build() {
     runuser -u "$OWNER" -- env \
         UV_PYTHON_INSTALL_DIR="$OPT/python" UV_PYTHON_DOWNLOADS=never \
+        uv venv --relocatable --project "$TREE" "$TREE/.venv" 9>&-
+    runuser -u "$OWNER" -- env \
+        UV_PYTHON_INSTALL_DIR="$OPT/python" UV_PYTHON_DOWNLOADS=never \
         UV_LINK_MODE=copy \
-        uv sync --frozen --package paperroute --no-default-groups \
+        uv sync --frozen --package "$APP" --no-default-groups \
         --no-editable --compile-bytecode --project "$TREE" 9>&-
+    ZONE=$(runuser -u "$OWNER" -- \
+        "$TREE/.venv/bin/paperroute-board" zone 9>&-) || ZONE=
+    if [[ ! $ZONE =~ $ZONE_RE || ! -f "/usr/share/zoneinfo/$ZONE" ]]; then
+        printf 'install-release: %s\n' \
+            'the release names no installed time zone' >&2
+        exit 1
+    fi
 }
 
 # Moves the tree out of the owner's reach before making it root's.
@@ -70,6 +95,7 @@ take_over() {
         exit 1
     fi
     printf '%s\n' "$SHA" >"$INCOMING/tree/VERSION"
+    printf '%s\n' "$APP" >"$INCOMING/tree/APP"
     chown -hR root:root "$INCOMING/tree"
     chmod -R go-w,ug-s "$INCOMING/tree"
     bad=$(find "$INCOMING/tree" \( ! -user root -o ! -group root \) \
@@ -103,9 +129,15 @@ healthy() {
     return 1
 }
 
+# A release from before the console scripts cannot run under these units,
+# so the app is stopped rather than switched back to it.
 roll_back() {
+    local stopped=
     printf 'install-release: %s did not come up; rolling back\n' "$SHA" >&2
-    if [[ -n $prev ]]; then
+    if [[ -n $prev && ! -x $prev/.venv/bin/paperroute-board ]]; then
+        systemctl stop paperroute || true
+        stopped=${prev##*/}
+    elif [[ -n $prev ]]; then
         switch_to "$prev"
         systemctl restart paperroute || true
     else
@@ -113,7 +145,31 @@ roll_back() {
         rm -f -- "$CURRENT"
     fi
     journalctl -u paperroute -n 50 --no-pager || true
+    if [[ -n $stopped ]]; then
+        printf 'install-release: %s %s %s\n' \
+            "$stopped predates paperroute-board; stopped paperroute." \
+            'Do not reboot.' 'Re-provision from its commit to roll back.' >&2
+    fi
     exit 1
+}
+
+# Points the nightly timer at the zone; reloads only when it changed.
+set_timer_zone() {
+    local tmp
+    mkdir -p -- "${ZONE_CONF%/*}"
+    tmp=$(mktemp "$ZONE_CONF.XXXXXX")
+    {
+        printf '[Timer]\n'
+        printf 'OnCalendar=\n'
+        printf 'OnCalendar=*-*-* 03:30:00 %s\n' "$1"
+    } >"$tmp"
+    chmod 644 "$tmp"
+    if cmp -s "$tmp" "$ZONE_CONF"; then
+        rm -f -- "$tmp"
+        return 0
+    fi
+    mv -f -- "$tmp" "$ZONE_CONF"
+    systemctl daemon-reload
 }
 
 # Keeps current, prev and the newest releases, up to KEEP in all.
@@ -138,9 +194,10 @@ prune() {
     )
 }
 
-[[ $# -eq 1 ]] || fail 'usage: install-release SHA'
+[[ $# -eq 2 ]] || fail 'usage: install-release SHA CITY'
 [[ $1 =~ $SHA_RE ]] || fail 'the sha must be 7 to 12 lowercase hex digits'
 SHA=$1
+CITY=$2
 if [[ $EUID -ne 0 ]]; then
     STAGE=${PAPERROUTE_STAGE:-$STAGE}
     R=${PAPERROUTE_RELEASES:-$R}
@@ -165,5 +222,6 @@ switch_to "$R/$SHA"
 if ! systemctl restart paperroute || ! healthy; then
     roll_back
 fi
+set_timer_zone "$ZONE"
 prune
 printf 'install-release: %s is live\n' "$SHA"

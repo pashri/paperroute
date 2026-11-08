@@ -98,7 +98,7 @@ unplug the data cable.
 
 3. Deploy. It never prompts.
 
-       scripts/deploy <user>@paperroute.local
+       scripts/deploy <user>@paperroute.local sydney
 
 4. Build the timetable. This takes about 40 minutes on a Zero 2 W, and the
    app starts by itself when it finishes.
@@ -110,7 +110,7 @@ unplug the data cable.
 
 ### Upgrade from the previous install
 
-1. Run `scripts/deploy <user>@paperroute.local`.
+1. Run `scripts/deploy <user>@paperroute.local sydney`.
 2. Wait until the app has written `/var/lib/paperroute/state.json`.
 3. Run `scripts/provision <user>@paperroute.local` once more, without
    `--reboot`. It refuses to run before step 2 finishes.

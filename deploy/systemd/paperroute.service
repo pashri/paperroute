@@ -8,7 +8,7 @@ User=paperroute
 Group=paperroute
 SupplementaryGroups=spi gpio
 Environment=PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets FONTCONFIG_FILE=/opt/paperroute/current/packages/paperroute-device/src/paperroute_device/fontconfig/fonts.conf
-ExecStart=/opt/paperroute/current/.venv/bin/python -m paperroute run --display web --panel --knobs --timetable /var/lib/paperroute/timetable.db --tiles /var/lib/paperroute/tiles.db --state /var/lib/paperroute/state.json --error-log /var/lib/paperroute/log/errors.jsonl --rebuild --power --wifi --version-file /opt/paperroute/current/VERSION
+ExecStart=/opt/paperroute/current/.venv/bin/paperroute-board run --display web --panel --knobs --timetable /var/lib/paperroute/timetable.db --tiles /var/lib/paperroute/tiles.db --state /var/lib/paperroute/state.json --error-log /var/lib/paperroute/log/errors.jsonl --rebuild --power --wifi --version-file /opt/paperroute/current/VERSION
 # + runs it as root: the paperroute user can't write delay_on or delay_off
 ExecStopPost=+/usr/local/bin/paperroute-led boot
 Restart=always

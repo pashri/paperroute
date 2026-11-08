@@ -56,6 +56,14 @@ BAD_SHAS: Final[tuple[str, ...]] = (
     '../abc1234',
 )
 SHA: Final[str] = 'abc1234'
+CITY: Final[str] = 'sydney'
+BAD_CITIES: Final[tuple[str, ...]] = ('', 'Sydney', '../x', 'syd ney')
+USAGE: Final[str] = 'install-release: usage: install-release SHA CITY\n'
+ZONE_RE: Final[str] = "ZONE_RE='^[A-Za-z]+(/[A-Za-z0-9_+-]+)*$'"
+SWITCH_STUB: Final[str] = 'switch_to() { ln -sfn -- "$1" "$CURRENT"; }'
+CITY_NAMES: Final[re.Pattern[str]] = re.compile(
+    pattern=r'(?i)sydney|tfnsw|\bnsw',
+)
 KMS_OFF: Final[str] = 's/^dtoverlay=vc4-kms-v3d/#&/'
 ROOT_SAFE_ENVIRONMENT: Final[frozenset[str]] = frozenset(
     {'PAPERROUTE_API_KEY_FILE', 'FONTCONFIG_FILE'}
@@ -69,7 +77,7 @@ LED_PATTERNS: Final[dict[str, dict[str, str]]] = {
     },
     'on': {'trigger': 'default-on'},
 }
-PYTHON: Final[str] = '/opt/paperroute/current/.venv/bin/python'
+VENV_BIN: Final[str] = '/opt/paperroute/current/.venv/bin'
 FONTS_CONF: Final[str] = (
     'packages/paperroute-device/src/paperroute_device/fontconfig/fonts.conf'
 )
@@ -88,7 +96,7 @@ APP_SERVICE: Final[dict[str, str]] = {
     'SupplementaryGroups': 'spi gpio',
     'Environment': UNIT_ENVIRONMENT,
     'ExecStart': (
-        f'{PYTHON} -m paperroute run --display web --panel --knobs'
+        f'{VENV_BIN}/paperroute-board run --display web --panel --knobs'
         ' --timetable /var/lib/paperroute/timetable.db'
         ' --tiles /var/lib/paperroute/tiles.db'
         ' --state /var/lib/paperroute/state.json'
@@ -118,7 +126,7 @@ TIMETABLE_SERVICE: Final[dict[str, str]] = {
     'ExecStartPre': '+/usr/local/bin/paperroute-led rebuild',
     'ExecStart': (
         '/usr/bin/env TMPDIR=/var/lib/paperroute/work'
-        f' {PYTHON} -m paperroute.build refresh'
+        f' {VENV_BIN}/paperroute-build refresh'
         ' --data-dir /var/lib/paperroute'
         ' --error-log /var/lib/paperroute/log/errors.jsonl'
     ),
@@ -153,7 +161,7 @@ UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
     },
     'paperroute-timetable.timer': {
         'Timer': {
-            'OnCalendar': '*-*-* 03:30:00 Australia/Sydney',
+            'OnCalendar': '*-*-* 03:30:00',
             'Persistent': 'true',
             'RandomizedDelaySec': '0',
         },
@@ -596,6 +604,9 @@ def stage_tree(stage: Path) -> Path:
         '[project]\n',
         encoding='utf-8',
     )
+    app = stage / SHA / 'apps' / f'paperroute-{CITY}'
+    app.mkdir(parents=True)
+    (app / 'pyproject.toml').write_text('[project]\n', encoding='utf-8')
     return stage / SHA
 
 
@@ -626,7 +637,7 @@ def test_service_unit_passes_rebuild() -> None:
         ' --rebuild --power --wifi'
         ' --version-file /opt/paperroute/current/VERSION'
     )
-    assert timer['OnCalendar'] == '*-*-* 03:30:00 Australia/Sydney'
+    assert timer['OnCalendar'] == '*-*-* 03:30:00'
 
 
 def test_service_unit_drives_the_panel() -> None:
@@ -699,7 +710,7 @@ def test_install_release_rejects_bad_sha(
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(value,),
+        args=(value, CITY),
         env=sandbox.env,
     )
     assert (result.returncode, result.stderr) == (
@@ -729,16 +740,16 @@ def test_install_files_rejects_any_argument(
 
 
 def test_install_release_rejects_extra_arguments(sandbox: Sandbox) -> None:
-    """install-release takes exactly one argument."""
+    """install-release takes exactly two arguments."""
     stage_tree(stage=sandbox.stage)
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA, SHA),
+        args=(SHA, CITY, CITY),
         env=sandbox.env,
     )
     assert result.returncode == 2
-    assert result.stderr == 'install-release: usage: install-release SHA\n'
+    assert result.stderr == USAGE
     assert snapshot(root=sandbox.root) == before
 
 
@@ -749,7 +760,7 @@ def test_install_release_rejects_symlinked_stage(sandbox: Sandbox) -> None:
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA,),
+        args=(SHA, CITY),
         env=sandbox.env,
     )
     assert result.returncode == 2
@@ -764,7 +775,7 @@ def test_install_release_rejects_missing_stage(sandbox: Sandbox) -> None:
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA,),
+        args=(SHA, CITY),
         env=sandbox.env,
     )
     assert result.returncode == 2
@@ -788,7 +799,7 @@ def test_install_release_rejects_odd_entries(
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA,),
+        args=(SHA, CITY),
         env=sandbox.env,
     )
     assert result.returncode == 2
@@ -806,7 +817,7 @@ def test_install_release_rejects_wrong_owner(sandbox: Sandbox) -> None:
     env = sandbox.env | {'SUDO_USER': 'nobody'}
     result = run_script(
         name='install-release',
-        args=(SHA,),
+        args=(SHA, CITY),
         env=env,
     )
     assert result.returncode == 2
@@ -823,7 +834,7 @@ def test_install_release_rejects_unknown_owner(sandbox: Sandbox) -> None:
     env = sandbox.env | {'SUDO_USER': 'no-such-user-paperroute'}
     result = run_script(
         name='install-release',
-        args=(SHA,),
+        args=(SHA, CITY),
         env=env,
     )
     assert result.returncode == 2
@@ -837,7 +848,7 @@ def test_install_release_valid_stage_needs_root(sandbox: Sandbox) -> None:
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA,),
+        args=(SHA, CITY),
         env=sandbox.env,
     )
     assert result.returncode == 2
@@ -845,6 +856,417 @@ def test_install_release_valid_stage_needs_root(sandbox: Sandbox) -> None:
         'install-release: checks passed; installing needs root\n'
     )
     assert snapshot(root=sandbox.root) == before
+
+
+@pytest.mark.parametrize('value', BAD_CITIES)
+def test_install_release_rejects_bad_city(
+    sandbox: Sandbox,
+    value: str,
+) -> None:
+    """A city that is not lowercase letters and digits exits 2."""
+    stage_tree(stage=sandbox.stage)
+    before = snapshot(root=sandbox.root)
+    result = run_script(
+        name='install-release',
+        args=(SHA, value),
+        env=sandbox.env,
+    )
+    assert (result.returncode, result.stderr) == (
+        2,
+        'install-release: the city must be lowercase letters and digits\n',
+    )
+    assert snapshot(root=sandbox.root) == before
+
+
+def test_install_release_needs_the_city(sandbox: Sandbox) -> None:
+    """A call with the sha alone gives the usage error."""
+    stage_tree(stage=sandbox.stage)
+    before = snapshot(root=sandbox.root)
+    result = run_script(
+        name='install-release',
+        args=(SHA,),
+        env=sandbox.env,
+    )
+    assert (result.returncode, result.stderr) == (2, USAGE)
+    assert snapshot(root=sandbox.root) == before
+
+
+@pytest.mark.parametrize('kind', ('missing', 'directory', 'symlink'))
+def test_install_release_rejects_missing_app(
+    sandbox: Sandbox,
+    kind: str,
+) -> None:
+    """A tree whose app has no regular pyproject.toml exits 2."""
+    tree = stage_tree(stage=sandbox.stage)
+    project = tree / 'apps' / f'paperroute-{CITY}' / 'pyproject.toml'
+    project.unlink()
+    if kind == 'directory':
+        project.mkdir()
+    elif kind == 'symlink':
+        project.symlink_to(tree / 'pyproject.toml')
+    before = snapshot(root=sandbox.root)
+    result = run_script(
+        name='install-release',
+        args=(SHA, CITY),
+        env=sandbox.env,
+    )
+    assert (result.returncode, result.stderr) == (
+        2,
+        'install-release: the staged tree has no app paperroute-sydney\n',
+    )
+    assert snapshot(root=sandbox.root) == before
+
+
+@pytest.mark.parametrize('name', ('paperroute-stub', 'README.md', '.x'))
+def test_install_release_rejects_other_apps(
+    sandbox: Sandbox,
+    name: str,
+) -> None:
+    """A tree whose apps directory holds anything else exits 2."""
+    tree = stage_tree(stage=sandbox.stage)
+    (tree / 'apps' / name).write_text('', encoding='utf-8')
+    before = snapshot(root=sandbox.root)
+    result = run_script(
+        name='install-release',
+        args=(SHA, CITY),
+        env=sandbox.env,
+    )
+    assert (result.returncode, result.stderr) == (
+        2,
+        'install-release: the staged tree holds another app\n',
+    )
+    assert snapshot(root=sandbox.root) == before
+
+
+def script_function(*, path: Path, name: str) -> str:
+    """
+    Take one function's definition from a script.
+
+    Parameters
+    ----------
+    path : Path
+        The script.
+    name : str
+        The function.
+
+    Returns
+    -------
+    str
+        From ``name() {`` to its closing brace.
+    """
+    found = re.search(
+        pattern=rf'^{name}\(\) \{{$.*?^\}}$',
+        string=script_text(path=path),
+        flags=re.MULTILINE | re.DOTALL,
+    )
+    assert found is not None, name
+    return found.group(0)
+
+
+def run_functions(
+    *,
+    names: tuple[str, ...],
+    program: str,
+    env: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run install-release's named functions under a program of stubs.
+
+    Parameters
+    ----------
+    names : tuple[str, ...]
+        The functions to take from install-release.
+    program : str
+        Variables, stubs and calls, run after the definitions.
+    env : dict[str, str]
+        The environment to run it in.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The exit status and output.
+    """
+    definitions = '\n'.join(
+        script_function(path=BIN / 'install-release', name=name)
+        for name in names
+    )
+    return subprocess.run(
+        args=[
+            'bash',
+            '-c',
+            f'set -euo pipefail\n{definitions}\n{program}',
+        ],
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+
+def zone_stage(*, root: Path, output: str) -> Path:
+    """
+    Stage a built tree whose board prints the given zone output.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+    output : str
+        What the stub ``paperroute-board zone`` prints.
+
+    Returns
+    -------
+    Path
+        The tree.
+    """
+    tree = stage_tree(stage=root / 'stage')
+    board = tree / '.venv' / 'bin' / 'paperroute-board'
+    board.parent.mkdir(parents=True)
+    printed = root / 'zone.txt'
+    printed.write_text(output, encoding='utf-8')
+    board.write_text(
+        f'#!/bin/sh\n[ "$1" = zone ] || exit 9\ncat {printed}\n',
+        encoding='utf-8',
+    )
+    board.chmod(0o755)
+    stubs = root / 'stubs'
+    stubs.mkdir()
+    uv = stubs / 'uv'
+    uv.write_text(
+        f'#!/bin/sh\nprintf "%s\\n" "$*" >>{root / "uv.log"}\n',
+        encoding='utf-8',
+    )
+    uv.chmod(0o755)
+    return tree
+
+
+@pytest.mark.parametrize(
+    ('output', 'status'),
+    (
+        ('Australia/Sydney\n[Service]\n', 1),
+        ('Australia/Sydney\n[Service]', 1),
+        ('../../../etc/passwd', 1),
+        ('Australia/Nowhere_Atlantis', 1),
+        ('', 1),
+        ('Australia/Sydney\n', 0),
+    ),
+)
+def test_install_release_checks_the_zone(
+    tmp_path: Path,
+    output: str,
+    status: int,
+) -> None:
+    """build() asks the release its zone and stops before switching."""
+    text = script_text(path=BIN / 'install-release')
+    switch = text.index('\nswitch_to "$R/$SHA"\n')
+    assert text.index(ZONE_RE) < switch
+    assert text.index('-f "/usr/share/zoneinfo/$ZONE"') < switch
+    assert text.index('\nbuild\n') < switch
+    build = script_function(path=BIN / 'install-release', name='build')
+    assert '[[ ! $ZONE =~ $ZONE_RE || ' in build
+    assert '-f "/usr/share/zoneinfo/$ZONE"' in build
+    if status == 0 and not Path('/usr/share/zoneinfo/Australia/Sydney').is_file():
+        pytest.skip('this machine has no zoneinfo for Australia/Sydney')
+    tree = zone_stage(root=tmp_path, output=output)
+    program = (
+        f'OWNER=me TREE={tree} OPT=/opt APP=paperroute-{CITY}\n'
+        f'{ZONE_RE}\n'
+        f'CURRENT={tmp_path / "current"} R={tmp_path / "releases"}\n'
+        'runuser() { shift 3; "$@"; }\n'
+        f'{SWITCH_STUB}\n'
+        'build\nswitch_to "$R/abc1234"\nprintf "%s\\n" "$ZONE"\n'
+    )
+    result = run_functions(
+        names=('build',),
+        program=program,
+        env=user_env(PATH=f'{tmp_path / "stubs"}:{os.environ["PATH"]}'),
+    )
+    assert result.returncode == status, result.stderr
+    assert len(
+        (tmp_path / 'uv.log').read_text(encoding='utf-8').splitlines()
+    ) == 2
+    if status:
+        assert result.stderr == (
+            'install-release: the release names no installed time zone\n'
+        )
+        assert not (tmp_path / 'current').is_symlink()
+    else:
+        assert result.stdout == 'Australia/Sydney\n'
+        assert (tmp_path / 'current').is_symlink()
+
+
+def test_install_release_skips_unchanged_zone(tmp_path: Path) -> None:
+    """set_timer_zone reloads systemd only when the drop-in changes."""
+    body = script_function(path=BIN / 'install-release', name='set_timer_zone')
+    assert body.index('cmp -s') < body.index('systemctl daemon-reload')
+    conf = tmp_path / 'timer.d' / 'city-zone.conf'
+    log = tmp_path / 'systemctl.log'
+    program = (
+        f'ZONE_CONF={conf}\n'
+        f'systemctl() {{ printf "%s\\n" "$*" >>{log}; }}\n'
+        'set_timer_zone Australia/Sydney\n'
+        'set_timer_zone Australia/Sydney\n'
+        'set_timer_zone Australia/Perth\n'
+    )
+    result = run_functions(
+        names=('set_timer_zone',),
+        program=program,
+        env=user_env(),
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    assert conf.read_text(encoding='utf-8') == (
+        '[Timer]\nOnCalendar=\nOnCalendar=*-*-* 03:30:00 Australia/Perth\n'
+    )
+    assert conf.stat().st_mode & 0o777 == 0o644
+    assert sorted(path.name for path in conf.parent.iterdir()) == [
+        'city-zone.conf',
+    ]
+    assert log.read_text(encoding='utf-8') == (
+        'daemon-reload\ndaemon-reload\n'
+    )
+
+
+@pytest.mark.parametrize('board', (False, True))
+def test_roll_back_stops_when_previous_predates_scripts(
+    tmp_path: Path,
+    board: bool,
+) -> None:
+    """A previous release without paperroute-board is never switched to."""
+    body = script_function(path=BIN / 'install-release', name='roll_back')
+    test = '! -x $prev/.venv/bin/paperroute-board'
+    assert body.index(test) < body.index('switch_to "$prev"')
+    branch = body[body.index(test):body.index('elif')]
+    assert 'systemctl stop paperroute' in branch
+    assert 'switch_to' not in branch
+    prev = tmp_path / 'releases' / 'abc1233'
+    new = tmp_path / 'releases' / SHA
+    (prev / '.venv' / 'bin').mkdir(parents=True)
+    new.mkdir()
+    if board:
+        script = prev / '.venv' / 'bin' / 'paperroute-board'
+        script.write_text('#!/bin/sh\n', encoding='utf-8')
+        script.chmod(0o755)
+    current = tmp_path / 'current'
+    current.symlink_to(new)
+    log = tmp_path / 'systemctl.log'
+    program = (
+        f'SHA={SHA} prev={prev} CURRENT={current}\n'
+        f'systemctl() {{ printf "%s\\n" "$*" >>{log}; }}\n'
+        'journalctl() { :; }\n'
+        f'{SWITCH_STUB}\n'
+        'roll_back\n'
+    )
+    result = run_functions(
+        names=('roll_back',),
+        program=program,
+        env=user_env(),
+    )
+    rolling = f'install-release: {SHA} did not come up; rolling back\n'
+    assert result.returncode == 1
+    if board:
+        assert result.stderr == rolling
+        assert os.readlink(current) == str(prev)
+        assert log.read_text(encoding='utf-8') == 'restart paperroute\n'
+    else:
+        assert result.stderr == rolling + (
+            'install-release: abc1233 predates paperroute-board; stopped'
+            ' paperroute. Do not reboot. Re-provision from its commit to'
+            ' roll back.\n'
+        )
+        assert os.readlink(current) == str(new)
+        assert log.read_text(encoding='utf-8') == 'stop paperroute\n'
+
+
+def copy_deploy_script(*, root: Path) -> Path:
+    """
+    Copy scripts/deploy into a tree whose scripts/check leaves a marker.
+
+    Parameters
+    ----------
+    root : Path
+        The tree to make.
+
+    Returns
+    -------
+    Path
+        The copied deploy script.
+    """
+    scripts = root / 'scripts'
+    scripts.mkdir(parents=True)
+    deploy = scripts / 'deploy'
+    shutil.copy2(src=DEPLOY_SCRIPT, dst=deploy)
+    check = scripts / 'check'
+    check.write_text(
+        f'#!/bin/sh\n: >{root / "checked"}\nexit 1\n',
+        encoding='utf-8',
+    )
+    check.chmod(0o755)
+    return deploy
+
+
+@pytest.mark.parametrize(
+    ('args', 'message'),
+    (
+        ((), 'usage: scripts/deploy HOST CITY\n'),
+        (('host',), 'usage: scripts/deploy HOST CITY\n'),
+        (('host', 'Sydney'), 'usage: scripts/deploy HOST CITY\n'),
+        (('host', '../x'), 'usage: scripts/deploy HOST CITY\n'),
+        (('host', 'sydney', 'x'), 'usage: scripts/deploy HOST CITY\n'),
+        (('host', 'nosuch'), 'deploy: no app apps/paperroute-nosuch\n'),
+    ),
+)
+def test_deploy_requires_a_city(
+    tmp_path: Path,
+    args: tuple[str, ...],
+    message: str,
+) -> None:
+    """Deploy refuses a missing, malformed or unknown city before checking."""
+    deploy = copy_deploy_script(root=tmp_path)
+    result = subprocess.run(
+        args=['bash', str(deploy), *args],
+        env=user_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert (result.returncode, result.stderr) == (2, message)
+    assert not (tmp_path / 'checked').exists()
+
+
+def test_deploy_checks_a_known_city(tmp_path: Path) -> None:
+    """A city whose app exists gets as far as scripts/check."""
+    deploy = copy_deploy_script(root=tmp_path)
+    app = tmp_path / 'apps' / f'paperroute-{CITY}'
+    app.mkdir(parents=True)
+    (app / 'pyproject.toml').write_text('[project]\n', encoding='utf-8')
+    result = subprocess.run(
+        args=['bash', str(deploy), 'host', CITY],
+        env=user_env(),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+    assert result.returncode == 1
+    assert (tmp_path / 'checked').exists()
+
+
+def test_deploy_files_name_no_city() -> None:
+    """No text file under deploy/ names a city or its transport agency."""
+    texts = {
+        path: file_content(path=path)
+        for path in sorted(DEPLOY.rglob('*'))
+        if path.is_file()
+    }
+    named = [
+        str(path.relative_to(DEPLOY))
+        for path, text in texts.items()
+        if isinstance(text, str) and CITY_NAMES.search(text)
+    ]
+    assert sum(isinstance(text, str) for text in texts.values()) > 10
+    assert not named
 
 
 def test_sshd_drop_in_sorts_before_cloud_init() -> None:
@@ -1196,8 +1618,27 @@ def test_install_release_writes_version() -> None:
 def test_install_release_closes_lock_for_owner() -> None:
     """The stage owner's commands never inherit the install lock's fd."""
     found = commands(path=BIN / 'install-release', word='runuser')
-    assert len(found) == 2
-    assert all(command.endswith(' 9>&-') for command in found)
+    assert len(found) == 4
+    assert all(
+        re.search(pattern=r' 9>&-(?:\)|$)', string=command)
+        for command in found
+    )
+
+
+def test_install_release_makes_a_relocatable_venv() -> None:
+    """One relocatable venv comes before the one sync, both offline."""
+    text = script_text(path=BIN / 'install-release').replace('\\\n', ' ')
+    venvs = commands(path=BIN / 'install-release', word='uv venv')
+    syncs = commands(path=BIN / 'install-release', word='uv sync')
+    assert (len(venvs), len(syncs)) == (1, 1)
+    assert '--relocatable' in venvs[0].split()
+    assert venvs[0].endswith(
+        ' uv venv --relocatable --project "$TREE" "$TREE/.venv" 9>&-'
+    )
+    for command in (*venvs, *syncs):
+        assert ' UV_PYTHON_INSTALL_DIR="$OPT/python" ' in command
+        assert ' UV_PYTHON_DOWNLOADS=never ' in command
+    assert text.index(' uv venv ') < text.index(' uv sync ')
 
 
 def test_install_release_builds_with_copied_files() -> None:
@@ -1214,27 +1655,60 @@ def test_install_release_syncs_only_the_app() -> None:
     words = found[0].split()
     assert {
         '--package',
-        'paperroute',
+        '"$APP"',
         '--no-default-groups',
         '--frozen',
         '--no-editable',
     } <= set(words)
-    assert words[words.index('--package') + 1] == 'paperroute'
+    assert words[words.index('--package') + 1] == '"$APP"'
+    assert 'APP=paperroute-$CITY' in script_text(path=BIN / 'install-release')
     assert '--no-dev' not in words
 
 
-def test_deploy_stages_packages() -> None:
-    """Deploy copies the workspace packages along with the app."""
+def test_deploy_stages_only_the_named_app() -> None:
+    """Deploy copies the workspace packages and the named app alone."""
     found = commands(path=DEPLOY_SCRIPT, word='git ls-files')
     assert len(found) == 1
-    assert 'packages' in found[0].split()
+    words = found[0].split()
+    assert {'packages', '"apps/paperroute-$city"'} <= set(words)
+    assert 'src' not in words
+    assert 'apps' not in words
+    assert commands(path=DEPLOY_SCRIPT, word='INSTALL')[-1] == (
+        'ssh -- "$host" sudo -n "$INSTALL" "$sha" "$city" || status=$?'
+    )
+
+
+def test_install_release_records_the_app() -> None:
+    """take_over writes the app's name beside VERSION, before chown."""
+    body = script_function(path=BIN / 'install-release', name='take_over')
+    version = '    printf \'%s\\n\' "$SHA" >"$INCOMING/tree/VERSION"\n'
+    app = '    printf \'%s\\n\' "$APP" >"$INCOMING/tree/APP"\n'
+    assert body.count(app) == 1
+    assert body.index(version) + len(version) == body.index(app)
+    assert body.index(app) < body.index('chown -hR')
+
+
+def test_install_release_sets_timer_zone_after_health() -> None:
+    """The timer's zone changes only once the new release is healthy."""
+    text = script_text(path=BIN / 'install-release')
+    body = script_function(path=BIN / 'install-release', name='set_timer_zone')
+    call = text.index('\nset_timer_zone "$ZONE"\n')
+    assert text.count('set_timer_zone "$ZONE"') == 1
+    assert text.rindex('healthy') < call
+    assert "printf 'OnCalendar=\\n'" in body
+    assert "printf 'OnCalendar=*-*-* 03:30:00 %s\\n'" in body
+    assert 'systemctl daemon-reload' in body
+    assert 'restart paperroute-timetable' not in text
+    assert script_value(path=BIN / 'install-release', name='ZONE_CONF') == (
+        '/etc/systemd/system/paperroute-timetable.timer.d/city-zone.conf'
+    )
 
 
 def test_install_release_starts_without_timetable() -> None:
     """The app starts and is checked whether or not a timetable exists."""
     text = script_text(path=BIN / 'install-release')
     assert 'timetable.db' not in text
-    assert 'paperroute-timetable' not in text
+    assert 'paperroute-timetable.service' not in text
     lines = text.splitlines()
     last = max(
         index
@@ -1605,7 +2079,7 @@ def test_deploy_only_warns_on_tiles() -> None:
     )
     assert check < first_ssh
     assert lines[check].strip() == (
-        'uv run python -m paperroute.build check-tiles data/tiles.db '
+        'uv run python -m "paperroute_$city.build" check-tiles data/tiles.db '
         "|| printf 'deploy: warning: tiles do not match this release; "
         "deploying anyway\\n' >&2"
     )

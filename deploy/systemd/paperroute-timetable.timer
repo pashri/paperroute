@@ -1,5 +1,6 @@
 [Timer]
-OnCalendar=*-*-* 03:30:00 Australia/Sydney
+# UTC here; install-release adds the city's zone in a drop-in
+OnCalendar=*-*-* 03:30:00
 Persistent=true
 RandomizedDelaySec=0
 

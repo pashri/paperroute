@@ -334,6 +334,7 @@ def parse_args(*, argv: Sequence[str] | None = None) -> argparse.Namespace:
     sub = parser.add_subparsers(dest='command', required=True)
     add_run_arguments(sub.add_parser('run', help='run the device software'))
     sub.add_parser('selftest', help='test the e-paper panel')
+    sub.add_parser('zone', help="print the city's IANA time zone")
     args = parser.parse_args(argv)
     if args.command == 'run':
         require_both_or_neither(args=args)
@@ -1213,6 +1214,9 @@ def main(
     args = parse_args(argv=argv)
     if args.command == 'selftest':
         sys.exit(selftest_main())
+    if args.command == 'zone':
+        print(city.zone.key)
+        return
     last_error = LastError(zone=city.zone)
     configure_logging(error_file=args.error_log, last_error=last_error)
     summary = Summary()

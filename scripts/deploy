@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Usage: scripts/deploy HOST
-# Checks the tree, stages the tracked files of HEAD on the Pi and installs
-# them with the passwordless install scripts, the map tiles first when
-# data/tiles.db exists. Never prompts.
+# Usage: scripts/deploy HOST CITY
+# Checks the tree, stages the tracked files of HEAD for the city's app on
+# the Pi and installs them with the passwordless install scripts, the map
+# tiles first when data/tiles.db exists. Never prompts.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -11,13 +11,19 @@ INSTALL=/usr/local/sbin/paperroute-install-release
 TILES=/usr/local/sbin/paperroute-install-tiles
 
 usage() {
-    printf 'usage: scripts/deploy HOST\n' >&2
+    printf 'usage: scripts/deploy HOST CITY\n' >&2
     exit 2
 }
 
-[[ $# -eq 1 ]] || usage
+[[ $# -eq 2 ]] || usage
 host=$1
+city=$2
 [[ $host =~ ^[A-Za-z0-9][A-Za-z0-9._@-]*$ ]] || usage
+[[ $city =~ ^[a-z][a-z0-9]*$ ]] || usage
+if [[ ! -f apps/paperroute-$city/pyproject.toml ]]; then
+    printf 'deploy: no app apps/paperroute-%s\n' "$city" >&2
+    exit 2
+fi
 
 scripts/check
 if [[ -n $(git status --porcelain) ]]; then
@@ -30,7 +36,7 @@ sha=$(git rev-parse --short HEAD)
     exit 1
 }
 if [[ -f data/tiles.db ]]; then
-    uv run python -m paperroute.build check-tiles data/tiles.db || printf 'deploy: warning: tiles do not match this release; deploying anyway\n' >&2
+    uv run python -m "paperroute_$city.build" check-tiles data/tiles.db || printf 'deploy: warning: tiles do not match this release; deploying anyway\n' >&2
 fi
 
 if ! ssh -- "$host" sudo -n -l "$INSTALL" >/dev/null 2>&1; then
@@ -38,7 +44,7 @@ if ! ssh -- "$host" sudo -n -l "$INSTALL" >/dev/null 2>&1; then
     exit 1
 fi
 ssh -- "$host" rm -rf "$STAGE/$sha"
-git ls-files -z src packages pyproject.toml uv.lock README.md \
+git ls-files -z packages "apps/paperroute-$city" pyproject.toml uv.lock \
     | rsync -a --from0 --files-from=- ./ "$host:$STAGE/$sha/"
 if [[ -f data/tiles.db ]]; then
     if ! ssh -- "$host" sudo -n -l "$TILES" >/dev/null 2>&1; then
@@ -76,5 +82,5 @@ if [[ -f data/tiles.db ]]; then
     ssh -- "$host" sudo -n "$TILES" || exit
 fi
 status=0
-ssh -- "$host" sudo -n "$INSTALL" "$sha" || status=$?
+ssh -- "$host" sudo -n "$INSTALL" "$sha" "$city" || status=$?
 exit "$status"

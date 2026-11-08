@@ -153,6 +153,59 @@ def tagged_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
     return frozenset(spec.id for spec in modes if spec.tagged)
 
 
+
+def replacing_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
+    """
+    List the modes whose routes stand in for another mode's lines.
+
+    Parameters
+    ----------
+    modes : Sequence[ModeSpec]
+        Declared modes.
+
+    Returns
+    -------
+    frozenset[str]
+        Ids of the specs with `replaces` set.
+    """
+    return frozenset(spec.id for spec in modes if spec.replaces is not None)
+
+
+def replaced_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
+    """
+    List the modes whose lines another mode's routes stand in for.
+
+    Parameters
+    ----------
+    modes : Sequence[ModeSpec]
+        Declared modes.
+
+    Returns
+    -------
+    frozenset[str]
+        The ids named by a spec's `replaces`.
+    """
+    return frozenset(
+        spec.replaces for spec in modes if spec.replaces is not None
+    )
+
+
+def wharf_modes(*, modes: Sequence[ModeSpec]) -> frozenset[str]:
+    """
+    List the modes whose stops are wharves.
+
+    Parameters
+    ----------
+    modes : Sequence[ModeSpec]
+        Declared modes.
+
+    Returns
+    -------
+    frozenset[str]
+        Ids of the specs with `wharf_names` set.
+    """
+    return frozenset(spec.id for spec in modes if spec.wharf_names)
+
 def mode_problems(*, modes: Sequence[ModeSpec]) -> list[str]:
     """
     Find what is wrong with a city's declared modes.

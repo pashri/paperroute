@@ -186,7 +186,11 @@ class TimetableRepository(Protocol):
         """
 
     def alert_places(
-        self, *, route_ids: Collection[str], stop_ids: Collection[str]
+        self,
+        *,
+        route_ids: Collection[str],
+        stop_ids: Collection[str],
+        route_type: int | None = None,
     ) -> AlertPlaces:
         """
         Look up the routes and stops an alert feed names.
@@ -197,12 +201,14 @@ class TimetableRepository(Protocol):
             Route IDs from the feed.
         stop_ids : Collection[str]
             Stop IDs from the feed.
+        route_type : int | None
+            The GTFS type whose only route to report, or None.
 
         Returns
         -------
         AlertPlaces
-            Route short names, stop families and the metro line; unknown
-            IDs are absent.
+            Route short names, stop families and the only line of
+            `route_type`; unknown IDs are absent.
         """
 
     def leg_lines(
@@ -224,14 +230,18 @@ class TimetableRepository(Protocol):
             Timetable route IDs.
         """
 
-    def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:
+    def serves_agencies(
+        self, *, stop_ids: Collection[str], agencies: Collection[str],
+    ) -> bool:
         """
-        Say whether an NSW TrainLink trip calls at any of some stops.
+        Say whether a trip of some agencies calls at any of some stops.
 
         Parameters
         ----------
         stop_ids : Collection[str]
             Stop IDs.
+        agencies : Collection[str]
+            GTFS agency IDs.
 
         Returns
         -------

@@ -29,8 +29,9 @@ from paperroute.build.handoff import (
     read_handoff,
     write_handoff,
 )
-from paperroute.build.sources import SourceState
+from paperroute.build.source_state import SourceState
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.city import SYDNEY
 from paperroute_transit.build.gtfs_files import Source
 from tests.build.network_feed import network_feed
 
@@ -75,7 +76,7 @@ def fixture_loaded(tmp_path_factory: pytest.TempPathFactory) -> Path:
                     archive=network_feed(path=folder / 'network.zip'))
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(timetable, 'build_extras', lambda *, path: None)
-        build_timetable(sources=[source],
+        build_timetable(city=SYDNEY, sources=[source],
                         window=Window(start=date(2026, 10, 5), days=3),
                         out=folder / 'timetable.db')
     return folder / 'timetable.db'

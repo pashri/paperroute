@@ -3,11 +3,10 @@
 import hashlib
 import sqlite3
 from collections import defaultdict
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, replace
 from enum import IntEnum
 from typing import Final
-
-from paperroute.city import REGIONAL_AGENCIES, TRAINLINK
 
 MATCH_SECONDS: Final[int] = 180
 MIN_CALLS: Final[int] = 2
@@ -545,7 +544,12 @@ def apply_group(
     return 0, 1
 
 
-def trim_trainlink(*, conn: sqlite3.Connection) -> TrimReport:
+def trim_trainlink(
+    *,
+    conn: sqlite3.Connection,
+    agencies: Collection[str],
+    lines: Sequence[str],
+) -> TrimReport:
     """
     Drop or shorten bundle NSW TrainLink trips that the trains feed repeats.
 
@@ -568,6 +572,10 @@ def trim_trainlink(*, conn: sqlite3.Connection) -> TrimReport:
     ----------
     conn : sqlite3.Connection
         Loaded timetable, before the bundle routes are renamed.
+    agencies : Collection[str]
+        The TrainLink agency IDs.
+    lines : Sequence[str]
+        The trains feed's TrainLink line names.
 
     Returns
     -------
@@ -575,15 +583,15 @@ def trim_trainlink(*, conn: sqlite3.Connection) -> TrimReport:
         Bundle trips removed outright, and trips shortened (a trip cut on
         only some dates counts once per cut).
     """
-    marks = ', '.join('?' * len(REGIONAL_AGENCIES))
+    marks = ', '.join('?' * len(agencies))
     bundles = load_trips(
         conn=conn, where=BUNDLE_TRIPS.format(agencies=marks),
-        params=tuple(sorted(REGIONAL_AGENCIES)),
+        params=tuple(sorted(agencies)),
     )
     twins = load_trips(
         conn=conn,
-        where=TWIN_TRIPS.format(lines=', '.join('?' * len(TRAINLINK))),
-        params=TRAINLINK,
+        where=TWIN_TRIPS.format(lines=', '.join('?' * len(lines))),
+        params=tuple(lines),
     )
     dropped = cut = 0
     for bundle in bundles:

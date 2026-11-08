@@ -656,7 +656,11 @@ class PlacesTimetable(EmptyPlacedTimetable):
     asked: int = 0
 
     def alert_places(
-        self, *, route_ids: Collection[str], stop_ids: Collection[str]
+        self,
+        *,
+        route_ids: Collection[str],
+        stop_ids: Collection[str],
+        route_type: int | None = None,
     ) -> AlertPlaces:
         """
         Give the fixed places and count the question.
@@ -666,6 +670,8 @@ class PlacesTimetable(EmptyPlacedTimetable):
         route_ids : Collection[str]
             Ignored.
         stop_ids : Collection[str]
+            Ignored.
+        route_type : int | None
             Ignored.
 
         Returns
@@ -763,7 +769,7 @@ def metro_alert(
 def test_metro_feed_routes_resolve_to_the_line() -> None:
     """Every route of the metro feed is the single metro line."""
     timetable = PlacesTimetable(
-        places=AlertPlaces(routes={}, stops={}, metro='M1')
+        places=AlertPlaces(routes={}, stops={}, only_line='M1')
     )
     metro = alert_event(
         timetable=timetable, feed=METRO_FEED, data=metro_alert()
@@ -784,7 +790,7 @@ def test_metro_feed_routes_resolve_to_the_line() -> None:
 def test_metro_feed_keeps_resolved_routes() -> None:
     """A metro-feed route the timetable resolves keeps its own name."""
     timetable = PlacesTimetable(
-        places=AlertPlaces(routes={'WST_2c': 'T1'}, stops={}, metro='M1')
+        places=AlertPlaces(routes={'WST_2c': 'T1'}, stops={}, only_line='M1')
     )
     metro = alert_event(
         timetable=timetable,
@@ -820,7 +826,11 @@ class AlertFailingTimetable(EmptyPlacedTimetable):
     """A timetable whose alert lookup fails."""
 
     def alert_places(
-        self, *, route_ids: Collection[str], stop_ids: Collection[str]
+        self,
+        *,
+        route_ids: Collection[str],
+        stop_ids: Collection[str],
+        route_type: int | None = None,
     ) -> AlertPlaces:
         """
         Fail.
@@ -830,6 +840,8 @@ class AlertFailingTimetable(EmptyPlacedTimetable):
         route_ids : Collection[str]
             Ignored.
         stop_ids : Collection[str]
+            Ignored.
+        route_type : int | None
             Ignored.
 
         Raises

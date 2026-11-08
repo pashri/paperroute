@@ -11,7 +11,7 @@ import pytest
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.dedupe import merge_rail
-from paperroute.city import SYDNEY
+from paperroute.city import METRO_ROUTE_TYPE, REGIONAL_AGENCIES, SYDNEY
 from paperroute_transit.build.gtfs_files import Source
 from tests.build.feeds import build_db
 
@@ -157,19 +157,29 @@ def test_metro_route_read_from_timetable(tmp_path: Path) -> None:
             tmp_path=tmp_path, lines=[('metro:SMNW_M1', 'M1', 401)]
         )
     ) as one:
-        assert one.alert_places(route_ids=[], stop_ids=[]).metro == 'M1'
+        found = one.alert_places(
+            route_ids=[], stop_ids=[], route_type=METRO_ROUTE_TYPE,
+        )
+        assert found.only_line == 'M1'
+        assert one.alert_places(route_ids=[], stop_ids=[]).only_line is None
     two_dir = tmp_path / 'two'
     two_dir.mkdir()
     lines = [('metro:SMNW_M1', 'M1', 401), ('metro:X_M2', 'M2', 401)]
     with closing(routes_repo(tmp_path=two_dir, lines=lines)) as two:
-        assert two.alert_places(route_ids=[], stop_ids=[]).metro is None
+        found = two.alert_places(
+            route_ids=[], stop_ids=[], route_type=METRO_ROUTE_TYPE,
+        )
+        assert found.only_line is None
 
 
 def test_no_metro_route_gives_none(
     slice_repo: SqliteTimetableRepository,
 ) -> None:
     """A timetable without a type-401 route has no metro line."""
-    assert slice_repo.alert_places(route_ids=[], stop_ids=[]).metro is None
+    found = slice_repo.alert_places(
+        route_ids=[], stop_ids=[], route_type=METRO_ROUTE_TYPE,
+    )
+    assert found.only_line is None
 
 
 def test_ferry_route_resolves_through_bundle(tmp_path: Path) -> None:
@@ -185,7 +195,9 @@ def test_trainlink_serves_central(
 ) -> None:
     """NSW TrainLink trips call in Central's stop family."""
     family = slice_repo.alert_places(route_ids=[], stop_ids=[CENTRAL]).stops
-    assert slice_repo.serves_trainlink(stop_ids=family[CENTRAL])
+    assert slice_repo.serves_agencies(
+        stop_ids=family[CENTRAL], agencies=REGIONAL_AGENCIES,
+    )
 
 
 def test_trainlink_skips_bus_stop(
@@ -203,11 +215,15 @@ def test_trainlink_skips_bus_stop(
             params=(),
         )[0][0]
     )
-    assert not slice_repo.serves_trainlink(stop_ids=[stop])
+    assert not slice_repo.serves_agencies(
+        stop_ids=[stop], agencies=REGIONAL_AGENCIES,
+    )
 
 
 def test_trainlink_no_stops_false(
     slice_repo: SqliteTimetableRepository,
 ) -> None:
     """No stops are served by nothing."""
-    assert not slice_repo.serves_trainlink(stop_ids=[])
+    assert not slice_repo.serves_agencies(
+        stop_ids=[], agencies=REGIONAL_AGENCIES,
+    )

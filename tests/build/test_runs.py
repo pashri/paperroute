@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SydneyMode
+from paperroute.city import RAIL_TYPES, SYDNEY, SydneyMode
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.runs import (
     RUN_SCHEMA,
@@ -58,7 +58,7 @@ def fixture_network_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     out = folder / 'timetable.db'
     source = Source(name='sydneytrains',
                     archive=network_feed(path=folder / 'network.zip'))
-    build_timetable(sources=[source],
+    build_timetable(city=SYDNEY, sources=[source],
                     window=Window(start=date(2026, 10, 5), days=3), out=out)
     return out
 
@@ -97,7 +97,9 @@ def fixture_calls(network: sqlite3.Connection) -> list[TripCalls]:
     list[TripCalls]
         Trips.
     """
-    return list(trip_calls(conn=network, classify=SYDNEY.classify))
+    return list(trip_calls(
+        conn=network, classify=SYDNEY.classify, rail_types=RAIL_TYPES,
+    ))
 
 
 def hand_trip(*, trip_id: str, route: str, stations: str, first_dep: int,
@@ -389,7 +391,9 @@ def test_load_runs_subtracts_skipped_dates(
             'DROP TABLE route_patterns;',
         )
         conn.executescript(RUN_SCHEMA)
-        report = load_runs(conn=conn, classify=SYDNEY.classify)
+        report = load_runs(
+            conn=conn, classify=SYDNEY.classify, rail_types=RAIL_TYPES,
+        )
         run_id = run_id_of(conn=conn, stations='E2 E1 C J W1')
         assert conn.execute(
             'SELECT trips FROM runs WHERE run_id = ?', (run_id,),
@@ -443,12 +447,19 @@ def test_load_runs_skips_hidden_block_trips_and_orphans(
             'DELETE FROM trip_runs;',
         )
         assert {'cc1', 'cc2'}.isdisjoint(
-            trip.trip_id for trip in trip_calls(conn=conn, classify=SYDNEY.classify)
+            trip.trip_id
+            for trip in trip_calls(
+                conn=conn, classify=SYDNEY.classify, rail_types=RAIL_TYPES,
+            )
         )
         plain = RunTable(days={'sydneytrains:daily': 3}, skips=Counter())
         blocks: list[TripCalls] = []
         assert 'empty1' not in dict(plain_trip_runs(
-            trips=trip_calls(conn=conn, classify=SYDNEY.classify), table=plain, blocks=blocks,
+            trips=trip_calls(
+                conn=conn, classify=SYDNEY.classify, rail_types=RAIL_TYPES,
+            ),
+            table=plain,
+            blocks=blocks,
         ))
         assert 'empty1' in {trip.trip_id for trip in blocks}
         assert 'empty1' not in dict(block_trip_runs(
@@ -459,7 +470,7 @@ def test_load_runs_skips_hidden_block_trips_and_orphans(
 def test_merged_trainlink_train_gets_a_run(tmp_path: Path) -> None:
     """The feed's NRC trip, given the bundle's agency 711, still runs."""
     out = tmp_path / 'timetable.db'
-    build_timetable(sources=regional_sources(tmp_path=tmp_path),
+    build_timetable(city=SYDNEY, sources=regional_sources(tmp_path=tmp_path),
                     window=Window(start=date(2026, 10, 16), days=2), out=out)
     with closing(sqlite3.connect(out)) as conn:
         agency, runs = conn.execute(
@@ -516,10 +527,14 @@ def test_load_runs_stores_stopping_calls(
         )
         assert next(
             trip.passes
-            for trip in trip_calls(conn=conn, classify=SYDNEY.classify)
+            for trip in trip_calls(
+                conn=conn, classify=SYDNEY.classify, rail_types=RAIL_TYPES,
+            )
             if trip.trip_id == 'x1'
         ) == (1,)
-        load_runs(conn=conn, classify=SYDNEY.classify)
+        load_runs(
+            conn=conn, classify=SYDNEY.classify, rail_types=RAIL_TYPES,
+        )
         run_id = run_id_of(conn=conn, stations='E2 E1 C J W1')
         rows = conn.execute(
             'SELECT stops FROM run_calls WHERE run_id = ?', (run_id,),
@@ -560,7 +575,9 @@ def test_one_way_flags_recorded(network_db: Path, tmp_path: Path) -> None:
             "UPDATE stop_times SET pickup = 1 WHERE trip_id = 'ew1' "
             "AND stop_id = 'J_1'",
         )
-        load_runs(conn=conn, classify=SYDNEY.classify)
+        load_runs(
+            conn=conn, classify=SYDNEY.classify, rail_types=RAIL_TYPES,
+        )
         run_id = run_id_of(conn=conn, stations=EAST_WEST)
         rows = set(conn.execute(
             'SELECT stops, no_board, no_alight FROM run_calls '
@@ -625,7 +642,9 @@ def test_runs_skip_non_service(network_db: Path, tmp_path: Path) -> None:
             'DROP TABLE route_patterns;',
         )
         conn.executescript(RUN_SCHEMA)
-        load_runs(conn=conn, classify=SYDNEY.classify)
+        load_runs(
+            conn=conn, classify=SYDNEY.classify, rail_types=RAIL_TYPES,
+        )
         assert conn.execute(
             "SELECT COUNT(*) FROM trip_runs WHERE trip_id IN ('cc1', 'cc2')",
         ).fetchall() == [(0,)]

@@ -97,6 +97,7 @@ def build_network(*, folder: Path) -> Path:
     """
     out = folder / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[
             Source(
                 name='sydneytrains',
@@ -984,6 +985,7 @@ def test_pass_through_station_stays_on_the_strip(tmp_path: Path) -> None:
     ]
     out = tmp_path / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[Source(
             name='sydneytrains',
             archive=write_feed(path=tmp_path / 'n.zip', files=files),

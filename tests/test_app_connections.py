@@ -65,7 +65,11 @@ class RecordingTimetable(EmptyPlacedTimetable):
         return [departure(departs=start, trip_id=f'call-{len(self.reads)}')]
 
     def alert_places(
-        self, *, route_ids: Collection[str], stop_ids: Collection[str]
+        self,
+        *,
+        route_ids: Collection[str],
+        stop_ids: Collection[str],
+        route_type: int | None = None,
     ) -> AlertPlaces:
         """
         Note the stops asked about and give each a family of itself.
@@ -76,6 +80,8 @@ class RecordingTimetable(EmptyPlacedTimetable):
             Ignored.
         stop_ids : Collection[str]
             Stop IDs.
+        route_type : int | None
+            Ignored.
 
         Returns
         -------

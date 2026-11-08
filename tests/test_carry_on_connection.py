@@ -60,6 +60,7 @@ def _built(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """
     out = tmp_path_factory.mktemp('carry') / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'carry_on.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),

@@ -4,15 +4,15 @@ from collections.abc import Callable, Collection, Sequence
 from datetime import date
 from typing import Final
 
-from paperroute_transit.adapters.calendar_rows import Fetch, FetchIn
+from paperroute_transit.adapters.calendar_rows import FetchIn
 from paperroute_transit.core.alert_model import AlertPlaces
 
+type FetchWith = Callable[[str, tuple[object, ...]], list[tuple[object, ...]]]
+type FetchInWith = Callable[
+    [str, Collection[str], tuple[object, ...]], list[tuple[object, ...]],
+]
+
 LINES_LIMIT: Final[int] = 64
-ROUTE_PREFIXES: Final[tuple[str, ...]] = (
-    'sydneytrains:',
-    'metro:',
-    'bundle:',
-)
 ROUTE_NAMES: Final[str] = (
     'SELECT route_id, short_name FROM routes WHERE route_id IN ({marks})'
 )
@@ -26,15 +26,15 @@ STOP_CHILDREN: Final[str] = (
     'SELECT stop_id, parent_station FROM stops '
     'WHERE parent_station IN ({marks})'
 )
-METRO_ROUTE: Final[str] = (
-    'SELECT DISTINCT short_name FROM routes WHERE type = 401'
+ONLY_LINE: Final[str] = (
+    'SELECT DISTINCT short_name FROM routes WHERE type = ?'
 )
-TRAINLINK_STOPS: Final[str] = (
+AGENCY_STOPS: Final[str] = (
     'SELECT 1 FROM stop_times st '
     'JOIN trips t ON t.trip_id = st.trip_id '
     'JOIN routes r ON r.route_id = t.route_id '
     'WHERE st.stop_id IN ({marks}) '
-    "AND COALESCE(t.agency_id, r.agency_id) IN ('711') LIMIT 1"
+    'AND COALESCE(t.agency_id, r.agency_id) IN ({agencies}) LIMIT 1'
 )
 
 
@@ -169,7 +169,10 @@ def suffix_of(*, route_id: str) -> str | None:
 
 
 def read_routes(
-    *, route_ids: Collection[str], fetch_in: FetchIn
+    *,
+    route_ids: Collection[str],
+    prefixes: Sequence[str],
+    fetch_in: FetchIn,
 ) -> dict[str, str]:
     """
     Resolve feed route IDs to route short names.
@@ -178,6 +181,8 @@ def read_routes(
     ----------
     route_ids : Collection[str]
         Route IDs from a feed.
+    prefixes : Sequence[str]
+        Prefixes tried, in order, to find a route ID in the timetable.
     fetch_in : FetchIn
         Runs a query with an IN list and returns its rows.
 
@@ -185,11 +190,13 @@ def read_routes(
     -------
     dict[str, str]
         Short name by feed ID. An ID resolves to the first of its
-        sydneytrains, metro and bundle forms that is a route; failing
+        prefixed forms that is a route; failing
         that, to the text after its last underscore when some route has
         that short name. Other IDs are absent.
     """
-    found = prefixed_routes(route_ids=route_ids, fetch_in=fetch_in)
+    found = prefixed_routes(
+        route_ids=route_ids, prefixes=prefixes, fetch_in=fetch_in,
+    )
     rest = {
         route_id: suffix
         for route_id in route_ids
@@ -206,7 +213,10 @@ def read_routes(
 
 
 def prefixed_routes(
-    *, route_ids: Collection[str], fetch_in: FetchIn
+    *,
+    route_ids: Collection[str],
+    prefixes: Sequence[str],
+    fetch_in: FetchIn,
 ) -> dict[str, str]:
     """
     Resolve feed route IDs through their prefixed forms.
@@ -215,25 +225,30 @@ def prefixed_routes(
     ----------
     route_ids : Collection[str]
         Route IDs from a feed.
+    prefixes : Sequence[str]
+        Prefixes tried, in order, to find a route ID in the timetable.
     fetch_in : FetchIn
         Runs a query with an IN list and returns its rows.
 
     Returns
     -------
     dict[str, str]
-        Short name by feed ID, from the first of its sydneytrains, metro
-        and bundle forms that is a route; other IDs are absent.
+        Short name by feed ID, from the first of its prefixed forms that
+        is a route; other IDs are absent.
     """
     return {
         route_id: name
         for route_id, (_, name) in prefixed_rows(
-            route_ids=route_ids, fetch_in=fetch_in,
+            route_ids=route_ids, prefixes=prefixes, fetch_in=fetch_in,
         ).items()
     }
 
 
 def prefixed_rows(
-    *, route_ids: Collection[str], fetch_in: FetchIn
+    *,
+    route_ids: Collection[str],
+    prefixes: Sequence[str],
+    fetch_in: FetchIn,
 ) -> dict[str, tuple[str, str]]:
     """
     Find the timetable route each feed route ID is with a prefix.
@@ -242,6 +257,8 @@ def prefixed_rows(
     ----------
     route_ids : Collection[str]
         Route IDs from a feed.
+    prefixes : Sequence[str]
+        Prefixes tried, in order, to find a route ID in the timetable.
     fetch_in : FetchIn
         Runs a query with an IN list and returns its rows.
 
@@ -249,13 +266,12 @@ def prefixed_rows(
     -------
     dict[str, tuple[str, str]]
         Timetable route ID and short name by feed ID, from the first of
-        its sydneytrains, metro and bundle forms that is a route; other
-        IDs are absent.
+        its prefixed forms that is a route; other IDs are absent.
     """
     candidates = [
         prefix + route_id
         for route_id in route_ids
-        for prefix in ROUTE_PREFIXES
+        for prefix in prefixes
     ]
     names = {
         str(row[0]): str(row[1]) for row in fetch_in(ROUTE_NAMES, candidates)
@@ -263,11 +279,11 @@ def prefixed_rows(
     return {
         route_id: next(
             (prefix + route_id, names[prefix + route_id])
-            for prefix in ROUTE_PREFIXES
+            for prefix in prefixes
             if prefix + route_id in names
         )
         for route_id in route_ids
-        if any(prefix + route_id in names for prefix in ROUTE_PREFIXES)
+        if any(prefix + route_id in names for prefix in prefixes)
     }
 
 
@@ -300,52 +316,69 @@ def read_families(
     return {stop: frozenset(members) for stop, members in family.items()}
 
 
-def read_metro(*, fetch: Fetch) -> str | None:
+def read_only_line(*, fetch: FetchWith, route_type: int) -> str | None:
     """
-    Read the short name of the timetable's only metro route.
+    Read the short name of the timetable's only route of one GTFS type.
 
     Parameters
     ----------
-    fetch : Fetch
-        Runs one query and returns its rows.
+    fetch : FetchWith
+        Runs one query with its parameters and returns its rows.
+    route_type : int
+        GTFS route_type.
 
     Returns
     -------
     str | None
-        The short name, or None unless exactly one metro route exists.
+        The short name, or None unless exactly one route of that type
+        exists.
     """
-    rows = fetch(METRO_ROUTE)
+    rows = fetch(ONLY_LINE, (route_type,))
     return str(rows[0][0]) if len(rows) == 1 else None
 
 
-def read_trainlink(*, stop_ids: Collection[str], fetch_in: FetchIn) -> bool:
+def read_agency_stops(
+    *,
+    stop_ids: Collection[str],
+    agencies: Collection[str],
+    fetch_in: FetchInWith,
+) -> bool:
     """
-    Say whether an NSW TrainLink trip calls at any of some stops.
+    Say whether a trip of some agencies calls at any of some stops.
 
-    Trains and coaches both count.
+    Every route type counts.
 
     Parameters
     ----------
     stop_ids : Collection[str]
         Stop IDs.
-    fetch_in : FetchIn
-        Runs a query with an IN list and returns its rows.
+    agencies : Collection[str]
+        GTFS agency IDs.
+    fetch_in : FetchInWith
+        Runs a query with an IN list, then further parameters, and
+        returns its rows.
 
     Returns
     -------
     bool
-        True when one does; False with no stops, without a query.
+        True when one does; False with no stops or no agencies, without
+        a query.
     """
-    if not stop_ids:
+    if not stop_ids or not agencies:
         return False
-    return bool(fetch_in(TRAINLINK_STOPS, stop_ids))
+    sql = AGENCY_STOPS.format(
+        marks='{marks}', agencies=','.join('?' * len(agencies)),
+    )
+    return bool(fetch_in(sql, stop_ids, tuple(sorted(agencies))))
 
 
 def alert_places(
     *,
     route_ids: Collection[str],
     stop_ids: Collection[str],
-    fetch: Fetch,
+    prefixes: Sequence[str],
+    route_type: int | None,
+    fetch: FetchWith,
     fetch_in: FetchIn,
 ) -> AlertPlaces:
     """
@@ -357,25 +390,36 @@ def alert_places(
         Route IDs from the feed.
     stop_ids : Collection[str]
         Stop IDs from the feed.
-    fetch : Fetch
-        Runs one query and returns its rows.
+    prefixes : Sequence[str]
+        Prefixes tried, in order, to find a route ID in the timetable.
+    route_type : int | None
+        The GTFS type whose only route the feed's unknown routes are, or
+        None.
+    fetch : FetchWith
+        Runs one query with its parameters and returns its rows.
     fetch_in : FetchIn
         Runs a query with an IN list and returns its rows.
 
     Returns
     -------
     AlertPlaces
-        Route short names, stop families, the metro line and the
-        timetable route IDs found through a prefix.
+        Route short names, stop families, the only line of
+        `route_type` and the timetable route IDs found through a prefix.
     """
     return AlertPlaces(
-        routes=read_routes(route_ids=route_ids, fetch_in=fetch_in),
+        routes=read_routes(
+            route_ids=route_ids, prefixes=prefixes, fetch_in=fetch_in,
+        ),
         stops=read_families(stop_ids=stop_ids, fetch_in=fetch_in),
-        metro=read_metro(fetch=fetch),
+        only_line=(
+            None
+            if route_type is None
+            else read_only_line(fetch=fetch, route_type=route_type)
+        ),
         lines={
             route_id: line
             for route_id, (line, _) in prefixed_rows(
-                route_ids=route_ids, fetch_in=fetch_in,
+                route_ids=route_ids, prefixes=prefixes, fetch_in=fetch_in,
             ).items()
         },
     )

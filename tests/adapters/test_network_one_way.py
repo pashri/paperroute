@@ -146,6 +146,7 @@ def one_way_network(*, folder: Path) -> Path:
     out = folder / 'timetable.db'
     archive = write_feed(path=folder / 'network.zip', files=files)
     build_timetable(
+        city=SYDNEY,
         sources=[Source(name='sydneytrains', archive=archive)],
         window=Window(start=DAY, days=3), out=out,
     )

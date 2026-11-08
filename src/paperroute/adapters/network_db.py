@@ -9,14 +9,7 @@ from typing import Final, cast
 
 from paperroute.adapters.network_lines import LineTables, Row
 from paperroute.adapters.timetable_db import DEFAULT_PATH, to_point
-from paperroute.city import (
-    INTERCITY,
-    SYDNEY,
-    SYDNEY_FERRIES,
-    SYDNEY_LINES,
-    TRAINLINK,
-    SydneyMode,
-)
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.chooser import (
     KIND_LABELS,
     KIND_LETTERS,
@@ -31,6 +24,7 @@ from paperroute_device.adapters.sqlite_ro import (
     ReadOnlyDatabase,
     file_identity,
 )
+from paperroute_transit.core.city import LineGroup
 from paperroute_transit.core.geo import Projection
 from paperroute_transit.core.model import StopPlace, until_revisit
 from paperroute_transit.core.modes import line_modes
@@ -177,31 +171,9 @@ def route_choices(*, rows: Iterable[Row]) -> tuple[Choice, ...]:
     )
 
 
-def line_group(*, number: str) -> int:
-    """
-    Sort a line number into the group it is listed in.
-
-    Parameters
-    ----------
-    number : str
-        Line number, such as 'T1', 'BMT' or 'F1'.
-
-    Returns
-    -------
-    int
-        0 for Sydney Trains and Sydney Ferries lines, 1 for intercity
-        lines, 2 for NSW TrainLink lines and 3 for anything else.
-    """
-    if number in INTERCITY:
-        return 1
-    if number in TRAINLINK:
-        return 2
-    if SYDNEY_LINES.match(number) or SYDNEY_FERRIES.match(number):
-        return 0
-    return 3
-
-
-def ruled_off(*, lines: Sequence[Choice]) -> tuple[Choice, ...]:
+def ruled_off(
+    *, lines: Sequence[Choice], group_of: LineGroup,
+) -> tuple[Choice, ...]:
     """
     Put a rule above each line that starts a new group.
 
@@ -209,6 +181,8 @@ def ruled_off(*, lines: Sequence[Choice]) -> tuple[Choice, ...]:
     ----------
     lines : Sequence[Choice]
         Line choices in order.
+    group_of : LineGroup
+        The group each line is listed in.
 
     Returns
     -------
@@ -216,7 +190,7 @@ def ruled_off(*, lines: Sequence[Choice]) -> tuple[Choice, ...]:
         The same lines, each one whose group differs from the line before
         it with ``rule_above``.
     """
-    groups = [line_group(number=line.badge) for line in lines]
+    groups = [group_of(number=line.badge) for line in lines]
     return tuple(
         replace(line, rule_above=True) if index and group != groups[index - 1]
         else line
@@ -534,7 +508,10 @@ class SqliteNetworkRepository:
             Lines in line order, each group of lines ruled off.
         """
         rows = self.fetch(sql=REPLACEMENT_LINES, params=())
-        lines = ruled_off(lines=route_choices(rows=rows))
+        lines = ruled_off(
+            lines=route_choices(rows=rows),
+            group_of=SYDNEY.catalogue.line_group,
+        )
         return Column(level=Level.LINE, items=lines)
 
     def route_column(self, *, sql: str, params: tuple[object, ...]) -> Column:
@@ -571,7 +548,10 @@ class SqliteNetworkRepository:
             Lines in sort order.
         """
         rows = self.fetch(sql=ROUTES_OF_KIND, params=(kind,))
-        lines = ruled_off(lines=route_choices(rows=rows))
+        lines = ruled_off(
+            lines=route_choices(rows=rows),
+            group_of=SYDNEY.catalogue.line_group,
+        )
         return Column(level=Level.LINE, items=lines)
 
     def towards_column(self, *, route_key: str) -> Column:

@@ -50,6 +50,7 @@ def _network_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     folder = tmp_path_factory.mktemp('network')
     out = folder / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[
             Source(
                 name='sydneytrains',

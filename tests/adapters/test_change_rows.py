@@ -13,7 +13,7 @@ from paperroute.adapters.change_rows import CHANGE_COUNT, CHANGE_M
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.pin_options import SqlitePinOptions
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_PROJECTION
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.model import StopPlace
 
@@ -37,6 +37,7 @@ def _built(tmp_path_factory: pytest.TempPathFactory) -> Path:
     """
     out = tmp_path_factory.mktemp('changes') / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),

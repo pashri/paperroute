@@ -10,16 +10,18 @@ from typing import Final
 
 import pytest
 
+from paperroute.build.source_state import (
+    SourceError,
+    SourceState,
+    load_states,
+    save_states,
+)
 from paperroute.build.sources import (
     SOURCES,
-    SourceError,
     SourceSpec,
-    SourceState,
     download,
     head,
-    load_states,
     needs_download,
-    save_states,
 )
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from tests.build.feed_server import (

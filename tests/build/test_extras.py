@@ -15,6 +15,7 @@ from paperroute.build import extras, timetable
 from paperroute.build.extras import build_extras
 from paperroute.build.handoff import HandoffRecord, write_handoff
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.city import SYDNEY
 from paperroute_transit.build.gtfs_files import Source
 from tests.build.network_feed import network_feed
 
@@ -57,7 +58,7 @@ def network_build(*, folder: Path) -> Path:
     out = folder / 'timetable.db'
     source = Source(name='sydneytrains',
                     archive=network_feed(path=folder / 'network.zip'))
-    build_timetable(sources=[source],
+    build_timetable(city=SYDNEY, sources=[source],
                     window=Window(start=date(2026, 10, 5), days=3), out=out)
     return out
 

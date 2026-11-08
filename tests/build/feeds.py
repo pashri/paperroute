@@ -12,6 +12,7 @@ from paperroute.build.timetable import (
     create_schema,
     load_source,
 )
+from paperroute.city import SYDNEY
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 
@@ -252,7 +253,9 @@ def build_db(*, tmp_path: Path, sources: list[Source], start: date,
     with closing(sqlite3.connect(db)) as conn:
         create_schema(conn=conn)
         for source in sources:
-            load_source(conn=conn, source=source, window=window)
+            load_source(
+                conn=conn, source=source, window=window, city=SYDNEY,
+            )
         create_indexes(conn=conn)
     return db
 

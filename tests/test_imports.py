@@ -2,6 +2,7 @@
 
 import ast
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -37,6 +38,7 @@ REFRESH_RUN: Final[str] = (
 KIT_TEXT: Final[frozenset[str]] = frozenset(
     {'.py', '.html', '.css', '.js', '.toml', '.txt'},
 )
+NSW: Final[re.Pattern[str]] = re.compile(r'(?i)\bnsw')
 SCREEN_IMPORTS: Final[str] = (
     'import paperroute.screen, sys; '
     'print(*sorted(sys.modules))'
@@ -304,6 +306,45 @@ def kit_texts() -> list[tuple[Path, str]]:
         for path in sorted(kit.rglob('*'))
         if path.is_file() and path.suffix in KIT_TEXT
     ]
+
+
+def transit_texts() -> list[tuple[Path, str]]:
+    """
+    Read the transit package's text files.
+
+    Returns
+    -------
+    list[tuple[Path, str]]
+        Each source, page, style, script, TOML and text file under the
+        transit package's ``src``, with its text; binary files are
+        skipped.
+    """
+    transit = ROOT / 'packages' / 'paperroute-transit' / 'src'
+    return [
+        (path, path.read_text(encoding='utf-8'))
+        for path in sorted(transit.rglob('*'))
+        if path.is_file() and path.suffix in KIT_TEXT
+    ]
+
+
+def test_transit_names_no_tfnsw() -> None:
+    """No file of the transit package names TfNSW or NSW."""
+    offenders = [
+        str(path)
+        for path, text in transit_texts()
+        if 'tfnsw' in text.lower() or NSW.search(text)
+    ]
+    assert not offenders
+
+
+def test_transit_names_no_sydney() -> None:
+    """No file of the transit package names Sydney."""
+    offenders = [
+        str(path)
+        for path, text in transit_texts()
+        if 'sydney' in text.lower()
+    ]
+    assert not offenders
 
 
 def test_device_kit_names_no_tfnsw() -> None:

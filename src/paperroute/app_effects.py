@@ -13,7 +13,7 @@ from typing import Final
 from paperroute.adapters.gtfs_alerts import parse_alerts
 from paperroute.adapters.gtfs_rt import parse_positions, parse_trip_updates
 from paperroute.app_connections import between_read
-from paperroute.city import SydneyFeed
+from paperroute.city import METRO_ROUTE_TYPE, SydneyFeed
 from paperroute.core.feeds import ALERT_FEEDS, FeedKind
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
@@ -664,7 +664,7 @@ def informed_with(
     """
     route = places.routes.get(item.route_id or '')
     if route is None and metro and item.route_id:
-        route = places.metro
+        route = places.only_line
     return replace(
         item,
         route=route,
@@ -702,11 +702,12 @@ def labelled_alerts(
     """
     snapshot = parse_alerts(data=data, feed=feed, fetched_at=fetched_at)
     entities = [item for alert in snapshot.alerts for item in alert.informed]
+    metro = feed == ALERT_FEEDS[SydneyFeed.METRO]
     places = timetable.alert_places(
         route_ids={item.route_id for item in entities if item.route_id},
         stop_ids={item.stop_id for item in entities if item.stop_id},
+        route_type=METRO_ROUTE_TYPE if metro else None,
     )
-    metro = feed == ALERT_FEEDS[SydneyFeed.METRO]
     return replace(
         snapshot,
         alerts=tuple(

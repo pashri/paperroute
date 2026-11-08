@@ -302,3 +302,11 @@ def test_trainlink_coaches_are_coach() -> None:
         ).kind
         for route_type in (204, 205)
     ] == [SydneyMode.COACH, SydneyMode.COACH]
+
+
+def test_line_group_matches_today() -> None:
+    """Sydney's line groups are the chooser's groups from before the city."""
+    numbers = ('T1', 'T9', 'F10', 'BMT', 'HUN', 'WST', 'NRC', 'F11', 'X')
+    assert [
+        SYDNEY.catalogue.line_group(number=number) for number in numbers
+    ] == [0, 0, 0, 1, 1, 2, 2, 3, 3]

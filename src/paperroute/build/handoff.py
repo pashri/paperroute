@@ -8,7 +8,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final, NoReturn
 
-from paperroute.build.sources import SourceState
+from paperroute.build.source_state import SourceState
 from paperroute_transit.build.layout import Layout
 
 HANDOFF_NAME: Final[str] = 'handoff.json'

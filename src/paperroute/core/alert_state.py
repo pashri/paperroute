@@ -77,7 +77,7 @@ def trainlink_known(*, state: State, pin: Pin) -> bool:
     return (
         between is not None
         and same_place(first=between[0], second=pin)
-        and state.alerts.trainlink
+        and state.alerts.agency_alerts
     )
 
 
@@ -289,7 +289,7 @@ def on_alerts(*, state: State, event: AlertsFetched | BetweenLoaded) -> State:
             alerts,
             between=(event.pin, event.names),
             families=event.families,
-            trainlink=event.trainlink,
+            agency_alerts=event.agency_alerts,
             lines=event.lines,
         )
     return rematched(state=replace(state, alerts=alerts))

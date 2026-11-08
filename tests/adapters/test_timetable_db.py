@@ -303,6 +303,21 @@ def test_departures_kept_xpt_stays_regional(tmp_path: Path) -> None:
     ]
 
 
+def test_serves_agencies_reads_given_agencies(tmp_path: Path) -> None:
+    """A stop answers for the agencies asked about, not a fixed one."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 16),
+        days=1,
+        sources=regional_sources(tmp_path=tmp_path),
+    )
+    with closing(SqliteTimetableRepository(path=db, city=SYDNEY)) as repo:
+        assert repo.serves_agencies(stop_ids=['2000321'], agencies={'711'})
+        assert not repo.serves_agencies(
+            stop_ids=['2000321'], agencies={'999'},
+        )
+
+
 def test_departures_partial_xpt_listed_once_per_day(
     tmp_path: Path,
 ) -> None:
@@ -1112,6 +1127,7 @@ def _network_db(tmp_path_factory: pytest.TempPathFactory) -> Path:
     folder = tmp_path_factory.mktemp('network')
     out = folder / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[
             Source(
                 name='sydneytrains',

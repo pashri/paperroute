@@ -2,10 +2,10 @@
 
 import sqlite3
 from collections import defaultdict
-from dataclasses import dataclass
+from collections.abc import Collection, Sequence
 from typing import Final
 
-from paperroute.city import REGIONAL_AGENCIES, TRAINLINK
+from paperroute_transit.core.city import MergeReport
 
 MIN_SHARED: Final[int] = 2
 
@@ -118,15 +118,6 @@ DROP TABLE trip_key;
 """
 
 
-@dataclass(frozen=True)
-class MergeReport:
-    """What merging rail trips did."""
-
-    dropped: int
-    partial: int
-    overnight: int
-
-
 def merge_rail(*, conn: sqlite3.Connection) -> MergeReport:
     """
     Drop bundle rail and metro trips duplicated by a preferred feed.
@@ -205,7 +196,10 @@ ORDER BY r.route_id
 
 
 def stations_by_route(
-    *, conn: sqlite3.Connection,
+    *,
+    conn: sqlite3.Connection,
+    agencies: Collection[str],
+    lines: Sequence[str],
 ) -> tuple[
     dict[str, set[str]], dict[str, str], dict[str, set[str]],
 ]:
@@ -216,6 +210,10 @@ def stations_by_route(
     ----------
     conn : sqlite3.Connection
         Loaded timetable.
+    agencies : Collection[str]
+        The TrainLink agency IDs.
+    lines : Sequence[str]
+        The TrainLink line names.
 
     Returns
     -------
@@ -224,25 +222,25 @@ def stations_by_route(
         line name; parent stations by bundle route ID.
     """
     sql = STATIONS_OF_ROUTES.format(
-        agencies=', '.join('?' * len(REGIONAL_AGENCIES)),
-        lines=', '.join('?' * len(TRAINLINK)),
+        agencies=', '.join('?' * len(agencies)),
+        lines=', '.join('?' * len(lines)),
     )
-    lines: dict[str, set[str]] = defaultdict(set)
+    found: dict[str, set[str]] = defaultdict(set)
     names: dict[str, str] = {}
     routes: dict[str, set[str]] = defaultdict(set)
     for route_id, short, long, kind, station in conn.execute(
-        sql, (*sorted(REGIONAL_AGENCIES), *TRAINLINK),
+        sql, (*sorted(agencies), *lines),
     ):
         if kind == 2:
-            lines[short].add(station)
+            found[short].add(station)
             names.setdefault(short, long)
         else:
             routes[route_id].add(station)
-    return lines, names, routes
+    return found, names, routes
 
 
 def closest_line(
-    *, shared: dict[str, int],
+    *, shared: dict[str, int], lines: Sequence[str],
 ) -> str | None:
     """
     Pick the TrainLink line that shares the most stations.
@@ -251,20 +249,27 @@ def closest_line(
     ----------
     shared : dict[str, int]
         Stations shared with each line, by line name.
+    lines : Sequence[str]
+        The TrainLink line names, in tie-break order.
 
     Returns
     -------
     str | None
-        The line with the most, the first in TRAINLINK order on a tie;
+        The line with the most, the first in `lines` order on a tie;
         None when no line shares enough stations to be the same line.
     """
     best = max(shared.values(), default=0)
     if best < MIN_SHARED:
         return None
-    return next(line for line in TRAINLINK if shared.get(line) == best)
+    return next(line for line in lines if shared.get(line) == best)
 
 
-def relabel_trainlink(*, conn: sqlite3.Connection) -> int:
+def relabel_trainlink(
+    *,
+    conn: sqlite3.Connection,
+    agencies: Collection[str],
+    lines: Sequence[str],
+) -> int:
     """
     Name each bundle NSW TrainLink train route after its NSWTrains line.
 
@@ -278,18 +283,27 @@ def relabel_trainlink(*, conn: sqlite3.Connection) -> int:
     ----------
     conn : sqlite3.Connection
         Loaded timetable, after `merge_rail`.
+    agencies : Collection[str]
+        The TrainLink agency IDs.
+    lines : Sequence[str]
+        The TrainLink line names, in tie-break order.
 
     Returns
     -------
     int
         Number of routes renamed.
     """
-    lines, names, routes = stations_by_route(conn=conn)
+    stations_of, names, routes = stations_by_route(
+        conn=conn, agencies=agencies, lines=lines,
+    )
     renamed = 0
     for route_id, stations in routes.items():
-        line = closest_line(shared={
-            code: len(stations & lines[code]) for code in names
-        })
+        line = closest_line(
+            shared={
+                code: len(stations & stations_of[code]) for code in names
+            },
+            lines=lines,
+        )
         if line is not None:
             conn.execute(
                 'UPDATE routes SET short_name = ?, long_name = ? '

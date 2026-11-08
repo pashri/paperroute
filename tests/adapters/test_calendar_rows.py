@@ -63,6 +63,7 @@ def holiday_db(*, tmp_path: Path) -> Path:
     archive = write_feed(path=tmp_path / 'bundle.zip', files=files)
     out = tmp_path / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[Source(name='bundle', archive=archive)],
         window=Window(start=HOLIDAY, days=3),
         out=out,
@@ -192,6 +193,7 @@ def test_service_span_counts_trips_after_midnight(tmp_path: Path) -> None:
     archive = write_feed(path=tmp_path / 'bundle.zip', files=bus_files())
     out = tmp_path / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[Source(name='bundle', archive=archive)],
         window=Window(start=SERVICE, days=3),
         out=out,

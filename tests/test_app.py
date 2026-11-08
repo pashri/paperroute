@@ -301,6 +301,7 @@ async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
     """The loop loads departures, fetches the train feed and draws frames."""
     db = tmp_path / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
@@ -336,6 +337,7 @@ async def test_run_reports_frames_feeds_and_ticks(tmp_path: Path) -> None:
     """A Timings observer sees frames, the parsed train feed and ticks."""
     db = tmp_path / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
@@ -729,6 +731,7 @@ def _build_db(tmp_path: Path) -> Path:
     """
     db = tmp_path / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),
@@ -948,6 +951,7 @@ async def test_run_draws_when_every_feed_fails(
     """Missing recordings are logged as failed feeds; frames still draw."""
     db = tmp_path / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),

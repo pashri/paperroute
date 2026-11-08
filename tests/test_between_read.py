@@ -58,15 +58,20 @@ class BetweenTimetable(EmptyPlacedTimetable):
     error: sqlite3.Error | None = None
     trainlink: bool = False
     trainlink_asked: set[str] = field(default_factory=set)
+    agencies_asked: set[str] = field(default_factory=set)
 
-    def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:
+    def serves_agencies(
+        self, *, stop_ids: Collection[str], agencies: Collection[str],
+    ) -> bool:
         """
-        Record the stops asked about and give the fixed answer.
+        Record the stops and agencies asked about and give the fixed answer.
 
         Parameters
         ----------
         stop_ids : Collection[str]
             Stop IDs.
+        agencies : Collection[str]
+            GTFS agency IDs.
 
         Returns
         -------
@@ -74,6 +79,7 @@ class BetweenTimetable(EmptyPlacedTimetable):
             The `trainlink` field.
         """
         self.trainlink_asked.update(stop_ids)
+        self.agencies_asked.update(agencies)
         return self.trainlink
 
     def patterns(
@@ -109,7 +115,11 @@ class BetweenTimetable(EmptyPlacedTimetable):
         return {'trip-0': replace(stops, stops=named)}
 
     def alert_places(
-        self, *, route_ids: Collection[str], stop_ids: Collection[str]
+        self,
+        *,
+        route_ids: Collection[str],
+        stop_ids: Collection[str],
+        route_type: int | None = None,
     ) -> AlertPlaces:
         """
         Give the fixed families of the stops asked about.
@@ -120,6 +130,8 @@ class BetweenTimetable(EmptyPlacedTimetable):
             Ignored.
         stop_ids : Collection[str]
             Stop IDs.
+        route_type : int | None
+            Ignored.
 
         Returns
         -------
@@ -183,10 +195,11 @@ async def test_between_reads_trainlink() -> None:
             pin=pin,
             names=frozenset({'B', 'C'}),
             families=families,
-            trainlink=True,
+            agency_alerts=True,
         ),
     ]
     assert timetable.trainlink_asked == {STRATHFIELD_PLATFORM, 'S', 'T'}
+    assert timetable.agencies_asked == {'711'}
 
 
 async def test_between_read_failure_is_empty(

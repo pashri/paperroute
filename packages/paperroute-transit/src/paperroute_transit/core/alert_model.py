@@ -61,14 +61,15 @@ class AlertPlaces:
 
     ``routes`` maps a feed route ID to a route short name and ``stops``
     maps a feed stop ID to its family: the stop, its parent station and
-    its child stops. Unknown IDs are absent. ``metro`` is the short name
-    of the timetable's only metro route, or None. ``lines`` maps a feed
+    its child stops. Unknown IDs are absent. ``only_line`` is the short
+    name of the timetable's only route of the GTFS type asked about, or
+    None. ``lines`` maps a feed
     route ID to the timetable route ID it is with a source prefix.
     """
 
     routes: Mapping[str, str]
     stops: Mapping[str, frozenset[str]]
-    metro: str | None = None
+    only_line: str | None = None
     lines: Mapping[str, str] = field(default_factory=dict)
 
 
@@ -166,8 +167,9 @@ class BetweenLoaded:
         Timetable version asked of.
     families : Mapping[str, frozenset[str]]
         Stop families of From and To; empty when the read failed.
-    trainlink : bool
-        True when an NSW TrainLink trip calls at From or To.
+    agency_alerts : bool
+        True when a trip of the city's separately alerted agencies calls
+        at From or To.
     lines : frozenset[str]
         Timetable route IDs of every trip that day along each leg of a
         connection pin; empty for a plain pin.
@@ -177,7 +179,7 @@ class BetweenLoaded:
     names: frozenset[str]
     timetable: str | None = None
     families: Mapping[str, frozenset[str]] = field(default_factory=dict)
-    trainlink: bool = False
+    agency_alerts: bool = False
     lines: frozenset[str] = frozenset()
 
 
@@ -196,8 +198,9 @@ class AlertsState:
         A pin and the place names between its From and To.
     families : Mapping[str, frozenset[str]]
         Stop families of the `between` pin's From and To.
-    trainlink : bool
-        The `between` pin's TrainLink answer.
+    agency_alerts : bool
+        The `between` pin's answer: whether a trip of the city's
+        separately alerted agencies calls at its From or To.
     lines : frozenset[str]
         The `between` pin's leg route IDs from the timetable.
     asked : tuple[Pin, str | None, bool, date] | None
@@ -215,7 +218,7 @@ class AlertsState:
     fetched_at: Mapping[str, datetime] = field(default_factory=dict)
     between: tuple[Pin, frozenset[str]] | None = None
     families: Mapping[str, frozenset[str]] = field(default_factory=dict)
-    trainlink: bool = False
+    agency_alerts: bool = False
     lines: frozenset[str] = frozenset()
     asked: tuple[Pin, str | None, bool, date] | None = None
     matched: tuple[Pin, tuple[Matched, ...]] | None = None

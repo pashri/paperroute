@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Final
 
-from paperroute.city import SydneyFeed, SydneyMode
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.alert_model import (
     Alert,
@@ -20,29 +20,11 @@ from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.patterns import TripPattern
 
 BANNER_AHEAD: Final[timedelta] = timedelta(hours=24)
-NAME_SUFFIXES: Final[tuple[str, ...]] = (
-    ' Light Rail Station',
-    ' Metro Station',
-    ' Light Rail',
-    ' Station',
-    ' Wharf',
-)
 NAME_KINDS: Final[frozenset[SydneyMode]] = frozenset({
     SydneyMode.TRAIN,
     SydneyMode.METRO,
     SydneyMode.LIGHT_RAIL,
     SydneyMode.FERRY,
-})
-NAME_MODES: Final[frozenset[SydneyFeed]] = frozenset({
-    SydneyFeed.TRAIN,
-    SydneyFeed.METRO,
-    SydneyFeed.LIGHT_RAIL,
-    SydneyFeed.REGIONAL,
-    SydneyFeed.FERRY,
-})
-LOOSE_MODES: Final[frozenset[SydneyFeed]] = frozenset({
-    SydneyFeed.REGIONAL,
-    SydneyFeed.LIGHT_RAIL,
 })
 LOOSE_KINDS: Final[frozenset[SydneyMode]] = frozenset({
     SydneyMode.COACH,
@@ -151,7 +133,7 @@ def place_name(*, name: str) -> str:
     """
     if 'Wharf' in name:
         name = name.partition(',')[0]
-    for suffix in NAME_SUFFIXES:
+    for suffix in SYDNEY.alerts.name_suffixes:
         if name.endswith(suffix):
             return name.removesuffix(suffix)
     return name
@@ -212,7 +194,7 @@ def is_name_pin(*, pin: Pin, departures: Sequence[Departure]) -> bool:
     if pin.kind is not None:
         return pin.kind in NAME_KINDS
     return bool(departures) and all(
-        item.source in NAME_MODES for item in departures
+        item.source in SYDNEY.alerts.name_sources for item in departures
     )
 
 
@@ -235,7 +217,7 @@ def is_ferry_pin(*, pin: Pin, departures: Sequence[Departure]) -> bool:
     if pin.kind is not None:
         return pin.kind == SydneyMode.FERRY
     return bool(departures) and all(
-        item.source == SydneyFeed.FERRY for item in departures
+        item.source in SYDNEY.alerts.wharf_sources for item in departures
     )
 
 
@@ -317,7 +299,9 @@ def pin_facts(
             if item.facts.route_id
         ),
         loose=pin.kind in LOOSE_KINDS
-        or any(item.source in LOOSE_MODES for item in departures),
+        or any(
+            item.source in SYDNEY.alerts.loose_sources for item in departures
+        ),
     )
 
 

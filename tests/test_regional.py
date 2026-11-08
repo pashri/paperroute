@@ -56,6 +56,7 @@ def build(*, tmp_path: Path, days: int = 1) -> Path:
     """
     db = tmp_path / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),

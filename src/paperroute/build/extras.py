@@ -48,7 +48,11 @@ def run_extras(*, path: Path) -> None:
         conn.executescript(CATALOGUE_SCHEMA)
         timed(
             phase='runs',
-            step=lambda: load_runs(conn=conn, classify=SYDNEY.classify),
+            step=lambda: load_runs(
+                conn=conn,
+                classify=SYDNEY.classify,
+                rail_types=SYDNEY.catalogue.rail_types,
+            ),
         )
         timed(
             phase='catalogue',
@@ -57,6 +61,7 @@ def run_extras(*, path: Path) -> None:
                 projection=SYDNEY.projection,
                 classify=SYDNEY.classify,
                 modes=SYDNEY.modes,
+                rules=SYDNEY.catalogue,
             ),
         )
         conn.commit()

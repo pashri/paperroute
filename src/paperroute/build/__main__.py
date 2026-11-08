@@ -175,6 +175,7 @@ def run_gtfs(*, args: argparse.Namespace) -> None:
     build_timetable(
         sources=[*preferred, Source(name='bundle', archive=args.bundle)],
         window=Window(start=args.start, days=args.days), out=args.out,
+        city=SYDNEY,
         handoff=Handoff(
             path=args.out.with_name(f'{args.out.stem}.handoff.json'),
         ),

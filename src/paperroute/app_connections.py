@@ -5,7 +5,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from types import MappingProxyType
 
-from paperroute.city import SydneyMode
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.alert_match import between_names
 from paperroute.core.chains import Legs, open_legs
 from paperroute.core.connection_model import LEG_EXTRA, direct_leg
@@ -185,7 +185,7 @@ def between_read(
             for part in loaded
             for stop, family in part.families.items()
         },
-        trainlink=any(part.trainlink for part in loaded),
+        agency_alerts=any(part.agency_alerts for part in loaded),
         lines=frozenset().union(*(
             timetable.leg_lines(
                 ends=(leg.origin.stop_id, leg.destination.stop_id),
@@ -205,8 +205,9 @@ def leg_between(
 
     A pin's From or To may be a platform, so their stop families are read
     too and each is found through its station. With no trips asked
-    about, only the families are read. For a train pin or one of no
-    kind, NSW TrainLink is asked about every stop in either end's family.
+    about, only the families are read. For a pin of one of the city's
+    agency-alerted modes or of no kind, those agencies are asked about
+    every stop in either end's family.
 
     Parameters
     ----------
@@ -234,11 +235,17 @@ def leg_between(
     stop_ids = {
         stop for end in ends for stop in families.get(end, frozenset({end}))
     }
+    rule = SYDNEY.alerts.agency_alerts
     return BetweenLoaded(
         pin=pin,
         names=names,
         timetable=effect.timetable,
         families=families,
-        trainlink=pin.kind in (None, SydneyMode.TRAIN)
-        and timetable.serves_trainlink(stop_ids=stop_ids),
+        agency_alerts=(
+            rule is not None
+            and (pin.kind is None or pin.kind in rule.modes)
+            and timetable.serves_agencies(
+                stop_ids=stop_ids, agencies=rule.agencies,
+            )
+        ),
     )

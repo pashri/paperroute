@@ -8,10 +8,12 @@ from typing import Final
 
 import pytest
 
-from paperroute.build.dedupe import MergeReport, merge_rail, relabel_trainlink
+from paperroute.build.dedupe import merge_rail, relabel_trainlink
 from paperroute.build.timetable import create_schema
+from paperroute.city import REGIONAL_AGENCIES, TRAINLINK
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.city import MergeReport
 from tests.build.feeds import (
     DAILY,
     STATIONS,
@@ -399,7 +401,9 @@ def names_after(
         Short and long name by route ID of the bundle routes.
     """
     with closing(trainlink_db(routes={**LINES, **extra})) as conn:
-        relabel_trainlink(conn=conn)
+        relabel_trainlink(
+            conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+        )
         return {
             route_id: (short, long)
             for route_id, short, long in conn.execute(
@@ -444,7 +448,9 @@ def test_relabel_without_nswtrains_routes_changes_nothing() -> None:
     with closing(trainlink_db(routes={
         'b1': ('1', 'One', 106, '711', ('Central', 'Lithgow')),
     })) as conn:
-        assert relabel_trainlink(conn=conn) == 0
+        assert relabel_trainlink(
+            conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+        ) == 0
 
 
 @pytest.mark.parametrize('trip_id', ['S-0835', 'B-0835'])
@@ -478,7 +484,9 @@ def test_relabel_ignores_non_service() -> None:
                  ('Central', 'Lithgow', 'Orange', 'Broken Hill')),
     })) as conn:
         conn.execute("UPDATE trips SET service = 0 WHERE trip_id = 't-wst'")
-        relabel_trainlink(conn=conn)
+        relabel_trainlink(
+            conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+        )
         assert conn.execute(
             "SELECT short_name FROM routes WHERE route_id = 'b446'",
         ).fetchall() == [('446',)]

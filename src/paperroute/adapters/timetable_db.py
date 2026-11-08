@@ -25,7 +25,7 @@ from paperroute_device.adapters.sqlite_ro import (
 from paperroute_transit.adapters.alert_rows import (
     LineMemory,
     alert_places,
-    read_trainlink,
+    read_agency_stops,
 )
 from paperroute_transit.adapters.calendar_rows import (
     SERVICE_DAY_LENGTH,
@@ -183,8 +183,8 @@ class SqliteTimetableRepository:
     ----------
     city : City
         The city: its time zone (the timetable's service days are in it),
-        its projection (stop points are placed in it) and its route
-        classifier.
+        its projection (stop points are placed in it), its route
+        classifier and the route ID prefixes its alert feeds need.
     path : Path | None
         Timetable file; defaults to the device location.
     connection : sqlite3.Connection | None
@@ -209,6 +209,7 @@ class SqliteTimetableRepository:
         self.zone = city.zone
         self.projection = city.projection
         self.classify = city.classify
+        self.route_prefixes = city.alerts.route_prefixes
         self.db = ReadOnlyDatabase(
             path=path or DEFAULT_PATH,
             connection=connection,
@@ -259,6 +260,7 @@ class SqliteTimetableRepository:
         sql: str,
         ids: Collection[str],
         lead: tuple[object, ...] = (),
+        tail: tuple[object, ...] = (),
         shape: str = NO_SHAPE,
     ) -> list[tuple[object, ...]]:
         """
@@ -273,6 +275,8 @@ class SqliteTimetableRepository:
             Values for the IN list.
         lead : tuple[object, ...]
             Parameters that come before the IN list.
+        tail : tuple[object, ...]
+            Parameters that come after the IN list.
         shape : str
             Expression to select in place of ``{shape}``.
 
@@ -284,7 +288,9 @@ class SqliteTimetableRepository:
         rows: list[tuple[object, ...]] = []
         for chunk in batched(sorted(set(ids)), CHUNK):
             query = sql.format(marks=','.join('?' * len(chunk)), shape=shape)
-            rows.extend(self.fetch(sql=query, params=(*lead, *chunk)))
+            rows.extend(
+                self.fetch(sql=query, params=(*lead, *chunk, *tail)),
+            )
         return rows
 
     def features(self) -> Features:
@@ -813,7 +819,11 @@ class SqliteTimetableRepository:
         return found
 
     def alert_places(
-        self, *, route_ids: Collection[str], stop_ids: Collection[str]
+        self,
+        *,
+        route_ids: Collection[str],
+        stop_ids: Collection[str],
+        route_type: int | None = None,
     ) -> AlertPlaces:
         """
         Look up the routes and stops an alert feed names.
@@ -824,17 +834,21 @@ class SqliteTimetableRepository:
             Route IDs from the feed.
         stop_ids : Collection[str]
             Stop IDs from the feed.
+        route_type : int | None
+            The GTFS type whose only route to report, or None.
 
         Returns
         -------
         AlertPlaces
-            Route short names, stop families and the metro line; unknown
-            IDs are absent.
+            Route short names, stop families and the only line of
+            `route_type`; unknown IDs are absent.
         """
         return alert_places(
             route_ids=route_ids,
             stop_ids=stop_ids,
-            fetch=lambda sql: self.fetch(sql=sql, params=()),
+            prefixes=self.route_prefixes,
+            route_type=route_type,
+            fetch=lambda sql, params: self.fetch(sql=sql, params=params),
             fetch_in=lambda sql, ids: self.fetch_in(sql=sql, ids=ids),
         )
 
@@ -863,23 +877,30 @@ class SqliteTimetableRepository:
             fetch=lambda sql: self.fetch(sql=sql, params=params),
         )
 
-    def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:
+    def serves_agencies(
+        self, *, stop_ids: Collection[str], agencies: Collection[str],
+    ) -> bool:
         """
-        Say whether an NSW TrainLink trip calls at any of some stops.
+        Say whether a trip of some agencies calls at any of some stops.
 
         Parameters
         ----------
         stop_ids : Collection[str]
             Stop IDs.
+        agencies : Collection[str]
+            GTFS agency IDs.
 
         Returns
         -------
         bool
             True when one does.
         """
-        return read_trainlink(
+        return read_agency_stops(
             stop_ids=stop_ids,
-            fetch_in=lambda sql, ids: self.fetch_in(sql=sql, ids=ids),
+            agencies=agencies,
+            fetch_in=lambda sql, ids, tail: self.fetch_in(
+                sql=sql, ids=ids, tail=tail,
+            ),
         )
 
     def departures(

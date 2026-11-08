@@ -261,7 +261,9 @@ def line_stops(*, conn: sqlite3.Connection) -> dict[str, set[str]]:
     """
     keys = {
         source.route_id: f'{source.merge[0]}:{source.merge[1]}'
-        for source in route_sources(conn=conn, classify=line_class)
+        for source in route_sources(
+            conn=conn, classify=line_class, by_number=frozenset(),
+        )
         if source.merge[0] in LINE_KINDS
     }
     inputs = line_inputs(conn=conn, keys=keys)

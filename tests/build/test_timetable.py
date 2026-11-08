@@ -1,16 +1,22 @@
 """Tests for loading GTFS sources into SQLite."""
 
+import dataclasses
 import logging
+import os
 import sqlite3
 from contextlib import closing
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 
 import pytest
 
+from paperroute.build.handoff import Handoff, read_handoff
 from paperroute.build.timetable import SCHEMA_VERSION, Window, build_timetable
+from paperroute.city import SYDNEY
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
+from paperroute_transit.core.city import MergeReport, TimetableRules
 from tests.build.feeds import (
     DAILY,
     build_db,
@@ -182,7 +188,7 @@ def built(*, tmp_path: Path, sources: list[Source]) -> Path:
         The timetable file.
     """
     out = tmp_path / 'timetable.db'
-    build_timetable(sources=sources,
+    build_timetable(city=SYDNEY, sources=sources,
                     window=Window(start=date(2026, 10, 16), days=2), out=out)
     return out
 
@@ -462,3 +468,67 @@ def test_trip_categories_are_kept_without_a_categories_file(
         ('bus-0803',), ('bus-2510',), ('hidden',), ('perth',), ('short',),
         ('xpt',), ('yard',),
     ]
+
+
+@dataclass
+class RecordingMerge:
+    """A merge hook that notes the sources loaded at each call."""
+
+    calls: list[set[str]] = field(default_factory=list)
+
+    def __call__(self, *, conn: sqlite3.Connection) -> MergeReport:
+        """
+        Note the sources whose trips are loaded and report three dropped.
+
+        Parameters
+        ----------
+        conn : sqlite3.Connection
+            Timetable being built.
+
+        Returns
+        -------
+        MergeReport
+            Three trips dropped, none partial or overnight.
+        """
+        rows = conn.execute('SELECT DISTINCT source FROM trips')
+        self.calls.append({str(source) for source, in rows})
+        return MergeReport(dropped=3, partial=0, overnight=0)
+
+
+class Execed(Exception):
+    """Raised by the stand-in for os.execv."""
+
+
+def test_merge_hook_is_called_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The city's merge runs once, after every source, and is reported."""
+    merge = RecordingMerge()
+    city = dataclasses.replace(
+        SYDNEY,
+        timetable=TimetableRules(merge=merge, holiday_source='bundle'),
+    )
+    handed: list[int] = []
+
+    def execv(path: str, argv: list[str]) -> None:
+        handed.append(read_handoff(path=Path(argv[-1])).dropped)
+        raise Execed(path)
+
+    monkeypatch.setattr(os, 'execv', execv)
+    sources = [
+        Source(
+            name='sydneytrains',
+            archive=sydneytrains_feed(path=tmp_path / 's.zip'),
+        ),
+        Source(name='bundle', archive=bus_feed(path=tmp_path / 'b.zip')),
+    ]
+    with pytest.raises(Execed):
+        build_timetable(
+            city=city,
+            sources=sources,
+            window=Window(start=date(2026, 10, 16), days=2),
+            out=tmp_path / 'timetable.db',
+            handoff=Handoff(path=tmp_path / 'handoff.json'),
+        )
+    assert merge.calls == [{'sydneytrains', 'bundle'}]
+    assert handed == [3]

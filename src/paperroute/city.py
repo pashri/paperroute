@@ -1,11 +1,22 @@
 """Sydney's values for the engine."""
 
 import re
+import sqlite3
 from enum import StrEnum
 from typing import Final
 from zoneinfo import ZoneInfo
 
-from paperroute_transit.core.city import City
+from paperroute.build.dedupe import merge_rail, relabel_trainlink
+from paperroute.build.trainlink import trim_trainlink
+from paperroute_transit.core.city import (
+    AgencyAlerts,
+    AlertRules,
+    CatalogueRules,
+    City,
+    MergeReport,
+    PlaceNames,
+    TimetableRules,
+)
 from paperroute_transit.core.geo import DegreeBox, Projection
 from paperroute_transit.core.modes import ModeSpec, RouteClass
 
@@ -197,6 +208,147 @@ def classify_sydney(
     )
 
 
+def sydney_line_group(*, number: str) -> int:
+    """
+    Sort a line number into the group it is listed in.
+
+    Parameters
+    ----------
+    number : str
+        Line number, such as 'T1', 'BMT' or 'F1'.
+
+    Returns
+    -------
+    int
+        0 for Sydney Trains and Sydney Ferries lines, 1 for intercity
+        lines, 2 for NSW TrainLink lines and 3 for anything else.
+    """
+    if number in INTERCITY:
+        return 1
+    if number in TRAINLINK:
+        return 2
+    if SYDNEY_LINES.match(number) or SYDNEY_FERRIES.match(number):
+        return 0
+    return 3
+
+
+def merge_sydney(*, conn: sqlite3.Connection) -> MergeReport:
+    """
+    Merge the rail feeds and trim and rename NSW TrainLink's bundle trips.
+
+    Parameters
+    ----------
+    conn : sqlite3.Connection
+        Timetable being built, every source loaded.
+
+    Returns
+    -------
+    MergeReport
+        What the rail merge did.
+    """
+    report = merge_rail(conn=conn)
+    trim_trainlink(conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK)
+    relabel_trainlink(conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK)
+    return report
+
+
+CENTRES: Final[tuple[tuple[str, float, float, float], ...]] = (
+    ('Sydney', 151.207, -33.870, 55),
+    ('Newcastle', 151.750, -32.930, 40),
+    ('C Coast', 151.340, -33.430, 30),
+    ('Wollongong', 150.890, -34.420, 30),
+    ('Blue Mtns', 150.400, -33.700, 25),
+)  # label, lon, lat, radius in km
+PLACE_SUFFIX: Final[re.Pattern[str]] = re.compile(
+    r'\s+(City Centre|Town Centre|CBD|Station|Interchange|Mall|City|Park Ave'
+    r'|Shopping Centre|Shops|Market Square|Manning Mall|East|West|North'
+    r'|South|CBD)$',
+)
+PLACE_SHORT: Final[dict[str, str]] = {
+    'Port Macquarie': 'Port Mac',
+    'Coffs Harbour': 'Coffs',
+    'Wagga Wagga': 'Wagga',
+    'Batemans Bay': 'Batemans',
+    'Raymond Terrace': 'Raymond T',
+    'Soldiers Point': 'Soldiers P',
+    'Muswellbrook': 'Muswellbk',
+    'Murwillumbah': 'Murwillum',
+    'Queanbeyan': 'Queanbeyan',
+    'University of Wollongong': 'UOW',
+    'City Martin Place': 'City',
+    'City Wynyard': 'City',
+    'City QVB': 'City',
+    'Broken Hill': 'Broken Hl',
+    'Campbelltown': 'Campbelltn',
+    'Stockland Forster': 'Forster',
+    'QEII Square': 'Albury',
+    'Orana': 'Dubbo',
+    'Green Hills': 'Maitland',
+    'Park Beach Plaza': 'Coffs',
+    'Toormina Gardens': 'Coffs',
+    'Sunnyside': 'Murwillum',
+}
+REPLACEMENT: Final[re.Pattern[str]] = re.compile(
+    r'^\d+[A-Z]?(T\d|BM|CN|HU|SC|SH)',
+)
+REPLACEMENT_LINES: Final[dict[str, str]] = {
+    'BM': 'BMT', 'CN': 'CCN', 'HU': 'HUN', 'SC': 'SCO', 'SH': 'SHL',
+}
+LINE_SORT: Final[dict[str, int]] = {
+    **{f'T{line}': line for line in range(1, 10)},
+    **{code: 101 + index for index, code in enumerate(INTERCITY)},
+    **{code: 111 + index for index, code in enumerate(TRAINLINK)},
+}
+RAIL_TYPES: Final[frozenset[int]] = frozenset({2, 401, 900})
+NAME_SUFFIXES: Final[tuple[str, ...]] = (
+    ' Light Rail Station',
+    ' Metro Station',
+    ' Light Rail',
+    ' Station',
+    ' Wharf',
+)
+NAME_SOURCES: Final[frozenset[SydneyFeed]] = frozenset({
+    SydneyFeed.TRAIN,
+    SydneyFeed.METRO,
+    SydneyFeed.LIGHT_RAIL,
+    SydneyFeed.REGIONAL,
+    SydneyFeed.FERRY,
+})
+LOOSE_SOURCES: Final[frozenset[SydneyFeed]] = frozenset({
+    SydneyFeed.REGIONAL,
+    SydneyFeed.LIGHT_RAIL,
+})
+ROUTE_PREFIXES: Final[tuple[str, ...]] = (
+    'sydneytrains:',
+    'metro:',
+    'bundle:',
+)
+METRO_ROUTE_TYPE: Final[int] = 401
+SYDNEY_CATALOGUE: Final[CatalogueRules] = CatalogueRules(
+    line_sort=LINE_SORT,
+    replacement=REPLACEMENT,
+    replacement_lines=REPLACEMENT_LINES,
+    numbered_lines=SYDNEY_FERRIES,
+    rail_types=RAIL_TYPES,
+    line_group=sydney_line_group,
+    places=PlaceNames(
+        centres=CENTRES,
+        suffix=PLACE_SUFFIX,
+        short=PLACE_SHORT,
+    ),
+)
+SYDNEY_ALERTS: Final[AlertRules] = AlertRules(
+    name_suffixes=NAME_SUFFIXES,
+    name_sources=NAME_SOURCES,
+    loose_sources=LOOSE_SOURCES,
+    wharf_sources=frozenset({SydneyFeed.FERRY}),
+    route_prefixes=ROUTE_PREFIXES,
+    agency_alerts=AgencyAlerts(
+        agencies=REGIONAL_AGENCIES,
+        modes=frozenset({SydneyMode.TRAIN}),
+        source=SydneyFeed.REGIONAL,
+    ),
+)
 SYDNEY_ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 SYDNEY_PROJECTION: Final[Projection] = Projection(
     origin_lon=151.2093,
@@ -212,4 +364,7 @@ SYDNEY: Final[City] = City(
     bbox=SYDNEY_BBOX,
     modes=SYDNEY_MODES,
     classify=classify_sydney,
+    catalogue=SYDNEY_CATALOGUE,
+    timetable=TimetableRules(merge=merge_sydney, holiday_source='bundle'),
+    alerts=SYDNEY_ALERTS,
 )

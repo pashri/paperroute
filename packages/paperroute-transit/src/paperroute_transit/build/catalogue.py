@@ -21,12 +21,16 @@ from paperroute_transit.build.route_tags import (
     agency_towns,
     tags_of,
 )
+from paperroute_transit.core.city import CatalogueRules
 from paperroute_transit.core.geo import Point, Projection, to_metres
 from paperroute_transit.core.modes import (
     Classifier,
     ModeSpec,
     line_modes,
+    replaced_modes,
+    replacing_modes,
     tagged_modes,
+    wharf_modes,
 )
 
 CATALOGUE_SCHEMA: Final[str] = """
@@ -49,30 +53,9 @@ CREATE TABLE line_exits (line_key TEXT NOT NULL, station_id TEXT NOT NULL,
   off_id TEXT NOT NULL, lines TEXT NOT NULL,
   PRIMARY KEY (line_key, station_id, off_id)) WITHOUT ROWID;
 """
-REPLACEMENT: Final[re.Pattern[str]] = re.compile(
-    r'^\d+[A-Z]?(T\d|BM|CN|HU|SC|SH)',
-)
-REPLACEMENT_LINES: Final[dict[str, str]] = {
-    'BM': 'BMT', 'CN': 'CCN', 'HU': 'HUN', 'SC': 'SCO', 'SH': 'SHL',
-}
 FIRST_HUNDRED: Final[str] = '1\u201399'
 LETTERED: Final[int] = 10**6
 NO_NUMBER: Final[int] = 10**9
-LINE_SORT: Final[dict[str, int]] = {
-    **{f'T{line}': line for line in range(1, 10)},
-    **{
-        code: 101 + index
-        for index, code in enumerate(('BMT', 'CCN', 'SCO', 'SHL', 'HUN'))
-    },
-    **{
-        code: 111 + index
-        for index, code in enumerate(('NRC', 'NRW', 'STH', 'WST'))
-    },
-}
-NUMBERED_FERRIES: Final[re.Pattern[str]] = re.compile(r'^F(?:[1-9]|10)$')
-REPLACEMENT_KIND: Final[str] = 'replacement'
-TRAIN_KIND: Final[str] = 'train'
-FERRY_KIND: Final[str] = 'ferry'
 OTHER_LINES: Final[int] = 200
 LEADING_DIGITS: Final[re.Pattern[str]] = re.compile(r'^\d+')
 NATURAL_PARTS: Final[re.Pattern[str]] = re.compile(r'\d+|\D+')
@@ -223,7 +206,9 @@ def line_name(*, long_name: str, code: str) -> str:
     return name.replace(' and ', ' & ')
 
 
-def merge_key(*, kind: str, number: str, long_name: str) -> str:
+def merge_key(
+    *, kind: str, number: str, long_name: str, by_number: Collection[str],
+) -> str:
     """
     Key the merged route a route ID joins.
 
@@ -235,6 +220,8 @@ def merge_key(*, kind: str, number: str, long_name: str) -> str:
         Route short name.
     long_name : str
         Route long name.
+    by_number : Collection[str]
+        Mode ids of replacement routes.
 
     Returns
     -------
@@ -242,13 +229,16 @@ def merge_key(*, kind: str, number: str, long_name: str) -> str:
         Kind, number and long name; a replacement bus by kind and number
         alone, as its long names differ by direction.
     """
-    if kind == REPLACEMENT_KIND:
+    if kind in by_number:
         return f'{kind}:{number}'
     return f'{kind}:{number}:{long_name}'
 
 
 def route_sources(
-    *, conn: sqlite3.Connection, classify: Classifier,
+    *,
+    conn: sqlite3.Connection,
+    classify: Classifier,
+    by_number: Collection[str],
 ) -> list[RouteSource]:
     """
     Read every route ID with route patterns and a kind.
@@ -259,6 +249,8 @@ def route_sources(
         Timetable with the run tables.
     classify : Classifier
         Sorts a route into a mode.
+    by_number : Collection[str]
+        Mode ids of replacement routes, merged by number alone.
 
     Returns
     -------
@@ -276,7 +268,10 @@ def route_sources(
             found.append(RouteSource(
                 route_id=route_id, merge=(kind, number, long_name),
                 key=merge_key(
-                    kind=kind, number=number, long_name=long_name,
+                    kind=kind,
+                    number=number,
+                    long_name=long_name,
+                    by_number=by_number,
                 ),
                 agency=agency or '',
                 trips=trips,
@@ -388,6 +383,7 @@ def merged_routes(
     conn: sqlite3.Connection,
     projection: Projection,
     classify: Classifier,
+    by_number: Collection[str],
     sources: Sequence[RouteSource] | None = None,
 ) -> list[CatalogueRoute]:
     """
@@ -401,6 +397,8 @@ def merged_routes(
         The projection to place route middles in.
     classify : Classifier
         Sorts a route into a mode, when reading the route IDs.
+    by_number : Collection[str]
+        Mode ids of replacement routes, merged by number alone.
     sources : Sequence[RouteSource] | None
         Route IDs from route_sources; None to read them.
 
@@ -413,7 +411,7 @@ def merged_routes(
         long name.
     """
     sources = (
-        route_sources(conn=conn, classify=classify)
+        route_sources(conn=conn, classify=classify, by_number=by_number)
         if sources is None
         else sources
     )
@@ -526,7 +524,10 @@ def short_place(*, name: str) -> str:
 
 
 def replacement_ends(
-    *, conn: sqlite3.Connection, sources: Sequence[RouteSource],
+    *,
+    conn: sqlite3.Connection,
+    sources: Sequence[RouteSource],
+    by_number: Collection[str],
 ) -> dict[str, str]:
     """
     Name each replacement bus route by where it runs from and to.
@@ -539,6 +540,8 @@ def replacement_ends(
         Timetable with the run tables.
     sources : Sequence[RouteSource]
         Route IDs and the merged routes they join.
+    by_number : Collection[str]
+        Mode ids of replacement routes.
 
     Returns
     -------
@@ -549,7 +552,7 @@ def replacement_ends(
     keys = {
         source.route_id: source.key
         for source in sources
-        if source.merge[0] == REPLACEMENT_KIND
+        if source.merge[0] in by_number
     }
     ends: dict[str, Counter[str]] = defaultdict(Counter)
     rows = conn.execute(ENDS, (json.dumps(list(keys)),))
@@ -570,6 +573,8 @@ def route_entries(
     routes: Sequence[CatalogueRoute],
     tags: Mapping[str, str],
     ends: Mapping[str, str],
+    rules: CatalogueRules,
+    by_number: Collection[str],
 ) -> Iterator[Entry]:
     """
     Make one entry per merged route of the other kinds.
@@ -583,6 +588,10 @@ def route_entries(
     ends : Mapping[str, str]
         Replacement bus names by route key, used in place of the long
         name.
+    rules : CatalogueRules
+        How replacement route numbers name their lines.
+    by_number : Collection[str]
+        Mode ids of replacement routes.
 
     Yields
     ------
@@ -591,10 +600,11 @@ def route_entries(
     """
     for route in routes:
         line = ''
-        if route.kind == REPLACEMENT_KIND:
-            if (found := REPLACEMENT.match(route.number)) is None:
+        if route.kind in by_number:
+            if (found := rules.replacement.match(route.number)) is None:
                 continue
-            line = REPLACEMENT_LINES.get(found.group(1), found.group(1))
+            code = found.group(1)
+            line = rules.replacement_lines.get(code, code)
         yield Entry(
             key=route.route_key, kind=route.kind, number=route.number,
             name=ends.get(route.route_key, route.long_name),
@@ -603,48 +613,69 @@ def route_entries(
         )
 
 
-def ferry_rank(*, number: str, fallback: int = OTHER_LINES) -> int:
+def ferry_rank(
+    *, number: str, numbered: re.Pattern[str], fallback: int = OTHER_LINES,
+) -> int:
     """
-    Rank a ferry line: Sydney Ferries F1-F10 by number, others after.
+    Rank a ferry line: numbered lines by number, others after.
 
     Parameters
     ----------
     number : str
         Ferry line number.
+    numbered : re.Pattern[str]
+        Matches the lines ranked by the number after their first letter.
     fallback : int
-        Rank of a line outside F1-F10.
+        Rank of a line it does not match.
 
     Returns
     -------
     int
-        The number of an F1-F10 line, else ``fallback``.
+        The number of a matched line, else ``fallback``.
     """
-    return int(number[1:]) if NUMBERED_FERRIES.match(number) else fallback
+    return int(number[1:]) if numbered.match(number) else fallback
 
 
 def kind_rows(
-    *, entries: Sequence[Entry], tagged: Collection[str],
+    *,
+    entries: Sequence[Entry],
+    modes: Sequence[ModeSpec],
+    rules: CatalogueRules,
 ) -> Iterator[RouteRow]:
     """
     Sort one kind's entries and give their chooser_routes rows.
+
+    Lines of a mode that replacement routes stand in for rank by
+    `rules.line_sort`; lines of a mode whose stops are wharves rank by
+    `rules.numbered_lines`.
 
     Parameters
     ----------
     entries : Sequence[Entry]
         Entries of one kind.
-    tagged : Collection[str]
-        Mode ids whose routes are grouped by number.
+    modes : Sequence[ModeSpec]
+        The city's modes: which are tagged, replaced or wharf modes.
+    rules : CatalogueRules
+        The line ranks.
 
     Yields
     ------
     RouteRow
         chooser_routes values.
     """
+    tagged = tagged_modes(modes=modes)
+    sorted_lines = replaced_modes(modes=modes)
+    wharves = wharf_modes(modes=modes)
+    numbered = rules.numbered_lines
     ranked = sorted(
         entries,
         key=lambda entry: (
-            (ferry_rank(number=entry.number), (), entry.name)
-            if entry.kind == FERRY_KIND
+            (
+                ferry_rank(number=entry.number, numbered=numbered),
+                (),
+                entry.name,
+            )
+            if entry.kind in wharves
             else (*route_order(number=entry.number), entry.name)
         ),
     )
@@ -652,10 +683,14 @@ def kind_rows(
         grp = bucket_of(number=entry.number)
         if entry.kind not in tagged:
             grp = ''
-        if entry.kind == TRAIN_KIND:
-            rank = LINE_SORT.get(entry.number, OTHER_LINES + rank)
-        elif entry.kind == FERRY_KIND:
-            rank = ferry_rank(number=entry.number, fallback=OTHER_LINES + rank)
+        if entry.kind in sorted_lines:
+            rank = rules.line_sort.get(entry.number, OTHER_LINES + rank)
+        elif entry.kind in wharves:
+            rank = ferry_rank(
+                number=entry.number,
+                numbered=numbered,
+                fallback=OTHER_LINES + rank,
+            )
         yield (
             entry.key, str(entry.kind), grp,
             bucket_order(bucket=grp) if grp else 0, entry.number, rank,
@@ -807,7 +842,10 @@ def write_towards(
 
 
 def rows_by_kind(
-    *, entries: Sequence[Entry], tagged: Collection[str],
+    *,
+    entries: Sequence[Entry],
+    modes: Sequence[ModeSpec],
+    rules: CatalogueRules,
 ) -> list[RouteRow]:
     """
     Number the entries kind by kind into chooser rows.
@@ -816,8 +854,10 @@ def rows_by_kind(
     ----------
     entries : Sequence[Entry]
         Every entry, in any order of kinds.
-    tagged : Collection[str]
-        Mode ids whose routes are grouped by number.
+    modes : Sequence[ModeSpec]
+        The city's modes.
+    rules : CatalogueRules
+        The line ranks.
 
     Returns
     -------
@@ -830,7 +870,7 @@ def rows_by_kind(
     return [
         row
         for group in kinds.values()
-        for row in kind_rows(entries=group, tagged=tagged)
+        for row in kind_rows(entries=group, modes=modes, rules=rules)
     ]
 
 
@@ -840,6 +880,7 @@ def load_catalogue(
     projection: Projection,
     classify: Classifier,
     modes: Sequence[ModeSpec],
+    rules: CatalogueRules,
 ) -> int:
     """
     Write the chooser and line tables.
@@ -856,6 +897,8 @@ def load_catalogue(
         Sorts a route into a mode.
     modes : Sequence[ModeSpec]
         The city's modes: which are chosen by line and which tagged.
+    rules : CatalogueRules
+        The city's line ranks, replacement numbers and place names.
 
     Returns
     -------
@@ -863,20 +906,22 @@ def load_catalogue(
         Number of chooser_routes rows written.
     """
     lines = line_modes(modes=modes)
-    sources = route_sources(conn=conn, classify=classify)
+    by_number = replacing_modes(modes=modes)
+    sources = route_sources(conn=conn, classify=classify, by_number=by_number)
     routes = merged_routes(
         conn=conn,
         projection=projection,
         classify=classify,
+        by_number=by_number,
         sources=sources,
     )
-    tagged = [
-        route for route in routes if route.kind in tagged_modes(modes=modes)
-    ]
+    tagged_kinds = tagged_modes(modes=modes)
+    tagged = [route for route in routes if route.kind in tagged_kinds]
     tags = tags_of(
         routes=tagged,
-        towns=agency_towns(routes=tagged),
+        towns=agency_towns(routes=tagged, places=rules.places),
         projection=projection,
+        places=rules.places,
     )
     entries = [
         *line_entries(
@@ -886,10 +931,14 @@ def load_catalogue(
         *route_entries(
             routes=[r for r in routes if r.kind not in lines],
             tags=tags,
-            ends=replacement_ends(conn=conn, sources=sources),
+            ends=replacement_ends(
+                conn=conn, sources=sources, by_number=by_number,
+            ),
+            rules=rules,
+            by_number=by_number,
         ),
     ]
-    rows = rows_by_kind(entries=entries, tagged=tagged_modes(modes=modes))
+    rows = rows_by_kind(entries=entries, modes=modes, rules=rules)
     insert_many(conn=conn, rows=rows, sql=(
         'INSERT INTO chooser_routes VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
     ))

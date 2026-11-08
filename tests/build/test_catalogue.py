@@ -16,7 +16,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from paperroute.build.timetable import Window, build_timetable, create_schema
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
+from paperroute.city import CENTRES, SYDNEY, SYDNEY_PROJECTION, SydneyMode
 from paperroute_transit.build.catalogue import (
     CATALOGUE_SCHEMA,
     Entry,
@@ -30,7 +30,6 @@ from paperroute_transit.build.catalogue import (
 )
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.route_tags import (
-    CENTRES,
     TAG_MAX,
     CatalogueRoute,
     agency_towns,
@@ -38,8 +37,9 @@ from paperroute_transit.build.route_tags import (
     tags_of,
 )
 from paperroute_transit.build.runs import RUN_SCHEMA
+from paperroute_transit.core.city import PlaceNames
 from paperroute_transit.core.geo import Point, to_metres
-from paperroute_transit.core.modes import tagged_modes
+from paperroute_transit.core.modes import replacing_modes
 from tests.build.network_feed import EAST_WEST, network_feed
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
@@ -49,6 +49,8 @@ FAR: Final[Point] = to_metres(
     lat=-34.3,
     projection=SYDNEY_PROJECTION,
 )
+NAMES: Final[PlaceNames] = SYDNEY.catalogue.places
+BY_NUMBER: Final[frozenset[str]] = replacing_modes(modes=SYDNEY.modes)
 PLACES: Final[tuple[str, ...]] = (
     'Alpha', 'Bravo', 'Charlie', 'Delta Heights', 'Campbelltown North',
     'Campbelltown South', 'City Martin Place', 'City Wynyard',
@@ -272,6 +274,7 @@ def test_repeated_numbers_get_place_tags() -> None:
         routes=[south, north],
         towns={},
         projection=SYDNEY_PROJECTION,
+        places=NAMES,
     ) == {
         south.route_key: 'Wollongong', north.route_key: 'C Coast',
     }
@@ -285,6 +288,7 @@ def test_clashing_tags_fall_back_to_first_place() -> None:
         routes=[one, two],
         towns={'A1': 'Griffith'},
         projection=SYDNEY_PROJECTION,
+        places=NAMES,
     )
     assert tags == {one.route_key: 'Leeton', two.route_key: 'Narrandera'}
 
@@ -298,6 +302,7 @@ def test_unknown_town_is_never_a_tag() -> None:
         routes=[known, unknown],
         towns={},
         projection=SYDNEY_PROJECTION,
+        places=NAMES,
     )
     assert tags == {known.route_key: 'Wollongong', unknown.route_key: 'Leeton'}
 
@@ -312,6 +317,7 @@ def test_lone_leftover_takes_its_number_without_a_warning() -> None:
             routes=[known, blank],
             towns={},
             projection=SYDNEY_PROJECTION,
+            places=NAMES,
         )
     assert tags == {known.route_key: 'Wollongong', blank.route_key: '70'}
     assert not found
@@ -327,6 +333,7 @@ def test_agency_ties_go_to_the_lowest_id(tmp_path: Path) -> None:
     ])) as conn:
         (route,) = merged_routes(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            by_number=BY_NUMBER,
         )
     assert route.agency == 'X1'
 
@@ -343,12 +350,13 @@ def test_identical_long_names_merge_into_one_untagged_row(
     ])) as conn:
         (route,) = merged_routes(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            by_number=BY_NUMBER,
         )
         assert route.agency == 'X2'
         assert route.route_key == 'bus:78:A to B'
         assert load_catalogue(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
-            modes=SYDNEY.modes,
+            modes=SYDNEY.modes, rules=SYDNEY.catalogue,
         ) == 1
         assert chooser_rows(conn=conn, kind='bus') == [
             ('78', 'A to B', '', ''),
@@ -371,6 +379,7 @@ def test_merged_route_middle_is_the_median_station(tmp_path: Path) -> None:
         )
         (route,) = merged_routes(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            by_number=BY_NUMBER,
         )
     assert route.middle == pytest.approx(to_metres(
         lon=151.0,
@@ -385,7 +394,12 @@ def test_tags_fall_through_to_last_place() -> None:
               middle=centre(label='C Coast'))
     two = bus(number='21', long_name='Lake Haven to Wyong',
               middle=centre(label='C Coast'))
-    tags = tags_of(routes=[one, two], towns={}, projection=SYDNEY_PROJECTION)
+    tags = tags_of(
+        routes=[one, two],
+        towns={},
+        projection=SYDNEY_PROJECTION,
+        places=NAMES,
+    )
     assert tags == {one.route_key: 'Tuggerah', two.route_key: 'Wyong'}
 
 
@@ -397,18 +411,23 @@ def test_tags_fall_through_to_via_place() -> None:
         routes=[one, two],
         towns={'A1': 'A'},
         projection=SYDNEY_PROJECTION,
+        places=NAMES,
     )
     assert tags == {one.route_key: 'C', two.route_key: 'D'}
 
 
 def test_short_tag_keeps_cut_names_distinct() -> None:
     """Cut names that would read the same keep their ends."""
-    north = short_tag(place='Campbelltown North', other='Campbelltown South')
-    south = short_tag(place='Campbelltown South', other='Campbelltown North')
+    north = short_tag(
+        place='Campbelltown North', places=NAMES, other='Campbelltown South',
+    )
+    south = short_tag(
+        place='Campbelltown South', places=NAMES, other='Campbelltown North',
+    )
     assert (north, south) == ('Camp.North', 'Camp.South')
     assert max(len(north), len(south)) <= TAG_MAX
-    assert short_tag(place='City Town Hall') == 'City Town.'
-    assert short_tag(place='Campbelltown') == 'Campbelltn'
+    assert short_tag(place='City Town Hall', places=NAMES) == 'City Town.'
+    assert short_tag(place='Campbelltown', places=NAMES) == 'Campbelltn'
 
 
 def test_surviving_clash_falls_back_to_first_differing_word() -> None:
@@ -420,6 +439,7 @@ def test_surviving_clash_falls_back_to_first_differing_word() -> None:
             routes=[one, two],
             towns={'A1': 'A'},
             projection=SYDNEY_PROJECTION,
+            places=NAMES,
         )
     assert tags == {one.route_key: 'Express', two.route_key: 'Limited'}
     assert len(found) == 1
@@ -436,6 +456,7 @@ def test_indistinguishable_routes_share_a_tag_with_a_warning() -> None:
             routes=[one, two],
             towns={'A1': 'A'},
             projection=SYDNEY_PROJECTION,
+            places=NAMES,
         )
     assert tags[one.route_key] == tags[two.route_key] != ''
     assert len(found) == 1
@@ -455,6 +476,7 @@ def test_warning_names_every_route_sharing_a_tag() -> None:
             routes=routes,
             towns={'A1': 'Alpha'},
             projection=SYDNEY_PROJECTION,
+            places=NAMES,
         )
     shared = [
         key
@@ -504,14 +526,16 @@ def route_groups(draw: st.DrawFn) -> list[CatalogueRoute]:
 @given(routes=route_groups())
 def test_tags_always_distinct(routes: list[CatalogueRoute]) -> None:
     """Tags are short and distinct, and any shared tag is warned about."""
-    towns = agency_towns(routes=[
-        route for route in routes if route.agency != 'Unknown'
-    ])
+    towns = agency_towns(
+        routes=[route for route in routes if route.agency != 'Unknown'],
+        places=NAMES,
+    )
     with warnings_logged() as found:
         tags = tags_of(
             routes=routes,
             towns=towns,
             projection=SYDNEY_PROJECTION,
+            places=NAMES,
         )
     assert set(tags) == {route.route_key for route in routes}
     for tag in tags.values():
@@ -554,7 +578,7 @@ def test_replacement_buses_go_under_their_line(tmp_path: Path) -> None:
     ])) as conn:
         load_catalogue(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
-            modes=SYDNEY.modes,
+            modes=SYDNEY.modes, rules=SYDNEY.catalogue,
         )
         assert sorted(
             row[::3] for row in chooser_rows(conn=conn, kind='replacement')
@@ -586,7 +610,7 @@ def test_replacement_buses_are_named_by_their_ends(tmp_path: Path) -> None:
     ])) as conn:
         load_catalogue(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
-            modes=SYDNEY.modes,
+            modes=SYDNEY.modes, rules=SYDNEY.catalogue,
         )
         names = {
             row[0]: row[1]
@@ -617,6 +641,7 @@ def test_merged_replacement_takes_the_busiest_long_name(
     ])) as conn:
         (route,) = merged_routes(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            by_number=BY_NUMBER,
         )
     assert route.long_name == 'Bankstown to Lidcombe'
 
@@ -637,7 +662,7 @@ def test_replacement_bus_is_one_row_per_route(tmp_path: Path) -> None:
     ])) as conn:
         load_catalogue(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
-            modes=SYDNEY.modes,
+            modes=SYDNEY.modes, rules=SYDNEY.catalogue,
         )
         rows = chooser_rows(conn=conn, kind='replacement')
         towards = conn.execute(
@@ -668,7 +693,7 @@ def test_train_lines_in_decision_order(tmp_path: Path) -> None:
     ])) as conn:
         load_catalogue(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
-            modes=SYDNEY.modes,
+            modes=SYDNEY.modes, rules=SYDNEY.catalogue,
         )
         rows = chooser_rows(conn=conn, kind='train')
         keys = [key for key, in conn.execute(
@@ -688,7 +713,7 @@ def test_unlisted_train_lines_sort_after_the_listed_ones() -> None:
         Entry(key=f'train:{code}', kind=SydneyMode.TRAIN, number=code,
               name=code, tag='', line='')
         for code in ('T1', 'XPT', 'HUN')
-    ], tagged=tagged_modes(modes=SYDNEY.modes))
+    ], modes=SYDNEY.modes, rules=SYDNEY.catalogue)
     assert {row[4]: row[5] for row in rows} == {
         'T1': 1, 'HUN': 105, 'XPT': 203,
     }
@@ -706,7 +731,7 @@ def test_trainlink_is_train_and_coaches_are_coach(tmp_path: Path) -> None:
     ])) as conn:
         load_catalogue(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
-            modes=SYDNEY.modes,
+            modes=SYDNEY.modes, rules=SYDNEY.catalogue,
         )
         kinds = dict(conn.execute('SELECT number, kind FROM chooser_routes'))
     assert kinds == {'NRC': 'train', 'C1': 'coach', 'CCN': 'train'}
@@ -724,7 +749,7 @@ def test_towards_rows_sum_merged_routes(tmp_path: Path) -> None:
     ])) as conn:
         load_catalogue(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
-            modes=SYDNEY.modes,
+            modes=SYDNEY.modes, rules=SYDNEY.catalogue,
         )
         rows = conn.execute(
             'SELECT route_key, headsign, trips, stations FROM chooser_towards '
@@ -749,7 +774,7 @@ def test_towards_rows_merge_headsigns_differing_in_case(
     ])) as conn:
         load_catalogue(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
-            modes=SYDNEY.modes,
+            modes=SYDNEY.modes, rules=SYDNEY.catalogue,
         )
         rows = conn.execute(
             'SELECT headsign, trips, stations FROM chooser_towards '
@@ -776,7 +801,7 @@ def test_replacement_towards_drop_stand_suffixes(tmp_path: Path) -> None:
     ])) as conn:
         load_catalogue(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
-            modes=SYDNEY.modes,
+            modes=SYDNEY.modes, rules=SYDNEY.catalogue,
         )
         rows = conn.execute(
             'SELECT headsign, trips FROM chooser_towards',
@@ -794,7 +819,7 @@ def test_bus_towards_drop_stand_suffixes(tmp_path: Path) -> None:
     ])) as conn:
         load_catalogue(
             conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
-            modes=SYDNEY.modes,
+            modes=SYDNEY.modes, rules=SYDNEY.catalogue,
         )
         rows = conn.execute(
             'SELECT headsign, trips FROM chooser_towards ORDER BY headsign',
@@ -819,7 +844,7 @@ def build_network(*, path: Path) -> Path:
     out = path / 'timetable.db'
     source = Source(name='sydneytrains',
                     archive=network_feed(path=path / 'network.zip'))
-    build_timetable(sources=[source],
+    build_timetable(city=SYDNEY, sources=[source],
                     window=Window(start=date(2026, 10, 5), days=3), out=out)
     return out
 
@@ -858,7 +883,7 @@ def test_catalogue_writes_line_stations_for_station_first_lines(
     out = tmp_path / 'timetable.db'
     source = Source(name='sydneytrains',
                     archive=network_feed(path=tmp_path / 'network.zip'))
-    build_timetable(sources=[source],
+    build_timetable(city=SYDNEY, sources=[source],
                     window=Window(start=date(2026, 10, 5), days=3), out=out)
     with closing(sqlite3.connect(out)) as conn:
         t1 = conn.execute(
@@ -880,7 +905,7 @@ def test_catalogue_writes_line_exits(tmp_path: Path) -> None:
     out = tmp_path / 'timetable.db'
     source = Source(name='sydneytrains',
                     archive=network_feed(path=tmp_path / 'network.zip'))
-    build_timetable(sources=[source],
+    build_timetable(city=SYDNEY, sources=[source],
                     window=Window(start=date(2026, 10, 5), days=3), out=out)
     with closing(sqlite3.connect(out)) as conn:
         rows = conn.execute(
@@ -902,7 +927,7 @@ def test_train_lines_sort_sydney_then_intercity_then_trainlink() -> None:
         Entry(key=f'train:{code}', kind=SydneyMode.TRAIN, number=code,
               name=code, tag='', line='')
         for code in ('WST', 'XPT', 'HUN', 'NRC', 'T1', 'STH', 'NRW')
-    ], tagged=tagged_modes(modes=SYDNEY.modes))
+    ], modes=SYDNEY.modes, rules=SYDNEY.catalogue)
     assert sorted((row[5], row[4]) for row in rows) == [
         (1, 'T1'), (105, 'HUN'), (111, 'NRC'), (112, 'NRW'), (113, 'STH'),
         (114, 'WST'), (207, 'XPT'),
@@ -917,7 +942,7 @@ def test_ferry_lines_sort_sydney_ferries_first() -> None:
         for code, name in (
             ('MFF', 'Zeta'), ('F10', 'Ten'), ('F2', 'Two'), ('SM', 'Alpha'),
         )
-    ], tagged=tagged_modes(modes=SYDNEY.modes))
+    ], modes=SYDNEY.modes, rules=SYDNEY.catalogue)
     assert [row[4] for row in sorted(rows, key=lambda row: row[5])] == [
         'F2', 'F10', 'SM', 'MFF',
     ]

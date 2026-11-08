@@ -576,6 +576,7 @@ def build_db(*, path: Path) -> None:
         Database file to create.
     """
     build_timetable(
+        city=SYDNEY,
         sources=[
             Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
             Source(name='bundle', archive=REAL / 'bundle.zip'),

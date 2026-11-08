@@ -13,7 +13,7 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.build.timetable import Window, build_timetable, create_schema
-from paperroute.city import SYDNEY_PROJECTION, SydneyFeed
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyFeed
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.shapes import (
@@ -293,6 +293,7 @@ def test_build_stores_shapes_with_mode_and_bounds(tmp_path: Path) -> None:
     """A bus shape is stored simplified, with its mode and bounds."""
     out = tmp_path / 'timetable.db'
     build_timetable(
+        city=SYDNEY,
         sources=[Source(
             name='bundle',
             archive=shaped_bus_feed(path=tmp_path / 'b.zip', points=ROUTE),

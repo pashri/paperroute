@@ -17,16 +17,14 @@ from paperroute.build.handoff import (
     Handoff,
     RefreshTail,
 )
+from paperroute.build.source_state import SourceState, load_states, save_states
 from paperroute.build.sources import (
     SOURCES,
     SourceSpec,
-    SourceState,
     download,
     file_sha256,
     head,
-    load_states,
     needs_download,
-    save_states,
 )
 from paperroute.build.swap import (
     RefreshReport,
@@ -291,6 +289,7 @@ def build_and_check(*, layout: Layout, changed: tuple[str, ...],
             for spec in SOURCES
         ],
         window=Window(start=yesterday(zone=SYDNEY.zone), days=days),
+        city=SYDNEY,
         out=out,
         handoff=handoff,
     )

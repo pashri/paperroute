@@ -17,6 +17,7 @@ from paperroute.build.trainlink import (
     load_trips,
     trim_trainlink,
 )
+from paperroute.city import REGIONAL_AGENCIES, TRAINLINK
 
 DAY = '20261020'
 NEXT = '20261021'
@@ -148,7 +149,9 @@ def test_same_ends_within_the_window_drop_the_bundle_trip(
         ('C', 8 * HOUR + 61, 8 * HOUR + 61),
         ('A', 12 * HOUR + 5, 12 * HOUR + 5),
     ])
-    assert trim_trainlink(conn=conn) == TrimReport(dropped=1, cut=0)
+    assert trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    ) == TrimReport(dropped=1, cut=0)
     assert trip_ids(conn=conn) == {'n1'}
     assert conn.execute('SELECT * FROM trip_aliases').fetchall() == [
         ('b1', 'n1'),
@@ -167,7 +170,9 @@ def test_departures_further_apart_than_the_window_are_kept(
         ('C', 8 * HOUR + MATCH_SECONDS + 1, 8 * HOUR + MATCH_SECONDS + 1),
         ('A', 12 * HOUR, 12 * HOUR),
     ])
-    assert trim_trainlink(conn=conn) == TrimReport(dropped=0, cut=0)
+    assert trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    ) == TrimReport(dropped=0, cut=0)
     assert trip_ids(conn=conn) == {'b1', 'n1'}
 
 
@@ -177,7 +182,9 @@ def test_twin_ending_early_starts_the_bundle_trip_there(
     """Same first station, twin ends at W: the bundle trip starts at W."""
     add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH)
     add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[:3])
-    assert trim_trainlink(conn=conn) == TrimReport(dropped=0, cut=1)
+    assert trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    ) == TrimReport(dropped=0, cut=1)
     assert stations(conn=conn, trip_id='b1') == ['W', 'A']
     assert conn.execute(
         "SELECT arr, dep FROM stop_times WHERE trip_id = 'b1' AND seq = 2",
@@ -195,7 +202,9 @@ def test_twin_starting_late_ends_the_bundle_trip_there(
         ('W', 10 * HOUR, 10 * HOUR),
         ('A', 12 * HOUR + 60, 12 * HOUR + 60),
     ])
-    assert trim_trainlink(conn=conn) == TrimReport(dropped=0, cut=1)
+    assert trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    ) == TrimReport(dropped=0, cut=1)
     assert stations(conn=conn, trip_id='b1') == ['C', 'M']
 
 
@@ -221,7 +230,9 @@ def test_cut_on_some_dates_makes_a_copy(conn: sqlite3.Connection) -> None:
         dates=(DAY, NEXT),
     )
     add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[:3])
-    assert trim_trainlink(conn=conn) == TrimReport(dropped=0, cut=1)
+    assert trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    ) == TrimReport(dropped=0, cut=1)
     assert stations(conn=conn, trip_id='b1') == ['C', 'M', 'W', 'A']
     assert conn.execute('SELECT * FROM trip_skip').fetchall() == [
         ('b1', DAY),
@@ -247,7 +258,9 @@ def test_drop_on_some_dates_skips_those_dates(
         dates=(DAY, NEXT),
     )
     add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH)
-    assert trim_trainlink(conn=conn) == TrimReport(dropped=0, cut=0)
+    assert trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    ) == TrimReport(dropped=0, cut=0)
     assert conn.execute('SELECT * FROM trip_skip').fetchall() == [
         ('b1', DAY),
     ]
@@ -261,7 +274,9 @@ def test_trips_on_different_dates_are_left_alone(
     add_trip(
         conn=conn, trip_id='n1', route='n', calls=THROUGH, dates=(NEXT,),
     )
-    assert trim_trainlink(conn=conn) == TrimReport(dropped=0, cut=0)
+    assert trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    ) == TrimReport(dropped=0, cut=0)
     assert trip_ids(conn=conn) == {'b1', 'n1'}
 
 
@@ -272,7 +287,9 @@ def test_through_train_carried_as_two_trips_is_dropped(
     add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH)
     add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[:3])
     add_trip(conn=conn, trip_id='n2', route='n', calls=THROUGH[2:])
-    assert trim_trainlink(conn=conn) == TrimReport(dropped=1, cut=0)
+    assert trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    ) == TrimReport(dropped=1, cut=0)
     assert trip_ids(conn=conn) == {'n1', 'n2'}
     assert conn.execute(
         'SELECT trip_id FROM trip_aliases ORDER BY trip_id',
@@ -306,7 +323,9 @@ def test_twin_of_a_head_cut_keeps_its_agency(
     """A twin of a cut trip is not retagged and gets no alias."""
     add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH)
     add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[:3])
-    trim_trainlink(conn=conn)
+    trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    )
     assert agency_of(conn=conn, trip_id='n1') == 'NSWTrains'
     assert conn.execute('SELECT * FROM trip_aliases').fetchall() == []
 
@@ -317,7 +336,9 @@ def test_twin_of_a_tail_cut_keeps_its_agency(
     """The same holds when the twin starts late."""
     add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH)
     add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[1:])
-    trim_trainlink(conn=conn)
+    trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    )
     assert stations(conn=conn, trip_id='b1') == ['C', 'M']
     assert agency_of(conn=conn, trip_id='n1') == 'NSWTrains'
     assert conn.execute('SELECT * FROM trip_aliases').fetchall() == []
@@ -332,7 +353,9 @@ def test_copy_of_a_trimmed_trip_is_an_alias_of_it(
         dates=(DAY, NEXT),
     )
     add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[:3])
-    trim_trainlink(conn=conn)
+    trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    )
     copy = next(trip for trip in trip_ids(conn=conn) if '~' in trip)
     assert conn.execute('SELECT * FROM trip_aliases').fetchall() == [
         ('b1', copy),
@@ -348,7 +371,9 @@ def test_nearest_twin_decides_a_cut(conn: sqlite3.Connection) -> None:
     add_trip(conn=conn, trip_id='n2', route='n', calls=[
         ('C', 8 * HOUR + 10, 8 * HOUR + 10), THROUGH[1], THROUGH[2],
     ])
-    trim_trainlink(conn=conn)
+    trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    )
     assert stations(conn=conn, trip_id='b1') == ['W', 'A']
 
 
@@ -357,7 +382,9 @@ def test_longest_overlap_breaks_a_tie(conn: sqlite3.Connection) -> None:
     add_trip(conn=conn, trip_id='b1', route='b', calls=THROUGH)
     add_trip(conn=conn, trip_id='n1', route='n', calls=THROUGH[:2])
     add_trip(conn=conn, trip_id='n2', route='n', calls=THROUGH[:3])
-    trim_trainlink(conn=conn)
+    trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    )
     assert stations(conn=conn, trip_id='b1') == ['W', 'A']
 
 
@@ -374,7 +401,9 @@ def test_original_with_every_date_handled_is_deleted(
         conn=conn, trip_id='n2', route='n', calls=THROUGH[:3],
         dates=(NEXT,),
     )
-    assert trim_trainlink(conn=conn) == TrimReport(dropped=1, cut=1)
+    assert trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    ) == TrimReport(dropped=1, cut=1)
     assert 'b1' not in trip_ids(conn=conn)
     assert stations(conn=conn, trip_id='b1') == []
     assert conn.execute(
@@ -420,7 +449,9 @@ def test_date_skipped_by_the_rail_merge_is_not_revived(
         conn=conn, trip_id='n1', route='n', calls=THROUGH[:3],
         dates=(DAY, NEXT),
     )
-    trim_trainlink(conn=conn)
+    trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    )
     assert stations(conn=conn, trip_id='b1') == ['W', 'A']
     assert conn.execute(
         'SELECT date FROM trip_skip ORDER BY date',
@@ -437,6 +468,8 @@ def test_trim_ignores_non_service(
     add_trip(conn=conn, trip_id='n1', route='n', calls=[
         ('C', 8 * HOUR, 8 * HOUR), ('A', 12 * HOUR, 12 * HOUR),
     ], service=int(empty != 'n1'))
-    assert trim_trainlink(conn=conn) == TrimReport(dropped=0, cut=0)
+    assert trim_trainlink(
+        conn=conn, agencies=REGIONAL_AGENCIES, lines=TRAINLINK,
+    ) == TrimReport(dropped=0, cut=0)
     assert trip_ids(conn=conn) == {'b1', 'n1'}
     assert stations(conn=conn, trip_id='b1') == ['C', 'M', 'W', 'A']

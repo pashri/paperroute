@@ -15,7 +15,6 @@ from paperroute_transit.build.gtfs_files import insert_many
 from paperroute_transit.core.model import HIDDEN_HEADSIGNS, until_repeated_hop
 from paperroute_transit.core.modes import Classifier
 
-RAIL_TYPES: Final[frozenset[int]] = frozenset({2, 401, 900})
 CALLS: Final[str] = """
 SELECT st.trip_id, COALESCE(NULLIF(s.parent_station, ''), s.stop_id),
   st.arr, st.dep, st.pickup <> 1, st.dropoff <> 1
@@ -202,6 +201,7 @@ def stopping(
 
 def trip_from_rows(
     *, trip: TripRow, calls: Sequence[CallRow], classify: Classifier,
+    rail_types: Collection[int],
 ) -> TripCalls:
     """
     Turn one trip's row and call rows into a TripCalls.
@@ -216,6 +216,8 @@ def trip_from_rows(
         Rows of CALLS for the trip, in stop order.
     classify : Classifier
         Sorts the trip's route into a mode.
+    rail_types : Collection[int]
+        GTFS route types run on rails.
 
     Returns
     -------
@@ -236,7 +238,7 @@ def trip_from_rows(
         block=block, service=sys.intern(service),
         first_dep=calls[0][3], last_arr=calls[-1][2],
         stations=collapsed(stations=(call[1] for call in calls)),
-        rail=route_type in RAIL_TYPES,
+        rail=route_type in rail_types,
         passes=passes_of(no_board=no_board, no_alight=no_alight),
         revenue=bool(revenue), no_board=no_board, no_alight=no_alight,
     )
@@ -244,6 +246,7 @@ def trip_from_rows(
 
 def trip_calls(
     *, conn: sqlite3.Connection, classify: Classifier,
+    rail_types: Collection[int],
 ) -> Iterator[TripCalls]:
     """
     Read every trip with the parent stations it calls at.
@@ -260,6 +263,8 @@ def trip_calls(
         Built timetable.
     classify : Classifier
         Sorts a route into a mode.
+    rail_types : Collection[int]
+        GTFS route types run on rails.
 
     Yields
     ------
@@ -274,6 +279,7 @@ def trip_calls(
         if trip is not None and trip[0] == trip_id:
             yield trip_from_rows(
                 trip=trip, calls=list(calls), classify=classify,
+                rail_types=rail_types,
             )
 
 
@@ -954,6 +960,7 @@ def write_run_table(*, conn: sqlite3.Connection, table: RunTable) -> None:
 
 def load_runs(
     *, conn: sqlite3.Connection, classify: Classifier,
+    rail_types: Collection[int],
 ) -> RunReport:
     """
     Store every shown trip's run, the runs, their stops and the patterns.
@@ -967,6 +974,8 @@ def load_runs(
         Built timetable with the RUN_SCHEMA tables.
     classify : Classifier
         Sorts a route into a mode.
+    rail_types : Collection[int]
+        GTFS route types run on rails.
 
     Returns
     -------
@@ -977,7 +986,9 @@ def load_runs(
     blocks: list[TripCalls] = []
     insert_many(conn=conn, sql='INSERT INTO trip_runs VALUES (?, ?)',
                 rows=plain_trip_runs(
-                    trips=trip_calls(conn=conn, classify=classify),
+                    trips=trip_calls(
+                        conn=conn, classify=classify, rail_types=rail_types,
+                    ),
                     table=table, blocks=blocks,
                 ))
     load_block_runs(conn=conn, table=table, blocks=blocks)

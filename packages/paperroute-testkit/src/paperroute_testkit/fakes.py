@@ -417,7 +417,11 @@ class BrokenTimetable:
         return {}
 
     def alert_places(
-        self, *, route_ids: Collection[str], stop_ids: Collection[str]
+        self,
+        *,
+        route_ids: Collection[str],
+        stop_ids: Collection[str],
+        route_type: int | None = None,
     ) -> AlertPlaces:
         """
         Know no routes or stops.
@@ -427,6 +431,8 @@ class BrokenTimetable:
         route_ids : Collection[str]
             Ignored.
         stop_ids : Collection[str]
+            Ignored.
+        route_type : int | None
             Ignored.
 
         Returns
@@ -456,13 +462,17 @@ class BrokenTimetable:
         """
         return frozenset()
 
-    def serves_trainlink(self, *, stop_ids: Collection[str]) -> bool:
+    def serves_agencies(
+        self, *, stop_ids: Collection[str], agencies: Collection[str],
+    ) -> bool:
         """
-        Know no NSW TrainLink trips.
+        Know no trips of any agency.
 
         Parameters
         ----------
         stop_ids : Collection[str]
+            Ignored.
+        agencies : Collection[str]
             Ignored.
 
         Returns

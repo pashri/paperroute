@@ -18,7 +18,8 @@ from paperroute.build import handoff as handoff_module
 from paperroute.build import refresh as refresh_module
 from paperroute.build import swap
 from paperroute.build.refresh import RefreshBusy, refresh
-from paperroute.build.sources import SOURCES, SourceError
+from paperroute.build.source_state import SourceError
+from paperroute.build.sources import SOURCES
 from paperroute.build.swap import RefreshReport, TimetableCheckError
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from tests.build.feed_server import FeedServer, Served, feed_server

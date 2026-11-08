@@ -15,11 +15,8 @@ from enum import Enum, auto
 from pathlib import Path
 from typing import Final
 
-from paperroute.build.dedupe import MergeReport, merge_rail, relabel_trainlink
 from paperroute.build.extras import build_extras
 from paperroute.build.handoff import Handoff, HandoffRecord, hand_over
-from paperroute.build.trainlink import trim_trainlink
-from paperroute.city import SYDNEY
 from paperroute_device.rss import current_rss_mb, max_rss_mb
 from paperroute_transit.build.gtfs_files import (
     Source,
@@ -30,13 +27,14 @@ from paperroute_transit.build.gtfs_files import (
 )
 from paperroute_transit.build.holidays import holiday_dates
 from paperroute_transit.build.shapes import load_shapes
+from paperroute_transit.core.city import City, MergeReport
+from paperroute_transit.core.geo import DegreeBox
 from paperroute_transit.core.model import HIDDEN_HEADSIGNS, TIMETABLE_SCHEMA
 from paperroute_transit.core.modes import Classifier
 
 logger = logging.getLogger(__name__)
 
 SCHEMA_VERSION: Final[str] = TIMETABLE_SCHEMA
-BUNDLE: Final[str] = 'bundle'
 CATEGORIES: Final[str] = 'vehicle_categories.txt'
 SHORT_SUSPECTS: Final[str] = """
 SELECT j.value FROM json_each(:trips) j
@@ -486,10 +484,10 @@ def load_trips(*, conn: sqlite3.Connection, source: Source,
 
 
 def mark_short_suspects(
-    *, conn: sqlite3.Connection, suspects: set[str],
+    *, conn: sqlite3.Connection, suspects: set[str], bbox: DegreeBox,
 ) -> int:
     """
-    Mark out of service suspects with under two stopping calls or out of NSW.
+    Mark out of service suspects with under two stopping calls or out of area.
 
     Parameters
     ----------
@@ -497,6 +495,8 @@ def mark_short_suspects(
         Database with the suspects' stop times loaded.
     suspects : set[str]
         Trip IDs naming an undefined vehicle category.
+    bbox : DegreeBox
+        The city's area.
 
     Returns
     -------
@@ -504,7 +504,7 @@ def mark_short_suspects(
         Trips marked: those with fewer than two stopping calls, or with
         a stopping call outside the city's area.
     """
-    west, south, east, north = SYDNEY.bbox
+    west, south, east, north = bbox
     short = [
         trip_id
         for (trip_id,) in conn.execute(SHORT_SUSPECTS, {
@@ -580,7 +580,7 @@ def stop_time_rows(*, archive: Path,
 
 
 def load_source(*, conn: sqlite3.Connection, source: Source,
-                window: Window) -> int:
+                window: Window, city: City) -> int:
     """
     Load one feed's stops, routes, services, trips, stop times and shapes.
 
@@ -594,6 +594,8 @@ def load_source(*, conn: sqlite3.Connection, source: Source,
         Feed.
     window : Window
         Dates of interest.
+    city : City
+        The city: its area, route classifier and projection.
 
     Returns
     -------
@@ -613,15 +615,17 @@ def load_source(*, conn: sqlite3.Connection, source: Source,
                 sql='INSERT INTO stop_times VALUES (?, ?, ?, ?, ?, ?, ?)',
                 rows=stop_time_rows(archive=source.archive,
                                     trips=trips.inserted))
-    short = mark_short_suspects(conn=conn, suspects=trips.suspects)
+    short = mark_short_suspects(
+        conn=conn, suspects=trips.suspects, bbox=city.bbox,
+    )
     if trips.hidden + short:
         logger.info('kept %d %s trips out of service',
                     trips.hidden + short, source.name)
     load_shapes(conn=conn, source=source,
                 modes=shape_modes(
-                    conn=conn, source=source, classify=SYDNEY.classify,
+                    conn=conn, source=source, classify=city.classify,
                 ),
-                projection=SYDNEY.projection)
+                projection=city.projection)
     conn.commit()
     return len(trips.inserted)
 
@@ -679,7 +683,7 @@ def load_holidays(*, conn: sqlite3.Connection, archive: Path,
 
 
 def load_all(*, sources: list[Source], window: Window,
-             scratch: Path) -> MergeReport:
+             scratch: Path, city: City) -> MergeReport:
     """
     Load every source into a new file and merge rail duplicates.
 
@@ -691,26 +695,30 @@ def load_all(*, sources: list[Source], window: Window,
         Dates to cover.
     scratch : Path
         New timetable file.
+    city : City
+        The city the timetable is for.
 
     Returns
     -------
     MergeReport
-        Result of merging rail duplicates.
+        Result of the city's merge.
     """
     with closing(sqlite3.connect(scratch)) as conn:
         create_schema(conn=conn)
         for source in sources:
             print(f'progress load {source.name}', flush=True)
-            load_source(conn=conn, source=source, window=window)
-            if source.name == BUNDLE:
+            load_source(conn=conn, source=source, window=window, city=city)
+            if source.name == city.timetable.holiday_source:
                 load_holidays(conn=conn, archive=source.archive,
                               window=window)
-        return merged(conn=conn, window=window)
+        return merged(conn=conn, window=window, city=city)
 
 
-def merged(*, conn: sqlite3.Connection, window: Window) -> MergeReport:
+def merged(
+    *, conn: sqlite3.Connection, window: Window, city: City,
+) -> MergeReport:
     """
-    Merge the rail feeds, trim NSW TrainLink and finish the file.
+    Run the city's merge and finish the file.
 
     Parameters
     ----------
@@ -718,34 +726,34 @@ def merged(*, conn: sqlite3.Connection, window: Window) -> MergeReport:
         Timetable being built, every source loaded.
     window : Window
         Dates loaded.
+    city : City
+        The city: its merge hook and projection origin.
 
     Returns
     -------
     MergeReport
-        What the rail merge did.
+        What the merge did.
     """
     print('progress merge', flush=True)
-    report = merge_rail(conn=conn)
-    trim_trainlink(conn=conn)
-    relabel_trainlink(conn=conn)
+    report = city.timetable.merge(conn=conn)
     conn.execute(DROP_UNUSED_SHAPES)
     create_indexes(conn=conn)
     write_meta(
         conn=conn,
         window=window,
-        origin=SYDNEY.projection.origin_text,
+        origin=city.projection.origin_text,
     )
     conn.commit()
     return report
 
 
-def build_timetable(*, sources: list[Source], window: Window,
-                    out: Path, handoff: Handoff | None = None) -> MergeReport:
+def build_timetable(*, sources: list[Source], window: Window, out: Path,
+                    city: City, handoff: Handoff | None = None) -> MergeReport:
     """
     Build a timetable file from sources, replacing out only on success.
 
-    Load preferred feeds (Sydney Trains, Metro) before the bundle so that a
-    trip ID in both keeps the preferred copy. The run tables are then built
+    Load preferred feeds before the bundle so that a trip ID in both keeps
+    the preferred copy. The run tables are then built
     in a child process, see build_extras.
 
     Parameters
@@ -756,6 +764,8 @@ def build_timetable(*, sources: list[Source], window: Window,
         Dates to cover.
     out : Path
         Timetable file to write.
+    city : City
+        The city the timetable is for.
     handoff : Handoff | None
         When set, write the handoff file and exec into the extras program
         instead of returning, so the load and the extras never share
@@ -768,7 +778,9 @@ def build_timetable(*, sources: list[Source], window: Window,
     """
     scratch = out.with_suffix('.new')
     scratch.unlink(missing_ok=True)
-    report = load_all(sources=sources, window=window, scratch=scratch)
+    report = load_all(
+        sources=sources, window=window, scratch=scratch, city=city,
+    )
     gc.collect()
     print(
         f'progress extras parent {current_rss_mb():.0f}MB '

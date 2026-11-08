@@ -575,7 +575,7 @@ def trainlink_fetches(
         The alert fetches of that tick.
     """
     state, _ = loaded_with(state=started(pins=(pin,)), modes=(mode,))
-    event = BetweenLoaded(pin=pin, names=frozenset(), trainlink=trainlink)
+    event = BetweenLoaded(pin=pin, names=frozenset(), agency_alerts=trainlink)
     state, _ = step(state, event)
     _, fetches = tick_at(state=state, after=timedelta(minutes=1))
     return fetches
@@ -585,7 +585,7 @@ def test_trainlink_answer_fetches_its_feed_at_once() -> None:
     """A TrainLink feed newly needed is fetched at once, and only it."""
     pin = PARRAMATTA_CENTRAL
     state, _ = loaded_with(state=started(pins=(pin,)), modes=(SydneyFeed.TRAIN,))
-    event = BetweenLoaded(pin=pin, names=frozenset(), trainlink=True)
+    event = BetweenLoaded(pin=pin, names=frozenset(), agency_alerts=True)
     state, effects = step(state, event)
     assert alert_fetches(effects=effects) == [
         FetchFeed(feed=REGIONAL, kind=FeedKind.ALERTS),
@@ -612,7 +612,7 @@ def test_trainlink_answer_for_other_pin_ignored() -> None:
     pins = (PARRAMATTA_CENTRAL, STRATHFIELD_TOWN_HALL)
     state, _ = loaded_with(state=started(pins=pins))
     event = BetweenLoaded(
-        pin=PARRAMATTA_CENTRAL, names=frozenset(), trainlink=True,
+        pin=PARRAMATTA_CENTRAL, names=frozenset(), agency_alerts=True,
     )
     state, _ = step(state, event)
     state, _ = step(state, KnobTurned(knob=Knob.TOP, steps=1))

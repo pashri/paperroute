@@ -8,46 +8,11 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from typing import Final
 
+from paperroute_transit.core.city import PlaceNames
 from paperroute_transit.core.geo import Point, Projection, to_metres
 
 logger = logging.getLogger(__name__)
 
-CENTRES: Final[tuple[tuple[str, float, float, float], ...]] = (
-    ('Sydney', 151.207, -33.870, 55),
-    ('Newcastle', 151.750, -32.930, 40),
-    ('C Coast', 151.340, -33.430, 30),
-    ('Wollongong', 150.890, -34.420, 30),
-    ('Blue Mtns', 150.400, -33.700, 25),
-)  # label, lon, lat, radius in km
-PLACE_SUFFIX: Final[re.Pattern[str]] = re.compile(
-    r'\s+(City Centre|Town Centre|CBD|Station|Interchange|Mall|City|Park Ave'
-    r'|Shopping Centre|Shops|Market Square|Manning Mall|East|West|North'
-    r'|South|CBD)$',
-)
-PLACE_SHORT: Final[dict[str, str]] = {
-    'Port Macquarie': 'Port Mac',
-    'Coffs Harbour': 'Coffs',
-    'Wagga Wagga': 'Wagga',
-    'Batemans Bay': 'Batemans',
-    'Raymond Terrace': 'Raymond T',
-    'Soldiers Point': 'Soldiers P',
-    'Muswellbrook': 'Muswellbk',
-    'Murwillumbah': 'Murwillum',
-    'Queanbeyan': 'Queanbeyan',
-    'University of Wollongong': 'UOW',
-    'City Martin Place': 'City',
-    'City Wynyard': 'City',
-    'City QVB': 'City',
-    'Broken Hill': 'Broken Hl',
-    'Campbelltown': 'Campbelltn',
-    'Stockland Forster': 'Forster',
-    'QEII Square': 'Albury',
-    'Orana': 'Dubbo',
-    'Green Hills': 'Maitland',
-    'Park Beach Plaza': 'Coffs',
-    'Toormina Gardens': 'Coffs',
-    'Sunnyside': 'Murwillum',
-}
 TAG_MAX: Final[int] = 10
 LEVELS: Final[int] = 4  # region, first place, last place, via place
 WORD: Final[re.Pattern[str]] = re.compile(r'[^\W_]+')
@@ -83,7 +48,7 @@ class CatalogueRoute:
     middle: Point | None
 
 
-def end_places(*, long_name: str) -> list[str]:
+def end_places(*, long_name: str, places: PlaceNames) -> list[str]:
     """
     Pull the place names out of a long name such as 'A to B via C'.
 
@@ -91,6 +56,8 @@ def end_places(*, long_name: str) -> list[str]:
     ----------
     long_name : str
         Route long name.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
@@ -100,13 +67,13 @@ def end_places(*, long_name: str) -> list[str]:
     """
     trimmed = re.split(r' via |\(| or | and ', long_name)[0]
     return [
-        PLACE_SUFFIX.sub('', part.strip()).strip()
+        places.suffix.sub('', part.strip()).strip()
         for part in trimmed.split(' to ')
         if part.strip() and part.strip() != 'Unknown'
     ]
 
 
-def via_place(*, long_name: str) -> str:
+def via_place(*, long_name: str, places: PlaceNames) -> str:
     """
     Find the place a long name says the route runs via.
 
@@ -114,6 +81,8 @@ def via_place(*, long_name: str) -> str:
     ----------
     long_name : str
         Route long name.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
@@ -122,11 +91,13 @@ def via_place(*, long_name: str) -> str:
         there is none.
     """
     _, via, rest = long_name.partition(' via ')
-    place = PLACE_SUFFIX.sub('', rest.split('(')[0].strip()).strip()
+    place = places.suffix.sub('', rest.split('(')[0].strip()).strip()
     return place if via else ''
 
 
-def short_tag(*, place: str, other: str | None = None) -> str:
+def short_tag(
+    *, place: str, places: PlaceNames, other: str | None = None,
+) -> str:
     """
     Shorten a place to a tag, keeping it apart from another place.
 
@@ -134,27 +105,35 @@ def short_tag(*, place: str, other: str | None = None) -> str:
     ----------
     place : str
         Place name.
+    places : PlaceNames
+        How place names are read and shortened.
     other : str | None
         A different place whose cut might read the same.
 
     Returns
     -------
     str
-        The PLACE_SHORT form or the name when it fits TAG_MAX, else its
+        The short form or the name when it fits TAG_MAX, else its
         first nine characters and '.'; when that equals the other's cut
         although the names differ, its first four characters, '.', then
         its last five.
     """
-    short = PLACE_SHORT.get(place, place)
+    short = places.short.get(place, place)
     cut = short
     if len(short) > TAG_MAX:
         cut = short[:TAG_MAX - 1].rstrip() + '.'
-    if other is None or other == place or short_tag(place=other) != cut:
+    if (
+        other is None
+        or other == place
+        or short_tag(place=other, places=places) != cut
+    ):
         return cut
     return f'{short[:4]}.{short[-5:]}'
 
 
-def agency_towns(*, routes: Sequence[CatalogueRoute]) -> dict[str, str]:
+def agency_towns(
+    *, routes: Sequence[CatalogueRoute], places: PlaceNames,
+) -> dict[str, str]:
     """
     Name each operator after the place its routes most often end at.
 
@@ -162,6 +141,8 @@ def agency_towns(*, routes: Sequence[CatalogueRoute]) -> dict[str, str]:
     ----------
     routes : Sequence[CatalogueRoute]
         Routes.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
@@ -170,15 +151,22 @@ def agency_towns(*, routes: Sequence[CatalogueRoute]) -> dict[str, str]:
     """
     ends: dict[str, Counter[str]] = defaultdict(Counter)
     for route in routes:
-        ends[route.agency].update(end_places(long_name=route.long_name))
+        ends[route.agency].update(
+            end_places(long_name=route.long_name, places=places),
+        )
     return {
-        agency: places.most_common(1)[0][0]
-        for agency, places in ends.items()
-        if places
+        agency: found.most_common(1)[0][0]
+        for agency, found in ends.items()
+        if found
     }
 
 
-def centre_of(*, middle: Point, projection: Projection) -> str | None:
+def centre_of(
+    *,
+    middle: Point,
+    projection: Projection,
+    centres: Sequence[tuple[str, float, float, float]],
+) -> str | None:
     """
     Find the big centre a point belongs to, if any.
 
@@ -188,6 +176,8 @@ def centre_of(*, middle: Point, projection: Projection) -> str | None:
         Position in metres.
     projection : Projection
         The projection the position is in.
+    centres : Sequence[tuple[str, float, float, float]]
+        Big centres as label, longitude, latitude and radius in km.
 
     Returns
     -------
@@ -196,7 +186,7 @@ def centre_of(*, middle: Point, projection: Projection) -> str | None:
         radius, or None outside them all.
     """
     reach = []
-    for label, lon, lat, radius in CENTRES:
+    for label, lon, lat, radius in centres:
         reached = math.dist(
             middle,
             to_metres(lon=lon, lat=lat, projection=projection),
@@ -211,6 +201,7 @@ def level_values(
     route: CatalogueRoute,
     towns: Mapping[str, str],
     projection: Projection,
+    places: PlaceNames,
 ) -> tuple[str, str, str, str]:
     """
     Give a route's candidate tags, level by level.
@@ -223,6 +214,8 @@ def level_values(
         Place by operator ID.
     projection : Projection
         The projection route middles are in.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
@@ -233,18 +226,24 @@ def level_values(
     centre = (
         None
         if route.middle is None
-        else centre_of(middle=route.middle, projection=projection)
+        else centre_of(
+            middle=route.middle,
+            projection=projection,
+            centres=places.centres,
+        )
     )
-    places = end_places(long_name=route.long_name) or ['']
+    ends = end_places(long_name=route.long_name, places=places) or ['']
     return (
         centre or towns.get(route.agency, UNKNOWN_TOWN),
-        places[0],
-        places[-1],
-        via_place(long_name=route.long_name),
+        ends[0],
+        ends[-1],
+        via_place(long_name=route.long_name, places=places),
     )
 
 
-def twin_of(*, place: str, places: Iterable[str]) -> str | None:
+def twin_of(
+    *, place: str, others: Iterable[str], places: PlaceNames,
+) -> str | None:
     """
     Find another place whose cut reads the same as this one's.
 
@@ -252,27 +251,29 @@ def twin_of(*, place: str, places: Iterable[str]) -> str | None:
     ----------
     place : str
         Place.
-    places : Iterable[str]
+    others : Iterable[str]
         Places to look through.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
     str | None
         The first different place with the same cut, if any.
     """
-    cut = short_tag(place=place)
+    cut = short_tag(place=place, places=places)
     return next(
         (
             other
-            for other in places
-            if other != place and short_tag(place=other) == cut
+            for other in others
+            if other != place and short_tag(place=other, places=places) == cut
         ),
         None,
     )
 
 
 def level_tags(
-    *, values: Mapping[str, str], given: set[str],
+    *, values: Mapping[str, str], given: set[str], places: PlaceNames,
 ) -> dict[str, str]:
     """
     Tag the routes whose value at one level tells them apart.
@@ -283,6 +284,8 @@ def level_tags(
         Each untagged route's value at the level, by route key.
     given : set[str]
         Tags already given in the group.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
@@ -291,7 +294,11 @@ def level_tags(
     """
     tags = {
         key: short_tag(
-            place=value, other=twin_of(place=value, places=values.values()),
+            place=value,
+            places=places,
+            other=twin_of(
+                place=value, others=values.values(), places=places,
+            ),
         )
         for key, value in values.items()
         if value not in ('', UNKNOWN_TOWN)
@@ -306,7 +313,7 @@ def level_tags(
 
 def differing_word(
     *, words: tuple[str, ...], others: Sequence[tuple[str, ...]],
-    taken: set[str],
+    taken: set[str], places: PlaceNames,
 ) -> str | None:
     """
     Find the first word unlike the other routes' words in its place.
@@ -319,6 +326,8 @@ def differing_word(
         The other routes' words.
     taken : set[str]
         Tags already used.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
@@ -328,16 +337,19 @@ def differing_word(
     """
     return next(
         (
-            short_tag(place=word)
+            short_tag(place=word, places=places)
             for index, word in enumerate(words)
             if all(other[index:index + 1] != (word,) for other in others)
-            and short_tag(place=word) not in taken
+            and short_tag(place=word, places=places) not in taken
         ),
         None,
     )
 
 
-def free_word(*, words: tuple[str, ...], taken: set[str], number: str) -> str:
+def free_word(
+    *, words: tuple[str, ...], taken: set[str], number: str,
+    places: PlaceNames,
+) -> str:
     """
     Pick a route's first word whose tag is not yet used.
 
@@ -349,6 +361,8 @@ def free_word(*, words: tuple[str, ...], taken: set[str], number: str) -> str:
         Tags already used.
     number : str
         Route number, the tag when the long name has no words.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
@@ -356,12 +370,15 @@ def free_word(*, words: tuple[str, ...], taken: set[str], number: str) -> str:
         That tag; else the first word's tag (shared), or the number with
         no words.
     """
-    tags = [short_tag(place=word) for word in words] or [number]
+    tags = [
+        short_tag(place=word, places=places)
+        for word in words
+    ] or [number]
     return next((tag for tag in tags if tag not in taken), tags[0])
 
 
 def differing_picks(
-    *, units: Sequence[tuple[str, ...]], taken: set[str],
+    *, units: Sequence[tuple[str, ...]], taken: set[str], places: PlaceNames,
 ) -> dict[tuple[str, ...], str]:
     """
     Pick for each name a word the other names lack, where there is one.
@@ -372,6 +389,8 @@ def differing_picks(
         Each distinct name's words.
     taken : set[str]
         Words already used; each pick is added.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
@@ -381,14 +400,17 @@ def differing_picks(
     picks: dict[tuple[str, ...], str] = {}
     for unit in units:
         others = [other for other in units if other != unit]
-        if pick := differing_word(words=unit, others=others, taken=taken):
+        pick = differing_word(
+            words=unit, others=others, taken=taken, places=places,
+        )
+        if pick:
             picks[unit] = pick
             taken.add(pick)
     return picks
 
 
 def word_tags(
-    *, routes: Sequence[CatalogueRoute], given: set[str],
+    *, routes: Sequence[CatalogueRoute], given: set[str], places: PlaceNames,
 ) -> dict[str, str]:
     """
     Tag routes alike at every level by a word of their long names.
@@ -401,6 +423,8 @@ def word_tags(
         Routes left untagged.
     given : set[str]
         Tags already given in the group.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
@@ -413,10 +437,10 @@ def word_tags(
     }
     units = list(dict.fromkeys(words.values()))
     taken = set(given)
-    picks = differing_picks(units=units, taken=taken)
+    picks = differing_picks(units=units, taken=taken, places=places)
     for unit in (unit for unit in units if unit not in picks):
         picks[unit] = free_word(
-            words=unit, taken=taken, number=routes[0].number,
+            words=unit, taken=taken, number=routes[0].number, places=places,
         )
         taken.add(picks[unit])
     return {key: picks[unit] for key, unit in words.items()}
@@ -455,6 +479,7 @@ def group_tags(
     group: Sequence[CatalogueRoute],
     towns: Mapping[str, str],
     projection: Projection,
+    places: PlaceNames,
 ) -> dict[str, str]:
     """
     Tag the routes of one repeated number.
@@ -470,6 +495,8 @@ def group_tags(
         Place by operator ID.
     projection : Projection
         The projection route middles are in.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
@@ -481,6 +508,7 @@ def group_tags(
             route=route,
             towns=towns,
             projection=projection,
+            places=places,
         )
         for route in group
     }
@@ -493,10 +521,13 @@ def group_tags(
                 if key not in tags
             },
             given=set(tags.values()),
+            places=places,
         ))
     left = [route for route in group if route.route_key not in tags]
     if left:
-        tags.update(word_tags(routes=left, given=set(tags.values())))
+        tags.update(word_tags(
+            routes=left, given=set(tags.values()), places=places,
+        ))
     if clashing := clashes(tags=tags, left=left):
         logger.warning(
             'route tags clash after every level: %s', ', '.join(clashing),
@@ -509,6 +540,7 @@ def tags_of(
     routes: Sequence[CatalogueRoute],
     towns: Mapping[str, str],
     projection: Projection,
+    places: PlaceNames,
 ) -> dict[str, str]:
     """
     Tag every route whose kind and number repeat.
@@ -521,6 +553,8 @@ def tags_of(
         Place by operator ID.
     projection : Projection
         The projection route middles are in.
+    places : PlaceNames
+        How place names are read and shortened.
 
     Returns
     -------
@@ -536,6 +570,11 @@ def tags_of(
     for group in groups.values():
         if len(group) > 1:
             tags.update(
-                group_tags(group=group, towns=towns, projection=projection),
+                group_tags(
+                    group=group,
+                    towns=towns,
+                    projection=projection,
+                    places=places,
+                ),
             )
     return tags

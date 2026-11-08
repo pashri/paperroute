@@ -2,11 +2,14 @@
 
 import importlib.util
 import sys
+from dataclasses import replace
 from pathlib import Path
 from types import ModuleType
 from typing import Final
 
 import pytest
+
+from tests.golden.test_golden_state import HOME, RICH_SAVED
 
 ROOT: Final[Path] = Path(__file__).parents[1]
 SCRIPT: Final[Path] = ROOT / 'scripts' / 'check_state_backups.py'
@@ -45,6 +48,40 @@ def test_golden_state_checks_clean(
     pins = found['pins']
     assert len(pins) == 2
     assert (pins[1]['kind'], pins[1]['routes']) == ('bus', ['606', '609'])
+    assert pins[0]['missing'] is False
+    assert pins[0]['destination']['name'] == 'Westmead Station'
+    assert pins[0]['destination']['point'] == [800.0, -1900.0]
+    assert [way['ticked'] for way in pins[0]['ways']] == [True, True]
+    assert pins[0]['ways'][1]['changes'][1]['allow'] == 4
+    assert pins[1]['windows'] == [
+        {'days': [0, 1, 2, 3, 4], 'start': '17:00:00', 'end': '18:00:00'},
+    ]
+    auto = found['auto']
+    assert auto['overridden_at'] == '2026-10-16T17:20:00+11:00'
+    assert auto['occurrence']['ref'] == pins[1]['ref']
+    assert auto['occurrence']['start'] == '2026-10-16T06:00:00+00:00'
+    assert (auto['before'], auto['before_pinned']) == (pins[0]['ref'], True)
+
+
+def test_digest_unpinned_in_full(check_state_backups: ModuleType) -> None:
+    """An unpinned place is digested like a pin, not by ref alone."""
+    found = check_state_backups.digest(
+        saved=replace(RICH_SAVED, unpinned=HOME),
+    )
+    assert found['unpinned'] == found['pins'][1]
+
+
+def test_plain_sorts_sets(check_state_backups: ModuleType) -> None:
+    """Sets come out in one order whatever order they were built in."""
+    assert check_state_backups.plain(frozenset({4, 0, 2})) == [0, 2, 4]
+    assert check_state_backups.plain({'b', 'a'}) == ['a', 'b']
+
+
+def test_empty_dir_fails(
+    check_state_backups: ModuleType, tmp_path: Path,
+) -> None:
+    """A folder with no state files fails the run."""
+    assert check_state_backups.main(['--dir', str(tmp_path)]) == 1
 
 
 def test_bad_file_reported(

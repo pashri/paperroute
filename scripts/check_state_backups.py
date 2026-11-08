@@ -67,41 +67,31 @@ def plain(value: object) -> object:
     return value
 
 
-def pin_digest(*, pin: Pin) -> dict[str, object]:
+def pin_digest(*, pin: Pin | None) -> dict[str, object] | None:
     """
     Sum up one pin.
 
     Parameters
     ----------
-    pin : Pin
-        Pin.
+    pin : Pin | None
+        Pin, or None.
 
     Returns
     -------
-    dict[str, object]
-        Its ref, nickname, kind, end stop IDs, route lists and how many
-        ways and windows it has.
+    dict[str, object] | None
+        Its ref and every field, with places' names and points, ways and
+        windows in full; None for no pin.
     """
-    destination = pin.destination
-    return {
-        'ref': pin_ref(pin=pin),
-        'nickname': pin.nickname,
-        'kind': None if pin.kind is None else str(pin.kind),
-        'ends': [
-            pin.origin.stop_id,
-            None if destination is None else destination.stop_id,
-        ],
-        'routes': list(pin.routes),
-        'only': list(pin.only),
-        'never': list(pin.never),
-        'ways': len(pin.ways),
-        'windows': len(pin.windows),
-    }
+    if pin is None:
+        return None
+    fields = plain(pin)
+    assert isinstance(fields, dict)
+    return {'ref': pin_ref(pin=pin), **fields}
 
 
 def auto_digest(*, auto: AutoState) -> dict[str, object]:
     """
-    Sum up the automatic pin's state by refs.
+    Sum up the automatic pin's state.
 
     Parameters
     ----------
@@ -111,14 +101,15 @@ def auto_digest(*, auto: AutoState) -> dict[str, object]:
     Returns
     -------
     dict[str, object]
-        The running occurrence's ref, and the ref and pinned flag of the
-        place shown before it.
+        Every field, with the place shown before as its ref and whether
+        it was pinned.
     """
-    occurrence, before = auto.occurrence, auto.before
+    before = auto.before
     return {
-        'occurrence': None if occurrence is None else occurrence.ref,
+        'occurrence': plain(auto.occurrence),
         'before': None if before is None else pin_ref(pin=before.place),
         'before_pinned': None if before is None else before.pinned,
+        'overridden_at': plain(auto.overridden_at),
     }
 
 
@@ -134,14 +125,13 @@ def digest(*, saved: Saved) -> dict[str, object]:
     Returns
     -------
     dict[str, object]
-        Pins, current index, unpinned ref, view, settings, quota and auto
-        refs, ready for JSON. No schema version.
+        Pins, current index, unpinned place, view, settings, quota and
+        auto state, ready for JSON. No schema version.
     """
-    unpinned = saved.unpinned
     return {
         'pins': [pin_digest(pin=pin) for pin in saved.pins],
         'current': saved.current,
-        'unpinned': None if unpinned is None else pin_ref(pin=unpinned),
+        'unpinned': pin_digest(pin=saved.unpinned),
         'view': str(saved.view),
         'settings': plain(saved.settings),
         'quota': plain(saved.quota),
@@ -197,13 +187,17 @@ def main(argv: list[str] | None = None) -> int:
     Returns
     -------
     int
-        0 when every file is clean, else 1.
+        0 when every file is clean, else 1, as when there are none.
     """
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dir', type=Path, default=BACKUPS)
     args = parser.parse_args(argv)
+    paths = sorted(args.dir.glob('state-*.json'))
+    if not paths:
+        print(f'{args.dir}: no state-*.json files', file=sys.stderr)
+        return 1
     failed = False
-    for path in sorted(args.dir.glob('state-*.json')):
+    for path in paths:
         with tempfile.TemporaryDirectory() as work:
             found, problems = check_file(path=path, work=Path(work))
         for problem in problems:

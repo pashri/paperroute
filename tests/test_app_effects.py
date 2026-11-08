@@ -5,7 +5,7 @@ import errno
 import logging
 import sqlite3
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import date, timedelta
 
 import numpy as np
@@ -654,6 +654,7 @@ class PlacesTimetable(EmptyPlacedTimetable):
 
     places: AlertPlaces = AlertPlaces(routes={}, stops={})
     asked: int = 0
+    route_types: list[int | None] = field(default_factory=list)
 
     def alert_places(
         self,
@@ -672,15 +673,19 @@ class PlacesTimetable(EmptyPlacedTimetable):
         stop_ids : Collection[str]
             Ignored.
         route_type : int | None
-            Ignored.
+            Noted; the fixed only line is given for type 401 alone.
 
         Returns
         -------
         AlertPlaces
-            The fixed places.
+            The fixed places, with no only line unless `route_type` is
+            401.
         """
         self.asked += 1
-        return self.places
+        self.route_types.append(route_type)
+        if route_type == 401:
+            return self.places
+        return replace(self.places, only_line=None)
 
 
 def alert_event(
@@ -739,6 +744,7 @@ def test_alert_feed_parsed_to_event() -> None:
     assert lines['WST_2c'] == 'sydneytrains:WST_2c'
     assert lines['WST_1a'] is None
     assert timetable.asked == 1
+    assert timetable.route_types == [None]
 
 
 def metro_alert(
@@ -785,6 +791,7 @@ def test_metro_feed_routes_resolve_to_the_line() -> None:
         None,
         None,
     ]
+    assert timetable.route_types == [401, None]
 
 
 def test_metro_feed_keeps_resolved_routes() -> None:

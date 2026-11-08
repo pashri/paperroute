@@ -1692,7 +1692,7 @@ def test_install_release_sets_timer_zone_after_health() -> None:
     """The timer's zone changes only once the new release is healthy."""
     text = script_text(path=BIN / 'install-release')
     body = script_function(path=BIN / 'install-release', name='set_timer_zone')
-    call = text.index('\nset_timer_zone "$ZONE"\n')
+    call = text.index('\nif ! reason=$(set_timer_zone "$ZONE" 2>&1); then\n')
     assert text.count('set_timer_zone "$ZONE"') == 1
     assert text.rindex('healthy') < call
     assert "printf 'OnCalendar=\\n'" in body
@@ -1702,6 +1702,40 @@ def test_install_release_sets_timer_zone_after_health() -> None:
     assert script_value(path=BIN / 'install-release', name='ZONE_CONF') == (
         '/etc/systemd/system/paperroute-timetable.timer.d/city-zone.conf'
     )
+
+
+def test_install_release_reports_unset_timer_zone() -> None:
+    """A failed zone write says the release is live, why, and exits 1."""
+    text = script_text(path=BIN / 'install-release')
+    call = text.index('\nif ! reason=$(set_timer_zone "$ZONE" 2>&1); then\n')
+    said = text.index(
+        "'install-release: %s is live, but the timer zone was not set: %s\\n'",
+    )
+    failed = text.index('    exit 1\nfi\nprune\n')
+    assert call < said < failed
+    assert text.index('"$SHA" "${reason:-no reason given}" >&2') < failed
+
+
+def test_set_timer_zone_fails_at_first_step(tmp_path: Path) -> None:
+    """Under `if`, a failed step still ends set_timer_zone, with a reason."""
+    blocker = tmp_path / 'blocker'
+    blocker.write_text('', encoding='utf-8')
+    log = tmp_path / 'systemctl.log'
+    program = (
+        f'ZONE_CONF={blocker}/timer.d/city-zone.conf\n'
+        f'systemctl() {{ printf "%s\\n" "$*" >>{log}; }}\n'
+        'if ! reason=$(set_timer_zone Australia/Perth 2>&1); then\n'
+        '    printf "failed: %s\\n" "$reason"\n'
+        'fi\n'
+    )
+    result = run_functions(
+        names=('set_timer_zone',),
+        program=program,
+        env=user_env(),
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.startswith('failed: mkdir')
+    assert not log.exists()
 
 
 def test_install_release_starts_without_timetable() -> None:

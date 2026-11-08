@@ -154,21 +154,22 @@ roll_back() {
 }
 
 # Points the nightly timer at the zone; reloads only when it changed.
+# Returns non-zero at the first failed step (set -e is off under `if`).
 set_timer_zone() {
     local tmp
-    mkdir -p -- "${ZONE_CONF%/*}"
-    tmp=$(mktemp "$ZONE_CONF.XXXXXX")
+    mkdir -p -- "${ZONE_CONF%/*}" || return
+    tmp=$(mktemp "$ZONE_CONF.XXXXXX") || return
     {
         printf '[Timer]\n'
         printf 'OnCalendar=\n'
         printf 'OnCalendar=*-*-* 03:30:00 %s\n' "$1"
-    } >"$tmp"
-    chmod 644 "$tmp"
+    } >"$tmp" || return
+    chmod 644 "$tmp" || return
     if cmp -s "$tmp" "$ZONE_CONF"; then
         rm -f -- "$tmp"
         return 0
     fi
-    mv -f -- "$tmp" "$ZONE_CONF"
+    mv -f -- "$tmp" "$ZONE_CONF" || return
     systemctl daemon-reload
 }
 
@@ -222,6 +223,11 @@ switch_to "$R/$SHA"
 if ! systemctl restart paperroute || ! healthy; then
     roll_back
 fi
-set_timer_zone "$ZONE"
+if ! reason=$(set_timer_zone "$ZONE" 2>&1); then
+    reason=${reason//$'\n'/; }
+    printf 'install-release: %s is live, but the timer zone was not set: %s\n' \
+        "$SHA" "${reason:-no reason given}" >&2
+    exit 1
+fi
 prune
 printf 'install-release: %s is live\n' "$SHA"

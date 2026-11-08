@@ -1086,11 +1086,11 @@ def test_parse_args_selftest_needs_nothing(
     assert parse_args().command == 'selftest'
 
 
-
 def test_zone_prints_city_zone(capsys: pytest.CaptureFixture[str]) -> None:
     """The zone command prints the city's IANA zone and a newline."""
     cli.main(city=SYDNEY, parts=SYDNEY_PARTS, argv=['zone'])
     assert capsys.readouterr() == ('Australia/Sydney\n', '')
+
 
 def test_feeds_client_calls_live_only_when_live(tmp_path: Path) -> None:
     """Replayed feeds never make the live client; live feeds guard it."""

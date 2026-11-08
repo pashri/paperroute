@@ -110,13 +110,13 @@ unplug the data cable.
 
 ### Upgrade from the previous install
 
-1. Run `scripts/deploy <user>@paperroute.local sydney`.
-2. Wait until the app has written `/var/lib/paperroute/state.json`.
-3. Run `scripts/provision <user>@paperroute.local` once more, without
-   `--reboot`. It refuses to run before step 2 finishes.
-4. Rebuild the timetable, as in Install step 4 (the nightly 03:30 run does
-   it too). Until it finishes the line chooser says "Routes need a timetable
-   update".
+When the release changes the systemd units, as the move to city apps does:
+
+1. Run `scripts/provision <user>@paperroute.local`, without `--reboot`.
+2. Straight away, run `scripts/deploy <user>@paperroute.local sydney`.
+
+Do not reboot between the two: the old release cannot run under the new
+units. When the units do not change, step 2 alone is enough.
 
 ### Green LED
 

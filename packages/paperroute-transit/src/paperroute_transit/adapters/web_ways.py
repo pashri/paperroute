@@ -114,8 +114,6 @@ SUGGEST: Final[str] = """
                   formaction="/pins/ways/suggest"
                   data-suggest>Suggest with Trip Planner</button>
         </p>{suggestions}"""
-EMPTY_LIST: Final[str] = """
-        <div class="suggestions" aria-live="polite" data-suggestions></div>"""
 
 type CardOf = Callable[[MultiMapping[str]], str]
 
@@ -477,7 +475,7 @@ def stop_places(
 
 def plain_card(query: MultiMapping[str]) -> str:
     """
-    Draw the Suggest button with an empty suggestion list.
+    Draw no card, for a city with no suggestion plug.
 
     Parameters
     ----------
@@ -487,10 +485,10 @@ def plain_card(query: MultiMapping[str]) -> str:
     Returns
     -------
     str
-        The button and the list.
+        An empty string.
     """
     del query
-    return SUGGEST.format(suggestions=EMPTY_LIST)
+    return ''
 
 
 class WaysPages:
@@ -506,7 +504,8 @@ class WaysPages:
     options : PinOptions | None
         The timetable's choices, or None.
     card : CardOf
-        Draws the Trip Planner controls for a query.
+        Draws the suggestion plug's card for a query; the default draws
+        none.
     head : BoardHead
         The extra stylesheets and scripts each page links, and its nav.
     """

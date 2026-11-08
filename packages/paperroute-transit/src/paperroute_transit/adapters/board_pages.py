@@ -115,11 +115,18 @@ class PinPages:
         Adds pages and the ways page's card, or None for neither.
     head : BoardHead
         The extra stylesheets and scripts every page links, and its nav.
+        Its scripts never name the suggestion script, which only a plug
+        adds.
 
     Attributes
     ----------
     pins_sleep : Callable[[float], Awaitable[None]]
         How the Pins page waits for a new report; set before `routes`.
+
+    Raises
+    ------
+    ValueError
+        When `head` names the suggestion script.
     """
 
     def __init__(
@@ -131,6 +138,8 @@ class PinPages:
         plug: WaysPlug | None,
         head: BoardHead,
     ) -> None:
+        if SUGGEST_SCRIPT in head.scripts:
+            raise ValueError(f'{SUGGEST_SCRIPT} is added only by a plug')
         self._pins = pins
         self._options = options
         self._modes = modes

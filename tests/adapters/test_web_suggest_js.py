@@ -52,6 +52,11 @@ list.children = [];
 globalThis.fetch = async () => ({ ok: false, status: 429 });
 await mod.loadSuggestions(form);
 results.limited = shown();
+list.children = [];
+delete list.dataset.suggestUrl;
+globalThis.fetch = async (url) => { results.unwired = url; };
+await mod.loadSuggestions(form);
+results.unplugged = shown();
 results.day = day.value;
 console.log(JSON.stringify(results));
 """
@@ -60,7 +65,12 @@ FAILURE = [['P', 'failure', 'No <b>answer</b>']]
 
 @pytest.mark.skipif(shutil.which('node') is None, reason='node not installed')
 def test_load_suggestions_in_node(tmp_path: Path) -> None:
-    """The list is swapped in; a failed fetch shows the list's failure text."""
+    """
+    The list is swapped in; a failed fetch shows the list's failure text.
+
+    A list with no suggestion address fetches nothing and shows the
+    failure text.
+    """
     script = tmp_path / 'suggest.mjs'
     script.write_text(
         (BOARD_WEB / 'suggest.js').read_text(encoding='utf-8'),
@@ -85,5 +95,6 @@ def test_load_suggestions_in_node(tmp_path: Path) -> None:
         'swapped': '<div class="suggestions">new</div>',
         'failed': FAILURE,
         'limited': FAILURE,
+        'unplugged': FAILURE,
         'day': '2026-10-28',
     }

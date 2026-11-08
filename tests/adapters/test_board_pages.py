@@ -4,6 +4,7 @@ import re
 from collections.abc import Callable
 from http import HTTPStatus
 
+import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from multidict import MultiMapping
@@ -130,6 +131,26 @@ async def test_pin_pages_without_plug_serve_no_suggest() -> None:
     assert suggested.status == HTTPStatus.NOT_FOUND
 
 
+async def test_ways_page_without_plug_has_no_suggest() -> None:
+    """With no plug the ways page draws no Suggest button or list."""
+    pins = Pins(pins=(WORK,))
+    board = PinPages(
+        head=BoardHead(),
+        pins=pins.get, options=OPTIONS, modes=SYDNEY.modes, plug=None,
+    )
+    board.pins_sleep = pins.sleep
+    client = await started(board=board)
+    try:
+        response = await client.get(f'/pins/ways?ref={pin_ref(pin=WORK)}')
+        text = await response.text()
+    finally:
+        await client.close()
+    assert response.status == HTTPStatus.OK
+    assert '<legend>From and to</legend>' in text
+    assert 'data-suggest' not in text
+    assert '/pins/ways/suggest' not in text
+
+
 async def test_plug_card_on_ways_page() -> None:
     """The plug's card is drawn on the ways page; shutdown closes it once."""
     pins = Pins(pins=(WORK,))
@@ -227,6 +248,17 @@ async def test_scripts_follow_the_plug() -> None:
             assert 'suggest.js' not in page
             assert f'{WAYS_LINE}</head>' in page
             assert script.status == HTTPStatus.NOT_FOUND
+
+
+def test_head_naming_suggest_script_refused() -> None:
+    """A head that names the suggestion script would load it twice."""
+    for plug in (RecordingPlug(), None):
+        with pytest.raises(ValueError, match='suggest.js is added only'):
+            PinPages(
+                head=BoardHead(scripts=('ways.js', 'suggest.js')),
+                pins=lambda: None, options=None, modes=SYDNEY.modes,
+                plug=plug,
+            )
 
 
 async def test_board_nav_comes_from_the_city() -> None:

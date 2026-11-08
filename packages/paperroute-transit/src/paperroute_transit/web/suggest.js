@@ -30,13 +30,18 @@ function showFailure(list) {
 
 /**
  * Fetch the suggestion list and swap it in, or show the list's failure
- * line. The form's inputs are never changed.
+ * line. A list with no `data-suggest-url` fetches nothing and shows the
+ * failure line. The form's inputs are never changed.
  * @param {HTMLFormElement} form The ways page's form.
  * @param {string} page `earlier`, `later` or '' for the search typed.
  * @returns {Promise<void>} Settles once the list is replaced.
  */
 export async function loadSuggestions(form, page = '') {
   const list = form.querySelector('[data-suggestions]');
+  if (!list.dataset.suggestUrl) {
+    showFailure(list);
+    return;
+  }
   try {
     const response = await fetch(suggestionsUrl(form, page));
     if (!response.ok) {

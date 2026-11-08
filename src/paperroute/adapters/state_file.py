@@ -38,17 +38,32 @@ from paperroute.adapters.state_change import (
     repaired_ways,
     route_names,
 )
-from paperroute.adapters.state_migrations import SCHEMA_VERSION, migrate
+from paperroute.adapters.state_migrations import (
+    BOARD_SCHEMA,
+    SCHEMA_VERSION,
+    migrate,
+)
 from paperroute.adapters.state_settings import (
-    SettingsModel,
-    default_settings,
-    settings_from_model,
-    settings_to_model,
+    BoardSettingsModel,
+    DeviceSettingsModel,
+    board_settings_from_model,
+    board_settings_to_model,
+    device_settings_from_model,
+    device_settings_to_model,
+    repaired_settings,
 )
 from paperroute.core.pin_choices import NICKNAME_MAX, clean_nickname
-from paperroute.core.saved import LiveView, Quota, Saved, default_saved
+from paperroute.core.saved import (
+    LiveView,
+    Quota,
+    Saved,
+    Settings,
+    default_saved,
+)
 from paperroute.ports import Loaded
 from paperroute_device.adapters.atomic_file import write_atomic
+from paperroute_device.core.device_settings import DeviceSettings
+from paperroute_device.core.sections import DEVICE_SCHEMA
 from paperroute_transit.core.auto_model import AutoState, Before
 from paperroute_transit.core.city import City
 from paperroute_transit.core.model import (
@@ -143,8 +158,17 @@ class QuotaModel(BaseModel):
     calls: int = Field(ge=0)
 
 
-class StateModel(BaseModel):
-    """The whole file."""
+class DeviceSectionModel(BaseModel):
+    """What the device keeps for itself, as stored."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    schema_version: int
+    settings: DeviceSettingsModel
+
+
+class BoardSectionModel(BaseModel):
+    """What the transit board keeps, as stored."""
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
@@ -153,9 +177,19 @@ class StateModel(BaseModel):
     current: int = Field(ge=0)
     unpinned: PinModel | None
     view: LiveView
-    settings: SettingsModel
+    settings: BoardSettingsModel
     quota: QuotaModel
     auto: AutoModel
+
+
+class StateModel(BaseModel):
+    """The whole file."""
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    schema_version: int
+    device: DeviceSectionModel
+    board: BoardSectionModel
 
 
 def stop_to_model(*, place: StopPlace) -> StopModel:
@@ -399,6 +433,53 @@ def auto_from_model(*, model: AutoModel, zone: tzinfo) -> AutoState:
     )
 
 
+def device_section(*, settings: DeviceSettings) -> DeviceSectionModel:
+    """
+    Convert the device's settings to its stored section.
+
+    Parameters
+    ----------
+    settings : DeviceSettings
+        The device's settings.
+
+    Returns
+    -------
+    DeviceSectionModel
+        The section at `DEVICE_SCHEMA`.
+    """
+    return DeviceSectionModel(
+        schema_version=DEVICE_SCHEMA,
+        settings=device_settings_to_model(settings=settings),
+    )
+
+
+def board_section(*, saved: Saved) -> BoardSectionModel:
+    """
+    Convert the board's part of the saved state to its stored section.
+
+    Parameters
+    ----------
+    saved : Saved
+        The pins and view.
+
+    Returns
+    -------
+    BoardSectionModel
+        The section at `BOARD_SCHEMA`.
+    """
+    unpinned = saved.unpinned
+    return BoardSectionModel(
+        schema_version=BOARD_SCHEMA,
+        pins=tuple(pin_to_model(pin=pin) for pin in saved.pins),
+        current=saved.current,
+        unpinned=None if unpinned is None else pin_to_model(pin=unpinned),
+        view=saved.view,
+        settings=board_settings_to_model(settings=saved.settings.board),
+        quota=QuotaModel(day=saved.quota.day, calls=saved.quota.calls),
+        auto=auto_to_model(auto=saved.auto),
+    )
+
+
 def to_model(*, saved: Saved) -> StateModel:
     """
     Convert the saved state to its stored form.
@@ -413,16 +494,10 @@ def to_model(*, saved: Saved) -> StateModel:
     StateModel
         The model to write.
     """
-    unpinned = saved.unpinned
     return StateModel(
         schema_version=SCHEMA_VERSION,
-        pins=tuple(pin_to_model(pin=pin) for pin in saved.pins),
-        current=saved.current,
-        unpinned=None if unpinned is None else pin_to_model(pin=unpinned),
-        view=saved.view,
-        settings=settings_to_model(settings=saved.settings),
-        quota=QuotaModel(day=saved.quota.day, calls=saved.quota.calls),
-        auto=auto_to_model(auto=saved.auto),
+        device=device_section(settings=saved.settings.device),
+        board=board_section(saved=saved),
     )
 
 
@@ -443,22 +518,26 @@ def from_model(*, model: StateModel, city: City) -> Saved:
         The state. The current index is clamped into range, and no pins
         with no unpinned place gives the city's default pin.
     """
-    pins = tuple(pin_from_model(model=pin) for pin in model.pins)
+    board = model.board
+    pins = tuple(pin_from_model(model=pin) for pin in board.pins)
     unpinned = (
         None
-        if model.unpinned is None
-        else pin_from_model(model=model.unpinned)
+        if board.unpinned is None
+        else pin_from_model(model=board.unpinned)
     )
     if not pins and unpinned is None:
         unpinned = city.default_pin
     return Saved(
         pins=pins,
-        current=min(model.current, max(len(pins) - 1, 0)),
+        current=min(board.current, max(len(pins) - 1, 0)),
         unpinned=unpinned,
-        view=model.view,
-        settings=settings_from_model(model=model.settings),
-        quota=Quota(day=model.quota.day, calls=model.quota.calls),
-        auto=auto_from_model(model=model.auto, zone=city.zone),
+        view=board.view,
+        settings=Settings(
+            device=device_settings_from_model(model=model.device.settings),
+            board=board_settings_from_model(model=board.settings),
+        ),
+        quota=Quota(day=board.quota.day, calls=board.quota.calls),
+        auto=auto_from_model(model=board.auto, zone=city.zone),
     )
 
 
@@ -469,7 +548,7 @@ def repaired_quota(*, data: dict[str, object]) -> dict[str, object]:
     Parameters
     ----------
     data : dict[str, object]
-        Migrated data.
+        The migrated board section.
 
     Returns
     -------
@@ -491,7 +570,7 @@ def repaired_auto(*, data: dict[str, object]) -> dict[str, object]:
     Parameters
     ----------
     data : dict[str, object]
-        Migrated data.
+        The migrated board section.
 
     Returns
     -------
@@ -504,45 +583,6 @@ def repaired_auto(*, data: dict[str, object]) -> dict[str, object]:
     except ValidationError:
         logger.warning('state.json auto pin state unusable, resetting it')
         return {**data, 'auto': dict(EMPTY_AUTO)}
-    return data
-
-
-def repaired_settings(
-    *, data: dict[str, object], city: City,
-) -> dict[str, object]:
-    """
-    Reset each setting that cannot be read, so the rest are kept.
-
-    Parameters
-    ----------
-    data : dict[str, object]
-        Migrated data.
-    city : City
-        The city, whose defaults reset settings take.
-
-    Returns
-    -------
-    dict[str, object]
-        The data with each bad setting at its default and unknown ones
-        dropped; all defaults when the settings are not an object. The
-        peak windows are reset as a whole when any of them is bad.
-    """
-    settings = data.get('settings')
-    if not isinstance(settings, dict):
-        logger.warning('state.json settings unusable, resetting them')
-        return {**data, 'settings': default_settings(city=city)}
-    try:
-        SettingsModel.model_validate(settings)
-    except ValidationError as error:
-        bad = {item['loc'][0] for item in error.errors() if item['loc']}
-        logger.warning('state.json settings %s unusable, resetting', bad)
-        defaults = default_settings(city=city)
-        kept = {
-            name: value
-            for name, value in settings.items()
-            if name in defaults and name not in bad
-        }
-        return {**data, 'settings': {**defaults, **kept}}
     return data
 
 
@@ -585,11 +625,30 @@ def usable_pin(*, pin: dict[str, object], mode_ids: Collection[str]) -> bool:
         True when it is a valid pin whose kind is None or one of the
         city's modes.
     """
-    kind = pin.get('kind')
     try:
         PinModel.model_validate(pin)
     except ValidationError:
         return False
+    return known_kind(pin=pin, mode_ids=mode_ids)
+
+
+def known_kind(*, pin: dict[str, object], mode_ids: Collection[str]) -> bool:
+    """
+    Say whether a stored pin's kind is one the city knows.
+
+    Parameters
+    ----------
+    pin : dict[str, object]
+        The stored pin.
+    mode_ids : Collection[str]
+        The city's mode ids.
+
+    Returns
+    -------
+    bool
+        True when its kind is None or one of the city's modes.
+    """
+    kind = pin.get('kind')
     return kind is None or kind in mode_ids
 
 
@@ -645,15 +704,17 @@ def repaired_pins(
     Parameters
     ----------
     data : dict[str, object]
-        Migrated data.
+        The migrated board section.
     mode_ids : Collection[str]
-        The city's mode ids.
+        The city's mode ids; a pin, unpinned place or before place of
+        any other kind is dropped.
 
     Returns
     -------
     dict[str, object]
-        The data with each pin repaired and unusable pins dropped, and
-        the unpinned place None when it is unusable. Data whose pins are
+        The section with each pin repaired and unusable pins dropped,
+        the unpinned place None when it is unusable, and the auto before
+        place None when its kind is unknown. A section whose pins are
         not a list is left for validation to fail.
     """
     pins = data.get('pins')
@@ -669,7 +730,37 @@ def repaired_pins(
             if unpinned is None
             else repaired_pin(pin=unpinned, mode_ids=mode_ids)
         ),
+        'auto': known_before(auto=data.get('auto'), mode_ids=mode_ids),
     }
+
+
+def known_before(*, auto: object, mode_ids: Collection[str]) -> object:
+    """
+    Forget the place kept by the auto pin state when its kind is unknown.
+
+    Parameters
+    ----------
+    auto : object
+        The stored auto block.
+    mode_ids : Collection[str]
+        The city's mode ids.
+
+    Returns
+    -------
+    object
+        The block with `before` None when its place is of a kind the
+        city does not know; anything else is left for validation.
+    """
+    if not isinstance(auto, dict):
+        return auto
+    before = auto.get('before')
+    place = before.get('place') if isinstance(before, dict) else None
+    if not isinstance(place, dict) or known_kind(
+        pin=place, mode_ids=mode_ids,
+    ):
+        return auto
+    logger.warning('state.json auto before place unusable, dropping it')
+    return {**auto, 'before': None}
 
 
 def bad_stamp(path: Path) -> int:
@@ -743,16 +834,78 @@ def state_model_of(*, text: str, city: City) -> StateModel:
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError('state.json is not an object')
-    migrated = repaired_auto(
+    migrated = migrate(data=data, city=city)
+    return StateModel.model_validate({
+        **migrated,
+        'device': repaired_device(section=migrated.get('device'), city=city),
+        'board': repaired_board(section=migrated.get('board'), city=city),
+    })
+
+
+def repaired_device(*, section: object, city: City) -> dict[str, object]:
+    """
+    Repair the migrated device section.
+
+    Parameters
+    ----------
+    section : object
+        The migrated section, as stored.
+    city : City
+        The city, whose defaults reset settings take.
+
+    Returns
+    -------
+    dict[str, object]
+        The section with bad settings reset; all defaults when it is
+        missing or not an object.
+    """
+    defaults = device_section(
+        settings=default_saved(city=city).settings.device,
+    ).model_dump(mode='json')
+    if not isinstance(section, dict):
+        logger.warning('state.json device section unusable, resetting it')
+        return defaults
+    return repaired_settings(
+        data=section,
+        model=DeviceSettingsModel,
+        defaults=defaults['settings'],
+    )
+
+
+def repaired_board(*, section: object, city: City) -> dict[str, object]:
+    """
+    Repair the migrated board section.
+
+    Parameters
+    ----------
+    section : object
+        The migrated section, as stored.
+    city : City
+        The city: pins of a kind it does not declare are dropped, and
+        reset settings and a reset section take its defaults.
+
+    Returns
+    -------
+    dict[str, object]
+        The section with its quota, settings, pins and auto block
+        repaired; all defaults when it is missing or not an object.
+    """
+    defaults = board_section(
+        saved=default_saved(city=city),
+    ).model_dump(mode='json')
+    if not isinstance(section, dict):
+        logger.warning('state.json board section unusable, resetting it')
+        return defaults
+    return repaired_auto(
         data=repaired_pins(
             data=repaired_settings(
-                data=repaired_quota(data=migrate(data=data, city=city)),
-                city=city,
+                data=repaired_quota(data=section),
+                model=BoardSettingsModel,
+                defaults=defaults['settings'],
             ),
             mode_ids=city.mode_ids,
         ),
     )
-    return StateModel.model_validate(migrated)
 
 
 class JsonStateRepository:

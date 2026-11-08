@@ -23,6 +23,7 @@ from paperroute.adapters.state_migrations import (
 from paperroute.city import PEAK_WINDOWS, SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.saved import (
+    DEVICE_FIELDS,
     BoardSettings,
     ConnectionMap,
     LiveView,
@@ -45,7 +46,9 @@ from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE
 from paperroute_testkit.core.factories import pin_at
 from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
 from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, Way
+from tests.adapters.state_layout import STATE_V11, STATE_V11_KINDS, flat_v11
 from tests.core.test_auto_pins import is_shown, started, ticked, trusted
+from tests.golden.scenes import GOLDEN
 
 ROTATED: Final[Settings] = Settings(
     board=BoardSettings(peak_windows=PEAK_WINDOWS),
@@ -271,7 +274,7 @@ def test_wrong_field_type_gives_defaults(path: Path) -> None:
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
-    data['current'] = 'big'
+    data['board']['current'] = 'big'
     path.write_text(json.dumps(data))
     assert repository.load().saved == default_saved(city=SYDNEY)
 
@@ -321,7 +324,7 @@ def test_current_out_of_range_is_clamped(path: Path) -> None:
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
-    data['current'] = 9
+    data['board']['current'] = 9
     path.write_text(json.dumps(data))
     loaded = repository.load()
     assert loaded.saved.current == 1
@@ -333,7 +336,7 @@ def test_no_pins_and_no_unpinned_gives_default_place(path: Path) -> None:
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
-    data['pins'] = []
+    data['board']['pins'] = []
     path.write_text(json.dumps(data))
     loaded = repository.load().saved
     assert loaded.unpinned == default_saved(city=SYDNEY).unpinned
@@ -388,7 +391,9 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
     """Only the documented keys are written."""
     JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     data = json.loads(path.read_text())
-    assert set(data) == {
+    assert set(data) == {'schema_version', 'device', 'board'}
+    assert set(data['device']) == {'schema_version', 'settings'}
+    assert set(data['board']) == {
         'schema_version',
         'pins',
         'current',
@@ -398,7 +403,7 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
         'quota',
         'auto',
     }
-    assert set(data['pins'][0]) == {
+    assert set(data['board']['pins'][0]) == {
         'origin',
         'destination',
         'kind',
@@ -416,14 +421,14 @@ def test_written_json_shape(path: Path) -> None:
     JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     data = json.loads(path.read_text())
     assert data['schema_version'] == SCHEMA_VERSION
-    assert data['settings']['auto_rebuild'] is True
-    assert data['pins'][0]['origin'] == {
+    assert data['device']['settings']['auto_rebuild'] is True
+    assert data['board']['pins'][0]['origin'] == {
         'stop_id': 'a',
         'name': 'A',
         'x': 1.5,
         'y': -2.5,
     }
-    assert data['pins'][0]['destination']['x'] is None
+    assert data['board']['pins'][0]['destination']['x'] is None
 
 
 def test_load_removes_stale_temp_files(path: Path) -> None:
@@ -544,7 +549,7 @@ def test_migrates_v2_with_auto_rebuild_on(path: Path) -> None:
     """A version 2 file loads with the rebuild on and saves as current."""
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
-    data = json.loads(path.read_text())
+    data = flat_v11(data=json.loads(path.read_text()))
     del data['settings']
     data['schema_version'] = 2
     path.write_text(json.dumps(data))
@@ -572,7 +577,7 @@ def test_migrates_v3_to_v4_with_empty_quota(path: Path) -> None:
     """A version 3 file loads with no calls counted and saves as current."""
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
-    data = json.loads(path.read_text())
+    data = flat_v11(data=json.loads(path.read_text()))
     del data['quota']
     data['schema_version'] = 3
     path.write_text(json.dumps(data))
@@ -583,7 +588,7 @@ def test_migrates_v3_to_v4_with_empty_quota(path: Path) -> None:
     repository.save(saved=loaded.saved)
     stored = json.loads(path.read_text())
     assert stored['schema_version'] == SCHEMA_VERSION
-    assert stored['quota'] == {'day': None, 'calls': 0}
+    assert stored['board']['quota'] == {'day': None, 'calls': 0}
 
 
 def test_round_trips_quota(path: Path) -> None:
@@ -591,7 +596,7 @@ def test_round_trips_quota(path: Path) -> None:
     repository = JsonStateRepository(path=path, city=SYDNEY)
     quota = Quota(day=date(2026, 10, 21), calls=1234)
     repository.save(saved=replace(sample(), quota=quota))
-    assert json.loads(path.read_text())['quota'] == {
+    assert json.loads(path.read_text())['board']['quota'] == {
         'day': '2026-10-21',
         'calls': 1234,
     }
@@ -605,7 +610,7 @@ def test_negative_calls_reset_the_quota_only(
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
-    data['quota']['calls'] = -1
+    data['board']['quota']['calls'] = -1
     path.write_text(json.dumps(data))
     loaded = repository.load()
     assert loaded.stored
@@ -636,7 +641,7 @@ def write_v4(*, path: Path, auto_rebuild: bool) -> None:
         The stored rebuild setting.
     """
     JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
-    data = json.loads(path.read_text())
+    data = flat_v11(data=json.loads(path.read_text()))
     data['schema_version'] = 4
     data['settings'] = {'auto_rebuild': auto_rebuild}
     path.write_text(json.dumps(data))
@@ -656,7 +661,7 @@ def test_migrates_v4_to_v5_with_defaults(path: Path) -> None:
     repository.save(saved=loaded.saved)
     stored = json.loads(path.read_text())
     assert stored['schema_version'] == SCHEMA_VERSION
-    assert stored['settings']['peak_windows'] == [
+    assert stored['board']['settings']['peak_windows'] == [
         {'start': '06:30', 'end': '10:00'},
         {'start': '15:00', 'end': '19:00'},
     ]
@@ -691,7 +696,7 @@ def test_bad_time_falls_back(
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
-    data['settings']['peak_windows'][0]['start'] = '25:00'
+    data['board']['settings']['peak_windows'][0]['start'] = '25:00'
     path.write_text(json.dumps(data))
     loaded = repository.load()
     assert loaded.stored
@@ -721,7 +726,9 @@ def load_with_settings(
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
-    data['settings'].update(changes)
+    for name, value in changes.items():
+        section = 'device' if name in DEVICE_FIELDS else 'board'
+        data[section]['settings'][name] = value
     path.write_text(json.dumps(data))
     loaded = repository.load()
     assert loaded.stored
@@ -826,7 +833,7 @@ def test_file_without_clean_after_cleans_after_thirty(path: Path) -> None:
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
-    del data['settings']['clean_after']
+    del data['device']['settings']['clean_after']
     path.write_text(json.dumps(data))
     loaded = repository.load()
     assert loaded.stored
@@ -852,7 +859,7 @@ def test_migrates_to_pin_fields(path: Path) -> None:
     repository = JsonStateRepository(path=path, city=SYDNEY)
     saved = replace(sample(), unpinned=sample().pins[0])
     repository.save(saved=saved)
-    data = json.loads(path.read_text())
+    data = flat_v11(data=json.loads(path.read_text()))
     data['schema_version'] = 5
     for pin in [*data['pins'], data['unpinned']]:
         del pin['nickname']
@@ -873,7 +880,7 @@ def test_migrates_v6_to_v7_with_lookahead(path: Path) -> None:
     """A version 6 file keeps its settings and gains the lookahead."""
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=ROTATED))
-    data = json.loads(path.read_text())
+    data = flat_v11(data=json.loads(path.read_text()))
     data['schema_version'] = 6
     del data['settings']['alert_lookahead']
     path.write_text(json.dumps(data))
@@ -944,7 +951,7 @@ def stored_with(*, path: Path, pin_fields: dict[str, object]) -> dict[str, Any]:
     """
     JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     data: dict[str, Any] = json.loads(path.read_text())
-    data['pins'][1].update(pin_fields)
+    data['board']['pins'][1].update(pin_fields)
     path.write_text(json.dumps(data))
     return data
 
@@ -985,7 +992,7 @@ def test_broken_pin_is_dropped_and_the_rest_kept(path: Path) -> None:
 def test_broken_unpinned_place_is_dropped(path: Path) -> None:
     """An unusable unpinned place goes; the pins stay."""
     data = stored_with(path=path, pin_fields={})
-    data['unpinned'] = {'origin': 5}
+    data['board']['unpinned'] = {'origin': 5}
     path.write_text(json.dumps(data))
     loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.saved.pins == sample().pins
@@ -999,7 +1006,7 @@ def test_v5_pin_with_fields_survives_migration(path: Path) -> None:
             'nickname': 'Work', 'only': ['606'], 'destination': None,
         },
     )
-    data = json.loads(path.read_text())
+    data = flat_v11(data=json.loads(path.read_text()))
     data['schema_version'] = 5
     path.write_text(json.dumps(data))
     pin = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins[1]
@@ -1027,7 +1034,7 @@ def test_round_trips_windows_and_auto(path: Path) -> None:
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=saved)
     assert repository.load().saved == saved
-    stored = json.loads(path.read_text())['pins'][0]['windows'][0]
+    stored = json.loads(path.read_text())['board']['pins'][0]['windows'][0]
     assert stored['days'] == ['mon', 'tue', 'wed', 'thu', 'fri']
     assert stored['start'] == '07:30'
 
@@ -1037,7 +1044,7 @@ def test_migrates_v7_to_v8(path: Path) -> None:
     saved = replace(sample(), unpinned=sample().pins[0])
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=saved)
-    data = json.loads(path.read_text())
+    data = flat_v11(data=json.loads(path.read_text()))
     data['schema_version'] = 7
     del data['auto']
     for pin in (*data['pins'], data['unpinned']):
@@ -1060,7 +1067,7 @@ def test_bad_window_dropped_alone(
         saved=replace(sample(), settings=settings, quota=quota),
     )
     data = json.loads(path.read_text())
-    data['pins'][1]['windows'] = [
+    data['board']['pins'][1]['windows'] = [
         GOOD_WINDOW,
         {'days': ['mon'], 'start': '07:00', 'end': '07:00'},
         {'days': ['funday'], 'start': '07:00', 'end': '08:00'},
@@ -1086,7 +1093,7 @@ def test_bad_auto_reset_alone(
     """An auto block that can't be read resets; the pins stay."""
     JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     data = json.loads(path.read_text())
-    data['auto'] = {'occurrence': 3}
+    data['board']['auto'] = {'occurrence': 3}
     path.write_text(json.dumps(data))
     loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.stored
@@ -1140,7 +1147,7 @@ def test_round_trips_change(path: Path) -> None:
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=saved)
     assert repository.load().saved == saved
-    way = json.loads(path.read_text())['pins'][0]['ways'][0]
+    way = json.loads(path.read_text())['board']['pins'][0]['ways'][0]
     assert way['ticked'] is True
     assert way['changes'][0]['allow'] == 7
     assert way['changes'][0]['alight']['stop_id'] == 'G215254'
@@ -1156,7 +1163,7 @@ def test_migrates_v8_to_current(path: Path) -> None:
     )
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=saved)
-    data = json.loads(path.read_text())
+    data = flat_v11(data=json.loads(path.read_text()))
     data['schema_version'] = 8
     del data['settings']['connection_map']
     for pin in (*data['pins'], data['unpinned'], data['auto']['before']['place']):
@@ -1184,7 +1191,7 @@ def stored_change(*, path: Path, change: dict[str, object]) -> None:
     saved = replace(sample(), pins=(sample().pins[0], WORK))
     JsonStateRepository(path=path, city=SYDNEY).save(saved=saved)
     data: dict[str, Any] = json.loads(path.read_text())
-    data['pins'][1]['ways'][0]['changes'][0].update(change)
+    data['board']['pins'][1]['ways'][0]['changes'][0].update(change)
     path.write_text(json.dumps(data))
 
 
@@ -1197,7 +1204,7 @@ def test_bad_change_drops_way_alone(
         saved=replace(sample(), pins=(sample().pins[0], WORK), settings=settings),
     )
     data = json.loads(path.read_text())
-    data['pins'][1]['ways'][0]['changes'][0] = {'alight': 3}
+    data['board']['pins'][1]['ways'][0]['changes'][0] = {'alight': 3}
     path.write_text(json.dumps(data))
     caplog.clear()
     saved = JsonStateRepository(path=path, city=SYDNEY).load().saved
@@ -1236,7 +1243,7 @@ def test_file_without_swap_knobs_leaves_the_knobs(path: Path) -> None:
     repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
-    del data['settings']['swap_knobs']
+    del data['device']['settings']['swap_knobs']
     path.write_text(json.dumps(data))
     loaded = repository.load()
     assert loaded.stored
@@ -1255,3 +1262,86 @@ def test_round_trips_swap_knobs(path: Path) -> None:
     )
     repository.save(saved=replace(sample(), settings=changed))
     assert repository.load().saved.settings == changed
+
+
+GOLDEN_STATE: Final[Path] = GOLDEN / 'state.json'
+
+
+def test_v11_file_saves_as_v12_golden(path: Path) -> None:
+    """Today's v11 golden loads and saves as the v12 golden's bytes."""
+    path.write_bytes(STATE_V11.read_bytes())
+    repository = JsonStateRepository(path=path, city=SYDNEY)
+    loaded = repository.load()
+    assert loaded.stored
+    repository.save(saved=loaded.saved)
+    assert path.read_bytes() == GOLDEN_STATE.read_bytes()
+
+
+def test_unknown_kind_drops_pin(
+    path: Path, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A pin of a kind the city has no mode for goes; the rest stay."""
+    data = json.loads(STATE_V11_KINDS.read_text())
+    data['pins'][3]['kind'] = 'tram'
+    path.write_text(json.dumps(data))
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
+    assert loaded.stored
+    kinds = [pin.kind for pin in loaded.saved.pins]
+    assert kinds == [
+        mode for mode in SydneyMode if mode != SydneyMode.LIGHT_RAIL
+    ] + [None]
+    assert [r.levelno for r in caplog.records] == [logging.WARNING]
+    assert not list(path.parent.glob('state.json.bad-*'))
+
+
+def test_unknown_kind_drops_unpinned_and_before(
+    path: Path, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """An unpinned or before place of an unknown kind goes; pins stay."""
+    data = json.loads(STATE_V11_KINDS.read_text())
+    data['unpinned']['kind'] = 'tram'
+    data['auto']['before']['place']['kind'] = 'tram'
+    path.write_text(json.dumps(data))
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
+    assert loaded.stored
+    assert len(loaded.saved.pins) == 9
+    assert loaded.saved.unpinned is None
+    assert loaded.saved.auto.before is None
+    assert loaded.saved.auto.occurrence is not None
+    assert len(caplog.records) == 2
+
+
+@pytest.mark.parametrize(
+    ('section', 'expected'),
+    [
+        ('device', replace(sample(), settings=default_settings(city=SYDNEY))),
+        ('board', replace(default_saved(city=SYDNEY), settings=ROTATED)),
+    ],
+)
+@pytest.mark.parametrize('broken', [None, 3], ids=['missing', 'number'])
+def test_missing_section_reset(
+    path: Path, section: str, expected: Saved, broken: int | None,
+) -> None:
+    """A missing or non-object section resets alone; the other is kept."""
+    repository = JsonStateRepository(path=path, city=SYDNEY)
+    repository.save(saved=replace(sample(), settings=ROTATED))
+    data = json.loads(path.read_text())
+    del data[section]
+    if broken is not None:
+        data[section] = broken
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert (loaded.saved, loaded.stored) == (expected, True)
+    assert not list(path.parent.glob('state.json.bad-*'))
+
+
+def test_too_new_section_moved_aside(path: Path) -> None:
+    """A board section newer than the code gives defaults and a .bad- file."""
+    repository = JsonStateRepository(path=path, city=SYDNEY)
+    repository.save(saved=sample())
+    data = json.loads(path.read_text())
+    data['board']['schema_version'] = 2
+    path.write_text(json.dumps(data))
+    loaded = repository.load()
+    assert (loaded.saved, loaded.stored) == (default_saved(city=SYDNEY), False)
+    assert len(list(path.parent.glob('state.json.bad-*'))) == 1

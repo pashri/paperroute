@@ -1,19 +1,20 @@
 """Settings as stored in the state file, and their defaults."""
 
+import logging
 from datetime import datetime
 from typing import Final
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+)
 
 from paperroute.adapters.state_auto import CLOCK, CLOCK_FORMAT
 from paperroute.core import saved
-from paperroute.core.saved import (
-    BoardSettings,
-    ConnectionMap,
-    Lookahead,
-    Rate,
-    Settings,
-)
+from paperroute.core.saved import BoardSettings, ConnectionMap, Lookahead, Rate
 from paperroute_device.core.device_settings import (
     CLEAN_CHOICES,
     DeviceSettings,
@@ -23,7 +24,10 @@ from paperroute_device.core.device_settings import (
 from paperroute_hardware.ports import CLEAN_AFTER
 from paperroute_transit.core.city import City
 
+logger = logging.getLogger(__name__)
+
 MAX_PEAK_WINDOWS: Final[int] = 2
+
 
 class WindowModel(BaseModel):
     """A daily window as stored, each end as ``HH:MM``."""
@@ -34,31 +38,22 @@ class WindowModel(BaseModel):
     end: str = Field(pattern=CLOCK)
 
 
-class SettingsModel(BaseModel):
+class DeviceSettingsModel(BaseModel):
     """
-    The Settings page's choices as stored.
+    The device's own Settings page choices as stored.
 
-    The school switches, the cleaning count and the knob swap have
-    defaults, so files stored before them load.
+    The cleaning count and the knob swap have defaults, so files stored
+    before them load.
     """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
     auto_rebuild: bool
-    peak_rate: Rate
-    offpeak_rate: Rate
-    peak_windows: tuple[WindowModel, ...] = Field(
-        max_length=MAX_PEAK_WINDOWS,
-    )
     quiet_mode: QuietMode
     my_hours: WindowModel
     rotate: bool
     larger_text: bool
     inverted_lists: bool
-    alert_lookahead: Lookahead
-    connection_map: ConnectionMap
-    skip_school_buses: bool = True
-    skip_school_on_route_pins: bool = False
     clean_after: int = CLEAN_AFTER
     swap_knobs: bool = False
 
@@ -86,6 +81,26 @@ class SettingsModel(BaseModel):
         if count not in CLEAN_CHOICES:
             raise ValueError(f'clean_after must be one of {CLEAN_CHOICES}')
         return count
+
+
+class BoardSettingsModel(BaseModel):
+    """
+    The transit board's Settings page choices as stored.
+
+    The school switches have defaults, so files stored before them load.
+    """
+
+    model_config = ConfigDict(extra='forbid', frozen=True)
+
+    peak_rate: Rate
+    offpeak_rate: Rate
+    peak_windows: tuple[WindowModel, ...] = Field(
+        max_length=MAX_PEAK_WINDOWS,
+    )
+    alert_lookahead: Lookahead
+    connection_map: ConnectionMap
+    skip_school_buses: bool = True
+    skip_school_on_route_pins: bool = False
 
     @field_validator('peak_windows')
     @classmethod
@@ -161,87 +176,120 @@ def window_from_model(*, model: WindowModel) -> Window:
     )
 
 
-def settings_to_model(*, settings: Settings) -> SettingsModel:
+def device_settings_to_model(
+    *, settings: DeviceSettings,
+) -> DeviceSettingsModel:
     """
-    Convert the settings to their stored form.
+    Convert the device's settings to their stored form.
 
     Parameters
     ----------
-    settings : Settings
-        The settings.
+    settings : DeviceSettings
+        The device's settings.
 
     Returns
     -------
-    SettingsModel
+    DeviceSettingsModel
         The stored settings.
     """
-    device = settings.device
-    board = settings.board
-    return SettingsModel(
-        auto_rebuild=device.auto_rebuild,
-        peak_rate=board.peak_rate,
-        offpeak_rate=board.offpeak_rate,
+    return DeviceSettingsModel(
+        auto_rebuild=settings.auto_rebuild,
+        quiet_mode=settings.quiet_mode,
+        my_hours=window_to_model(window=settings.my_hours),
+        rotate=settings.rotate,
+        larger_text=settings.larger_text,
+        inverted_lists=settings.inverted_lists,
+        clean_after=settings.clean_after,
+        swap_knobs=settings.swap_knobs,
+    )
+
+
+def device_settings_from_model(
+    *, model: DeviceSettingsModel,
+) -> DeviceSettings:
+    """
+    Convert the device's stored settings back.
+
+    Parameters
+    ----------
+    model : DeviceSettingsModel
+        The stored settings.
+
+    Returns
+    -------
+    DeviceSettings
+        The device's settings.
+    """
+    return DeviceSettings(
+        auto_rebuild=model.auto_rebuild,
+        quiet_mode=model.quiet_mode,
+        my_hours=window_from_model(model=model.my_hours),
+        rotate=model.rotate,
+        larger_text=model.larger_text,
+        inverted_lists=model.inverted_lists,
+        clean_after=model.clean_after,
+        swap_knobs=model.swap_knobs,
+    )
+
+
+def board_settings_to_model(*, settings: BoardSettings) -> BoardSettingsModel:
+    """
+    Convert the board's settings to their stored form.
+
+    Parameters
+    ----------
+    settings : BoardSettings
+        The board's settings.
+
+    Returns
+    -------
+    BoardSettingsModel
+        The stored settings.
+    """
+    return BoardSettingsModel(
+        peak_rate=settings.peak_rate,
+        offpeak_rate=settings.offpeak_rate,
         peak_windows=tuple(
             window_to_model(window=window)
-            for window in board.peak_windows
+            for window in settings.peak_windows
         ),
-        quiet_mode=device.quiet_mode,
-        my_hours=window_to_model(window=device.my_hours),
-        rotate=device.rotate,
-        larger_text=device.larger_text,
-        inverted_lists=device.inverted_lists,
-        alert_lookahead=board.alert_lookahead,
-        connection_map=board.connection_map,
-        skip_school_buses=board.skip_school_buses,
-        skip_school_on_route_pins=board.skip_school_on_route_pins,
-        clean_after=device.clean_after,
-        swap_knobs=device.swap_knobs,
+        alert_lookahead=settings.alert_lookahead,
+        connection_map=settings.connection_map,
+        skip_school_buses=settings.skip_school_buses,
+        skip_school_on_route_pins=settings.skip_school_on_route_pins,
     )
 
 
-def settings_from_model(*, model: SettingsModel) -> Settings:
+def board_settings_from_model(*, model: BoardSettingsModel) -> BoardSettings:
     """
-    Convert stored settings back.
+    Convert the board's stored settings back.
 
     Parameters
     ----------
-    model : SettingsModel
+    model : BoardSettingsModel
         The stored settings.
 
     Returns
     -------
-    Settings
-        The settings.
+    BoardSettings
+        The board's settings.
     """
-    return Settings(
-        device=DeviceSettings(
-            auto_rebuild=model.auto_rebuild,
-            quiet_mode=model.quiet_mode,
-            my_hours=window_from_model(model=model.my_hours),
-            rotate=model.rotate,
-            larger_text=model.larger_text,
-            inverted_lists=model.inverted_lists,
-            clean_after=model.clean_after,
-            swap_knobs=model.swap_knobs,
+    return BoardSettings(
+        peak_rate=model.peak_rate,
+        offpeak_rate=model.offpeak_rate,
+        peak_windows=tuple(
+            window_from_model(model=window) for window in model.peak_windows
         ),
-        board=BoardSettings(
-            peak_rate=model.peak_rate,
-            offpeak_rate=model.offpeak_rate,
-            peak_windows=tuple(
-                window_from_model(model=window)
-                for window in model.peak_windows
-            ),
-            alert_lookahead=model.alert_lookahead,
-            connection_map=model.connection_map,
-            skip_school_buses=model.skip_school_buses,
-            skip_school_on_route_pins=model.skip_school_on_route_pins,
-        ),
+        alert_lookahead=model.alert_lookahead,
+        connection_map=model.connection_map,
+        skip_school_buses=model.skip_school_buses,
+        skip_school_on_route_pins=model.skip_school_on_route_pins,
     )
 
 
-def default_settings(*, city: City) -> dict[str, object]:
+def default_device_settings(*, city: City) -> dict[str, object]:
     """
-    Give a city's default settings as stored.
+    Give a city's default device settings as stored.
 
     Parameters
     ----------
@@ -251,8 +299,91 @@ def default_settings(*, city: City) -> dict[str, object]:
     Returns
     -------
     dict[str, object]
-        The default settings as JSON data.
+        The default device settings as JSON data.
     """
-    return settings_to_model(
-        settings=saved.default_settings(city=city),
+    return device_settings_to_model(
+        settings=saved.default_settings(city=city).device,
     ).model_dump(mode='json')
+
+
+def default_board_settings(*, city: City) -> dict[str, object]:
+    """
+    Give a city's default board settings as stored.
+
+    Parameters
+    ----------
+    city : City
+        The city.
+
+    Returns
+    -------
+    dict[str, object]
+        The default board settings as JSON data.
+    """
+    return board_settings_to_model(
+        settings=saved.default_settings(city=city).board,
+    ).model_dump(mode='json')
+
+
+def default_settings(*, city: City) -> dict[str, object]:
+    """
+    Give a city's default settings in the one object older files kept.
+
+    Parameters
+    ----------
+    city : City
+        The city.
+
+    Returns
+    -------
+    dict[str, object]
+        The device and board defaults together, as JSON data; schemas
+        before 12 stored both in one ``settings`` object.
+    """
+    return {
+        **default_device_settings(city=city),
+        **default_board_settings(city=city),
+    }
+
+
+def repaired_settings(
+    *,
+    data: dict[str, object],
+    model: type[BaseModel],
+    defaults: dict[str, object],
+) -> dict[str, object]:
+    """
+    Reset each setting that cannot be read, so the rest are kept.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        A migrated section.
+    model : type[BaseModel]
+        The model its settings must match.
+    defaults : dict[str, object]
+        Its default settings as stored.
+
+    Returns
+    -------
+    dict[str, object]
+        The section with each bad setting at its default and unknown ones
+        dropped; all defaults when the settings are not an object. The
+        peak windows are reset as a whole when any of them is bad.
+    """
+    settings = data.get('settings')
+    if not isinstance(settings, dict):
+        logger.warning('state.json settings unusable, resetting them')
+        return {**data, 'settings': defaults}
+    try:
+        model.model_validate(settings)
+    except ValidationError as error:
+        bad = {item['loc'][0] for item in error.errors() if item['loc']}
+        logger.warning('state.json settings %s unusable, resetting', bad)
+        kept = {
+            name: value
+            for name, value in settings.items()
+            if name in defaults and name not in bad
+        }
+        return {**data, 'settings': {**defaults, **kept}}
+    return data

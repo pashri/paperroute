@@ -1,4 +1,4 @@
-"""Tests for the steps from state.json schema 9 to 11."""
+"""Tests for the steps from state.json schema 9 to 12."""
 
 import json
 from dataclasses import replace
@@ -10,16 +10,20 @@ import pytest
 
 from paperroute.adapters.state_file import (
     JsonStateRepository,
+    PinModel,
     from_model,
+    pin_from_model,
     state_model_of,
 )
 from paperroute.adapters.state_migrations import (
+    BOARD_SCHEMA,
     SCHEMA_VERSION,
     V1_TRAINLINK_LINES,
     add_ways,
     coach_pin,
     drop_zoom,
     migrate,
+    split_sections,
     v9_ref,
 )
 from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
@@ -41,6 +45,10 @@ from paperroute_transit.core.model import (
     Way,
     pin_ref,
 )
+from tests.adapters.state_layout import STATE_V11, STATE_V11_KINDS, flat_v11
+from tests.golden.scenes import GOLDEN
+
+GOLDEN_STATE: Final[Path] = GOLDEN / 'state.json'
 
 WINDOW: Final[dict[str, object]] = {
     'days': ['mon', 'tue'], 'start': '07:00', 'end': '08:30',
@@ -155,7 +163,7 @@ def v9_file(*, path: Path, **fields: object) -> dict[str, Any]:
     JsonStateRepository(path=path, city=SYDNEY).save(
         saved=default_saved(city=SYDNEY),
     )
-    data: dict[str, Any] = json.loads(path.read_text())
+    data = flat_v11(data=json.loads(path.read_text()))
     data.update(
         schema_version=9,
         pins=[PIN_1, PIN_2, PIN_3, PIN_4, PIN_5],
@@ -315,7 +323,7 @@ def test_bad_way_drops_way_alone(path: Path) -> None:
     """An unreadable way is dropped; the pin keeps its other ways."""
     pin = replace(WORK, ways=(*WORK.ways, TWO_WAY))
     data = saved_ways(path=path, pin=pin)
-    data['pins'][0]['ways'][1]['changes'][0]['alight'] = 3
+    data['board']['pins'][0]['ways'][1]['changes'][0]['alight'] = 3
     path.write_text(json.dumps(data))
     assert JsonStateRepository(
         path=path,
@@ -329,7 +337,7 @@ def test_way_with_bad_changes_dropped(
 ) -> None:
     """A way with no changes or too many becomes a plain pin's way."""
     data = saved_ways(path=path, pin=WORK)
-    data['pins'][0]['ways'][0]['changes'] = changes
+    data['board']['pins'][0]['ways'][0]['changes'] = changes
     path.write_text(json.dumps(data))
     pins = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins
     assert pins == (replace(WORK, ways=()),)
@@ -338,7 +346,7 @@ def test_way_with_bad_changes_dropped(
 def test_ways_not_a_list_gives_plain_pin(path: Path) -> None:
     """Ways that are not a list leave a plain pin with its To."""
     data = saved_ways(path=path, pin=WORK)
-    data['pins'][0]['ways'] = 'x'
+    data['board']['pins'][0]['ways'] = 'x'
     path.write_text(json.dumps(data))
     pins = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins
     assert pins == (replace(WORK, ways=()),)
@@ -347,7 +355,7 @@ def test_ways_not_a_list_gives_plain_pin(path: Path) -> None:
 def test_allow_clamped_in_way(path: Path) -> None:
     """An allowance outside 1-60 is clamped within its way."""
     data = saved_ways(path=path, pin=WORK)
-    data['pins'][0]['ways'][0]['changes'][0]['allow'] = 90
+    data['board']['pins'][0]['ways'][0]['changes'][0]['allow'] = 90
     path.write_text(json.dumps(data))
     pin = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins[0]
     assert pin.ways[0].changes[0].allow == 60
@@ -357,7 +365,7 @@ def test_allow_clamped_in_way(path: Path) -> None:
 def test_bad_never_resets_to_empty(path: Path, bad: object) -> None:
     """A never list that is not a list of names becomes empty."""
     data = saved_ways(path=path, pin=replace(WORK, never=('665',)))
-    data['pins'][0]['never'] = bad
+    data['board']['pins'][0]['never'] = bad
     path.write_text(json.dumps(data))
     assert JsonStateRepository(
         path=path,
@@ -374,8 +382,8 @@ def test_round_trip_two_changes(path: Path) -> None:
         never=('665', '660'),
     )
     data = saved_ways(path=path, pin=pin)
-    assert 'change' not in data['pins'][0]
-    assert data['pins'][0]['ways'][1]['ticked'] is False
+    assert 'change' not in data['board']['pins'][0]
+    assert data['board']['pins'][0]['ways'][1]['ticked'] is False
     assert JsonStateRepository(
         path=path,
         city=SYDNEY,
@@ -394,8 +402,8 @@ def test_saved_pin_holds_no_change_field(path: Path) -> None:
     JsonStateRepository(path=path, city=SYDNEY).save(saved=saved)
     data = json.loads(path.read_text())
     assert data['schema_version'] == SCHEMA_VERSION
-    assert data['unpinned']['ways'] == []
-    assert data['unpinned']['never'] == []
+    assert data['board']['unpinned']['ways'] == []
+    assert data['board']['unpinned']['never'] == []
 
 
 def test_pins_sharing_identity_merged() -> None:
@@ -521,12 +529,12 @@ def v10_data() -> dict[str, object]:
 
 
 def test_v10_zoom_is_dropped() -> None:
-    """A schema 10 file with a zoom loads at 11 without it."""
+    """A schema 10 file with a zoom loads at 12 without it."""
     model = state_model_of(
         text=json.dumps(v10_data()), city=SYDNEY,
     )
-    assert model.schema_version == SCHEMA_VERSION == 11
-    assert 'zoom' not in model.model_dump()
+    assert model.schema_version == SCHEMA_VERSION == 12
+    assert 'zoom' not in model.board.model_dump()
     saved = from_model(model=model, city=SYDNEY)
     assert len(saved.pins) == 6
     assert saved.current == 5
@@ -566,12 +574,140 @@ def test_old_file_gets_city_peak_windows() -> None:
     """Settings an old file lacks take the city's peak windows."""
     sydney = migrate(data=v1_data(), city=SYDNEY)
     plain = migrate(data=v1_data(), city=replace(SYDNEY, peak_windows=()))
-    sydney_settings = sydney['settings']
-    plain_settings = plain['settings']
-    assert isinstance(sydney_settings, dict)
-    assert isinstance(plain_settings, dict)
+    sydney_board = sydney['board']
+    plain_board = plain['board']
+    assert isinstance(sydney_board, dict)
+    assert isinstance(plain_board, dict)
+    sydney_settings = sydney_board['settings']
+    plain_settings = plain_board['settings']
     assert sydney_settings['peak_windows'] == [
         {'start': '06:30', 'end': '10:00'},
         {'start': '15:00', 'end': '19:00'},
     ]
     assert plain_settings['peak_windows'] == []
+
+
+def v11_refs(*, data: dict[str, Any]) -> list[str]:
+    """
+    Work out each stored schema 11 pin's ref.
+
+    Parameters
+    ----------
+    data : dict[str, Any]
+        A schema 11 file's data.
+
+    Returns
+    -------
+    list[str]
+        The pins' refs, in order.
+    """
+    return [
+        pin_ref(pin=pin_from_model(model=PinModel.model_validate(pin)))
+        for pin in data['pins']
+    ]
+
+
+def test_v11_kinds_split_keeping_refs() -> None:
+    """
+    A v11 file with every kind keeps every pin, kind and ref at v12.
+
+    The running occurrence still names the bus pin's ref.
+    """
+    v11 = json.loads(STATE_V11_KINDS.read_text())
+    migrated = migrate(
+        data=json.loads(STATE_V11_KINDS.read_text()), city=SYDNEY,
+    )
+    board = migrated['board']
+    assert isinstance(board, dict)
+    assert [pin['kind'] for pin in board['pins']] == [
+        pin['kind'] for pin in v11['pins']
+    ]
+    assert [pin['kind'] for pin in v11['pins']] == [*SydneyMode, None]
+    assert (board['unpinned'], board['auto']) == (
+        v11['unpinned'], v11['auto'],
+    )
+    saved = from_model(
+        model=state_model_of(text=STATE_V11_KINDS.read_text(), city=SYDNEY),
+        city=SYDNEY,
+    )
+    refs = v11_refs(data=v11)
+    assert [pin_ref(pin=pin) for pin in saved.pins] == refs
+    assert [pin.kind for pin in saved.pins] == [*SydneyMode, None]
+    assert saved.unpinned is not None
+    assert saved.unpinned.kind is None
+    assert saved.auto.before is not None
+    assert saved.auto.before.place == saved.pins[1]
+    assert saved.auto.before.place.kind == SydneyMode.TRAIN
+    assert saved.auto.occurrence is not None
+    assert saved.auto.occurrence.ref == v11['auto']['occurrence']['ref']
+    assert saved.auto.occurrence.ref == refs[0]
+    assert saved.pins[0].kind == SydneyMode.BUS
+
+
+def test_v11_golden_splits_into_v12() -> None:
+    """Today's v11 golden migrates to exactly the v12 golden."""
+    v11 = json.loads(STATE_V11.read_text())
+    migrated = migrate(
+        data=json.loads(STATE_V11.read_text()), city=SYDNEY,
+    )
+    assert migrated == json.loads(GOLDEN_STATE.read_text())
+    board = migrated['board']
+    assert isinstance(board, dict)
+    assert [pin['kind'] for pin in board['pins']] == [
+        pin['kind'] for pin in v11['pins']
+    ]
+    assert board['auto'] == v11['auto']
+    assert board['auto']['before']['place']['kind'] == (
+        v11['auto']['before']['place']['kind']
+    )
+
+
+def test_split_sections_puts_device_settings_apart() -> None:
+    """Device settings go to the device section, the rest to the board."""
+    data = split_sections(
+        {
+            'schema_version': 11,
+            'pins': [],
+            'view': 'map',
+            'settings': {'rotate': True, 'peak_rate': '30s', 'odd': 1},
+            'extra': 2,
+        },
+        city=SYDNEY,
+    )
+    assert data == {
+        'schema_version': 11,
+        'extra': 2,
+        'device': {'schema_version': 1, 'settings': {'rotate': True}},
+        'board': {
+            'schema_version': 1,
+            'pins': [],
+            'view': 'map',
+            'settings': {'peak_rate': '30s', 'odd': 1},
+        },
+    }
+
+
+def test_split_sections_shares_unusable_settings() -> None:
+    """Settings that are not an object go to both sections for repair."""
+    data = split_sections({'settings': 3}, city=SYDNEY)
+    assert data == {
+        'device': {'schema_version': 1, 'settings': 3},
+        'board': {'schema_version': 1, 'settings': 3},
+    }
+
+
+def test_migrate_leaves_missing_section_for_repair() -> None:
+    """A v12 file without a device section migrates without one."""
+    data: dict[str, object] = {'schema_version': 12, 'board': 3}
+    assert migrate(data=data, city=SYDNEY) == {
+        'schema_version': 12, 'board': 3,
+    }
+
+
+def test_migrate_refuses_newer_board() -> None:
+    """A board section newer than the code is refused by name."""
+    data: dict[str, object] = {
+        'schema_version': 12, 'board': {'schema_version': BOARD_SCHEMA + 1},
+    }
+    with pytest.raises(ValueError, match='board'):
+        migrate(data=data, city=SYDNEY)

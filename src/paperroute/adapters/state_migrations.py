@@ -2,14 +2,27 @@
 
 import hashlib
 import json
+from collections.abc import Mapping
 from typing import Any, Final, Protocol
 
 from paperroute.adapters.state_auto import add_auto
 from paperroute.adapters.state_change import add_connections, before_rewritten
 from paperroute.adapters.state_settings import default_settings
+from paperroute.core.saved import DEVICE_FIELDS
+from paperroute_device.core.sections import (
+    DEVICE_MIGRATIONS,
+    DEVICE_SCHEMA,
+    SectionStep,
+    migrate_section,
+)
 from paperroute_transit.core.city import City
 
-SCHEMA_VERSION: Final[int] = 11
+SCHEMA_VERSION: Final[int] = 12
+BOARD_SCHEMA: Final[int] = 1
+BOARD_MIGRATIONS: Final[Mapping[int, SectionStep]] = {}
+BOARD_KEYS: Final[tuple[str, ...]] = (
+    'pins', 'current', 'unpinned', 'view', 'quota', 'auto',
+)
 V1_TRAINLINK_LINES: Final[tuple[str, ...]] = ('NRC', 'NRW', 'STH', 'WST')
 
 
@@ -606,6 +619,55 @@ def drop_zoom(
     return {key: value for key, value in data.items() if key != 'zoom'}
 
 
+def split_sections(
+    data: dict[str, object], *, city: City,
+) -> dict[str, object]:
+    """
+    Move the device's settings and the board's fields into two sections.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Version 11 data.
+    city : City
+        The city; this step needs nothing from it.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with a ``device`` section holding the device's settings
+        and a ``board`` section holding the pins, place, view, quota,
+        auto block and every other setting, each at version 1. Settings
+        that are not an object go to both sections, for repair to reset;
+        other unknown fields stay at the top, for validation to fail.
+    """
+    del city
+    settings = data.get('settings')
+    device_settings: object = settings
+    board_settings: object = settings
+    if isinstance(settings, dict):
+        device_settings = {
+            name: value
+            for name, value in settings.items()
+            if name in DEVICE_FIELDS
+        }
+        board_settings = {
+            name: value
+            for name, value in settings.items()
+            if name not in DEVICE_FIELDS
+        }
+    moved = {*BOARD_KEYS, 'settings'}
+    return {
+        **{key: value for key, value in data.items() if key not in moved},
+        'device': {'schema_version': 1, 'settings': device_settings},
+        'board': {
+            'schema_version': 1,
+            **{key: data[key] for key in BOARD_KEYS if key in data},
+            'settings': board_settings,
+        },
+    }
+
+
 class MigrationStep(Protocol):
     """Brings stored data up one schema version."""
 
@@ -640,6 +702,7 @@ MIGRATIONS: Final[dict[int, MigrationStep]] = {
     8: add_connections,
     9: add_ways,
     10: drop_zoom,
+    11: split_sections,
 }
 
 
@@ -690,7 +753,7 @@ def migrate(*, data: dict[str, object], city: City) -> dict[str, object]:
     ------
     ValueError
         When the version is missing, above `SCHEMA_VERSION`, or has no
-        migration step.
+        migration step, or the same holds for a section.
     """
     version = stored_version(data=data)
     while version < SCHEMA_VERSION:
@@ -699,4 +762,43 @@ def migrate(*, data: dict[str, object], city: City) -> dict[str, object]:
         data = MIGRATIONS[version](data, city=city)
         version += 1
         data['schema_version'] = version
+    return migrated_sections(data=data)
+
+
+def migrated_sections(*, data: dict[str, object]) -> dict[str, object]:
+    """
+    Bring the device and board sections up to their latest versions.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        Data at `SCHEMA_VERSION`.
+
+    Returns
+    -------
+    dict[str, object]
+        The data with each section migrated; a missing or non-object
+        section is left for repair to reset.
+
+    Raises
+    ------
+    ValueError
+        When a section's version is missing, too new or has no step.
+    """
+    device = data.get('device')
+    board = data.get('board')
+    if isinstance(device, dict):
+        data = {**data, 'device': migrate_section(
+            data=device,
+            steps=DEVICE_MIGRATIONS,
+            latest=DEVICE_SCHEMA,
+            name='device',
+        )}
+    if isinstance(board, dict):
+        data = {**data, 'board': migrate_section(
+            data=board,
+            steps=BOARD_MIGRATIONS,
+            latest=BOARD_SCHEMA,
+            name='board',
+        )}
     return data

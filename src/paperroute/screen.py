@@ -22,8 +22,9 @@ def read_rotate(*, path: Path | None) -> bool:
     Returns
     -------
     bool
-        True only when the file holds ``settings.rotate`` as true; a
-        missing, unreadable or malformed file counts as not rotated.
+        True only when the file holds ``device.settings.rotate`` as true,
+        or, in a file the app has not yet migrated, ``settings.rotate``;
+        a missing, unreadable or malformed file counts as not rotated.
     """
     if path is None:
         return False
@@ -31,7 +32,11 @@ def read_rotate(*, path: Path | None) -> bool:
         data = json.loads(path.read_bytes())
     except (OSError, ValueError):
         return False
-    settings = data.get('settings') if isinstance(data, dict) else None
+    if not isinstance(data, dict):
+        return False
+    device = data.get('device')
+    holder = device if isinstance(device, dict) else data
+    settings = holder.get('settings')
     return isinstance(settings, dict) and settings.get('rotate') is True
 
 

@@ -1,0 +1,245 @@
+{
+  "schema_version": 11,
+  "pins": [
+    {
+      "origin": {
+        "stop_id": "k0",
+        "name": "k0",
+        "x": 0.0,
+        "y": 0.0
+      },
+      "destination": null,
+      "kind": "bus",
+      "routes": [
+        "r0"
+      ],
+      "nickname": null,
+      "only": [],
+      "windows": [],
+      "ways": [],
+      "never": []
+    },
+    {
+      "origin": {
+        "stop_id": "k1",
+        "name": "k1",
+        "x": 100.0,
+        "y": 0.0
+      },
+      "destination": null,
+      "kind": "train",
+      "routes": [
+        "r1"
+      ],
+      "nickname": null,
+      "only": [],
+      "windows": [],
+      "ways": [],
+      "never": []
+    },
+    {
+      "origin": {
+        "stop_id": "k2",
+        "name": "k2",
+        "x": 200.0,
+        "y": 0.0
+      },
+      "destination": null,
+      "kind": "metro",
+      "routes": [
+        "r2"
+      ],
+      "nickname": null,
+      "only": [],
+      "windows": [],
+      "ways": [],
+      "never": []
+    },
+    {
+      "origin": {
+        "stop_id": "k3",
+        "name": "k3",
+        "x": 300.0,
+        "y": 0.0
+      },
+      "destination": null,
+      "kind": "light_rail",
+      "routes": [
+        "r3"
+      ],
+      "nickname": null,
+      "only": [],
+      "windows": [],
+      "ways": [],
+      "never": []
+    },
+    {
+      "origin": {
+        "stop_id": "k4",
+        "name": "k4",
+        "x": 400.0,
+        "y": 0.0
+      },
+      "destination": null,
+      "kind": "ferry",
+      "routes": [
+        "r4"
+      ],
+      "nickname": null,
+      "only": [],
+      "windows": [],
+      "ways": [],
+      "never": []
+    },
+    {
+      "origin": {
+        "stop_id": "k5",
+        "name": "k5",
+        "x": 500.0,
+        "y": 0.0
+      },
+      "destination": null,
+      "kind": "school",
+      "routes": [
+        "r5"
+      ],
+      "nickname": null,
+      "only": [],
+      "windows": [],
+      "ways": [],
+      "never": []
+    },
+    {
+      "origin": {
+        "stop_id": "k6",
+        "name": "k6",
+        "x": 600.0,
+        "y": 0.0
+      },
+      "destination": null,
+      "kind": "coach",
+      "routes": [
+        "r6"
+      ],
+      "nickname": null,
+      "only": [],
+      "windows": [],
+      "ways": [],
+      "never": []
+    },
+    {
+      "origin": {
+        "stop_id": "k7",
+        "name": "k7",
+        "x": 700.0,
+        "y": 0.0
+      },
+      "destination": null,
+      "kind": "replacement",
+      "routes": [
+        "r7"
+      ],
+      "nickname": null,
+      "only": [],
+      "windows": [],
+      "ways": [],
+      "never": []
+    },
+    {
+      "origin": {
+        "stop_id": "anything",
+        "name": "anything",
+        "x": 900.0,
+        "y": 0.0
+      },
+      "destination": null,
+      "kind": null,
+      "routes": [],
+      "nickname": null,
+      "only": [],
+      "windows": [],
+      "ways": [],
+      "never": []
+    }
+  ],
+  "current": 2,
+  "unpinned": {
+    "origin": {
+      "stop_id": "loose",
+      "name": "loose",
+      "x": 50.0,
+      "y": 0.0
+    },
+    "destination": null,
+    "kind": null,
+    "routes": [],
+    "nickname": null,
+    "only": [],
+    "windows": [],
+    "ways": [],
+    "never": []
+  },
+  "view": "stop",
+  "settings": {
+    "auto_rebuild": true,
+    "peak_rate": "30s",
+    "offpeak_rate": "2min",
+    "peak_windows": [
+      {
+        "start": "06:30",
+        "end": "10:00"
+      },
+      {
+        "start": "15:00",
+        "end": "19:00"
+      }
+    ],
+    "quiet_mode": "my_hours",
+    "my_hours": {
+      "start": "23:00",
+      "end": "05:30"
+    },
+    "rotate": false,
+    "larger_text": false,
+    "inverted_lists": false,
+    "alert_lookahead": "7d",
+    "connection_map": "changes",
+    "skip_school_buses": true,
+    "skip_school_on_route_pins": false,
+    "clean_after": 30,
+    "swap_knobs": false
+  },
+  "quota": {
+    "day": null,
+    "calls": 0
+  },
+  "auto": {
+    "occurrence": {
+      "ref": "bd56118e088b",
+      "start": "2026-11-03T07:30:00+11:00",
+      "end": "2026-11-03T09:30:00+11:00"
+    },
+    "before": {
+      "place": {
+        "origin": {
+          "stop_id": "k1",
+          "name": "k1",
+          "x": 100.0,
+          "y": 0.0
+        },
+        "destination": null,
+        "kind": "train",
+        "routes": [
+          "r1"
+        ],
+        "nickname": null,
+        "only": [],
+        "windows": [],
+        "ways": [],
+        "never": []
+      },
+      "pinned": true
+    },
+    "overridden_at": null
+  }
+}

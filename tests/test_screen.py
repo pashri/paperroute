@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from paperroute.screen import screen_main
+from paperroute.screen import read_rotate, screen_main
 from paperroute_hardware.adapters.panel_bus import LinuxPanelBus
 from paperroute_hardware.render.panel_bits import grey_planes, oriented
 from paperroute_testkit.hardware_fakes import FakePanelBus
@@ -130,3 +130,25 @@ def test_screen_main_turns_frame_with_unreadable_bytes(
     argv = ['--image', str(image), '--state', str(state)]
     assert screen_main(argv=argv) == 0
     assert drawn_planes(bus=bus) == grey_planes(frame=stepped_frame())
+
+
+@pytest.mark.parametrize(
+    ('state', 'turned'),
+    [
+        ({'settings': {'rotate': True}}, True),
+        ({'device': {'settings': {'rotate': True}}}, True),
+        ({'device': {'settings': {'rotate': False}}}, False),
+        ({'device': 3}, False),
+        ([], False),
+        (None, False),
+    ],
+    ids=['v11', 'v12', 'v12-off', 'bad-device', 'list', 'missing'],
+)
+def test_read_rotate_both_layouts(
+    tmp_path: Path, state: object, turned: bool,
+) -> None:
+    """Rotate is read from a v11 or a v12 file; anything else is not."""
+    path = tmp_path / 'state.json'
+    if state is not None:
+        path.write_text(json.dumps(state), encoding='utf-8')
+    assert read_rotate(path=path) is turned

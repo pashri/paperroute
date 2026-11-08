@@ -261,7 +261,7 @@ def undefined_category(
     """
     Tell whether a trip names a vehicle category its feed does not define.
 
-    Sydney Trains marks empty running, track, special and some excursion
+    The train operator marks empty running, track, special and some excursion
     trains this way.
 
     Parameters
@@ -331,7 +331,7 @@ def trip_fate(
         KEEP for a trip of a defined or no category. For an undefined
         category: HIDE on a route with no defined-category trip or with
         a hidden headsign, else CHECK, in service only if it has two
-        stopping calls and stops nowhere outside NSW.
+        stopping calls and stops nowhere outside the city's area.
     """
     if not undefined_category(row=row, categories=categories):
         return Fate.KEEP

@@ -166,7 +166,7 @@ def between_read(
     -------
     BetweenLoaded
         The names; for a connection pin, the names and families of the
-        direct leg and every ticked way's legs merged, NSW TrainLink
+        direct leg and every ticked way's legs merged, the agency alerts source
         when any leg has it, and every line the timetable runs along the
         legs that day.
     """

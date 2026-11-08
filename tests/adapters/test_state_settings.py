@@ -3,6 +3,7 @@
 import pytest
 from pydantic import ValidationError
 
+from paperroute.adapters.state_migrations import V11_DEVICE_FIELDS
 from paperroute.adapters.state_settings import (
     BoardSettingsModel,
     DeviceSettingsModel,
@@ -141,3 +142,8 @@ def test_settings_round_trip_swap_knobs() -> None:
     settings = DeviceSettings(swap_knobs=True)
     model = device_settings_to_model(settings=settings)
     assert device_settings_from_model(model=model) == settings
+
+
+def test_v11_device_fields_snapshot() -> None:
+    """The frozen v11 field names equal today's device fields."""
+    assert V11_DEVICE_FIELDS == DEVICE_FIELDS

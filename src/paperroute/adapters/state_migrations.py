@@ -8,7 +8,6 @@ from typing import Any, Final, Protocol
 from paperroute.adapters.state_auto import add_auto
 from paperroute.adapters.state_change import add_connections, before_rewritten
 from paperroute.adapters.state_settings import default_settings
-from paperroute.core.saved import DEVICE_FIELDS
 from paperroute_device.core.sections import (
     DEVICE_MIGRATIONS,
     DEVICE_SCHEMA,
@@ -23,6 +22,10 @@ BOARD_MIGRATIONS: Final[Mapping[int, SectionStep]] = {}
 BOARD_KEYS: Final[tuple[str, ...]] = (
     'pins', 'current', 'unpinned', 'view', 'quota', 'auto',
 )
+V11_DEVICE_FIELDS: Final[frozenset[str]] = frozenset({
+    'auto_rebuild', 'clean_after', 'inverted_lists', 'larger_text',
+    'my_hours', 'quiet_mode', 'rotate', 'swap_knobs',
+})
 V1_TRAINLINK_LINES: Final[tuple[str, ...]] = ('NRC', 'NRW', 'STH', 'WST')
 
 
@@ -649,12 +652,12 @@ def split_sections(
         device_settings = {
             name: value
             for name, value in settings.items()
-            if name in DEVICE_FIELDS
+            if name in V11_DEVICE_FIELDS
         }
         board_settings = {
             name: value
             for name, value in settings.items()
-            if name not in DEVICE_FIELDS
+            if name not in V11_DEVICE_FIELDS
         }
     moved = {*BOARD_KEYS, 'settings'}
     return {

@@ -1,4 +1,4 @@
-"""Back off feeds TfNSW throttles or fails, and share fetches in flight."""
+"""Back off feeds the provider throttles or fails; share fetches."""
 
 import asyncio
 import logging

@@ -50,9 +50,9 @@ class PinFacts:
     lines : frozenset[str]
         Timetable route IDs its departures run on.
     loose : bool
-        True when it takes NSW TrainLink or light rail, whose feed route
-        IDs the timetable does not know, so a stop alert naming one of
-        those counts.
+        True when it takes the agency alerts source or light rail, whose
+        feed route IDs the timetable does not know, so a stop alert
+        naming one of those counts.
     """
 
     trips: frozenset[str]

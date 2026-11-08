@@ -54,7 +54,7 @@ def is_peak(
     Parameters
     ----------
     now : datetime
-        The moment, in Sydney time.
+        The moment, in the city's local time.
     settings : Settings
         The peak windows.
     holidays : frozenset[date]

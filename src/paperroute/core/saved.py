@@ -174,7 +174,7 @@ def with_changes(
 @dataclass(frozen=True)
 class Quota:
     """
-    The API calls made on one Sydney day.
+    The API calls made on one local day.
 
     Attributes
     ----------

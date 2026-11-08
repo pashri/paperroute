@@ -93,7 +93,7 @@ def agency_asked(
 
 def trainlink_known(*, state: State, pin: Pin) -> bool:
     """
-    Say whether the timetable said NSW TrainLink serves a pin.
+    Say whether the timetable said the agency alerts source serves a pin.
 
     Parameters
     ----------

@@ -1,4 +1,4 @@
-"""Counting the API calls made each Sydney day."""
+"""Counting the API calls made each local day."""
 
 from dataclasses import replace
 from datetime import date, timedelta
@@ -26,7 +26,7 @@ def counted(*, quota: Quota, day: date, calls: int) -> Quota:
     quota : Quota
         The calls counted so far.
     day : date
-        The Sydney day of the new calls.
+        The local day of the new calls.
     calls : int
         The number of new calls.
 
@@ -49,7 +49,7 @@ def calls_today(*, quota: Quota, day: date) -> int:
     quota : Quota
         The calls counted.
     day : date
-        The Sydney day.
+        The local day.
 
     Returns
     -------
@@ -89,7 +89,7 @@ def without_skipped(*, state: State, event: Event) -> State:
 
     A fetch is counted when it is asked for; one turned away by its
     feed's backoff, or one that shared another fetch's request, never
-    reached TfNSW.
+    reached the feed provider.
 
     Parameters
     ----------

@@ -380,8 +380,8 @@ def request_patterns(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the trips pending, and a LoadPatterns for today in
-        Sydney when any are new and no failure is backing off.
+        State with the trips pending, and a LoadPatterns for today, local time,
+        when any are new and no failure is backing off.
     """
     pending = state.map.pending_patterns
     new = wanted - frozenset(state.map.patterns) - pending

@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.chains import LegKey, chains_of, leg_key
 from paperroute.core.connection_model import (
     LEG_EXTRA,
@@ -448,8 +448,7 @@ def main(  # pylint: disable=too-many-statements
     with closing(
         SqliteTimetableRepository(
             path=args.db,
-            zone=SYDNEY_ZONE,
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         ),
     ) as repo:
         for pair in args.pairs:

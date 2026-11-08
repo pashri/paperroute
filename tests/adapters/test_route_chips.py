@@ -1,7 +1,8 @@
 """Tests for the route chips on the Pins list."""
 
 from paperroute.adapters.route_chips import chip_html, colour_sheet
-from paperroute_transit.core.model import Pin, RouteKind, StopPlace
+from paperroute.city import SydneyMode
+from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.route_colours import RouteColour
 
 STOP: StopPlace = StopPlace(stop_id='a', name='A Stop', point=None)
@@ -31,7 +32,7 @@ def test_chip_text() -> None:
     """The first filtered route, then the kind's letter, then All."""
     routes = Pin(origin=STOP, destination=STOP, routes=('606', '607'))
     only = Pin(origin=STOP, routes=('T1', 'T2'), only=('T2',))
-    train = Pin(origin=STOP, kind=RouteKind.TRAIN)
+    train = Pin(origin=STOP, kind=SydneyMode.TRAIN)
     assert '>606</span>' in chip_of(pin=routes)
     assert '>T2</span>' in chip_of(pin=only)
     assert '>T</span>' in chip_of(pin=train)
@@ -40,17 +41,17 @@ def test_chip_text() -> None:
 
 def test_chip_of_a_pin_without_a_to_names_no_line_it_does_not_filter() -> None:
     """A T1 pin without a To lists every line, so its chip says T."""
-    line = Pin(origin=STOP, kind=RouteKind.TRAIN, routes=('T1',))
+    line = Pin(origin=STOP, kind=SydneyMode.TRAIN, routes=('T1',))
     assert '>T</span>' in chip_of(pin=line)
 
 
 def test_chip_classes() -> None:
     """The kind's class, and the colour class when there is one."""
     bus = Pin(
-        origin=STOP, destination=STOP, kind=RouteKind.BUS, routes=('606',),
+        origin=STOP, destination=STOP, kind=SydneyMode.BUS, routes=('606',),
     )
     light = Pin(
-        origin=STOP, destination=STOP, kind=RouteKind.LIGHT_RAIL,
+        origin=STOP, destination=STOP, kind=SydneyMode.LIGHT_RAIL,
         routes=('L1',),
     )
     found = chip_of(pin=bus, colour=BLUE)
@@ -77,7 +78,7 @@ def test_sheet_has_only_valid_rules() -> None:
 def test_every_kind_has_a_letter() -> None:
     """Each kind's chip without routes shows a letter."""
     letters = {
-        kind: chip_of(pin=Pin(origin=STOP, kind=kind)) for kind in RouteKind
+        kind: chip_of(pin=Pin(origin=STOP, kind=kind)) for kind in SydneyMode
     }
-    assert '>R</span>' in letters[RouteKind.REPLACEMENT]
-    assert '>S</span>' in letters[RouteKind.SCHOOL]
+    assert '>R</span>' in letters[SydneyMode.REPLACEMENT]
+    assert '>S</span>' in letters[SydneyMode.SCHOOL]

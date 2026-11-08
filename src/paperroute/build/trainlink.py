@@ -7,7 +7,7 @@ from dataclasses import dataclass, replace
 from enum import IntEnum
 from typing import Final
 
-from paperroute_transit.core.model import REGIONAL_AGENCIES, TRAINLINK
+from paperroute.city import REGIONAL_AGENCIES, TRAINLINK
 
 MATCH_SECONDS: Final[int] = 180
 MIN_CALLS: Final[int] = 2

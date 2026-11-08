@@ -8,7 +8,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyMode
 from paperroute.core.chooser import (
     Choice,
     ChooserState,
@@ -46,7 +46,7 @@ from paperroute.core.state_model import State
 from paperroute.core.stop_view import HORIZON
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, begun, pin_at, place
-from paperroute_transit.core.model import Pin, RouteKind, shifted
+from paperroute_transit.core.model import Pin, shifted
 from tests.core.chooser_walks import (
     NEXT,
     OPEN,
@@ -185,7 +185,7 @@ def test_station_press_preloads_departures_and_asks_to_column() -> None:
     ]
     [load] = [e for e in effects if isinstance(e, LoadChooserDepartures)]
     assert load.pin == Pin(
-        origin=T1_PLACES['E2'], kind=RouteKind.TRAIN, routes=('T1',),
+        origin=T1_PLACES['E2'], kind=SydneyMode.TRAIN, routes=('T1',),
     )
 
 
@@ -502,7 +502,7 @@ def test_station_and_to_cursors_stay_focusable(
         made_rows(kinds=stations, level=Level.STATION),
         made_rows(kinds=tos, level=Level.TO),
     )
-    chooser = opened_at_kind(kind=RouteKind.TRAIN)
+    chooser = opened_at_kind(kind=SydneyMode.TRAIN)
     chooser = answer(
         chooser=chooser, request=ColumnRequest(path=T1[:1]), columns=columns,
     )

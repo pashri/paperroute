@@ -4,7 +4,7 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyMode
 from paperroute.core.chains import Chain, Legs, chains_of, leg_key
 from paperroute.core.connection_model import way_legs
 from paperroute_testkit.core.factories import departure, live, place
@@ -12,7 +12,6 @@ from paperroute_transit.core.model import (
     Change,
     Departure,
     Pin,
-    RouteKind,
     StopPlace,
     Way,
 )
@@ -63,7 +62,7 @@ WORK_CHANGE: Final[Change] = Change(
 WORK: Final[Pin] = Pin(
     origin=HOLLIS,
     destination=WESTMEAD,
-    kind=RouteKind.BUS,
+    kind=SydneyMode.BUS,
     nickname='Work',
     ways=(Way(changes=(WORK_CHANGE,)),),
 )

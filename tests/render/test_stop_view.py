@@ -5,6 +5,7 @@ from dataclasses import replace
 import numpy as np
 import pytest
 
+from paperroute.city import SydneyFeed
 from paperroute.core.stop_view import Pill
 from paperroute.render.chrome import BANNER, badge, badge_width, route_pair
 from paperroute.render.stop_view import (
@@ -35,7 +36,7 @@ from paperroute_device.render.canvas import (
 from paperroute_device.render.frame import HEADER, finish
 from paperroute_testkit.render.factories import STOP_VIEW as BASE
 from paperroute_testkit.render.factories import stop_row as row
-from paperroute_transit.core.model import CarryOn, Mode
+from paperroute_transit.core.model import CarryOn
 
 
 def test_frame_is_one_bit_800_by_480() -> None:
@@ -89,7 +90,7 @@ def test_rows_never_run_off_the_bottom() -> None:
 
 def test_ferry_hero_says_ferry() -> None:
     """The hero names the vehicle and stop part by mode alone."""
-    ferry = replace(BASE, hero=replace(row(), mode=Mode.FERRY))
+    ferry = replace(BASE, hero=replace(row(), mode=SydneyFeed.FERRY))
     bus = draw_stop_view(view=BASE)
     drawn = draw_stop_view(view=ferry)
     assert (drawn[40:70, 0:438] != bus[40:70, 0:438]).any()

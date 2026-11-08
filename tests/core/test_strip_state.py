@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.map_state import area_frame
 from paperroute.core.map_view import DEFAULT_ZOOM, MapView
@@ -58,7 +58,7 @@ from paperroute_testkit.core.strip_factories import (
     trains,
     turn,
 )
-from paperroute_transit.core.model import CarryOn, Departure, Mode, RouteKind
+from paperroute_transit.core.model import CarryOn, Departure
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, OPEN, REACH, TO_STAGE
 from tests.core.test_connection_screens import started, with_legs
@@ -128,9 +128,9 @@ def kinds[T](*, effects: tuple[Effect, ...], kind: type[T]) -> list[T]:
 
 def test_strip_key_takes_the_pins_from_kind_and_routes() -> None:
     """The key is the From's ID, the kind and the routes."""
-    pin = replace(PIN, kind=RouteKind.BUS, routes=('606',))
+    pin = replace(PIN, kind=SydneyMode.BUS, routes=('606',))
     assert strip_key(pin=pin) == StripKey(
-        station='C', kind=RouteKind.BUS, routes=('606',),
+        station='C', kind=SydneyMode.BUS, routes=('606',),
     )
 
 
@@ -362,7 +362,7 @@ def test_strip_map_polls_every_position_feed_until_modes_known() -> None:
     _, effects = on_view(view=LiveView.STRIP_MAP, departures=trains())
     fetches = kinds(effects=effects, kind=FetchFeed)
     assert {fetch.feed for fetch in fetches} >= {
-        *position_feeds(modes=ALL_POSITION_MODES - {Mode.LIGHT_RAIL}),
+        *position_feeds(modes=ALL_POSITION_MODES - {SydneyFeed.LIGHT_RAIL}),
         'v1/gtfs/vehiclepos/lightrail/parramatta',
     }
     assert 'v1/gtfs/vehiclepos/lightrail/newcastle' not in {
@@ -375,9 +375,9 @@ def test_strip_trips_patterns_requested() -> None:
     """The Strip asks for the patterns of its trips in the window."""
     late = departure(
         departs=START + timedelta(minutes=45),
-        mode=Mode.TRAIN,
+        mode=SydneyFeed.TRAIN,
         trip_id='late',
-        kind=RouteKind.TRAIN,
+        kind=SydneyMode.TRAIN,
     )
     _, effects = on_view(view=LiveView.STRIP, departures=(*trains(), late))
     [load] = kinds(effects=effects, kind=LoadPatterns)
@@ -388,10 +388,10 @@ def test_strip_trips_include_next_trips() -> None:
     """The Strip asks for the pattern of the trip a train carries on as."""
     t8 = departure(
         departs=START + timedelta(minutes=3),
-        mode=Mode.TRAIN,
+        mode=SydneyFeed.TRAIN,
         route='T8',
         trip_id='a',
-        kind=RouteKind.TRAIN,
+        kind=SydneyMode.TRAIN,
         then=CarryOn(route='T2', headsign='Leppington', trip_id='b'),
     )
     _, effects = on_view(view=LiveView.STRIP, departures=(*trains(), t8))
@@ -417,10 +417,10 @@ def whole_stop(*, at: datetime) -> tuple[Departure, ...]:
     window = tuple(
         departure(
             departs=at + timedelta(minutes=-59, seconds=90 * i),
-            mode=Mode.TRAIN,
+            mode=SydneyFeed.TRAIN,
             route='T1',
             trip_id=f'train-{i}',
-            kind=RouteKind.TRAIN,
+            kind=SydneyMode.TRAIN,
         )
         for i in range(60)
     )
@@ -428,7 +428,7 @@ def whole_stop(*, at: datetime) -> tuple[Departure, ...]:
         departure(
             departs=at + timedelta(seconds=15 * i),
             trip_id=f'bus-{i}',
-            kind=RouteKind.BUS,
+            kind=SydneyMode.BUS,
         )
         for i in range(440)
     )
@@ -466,9 +466,9 @@ def test_strip_trips_do_not_wait_for_the_fetch_in_flight() -> None:
     """A strip trip seen in an old download is asked for at once."""
     early = departure(
         departs=START + timedelta(minutes=1),
-        mode=Mode.TRAIN,
+        mode=SydneyFeed.TRAIN,
         trip_id='early',
-        kind=RouteKind.TRAIN,
+        kind=SydneyMode.TRAIN,
     )
     state, _ = on_view(view=LiveView.STRIP, departures=(early,))
     seen = vehicle(timestamp=int(START.timestamp()), trip_id='train-0')
@@ -496,7 +496,7 @@ def test_strip_trips_do_not_wait_for_the_fetch_in_flight() -> None:
 
 def test_to_stage_keeps_the_chooser_key_in_use() -> None:
     """The chooser's strip is kept while it picks a TO, not after a back."""
-    pin = replace(PIN, kind=RouteKind.BUS)
+    pin = replace(PIN, kind=SydneyMode.BUS)
     state, _ = on_view(view=LiveView.STOP, pin=pin)
     state, _ = run(state=state, events=list(TO_STAGE))
     assert keys_in_use(state=state) == {strip_key(pin=pin), CHOSEN_KEY}

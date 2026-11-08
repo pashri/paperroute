@@ -1,5 +1,6 @@
 """Views to draw in tests: a Stop view, a Strip view and chooser columns."""
 
+from paperroute.city import SydneyFeed
 from paperroute.core.chooser import Choice, Level
 from paperroute.core.chooser_view import ChooserView, ColumnView
 from paperroute.core.stop_view import Pill, PinTag, Row, StopView
@@ -10,7 +11,7 @@ from paperroute.core.strip_model import (
     StripRow,
     StripView,
 )
-from paperroute_transit.core.model import CarryOn, Mode
+from paperroute_transit.core.model import CarryOn
 from paperroute_transit.core.reach import RowKind
 
 
@@ -41,7 +42,7 @@ def stop_row(
         Row.
     """
     return Row(
-        route='606', mode=Mode.BUS, platform='B4', destination=destination,
+        route='606', mode=SydneyFeed.BUS, platform='B4', destination=destination,
         countdown='9', leaves_at='8:09', arrives_at='8:45', ride_minutes=36,
         live=True, pill=pill, then=then, onto=onto)
 
@@ -72,7 +73,7 @@ def panel_row(*, then: CarryOn | None = None,
         The departure.
     """
     return Row(
-        route='T1', mode=Mode.TRAIN, platform='3', destination='Emu Plains',
+        route='T1', mode=SydneyFeed.TRAIN, platform='3', destination='Emu Plains',
         countdown='6', leaves_at='8:11', arrives_at='8:47', ride_minutes=36,
         live=True, pill=pill, then=then, onto=onto)
 

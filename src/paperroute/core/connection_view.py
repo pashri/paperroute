@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from typing import Final
 
+from paperroute.city import SydneyFeed
 from paperroute.core.chains import Chain
 from paperroute.core.connection_model import change_walk
 from paperroute.core.rides import Ride, rides_of
@@ -16,19 +17,19 @@ from paperroute.core.stop_view import (
     empty_text,
 )
 from paperroute_device.core.text import clock_text
-from paperroute_transit.core.model import Mode, Pin
+from paperroute_transit.core.model import Pin
 
 NO_PAIRS: Final[str] = f'No connections in {HORIZON_TEXT}'
 PAIR_ROWS: Final[int] = 5
-MODE_NOUNS: Final[dict[Mode, str]] = {
-    Mode.BUS: 'bus',
-    Mode.TRAIN: 'train',
-    Mode.METRO: 'metro',
-    Mode.FERRY: 'ferry',
-    Mode.LIGHT_RAIL: 'light rail',
-    Mode.COACH: 'coach',
-    Mode.REGIONAL: 'train',
-    Mode.OTHER: 'service',
+MODE_NOUNS: Final[dict[str, str]] = {
+    SydneyFeed.BUS: 'bus',
+    SydneyFeed.TRAIN: 'train',
+    SydneyFeed.METRO: 'metro',
+    SydneyFeed.FERRY: 'ferry',
+    SydneyFeed.LIGHT_RAIL: 'light rail',
+    SydneyFeed.COACH: 'coach',
+    SydneyFeed.REGIONAL: 'train',
+    SydneyFeed.OTHER: 'service',
 }
 WAITING: Final[frozenset[str]] = frozenset({
     empty_text(destination=None, loaded=False),
@@ -45,7 +46,7 @@ class HeroLine:
     ----------
     route : str | None
         The ride's route, or None for a plain step.
-    mode : Mode | None
+    mode : str | None
         The ride's mode, or None for a plain step.
     text : str
         The ride's headsign, or the step.
@@ -54,7 +55,7 @@ class HeroLine:
     """
 
     route: str | None
-    mode: Mode | None
+    mode: str | None
     text: str
     at: str = ''
 
@@ -165,7 +166,7 @@ def ride_line(*, ride: Ride, zone: tzinfo) -> HeroLine:
     departure = ride.item.departure
     return HeroLine(
         route=departure.route,
-        mode=departure.mode,
+        mode=departure.source,
         text=departure.headsign,
         at=clock_text(moment=ride.departs, zone=zone),
     )

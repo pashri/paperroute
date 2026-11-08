@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute.core.alert_state import alert_feeds, listed_ids, shown_alerts
 from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import MapView
@@ -53,7 +53,7 @@ from paperroute_transit.core.alert_model import (
     LoadBetween,
     Matched,
 )
-from paperroute_transit.core.model import Departure, Mode, Pin, RouteKind
+from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from tests.core.test_quiet import asleep_at_one, at, evening, ticked
 
@@ -77,7 +77,7 @@ STRATHFIELD_TOWN_HALL: Final[Pin] = station_pin(
 BUS_PIN: Final[Pin] = station_pin(
     origin='213460',
     origin_name='Rhodes Station, Walker St',
-    kind=RouteKind.BUS,
+    kind=SydneyMode.BUS,
 )
 
 
@@ -104,7 +104,7 @@ def started(*, pins: tuple[Pin, ...] = (PARRAMATTA_CENTRAL,)) -> State:
 def loaded_with(
     *,
     state: State,
-    modes: tuple[Mode, ...] = (Mode.TRAIN,),
+    modes: tuple[SydneyFeed, ...] = (SydneyFeed.TRAIN,),
     route: str = 'T1',
 ) -> tuple[State, tuple[Effect, ...]]:
     """
@@ -114,7 +114,7 @@ def loaded_with(
     ----------
     state : State
         State.
-    modes : tuple[Mode, ...]
+    modes : tuple[SydneyFeed, ...]
         Each departure's mode.
     route : str
         Their route.
@@ -229,7 +229,7 @@ def test_alerts_polled_for_pin_modes() -> None:
 def test_two_modes_poll_each_feed() -> None:
     """Bus and train departures fetch each alerts feed once a poll."""
     state, effects = loaded_with(
-        state=started(), modes=(Mode.BUS, Mode.TRAIN),
+        state=started(), modes=(SydneyFeed.BUS, SydneyFeed.TRAIN),
     )
     wanted = [
         FetchFeed(feed=BUSES, kind=FeedKind.ALERTS),
@@ -244,8 +244,8 @@ def test_two_modes_poll_each_feed() -> None:
 
 def test_ferry_pin_polls_ferry_alerts() -> None:
     """A ferry pin fetches the ferry alerts feed."""
-    pin = replace(PARRAMATTA_CENTRAL, kind=RouteKind.FERRY)
-    _, effects = loaded_with(state=started(pins=(pin,)), modes=(Mode.FERRY,))
+    pin = replace(PARRAMATTA_CENTRAL, kind=SydneyMode.FERRY)
+    _, effects = loaded_with(state=started(pins=(pin,)), modes=(SydneyFeed.FERRY,))
     assert alert_fetches(effects=effects) == [
         FetchFeed(feed=FERRIES, kind=FeedKind.ALERTS),
     ]
@@ -306,7 +306,7 @@ def test_pin_flip_uses_new_pin() -> None:
     state, _ = step(state, KnobTurned(knob=Knob.TOP, steps=1))
     assert shown(state=state) == BUS_PIN
     assert not shown_alerts(state=state)
-    state, _ = loaded_with(state=state, modes=(Mode.BUS,), route='526')
+    state, _ = loaded_with(state=state, modes=(SydneyFeed.BUS,), route='526')
     assert [
         item.matched.alert for item in shown_alerts(state=state)
     ] == [RHODES]
@@ -326,7 +326,7 @@ def test_between_requested_for_rail_pin() -> None:
     _, effects = loaded_with(state=state)
     assert not [e for e in effects if isinstance(e, LoadBetween)]
     alone = replace(STRATHFIELD_TOWN_HALL, destination=None)
-    for pin, mode in ((BUS_PIN, Mode.BUS), (alone, Mode.TRAIN)):
+    for pin, mode in ((BUS_PIN, SydneyFeed.BUS), (alone, SydneyFeed.TRAIN)):
         _, effects = loaded_with(state=started(pins=(pin,)), modes=(mode,))
         assert [e for e in effects if isinstance(e, LoadBetween)] == [
             LoadBetween(pin=pin, trip_ids=frozenset(), day=NOW.date()),
@@ -460,7 +460,7 @@ def test_list_only_alert_no_banner() -> None:
 def test_alert_in_two_feeds_listed_once() -> None:
     """An alert in two feeds is listed, counted and passed once."""
     state, _ = loaded_with(
-        state=started(), modes=(Mode.TRAIN, Mode.REGIONAL),
+        state=started(), modes=(SydneyFeed.TRAIN, SydneyFeed.REGIONAL),
     )
     second = replace(XPLORER, alert_id='second', header='Second')
     state = fresh_with(state=state, alerts=(XPLORER, second))
@@ -518,7 +518,7 @@ def test_kindless_pin_asked_again_once_trips_load() -> None:
 def test_ferry_wharf_alert_takes_banner() -> None:
     """A wharf closure naming the ferry pin's wharf takes the banner."""
     state, _ = loaded_with(
-        state=started(pins=(ROSE_BAY_PIN,)), modes=(Mode.FERRY,), route='F9',
+        state=started(pins=(ROSE_BAY_PIN,)), modes=(SydneyFeed.FERRY,), route='F9',
     )
     state = fresh_with(
         state=state,
@@ -541,10 +541,10 @@ def test_ferry_wharf_alert_takes_banner() -> None:
 def test_ferry_alert_naming_other_wharf_listed_only() -> None:
     """A closure of another wharf on the route is only listed."""
     pin = station_pin(
-        origin='21501', origin_name='Parramatta Wharf', kind=RouteKind.FERRY,
+        origin='21501', origin_name='Parramatta Wharf', kind=SydneyMode.FERRY,
     )
     state, _ = loaded_with(
-        state=started(pins=(pin,)), modes=(Mode.FERRY,), route='F3',
+        state=started(pins=(pin,)), modes=(SydneyFeed.FERRY,), route='F3',
     )
     state = fresh_with(state=state, alerts=(ABBOTSFORD,), feed=FERRIES)
     assert listed_ids(state=state) == [ABBOTSFORD.alert_id]
@@ -554,7 +554,7 @@ def test_ferry_alert_naming_other_wharf_listed_only() -> None:
 
 
 def trainlink_fetches(
-    *, pin: Pin, mode: Mode, trainlink: bool,
+    *, pin: Pin, mode: SydneyFeed, trainlink: bool,
 ) -> list[FetchFeed]:
     """
     Load a pin's departures and TrainLink answer, then tick to the
@@ -564,7 +564,7 @@ def trainlink_fetches(
     ----------
     pin : Pin
         The shown pin.
-    mode : Mode
+    mode : SydneyFeed
         Its departures' mode.
     trainlink : bool
         The timetable's TrainLink answer.
@@ -584,7 +584,7 @@ def trainlink_fetches(
 def test_trainlink_answer_fetches_its_feed_at_once() -> None:
     """A TrainLink feed newly needed is fetched at once, and only it."""
     pin = PARRAMATTA_CENTRAL
-    state, _ = loaded_with(state=started(pins=(pin,)), modes=(Mode.TRAIN,))
+    state, _ = loaded_with(state=started(pins=(pin,)), modes=(SydneyFeed.TRAIN,))
     event = BetweenLoaded(pin=pin, names=frozenset(), trainlink=True)
     state, effects = step(state, event)
     assert alert_fetches(effects=effects) == [
@@ -597,13 +597,13 @@ def test_trainlink_answer_fetches_its_feed_at_once() -> None:
 def test_trainlink_station_polls_trainlink() -> None:
     """A train pin TrainLink serves also polls the TrainLink feed."""
     assert trainlink_fetches(
-        pin=PARRAMATTA_CENTRAL, mode=Mode.TRAIN, trainlink=True,
+        pin=PARRAMATTA_CENTRAL, mode=SydneyFeed.TRAIN, trainlink=True,
     ) == [
         FetchFeed(feed=REGIONAL, kind=FeedKind.ALERTS),
         FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS),
     ]
     assert trainlink_fetches(
-        pin=PARRAMATTA_CENTRAL, mode=Mode.TRAIN, trainlink=False,
+        pin=PARRAMATTA_CENTRAL, mode=SydneyFeed.TRAIN, trainlink=False,
     ) == [FetchFeed(feed=TRAINS, kind=FeedKind.ALERTS)]
 
 
@@ -625,7 +625,7 @@ def test_kindless_train_pin_polls_trainlink() -> None:
     """A kind-less pin with train departures polls TrainLink too."""
     assert trainlink_fetches(
         pin=replace(PARRAMATTA_CENTRAL, kind=None),
-        mode=Mode.TRAIN,
+        mode=SydneyFeed.TRAIN,
         trainlink=True,
     ) == [
         FetchFeed(feed=REGIONAL, kind=FeedKind.ALERTS),
@@ -636,7 +636,7 @@ def test_kindless_train_pin_polls_trainlink() -> None:
 def test_bus_pin_ignores_trainlink() -> None:
     """A bus pin never polls TrainLink from the timetable's answer."""
     assert trainlink_fetches(
-        pin=BUS_PIN, mode=Mode.BUS, trainlink=True,
+        pin=BUS_PIN, mode=SydneyFeed.BUS, trainlink=True,
     ) == [FetchFeed(feed=BUSES, kind=FeedKind.ALERTS)]
 
 
@@ -676,7 +676,7 @@ def test_connection_asks_between_per_leg() -> None:
     ferry = (
         departure(
             departs=at_connection(7, 50),
-            mode=Mode.FERRY,
+            mode=SydneyFeed.FERRY,
             route='F3',
             trip_id='ferry-1',
         ),

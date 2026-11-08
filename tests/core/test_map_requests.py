@@ -3,7 +3,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute.core.cycle import cycle_effects
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM
@@ -42,7 +42,7 @@ from paperroute_testkit.core.strip_factories import (
     turn,
 )
 from paperroute_transit.core.geo import Point
-from paperroute_transit.core.model import Departure, Mode, Pin, RouteKind
+from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_connection_screens import legs_loaded, started
 
@@ -57,7 +57,7 @@ def bus_pin() -> tuple[Departure, ...]:
         The departure.
     """
     return (
-        departure(departs=START + timedelta(minutes=3), mode=Mode.BUS),
+        departure(departs=START + timedelta(minutes=3), mode=SydneyFeed.BUS),
     )
 
 
@@ -146,7 +146,7 @@ def test_map_polls_only_the_light_rail_line_in_its_area() -> None:
     """Light rail in the area polls that line's feed, not all four."""
     state = on_map()
     request = area(state=state)
-    modes = frozenset({Mode.LIGHT_RAIL})
+    modes = frozenset({SydneyFeed.LIGHT_RAIL})
     state, _ = step(
         state, ModesLoaded(mpp=request.mpp, box=request.box, modes=modes),
     )
@@ -159,7 +159,7 @@ def test_map_polls_area_modes_when_known() -> None:
     """Known area modes poll exactly their feeds."""
     state = on_map()
     request = area(state=state)
-    modes = frozenset({Mode.TRAIN, Mode.BUS})
+    modes = frozenset({SydneyFeed.TRAIN, SydneyFeed.BUS})
     event = ModesLoaded(mpp=request.mpp, box=request.box, modes=modes)
     state, _ = step(state, event)
     assert map_feeds(state=state) == position_feeds(modes=modes)
@@ -171,7 +171,7 @@ def test_strip_feeds_unchanged() -> None:
     state, _ = on_view(
         view=LiveView.STRIP, departures=(*bus_pin(), *trains()),
     )
-    assert map_feeds(state=state) == position_feeds(modes={Mode.TRAIN})
+    assert map_feeds(state=state) == position_feeds(modes={SydneyFeed.TRAIN})
 
 
 def test_positions_follow_rate() -> None:
@@ -205,27 +205,27 @@ def test_connection_map_requests_both_shapes() -> None:
 
 def test_connection_positions_union() -> None:
     """The connection Map polls every leg's positions feed."""
-    second = tuple(replace(item, mode=Mode.TRAIN) for item in LEG2)
+    second = tuple(replace(item, source=SydneyFeed.TRAIN) for item in LEG2)
     state, _ = legs_loaded(state=started(view=LiveView.MAP), second=second)
     mpp = ZOOMS[0]  # the Changes fit
     state = replace(state, map=replace(
-        state.map, area_modes={mpp: frozenset({Mode.FERRY})},
+        state.map, area_modes={mpp: frozenset({SydneyFeed.FERRY})},
     ))
     assert set(map_feeds(state=state)) == set(position_feeds(
-        modes={Mode.BUS, Mode.TRAIN, Mode.FERRY},
+        modes={SydneyFeed.BUS, SydneyFeed.TRAIN, SydneyFeed.FERRY},
     ))
 
 
 def test_connection_legs_poll_their_light_rail_anywhere() -> None:
     """A light rail leg polls every light rail feed, near the map or not."""
-    second = tuple(replace(item, mode=Mode.LIGHT_RAIL) for item in LEG2)
+    second = tuple(replace(item, source=SydneyFeed.LIGHT_RAIL) for item in LEG2)
     state, _ = legs_loaded(state=started(view=LiveView.MAP), second=second)
     mpp = ZOOMS[0]  # the Changes fit
     state = replace(state, map=replace(
-        state.map, area_modes={mpp: frozenset({Mode.BUS})},
+        state.map, area_modes={mpp: frozenset({SydneyFeed.BUS})},
     ))
     assert set(map_feeds(state=state)) == set(position_feeds(
-        modes={Mode.BUS, Mode.LIGHT_RAIL},
+        modes={SydneyFeed.BUS, SydneyFeed.LIGHT_RAIL},
     ))
 
 
@@ -238,10 +238,10 @@ def test_connection_modes_around_drawn_map() -> None:
     assert (centre[0], zoom) == (72.0, 0)
     assert LoadModes(mpp=mpp, box=area_box(centre=centre, mpp=mpp)) in effects
     state = replace(state, map=replace(
-        state.map, area_modes={mpp: frozenset({Mode.FERRY})},
+        state.map, area_modes={mpp: frozenset({SydneyFeed.FERRY})},
     ))
     assert set(map_feeds(state=state)) >= set(position_feeds(
-        modes={Mode.FERRY},
+        modes={SydneyFeed.FERRY},
     ))
     strip, _ = step(state, KnobPressed(knob=Knob.BOTTOM))
     assert strip.view is LiveView.STRIP
@@ -273,7 +273,7 @@ def fitted_on(
     pin = Pin(
         origin=place('C', name='Central', point=CENTRE),
         destination=place('S5', name='S5', point=to),
-        kind=RouteKind.BUS,
+        kind=SydneyMode.BUS,
     )
     state, first = on_view(view=view, pin=pin, departures=bus_pin())
     stops = calls(
@@ -320,7 +320,7 @@ def test_new_frame_drops_area_modes() -> None:
     state, _ = fitted_on()
     state = replace(state, map=replace(
         state.map,
-        area_modes={5: frozenset({Mode.FERRY}), 8: frozenset({Mode.BUS})},
+        area_modes={5: frozenset({SydneyFeed.FERRY}), 8: frozenset({SydneyFeed.BUS})},
         pending_modes=frozenset({14}),
     ))
     state, effects = step(state, turn(steps=-1))

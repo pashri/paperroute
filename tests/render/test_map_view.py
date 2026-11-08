@@ -8,7 +8,7 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.city import SYDNEY_PROJECTION
+from paperroute.city import SYDNEY_PROJECTION, SydneyFeed
 from paperroute.core.connection_view import PairRow
 from paperroute.core.map_view import (
     MAP_HEIGHT,
@@ -62,7 +62,6 @@ from paperroute_device.render.frame import HEADER
 from paperroute_transit.adapters.tiles_db import SqliteTileRepository
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.geo import Point, to_metres
-from paperroute_transit.core.model import Mode
 from paperroute_transit.core.tiles import (
     CITY,
     TILE,
@@ -117,7 +116,7 @@ def row(
     """
     return Row(
         route=route,
-        mode=Mode.BUS,
+        mode=SydneyFeed.BUS,
         platform='',
         destination='Parramatta',
         countdown=countdown,

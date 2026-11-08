@@ -13,6 +13,7 @@ from typing import Final
 from paperroute.adapters.gtfs_alerts import parse_alerts
 from paperroute.adapters.gtfs_rt import parse_positions, parse_trip_updates
 from paperroute.app_connections import between_read
+from paperroute.city import SydneyFeed
 from paperroute.core.feeds import ALERT_FEEDS, FeedKind
 from paperroute.core.messages import (
     ChooserDeparturesFailed,
@@ -62,7 +63,7 @@ from paperroute_transit.core.alert_model import (
     Informed,
     LoadBetween,
 )
-from paperroute_transit.core.model import Mode, Pin, StopPlace
+from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.positions import PositionsSnapshot, with_labels
 from paperroute_transit.core.reach import build_reach
 
@@ -705,7 +706,7 @@ def labelled_alerts(
         route_ids={item.route_id for item in entities if item.route_id},
         stop_ids={item.stop_id for item in entities if item.stop_id},
     )
-    metro = feed == ALERT_FEEDS[Mode.METRO]
+    metro = feed == ALERT_FEEDS[SydneyFeed.METRO]
     return replace(
         snapshot,
         alerts=tuple(

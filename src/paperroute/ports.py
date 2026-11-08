@@ -8,6 +8,7 @@ from typing import Protocol
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute.city import SydneyFeed, SydneyMode
 from paperroute.core.chooser import Choice, ChooserPath, Column
 from paperroute.core.pin_choices import ChangeStop, StopMatch
 from paperroute.core.saved import Saved, Settings
@@ -16,9 +17,7 @@ from paperroute_transit.core.alert_model import AlertPlaces
 from paperroute_transit.core.geo import MetreBox, Projection, Shape
 from paperroute_transit.core.model import (
     Departure,
-    Mode,
     Pin,
-    RouteKind,
     ServiceSpan,
     StopPlace,
 )
@@ -240,7 +239,7 @@ class TimetableRepository(Protocol):
             True when one does.
         """
 
-    def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
+    def modes_near(self, *, box: MetreBox) -> frozenset[SydneyFeed]:
         """
         List the modes of the shapes that overlap an area.
 
@@ -251,7 +250,7 @@ class TimetableRepository(Protocol):
 
         Returns
         -------
-        frozenset[Mode]
+        frozenset[SydneyFeed]
             The modes found.
         """
 
@@ -390,7 +389,7 @@ class PinOptions(Protocol):
             The stop, lifted to its parent station; None when unknown.
         """
 
-    def kinds_at(self, *, stop_id: str) -> tuple[RouteKind, ...]:
+    def kinds_at(self, *, stop_id: str) -> tuple[SydneyMode, ...]:
         """
         List the kinds of route that have a line or route at a stop.
 
@@ -401,11 +400,13 @@ class PinOptions(Protocol):
 
         Returns
         -------
-        tuple[RouteKind, ...]
+        tuple[SydneyMode, ...]
             Kinds in display order.
         """
 
-    def lines_at(self, *, stop_id: str, kind: RouteKind) -> tuple[Choice, ...]:
+    def lines_at(
+        self, *, stop_id: str, kind: SydneyMode,
+    ) -> tuple[Choice, ...]:
         """
         List the lines or routes of a kind that serve a stop.
 
@@ -413,7 +414,7 @@ class PinOptions(Protocol):
         ----------
         stop_id : str
             Stop or station ID.
-        kind : RouteKind
+        kind : SydneyMode
             Kind of route.
 
         Returns
@@ -423,7 +424,7 @@ class PinOptions(Protocol):
         """
 
     def destinations(
-        self, *, origin: StopPlace, kind: RouteKind, line: Choice,
+        self, *, origin: StopPlace, kind: SydneyMode, line: Choice,
     ) -> tuple[StopPlace, ...]:
         """
         List the places the device offers as the To.
@@ -432,7 +433,7 @@ class PinOptions(Protocol):
         ----------
         origin : StopPlace
             The From.
-        kind : RouteKind
+        kind : SydneyMode
             Kind of route.
         line : Choice
             The line or route, from `lines_at`.
@@ -445,7 +446,7 @@ class PinOptions(Protocol):
         """
 
     def filters_at(
-        self, *, stop_id: str, kind: RouteKind,
+        self, *, stop_id: str, kind: SydneyMode,
     ) -> tuple[str, ...]:
         """
         List the route numbers a pin's departures can be limited to.
@@ -454,7 +455,7 @@ class PinOptions(Protocol):
         ----------
         stop_id : str
             Stop or station ID.
-        kind : RouteKind
+        kind : SydneyMode
             Kind of route.
 
         Returns
@@ -464,7 +465,7 @@ class PinOptions(Protocol):
         """
 
     def nearby(
-        self, *, place: StopPlace, kind: RouteKind | None,
+        self, *, place: StopPlace, kind: str | None,
     ) -> tuple[StopPlace, ...]:
         """
         List stops close to a place that runs of a kind serve.
@@ -473,7 +474,7 @@ class PinOptions(Protocol):
         ----------
         place : StopPlace
             The place, such as a missing pin's old stop.
-        kind : RouteKind | None
+        kind : str | None
             Kind of route, or None for any.
 
         Returns

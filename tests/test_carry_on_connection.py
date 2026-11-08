@@ -15,7 +15,7 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app_connections import departures_read
 from paperroute.app_ports import Ports
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE, SydneyMode
 from paperroute.core.chains import chains_of
 from paperroute.core.connection_strip import ConnectionStripView
 from paperroute.core.map_view import DEFAULT_ZOOM
@@ -35,7 +35,7 @@ from paperroute_testkit.app_factories import ports_of, posted_by
 from paperroute_testkit.core.factories import live
 from paperroute_testkit.fakes import FixedClock
 from paperroute_transit.build.gtfs_files import Source
-from paperroute_transit.core.model import Change, Pin, RouteKind, Way
+from paperroute_transit.core.model import Change, Pin, Way
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 DAY: Final[date] = date(2026, 10, 16)
@@ -88,8 +88,7 @@ def _timetable(built: Path) -> Iterator[SqliteTimetableRepository]:
     with closing(
         SqliteTimetableRepository(
             path=built,
-            zone=SYDNEY_ZONE,
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         ),
     ) as timetable:
         yield timetable
@@ -127,7 +126,7 @@ def carry_pin(
     return Pin(
         origin=stop(stop_id=ids['origin']),
         destination=stop(stop_id=ids['destination']),
-        kind=RouteKind.BUS,
+        kind=SydneyMode.BUS,
         ways=(
             Way(
                 changes=(
@@ -205,8 +204,7 @@ def connection_strip(
         closing(
             SqliteTimetableRepository(
                 path=path,
-                zone=SYDNEY_ZONE,
-                projection=SYDNEY_PROJECTION,
+                city=SYDNEY,
             ),
         ) as timetable,
         closing(SqliteNetworkRepository(
@@ -264,7 +262,7 @@ def test_leg_two_follows_carry_on_to_town_hall(
     pin = Pin(
         origin=stop(stop_id='2145615'),
         destination=stop(stop_id='200070'),
-        kind=RouteKind.BUS,
+        kind=SydneyMode.BUS,
         ways=(
             Way(
                 changes=(
@@ -328,8 +326,7 @@ def test_m9b_connection_strips_load_their_lines() -> None:
     with closing(
         SqliteTimetableRepository(
             path=M9B_DB,
-            zone=SYDNEY_ZONE,
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         ),
     ) as timetable:
         stop = timetable.stop
@@ -338,7 +335,7 @@ def test_m9b_connection_strips_load_their_lines() -> None:
             Pin(
                 origin=stop(stop_id='G257060'),
                 destination=stop(stop_id='200070'),
-                kind=RouteKind.BUS,
+                kind=SydneyMode.BUS,
                 ways=(
                     Way(
                         changes=(

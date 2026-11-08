@@ -30,12 +30,8 @@ from paperroute_transit.build.gtfs_files import (
 )
 from paperroute_transit.build.holidays import holiday_dates
 from paperroute_transit.build.shapes import load_shapes
-from paperroute_transit.core.model import (
-    HIDDEN_HEADSIGNS,
-    TIMETABLE_SCHEMA,
-    Mode,
-    mode_for,
-)
+from paperroute_transit.core.model import HIDDEN_HEADSIGNS, TIMETABLE_SCHEMA
+from paperroute_transit.core.modes import Classifier
 
 logger = logging.getLogger(__name__)
 
@@ -78,10 +74,11 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 CREATE TABLE holidays (date TEXT PRIMARY KEY) WITHOUT ROWID;
 """
 SHAPE_MODES: Final[str] = """
-SELECT DISTINCT t.shape_id, r.type, COALESCE(t.agency_id, r.agency_id)
+SELECT DISTINCT t.shape_id, r.type, COALESCE(t.agency_id, r.agency_id),
+  r.short_name
 FROM trips t JOIN routes r ON r.route_id = t.route_id
 WHERE t.source = :name AND t.shape_id IS NOT NULL
-ORDER BY t.shape_id, r.type, COALESCE(t.agency_id, r.agency_id)
+ORDER BY t.shape_id, r.type, COALESCE(t.agency_id, r.agency_id), r.short_name
 """
 DROP_UNUSED_SHAPES: Final[str] = """
 DELETE FROM shapes WHERE shape_id NOT IN
@@ -523,10 +520,11 @@ def mark_short_suspects(
     return len(short)
 
 
-def shape_modes(*, conn: sqlite3.Connection,
-                source: Source) -> dict[str, Mode]:
+def shape_modes(
+    *, conn: sqlite3.Connection, source: Source, classify: Classifier,
+) -> dict[str, str]:
     """
-    Map the raw shape IDs of one feed's stored trips to their modes.
+    Map the raw shape IDs of one feed's stored trips to their sources.
 
     Parameters
     ----------
@@ -534,19 +532,24 @@ def shape_modes(*, conn: sqlite3.Connection,
         Database holding the feed's trips and routes.
     source : Source
         Feed.
+    classify : Classifier
+        Sorts a route into a mode and a feed source.
 
     Returns
     -------
-    dict[str, Mode]
-        Raw shape ID to mode. A shape used by trips of several modes takes
-        the one with the lowest route type, then the lowest agency.
+    dict[str, str]
+        Raw shape ID to feed source. A shape used by trips of several
+        routes takes the source of the one with the lowest route type,
+        then the lowest agency, then the lowest short name.
     """
     prefix = len(f'{source.name}:')
-    modes: dict[str, Mode] = {}
-    for shape_id, route_type, agency_id in conn.execute(
+    modes: dict[str, str] = {}
+    for shape_id, route_type, agency_id, short_name in conn.execute(
             SHAPE_MODES, {'name': source.name}):
-        modes.setdefault(shape_id[prefix:], mode_for(
-            route_type=route_type, agency_id=agency_id))
+        modes.setdefault(shape_id[prefix:], classify(
+            route_type=route_type, agency_id=agency_id,
+            short_name=short_name or '',
+        ).source)
     return modes
 
 
@@ -615,7 +618,9 @@ def load_source(*, conn: sqlite3.Connection, source: Source,
         logger.info('kept %d %s trips out of service',
                     trips.hidden + short, source.name)
     load_shapes(conn=conn, source=source,
-                modes=shape_modes(conn=conn, source=source),
+                modes=shape_modes(
+                    conn=conn, source=source, classify=SYDNEY.classify,
+                ),
                 projection=SYDNEY.projection)
     conn.commit()
     return len(trips.inserted)

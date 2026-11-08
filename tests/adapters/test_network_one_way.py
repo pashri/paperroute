@@ -10,11 +10,11 @@ import pytest
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE, SydneyMode
 from paperroute.core.chooser import Column, Level
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
-from paperroute_transit.core.model import Pin, RouteKind, StopPlace
+from paperroute_transit.core.model import Pin, StopPlace
 from tests.adapters.test_network_db import (
     T1,
     build_network,
@@ -175,7 +175,7 @@ def has_departures(
     pin = Pin(
         origin=StopPlace(stop_id=origin, name=origin, point=None),
         destination=StopPlace(stop_id=to, name=to, point=None),
-        kind=RouteKind.TRAIN,
+        kind=SydneyMode.TRAIN,
     )
     return bool(repo.departures(
         pin=pin, start=datetime(2026, 10, 5, tzinfo=SYDNEY_ZONE),
@@ -194,8 +194,7 @@ def test_every_bright_to_has_a_departure(tmp_path: Path) -> None:
     with closing(
         SqliteTimetableRepository(
             path=path,
-            zone=SYDNEY_ZONE,
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         ),
     ) as repo:
         missing = [

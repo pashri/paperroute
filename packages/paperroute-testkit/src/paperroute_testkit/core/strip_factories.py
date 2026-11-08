@@ -4,7 +4,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import DeparturesLoaded, Effect, Event
 from paperroute.core.saved import LiveView, Saved
@@ -27,13 +27,7 @@ from paperroute_testkit.core.factories import (
 )
 from paperroute_testkit.core.steps import step_answered
 from paperroute_transit.core.geo import Point
-from paperroute_transit.core.model import (
-    Departure,
-    Mode,
-    Pin,
-    RouteKind,
-    StopPlace,
-)
+from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 
 WEST: Final[tuple[str, ...]] = ('C', 'J', 'W1', 'W2')
@@ -42,10 +36,10 @@ CENTRE: Final[Point] = (-17_000.0, 1_000.0)
 PIN: Final[Pin] = Pin(
     origin=place('C', name='Central', point=CENTRE),
     destination=place('S5', name='S5'),
-    kind=RouteKind.TRAIN,
+    kind=SydneyMode.TRAIN,
 )
 KEY: Final[StripKey] = StripKey(
-    station='C', kind=RouteKind.TRAIN, routes=(),
+    station='C', kind=SydneyMode.TRAIN, routes=(),
 )
 
 
@@ -151,10 +145,10 @@ def trains(*, count: int = 3) -> tuple[Departure, ...]:
     return tuple(
         departure(
             departs=START + timedelta(minutes=5 * (i + 1)),
-            mode=Mode.TRAIN,
+            mode=SydneyFeed.TRAIN,
             route='T1',
             trip_id=f'train-{i}',
-            kind=RouteKind.TRAIN,
+            kind=SydneyMode.TRAIN,
         )
         for i in range(count)
     )

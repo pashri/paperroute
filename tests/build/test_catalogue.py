@@ -16,7 +16,7 @@ from hypothesis import given
 from hypothesis import strategies as st
 
 from paperroute.build.timetable import Window, build_timetable, create_schema
-from paperroute.city import SYDNEY_PROJECTION
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
 from paperroute_transit.build.catalogue import (
     CATALOGUE_SCHEMA,
     Entry,
@@ -39,7 +39,7 @@ from paperroute_transit.build.route_tags import (
 )
 from paperroute_transit.build.runs import RUN_SCHEMA
 from paperroute_transit.core.geo import Point, to_metres
-from paperroute_transit.core.model import RouteKind
+from paperroute_transit.core.modes import tagged_modes
 from tests.build.network_feed import EAST_WEST, network_feed
 
 REAL_DB: Final[Path] = Path(__file__).parents[2] / 'data' / 'timetable.db'
@@ -114,7 +114,7 @@ def bus(
         Route.
     """
     return CatalogueRoute(
-        route_key=f'bus:{number}:{long_name}', kind=RouteKind.BUS,
+        route_key=f'bus:{number}:{long_name}', kind=SydneyMode.BUS,
         number=number, long_name=long_name, agency=agency, middle=middle,
     )
 
@@ -325,7 +325,9 @@ def test_agency_ties_go_to_the_lowest_id(tmp_path: Path) -> None:
         RouteRow(route_id='r2', number='78', long_name='A to B',
                  agency='X1', patterns=(('B', ('S1', 'S3'), 4),)),
     ])) as conn:
-        (route,) = merged_routes(conn=conn, projection=SYDNEY_PROJECTION)
+        (route,) = merged_routes(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+        )
     assert route.agency == 'X1'
 
 
@@ -339,10 +341,15 @@ def test_identical_long_names_merge_into_one_untagged_row(
         RouteRow(route_id='r2', number='78', long_name='A to B',
                  agency='X2', patterns=(('B', ('S1', 'S3'), 5),)),
     ])) as conn:
-        (route,) = merged_routes(conn=conn, projection=SYDNEY_PROJECTION)
+        (route,) = merged_routes(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+        )
         assert route.agency == 'X2'
         assert route.route_key == 'bus:78:A to B'
-        assert load_catalogue(conn=conn, projection=SYDNEY_PROJECTION) == 1
+        assert load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=SYDNEY.modes,
+        ) == 1
         assert chooser_rows(conn=conn, kind='bus') == [
             ('78', 'A to B', '', ''),
         ]
@@ -362,7 +369,9 @@ def test_merged_route_middle_is_the_median_station(tmp_path: Path) -> None:
             [(150.0, -33.0, 'S1'), (151.0, -34.0, 'S2'),
              (152.5, -35.0, 'S3')],
         )
-        (route,) = merged_routes(conn=conn, projection=SYDNEY_PROJECTION)
+        (route,) = merged_routes(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+        )
     assert route.middle == pytest.approx(to_metres(
         lon=151.0,
         lat=-34.0,
@@ -543,7 +552,10 @@ def test_replacement_buses_go_under_their_line(tmp_path: Path) -> None:
                  route_type=714)
         for number in ('8T1', '42CN', 'EV1')
     ])) as conn:
-        load_catalogue(conn=conn, projection=SYDNEY_PROJECTION)
+        load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=SYDNEY.modes,
+        )
         assert sorted(
             row[::3] for row in chooser_rows(conn=conn, kind='replacement')
         ) == [('42CN', 'CCN'), ('8T1', 'T1')]
@@ -572,7 +584,10 @@ def test_replacement_buses_are_named_by_their_ends(tmp_path: Path) -> None:
             route_type=714, patterns=(('L', ('Loop', 'Mid', 'Loop'), 3),),
         ),
     ])) as conn:
-        load_catalogue(conn=conn, projection=SYDNEY_PROJECTION)
+        load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=SYDNEY.modes,
+        )
         names = {
             row[0]: row[1]
             for row in chooser_rows(conn=conn, kind='replacement')
@@ -600,7 +615,9 @@ def test_merged_replacement_takes_the_busiest_long_name(
             patterns=(('B', ('Lidcombe Station', 'Bankstown Station'), 7),),
         ),
     ])) as conn:
-        (route,) = merged_routes(conn=conn, projection=SYDNEY_PROJECTION)
+        (route,) = merged_routes(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+        )
     assert route.long_name == 'Bankstown to Lidcombe'
 
 
@@ -618,7 +635,10 @@ def test_replacement_bus_is_one_row_per_route(tmp_path: Path) -> None:
             patterns=(('B', ('Lidcombe Station', 'Bankstown Station'), 7),),
         ),
     ])) as conn:
-        load_catalogue(conn=conn, projection=SYDNEY_PROJECTION)
+        load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=SYDNEY.modes,
+        )
         rows = chooser_rows(conn=conn, kind='replacement')
         towards = conn.execute(
             'SELECT headsign, trips FROM chooser_towards ORDER BY headsign',
@@ -646,7 +666,10 @@ def test_train_lines_in_decision_order(tmp_path: Path) -> None:
         RouteRow(route_id='nr', number='', long_name='Non Revenue',
                  route_type=2),
     ])) as conn:
-        load_catalogue(conn=conn, projection=SYDNEY_PROJECTION)
+        load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=SYDNEY.modes,
+        )
         rows = chooser_rows(conn=conn, kind='train')
         keys = [key for key, in conn.execute(
             'SELECT route_key FROM chooser_routes ORDER BY sort',
@@ -662,10 +685,10 @@ def test_train_lines_in_decision_order(tmp_path: Path) -> None:
 def test_unlisted_train_lines_sort_after_the_listed_ones() -> None:
     """A train line outside T1-T9 and the intercity lines sorts last."""
     rows = kind_rows(entries=[
-        Entry(key=f'train:{code}', kind=RouteKind.TRAIN, number=code,
+        Entry(key=f'train:{code}', kind=SydneyMode.TRAIN, number=code,
               name=code, tag='', line='')
         for code in ('T1', 'XPT', 'HUN')
-    ])
+    ], tagged=tagged_modes(modes=SYDNEY.modes))
     assert {row[4]: row[5] for row in rows} == {
         'T1': 1, 'HUN': 105, 'XPT': 203,
     }
@@ -681,7 +704,10 @@ def test_trainlink_is_train_and_coaches_are_coach(tmp_path: Path) -> None:
         RouteRow(route_id='ccn', number='CCN', long_name='CCN Line',
                  route_type=2, agency='NSWTrains'),
     ])) as conn:
-        load_catalogue(conn=conn, projection=SYDNEY_PROJECTION)
+        load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=SYDNEY.modes,
+        )
         kinds = dict(conn.execute('SELECT number, kind FROM chooser_routes'))
     assert kinds == {'NRC': 'train', 'C1': 'coach', 'CCN': 'train'}
 
@@ -696,7 +722,10 @@ def test_towards_rows_sum_merged_routes(tmp_path: Path) -> None:
         RouteRow(route_id='r2', number='9', long_name='A to B', agency='X2',
                  patterns=(('B', ('A', 'X', 'B'), 4),)),
     ])) as conn:
-        load_catalogue(conn=conn, projection=SYDNEY_PROJECTION)
+        load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=SYDNEY.modes,
+        )
         rows = conn.execute(
             'SELECT route_key, headsign, trips, stations FROM chooser_towards '
             'ORDER BY headsign',
@@ -718,7 +747,10 @@ def test_towards_rows_merge_headsigns_differing_in_case(
             ('Bz', ('A', 'B'), 1),
         )),
     ])) as conn:
-        load_catalogue(conn=conn, projection=SYDNEY_PROJECTION)
+        load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=SYDNEY.modes,
+        )
         rows = conn.execute(
             'SELECT headsign, trips, stations FROM chooser_towards '
             'ORDER BY headsign',
@@ -742,7 +774,10 @@ def test_replacement_towards_drop_stand_suffixes(tmp_path: Path) -> None:
             ),
         ),
     ])) as conn:
-        load_catalogue(conn=conn, projection=SYDNEY_PROJECTION)
+        load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=SYDNEY.modes,
+        )
         rows = conn.execute(
             'SELECT headsign, trips FROM chooser_towards',
         ).fetchall()
@@ -757,7 +792,10 @@ def test_bus_towards_drop_stand_suffixes(tmp_path: Path) -> None:
             (': Stand E', ('B', 'A'), 2),
         )),
     ])) as conn:
-        load_catalogue(conn=conn, projection=SYDNEY_PROJECTION)
+        load_catalogue(
+            conn=conn, projection=SYDNEY_PROJECTION, classify=SYDNEY.classify,
+            modes=SYDNEY.modes,
+        )
         rows = conn.execute(
             'SELECT headsign, trips FROM chooser_towards ORDER BY headsign',
         ).fetchall()
@@ -861,10 +899,10 @@ def test_catalogue_writes_line_exits(tmp_path: Path) -> None:
 def test_train_lines_sort_sydney_then_intercity_then_trainlink() -> None:
     """T1-T9, then the intercity lines, then NRC, NRW, STH and WST."""
     rows = kind_rows(entries=[
-        Entry(key=f'train:{code}', kind=RouteKind.TRAIN, number=code,
+        Entry(key=f'train:{code}', kind=SydneyMode.TRAIN, number=code,
               name=code, tag='', line='')
         for code in ('WST', 'XPT', 'HUN', 'NRC', 'T1', 'STH', 'NRW')
-    ])
+    ], tagged=tagged_modes(modes=SYDNEY.modes))
     assert sorted((row[5], row[4]) for row in rows) == [
         (1, 'T1'), (105, 'HUN'), (111, 'NRC'), (112, 'NRW'), (113, 'STH'),
         (114, 'WST'), (207, 'XPT'),
@@ -874,12 +912,12 @@ def test_train_lines_sort_sydney_then_intercity_then_trainlink() -> None:
 def test_ferry_lines_sort_sydney_ferries_first() -> None:
     """F1-F10 come in number order, then the other ferries by name."""
     rows = kind_rows(entries=[
-        Entry(key=f'ferry:{code}', kind=RouteKind.FERRY, number=code,
+        Entry(key=f'ferry:{code}', kind=SydneyMode.FERRY, number=code,
               name=name, tag='', line='')
         for code, name in (
             ('MFF', 'Zeta'), ('F10', 'Ten'), ('F2', 'Two'), ('SM', 'Alpha'),
         )
-    ])
+    ], tagged=tagged_modes(modes=SYDNEY.modes))
     assert [row[4] for row in sorted(rows, key=lambda row: row[5])] == [
         'F2', 'F10', 'SM', 'MFF',
     ]

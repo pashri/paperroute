@@ -6,6 +6,7 @@ from typing import Final
 
 import pytest
 
+from paperroute.city import SydneyMode
 from paperroute.core.chooser import Stage, to_row, turned_to
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import StripLoaded, TimetableSeen
@@ -39,7 +40,7 @@ from paperroute_testkit.core.strip_factories import (
     run,
     turn,
 )
-from paperroute_transit.core.model import Pin, RouteKind
+from paperroute_transit.core.model import Pin
 from paperroute_transit.core.reach import (
     Reach,
     ReachInput,
@@ -399,7 +400,7 @@ def strip_with_end_open(*, pins: tuple[Pin, ...]) -> State:
 
 def test_place_change_shuts_the_folds() -> None:
     """Turning to a pin with another strip shuts the folds."""
-    other = Pin(origin=place('D', name='D'), kind=RouteKind.TRAIN)
+    other = Pin(origin=place('D', name='D'), kind=SydneyMode.TRAIN)
     state = strip_with_end_open(pins=(replace(PIN, destination=None), other))
     state, _ = run(state=state, events=[TOP_TURN])
     assert state.strip.opened == frozenset()

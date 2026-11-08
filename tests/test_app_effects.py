@@ -14,7 +14,7 @@ from google.transit import gtfs_realtime_pb2
 
 from paperroute.app import MapRenderer, run, ticker
 from paperroute.app_effects import VersionWatch, parse_feed
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute.core.chooser import Column, Level
 from paperroute.core.feeds import FeedKind
 from paperroute.core.map_state import area_box
@@ -77,13 +77,7 @@ from paperroute_testkit.render.factories import (
 from paperroute_transit.adapters.tiles_db import NullTiles
 from paperroute_transit.core.alert_model import AlertPlaces, AlertsFetched
 from paperroute_transit.core.geo import MetreBox
-from paperroute_transit.core.model import (
-    Mode,
-    Pin,
-    RouteKind,
-    ServiceSpan,
-    StopPlace,
-)
+from paperroute_transit.core.model import Pin, ServiceSpan, StopPlace
 from paperroute_transit.core.reach import (
     ReachInput,
     RunTail,
@@ -223,7 +217,7 @@ def reach_data() -> ReachInput:
     )
 
 
-STRIP_KEY = StripKey(station='C', kind=RouteKind.TRAIN, routes=())
+STRIP_KEY = StripKey(station='C', kind=SydneyMode.TRAIN, routes=())
 
 
 async def test_load_strip_posts_reach(
@@ -272,7 +266,7 @@ async def test_modes_load_logged(
 class MixedModesTimetable(EmptyPlacedTimetable):
     """A placed timetable with trains and buses near everywhere."""
 
-    def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
+    def modes_near(self, *, box: MetreBox) -> frozenset[SydneyFeed]:
         """
         Find a train and a bus.
 
@@ -283,10 +277,10 @@ class MixedModesTimetable(EmptyPlacedTimetable):
 
         Returns
         -------
-        frozenset[Mode]
+        frozenset[SydneyFeed]
             Trains and buses.
         """
-        return frozenset({Mode.TRAIN, Mode.BUS})
+        return frozenset({SydneyFeed.TRAIN, SydneyFeed.BUS})
 
 
 async def test_modes_load_logs_modes_sorted(
@@ -301,7 +295,7 @@ async def test_modes_load_logs_modes_sorted(
         )
     assert posted == [
         ModesLoaded(
-            mpp=8, box=box, modes=frozenset({Mode.TRAIN, Mode.BUS}),
+            mpp=8, box=box, modes=frozenset({SydneyFeed.TRAIN, SydneyFeed.BUS}),
         ),
     ]
     [record] = [r for r in caplog.records if r.message == 'modes near']

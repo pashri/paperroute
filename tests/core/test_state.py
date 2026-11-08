@@ -10,7 +10,13 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import (
+    SYDNEY,
+    SYDNEY_PROJECTION,
+    SYDNEY_ZONE,
+    SydneyFeed,
+    SydneyMode,
+)
 from paperroute.core.alert_state import ALERT_EVERY, alert_feeds
 from paperroute.core.chooser import (
     ChooserPath,
@@ -170,9 +176,7 @@ from paperroute_transit.core.auto_model import AutoState
 from paperroute_transit.core.geo import Point, make_shape
 from paperroute_transit.core.model import (
     Departure,
-    Mode,
     Pin,
-    RouteKind,
     is_connection,
     pin_key,
     same_place,
@@ -231,7 +235,7 @@ POOL: Final[tuple[Pin, ...]] = (
     PIN,
     *PINS,
     ELSEWHERE,
-    Pin(origin=TOWN_HALL, kind=RouteKind.TRAIN),
+    Pin(origin=TOWN_HALL, kind=SydneyMode.TRAIN),
 )
 
 
@@ -274,7 +278,7 @@ def loaded(
     *,
     state: State,
     count: int = 3,
-    mode: Mode = Mode.BUS,
+    mode: SydneyFeed = SydneyFeed.BUS,
     shaped: bool = False,
 ) -> State:
     """
@@ -286,7 +290,7 @@ def loaded(
         State before.
     count : int
         Departures, three minutes apart.
-    mode : Mode
+    mode : SydneyFeed
         Their mode.
     shaped : bool
         Give each departure its own shape ID.
@@ -463,7 +467,7 @@ def test_poll_interval_counts_real_seconds_on_fall_back_night() -> None:
 def test_step_no_feed_for_ferry_pin() -> None:
     """A ferry pin fetches only alerts and shows the no-feed banner."""
     state, effects = step(
-        loaded(state=fresh(), mode=Mode.FERRY), Tick(now=START)
+        loaded(state=fresh(), mode=SydneyFeed.FERRY), Tick(now=START)
     )
     assert state.feeds == ()
     assert not trip_fetches(effects=effects)
@@ -560,7 +564,7 @@ def test_second_tick_does_not_load_again() -> None:
 
 def test_mixed_modes_fetch_each_needed_feed_once() -> None:
     """Each mode's feed is fetched once; a ferry adds none."""
-    modes = [Mode.BUS, Mode.TRAIN, Mode.REGIONAL, Mode.FERRY]
+    modes = [SydneyFeed.BUS, SydneyFeed.TRAIN, SydneyFeed.REGIONAL, SydneyFeed.FERRY]
     deps = tuple(
         departure(departs=START + timedelta(minutes=3 * (i + 1)), mode=mode)
         for i, mode in enumerate(modes)
@@ -738,12 +742,12 @@ def test_modes_loaded_narrows_the_polled_feeds() -> None:
     """The area's modes replace the every-mode feeds already polled."""
     state, _ = step(fresh(centre=CENTRE), PRESS)
     event = ModesLoaded(
-        mpp=8, box=area_box(centre=CENTRE, mpp=8), modes=frozenset({Mode.BUS})
+        mpp=8, box=area_box(centre=CENTRE, mpp=8), modes=frozenset({SydneyFeed.BUS})
     )
     state, effects = step(state, event)
     assert not effects_of(effects=effects, kind=FetchFeed)
     assert map_feeds(state=state) == (BUS_POSITIONS,)
-    assert state.map.area_modes == {8: frozenset({Mode.BUS})}
+    assert state.map.area_modes == {8: frozenset({SydneyFeed.BUS})}
     assert not state.map.pending_modes
 
 
@@ -777,13 +781,13 @@ def test_stop_view_never_polls_positions() -> None:
 
 def test_map_polls_positions_for_a_ferry_pin() -> None:
     """A ferry pin has no trip feed, yet the Map polls ferry positions."""
-    pin = loaded(state=fresh(centre=CENTRE), mode=Mode.FERRY)
+    pin = loaded(state=fresh(centre=CENTRE), mode=SydneyFeed.FERRY)
     state, _ = step(pin, PRESS)
     assert state.feeds == ()
     ferry = ModesLoaded(
         mpp=8,
         box=area_box(centre=CENTRE, mpp=8),
-        modes=frozenset({Mode.FERRY}),
+        modes=frozenset({SydneyFeed.FERRY}),
     )
     state, _ = step(state, ferry)
     fetch = FetchFeed(feed=FERRY_POSITIONS, kind=FeedKind.POSITIONS)
@@ -807,7 +811,7 @@ def test_empty_area_modes_fall_back_to_every_mode() -> None:
             projection=SYDNEY_PROJECTION,
         ),
     )
-    ferry = ModesLoaded(mpp=8, box=box, modes=frozenset({Mode.FERRY}))
+    ferry = ModesLoaded(mpp=8, box=box, modes=frozenset({SydneyFeed.FERRY}))
     state, _ = step(state, ferry)
     assert needed_feeds(state=state) == (BUSES, FERRY_POSITIONS)
 
@@ -919,7 +923,7 @@ def test_map_sidebar_starts_at_the_next_departure() -> None:
 
 def test_positions_are_not_fetched_twice_within_a_poll() -> None:
     """Positions fetched on entering the Map wait for the next boundary."""
-    state, effects = step(loaded(state=fresh(), mode=Mode.FERRY), PRESS)
+    state, effects = step(loaded(state=fresh(), mode=SydneyFeed.FERRY), PRESS)
     assert effects_of(effects=effects, kind=FetchFeed) == (
         every_position_fetch()
     )
@@ -976,7 +980,7 @@ def test_map_draws_only_the_feeds_it_polls() -> None:
     buses_only = ModesLoaded(
         mpp=8,
         box=area_box(centre=CENTRE, mpp=8),
-        modes=frozenset({Mode.BUS}),
+        modes=frozenset({SydneyFeed.BUS}),
     )
     state, _ = step(state, buses_only)
     boat = vehicle(timestamp=int(START.timestamp()), point=CENTRE)
@@ -1037,7 +1041,7 @@ def test_loaded_shapes_and_positions_are_drawn() -> None:
 
 
 FALL_BACK_EVE = datetime(2026, 4, 5, 1, 30, tzinfo=SYDNEY_ZONE)
-MODES = [Mode.BUS, Mode.TRAIN, Mode.REGIONAL, Mode.FERRY]
+MODES = [SydneyFeed.BUS, SydneyFeed.TRAIN, SydneyFeed.REGIONAL, SydneyFeed.FERRY]
 
 
 @st.composite
@@ -2789,7 +2793,7 @@ def test_modes_for_the_old_area_are_dropped_after_a_flip() -> None:
     state, effects = step(pinned(view=LiveView.MAP), top(steps=1))
     [load] = effects_of(effects=effects, kind=LoadModes)
     assert load.box == area_box(centre=PINS[1].origin.point or CENTRE, mpp=mpp)
-    event = ModesLoaded(mpp=mpp, box=old, modes=frozenset({Mode.FERRY}))
+    event = ModesLoaded(mpp=mpp, box=old, modes=frozenset({SydneyFeed.FERRY}))
     state, _ = step(state, event)
     assert not state.map.area_modes
     request = LoadModes(mpp=mpp, box=old)

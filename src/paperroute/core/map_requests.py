@@ -135,7 +135,7 @@ def map_feeds(*, state: State) -> tuple[str, ...]:
         departures. Sorted and unique.
     """
     modes = frozenset(
-        departure.mode for departure in polled_departures(state=state)
+        departure.source for departure in polled_departures(state=state)
     )
     if not map_shown(state=state):
         return position_feeds(modes=modes)

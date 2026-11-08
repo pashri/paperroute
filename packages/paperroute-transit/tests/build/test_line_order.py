@@ -1,5 +1,6 @@
 """Tests for each line's station order and branch blocks."""
 
+import re
 import sqlite3
 from collections import Counter
 from collections.abc import Iterator, Sequence
@@ -17,14 +18,62 @@ from paperroute_transit.build.line_order import (
     line_order,
 )
 from paperroute_transit.build.line_stations import line_inputs
-from paperroute_transit.core.model import STATION_FIRST
+from paperroute_transit.core.modes import RouteClass
 
 REAL_DB: Final[Path] = ROOT / 'data' / 'timetable.db'
+LINE_KINDS: Final[frozenset[str]] = frozenset(
+    {'train', 'metro', 'light_rail', 'ferry'},
+)
+RAIL_LINES: Final[re.Pattern[str]] = re.compile(
+    r'^(?:T[1-9]|BMT|CCN|SCO|SHL|HUN|NRC|NRW|STH|WST)$',
+)
+REGIONAL_LINES: Final[frozenset[str]] = frozenset(
+    {'NRC', 'NRW', 'STH', 'WST'},
+)
+OTHER_LINE_TYPES: Final[dict[int, str]] = {
+    106: 'train', 401: 'metro', 900: 'light_rail', 4: 'ferry',
+}
 RICHMOND: Final[str] = 'Richmond Station'
 BLACKTOWN: Final[str] = 'Blacktown Station'
 BLOCK_ENDS: Final[tuple[str, ...]] = (
     'Berowra Station', 'Emu Plains Station',
 )
+
+
+def line_class(
+    *, route_type: int, agency_id: str | None, short_name: str,
+) -> RouteClass:
+    """
+    Sort a real timetable route into the line kinds only.
+
+    Parameters
+    ----------
+    route_type : int
+        GTFS route_type.
+    agency_id : str | None
+        GTFS agency_id, when the feed gives one.
+    short_name : str
+        Route short name.
+
+    Returns
+    -------
+    RouteClass
+        A line kind for a named rail, metro, light rail or ferry line;
+        None for every other route. The source is left empty.
+    """
+    regional = agency_id == '711'
+    if not short_name or (regional and route_type not in {2, 106}):
+        kind = None
+    elif route_type == 2:
+        named = (
+            short_name in REGIONAL_LINES
+            if regional
+            else RAIL_LINES.match(short_name) is not None
+        )
+        kind = 'train' if named else None
+    else:
+        kind = OTHER_LINE_TYPES.get(route_type)
+    return RouteClass(kind=kind, source='')
 
 
 def northward(*, stations: str) -> dict[str, float]:
@@ -212,8 +261,8 @@ def line_stops(*, conn: sqlite3.Connection) -> dict[str, set[str]]:
     """
     keys = {
         source.route_id: f'{source.merge[0]}:{source.merge[1]}'
-        for source in route_sources(conn=conn)
-        if source.merge[0] in STATION_FIRST
+        for source in route_sources(conn=conn, classify=line_class)
+        if source.merge[0] in LINE_KINDS
     }
     inputs = line_inputs(conn=conn, keys=keys)
     return {
@@ -288,7 +337,7 @@ def test_real_line_stations_hold_only_station_first_lines(
             'SELECT DISTINCT line_key FROM line_stations',
         )
     }
-    assert kinds == {str(kind) for kind in STATION_FIRST}
+    assert kinds == LINE_KINDS
 
 
 def test_line_exits_lists_routes_leaving_the_line() -> None:

@@ -9,6 +9,14 @@ from typing import Final, cast
 
 from paperroute.adapters.network_lines import LineTables, Row
 from paperroute.adapters.timetable_db import DEFAULT_PATH, to_point
+from paperroute.city import (
+    INTERCITY,
+    SYDNEY,
+    SYDNEY_FERRIES,
+    SYDNEY_LINES,
+    TRAINLINK,
+    SydneyMode,
+)
 from paperroute.core.chooser import (
     KIND_LABELS,
     KIND_LETTERS,
@@ -24,18 +32,9 @@ from paperroute_device.adapters.sqlite_ro import (
     file_identity,
 )
 from paperroute_transit.core.geo import Projection
-from paperroute_transit.core.model import (
-    INTERCITY,
-    STATION_FIRST,
-    SYDNEY_FERRIES,
-    SYDNEY_LINES,
-    TRAINLINK,
-    RouteKind,
-    StopPlace,
-    until_revisit,
-)
+from paperroute_transit.core.model import StopPlace, until_revisit
+from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.reach import (
-    LINE_KINDS,
     ReachInput,
     RunTail,
     StripKey,
@@ -44,6 +43,7 @@ from paperroute_transit.core.reach import (
     merge_tails,
 )
 
+LINE_KINDS: Final[frozenset[str]] = line_modes(modes=SYDNEY.modes)
 NETWORK_TABLES: Final[tuple[str, ...]] = (
     'runs', 'run_stops', 'chooser_routes', 'chooser_towards',
 )
@@ -135,7 +135,7 @@ def unit_count(*, count: int, unit: str) -> str:
     return f'{count:,} {unit}{"" if count == 1 else "s"}'
 
 
-def kind_of(*, path: ChooserPath) -> RouteKind | None:
+def kind_of(*, path: ChooserPath) -> SydneyMode | None:
     """
     Read the kind a chooser path starts with.
 
@@ -146,7 +146,7 @@ def kind_of(*, path: ChooserPath) -> RouteKind | None:
 
     Returns
     -------
-    RouteKind | None
+    SydneyMode | None
         The kind of its first, KIND, step; None when it has none or the
         kind is not offered.
     """
@@ -407,19 +407,19 @@ class SqliteNetworkRepository:
         kind = kind_of(path=path)
         level, key = path[-1]
         match (level, kind):
-            case (Level.KIND, RouteKind()):
+            case (Level.KIND, SydneyMode()):
                 return self._kind_next(kind=kind)
-            case (Level.GROUP, RouteKind()):
+            case (Level.GROUP, SydneyMode()):
                 return self.route_column(
                     sql=ROUTES_IN_GROUP, params=(kind, key),
                 )
-            case (Level.LINE | Level.STATION, RouteKind()) if (
-                kind in STATION_FIRST
+            case (Level.LINE | Level.STATION, SydneyMode()) if (
+                kind in LINE_KINDS
             ):
                 return self.station_first_column(path=path, kind=kind)
-            case (Level.REPLACEMENTS | Level.LINE, RouteKind.BUS):
+            case (Level.REPLACEMENTS | Level.LINE, SydneyMode.BUS):
                 return self._replacement_next(level=level, key=key)
-            case (Level.ROUTE | Level.LINE, RouteKind()):
+            case (Level.ROUTE | Level.LINE, SydneyMode()):
                 return self.towards_column(route_key=key)
         return None
 
@@ -443,13 +443,13 @@ class SqliteNetworkRepository:
             return self.replacement_lines()
         return self.route_column(sql=REPLACEMENTS_OF, params=(key,))
 
-    def _kind_next(self, *, kind: RouteKind) -> Column | None:
+    def _kind_next(self, *, kind: SydneyMode) -> Column | None:
         """
         Work out the column after a kind.
 
         Parameters
         ----------
-        kind : RouteKind
+        kind : SydneyMode
             The kind chosen.
 
         Returns
@@ -459,15 +459,15 @@ class SqliteNetworkRepository:
             for rail and ferries; None for any other kind.
         """
         match kind:
-            case RouteKind.BUS | RouteKind.SCHOOL:
+            case SydneyMode.BUS | SydneyMode.SCHOOL:
                 return self.group_column(kind=kind)
-            case RouteKind.COACH:
+            case SydneyMode.COACH:
                 return self.route_column(sql=ROUTES_OF_KIND, params=(kind,))
             case (
-                RouteKind.TRAIN
-                | RouteKind.METRO
-                | RouteKind.LIGHT_RAIL
-                | RouteKind.FERRY
+                SydneyMode.TRAIN
+                | SydneyMode.METRO
+                | SydneyMode.LIGHT_RAIL
+                | SydneyMode.FERRY
             ):
                 return self.line_column(kind=kind)
         return None
@@ -498,13 +498,13 @@ class SqliteNetworkRepository:
         )
         return Column(level=Level.KIND, items=items)
 
-    def group_column(self, *, kind: RouteKind) -> Column:
+    def group_column(self, *, kind: SydneyMode) -> Column:
         """
         The GROUP column of a kind: its hundreds groups, counted.
 
         Parameters
         ----------
-        kind : RouteKind
+        kind : SydneyMode
             Bus or School.
 
         Returns
@@ -518,7 +518,7 @@ class SqliteNetworkRepository:
             Choice(key=str(grp), label=str(grp), detail=str(count))
             for grp, count in rows
         )
-        if kind is RouteKind.BUS and self.fetch(
+        if kind == SydneyMode.BUS and self.fetch(
             sql=HAS_REPLACEMENTS, params=(),
         ):
             items = (*items, REPLACEMENTS_ROW)
@@ -556,13 +556,13 @@ class SqliteNetworkRepository:
         rows = self.fetch(sql=sql, params=params)
         return Column(level=Level.ROUTE, items=route_choices(rows=rows))
 
-    def line_column(self, *, kind: RouteKind) -> Column:
+    def line_column(self, *, kind: SydneyMode) -> Column:
         """
         The LINE column of a kind, each group of lines ruled off.
 
         Parameters
         ----------
-        kind : RouteKind
+        kind : SydneyMode
             Train, Metro, Light rail or Ferry.
 
         Returns
@@ -597,7 +597,7 @@ class SqliteNetworkRepository:
         return Column(level=Level.TOWARDS, items=items)
 
     def station_first_column(
-        self, *, path: ChooserPath, kind: RouteKind,
+        self, *, path: ChooserPath, kind: SydneyMode,
     ) -> Column | None:
         """
         The STATION or TO column after a station-first line or station.
@@ -606,7 +606,7 @@ class SqliteNetworkRepository:
         ----------
         path : ChooserPath
             Steps chosen so far, ending in a LINE or STATION step.
-        kind : RouteKind
+        kind : SydneyMode
             The path's station-first kind.
 
         Returns
@@ -744,7 +744,7 @@ class SqliteNetworkRepository:
         rows = self.fetch(sql=RUNS_THROUGH, params={
             'station': station,
             'kind': None if key.kind is None else str(key.kind),
-            'any_route': every_route(key=key),
+            'any_route': every_route(key=key, line_kinds=LINE_KINDS),
             'routes': json.dumps(list(key.routes)),
         })
         return merged_tails(rows=rows)

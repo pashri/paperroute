@@ -24,7 +24,6 @@ from paperroute_transit.core.geo import (
     pack_shape,
     to_metres,
 )
-from paperroute_transit.core.model import Mode
 
 SIMPLIFY_M: Final[float] = 1.5
 SHAPES_BATCH: Final[int] = 500
@@ -320,7 +319,7 @@ def simplify(
 def shape_record(
     *,
     shape_id: str,
-    mode: Mode,
+    mode: str,
     run: Run,
     projection: Projection,
 ) -> ShapeRow:
@@ -331,8 +330,8 @@ def shape_record(
     ----------
     shape_id : str
         Namespaced shape ID.
-    mode : Mode
-        Mode of the trips that use it.
+    mode : str
+        Feed source of the trips that use it.
     run : Run
         (sequence, lon, lat) points in order.
     projection : Projection
@@ -398,7 +397,7 @@ def load_shapes(
     *,
     conn: sqlite3.Connection,
     source: Source,
-    modes: Mapping[str, Mode],
+    modes: Mapping[str, str],
     projection: Projection,
 ) -> int:
     """
@@ -412,8 +411,8 @@ def load_shapes(
         Database with the schema.
     source : Source
         Feed; its name prefixes the stored shape IDs.
-    modes : Mapping[str, Mode]
-        Raw shape ID to mode, for the shapes to load.
+    modes : Mapping[str, str]
+        Raw shape ID to feed source, for the shapes to load.
     projection : Projection
         The projection to store the points in.
 

@@ -5,9 +5,10 @@ from datetime import datetime
 from enum import StrEnum
 from typing import Final
 
+from paperroute.city import SydneyMode
 from paperroute.core.strip_follow import origin_of
 from paperroute.core.strip_model import ALL_TAG
-from paperroute_transit.core.model import Departure, Pin, RouteKind, StopPlace
+from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.reach import Reach, RowKind, StripKey
 
 
@@ -26,32 +27,32 @@ class Level(StrEnum):
 
 ChooserPath = tuple[tuple[Level, str], ...]
 
-KIND_ORDER: Final[tuple[RouteKind, ...]] = (
-    RouteKind.BUS,
-    RouteKind.TRAIN,
-    RouteKind.METRO,
-    RouteKind.LIGHT_RAIL,
-    RouteKind.FERRY,
-    RouteKind.SCHOOL,
-    RouteKind.COACH,
+KIND_ORDER: Final[tuple[SydneyMode, ...]] = (
+    SydneyMode.BUS,
+    SydneyMode.TRAIN,
+    SydneyMode.METRO,
+    SydneyMode.LIGHT_RAIL,
+    SydneyMode.FERRY,
+    SydneyMode.SCHOOL,
+    SydneyMode.COACH,
 )
-KIND_LABELS: Final[dict[RouteKind, str]] = {
-    RouteKind.BUS: 'Bus',
-    RouteKind.TRAIN: 'Train',
-    RouteKind.METRO: 'Metro',
-    RouteKind.LIGHT_RAIL: 'Light rail',
-    RouteKind.FERRY: 'Ferry',
-    RouteKind.SCHOOL: 'School',
-    RouteKind.COACH: 'Coach',
+KIND_LABELS: Final[dict[SydneyMode, str]] = {
+    SydneyMode.BUS: 'Bus',
+    SydneyMode.TRAIN: 'Train',
+    SydneyMode.METRO: 'Metro',
+    SydneyMode.LIGHT_RAIL: 'Light rail',
+    SydneyMode.FERRY: 'Ferry',
+    SydneyMode.SCHOOL: 'School',
+    SydneyMode.COACH: 'Coach',
 }
-KIND_LETTERS: Final[dict[RouteKind, str]] = {
-    RouteKind.BUS: 'B',
-    RouteKind.TRAIN: 'T',
-    RouteKind.METRO: 'M',
-    RouteKind.LIGHT_RAIL: 'L',
-    RouteKind.FERRY: 'F',
-    RouteKind.SCHOOL: 'S',
-    RouteKind.COACH: 'C',
+KIND_LETTERS: Final[dict[str, str]] = {
+    SydneyMode.BUS: 'B',
+    SydneyMode.TRAIN: 'T',
+    SydneyMode.METRO: 'M',
+    SydneyMode.LIGHT_RAIL: 'L',
+    SydneyMode.FERRY: 'F',
+    SydneyMode.SCHOOL: 'S',
+    SydneyMode.COACH: 'C',
 }
 
 
@@ -254,7 +255,7 @@ class ChooserState:
         The TO stage's strip.
     to_cursor : int
         Rows from the From row to the TO stage's cursor; negative above.
-    prefer : RouteKind | None
+    prefer : str | None
         Kind the KIND column's cursor starts on.
     failed : Failure | None
         Why the last column or line asked for is missing; None when it
@@ -276,7 +277,7 @@ class ChooserState:
     origin: StopPlace | None = None
     key: StripKey | None = None
     to_cursor: int = 0
-    prefer: RouteKind | None = None
+    prefer: str | None = None
     failed: Failure | None = None
     departures: tuple[Departure, ...] = ()
     load: DepartureLoad = field(default_factory=DepartureLoad)
@@ -468,7 +469,7 @@ def opened(*, shown: Pin) -> tuple[ChooserState, ChooserRequest]:
     )
 
 
-def first_cursor(*, column: Column, prefer: RouteKind | None) -> int:
+def first_cursor(*, column: Column, prefer: str | None) -> int:
     """
     Choose where a new column's cursor starts.
 
@@ -476,7 +477,7 @@ def first_cursor(*, column: Column, prefer: RouteKind | None) -> int:
     ----------
     column : Column
         New column.
-    prefer : RouteKind | None
+    prefer : str | None
         Kind the KIND column starts on.
 
     Returns
@@ -486,7 +487,7 @@ def first_cursor(*, column: Column, prefer: RouteKind | None) -> int:
         replacement bus place) or the From's row in a TO column; failing
         those, the first row a cursor may rest on, else 0.
     """
-    wanted = RouteKind.BUS if prefer is RouteKind.REPLACEMENT else prefer
+    wanted = SydneyMode.BUS if prefer == SydneyMode.REPLACEMENT else prefer
     match column.level:
         case Level.KIND:
             first = [row.key == wanted for row in column.items]
@@ -978,6 +979,6 @@ def chosen_pin(
     return Pin(
         origin=chooser.origin,
         destination=destination,
-        kind=RouteKind.REPLACEMENT if replaced else RouteKind(path[0][1]),
+        kind=SydneyMode.REPLACEMENT if replaced else SydneyMode(path[0][1]),
         routes=tuple(badges[-1:]),
     )

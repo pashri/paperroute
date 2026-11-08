@@ -20,7 +20,7 @@ from paperroute.adapters.state_migrations import (
     SCHEMA_VERSION,
     regional_to_coach,
 )
-from paperroute.city import SYDNEY, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
@@ -43,13 +43,7 @@ from paperroute_device.core.device_settings import (
 from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE
 from paperroute_testkit.core.factories import pin_at
 from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
-from paperroute_transit.core.model import (
-    AutoWindow,
-    Pin,
-    RouteKind,
-    StopPlace,
-    Way,
-)
+from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, Way
 from tests.core.test_auto_pins import is_shown, started, ticked, trusted
 
 ROTATED: Final[Settings] = Settings(device=DeviceSettings(rotate=True))
@@ -70,7 +64,7 @@ PINS = st.builds(
     Pin,
     origin=PLACES,
     destination=st.none() | PLACES,
-    kind=st.none() | st.sampled_from(RouteKind),
+    kind=st.none() | st.sampled_from(SydneyMode),
     routes=st.lists(st.text(max_size=5), max_size=3).map(tuple),
     nickname=NAMES.map(lambda text: clean_nickname(text=text)),
     only=st.lists(st.text(max_size=5), max_size=3).map(tuple),
@@ -186,7 +180,7 @@ def sample() -> Saved:
     pin = Pin(
         origin=StopPlace(stop_id='a', name='A', point=(1.5, -2.5)),
         destination=StopPlace(stop_id='b', name='B', point=None),
-        kind=RouteKind.BUS,
+        kind=SydneyMode.BUS,
     )
     return Saved(
         pins=(pin, pin),
@@ -512,10 +506,10 @@ def test_migrate_regional_pin_to_coach(path: Path) -> None:
     loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.stored
     assert [pin.kind for pin in loaded.saved.pins] == [
-        RouteKind.COACH, RouteKind.TRAIN, RouteKind.COACH, RouteKind.BUS,
+        SydneyMode.COACH, SydneyMode.TRAIN, SydneyMode.COACH, SydneyMode.BUS,
     ]
     assert loaded.saved.unpinned is not None
-    assert loaded.saved.unpinned.kind is RouteKind.TRAIN
+    assert loaded.saved.unpinned.kind == SydneyMode.TRAIN
     assert not list(path.parent.glob('state.json.bad-*'))
 
 
@@ -532,7 +526,7 @@ def test_migrate_regional_with_no_unpinned_place(path: Path) -> None:
     loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.stored
     assert loaded.saved.unpinned is None
-    assert loaded.saved.pins[0].kind is RouteKind.COACH
+    assert loaded.saved.pins[0].kind == SydneyMode.COACH
 
 
 def test_regional_to_coach_leaves_a_malformed_pin_list_alone() -> None:

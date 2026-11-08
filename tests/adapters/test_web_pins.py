@@ -21,6 +21,7 @@ from paperroute.adapters.web_pins import (
     pin_label,
     pin_line,
 )
+from paperroute.city import SydneyMode
 from paperroute.core.chooser import Choice
 from paperroute.core.messages import (
     Event,
@@ -35,13 +36,7 @@ from paperroute_testkit.core.connection_factories import WORK as CONNECTION
 from paperroute_testkit.core.connection_factories import WORK_CHANGE
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_testkit.page_markup import inside, parse_page, parse_tree
-from paperroute_transit.core.model import (
-    AutoWindow,
-    Pin,
-    RouteKind,
-    StopPlace,
-    pin_ref,
-)
+from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, pin_ref
 from paperroute_transit.core.route_colours import RouteColour
 from tests.adapters.test_web_device import sydney_site
 
@@ -146,7 +141,7 @@ def test_pin_label_prefers_nickname() -> None:
 def test_pin_line_without_a_to_names_only_its_filter() -> None:
     """A T1 pin without a To lists every line, so no line is named."""
     station = StopPlace(stop_id='P', name='Parramatta Station', point=None)
-    line = Pin(origin=station, kind=RouteKind.TRAIN, routes=('T1',))
+    line = Pin(origin=station, kind=SydneyMode.TRAIN, routes=('T1',))
     assert pin_line(pin=line) == 'Parramatta Station'
     assert pin_line(pin=replace(line, only=('T2',))) == (
         'Parramatta Station · T2'
@@ -497,13 +492,13 @@ TOWN_HALL = StopPlace(stop_id='TH', name='Town Hall', point=None)
 SAVED = Pin(
     origin=BUS_STOP,
     destination=TOWN_HALL,
-    kind=RouteKind.BUS,
+    kind=SydneyMode.BUS,
     routes=('811',),
     nickname='Shops',
 )
 LOST = Pin(
     origin=StopPlace(stop_id='OLD', name='Old Stop', point=(1.0, 2.0)),
-    kind=RouteKind.BUS,
+    kind=SydneyMode.BUS,
     routes=('809',),
     missing=True,
 )
@@ -516,11 +511,11 @@ def _options() -> FakePinOptions:
             CENTRAL, JUNCTION, REDFERN, BUS_STOP, TOWN_HALL,
         )},
         lines={
-            ('C', RouteKind.TRAIN): (
+            ('C', SydneyMode.TRAIN): (
                 Choice(key='T1', label='North Shore', badge='T1'),
                 Choice(key='T2', label='Leppington', badge='T2'),
             ),
-            ('B2', RouteKind.BUS): (
+            ('B2', SydneyMode.BUS): (
                 Choice(key='809', label='809', badge='809'),
                 Choice(key='811', label='811', badge='811'),
             ),
@@ -530,13 +525,13 @@ def _options() -> FakePinOptions:
             ('B2', '811'): (TOWN_HALL,),
         },
         only={
-            ('C', RouteKind.TRAIN): ('T1', 'T2'),
-            ('B2', RouteKind.BUS): ('809', '811'),
+            ('C', SydneyMode.TRAIN): ('T1', 'T2'),
+            ('B2', SydneyMode.BUS): ('809', '811'),
         },
         near=(BUS_STOP,),
         found=(
             StopMatch(
-                place=CENTRAL, kinds=(RouteKind.TRAIN,), routes=('T1', 'T2'),
+                place=CENTRAL, kinds=(SydneyMode.TRAIN,), routes=('T1', 'T2'),
             ),
         ),
     )
@@ -573,7 +568,7 @@ def test_draft_of_reads_fields() -> None:
     )
     assert (draft.stop, draft.kind, draft.ref) == ('C', None, 'x')
     assert draft.only == ('T1',)
-    assert draft_of(query={'kind': 'train'}, only=[]).kind is RouteKind.TRAIN
+    assert draft_of(query={'kind': 'train'}, only=[]).kind == SydneyMode.TRAIN
 
 
 async def test_search_lists_matches(editor: Client) -> None:
@@ -655,7 +650,7 @@ async def test_save_posts_pin(pins: Pins, editor: Client) -> None:
     assert pins.posted == [PinSaved(ref=None, pin=Pin(
         origin=CENTRAL,
         destination=JUNCTION,
-        kind=RouteKind.TRAIN,
+        kind=SydneyMode.TRAIN,
         routes=('T1',),
         only=('T2',),
         nickname='Home',

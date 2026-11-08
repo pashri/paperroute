@@ -13,7 +13,7 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute.build.timetable import Window, build_timetable, create_schema
-from paperroute.city import SYDNEY_PROJECTION
+from paperroute.city import SYDNEY_PROJECTION, SydneyFeed
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.shapes import (
@@ -24,7 +24,6 @@ from paperroute_transit.build.shapes import (
     simplify,
 )
 from paperroute_transit.core.geo import to_lonlat, to_metres, unpack_shape
-from paperroute_transit.core.model import Mode
 from tests.build.feeds import shape_rows, shaped_bus_feed
 
 ROUTE: Final[list[tuple[float, float]]] = [
@@ -177,7 +176,7 @@ def test_shape_runs_skips_a_repeated_run_with_warning(
     ]
 
 
-def stored_shapes(*, archive: Path, modes: dict[str, Mode]) -> list[str]:
+def stored_shapes(*, archive: Path, modes: dict[str, SydneyFeed]) -> list[str]:
     """
     Load one feed's shapes into a new database and list what's stored.
 
@@ -185,7 +184,7 @@ def stored_shapes(*, archive: Path, modes: dict[str, Mode]) -> list[str]:
     ----------
     archive : Path
         GTFS zip named 'bundle'.
-    modes : dict[str, Mode]
+    modes : dict[str, SydneyFeed]
         Raw shape ID to mode.
 
     Returns
@@ -220,7 +219,7 @@ def test_load_shapes_drops_a_split_shape(
     with caplog.at_level(logging.WARNING):
         stored = stored_shapes(
             archive=archive,
-            modes={'S1': Mode.BUS, 'S3': Mode.BUS},
+            modes={'S1': SydneyFeed.BUS, 'S3': SydneyFeed.BUS},
         )
     assert stored == ['bundle:S3']
     assert [record.getMessage() for record in caplog.records] == [
@@ -241,7 +240,7 @@ def test_load_shapes_drops_shapes_ordered_by_sequence(
     with caplog.at_level(logging.WARNING):
         stored = stored_shapes(
             archive=archive,
-            modes={'A': Mode.BUS, 'B': Mode.BUS},
+            modes={'A': SydneyFeed.BUS, 'B': SydneyFeed.BUS},
         )
     assert not stored
     assert [record.getMessage() for record in caplog.records] == [
@@ -274,7 +273,7 @@ def test_shape_record_widens_bounds_to_whole_decimetres() -> None:
     run = [(1, *lonlat(x=1000.04, y=2000.04)),
            (2, *lonlat(x=1500.06, y=2500.06))]
     shape_id, mode, west, south, east, north, blob = shape_record(
-        shape_id='bundle:S1', mode=Mode.BUS, run=run,
+        shape_id='bundle:S1', mode=SydneyFeed.BUS, run=run,
         projection=SYDNEY_PROJECTION)
     assert (shape_id, mode) == ('bundle:S1', 'bus')
     assert (west, south, east, north) == (1000.0, 2000.0, 1500.1, 2500.1)

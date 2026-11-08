@@ -6,6 +6,7 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute.city import SydneyFeed
 from paperroute.core.stop_view import Pill, Row, StopView, stops_text
 from paperroute.render.chrome import (
     ARROW_GAP,
@@ -31,17 +32,17 @@ from paperroute_device.render.canvas import (
     text_width,
 )
 from paperroute_device.render.frame import HEADER, finish
-from paperroute_transit.core.model import Mode
 
 SPLIT: Final[int] = 438
 ROW_H: Final[int] = 50
 LARGE_ROW_H: Final[int] = 64
 LARGE_SCALE: Final[float] = 1.25
 LIST_TOP: Final[int] = 30
-VEHICLE: Final[dict[Mode, str]] = {
-    Mode.BUS: 'bus', Mode.TRAIN: 'train', Mode.METRO: 'metro',
-    Mode.FERRY: 'ferry', Mode.LIGHT_RAIL: 'light rail', Mode.COACH: 'coach',
-    Mode.REGIONAL: 'service', Mode.OTHER: 'service'}
+VEHICLE: Final[dict[str, str]] = {
+    SydneyFeed.BUS: 'bus', SydneyFeed.TRAIN: 'train',
+    SydneyFeed.METRO: 'metro', SydneyFeed.FERRY: 'ferry',
+    SydneyFeed.LIGHT_RAIL: 'light rail', SydneyFeed.COACH: 'coach',
+    SydneyFeed.REGIONAL: 'service', SydneyFeed.OTHER: 'service'}
 LIST_LEFT: Final[int] = 456
 LATER: Final[str] = 'LATER'
 LIST_WIDTH: Final[int] = 140
@@ -57,8 +58,9 @@ FASTER_GAP: Final[int] = 10
 TAG_FACE: Final[Face] = Face(weight=700, px=12)
 TAG_GAP: Final[int] = 8
 TAG_FLOOR: Final[int] = 40
-BAY: Final[dict[Mode, str]] = {Mode.BUS: 'stand', Mode.COACH: 'stand',
-                               Mode.FERRY: 'wharf'}
+BAY: Final[dict[str, str]] = {
+    SydneyFeed.BUS: 'stand', SydneyFeed.COACH: 'stand',
+    SydneyFeed.FERRY: 'wharf'}
 
 
 def hero_headline(canvas: Canvas, *, row: Row, top: int) -> None:

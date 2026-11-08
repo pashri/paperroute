@@ -14,7 +14,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyMode
 from paperroute.core.messages import Event, PinSaved
 from paperroute.core.pin_choices import ChangeStop, StopMatch
 from paperroute.core.trip_search import Journey, JourneyLeg
@@ -27,7 +27,7 @@ from paperroute_testkit.core.connection_factories import (
 from paperroute_testkit.core.factories import place
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_testkit.fakes import FakeTripPlanner
-from paperroute_transit.core.model import RouteKind, StopPlace
+from paperroute_transit.core.model import StopPlace
 from tests.adapters.test_web_device import sydney_site
 
 Client = TestClient[web.Request, web.Application]
@@ -41,8 +41,8 @@ OPTIONS: Final[FakePinOptions] = FakePinOptions(
         for stop in (HOLLIS, HAMMERS, CONSTITUTION, TOWN_HALL)
     },
     found=(
-        StopMatch(place=HOLLIS, kinds=(RouteKind.BUS,), routes=('606',)),
-        StopMatch(place=TOWN_HALL, kinds=(RouteKind.TRAIN,), routes=('T1',)),
+        StopMatch(place=HOLLIS, kinds=(SydneyMode.BUS,), routes=('606',)),
+        StopMatch(place=TOWN_HALL, kinds=(SydneyMode.TRAIN,), routes=('T1',)),
     ),
     changes=(ChangeStop(place=CONSTITUTION, metres=150),),
     reached=(TOWN_HALL,),

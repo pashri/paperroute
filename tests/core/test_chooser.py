@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import pytest
 
+from paperroute.city import SydneyMode
 from paperroute.core.chooser import (
     Choice,
     Column,
@@ -24,7 +25,7 @@ from paperroute.core.chooser import (
 from paperroute.core.chooser_station import knob_pressed
 from paperroute.core.chooser_view import build_chooser_view
 from paperroute_testkit.core.factories import place
-from paperroute_transit.core.model import Pin, RouteKind
+from paperroute_transit.core.model import Pin
 from paperroute_transit.core.reach import RowKind, StripKey
 from tests.core.chooser_walks import (
     BUS_606,
@@ -51,18 +52,18 @@ from tests.core.chooser_walks import (
 
 def test_opened_asks_for_kind_column() -> None:
     chooser, request = opened(
-        shown=Pin(origin=place('X'), kind=RouteKind.TRAIN),
+        shown=Pin(origin=place('X'), kind=SydneyMode.TRAIN),
     )
     assert request == ColumnRequest(path=())
     assert chooser.waiting == ()
-    assert chooser.prefer is RouteKind.TRAIN
+    assert chooser.prefer == SydneyMode.TRAIN
     assert chooser.stage is Stage.LISTS
     assert not chooser.columns
 
 
 def test_kind_cursor_starts_on_current_kind() -> None:
     chooser, asked = opened(
-        shown=Pin(origin=place('X'), kind=RouteKind.TRAIN),
+        shown=Pin(origin=place('X'), kind=SydneyMode.TRAIN),
     )
     chooser, request = fed(chooser, asked, KINDS)
     assert chooser.cursors == (1,)
@@ -107,7 +108,7 @@ def test_press_before_preview_loaded_does_nothing() -> None:
 
 
 def test_single_line_column_collapses() -> None:
-    chooser = opened_at_kind(kind=RouteKind.METRO)
+    chooser = opened_at_kind(kind=SydneyMode.METRO)
     chooser, request = fed(chooser, ColumnRequest(
         path=((Level.KIND, 'metro'),),
     ), METRO_LINES)
@@ -147,7 +148,7 @@ def test_from_press_asks_for_strip_with_chosen_routes() -> None:
     assert chooser.line_cursor == 2
     chooser, _ = turned(chooser=chooser, steps=-1, reach=None)
     chooser, request = pressed(chooser=chooser, reach=None)
-    key = StripKey(station='S2', kind=RouteKind.BUS, routes=('606',))
+    key = StripKey(station='S2', kind=SydneyMode.BUS, routes=('606',))
     assert request == StripRequest(key=key)
     assert chooser.stage is Stage.TO
     assert chooser.origin == LINE[1]
@@ -160,7 +161,7 @@ def test_to_press_on_from_commits_no_destination() -> None:
     assert pressed(chooser=chooser, reach=None) == (chooser, None)
     _, pin = pressed(chooser=chooser, reach=REACH)
     assert pin == Pin(
-        origin=LINE[1], destination=None, kind=RouteKind.BUS,
+        origin=LINE[1], destination=None, kind=SydneyMode.BUS,
         routes=('606',),
     )
 
@@ -222,7 +223,7 @@ def test_station_first_walk_commits_line_kind() -> None:
     chooser, _ = fed(chooser, request, T1_TO)
     _, pin = knob_pressed(chooser=chooser, reach=None)
     assert pin == Pin(
-        origin=T1_PLACES['E2'], kind=RouteKind.TRAIN, routes=('T1',),
+        origin=T1_PLACES['E2'], kind=SydneyMode.TRAIN, routes=('T1',),
     )
 
 
@@ -233,7 +234,7 @@ def test_replacement_route_commits_replacement_kind() -> None:
     chooser, _ = pressed(chooser=chooser, reach=None)
     _, pin = pressed(chooser=chooser, reach=REACH)
     assert pin == Pin(
-        origin=LINE[1], kind=RouteKind.REPLACEMENT, routes=('1T1',),
+        origin=LINE[1], kind=SydneyMode.REPLACEMENT, routes=('1T1',),
     )
 
 
@@ -274,7 +275,7 @@ def test_empty_column_is_never_focused() -> None:
 
 def test_replacement_place_starts_on_bus() -> None:
     chooser, request = opened(
-        shown=Pin(origin=place('X'), kind=RouteKind.REPLACEMENT),
+        shown=Pin(origin=place('X'), kind=SydneyMode.REPLACEMENT),
     )
     trains_first = replace(KINDS, items=KINDS.items[::-1])
     chooser, _ = fed(chooser, request, trains_first)

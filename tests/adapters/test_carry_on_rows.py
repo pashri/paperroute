@@ -13,7 +13,7 @@ import pytest
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.adapters.carry_on_rows import (
     CARRY_ONS,
@@ -158,8 +158,7 @@ def chain_departures(*, db: Path, dest: str) -> list[Departure]:
     """
     with closing(SqliteTimetableRepository(
         path=db,
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )) as repo:
         found = repo.on_day(
             ends=('E2', dest),
@@ -388,8 +387,7 @@ def test_patterns_name_the_trip_joined_onto(chain_db: Path) -> None:
     with closing(
         SqliteTimetableRepository(
             path=chain_db,
-            zone=SYDNEY_ZONE,
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         ),
     ) as repo:
         found = repo.patterns(trip_ids=['c1', 'c8'], around=DAY)
@@ -403,8 +401,7 @@ def test_carry_ons_reach_destination_through_the_chain(
     with closing(
         SqliteTimetableRepository(
             path=chain_db,
-            zone=SYDNEY_ZONE,
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         ),
     ) as repo:
         sql = CARRY_ONS.format(
@@ -426,8 +423,7 @@ def test_leg_lines_follow_the_trip_a_vehicle_becomes(chain_db: Path) -> None:
     with closing(
         SqliteTimetableRepository(
             path=chain_db,
-            zone=SYDNEY_ZONE,
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         ),
     ) as repo:
         found = repo.leg_lines(ends=('E2', 'C'), day=date(2026, 10, 6))
@@ -444,8 +440,7 @@ def test_leg_lines_skip_a_next_trip_not_running(chain_db: Path) -> None:
     with closing(
         SqliteTimetableRepository(
             path=chain_db,
-            zone=SYDNEY_ZONE,
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         ),
     ) as repo:
         found = repo.leg_lines(ends=('E2', 'C'), day=date(2026, 10, 6))

@@ -6,11 +6,12 @@ import math
 import sqlite3
 from collections.abc import Collection
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, tzinfo
+from datetime import date, datetime, timedelta
 from itertools import batched
 from pathlib import Path
 from typing import Final, cast
 
+from paperroute.city import SydneyFeed
 from paperroute.core.strip_times import (
     board_departures,
     filtered,
@@ -50,6 +51,7 @@ from paperroute_transit.adapters.pattern_rows import (
     pattern_of,
 )
 from paperroute_transit.core.alert_model import AlertPlaces
+from paperroute_transit.core.city import City
 from paperroute_transit.core.geo import (
     MetreBox,
     Point,
@@ -62,7 +64,6 @@ from paperroute_transit.core.geo import (
 from paperroute_transit.core.model import (
     HIDDEN_HEADSIGNS,
     Departure,
-    Mode,
     Pin,
     ServiceSpan,
     StopPlace,
@@ -180,10 +181,10 @@ class SqliteTimetableRepository:
 
     Parameters
     ----------
-    zone : tzinfo
-        Local time zone the timetable's service days are in.
-    projection : Projection
-        The projection stop points are placed in.
+    city : City
+        The city: its time zone (the timetable's service days are in it),
+        its projection (stop points are placed in it) and its route
+        classifier.
     path : Path | None
         Timetable file; defaults to the device location.
     connection : sqlite3.Connection | None
@@ -201,13 +202,13 @@ class SqliteTimetableRepository:
     def __init__(
         self,
         *,
-        zone: tzinfo,
-        projection: Projection,
+        city: City,
         path: Path | None = None,
         connection: sqlite3.Connection | None = None,
     ) -> None:
-        self.zone = zone
-        self.projection = projection
+        self.zone = city.zone
+        self.projection = city.projection
+        self.classify = city.classify
         self.db = ReadOnlyDatabase(
             path=path or DEFAULT_PATH,
             connection=connection,
@@ -561,7 +562,7 @@ class SqliteTimetableRepository:
             for shape_id, blob in rows
         }
 
-    def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
+    def modes_near(self, *, box: MetreBox) -> frozenset[SydneyFeed]:
         """
         List the modes of the shapes that overlap an area.
 
@@ -572,7 +573,7 @@ class SqliteTimetableRepository:
 
         Returns
         -------
-        frozenset[Mode]
+        frozenset[SydneyFeed]
             The modes; empty for a file built before shapes.
         """
         if not self.features().shapes:
@@ -587,7 +588,7 @@ class SqliteTimetableRepository:
                 'north': north,
             },
         )
-        return frozenset(Mode(str(row[0])) for row in rows)
+        return frozenset(SydneyFeed(str(row[0])) for row in rows)
 
     def resolve_trips(
         self, *, trip_ids: Collection[str]
@@ -650,6 +651,7 @@ class SqliteTimetableRepository:
                 rows=rows,
                 days=days,
                 calls=(calls, nexts),
+                classify=self.classify,
             )
             for requested, rows in found.items()
         }
@@ -993,11 +995,16 @@ class SqliteTimetableRepository:
             params=params,
         )
         found = [
-            to_departure(row=row, day=day, zone=self.zone) for row in rows
+            to_departure(
+                row=row, day=day, zone=self.zone, classify=self.classify,
+            )
+            for row in rows
         ]
         if ends[1] is not None and features.joins:
             found.extend(
-                carry_on_departure(row=row, day=day, zone=self.zone)
+                carry_on_departure(
+                    row=row, day=day, zone=self.zone, classify=self.classify,
+                )
                 for row in self.fetch(
                     sql=CARRY_ONS.format(
                         shape=self.shape_column(),

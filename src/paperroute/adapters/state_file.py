@@ -4,6 +4,7 @@ import contextlib
 import json
 import logging
 import time
+from collections.abc import Collection
 from datetime import date, tzinfo
 from pathlib import Path
 from typing import Final
@@ -54,7 +55,6 @@ from paperroute_transit.core.model import (
     MAX_CHANGES,
     Change,
     Pin,
-    RouteKind,
     StopPlace,
     Way,
 )
@@ -106,7 +106,7 @@ class PinModel(BaseModel):
 
     origin: StopModel
     destination: StopModel | None
-    kind: RouteKind | None
+    kind: str | None
     routes: tuple[str, ...]
     nickname: str | None = Field(max_length=NICKNAME_MAX)
     only: tuple[str, ...]
@@ -564,7 +564,34 @@ def readable_way(way: object) -> bool:
     return True
 
 
-def repaired_pin(*, pin: object) -> dict[str, object] | None:
+def usable_pin(*, pin: dict[str, object], mode_ids: Collection[str]) -> bool:
+    """
+    Say whether a repaired stored pin can be read.
+
+    Parameters
+    ----------
+    pin : dict[str, object]
+        The repaired pin.
+    mode_ids : Collection[str]
+        The city's mode ids.
+
+    Returns
+    -------
+    bool
+        True when it is a valid pin whose kind is None or one of the
+        city's modes.
+    """
+    kind = pin.get('kind')
+    try:
+        PinModel.model_validate(pin)
+    except ValidationError:
+        return False
+    return kind is None or kind in mode_ids
+
+
+def repaired_pin(
+    *, pin: object, mode_ids: Collection[str],
+) -> dict[str, object] | None:
     """
     Repair one stored pin's windows, nickname and route filter.
 
@@ -572,6 +599,8 @@ def repaired_pin(*, pin: object) -> dict[str, object] | None:
     ----------
     pin : object
         The stored pin.
+    mode_ids : Collection[str]
+        The city's mode ids; a pin of any other kind is dropped.
 
     Returns
     -------
@@ -597,15 +626,15 @@ def repaired_pin(*, pin: object) -> dict[str, object] | None:
         ),
         'only': route_names(value=pin.get('only')),
     }
-    try:
-        PinModel.model_validate(fixed)
-    except ValidationError:
+    if not usable_pin(pin=fixed, mode_ids=mode_ids):
         logger.warning('state.json pin unusable, dropping it')
         return None
     return fixed
 
 
-def repaired_pins(*, data: dict[str, object]) -> dict[str, object]:
+def repaired_pins(
+    *, data: dict[str, object], mode_ids: Collection[str],
+) -> dict[str, object]:
     """
     Repair each pin, dropping only the ones that cannot be read.
 
@@ -613,6 +642,8 @@ def repaired_pins(*, data: dict[str, object]) -> dict[str, object]:
     ----------
     data : dict[str, object]
         Migrated data.
+    mode_ids : Collection[str]
+        The city's mode ids.
 
     Returns
     -------
@@ -624,13 +655,15 @@ def repaired_pins(*, data: dict[str, object]) -> dict[str, object]:
     pins = data.get('pins')
     if not isinstance(pins, list):
         return data
-    kept = [repaired_pin(pin=pin) for pin in pins]
+    kept = [repaired_pin(pin=pin, mode_ids=mode_ids) for pin in pins]
     unpinned = data.get('unpinned')
     return {
         **data,
         'pins': [pin for pin in kept if pin is not None],
         'unpinned': (
-            None if unpinned is None else repaired_pin(pin=unpinned)
+            None
+            if unpinned is None
+            else repaired_pin(pin=unpinned, mode_ids=mode_ids)
         ),
     }
 
@@ -679,7 +712,7 @@ def state_text(*, path: Path) -> str:
     return path.read_text(encoding='utf-8')
 
 
-def state_model_of(*, text: str) -> StateModel:
+def state_model_of(*, text: str, mode_ids: Collection[str]) -> StateModel:
     """
     Parse the file's text, migrating and repairing it first.
 
@@ -687,6 +720,8 @@ def state_model_of(*, text: str) -> StateModel:
     ----------
     text : str
         The file's contents.
+    mode_ids : Collection[str]
+        The city's mode ids; pins of any other kind are dropped.
 
     Returns
     -------
@@ -708,6 +743,7 @@ def state_model_of(*, text: str) -> StateModel:
             data=repaired_settings(
                 data=repaired_quota(data=migrate(data=data)),
             ),
+            mode_ids=mode_ids,
         ),
     )
     return StateModel.model_validate(migrated)
@@ -742,7 +778,9 @@ class JsonStateRepository:
         if not self.path.exists() and not self.path.is_symlink():
             return Loaded(saved=DEFAULT_SAVED, stored=False)
         try:
-            model = state_model_of(text=state_text(path=self.path))
+            model = state_model_of(
+                text=state_text(path=self.path), mode_ids=self.city.mode_ids,
+            )
         except (OSError, UnicodeDecodeError, ValueError, RecursionError):
             return self.defaults_after_error()
         saved = from_model(model=model, zone=self.city.zone)

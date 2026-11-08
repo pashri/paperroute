@@ -5,6 +5,7 @@ from dataclasses import dataclass, field, replace
 from datetime import datetime
 from typing import Final
 
+from paperroute.city import SydneyFeed
 from paperroute.core.map_fit import resting_zoom
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH
 from paperroute.core.messages import (
@@ -16,7 +17,6 @@ from paperroute.core.messages import (
     PatternsLoaded,
 )
 from paperroute_transit.core.geo import MetreBox, Point, Shape
-from paperroute_transit.core.model import Mode
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.tiles import ZOOMS
@@ -43,7 +43,7 @@ class MapState:
         Loaded trip patterns by trip ID; None when the trip is unknown.
     pending_patterns : frozenset[str]
         Trip IDs whose patterns are being loaded.
-    area_modes : Mapping[int, frozenset[Mode]]
+    area_modes : Mapping[int, frozenset[SydneyFeed]]
         Modes found in the map area, by metres per pixel.
     pending_modes : frozenset[int]
         Metres per pixel whose modes are being loaded.
@@ -68,7 +68,9 @@ class MapState:
     requested_shapes: frozenset[str] = frozenset()
     patterns: Mapping[str, TripPattern | None] = field(default_factory=dict)
     pending_patterns: frozenset[str] = frozenset()
-    area_modes: Mapping[int, frozenset[Mode]] = field(default_factory=dict)
+    area_modes: Mapping[int, frozenset[SydneyFeed]] = field(
+        default_factory=dict,
+    )
     pending_modes: frozenset[int] = frozenset()
     positions: Mapping[str, PositionsSnapshot] = field(default_factory=dict)
     fetched_at: Mapping[str, datetime] = field(default_factory=dict)

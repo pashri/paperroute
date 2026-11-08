@@ -6,28 +6,30 @@ from datetime import date, datetime, timedelta, tzinfo
 from itertools import chain
 from typing import Final
 
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.live import LiveDeparture
 from paperroute.core.stop_view import not_departed
 from paperroute.core.strip_model import TripDay, trip_day
 from paperroute_device.core.text import clock_text
 from paperroute_transit.core.model import (
     Departure,
-    RouteKind,
     service_seconds,
     service_time,
     shifted,
 )
+from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.reach import Reach, RowKind, StripKey, every_route
 
+LINE_KINDS: Final[frozenset[str]] = line_modes(modes=SYDNEY.modes)
 STRIP_LOOKBACK: Final[timedelta] = timedelta(minutes=60)
 STRIP_AHEAD: Final[timedelta] = timedelta(minutes=30)
 STRIP_HOPS: Final[int] = 6  # joins followed past a trip's last stop
-BOARD_KINDS: Final[dict[RouteKind, frozenset[RouteKind]]] = {
-    **{kind: frozenset({kind}) for kind in RouteKind},
-    RouteKind.BUS: frozenset({
-        RouteKind.BUS, RouteKind.SCHOOL, RouteKind.REPLACEMENT,
+BOARD_KINDS: Final[dict[str, frozenset[str]]] = {
+    **{kind: frozenset({kind}) for kind in SydneyMode},
+    SydneyMode.BUS: frozenset({
+        SydneyMode.BUS, SydneyMode.SCHOOL, SydneyMode.REPLACEMENT,
     }),
 }
 
@@ -89,7 +91,10 @@ def on_strip(*, departure: Departure, key: StripKey) -> bool:
         return True
     if departure.facts.kind != key.kind:
         return False
-    return every_route(key=key) or departure.route in key.routes
+    return (
+        every_route(key=key, line_kinds=LINE_KINDS)
+        or departure.route in key.routes
+    )
 
 
 def strip_departures(
@@ -145,7 +150,7 @@ def filtered(
 
 
 def board_departures(
-    *, departures: Sequence[Departure], kind: RouteKind | None,
+    *, departures: Sequence[Departure], kind: str | None,
 ) -> tuple[Departure, ...]:
     """
     Keep the departures a pin's board shows when it has no Destination.
@@ -154,7 +159,7 @@ def board_departures(
     ----------
     departures : Sequence[Departure]
         Every departure from the From.
-    kind : RouteKind | None
+    kind : str | None
         The pin's kind.
 
     Returns

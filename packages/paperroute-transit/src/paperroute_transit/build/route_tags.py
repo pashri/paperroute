@@ -9,7 +9,6 @@ from dataclasses import dataclass
 from typing import Final
 
 from paperroute_transit.core.geo import Point, Projection, to_metres
-from paperroute_transit.core.model import RouteKind
 
 logger = logging.getLogger(__name__)
 
@@ -64,8 +63,8 @@ class CatalogueRoute:
     ----------
     route_key : str
         'kind:number:long name'.
-    kind : RouteKind
-        Kind.
+    kind : str
+        Mode id.
     number : str
         Route short name.
     long_name : str
@@ -77,7 +76,7 @@ class CatalogueRoute:
     """
 
     route_key: str
-    kind: RouteKind
+    kind: str
     number: str
     long_name: str
     agency: str
@@ -528,7 +527,7 @@ def tags_of(
     dict[str, str]
         Tags by route key; routes with a unique number are missing.
     """
-    groups: dict[tuple[RouteKind, str], list[CatalogueRoute]] = defaultdict(
+    groups: dict[tuple[str, str], list[CatalogueRoute]] = defaultdict(
         list,
     )
     for route in routes:

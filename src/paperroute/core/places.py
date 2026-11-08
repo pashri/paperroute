@@ -126,7 +126,7 @@ def feeds_of(*, departures: Sequence[Departure]) -> tuple[str, ...]:
             {
                 feed
                 for dep in departures
-                if (feed := feed_for(mode=dep.mode)) is not None
+                if (feed := feed_for(mode=dep.source)) is not None
             }
         )
     )

@@ -17,7 +17,6 @@ from paperroute.core.strip_times import from_call, joined_patterns
 from paperroute_device.core.text import clock_text
 from paperroute_transit.core.model import (
     Change,
-    Mode,
     Pin,
     StopPlace,
     service_seconds,
@@ -71,7 +70,7 @@ class LegSection:
     ----------
     route : str
         Route of the leg.
-    mode : Mode
+    mode : str
         Mode of the leg.
     title : str
         '{from} → {to}' of the leg.
@@ -86,7 +85,7 @@ class LegSection:
     """
 
     route: str
-    mode: Mode
+    mode: str
     title: str
     note: str | None
     stops: tuple[LegStop, ...]
@@ -616,7 +615,7 @@ def leg_section(
     departure = leg.item.departure
     return LegSection(
         route=departure.route,
-        mode=departure.mode,
+        mode=departure.source,
         title=f'{leg.start.name} → {leg.end.name}',
         note=leg.note,
         stops=rows,

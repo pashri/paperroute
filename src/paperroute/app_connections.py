@@ -5,6 +5,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import replace
 from types import MappingProxyType
 
+from paperroute.city import SydneyMode
 from paperroute.core.alert_match import between_names
 from paperroute.core.chains import Legs, open_legs
 from paperroute.core.connection_model import LEG_EXTRA, direct_leg
@@ -12,12 +13,7 @@ from paperroute.core.messages import DeparturesLoaded, LoadDepartures
 from paperroute.ports import TimetableRepository
 from paperroute_transit.adapters.leg_cache import LegCache
 from paperroute_transit.core.alert_model import BetweenLoaded, LoadBetween
-from paperroute_transit.core.model import (
-    Departure,
-    Pin,
-    RouteKind,
-    is_connection,
-)
+from paperroute_transit.core.model import Departure, Pin, is_connection
 
 
 def departures_read(
@@ -144,7 +140,7 @@ def usable(
         item
         for item in items
         if item.route not in pin.never
-        and not (skip_school and item.facts.kind is RouteKind.SCHOOL)
+        and not (skip_school and item.facts.kind == SydneyMode.SCHOOL)
     )
 
 
@@ -243,6 +239,6 @@ def leg_between(
         names=names,
         timetable=effect.timetable,
         families=families,
-        trainlink=pin.kind in (None, RouteKind.TRAIN)
+        trainlink=pin.kind in (None, SydneyMode.TRAIN)
         and timetable.serves_trainlink(stop_ids=stop_ids),
     )

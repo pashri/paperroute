@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta, tzinfo
 from typing import Final
 
+from paperroute.city import SydneyFeed
 from paperroute.core.alert_match import Listed, listed_alerts, matched_alerts
 from paperroute.core.chains import all_departures
 from paperroute.core.connection import between_lists, board_facts, name_trips
@@ -24,7 +25,7 @@ from paperroute_transit.core.alert_model import (
     BetweenLoaded,
     LoadBetween,
 )
-from paperroute_transit.core.model import Mode, Pin, same_place
+from paperroute_transit.core.model import Pin, same_place
 
 ALERT_EVERY: Final[timedelta] = timedelta(minutes=5)
 
@@ -50,9 +51,9 @@ def alert_feeds(*, state: State) -> tuple[str, ...]:
     loaded = all_departures(
         departures=state.board.departures, legs=state.board.legs,
     )
-    modes = {*kind_modes, *(item.mode for item in loaded)}
-    if Mode.TRAIN in modes and trainlink_known(state=state, pin=pin):
-        modes.add(Mode.REGIONAL)
+    modes = {*kind_modes, *(item.source for item in loaded)}
+    if SydneyFeed.TRAIN in modes and trainlink_known(state=state, pin=pin):
+        modes.add(SydneyFeed.REGIONAL)
     return alert_feeds_for(modes=modes)
 
 

@@ -7,10 +7,9 @@ from paperroute_transit.core.model import (
     CarryOn,
     Departure,
     TripFacts,
-    kind_for,
-    mode_for,
     service_time,
 )
+from paperroute_transit.core.modes import Classifier, RouteClass
 
 STILL_AT_FROM: Final[str] = """
   AND NOT EXISTS (SELECT 1 FROM stop_times n
@@ -63,7 +62,7 @@ def stop_count(*, trip: str, after: str, upto: str | None = None) -> str:
 
 # pylint: disable-next=too-many-locals
 def to_departure(
-    *, row: tuple[object, ...], day: date, zone: tzinfo,
+    *, row: tuple[object, ...], day: date, zone: tzinfo, classify: Classifier,
 ) -> Departure:
     """
     Turn a query row into a Departure.
@@ -76,22 +75,21 @@ def to_departure(
         Service date the row's times count from.
     zone : tzinfo
         Local time zone.
+    classify : Classifier
+        Sorts the row's route into a mode and a feed source.
 
     Returns
     -------
     Departure
         The departure.
     """
-    (trip, route, route_type, agency, headsign, platform, oseq, ostop,
+    (trip, route, _, _, headsign, platform, oseq, ostop,
      dseq, dstop, dep, arr, aliases) = row[:13]
     return Departure(
         trip_id=str(trip),
         aliases=tuple(sorted(str(aliases).split())) if aliases else (),
         route=str(route),
-        mode=mode_for(
-            route_type=int(str(route_type)),
-            agency_id=str(agency) if agency else None,
-        ),
+        source=route_class(row=row, classify=classify).source,
         headsign=str(headsign),
         platform=str(platform),
         origin_seq=int(str(oseq)),
@@ -102,7 +100,7 @@ def to_departure(
         arrives=service_time(day=day, seconds=int(str(arr)), zone=zone),
         service_day=day,
         shape_id=str(row[13]) if row[13] else None,
-        facts=facts_of(row=row),
+        facts=facts_of(row=row, classify=classify),
         stops=(
             int(str(row[17]))
             if len(row) > 17 and row[17] is not None
@@ -111,7 +109,35 @@ def to_departure(
     )
 
 
-def facts_of(*, row: tuple[object, ...]) -> TripFacts:
+def route_class(
+    *, row: tuple[object, ...], classify: Classifier,
+) -> RouteClass:
+    """
+    Classify a departure row's route.
+
+    Parameters
+    ----------
+    row : tuple[object, ...]
+        DEPARTURES or WHOLE_STOP row.
+    classify : Classifier
+        Sorts a route into a mode and a feed source.
+
+    Returns
+    -------
+    RouteClass
+        The route's mode and feed source.
+    """
+    route, route_type, agency = row[1:4]
+    return classify(
+        route_type=int(str(route_type)),
+        agency_id=str(agency) if agency else None,
+        short_name=str(route),
+    )
+
+
+def facts_of(
+    *, row: tuple[object, ...], classify: Classifier,
+) -> TripFacts:
     """
     Read a departure row's route kind and carry-on.
 
@@ -119,6 +145,8 @@ def facts_of(*, row: tuple[object, ...]) -> TripFacts:
     ----------
     row : tuple[object, ...]
         DEPARTURES or WHOLE_STOP row.
+    classify : Classifier
+        Sorts the row's route into a mode and a feed source.
 
     Returns
     -------
@@ -126,15 +154,10 @@ def facts_of(*, row: tuple[object, ...]) -> TripFacts:
         Kind and ID of the route and the service the vehicle runs next,
         None when the row has none.
     """
-    route, route_type, agency = row[1:4]
     then, then_to, then_trip = row[14:17]
     return TripFacts(
         route_id=str(row[18]) if len(row) > 18 else '',
-        kind=kind_for(
-            route_type=int(str(route_type)),
-            agency_id=str(agency) if agency else None,
-            short_name=str(route),
-        ),
+        kind=route_class(row=row, classify=classify).kind,
         then=(
             None
             if then is None

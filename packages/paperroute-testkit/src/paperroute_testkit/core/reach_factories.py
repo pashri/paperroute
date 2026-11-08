@@ -9,10 +9,10 @@ from typing import Final
 from hypothesis import strategies as st
 
 from paperroute.adapters.network_db import SqliteNetworkRepository
-from paperroute.city import SYDNEY_PROJECTION
+from paperroute.city import SYDNEY_PROJECTION, SydneyMode
 from paperroute_testkit.paths import ROOT
 from paperroute_transit.core.geo import Point
-from paperroute_transit.core.model import RouteKind, StopPlace
+from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import (
     Reach,
     ReachInput,
@@ -186,7 +186,7 @@ def train_reach(*, station: str) -> tuple[Reach, set[str]]:
         projection=SYDNEY_PROJECTION,
     )) as repo:
         found = repo.reach_input(
-            key=StripKey(station=station, kind=RouteKind.TRAIN, routes=()),
+            key=StripKey(station=station, kind=SydneyMode.TRAIN, routes=()),
             origin=StopPlace(stop_id=station, name=station, point=None),
         )
     assert found is not None

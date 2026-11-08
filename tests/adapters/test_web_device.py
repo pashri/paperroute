@@ -12,7 +12,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_board import SYDNEY_NAV
 from paperroute.adapters.web_display import WebDisplay
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyFeed
 from paperroute.core.feeds import (
     DAILY_LIMIT,
     FEEDS,
@@ -24,11 +24,10 @@ from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_testkit.device_pages import KEY, NOW, DeviceSite
 from paperroute_testkit.page_markup import parse_page
-from paperroute_transit.core.model import Mode
 
 Client = TestClient[web.Request, web.Application]
-TRAINS = POSITION_FEEDS[Mode.TRAIN][0]
-BUSES = FEEDS[Mode.BUS]
+TRAINS = POSITION_FEEDS[SydneyFeed.TRAIN][0]
+BUSES = FEEDS[SydneyFeed.BUS]
 SHELL_PAGES: Final[frozenset[str]] = frozenset(
     {'device.html', 'power.html', 'setup.html', 'live.html'},
 )

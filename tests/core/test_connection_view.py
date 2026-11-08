@@ -3,7 +3,7 @@
 from dataclasses import replace
 from typing import Final
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyFeed
 from paperroute.core.chains import Chain
 from paperroute.core.connection_map import sidebar_rows
 from paperroute.core.connection_strip import build_connection_strip
@@ -32,7 +32,7 @@ from paperroute_testkit.core.connection_factories import (
     work_chains,
 )
 from paperroute_testkit.core.factories import STALE_LIMIT, live, place
-from paperroute_transit.core.model import Change, Mode, Pin, Way
+from paperroute_transit.core.model import Change, Pin, Way
 
 CHAINS: Final[tuple[Chain, ...]] = work_chains()
 STOP: Final[StopView] = StopView(
@@ -94,7 +94,7 @@ def test_hero_spells_out_steps() -> None:
         'change at Constitution Hill, North West Twy 7:46',
         'walk 150 m',
     ]
-    assert hero.lines[0].mode is Mode.BUS
+    assert hero.lines[0].mode == SydneyFeed.BUS
     assert (hero.lines[0].at, hero.lines[3].at) == ('7:33', '7:46')
     assert hero.arrives_at == '7:57'
     assert not hero.live
@@ -307,9 +307,9 @@ def test_chrome_from_stop_view() -> None:
 
 def test_mode_nouns_cover_modes() -> None:
     """Every mode has a noun."""
-    assert set(MODE_NOUNS) == set(Mode)
-    assert MODE_NOUNS[Mode.REGIONAL] == 'train'
-    assert MODE_NOUNS[Mode.OTHER] == 'service'
+    assert set(MODE_NOUNS) == set(SydneyFeed)
+    assert MODE_NOUNS[SydneyFeed.REGIONAL] == 'train'
+    assert MODE_NOUNS[SydneyFeed.OTHER] == 'service'
 
 
 def test_change_at_stops_no_distance_apart_has_no_walk() -> None:

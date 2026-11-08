@@ -9,12 +9,11 @@ from typing import Final
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
 from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolve
 from paperroute_testkit.core.factories import STALE_LIMIT, pin_of
 from paperroute_transit.build.gtfs_files import Source
-from paperroute_transit.core.model import Mode
 from paperroute_transit.core.realtime import RealtimeSnapshot
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
@@ -102,8 +101,7 @@ def resolved(*, db: Path, query: str) -> list[list[LiveDeparture]]:
     live = snapshot()
     repo = SqliteTimetableRepository(
         path=db,
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     try:
         result = []
@@ -139,8 +137,8 @@ def test_regional_coaches_are_live_from_nswtrains(tmp_path: Path) -> None:
     groups = resolved(db=build(tmp_path=tmp_path), query=COACH_PINS)
     found = [item for group in groups for item in group]
     assert found
-    assert all(item.departure.mode is Mode.REGIONAL for item in found)
-    assert feed_for(mode=Mode.REGIONAL) == 'v1/gtfs/realtime/nswtrains'
+    assert all(item.departure.source == SydneyFeed.REGIONAL for item in found)
+    assert feed_for(mode=SydneyFeed.REGIONAL) == 'v1/gtfs/realtime/nswtrains'
     assert any(
         item.live and item.departs != item.departure.departs
         for item in found
@@ -152,7 +150,7 @@ def test_xpt_appears_once_and_goes_live(tmp_path: Path) -> None:
     groups = resolved(db=build(tmp_path=tmp_path), query=XPT_PINS)
     assert groups
     assert all(len(group) == 1 for group in groups)
-    assert all(g[0].departure.mode is Mode.REGIONAL for g in groups)
+    assert all(g[0].departure.source == SydneyFeed.REGIONAL for g in groups)
     assert any(group[0].live for group in groups)
 
 
@@ -160,8 +158,7 @@ def test_central_to_casino_xpt_listed_once(tmp_path: Path) -> None:
     """Real slice, three days: each Casino XPT shows once a day."""
     repo = SqliteTimetableRepository(
         path=build(tmp_path=tmp_path, days=3),
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     try:
         days = [
@@ -178,4 +175,4 @@ def test_central_to_casino_xpt_listed_once(tmp_path: Path) -> None:
     for found in days:
         times = [d.departs for d in found]
         assert len(times) == len(set(times))
-    assert all(d.mode is Mode.REGIONAL for d in days[0])
+    assert all(d.source == SydneyFeed.REGIONAL for d in days[0])

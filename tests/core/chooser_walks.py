@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute.city import SydneyMode
 from paperroute.core.chooser import (
     Choice,
     ChooserPath,
@@ -23,7 +24,7 @@ from paperroute.core.state_model import RELOAD_BEFORE
 from paperroute.core.stop_view import HORIZON
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_testkit.core.factories import START, departure, place
-from paperroute_transit.core.model import Departure, Pin, RouteKind, StopPlace
+from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 
 KINDS: Final[Column] = Column(
@@ -187,17 +188,17 @@ BUS_606: Final[ChooserPath] = (
 
 
 CHOSEN: Final[Pin] = Pin(
-    origin=LINE[1], kind=RouteKind.BUS, routes=('606',),
+    origin=LINE[1], kind=SydneyMode.BUS, routes=('606',),
 )
 CHOSEN_KEY: Final[StripKey] = StripKey(
-    station='S2', kind=RouteKind.BUS, routes=('606',),
+    station='S2', kind=SydneyMode.BUS, routes=('606',),
 )
 UNTIL: Final[datetime] = START + HORIZON + RELOAD_BEFORE
 OPEN: Final[KnobPressed] = KnobPressed(knob=Knob.TOP)
 NEXT: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 DOWN: Final[KnobTurned] = KnobTurned(knob=Knob.BOTTOM, steps=1)
 PENRITH: Final[Pin] = Pin(
-    origin=T1_PLACES['E2'], kind=RouteKind.TRAIN, routes=('T1',),
+    origin=T1_PLACES['E2'], kind=SydneyMode.TRAIN, routes=('T1',),
 )
 TO_COLUMN: Final[tuple[Event, ...]] = (
     OPEN,
@@ -288,13 +289,13 @@ def fed(
     return with_column(chooser=chooser, path=request.path, column=column)
 
 
-def opened_at_kind(kind: RouteKind | None = None) -> ChooserState:
+def opened_at_kind(kind: SydneyMode | None = None) -> ChooserState:
     """
     Open the chooser and load the KIND column.
 
     Parameters
     ----------
-    kind : RouteKind | None
+    kind : SydneyMode | None
         Shown place's kind.
 
     Returns
@@ -390,7 +391,7 @@ def at_stations() -> ChooserState:
     ChooserState
         The chooser focused on T1's stations, cursor on Richmond.
     """
-    chooser = opened_at_kind(kind=RouteKind.TRAIN)
+    chooser = opened_at_kind(kind=SydneyMode.TRAIN)
     chooser, request = fed(chooser, ColumnRequest(path=T1[:1]), TRAIN_LINES)
     chooser, request = pressed(chooser=chooser, reach=None)
     chooser, request = fed(chooser, request, T1_STATIONS)
@@ -438,7 +439,7 @@ def chooser_departures() -> tuple[Departure, ...]:
             departs=START + timedelta(minutes=minutes),
             trip_id=f'c-{index}',
             headsign='Hawkesbury',
-            kind=RouteKind.BUS,
+            kind=SydneyMode.BUS,
         )
         for index, minutes in enumerate((-1, 5))
     )

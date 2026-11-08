@@ -3,7 +3,7 @@
 from dataclasses import replace
 from datetime import timedelta
 
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SydneyFeed
 from paperroute.core.map_state import area_box
 from paperroute.core.messages import MapData, ModesLoaded
 from paperroute.core.places import (
@@ -27,7 +27,7 @@ from paperroute_testkit.core.factories import (
     snapshot,
 )
 from paperroute_transit.core.geo import make_shape
-from paperroute_transit.core.model import Mode, Pin
+from paperroute_transit.core.model import Pin
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_map_requests import fitted_on
@@ -129,7 +129,7 @@ def test_with_place_resets_what_belonged_to_the_old_place() -> None:
 def test_with_place_keeps_given_departures_and_their_feeds() -> None:
     """Departures handed over show at once and keep their feed's data."""
     bus = departure(departs=START + timedelta(minutes=3))
-    train = departure(departs=START + timedelta(minutes=5), mode=Mode.TRAIN)
+    train = departure(departs=START + timedelta(minutes=5), mode=SydneyFeed.TRAIN)
     state = replace(
         state_with(),
         board=Board(departures=(train,)),
@@ -270,7 +270,7 @@ def test_modes_reply_for_the_frame_is_kept() -> None:
     reply = ModesLoaded(
         mpp=mpp,
         box=area_box(centre=centre, mpp=mpp),
-        modes=frozenset({Mode.BUS}),
+        modes=frozenset({SydneyFeed.BUS}),
     )
     assert not is_stale(state=state, event=reply)
     away = replace(reply, box=area_box(centre=start, mpp=mpp))

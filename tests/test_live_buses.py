@@ -9,11 +9,11 @@ import pytest
 
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
 from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolved
 from paperroute_testkit.core.factories import STALE_LIMIT
-from paperroute_transit.core.model import Mode, Pin
+from paperroute_transit.core.model import Pin
 from paperroute_transit.core.realtime import RealtimeSnapshot
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
@@ -60,8 +60,7 @@ def live_from(
     with closing(
         SqliteTimetableRepository(
             path=M9B_DB,
-            zone=SYDNEY_ZONE,
-            projection=SYDNEY_PROJECTION,
+            city=SYDNEY,
         ),
     ) as timetable:
         pin = Pin(
@@ -73,7 +72,7 @@ def live_from(
         )
     return resolved(
         departures=departures,
-        snapshots={feed_for(mode=Mode.BUS) or '': snapshot},
+        snapshots={feed_for(mode=SydneyFeed.BUS) or '': snapshot},
         now=FETCHED,
         limit=STALE_LIMIT,
         zone=SYDNEY_ZONE,

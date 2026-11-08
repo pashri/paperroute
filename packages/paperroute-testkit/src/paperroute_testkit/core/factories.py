@@ -5,7 +5,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute.core.live import LiveDeparture
 from paperroute.core.saved import Saved
 from paperroute.core.state import initial_state
@@ -22,9 +22,7 @@ from paperroute_transit.core.geo import Point
 from paperroute_transit.core.model import (
     CarryOn,
     Departure,
-    Mode,
     Pin,
-    RouteKind,
     StopPlace,
     TripFacts,
 )
@@ -47,7 +45,7 @@ STALE_LIMIT: Final[timedelta] = timedelta(minutes=2)
 EIGHT: int = 8 * 3600  # seconds into the service day
 TEN_MINUTES: int = 600  # seconds
 TRAIN: Final[StripKey] = StripKey(
-    station='C', kind=RouteKind.TRAIN, routes=(),
+    station='C', kind=SydneyMode.TRAIN, routes=(),
 )
 POINTS: Final[dict[str, Point]] = {
     'C': (0.0, 0.0),
@@ -160,11 +158,11 @@ def departure(
     departs: datetime,
     ride: int = 30,
     route: str = '606',
-    mode: Mode = Mode.BUS,
+    mode: SydneyFeed = SydneyFeed.BUS,
     trip_id: str | None = None,
     headsign: str = 'Parramatta Station',
     platform: str = '',
-    kind: RouteKind | None = None,
+    kind: SydneyMode | None = None,
     then: CarryOn | None = None,
 ) -> Departure:
     """
@@ -178,7 +176,7 @@ def departure(
         Minutes to the destination.
     route : str
         Route short name.
-    mode : Mode
+    mode : SydneyFeed
         Mode.
     trip_id : str | None
         Trip ID; defaults to one derived from the departure time.
@@ -186,7 +184,7 @@ def departure(
         Headsign.
     platform : str
         Platform or stand.
-    kind : RouteKind | None
+    kind : SydneyMode | None
         Kind of route.
     then : CarryOn | None
         The service the vehicle runs next.
@@ -200,7 +198,7 @@ def departure(
         trip_id=trip_id or f'trip-{departs:%H%M}',
         aliases=(),
         route=route,
-        mode=mode,
+        source=mode,
         headsign=headsign,
         platform=platform,
         origin_seq=5,
@@ -286,7 +284,7 @@ def pattern(
     return TripPattern(
         trip_id=trip_id,
         route=route,
-        mode=Mode.BUS,
+        source=SydneyFeed.BUS,
         shape_id=shape_id,
         stops=(
             stops
@@ -401,7 +399,7 @@ def example_reach() -> Reach:
 
 
 def train(
-    *, minutes: int, trip_id: str, kind: RouteKind = RouteKind.TRAIN,
+    *, minutes: int, trip_id: str, kind: SydneyMode = SydneyMode.TRAIN,
 ) -> Departure:
     """
     Make a departure from C some minutes after 8:00.
@@ -412,7 +410,7 @@ def train(
         Minutes after 8:00.
     trip_id : str
         Trip ID.
-    kind : RouteKind
+    kind : SydneyMode
         Kind of route.
 
     Returns
@@ -684,8 +682,8 @@ def carry_on_inputs(
         stops=calls(stations='CD', start=EIGHT + 720, points=LINE),
     )
     item = departure(
-        departs=START, trip_id='a', route='T8', mode=Mode.TRAIN,
-        kind=RouteKind.TRAIN, then=T2_ON,
+        departs=START, trip_id='a', route='T8', mode=SydneyFeed.TRAIN,
+        kind=SydneyMode.TRAIN, then=T2_ON,
     )
     return inputs_of(
         reach=line_reach(off=off),

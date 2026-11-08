@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE, SydneyFeed
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
@@ -35,7 +35,7 @@ from paperroute_testkit.core.factories import (
     vehicle,
 )
 from paperroute_transit.core.geo import Point, make_shape
-from paperroute_transit.core.model import Departure, Mode
+from paperroute_transit.core.model import Departure
 from paperroute_transit.core.patterns import timetable_point
 from paperroute_transit.core.positions import VehiclePosition
 from paperroute_transit.core.tiles import ZOOMS
@@ -64,7 +64,7 @@ def row(*, route: str = '606') -> Row:
     """
     return Row(
         route=route,
-        mode=Mode.BUS,
+        mode=SydneyFeed.BUS,
         platform='',
         destination='Parramatta',
         countdown='5',

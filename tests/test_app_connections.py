@@ -6,7 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Final
 
 from paperroute.app_connections import between_read, departures_read
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyMode
 from paperroute.core.chains import leg_key
 from paperroute.core.connection_model import direct_leg, way_legs
 from paperroute.core.messages import LoadDepartures
@@ -22,7 +22,7 @@ from paperroute_testkit.core.factories import departure, pin_of, place
 from paperroute_testkit.fakes import EmptyPlacedTimetable
 from paperroute_transit.adapters.leg_cache import LegCache
 from paperroute_transit.core.alert_model import AlertPlaces, LoadBetween
-from paperroute_transit.core.model import Departure, Pin, RouteKind, Way
+from paperroute_transit.core.model import Departure, Pin, Way
 
 START: Final[datetime] = at(7, 0)
 END: Final[datetime] = at(10, 0)
@@ -114,7 +114,7 @@ class RoutesTimetable(RecordingTimetable):
     """A timetable that answers one departure per route on each call."""
 
     routes: tuple[str, ...] = ()
-    kinds: dict[str, RouteKind] = field(default_factory=dict)
+    kinds: dict[str, SydneyMode] = field(default_factory=dict)
 
     def departures(
         self, *, pin: Pin, start: datetime, end: datetime
@@ -224,7 +224,7 @@ def test_plain_destination_pin_any_route() -> None:
     pin = Pin(
         origin=WORK.origin,
         destination=WORK.destination,
-        kind=RouteKind.BUS,
+        kind=SydneyMode.BUS,
         never=('664',),
     )
     timetable = RoutesTimetable(routes=('711', '609', '664'))
@@ -250,7 +250,7 @@ def test_never_dropped_from_every_leg() -> None:
 def test_school_routes_dropped_when_asked() -> None:
     """School routes leave direct trips and legs, and the load says so."""
     timetable = RoutesTimetable(
-        routes=('711', 'S1'), kinds={'S1': RouteKind.SCHOOL},
+        routes=('711', 'S1'), kinds={'S1': SydneyMode.SCHOOL},
     )
     effect = LoadDepartures(pin=WORK, start=START, end=END)
     event = departures_read(timetable=timetable, effect=effect)
@@ -265,7 +265,7 @@ def test_school_routes_dropped_when_asked() -> None:
 def test_school_routes_dropped_on_pin_without_to_when_asked() -> None:
     """A pin without a To drops school routes only when the load asks."""
     timetable = RoutesTimetable(
-        routes=('711', 'S1'), kinds={'S1': RouteKind.SCHOOL},
+        routes=('711', 'S1'), kinds={'S1': SydneyMode.SCHOOL},
     )
     pin = replace(WORK, destination=None)
     plain = LoadDepartures(pin=pin, start=START, end=END)
@@ -280,7 +280,7 @@ def test_school_routes_dropped_on_pin_without_to_when_asked() -> None:
 def test_school_routes_kept_when_not_skipped() -> None:
     """With school buses allowed, school routes stay."""
     timetable = RoutesTimetable(
-        routes=('711', 'S1'), kinds={'S1': RouteKind.SCHOOL},
+        routes=('711', 'S1'), kinds={'S1': SydneyMode.SCHOOL},
     )
     effect = LoadDepartures(
         pin=WORK, start=START, end=END, skip_school=False,

@@ -5,9 +5,9 @@ from typing import Final
 
 import pytest
 
+from paperroute.city import SydneyFeed
 from paperroute.measures import StopMeasures
 from paperroute_transit.core.geo import Point, Shape, make_shape
-from paperroute_transit.core.model import Mode
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 
 LINE: Final[Shape] = make_shape(
@@ -40,7 +40,7 @@ def trip(*, trip_id: str, points: tuple[Point | None, ...],
     return TripPattern(
         trip_id=trip_id,
         route='T1',
-        mode=Mode.TRAIN,
+        source=SydneyFeed.TRAIN,
         shape_id=shape_id,
         stops=tuple(
             PatternStop(arrives=60 * i, departs=60 * i, point=point)

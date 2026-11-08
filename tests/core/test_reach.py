@@ -8,7 +8,7 @@ from typing import Final
 import pytest
 from hypothesis import given
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_model import StripInputs
 from paperroute.core.strip_view import build_strip_view
@@ -27,7 +27,8 @@ from paperroute_testkit.core.reach_factories import (
     train_reach,
 )
 from paperroute_transit.core.geo import Point
-from paperroute_transit.core.model import RouteKind, StopPlace
+from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.modes import line_modes
 from paperroute_transit.core.reach import (
     Reach,
     ReachInput,
@@ -753,5 +754,5 @@ def test_sydenham_keeps_turrella_off_the_illawarra() -> None:
 
 def test_ferry_routes_ignored_for_trips() -> None:
     """A Ferry strip takes every ferry through the From, as a line kind."""
-    key = StripKey(station='W', kind=RouteKind.FERRY, routes=('F1',))
-    assert every_route(key=key)
+    key = StripKey(station='W', kind=SydneyMode.FERRY, routes=('F1',))
+    assert every_route(key=key, line_kinds=line_modes(modes=SYDNEY.modes))

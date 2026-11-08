@@ -4,31 +4,31 @@ from collections.abc import Iterable
 from enum import StrEnum
 from typing import Final
 
+from paperroute.city import SydneyFeed, SydneyMode
 from paperroute_transit.core.geo import MetreBox, Projection, to_metres
-from paperroute_transit.core.model import Mode, RouteKind
 
 DAILY_LIMIT: Final[int] = 60_000  # API calls a day
-FEEDS: Final[dict[Mode, str]] = {
-    Mode.BUS: 'v1/gtfs/realtime/buses',
-    Mode.TRAIN: 'v2/gtfs/realtime/sydneytrains',
-    Mode.METRO: 'v2/gtfs/realtime/metro',
-    Mode.REGIONAL: 'v1/gtfs/realtime/nswtrains',
+FEEDS: Final[dict[str, str]] = {
+    SydneyFeed.BUS: 'v1/gtfs/realtime/buses',
+    SydneyFeed.TRAIN: 'v2/gtfs/realtime/sydneytrains',
+    SydneyFeed.METRO: 'v2/gtfs/realtime/metro',
+    SydneyFeed.REGIONAL: 'v1/gtfs/realtime/nswtrains',
 }
-ALERT_FEEDS: Final[dict[Mode, str]] = {
-    Mode.BUS: 'v2/gtfs/alerts/buses',
-    Mode.TRAIN: 'v2/gtfs/alerts/sydneytrains',
-    Mode.METRO: 'v2/gtfs/alerts/metro',
-    Mode.LIGHT_RAIL: 'v2/gtfs/alerts/lightrail',
-    Mode.REGIONAL: 'v2/gtfs/alerts/nswtrains',
-    Mode.FERRY: 'v2/gtfs/alerts/ferries',
+ALERT_FEEDS: Final[dict[str, str]] = {
+    SydneyFeed.BUS: 'v2/gtfs/alerts/buses',
+    SydneyFeed.TRAIN: 'v2/gtfs/alerts/sydneytrains',
+    SydneyFeed.METRO: 'v2/gtfs/alerts/metro',
+    SydneyFeed.LIGHT_RAIL: 'v2/gtfs/alerts/lightrail',
+    SydneyFeed.REGIONAL: 'v2/gtfs/alerts/nswtrains',
+    SydneyFeed.FERRY: 'v2/gtfs/alerts/ferries',
 }
-POSITION_FEEDS: Final[dict[Mode, tuple[str, ...]]] = {
-    Mode.BUS: ('v1/gtfs/vehiclepos/buses',),
-    Mode.TRAIN: ('v2/gtfs/vehiclepos/sydneytrains',),
-    Mode.METRO: ('v2/gtfs/vehiclepos/metro',),
-    Mode.REGIONAL: ('v1/gtfs/vehiclepos/nswtrains',),
-    Mode.FERRY: ('v1/gtfs/vehiclepos/ferries/sydneyferries',),
-    Mode.LIGHT_RAIL: (
+POSITION_FEEDS: Final[dict[str, tuple[str, ...]]] = {
+    SydneyFeed.BUS: ('v1/gtfs/vehiclepos/buses',),
+    SydneyFeed.TRAIN: ('v2/gtfs/vehiclepos/sydneytrains',),
+    SydneyFeed.METRO: ('v2/gtfs/vehiclepos/metro',),
+    SydneyFeed.REGIONAL: ('v1/gtfs/vehiclepos/nswtrains',),
+    SydneyFeed.FERRY: ('v1/gtfs/vehiclepos/ferries/sydneyferries',),
+    SydneyFeed.LIGHT_RAIL: (
         'v1/gtfs/vehiclepos/lightrail/cbdandsoutheast',
         'v2/gtfs/vehiclepos/lightrail/innerwest',
         'v1/gtfs/vehiclepos/lightrail/parramatta',
@@ -49,24 +49,24 @@ LINE_AREAS: Final[dict[str, tuple[float, float, float, float]]] = {
         151.73, -32.94, 151.80, -32.91,
     ),
 }  # west, south, east and north in degrees, with a margin round each line
-KIND_MODES: Final[dict[RouteKind, frozenset[Mode]]] = {
-    RouteKind.BUS: frozenset({Mode.BUS}),
-    RouteKind.SCHOOL: frozenset({Mode.BUS}),
-    RouteKind.REPLACEMENT: frozenset({Mode.BUS}),
-    RouteKind.TRAIN: frozenset({Mode.TRAIN}),
-    RouteKind.METRO: frozenset({Mode.METRO}),
-    RouteKind.LIGHT_RAIL: frozenset({Mode.LIGHT_RAIL}),
-    RouteKind.FERRY: frozenset({Mode.FERRY}),
-    RouteKind.COACH: frozenset({Mode.COACH}),
+KIND_MODES: Final[dict[str, frozenset[str]]] = {
+    SydneyMode.BUS: frozenset({SydneyFeed.BUS}),
+    SydneyMode.SCHOOL: frozenset({SydneyFeed.BUS}),
+    SydneyMode.REPLACEMENT: frozenset({SydneyFeed.BUS}),
+    SydneyMode.TRAIN: frozenset({SydneyFeed.TRAIN}),
+    SydneyMode.METRO: frozenset({SydneyFeed.METRO}),
+    SydneyMode.LIGHT_RAIL: frozenset({SydneyFeed.LIGHT_RAIL}),
+    SydneyMode.FERRY: frozenset({SydneyFeed.FERRY}),
+    SydneyMode.COACH: frozenset({SydneyFeed.COACH}),
 }
-ALL_POSITION_MODES: Final[frozenset[Mode]] = frozenset(POSITION_FEEDS)
-MODE_NAMES: Final[dict[Mode, str]] = {
-    Mode.BUS: 'Buses',
-    Mode.TRAIN: 'Sydney Trains',
-    Mode.METRO: 'Metro',
-    Mode.REGIONAL: 'NSW TrainLink',
-    Mode.FERRY: 'Ferries',
-    Mode.LIGHT_RAIL: 'Light rail',
+ALL_POSITION_MODES: Final[frozenset[str]] = frozenset(POSITION_FEEDS)
+MODE_NAMES: Final[dict[str, str]] = {
+    SydneyFeed.BUS: 'Buses',
+    SydneyFeed.TRAIN: 'Sydney Trains',
+    SydneyFeed.METRO: 'Metro',
+    SydneyFeed.REGIONAL: 'NSW TrainLink',
+    SydneyFeed.FERRY: 'Ferries',
+    SydneyFeed.LIGHT_RAIL: 'Light rail',
 }
 
 
@@ -78,13 +78,13 @@ class FeedKind(StrEnum):
     ALERTS = 'alerts'
 
 
-def feed_for(*, mode: Mode) -> str | None:
+def feed_for(*, mode: str) -> str | None:
     """
     Find the trip-updates feed for a mode.
 
     Parameters
     ----------
-    mode : Mode
+    mode : str
         Mode.
 
     Returns
@@ -95,13 +95,13 @@ def feed_for(*, mode: Mode) -> str | None:
     return FEEDS.get(mode)
 
 
-def position_feeds(*, modes: Iterable[Mode]) -> tuple[str, ...]:
+def position_feeds(*, modes: Iterable[str]) -> tuple[str, ...]:
     """
     List the vehicle-positions feeds for some modes.
 
     Parameters
     ----------
-    modes : Iterable[Mode]
+    modes : Iterable[str]
         Modes.
 
     Returns
@@ -187,13 +187,13 @@ def line_near(*, feed: str, box: MetreBox, projection: Projection) -> bool:
     return west <= right and east >= left and south <= top and north >= bottom
 
 
-def alert_feeds_for(*, modes: Iterable[Mode]) -> tuple[str, ...]:
+def alert_feeds_for(*, modes: Iterable[str]) -> tuple[str, ...]:
     """
     List the alert feeds for some modes.
 
     Parameters
     ----------
-    modes : Iterable[Mode]
+    modes : Iterable[str]
         Modes.
 
     Returns
@@ -254,7 +254,7 @@ def feed_label(feed: str) -> str:
         if feed not in paths:
             continue
         label = f'{MODE_NAMES[mode]} positions'
-        if mode is Mode.LIGHT_RAIL:
+        if mode == SydneyFeed.LIGHT_RAIL:
             return f"{label} ({feed.rsplit('/', maxsplit=1)[-1]})"
         return label
     return feed

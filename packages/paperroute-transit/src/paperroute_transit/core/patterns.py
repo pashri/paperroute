@@ -12,7 +12,7 @@ from paperroute_transit.core.geo import (
     project_onto_segment,
     stop_distances,
 )
-from paperroute_transit.core.model import Mode, service_seconds
+from paperroute_transit.core.model import service_seconds
 
 
 @dataclass(frozen=True)
@@ -54,8 +54,8 @@ class TripPattern:
         The requested trip ID, which may be an alias.
     route : str
         Route short name.
-    mode : Mode
-        Kind of service.
+    source : str
+        The city's feed key for the trip's route.
     shape_id : str | None
         Namespaced shape ID, or None when the trip has no shape.
     stops : tuple[PatternStop, ...]
@@ -71,7 +71,7 @@ class TripPattern:
 
     trip_id: str
     route: str
-    mode: Mode
+    source: str
     shape_id: str | None
     stops: tuple[PatternStop, ...]
     days: tuple[date, ...]

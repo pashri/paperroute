@@ -3,7 +3,7 @@
 from dataclasses import replace
 from typing import Final
 
-from paperroute.city import SYDNEY, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
 from paperroute.core.alert_match import tie_of
 from paperroute.core.connection import (
     chain_legs,
@@ -38,7 +38,7 @@ from paperroute_transit.core.alert_model import (
     BetweenLoaded,
     Informed,
 )
-from paperroute_transit.core.model import Change, Departure, Mode, Pin, Way
+from paperroute_transit.core.model import Change, Departure, Pin, Way
 
 FERRY_CHANGE: Final[Change] = replace(
     WORK_CHANGE, board=place('10102027', name='Parramatta Wharf'),
@@ -46,7 +46,7 @@ FERRY_CHANGE: Final[Change] = replace(
 FERRY_WORK: Final[Pin] = replace(WORK, ways=(Way(changes=(FERRY_CHANGE,)),))
 FERRY_LEG: Final[tuple[Departure, ...]] = (
     departure(
-        departs=at(7, 50), route='F3', mode=Mode.FERRY, trip_id='ferry-1',
+        departs=at(7, 50), route='F3', mode=SydneyFeed.FERRY, trip_id='ferry-1',
     ),
 )
 
@@ -122,7 +122,7 @@ def board_of(
 
 def test_feeds_union_of_legs() -> None:
     """Both legs' trip feeds are polled."""
-    trains = tuple(replace(item, mode=Mode.TRAIN) for item in LEG2)
+    trains = tuple(replace(item, source=SydneyFeed.TRAIN) for item in LEG2)
     state = loaded(second=trains)
     assert set(state.feeds) == {
         'v1/gtfs/realtime/buses',
@@ -263,7 +263,7 @@ def test_connection_facts_merge_lines_and_loose() -> None:
     second = tuple(
         replace(
             item,
-            mode=Mode.REGIONAL,
+            source=SydneyFeed.REGIONAL,
             facts=replace(item.facts, route_id='sydneytrains:WST_2c'),
         )
         for item in LEG2
@@ -288,7 +288,7 @@ def test_leg_lines_from_the_timetable_tie_alerts() -> None:
         periods=(),
         informed=(Informed(route='T1', line='sydneytrains:WST_2c'),),
     )
-    feed = ALERT_FEEDS[Mode.BUS]
+    feed = ALERT_FEEDS[SydneyFeed.BUS]
     snapshot = AlertsSnapshot(
         feed=feed, fetched_at=at(7, 30), alerts=(on_line,),
     )

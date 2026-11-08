@@ -7,7 +7,7 @@ from typing import Final
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyFeed
 from paperroute.core.banners import NO_WIFI
 from paperroute.core.live import LiveDeparture
 from paperroute.core.stop_view import (
@@ -33,7 +33,7 @@ from paperroute_device.core.text import DOT, clock_text
 from paperroute_testkit.core.alert_factories import WESTERN, XPLORER
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.core.alert_model import AlertBanner
-from paperroute_transit.core.model import CarryOn, Mode, TripFacts
+from paperroute_transit.core.model import CarryOn, TripFacts
 
 
 def live(
@@ -43,7 +43,7 @@ def live(
     cancelled: bool = False,
     is_live: bool = True,
     late: int = 0,
-    mode: Mode = Mode.BUS,
+    mode: SydneyFeed = SydneyFeed.BUS,
     facts: TripFacts = TripFacts(),
 ) -> LiveDeparture:
     """
@@ -61,7 +61,7 @@ def live(
         Live flag.
     late : int
         Minutes the live times run behind the timetable.
-    mode : Mode
+    mode : SydneyFeed
         Mode.
     facts : TripFacts
         What is known about the trip.
@@ -190,7 +190,7 @@ def test_view_hero_and_rows() -> None:
 def test_view_row_fields() -> None:
     """A row carries the route, times, ride length and live flag."""
     row = hero(result=view(departures=(live(minutes=3, ride=25),)))
-    assert (row.route, row.mode.value) == ('606', 'bus')
+    assert (row.route, row.mode) == ('606', 'bus')
     assert row.destination == 'Parramatta'
     assert (row.leaves_at, row.arrives_at) == ('8:03', '8:28')
     assert (row.ride_minutes, row.live, row.pill) == (25, True, None)
@@ -624,8 +624,8 @@ def test_no_destination_has_no_hero_and_lists_every_departure() -> None:
     """A train, a bus and a light rail departure all show, in order."""
     result = view(
         departures=(
-            live(minutes=9, mode=Mode.LIGHT_RAIL),
-            live(minutes=3, mode=Mode.TRAIN),
+            live(minutes=9, mode=SydneyFeed.LIGHT_RAIL),
+            live(minutes=3, mode=SydneyFeed.TRAIN),
             live(minutes=6),
         ),
         destination=None,
@@ -633,9 +633,9 @@ def test_no_destination_has_no_hero_and_lists_every_departure() -> None:
     assert result.hero is None
     assert [row.countdown for row in result.rows] == ['3', '6', '9']
     assert [row.mode for row in result.rows] == [
-        Mode.TRAIN,
-        Mode.BUS,
-        Mode.LIGHT_RAIL,
+        SydneyFeed.TRAIN,
+        SydneyFeed.BUS,
+        SydneyFeed.LIGHT_RAIL,
     ]
     assert result.empty is None
 
@@ -687,7 +687,7 @@ def test_train_row_carries_on_to_another_line() -> None:
         departures=(
             live(
                 minutes=3,
-                mode=Mode.TRAIN,
+                mode=SydneyFeed.TRAIN,
                 facts=TripFacts(then=CarryOn(route='T9', headsign='Hornsby')),
             ),
         ),

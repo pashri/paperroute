@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.adapters.state_file import JsonStateRepository
-from paperroute.city import SYDNEY, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute.core.saved import (
     BoardSettings,
     ConnectionMap,
@@ -25,14 +25,14 @@ from paperroute_device.core.device_settings import (
 from paperroute_testkit.core.connection_factories import TWO_WAY, WORK
 from paperroute_testkit.core.factories import pin_at
 from paperroute_transit.core.auto_model import AutoState, Before, running
-from paperroute_transit.core.model import AutoWindow, Pin, RouteKind
+from paperroute_transit.core.model import AutoWindow, Pin
 from tests.golden.scenes import GOLDEN, baseline_bytes
 
 STATE: Final[Path] = GOLDEN / 'state.json'
 WORK_WAYS: Final[Pin] = replace(WORK, ways=(*WORK.ways, TWO_WAY))
 HOME: Final[Pin] = replace(
     pin_at('home', x=100.0),
-    kind=RouteKind.BUS,
+    kind=SydneyMode.BUS,
     routes=('606', '609'),
     only=('606',),
     never=('660',),

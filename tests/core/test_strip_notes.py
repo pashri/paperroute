@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import timedelta
 
+from paperroute.city import SydneyFeed, SydneyMode
 from paperroute.core.strip_model import CarryNote, StripInputs
 from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_view import strip_rows, trips_of
@@ -17,7 +18,6 @@ from paperroute_testkit.core.factories import (
     live,
     pattern,
 )
-from paperroute_transit.core.model import Mode, RouteKind
 from paperroute_transit.core.reach import Reach, RowKind
 
 T8_NOTE = CarryNote(route='T8', then='T2 Leppington')
@@ -86,7 +86,7 @@ def with_run(
     """
     item = departure(
         departs=START + timedelta(minutes=minutes), trip_id='x',
-        route='T8', mode=Mode.TRAIN, kind=RouteKind.TRAIN, then=T2_ON,
+        route='T8', mode=SydneyFeed.TRAIN, kind=SydneyMode.TRAIN, then=T2_ON,
     )
     run = pattern(
         trip_id='x', route='T8',

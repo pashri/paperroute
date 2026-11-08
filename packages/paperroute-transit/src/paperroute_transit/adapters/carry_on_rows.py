@@ -17,6 +17,7 @@ from paperroute_transit.adapters.departure_rows import (
     to_departure,
 )
 from paperroute_transit.core.model import CarryOn, Departure
+from paperroute_transit.core.modes import Classifier
 
 MAX_HOPS: Final[int] = 6
 STOPS_OF: Final[str] = """(SELECT stop_id FROM stops
@@ -87,7 +88,7 @@ GROUP BY c.trip_id, c.seq
 
 
 def carry_on_departure(
-    *, row: tuple[object, ...], day: date, zone: tzinfo,
+    *, row: tuple[object, ...], day: date, zone: tzinfo, classify: Classifier,
 ) -> Departure:
     """
     Turn a CARRY_ONS row into a Departure.
@@ -105,6 +106,8 @@ def carry_on_departure(
         Service date the row's times count from.
     zone : tzinfo
         Local time zone.
+    classify : Classifier
+        Sorts the row's route into a mode and a feed source.
 
     Returns
     -------
@@ -116,6 +119,7 @@ def carry_on_departure(
         row=(*row[:14], None, None, None, *row[17:19]),
         day=day,
         zone=zone,
+        classify=classify,
     )
     return replace(
         departure,

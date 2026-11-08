@@ -6,11 +6,11 @@ from datetime import date, time, timedelta
 from enum import StrEnum
 from typing import Any, Final
 
-from paperroute.city import SYDNEY_PROJECTION
+from paperroute.city import SYDNEY_PROJECTION, SydneyMode
 from paperroute_device.core.device_settings import DeviceSettings, Window
 from paperroute_transit.core.auto_model import AutoState
 from paperroute_transit.core.geo import to_metres
-from paperroute_transit.core.model import Pin, RouteKind, StopPlace
+from paperroute_transit.core.model import Pin, StopPlace
 
 
 class LiveView(StrEnum):
@@ -233,7 +233,7 @@ TOWN_HALL: Final[StopPlace] = StopPlace(
         projection=SYDNEY_PROJECTION,
     ),
 )
-DEFAULT_PLACE: Final[Pin] = Pin(origin=TOWN_HALL, kind=RouteKind.TRAIN)
+DEFAULT_PLACE: Final[Pin] = Pin(origin=TOWN_HALL, kind=SydneyMode.TRAIN)
 DEFAULT_SAVED: Final[Saved] = Saved(
     pins=(),
     current=0,

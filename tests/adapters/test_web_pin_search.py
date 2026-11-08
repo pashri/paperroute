@@ -9,9 +9,10 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
+from paperroute.city import SydneyMode
 from paperroute.core.pin_choices import StopMatch
 from paperroute_testkit.fake_pins import FakePinOptions
-from paperroute_transit.core.model import RouteKind, StopPlace
+from paperroute_transit.core.model import StopPlace
 from tests.adapters.test_web_device import sydney_site
 
 Client = TestClient[web.Request, web.Application]
@@ -20,7 +21,7 @@ PARRAMATTA = StopPlace(
 )
 MATCH = StopMatch(
     place=PARRAMATTA,
-    kinds=(RouteKind.BUS, RouteKind.TRAIN),
+    kinds=(SydneyMode.BUS, SydneyMode.TRAIN),
     routes=('606', 'T1'),
 )
 

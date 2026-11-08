@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from hypothesis import given
 from hypothesis import strategies as st
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute.core.alert_match import (
     Listed,
     PinFacts,
@@ -43,7 +43,7 @@ from paperroute_transit.core.alert_model import (
     Matched,
     Period,
 )
-from paperroute_transit.core.model import Departure, Mode, Pin, RouteKind
+from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 
 SAT_MORNING = sydney(day=24, hour=9, minute=39)
@@ -75,7 +75,7 @@ STRATHFIELD_PIN = station_pin(
 BETWEEN = frozenset({'Burwood', 'Redfern', 'Central'})
 
 
-def trains(*, route: str = 'T1', mode: Mode = Mode.TRAIN) -> list[Departure]:
+def trains(*, route: str = 'T1', mode: SydneyFeed = SydneyFeed.TRAIN) -> list[Departure]:
     """
     Two departures on one route.
 
@@ -83,7 +83,7 @@ def trains(*, route: str = 'T1', mode: Mode = Mode.TRAIN) -> list[Departure]:
     ----------
     route : str
         Route short name.
-    mode : Mode
+    mode : SydneyFeed
         Mode.
 
     Returns
@@ -172,7 +172,7 @@ def test_numbered_wharf_pin_takes_banner() -> None:
     pin = station_pin(
         origin='20003',
         origin_name='Circular Quay, Wharf 5, Side A',
-        kind=RouteKind.FERRY,
+        kind=SydneyMode.FERRY,
     )
     found = alert(
         alert_id='quay',
@@ -188,7 +188,7 @@ def test_numbered_wharf_pin_takes_banner() -> None:
         pin=pin,
         found=found,
         now=SAT_MORNING,
-        departures=trains(route='F1', mode=Mode.FERRY),
+        departures=trains(route='F1', mode=SydneyFeed.FERRY),
     )
     assert listed[0].banner
 
@@ -232,7 +232,7 @@ def test_ferry_pin_is_name_pin() -> None:
     assert is_name_pin(pin=ROSE_BAY_PIN, departures=())
     kindless = replace(ROSE_BAY_PIN, kind=None)
     assert is_name_pin(
-        pin=kindless, departures=trains(route='F9', mode=Mode.FERRY),
+        pin=kindless, departures=trains(route='F9', mode=SydneyFeed.FERRY),
     )
 
 
@@ -304,13 +304,13 @@ def test_station_between_reaches_banner() -> None:
 def test_bus_pin_never_matches_by_name() -> None:
     """Bus pins don't match alert text against stop names."""
     pin = station_pin(
-        origin='213820', origin_name='Rhodes', kind=RouteKind.BUS,
+        origin='213820', origin_name='Rhodes', kind=SydneyMode.BUS,
     )
     listed = listed_for(
         pin=pin,
         found=RHODES,
         now=sydney(day=25, hour=6),
-        departures=trains(route='526', mode=Mode.BUS),
+        departures=trains(route='526', mode=SydneyFeed.BUS),
     )
     assert len(listed) == 1
     assert not listed[0].banner
@@ -615,7 +615,7 @@ def line(*, trip_id: str, stations: str) -> TripPattern:
     return TripPattern(
         trip_id=trip_id,
         route='T1',
-        mode=Mode.TRAIN,
+        source=SydneyFeed.TRAIN,
         shape_id=None,
         stops=tuple(named_stop(station=station) for station in stations),
         days=(),
@@ -662,7 +662,7 @@ def test_pin_facts_name_pin_by_modes() -> None:
         routes=frozenset({'T1'}),
         names=frozenset({'Parramatta', 'Central'}),
     )
-    mixed = trains() + trains(route='526', mode=Mode.BUS)
+    mixed = trains() + trains(route='526', mode=SydneyFeed.BUS)
     assert not pin_facts(pin=pin, departures=mixed, between=BETWEEN).names
 
 
@@ -673,7 +673,7 @@ def test_unmatched_alert_is_not_listed() -> None:
 
 def test_plain_destination_pin_matches_any_loaded_route() -> None:
     """A train pin with a To matches a bus route its departures use."""
-    bus = trains(route='526', mode=Mode.BUS)
+    bus = trains(route='526', mode=SydneyFeed.BUS)
     facts = pin_facts(
         pin=PARRAMATTA_CENTRAL, departures=trains() + bus, between=BETWEEN,
     )
@@ -711,7 +711,7 @@ def test_stop_alert_for_a_route_the_pin_does_not_use_is_dropped() -> None:
     )
     regional = pin_facts(
         pin=replace(PARRAMATTA_CENTRAL, kind=None),
-        departures=trains(route='WST', mode=Mode.REGIONAL),
+        departures=trains(route='WST', mode=SydneyFeed.REGIONAL),
         between=frozenset(),
     )
     assert tie_of(alert=xpt, facts=t1) is None

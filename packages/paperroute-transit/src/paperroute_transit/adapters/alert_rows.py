@@ -6,7 +6,6 @@ from typing import Final
 
 from paperroute_transit.adapters.calendar_rows import Fetch, FetchIn
 from paperroute_transit.core.alert_model import AlertPlaces
-from paperroute_transit.core.model import REGIONAL_AGENCIES
 
 LINES_LIMIT: Final[int] = 64
 ROUTE_PREFIXES: Final[tuple[str, ...]] = (
@@ -35,9 +34,7 @@ TRAINLINK_STOPS: Final[str] = (
     'JOIN trips t ON t.trip_id = st.trip_id '
     'JOIN routes r ON r.route_id = t.route_id '
     'WHERE st.stop_id IN ({marks}) '
-    'AND COALESCE(t.agency_id, r.agency_id) IN ('
-    + ', '.join(f"'{agency}'" for agency in sorted(REGIONAL_AGENCIES))
-    + ') LIMIT 1'
+    "AND COALESCE(t.agency_id, r.agency_id) IN ('711') LIMIT 1"
 )
 
 

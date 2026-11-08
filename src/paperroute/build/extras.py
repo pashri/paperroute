@@ -46,12 +46,17 @@ def run_extras(*, path: Path) -> None:
         conn.execute('PRAGMA cache_size = -2000')
         conn.executescript(RUN_SCHEMA)
         conn.executescript(CATALOGUE_SCHEMA)
-        timed(phase='runs', step=lambda: load_runs(conn=conn))
+        timed(
+            phase='runs',
+            step=lambda: load_runs(conn=conn, classify=SYDNEY.classify),
+        )
         timed(
             phase='catalogue',
             step=lambda: load_catalogue(
                 conn=conn,
                 projection=SYDNEY.projection,
+                classify=SYDNEY.classify,
+                modes=SYDNEY.modes,
             ),
         )
         conn.commit()

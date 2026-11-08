@@ -11,7 +11,7 @@ import sys
 from collections.abc import Callable, Iterator
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import date, datetime, tzinfo
+from datetime import date, datetime
 from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
@@ -51,7 +51,7 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
 from paperroute.app_render import MapRenderer
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
 from paperroute.core.messages import Event
 from paperroute.observers import Timings
@@ -82,7 +82,8 @@ from paperroute_transit.adapters.tiles_db import (
 )
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
-from paperroute_transit.core.geo import Projection, to_metres
+from paperroute_transit.core.city import City
+from paperroute_transit.core.geo import to_metres
 from paperroute_transit.core.tiles import (
     TILE_STYLE,
     ZOOMS,
@@ -592,8 +593,7 @@ async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
     display = WebDisplay(status=timings.snapshot)
     timetable = SqliteTimetableRepository(
         path=db,
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     ports = Ports(
         timetable=timetable,
@@ -675,7 +675,7 @@ def _restored_logging() -> Iterator[None]:
 
 
 def unopenable(
-    *, path: Path, zone: tzinfo, projection: Projection,
+    *, path: Path, city: City,
 ) -> SqliteTimetableRepository:
     """
     Fail to open a timetable.
@@ -684,9 +684,7 @@ def unopenable(
     ----------
     path : Path
         Ignored.
-    zone : tzinfo
-        Ignored.
-    projection : Projection
+    city : City
         Ignored.
 
     Raises
@@ -794,8 +792,7 @@ async def test_serve_web_posts_knob_events_then_stops_the_knobs(
     display = WebDisplay(status=Timings().snapshot)
     memory = SqliteTimetableRepository(
         connection=sqlite3.connect(':memory:'),
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     with closing(memory) as timetable:
         ports = Ports(
@@ -831,8 +828,7 @@ async def test_serve_web_passes_the_tiles_variant_to_run(
     display = WebDisplay(status=Timings().snapshot)
     memory = SqliteTimetableRepository(
         connection=sqlite3.connect(':memory:'),
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     with closing(memory) as timetable:
         ports = Ports(
@@ -874,8 +870,7 @@ def test_serve_or_exit_passes_the_tiles_variant(
     )
     memory = SqliteTimetableRepository(
         connection=sqlite3.connect(':memory:'),
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     with closing(memory) as timetable:
         ports = Ports(
@@ -959,8 +954,7 @@ async def test_show_passes_the_tiles_variant_to_run(
     monkeypatch.setattr(cli, 'run', fake_run)
     memory = SqliteTimetableRepository(
         connection=sqlite3.connect(':memory:'),
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     with closing(memory) as timetable:
         ports = Ports(

@@ -9,6 +9,7 @@ from typing import Final
 
 import pytest
 
+from paperroute.city import SydneyFeed, SydneyMode
 from paperroute_testkit.app_factories import ports_of, posted_by
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import EmptyPlacedTimetable
@@ -17,7 +18,6 @@ from paperroute_transit.core.alert_model import (
     BetweenLoaded,
     LoadBetween,
 )
-from paperroute_transit.core.model import Mode, RouteKind
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 
 STRATHFIELD_PLATFORM: Final[str] = '2135171'
@@ -40,7 +40,7 @@ def stopping(*, stations: str) -> TripPattern:
     return TripPattern(
         trip_id='trip-0',
         route='T1',
-        mode=Mode.TRAIN,
+        source=SydneyFeed.TRAIN,
         shape_id=None,
         stops=tuple(
             PatternStop(arrives=0, departs=0, point=None, station=station)
@@ -216,7 +216,7 @@ async def test_between_read_failure_is_empty(
 
 async def test_bus_pin_skips_trainlink() -> None:
     """A pin of a kind other than train never asks about TrainLink."""
-    pin = replace(pin_of('S', 'T'), kind=RouteKind.BUS)
+    pin = replace(pin_of('S', 'T'), kind=SydneyMode.BUS)
     timetable = BetweenTimetable(trainlink=True)
     posted = await posted_by(
         ports=ports_of(timetable=timetable),

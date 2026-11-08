@@ -526,7 +526,7 @@ def timetable_for(
         The open timetable.
     """
     timetable = SqliteTimetableRepository(
-        path=args.timetable, zone=SYDNEY.zone, projection=SYDNEY.projection,
+        path=args.timetable, city=SYDNEY,
     )
     try:
         yield timetable

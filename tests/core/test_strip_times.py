@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyMode
 from paperroute.core.strip_times import (
     STRIP_HOPS,
     TripInputs,
@@ -26,11 +26,11 @@ from paperroute_testkit.core.factories import (
     live,
     pattern,
 )
-from paperroute_transit.core.model import CarryOn, Departure, RouteKind
+from paperroute_transit.core.model import CarryOn, Departure
 from paperroute_transit.core.reach import StripKey
 
 TRAIN: Final[StripKey] = StripKey(
-    station='C', kind=RouteKind.TRAIN, routes=(),
+    station='C', kind=SydneyMode.TRAIN, routes=(),
 )
 
 
@@ -54,7 +54,7 @@ def train(*, minutes: int, trip_id: str) -> Departure:
         departs=START + timedelta(minutes=minutes),
         trip_id=trip_id,
         route='T1',
-        kind=RouteKind.TRAIN,
+        kind=SydneyMode.TRAIN,
     )
 
 
@@ -82,12 +82,12 @@ def test_strip_trips_keep_every_trip_in_the_window() -> None:
 
 def test_strip_trips_follow_the_routes_rule() -> None:
     """A bus key takes its routes, or every bus route when it has none."""
-    ours = departure(departs=START, trip_id='a', kind=RouteKind.BUS)
+    ours = departure(departs=START, trip_id='a', kind=SydneyMode.BUS)
     theirs = departure(
-        departs=START, trip_id='b', route='609', kind=RouteKind.BUS,
+        departs=START, trip_id='b', route='609', kind=SydneyMode.BUS,
     )
-    chosen = StripKey(station='C', kind=RouteKind.BUS, routes=('606',))
-    every = StripKey(station='C', kind=RouteKind.BUS, routes=())
+    chosen = StripKey(station='C', kind=SydneyMode.BUS, routes=('606',))
+    every = StripKey(station='C', kind=SydneyMode.BUS, routes=())
     anything = StripKey(station='C', kind=None, routes=())
     both = [ours, theirs]
     assert strip_trips(departures=both, key=chosen, now=START) == {'a'}
@@ -103,7 +103,7 @@ def test_strip_trips_include_next_trips() -> None:
         departs=START,
         trip_id='a',
         route='T8',
-        kind=RouteKind.TRAIN,
+        kind=SydneyMode.TRAIN,
         then=CarryOn(route='T2', headsign='Leppington', trip_id='b'),
     )
     assert strip_trips(departures=[t8], key=TRAIN, now=START) == {'a', 'b'}
@@ -112,8 +112,8 @@ def test_strip_trips_include_next_trips() -> None:
 def test_bus_board_keeps_school_and_replacement() -> None:
     """A Bus board keeps school and replacement buses; others their kind."""
     kinds = (
-        RouteKind.BUS, RouteKind.SCHOOL, RouteKind.REPLACEMENT,
-        RouteKind.TRAIN, RouteKind.COACH, None,
+        SydneyMode.BUS, SydneyMode.SCHOOL, SydneyMode.REPLACEMENT,
+        SydneyMode.TRAIN, SydneyMode.COACH, None,
     )
     every = [
         departure(departs=START, trip_id=str(kind), kind=kind)
@@ -126,9 +126,9 @@ def test_bus_board_keeps_school_and_replacement() -> None:
         ]
         for kind in kinds
     }
-    assert boards[RouteKind.BUS] == ['bus', 'school', 'replacement']
-    assert boards[RouteKind.SCHOOL] == ['school']
-    assert boards[RouteKind.TRAIN] == ['train']
+    assert boards[SydneyMode.BUS] == ['bus', 'school', 'replacement']
+    assert boards[SydneyMode.SCHOOL] == ['school']
+    assert boards[SydneyMode.TRAIN] == ['train']
     assert boards[None] == [str(kind) for kind in kinds]
 
 

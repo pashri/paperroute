@@ -12,6 +12,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.app_render import MapRenderer, drawing
+from paperroute.city import SydneyFeed, SydneyMode
 from paperroute.core.chains import Legs, leg_key
 from paperroute.core.connection_model import way_legs
 from paperroute.core.messages import (
@@ -65,7 +66,7 @@ from paperroute_testkit.core.strip_factories import (
 )
 from paperroute_testkit.device_pages import FACTS
 from paperroute_transit.core.geo import make_shape
-from paperroute_transit.core.model import Mode, Pin, RouteKind
+from paperroute_transit.core.model import Pin
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.tiles import (
     TILE,
@@ -292,9 +293,9 @@ def stop_trainlink() -> State:
     departures = tuple(
         replace(
             departure,
-            mode=Mode.REGIONAL,
+            source=SydneyFeed.REGIONAL,
             route='WST',
-            facts=replace(departure.facts, kind=RouteKind.TRAIN),
+            facts=replace(departure.facts, kind=SydneyMode.TRAIN),
         )
         for departure in state.board.departures
     )

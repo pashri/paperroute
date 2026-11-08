@@ -292,7 +292,7 @@ def resolved(
     return tuple(
         resolve(
             departure=dep,
-            snapshot=snapshots.get(feed_for(mode=dep.mode) or ''),
+            snapshot=snapshots.get(feed_for(mode=dep.source) or ''),
             now=now,
             limit=limit,
             zone=zone,

@@ -9,7 +9,7 @@ from typing import Final
 from paperroute.core.live import LiveDeparture
 from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.alert_model import AlertBanner
-from paperroute_transit.core.model import CarryOn, Departure, Mode
+from paperroute_transit.core.model import CarryOn, Departure
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
@@ -37,7 +37,7 @@ class Row:
     """
 
     route: str
-    mode: Mode
+    mode: str
     platform: str
     destination: str
     countdown: str
@@ -303,7 +303,7 @@ def to_row(
     ride_s = item.arrives.timestamp() - item.departs.timestamp()
     return Row(
         route=dep.route,
-        mode=dep.mode,
+        mode=dep.source,
         platform=dep.platform,
         destination=(onto.headsign if onto else dep.headsign).removesuffix(
             ' Station'

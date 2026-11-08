@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Final
 
+from paperroute.city import SydneyFeed, SydneyMode
 from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.alert_model import (
     Alert,
@@ -15,7 +16,7 @@ from paperroute_transit.core.alert_model import (
     Matched,
     Period,
 )
-from paperroute_transit.core.model import Departure, Mode, Pin, RouteKind
+from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.patterns import TripPattern
 
 BANNER_AHEAD: Final[timedelta] = timedelta(hours=24)
@@ -26,26 +27,26 @@ NAME_SUFFIXES: Final[tuple[str, ...]] = (
     ' Station',
     ' Wharf',
 )
-NAME_KINDS: Final[frozenset[RouteKind]] = frozenset({
-    RouteKind.TRAIN,
-    RouteKind.METRO,
-    RouteKind.LIGHT_RAIL,
-    RouteKind.FERRY,
+NAME_KINDS: Final[frozenset[SydneyMode]] = frozenset({
+    SydneyMode.TRAIN,
+    SydneyMode.METRO,
+    SydneyMode.LIGHT_RAIL,
+    SydneyMode.FERRY,
 })
-NAME_MODES: Final[frozenset[Mode]] = frozenset({
-    Mode.TRAIN,
-    Mode.METRO,
-    Mode.LIGHT_RAIL,
-    Mode.REGIONAL,
-    Mode.FERRY,
+NAME_MODES: Final[frozenset[SydneyFeed]] = frozenset({
+    SydneyFeed.TRAIN,
+    SydneyFeed.METRO,
+    SydneyFeed.LIGHT_RAIL,
+    SydneyFeed.REGIONAL,
+    SydneyFeed.FERRY,
 })
-LOOSE_MODES: Final[frozenset[Mode]] = frozenset({
-    Mode.REGIONAL,
-    Mode.LIGHT_RAIL,
+LOOSE_MODES: Final[frozenset[SydneyFeed]] = frozenset({
+    SydneyFeed.REGIONAL,
+    SydneyFeed.LIGHT_RAIL,
 })
-LOOSE_KINDS: Final[frozenset[RouteKind]] = frozenset({
-    RouteKind.COACH,
-    RouteKind.LIGHT_RAIL,
+LOOSE_KINDS: Final[frozenset[SydneyMode]] = frozenset({
+    SydneyMode.COACH,
+    SydneyMode.LIGHT_RAIL,
 })
 BETWEEN_TRIPS: Final[int] = 12
 WEEK_DAYS: Final[int] = 6
@@ -211,7 +212,7 @@ def is_name_pin(*, pin: Pin, departures: Sequence[Departure]) -> bool:
     if pin.kind is not None:
         return pin.kind in NAME_KINDS
     return bool(departures) and all(
-        item.mode in NAME_MODES for item in departures
+        item.source in NAME_MODES for item in departures
     )
 
 
@@ -232,9 +233,9 @@ def is_ferry_pin(*, pin: Pin, departures: Sequence[Departure]) -> bool:
         True for a ferry kind, or for no kind and only ferry departures.
     """
     if pin.kind is not None:
-        return pin.kind == RouteKind.FERRY
+        return pin.kind == SydneyMode.FERRY
     return bool(departures) and all(
-        item.mode == Mode.FERRY for item in departures
+        item.source == SydneyFeed.FERRY for item in departures
     )
 
 
@@ -316,7 +317,7 @@ def pin_facts(
             if item.facts.route_id
         ),
         loose=pin.kind in LOOSE_KINDS
-        or any(item.mode in LOOSE_MODES for item in departures),
+        or any(item.source in LOOSE_MODES for item in departures),
     )
 
 

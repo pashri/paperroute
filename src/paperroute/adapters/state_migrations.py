@@ -8,9 +8,9 @@ from typing import Any, Final
 from paperroute.adapters.state_auto import add_auto
 from paperroute.adapters.state_change import add_connections, before_rewritten
 from paperroute.adapters.state_settings import default_settings
-from paperroute_transit.core.model import TRAINLINK
 
 SCHEMA_VERSION: Final[int] = 11
+V1_TRAINLINK_LINES: Final[tuple[str, ...]] = ('NRC', 'NRW', 'STH', 'WST')
 
 
 def coach_pin(*, pin: object) -> object:
@@ -34,7 +34,7 @@ def coach_pin(*, pin: object) -> object:
     trainlink = (
         isinstance(routes, list)
         and bool(routes)
-        and all(route in TRAINLINK for route in routes)
+        and all(route in V1_TRAINLINK_LINES for route in routes)
     )
     return {**pin, 'kind': 'train' if trainlink else 'coach'}
 

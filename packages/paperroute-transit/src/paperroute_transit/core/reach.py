@@ -5,13 +5,10 @@ from dataclasses import dataclass, replace
 from datetime import date
 from enum import StrEnum
 from itertools import takewhile
-from typing import Final
 
-from paperroute_transit.core.model import STATION_FIRST, RouteKind, StopPlace
+from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach_layout import Entry, LineExit, lay_out
 from paperroute_transit.core.reach_track import FROM_KEY, place_of
-
-LINE_KINDS: Final[frozenset[RouteKind]] = STATION_FIRST
 
 
 @dataclass(frozen=True)
@@ -71,18 +68,18 @@ class StripKey:
     ----------
     station : str
         From stop or station ID.
-    kind : RouteKind | None
-        Kind of route, or None for every run.
+    kind : str | None
+        Mode id of the routes, or None for every run.
     routes : tuple[str, ...]
         Route short names chosen.
     """
 
     station: str
-    kind: RouteKind | None
+    kind: str | None
     routes: tuple[str, ...]
 
 
-def every_route(*, key: StripKey) -> bool:
+def every_route(*, key: StripKey, line_kinds: Collection[str]) -> bool:
     """
     Say whether a strip takes every route of its kind through the From.
 
@@ -90,17 +87,21 @@ def every_route(*, key: StripKey) -> bool:
     ----------
     key : StripKey
         Strip kind and routes.
+    line_kinds : Collection[str]
+        Mode ids chosen by line.
 
     Returns
     -------
     bool
-        True with no kind, for Train, Metro and Light rail, and for
-        another kind with no routes chosen.
+        True with no kind, for a kind chosen by line, and for another
+        kind with no routes chosen.
     """
-    return key.kind is None or key.kind in LINE_KINDS or not key.routes
+    return key.kind is None or key.kind in line_kinds or not key.routes
 
 
-def line_key_of(*, key: StripKey) -> str | None:
+def line_key_of(
+    *, key: StripKey, line_kinds: Collection[str],
+) -> str | None:
     """
     Name the line a strip follows.
 
@@ -108,14 +109,16 @@ def line_key_of(*, key: StripKey) -> str | None:
     ----------
     key : StripKey
         Strip kind and routes.
+    line_kinds : Collection[str]
+        Mode ids chosen by line.
 
     Returns
     -------
     str | None
-        The line key, such as 'train:T1', for a station-first kind with
+        The line key, such as 'train:T1', for a kind chosen by line with
         one route; None otherwise.
     """
-    if key.kind not in STATION_FIRST or len(key.routes) != 1:
+    if key.kind not in line_kinds or len(key.routes) != 1:
         return None
     return f'{key.kind}:{key.routes[0]}'
 

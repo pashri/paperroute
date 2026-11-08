@@ -3,7 +3,7 @@
 from datetime import date
 from typing import Final
 
-from paperroute_transit.core.model import mode_for
+from paperroute_transit.core.modes import Classifier
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 
 JOINED_TRIPS: Final[str] = """
@@ -48,6 +48,7 @@ def pattern_of(
     rows: list[tuple[object, ...]],
     days: dict[str, list[date]],
     calls: tuple[dict[str, list[PatternStop]], dict[str, str]],
+    classify: Classifier,
 ) -> TripPattern:
     """
     Build the pattern of a requested ID from its candidate trips.
@@ -62,6 +63,8 @@ def pattern_of(
         Running dates by trip ID.
     calls : tuple[dict[str, list[PatternStop]], dict[str, str]]
         Stops by trip ID, and the trip each runs on through as.
+    classify : Classifier
+        Sorts the trip's route into a mode and a feed source.
 
     Returns
     -------
@@ -74,10 +77,11 @@ def pattern_of(
     return TripPattern(
         trip_id=requested,
         route=str(row[2]),
-        mode=mode_for(
+        source=classify(
             route_type=int(str(row[3])),
             agency_id=str(row[4]) if row[4] else None,
-        ),
+            short_name=str(row[2]),
+        ).source,
         shape_id=str(row[5]) if row[5] else None,
         stops=tuple(calls[0].get(str(row[1]), ())),
         days=tuple(running),

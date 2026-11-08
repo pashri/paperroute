@@ -12,12 +12,8 @@ from operator import itemgetter
 from typing import Final
 
 from paperroute_transit.build.gtfs_files import insert_many
-from paperroute_transit.core.model import (
-    HIDDEN_HEADSIGNS,
-    RouteKind,
-    kind_for,
-    until_repeated_hop,
-)
+from paperroute_transit.core.model import HIDDEN_HEADSIGNS, until_repeated_hop
+from paperroute_transit.core.modes import Classifier
 
 RAIL_TYPES: Final[frozenset[int]] = frozenset({2, 401, 900})
 CALLS: Final[str] = """
@@ -76,7 +72,7 @@ class TripCalls:
 
     trip_id: str
     route_id: str
-    kind: RouteKind | None
+    kind: str | None
     route: str
     headsign: str
     block: str | None
@@ -205,7 +201,7 @@ def stopping(
 
 
 def trip_from_rows(
-    *, trip: TripRow, calls: Sequence[CallRow],
+    *, trip: TripRow, calls: Sequence[CallRow], classify: Classifier,
 ) -> TripCalls:
     """
     Turn one trip's row and call rows into a TripCalls.
@@ -218,6 +214,8 @@ def trip_from_rows(
         Row of TRIP_ROUTES.
     calls : Sequence[CallRow]
         Rows of CALLS for the trip, in stop order.
+    classify : Classifier
+        Sorts the trip's route into a mode.
 
     Returns
     -------
@@ -231,9 +229,9 @@ def trip_from_rows(
     no_board, no_alight = one_way_of(calls=calls)
     return TripCalls(
         trip_id=trip_id, route_id=sys.intern(route_id),
-        kind=kind_for(
+        kind=classify(
             route_type=route_type, agency_id=agency, short_name=route,
-        ),
+        ).kind,
         route=sys.intern(route), headsign=sys.intern(headsign),
         block=block, service=sys.intern(service),
         first_dep=calls[0][3], last_arr=calls[-1][2],
@@ -244,7 +242,9 @@ def trip_from_rows(
     )
 
 
-def trip_calls(*, conn: sqlite3.Connection) -> Iterator[TripCalls]:
+def trip_calls(
+    *, conn: sqlite3.Connection, classify: Classifier,
+) -> Iterator[TripCalls]:
     """
     Read every trip with the parent stations it calls at.
 
@@ -258,6 +258,8 @@ def trip_calls(*, conn: sqlite3.Connection) -> Iterator[TripCalls]:
     ----------
     conn : sqlite3.Connection
         Built timetable.
+    classify : Classifier
+        Sorts a route into a mode.
 
     Yields
     ------
@@ -270,7 +272,9 @@ def trip_calls(*, conn: sqlite3.Connection) -> Iterator[TripCalls]:
         while trip is not None and trip[0] < trip_id:
             trip = next(trips, None)
         if trip is not None and trip[0] == trip_id:
-            yield trip_from_rows(trip=trip, calls=list(calls))
+            yield trip_from_rows(
+                trip=trip, calls=list(calls), classify=classify,
+            )
 
 
 def next_on_block(
@@ -948,7 +952,9 @@ def write_run_table(*, conn: sqlite3.Connection, table: RunTable) -> None:
                 rows=table.pattern_rows())
 
 
-def load_runs(*, conn: sqlite3.Connection) -> RunReport:
+def load_runs(
+    *, conn: sqlite3.Connection, classify: Classifier,
+) -> RunReport:
     """
     Store every shown trip's run, the runs, their stops and the patterns.
 
@@ -959,6 +965,8 @@ def load_runs(*, conn: sqlite3.Connection) -> RunReport:
     ----------
     conn : sqlite3.Connection
         Built timetable with the RUN_SCHEMA tables.
+    classify : Classifier
+        Sorts a route into a mode.
 
     Returns
     -------
@@ -968,8 +976,10 @@ def load_runs(*, conn: sqlite3.Connection) -> RunReport:
     table = RunTable(days=trip_days(conn=conn), skips=trip_skips(conn=conn))
     blocks: list[TripCalls] = []
     insert_many(conn=conn, sql='INSERT INTO trip_runs VALUES (?, ?)',
-                rows=plain_trip_runs(trips=trip_calls(conn=conn),
-                                     table=table, blocks=blocks))
+                rows=plain_trip_runs(
+                    trips=trip_calls(conn=conn, classify=classify),
+                    table=table, blocks=blocks,
+                ))
     load_block_runs(conn=conn, table=table, blocks=blocks)
     write_run_table(conn=conn, table=table)
     return RunReport(runs=len(table.ids), trips=table.mapped)

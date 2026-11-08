@@ -11,10 +11,10 @@ import pytest
 from paperroute.adapters import pin_options
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.pin_options import SqlitePinOptions
-from paperroute.city import SYDNEY_PROJECTION
+from paperroute.city import SYDNEY_PROJECTION, SydneyMode
 from paperroute.core.chooser import UNPICKED, Choice, Level, focusable
 from paperroute.core.pin_choices import KIND_NAMES
-from paperroute_transit.core.model import RouteKind, StopPlace
+from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import RowKind, StripKey, build_reach
 from paperroute_transit.core.route_colours import RouteColour
 from tests.adapters.test_network_db import T1, build_network
@@ -119,9 +119,9 @@ def test_search_prefix_first(options: SqlitePinOptions) -> None:
 def test_search_shows_kinds_and_routes(options: SqlitePinOptions) -> None:
     """Each result lists its kinds and route numbers."""
     by_id = {m.place.stop_id: m for m in options.search(text='stop')}
-    assert by_id['C'].kinds == (RouteKind.TRAIN,)
+    assert by_id['C'].kinds == (SydneyMode.TRAIN,)
     assert by_id['C'].routes == ('T1', 'T2')
-    assert by_id['B2'].kinds == (RouteKind.BUS,)
+    assert by_id['B2'].kinds == (SydneyMode.BUS,)
     assert by_id['B2'].routes == ('809', '811')
 
 
@@ -143,7 +143,7 @@ def test_search_lists_routes_naturally(built: Path, tmp_path: Path) -> None:
     )) as network:
         found = SqlitePinOptions(network=network).search(text='c st')
     assert found[0].routes == ('T1', 'T2', '3', '9', '10', '20')
-    assert found[0].kinds == (RouteKind.BUS, RouteKind.TRAIN)
+    assert found[0].kinds == (SydneyMode.BUS, SydneyMode.TRAIN)
 
 
 def test_search_can_leave_out_school_routes(
@@ -170,7 +170,7 @@ def test_search_can_leave_out_school_routes(
         }
         kept = {m.place.stop_id: m for m in options.search(text='stop')}
     assert 'S901' not in skipped['B2'].routes
-    assert RouteKind.SCHOOL not in skipped['B2'].kinds
+    assert SydneyMode.SCHOOL not in skipped['B2'].kinds
     assert skipped['SO'].routes == ()
     assert 'S901' in kept['B2'].routes
 
@@ -212,31 +212,31 @@ def test_trip_stop_lifts_to_parent(options: SqlitePinOptions) -> None:
 
 def test_kinds_at_lists_kinds_with_lines(options: SqlitePinOptions) -> None:
     """Only kinds that have a line or route at the stop are listed."""
-    assert options.kinds_at(stop_id='C') == (RouteKind.TRAIN,)
-    assert options.kinds_at(stop_id='B2') == (RouteKind.BUS,)
+    assert options.kinds_at(stop_id='C') == (SydneyMode.TRAIN,)
+    assert options.kinds_at(stop_id='B2') == (SydneyMode.BUS,)
 
 
 def test_lines_at_station(options: SqlitePinOptions) -> None:
     """A station lists the lines whose stations hold it."""
-    both = options.lines_at(stop_id='C', kind=RouteKind.TRAIN)
+    both = options.lines_at(stop_id='C', kind=SydneyMode.TRAIN)
     assert tuple(line.badge for line in both) == ('T1', 'T2')
     assert both[0].key == 'train:T1'
-    only_one = options.lines_at(stop_id='R2', kind=RouteKind.TRAIN)
+    only_one = options.lines_at(stop_id='R2', kind=SydneyMode.TRAIN)
     assert tuple(line.badge for line in only_one) == ('T1',)
 
 
 def test_lines_at_stop(options: SqlitePinOptions) -> None:
     """A bus stop lists the routes of the runs that serve it."""
-    found = options.lines_at(stop_id='B2', kind=RouteKind.BUS)
+    found = options.lines_at(stop_id='B2', kind=SydneyMode.BUS)
     assert tuple(line.badge for line in found) == ('809', '811')
-    assert options.lines_at(stop_id='B2', kind=RouteKind.TRAIN) == ()
+    assert options.lines_at(stop_id='B2', kind=SydneyMode.TRAIN) == ()
 
 
 def test_destinations_station_first_match_to_column(
     network: SqliteNetworkRepository, options: SqlitePinOptions,
 ) -> None:
     """The To list is the focusable rows of the line's TO column."""
-    line = options.lines_at(stop_id='C', kind=RouteKind.TRAIN)[0]
+    line = options.lines_at(stop_id='C', kind=SydneyMode.TRAIN)[0]
     column = network.choices(path=(*T1, (Level.STATION, 'C')))
     assert column is not None
     expected = tuple(
@@ -246,7 +246,7 @@ def test_destinations_station_first_match_to_column(
     )
     found = options.destinations(
         origin=at(options=options, stop_id='C'),
-        kind=RouteKind.TRAIN,
+        kind=SydneyMode.TRAIN,
         line=line,
     )
     assert found == expected
@@ -260,9 +260,9 @@ def test_destinations_route_first_match_strip(
 ) -> None:
     """The To list is the strip rows the TO knob can stop on."""
     origin = at(options=options, stop_id='B2')
-    line = options.lines_at(stop_id='B2', kind=RouteKind.BUS)[1]
+    line = options.lines_at(stop_id='B2', kind=SydneyMode.BUS)[1]
     data = network.reach_input(
-        key=StripKey(station='B2', kind=RouteKind.BUS, routes=('811',)),
+        key=StripKey(station='B2', kind=SydneyMode.BUS, routes=('811',)),
         origin=origin,
     )
     assert data is not None
@@ -272,7 +272,7 @@ def test_destinations_route_first_match_strip(
         if row.kind not in UNPICKED and row.kind is not RowKind.ORIGIN
     )
     found = options.destinations(
-        origin=origin, kind=RouteKind.BUS, line=line,
+        origin=origin, kind=SydneyMode.BUS, line=line,
     )
     assert found == expected
     assert [place.stop_id for place in found] == ['B3']
@@ -292,7 +292,7 @@ def test_destinations_without_line_tables(
     )) as network:
         found = SqlitePinOptions(network=network).destinations(
             origin=StopPlace(stop_id='C', name='C Stop', point=None),
-            kind=RouteKind.TRAIN,
+            kind=SydneyMode.TRAIN,
             line=Choice(key='train:T1', label='Line T1', badge='T1'),
         )
     assert found == ()
@@ -313,10 +313,10 @@ def test_filters_for_bus_include_school_and_replacement(
         projection=SYDNEY_PROJECTION,
     )) as network:
         found = SqlitePinOptions(network=network).filters_at(
-            stop_id='B2', kind=RouteKind.BUS,
+            stop_id='B2', kind=SydneyMode.BUS,
         )
         trains = SqlitePinOptions(network=network).filters_at(
-            stop_id='B2', kind=RouteKind.TRAIN,
+            stop_id='B2', kind=SydneyMode.TRAIN,
         )
     assert {'809', '811', 'S901', 'T1X'} <= set(found)
     assert trains == ()
@@ -324,7 +324,7 @@ def test_filters_for_bus_include_school_and_replacement(
 
 def test_filters_for_train_are_its_lines(options: SqlitePinOptions) -> None:
     """A station's filter lists the routes of its trains in line order."""
-    found = options.filters_at(stop_id='C', kind=RouteKind.TRAIN)
+    found = options.filters_at(stop_id='C', kind=SydneyMode.TRAIN)
     assert found == ('T1', 'T2')
 
 
@@ -333,9 +333,9 @@ def test_nearby_lists_close_stops(
 ) -> None:
     """Stops with runs of the kind within the distance, nearest first."""
     centre = at(options=options, stop_id='C')
-    assert options.nearby(place=centre, kind=RouteKind.TRAIN) == ()
+    assert options.nearby(place=centre, kind=SydneyMode.TRAIN) == ()
     monkeypatch.setattr(pin_options, 'NEARBY_M', 2500)
-    found = options.nearby(place=centre, kind=RouteKind.TRAIN)
+    found = options.nearby(place=centre, kind=SydneyMode.TRAIN)
     ids = [place.stop_id for place in found]
     assert 'J' in ids
     assert 'C' not in ids
@@ -362,8 +362,8 @@ def test_old_file_offers_nothing(built: Path, tmp_path: Path) -> None:
         old = SqlitePinOptions(network=network)
         centre = StopPlace(stop_id='C', name='C', point=(0.0, 0.0))
         assert old.search(text='stop') == ()
-        assert old.lines_at(stop_id='C', kind=RouteKind.TRAIN) == ()
-        assert old.filters_at(stop_id='C', kind=RouteKind.TRAIN) == ()
+        assert old.lines_at(stop_id='C', kind=SydneyMode.TRAIN) == ()
+        assert old.filters_at(stop_id='C', kind=SydneyMode.TRAIN) == ()
         assert old.nearby(place=centre, kind=None) == ()
 
 

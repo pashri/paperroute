@@ -15,14 +15,14 @@ import pytest
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SydneyMode
 from paperroute.core.chooser import Choice, ChooserPath, Column, Level
 from paperroute.core.strip_view import build_strip_view
 from paperroute.ports import NetworkRepository
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import inputs_of
 from paperroute_transit.build.gtfs_files import Source
-from paperroute_transit.core.model import RouteKind, StopPlace
+from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import (
     ReachInput,
     RowKind,
@@ -281,7 +281,7 @@ def set_runs(*, path: Path, runs: Sequence[tuple[str, int]]) -> None:
 
 
 def tails_from(
-    *, path: Path, station: str, kind: RouteKind | None = RouteKind.TRAIN,
+    *, path: Path, station: str, kind: SydneyMode | None = SydneyMode.TRAIN,
     routes: tuple[str, ...] = (),
 ) -> tuple[RunTail, ...]:
     """
@@ -293,7 +293,7 @@ def tails_from(
         Timetable file.
     station : str
         From station ID.
-    kind : RouteKind | None
+    kind : SydneyMode | None
         Strip kind.
     routes : tuple[str, ...]
         Strip routes.
@@ -639,7 +639,7 @@ def test_station_column_on_old_timetable_is_none(copy: Path) -> None:
         assert labels(column=repo.choices(path=())) == ['Bus', 'Train']
         assert repo.choices(path=(*bus, (Level.GROUP, '800s'))) is not None
         assert repo.reach_input(
-            key=StripKey(station='C', kind=RouteKind.TRAIN, routes=()),
+            key=StripKey(station='C', kind=SydneyMode.TRAIN, routes=()),
             origin=place(stop_id='C'),
         ) is not None
 
@@ -655,7 +655,7 @@ def test_schema_four_file_serves_chooser_and_strip(copy: Path) -> None:
         assert repo.choices(path=T1) is not None
         assert repo.towards_line(towards=1) is not None
         assert repo.reach_input(
-            key=StripKey(station='C', kind=RouteKind.TRAIN, routes=()),
+            key=StripKey(station='C', kind=SydneyMode.TRAIN, routes=()),
             origin=place(stop_id='C'),
         ) is not None
 
@@ -769,8 +769,7 @@ def test_towards_line_has_names_and_points(network_db: Path) -> None:
         closing(
             SqliteTimetableRepository(
                 path=network_db,
-                zone=SYDNEY_ZONE,
-                projection=SYDNEY_PROJECTION,
+                city=SYDNEY,
             ),
         ) as timetable,
     ):
@@ -797,7 +796,7 @@ def test_reach_input_for_train_takes_every_train_run(
 def test_reach_input_for_bus_filters_by_route(network_db: Path) -> None:
     """A Bus strip takes only its own route's runs."""
     tails = tails_from(
-        path=network_db, station='B2', kind=RouteKind.BUS, routes=('811',),
+        path=network_db, station='B2', kind=SydneyMode.BUS, routes=('811',),
     )
     assert tails == (RunTail(before=(), after=('B3',), trips=3),)
 
@@ -806,7 +805,7 @@ def test_reach_input_for_bus_with_no_routes_takes_every_bus_route(
     network_db: Path,
 ) -> None:
     """A Bus strip with no routes chosen takes every bus route's runs."""
-    tails = tails_from(path=network_db, station='B2', kind=RouteKind.BUS)
+    tails = tails_from(path=network_db, station='B2', kind=SydneyMode.BUS)
     assert set(tails) == {
         RunTail(before=(), after=('B3',), trips=3),
         RunTail(before=('B1',), after=(), trips=3),
@@ -824,7 +823,7 @@ def test_reach_input_maps_a_platform_to_its_station(
 ) -> None:
     """A platform From reads the runs of its station."""
     found = network.reach_input(
-        key=StripKey(station='W1_1', kind=RouteKind.TRAIN, routes=()),
+        key=StripKey(station='W1_1', kind=SydneyMode.TRAIN, routes=()),
         origin=place(stop_id='W1_1'),
     )
     assert found is not None
@@ -939,7 +938,7 @@ def line_input(*, path: Path, station: str, line: str) -> ReachInput:
         projection=SYDNEY_PROJECTION,
     )) as repo:
         found = repo.reach_input(
-            key=StripKey(station=station, kind=RouteKind.TRAIN,
+            key=StripKey(station=station, kind=SydneyMode.TRAIN,
                          routes=(line,)),
             origin=place(stop_id=station),
         )
@@ -1071,7 +1070,7 @@ def test_town_hall_train_strip_reaches_the_inner_west() -> None:
         projection=SYDNEY_PROJECTION,
     )) as repo:
         found = repo.reach_input(
-            key=StripKey(station=TOWN_HALL, kind=RouteKind.TRAIN, routes=()),
+            key=StripKey(station=TOWN_HALL, kind=SydneyMode.TRAIN, routes=()),
             origin=place(stop_id=TOWN_HALL),
         )
     assert found is not None

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyMode
 from paperroute.core.map_view import Marker
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_badges import HALF_WIDE
@@ -61,7 +61,7 @@ from paperroute_testkit.core.strip_factories import (
     three_trains,
     times,
 )
-from paperroute_transit.core.model import CarryOn, RouteKind, StopPlace
+from paperroute_transit.core.model import CarryOn, StopPlace
 from paperroute_transit.core.reach import (
     Reach,
     ReachInput,
@@ -293,7 +293,7 @@ def test_times_shift_by_live_delay() -> None:
 def test_times_ignore_other_kinds() -> None:
     """A bus calling at a strip station gives it no time."""
     inputs = three_trains()
-    bus = train(minutes=0, trip_id='b', kind=RouteKind.BUS)
+    bus = train(minutes=0, trip_id='b', kind=SydneyMode.BUS)
     view = replace(
         inputs,
         departures=(live(item=bus),),
@@ -336,7 +336,7 @@ def test_whole_stop_buses_never_crowd_out_train_markers() -> None:
         departure(
             departs=START + timedelta(seconds=20 * i),
             trip_id=f'bus{i}',
-            kind=RouteKind.BUS,
+            kind=SydneyMode.BUS,
         )
         for i in range(60)
     ]

@@ -6,6 +6,7 @@ from typing import Final
 from urllib.parse import urlencode
 
 from paperroute.adapters.pin_windows import DEFAULT_BUTTON
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.pin_choices import (
     KIND_NAMES,
     NICKNAME_MAX,
@@ -14,8 +15,10 @@ from paperroute.core.pin_choices import (
     StopMatch,
 )
 from paperroute_device.adapters.web_common import asset
-from paperroute_transit.core.model import STATION_FIRST, RouteKind, StopPlace
+from paperroute_transit.core.model import StopPlace
+from paperroute_transit.core.modes import line_modes
 
+LINE_KINDS: Final[frozenset[str]] = line_modes(modes=SYDNEY.modes)
 MIN_QUERY: Final[int] = 2
 TOO_SHORT: Final[str] = 'Type at least 2 letters.'
 NO_MATCH: Final[str] = 'No stop or station matches “{text}”.'
@@ -84,7 +87,7 @@ def draft_of(
     kind = query.get('kind', '')
     return PinDraft(
         stop=query.get('stop', ''),
-        kind=RouteKind(kind) if kind in RouteKind else None,
+        kind=SydneyMode(kind) if kind in SydneyMode else None,
         route=query.get('route', ''),
         to=query.get('to', ''),
         only=tuple(only),
@@ -268,7 +271,7 @@ def line_field(*, editor: PinEditor) -> str:
     """
     if not editor.lines:
         return ''
-    label = 'Line' if editor.draft.kind in STATION_FIRST else 'Route'
+    label = 'Line' if editor.draft.kind in LINE_KINDS else 'Route'
     open_ended = not editor.draft.to
     chosen = editor.draft.route
     options = option(value='', label=f'Pick a {label.lower()}', chosen=chosen)

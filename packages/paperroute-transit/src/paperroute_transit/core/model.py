@@ -2,152 +2,21 @@
 
 import hashlib
 import json
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, time, timedelta, tzinfo
-from enum import StrEnum
 from itertools import pairwise
 from typing import Final
 
 from paperroute_transit.core.geo import Point
 
 TIMETABLE_SCHEMA: Final[str] = '8'
-REGIONAL_AGENCIES: Final[frozenset[str]] = frozenset({'711'})
 DAY_NAMES: Final[tuple[str, ...]] = (
     'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun',
 )
 HIDDEN_HEADSIGNS: Final[frozenset[str]] = frozenset(
     {'Empty Train', 'Out Of Service', 'Non Revenue'},
 )
-
-
-class Mode(StrEnum):
-    """Kinds of service."""
-
-    BUS = 'bus'
-    TRAIN = 'train'
-    METRO = 'metro'
-    FERRY = 'ferry'
-    LIGHT_RAIL = 'light_rail'
-    COACH = 'coach'
-    REGIONAL = 'regional'
-    OTHER = 'other'
-
-
-EXACT_MODES: Final[dict[int, Mode]] = {
-    2: Mode.TRAIN,
-    106: Mode.TRAIN,
-    401: Mode.METRO,
-    4: Mode.FERRY,
-    900: Mode.LIGHT_RAIL,
-}
-
-
-def mode_for(*, route_type: int, agency_id: str | None) -> Mode:
-    """
-    Find the mode of a route from its GTFS type and agency.
-
-    NSW TrainLink (bundle agency 711) trains and coaches are Regional. TfNSW
-    uses extended route types: 700-799 buses, 200-299 coaches.
-
-    Parameters
-    ----------
-    route_type : int
-        GTFS route_type.
-    agency_id : str | None
-        GTFS agency_id, when the feed gives one.
-
-    Returns
-    -------
-    Mode
-        Mode.
-    """
-    if agency_id in REGIONAL_AGENCIES:
-        return Mode.REGIONAL
-    if route_type in EXACT_MODES:
-        return EXACT_MODES[route_type]
-    if 700 <= route_type < 800:
-        return Mode.BUS
-    return Mode.COACH if 200 <= route_type < 300 else Mode.OTHER
-
-
-class RouteKind(StrEnum):
-    """Kinds of route offered when choosing lines."""
-
-    BUS = 'bus'
-    TRAIN = 'train'
-    METRO = 'metro'
-    LIGHT_RAIL = 'light_rail'
-    FERRY = 'ferry'
-    SCHOOL = 'school'
-    COACH = 'coach'
-    REPLACEMENT = 'replacement'
-
-
-INTERCITY: Final[tuple[str, ...]] = ('BMT', 'CCN', 'SCO', 'SHL', 'HUN')
-TRAINLINK: Final[tuple[str, ...]] = ('NRC', 'NRW', 'STH', 'WST')
-STATION_FIRST: Final[frozenset[RouteKind]] = frozenset({
-    RouteKind.TRAIN,
-    RouteKind.METRO,
-    RouteKind.LIGHT_RAIL,
-    RouteKind.FERRY,
-})
-SYDNEY_LINES: Final[re.Pattern[str]] = re.compile(r'^T[1-9]$')
-SYDNEY_FERRIES: Final[re.Pattern[str]] = re.compile(r'^F(?:[1-9]|10)$')
-TRAINLINK_KINDS: Final[dict[int, RouteKind]] = {
-    106: RouteKind.TRAIN,
-    204: RouteKind.COACH,
-    205: RouteKind.COACH,
-}
-EXACT_KINDS: Final[dict[int, RouteKind]] = {
-    **TRAINLINK_KINDS,
-    401: RouteKind.METRO,
-    900: RouteKind.LIGHT_RAIL,
-    4: RouteKind.FERRY,
-    700: RouteKind.BUS,
-    712: RouteKind.SCHOOL,
-    714: RouteKind.REPLACEMENT,
-}
-
-
-def kind_for(
-    *, route_type: int, agency_id: str | None, short_name: str,
-) -> RouteKind | None:
-    """
-    Sort a route into a kind from its type, agency and short name.
-
-    Parameters
-    ----------
-    route_type : int
-        GTFS route_type.
-    agency_id : str | None
-        GTFS agency_id, when the feed gives one.
-    short_name : str
-        Route short name.
-
-    Returns
-    -------
-    RouteKind | None
-        Kind; None for a route with no short name, a rail line that is
-        not a Sydney, intercity or NSW TrainLink line, or an on-demand or
-        unknown type. A rail trip keeps its line's kind when merging gave
-        it the bundle's NSW TrainLink agency.
-    """
-    if not short_name:
-        return None
-    if agency_id in REGIONAL_AGENCIES:
-        if route_type == 2:
-            return RouteKind.TRAIN if short_name in TRAINLINK else None
-        return TRAINLINK_KINDS.get(route_type)
-    if route_type == 2:
-        known = (
-            SYDNEY_LINES.match(short_name)
-            or short_name in INTERCITY
-            or short_name in TRAINLINK
-        )
-        return RouteKind.TRAIN if known else None
-    return EXACT_KINDS.get(route_type)
 
 
 def until_repeated_hop(*, stations: Sequence[str]) -> tuple[str, ...]:
@@ -279,8 +148,8 @@ class Pin:
         From stop or station.
     destination : StopPlace | None
         Destination, or None for every service leaving the From.
-    kind : RouteKind | None
-        Kind of route chosen, or None for any.
+    kind : str | None
+        Mode id of the routes chosen, or None for any.
     routes : tuple[str, ...]
         Route short names chosen; empty for all.
     nickname : str | None
@@ -300,7 +169,7 @@ class Pin:
 
     origin: StopPlace
     destination: StopPlace | None = None
-    kind: RouteKind | None = None
+    kind: str | None = None
     routes: tuple[str, ...] = ()
     nickname: str | None = None
     only: tuple[str, ...] = ()
@@ -390,7 +259,7 @@ def same_place(*, first: Pin, second: Pin) -> bool:
 type PinKey = tuple[
     str,
     str | None,
-    RouteKind | None,
+    str | None,
     tuple[str, ...],
     tuple[str, ...],
 ]
@@ -475,8 +344,8 @@ class TripFacts:
 
     Attributes
     ----------
-    kind : RouteKind | None
-        Kind of route, or None when not known.
+    kind : str | None
+        Mode id of the route, or None when not known.
     then : CarryOn | None
         The service the vehicle runs next, or None when not known.
     onto : CarryOn | None
@@ -487,7 +356,7 @@ class TripFacts:
         name (T1's Western and North Shore runs); empty when not known.
     """
 
-    kind: RouteKind | None = None
+    kind: str | None = None
     then: CarryOn | None = None
     onto: CarryOn | None = None
     route_id: str = ''
@@ -502,15 +371,16 @@ class Departure:
     One direct service leaving a pin's From.
 
     With a Destination it runs to that Destination; without one, to the
-    trip's last stop. `stops` counts the stations it stops at after the
-    From up to and including the Destination, across any carry-on; None
-    without a Destination or when not known.
+    trip's last stop. `source` is the city's feed key for its route.
+    `stops` counts the stations it stops at after the From up to and
+    including the Destination, across any carry-on; None without a
+    Destination or when not known.
     """
 
     trip_id: str
     aliases: tuple[str, ...]
     route: str
-    mode: Mode
+    source: str
     headsign: str
     platform: str
     origin_seq: int

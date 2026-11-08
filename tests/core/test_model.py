@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
-from paperroute.city import SYDNEY_ZONE
+from paperroute.city import SYDNEY_ZONE, SydneyMode
 from paperroute.core.chooser import KIND_LABELS, KIND_LETTERS, KIND_ORDER
 from paperroute.core.saved import TOWN_HALL
 from paperroute_testkit.core.connection_factories import (
@@ -17,13 +17,9 @@ from paperroute_testkit.core.connection_factories import (
 )
 from paperroute_testkit.core.factories import pin_of, place
 from paperroute_transit.core.model import (
-    TRAINLINK,
-    Mode,
     Pin,
-    RouteKind,
+    StopPlace,
     is_connection,
-    kind_for,
-    mode_for,
     pin_ref,
     same_place,
     service_epoch,
@@ -34,26 +30,6 @@ from paperroute_transit.core.model import (
     until_revisit,
     way_key,
 )
-
-
-@pytest.mark.parametrize(('route_type', 'agency_id', 'mode'), [
-    (2, 'x0001', Mode.TRAIN),
-    (2, 'NSWTrains', Mode.TRAIN),
-    (401, 'SMNW', Mode.METRO),
-    (4, None, Mode.FERRY),
-    (900, None, Mode.LIGHT_RAIL),
-    (700, '2436', Mode.BUS),
-    (712, None, Mode.BUS),
-    (204, None, Mode.COACH),
-    (106, '711', Mode.REGIONAL),
-    (204, '711', Mode.REGIONAL),
-    (1, None, Mode.OTHER),
-])
-def test_mode_for_route_types(
-    route_type: int, agency_id: str | None, mode: Mode
-) -> None:
-    """GTFS route types and NSW TrainLink's agency map to modes."""
-    assert mode_for(route_type=route_type, agency_id=agency_id) is mode
 
 
 def test_service_epoch_is_midnight_on_normal_days() -> None:
@@ -101,40 +77,6 @@ def test_service_time_before_daylight_saving_start() -> None:
     assert one.astimezone(UTC) == datetime(2026, 10, 3, 14, tzinfo=UTC)
 
 
-@pytest.mark.parametrize(('route_type', 'agency_id', 'short_name', 'kind'), [
-    (2, 'SydneyTrains', 'T1', RouteKind.TRAIN),
-    (2, 'SydneyTrains', 'CCN', RouteKind.TRAIN),
-    (2, 'NSWTrains', 'NRC', RouteKind.TRAIN),
-    (2, 'NSWTrains', 'NRW', RouteKind.TRAIN),
-    (2, 'NSWTrains', 'STH', RouteKind.TRAIN),
-    (2, 'NSWTrains', 'WST', RouteKind.TRAIN),
-    (2, 'NSWTrains', 'XPT', None),
-    (2, 'SydneyTrains', '', None),
-    (700, '2436', '', None),
-    (106, '711', '31', RouteKind.TRAIN),
-    (204, '711', '700', RouteKind.COACH),
-    (205, '711', '701', RouteKind.COACH),
-    (204, None, '700', RouteKind.COACH),
-    (700, '711', '480', None),
-    (2, '711', 'T1', None),
-    (401, 'SMNW', 'M1', RouteKind.METRO),
-    (900, None, 'L1', RouteKind.LIGHT_RAIL),
-    (4, None, 'F1', RouteKind.FERRY),
-    (700, '2436', '606', RouteKind.BUS),
-    (712, '2436', '2606', RouteKind.SCHOOL),
-    (714, '2436', 'RTTA', RouteKind.REPLACEMENT),
-    (715, '2436', 'OD1', None),
-])
-def test_kind_for_sorts_every_route_type(
-    route_type: int, agency_id: str | None, short_name: str,
-    kind: RouteKind | None,
-) -> None:
-    """Route types, agencies and line names sort into chooser kinds."""
-    assert kind_for(
-        route_type=route_type, agency_id=agency_id, short_name=short_name,
-    ) == kind
-
-
 def test_until_revisit_cuts_before_a_repeat() -> None:
     """The run stops before the first station seen twice."""
     assert until_revisit(stations=['A', 'B', 'C', 'B', 'D']) == (
@@ -168,54 +110,22 @@ def test_same_place_ignores_names_and_points() -> None:
     pin_of('A', None),
     pin_of('A', 'C'),
     pin_of('C', 'B'),
-    Pin(origin=place('A'), destination=place('B'), kind=RouteKind.BUS),
+    Pin(origin=place('A'), destination=place('B'), kind=SydneyMode.BUS),
 ])
 def test_same_place_tells_pins_apart(other: Pin) -> None:
     """A different stop, kind or route list is a different pin."""
     assert not same_place(first=pin_of('A', 'B'), second=other)
 
 
-def test_kind_for_bundle_trainlink_services_are_train() -> None:
-    """The bundle's numbered XPT services are trains, not coaches."""
-    assert kind_for(
-        route_type=106, agency_id='711', short_name='31',
-    ) is RouteKind.TRAIN
-
-
-def test_kind_for_trainlink_lines_are_train() -> None:
-    """NRC, NRW, STH and WST are Train lines."""
-    assert {
-        code: kind_for(
-            route_type=2, agency_id='NSWTrains', short_name=code,
-        )
-        for code in TRAINLINK
-    } == dict.fromkeys(TRAINLINK, RouteKind.TRAIN)
-
-
-def test_kind_for_merged_trainlink_trains_are_train() -> None:
-    """A trains-feed WST trip that took the bundle's agency 711 is Train."""
-    assert kind_for(
-        route_type=2, agency_id='711', short_name='WST',
-    ) is RouteKind.TRAIN
-
-
-def test_kind_for_coaches_are_coach() -> None:
-    """Route types 204 and 205 of agency 711 are coaches."""
-    assert [
-        kind_for(route_type=kind, agency_id='711', short_name='C1')
-        for kind in (204, 205)
-    ] == [RouteKind.COACH, RouteKind.COACH]
-
-
 def test_kind_order_is_bus_train_metro_lr_ferry_school_coach() -> None:
     """The chooser lists kinds in its fixed order, with Coach last."""
     assert KIND_ORDER == (
-        RouteKind.BUS, RouteKind.TRAIN, RouteKind.METRO,
-        RouteKind.LIGHT_RAIL, RouteKind.FERRY, RouteKind.SCHOOL,
-        RouteKind.COACH,
+        SydneyMode.BUS, SydneyMode.TRAIN, SydneyMode.METRO,
+        SydneyMode.LIGHT_RAIL, SydneyMode.FERRY, SydneyMode.SCHOOL,
+        SydneyMode.COACH,
     )
-    assert KIND_LABELS[RouteKind.COACH] == 'Coach'
-    assert KIND_LETTERS[RouteKind.COACH] == 'C'
+    assert KIND_LABELS[SydneyMode.COACH] == 'Coach'
+    assert KIND_LETTERS[SydneyMode.COACH] == 'C'
 
 
 def test_pin_key_includes_filter_not_nickname() -> None:
@@ -230,11 +140,21 @@ def test_pin_key_includes_filter_not_nickname() -> None:
 
 def test_pin_ref_is_stable_and_short() -> None:
     """A ref is twelve hex digits that change with the filter."""
-    pin = Pin(origin=TOWN_HALL, kind=RouteKind.TRAIN, routes=('T1',))
+    pin = Pin(origin=TOWN_HALL, kind=SydneyMode.TRAIN, routes=('T1',))
     ref = pin_ref(pin=pin)
     assert re.fullmatch('[0-9a-f]{12}', ref)
     assert ref == pin_ref(pin=pin)
     assert ref != pin_ref(pin=replace(pin, only=('T2',)))
+
+
+def test_pin_ref_unchanged() -> None:
+    """A pin's ref is the one it had when kinds were an enum."""
+    pin = Pin(
+        origin=StopPlace(stop_id='200060', name='Central', point=None),
+        kind='bus',
+        routes=('606',),
+    )
+    assert pin_ref(pin=pin) == '8a5e960f4c4b'
 
 
 def test_way_key_ignores_allow_and_tick() -> None:
@@ -274,7 +194,7 @@ def test_never_not_in_identity() -> None:
     never = replace(base, never=('2', '1'))
     assert same_place(first=base, second=never)
     assert pin_ref(pin=base) == pin_ref(pin=never)
-    open_ended = Pin(origin=TOWN_HALL, kind=RouteKind.TRAIN, routes=('T1',))
+    open_ended = Pin(origin=TOWN_HALL, kind=SydneyMode.TRAIN, routes=('T1',))
     assert pin_ref(pin=open_ended) == pin_ref(
         pin=replace(open_ended, never=('T2',)),
     )

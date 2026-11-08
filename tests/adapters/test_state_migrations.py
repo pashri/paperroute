@@ -15,11 +15,13 @@ from paperroute.adapters.state_file import (
 )
 from paperroute.adapters.state_migrations import (
     SCHEMA_VERSION,
+    V1_TRAINLINK_LINES,
     add_ways,
+    coach_pin,
     drop_zoom,
     v9_ref,
 )
-from paperroute.city import SYDNEY, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute.core.saved import DEFAULT_SAVED, ConnectionMap, Saved
 from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
@@ -34,7 +36,6 @@ from paperroute_transit.core.model import (
     AutoWindow,
     Change,
     Pin,
-    RouteKind,
     StopPlace,
     Way,
     pin_ref,
@@ -182,6 +183,15 @@ def path_fixture(tmp_path: Path) -> Path:
     return tmp_path / 'state.json'
 
 
+def test_v1_regional_pins_split_as_before() -> None:
+    """A v1 Regional pin is Train on TrainLink lines and Coach otherwise."""
+    assert V1_TRAINLINK_LINES == ('NRC', 'NRW', 'STH', 'WST')
+    train = {'kind': 'regional', 'routes': ['WST', 'NRC']}
+    coach = {'kind': 'regional', 'routes': ['X']}
+    assert coach_pin(pin=train) == {**train, 'kind': 'train'}
+    assert coach_pin(pin=coach) == {**coach, 'kind': 'coach'}
+
+
 def test_migrates_v9_to_v10(path: Path) -> None:
     """Destination pins lose routes; pin 5's change becomes one way."""
     v9_file(path=path)
@@ -199,7 +209,7 @@ def test_migrates_v9_to_v10(path: Path) -> None:
         ),
     )
     assert all(pin.only == () and pin.never == () for pin in pins)
-    assert pins[1].kind is RouteKind.TRAIN
+    assert pins[1].kind == SydneyMode.TRAIN
 
 
 def test_migration_keeps_auto_refs(path: Path) -> None:
@@ -507,7 +517,9 @@ def v10_data() -> dict[str, object]:
 
 def test_v10_zoom_is_dropped() -> None:
     """A schema 10 file with a zoom loads at 11 without it."""
-    model = state_model_of(text=json.dumps(v10_data()))
+    model = state_model_of(
+        text=json.dumps(v10_data()), mode_ids=SYDNEY.mode_ids,
+    )
     assert model.schema_version == SCHEMA_VERSION == 11
     assert 'zoom' not in model.model_dump()
     saved = from_model(model=model, zone=SYDNEY_ZONE)

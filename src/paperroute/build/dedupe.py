@@ -5,7 +5,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from typing import Final
 
-from paperroute_transit.core.model import REGIONAL_AGENCIES, TRAINLINK
+from paperroute.city import REGIONAL_AGENCIES, TRAINLINK
 
 MIN_SHARED: Final[int] = 2
 

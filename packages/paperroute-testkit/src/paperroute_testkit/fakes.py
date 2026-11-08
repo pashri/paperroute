@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute.core.chooser import ChooserPath, Column
 from paperroute.core.saved import DEFAULT_SAVED, Saved
 from paperroute.core.trip_search import (
@@ -37,9 +37,7 @@ from paperroute_transit.core.geo import (
 )
 from paperroute_transit.core.model import (
     Departure,
-    Mode,
     Pin,
-    RouteKind,
     ServiceSpan,
     StopPlace,
 )
@@ -474,7 +472,7 @@ class BrokenTimetable:
         """
         return False
 
-    def modes_near(self, *, box: MetreBox) -> frozenset[Mode]:
+    def modes_near(self, *, box: MetreBox) -> frozenset[SydneyFeed]:
         """
         Know no shapes.
 
@@ -485,7 +483,7 @@ class BrokenTimetable:
 
         Returns
         -------
-        frozenset[Mode]
+        frozenset[SydneyFeed]
             Nothing.
         """
         return frozenset()

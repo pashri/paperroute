@@ -1,10 +1,11 @@
 """Tests for the pin editor's checking of the choices made."""
 
 from paperroute.adapters.pin_editor import edited
+from paperroute.city import SydneyMode
 from paperroute.core.chooser import Choice
 from paperroute.core.pin_choices import PinDraft
 from paperroute_testkit.fake_pins import FakePinOptions
-from paperroute_transit.core.model import Pin, RouteKind, StopPlace
+from paperroute_transit.core.model import Pin, StopPlace
 
 HOME = StopPlace(stop_id='H', name='Home', point=None)
 WORK = StopPlace(stop_id='W', name='Work', point=None)
@@ -25,26 +26,26 @@ def options() -> FakePinOptions:
     """
     return FakePinOptions(
         places={'H': HOME, 'W': WORK, 'F': FAR},
-        lines={('H', RouteKind.TRAIN): (T1, T2), ('W', RouteKind.BUS): (BUS,)},
+        lines={('H', SydneyMode.TRAIN): (T1, T2), ('W', SydneyMode.BUS): (BUS,)},
         to={('H', 'train:T1'): (WORK, FAR)},
-        only={('H', RouteKind.TRAIN): ('T1', 'T2')},
+        only={('H', SydneyMode.TRAIN): ('T1', 'T2')},
     )
 
 
 def test_single_kind_and_line_are_chosen() -> None:
     """The only kind, and the only line of it, need no choosing."""
     found = edited(options=options(), draft=PinDraft(stop='W'))
-    assert found.draft.kind is RouteKind.BUS
+    assert found.draft.kind == SydneyMode.BUS
     assert found.draft.route == '809'
     assert found.pin == Pin(
-        WORK, None, RouteKind.BUS, routes=('809',), nickname=None,
+        WORK, None, SydneyMode.BUS, routes=('809',), nickname=None,
     )
 
 
 def test_unoffered_to_is_dropped() -> None:
     """A To the line does not offer goes; the filter stays."""
     draft = PinDraft(
-        stop='H', kind=RouteKind.TRAIN, route='T1', to='nowhere',
+        stop='H', kind=SydneyMode.TRAIN, route='T1', to='nowhere',
         only=('T2',),
     )
     found = edited(options=options(), draft=draft)
@@ -57,7 +58,7 @@ def test_unoffered_to_is_dropped() -> None:
 def test_unoffered_kind_drops_line_and_to() -> None:
     """A kind the stop does not have clears the line and the To."""
     draft = PinDraft(
-        stop='H', kind=RouteKind.FERRY, route='T1', to='W', nickname='Me',
+        stop='H', kind=SydneyMode.FERRY, route='T1', to='W', nickname='Me',
     )
     found = edited(options=options(), draft=draft)
     assert found.draft.route == ''
@@ -70,7 +71,7 @@ def test_unoffered_kind_drops_line_and_to() -> None:
 def test_unoffered_stop_drops_everything() -> None:
     """A stop that is not known clears every choice but the name."""
     draft = PinDraft(
-        stop='gone', kind=RouteKind.TRAIN, route='T1', nickname='Me',
+        stop='gone', kind=SydneyMode.TRAIN, route='T1', nickname='Me',
         ref='abc',
     )
     found = edited(options=options(), draft=draft)
@@ -81,7 +82,7 @@ def test_unoffered_stop_drops_everything() -> None:
 
 def test_unoffered_line_is_dropped_with_its_to() -> None:
     """A line the kind does not have clears the line and the To."""
-    draft = PinDraft(stop='H', kind=RouteKind.TRAIN, route='T9', to='W')
+    draft = PinDraft(stop='H', kind=SydneyMode.TRAIN, route='T9', to='W')
     found = edited(options=options(), draft=draft)
     assert found.draft.route == ''
     assert found.draft.to == ''
@@ -92,12 +93,12 @@ def test_unoffered_line_is_dropped_with_its_to() -> None:
 def test_complete_draft_gives_pin() -> None:
     """A full draft makes the pin, with a tidy nickname."""
     draft = PinDraft(
-        stop='H', kind=RouteKind.TRAIN, route='T1', to='W', only=('T2',),
+        stop='H', kind=SydneyMode.TRAIN, route='T1', to='W', only=('T2',),
         nickname='  Home ',
     )
     found = edited(options=options(), draft=draft)
     assert found.pin == Pin(
-        HOME, WORK, RouteKind.TRAIN, routes=('T1',), only=('T2',),
+        HOME, WORK, SydneyMode.TRAIN, routes=('T1',), only=('T2',),
         nickname='Home',
     )
     assert found.destinations == (WORK, FAR)
@@ -108,7 +109,7 @@ def test_nearby_comes_only_from_the_missing_pin() -> None:
     """Nearby stops are listed for a missing pin and no other."""
     fake = options()
     fake.near = (WORK,)
-    missing = Pin(HOME, kind=RouteKind.TRAIN, routes=('T1',), missing=True)
+    missing = Pin(HOME, kind=SydneyMode.TRAIN, routes=('T1',), missing=True)
     assert edited(options=fake, draft=PinDraft()).nearby == ()
     found = edited(options=fake, draft=PinDraft(), missing=missing)
     assert found.nearby == (WORK,)

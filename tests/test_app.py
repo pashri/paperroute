@@ -37,7 +37,7 @@ from paperroute.app_render import drawing
 from paperroute.app_work import fetch
 from paperroute.build.map_style import LIGHT
 from paperroute.build.timetable import Window, build_timetable
-from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE
+from paperroute.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE, SydneyFeed
 from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
 from paperroute.core.cycle import CYCLE_WAIT
 from paperroute.core.device import NOTICE, on_reset
@@ -142,7 +142,7 @@ from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.alert_model import AlertsFetched
 from paperroute_transit.core.geo import Point, Shape, make_shape
-from paperroute_transit.core.model import Departure, Mode, Pin, StopPlace
+from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.tiles import (
     TILE,
@@ -311,8 +311,7 @@ async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
     display = FrameRecorder()
     timetable = SqliteTimetableRepository(
         path=db,
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     ports = Ports(
         timetable=timetable,
@@ -348,8 +347,7 @@ async def test_run_reports_frames_feeds_and_ticks(tmp_path: Path) -> None:
     observer: Observer = timings
     timetable = SqliteTimetableRepository(
         path=db,
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     ports = Ports(
         timetable=timetable,
@@ -746,8 +744,7 @@ async def test_run_survives_a_raising_observer(tmp_path: Path) -> None:
     display = FrameRecorder()
     timetable = SqliteTimetableRepository(
         path=_build_db(tmp_path),
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     ports = Ports(
         timetable=timetable,
@@ -775,8 +772,7 @@ async def test_run_logs_frame_and_feed_timings_at_debug(
     """Per-frame and per-feed records are DEBUG, keeping the journal quiet."""
     timetable = SqliteTimetableRepository(
         path=_build_db(tmp_path),
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     ports = Ports(
         timetable=timetable,
@@ -964,8 +960,7 @@ async def test_run_draws_when_every_feed_fails(
     display = FrameRecorder()
     timetable = SqliteTimetableRepository(
         path=db,
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     ports = Ports(
         timetable=timetable,
@@ -1108,8 +1103,7 @@ async def test_run_sends_a_watchdog_for_each_handled_tick(
     observer = CallRecorder()
     timetable = SqliteTimetableRepository(
         path=_build_db(tmp_path),
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     ports = Ports(
         timetable=timetable,
@@ -1266,8 +1260,7 @@ async def test_run_draws_map_after_bottom_press(tmp_path: Path) -> None:
     """A bottom press shows the Map over the tiles and polls positions."""
     timetable = SqliteTimetableRepository(
         path=_build_db(tmp_path),
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     place = timetable.stop(stop_id=MAP_PIN.origin.stop_id)
     assert place.point is not None
@@ -1497,8 +1490,7 @@ async def test_positions_are_labelled_from_the_timetable(
     """Vehicles take the route label the timetable gives their trip."""
     timetable = RelabellingTimetable(
         path=_build_db(tmp_path),
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     ports = Ports(
         timetable=timetable,
@@ -1760,7 +1752,7 @@ class PatternedTimetable(BrokenTimetable):
         trip = TripPattern(
             trip_id='t1',
             route='606',
-            mode=Mode.BUS,
+            source=SydneyFeed.BUS,
             shape_id='s1',
             stops=(
                 PatternStop(arrives=0, departs=0, point=(0.0, 0.0)),
@@ -2545,8 +2537,7 @@ async def test_app_starts_without_a_timetable(tmp_path: Path) -> None:
     missing = tmp_path / 'timetable.db'
     timetable = SqliteTimetableRepository(
         path=missing,
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     network = SqliteNetworkRepository(
         path=missing,
@@ -2677,8 +2668,7 @@ async def test_app_runs_with_no_timetable(tmp_path: Path) -> None:
     missing = tmp_path / 'timetable.db'
     timetable = SqliteTimetableRepository(
         path=missing,
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     network = SqliteNetworkRepository(
         path=missing,
@@ -2797,8 +2787,7 @@ async def test_app_goes_live_when_the_timetable_arrives(
     target = tmp_path / 'timetable.db'
     timetable = SqliteTimetableRepository(
         path=target,
-        zone=SYDNEY_ZONE,
-        projection=SYDNEY_PROJECTION,
+        city=SYDNEY,
     )
     network = SqliteNetworkRepository(
         path=target,

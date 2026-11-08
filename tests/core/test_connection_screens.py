@@ -4,7 +4,7 @@ from dataclasses import replace
 from datetime import time
 from typing import Final
 
-from paperroute.city import SYDNEY
+from paperroute.city import SYDNEY, SydneyMode
 from paperroute.core.chooser import ChooserState
 from paperroute.core.connection_strip import (
     ConnectionStripMapView,
@@ -46,10 +46,10 @@ from paperroute_testkit.core.factories import place
 from paperroute_testkit.core.steps import wakeful
 from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
-from paperroute_transit.core.model import AutoWindow, Departure, Pin, RouteKind
+from paperroute_transit.core.model import AutoWindow, Departure, Pin
 
 PLAIN: Final[Pin] = Pin(
-    origin=place('200060', name='Central Station'), kind=RouteKind.TRAIN,
+    origin=place('200060', name='Central Station'), kind=SydneyMode.TRAIN,
 )
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 
@@ -290,7 +290,7 @@ def test_top_press_opens_chooser_at_leg_one() -> None:
     """The chooser opens at leg 1; turning back shows the connection."""
     state = with_legs(state=started(pins=(WORK, PLAIN)))
     state = stepped(state=state, event=KnobPressed(knob=Knob.TOP))
-    assert state.chooser == ChooserState(waiting=(), prefer=RouteKind.BUS)
+    assert state.chooser == ChooserState(waiting=(), prefer=SydneyMode.BUS)
     assert shown(state=state).origin == HOLLIS
     state = stepped(state=state, event=KnobPressed(knob=Knob.TOP))
     assert state.chooser is None

@@ -61,6 +61,11 @@ SYDNEY_MODULES: Final[frozenset[str]] = frozenset({
     'paperroute.build.dedupe',
     'paperroute.build.trainlink',
 })
+CITY_IMPORTS: Final[str] = (
+    'import paperroute.city, paperroute.build.extras, sys; '
+    "loaded = sorted(name for name in sys.modules if name.startswith('google')); "
+    'assert not loaded, loaded'
+)
 SCREEN_IMPORTS: Final[str] = (
     'import paperroute.screen, sys; '
     'print(*sorted(sys.modules))'
@@ -89,6 +94,17 @@ def test_refresh_never_imports_build_libraries(tmp_path: Path) -> None:
             **os.environ,
             'PAPERROUTE_API_KEY_FILE': str(tmp_path / 'no-such-key'),
         },
+    )
+    assert result.returncode == 0, result.stderr
+
+
+def test_city_loads_no_feed_parsers() -> None:
+    """The city and the extras program load without protobuf."""
+    result = subprocess.run(
+        [sys.executable, '-c', CITY_IMPORTS],
+        check=False,
+        capture_output=True,
+        text=True,
     )
     assert result.returncode == 0, result.stderr
 
@@ -204,14 +220,18 @@ def imported_names(*, path: Path) -> set[str]:
     Returns
     -------
     set[str]
-        Dotted module names from import statements.
+        Dotted module names from import statements; a from-import also
+        gives each name it imports under its module, so ``from paperroute
+        import city`` gives ``paperroute.city``.
     """
     names: set[str] = set()
     for node in ast.walk(ast.parse(path.read_text(encoding='utf-8'))):
         if isinstance(node, ast.Import):
             names.update(alias.name for alias in node.names)
         elif isinstance(node, ast.ImportFrom):
-            names.add(resolve_from(path=path, node=node))
+            module = resolve_from(path=path, node=node)
+            names.add(module)
+            names.update(f'{module}.{alias.name}' for alias in node.names)
     return names
 
 
@@ -496,3 +516,16 @@ def test_sydney_modules_exist() -> None:
     """Every module named Sydney's is an app module."""
     modules = {app_module(path=path) for path in APP.rglob('*.py')}
     assert SYDNEY_MODULES <= modules
+
+
+def test_imported_names_see_package_from_imports(tmp_path: Path) -> None:
+    """Importing a module from its package names the module."""
+    path = tmp_path / 'engine.py'
+    path.write_text(
+        'from paperroute import city\n'
+        'from paperroute import sydney_feeds as feeds\n',
+        encoding='utf-8',
+    )
+    assert {'paperroute.city', 'paperroute.sydney_feeds'} <= (
+        imported_names(path=path)
+    )

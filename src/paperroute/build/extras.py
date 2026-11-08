@@ -51,6 +51,8 @@ def city_named(*, ref: str) -> City:
 
     Raises
     ------
+    ModuleNotFoundError
+        When the module does not exist.
     ValueError
         When the name in the module is not a city.
     """

@@ -4,8 +4,6 @@ import functools
 from collections.abc import Iterable
 from typing import Final
 
-from paperroute.adapters.gtfs_alerts import parse_alerts
-from paperroute.adapters.gtfs_rt import parse_positions, parse_trip_updates
 from paperroute_transit.core.feed_plan import FeedKind, FeedParsers
 from paperroute_transit.core.geo import MetreBox, Projection, to_metres
 
@@ -163,6 +161,34 @@ def feed_label(feed: str) -> str:
     return feed
 
 
+def gtfs_readers(*, projection: Projection) -> FeedParsers:
+    """
+    Give the GTFS-realtime readers, placing positions in a projection.
+
+    The readers load protobuf, so they are imported here, when a feed is
+    first read, and the city loads without it.
+
+    Parameters
+    ----------
+    projection : Projection
+        The projection vehicle positions are placed in.
+
+    Returns
+    -------
+    FeedParsers
+        The trip updates, positions and alerts readers.
+    """
+    # pylint: disable-next=import-outside-toplevel
+    from paperroute.adapters.gtfs_alerts import parse_alerts
+    # pylint: disable-next=import-outside-toplevel
+    from paperroute.adapters.gtfs_rt import parse_positions, parse_trip_updates
+    return FeedParsers(
+        trips=parse_trip_updates,
+        positions=functools.partial(parse_positions, projection=projection),
+        alerts=parse_alerts,
+    )
+
+
 class SydneyFeeds:
     """
     Sydney's TfNSW realtime feeds.
@@ -175,13 +201,7 @@ class SydneyFeeds:
 
     def __init__(self, *, projection: Projection) -> None:
         self.projection = projection
-        self.readers = FeedParsers(
-            trips=parse_trip_updates,
-            positions=functools.partial(
-                parse_positions, projection=projection,
-            ),
-            alerts=parse_alerts,
-        )
+        self.readers: FeedParsers | None = None
 
     @property
     def daily_limit(self) -> int:
@@ -345,6 +365,8 @@ class SydneyFeeds:
             positions are placed in the projection.
         """
         del feed
+        if self.readers is None:
+            self.readers = gtfs_readers(projection=self.projection)
         return self.readers
 
     def single_line_type(self, *, feed: str) -> int | None:

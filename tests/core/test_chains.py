@@ -9,6 +9,7 @@ import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.chains import (
     Chain,
     LegKey,
@@ -22,7 +23,7 @@ from paperroute.core.chains import (
 )
 from paperroute.core.connection_model import trip_key, way_legs
 from paperroute.core.live import LiveDeparture
-from paperroute.core.stop_view import clock_text
+from paperroute_device.core.text import clock_text
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN,
     CAMPBELLTOWN_WAY,
@@ -137,7 +138,10 @@ def test_chains_match_real_times() -> None:
     assert [chain.legs[1].departure.route for chain in chains] == [
         '665', '664', '665', '665', '665',
     ]
-    assert [clock_text(moment=chain.arrives) for chain in chains] == [
+    assert [clock_text(
+        moment=chain.arrives,
+        zone=SYDNEY_ZONE,
+    ) for chain in chains] == [
         '7:57', '8:12', '8:27', '8:45', '9:04',
     ]
     assert all(chain.way == 0 and chain.changes == 1 for chain in chains)
@@ -155,7 +159,7 @@ def test_delay_repairs_silently() -> None:
         first=(live(item=LEG1[0], late=6),), second=lived(LEG2),
     )
     assert ids(chains) == [('a0733', 'b0801a')]
-    assert clock_text(moment=chains[0].arrives) == '8:12'
+    assert clock_text(moment=chains[0].arrives, zone=SYDNEY_ZONE) == '8:12'
 
 
 def test_change_exactly_allow_is_catchable() -> None:
@@ -171,7 +175,7 @@ def test_cancelled_second_leg_skipped() -> None:
     second = (live(item=LEG2[0], cancelled=True), *lived(LEG2[1:]))
     chains = work_chains(first=lived(LEG1[:1]), second=second)
     assert chains[0].legs[1].departure.route == '662'
-    assert clock_text(moment=chains[0].arrives) == '8:02'
+    assert clock_text(moment=chains[0].arrives, zone=SYDNEY_ZONE) == '8:02'
 
 
 def test_no_workable_second_leg_hidden() -> None:
@@ -288,7 +292,7 @@ def test_two_changes_chain() -> None:
         now=at(7, 30),
     )
     assert ids(chains) == [('a0733', 'b0746', 't0803')]
-    assert clock_text(moment=chains[0].arrives) == '8:08'
+    assert clock_text(moment=chains[0].arrives, zone=SYDNEY_ZONE) == '8:08'
     assert chains[0].changes == 2
 
 

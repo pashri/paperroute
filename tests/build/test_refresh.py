@@ -125,7 +125,7 @@ def _data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     monkeypatch.setattr(
         refresh_module,
         'yesterday',
-        lambda: START,
+        lambda *, zone: START,
     )
     path = tmp_path / 'data'
     path.mkdir()
@@ -373,7 +373,7 @@ def test_window_running_out_rebuilds_from_stored_zips(
     """Fewer than a week left in the window rebuilds with no download."""
     run(server=server, data_dir=data_dir)
     later = START + timedelta(days=DAYS - 4)
-    monkeypatch.setattr(refresh_module, 'yesterday', lambda: later)
+    monkeypatch.setattr(refresh_module, 'yesterday', lambda *, zone: later)
     server.state.hits.clear()
     report = run(server=server, data_dir=data_dir)
     assert server.state.hits == {'HEAD': 3}

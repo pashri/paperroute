@@ -69,6 +69,7 @@ def live_list(
         snapshots=state.snapshots,
         now=frame_time(state=state),
         limit=stale_after(state=state),
+        zone=state.city.zone,
     )
     return sorted(found, key=lambda item: item.departs)
 

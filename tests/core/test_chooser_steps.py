@@ -7,6 +7,7 @@ from typing import Final
 
 import pytest
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.chooser import ChooserState, Level, Stage
 from paperroute.core.chooser_steps import DEPARTURES_FAILED, LINE_FAILED
 from paperroute.core.chooser_view import LOADING_LISTS, ChooserView
@@ -522,7 +523,11 @@ def test_chooser_departures_reload_on_a_long_dwell() -> None:
     )
     state, effects = step(state, Tick(now=START + timedelta(minutes=10)))
     assert not effects_of(effects=effects, kind=LoadChooserDepartures)
-    late = shifted(moment=UNTIL, seconds=-int(HORIZON.total_seconds()) + 1)
+    late = shifted(
+        moment=UNTIL,
+        seconds=-int(HORIZON.total_seconds()) + 1,
+        zone=SYDNEY_ZONE,
+    )
     state, _ = step(state, TimetableSeen(version='v1'))
     state, _ = step(state, replace(picked(), timetable='v1'))
     state, effects = step(state, Tick(now=late))

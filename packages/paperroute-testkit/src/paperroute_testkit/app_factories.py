@@ -8,6 +8,7 @@ from datetime import datetime
 from paperroute.adapters.feed_files import FileFeedsClient
 from paperroute.app import MapRenderer, Ports, perform
 from paperroute.app_effects import StateSaver
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.map_view import STRIP_MAP_WIDTH, MapBase, MapView, Marker
 from paperroute.core.messages import Effect, Event
 from paperroute.core.strip_model import StripMapView, StripPane
@@ -22,10 +23,9 @@ from paperroute_testkit.fakes import (
 )
 from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_testkit.paths import FIXTURES
-from paperroute_transit.core.model import SYDNEY
 
 REAL = FIXTURES / 'real'
-AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
+AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY_ZONE)
 PIN = pin_of('215020', '200060')
 MAP_PIN = pin_of('2145615', '215020')
 MAP_MPP = 8

@@ -8,6 +8,7 @@ from pathlib import Path
 
 import pytest
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.logs import LastError, configure_logging
 
 
@@ -103,7 +104,7 @@ def test_error_file_rotates(
 
 def test_last_error_keeps_latest_error() -> None:
     """Only ERROR records count, and the latest is kept with its time."""
-    last = LastError()
+    last = LastError(zone=SYDNEY_ZONE)
     assert last.text() is None
     log = logging.getLogger('paperroute.last')
     log.addHandler(last)
@@ -126,7 +127,7 @@ def test_configure_logging_attaches_last_error(
 ) -> None:
     """The handler given sees errors logged anywhere."""
     monkeypatch.setattr('sys.stderr', io.StringIO())
-    last = LastError()
+    last = LastError(zone=SYDNEY_ZONE)
     configure_logging(last_error=last)
     logging.getLogger('paperroute.t').error('boom')
     text = last.text()

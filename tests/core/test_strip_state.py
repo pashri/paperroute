@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute.city import SYDNEY
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.map_state import area_frame
 from paperroute.core.map_view import DEFAULT_ZOOM, MapView
@@ -333,7 +334,7 @@ def test_flip_resets_the_strip_scroll() -> None:
         unpinned=None,
         view=LiveView.STRIP,
     )
-    state = initial_state(saved=saved, now=START, stored=True)
+    state = initial_state(saved=saved, now=START, stored=True, city=SYDNEY)
     state, _ = step(state, StripLoaded(key=KEY, reach=long_reach()))
     state, _ = step(state, turn(steps=4))
     assert state.strip.scroll == 4

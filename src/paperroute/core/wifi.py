@@ -32,7 +32,6 @@ from paperroute_device.core.wifi_text import (
     START_FAILED,
 )
 from paperroute_hardware.core.knob_events import Knob, KnobPressed
-from paperroute_transit.core.model import SYDNEY
 
 SETUP_FOR: Final[timedelta] = timedelta(minutes=10)
 WIFI_SPECIAL: Final[str] = '\\;,:"'
@@ -126,7 +125,7 @@ def wifi_setup_view(*, state: State) -> WifiSetupView:
     if setup.until is not None:
         seconds = max((setup.until - state.now).total_seconds(), 0.0)
     return WifiSetupView(
-        clock=clock_text(moment=state.now, zone=SYDNEY),
+        clock=clock_text(moment=state.now, zone=state.city.zone),
         phase=setup.phase,
         qr=wifi_qr(password=setup.password),
         password=shown_password(password=setup.password),

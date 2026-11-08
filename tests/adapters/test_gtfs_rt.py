@@ -14,10 +14,10 @@ from paperroute.adapters.gtfs_rt import (
     parse_trip_updates,
 )
 from paperroute.adapters.tfnsw import FeedError
+from paperroute.city import SYDNEY_ZONE
 from paperroute_testkit.adapters.rt_factory import RtStop, RtTrip, feed
-from paperroute_transit.core.model import SYDNEY
 
-NOW = datetime(2026, 10, 16, 6, 30, tzinfo=SYDNEY)
+NOW = datetime(2026, 10, 16, 6, 30, tzinfo=SYDNEY_ZONE)
 REAL = Path(__file__).parent.parent / 'fixtures' / 'real'
 
 

@@ -2,13 +2,14 @@
 
 from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, tzinfo
 from itertools import chain
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
-from paperroute.core.stop_view import clock_text, not_departed
+from paperroute.core.stop_view import not_departed
 from paperroute.core.strip_model import TripDay, trip_day
+from paperroute_device.core.text import clock_text
 from paperroute_transit.core.model import (
     Departure,
     RouteKind,
@@ -51,6 +52,8 @@ class TripInputs:
     stale_after : timedelta
         How old a position may be before it is drawn at its timetable
         position instead.
+    zone : tzinfo
+        Local time zone the times show in.
     station_of : Mapping[str, str]
         The station ID of each stop under a strip station.
     """
@@ -61,6 +64,7 @@ class TripInputs:
     positions: Mapping[str, PositionsSnapshot]
     now: datetime
     stale_after: timedelta
+    zone: tzinfo
     station_of: Mapping[str, str]
 
 
@@ -338,8 +342,14 @@ def live_strip(*, trips: TripInputs) -> list[LiveDeparture]:
     ]
 
 
-def from_call(*, departure: Departure, pattern: TripPattern, origin: str,
-              stations: Mapping[str, str]) -> int | None:
+def from_call(
+    *,
+    departure: Departure,
+    pattern: TripPattern,
+    origin: str,
+    stations: Mapping[str, str],
+    zone: tzinfo,
+) -> int | None:
     """
     Find the call at which a departure leaves the From.
 
@@ -353,6 +363,8 @@ def from_call(*, departure: Departure, pattern: TripPattern, origin: str,
         The From station ID.
     stations : Mapping[str, str]
         Station ID by stop ID, for stops under a strip station.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
@@ -366,7 +378,7 @@ def from_call(*, departure: Departure, pattern: TripPattern, origin: str,
         if stations.get(stop.station, stop.station) == origin
     ]
     leaves = service_seconds(
-        day=departure.service_day, moment=departure.departs,
+        day=departure.service_day, moment=departure.departs, zone=zone,
     )
     timed = [i for i in at_from if pattern.stops[i].departs == leaves]
     return next(iter(timed or at_from), None)
@@ -397,7 +409,7 @@ def started_pattern(
     pattern = trips.patterns.get(departure.trip_id)
     start = None if pattern is None else from_call(
         departure=departure, pattern=pattern, origin=origin,
-        stations=trips.station_of,
+        stations=trips.station_of, zone=trips.zone,
     )
     if pattern is None or start is None:
         return None
@@ -438,7 +450,9 @@ def stops_after(
     if started is None:
         return
     pattern, start, delay = started
-    ends = delay_ends(item=item, leaves=pattern.stops[start], delay=delay)
+    ends = delay_ends(
+        item=item, leaves=pattern.stops[start], delay=delay, zone=trips.zone,
+    )
     joined = joined_patterns(
         pattern=pattern, patterns=trips.patterns, day=day,
     )
@@ -447,19 +461,22 @@ def stops_after(
     )
     for stop in calls:
         if not stop.passes:
-            arrives = service_time(day=day, seconds=stop.arrives)
+            arrives = service_time(
+                day=day, seconds=stop.arrives, zone=trips.zone,
+            )
             yield (
                 trips.station_of.get(stop.station, stop.station),
                 stop,
                 shifted(
                     moment=arrives,
                     seconds=call_delay(seconds=stop.arrives, ends=ends),
+                    zone=trips.zone,
                 ),
             )
 
 
 def delay_ends(
-    *, item: LiveDeparture, leaves: PatternStop, delay: int,
+    *, item: LiveDeparture, leaves: PatternStop, delay: int, zone: tzinfo,
 ) -> tuple[tuple[int, int], tuple[int, int]]:
     """
     Pair a departure's delay at the From with its delay on arrival.
@@ -472,6 +489,8 @@ def delay_ends(
         Its call at the From.
     delay : int
         Seconds late leaving the From.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
@@ -481,7 +500,7 @@ def delay_ends(
     """
     departure = item.departure
     arrives = service_seconds(
-        day=departure.service_day, moment=departure.arrives,
+        day=departure.service_day, moment=departure.arrives, zone=zone,
     )
     late = int(item.arrives.timestamp() - departure.arrives.timestamp())
     return (leaves.departs, delay), (arrives, late)
@@ -687,8 +706,10 @@ def calls_before(
                 seconds=(
                     stop.arrives if stop.departs is None else stop.departs
                 ),
+                zone=trips.zone,
             ),
             seconds=delay,
+            zone=trips.zone,
         )
         for stop in pattern.stops[:start]
         if not stop.passes
@@ -779,7 +800,9 @@ def trip_text(
         for above in (False, True)
     ]
     return {
-        index: clock_text(moment=found[index < origin][row.place.stop_id])
+        index: clock_text(
+            moment=found[index < origin][row.place.stop_id], zone=trips.zone,
+        )
         for index, row in enumerate(reach.rows)
         if index in rows
         and row.kind in (RowKind.APPROACH, RowKind.MAIN, RowKind.BRANCH)

@@ -430,7 +430,11 @@ def clock_checked(*, state: State, now: datetime, synced: bool) -> State:
         return replace(after, clock_gave_up=True, panel=panel)
     if waiting or state.last_view is not None:
         return after
-    until = shifted(moment=now, seconds=int(CLOCK_WAIT.total_seconds()))
+    until = shifted(
+        moment=now,
+        seconds=int(CLOCK_WAIT.total_seconds()),
+        zone=state.city.zone,
+    )
     return replace(after, clock_wait_until=until)
 
 

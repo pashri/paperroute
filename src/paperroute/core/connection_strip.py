@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from enum import StrEnum
 
 from paperroute.core.chains import Chain
@@ -11,9 +11,10 @@ from paperroute.core.connection_view import PairRow, chain_rows, no_pair_text
 from paperroute.core.live import LiveDeparture
 from paperroute.core.map_view import MapView, is_fresh, position_age
 from paperroute.core.rides import rides_of
-from paperroute.core.stop_view import PinTag, StopView, clock_text, stops_text
+from paperroute.core.stop_view import PinTag, StopView, stops_text
 from paperroute.core.strip_model import LOADING, NO_LEG_STOPS
 from paperroute.core.strip_times import from_call, joined_patterns
+from paperroute_device.core.text import clock_text
 from paperroute_transit.core.model import (
     Change,
     Mode,
@@ -142,7 +143,12 @@ class ConnectionStripMapView:
 
 
 def end_call(
-    *, item: LiveDeparture, pattern: TripPattern, start: int, end: str,
+    *,
+    item: LiveDeparture,
+    pattern: TripPattern,
+    start: int,
+    end: str,
+    zone: tzinfo,
 ) -> int | None:
     """
     Find the call at which a departure reaches a station.
@@ -157,6 +163,8 @@ def end_call(
         Index of the boarding call.
     end : str
         Station ID got off at.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -171,7 +179,7 @@ def end_call(
         if pattern.stops[index].station == end
     ]
     arrives = service_seconds(
-        day=departure.service_day, moment=departure.arrives,
+        day=departure.service_day, moment=departure.arrives, zone=zone,
     )
     timed = [i for i in at_end if pattern.stops[i].arrives == arrives]
     return next(iter(timed or at_end), None)
@@ -184,6 +192,7 @@ def leg_calls(
     pattern: TripPattern,
     start: str,
     end: str,
+    zone: tzinfo,
 ) -> tuple[LegCall, ...]:
     """
     List a leg's calls from boarding to getting off, with live times.
@@ -201,6 +210,8 @@ def leg_calls(
         Station ID boarded at.
     end : str
         Station ID got off at.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -211,10 +222,14 @@ def leg_calls(
     """
     departure = item.departure
     first = from_call(
-        departure=departure, pattern=pattern, origin=start, stations={},
+        departure=departure,
+        pattern=pattern,
+        origin=start,
+        stations={},
+        zone=zone,
     )
     final = None if first is None else end_call(
-        item=last, pattern=pattern, start=first, end=end,
+        item=last, pattern=pattern, start=first, end=end, zone=zone,
     )
     if first is None or final is None:
         return ()
@@ -225,11 +240,13 @@ def leg_calls(
                 moment=service_time(
                     day=departure.service_day,
                     seconds=stop.arrives if index == final else stop.departs,
+                    zone=zone,
                 ),
                 seconds=(
                     late_arriving(item=last) if index == final
                     else delay_of(item=item)
                 ),
+                zone=zone,
             ),
         )
         for index, stop in enumerate(pattern.stops)
@@ -271,7 +288,9 @@ def late_arriving(*, item: LiveDeparture) -> int:
     return int(item.arrives.timestamp() - item.departure.arrives.timestamp())
 
 
-def fold_leg(*, calls: Sequence[LegCall]) -> tuple[LegStop, ...]:
+def fold_leg(
+    *, calls: Sequence[LegCall], zone: tzinfo,
+) -> tuple[LegStop, ...]:
     """
     Show a leg's first and last calls, folding the stops between.
 
@@ -279,6 +298,8 @@ def fold_leg(*, calls: Sequence[LegCall]) -> tuple[LegStop, ...]:
     ----------
     calls : Sequence[LegCall]
         The leg's calls with their times.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -286,7 +307,7 @@ def fold_leg(*, calls: Sequence[LegCall]) -> tuple[LegStop, ...]:
         The first call, a fold row '{n} stops' ('1 stop') when any are
         between, and the last call; empty with no calls.
     """
-    rows = leg_stops(calls=calls)
+    rows = leg_stops(calls=calls, zone=zone)
     if len(rows) <= 2:
         return rows
     hidden = len(rows) - 2
@@ -302,6 +323,7 @@ def approach_note(
     position: VehiclePosition | None,
     board: StopPlace,
     pattern: TripPattern | None,
+    zone: tzinfo,
 ) -> str | None:
     """
     Say how far a leg's vehicle is from the stop it is boarded at.
@@ -316,6 +338,8 @@ def approach_note(
         Where the leg is boarded.
     pattern : TripPattern | None
         Its trip, or None while loading.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -326,8 +350,11 @@ def approach_note(
     if position is None or pattern is None:
         return None
     start = from_call(
-        departure=leg.departure, pattern=pattern, origin=board.stop_id,
+        departure=leg.departure,
+        pattern=pattern,
+        origin=board.stop_id,
         stations={},
+        zone=zone,
     )
     hop = hop_near(pattern=pattern, point=position.point)
     if start is None or hop is None or hop[0] >= start:
@@ -378,7 +405,9 @@ def leg_vehicle(
     return min(fresh, key=lambda pair: pair[0])[1] if fresh else None
 
 
-def leg_stops(*, calls: Sequence[LegCall]) -> tuple[LegStop, ...]:
+def leg_stops(
+    *, calls: Sequence[LegCall], zone: tzinfo,
+) -> tuple[LegStop, ...]:
     """
     Turn a leg's calls into rows.
 
@@ -386,6 +415,8 @@ def leg_stops(*, calls: Sequence[LegCall]) -> tuple[LegStop, ...]:
     ----------
     calls : Sequence[LegCall]
         The calls with their times.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -396,7 +427,7 @@ def leg_stops(*, calls: Sequence[LegCall]) -> tuple[LegStop, ...]:
     return tuple(
         LegStop(
             name=stop.name or stop.station,
-            time=clock_text(moment=moment),
+            time=clock_text(moment=moment, zone=zone),
             mark=(
                 StopMark.FIRST
                 if index == 0
@@ -522,7 +553,7 @@ def run_on_pattern(
 
 
 def leg_rows(
-    *, leg: Leg, patterns: Mapping[str, TripPattern | None],
+    *, leg: Leg, patterns: Mapping[str, TripPattern | None], zone: tzinfo,
 ) -> tuple[LegStop, ...]:
     """
     List every row of a leg.
@@ -533,6 +564,8 @@ def leg_rows(
         The leg.
     patterns : Mapping[str, TripPattern | None]
         Loaded patterns by trip ID.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -548,8 +581,9 @@ def leg_rows(
         pattern=run_on_pattern(pattern=pattern, patterns=patterns, leg=leg),
         start=leg.start.stop_id,
         end=leg.end.stop_id,
+        zone=zone,
     )
-    return fold_leg(calls=calls)
+    return fold_leg(calls=calls, zone=zone)
 
 
 def leg_section(
@@ -603,6 +637,7 @@ def chain_sections(
     positions: Mapping[str, PositionsSnapshot],
     now: datetime,
     stale_after: timedelta,
+    zone: tzinfo,
 ) -> tuple[LegSection, ...]:
     """
     Build a section per ride of a chain.
@@ -621,6 +656,8 @@ def chain_sections(
         The frame time.
     stale_after : timedelta
         How old a position may be.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -641,17 +678,18 @@ def chain_sections(
             ),
             board=leg.start,
             pattern=trip,
+            zone=zone,
         )
         sections.append(leg_section(
             leg=leg,
-            rows=leg_rows(leg=leg, patterns=patterns),
+            rows=leg_rows(leg=leg, patterns=patterns, zone=zone),
             loaded=trip_id in patterns,
             vehicle=note,
         ))
     return tuple(sections)
 
 
-def build_connection_strip(
+def build_connection_strip(  # pylint: disable=too-many-arguments
     *,
     stop_view: StopView,
     pin: Pin,
@@ -661,6 +699,7 @@ def build_connection_strip(
     positions: Mapping[str, PositionsSnapshot],
     now: datetime,
     stale_after: timedelta,
+    zone: tzinfo,
 ) -> ConnectionStripView:
     """
     Build the connection Strip.
@@ -683,6 +722,8 @@ def build_connection_strip(
         The frame time.
     stale_after : timedelta
         How old a position may be.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -697,6 +738,7 @@ def build_connection_strip(
         positions=positions,
         now=now,
         stale_after=stale_after,
+        zone=zone,
     )
     return ConnectionStripView(
         origin=stop_view.origin,
@@ -708,7 +750,7 @@ def build_connection_strip(
         sections=sections,
         more=stop_view.more,
         planned=stop_view.planned,
-        pairs=chain_rows(chains=chains, pin=pin, now=now),
+        pairs=chain_rows(chains=chains, pin=pin, now=now, zone=zone),
         selected=index,
         empty=no_pair_text(stop_view=stop_view, chains=chains),
     )

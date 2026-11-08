@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import time
 from typing import Final
 
+from paperroute.city import SYDNEY
 from paperroute.core.chooser import ChooserState
 from paperroute.core.connection_strip import (
     ConnectionStripMapView,
@@ -85,6 +86,7 @@ def started(
     )
     return wakeful(state=initial_state(
         saved=saved, now=at(7, 30), stored=True,
+        city=SYDNEY,
     ))
 
 
@@ -313,7 +315,7 @@ def test_auto_window_shows_connection() -> None:
     saved = replace(
         seeded(pin=PLAIN), pins=(PLAIN, work), view=LiveView.MAP,
     )
-    state = initial_state(saved=saved, now=at(7, 29), stored=True)
+    state = initial_state(saved=saved, now=at(7, 29), stored=True, city=SYDNEY)
     state = replace(state, panel=replace(state.panel, facts=device_facts()))
     state = stepped(state=wakeful(state=state), event=Tick(now=at(7, 29)))
     state = stepped(state=state, event=Tick(now=at(7, 30)))

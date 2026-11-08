@@ -4,7 +4,7 @@ import contextlib
 import json
 import logging
 import time
-from datetime import date
+from datetime import date, tzinfo
 from pathlib import Path
 from typing import Final
 
@@ -49,9 +49,9 @@ from paperroute.core.saved import DEFAULT_SAVED, LiveView, Quota, Saved
 from paperroute.ports import Loaded
 from paperroute_device.adapters.atomic_file import write_atomic
 from paperroute_transit.core.auto_model import AutoState, Before
+from paperroute_transit.core.city import City
 from paperroute_transit.core.model import (
     MAX_CHANGES,
-    SYDNEY,
     Change,
     Pin,
     RouteKind,
@@ -360,7 +360,7 @@ def auto_to_model(*, auto: AutoState) -> AutoModel:
     )
 
 
-def auto_from_model(*, model: AutoModel) -> AutoState:
+def auto_from_model(*, model: AutoModel, zone: tzinfo) -> AutoState:
     """
     Convert a stored auto pin state back.
 
@@ -368,11 +368,13 @@ def auto_from_model(*, model: AutoModel) -> AutoState:
     ----------
     model : AutoModel
         The stored state.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
     AutoState
-        The state, its times in Sydney.
+        The state, its times in local time.
     """
     occurrence = model.occurrence
     before = model.before
@@ -392,7 +394,7 @@ def auto_from_model(*, model: AutoModel) -> AutoState:
             )
         ),
         overridden_at=(
-            None if overridden_at is None else overridden_at.astimezone(SYDNEY)
+            None if overridden_at is None else overridden_at.astimezone(zone)
         ),
     )
 
@@ -424,7 +426,7 @@ def to_model(*, saved: Saved) -> StateModel:
     )
 
 
-def from_model(*, model: StateModel) -> Saved:
+def from_model(*, model: StateModel, zone: tzinfo) -> Saved:
     """
     Convert a stored state back, repairing what can be repaired.
 
@@ -432,6 +434,8 @@ def from_model(*, model: StateModel) -> Saved:
     ----------
     model : StateModel
         The stored state.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
@@ -454,7 +458,7 @@ def from_model(*, model: StateModel) -> Saved:
         view=model.view,
         settings=settings_from_model(model=model.settings),
         quota=Quota(day=model.quota.day, calls=model.quota.calls),
-        auto=auto_from_model(model=model.auto),
+        auto=auto_from_model(model=model.auto, zone=zone),
     )
 
 
@@ -715,12 +719,15 @@ class JsonStateRepository:
 
     Parameters
     ----------
-    path : Path | None
-        The file; `DEFAULT_PATH` when None.
+    path : Path
+        The file.
+    city : City
+        The city the state is kept for.
     """
 
-    def __init__(self, *, path: Path | None = None) -> None:
-        self.path = path or DEFAULT_PATH
+    def __init__(self, *, path: Path, city: City) -> None:
+        self.path = path
+        self.city = city
 
     def load(self) -> Loaded:
         """
@@ -738,7 +745,8 @@ class JsonStateRepository:
             model = state_model_of(text=state_text(path=self.path))
         except (OSError, UnicodeDecodeError, ValueError, RecursionError):
             return self.defaults_after_error()
-        return Loaded(saved=from_model(model=model), stored=True)
+        saved = from_model(model=model, zone=self.city.zone)
+        return Loaded(saved=saved, stored=True)
 
     def save(self, *, saved: Saved) -> None:
         """

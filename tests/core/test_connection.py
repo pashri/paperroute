@@ -3,6 +3,7 @@
 from dataclasses import replace
 from typing import Final
 
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.alert_match import tie_of
 from paperroute.core.connection import (
     chain_legs,
@@ -14,7 +15,7 @@ from paperroute.core.messages import DeparturesLoaded
 from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import Board, State
-from paperroute.core.stop_view import clock_text
+from paperroute_device.core.text import clock_text
 from paperroute_testkit.core.alert_factories import alert
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
@@ -75,6 +76,7 @@ def loaded(
     """
     state = wakeful(state=initial_state(
         saved=seeded(pin=pin), now=at(7, 30), stored=True,
+        city=SYDNEY,
     ))
     state, _ = step(state, DeparturesLoaded(
         pin=pin,
@@ -132,7 +134,10 @@ def test_live_chains_from_board() -> None:
     """The loaded legs chain as the real times do."""
     state = loaded()
     chains = live_chains(state=state)
-    assert [clock_text(moment=chain.arrives) for chain in chains] == [
+    assert [clock_text(
+        moment=chain.arrives,
+        zone=SYDNEY_ZONE,
+    ) for chain in chains] == [
         '7:57', '8:12', '8:27', '8:45', '9:04',
     ]
     assert [len(chain_legs(chain=chain)) for chain in chains] == [2] * 5
@@ -147,6 +152,7 @@ def test_direct_list_competes() -> None:
     )
     state = wakeful(state=initial_state(
         saved=seeded(pin=WORK), now=at(7, 30), stored=True,
+        city=SYDNEY,
     ))
     state, _ = step(state, DeparturesLoaded(
         pin=WORK, departures=direct, until=at(10, 30), legs=work_legs(),

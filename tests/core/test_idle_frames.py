@@ -4,6 +4,7 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.feeds import FeedKind
 from paperroute.core.messages import (
     DeparturesLoaded,
@@ -98,7 +99,7 @@ def running(*, trip_id: str) -> TripPattern:
     TripPattern
         A pattern from `CENTRE` to 2 km east, over the idle time.
     """
-    begins = service_seconds(day=START.date(), moment=START)
+    begins = service_seconds(day=START.date(), moment=START, zone=SYDNEY_ZONE)
     return pattern(
         trip_id=trip_id,
         stops=calls(

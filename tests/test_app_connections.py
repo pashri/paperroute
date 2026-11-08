@@ -6,6 +6,7 @@ from datetime import date, datetime, timedelta
 from typing import Final
 
 from paperroute.app_connections import between_read, departures_read
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.chains import leg_key
 from paperroute.core.connection_model import direct_leg, way_legs
 from paperroute.core.messages import LoadDepartures
@@ -342,7 +343,7 @@ def test_between_read_covers_two_changes() -> None:
 def test_connection_second_read_cached() -> None:
     """With a cache, a repeat load of a connection reads nothing."""
     timetable = RecordingTimetable()
-    cache = LegCache()
+    cache = LegCache(zone=SYDNEY_ZONE)
     effect = LoadDepartures(pin=WORK, start=START, end=END, timetable='v1')
     first = departures_read(timetable=timetable, effect=effect, cache=cache)
     second = departures_read(timetable=timetable, effect=effect, cache=cache)

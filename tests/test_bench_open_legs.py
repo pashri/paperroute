@@ -9,7 +9,7 @@ from types import ModuleType
 
 import pytest
 
-from paperroute_transit.core.model import SYDNEY
+from paperroute.city import SYDNEY_ZONE
 from tests.helpers import slice_db
 
 SCRIPT = Path(__file__).parent.parent / 'scripts' / 'bench_open_legs.py'
@@ -138,9 +138,9 @@ def test_bench_chains_default_is_work_shaped(
 
 
 @pytest.mark.parametrize(('now', 'expected'), [
-    (datetime(2026, 10, 27, 7, 0, tzinfo=SYDNEY), (27, 8)),
-    (datetime(2026, 10, 27, 9, 0, tzinfo=SYDNEY), (28, 8)),
-    (datetime(2026, 10, 30, 9, 0, tzinfo=SYDNEY), (2, 8)),
+    (datetime(2026, 10, 27, 7, 0, tzinfo=SYDNEY_ZONE), (27, 8)),
+    (datetime(2026, 10, 27, 9, 0, tzinfo=SYDNEY_ZONE), (28, 8)),
+    (datetime(2026, 10, 30, 9, 0, tzinfo=SYDNEY_ZONE), (2, 8)),
 ])
 def test_next_weekday_start(
     now: datetime, expected: tuple[int, int],

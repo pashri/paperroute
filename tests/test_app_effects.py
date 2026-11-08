@@ -14,6 +14,7 @@ from google.transit import gtfs_realtime_pb2
 
 from paperroute.app import MapRenderer, run, ticker
 from paperroute.app_effects import VersionWatch, parse_feed
+from paperroute.city import SYDNEY
 from paperroute.core.chooser import Column, Level
 from paperroute.core.feeds import FeedKind
 from paperroute.core.map_state import area_box
@@ -167,6 +168,7 @@ async def test_version_error_does_not_quit(
             seed=MAP_PIN,
             tick_every=0.01,
             max_events=15,
+            city=SYDNEY,
         )
     assert state.running
     failures = [

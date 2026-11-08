@@ -256,7 +256,9 @@ def auto_step(*, state: State) -> State:
     """
     if not clock_trusted(state=state):
         return state
-    found = running(pins=state.places.pins, now=state.now)
+    found = running(
+        pins=state.places.pins, now=state.now, zone=state.city.zone,
+    )
     if found is None:
         if state.auto.occurrence is None or blocked(state=state):
             return state

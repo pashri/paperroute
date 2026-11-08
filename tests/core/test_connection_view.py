@@ -3,6 +3,7 @@
 from dataclasses import replace
 from typing import Final
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.chains import Chain
 from paperroute.core.connection_map import sidebar_rows
 from paperroute.core.connection_strip import build_connection_strip
@@ -80,7 +81,12 @@ STAY: Final[Chain] = Chain(
 
 def test_hero_spells_out_steps() -> None:
     """The next chain counts down and spells out each step."""
-    hero = chain_hero(chain=CHAINS[0], pin=WORK, now=at(7, 30))
+    hero = chain_hero(
+        chain=CHAINS[0],
+        pin=WORK,
+        now=at(7, 30),
+        zone=SYDNEY_ZONE,
+    )
     assert hero.countdown == '3'
     assert hero.leaves_at == '7:33'
     assert [line.route for line in hero.lines] == ['606', None, None, '665']
@@ -96,7 +102,12 @@ def test_hero_spells_out_steps() -> None:
 
 def test_hero_lists_each_change() -> None:
     """A two-change chain has three badge lines and two change lines."""
-    hero = chain_hero(chain=TWO_CHANGES, pin=TWO, now=at(7, 30))
+    hero = chain_hero(
+        chain=TWO_CHANGES,
+        pin=TWO,
+        now=at(7, 30),
+        zone=SYDNEY_ZONE,
+    )
     badges = [line for line in hero.lines if line.route is not None]
     changes = [
         line.text for line in hero.lines if line.text.startswith('change')
@@ -113,7 +124,7 @@ def test_hero_lists_each_change() -> None:
 
 def test_direct_hero() -> None:
     """A direct trip says where it goes."""
-    hero = chain_hero(chain=DIRECT, pin=WORK, now=at(7, 30))
+    hero = chain_hero(chain=DIRECT, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE)
     assert hero.lines[1] == HeroLine(
         route=None, mode=None, text='direct to Westmead Station', at='',
     )
@@ -122,17 +133,22 @@ def test_direct_hero() -> None:
 
 def test_stay_on_folds_into_one_leg() -> None:
     """Two legs on one trip read as one stay-on leg."""
-    hero = chain_hero(chain=STAY, pin=WORK, now=at(7, 30))
+    hero = chain_hero(chain=STAY, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE)
     assert [line.route for line in hero.lines] == ['606', None]
     assert hero.lines[1].text == 'stay on to Westmead Station'
-    row = chain_row(chain=STAY, pin=WORK, now=at(7, 30))
+    row = chain_row(chain=STAY, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE)
     assert row.chips == ('606',)
     assert row.detail == 'stay on'
 
 
 def test_chain_row_counts_down_when_live() -> None:
     """A live first leg counts down and keeps its clock time."""
-    row = chain_row(chain=LIVE_DIRECT, pin=WORK, now=at(5, 30))
+    row = chain_row(
+        chain=LIVE_DIRECT,
+        pin=WORK,
+        now=at(5, 30),
+        zone=SYDNEY_ZONE,
+    )
     assert row.countdown == '130'
     assert row.live
     assert row.leaves_at == '7:40'
@@ -140,7 +156,7 @@ def test_chain_row_counts_down_when_live() -> None:
 
 def test_chain_row_timetable_keeps_the_clock() -> None:
     """A timetable-only first leg is not live."""
-    row = chain_row(chain=DIRECT, pin=WORK, now=at(7, 30))
+    row = chain_row(chain=DIRECT, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE)
     assert not row.live
     assert row.leaves_at == '7:40'
 
@@ -151,6 +167,7 @@ def test_every_pair_surface_gets_the_count() -> None:
     now = at(7, 28)
     view = build_connection_view(
         stop_view=STOP, pin=WORK, chains=chains, scroll=0, now=now,
+        zone=SYDNEY_ZONE,
     )
     strip = build_connection_strip(
         stop_view=STOP,
@@ -161,8 +178,9 @@ def test_every_pair_surface_gets_the_count() -> None:
         positions={},
         now=now,
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
-    sidebar = sidebar_rows(pin=WORK, chains=chains, now=now)
+    sidebar = sidebar_rows(pin=WORK, chains=chains, now=now, zone=SYDNEY_ZONE)
     assert view.rows[0].countdown == '12'
     assert sidebar[0].countdown == '12'
     assert strip.pairs[0].countdown == '12'
@@ -170,7 +188,7 @@ def test_every_pair_surface_gets_the_count() -> None:
 
 def test_row_at_one_stop() -> None:
     """A one-change row says where to change."""
-    row = chain_row(chain=CHAINS[1], pin=WORK, now=at(7, 30))
+    row = chain_row(chain=CHAINS[1], pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE)
     assert row.detail == 'at Constitution Hill, North West Twy'
     assert row.chips == ('606', '664')
     assert (row.leaves_at, row.arrives_at, row.minutes) == (
@@ -188,7 +206,7 @@ def test_row_via_two_stops() -> None:
 
 def test_direct_row_single_chip() -> None:
     """A direct row has one chip and says direct."""
-    row = chain_row(chain=DIRECT, pin=WORK, now=at(7, 30))
+    row = chain_row(chain=DIRECT, pin=WORK, now=at(7, 30), zone=SYDNEY_ZONE)
     assert row.chips == ('609',)
     assert row.detail == 'direct'
 
@@ -197,6 +215,7 @@ def test_rows_after_hero() -> None:
     """The list holds the chains after the hero, scrolled."""
     view = build_connection_view(
         stop_view=STOP, pin=WORK, chains=CHAINS, scroll=0, now=at(7, 30),
+        zone=SYDNEY_ZONE,
     )
     assert view.hero is not None
     assert [row.leaves_at for row in view.rows] == [
@@ -204,6 +223,7 @@ def test_rows_after_hero() -> None:
     ]
     scrolled = build_connection_view(
         stop_view=STOP, pin=WORK, chains=CHAINS, scroll=2, now=at(7, 30),
+        zone=SYDNEY_ZONE,
     )
     assert scrolled.rows[0].leaves_at == '8:22'
 
@@ -213,10 +233,12 @@ def test_rows_capped_and_scroll_clamped() -> None:
     view = build_connection_view(
         stop_view=STOP, pin=WORK, chains=CHAINS + CHAINS, scroll=0,
         now=at(7, 30),
+        zone=SYDNEY_ZONE,
     )
     assert len(view.rows) == PAIR_ROWS
     far = build_connection_view(
         stop_view=STOP, pin=WORK, chains=CHAINS, scroll=40, now=at(7, 30),
+        zone=SYDNEY_ZONE,
     )
     assert [row.leaves_at for row in far.rows] == ['8:42']
 
@@ -225,6 +247,7 @@ def test_no_chains_text() -> None:
     """No chain says so, unless the board is still loading."""
     view = build_connection_view(
         stop_view=STOP, pin=WORK, chains=(), scroll=0, now=at(7, 30),
+        zone=SYDNEY_ZONE,
     )
     assert view.hero is None
     assert not view.rows
@@ -236,6 +259,7 @@ def test_no_chains_text() -> None:
         chains=(),
         scroll=0,
         now=at(7, 30),
+        zone=SYDNEY_ZONE,
     )
     assert view.empty == loading
 
@@ -249,6 +273,7 @@ def test_no_direct_trip_still_says_no_chains() -> None:
         chains=(),
         scroll=0,
         now=at(7, 30),
+        zone=SYDNEY_ZONE,
     )
     assert view.empty == 'No connections to Westmead Station in the next 3 hours'
 
@@ -261,6 +286,7 @@ def test_no_chains_without_destination() -> None:
         chains=(),
         scroll=0,
         now=at(7, 30),
+        zone=SYDNEY_ZONE,
     )
     assert view.empty == NO_PAIRS == 'No connections in the next 3 hours'
 
@@ -269,6 +295,7 @@ def test_chrome_from_stop_view() -> None:
     """The banner, warning, pill and titles come from the Stop view."""
     view = build_connection_view(
         stop_view=STOP, pin=WORK, chains=CHAINS, scroll=0, now=at(7, 30),
+        zone=SYDNEY_ZONE,
     )
     assert view.banner == 'Lift out of order'
     assert (view.warning, view.more, view.planned) == (True, 2, False)
@@ -294,6 +321,9 @@ def test_change_at_stops_no_distance_apart_has_no_walk() -> None:
         end=place('c'),
         change=Change(alight=place('a'), board=place('b'), allow=2),
     )
-    assert [line.text for line in change_lines(ride=ride)] == [
+    assert [line.text for line in change_lines(
+        ride=ride,
+        zone=SYDNEY_ZONE,
+    )] == [
         'change at  7:33',
     ]

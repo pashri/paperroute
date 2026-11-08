@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute.city import SYDNEY
 from paperroute.core.alert_state import alert_feeds, listed_ids, shown_alerts
 from paperroute.core.feeds import FeedKind
 from paperroute.core.map_view import MapView
@@ -95,7 +96,9 @@ def started(*, pins: tuple[Pin, ...] = (PARRAMATTA_CENTRAL,)) -> State:
         The state at `NOW`.
     """
     saved = replace(seeded(pin=pins[0]), pins=pins)
-    return wakeful(state=initial_state(saved=saved, now=NOW, stored=True))
+    return wakeful(
+        state=initial_state(saved=saved, now=NOW, stored=True, city=SYDNEY),
+    )
 
 
 def loaded_with(
@@ -654,6 +657,7 @@ def connection_asks(*, second: tuple[Departure, ...]) -> list[LoadBetween]:
     now = at_connection(7, 30)
     state = wakeful(state=initial_state(
         saved=seeded(pin=WORK), now=now, stored=True,
+        city=SYDNEY,
     ))
     _, effects = step(state, DeparturesLoaded(
         pin=WORK,

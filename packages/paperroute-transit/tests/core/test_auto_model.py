@@ -1,23 +1,21 @@
 """Tests for auto windows on pins and their occurrences."""
 
 from dataclasses import replace
-from datetime import datetime, time
+from datetime import UTC, date, datetime, time
 from typing import Final
+from zoneinfo import ZoneInfo
 
 from paperroute_testkit.core.factories import START, pin_of
 from paperroute_transit.core.auto_model import (
     AutoState,
     Occurrence,
     holds_awake,
+    occurrence_of,
     running,
 )
-from paperroute_transit.core.model import (
-    SYDNEY,
-    AutoWindow,
-    Pin,
-    pin_ref,
-    same_place,
-)
+from paperroute_transit.core.model import AutoWindow, Pin, pin_ref, same_place
+
+ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 
 WEEKDAYS: Final[frozenset[int]] = frozenset(range(5))
 PIN_A: Final[Pin] = pin_of('A', None)
@@ -42,7 +40,7 @@ def at(*, day: int, hour: int, minute: int = 0) -> datetime:
     datetime
         Aware Sydney datetime.
     """
-    return datetime(2026, 10, day, hour, minute, tzinfo=SYDNEY)
+    return datetime(2026, 10, day, hour, minute, tzinfo=ZONE)
 
 
 def windowed(*, pin: Pin, window: AutoWindow) -> Pin:
@@ -69,13 +67,17 @@ def test_weekday_window_runs() -> None:
     pin = windowed(
         pin=PIN_A, window=AutoWindow(WEEKDAYS, time(7, 30), time(9)),
     )
-    assert running(pins=(pin,), now=START) == Occurrence(
+    assert running(pins=(pin,), now=START, zone=ZONE) == Occurrence(
         ref=pin_ref(pin=pin),
         start=at(day=16, hour=7, minute=30),
         end=at(day=16, hour=9),
     )
-    assert running(pins=(pin,), now=at(day=16, hour=9)) is None
-    assert running(pins=(pin,), now=at(day=16, hour=7, minute=29)) is None
+    assert running(pins=(pin,), now=at(day=16, hour=9), zone=ZONE) is None
+    assert running(
+        pins=(pin,),
+        now=at(day=16, hour=7, minute=29),
+        zone=ZONE,
+    ) is None
 
 
 def test_midnight_window_runs_into_next_day() -> None:
@@ -83,10 +85,10 @@ def test_midnight_window_runs_into_next_day() -> None:
     pin = windowed(
         pin=PIN_A, window=AutoWindow(frozenset({4}), time(22), time(1)),
     )
-    found = running(pins=(pin,), now=at(day=17, hour=0, minute=30))
+    found = running(pins=(pin,), now=at(day=17, hour=0, minute=30), zone=ZONE)
     assert found is not None
     assert found.end == at(day=17, hour=1)
-    assert running(pins=(pin,), now=at(day=17, hour=1)) is None
+    assert running(pins=(pin,), now=at(day=17, hour=1), zone=ZONE) is None
 
 
 def test_days_name_the_start_day() -> None:
@@ -94,7 +96,11 @@ def test_days_name_the_start_day() -> None:
     pin = windowed(
         pin=PIN_A, window=AutoWindow(frozenset({5}), time(22), time(1)),
     )
-    assert running(pins=(pin,), now=at(day=17, hour=0, minute=30)) is None
+    assert running(
+        pins=(pin,),
+        now=at(day=17, hour=0, minute=30),
+        zone=ZONE,
+    ) is None
 
 
 def test_latest_start_wins() -> None:
@@ -106,10 +112,14 @@ def test_latest_start_wins() -> None:
         pin=PIN_B, window=AutoWindow(WEEKDAYS, time(8, 30), time(9)),
     )
     pins = (long, short)
-    inner = running(pins=pins, now=at(day=16, hour=8, minute=45))
+    inner = running(pins=pins, now=at(day=16, hour=8, minute=45), zone=ZONE)
     assert inner is not None
     assert inner.ref == pin_ref(pin=short)
-    assert running(pins=pins, now=at(day=16, hour=9, minute=30)) == (
+    assert running(
+        pins=pins,
+        now=at(day=16, hour=9, minute=30),
+        zone=ZONE,
+    ) == (
         Occurrence(
             ref=pin_ref(pin=long),
             start=at(day=16, hour=7),
@@ -125,7 +135,7 @@ def test_tie_goes_to_earlier_pin() -> None:
         windowed(pin=PIN_A, window=window),
         windowed(pin=PIN_B, window=window),
     )
-    found = running(pins=pins, now=START)
+    found = running(pins=pins, now=START, zone=ZONE)
     assert found is not None
     assert found.ref == pin_ref(pin=PIN_A)
 
@@ -153,10 +163,10 @@ def test_window_on_spring_forward_day() -> None:
     pin = windowed(
         pin=PIN_A, window=AutoWindow(frozenset({6}), time(2, 30), time(4)),
     )
-    late = datetime(2026, 10, 4, 3, 30, tzinfo=SYDNEY)
-    early = datetime(2026, 10, 4, 3, tzinfo=SYDNEY)
-    assert running(pins=(pin,), now=early) is None
-    found = running(pins=(pin,), now=late)
+    late = datetime(2026, 10, 4, 3, 30, tzinfo=ZONE)
+    early = datetime(2026, 10, 4, 3, tzinfo=ZONE)
+    assert running(pins=(pin,), now=early, zone=ZONE) is None
+    found = running(pins=(pin,), now=late, zone=ZONE)
     assert found is not None
     assert found.start == late
 
@@ -166,6 +176,19 @@ def test_window_on_fall_back_day() -> None:
     pin = windowed(
         pin=PIN_A, window=AutoWindow(frozenset({6}), time(2), time(2, 45)),
     )
-    first = datetime(2026, 4, 5, 2, 10, tzinfo=SYDNEY)
-    assert running(pins=(pin,), now=first) is not None
-    assert running(pins=(pin,), now=first.replace(fold=1)) is None
+    first = datetime(2026, 4, 5, 2, 10, tzinfo=ZONE)
+    assert running(pins=(pin,), now=first, zone=ZONE) is not None
+    assert running(pins=(pin,), now=first.replace(fold=1), zone=ZONE) is None
+
+
+def test_windows_follow_given_zone() -> None:
+    """The same window starts at another instant in another zone."""
+    window = AutoWindow(WEEKDAYS, time(7, 30), time(9))
+    day = date(2026, 10, 16)
+    sydney = occurrence_of(window=window, day=day, zone=ZONE)
+    london = occurrence_of(
+        window=window, day=day, zone=ZoneInfo('Europe/London'),
+    )
+    assert sydney is not None and london is not None
+    assert sydney[0] == datetime(2026, 10, 15, 20, 30, tzinfo=UTC)
+    assert london[0] == datetime(2026, 10, 16, 6, 30, tzinfo=UTC)

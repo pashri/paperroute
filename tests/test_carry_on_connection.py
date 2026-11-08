@@ -15,6 +15,7 @@ from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.app_connections import departures_read
 from paperroute.app_ports import Ports
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.chains import chains_of
 from paperroute.core.connection_strip import ConnectionStripView
 from paperroute.core.map_view import DEFAULT_ZOOM
@@ -34,12 +35,12 @@ from paperroute_testkit.app_factories import ports_of, posted_by
 from paperroute_testkit.core.factories import live
 from paperroute_testkit.fakes import FixedClock
 from paperroute_transit.build.gtfs_files import Source
-from paperroute_transit.core.model import SYDNEY, Change, Pin, RouteKind, Way
+from paperroute_transit.core.model import Change, Pin, RouteKind, Way
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 DAY: Final[date] = date(2026, 10, 16)
 M9B_DB: Final[Path] = Path(__file__).parents[1] / 'data' / 'timetable-m9b.db'
-M9B_AT: Final[datetime] = datetime(2026, 10, 28, 8, 0, tzinfo=SYDNEY)
+M9B_AT: Final[datetime] = datetime(2026, 10, 28, 8, 0, tzinfo=SYDNEY_ZONE)
 
 
 @pytest.fixture(name='built', scope='module')
@@ -84,7 +85,9 @@ def _timetable(built: Path) -> Iterator[SqliteTimetableRepository]:
     SqliteTimetableRepository
         The timetable.
     """
-    with closing(SqliteTimetableRepository(path=built)) as timetable:
+    with closing(
+        SqliteTimetableRepository(path=built, zone=SYDNEY_ZONE),
+    ) as timetable:
         yield timetable
 
 
@@ -195,7 +198,9 @@ def connection_strip(
         The Strip once every read has come back.
     """
     with (
-        closing(SqliteTimetableRepository(path=path)) as timetable,
+        closing(
+            SqliteTimetableRepository(path=path, zone=SYDNEY_ZONE),
+        ) as timetable,
         closing(SqliteNetworkRepository(path=path)) as network,
     ):
         ports = replace(
@@ -212,6 +217,7 @@ def connection_strip(
             ),
             now=now,
             stored=True,
+            city=SYDNEY,
         )
         view = asyncio.run(settled_view(ports=ports, state=state))
     assert isinstance(view, ConnectionStripView)
@@ -235,7 +241,7 @@ def at(hour: int, minute: int) -> datetime:
         Aware Sydney time.
     """
     return datetime(
-        DAY.year, DAY.month, DAY.day, hour, minute, tzinfo=SYDNEY,
+        DAY.year, DAY.month, DAY.day, hour, minute, tzinfo=SYDNEY_ZONE,
     )
 
 
@@ -308,7 +314,9 @@ def test_connection_strip_follows_carry_on_to_town_hall(
 )
 def test_m9b_connection_strips_load_their_lines() -> None:
     """Both carry-on connections show every leg's stops."""
-    with closing(SqliteTimetableRepository(path=M9B_DB)) as timetable:
+    with closing(
+        SqliteTimetableRepository(path=M9B_DB, zone=SYDNEY_ZONE),
+    ) as timetable:
         stop = timetable.stop
         pins = (
             carry_pin(timetable=timetable, ids=M9B_CARRY),

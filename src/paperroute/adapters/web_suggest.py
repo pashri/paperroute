@@ -11,6 +11,7 @@ from multidict import MultiMapping
 
 from paperroute.adapters.web_pins import html_page
 from paperroute.adapters.web_ways import SUGGEST, WaysPages
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.trip_search import (
     Journey,
     PlannerBusy,
@@ -21,7 +22,7 @@ from paperroute.core.trip_search import (
 from paperroute.planner_port import TripPlanner
 from paperroute.ports import PinOptions
 from paperroute_device.adapters.web_common import asset
-from paperroute_transit.core.model import MAX_CHANGES, SYDNEY, StopPlace
+from paperroute_transit.core.model import MAX_CHANGES, StopPlace
 
 FAILURE: Final[str] = "Trip Planner didn't answer. Try again in a minute."
 BUSY: Final[str] = 'Trip Planner is busy. Try again in a minute.'
@@ -124,7 +125,7 @@ def search_of(*, query: MultiMapping[str], now: datetime) -> TripSearch:
         moment = datetime.combine(
             date.fromisoformat(query['day']),
             time.fromisoformat(query['time']),
-            tzinfo=SYDNEY,
+            tzinfo=SYDNEY_ZONE,
         )
     except (KeyError, ValueError):
         moment = default.when
@@ -158,7 +159,7 @@ def shifted(*, query: MultiMapping[str], search: TripSearch) -> TripSearch:
         return search
     earlier = page == 'earlier'
     when = edge - STEP if earlier else edge + STEP
-    return TripSearch(when=when.astimezone(SYDNEY), arrive=earlier)
+    return TripSearch(when=when.astimezone(SYDNEY_ZONE), arrive=earlier)
 
 
 def controls(*, search: TripSearch) -> str:
@@ -175,7 +176,7 @@ def controls(*, search: TripSearch) -> str:
     str
         The fieldset.
     """
-    when = search.when.astimezone(SYDNEY)
+    when = search.when.astimezone(SYDNEY_ZONE)
     return CONTROLS.format(
         arr=' checked' if search.arrive else '',
         dep='' if search.arrive else ' checked',
@@ -285,8 +286,8 @@ def row_text(*, row: SuggestionRow) -> str:
     chips = arrow.join(
         f'<span class="chip">{html.escape(leg.route)}</span>' for leg in legs
     )
-    leaves = legs[0].departs.astimezone(SYDNEY).strftime('%H:%M')
-    arrives = legs[-1].arrives.astimezone(SYDNEY).strftime('%H:%M')
+    leaves = legs[0].departs.astimezone(SYDNEY_ZONE).strftime('%H:%M')
+    arrives = legs[-1].arrives.astimezone(SYDNEY_ZONE).strftime('%H:%M')
     via = f'via {", ".join(row.boards)}' if row.boards else 'direct'
     return (
         f'{chips} <span class="times">{leaves} {ARROW} {arrives}</span>'

@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, tzinfo
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
@@ -319,6 +319,8 @@ class StripInputs:
         The latest download of each positions feed in use.
     now : datetime
         The frame time.
+    zone : tzinfo
+        Local time zone the times show in.
     stale_after : timedelta
         How old a position may be before it is drawn at its timetable
         position instead.
@@ -347,6 +349,7 @@ class StripInputs:
     patterns: Mapping[str, TripPattern | None]
     positions: Mapping[str, PositionsSnapshot]
     now: datetime
+    zone: tzinfo
     stale_after: timedelta
     scroll: int
     cursor: int | None

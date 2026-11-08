@@ -13,6 +13,7 @@ import pytest
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.city import SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.adapters.carry_on_rows import (
     CARRY_ONS,
@@ -20,7 +21,7 @@ from paperroute_transit.adapters.carry_on_rows import (
     first_to_arrive,
 )
 from paperroute_transit.build.gtfs_files import Source
-from paperroute_transit.core.model import SYDNEY, CarryOn, Departure, TripFacts
+from paperroute_transit.core.model import CarryOn, Departure, TripFacts
 from tests.build.network_feed import network_feed
 
 DAY: Final[date] = date(2026, 10, 6)
@@ -155,12 +156,12 @@ def chain_departures(*, db: Path, dest: str) -> list[Departure]:
     list[Departure]
         Departures of chain trips, early in the morning.
     """
-    with closing(SqliteTimetableRepository(path=db)) as repo:
+    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
         found = repo.on_day(
             ends=('E2', dest),
             day=DAY,
-            start=datetime(2026, 10, 6, 2, 0, tzinfo=SYDNEY),
-            end=datetime(2026, 10, 6, 4, 0, tzinfo=SYDNEY),
+            start=datetime(2026, 10, 6, 2, 0, tzinfo=SYDNEY_ZONE),
+            end=datetime(2026, 10, 6, 4, 0, tzinfo=SYDNEY_ZONE),
         )
     return [d for d in found if d.trip_id.startswith('c')]
 
@@ -195,7 +196,7 @@ def test_carry_on_departure_listed(to_c: list[Departure]) -> None:
     assert departure.destination_stop == 'E1_1'
     assert departure.destination_seq == 2
     assert departure.arrives == datetime(
-        2026, 10, 6, 3, 15, tzinfo=SYDNEY,
+        2026, 10, 6, 3, 15, tzinfo=SYDNEY_ZONE,
     )
 
 
@@ -233,7 +234,7 @@ def test_carry_on_two_hops(chain_db: Path) -> None:
     assert departure.facts.onto is not None
     assert departure.facts.onto.trip_id == 'c3'
     assert departure.arrives == datetime(
-        2026, 10, 6, 3, 25, tzinfo=SYDNEY,
+        2026, 10, 6, 3, 25, tzinfo=SYDNEY_ZONE,
     )
 
 
@@ -341,7 +342,7 @@ def test_direct_row_uses_first_destination_call(chain_db: Path) -> None:
     loop, = [d for d in chain_departures(db=chain_db, dest='C')
              if d.trip_id == 'cloop']
     assert (loop.destination_stop, loop.stops) == ('C_1', 2)
-    assert loop.arrives == datetime(2026, 10, 6, 3, 10, tzinfo=SYDNEY)
+    assert loop.arrives == datetime(2026, 10, 6, 3, 10, tzinfo=SYDNEY_ZONE)
 
 
 def test_stop_count_skips_another_from_platform(chain_db: Path) -> None:
@@ -373,12 +374,16 @@ def test_carry_on_uses_first_destination_call(chain_db: Path) -> None:
     assert departure.facts.onto is not None
     assert departure.facts.onto.trip_id == 'cloop'
     assert departure.stops == 2
-    assert departure.arrives == datetime(2026, 10, 6, 3, 10, tzinfo=SYDNEY)
+    assert departure.arrives == datetime(
+        2026, 10, 6, 3, 10, tzinfo=SYDNEY_ZONE,
+    )
 
 
 def test_patterns_name_the_trip_joined_onto(chain_db: Path) -> None:
     """A chain trip's pattern names the next; the last names none."""
-    with closing(SqliteTimetableRepository(path=chain_db)) as repo:
+    with closing(
+        SqliteTimetableRepository(path=chain_db, zone=SYDNEY_ZONE),
+    ) as repo:
         found = repo.patterns(trip_ids=['c1', 'c8'], around=DAY)
     assert (found['c1'].next_trip, found['c8'].next_trip) == ('c2', None)
 
@@ -387,7 +392,9 @@ def test_carry_ons_reach_destination_through_the_chain(
     chain_db: Path,
 ) -> None:
     """Destination calls are found per chained trip, not by stop."""
-    with closing(SqliteTimetableRepository(path=chain_db)) as repo:
+    with closing(
+        SqliteTimetableRepository(path=chain_db, zone=SYDNEY_ZONE),
+    ) as repo:
         sql = CARRY_ONS.format(
             shape=repo.shape_column(), service=repo.service_filter(),
         )
@@ -404,7 +411,9 @@ def test_carry_ons_reach_destination_through_the_chain(
 
 def test_leg_lines_follow_the_trip_a_vehicle_becomes(chain_db: Path) -> None:
     """E2 to C stays on c1 as c2, so both lines ride the leg."""
-    with closing(SqliteTimetableRepository(path=chain_db)) as repo:
+    with closing(
+        SqliteTimetableRepository(path=chain_db, zone=SYDNEY_ZONE),
+    ) as repo:
         found = repo.leg_lines(ends=('E2', 'C'), day=date(2026, 10, 6))
     assert found == {'sydneytrains:T1', 'sydneytrains:T2'}
 
@@ -416,6 +425,8 @@ def test_leg_lines_skip_a_next_trip_not_running(chain_db: Path) -> None:
         db=chain_db,
         sql="UPDATE trips SET service_id = 'other' WHERE trip_id = 'c2'",
     )
-    with closing(SqliteTimetableRepository(path=chain_db)) as repo:
+    with closing(
+        SqliteTimetableRepository(path=chain_db, zone=SYDNEY_ZONE),
+    ) as repo:
         found = repo.leg_lines(ends=('E2', 'C'), day=date(2026, 10, 6))
     assert found == {'sydneytrains:T1'}

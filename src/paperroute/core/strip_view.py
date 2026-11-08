@@ -5,7 +5,6 @@ from dataclasses import replace
 
 from paperroute.core.map_view import Marker
 from paperroute.core.reach_exits import exit_name
-from paperroute.core.stop_view import clock_text
 from paperroute.core.strip_badges import (
     HALF_WIDE,
     NAME_REACH,
@@ -50,7 +49,7 @@ from paperroute.core.strip_model import (
 from paperroute.core.strip_notes import carry_note
 from paperroute.core.strip_times import TripInputs, shown_item, trip_text
 from paperroute.core.strip_vehicles import vehicle_markers
-from paperroute_device.core.text import DOT
+from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind
 
@@ -221,7 +220,7 @@ def row_times(
         **trip_text(
             item=item, trips=trips, reach=reach, rows=range(len(reach.rows)),
         ),
-        origin: clock_text(moment=item.departs),
+        origin: clock_text(moment=item.departs, zone=inputs.zone),
     }
 
 
@@ -269,8 +268,11 @@ def followed_times(
     below = {} if picked is None else picked[1]
     return {
         **trip_text(item=item, trips=trips, reach=reach, rows=range(origin)),
-        **{index: clock_text(moment=at) for index, at in below.items()},
-        origin: clock_text(moment=item.departs),
+        **{
+            index: clock_text(moment=at, zone=trips.zone)
+            for index, at in below.items()
+        },
+        origin: clock_text(moment=item.departs, zone=trips.zone),
     }
 
 
@@ -686,6 +688,7 @@ def trips_of(*, inputs: StripInputs) -> TripInputs:
         patterns=inputs.patterns,
         positions=inputs.positions,
         now=inputs.now,
+        zone=inputs.zone,
         stale_after=inputs.stale_after,
         station_of={} if inputs.reach is None else inputs.reach.station_of,
     )
@@ -936,7 +939,7 @@ def build_strip_view(*, inputs: StripInputs) -> StripView:
     return StripView(
         origin=stop.origin,
         destination=stop.destination,
-        clock=clock_text(moment=inputs.now),
+        clock=clock_text(moment=inputs.now, zone=inputs.zone),
         tag=inputs.tag,
         picking=inputs.picking,
         rows=rows,

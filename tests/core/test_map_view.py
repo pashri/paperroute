@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.map_view import (
     MAP_HEIGHT,
     MAP_WIDTH,
@@ -157,6 +158,7 @@ def inputs(
         shapes={},
         now=now,
         stale_after=stale_after,
+        zone=SYDNEY_ZONE,
     )
 
 
@@ -274,6 +276,7 @@ def test_vehicle_over_two_minutes_old_moves_to_timetable_position() -> None:
         pattern=pattern(),
         shape=None,
         now=NOW,
+        zone=SYDNEY_ZONE,
     )
     assert point is not None
     (marker,) = view.markers
@@ -493,6 +496,7 @@ def test_missing_shape_draws_no_route_line_and_uses_the_chord() -> None:
         pattern=pattern(),
         shape=None,
         now=NOW,
+        zone=SYDNEY_ZONE,
     )
     assert point is not None
     assert (marker.x, marker.y) == pytest.approx(at(point=point))

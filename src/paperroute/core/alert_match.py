@@ -3,11 +3,10 @@
 import re
 from collections.abc import Collection, Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Final
 
-from paperroute.core.stop_view import clock_text
-from paperroute_device.core.text import DOT
+from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.alert_model import (
     Alert,
     AlertBanner,
@@ -16,13 +15,7 @@ from paperroute_transit.core.alert_model import (
     Matched,
     Period,
 )
-from paperroute_transit.core.model import (
-    SYDNEY,
-    Departure,
-    Mode,
-    Pin,
-    RouteKind,
-)
+from paperroute_transit.core.model import Departure, Mode, Pin, RouteKind
 from paperroute_transit.core.patterns import TripPattern
 
 BANNER_AHEAD: Final[timedelta] = timedelta(hours=24)
@@ -714,7 +707,7 @@ def without_repeats(*, listed: Sequence[Listed]) -> tuple[Listed, ...]:
 
 
 def alert_banner(
-    *, listed: Sequence[Listed], now: datetime,
+    *, listed: Sequence[Listed], now: datetime, zone: tzinfo,
 ) -> AlertBanner | None:
     """
     The banner line for the first banner-eligible alert.
@@ -725,6 +718,8 @@ def alert_banner(
         Ranked listed alerts.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -738,13 +733,14 @@ def alert_banner(
     text = first.matched.alert.header
     start = first.timing.window.start
     if not first.timing.active and start is not None:
-        text = f'From {when_text(moment=start, now=now)}{DOT}{text}'
+        since = when_text(moment=start, now=now, zone=zone)
+        text = f'From {since}{DOT}{text}'
     return AlertBanner(
         text=text, active=first.timing.active, more=len(eligible) - 1,
     )
 
 
-def when_text(*, moment: datetime, now: datetime) -> str:
+def when_text(*, moment: datetime, now: datetime, zone: tzinfo) -> str:
     """
     A time, with as much of the date as it needs.
 
@@ -754,6 +750,8 @@ def when_text(*, moment: datetime, now: datetime) -> str:
         Time to show.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -761,9 +759,9 @@ def when_text(*, moment: datetime, now: datetime) -> str:
         '23:40' today, 'Sat 23:40' within six days, else
         'Sat 7 Nov 23:40'.
     """
-    local = moment.astimezone(SYDNEY)
-    days = (local.date() - now.astimezone(SYDNEY).date()).days
-    clock = clock_text(moment=moment)
+    local = moment.astimezone(zone)
+    days = (local.date() - now.astimezone(zone).date()).days
+    clock = clock_text(moment=moment, zone=zone)
     if days == 0:
         return clock
     if 0 < days <= WEEK_DAYS:
@@ -771,7 +769,7 @@ def when_text(*, moment: datetime, now: datetime) -> str:
     return f'{local:%a} {local.day} {local:%b} {clock}'
 
 
-def time_line(*, timing: Timing, now: datetime) -> str:
+def time_line(*, timing: Timing, now: datetime, zone: tzinfo) -> str:
     """
     The list's time line for an alert.
 
@@ -781,6 +779,8 @@ def time_line(*, timing: Timing, now: datetime) -> str:
         Its judged window.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -788,11 +788,13 @@ def time_line(*, timing: Timing, now: datetime) -> str:
         For example '21:50 to Tue 1:30 · +1 more'.
     """
     start, end = timing.window.start, timing.window.end
-    until = None if end is None else when_text(moment=end, now=now)
+    until = None if end is None else when_text(
+        moment=end, now=now, zone=zone,
+    )
     if timing.active or start is None:
         line = 'Ongoing' if until is None else f'Now until {until}'
     else:
-        since = when_text(moment=start, now=now)
+        since = when_text(moment=start, now=now, zone=zone)
         line = (
             f'From {since}, ongoing' if until is None
             else f'{since} to {until}'

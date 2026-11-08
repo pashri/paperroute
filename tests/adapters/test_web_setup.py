@@ -10,9 +10,9 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_display import WebDisplay
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.feeds import DAILY_LIMIT, feed_label
 from paperroute_testkit.device_pages import HOTSPOT, DeviceSite
-from paperroute_transit.core.model import SYDNEY
 
 Client = TestClient[web.Request, web.Application]
 
@@ -26,7 +26,7 @@ def _setup() -> DeviceSite:
         credential=TFNSW_KEY,
         feed_label=feed_label,
         daily_limit=DAILY_LIMIT,
-        zone=SYDNEY,
+        zone=SYDNEY_ZONE,
     )
 
 

@@ -2,11 +2,11 @@
 
 import threading
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, tzinfo
 from typing import Final, Protocol
 
 from paperroute_transit.adapters.carry_on_rows import first_to_arrive
-from paperroute_transit.core.model import SYDNEY, Departure, Pin
+from paperroute_transit.core.model import Departure, Pin
 
 CACHE_LIMIT: Final[int] = 12
 
@@ -100,13 +100,19 @@ class LegCache:
     """
     Keep each leg's scheduled departures for the day it is read on.
 
-    A later read of a leg on the same Sydney day reads only past the end
+    A later read of a leg on the same local day reads only past the end
     already held. Older days are dropped, and at most `CACHE_LIMIT` legs
     are held. A change of timetable version empties the cache. Realtime
     is not held: callers overlay it on every read.
+
+    Parameters
+    ----------
+    zone : tzinfo
+        Local time zone the days are counted in.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, *, zone: tzinfo) -> None:
+        self.zone = zone
         self.held: dict[CacheKey, Covered] = {}
         self.version: str | None = None
         self.lock = threading.Lock()
@@ -152,7 +158,7 @@ class LegCache:
         list[Departure]
             The departures leaving from start to end, in order.
         """
-        key = (pin, start.astimezone(SYDNEY).date())
+        key = (pin, start.astimezone(self.zone).date())
         with self.lock:
             self.forget(day=key[1], version=version)
             covered = self.cover(
@@ -208,7 +214,7 @@ class LegCache:
         Parameters
         ----------
         day : date
-            Sydney day being read.
+            Local day being read.
         version : str | None
             Timetable version being read.
         """

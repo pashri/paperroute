@@ -5,6 +5,7 @@ from typing import Final
 
 import numpy as np
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.connection_strip import (
     ConnectionStripView,
     LegSection,
@@ -45,6 +46,7 @@ VIEW: Final[ConnectionStripView] = build_connection_strip(
     positions={},
     now=at(7, 30),
     stale_after=STALE_LIMIT,
+    zone=SYDNEY_ZONE,
 )
 LONG: Final[str] = 'Constitution Hill Interchange, North West Transitway ' * 2
 

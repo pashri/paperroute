@@ -2,7 +2,7 @@
 
 import math
 from dataclasses import dataclass, replace
-from datetime import date, datetime
+from datetime import date, datetime, tzinfo
 from itertools import pairwise
 
 from paperroute_transit.core.geo import (
@@ -265,6 +265,7 @@ def timetable_point(
     pattern: TripPattern,
     shape: Shape | None,
     now: datetime,
+    zone: tzinfo,
 ) -> Point | None:
     """
     Find where the timetable puts a trip now.
@@ -280,6 +281,8 @@ def timetable_point(
         The trip's shape, or None when it has none.
     now : datetime
         Aware time.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
@@ -290,7 +293,7 @@ def timetable_point(
     if not pattern.stops:
         return None
     for day in pattern.days:
-        seconds = service_seconds(day=day, moment=now)
+        seconds = service_seconds(day=day, moment=now, zone=zone)
         if pattern.stops[0].departs <= seconds <= pattern.stops[-1].arrives:
             return point_at(pattern=pattern, shape=shape, seconds=seconds)
     return None

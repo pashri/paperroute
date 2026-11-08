@@ -10,10 +10,11 @@ import pytest
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.chooser import Column, Level
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import Source
-from paperroute_transit.core.model import SYDNEY, Pin, RouteKind, StopPlace
+from paperroute_transit.core.model import Pin, RouteKind, StopPlace
 from tests.adapters.test_network_db import (
     T1,
     build_network,
@@ -174,8 +175,8 @@ def has_departures(
         kind=RouteKind.TRAIN,
     )
     return bool(repo.departures(
-        pin=pin, start=datetime(2026, 10, 5, tzinfo=SYDNEY),
-        end=datetime(2026, 10, 5, 23, 59, 59, tzinfo=SYDNEY),
+        pin=pin, start=datetime(2026, 10, 5, tzinfo=SYDNEY_ZONE),
+        end=datetime(2026, 10, 5, 23, 59, 59, tzinfo=SYDNEY_ZONE),
     ))
 
 
@@ -187,7 +188,9 @@ def test_every_bright_to_has_a_departure(tmp_path: Path) -> None:
         for origin in ('W2', 'W1', 'J', 'C', 'E1', 'E2', 'R1', 'R3')
     }
     assert 'E1' in dim_keys(column=columns['W2'])
-    with closing(SqliteTimetableRepository(path=path)) as repo:
+    with closing(
+        SqliteTimetableRepository(path=path, zone=SYDNEY_ZONE),
+    ) as repo:
         missing = [
             (origin, choice.key)
             for origin, column in columns.items()

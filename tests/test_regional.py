@@ -9,16 +9,17 @@ from typing import Final
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolve
 from paperroute_testkit.core.factories import STALE_LIMIT, pin_of
 from paperroute_transit.build.gtfs_files import Source
-from paperroute_transit.core.model import SYDNEY, Mode
+from paperroute_transit.core.model import Mode
 from paperroute_transit.core.realtime import RealtimeSnapshot
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
-AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
-DAY_START = datetime(2026, 10, 16, tzinfo=SYDNEY)
+AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY_ZONE)
+DAY_START = datetime(2026, 10, 16, tzinfo=SYDNEY_ZONE)
 CASINO: Final[str] = '24701'
 CALLS: Final[str] = """
   (SELECT stop_id FROM stop_times WHERE trip_id = t.trip_id AND pickup <> 1
@@ -99,7 +100,7 @@ def resolved(*, db: Path, query: str) -> list[list[LiveDeparture]]:
     with closing(sqlite3.connect(db)) as conn:
         pins = conn.execute(query).fetchall()
     live = snapshot()
-    repo = SqliteTimetableRepository(path=db)
+    repo = SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
     try:
         result = []
         for trip, origin, destination in pins:
@@ -116,6 +117,7 @@ def resolved(*, db: Path, query: str) -> list[list[LiveDeparture]]:
                         snapshot=live,
                         now=AT,
                         limit=STALE_LIMIT,
+                        zone=SYDNEY_ZONE,
                     )
                     for d in found
                     if mine
@@ -152,7 +154,10 @@ def test_xpt_appears_once_and_goes_live(tmp_path: Path) -> None:
 
 def test_central_to_casino_xpt_listed_once(tmp_path: Path) -> None:
     """Real slice, three days: each Casino XPT shows once a day."""
-    repo = SqliteTimetableRepository(path=build(tmp_path=tmp_path, days=3))
+    repo = SqliteTimetableRepository(
+        path=build(tmp_path=tmp_path, days=3),
+        zone=SYDNEY_ZONE,
+    )
     try:
         days = [
             repo.departures(

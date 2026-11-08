@@ -10,7 +10,7 @@ import zipfile
 from collections.abc import Callable, Iterable, Iterator
 from contextlib import closing
 from dataclasses import dataclass, field
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone, tzinfo
 from enum import Enum, auto
 from pathlib import Path
 from typing import Final
@@ -31,7 +31,6 @@ from paperroute_transit.build.holidays import holiday_dates
 from paperroute_transit.build.shapes import load_shapes
 from paperroute_transit.core.model import (
     HIDDEN_HEADSIGNS,
-    SYDNEY,
     TIMETABLE_SCHEMA,
     Mode,
     mode_for,
@@ -769,16 +768,21 @@ def build_timetable(*, sources: list[Source], window: Window,
     return report
 
 
-def yesterday() -> date:
+def yesterday(*, zone: tzinfo) -> date:
     """
-    The Sydney date before today.
+    The local date before today.
 
     Starting a day early keeps the previous service day's 24:00-28:59
     trips when the build runs in the small hours.
 
+    Parameters
+    ----------
+    zone : tzinfo
+        Local time zone.
+
     Returns
     -------
     date
-        Yesterday in Sydney.
+        Yesterday in local time.
     """
-    return datetime.now(SYDNEY).date() - timedelta(days=1)
+    return datetime.now(zone).date() - timedelta(days=1)

@@ -7,10 +7,12 @@ from array import array
 from bisect import bisect_right
 from collections.abc import Sequence
 from dataclasses import dataclass
+from functools import cached_property
 from typing import Final
 
 Point = tuple[float, float]
 MetreBox = tuple[float, float, float, float]
+DegreeBox = tuple[float, float, float, float]  # west, south, east, north
 
 ORIGIN_LON: Final[float] = 151.2093
 ORIGIN_LAT: Final[float] = -33.8688
@@ -19,6 +21,68 @@ METRES_PER_DEGREE_LON: Final[float] = 111_320.0 * math.cos(
     math.radians(ORIGIN_LAT),
 )
 DECIMETRES: Final[int] = 10
+
+
+@dataclass(frozen=True)
+class Projection:
+    """
+    A local metre projection and the origin of the map's pixel grid.
+
+    Attributes
+    ----------
+    origin_lon : float
+        Longitude in degrees that projects to metre zero.
+    origin_lat : float
+        Latitude in degrees that projects to metre zero.
+    grid_lon : float
+        Longitude in degrees of the pixel grid's top-left corner.
+    grid_lat : float
+        Latitude in degrees of the pixel grid's top-left corner.
+    """
+
+    origin_lon: float
+    origin_lat: float
+    grid_lon: float
+    grid_lat: float
+
+    @cached_property
+    def metres_per_degree_lon(self) -> float:
+        """
+        Give the metres in a degree of longitude at the origin's latitude.
+
+        Returns
+        -------
+        float
+            Metres per degree.
+        """
+        return 111_320.0 * math.cos(math.radians(self.origin_lat))
+
+    @cached_property
+    def grid_origin(self) -> Point:
+        """
+        The pixel grid's top-left corner in metres from the origin.
+
+        Returns
+        -------
+        Point
+            Metres east and north of the origin.
+        """
+        return (
+            (self.grid_lon - self.origin_lon) * self.metres_per_degree_lon,
+            (self.grid_lat - self.origin_lat) * METRES_PER_DEGREE_LAT,
+        )
+
+    @property
+    def origin_text(self) -> str:
+        """
+        The origin as the text the timetable and tiles record.
+
+        Returns
+        -------
+        str
+            ``lon,lat`` in degrees.
+        """
+        return f'{self.origin_lon},{self.origin_lat}'
 
 
 @dataclass(frozen=True)

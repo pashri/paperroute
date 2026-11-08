@@ -413,6 +413,7 @@ def trip_stops(*, inputs: MapInputs) -> tuple[Point, ...]:
         departure=upcoming,
         pattern=inputs.patterns.get(upcoming.trip_id),
         window=stops_window(destination=inputs.stop_view.destination),
+        zone=inputs.zone,
     )
 
 

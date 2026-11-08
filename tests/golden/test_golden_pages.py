@@ -12,6 +12,7 @@ from paperroute.adapters.settings_form import form_values
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV, SydneyPages
 from paperroute.adapters.web_display import WebDisplay
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.feeds import DAILY_LIMIT, feed_label
 from paperroute_device.adapters.secrets_file import SecretsFile
 from paperroute_device.adapters.web_device import DevicePages
@@ -20,7 +21,6 @@ from paperroute_device.ports import KeyStore
 from paperroute_testkit.device_fakes import FakeKeys
 from paperroute_testkit.device_pages import HOTSPOT, KEY, NOW, STATUS
 from paperroute_testkit.fakes import FakeTripPlanner
-from paperroute_transit.core.model import SYDNEY
 from tests.adapters.test_web_device import BUSES, TRAINS
 from tests.adapters.test_web_pins import HOME, ODD, WORK, Pins
 from tests.adapters.test_web_suggest import NOW as SEARCH_NOW
@@ -72,7 +72,7 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
         feed_label=feed_label,
         daily_limit=DAILY_LIMIT,
         post=lambda event: None,
-        zone=SYDNEY,
+        zone=SYDNEY_ZONE,
         error_log=None,
         state_file=None,
         clock=lambda: NOW,

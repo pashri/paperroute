@@ -2,9 +2,9 @@
 
 from collections.abc import Iterator, Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 
-from paperroute_transit.core.model import SYDNEY, AutoWindow, Pin, pin_ref
+from paperroute_transit.core.model import AutoWindow, Pin, pin_ref
 
 
 @dataclass(frozen=True)
@@ -65,7 +65,7 @@ class AutoState:
 
 
 def occurrence_of(
-    *, window: AutoWindow, day: date,
+    *, window: AutoWindow, day: date, zone: tzinfo,
 ) -> tuple[datetime, datetime] | None:
     """
     Find when a window runs that starts on a day.
@@ -76,6 +76,8 @@ def occurrence_of(
         Window.
     day : date
         Day it would start.
+    zone : tzinfo
+        Local time zone the window's times are in.
 
     Returns
     -------
@@ -89,12 +91,14 @@ def occurrence_of(
         return None
     end_day = day + timedelta(days=1) if window.end < window.start else day
     return (
-        datetime.combine(day, window.start, tzinfo=SYDNEY).astimezone(UTC),
-        datetime.combine(end_day, window.end, tzinfo=SYDNEY).astimezone(UTC),
+        datetime.combine(day, window.start, tzinfo=zone).astimezone(UTC),
+        datetime.combine(end_day, window.end, tzinfo=zone).astimezone(UTC),
     )
 
 
-def candidates(*, pins: Sequence[Pin], now: datetime) -> Iterator[Occurrence]:
+def candidates(
+    *, pins: Sequence[Pin], now: datetime, zone: tzinfo,
+) -> Iterator[Occurrence]:
     """
     List the occurrences running at a moment, in pin order.
 
@@ -104,25 +108,29 @@ def candidates(*, pins: Sequence[Pin], now: datetime) -> Iterator[Occurrence]:
         Pins in knob order.
     now : datetime
         Aware time.
+    zone : tzinfo
+        Local time zone the windows' times are in.
 
     Yields
     ------
     Occurrence
         Each occurrence with `start <= now < end`.
     """
-    today = now.astimezone(SYDNEY).date()
+    today = now.astimezone(zone).date()
     days = (today - timedelta(days=1), today)
     for pin in pins:
         for window in pin.windows:
             for day in days:
-                found = occurrence_of(window=window, day=day)
+                found = occurrence_of(window=window, day=day, zone=zone)
                 if found is not None and found[0] <= now < found[1]:
                     yield Occurrence(
                         ref=pin_ref(pin=pin), start=found[0], end=found[1],
                     )
 
 
-def running(*, pins: Sequence[Pin], now: datetime) -> Occurrence | None:
+def running(
+    *, pins: Sequence[Pin], now: datetime, zone: tzinfo,
+) -> Occurrence | None:
     """
     Find the occurrence running at a moment.
 
@@ -132,6 +140,8 @@ def running(*, pins: Sequence[Pin], now: datetime) -> Occurrence | None:
         Pins in knob order.
     now : datetime
         Aware time.
+    zone : tzinfo
+        Local time zone the windows' times are in.
 
     Returns
     -------
@@ -140,7 +150,7 @@ def running(*, pins: Sequence[Pin], now: datetime) -> Occurrence | None:
         tie; None when nothing runs.
     """
     best: Occurrence | None = None
-    for found in candidates(pins=pins, now=now):
+    for found in candidates(pins=pins, now=now, zone=zone):
         if best is None or found.start > best.start:
             best = found
     return best

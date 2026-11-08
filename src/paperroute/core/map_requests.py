@@ -41,7 +41,7 @@ from paperroute.core.strip_state import (
     strip_window,
 )
 from paperroute_transit.core.geo import Point
-from paperroute_transit.core.model import SYDNEY, Departure, is_connection
+from paperroute_transit.core.model import Departure, is_connection
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.tiles import ZOOMS
 
@@ -228,6 +228,7 @@ def pin_map_inputs(*, state: State, stop_view: StopView) -> MapInputs:
         patterns=state.map.patterns,
         shapes=state.map.shapes,
         now=frame_time(state=state),
+        zone=state.city.zone,
         stale_after=stale_after(state=state),
         ends=pin_ends(state=state),
         step=state.map.step,
@@ -387,7 +388,8 @@ def request_patterns(
     if not new or not may_load(state=state, kind=MapData.PATTERNS):
         return state, ()
     map_state = replace(state.map, pending_patterns=pending | new)
-    load = LoadPatterns(trip_ids=new, day=state.now.astimezone(SYDNEY).date())
+    day = state.now.astimezone(state.city.zone).date()
+    load = LoadPatterns(trip_ids=new, day=day)
     return replace(state, map=map_state), (load,)
 
 

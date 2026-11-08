@@ -1,7 +1,7 @@
 """The stops a departure is ridden between, for fitting and drawing."""
 
 from collections.abc import Mapping, Sequence
-from datetime import timedelta
+from datetime import timedelta, tzinfo
 from typing import Final
 
 from paperroute_transit.core.geo import Point
@@ -17,6 +17,7 @@ def ridden_stops(
     departure: Departure,
     pattern: TripPattern | None,
     window: timedelta | None,
+    zone: tzinfo,
 ) -> tuple[Point, ...]:
     """
     List the points of the stops a departure is ridden between.
@@ -29,6 +30,8 @@ def ridden_stops(
         Its pattern; None gives no stops.
     window : timedelta | None
         When set, only stops reached within this long of leaving.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
@@ -38,7 +41,7 @@ def ridden_stops(
     """
     if pattern is None:
         return ()
-    epoch = service_epoch(day=departure.service_day)
+    epoch = service_epoch(day=departure.service_day, zone=zone)
     start = (departure.departs - epoch).total_seconds()
     end = (departure.arrives - epoch).total_seconds()
     if window is not None:
@@ -74,6 +77,7 @@ def route_stops(
     departures: Sequence[Departure],
     patterns: Mapping[str, TripPattern | None],
     window: timedelta | None,
+    zone: tzinfo,
 ) -> tuple[Point, ...]:
     """
     Collect the distinct ridden stops of some departures.
@@ -86,6 +90,8 @@ def route_stops(
         Loaded patterns by trip ID.
     window : timedelta | None
         As for `ridden_stops`.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
@@ -99,6 +105,7 @@ def route_stops(
             departure=departure,
             pattern=patterns.get(departure.trip_id),
             window=window,
+            zone=zone,
         )
     )
     return tuple(found)

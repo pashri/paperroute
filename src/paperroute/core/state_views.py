@@ -96,6 +96,7 @@ def live_departures(*, state: State) -> tuple[LiveDeparture, ...]:
         snapshots=state.snapshots,
         now=frame_time(state=state),
         limit=stale_after(state=state),
+        zone=state.city.zone,
     )
 
 
@@ -122,6 +123,7 @@ def stop_view_of(*, state: State) -> StopView:
             destination=None if destination is None else destination.name,
             departures=live_departures(state=state),
             now=frame,
+            zone=state.city.zone,
             scroll=state.scroll,
             live_since=live_since(
                 snapshots=state.snapshots, feeds=state.feeds, now=frame,
@@ -132,7 +134,9 @@ def stop_view_of(*, state: State) -> StopView:
             missing=pin.missing,
             notice=device_banner(state=state),
             alert=alert_banner(
-                listed=shown_alerts(state=state), now=frame,
+                listed=shown_alerts(state=state),
+                now=frame,
+                zone=state.city.zone,
             ),
             large=state.settings.device.larger_text,
             inverted=state.settings.device.inverted_lists,
@@ -267,6 +271,7 @@ def live_view(*, state: State, stop_view: StopView) -> ScreenView:
                 page=state.alerts.page,
                 stop_view=stop_view,
                 now=frame_time(state=state),
+                zone=state.city.zone,
             )
     return stop_view
 

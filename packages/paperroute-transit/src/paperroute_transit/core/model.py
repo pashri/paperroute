@@ -5,15 +5,13 @@ import json
 import re
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import UTC, date, datetime, time, timedelta, tzinfo
 from enum import StrEnum
 from itertools import pairwise
 from typing import Final
-from zoneinfo import ZoneInfo
 
 from paperroute_transit.core.geo import Point
 
-SYDNEY: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 TIMETABLE_SCHEMA: Final[str] = '7'
 REGIONAL_AGENCIES: Final[frozenset[str]] = frozenset({'711'})
 DAY_NAMES: Final[tuple[str, ...]] = (
@@ -219,9 +217,9 @@ class AutoWindow:
     days : frozenset[int]
         Days the window starts on, 0 (Monday) to 6 (Sunday).
     start : time
-        Sydney wall-clock time it starts.
+        Local wall-clock time it starts.
     end : time
-        Sydney wall-clock time it ends; before `start` when it runs past
+        Local wall-clock time it ends; before `start` when it runs past
         midnight.
     """
 
@@ -545,7 +543,7 @@ class ServiceSpan:
     last_end: datetime
 
 
-def service_epoch(*, day: date) -> datetime:
+def service_epoch(*, day: date, zone: tzinfo) -> datetime:
     """
     Find the moment GTFS times on a service day count from.
 
@@ -557,19 +555,21 @@ def service_epoch(*, day: date) -> datetime:
     ----------
     day : date
         Service date.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
     datetime
-        Aware Sydney datetime.
+        Aware local datetime.
     """
-    noon = datetime.combine(day, time(12), tzinfo=SYDNEY)
-    return (noon.astimezone(UTC) - timedelta(hours=12)).astimezone(SYDNEY)
+    noon = datetime.combine(day, time(12), tzinfo=zone)
+    return (noon.astimezone(UTC) - timedelta(hours=12)).astimezone(zone)
 
 
-def service_time(*, day: date, seconds: int) -> datetime:
+def service_time(*, day: date, seconds: int, zone: tzinfo) -> datetime:
     """
-    Turn a GTFS time on a service day into a Sydney time.
+    Turn a GTFS time on a service day into a local time.
 
     The sum is done in UTC because Python adds to an aware datetime on the
     wall clock, which is wrong across a daylight-saving change.
@@ -580,19 +580,21 @@ def service_time(*, day: date, seconds: int) -> datetime:
         Service date.
     seconds : int
         Seconds after the service day's epoch.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
     datetime
-        Aware Sydney datetime.
+        Aware local datetime.
     """
-    epoch = service_epoch(day=day).astimezone(UTC)
-    return (epoch + timedelta(seconds=seconds)).astimezone(SYDNEY)
+    epoch = service_epoch(day=day, zone=zone).astimezone(UTC)
+    return (epoch + timedelta(seconds=seconds)).astimezone(zone)
 
 
-def shifted(*, moment: datetime, seconds: int) -> datetime:
+def shifted(*, moment: datetime, seconds: int, zone: tzinfo) -> datetime:
     """
-    Move a moment by real seconds and give the result in Sydney time.
+    Move a moment by real seconds and give the result in local time.
 
     The sum is done in UTC because Python adds to an aware datetime on the
     wall clock, which is wrong across a daylight-saving change.
@@ -603,18 +605,20 @@ def shifted(*, moment: datetime, seconds: int) -> datetime:
         Aware time.
     seconds : int
         Real seconds to add (negative to subtract).
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
     datetime
-        Aware Sydney datetime.
+        Aware local datetime.
     """
     return (moment.astimezone(UTC) + timedelta(seconds=seconds)).astimezone(
-        SYDNEY
+        zone
     )
 
 
-def service_seconds(*, day: date, moment: datetime) -> int:
+def service_seconds(*, day: date, moment: datetime, zone: tzinfo) -> int:
     """
     Count the seconds from a service day's epoch to a moment.
 
@@ -624,10 +628,13 @@ def service_seconds(*, day: date, moment: datetime) -> int:
         Service date.
     moment : datetime
         Aware datetime.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
     int
         Elapsed seconds, negative before the epoch.
     """
-    return int(moment.timestamp() - service_epoch(day=day).timestamp())
+    epoch = service_epoch(day=day, zone=zone)
+    return int(moment.timestamp() - epoch.timestamp())

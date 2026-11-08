@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 
 import pytest
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.chooser import KIND_LABELS, KIND_LETTERS, KIND_ORDER
 from paperroute.core.saved import TOWN_HALL
 from paperroute_testkit.core.connection_factories import (
@@ -16,7 +17,6 @@ from paperroute_testkit.core.connection_factories import (
 )
 from paperroute_testkit.core.factories import pin_of, place
 from paperroute_transit.core.model import (
-    SYDNEY,
     TRAINLINK,
     Mode,
     Pin,
@@ -58,34 +58,46 @@ def test_mode_for_route_types(
 
 def test_service_epoch_is_midnight_on_normal_days() -> None:
     """On an ordinary day the service day starts at midnight."""
-    assert service_epoch(day=date(2026, 10, 16)) == datetime(
-        2026, 10, 16, tzinfo=SYDNEY
+    assert service_epoch(day=date(2026, 10, 16), zone=SYDNEY_ZONE) == datetime(
+        2026, 10, 16, tzinfo=SYDNEY_ZONE
     )
 
 
 def test_service_epoch_on_daylight_saving_start() -> None:
     """When clocks go forward, noon minus 12 hours is 23:00 the day before."""
-    epoch = service_epoch(day=date(2026, 10, 4))
-    assert epoch == datetime(2026, 10, 3, 23, tzinfo=SYDNEY)
+    epoch = service_epoch(day=date(2026, 10, 4), zone=SYDNEY_ZONE)
+    assert epoch == datetime(2026, 10, 3, 23, tzinfo=SYDNEY_ZONE)
     assert epoch.astimezone(UTC) == datetime(2026, 10, 3, 13, tzinfo=UTC)
 
 
 def test_service_time_after_daylight_saving_start() -> None:
     """A GTFS 08:00:00 on the change day is 8 am on the new clock."""
-    eight = service_time(day=date(2026, 10, 4), seconds=8 * 3600)
+    eight = service_time(
+        day=date(2026, 10, 4),
+        seconds=8 * 3600,
+        zone=SYDNEY_ZONE,
+    )
     assert eight.astimezone(UTC) == datetime(2026, 10, 3, 21, tzinfo=UTC)
     assert (eight.hour, eight.minute) == (8, 0)
 
 
 def test_service_seconds_inverts_service_time() -> None:
     """Seconds since the epoch round-trip through a Sydney time."""
-    moment = service_time(day=date(2026, 10, 4), seconds=90600)
-    assert service_seconds(day=date(2026, 10, 4), moment=moment) == 90600
+    moment = service_time(
+        day=date(2026, 10, 4),
+        seconds=90600,
+        zone=SYDNEY_ZONE,
+    )
+    assert service_seconds(
+        day=date(2026, 10, 4),
+        moment=moment,
+        zone=SYDNEY_ZONE,
+    ) == 90600
 
 
 def test_service_time_before_daylight_saving_start() -> None:
     """A GTFS 01:00:00 on the change day is before the clocks jump."""
-    one = service_time(day=date(2026, 10, 4), seconds=3600)
+    one = service_time(day=date(2026, 10, 4), seconds=3600, zone=SYDNEY_ZONE)
     assert one.astimezone(UTC) == datetime(2026, 10, 3, 14, tzinfo=UTC)
 
 

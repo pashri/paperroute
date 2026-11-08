@@ -20,6 +20,7 @@ from paperroute.adapters.state_migrations import (
     SCHEMA_VERSION,
     regional_to_coach,
 )
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.pin_choices import clean_nickname
 from paperroute.core.saved import (
     DEFAULT_SAVED,
@@ -43,7 +44,6 @@ from paperroute_testkit.core.connection_factories import WORK, WORK_CHANGE
 from paperroute_testkit.core.factories import pin_at
 from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
 from paperroute_transit.core.model import (
-    SYDNEY,
     AutoWindow,
     Pin,
     RouteKind,
@@ -219,7 +219,10 @@ def path_fixture(tmp_path: Path) -> Path:
 def test_round_trip(saved: Saved) -> None:
     """What is saved is what loads."""
     with tempfile.TemporaryDirectory() as directory:
-        repository = JsonStateRepository(path=Path(directory) / 's.json')
+        repository = JsonStateRepository(
+            path=Path(directory) / 's.json',
+            city=SYDNEY,
+        )
         repository.save(saved=saved)
         loaded = repository.load()
     assert loaded.saved == saved
@@ -230,7 +233,7 @@ def test_missing_file_gives_defaults_quietly(
     path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """No file is normal: defaults, not stored, nothing logged."""
-    loaded = JsonStateRepository(path=path).load()
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.saved == DEFAULT_SAVED
     assert not loaded.stored
     assert not caplog.records
@@ -240,7 +243,7 @@ def test_truncated_file_gives_defaults(
     path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A cut-off file gives defaults and an error log."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     path.write_text(path.read_text()[:40])
     loaded = repository.load()
@@ -258,7 +261,7 @@ def test_garbage_and_wrong_types_give_defaults(
 ) -> None:
     """Unusable content gives the defaults."""
     path.write_bytes(text.encode('utf-8', errors='surrogatepass'))
-    loaded = JsonStateRepository(path=path).load()
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.saved == DEFAULT_SAVED
     assert not loaded.stored
     assert [r.levelno for r in caplog.records] == [logging.ERROR]
@@ -266,7 +269,7 @@ def test_garbage_and_wrong_types_give_defaults(
 
 def test_wrong_field_type_gives_defaults(path: Path) -> None:
     """A field of the wrong type is rejected."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
     data['current'] = 'big'
@@ -278,7 +281,7 @@ def test_future_schema_falls_back(
     path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A file from a newer app is not guessed at."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
     data['schema_version'] = SCHEMA_VERSION + 1
@@ -291,7 +294,7 @@ def test_future_schema_falls_back(
 
 def test_unusable_file_is_kept_aside(path: Path) -> None:
     """A newer file survives a load and a save under a ``.bad-`` name."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
     data['schema_version'] = SCHEMA_VERSION + 1
@@ -307,7 +310,7 @@ def test_only_the_newest_unusable_files_are_kept(path: Path) -> None:
     for stamp in ('100', '20', '3'):
         path.with_name(f'state.json.bad-{stamp}').write_text('old')
     path.write_text('not json')
-    JsonStateRepository(path=path).load()
+    JsonStateRepository(path=path, city=SYDNEY).load()
     kept = sorted(p.name for p in path.parent.glob('state.json.bad-*'))
     assert len(kept) == 2
     assert 'state.json.bad-100' in kept
@@ -316,7 +319,7 @@ def test_only_the_newest_unusable_files_are_kept(path: Path) -> None:
 
 def test_current_out_of_range_is_clamped(path: Path) -> None:
     """A current index past the last pin becomes the last pin."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
     data['current'] = 9
@@ -328,7 +331,7 @@ def test_current_out_of_range_is_clamped(path: Path) -> None:
 
 def test_no_pins_and_no_unpinned_gives_default_place(path: Path) -> None:
     """An empty pin list still shows a place."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
     data['pins'] = []
@@ -356,7 +359,7 @@ def locked_fixture(tmp_path: Path) -> Iterator[Path]:
     directory = tmp_path / 'ro'
     directory.mkdir()
     path = directory / 'state.json'
-    JsonStateRepository(path=path).save(saved=sample())
+    JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     directory.chmod(stat.S_IRUSR | stat.S_IXUSR)
     yield path
     directory.chmod(stat.S_IRWXU)
@@ -366,7 +369,7 @@ def locked_fixture(tmp_path: Path) -> Iterator[Path]:
 def test_failed_write_keeps_old_file(locked: Path) -> None:
     """A write that can't happen leaves the old file and no temp file."""
     before = locked.read_text()
-    repository = JsonStateRepository(path=locked)
+    repository = JsonStateRepository(path=locked, city=SYDNEY)
     with pytest.raises(OSError):
         repository.save(saved=DEFAULT_SAVED)
     assert locked.read_text() == before
@@ -375,7 +378,7 @@ def test_failed_write_keeps_old_file(locked: Path) -> None:
 
 def test_state_file_round_trip_has_no_zoom(path: Path) -> None:
     """The map zoom is not saved, and a saved state loads back the same."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     assert 'zoom' not in json.loads(path.read_text())
     assert not hasattr(sample(), 'zoom')
@@ -384,7 +387,7 @@ def test_state_file_round_trip_has_no_zoom(path: Path) -> None:
 
 def test_file_holds_no_secret_keys(path: Path) -> None:
     """Only the documented keys are written."""
-    JsonStateRepository(path=path).save(saved=sample())
+    JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     data = json.loads(path.read_text())
     assert set(data) == {
         'schema_version',
@@ -411,7 +414,7 @@ def test_file_holds_no_secret_keys(path: Path) -> None:
 
 def test_written_json_shape(path: Path) -> None:
     """The version is current and stops carry their metre coordinates."""
-    JsonStateRepository(path=path).save(saved=sample())
+    JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     data = json.loads(path.read_text())
     assert data['schema_version'] == SCHEMA_VERSION
     assert data['settings']['auto_rebuild'] is True
@@ -430,7 +433,7 @@ def test_load_removes_stale_temp_files(path: Path) -> None:
     stale.write_text('half')
     other = path.parent / 'keep.txt'
     other.write_text('x')
-    JsonStateRepository(path=path).load()
+    JsonStateRepository(path=path, city=SYDNEY).load()
     assert not stale.exists()
     assert other.exists()
 
@@ -440,13 +443,13 @@ def test_failed_rename_removes_temp_file(path: Path) -> None:
     path.mkdir()
     (path / 'inner').write_text('x')
     with pytest.raises(OSError):
-        JsonStateRepository(path=path).save(saved=sample())
+        JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     assert [p.name for p in path.parent.iterdir()] == ['state.json']
 
 
 def test_written_file_is_world_readable(path: Path) -> None:
     """The file holds no secrets and is mode 0644."""
-    JsonStateRepository(path=path).save(saved=sample())
+    JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     assert stat.S_IMODE(path.stat().st_mode) == 0o644
 
 
@@ -455,7 +458,7 @@ def test_directory_at_path_gives_defaults(
 ) -> None:
     """Something that isn't a file at the path gives defaults and a log."""
     path.mkdir()
-    loaded = JsonStateRepository(path=path).load()
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.saved == DEFAULT_SAVED
     assert not loaded.stored
     assert [r.levelno for r in caplog.records] == [logging.ERROR]
@@ -464,7 +467,7 @@ def test_directory_at_path_gives_defaults(
 def test_deeply_nested_json_gives_defaults(path: Path) -> None:
     """JSON nested past the recursion limit gives defaults."""
     path.write_text('[' * 100000)
-    loaded = JsonStateRepository(path=path).load()
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.saved == DEFAULT_SAVED
     assert not loaded.stored
 
@@ -506,7 +509,7 @@ def test_migrate_regional_pin_to_coach(path: Path) -> None:
         'view': 'strip',
         'zoom': 0,
     }))
-    loaded = JsonStateRepository(path=path).load()
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.stored
     assert [pin.kind for pin in loaded.saved.pins] == [
         RouteKind.COACH, RouteKind.TRAIN, RouteKind.COACH, RouteKind.BUS,
@@ -526,7 +529,7 @@ def test_migrate_regional_with_no_unpinned_place(path: Path) -> None:
         'view': 'strip',
         'zoom': 0,
     }))
-    loaded = JsonStateRepository(path=path).load()
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.stored
     assert loaded.saved.unpinned is None
     assert loaded.saved.pins[0].kind is RouteKind.COACH
@@ -540,7 +543,7 @@ def test_regional_to_coach_leaves_a_malformed_pin_list_alone() -> None:
 
 def test_migrates_v2_with_auto_rebuild_on(path: Path) -> None:
     """A version 2 file loads with the rebuild on and saves as current."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
     del data['settings']
@@ -556,7 +559,7 @@ def test_migrates_v2_with_auto_rebuild_on(path: Path) -> None:
 
 def test_round_trips_settings(path: Path) -> None:
     """A switched-off rebuild survives a save and a load."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     manual = Settings(device=DeviceSettings(auto_rebuild=False))
     saved = replace(sample(), settings=manual)
     repository.save(saved=saved)
@@ -565,7 +568,7 @@ def test_round_trips_settings(path: Path) -> None:
 
 def test_migrates_v3_to_v4_with_empty_quota(path: Path) -> None:
     """A version 3 file loads with no calls counted and saves as current."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
     del data['quota']
@@ -583,7 +586,7 @@ def test_migrates_v3_to_v4_with_empty_quota(path: Path) -> None:
 
 def test_round_trips_quota(path: Path) -> None:
     """The day and the calls counted survive a save and a load."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     quota = Quota(day=date(2026, 10, 21), calls=1234)
     repository.save(saved=replace(sample(), quota=quota))
     assert json.loads(path.read_text())['quota'] == {
@@ -597,7 +600,7 @@ def test_negative_calls_reset_the_quota_only(
     path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A count below zero resets the quota and keeps the pins."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
     data['quota']['calls'] = -1
@@ -611,7 +614,7 @@ def test_negative_calls_reset_the_quota_only(
 
 def test_future_schema_is_not_guessed_at(path: Path) -> None:
     """A file newer than this app is not guessed at."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=sample())
     data = json.loads(path.read_text())
     data['schema_version'] = SCHEMA_VERSION + 1
@@ -630,7 +633,7 @@ def write_v4(*, path: Path, auto_rebuild: bool) -> None:
     auto_rebuild : bool
         The stored rebuild setting.
     """
-    JsonStateRepository(path=path).save(saved=sample())
+    JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     data = json.loads(path.read_text())
     data['schema_version'] = 4
     data['settings'] = {'auto_rebuild': auto_rebuild}
@@ -640,7 +643,7 @@ def write_v4(*, path: Path, auto_rebuild: bool) -> None:
 def test_migrates_v4_to_v5_with_defaults(path: Path) -> None:
     """A version 4 file keeps its rebuild setting and saves as current."""
     write_v4(path=path, auto_rebuild=False)
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     loaded = repository.load()
     assert loaded.stored
     assert loaded.saved.settings == Settings(
@@ -673,7 +676,7 @@ def test_round_trips_all_settings(path: Path) -> None:
             peak_windows=(Window(start=time(7), end=time(9)),),
         ),
     )
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=changed))
     assert repository.load().saved.settings == changed
 
@@ -682,7 +685,7 @@ def test_bad_time_falls_back(
     path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A time that can't be read resets that setting and keeps the pins."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
     data['settings']['peak_windows'][0]['start'] = '25:00'
@@ -712,7 +715,7 @@ def load_with_settings(
     Saved
         The loaded state, which must still be stored.
     """
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
     data['settings'].update(changes)
@@ -805,7 +808,7 @@ def test_bad_setting_resets_only_itself(
 
 def test_file_without_clean_after_cleans_after_thirty(path: Path) -> None:
     """A state.json from before the cleaning choice loads with 30."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
     del data['settings']['clean_after']
@@ -819,7 +822,7 @@ def test_file_without_clean_after_cleans_after_thirty(path: Path) -> None:
 
 def test_round_trips_clean_after(path: Path) -> None:
     """A cleaning choice survives a save and a load."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     changed = Settings(device=DeviceSettings(clean_after=120))
     repository.save(saved=replace(sample(), settings=changed))
     assert repository.load().saved.settings == changed
@@ -827,7 +830,7 @@ def test_round_trips_clean_after(path: Path) -> None:
 
 def test_migrates_to_pin_fields(path: Path) -> None:
     """A version 5 file gains an empty nickname and filter."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     saved = replace(sample(), unpinned=sample().pins[0])
     repository.save(saved=saved)
     data = json.loads(path.read_text())
@@ -849,7 +852,7 @@ def test_migrates_to_pin_fields(path: Path) -> None:
 
 def test_migrates_v6_to_v7_with_lookahead(path: Path) -> None:
     """A version 6 file keeps its settings and gains the lookahead."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
     data['schema_version'] = 6
@@ -881,7 +884,7 @@ def test_bad_lookahead_repaired_alone(
 def test_round_trips_lookahead(path: Path) -> None:
     """The longest lookahead survives a save and a load."""
     settings = Settings(board=BoardSettings(alert_lookahead=Lookahead.ALL))
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=settings))
     assert repository.load().saved.settings == settings
 
@@ -894,7 +897,7 @@ def test_round_trips_nickname_and_filter(path: Path) -> None:
         only=('606', '607X'),
     )
     saved = replace(DEFAULT_SAVED, pins=(pin,), unpinned=pin)
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=saved)
     assert repository.load().saved.pins == (pin,)
 
@@ -915,7 +918,7 @@ def stored_with(*, path: Path, pin_fields: dict[str, object]) -> dict[str, Any]:
     dict[str, Any]
         The rewritten file's data.
     """
-    JsonStateRepository(path=path).save(saved=sample())
+    JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     data: dict[str, Any] = json.loads(path.read_text())
     data['pins'][1].update(pin_fields)
     path.write_text(json.dumps(data))
@@ -926,7 +929,7 @@ def stored_with(*, path: Path, pin_fields: dict[str, object]) -> dict[str, Any]:
 def test_bad_nickname_resets_only_itself(path: Path, bad: object) -> None:
     """An unreadable nickname becomes None; the pin keeps the rest."""
     stored_with(path=path, pin_fields={'nickname': bad, 'only': ['1']})
-    pins = JsonStateRepository(path=path).load().saved.pins
+    pins = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins
     assert pins[1] == replace(sample().pins[1], only=('1',))
     assert pins[0] == sample().pins[0]
 
@@ -934,7 +937,7 @@ def test_bad_nickname_resets_only_itself(path: Path, bad: object) -> None:
 def test_long_nickname_is_trimmed(path: Path) -> None:
     """A nickname over the limit is cleaned and cut."""
     stored_with(path=path, pin_fields={'nickname': ' ' + 'a' * 40})
-    pin = JsonStateRepository(path=path).load().saved.pins[1]
+    pin = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins[1]
     assert pin.nickname == 'a' * 24
 
 
@@ -942,7 +945,7 @@ def test_long_nickname_is_trimmed(path: Path) -> None:
 def test_bad_only_resets_only_itself(path: Path, bad: object) -> None:
     """An unreadable route filter becomes empty; the nickname stays."""
     stored_with(path=path, pin_fields={'nickname': 'Work', 'only': bad})
-    pin = JsonStateRepository(path=path).load().saved.pins[1]
+    pin = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins[1]
     assert pin.only == ()
     assert pin.nickname == 'Work'
 
@@ -950,7 +953,7 @@ def test_bad_only_resets_only_itself(path: Path, bad: object) -> None:
 def test_broken_pin_is_dropped_and_the_rest_kept(path: Path) -> None:
     """A pin that stays invalid is dropped on its own."""
     stored_with(path=path, pin_fields={'kind': 'spaceship'})
-    loaded = JsonStateRepository(path=path).load()
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.stored
     assert loaded.saved.pins == (sample().pins[0],)
 
@@ -960,7 +963,7 @@ def test_broken_unpinned_place_is_dropped(path: Path) -> None:
     data = stored_with(path=path, pin_fields={})
     data['unpinned'] = {'origin': 5}
     path.write_text(json.dumps(data))
-    loaded = JsonStateRepository(path=path).load()
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.saved.pins == sample().pins
 
 
@@ -975,7 +978,7 @@ def test_v5_pin_with_fields_survives_migration(path: Path) -> None:
     data = json.loads(path.read_text())
     data['schema_version'] = 5
     path.write_text(json.dumps(data))
-    pin = JsonStateRepository(path=path).load().saved.pins[1]
+    pin = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins[1]
     assert (pin.nickname, pin.only) == ('Work', ('606',))
 
 
@@ -988,7 +991,7 @@ GOOD_WINDOW: dict[str, object] = {
 def test_round_trips_windows_and_auto(path: Path) -> None:
     """Windows and the auto pin state survive a save and a load."""
     pin = replace(sample().pins[0], windows=(WEEKDAY_WINDOW,))
-    start = datetime(2026, 10, 16, 7, 30, tzinfo=SYDNEY)
+    start = datetime(2026, 10, 16, 7, 30, tzinfo=SYDNEY_ZONE)
     auto = AutoState(
         occurrence=Occurrence(
             ref='abc', start=start, end=start.replace(hour=9),
@@ -997,7 +1000,7 @@ def test_round_trips_windows_and_auto(path: Path) -> None:
         overridden_at=start.replace(minute=45),
     )
     saved = replace(sample(), pins=(pin,), current=0, auto=auto)
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=saved)
     assert repository.load().saved == saved
     stored = json.loads(path.read_text())['pins'][0]['windows'][0]
@@ -1008,7 +1011,7 @@ def test_round_trips_windows_and_auto(path: Path) -> None:
 def test_migrates_v7_to_v8(path: Path) -> None:
     """A version 7 file gains empty windows and no auto pin state."""
     saved = replace(sample(), unpinned=sample().pins[0])
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=saved)
     data = json.loads(path.read_text())
     data['schema_version'] = 7
@@ -1029,7 +1032,7 @@ def test_bad_window_dropped_alone(
     """A window that can't be read goes; the rest of the file stays."""
     settings = ROTATED
     quota = Quota(day=date(2026, 10, 16), calls=3)
-    JsonStateRepository(path=path).save(
+    JsonStateRepository(path=path, city=SYDNEY).save(
         saved=replace(sample(), settings=settings, quota=quota),
     )
     data = json.loads(path.read_text())
@@ -1040,7 +1043,7 @@ def test_bad_window_dropped_alone(
     ]
     path.write_text(json.dumps(data))
     caplog.clear()
-    saved = JsonStateRepository(path=path).load().saved
+    saved = JsonStateRepository(path=path, city=SYDNEY).load().saved
     assert saved.pins[1].windows == (
         AutoWindow(frozenset({0}), time(7), time(8)),
     )
@@ -1057,11 +1060,11 @@ def test_bad_auto_reset_alone(
     path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """An auto block that can't be read resets; the pins stay."""
-    JsonStateRepository(path=path).save(saved=sample())
+    JsonStateRepository(path=path, city=SYDNEY).save(saved=sample())
     data = json.loads(path.read_text())
     data['auto'] = {'occurrence': 3}
     path.write_text(json.dumps(data))
-    loaded = JsonStateRepository(path=path).load()
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.stored
     assert loaded.saved.auto == AutoState()
     assert loaded.saved.pins == sample().pins
@@ -1073,7 +1076,7 @@ def test_bad_auto_reset_alone(
 def test_windows_not_a_list(path: Path) -> None:
     """Windows that are not a list leave the pin with none."""
     stored_with(path=path, pin_fields={'windows': 'x'})
-    loaded = JsonStateRepository(path=path).load()
+    loaded = JsonStateRepository(path=path, city=SYDNEY).load()
     assert loaded.saved.pins == sample().pins
 
 
@@ -1083,23 +1086,26 @@ def test_restart_in_repeated_hour_returns(tmp_path: Path) -> None:
     early = replace(pin_at('early', x=200.0), windows=(window,))
     home = pin_at('home', x=100.0)
     state = started(
-        pins=(home, early), now=datetime(2026, 4, 5, 1, 59, tzinfo=SYDNEY),
+        pins=(home, early), now=datetime(
+            2026, 4, 5, 1, 59, tzinfo=SYDNEY_ZONE,
+        ),
     )
     state = ticked(
-        state=state, times=(datetime(2026, 4, 5, 2, tzinfo=SYDNEY),),
+        state=state, times=(datetime(2026, 4, 5, 2, tzinfo=SYDNEY_ZONE),),
     )
-    repository = JsonStateRepository(path=tmp_path / 's.json')
+    repository = JsonStateRepository(path=tmp_path / 's.json', city=SYDNEY)
     repository.save(saved=saved_of(state=state))
-    now = datetime(2026, 4, 5, 2, 10, tzinfo=SYDNEY)
+    now = datetime(2026, 4, 5, 2, 10, tzinfo=SYDNEY_ZONE)
     state = trusted(state=initial_state(
         saved=repository.load().saved, now=now, stored=True,
+        city=SYDNEY,
     ))
     loaded = state.auto
     state = ticked(state=state, times=(now,))
     assert is_shown(state=state, pin=early)
     assert state.auto == loaded
     state = ticked(
-        state=state, times=(datetime(2026, 4, 5, 2, 45, tzinfo=SYDNEY),),
+        state=state, times=(datetime(2026, 4, 5, 2, 45, tzinfo=SYDNEY_ZONE),),
     )
     assert is_shown(state=state, pin=home)
 
@@ -1107,7 +1113,7 @@ def test_restart_in_repeated_hour_returns(tmp_path: Path) -> None:
 def test_round_trips_change(path: Path) -> None:
     """A connection pin saves and loads back equal."""
     saved = replace(sample(), pins=(WORK,), current=0)
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=saved)
     assert repository.load().saved == saved
     way = json.loads(path.read_text())['pins'][0]['ways'][0]
@@ -1124,7 +1130,7 @@ def test_migrates_v8_to_current(path: Path) -> None:
         unpinned=sample().pins[0],
         auto=AutoState(before=before),
     )
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=saved)
     data = json.loads(path.read_text())
     data['schema_version'] = 8
@@ -1152,7 +1158,7 @@ def stored_change(*, path: Path, change: dict[str, object]) -> None:
         Fields to set on the first change of WORK's stored way.
     """
     saved = replace(sample(), pins=(sample().pins[0], WORK))
-    JsonStateRepository(path=path).save(saved=saved)
+    JsonStateRepository(path=path, city=SYDNEY).save(saved=saved)
     data: dict[str, Any] = json.loads(path.read_text())
     data['pins'][1]['ways'][0]['changes'][0].update(change)
     path.write_text(json.dumps(data))
@@ -1163,14 +1169,14 @@ def test_bad_change_drops_way_alone(
 ) -> None:
     """A change that can't be read drops its way with one warning."""
     settings = ROTATED
-    JsonStateRepository(path=path).save(
+    JsonStateRepository(path=path, city=SYDNEY).save(
         saved=replace(sample(), pins=(sample().pins[0], WORK), settings=settings),
     )
     data = json.loads(path.read_text())
     data['pins'][1]['ways'][0]['changes'][0] = {'alight': 3}
     path.write_text(json.dumps(data))
     caplog.clear()
-    saved = JsonStateRepository(path=path).load().saved
+    saved = JsonStateRepository(path=path, city=SYDNEY).load().saved
     assert saved.pins == (sample().pins[0], replace(WORK, ways=()))
     assert saved.settings == settings
     assert saved.auto == AutoState()
@@ -1187,7 +1193,7 @@ def test_allow_out_of_range_clamped(
 ) -> None:
     """An allowance outside 1-60 is clamped; the rest is kept."""
     stored_change(path=path, change={'allow': allow})
-    pin = JsonStateRepository(path=path).load().saved.pins[1]
+    pin = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins[1]
     assert pin == replace(
         WORK, ways=(Way(changes=(replace(WORK_CHANGE, allow=kept),)),),
     )
@@ -1196,14 +1202,14 @@ def test_allow_out_of_range_clamped(
 def test_allow_not_a_number_drops_way(path: Path) -> None:
     """An allowance that is not a number drops that way alone."""
     stored_change(path=path, change={'allow': 'x'})
-    assert JsonStateRepository(path=path).load().saved.pins == (
+    assert JsonStateRepository(path=path, city=SYDNEY).load().saved.pins == (
         sample().pins[0], replace(WORK, ways=()),
     )
 
 
 def test_file_without_swap_knobs_leaves_the_knobs(path: Path) -> None:
     """A state.json from before the swap switch loads with it off."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     repository.save(saved=replace(sample(), settings=ROTATED))
     data = json.loads(path.read_text())
     del data['settings']['swap_knobs']
@@ -1217,7 +1223,7 @@ def test_file_without_swap_knobs_leaves_the_knobs(path: Path) -> None:
 
 def test_round_trips_swap_knobs(path: Path) -> None:
     """The swap switch survives a save and a load."""
-    repository = JsonStateRepository(path=path)
+    repository = JsonStateRepository(path=path, city=SYDNEY)
     changed = Settings(device=DeviceSettings(swap_knobs=True))
     repository.save(saved=replace(sample(), settings=changed))
     assert repository.load().saved.settings == changed

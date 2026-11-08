@@ -11,12 +11,12 @@ from paperroute.adapters.web_connection import ConnectionPages
 from paperroute.adapters.web_pins import PinsPages
 from paperroute.adapters.web_suggest import SuggestPages
 from paperroute.adapters.web_ways import WaysPages
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.messages import Event
 from paperroute.observers import PinsSeen
 from paperroute.planner_port import TripPlanner
 from paperroute.ports import PinOptions
 from paperroute_device.adapters.web_frame import DEVICE_NAV, LIVE_NAV, NavItem
-from paperroute_transit.core.model import SYDNEY
 
 PINS_NAV: Final[NavItem] = NavItem(
     href='/pins',
@@ -105,7 +105,7 @@ class SydneyPages:
         pins: Callable[[], PinsSeen | None],
         options: PinOptions | None,
         planner: TripPlanner | None,
-        now: Callable[[], datetime] = lambda: datetime.now(SYDNEY),
+        now: Callable[[], datetime] = lambda: datetime.now(SYDNEY_ZONE),
     ) -> None:
         self._pins = pins
         self._options = options

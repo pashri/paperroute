@@ -5,6 +5,7 @@ from datetime import date, datetime, time, timedelta
 
 import pytest
 
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.rhythm import (
     frame_time,
     in_window,
@@ -17,7 +18,6 @@ from paperroute.core.state import initial_state
 from paperroute.core.state_model import Calendar, Cycle, State
 from paperroute_device.core.device_settings import Window
 from paperroute_testkit.core.factories import pin_of
-from paperroute_transit.core.model import SYDNEY
 
 MONDAY = date(2026, 10, 19)
 TUESDAY = date(2026, 10, 20)
@@ -42,7 +42,7 @@ def at(*, day: date = TUESDAY, hour: int, minute: int = 0) -> datetime:
     datetime
         The moment in Sydney time.
     """
-    return datetime.combine(day, time(hour, minute), tzinfo=SYDNEY)
+    return datetime.combine(day, time(hour, minute), tzinfo=SYDNEY_ZONE)
 
 
 def state_at(
@@ -69,7 +69,7 @@ def state_at(
         The state.
     """
     state = initial_state(
-        saved=seeded(pin=pin_of('A', None)), now=now, stored=True
+        saved=seeded(pin=pin_of('A', None)), now=now, stored=True, city=SYDNEY
     )
     return replace(
         state,

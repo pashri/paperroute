@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.auto_pins import rule_holds
 from paperroute.core.messages import (
     DeparturesLoaded,
@@ -30,7 +31,7 @@ from paperroute_testkit.core.steps import wakeful
 from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.alert_model import AlertTie, Matched, Period
 from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
-from paperroute_transit.core.model import SYDNEY, AutoWindow, Pin, pin_ref
+from paperroute_transit.core.model import AutoWindow, Pin, pin_ref
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, NEXT, REACH, TO_STAGE
 from tests.core.test_chooser_steps import picked, run_events
 
@@ -68,7 +69,7 @@ def at(
     return datetime.combine(
         DAY + timedelta(days=days),
         time(hour, minute, second),
-        tzinfo=SYDNEY,
+        tzinfo=SYDNEY_ZONE,
     )
 
 
@@ -149,7 +150,9 @@ def started(
     """
     when = at(7, 29) if now is None else now
     saved = replace(seeded(pin=pins[0]), pins=pins, current=current)
-    state = trusted(state=initial_state(saved=saved, now=when, stored=True))
+    state = trusted(
+        state=initial_state(saved=saved, now=when, stored=True, city=SYDNEY),
+    )
     state = step(state, Tick(now=when))[0]
     return boarded(state=state)
 
@@ -399,7 +402,7 @@ def restarted(*, auto: AutoState, current: int) -> State:
         view=LiveView.STOP,
         auto=auto,
     )
-    state = initial_state(saved=saved, now=at(8), stored=True)
+    state = initial_state(saved=saved, now=at(8), stored=True, city=SYDNEY)
     return trusted(state=state)
 
 

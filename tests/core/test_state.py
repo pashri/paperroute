@@ -10,6 +10,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.alert_state import ALERT_EVERY, alert_feeds
 from paperroute.core.chooser import (
     ChooserPath,
@@ -168,7 +169,6 @@ from paperroute_testkit.core.steps import (
 from paperroute_transit.core.auto_model import AutoState
 from paperroute_transit.core.geo import Point, make_shape
 from paperroute_transit.core.model import (
-    SYDNEY,
     Departure,
     Mode,
     Pin,
@@ -320,6 +320,15 @@ def test_initial_state_centres_on_the_pins_point() -> None:
     assert fresh().map.centre is None
 
 
+def test_initial_state_carries_city() -> None:
+    """The state carries the city it was started for, out of its repr."""
+    state = initial_state(
+        saved=seeded(pin=PIN), now=START, stored=True, city=SYDNEY,
+    )
+    assert state.city is SYDNEY
+    assert 'city' not in repr(state)
+
+
 def test_start_has_step_zero() -> None:
     """The Map starts with no knob step, at the resting zoom."""
     assert fresh(centre=CENTRE).map.step == 0
@@ -443,8 +452,8 @@ def test_fetch_waits_for_poll_interval() -> None:
 
 def test_poll_interval_counts_real_seconds_on_fall_back_night() -> None:
     """02:30 happens twice on 5 Apr 2026; an hour apart is due to poll."""
-    first = datetime(2026, 4, 5, 2, 30, tzinfo=SYDNEY)
-    second = datetime(2026, 4, 5, 2, 30, 10, tzinfo=SYDNEY, fold=1)
+    first = datetime(2026, 4, 5, 2, 30, tzinfo=SYDNEY_ZONE)
+    second = datetime(2026, 4, 5, 2, 30, 10, tzinfo=SYDNEY_ZONE, fold=1)
     assert second.timestamp() - first.timestamp() == 3610
     state = replace(wakeful(state=loaded(state=fresh())), last_fetch=first)
     _, effects = step(state, Tick(now=second))
@@ -575,7 +584,7 @@ def test_mixed_modes_fetch_each_needed_feed_once() -> None:
 
 def test_load_window_is_real_seconds_on_fall_back_night() -> None:
     """The load window is measured in real seconds across the repeated hour."""
-    now = datetime(2026, 4, 5, 1, 30, tzinfo=SYDNEY)
+    now = datetime(2026, 4, 5, 1, 30, tzinfo=SYDNEY_ZONE)
     _, effects = step(fresh(now=now), Tick(now=now))
     loads = [e for e in effects if isinstance(e, LoadDepartures)]
     assert len(loads) == 1
@@ -1023,7 +1032,7 @@ def test_loaded_shapes_and_positions_are_drawn() -> None:
     assert [marker.live for marker in state.last_view.markers] == [True]
 
 
-FALL_BACK_EVE = datetime(2026, 4, 5, 1, 30, tzinfo=SYDNEY)
+FALL_BACK_EVE = datetime(2026, 4, 5, 1, 30, tzinfo=SYDNEY_ZONE)
 MODES = [Mode.BUS, Mode.TRAIN, Mode.REGIONAL, Mode.FERRY]
 
 
@@ -1301,7 +1310,7 @@ def picked_reply(
     return ChooserDeparturesLoaded(
         pin=pin,
         departures=chooser_departures(),
-        until=load_window(now=state.now)[1],
+        until=load_window(now=state.now, zone=SYDNEY_ZONE)[1],
         timetable=timetable,
     )
 
@@ -1338,7 +1347,7 @@ def listed_reply(
     return ChooserDeparturesLoaded(
         pin=pin,
         departures=chooser_departures(),
-        until=load_window(now=now)[1],
+        until=load_window(now=now, zone=SYDNEY_ZONE)[1],
         timetable=timetable,
     )
 
@@ -1495,7 +1504,11 @@ def event_lists(
     ]
     for kind in draw(st.lists(st.sampled_from(kinds), max_size=40)):
         if kind == 'tick':
-            now = shifted(moment=now, seconds=draw(st.integers(0, 900)))
+            now = shifted(
+                moment=now,
+                seconds=draw(st.integers(0, 900)),
+                zone=SYDNEY_ZONE,
+            )
             events.append(Tick(now=now))
         elif kind == 'turn':
             knob = draw(st.sampled_from(list(Knob)))
@@ -1561,14 +1574,22 @@ def event_lists(
             deps = tuple(
                 replace(
                     departure(
-                        departs=shifted(moment=now, seconds=120 * i),
+                        departs=shifted(
+                            moment=now,
+                            seconds=120 * i,
+                            zone=SYDNEY_ZONE,
+                        ),
                         mode=draw(st.sampled_from(MODES)),
                     ),
                     shape_id=draw(st.sampled_from([None, 'b:1', 'b:2'])),
                 )
                 for i in range(count)
             )
-            until = shifted(moment=now, seconds=3 * 3600 + 1800)
+            until = shifted(
+                moment=now,
+                seconds=3 * 3600 + 1800,
+                zone=SYDNEY_ZONE,
+            )
             events.append(
                 DeparturesLoaded(
                     pin=draw(st.sampled_from(POOL)),
@@ -2080,9 +2101,10 @@ def test_step_invariants_asleep_on_a_view_without_a_map(
     view: LiveView,
 ) -> None:
     """Falling asleep off the Map loads the sleep map, not positions."""
-    night = datetime(2026, 4, 12, 1, 30, tzinfo=SYDNEY)
+    night = datetime(2026, 4, 12, 1, 30, tzinfo=SYDNEY_ZONE)
     state = initial_state(
         saved=replace(DEFAULT_SAVED, view=view), now=night, stored=True,
+        city=SYDNEY,
     )
     trip = replace(departure(departs=night), shape_id='b:1')
     state, _ = step(
@@ -2113,7 +2135,7 @@ def test_step_invariants(
 ) -> None:
     """No event sequence breaks the reducer's invariants."""
     start, events = case
-    state = initial_state(saved=saved, now=start, stored=stored)
+    state = initial_state(saved=saved, now=start, stored=stored, city=SYDNEY)
     last = state.saving.saved
     for item in events:
         event = (
@@ -2456,7 +2478,12 @@ def test_no_destination_map_caps_patterns() -> None:
         origin=replace(PIN.origin, point=CENTRE),
         destination=None,
     )
-    state = initial_state(saved=seeded(pin=pin), now=START, stored=True)
+    state = initial_state(
+        saved=seeded(pin=pin),
+        now=START,
+        stored=True,
+        city=SYDNEY,
+    )
     state = loaded(state=state, count=500)
     _, effects = step(state, PRESS)
     loads = effects_of(effects=effects, kind=LoadPatterns)
@@ -2483,7 +2510,12 @@ def no_destination_map(*, count: int) -> State:
         origin=replace(PIN.origin, point=CENTRE),
         destination=None,
     )
-    state = initial_state(saved=seeded(pin=pin), now=START, stored=True)
+    state = initial_state(
+        saved=seeded(pin=pin),
+        now=START,
+        stored=True,
+        city=SYDNEY,
+    )
     return loaded(state=state, count=count, shaped=True)
 
 
@@ -2606,7 +2638,12 @@ def test_top_turn_drops_unpinned_and_keeps_current() -> None:
 def test_top_turn_without_pins_does_nothing() -> None:
     """With only the unpinned place there is nothing to turn to."""
     state, _ = step(
-        initial_state(saved=DEFAULT_SAVED, now=START, stored=True),
+        initial_state(
+            saved=DEFAULT_SAVED,
+            now=START,
+            stored=True,
+            city=SYDNEY,
+        ),
         Tick(now=START),
     )
     assert step_untouched(state=state, event=top(steps=1)) == (state, ())
@@ -2823,7 +2860,7 @@ def test_save_waits_three_seconds_after_last_change() -> None:
 def test_first_tick_saves_when_never_stored() -> None:
     """With no file yet, the first tick writes one."""
     saved = seeded(pin=PIN)
-    state = initial_state(saved=saved, now=START, stored=False)
+    state = initial_state(saved=saved, now=START, stored=False, city=SYDNEY)
     assert state.saving.saved is None
     state, effects = step(state, Tick(now=START))
     assert saves(effects=effects) == [SaveState(saved=saved)]
@@ -2865,7 +2902,7 @@ def test_new_timetable_version_matches_every_place() -> None:
         unpinned=ELSEWHERE,
         view=LiveView.STOP,
     )
-    state = initial_state(saved=saved, now=START, stored=True)
+    state = initial_state(saved=saved, now=START, stored=True, city=SYDNEY)
     state = loaded(state=state)
     state, effects = step(state, TimetableSeen(version='v2'))
     origins = tuple(pin.origin for pin in PINS)
@@ -2974,7 +3011,7 @@ def test_load_from_the_old_timetable_is_dropped(failed: bool) -> None:
     assert load.timetable == 'v2'
 
 
-NOON = datetime(2026, 10, 16, 12, 0, tzinfo=SYDNEY)
+NOON = datetime(2026, 10, 16, 12, 0, tzinfo=SYDNEY_ZONE)
 
 
 def fetches_at(*, state: State, now: datetime) -> list[Effect]:
@@ -3053,11 +3090,18 @@ def test_auto_saved_and_restored() -> None:
     state = fresh()
     assert saved_of(state=replace(state, auto=auto)).auto == auto
     saved = replace(seeded(pin=PIN), auto=auto)
-    assert initial_state(saved=saved, now=START, stored=True).auto == auto
+    assert initial_state(
+        saved=saved,
+        now=START,
+        stored=True,
+        city=SYDNEY,
+    ).auto == auto
 
 
-UNSYNCED_AT: Final[datetime] = datetime(2026, 11, 5, 23, 10, tzinfo=SYDNEY)
-SYNCED_AT: Final[datetime] = datetime(2026, 11, 6, 7, 42, tzinfo=SYDNEY)
+UNSYNCED_AT: Final[datetime] = datetime(
+    2026, 11, 5, 23, 10, tzinfo=SYDNEY_ZONE,
+)
+SYNCED_AT: Final[datetime] = datetime(2026, 11, 6, 7, 42, tzinfo=SYDNEY_ZONE)
 
 
 def clock_waiting(

@@ -7,6 +7,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute.app_render import MapRenderer, drawing
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.connection_map import build_connection_map
 from paperroute.core.connection_strip import (
     ConnectionStripMapView,
@@ -40,6 +41,7 @@ VIEW: Final[ConnectionStripMapView] = ConnectionStripMapView(
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     ),
 )
 BASE: Final[NDArray[np.uint8]] = np.full(
@@ -79,6 +81,7 @@ def test_drawing_picks_connection_views() -> None:
     assert drawing(view=VIEW.pane, maps=maps)().shape == (480, 800)
     stop = build_connection_view(
         stop_view=STOP, pin=WORK, chains=CHAINS, scroll=0, now=at(7, 30),
+        zone=SYDNEY_ZONE,
     )
     assert drawing(view=stop, maps=maps)().shape == (480, 800)
     assert maps.key is None

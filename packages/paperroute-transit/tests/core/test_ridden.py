@@ -1,6 +1,8 @@
 """Tests for the stops a departure is ridden between."""
 
 from datetime import timedelta
+from typing import Final
+from zoneinfo import ZoneInfo
 
 from paperroute_testkit.core.factories import (
     EIGHT,
@@ -15,6 +17,7 @@ from paperroute_transit.core.ridden import (
     route_stops,
 )
 
+ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 POINTS = {name: (index * 500.0, 0.0) for index, name in enumerate('ABCDEFG')}
 
 
@@ -26,6 +29,7 @@ def test_ridden_stops_between_board_and_alight() -> None:
         departure=ride,
         pattern=pattern(stops=stops),
         window=None,
+        zone=ZONE,
     ) == (POINTS['B'], POINTS['C'], POINTS['D'], POINTS['E'])
 
 
@@ -38,6 +42,7 @@ def test_ridden_stops_window_cuts_at_20_min() -> None:
         departure=ride,
         pattern=pattern(stops=stops),
         window=NO_DESTINATION_WINDOW,
+        zone=ZONE,
     ) == (POINTS['A'], POINTS['B'], POINTS['C'])
 
 
@@ -51,8 +56,14 @@ def test_ridden_stops_skip_stops_without_points() -> None:
     ride = departure(departs=START, ride=30)
     assert ridden_stops(
         departure=ride, pattern=pattern(stops=stops), window=None,
+        zone=ZONE,
     ) == (POINTS['A'], POINTS['C'])
-    assert ridden_stops(departure=ride, pattern=None, window=None) == ()
+    assert ridden_stops(
+        departure=ride,
+        pattern=None,
+        window=None,
+        zone=ZONE,
+    ) == ()
 
 
 def test_route_stops_once_each() -> None:
@@ -76,5 +87,6 @@ def test_route_stops_once_each() -> None:
             'other': None,
         },
         window=None,
+        zone=ZONE,
     )
     assert found == (POINTS['A'], POINTS['B'], POINTS['C'])

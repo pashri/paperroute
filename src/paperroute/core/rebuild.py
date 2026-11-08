@@ -7,9 +7,8 @@ from typing import Final
 from paperroute.core.banners import offline
 from paperroute.core.messages import Effect, RebuildTimetable, TimetableSeen
 from paperroute.core.state_model import Rebuild, State
-from paperroute.core.stop_view import clock_text
 from paperroute_device.core.panel_views import NoticeView
-from paperroute_device.core.text import DOT
+from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.model import TIMETABLE_SCHEMA
 
 BUILDING: Final[str] = 'Building the timetable'
@@ -231,7 +230,7 @@ def building_detail(*, state: State) -> str:
         return REBUILD_OFF
     retry_at = rebuild.retry_at
     if rebuild.failures and retry_at is not None and state.now < retry_at:
-        retry = clock_text(moment=retry_at)
+        retry = clock_text(moment=retry_at, zone=state.city.zone)
         return f'Last try failed{DOT}trying again at {retry}'
     return SETTINGS_HINT
 

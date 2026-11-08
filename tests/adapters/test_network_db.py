@@ -15,6 +15,7 @@ import pytest
 from paperroute.adapters.network_db import SqliteNetworkRepository
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.chooser import Choice, ChooserPath, Column, Level
 from paperroute.core.strip_view import build_strip_view
 from paperroute.ports import NetworkRepository
@@ -702,7 +703,9 @@ def test_towards_line_has_names_and_points(network_db: Path) -> None:
         ).fetchone()
     with (
         closing(SqliteNetworkRepository(path=network_db)) as repo,
-        closing(SqliteTimetableRepository(path=network_db)) as timetable,
+        closing(
+            SqliteTimetableRepository(path=network_db, zone=SYDNEY_ZONE),
+        ) as timetable,
     ):
         line = repo.towards_line(towards=towards)
         expected = tuple(

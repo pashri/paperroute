@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import timedelta
 
+from paperroute.city import SYDNEY
 from paperroute.core.map_view import MAP_HEIGHT, MapView, screen_point
 from paperroute.core.messages import (
     DeparturesLoaded,
@@ -233,7 +234,12 @@ def test_sleep_map_keeps_both_ends_above_the_band() -> None:
         destination=place('215020', point=(0.0, -900.0)),
     )
     state = slept(
-        state=initial_state(saved=seeded(pin=pin), now=START, stored=True),
+        state=initial_state(
+            saved=seeded(pin=pin),
+            now=START,
+            stored=True,
+            city=SYDNEY,
+        ),
     )
     view = sleep_view(state=state, stop_view=live_stop_view(state=state))
     base = view.map.base

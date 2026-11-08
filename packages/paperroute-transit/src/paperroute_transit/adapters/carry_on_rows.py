@@ -8,7 +8,7 @@ Destination, nor as a stop of its own.
 
 from collections.abc import Sequence
 from dataclasses import replace
-from datetime import date
+from datetime import date, tzinfo
 from typing import Final
 
 from paperroute_transit.adapters.departure_rows import (
@@ -86,7 +86,9 @@ GROUP BY c.trip_id, c.seq
 """
 
 
-def carry_on_departure(*, row: tuple[object, ...], day: date) -> Departure:
+def carry_on_departure(
+    *, row: tuple[object, ...], day: date, zone: tzinfo,
+) -> Departure:
     """
     Turn a CARRY_ONS row into a Departure.
 
@@ -101,6 +103,8 @@ def carry_on_departure(*, row: tuple[object, ...], day: date) -> Departure:
         CARRY_ONS row.
     day : date
         Service date the row's times count from.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
@@ -111,6 +115,7 @@ def carry_on_departure(*, row: tuple[object, ...], day: date) -> Departure:
     departure = to_departure(
         row=(*row[:14], None, None, None, *row[17:19]),
         day=day,
+        zone=zone,
     )
     return replace(
         departure,

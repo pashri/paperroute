@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import timedelta
 
+from paperroute.city import SYDNEY
 from paperroute.core.map_state import area_box
 from paperroute.core.messages import MapData, ModesLoaded
 from paperroute.core.places import (
@@ -68,7 +69,7 @@ def state_with(
         unpinned=unpinned,
         view=LiveView.STOP,
     )
-    return initial_state(saved=saved, now=START, stored=True)
+    return initial_state(saved=saved, now=START, stored=True, city=SYDNEY)
 
 
 def test_new_place_resets_step() -> None:
@@ -218,7 +219,7 @@ def test_matched_updates_the_unpinned_place() -> None:
 def test_initial_state_without_any_place_shows_the_default() -> None:
     """A saved file with no pins and no unpinned place shows Town Hall."""
     saved = replace(DEFAULT_SAVED, unpinned=None, current=3)
-    state = initial_state(saved=saved, now=START, stored=True)
+    state = initial_state(saved=saved, now=START, stored=True, city=SYDNEY)
     assert shown(state=state) == DEFAULT_SAVED.unpinned
     assert state.places.current == 0
 

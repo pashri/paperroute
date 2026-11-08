@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.adapters.state_file import BAD_PREFIX, JsonStateRepository
+from paperroute.city import SYDNEY
 from paperroute.core.saved import Saved
 from paperroute_transit.core.auto_model import AutoState
 from paperroute_transit.core.model import Pin, pin_ref
@@ -34,7 +35,7 @@ def repository(*, path: Path) -> JsonStateRepository:
     JsonStateRepository
         Its repository.
     """
-    return JsonStateRepository(path=path)
+    return JsonStateRepository(path=path, city=SYDNEY)
 
 
 def plain(value: object) -> object:

@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from paperroute.city import SYDNEY
 from paperroute.core.chooser import ChooserState
 from paperroute.core.map_view import MapView
 from paperroute.core.messages import Effect, Render, Tick
@@ -129,7 +130,12 @@ def test_loaded_start_draws_at_once() -> None:
 
 def test_loading_screen_waits_five_seconds() -> None:
     """Still loading, the first frame waits 5 s, then is drawn full."""
-    state = initial_state(saved=seeded(pin=PIN), now=START, stored=True)
+    state = initial_state(
+        saved=seeded(pin=PIN),
+        now=START,
+        stored=True,
+        city=SYDNEY,
+    )
     state, effects = step(state, Tick(now=START))
     assert not renders(effects=effects)
     assert state.refresh.started_at == START
@@ -142,7 +148,12 @@ def test_loading_screen_waits_five_seconds() -> None:
 
 def test_loading_hold_ends_when_clock_steps_back() -> None:
     """A clock stepped back past the start stops holding the screen."""
-    state = initial_state(saved=seeded(pin=PIN), now=START, stored=True)
+    state = initial_state(
+        saved=seeded(pin=PIN),
+        now=START,
+        stored=True,
+        city=SYDNEY,
+    )
     state, effects = step(state, Tick(now=START))
     assert not renders(effects=effects)
     _, effects = step(state, Tick(now=START - timedelta(hours=1)))

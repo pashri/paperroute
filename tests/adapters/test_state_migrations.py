@@ -19,6 +19,7 @@ from paperroute.adapters.state_migrations import (
     drop_zoom,
     v9_ref,
 )
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.saved import DEFAULT_SAVED, ConnectionMap, Saved
 from paperroute_testkit.core.connection_factories import (
     CONSTITUTION,
@@ -30,7 +31,6 @@ from paperroute_testkit.core.connection_factories import (
     WORK,
 )
 from paperroute_transit.core.model import (
-    SYDNEY,
     AutoWindow,
     Change,
     Pin,
@@ -43,7 +43,7 @@ from paperroute_transit.core.model import (
 WINDOW: Final[dict[str, object]] = {
     'days': ['mon', 'tue'], 'start': '07:00', 'end': '08:30',
 }
-START: Final[datetime] = datetime(2026, 10, 27, 7, tzinfo=SYDNEY)
+START: Final[datetime] = datetime(2026, 10, 27, 7, tzinfo=SYDNEY_ZONE)
 
 
 def stop(stop_id: str, name: str) -> dict[str, object]:
@@ -150,7 +150,7 @@ def v9_file(*, path: Path, **fields: object) -> dict[str, Any]:
     dict[str, Any]
         The data written.
     """
-    JsonStateRepository(path=path).save(saved=DEFAULT_SAVED)
+    JsonStateRepository(path=path, city=SYDNEY).save(saved=DEFAULT_SAVED)
     data: dict[str, Any] = json.loads(path.read_text())
     data.update(
         schema_version=9,
@@ -185,7 +185,7 @@ def path_fixture(tmp_path: Path) -> Path:
 def test_migrates_v9_to_v10(path: Path) -> None:
     """Destination pins lose routes; pin 5's change becomes one way."""
     v9_file(path=path)
-    pins = JsonStateRepository(path=path).load().saved.pins
+    pins = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins
     assert [pin.routes for pin in pins] == [(), ('T1',), (), ('T1',), ()]
     campbelltown = StopPlace(
         stop_id='2560', name='Campbelltown Station', point=None,
@@ -213,7 +213,7 @@ def test_migration_keeps_auto_refs(path: Path) -> None:
         path=path,
         auto={'occurrence': occurrence, 'before': None, 'overridden_at': None},
     )
-    saved = JsonStateRepository(path=path).load().saved
+    saved = JsonStateRepository(path=path, city=SYDNEY).load().saved
     assert saved.auto.occurrence is not None
     assert saved.auto.occurrence.ref == pin_ref(pin=saved.pins[4])
     assert saved.auto.occurrence.ref != occurrence['ref']
@@ -224,7 +224,7 @@ def test_migration_keeps_auto_refs(path: Path) -> None:
         path=path,
         auto={'occurrence': occurrence, 'before': None, 'overridden_at': None},
     )
-    saved = JsonStateRepository(path=path).load().saved
+    saved = JsonStateRepository(path=path, city=SYDNEY).load().saved
     assert saved.auto.occurrence is not None
     assert saved.auto.occurrence.ref == pin_ref(pin=saved.pins[0])
 
@@ -251,7 +251,7 @@ def test_migrates_unpinned_and_before(path: Path) -> None:
         unpinned=PIN_5,
         auto={'occurrence': None, 'before': before, 'overridden_at': None},
     )
-    saved = JsonStateRepository(path=path).load().saved
+    saved = JsonStateRepository(path=path, city=SYDNEY).load().saved
     assert saved.unpinned is not None
     assert saved.auto.before is not None
     assert saved.unpinned == saved.pins[4]
@@ -262,7 +262,10 @@ def test_migrates_unpinned_and_before(path: Path) -> None:
 def test_connection_map_change_becomes_changes(path: Path) -> None:
     """The v9 'change' map setting becomes 'changes'."""
     v9_file(path=path)
-    settings = JsonStateRepository(path=path).load().saved.settings
+    settings = JsonStateRepository(
+        path=path,
+        city=SYDNEY,
+    ).load().saved.settings
     assert settings.board.connection_map is ConnectionMap.CHANGES
 
 
@@ -289,7 +292,7 @@ def saved_ways(*, path: Path, pin: Pin) -> dict[str, Any]:
         The stored data.
     """
     saved = replace(DEFAULT_SAVED, pins=(pin,), current=0)
-    JsonStateRepository(path=path).save(saved=saved)
+    JsonStateRepository(path=path, city=SYDNEY).save(saved=saved)
     data: dict[str, Any] = json.loads(path.read_text())
     return data
 
@@ -300,7 +303,10 @@ def test_bad_way_drops_way_alone(path: Path) -> None:
     data = saved_ways(path=path, pin=pin)
     data['pins'][0]['ways'][1]['changes'][0]['alight'] = 3
     path.write_text(json.dumps(data))
-    assert JsonStateRepository(path=path).load().saved.pins == (WORK,)
+    assert JsonStateRepository(
+        path=path,
+        city=SYDNEY,
+    ).load().saved.pins == (WORK,)
 
 
 @pytest.mark.parametrize('changes', [[], 'x', [{}] * 3])
@@ -311,7 +317,7 @@ def test_way_with_bad_changes_dropped(
     data = saved_ways(path=path, pin=WORK)
     data['pins'][0]['ways'][0]['changes'] = changes
     path.write_text(json.dumps(data))
-    pins = JsonStateRepository(path=path).load().saved.pins
+    pins = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins
     assert pins == (replace(WORK, ways=()),)
 
 
@@ -320,7 +326,7 @@ def test_ways_not_a_list_gives_plain_pin(path: Path) -> None:
     data = saved_ways(path=path, pin=WORK)
     data['pins'][0]['ways'] = 'x'
     path.write_text(json.dumps(data))
-    pins = JsonStateRepository(path=path).load().saved.pins
+    pins = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins
     assert pins == (replace(WORK, ways=()),)
 
 
@@ -329,7 +335,7 @@ def test_allow_clamped_in_way(path: Path) -> None:
     data = saved_ways(path=path, pin=WORK)
     data['pins'][0]['ways'][0]['changes'][0]['allow'] = 90
     path.write_text(json.dumps(data))
-    pin = JsonStateRepository(path=path).load().saved.pins[0]
+    pin = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins[0]
     assert pin.ways[0].changes[0].allow == 60
 
 
@@ -339,7 +345,10 @@ def test_bad_never_resets_to_empty(path: Path, bad: object) -> None:
     data = saved_ways(path=path, pin=replace(WORK, never=('665',)))
     data['pins'][0]['never'] = bad
     path.write_text(json.dumps(data))
-    assert JsonStateRepository(path=path).load().saved.pins == (WORK,)
+    assert JsonStateRepository(
+        path=path,
+        city=SYDNEY,
+    ).load().saved.pins == (WORK,)
 
 
 def test_round_trip_two_changes(path: Path) -> None:
@@ -353,7 +362,10 @@ def test_round_trip_two_changes(path: Path) -> None:
     data = saved_ways(path=path, pin=pin)
     assert 'change' not in data['pins'][0]
     assert data['pins'][0]['ways'][1]['ticked'] is False
-    assert JsonStateRepository(path=path).load().saved.pins == (pin,)
+    assert JsonStateRepository(
+        path=path,
+        city=SYDNEY,
+    ).load().saved.pins == (pin,)
     assert (HAMMERS, CONSTITUTION, WESTMEAD, HOLLIS) == (
         pin.ways[1].changes[0].alight,
         pin.ways[1].changes[0].board,
@@ -365,7 +377,7 @@ def test_round_trip_two_changes(path: Path) -> None:
 def test_saved_pin_holds_no_change_field(path: Path) -> None:
     """A saved plain pin stores no ways and an empty never list."""
     saved: Saved = replace(DEFAULT_SAVED)
-    JsonStateRepository(path=path).save(saved=saved)
+    JsonStateRepository(path=path, city=SYDNEY).save(saved=saved)
     data = json.loads(path.read_text())
     assert data['schema_version'] == SCHEMA_VERSION
     assert data['unpinned']['ways'] == []
@@ -498,7 +510,7 @@ def test_v10_zoom_is_dropped() -> None:
     model = state_model_of(text=json.dumps(v10_data()))
     assert model.schema_version == SCHEMA_VERSION == 11
     assert 'zoom' not in model.model_dump()
-    saved = from_model(model=model)
+    saved = from_model(model=model, zone=SYDNEY_ZONE)
     assert len(saved.pins) == 6
     assert saved.current == 5
     assert len(saved.pins[5].ways) == 1

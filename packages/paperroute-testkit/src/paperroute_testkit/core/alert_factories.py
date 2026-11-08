@@ -3,8 +3,9 @@
 from datetime import datetime
 from typing import Final
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute_transit.core.alert_model import Alert, Informed, Period
-from paperroute_transit.core.model import SYDNEY, Pin, RouteKind, StopPlace
+from paperroute_transit.core.model import Pin, RouteKind, StopPlace
 
 
 def sydney(
@@ -39,7 +40,7 @@ def sydney(
         hour=hour,
         minute=minute,
         second=second,
-        tzinfo=SYDNEY,
+        tzinfo=SYDNEY_ZONE,
     )
 
 

@@ -133,6 +133,7 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_transit.core.alert_model import AlertsFetched, BetweenLoaded
+from paperroute_transit.core.city import City
 from paperroute_transit.core.model import same_place
 
 PERSON_EVENTS: Final[tuple[type, ...]] = (
@@ -147,7 +148,9 @@ PERSON_EVENTS: Final[tuple[type, ...]] = (
 )
 
 
-def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
+def initial_state(
+    *, saved: Saved, now: datetime, stored: bool, city: City,
+) -> State:
     """
     Make the state at start-up, centring the map on the shown From.
 
@@ -161,6 +164,8 @@ def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
     stored : bool
         Whether `saved` came from the file; if not, the first tick writes
         it.
+    city : City
+        The city the app runs for.
 
     Returns
     -------
@@ -171,6 +176,7 @@ def initial_state(*, saved: Saved, now: datetime, stored: bool) -> State:
     state = State(
         now=now,
         places=places_of(saved=saved),
+        city=city,
         view=saved.view,
         saving=Saving(
             saved=saved if stored else None,
@@ -202,7 +208,7 @@ def reload_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     due = runs_short(loaded_until=state.board.loaded_until, now=now)
     if not due or state.board.loading:
         return state, ()
-    start, end = load_window(now=now)
+    start, end = load_window(now=now, zone=state.city.zone)
     load = LoadDepartures(
         pin=shown(state=state),
         start=start,

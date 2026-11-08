@@ -14,6 +14,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.messages import Event, PinSaved
 from paperroute.core.pin_choices import ChangeStop, StopMatch
 from paperroute.core.trip_search import Journey, JourneyLeg
@@ -26,11 +27,11 @@ from paperroute_testkit.core.connection_factories import (
 from paperroute_testkit.core.factories import place
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_testkit.fakes import FakeTripPlanner
-from paperroute_transit.core.model import SYDNEY, RouteKind, StopPlace
+from paperroute_transit.core.model import RouteKind, StopPlace
 from tests.adapters.test_web_device import sydney_site
 
 Client = TestClient[web.Request, web.Application]
-NOW: Final[datetime] = datetime(2026, 10, 27, 10, 0, tzinfo=SYDNEY)
+NOW: Final[datetime] = datetime(2026, 10, 27, 10, 0, tzinfo=SYDNEY_ZONE)
 TOWN_HALL: Final[StopPlace] = place(
     '200070', name='Town Hall Station', point=(900.0, -9000.0),
 )
@@ -53,14 +54,14 @@ JOURNEY: Final[Journey] = Journey(legs=(
     JourneyLeg(
         origin_id=HOLLIS.stop_id, destination_id=HAMMERS.stop_id,
         route='606',
-        departs=datetime(2026, 10, 27, 21, 48, tzinfo=SYDNEY),
-        arrives=datetime(2026, 10, 27, 21, 54, tzinfo=SYDNEY),
+        departs=datetime(2026, 10, 27, 21, 48, tzinfo=SYDNEY_ZONE),
+        arrives=datetime(2026, 10, 27, 21, 54, tzinfo=SYDNEY_ZONE),
     ),
     JourneyLeg(
         origin_id='2145648_1', destination_id=TOWN_HALL.stop_id,
         route='660',
-        departs=datetime(2026, 10, 27, 22, 1, tzinfo=SYDNEY),
-        arrives=datetime(2026, 10, 27, 22, 40, tzinfo=SYDNEY),
+        departs=datetime(2026, 10, 27, 22, 1, tzinfo=SYDNEY_ZONE),
+        arrives=datetime(2026, 10, 27, 22, 40, tzinfo=SYDNEY_ZONE),
     ),
 ))
 VIA: Final[str] = 'via Constitution Hill, North West Twy'

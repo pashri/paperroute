@@ -1,6 +1,8 @@
 """Tests for trip patterns and timetable positions."""
 
 from datetime import datetime, timedelta
+from typing import Final
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -11,7 +13,6 @@ from paperroute_testkit.core.factories import (
     pattern,
 )
 from paperroute_transit.core.geo import make_shape
-from paperroute_transit.core.model import SYDNEY
 from paperroute_transit.core.patterns import (
     PatternStop,
     hop_at,
@@ -21,6 +22,7 @@ from paperroute_transit.core.patterns import (
     timetable_point,
 )
 
+ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 CORNER = make_shape(
     shape_id='L',
     points=[(0.0, 0.0), (1000.0, 0.0), (1000.0, 1000.0)],
@@ -33,6 +35,7 @@ DIAGONAL = (
         point=(1000.0, 1000.0),
     ),
 )
+
 HALFWAY = START + timedelta(minutes=5)
 QUARTER = START + timedelta(minutes=2, seconds=30)
 
@@ -68,7 +71,12 @@ def test_timetable_point_follows_the_shape() -> None:
         pattern=pattern(shape_id='L', stops=DIAGONAL),
         shape=CORNER,
     )
-    point = timetable_point(pattern=measured, shape=CORNER, now=HALFWAY)
+    point = timetable_point(
+        pattern=measured,
+        shape=CORNER,
+        now=HALFWAY,
+        zone=ZONE,
+    )
     assert point == pytest.approx((1000.0, 0.0))
 
 
@@ -78,6 +86,7 @@ def test_timetable_point_without_shape_uses_the_chord() -> None:
         pattern=pattern(stops=DIAGONAL),
         shape=None,
         now=HALFWAY,
+        zone=ZONE,
     )
     assert point == pytest.approx((500.0, 500.0))
 
@@ -88,6 +97,7 @@ def test_timetable_point_unmeasured_uses_the_chord() -> None:
         pattern=pattern(shape_id='L', stops=DIAGONAL),
         shape=CORNER,
         now=HALFWAY,
+        zone=ZONE,
     )
     assert point == pytest.approx((500.0, 500.0))
 
@@ -107,13 +117,14 @@ def test_timetable_point_in_a_dwell_sits_at_the_stop() -> None:
         pattern=pattern(stops=stops),
         shape=None,
         now=HALFWAY,
+        zone=ZONE,
     )
     assert point == (300.0, 700.0)
 
 
 def test_timetable_point_after_midnight_uses_previous_service_day() -> None:
     """At 00:30 a trip timed 24:20 to 24:40 runs on yesterday's service."""
-    now = datetime(2026, 10, 17, 0, 30, tzinfo=SYDNEY)
+    now = datetime(2026, 10, 17, 0, 30, tzinfo=ZONE)
     stops = (
         PatternStop(arrives=87_600, departs=87_600, point=(0.0, 0.0)),
         PatternStop(arrives=88_800, departs=88_800, point=(1000.0, 0.0)),
@@ -125,6 +136,7 @@ def test_timetable_point_after_midnight_uses_previous_service_day() -> None:
         ),
         shape=None,
         now=now,
+        zone=ZONE,
     )
     assert point == pytest.approx((500.0, 0.0))
 
@@ -134,8 +146,18 @@ def test_timetable_point_outside_the_trip_is_none() -> None:
     trip = pattern()
     early = START - timedelta(minutes=1)
     late = START + timedelta(minutes=11)
-    assert timetable_point(pattern=trip, shape=None, now=early) is None
-    assert timetable_point(pattern=trip, shape=None, now=late) is None
+    assert timetable_point(
+        pattern=trip,
+        shape=None,
+        now=early,
+        zone=ZONE,
+    ) is None
+    assert timetable_point(
+        pattern=trip,
+        shape=None,
+        now=late,
+        zone=ZONE,
+    ) is None
 
 
 def test_timetable_point_without_stop_points_is_none() -> None:
@@ -148,6 +170,7 @@ def test_timetable_point_without_stop_points_is_none() -> None:
         pattern=pattern(stops=stops),
         shape=None,
         now=HALFWAY,
+        zone=ZONE,
     )
     assert point is None
 
@@ -158,6 +181,7 @@ def test_timetable_point_at_the_last_arrival_is_the_last_stop() -> None:
         pattern=pattern(),
         shape=None,
         now=START + timedelta(minutes=10),
+        zone=ZONE,
     )
     assert point == (1000.0, 0.0)
 
@@ -168,6 +192,7 @@ def test_timetable_point_without_stops_is_none() -> None:
         pattern=pattern(stops=()),
         shape=None,
         now=HALFWAY,
+        zone=ZONE,
     )
     assert point is None
 
@@ -178,6 +203,7 @@ def test_timetable_point_quarter_hop_runs_forwards_on_the_chord() -> None:
         pattern=pattern(stops=DIAGONAL),
         shape=None,
         now=QUARTER,
+        zone=ZONE,
     )
     assert point == pytest.approx((250.0, 250.0))
 
@@ -188,7 +214,12 @@ def test_timetable_point_quarter_hop_runs_forwards_on_the_shape() -> None:
         pattern=pattern(shape_id='L', stops=DIAGONAL),
         shape=CORNER,
     )
-    point = timetable_point(pattern=measured, shape=CORNER, now=QUARTER)
+    point = timetable_point(
+        pattern=measured,
+        shape=CORNER,
+        now=QUARTER,
+        zone=ZONE,
+    )
     assert point == pytest.approx((500.0, 0.0))
 
 
@@ -206,7 +237,12 @@ def test_timetable_point_hop_after_a_dwell_counts_from_departure() -> None:
     trip = pattern(stops=stops)
     arriving = START + timedelta(minutes=4)
     later = START + timedelta(minutes=8, seconds=30)
-    assert timetable_point(pattern=trip, shape=None, now=arriving) == (
+    assert timetable_point(
+        pattern=trip,
+        shape=None,
+        now=arriving,
+        zone=ZONE,
+    ) == (
         300.0,
         700.0,
     )
@@ -214,12 +250,18 @@ def test_timetable_point_hop_after_a_dwell_counts_from_departure() -> None:
         pattern=trip,
         shape=None,
         now=later,
+        zone=ZONE,
     ) == pytest.approx((650.0, 850.0))
 
 
 def test_timetable_point_at_the_first_departure_is_the_first_stop() -> None:
     """At the first departure time the trip is at the first stop."""
-    point = timetable_point(pattern=pattern(), shape=None, now=START)
+    point = timetable_point(
+        pattern=pattern(),
+        shape=None,
+        now=START,
+        zone=ZONE,
+    )
     assert point == (0.0, 0.0)
 
 

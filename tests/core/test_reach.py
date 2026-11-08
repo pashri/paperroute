@@ -8,6 +8,7 @@ from typing import Final
 import pytest
 from hypothesis import given
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_model import StripInputs
 from paperroute.core.strip_view import build_strip_view
@@ -26,7 +27,7 @@ from paperroute_testkit.core.reach_factories import (
     train_reach,
 )
 from paperroute_transit.core.geo import Point
-from paperroute_transit.core.model import SYDNEY, RouteKind, StopPlace
+from paperroute_transit.core.model import RouteKind, StopPlace
 from paperroute_transit.core.reach import (
     Reach,
     ReachInput,
@@ -703,13 +704,14 @@ def test_blacktown_strip_opens_on_the_ride_to_parramatta() -> None:
         departures=(),
         patterns={},
         positions={},
-        now=datetime(2026, 10, 19, 8, 5, tzinfo=SYDNEY),
+        now=datetime(2026, 10, 19, 8, 5, tzinfo=SYDNEY_ZONE),
         stale_after=STALE_LIMIT,
         scroll=0,
         cursor=None,
         picking=None,
         destination=PARRAMATTA,
         tag=NOT_PINNED,
+        zone=SYDNEY_ZONE,
     ))
     shown = [row.station for row in view.rows]
     assert BLACKTOWN in shown

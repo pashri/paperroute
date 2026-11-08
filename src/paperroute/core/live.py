@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 
 from paperroute.core.feeds import feed_for
 from paperroute_transit.core.model import Departure, shifted
@@ -161,6 +161,7 @@ def resolve(
     snapshot: RealtimeSnapshot | None,
     now: datetime,
     limit: timedelta,
+    zone: tzinfo,
 ) -> LiveDeparture:
     """
     Apply live data to a departure when the snapshot is fresh.
@@ -179,6 +180,8 @@ def resolve(
         The frame time.
     limit : timedelta
         How old a snapshot may be.
+    zone : tzinfo
+        Local time zone of the live times.
 
     Returns
     -------
@@ -199,10 +202,12 @@ def resolve(
     trip = trip_for(departure=departure, snapshot=snapshot)
     if trip is None or trip.start_date not in (None, departure.service_day):
         return scheduled
-    return applied(departure=departure, trip=trip)
+    return applied(departure=departure, trip=trip, zone=zone)
 
 
-def applied(*, departure: Departure, trip: TripRealtime) -> LiveDeparture:
+def applied(
+    *, departure: Departure, trip: TripRealtime, zone: tzinfo,
+) -> LiveDeparture:
     """
     Apply one trip's live note to a departure.
 
@@ -214,6 +219,8 @@ def applied(*, departure: Departure, trip: TripRealtime) -> LiveDeparture:
         Scheduled departure.
     trip : TripRealtime
         The trip's live note, for the departure's service day.
+    zone : tzinfo
+        Local time zone of the live times.
 
     Returns
     -------
@@ -242,8 +249,12 @@ def applied(*, departure: Departure, trip: TripRealtime) -> LiveDeparture:
     reach_s = reach if reach is not None else leave_s
     return LiveDeparture(
         departure=departure,
-        departs=shifted(moment=departure.departs, seconds=leave_s),
-        arrives=shifted(moment=departure.arrives, seconds=reach_s),
+        departs=shifted(
+            moment=departure.departs, seconds=leave_s, zone=zone,
+        ),
+        arrives=shifted(
+            moment=departure.arrives, seconds=reach_s, zone=zone,
+        ),
         live=leave is not None or reach is not None,
         cancelled=trip.cancelled,
     )
@@ -255,6 +266,7 @@ def resolved(
     snapshots: Mapping[str, RealtimeSnapshot],
     now: datetime,
     limit: timedelta,
+    zone: tzinfo,
 ) -> tuple[LiveDeparture, ...]:
     """
     Apply each departure's feed to it.
@@ -269,6 +281,8 @@ def resolved(
         The frame time.
     limit : timedelta
         How old a snapshot may be.
+    zone : tzinfo
+        Local time zone of the live times.
 
     Returns
     -------
@@ -281,6 +295,7 @@ def resolved(
             snapshot=snapshots.get(feed_for(mode=dep.mode) or ''),
             now=now,
             limit=limit,
+            zone=zone,
         )
         for dep in departures
     )

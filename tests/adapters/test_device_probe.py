@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from paperroute.adapters.device_probe import SystemProbe, mem_available
+from paperroute.city import SYDNEY_ZONE
 from paperroute.logs import LastError
 from paperroute_device.core.device_model import WifiStatus
 from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
@@ -31,7 +32,7 @@ def probe_of(*, root: Path, version_file: Path | None) -> SystemProbe:
         wifi=FakeWifi(link=LINK),
         key=FakeKeys(key='secret'),
         tiles=NullTiles(),
-        last_error=LastError(),
+        last_error=LastError(zone=SYDNEY_ZONE),
         data_dir=root,
         version_file=version_file,
         root=root,
@@ -109,7 +110,7 @@ async def test_probe_without_data_dir(tmp_path: Path) -> None:
         wifi=FakeWifi(),
         key=FakeKeys(),
         tiles=NullTiles(),
-        last_error=LastError(),
+        last_error=LastError(zone=SYDNEY_ZONE),
         data_dir=tmp_path / 'gone',
         version_file=None,
         root=tmp_path,

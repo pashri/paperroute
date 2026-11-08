@@ -1,26 +1,31 @@
 """Clocks: the real one, and one that replays from a chosen moment."""
 
 import time
-from datetime import datetime
+from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import Final
 
-from paperroute_transit.core.model import SYDNEY, shifted
+from paperroute_transit.core.model import shifted
 
 TIMESYNC_FLAG: Final[Path] = Path('/run/systemd/timesync/synchronized')
 
 
 class SystemClock:
     """
-    The wall clock in Sydney time.
+    The wall clock in local time.
 
     Parameters
     ----------
+    zone : tzinfo
+        Local time zone.
     flag : Path
         File systemd-timesyncd creates once it has set the clock.
     """
 
-    def __init__(self, *, flag: Path = TIMESYNC_FLAG) -> None:
+    def __init__(
+        self, *, zone: tzinfo, flag: Path = TIMESYNC_FLAG,
+    ) -> None:
+        self.zone = zone
         self.flag = flag
 
     def synced(self) -> bool:
@@ -41,9 +46,9 @@ class SystemClock:
         Returns
         -------
         datetime
-            Aware Sydney datetime.
+            Aware local datetime.
         """
-        return datetime.now(SYDNEY)
+        return datetime.now(self.zone)
 
 
 class ReplayClock:
@@ -54,10 +59,13 @@ class ReplayClock:
     ----------
     start : datetime
         Aware time to start from.
+    zone : tzinfo
+        Local time zone the replayed times are given in.
     """
 
-    def __init__(self, *, start: datetime) -> None:
+    def __init__(self, *, start: datetime, zone: tzinfo) -> None:
         self.start = start
+        self.zone = zone
         self.began = time.monotonic()
 
     def now(self) -> datetime:
@@ -70,7 +78,7 @@ class ReplayClock:
             Start plus the whole seconds elapsed since the clock was made.
         """
         elapsed = int(time.monotonic() - self.began)
-        return shifted(moment=self.start, seconds=elapsed)
+        return shifted(moment=self.start, seconds=elapsed, zone=self.zone)
 
     def synced(self) -> bool:
         """

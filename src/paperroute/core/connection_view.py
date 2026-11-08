@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import Final
 
 from paperroute.core.chains import Chain
@@ -12,10 +12,10 @@ from paperroute.core.stop_view import (
     HORIZON_TEXT,
     PinTag,
     StopView,
-    clock_text,
     countdown,
     empty_text,
 )
+from paperroute_device.core.text import clock_text
 from paperroute_transit.core.model import Mode, Pin
 
 NO_PAIRS: Final[str] = f'No connections in {HORIZON_TEXT}'
@@ -146,7 +146,7 @@ class ConnectionView:
     planned: bool
 
 
-def ride_line(*, ride: Ride) -> HeroLine:
+def ride_line(*, ride: Ride, zone: tzinfo) -> HeroLine:
     """
     Make a ride's badge line.
 
@@ -154,6 +154,8 @@ def ride_line(*, ride: Ride) -> HeroLine:
     ----------
     ride : Ride
         The ride.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -165,11 +167,11 @@ def ride_line(*, ride: Ride) -> HeroLine:
         route=departure.route,
         mode=departure.mode,
         text=departure.headsign,
-        at=clock_text(moment=ride.departs),
+        at=clock_text(moment=ride.departs, zone=zone),
     )
 
 
-def change_lines(*, ride: Ride) -> tuple[HeroLine, ...]:
+def change_lines(*, ride: Ride, zone: tzinfo) -> tuple[HeroLine, ...]:
     """
     Spell out the change made to board a ride.
 
@@ -177,6 +179,8 @@ def change_lines(*, ride: Ride) -> tuple[HeroLine, ...]:
     ----------
     ride : Ride
         A ride after the first.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -191,7 +195,7 @@ def change_lines(*, ride: Ride) -> tuple[HeroLine, ...]:
         route=None,
         mode=None,
         text=f'change at {change.board.name} '
-        f'{clock_text(moment=ride.departs)}',
+        f'{clock_text(moment=ride.departs, zone=zone)}',
     )
     metres = change_walk(change=change)
     if metres is None:
@@ -199,7 +203,9 @@ def change_lines(*, ride: Ride) -> tuple[HeroLine, ...]:
     return at, HeroLine(route=None, mode=None, text=f'walk {metres} m')
 
 
-def hero_lines(*, chain: Chain, pin: Pin) -> tuple[HeroLine, ...]:
+def hero_lines(
+    *, chain: Chain, pin: Pin, zone: tzinfo,
+) -> tuple[HeroLine, ...]:
     """
     List the hero's lines for a chain.
 
@@ -209,6 +215,8 @@ def hero_lines(*, chain: Chain, pin: Pin) -> tuple[HeroLine, ...]:
         The chain.
     pin : Pin
         Connection pin.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -220,7 +228,10 @@ def hero_lines(*, chain: Chain, pin: Pin) -> tuple[HeroLine, ...]:
     lines = tuple(
         line
         for ride in rides
-        for line in (*change_lines(ride=ride), ride_line(ride=ride))
+        for line in (
+            *change_lines(ride=ride, zone=zone),
+            ride_line(ride=ride, zone=zone),
+        )
     )
     if len(rides) > 1:
         return lines
@@ -229,7 +240,9 @@ def hero_lines(*, chain: Chain, pin: Pin) -> tuple[HeroLine, ...]:
     return (*lines, HeroLine(route=None, mode=None, text=f'{lead} to {to}'))
 
 
-def chain_hero(*, chain: Chain, pin: Pin, now: datetime) -> ChainHero:
+def chain_hero(
+    *, chain: Chain, pin: Pin, now: datetime, zone: tzinfo,
+) -> ChainHero:
     """
     Spell out the next chain.
 
@@ -241,6 +254,8 @@ def chain_hero(*, chain: Chain, pin: Pin, now: datetime) -> ChainHero:
         Connection pin.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -249,9 +264,9 @@ def chain_hero(*, chain: Chain, pin: Pin, now: datetime) -> ChainHero:
     """
     return ChainHero(
         countdown=countdown(departs=chain.departs, now=now),
-        leaves_at=clock_text(moment=chain.departs),
-        lines=hero_lines(chain=chain, pin=pin),
-        arrives_at=clock_text(moment=chain.arrives),
+        leaves_at=clock_text(moment=chain.departs, zone=zone),
+        lines=hero_lines(chain=chain, pin=pin, zone=zone),
+        arrives_at=clock_text(moment=chain.arrives, zone=zone),
         live=chain.legs[0].live,
     )
 
@@ -306,7 +321,9 @@ def via_text(*, chain: Chain, pin: Pin) -> str:
     return 'via ' + ', '.join(boards)
 
 
-def chain_row(*, chain: Chain, pin: Pin, now: datetime) -> PairRow:
+def chain_row(
+    *, chain: Chain, pin: Pin, now: datetime, zone: tzinfo,
+) -> PairRow:
     """
     Summarise a chain as a list row.
 
@@ -318,6 +335,8 @@ def chain_row(*, chain: Chain, pin: Pin, now: datetime) -> PairRow:
         Connection pin.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -326,10 +345,10 @@ def chain_row(*, chain: Chain, pin: Pin, now: datetime) -> PairRow:
     """
     seconds = chain.arrives.timestamp() - chain.departs.timestamp()
     return PairRow(
-        leaves_at=clock_text(moment=chain.departs),
+        leaves_at=clock_text(moment=chain.departs, zone=zone),
         chips=route_chips(chain=chain, pin=pin),
         detail=via_text(chain=chain, pin=pin),
-        arrives_at=clock_text(moment=chain.arrives),
+        arrives_at=clock_text(moment=chain.arrives, zone=zone),
         minutes=int(seconds // 60),
         countdown=countdown(departs=chain.departs, now=now),
         live=chain.legs[0].live,
@@ -337,7 +356,7 @@ def chain_row(*, chain: Chain, pin: Pin, now: datetime) -> PairRow:
 
 
 def chain_rows(
-    *, chains: Sequence[Chain], pin: Pin, now: datetime,
+    *, chains: Sequence[Chain], pin: Pin, now: datetime, zone: tzinfo,
 ) -> tuple[PairRow, ...]:
     """
     Summarise chains as list rows.
@@ -350,6 +369,8 @@ def chain_rows(
         Connection pin.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -357,7 +378,8 @@ def chain_rows(
         One row each, in order.
     """
     return tuple(
-        chain_row(chain=chain, pin=pin, now=now) for chain in chains
+        chain_row(chain=chain, pin=pin, now=now, zone=zone)
+        for chain in chains
     )
 
 
@@ -397,6 +419,7 @@ def build_connection_view(
     chains: Sequence[Chain],
     scroll: int,
     now: datetime,
+    zone: tzinfo,
 ) -> ConnectionView:
     """
     Build the connection Stop view.
@@ -414,6 +437,8 @@ def build_connection_view(
         so the last chain stays listed.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -428,10 +453,15 @@ def build_connection_view(
         clock=stop_view.clock,
         tag=stop_view.tag,
         hero=(
-            chain_hero(chain=chains[0], pin=pin, now=now) if chains else None
+            chain_hero(chain=chains[0], pin=pin, now=now, zone=zone)
+            if chains
+            else None
         ),
         rows=chain_rows(
-            chains=rest[start : start + PAIR_ROWS], pin=pin, now=now,
+            chains=rest[start : start + PAIR_ROWS],
+            pin=pin,
+            now=now,
+            zone=zone,
         ),
         empty=no_pair_text(stop_view=stop_view, chains=chains),
         banner=stop_view.banner,

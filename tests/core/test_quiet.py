@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.messages import (
     DeparturesLoaded,
     Effect,
@@ -42,12 +43,7 @@ from paperroute_testkit.core.factories import START, departure
 from paperroute_testkit.core.steps import step_answered
 from paperroute_testkit.fakes import device_facts
 from paperroute_transit.core.auto_model import AutoState
-from paperroute_transit.core.model import (
-    SYDNEY,
-    AutoWindow,
-    ServiceSpan,
-    pin_ref,
-)
+from paperroute_transit.core.model import AutoWindow, ServiceSpan, pin_ref
 from tests.core.test_menu import DOWN, run, turn
 from tests.core.test_state import BUSES, PINS, fresh
 
@@ -79,7 +75,7 @@ def at(hour: int, minute: int = 0, *, days: int = 0) -> datetime:
         Aware Sydney time.
     """
     return datetime.combine(
-        DAY + timedelta(days=days), time(hour, minute), tzinfo=SYDNEY,
+        DAY + timedelta(days=days), time(hour, minute), tzinfo=SYDNEY_ZONE,
     )
 
 

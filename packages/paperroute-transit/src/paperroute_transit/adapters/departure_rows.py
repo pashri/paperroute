@@ -1,6 +1,6 @@
 """Turn timetable departure rows into Departures."""
 
-from datetime import date
+from datetime import date, tzinfo
 from typing import Final
 
 from paperroute_transit.core.model import (
@@ -61,7 +61,10 @@ def stop_count(*, trip: str, after: str, upto: str | None = None) -> str:
  WHERE before IS NULL OR here <> before)"""
 
 
-def to_departure(*, row: tuple[object, ...], day: date) -> Departure:
+# pylint: disable-next=too-many-locals
+def to_departure(
+    *, row: tuple[object, ...], day: date, zone: tzinfo,
+) -> Departure:
     """
     Turn a query row into a Departure.
 
@@ -71,6 +74,8 @@ def to_departure(*, row: tuple[object, ...], day: date) -> Departure:
         DEPARTURES or WHOLE_STOP row.
     day : date
         Service date the row's times count from.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
@@ -93,8 +98,8 @@ def to_departure(*, row: tuple[object, ...], day: date) -> Departure:
         origin_stop=str(ostop),
         destination_seq=int(str(dseq)),
         destination_stop=str(dstop),
-        departs=service_time(day=day, seconds=int(str(dep))),
-        arrives=service_time(day=day, seconds=int(str(arr))),
+        departs=service_time(day=day, seconds=int(str(dep)), zone=zone),
+        arrives=service_time(day=day, seconds=int(str(arr)), zone=zone),
         service_day=day,
         shape_id=str(row[13]) if row[13] else None,
         facts=facts_of(row=row),

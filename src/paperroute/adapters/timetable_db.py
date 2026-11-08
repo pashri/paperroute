@@ -1,10 +1,12 @@
 """Timetable repository over the built SQLite file."""
 
+# pylint: disable=too-many-lines
+
 import math
 import sqlite3
 from collections.abc import Collection
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, tzinfo
 from itertools import batched
 from pathlib import Path
 from typing import Final, cast
@@ -58,7 +60,6 @@ from paperroute_transit.core.geo import (
 )
 from paperroute_transit.core.model import (
     HIDDEN_HEADSIGNS,
-    SYDNEY,
     Departure,
     Mode,
     Pin,
@@ -178,6 +179,8 @@ class SqliteTimetableRepository:
 
     Parameters
     ----------
+    zone : tzinfo
+        Local time zone the timetable's service days are in.
     path : Path | None
         Timetable file; defaults to the device location.
     connection : sqlite3.Connection | None
@@ -195,9 +198,11 @@ class SqliteTimetableRepository:
     def __init__(
         self,
         *,
+        zone: tzinfo,
         path: Path | None = None,
         connection: sqlite3.Connection | None = None,
     ) -> None:
+        self.zone = zone
         self.db = ReadOnlyDatabase(
             path=path or DEFAULT_PATH,
             connection=connection,
@@ -397,7 +402,7 @@ class SqliteTimetableRepository:
             `SERVICE_DAY_LENGTH` after its start; None when there are
             none.
         """
-        start = service_epoch(day=day)
+        start = service_epoch(day=day, zone=self.zone)
         found = self.departures(
             pin=pin, start=start, end=start + SERVICE_DAY_LENGTH,
         )
@@ -405,6 +410,7 @@ class SqliteTimetableRepository:
             departures=found,
             day=day,
             fetch_in=lambda sql, ids: self.fetch_in(sql=sql, ids=ids),
+            zone=self.zone,
         )
 
     def stop(self, *, stop_id: str) -> StopPlace:
@@ -876,8 +882,8 @@ class SqliteTimetableRepository:
             (`Pin.only`) is applied last.
         """
         destination = pin.destination
-        first = start.astimezone(SYDNEY).date()
-        last = end.astimezone(SYDNEY).date()
+        first = start.astimezone(self.zone).date()
+        last = end.astimezone(self.zone).date()
         days = {first - timedelta(days=1), first, last}
         found = [
             departure
@@ -944,8 +950,8 @@ class SqliteTimetableRepository:
             'day': day.isoformat(),
             'origin': ends[0],
             'dest': ends[1],
-            'lo': service_seconds(day=day, moment=start),
-            'hi': service_seconds(day=day, moment=end),
+            'lo': service_seconds(day=day, moment=start, zone=self.zone),
+            'hi': service_seconds(day=day, moment=end, zone=self.zone),
         }
         rows = self.fetch(
             sql=sql.format(
@@ -956,10 +962,12 @@ class SqliteTimetableRepository:
             ),
             params=params,
         )
-        found = [to_departure(row=row, day=day) for row in rows]
+        found = [
+            to_departure(row=row, day=day, zone=self.zone) for row in rows
+        ]
         if ends[1] is not None and features.joins:
             found.extend(
-                carry_on_departure(row=row, day=day)
+                carry_on_departure(row=row, day=day, zone=self.zone)
                 for row in self.fetch(
                     sql=CARRY_ONS.format(
                         shape=self.shape_column(),

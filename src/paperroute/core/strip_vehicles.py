@@ -3,7 +3,7 @@
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 
 from paperroute.core.map_view import Marker, is_fresh, position_age
 from paperroute.core.strip_badges import Badge, Keepouts, Spot, pushed
@@ -156,6 +156,7 @@ def current_leg(
     departure: Departure,
     now: datetime,
     limit: timedelta,
+    zone: tzinfo,
 ) -> tuple[Leg, tuple[int, float]] | None:
     """
     Find the leg a departure's vehicle is on now, and its hop.
@@ -170,6 +171,8 @@ def current_leg(
         The frame time.
     limit : timedelta
         How old a position may be.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -187,7 +190,7 @@ def current_leg(
         hop = hop_near(pattern=fresh.pattern, point=fresh.found[0].point)
         return None if hop is None else (fresh, hop)
     seconds = service_seconds(
-        day=departure.service_day, moment=now,
+        day=departure.service_day, moment=now, zone=zone,
     )
     return timetable_leg(legs=legs, seconds=seconds)
 
@@ -260,6 +263,7 @@ def trip_marker(
         departure=departure,
         now=trips.now,
         limit=trips.stale_after,
+        zone=trips.zone,
     )
     if current is None:
         return None

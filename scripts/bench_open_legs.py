@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Final
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.chains import LegKey, chains_of, leg_key
 from paperroute.core.connection_model import (
     LEG_EXTRA,
@@ -21,7 +22,7 @@ from paperroute.core.connection_model import (
 )
 from paperroute.core.live import LiveDeparture, resolved
 from paperroute_transit.adapters.leg_cache import LegCache
-from paperroute_transit.core.model import SYDNEY, Change, Pin, StopPlace, Way
+from paperroute_transit.core.model import Change, Pin, StopPlace, Way
 
 DEFAULT_DB: Final[Path] = Path('data/timetable.db')
 DEFAULT_REPEAT: Final[int] = 5
@@ -155,7 +156,7 @@ def time_cached(
     end = start + WINDOW + LEG_EXTRA
     millis = []
     for _ in range(repeat):
-        cache = LegCache()
+        cache = LegCache(zone=SYDNEY_ZONE)
         cache.departures(timetable=repo, pin=pin, start=start, end=end)
         began = time.perf_counter()
         cache.departures(
@@ -292,6 +293,7 @@ def loaded(
         snapshots={},
         now=start,
         limit=timedelta(),
+        zone=SYDNEY_ZONE,
     )
     return tuple(sorted(items, key=lambda item: item.departs))
 
@@ -440,10 +442,12 @@ def main(  # pylint: disable=too-many-statements
     if not args.db.is_file():
         print(f'no timetable at {args.db}', file=sys.stderr)
         return 1
-    at = args.at or next_weekday_start(now=datetime.now(SYDNEY))
-    start = at if at.tzinfo else at.replace(tzinfo=SYDNEY)
+    at = args.at or next_weekday_start(now=datetime.now(SYDNEY_ZONE))
+    start = at if at.tzinfo else at.replace(tzinfo=SYDNEY_ZONE)
     status = 0
-    with closing(SqliteTimetableRepository(path=args.db)) as repo:
+    with closing(
+        SqliteTimetableRepository(path=args.db, zone=SYDNEY_ZONE),
+    ) as repo:
         for pair in args.pairs:
             line = pair_line(
                 repo=repo,

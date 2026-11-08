@@ -3,7 +3,7 @@
 import math
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from typing import Final
 
 from paperroute.core.connection_view import PairRow
@@ -166,6 +166,8 @@ class MapInputs:
     now : datetime
         The frame time, which ages, stale checks and timetable positions
         are worked out at.
+    zone : tzinfo
+        Local time zone the timetable's times count in.
     stale_after : timedelta
         How old a position may be before it is drawn at its timetable
         position instead.
@@ -189,6 +191,7 @@ class MapInputs:
     patterns: Mapping[str, TripPattern | None]
     shapes: Mapping[str, Shape]
     now: datetime
+    zone: tzinfo
     stale_after: timedelta
     width: int = MAP_WIDTH
     vehicle_trips: frozenset[str] | None = None
@@ -616,6 +619,7 @@ def timetable_marker(
         pattern=pattern,
         shape=shape_of(pattern=pattern, shapes=inputs.shapes),
         now=inputs.now,
+        zone=inputs.zone,
     )
     if point is None:
         return None
@@ -872,6 +876,7 @@ def build_map_view(*, inputs: MapInputs) -> MapView:
                 departures=inputs.departures,
                 patterns=inputs.patterns,
                 window=stops_window(destination=stop.destination),
+                zone=inputs.zone,
             ),
         ),
         zoom=inputs.zoom,

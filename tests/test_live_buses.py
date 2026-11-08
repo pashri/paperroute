@@ -9,16 +9,19 @@ import pytest
 
 from paperroute.adapters.gtfs_rt import parse_trip_updates
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.feeds import feed_for
 from paperroute.core.live import LiveDeparture, resolved
 from paperroute_testkit.core.factories import STALE_LIMIT
-from paperroute_transit.core.model import SYDNEY, Mode, Pin
+from paperroute_transit.core.model import Mode, Pin
 from paperroute_transit.core.realtime import RealtimeSnapshot
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 FEED: Final[Path] = REAL / 'v1_gtfs_realtime_buses_606.pb'
 M9B_DB: Final[Path] = Path(__file__).parents[1] / 'data' / 'timetable-m9b.db'
-FETCHED: Final[datetime] = datetime(2026, 10, 31, 9, 20, 47, tzinfo=SYDNEY)
+FETCHED: Final[datetime] = datetime(
+    2026, 10, 31, 9, 20, 47, tzinfo=SYDNEY_ZONE,
+)
 
 
 @pytest.fixture(name='_snapshot', scope='module')
@@ -54,7 +57,9 @@ def live_from(
     tuple[LiveDeparture, ...]
         The departures, with live times where the feed has them.
     """
-    with closing(SqliteTimetableRepository(path=M9B_DB)) as timetable:
+    with closing(
+        SqliteTimetableRepository(path=M9B_DB, zone=SYDNEY_ZONE),
+    ) as timetable:
         pin = Pin(
             origin=timetable.stop(stop_id=origin),
             destination=timetable.stop(stop_id=destination),
@@ -67,6 +72,7 @@ def live_from(
         snapshots={feed_for(mode=Mode.BUS) or '': snapshot},
         now=FETCHED,
         limit=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
 
 

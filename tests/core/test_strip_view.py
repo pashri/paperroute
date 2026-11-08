@@ -5,6 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.map_view import Marker
 from paperroute.core.stop_view import NOT_PINNED
 from paperroute.core.strip_badges import HALF_WIDE
@@ -713,6 +714,7 @@ def test_line_reach_has_no_origin_and_from_cursor_tag() -> None:
         picking='FROM',
         destination=None,
         tag=NOT_PINNED,
+        zone=SYDNEY_ZONE,
     ))
     assert view.band is None
     assert [row.tag for row in view.rows] == ['', 'FROM?', '']

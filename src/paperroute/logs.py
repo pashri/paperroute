@@ -3,13 +3,11 @@
 import logging
 import logging.handlers
 import sys
-from datetime import datetime
+from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import Final
 
 from pythonjsonlogger.json import JsonFormatter
-
-from paperroute_transit.core.model import SYDNEY
 
 FORMAT: Final[str] = '{asctime}{levelname}{name}{message}'
 FIELD_NAMES: Final[dict[str, str]] = {
@@ -25,10 +23,18 @@ ACCESS_LOGGER: Final[str] = 'aiohttp.access'
 
 
 class LastError(logging.Handler):
-    """Keeps the latest error logged, with its Sydney time."""
+    """
+    Keeps the latest error logged, with its local time.
 
-    def __init__(self) -> None:
+    Parameters
+    ----------
+    zone : tzinfo
+        Local time zone the time is given in.
+    """
+
+    def __init__(self, *, zone: tzinfo) -> None:
         super().__init__(level=logging.ERROR)
+        self.zone = zone
         self._text: str | None = None
 
     def emit(self, record: logging.LogRecord) -> None:
@@ -40,7 +46,7 @@ class LastError(logging.Handler):
         record : logging.LogRecord
             The record.
         """
-        moment = datetime.fromtimestamp(record.created, tz=SYDNEY)
+        moment = datetime.fromtimestamp(record.created, tz=self.zone)
         text = f'{moment:%H:%M} {record.getMessage()}'
         self._text = text[:LAST_ERROR_CHARS]
 

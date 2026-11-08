@@ -7,6 +7,7 @@ from typing import Final
 from hypothesis import given
 from hypothesis import strategies as st
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.banners import NO_WIFI
 from paperroute.core.live import LiveDeparture
 from paperroute.core.stop_view import (
@@ -23,17 +24,16 @@ from paperroute.core.stop_view import (
     StopView,
     arrival_line,
     build_stop_view,
-    clock_text,
     countdown,
     live_line,
     pin_tag,
     to_row,
 )
-from paperroute_device.core.text import DOT
+from paperroute_device.core.text import DOT, clock_text
 from paperroute_testkit.core.alert_factories import WESTERN, XPLORER
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.core.alert_model import AlertBanner
-from paperroute_transit.core.model import SYDNEY, CarryOn, Mode, TripFacts
+from paperroute_transit.core.model import CarryOn, Mode, TripFacts
 
 
 def live(
@@ -143,6 +143,7 @@ def view(
             large=large,
             alert=alert,
             notice=notice,
+            zone=SYDNEY_ZONE,
         ),
     )
 
@@ -208,31 +209,31 @@ def test_live_countdown_has_no_far_limit() -> None:
 
 def test_countdown_counts_clock_minutes() -> None:
     """The count is the difference between the printed clock minutes."""
-    now = datetime(2026, 10, 6, 7, 45, 50, tzinfo=SYDNEY)
-    soon = datetime(2026, 10, 6, 7, 48, 10, tzinfo=SYDNEY)
-    later = datetime(2026, 10, 6, 8, 55, tzinfo=SYDNEY)
+    now = datetime(2026, 10, 6, 7, 45, 50, tzinfo=SYDNEY_ZONE)
+    soon = datetime(2026, 10, 6, 7, 48, 10, tzinfo=SYDNEY_ZONE)
+    later = datetime(2026, 10, 6, 8, 55, tzinfo=SYDNEY_ZONE)
     assert countdown(departs=soon, now=now) == '3'
     assert countdown(departs=later, now=now) == '70'
 
 
 def test_countdown_now_for_this_minute_and_just_gone() -> None:
     """This minute's departure, or last minute's, reads 'now'."""
-    this = datetime(2026, 10, 6, 7, 45, 59, tzinfo=SYDNEY)
-    gone = datetime(2026, 10, 6, 7, 44, 30, tzinfo=SYDNEY)
+    this = datetime(2026, 10, 6, 7, 45, 59, tzinfo=SYDNEY_ZONE)
+    gone = datetime(2026, 10, 6, 7, 44, 30, tzinfo=SYDNEY_ZONE)
     assert countdown(
         departs=this,
-        now=datetime(2026, 10, 6, 7, 45, tzinfo=SYDNEY),
+        now=datetime(2026, 10, 6, 7, 45, tzinfo=SYDNEY_ZONE),
     ) == 'now'
     assert countdown(
         departs=gone,
-        now=datetime(2026, 10, 6, 7, 45, 10, tzinfo=SYDNEY),
+        now=datetime(2026, 10, 6, 7, 45, 10, tzinfo=SYDNEY_ZONE),
     ) == 'now'
 
 
 def test_countdown_counts_real_minutes_across_dst() -> None:
     """Across the clocks going forward the count stays in real minutes."""
-    now = datetime(2026, 10, 4, 1, 59, tzinfo=SYDNEY)
-    departs = datetime(2026, 10, 4, 3, 1, tzinfo=SYDNEY)
+    now = datetime(2026, 10, 4, 1, 59, tzinfo=SYDNEY_ZONE)
+    departs = datetime(2026, 10, 4, 3, 1, tzinfo=SYDNEY_ZONE)
     assert countdown(departs=departs, now=now) == '2'
 
 
@@ -258,7 +259,7 @@ def clock_minutes(*, text: str) -> int:
     now=st.datetimes(
         min_value=datetime(2026, 10, 5),
         max_value=datetime(2026, 10, 7),
-        timezones=st.just(SYDNEY),
+        timezones=st.just(SYDNEY_ZONE),
     ),
     ahead=st.integers(min_value=0, max_value=3 * 3600),
 )
@@ -269,8 +270,8 @@ def test_countdown_agrees_with_printed_clocks(
     """The count plus the printed now is the printed departure."""
     departs = now + timedelta(seconds=ahead)
     text = countdown(departs=departs, now=now)
-    dep_min = clock_minutes(text=clock_text(moment=departs))
-    now_min = clock_minutes(text=clock_text(moment=now))
+    dep_min = clock_minutes(text=clock_text(moment=departs, zone=SYDNEY_ZONE))
+    now_min = clock_minutes(text=clock_text(moment=now, zone=SYDNEY_ZONE))
     assert (dep_min - now_min) % 1440 == (0 if text == 'now' else int(text))
 
 
@@ -328,9 +329,11 @@ def test_live_line_waits_for_the_limit() -> None:
     since = START - timedelta(seconds=150)
     assert live_line(
         live_since=since, now=START, limit=timedelta(minutes=3),
+        zone=SYDNEY_ZONE,
     ) is None
     assert live_line(
         live_since=since, now=START, limit=timedelta(minutes=2),
+        zone=SYDNEY_ZONE,
     ) == 'No live data since 7:57'
 
 
@@ -389,6 +392,7 @@ def test_view_empty_says_loading_before_the_timetable_loads() -> None:
             has_feed=True,
             stale_after=timedelta(minutes=2),
             loaded=False,
+            zone=SYDNEY_ZONE,
         ),
     )
     assert result.empty == 'Loading timetable'
@@ -406,6 +410,7 @@ def test_view_without_a_destination_has_none_and_a_plain_empty() -> None:
             live_since=START,
             has_feed=True,
             stale_after=timedelta(minutes=2),
+            zone=SYDNEY_ZONE,
         ),
     )
     assert result.destination is None
@@ -436,6 +441,7 @@ def test_view_carries_its_tag() -> None:
             has_feed=True,
             stale_after=timedelta(minutes=2),
             tag=tag,
+            zone=SYDNEY_ZONE,
         ),
     )
     assert result.tag == tag
@@ -449,12 +455,6 @@ def test_view_empty_is_none_with_departures() -> None:
 def test_horizon_is_three_hours() -> None:
     """The horizon the empty message quotes is three hours."""
     assert HORIZON == timedelta(hours=3)
-
-
-def test_clock_text_converts_to_sydney() -> None:
-    """A UTC moment reads as Sydney wall-clock time."""
-    moment = datetime(2026, 10, 15, 21, 5, tzinfo=UTC)
-    assert clock_text(moment=moment) == '8:05'
 
 
 def fall_back(*, minutes: int, ride: int) -> LiveDeparture:
@@ -473,14 +473,14 @@ def fall_back(*, minutes: int, ride: int) -> LiveDeparture:
     LiveDeparture
         Departure.
     """
-    start = datetime(2026, 4, 5, 2, 0, tzinfo=SYDNEY).astimezone(UTC)
+    start = datetime(2026, 4, 5, 2, 0, tzinfo=SYDNEY_ZONE).astimezone(UTC)
     moment = start + timedelta(minutes=minutes)
     arrives = moment + timedelta(minutes=ride)
-    dep = departure(departs=moment.astimezone(SYDNEY), ride=ride)
+    dep = departure(departs=moment.astimezone(SYDNEY_ZONE), ride=ride)
     return LiveDeparture(
         departure=dep,
-        departs=moment.astimezone(SYDNEY),
-        arrives=arrives.astimezone(SYDNEY),
+        departs=moment.astimezone(SYDNEY_ZONE),
+        arrives=arrives.astimezone(SYDNEY_ZONE),
         live=True,
         cancelled=False,
     )
@@ -514,13 +514,14 @@ def fall_back_view(
             live_since=now,
             has_feed=True,
             stale_after=timedelta(minutes=2),
+            zone=SYDNEY_ZONE,
         ),
     )
 
 
 def test_view_ride_minutes_over_fall_back() -> None:
     """A ride spanning the clocks going back counts real minutes."""
-    now = datetime(2026, 4, 5, 1, 50, tzinfo=SYDNEY)
+    now = datetime(2026, 4, 5, 1, 50, tzinfo=SYDNEY_ZONE)
     result = fall_back_view(
         departures=(fall_back(minutes=0, ride=90),), now=now
     )
@@ -530,7 +531,7 @@ def test_view_ride_minutes_over_fall_back() -> None:
 def test_view_drops_departure_gone_after_fall_back() -> None:
     """A departure 5 real minutes ago is gone even if its clock reads later."""
     gone = fall_back(minutes=58, ride=10)
-    now = datetime(2026, 4, 5, 2, 3, fold=1, tzinfo=SYDNEY)
+    now = datetime(2026, 4, 5, 2, 3, fold=1, tzinfo=SYDNEY_ZONE)
     result = fall_back_view(departures=(gone,), now=now)
     assert result.hero is None
     assert result.empty is not None
@@ -540,7 +541,7 @@ def test_view_faster_compares_real_arrival_order() -> None:
     """FASTER uses real time when arrivals straddle the clocks going back."""
     slow = fall_back(minutes=30, ride=50)
     quick = fall_back(minutes=40, ride=10)
-    now = datetime(2026, 4, 5, 1, 50, tzinfo=SYDNEY)
+    now = datetime(2026, 4, 5, 1, 50, tzinfo=SYDNEY_ZONE)
     result = fall_back_view(departures=(slow, quick), now=now)
     assert [row.pill for row in result.rows] == [Pill.FASTER]
 
@@ -700,14 +701,15 @@ def test_row_for_carry_on() -> None:
     """A carry-on row names the route it becomes and where that goes."""
     onto = CarryOn(route='T2', headsign='Leppington Station')
     item = live(minutes=3, ride=40, facts=TripFacts(onto=onto))
-    row = to_row(item=item, now=START, pill=None)
+    row = to_row(item=item, now=START, pill=None, zone=SYDNEY_ZONE)
     assert row.onto == 'T2'
     assert row.route == '606'
     assert row.destination == 'Leppington'
-    assert row.arrives_at == clock_text(moment=item.arrives)
+    assert row.arrives_at == clock_text(moment=item.arrives, zone=SYDNEY_ZONE)
     same = CarryOn(route='606', headsign='Revesby Station')
     row = to_row(
         item=live(minutes=3, facts=TripFacts(onto=same)), now=START, pill=None,
+        zone=SYDNEY_ZONE,
     )
     assert row.onto is None
     assert row.destination == 'Revesby'
@@ -723,6 +725,7 @@ def test_arrival_line_counts_stops() -> None:
         ),
         now=START,
         pill=None,
+        zone=SYDNEY_ZONE,
     )
     assert row.stops == 6
     assert arrival_line(row=row) == f'arr {row.arrives_at} \u00b7 6 stops'

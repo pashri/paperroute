@@ -4,11 +4,11 @@ from datetime import datetime
 from types import MappingProxyType
 from typing import Final
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.chains import Chain, Legs, chains_of, leg_key
 from paperroute.core.connection_model import way_legs
 from paperroute_testkit.core.factories import departure, live, place
 from paperroute_transit.core.model import (
-    SYDNEY,
     Change,
     Departure,
     Pin,
@@ -36,7 +36,7 @@ def at(hour: int, minute: int, *, day: int = 27) -> datetime:
     datetime
         Aware Sydney time.
     """
-    return datetime(2026, 10, day, hour, minute, tzinfo=SYDNEY)
+    return datetime(2026, 10, day, hour, minute, tzinfo=SYDNEY_ZONE)
 
 
 HOLLIS: Final[StopPlace] = place(

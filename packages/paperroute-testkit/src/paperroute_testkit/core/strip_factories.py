@@ -4,6 +4,7 @@ from collections.abc import Sequence
 from datetime import timedelta
 from typing import Final
 
+from paperroute.city import SYDNEY
 from paperroute.core.map_view import DEFAULT_ZOOM
 from paperroute.core.messages import DeparturesLoaded, Effect, Event
 from paperroute.core.saved import LiveView, Saved
@@ -185,7 +186,9 @@ def on_view(
     saved = Saved(
         pins=(pin,), current=0, unpinned=None, view=view,
     )
-    state = initial_state(saved=saved, now=START, stored=True)
+    state = initial_state(
+        saved=saved, now=START, stored=True, city=SYDNEY,
+    )
     return step_answered(
         state=state,
         event=DeparturesLoaded(

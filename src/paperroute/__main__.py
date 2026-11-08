@@ -43,6 +43,7 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports, run
 from paperroute.app_device import DevicePorts
 from paperroute.asset_root import use_app_assets
+from paperroute.city import SYDNEY
 from paperroute.core.feeds import DAILY_LIMIT, feed_label
 from paperroute.core.messages import Event, QuitRequested
 from paperroute.logs import LastError, configure_logging
@@ -70,11 +71,12 @@ from paperroute_hardware.knobs_open import knobs_for, knobs_state_for
 from paperroute_hardware.panel_open import panel_for, panel_times_for
 from paperroute_hardware.selftest import selftest_main
 from paperroute_transit.adapters.checked_tiles import CheckedTiles, warn_unfit
+from paperroute_transit.adapters.leg_cache import LegCache
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
     SqliteTileRepository,
 )
-from paperroute_transit.core.model import SYDNEY, Pin, StopPlace
+from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.tiles import TileVariant
 
 if TYPE_CHECKING:
@@ -285,8 +287,8 @@ def sydney(*, moment: datetime) -> datetime:
         Aware Sydney datetime.
     """
     if moment.tzinfo is None:
-        return moment.replace(tzinfo=SYDNEY)
-    return moment.astimezone(SYDNEY)
+        return moment.replace(tzinfo=SYDNEY.zone)
+    return moment.astimezone(SYDNEY.zone)
 
 
 def builder_for(*, args: argparse.Namespace) -> TimetableBuilder:
@@ -479,8 +481,8 @@ def clock_for(*, args: argparse.Namespace) -> Clock:
         Clock.
     """
     if args.at:
-        return ReplayClock(start=sydney(moment=args.at))
-    return SystemClock()
+        return ReplayClock(start=sydney(moment=args.at), zone=SYDNEY.zone)
+    return SystemClock(zone=SYDNEY.zone)
 
 
 def seed_for(*, args: argparse.Namespace) -> Pin | None:
@@ -523,7 +525,9 @@ def timetable_for(
     SqliteTimetableRepository
         The open timetable.
     """
-    timetable = SqliteTimetableRepository(path=args.timetable)
+    timetable = SqliteTimetableRepository(
+        path=args.timetable, zone=SYDNEY.zone,
+    )
     try:
         yield timetable
     finally:
@@ -752,6 +756,7 @@ async def serve_web(  # pylint: disable=too-many-arguments
         await listen(runner=runner, host=host, port=port)
         await run(
             ports=ports,
+            city=SYDNEY,
             seed=seed,
             tick_every=tick_every,
             post_hook=lambda post: bind_web(
@@ -815,6 +820,7 @@ async def show(
     try:
         await run(
             ports=ports,
+            city=SYDNEY,
             seed=seed,
             pump=monitor.pump,
             post_hook=lambda post: monitor.bind(post=post),
@@ -859,14 +865,15 @@ def tk_main(
                 display=monitor,
                 clock=clock_for(args=args),
                 network=network,
-                states=JsonStateRepository(path=args.state),
+                states=JsonStateRepository(path=args.state, city=SYDNEY),
+                legs=LegCache(zone=SYDNEY.zone),
                 tiles=tiles,
                 builder=builder_for(args=args),
                 power=power_for(args=args),
                 device=device_for(
                     args=args,
                     tiles=tiles,
-                    last_error=last_error or LastError(),
+                    last_error=last_error or LastError(zone=SYDNEY.zone),
                 ),
             )
             asyncio.run(
@@ -955,7 +962,7 @@ def device_pages_for(
         feed_label=feed_label,
         daily_limit=DAILY_LIMIT,
         post=display.send,
-        zone=SYDNEY,
+        zone=SYDNEY.zone,
         error_log=args.error_log,
         state_file=args.state,
         knobs=knob_state,
@@ -1052,7 +1059,8 @@ def web_main(
             display=Displays(displays=[display, *shown]),
             clock=clock_for(args=args),
             network=network,
-            states=JsonStateRepository(path=args.state),
+            states=JsonStateRepository(path=args.state, city=SYDNEY),
+            legs=LegCache(zone=SYDNEY.zone),
             observer=observer,
             tiles=tiles,
             builder=builder_for(args=args),
@@ -1060,7 +1068,7 @@ def web_main(
             device=device_for(
                 args=args,
                 tiles=tiles,
-                last_error=last_error or LastError(),
+                last_error=last_error or LastError(zone=SYDNEY.zone),
             ),
         )
         try:
@@ -1080,7 +1088,7 @@ def main() -> None:  # pylint: disable=too-many-statements
     args = parse_args()
     if args.command == 'selftest':
         sys.exit(selftest_main())
-    last_error = LastError()
+    last_error = LastError(zone=SYDNEY.zone)
     configure_logging(error_file=args.error_log, last_error=last_error)
     summary = Summary()
     try:

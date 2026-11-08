@@ -106,6 +106,7 @@ def connection_strip(
         positions=polled_positions(state=state),
         now=frame_time(state=state),
         stale_after=stale_after(state=state),
+        zone=state.city.zone,
     )
 
 
@@ -159,4 +160,5 @@ def connection_screen(
         chains=chains,
         scroll=state.scroll,
         now=frame_time(state=state),
+        zone=state.city.zone,
     )

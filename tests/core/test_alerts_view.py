@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.alert_match import Listed, listed_alerts
 from paperroute.core.alerts_view import (
     ALERT_ROWS,
@@ -285,6 +286,7 @@ def test_view_model_texts() -> None:
         page=3,
         stop_view=stop_view(),
         now=now,
+        zone=SYDNEY_ZONE,
     )
     assert view.rows == (
         AlertRow(
@@ -315,6 +317,7 @@ def test_rows_window_holds_selection() -> None:
         page=0,
         stop_view=stop_view(),
         now=now,
+        zone=SYDNEY_ZONE,
     )
     assert len(view.rows) == ALERT_ROWS
     assert view.rows[view.selected].headline == f'T1{DOT}7'
@@ -342,9 +345,17 @@ def test_no_positions_polled_on_alerts_view() -> None:
 def test_also_line_without_start() -> None:
     """A later window with no start is ongoing or runs until its end."""
     now = sydney(day=26, hour=12)
-    assert also_line(window=Period(), now=now) == 'Also ongoing'
+    assert also_line(
+        window=Period(),
+        now=now,
+        zone=SYDNEY_ZONE,
+    ) == 'Also ongoing'
     window = Period(end=sydney(day=27, hour=1, minute=30))
-    assert also_line(window=window, now=now) == 'Also until Tue 1:30'
+    assert also_line(
+        window=window,
+        now=now,
+        zone=SYDNEY_ZONE,
+    ) == 'Also until Tue 1:30'
 
 
 def test_rows_put_the_line_first() -> None:
@@ -359,6 +370,7 @@ def test_rows_put_the_line_first() -> None:
         page=0,
         stop_view=stop_view(),
         now=now,
+        zone=SYDNEY_ZONE,
     )
     assert [row.headline for row in view.rows] == [
         WESTERN.header,

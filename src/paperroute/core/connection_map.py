@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 from dataclasses import replace
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import Final
 
 from paperroute.core.chains import Chain
@@ -537,11 +537,13 @@ def change_points(
             departures=(into.item.departure, into.last.departure),
             patterns=inputs.patterns,
             window=None,
+            zone=inputs.zone,
         ),
         *route_stops(
             departures=(out.item.departure,),
             patterns=inputs.patterns,
             window=SECOND_RIDE_WINDOW,
+            zone=inputs.zone,
         ),
     )
     walk = None if out.change is None else walk_ends(change=out.change)
@@ -633,7 +635,7 @@ def panes_inputs(
 
 
 def sidebar_rows(
-    *, pin: Pin, chains: Sequence[Chain], now: datetime,
+    *, pin: Pin, chains: Sequence[Chain], now: datetime, zone: tzinfo,
 ) -> tuple[PairRow, ...]:
     """
     Summarise the first chains for the sidebar.
@@ -646,6 +648,8 @@ def sidebar_rows(
         Workable chains.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -654,7 +658,9 @@ def sidebar_rows(
         changes or that it is direct or stays on; the first spells out
         a single change.
     """
-    rows = chain_rows(chains=chains[:SIDEBAR_PAIRS], pin=pin, now=now)
+    rows = chain_rows(
+        chains=chains[:SIDEBAR_PAIRS], pin=pin, now=now, zone=zone,
+    )
     return tuple(
         replace(
             row,
@@ -729,7 +735,9 @@ def build_connection_map(
         view,
         base=replace(view.base, route=route, trip=trip),
         sidebar=(),
-        pairs=sidebar_rows(pin=pin, chains=chains, now=inputs.now),
+        pairs=sidebar_rows(
+            pin=pin, chains=chains, now=inputs.now, zone=inputs.zone,
+        ),
         empty=(
             view.empty
             if framing.centre is None

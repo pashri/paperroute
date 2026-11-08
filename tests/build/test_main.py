@@ -15,9 +15,9 @@ from pathlib import Path
 import pytest
 
 from paperroute.build.__main__ import main, parse_args, run_check_tiles
+from paperroute.city import SYDNEY_ZONE
 from paperroute_testkit.build.osm_factory import TINY_BBOX, write_tiny_osm
 from paperroute_transit.build.tile_store import TileWriter
-from paperroute_transit.core.model import SYDNEY
 from paperroute_transit.core.tiles import TILE_STYLE
 from tests.build.network_feed import network_feed
 from tests.build.tile_inputs import write_timetable
@@ -30,7 +30,7 @@ def test_start_defaults_to_yesterday(monkeypatch: pytest.MonkeyPatch) -> None:
         'argv',
         ['build', 'gtfs', '--bundle', 'b.zip', '--out', 'o.db'],
     )
-    today = datetime.now(SYDNEY).date()
+    today = datetime.now(SYDNEY_ZONE).date()
     start = parse_args().start
     assert start in (
         today - timedelta(days=1),

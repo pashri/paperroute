@@ -2,7 +2,7 @@
 
 import sqlite3
 from collections.abc import Callable, Collection, Sequence
-from datetime import date, timedelta
+from datetime import date, timedelta, tzinfo
 from typing import Final
 
 from paperroute_transit.core.model import Departure, ServiceSpan, service_time
@@ -28,7 +28,11 @@ JOIN stop_times AS last
 
 
 def service_span(
-    *, departures: Sequence[Departure], day: date, fetch_in: FetchIn
+    *,
+    departures: Sequence[Departure],
+    day: date,
+    fetch_in: FetchIn,
+    zone: tzinfo,
 ) -> ServiceSpan | None:
     """
     Find when a pin's trips run on a service day.
@@ -41,6 +45,8 @@ def service_span(
         The service day.
     fetch_in : FetchIn
         Runs `TRIP_ENDS` for some trip IDs and returns its rows.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
@@ -60,8 +66,8 @@ def service_span(
     first = min(int(str(row[0])) for row in rows)
     last = max(int(str(row[1])) for row in rows)
     return ServiceSpan(
-        first_start=service_time(day=day, seconds=first),
-        last_end=service_time(day=day, seconds=last),
+        first_start=service_time(day=day, seconds=first, zone=zone),
+        last_end=service_time(day=day, seconds=last, zone=zone),
     )
 
 

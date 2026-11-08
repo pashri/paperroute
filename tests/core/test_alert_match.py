@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 from hypothesis import given
 from hypothesis import strategies as st
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.alert_match import (
     Listed,
     PinFacts,
@@ -345,7 +346,11 @@ def test_open_ended_never_banner() -> None:
     assert len(listed) == 1
     assert listed[0].matched.tie == AlertTie.STOP
     assert not listed[0].banner
-    assert time_line(timing=listed[0].timing, now=SAT_MORNING) == 'Ongoing'
+    assert time_line(
+        timing=listed[0].timing,
+        now=SAT_MORNING,
+        zone=SYDNEY_ZONE,
+    ) == 'Ongoing'
     platform = station_pin(
         origin='2135231', origin_name='Strathfield Station Platform 1',
     )
@@ -364,7 +369,11 @@ def test_open_ended_never_banner() -> None:
         periods=(Period(start=sydney(day=26, hour=21, minute=50)),),
     )
     listed = listed_for(pin=STRATHFIELD_PIN, found=coming, now=SAT_MORNING)
-    assert time_line(timing=listed[0].timing, now=SAT_MORNING) == (
+    assert time_line(
+        timing=listed[0].timing,
+        now=SAT_MORNING,
+        zone=SYDNEY_ZONE,
+    ) == (
         'From Mon 21:50, ongoing'
     )
     assert not listed[0].banner
@@ -398,7 +407,11 @@ def test_coming_within_day_reaches_banner() -> None:
     listed = listed_for(pin=CENTRAL_PIN, found=XPLORER, now=now)
     assert not listed[0].timing.active
     assert listed[0].banner
-    assert alert_banner(listed=listed, now=now) == AlertBanner(
+    assert alert_banner(
+        listed=listed,
+        now=now,
+        zone=SYDNEY_ZONE,
+    ) == AlertBanner(
         text=(
             'From 6:00 · Saturday 24th October 2026 - 631 Sydney to '
             'Canberra Xplorer service.'
@@ -510,7 +523,11 @@ def test_more_counts_banner_eligible() -> None:
         now=now,
         lookahead=None,
     )
-    assert alert_banner(listed=listed, now=now) == AlertBanner(
+    assert alert_banner(
+        listed=listed,
+        now=now,
+        zone=SYDNEY_ZONE,
+    ) == AlertBanner(
         text=XPLORER.header, active=True, more=1,
     )
 
@@ -520,29 +537,38 @@ def test_no_banner_without_eligible() -> None:
     listed = listed_for(
         pin=STRATHFIELD_PIN, found=STRATHFIELD_UPDATE, now=SAT_MORNING,
     )
-    assert alert_banner(listed=listed, now=SAT_MORNING) is None
+    assert alert_banner(
+        listed=listed,
+        now=SAT_MORNING,
+        zone=SYDNEY_ZONE,
+    ) is None
 
 
 def test_time_lines() -> None:
     """Time lines show the judged window and how many follow."""
     timing = timing_of(alert=PENRITH_CENTRAL, now=MON_NOON)
     assert timing is not None
-    assert time_line(timing=timing, now=MON_NOON) == (
+    assert time_line(timing=timing, now=MON_NOON, zone=SYDNEY_ZONE) == (
         '21:50 to Tue 1:30 · +1 more'
     )
     timing = timing_of(alert=WESTERN, now=SAT_MORNING)
     assert timing is not None
-    assert time_line(timing=timing, now=SAT_MORNING) == 'Now until Mon 2:00'
+    assert time_line(
+        timing=timing,
+        now=SAT_MORNING,
+        zone=SYDNEY_ZONE,
+    ) == 'Now until Mon 2:00'
     assert time_line(
         timing=Timing(window=Period(), active=True, more=0),
         now=SAT_MORNING,
+        zone=SYDNEY_ZONE,
     ) == 'Ongoing'
     later = Timing(
         window=Period(start=sydney(month=11, day=2, hour=21, minute=50)),
         active=False,
         more=0,
     )
-    assert time_line(timing=later, now=SAT_MORNING) == (
+    assert time_line(timing=later, now=SAT_MORNING, zone=SYDNEY_ZONE) == (
         'From Mon 2 Nov 21:50, ongoing'
     )
 

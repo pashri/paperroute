@@ -12,6 +12,7 @@ from aiohttp.test_utils import TestClient, TestServer
 from paperroute.adapters.tfnsw import TFNSW_KEY
 from paperroute.adapters.web_board import SYDNEY_NAV
 from paperroute.adapters.web_display import WebDisplay
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.feeds import (
     DAILY_LIMIT,
     FEEDS,
@@ -23,7 +24,7 @@ from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_testkit.device_pages import KEY, NOW, DeviceSite
 from paperroute_testkit.page_markup import parse_page
-from paperroute_transit.core.model import SYDNEY, Mode
+from paperroute_transit.core.model import Mode
 
 Client = TestClient[web.Request, web.Application]
 TRAINS = POSITION_FEEDS[Mode.TRAIN][0]
@@ -47,7 +48,7 @@ def sydney_site() -> DeviceSite:
         credential=TFNSW_KEY,
         feed_label=feed_label,
         daily_limit=DAILY_LIMIT,
-        zone=SYDNEY,
+        zone=SYDNEY_ZONE,
         nav=SYDNEY_NAV,
     )
 

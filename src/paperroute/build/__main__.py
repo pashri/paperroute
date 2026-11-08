@@ -17,6 +17,7 @@ from paperroute.build.handoff import Handoff
 from paperroute.build.refresh import RefreshBusy, refresh
 from paperroute.build.swap import guarded
 from paperroute.build.timetable import Window, build_timetable, yesterday
+from paperroute.city import SYDNEY
 from paperroute.logs import configure_logging
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import tile_meta
@@ -52,7 +53,7 @@ def add_gtfs(*, gtfs: argparse.ArgumentParser) -> None:
     gtfs.add_argument('--metro', type=Path)
     gtfs.add_argument('--out', type=Path, required=True)
     gtfs.add_argument('--start', type=date.fromisoformat,
-                      default=yesterday())
+                      default=yesterday(zone=SYDNEY.zone))
     gtfs.add_argument('--days', type=int, default=14)
 
 

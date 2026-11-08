@@ -37,6 +37,7 @@ from paperroute.app_render import drawing
 from paperroute.app_work import fetch
 from paperroute.build.map_style import LIGHT
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.alerts_view import AlertRow, AlertsView, AlertText
 from paperroute.core.cycle import CYCLE_WAIT
 from paperroute.core.device import NOTICE, on_reset
@@ -267,7 +268,7 @@ async def test_run_quits_when_the_ticker_crashes(
     with caplog.at_level(logging.ERROR):
         async with asyncio.timeout(5):
             state = await run(
-                ports=ports, seed=PIN, tick_every=0.01, pump=pump
+                ports=ports, seed=PIN, tick_every=0.01, pump=pump, city=SYDNEY
             )
     assert not state.running
     errors = [r.exc_info[1] for r in caplog.records if r.exc_info]
@@ -285,7 +286,13 @@ async def test_run_retries_after_a_failed_load() -> None:
         network=FakeNetwork(),
         states=MemoryStates(),
     )
-    state = await run(ports=ports, seed=PIN, tick_every=0.01, max_events=20)
+    state = await run(
+        ports=ports,
+        seed=PIN,
+        tick_every=0.01,
+        max_events=20,
+        city=SYDNEY,
+    )
     assert timetable.calls >= 2
     assert not state.board.departures
 
@@ -302,7 +309,7 @@ async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
         out=db,
     )
     display = FrameRecorder()
-    timetable = SqliteTimetableRepository(path=db)
+    timetable = SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
     ports = Ports(
         timetable=timetable,
         feeds=FileFeedsClient(directory=REAL),
@@ -313,7 +320,7 @@ async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
     )
     try:
         state = await run(
-            ports=ports, seed=PIN, tick_every=0.01, max_events=60
+            ports=ports, seed=PIN, tick_every=0.01, max_events=60, city=SYDNEY
         )
     finally:
         timetable.close()
@@ -335,7 +342,7 @@ async def test_run_reports_frames_feeds_and_ticks(tmp_path: Path) -> None:
     )
     timings = Timings()
     observer: Observer = timings
-    timetable = SqliteTimetableRepository(path=db)
+    timetable = SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
     ports = Ports(
         timetable=timetable,
         feeds=FileFeedsClient(directory=REAL),
@@ -346,7 +353,13 @@ async def test_run_reports_frames_feeds_and_ticks(tmp_path: Path) -> None:
         observer=observer,
     )
     try:
-        await run(ports=ports, seed=PIN, tick_every=0.01, max_events=60)
+        await run(
+            ports=ports,
+            seed=PIN,
+            tick_every=0.01,
+            max_events=60,
+            city=SYDNEY,
+        )
     finally:
         timetable.close()
     assert timings.frames >= 1
@@ -603,6 +616,7 @@ async def test_app_reports_settings() -> None:
         tick_every=60,
         post_hook=post_change,
         max_events=2,
+        city=SYDNEY,
     )
     assert recorder.settings == [
         Settings(device=DeviceSettings(auto_rebuild=True)),
@@ -632,6 +646,7 @@ async def test_app_reports_status() -> None:
         tick_every=60,
         post_hook=post_change,
         max_events=1,
+        city=SYDNEY,
     )
     assert [status.key_set for status in recorder.statuses] == [None, False]
 
@@ -662,6 +677,7 @@ async def test_app_reports_pins() -> None:
         tick_every=60,
         post_hook=post_events,
         max_events=2,
+        city=SYDNEY,
     )
     pins = (PIN, unpinned)
     assert [shown for _, shown in recorder.pins] == [None, 1, 1]
@@ -680,7 +696,13 @@ async def test_run_reads_the_key_before_the_first_tick() -> None:
         observer=recorder,
         device=DevicePorts(key=FakeKeys(key='k')),
     )
-    state = await run(ports=ports, seed=PIN, tick_every=60, max_events=1)
+    state = await run(
+        ports=ports,
+        seed=PIN,
+        tick_every=60,
+        max_events=1,
+        city=SYDNEY,
+    )
     assert state.panel.key_set is True
     assert recorder.statuses[-1].key_set is True
 
@@ -714,7 +736,10 @@ def _build_db(tmp_path: Path) -> Path:
 async def test_run_survives_a_raising_observer(tmp_path: Path) -> None:
     """Observer errors do not stop frames, snapshots or ticks."""
     display = FrameRecorder()
-    timetable = SqliteTimetableRepository(path=_build_db(tmp_path))
+    timetable = SqliteTimetableRepository(
+        path=_build_db(tmp_path),
+        zone=SYDNEY_ZONE,
+    )
     ports = Ports(
         timetable=timetable,
         feeds=FileFeedsClient(directory=REAL),
@@ -726,7 +751,7 @@ async def test_run_survives_a_raising_observer(tmp_path: Path) -> None:
     )
     try:
         state = await run(
-            ports=ports, seed=PIN, tick_every=0.01, max_events=60
+            ports=ports, seed=PIN, tick_every=0.01, max_events=60, city=SYDNEY
         )
     finally:
         timetable.close()
@@ -739,7 +764,10 @@ async def test_run_logs_frame_and_feed_timings_at_debug(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Per-frame and per-feed records are DEBUG, keeping the journal quiet."""
-    timetable = SqliteTimetableRepository(path=_build_db(tmp_path))
+    timetable = SqliteTimetableRepository(
+        path=_build_db(tmp_path),
+        zone=SYDNEY_ZONE,
+    )
     ports = Ports(
         timetable=timetable,
         feeds=FileFeedsClient(directory=REAL),
@@ -750,7 +778,13 @@ async def test_run_logs_frame_and_feed_timings_at_debug(
     )
     with caplog.at_level(logging.DEBUG):
         try:
-            await run(ports=ports, seed=PIN, tick_every=0.01, max_events=60)
+            await run(
+                ports=ports,
+                seed=PIN,
+                tick_every=0.01,
+                max_events=60,
+                city=SYDNEY,
+            )
         finally:
             timetable.close()
     frames = [r for r in caplog.records if r.message == 'frame drawn']
@@ -894,7 +928,7 @@ async def test_run_survives_unexpected_load_error(
     )
     with caplog.at_level(logging.ERROR):
         state = await run(
-            ports=ports, seed=PIN, tick_every=0.01, max_events=20
+            ports=ports, seed=PIN, tick_every=0.01, max_events=20, city=SYDNEY
         )
     assert state.running
     assert timetable.calls >= 2
@@ -918,7 +952,7 @@ async def test_run_draws_when_every_feed_fails(
     empty = tmp_path / 'empty'
     empty.mkdir()
     display = FrameRecorder()
-    timetable = SqliteTimetableRepository(path=db)
+    timetable = SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
     ports = Ports(
         timetable=timetable,
         feeds=FileFeedsClient(directory=empty),
@@ -930,7 +964,11 @@ async def test_run_draws_when_every_feed_fails(
     try:
         with caplog.at_level(logging.WARNING):
             state = await run(
-                ports=ports, seed=PIN, tick_every=0.01, max_events=60
+                ports=ports,
+                seed=PIN,
+                tick_every=0.01,
+                max_events=60,
+                city=SYDNEY,
             )
     finally:
         timetable.close()
@@ -1054,7 +1092,10 @@ async def test_run_sends_a_watchdog_for_each_handled_tick(
 ) -> None:
     """Every Tick the main loop handles reaches the observer."""
     observer = CallRecorder()
-    timetable = SqliteTimetableRepository(path=_build_db(tmp_path))
+    timetable = SqliteTimetableRepository(
+        path=_build_db(tmp_path),
+        zone=SYDNEY_ZONE,
+    )
     ports = Ports(
         timetable=timetable,
         feeds=FileFeedsClient(directory=REAL),
@@ -1065,7 +1106,13 @@ async def test_run_sends_a_watchdog_for_each_handled_tick(
         observer=observer,
     )
     try:
-        await run(ports=ports, seed=PIN, tick_every=0.01, max_events=20)
+        await run(
+            ports=ports,
+            seed=PIN,
+            tick_every=0.01,
+            max_events=20,
+            city=SYDNEY,
+        )
     finally:
         timetable.close()
     assert observer.ticks >= 1
@@ -1198,7 +1245,10 @@ def light_tiles(*, out: Path, point: Point) -> SqliteTileRepository:
 
 async def test_run_draws_map_after_bottom_press(tmp_path: Path) -> None:
     """A bottom press shows the Map over the tiles and polls positions."""
-    timetable = SqliteTimetableRepository(path=_build_db(tmp_path))
+    timetable = SqliteTimetableRepository(
+        path=_build_db(tmp_path),
+        zone=SYDNEY_ZONE,
+    )
     place = timetable.stop(stop_id=MAP_PIN.origin.stop_id)
     assert place.point is not None
     tiles = light_tiles(out=tmp_path / 'tiles.db', point=place.point)
@@ -1220,6 +1270,7 @@ async def test_run_draws_map_after_bottom_press(tmp_path: Path) -> None:
             tick_every=0.01,
             post_hook=display.hook,
             max_events=80,
+            city=SYDNEY,
         )
     finally:
         timetable.close()
@@ -1424,7 +1475,10 @@ async def test_positions_are_labelled_from_the_timetable(
     tmp_path: Path,
 ) -> None:
     """Vehicles take the route label the timetable gives their trip."""
-    timetable = RelabellingTimetable(path=_build_db(tmp_path))
+    timetable = RelabellingTimetable(
+        path=_build_db(tmp_path),
+        zone=SYDNEY_ZONE,
+    )
     ports = Ports(
         timetable=timetable,
         feeds=FileFeedsClient(directory=REAL),
@@ -1524,7 +1578,7 @@ def test_starting_state_fills_the_pins_places() -> None:
         states=MemoryStates(),
         tiles=NullTiles(),
     )
-    state = starting_state(ports=ports, seed=MAP_PIN)
+    state = starting_state(ports=ports, seed=MAP_PIN, city=SYDNEY)
     assert shown(state=state).origin == place(
         '2145615', name='2145615', point=STOP_POINT,
     )
@@ -1546,7 +1600,11 @@ def test_starting_state_awaits_the_first_tick() -> None:
         states=MemoryStates(),
         tiles=NullTiles(),
     )
-    assert not starting_state(ports=ports, seed=MAP_PIN).clock_known
+    assert not starting_state(
+        ports=ports,
+        seed=MAP_PIN,
+        city=SYDNEY,
+    ).clock_known
 
 
 def test_starting_state_keeps_no_destination() -> None:
@@ -1560,7 +1618,11 @@ def test_starting_state_keeps_no_destination() -> None:
         states=MemoryStates(),
         tiles=NullTiles(),
     )
-    state = starting_state(ports=ports, seed=pin_of('2145615', None))
+    state = starting_state(
+        ports=ports,
+        seed=pin_of('2145615', None),
+        city=SYDNEY,
+    )
     assert shown(state=state).origin == place(
         '2145615', name='2145615', point=STOP_POINT,
     )
@@ -1588,6 +1650,7 @@ async def test_run_draws_the_map_in_the_variant_asked_for() -> None:
         post_hook=display.hook,
         max_events=10,
         tiles_variant=TileVariant.BITS,
+        city=SYDNEY,
     )
     assert tiles.reads > 0
     assert tiles.variants == {TileVariant.BITS}
@@ -1844,6 +1907,7 @@ async def test_run_survives_a_tiles_read_error(
             tick_every=0.01,
             post_hook=display.hook,
             max_events=30,
+            city=SYDNEY,
         )
     assert state.running
     assert state.map.step != 0
@@ -1938,7 +2002,10 @@ async def test_run_starts_on_town_hall_map_without_state() -> None:
     """With no saved state and no seed, Town Hall shows on the Map."""
     states = MemoryStates()
     state = await run(
-        ports=ports_of(states=states), tick_every=0.01, max_events=5
+        ports=ports_of(states=states),
+        tick_every=0.01,
+        max_events=5,
+        city=SYDNEY,
     )
     assert states.saves
     first = replace(states.saves[0], quota=DEFAULT_SAVED.quota)
@@ -1959,6 +2026,7 @@ async def test_run_seeds_pin_when_no_state(
             seed=MAP_PIN,
             tick_every=0.01,
             max_events=5,
+            city=SYDNEY,
         )
     origin = place('2145615', name='2145615', point=STOP_POINT)
     assert shown(state=state).origin == origin
@@ -1981,6 +2049,7 @@ async def test_run_ignores_seed_when_state_exists(
             seed=PIN,
             tick_every=0.01,
             max_events=5,
+            city=SYDNEY,
         )
     assert state.places.pins == stored.pins
     assert 'seed ignored' in caplog.text
@@ -1996,7 +2065,10 @@ async def test_quit_writes_unsaved_state() -> None:
 
     async with asyncio.timeout(5):
         state = await run(
-            ports=ports_of(states=states), post_hook=hook, tick_every=60.0
+            ports=ports_of(states=states),
+            post_hook=hook,
+            tick_every=60.0,
+            city=SYDNEY,
         )
     assert not state.running
     assert states.stored is not None
@@ -2035,7 +2107,9 @@ def test_starting_state_keeps_unknown_seed_places_bare(
     """A seed stop the timetable lacks stays bare, with a warning."""
     with caplog.at_level(logging.WARNING):
         state = starting_state(
-            ports=ports_of(timetable=StoplessTimetable()), seed=MAP_PIN
+            ports=ports_of(timetable=StoplessTimetable()),
+            seed=MAP_PIN,
+            city=SYDNEY,
         )
     assert shown(state=state) == MAP_PIN
     assert 'stop 2145615 not in the timetable' in caplog.text
@@ -2057,6 +2131,7 @@ async def test_queued_knob_turns_draw_one_frame() -> None:
             post_hook=hook,
             tick_every=60.0,
             max_events=7,
+            city=SYDNEY,
         )
     assert len(display.frames) == 1
 
@@ -2073,7 +2148,7 @@ async def test_app_turns_panel_frames() -> None:
         post(Tick(now=AT + CYCLE_WAIT))
 
     async with asyncio.timeout(5):
-        await run(ports=ports, post_hook=hook, max_events=2)
+        await run(ports=ports, post_hook=hook, max_events=2, city=SYDNEY)
     assert display.turns[-1] is True
 
 
@@ -2089,7 +2164,7 @@ async def test_app_passes_clean_after_to_panel() -> None:
         maps=MapRenderer(tiles=ports.tiles),
         saver=StateSaver(states=ports.states),
     )
-    state = starting_state(ports=ports, seed=PIN)
+    state = starting_state(ports=ports, seed=PIN, city=SYDNEY)
     for event in (Tick(now=AT), SettingsChanged(clean_after=15)):
         state = await handle(
             state=state, event=event, ports=ports, queue=queue,
@@ -2111,7 +2186,7 @@ async def test_app_marks_frames_quick_after_a_knob_turn() -> None:
         maps=MapRenderer(tiles=ports.tiles),
         saver=StateSaver(states=ports.states),
     )
-    state = starting_state(ports=ports, seed=PIN)
+    state = starting_state(ports=ports, seed=PIN, city=SYDNEY)
     later = AT + timedelta(seconds=5)
     for event in (
         Tick(now=AT),
@@ -2138,7 +2213,7 @@ async def test_app_marks_frames_asleep_in_sleep_mode() -> None:
         maps=MapRenderer(tiles=ports.tiles),
         saver=StateSaver(states=ports.states),
     )
-    awake = starting_state(ports=ports, seed=PIN)
+    awake = starting_state(ports=ports, seed=PIN, city=SYDNEY)
     asleep = replace(awake, panel=replace(awake.panel, asleep=True))
     for state in (awake, asleep):
         state = await handle(
@@ -2322,7 +2397,13 @@ async def test_app_performs_rebuild() -> None:
     )
     await asyncio.gather(*tasks)
     assert queue.get_nowait() == TimetableRebuilt(ok=True)
-    await run(ports=ports, seed=PIN, tick_every=0.01, max_events=1)
+    await run(
+        ports=ports,
+        seed=PIN,
+        tick_every=0.01,
+        max_events=1,
+        city=SYDNEY,
+    )
     assert (builder.rebuilds, builder.stops) == (1, 1)
 
 
@@ -2337,7 +2418,7 @@ async def test_app_draws_notice_before_power() -> None:
         maps=MapRenderer(tiles=ports.tiles),
         saver=StateSaver(states=ports.states),
     )
-    state = starting_state(ports=ports, seed=PIN)
+    state = starting_state(ports=ports, seed=PIN, city=SYDNEY)
     for event in (Tick(now=AT), PowerRequested(action=PowerAction.OFF)):
         state = await handle(
             state=state, event=event, ports=ports, queue=queue,
@@ -2371,7 +2452,7 @@ async def test_app_reset_leaves_no_state_file(tmp_path: Path) -> None:
     )
     ports = replace(
         ports_of(),
-        states=JsonStateRepository(path=path),
+        states=JsonStateRepository(path=path, city=SYDNEY),
         device=DevicePorts(resets=resets),
     )
     queue: asyncio.Queue[Event] = asyncio.Queue()
@@ -2380,7 +2461,7 @@ async def test_app_reset_leaves_no_state_file(tmp_path: Path) -> None:
         maps=MapRenderer(tiles=ports.tiles),
         saver=StateSaver(states=ports.states),
     )
-    state = starting_state(ports=ports, seed=PIN)
+    state = starting_state(ports=ports, seed=PIN, city=SYDNEY)
     for event in (Tick(now=AT), SettingsChanged(auto_rebuild=False)):
         state = await handle(
             state=state, event=event, ports=ports, queue=queue,
@@ -2432,12 +2513,13 @@ def next_of[T](*, queue: asyncio.Queue[Event], kind: type[T]) -> T:
 async def test_app_starts_without_a_timetable(tmp_path: Path) -> None:
     """With no timetable file the app runs and ticks without crashing."""
     missing = tmp_path / 'timetable.db'
-    timetable = SqliteTimetableRepository(path=missing)
+    timetable = SqliteTimetableRepository(path=missing, zone=SYDNEY_ZONE)
     network = SqliteNetworkRepository(path=missing)
     ports = replace(ports_of(), timetable=timetable, network=network)
     try:
         state = await run(
             ports=ports, seed=PIN, tick_every=0.01, max_events=5,
+            city=SYDNEY,
         )
     finally:
         timetable.close()
@@ -2556,7 +2638,7 @@ def frame_index(
 async def test_app_runs_with_no_timetable(tmp_path: Path) -> None:
     """With no timetable the Building screen shows, then the menu opens."""
     missing = tmp_path / 'timetable.db'
-    timetable = SqliteTimetableRepository(path=missing)
+    timetable = SqliteTimetableRepository(path=missing, zone=SYDNEY_ZONE)
     network = SqliteNetworkRepository(path=missing)
     building = draw_notice_view(
         view=NoticeView(
@@ -2590,6 +2672,7 @@ async def test_app_runs_with_no_timetable(tmp_path: Path) -> None:
             tick_every=0.01,
             post_hook=display.hook,
             max_events=20,
+            city=SYDNEY,
         )
     finally:
         timetable.close()
@@ -2668,7 +2751,7 @@ async def test_app_goes_live_when_the_timetable_arrives(
     (tmp_path / 'built').mkdir()
     built = _build_db(tmp_path / 'built')
     target = tmp_path / 'timetable.db'
-    timetable = SqliteTimetableRepository(path=target)
+    timetable = SqliteTimetableRepository(path=target, zone=SYDNEY_ZONE)
     network = SqliteNetworkRepository(path=target)
     display = ArrivingDisplay(source=built, target=target)
     feeds = RecordingFeeds(directory=REAL)
@@ -2683,6 +2766,7 @@ async def test_app_goes_live_when_the_timetable_arrives(
     try:
         state = await run(
             ports=ports, seed=PIN, tick_every=0.01, max_events=60,
+            city=SYDNEY,
         )
     finally:
         timetable.close()

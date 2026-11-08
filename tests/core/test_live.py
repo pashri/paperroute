@@ -6,9 +6,10 @@ from typing import Final
 
 import pytest
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.live import resolve
 from paperroute_testkit.core.factories import START, departure
-from paperroute_transit.core.model import SYDNEY, CarryOn, TripFacts
+from paperroute_transit.core.model import CarryOn, TripFacts
 from paperroute_transit.core.realtime import (
     RealtimeSnapshot,
     StopUpdate,
@@ -116,6 +117,7 @@ def test_resolve_applies_delay_at_origin_and_destination() -> None:
         snapshot=snapshot(updates=updates),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert live.live
     assert live.departs == DEP.departs + timedelta(seconds=120)
@@ -131,6 +133,7 @@ def test_resolve_absolute_time_wins() -> None:
         snapshot=snapshot(updates=(note,)),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert live.departs == target
 
@@ -142,6 +145,7 @@ def test_resolve_propagates_earlier_delay() -> None:
         snapshot=snapshot(updates=(update(seq=2, dep=180),)),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert live.departs == DEP.departs + timedelta(seconds=180)
     assert live.arrives == DEP.arrives + timedelta(seconds=180)
@@ -154,6 +158,7 @@ def test_resolve_missing_trip_is_scheduled() -> None:
         snapshot=snapshot(updates=(update(seq=5, dep=60),), trip_id='other'),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert (live.departs, live.live) == (DEP.departs, False)
 
@@ -169,6 +174,7 @@ def test_resolve_alias_matches() -> None:
         snapshot=snapshot(updates=(note,), trip_id='old'),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert live.live
 
@@ -180,6 +186,7 @@ def test_resolve_cancelled() -> None:
         snapshot=snapshot(cancelled=True),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert live.cancelled
 
@@ -191,6 +198,7 @@ def test_resolve_not_cancelled_by_default() -> None:
         snapshot=snapshot(updates=(update(seq=5, dep=60),)),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert not live.cancelled
 
@@ -202,6 +210,7 @@ def test_resolve_ignores_stale_snapshot() -> None:
         snapshot=snapshot(updates=(update(seq=5, dep=600),), age_s=200),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert (live.departs, live.live) == (DEP.departs, False)
 
@@ -219,6 +228,7 @@ def test_resolve_uses_a_snapshot_within_the_limit(
         snapshot=snapshot(updates=(update(seq=5, dep=600),), age_s=150),
         now=START,
         limit=limit,
+        zone=SYDNEY_ZONE,
     )
     assert live.live is used
 
@@ -227,6 +237,7 @@ def test_resolve_without_snapshot_is_scheduled() -> None:
     """With no snapshot at all, times are scheduled."""
     live = resolve(
         departure=DEP, snapshot=None, now=START, limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert (live.departs, live.live) == (DEP.departs, False)
 
@@ -240,6 +251,7 @@ def test_resolve_propagates_delay_not_absolute_time() -> None:
         snapshot=snapshot(updates=(stop,)),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert live.departs == DEP.departs + timedelta(seconds=60)
 
@@ -253,6 +265,7 @@ def test_resolve_ignores_another_days_run() -> None:
         snapshot=snapshot(updates=note, start_date=yesterday),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert (other.departs, other.live) == (DEP.departs, False)
     today = resolve(
@@ -260,6 +273,7 @@ def test_resolve_ignores_another_days_run() -> None:
         snapshot=snapshot(updates=note, start_date=DEP.service_day),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert today.live
 
@@ -276,6 +290,7 @@ def test_resolve_alias_matches_by_stop_id() -> None:
         snapshot=snapshot(updates=(other_copy, wrong_seq), trip_id='old'),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert live.departs == DEP.departs + timedelta(seconds=90)
 
@@ -288,6 +303,7 @@ def test_resolve_carries_arrival_delay_when_no_departure_delay() -> None:
         snapshot=snapshot(updates=updates),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert live.live
     assert live.departs == DEP.departs + timedelta(seconds=120)
@@ -301,13 +317,14 @@ def test_resolve_update_without_timing_is_not_live() -> None:
         snapshot=snapshot(updates=(update(seq=5), update(seq=20))),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert (live.departs, live.live) == (DEP.departs, False)
 
 
 def test_resolve_delay_adds_real_seconds_over_fall_back() -> None:
     """On the night clocks go back, 5 minutes of delay is 5 real minutes."""
-    before = datetime(2026, 4, 5, 2, 58, tzinfo=SYDNEY)
+    before = datetime(2026, 4, 5, 2, 58, tzinfo=SYDNEY_ZONE)
     dep = departure(departs=before, ride=10, trip_id='t')
     now = before - timedelta(minutes=30)
     live = resolve(
@@ -325,17 +342,18 @@ def test_resolve_delay_adds_real_seconds_over_fall_back() -> None:
         ),
         now=now,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert live.departs.timestamp() - before.timestamp() == 300
     assert live.arrives.timestamp() - dep.arrives.timestamp() == 300
-    assert live.departs.tzinfo is SYDNEY
+    assert live.departs.tzinfo is SYDNEY_ZONE
     assert (live.departs.hour, live.departs.minute) == (2, 3)
 
 
 def test_resolve_snapshot_age_counts_real_seconds() -> None:
     """A snapshot fetched before the clocks go back is older than it reads."""
-    fetched = datetime(2026, 4, 5, 2, 59, tzinfo=SYDNEY)
-    now = datetime(2026, 4, 5, 2, 3, fold=1, tzinfo=SYDNEY)
+    fetched = datetime(2026, 4, 5, 2, 59, tzinfo=SYDNEY_ZONE)
+    now = datetime(2026, 4, 5, 2, 3, fold=1, tzinfo=SYDNEY_ZONE)
     dep = departure(departs=now + timedelta(minutes=5), trip_id='t')
     trip = TripRealtime(
         trip_id='t',
@@ -348,6 +366,7 @@ def test_resolve_snapshot_age_counts_real_seconds() -> None:
         snapshot=RealtimeSnapshot(fetched_at=fetched, trips={'t': trip}),
         now=now,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert not live.live
 
@@ -362,6 +381,7 @@ def test_carry_on_arrival_follows_boarded_delay() -> None:
         snapshot=snapshot(updates=(update(seq=20, arr=180),)),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert late.arrives == onto.arrives + timedelta(minutes=3)
     cancelled = resolve(
@@ -369,5 +389,6 @@ def test_carry_on_arrival_follows_boarded_delay() -> None:
         snapshot=snapshot(cancelled=True),
         now=START,
         limit=LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert cancelled.cancelled

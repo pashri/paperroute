@@ -11,6 +11,7 @@ import pytest
 
 from paperroute.adapters.timetable_db import SqliteTimetableRepository
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.city import SYDNEY_ZONE
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_testkit.core.factories import pin_of
 from paperroute_transit.adapters.calendar_rows import (
@@ -74,7 +75,7 @@ def test_holidays_round_trip(tmp_path: Path) -> None:
     db = holiday_db(tmp_path=tmp_path)
     with closing(sqlite3.connect(db)) as conn:
         assert read_holidays(fetch=connection_fetch(conn=conn)) == {HOLIDAY}
-    repo = SqliteTimetableRepository(path=db)
+    repo = SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
     try:
         assert repo.holidays() == {HOLIDAY}
     finally:
@@ -88,7 +89,7 @@ def test_holidays_absent_table(tmp_path: Path) -> None:
         conn.execute('DROP TABLE holidays')
         conn.commit()
         assert read_holidays(fetch=connection_fetch(conn=conn)) == frozenset()
-    repo = SqliteTimetableRepository(path=db)
+    repo = SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
     try:
         assert repo.holidays() == frozenset()
     finally:
@@ -129,7 +130,7 @@ def _bundle_repo(
         start=SERVICE,
         days=1,
     )
-    with closing(SqliteTimetableRepository(path=db)) as repo:
+    with closing(SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)) as repo:
         yield repo
 
 
@@ -142,8 +143,11 @@ def test_service_span_reads_trip_ends(
         found.trip_id
         for found in bundle_repo.departures(
             pin=pin,
-            start=service_epoch(day=SERVICE),
-            end=service_epoch(day=SERVICE + timedelta(days=1)),
+            start=service_epoch(day=SERVICE, zone=SYDNEY_ZONE),
+            end=service_epoch(
+                day=SERVICE + timedelta(days=1),
+                zone=SYDNEY_ZONE,
+            ),
         )
         if found.service_day == SERVICE
     }
@@ -160,8 +164,16 @@ def test_service_span_reads_trip_ends(
     )
     span = bundle_repo.service_span(pin=pin, day=SERVICE)
     assert span is not None
-    assert span.first_start == service_time(day=SERVICE, seconds=int(str(first)))
-    assert span.last_end == service_time(day=SERVICE, seconds=int(str(last)))
+    assert span.first_start == service_time(
+        day=SERVICE,
+        seconds=int(str(first)),
+        zone=SYDNEY_ZONE,
+    )
+    assert span.last_end == service_time(
+        day=SERVICE,
+        seconds=int(str(last)),
+        zone=SYDNEY_ZONE,
+    )
     after = SERVICE + timedelta(days=5)
     assert bundle_repo.service_span(pin=pin, day=after) is None
 
@@ -175,9 +187,19 @@ def test_service_span_counts_trips_after_midnight(tmp_path: Path) -> None:
         window=Window(start=SERVICE, days=3),
         out=out,
     )
-    with closing(SqliteTimetableRepository(path=out)) as repo:
+    with closing(
+        SqliteTimetableRepository(path=out, zone=SYDNEY_ZONE),
+    ) as repo:
         span = repo.service_span(pin=pin_of('2145615', '215020'), day=SERVICE)
     assert span == ServiceSpan(
-        first_start=service_time(day=SERVICE, seconds=8 * 3600 + 3 * 60),
-        last_end=service_time(day=SERVICE, seconds=25 * 3600 + 40 * 60),
+        first_start=service_time(
+            day=SERVICE,
+            seconds=8 * 3600 + 3 * 60,
+            zone=SYDNEY_ZONE,
+        ),
+        last_end=service_time(
+            day=SERVICE,
+            seconds=25 * 3600 + 40 * 60,
+            zone=SYDNEY_ZONE,
+        ),
     )

@@ -38,4 +38,4 @@ class Ports:
     builder: TimetableBuilder = field(default_factory=NullBuilder)
     power: PowerControl = field(default_factory=NullPower)
     device: DevicePorts = field(default_factory=DevicePorts)
-    legs: LegCache = field(default_factory=LegCache)
+    legs: LegCache | None = None

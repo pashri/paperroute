@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.strip_times import (
     STRIP_HOPS,
     TripInputs,
@@ -164,6 +165,7 @@ def approach_inputs(*, late: int = 0) -> TripInputs:
         now=START,
         stale_after=STALE_LIMIT,
         station_of={},
+        zone=SYDNEY_ZONE,
     )
 
 

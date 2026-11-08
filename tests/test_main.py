@@ -11,7 +11,7 @@ import sys
 from collections.abc import Callable, Iterator
 from contextlib import closing
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, tzinfo
 from http import HTTPStatus
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, cast
@@ -51,6 +51,7 @@ from paperroute.adapters.web_display import WebDisplay
 from paperroute.app import Ports
 from paperroute.app_render import MapRenderer
 from paperroute.build.timetable import Window, build_timetable
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
 from paperroute.core.messages import Event
 from paperroute.observers import Timings
@@ -82,7 +83,6 @@ from paperroute_transit.adapters.tiles_db import (
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.core.geo import to_metres
-from paperroute_transit.core.model import SYDNEY
 from paperroute_transit.core.tiles import (
     TILE_STYLE,
     ZOOMS,
@@ -94,7 +94,7 @@ if TYPE_CHECKING:
     from paperroute.adapters.tk_monitor import TkMonitor
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
-AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY)
+AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY_ZONE)
 ORIGIN: Final[str] = '215020'
 DESTINATION: Final[str] = '200060'
 PIN = pin_of(ORIGIN, DESTINATION)
@@ -582,12 +582,12 @@ async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
     build_db(path=db)
     timings = Timings()
     display = WebDisplay(status=timings.snapshot)
-    timetable = SqliteTimetableRepository(path=db)
+    timetable = SqliteTimetableRepository(path=db, zone=SYDNEY_ZONE)
     ports = Ports(
         timetable=timetable,
         feeds=FileFeedsClient(directory=REAL),
         display=display,
-        clock=ReplayClock(start=AT),
+        clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
         network=FakeNetwork(),
         states=MemoryStates(),
         observer=timings,
@@ -662,13 +662,15 @@ def _restored_logging() -> Iterator[None]:
     root.setLevel(level)
 
 
-def unopenable(*, path: Path) -> SqliteTimetableRepository:
+def unopenable(*, path: Path, zone: tzinfo) -> SqliteTimetableRepository:
     """
     Fail to open a timetable.
 
     Parameters
     ----------
     path : Path
+        Ignored.
+    zone : tzinfo
         Ignored.
 
     Raises
@@ -774,13 +776,16 @@ async def test_serve_web_posts_knob_events_then_stops_the_knobs(
 
     monkeypatch.setattr(cli, 'run', fake_run)
     display = WebDisplay(status=Timings().snapshot)
-    memory = SqliteTimetableRepository(connection=sqlite3.connect(':memory:'))
+    memory = SqliteTimetableRepository(
+        connection=sqlite3.connect(':memory:'),
+        zone=SYDNEY_ZONE,
+    )
     with closing(memory) as timetable:
         ports = Ports(
             timetable=timetable,
             feeds=FileFeedsClient(directory=REAL),
             display=display,
-            clock=ReplayClock(start=AT),
+            clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
             network=FakeNetwork(),
             states=MemoryStates(),
         )
@@ -807,13 +812,16 @@ async def test_serve_web_passes_the_tiles_variant_to_run(
 
     monkeypatch.setattr(cli, 'run', fake_run)
     display = WebDisplay(status=Timings().snapshot)
-    memory = SqliteTimetableRepository(connection=sqlite3.connect(':memory:'))
+    memory = SqliteTimetableRepository(
+        connection=sqlite3.connect(':memory:'),
+        zone=SYDNEY_ZONE,
+    )
     with closing(memory) as timetable:
         ports = Ports(
             timetable=timetable,
             feeds=FileFeedsClient(directory=REAL),
             display=display,
-            clock=ReplayClock(start=AT),
+            clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
             network=FakeNetwork(),
             states=MemoryStates(),
         )
@@ -846,13 +854,16 @@ def test_serve_or_exit_passes_the_tiles_variant(
         port=0,
         tiles_variant=TileVariant.BITS,
     )
-    memory = SqliteTimetableRepository(connection=sqlite3.connect(':memory:'))
+    memory = SqliteTimetableRepository(
+        connection=sqlite3.connect(':memory:'),
+        zone=SYDNEY_ZONE,
+    )
     with closing(memory) as timetable:
         ports = Ports(
             timetable=timetable,
             feeds=FileFeedsClient(directory=REAL),
             display=display,
-            clock=ReplayClock(start=AT),
+            clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
             network=FakeNetwork(),
             states=MemoryStates(),
         )
@@ -927,13 +938,16 @@ async def test_show_passes_the_tiles_variant_to_run(
         seen.append(kwargs['tiles_variant'])  # type: ignore[arg-type]
 
     monkeypatch.setattr(cli, 'run', fake_run)
-    memory = SqliteTimetableRepository(connection=sqlite3.connect(':memory:'))
+    memory = SqliteTimetableRepository(
+        connection=sqlite3.connect(':memory:'),
+        zone=SYDNEY_ZONE,
+    )
     with closing(memory) as timetable:
         ports = Ports(
             timetable=timetable,
             feeds=FileFeedsClient(directory=REAL),
             display=WebDisplay(status=Timings().snapshot),
-            clock=ReplayClock(start=AT),
+            clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
             network=FakeNetwork(),
             states=MemoryStates(),
         )

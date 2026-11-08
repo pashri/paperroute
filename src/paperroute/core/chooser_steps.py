@@ -117,7 +117,7 @@ def picked_load(
         State with the load in flight, and a LoadChooserDepartures over
         the usual window.
     """
-    start, end = load_window(now=state.now)
+    start, end = load_window(now=state.now, zone=state.city.zone)
     load = LoadChooserDepartures(
         pin=chosen_pin(chooser=chooser, destination=None),
         start=start,
@@ -617,6 +617,7 @@ def from_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
         patterns={},
         positions={},
         now=state.now,
+        zone=state.city.zone,
         stale_after=stale_after(state=state),
         scroll=0,
         cursor=chooser.line_cursor if line else None,
@@ -657,8 +658,10 @@ def picked_stop_view(*, state: State, chooser: ChooserState) -> StopView:
                 snapshots=state.snapshots,
                 now=state.now,
                 limit=stale_after(state=state),
+                zone=state.city.zone,
             ),
             now=state.now,
+            zone=state.city.zone,
             scroll=0,
             live_since=live_since(
                 snapshots=state.snapshots, feeds=feeds, now=state.now,
@@ -724,10 +727,12 @@ def to_inputs(*, state: State, chooser: ChooserState) -> StripInputs:
             snapshots=state.snapshots,
             now=state.now,
             limit=stale_after(state=state),
+            zone=state.city.zone,
         ),
         patterns=state.map.patterns,
         positions=polled_positions(state=state),
         now=state.now,
+        zone=state.city.zone,
         stale_after=stale_after(state=state),
         scroll=0,
         cursor=to_cursor_row(chooser=chooser, reach=reach),

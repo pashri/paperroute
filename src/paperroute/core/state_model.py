@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, tzinfo
 from typing import Final
 
 from paperroute.core.chains import Legs
@@ -15,6 +15,7 @@ from paperroute.core.strip_model import TripDay
 from paperroute_device.core.device_model import Panel, PowerAction
 from paperroute_transit.core.alert_model import AlertsState
 from paperroute_transit.core.auto_model import AutoState
+from paperroute_transit.core.city import City
 from paperroute_transit.core.model import Departure, Pin, ServiceSpan, shifted
 from paperroute_transit.core.reach import Reach, StripKey
 from paperroute_transit.core.realtime import RealtimeSnapshot
@@ -50,7 +51,9 @@ def elapsed(*, since: datetime | None, now: datetime, span: timedelta) -> bool:
     return now.timestamp() - since.timestamp() >= span.total_seconds()
 
 
-def load_window(*, now: datetime) -> tuple[datetime, datetime]:
+def load_window(
+    *, now: datetime, zone: tzinfo,
+) -> tuple[datetime, datetime]:
     """
     Choose the span of departures to load from a stop.
 
@@ -58,6 +61,8 @@ def load_window(*, now: datetime) -> tuple[datetime, datetime]:
     ----------
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone of the span's ends.
 
     Returns
     -------
@@ -67,8 +72,10 @@ def load_window(*, now: datetime) -> tuple[datetime, datetime]:
     """
     ahead = HORIZON + RELOAD_BEFORE
     return (
-        shifted(moment=now, seconds=-int(LOOKBACK.total_seconds())),
-        shifted(moment=now, seconds=int(ahead.total_seconds())),
+        shifted(
+            moment=now, seconds=-int(LOOKBACK.total_seconds()), zone=zone,
+        ),
+        shifted(moment=now, seconds=int(ahead.total_seconds()), zone=zone),
     )
 
 
@@ -327,6 +334,8 @@ class State:
         The latest time seen.
     places : Places
         The pins and the place shown.
+    city : City
+        The city the app runs for.
     board : Board
         The shown place's departures.
     feeds : tuple[str, ...]
@@ -384,6 +393,7 @@ class State:
 
     now: datetime
     places: Places
+    city: City = field(repr=False)
     board: Board = field(default_factory=Board)
     feeds: tuple[str, ...] = ()
     snapshots: Mapping[str, RealtimeSnapshot] = field(default_factory=dict)

@@ -8,6 +8,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.chooser import (
     Choice,
     ChooserState,
@@ -261,7 +262,11 @@ def test_to_column_departures_reload_when_short() -> None:
     state, _ = run_events(
         state=started(), events=[*TO_COLUMN, penrith_departures()],
     )
-    late = shifted(moment=UNTIL, seconds=-int(HORIZON.total_seconds()) + 1)
+    late = shifted(
+        moment=UNTIL,
+        seconds=-int(HORIZON.total_seconds()) + 1,
+        zone=SYDNEY_ZONE,
+    )
     _, effects = step(state, Tick(now=late))
     [load] = [e for e in effects if isinstance(e, LoadChooserDepartures)]
     assert load.pin == PENRITH
@@ -292,7 +297,11 @@ def test_back_from_station_forgets_the_from() -> None:
     assert state.chooser is not None
     assert (state.chooser.origin, state.chooser.departures) == (None, ())
     assert trip_feeds(state=state) == state.feeds
-    later = shifted(moment=UNTIL, seconds=-int(HORIZON.total_seconds()) + 1)
+    later = shifted(
+        moment=UNTIL,
+        seconds=-int(HORIZON.total_seconds()) + 1,
+        zone=SYDNEY_ZONE,
+    )
     _, effects = step(state, Tick(now=later))
     assert not [e for e in effects if isinstance(e, LoadChooserDepartures)]
 

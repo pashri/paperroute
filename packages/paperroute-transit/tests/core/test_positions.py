@@ -1,14 +1,17 @@
 """Tests for vehicle position data."""
 
 from datetime import datetime
+from typing import Final
+from zoneinfo import ZoneInfo
 
-from paperroute_transit.core.model import SYDNEY
 from paperroute_transit.core.positions import (
     PositionsSnapshot,
     VehiclePosition,
     fallback_label,
     with_labels,
 )
+
+ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 
 
 def vehicle(*, trip_id: str, label: str) -> VehiclePosition:
@@ -50,7 +53,7 @@ def test_fallback_label() -> None:
 def test_with_labels_replaces_known_trips_only() -> None:
     """Trips in the mapping get the new label; the rest keep theirs."""
     snapshot = PositionsSnapshot(
-        fetched_at=datetime(2026, 10, 16, tzinfo=SYDNEY),
+        fetched_at=datetime(2026, 10, 16, tzinfo=ZONE),
         header_time=5,
         vehicles=(
             vehicle(trip_id='a', label='x'),

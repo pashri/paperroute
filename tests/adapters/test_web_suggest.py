@@ -11,16 +11,16 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute.adapters.web_board import SydneyPages
 from paperroute.adapters.web_display import WebDisplay
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.trip_search import Journey, JourneyLeg, TripSearch
 from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.fakes import FakeTripPlanner
-from paperroute_transit.core.model import SYDNEY
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_device import sydney_site
 from tests.adapters.test_web_pins import Pins
 
 Client = TestClient[web.Request, web.Application]
-NOW: Final[datetime] = datetime(2026, 10, 27, 10, 0, tzinfo=SYDNEY)
+NOW: Final[datetime] = datetime(2026, 10, 27, 10, 0, tzinfo=SYDNEY_ZONE)
 SEARCH: Final[list[tuple[str, str]]] = [
     ('from', 'G2145615'), ('to', '214510'), ('mode', 'dep'),
     ('day', '2026-10-28'), ('time', '07:30'),
@@ -149,7 +149,7 @@ async def test_suggest_lists_journeys() -> None:
     assert 'name="time" value="07:30"' in text
     assert planner.asked == [(
         'G2145615', '214510',
-        TripSearch(when=datetime(2026, 10, 28, 7, 30, tzinfo=SYDNEY),
+        TripSearch(when=datetime(2026, 10, 28, 7, 30, tzinfo=SYDNEY_ZONE),
                    arrive=False),
     )]
     _, part = await fetched(
@@ -235,15 +235,16 @@ async def test_earlier_later_one_call_each() -> None:
         planner=planner, fields=[*SEARCH, ('first', 'x'), ('page', 'earlier')],
     )
     earlier = TripSearch(
-        when=datetime(2026, 10, 28, 7, 47, tzinfo=SYDNEY), arrive=True,
+        when=datetime(2026, 10, 28, 7, 47, tzinfo=SYDNEY_ZONE), arrive=True,
     )
     later = TripSearch(
-        when=datetime(2026, 10, 28, 7, 59, tzinfo=SYDNEY), arrive=False,
+        when=datetime(2026, 10, 28, 7, 59, tzinfo=SYDNEY_ZONE), arrive=False,
     )
     assert [search for _, _, search in planner.asked] == [
         earlier, later, earlier, later,
         TripSearch(
-            when=datetime(2026, 10, 28, 7, 30, tzinfo=SYDNEY), arrive=False,
+            when=datetime(2026, 10, 28, 7, 30, tzinfo=SYDNEY_ZONE),
+            arrive=False,
         ),
     ]
 

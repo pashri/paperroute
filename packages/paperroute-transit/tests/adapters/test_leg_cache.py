@@ -3,6 +3,7 @@
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timedelta
 from typing import Final
+from zoneinfo import ZoneInfo
 
 from paperroute_testkit.core.connection_factories import at
 from paperroute_testkit.core.factories import departure, pin_of
@@ -10,6 +11,7 @@ from paperroute_transit.adapters.leg_cache import CACHE_LIMIT, LegCache
 from paperroute_transit.core.model import CarryOn, Departure, Pin, TripFacts
 
 PIN: Final[Pin] = pin_of('a', 'b')
+ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 
 type Call = tuple[Pin, datetime, datetime]
 
@@ -89,7 +91,7 @@ def trips(*, items: list[Departure]) -> list[str]:
 def test_departures_first_read_goes_to_timetable() -> None:
     """The first read of a leg asks the timetable for the range."""
     reader = ScheduleReader(schedule=every_ten(first=at(7, 0), count=30))
-    found = LegCache().departures(
+    found = LegCache(zone=ZONE).departures(
         timetable=reader, pin=PIN, start=at(7, 0), end=at(8, 0),
     )
     assert reader.reads == [(PIN, at(7, 0), at(8, 0))]
@@ -99,7 +101,7 @@ def test_departures_first_read_goes_to_timetable() -> None:
 def test_departures_repeat_read_is_cached() -> None:
     """A second read of the same range asks the timetable nothing."""
     reader = ScheduleReader(schedule=every_ten(first=at(7, 0), count=30))
-    cache = LegCache()
+    cache = LegCache(zone=ZONE)
     first = cache.departures(
         timetable=reader, pin=PIN, start=at(7, 0), end=at(8, 0),
     )
@@ -114,7 +116,7 @@ def test_departures_later_end_reads_only_the_gap() -> None:
     """A longer range reads only past the cached end, without repeats."""
     schedule = every_ten(first=at(7, 0), count=30)
     reader = ScheduleReader(schedule=schedule)
-    cache = LegCache()
+    cache = LegCache(zone=ZONE)
     cache.departures(timetable=reader, pin=PIN, start=at(7, 0), end=at(8, 0))
     found = cache.departures(
         timetable=reader, pin=PIN, start=at(7, 5), end=at(9, 0),
@@ -126,7 +128,7 @@ def test_departures_later_end_reads_only_the_gap() -> None:
 def test_departures_earlier_start_rereads() -> None:
     """A range starting before the cached one is read in full."""
     reader = ScheduleReader(schedule=every_ten(first=at(6, 0), count=30))
-    cache = LegCache()
+    cache = LegCache(zone=ZONE)
     cache.departures(timetable=reader, pin=PIN, start=at(7, 0), end=at(8, 0))
     found = cache.departures(
         timetable=reader, pin=PIN, start=at(6, 0), end=at(7, 0),
@@ -138,7 +140,7 @@ def test_departures_earlier_start_rereads() -> None:
 def test_departures_new_day_drops_old_days() -> None:
     """Reading on a new service day evicts the earlier day's legs."""
     reader = ScheduleReader()
-    cache = LegCache()
+    cache = LegCache(zone=ZONE)
     cache.departures(timetable=reader, pin=PIN, start=at(7, 0), end=at(8, 0))
     other = pin_of('c', 'd')
     cache.departures(
@@ -151,7 +153,7 @@ def test_departures_new_day_drops_old_days() -> None:
 def test_departures_new_version_clears() -> None:
     """A different timetable version reads afresh."""
     reader = ScheduleReader()
-    cache = LegCache()
+    cache = LegCache(zone=ZONE)
     for version in ('v1', 'v2'):
         cache.departures(
             timetable=reader, pin=PIN, start=at(7, 0), end=at(8, 0),
@@ -164,7 +166,7 @@ def test_departures_new_version_clears() -> None:
 def test_departures_capped() -> None:
     """Past the cap, the least recently stored leg is dropped."""
     reader = ScheduleReader()
-    cache = LegCache()
+    cache = LegCache(zone=ZONE)
     for index in range(CACHE_LIMIT + 1):
         cache.departures(
             timetable=reader, pin=pin_of(f'a{index}', 'b'),
@@ -185,7 +187,7 @@ def test_departures_gap_direct_beats_cached_carry_on() -> None:
     )
     direct = departure(departs=at(8, 10), ride=20, trip_id='direct')
     reader = ScheduleReader(schedule=[carry, direct])
-    cache = LegCache()
+    cache = LegCache(zone=ZONE)
     first = cache.departures(
         timetable=reader, pin=PIN, start=at(7, 0), end=at(8, 0),
     )

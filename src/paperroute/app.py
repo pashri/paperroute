@@ -25,6 +25,7 @@ from paperroute.core.saved import seeded
 from paperroute.core.state import initial_state, step
 from paperroute.core.state_model import State
 from paperroute.observers import ObserverGroup
+from paperroute_transit.core.city import City
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.tiles import TileVariant
 
@@ -125,7 +126,9 @@ async def tick(
     await queue.put(Tick(now=clock.now(), synced=synced))
 
 
-def starting_state(*, ports: Ports, seed: Pin | None = None) -> State:
+def starting_state(
+    *, ports: Ports, city: City, seed: Pin | None = None,
+) -> State:
     """
     Make the state at start-up from the saved state, or else the seed.
 
@@ -138,6 +141,8 @@ def starting_state(*, ports: Ports, seed: Pin | None = None) -> State:
     ----------
     ports : Ports
         Adapters.
+    city : City
+        The city the app runs for.
     seed : Pin | None
         Pin from the command line or environment.
 
@@ -154,7 +159,7 @@ def starting_state(*, ports: Ports, seed: Pin | None = None) -> State:
         saved = seeded(pin=filled(timetable=ports.timetable, pin=seed))
         logger.info('state seeded from the command line or environment')
     state = initial_state(
-        saved=saved, now=ports.clock.now(), stored=loaded.stored
+        saved=saved, now=ports.clock.now(), stored=loaded.stored, city=city,
     )
     return replace(state, clock_known=False)
 
@@ -253,6 +258,7 @@ def report_step(
 async def opened(
     *,
     ports: Ports,
+    city: City,
     seed: Pin | None,
     queue: asyncio.Queue[Event],
     outputs: Outputs,
@@ -264,6 +270,8 @@ async def opened(
     ----------
     ports : Ports
         Adapters.
+    city : City
+        The city the app runs for.
     seed : Pin | None
         Pin to start with when there is no saved state.
     queue : asyncio.Queue[Event]
@@ -276,7 +284,7 @@ async def opened(
     State
         The starting state.
     """
-    state = starting_state(ports=ports, seed=seed)
+    state = starting_state(ports=ports, city=city, seed=seed)
     ports.observer.settings_seen(settings=state.settings)
     pins_shown(observer=ports.observer, places=state.places)
     report_status(
@@ -292,6 +300,7 @@ async def opened(
 async def run(  # pylint: disable=too-many-statements
     *,
     ports: Ports,
+    city: City,
     seed: Pin | None = None,
     tick_every: float = 5.0,
     pump: Callable[[], None] | None = None,
@@ -311,6 +320,8 @@ async def run(  # pylint: disable=too-many-statements
     ----------
     ports : Ports
         Adapters.
+    city : City
+        The city the app runs for.
     seed : Pin | None
         Pin to start with when there is no saved state.
     tick_every : float
@@ -340,7 +351,7 @@ async def run(  # pylint: disable=too-many-statements
         saver=StateSaver(states=ports.states),
     )
     state = await opened(
-        ports=ports, seed=seed, queue=queue, outputs=outputs,
+        ports=ports, city=city, seed=seed, queue=queue, outputs=outputs,
     )
     tasks: set[asyncio.Task[None]] = set()
     clock = started_ticker(

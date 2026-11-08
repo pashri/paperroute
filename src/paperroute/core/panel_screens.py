@@ -1,5 +1,7 @@
 """Build the panel's settings screens from the state."""
 
+from datetime import tzinfo
+
 from paperroute.core.quota import calls_today
 from paperroute.core.state_model import State
 from paperroute.core.wifi import wifi_setup_view
@@ -22,7 +24,6 @@ from paperroute_device.core.panel_views import (
     strength,
 )
 from paperroute_device.core.text import DOT, clock_text, day_text, local_time
-from paperroute_transit.core.model import SYDNEY
 
 
 def menu_view(*, state: State) -> MenuView:
@@ -42,7 +43,7 @@ def menu_view(*, state: State) -> MenuView:
     """
     cursor = state.panel.menu.cursor if state.panel.menu else 0
     return MenuView(
-        clock=clock_text(moment=state.now, zone=SYDNEY),
+        clock=clock_text(moment=state.now, zone=state.city.zone),
         rows=tuple(row.value for row in MENU_ROWS),
         cursor=cursor,
         first=max(0, cursor - MENU_VISIBLE + 1),
@@ -69,7 +70,7 @@ def phone_view(*, state: State) -> PhoneView:
     url = f'http://{wifi.ip}/' if wifi.ip else f'http://{LOCAL_NAME}/'
     ips = (f'http://{wifi.ip}',) if wifi.ip else ()
     return PhoneView(
-        clock=clock_text(moment=state.now, zone=SYDNEY),
+        clock=clock_text(moment=state.now, zone=state.city.zone),
         url=url,
         addresses=(LOCAL_NAME, *ips),
         network=wifi.ssid,
@@ -116,10 +117,10 @@ def timetable_value(*, state: State) -> str:
     if state.rebuild.running:
         return 'rebuilding'
     parts = ['last build failed'] if state.rebuild.failed else []
-    built = local_time(stamp=state.saving.timetable, zone=SYDNEY)
+    built = local_time(stamp=state.saving.timetable, zone=state.city.zone)
     if built is None:
         return DOT.join(parts) or UNKNOWN
-    clock = clock_text(moment=built, zone=SYDNEY)
+    clock = clock_text(moment=built, zone=state.city.zone)
     parts += [day_text(moment=built), f'built {clock}']
     if state.rebuild.schema is not None:
         parts.append(f'version {state.rebuild.schema}')
@@ -169,7 +170,9 @@ def software_value(*, facts: DeviceFacts) -> str:
     return f'{facts.version}{DOT}{up}'
 
 
-def facts_values(*, facts: DeviceFacts | None) -> tuple[str, str, str, str]:
+def facts_values(
+    *, facts: DeviceFacts | None, zone: tzinfo,
+) -> tuple[str, str, str, str]:
     """
     Describe what the probe found.
 
@@ -177,6 +180,8 @@ def facts_values(*, facts: DeviceFacts | None) -> tuple[str, str, str, str]:
     ----------
     facts : DeviceFacts | None
         The latest probe, or None.
+    zone : tzinfo
+        Local time zone the tiles' build day is given in.
 
     Returns
     -------
@@ -186,7 +191,7 @@ def facts_values(*, facts: DeviceFacts | None) -> tuple[str, str, str, str]:
     if facts is None:
         return UNKNOWN, UNKNOWN, UNKNOWN, UNKNOWN
     synced = {True: 'synced', False: 'not synced', None: UNKNOWN}
-    tiles = local_time(stamp=facts.tiles_built, zone=SYDNEY)
+    tiles = local_time(stamp=facts.tiles_built, zone=zone)
     return (
         wifi_value(wifi=facts.wifi),
         synced[facts.clock_synced],
@@ -211,7 +216,9 @@ def device_rows(*, state: State) -> tuple[InfoRow, ...]:
         last error.
     """
     facts = state.panel.facts
-    wifi, clock, tiles, software = facts_values(facts=facts)
+    wifi, clock, tiles, software = facts_values(
+        facts=facts, zone=state.city.zone,
+    )
     error = UNKNOWN if facts is None else (facts.last_error or 'none')
     return (
         InfoRow(label='Wi-Fi', value=wifi),
@@ -239,7 +246,7 @@ def device_view(*, state: State) -> DeviceView:
         The clock and the lines.
     """
     return DeviceView(
-        clock=clock_text(moment=state.now, zone=SYDNEY),
+        clock=clock_text(moment=state.now, zone=state.city.zone),
         rows=device_rows(state=state),
     )
 

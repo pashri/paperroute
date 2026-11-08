@@ -2,21 +2,14 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, tzinfo
 from enum import StrEnum
 from typing import Final
 
 from paperroute.core.live import LiveDeparture
-from paperroute_device.core.text import DOT
-from paperroute_device.core.text import clock_text as zoned_clock_text
+from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.alert_model import AlertBanner
-from paperroute_transit.core.model import (
-    SYDNEY,
-    CarryOn,
-    Departure,
-    Mode,
-    shifted,
-)
+from paperroute_transit.core.model import CarryOn, Departure, Mode
 
 VISIBLE_ROWS: Final[int] = 8
 ROWS_UNDER_BANNER: Final[int] = 7
@@ -211,6 +204,8 @@ class StopInputs:
         Departures in timetable order.
     now : datetime
         The frame time.
+    zone : tzinfo
+        Local time zone the times show in.
     scroll : int
         Requested scroll offset.
     live_since : datetime | None
@@ -243,6 +238,7 @@ class StopInputs:
     destination: str | None
     departures: tuple[LiveDeparture, ...]
     now: datetime
+    zone: tzinfo
     scroll: int
     live_since: datetime | None
     has_feed: bool
@@ -254,23 +250,6 @@ class StopInputs:
     large: bool = False
     inverted: bool = False
     alert: AlertBanner | None = None
-
-
-def clock_text(*, moment: datetime) -> str:
-    """
-    A 24-hour Sydney clock time without a leading zero.
-
-    Parameters
-    ----------
-    moment : datetime
-        Time.
-
-    Returns
-    -------
-    str
-        For example '8:05'.
-    """
-    return zoned_clock_text(moment=moment, zone=SYDNEY)
 
 
 def countdown(*, departs: datetime, now: datetime) -> str:
@@ -297,7 +276,9 @@ def countdown(*, departs: datetime, now: datetime) -> str:
     return 'now' if minutes <= 0 else str(minutes)
 
 
-def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
+def to_row(
+    *, item: LiveDeparture, now: datetime, pill: Pill | None, zone: tzinfo,
+) -> Row:
     """
     Turn a departure into a row.
 
@@ -309,6 +290,8 @@ def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
         Current time.
     pill : Pill | None
         Marker.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -326,8 +309,8 @@ def to_row(*, item: LiveDeparture, now: datetime, pill: Pill | None) -> Row:
             ' Station'
         ),
         countdown=countdown(departs=item.departs, now=now),
-        leaves_at=clock_text(moment=item.departs),
-        arrives_at=clock_text(moment=item.arrives),
+        leaves_at=clock_text(moment=item.departs, zone=zone),
+        arrives_at=clock_text(moment=item.arrives, zone=zone),
         ride_minutes=int(ride_s // 60),
         live=item.live,
         pill=pill,
@@ -377,7 +360,11 @@ def pills(
 
 
 def live_line(
-    *, live_since: datetime | None, now: datetime, limit: timedelta
+    *,
+    live_since: datetime | None,
+    now: datetime,
+    limit: timedelta,
+    zone: tzinfo,
 ) -> str | None:
     """
     Choose the banner about live data going missing, if one is needed.
@@ -391,6 +378,8 @@ def live_line(
         The frame time.
     limit : timedelta
         How old live data may be.
+    zone : tzinfo
+        Local time zone the time shows in.
 
     Returns
     -------
@@ -401,7 +390,8 @@ def live_line(
         return f'Timetable times{DOT}no live data yet'
     age = now.timestamp() - live_since.timestamp()
     if age > limit.total_seconds():
-        return f'No live data since {clock_text(moment=live_since)}'
+        since = clock_text(moment=live_since, zone=zone)
+        return f'No live data since {since}'
     return None
 
 
@@ -442,11 +432,11 @@ def not_departed(
     list[LiveDeparture]
         The rest, in order.
     """
-    cutoff = shifted(moment=now, seconds=-59)
+    cutoff = now.timestamp() - 59
     return [
         item
         for item in departures
-        if item.departs.timestamp() >= cutoff.timestamp()
+        if item.departs.timestamp() >= cutoff
     ]
 
 
@@ -569,6 +559,7 @@ def alert_shown(*, inputs: StopInputs) -> AlertBanner | None:
         live_since=inputs.live_since,
         now=inputs.now,
         limit=inputs.stale_after,
+        zone=inputs.zone,
     ):
         return None
     return inputs.alert
@@ -598,6 +589,7 @@ def banner_text(*, inputs: StopInputs) -> str | None:
             live_since=inputs.live_since,
             now=inputs.now,
             limit=inputs.stale_after,
+            zone=inputs.zone,
         )
         if line:
             return line
@@ -671,7 +663,7 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     """
     upcoming = in_view(departures=inputs.departures, now=inputs.now)
     rows = [
-        to_row(item=item, now=inputs.now, pill=pill)
+        to_row(item=item, now=inputs.now, pill=pill, zone=inputs.zone)
         for item, pill in zip(
             upcoming,
             pills(items=upcoming, faster=inputs.destination is not None),
@@ -688,7 +680,7 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     return StopView(
         origin=inputs.origin,
         destination=inputs.destination,
-        clock=clock_text(moment=inputs.now),
+        clock=clock_text(moment=inputs.now, zone=inputs.zone),
         hero=None if lead is None else rows[lead],
         rows=tuple(rest[offset : offset + shown]),
         banner=text,

@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.feeds import DAILY_LIMIT
 from paperroute.core.messages import (
     FeedFailed,
@@ -26,7 +27,6 @@ from paperroute.core.state_model import Cycle, State
 from paperroute.core.state_saves import SAVE_AFTER
 from paperroute.core.state_views import saved_of
 from paperroute_testkit.core.steps import wakeful
-from paperroute_transit.core.model import SYDNEY
 from tests.core.test_state import BUSES, HOLD, at, fresh, loaded, pinned, saves
 
 DAY = date(2026, 10, 21)
@@ -59,7 +59,7 @@ def test_constants() -> None:
 
 def test_fetches_are_counted() -> None:
     """A tick fetching two trip feeds and one alerts feed counts three."""
-    now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY)
+    now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY_ZONE)
     state = replace(
         loaded(state=fresh(now=now)), feeds=TWO_FEEDS, quota=Quota(),
     )
@@ -70,8 +70,8 @@ def test_fetches_are_counted() -> None:
 
 def test_quota_rolls_over_at_sydney_midnight() -> None:
     """The count restarts on the first call of the next Sydney day."""
-    late = datetime(2026, 10, 21, 23, 59, 59, tzinfo=SYDNEY)
-    early = datetime(2026, 10, 22, 0, 0, 5, tzinfo=SYDNEY)
+    late = datetime(2026, 10, 21, 23, 59, 59, tzinfo=SYDNEY_ZONE)
+    early = datetime(2026, 10, 22, 0, 0, 5, tzinfo=SYDNEY_ZONE)
     state = wakeful(state=loaded(state=fresh(now=late)))
     state = replace(state, quota=Quota(day=DAY, calls=500))
     state, _ = step(fetching(state=state), Tick(now=late))
@@ -82,8 +82,8 @@ def test_quota_rolls_over_at_sydney_midnight() -> None:
 
 def test_quota_rolls_over_on_a_daylight_saving_day() -> None:
     """Midnight after the clocks go forward still starts a new day."""
-    late = datetime(2026, 10, 4, 23, 59, tzinfo=SYDNEY)
-    early = datetime(2026, 10, 5, 0, 0, tzinfo=SYDNEY)
+    late = datetime(2026, 10, 4, 23, 59, tzinfo=SYDNEY_ZONE)
+    early = datetime(2026, 10, 5, 0, 0, tzinfo=SYDNEY_ZONE)
     state = wakeful(state=loaded(state=fresh(now=late)))
     state = replace(state, quota=Quota(day=date(2026, 10, 4), calls=9))
     state, _ = step(fetching(state=state), Tick(now=late))
@@ -186,7 +186,7 @@ def skipped(*, at: datetime, sent: bool = False) -> FeedFailed:
 
 def test_fetch_skipped_in_backoff_is_not_counted() -> None:
     """A fetch its backoff turned away gives back its call."""
-    now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY)
+    now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY_ZONE)
     state = replace(
         loaded(state=fresh(now=now)), quota=Quota(day=DAY, calls=5),
     )
@@ -196,7 +196,7 @@ def test_fetch_skipped_in_backoff_is_not_counted() -> None:
 
 def test_joined_fetch_is_not_counted() -> None:
     """A fetch that shared another's request gives back its call."""
-    now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY)
+    now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY_ZONE)
     state = replace(
         loaded(state=fresh(now=now)), quota=Quota(day=DAY, calls=5),
     )
@@ -206,7 +206,7 @@ def test_joined_fetch_is_not_counted() -> None:
 
 def test_sent_failure_is_still_counted() -> None:
     """A fetch that reached TfNSW and failed keeps its call."""
-    now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY)
+    now = datetime(2026, 10, 21, 8, 0, tzinfo=SYDNEY_ZONE)
     state = replace(
         loaded(state=fresh(now=now)), quota=Quota(day=DAY, calls=5),
     )
@@ -216,7 +216,7 @@ def test_sent_failure_is_still_counted() -> None:
 
 def test_skip_after_midnight_leaves_the_new_day_alone() -> None:
     """A skip landing on a day with no calls counted takes nothing."""
-    early = datetime(2026, 10, 22, 0, 0, 1, tzinfo=SYDNEY)
+    early = datetime(2026, 10, 22, 0, 0, 1, tzinfo=SYDNEY_ZONE)
     state = replace(
         loaded(state=fresh(now=early)), quota=Quota(day=DAY, calls=5),
     )

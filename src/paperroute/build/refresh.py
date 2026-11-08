@@ -41,6 +41,7 @@ from paperroute.build.timetable import (
     build_timetable,
     yesterday,
 )
+from paperroute.city import SYDNEY
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
 from paperroute_device.rss import max_rss_mb
 from paperroute_transit.build.gtfs_files import Source
@@ -289,7 +290,7 @@ def build_and_check(*, layout: Layout, changed: tuple[str, ...],
             )
             for spec in SOURCES
         ],
-        window=Window(start=yesterday(), days=days),
+        window=Window(start=yesterday(zone=SYDNEY.zone), days=days),
         out=out,
         handoff=handoff,
     )
@@ -339,7 +340,7 @@ def days_left(*, meta: dict[str, str]) -> int:
     end = date.fromisoformat(meta['window_start']) + timedelta(
         days=int(meta['window_days']),
     )
-    return (end - yesterday()).days - 1
+    return (end - yesterday(zone=SYDNEY.zone)).days - 1
 
 
 def update(*, layout: Layout, fetched: Fetched, days: int,

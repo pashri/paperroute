@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.chains import Chain
 from paperroute.core.connection_strip import (
     LegCall,
@@ -121,6 +122,7 @@ def test_sections_for_change_pair() -> None:
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     first, second = view.sections
     assert first.title == (
@@ -152,6 +154,7 @@ def test_leg_times_follow_delay() -> None:
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     first, second = view.sections
     assert [stop.time for stop in first.stops] == ['7:36', '', '7:42']
@@ -172,6 +175,7 @@ def test_leg_arrival_is_the_live_arrival_the_pair_was_made_with() -> None:
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert [stop.time for stop in view.sections[0].stops] == [
         '7:36', '', '7:40',
@@ -189,6 +193,7 @@ def test_leg_calls_skip_passing() -> None:
     calls = leg_calls(
         item=live(item=LEG1[0]), last=live(item=LEG1[0]), pattern=trip, start='G2145615',
         end='G215254',
+        zone=SYDNEY_ZONE,
     )
     assert [stop.station for stop, _ in calls] == [
         'G2145615', 's1', 's3', 'G215254',
@@ -204,6 +209,7 @@ def test_rowless_leg_says_no_stops() -> None:
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert view.sections[1].stops == ()
     assert view.sections[1].empty == NO_LEG_STOPS
@@ -217,6 +223,7 @@ def test_unknown_trip_says_no_stops() -> None:
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert view.sections[1].empty == NO_LEG_STOPS
 
@@ -236,6 +243,7 @@ def test_leg_follows_joined_trip_to_its_end() -> None:
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     second = view.sections[1]
     assert second.empty is None
@@ -247,6 +255,7 @@ def test_leg_calls_missing_end() -> None:
     calls = leg_calls(
         item=live(item=LEG1[0]), last=live(item=LEG1[0]), pattern=FIRST_LEG, start='G2145615',
         end='nowhere',
+        zone=SYDNEY_ZONE,
     )
     assert calls == ()
 
@@ -264,11 +273,13 @@ def test_stay_on_ends_at_last_leg_visit() -> None:
     )
     calls = leg_calls(
         item=item, last=last, pattern=loop, start='G2145615', end='G215254',
+        zone=SYDNEY_ZONE,
     )
     assert len(calls) == 5
     assert calls[-1][1] == at(7, 39)
     alone = leg_calls(
         item=item, last=item, pattern=loop, start='G2145615', end='G215254',
+        zone=SYDNEY_ZONE,
     )
     assert len(alone) == 3
 
@@ -301,7 +312,7 @@ def calls_at(*, count: int) -> tuple[LegCall, ...]:
 
 def test_leg_folds_middle() -> None:
     """A leg shows its first and last stop and folds the rest."""
-    rows = fold_leg(calls=calls_at(count=11))
+    rows = fold_leg(calls=calls_at(count=11), zone=SYDNEY_ZONE)
     assert [(row.name, row.time) for row in rows] == [
         ('Stop 0', '8:00'), ('9 stops', ''), ('Stop 10', '8:10'),
     ]
@@ -312,13 +323,16 @@ def test_leg_folds_middle() -> None:
 
 def test_short_leg_no_fold() -> None:
     """Two calls need no fold row."""
-    rows = fold_leg(calls=calls_at(count=2))
+    rows = fold_leg(calls=calls_at(count=2), zone=SYDNEY_ZONE)
     assert [row.name for row in rows] == ['Stop 0', 'Stop 1']
 
 
 def test_one_stop_singular() -> None:
     """One stop between reads singular."""
-    assert fold_leg(calls=calls_at(count=3))[1].name == '1 stop'
+    assert fold_leg(
+        calls=calls_at(count=3),
+        zone=SYDNEY_ZONE,
+    )[1].name == '1 stop'
 
 
 LEPPINGTON: Final[StopPlace] = place(
@@ -350,6 +364,7 @@ def test_vehicle_before_board_note() -> None:
         position=vehicle(timestamp=0, trip_id='t5', point=(150.0, 0.0)),
         board=LEPPINGTON,
         pattern=T5,
+        zone=SYDNEY_ZONE,
     )
     assert note == 'T5 3 stops before Leppington Station'
     near = approach_note(
@@ -357,6 +372,7 @@ def test_vehicle_before_board_note() -> None:
         position=vehicle(timestamp=0, trip_id='t5', point=(350.0, 0.0)),
         board=LEPPINGTON,
         pattern=T5,
+        zone=SYDNEY_ZONE,
     )
     assert near == 'T5 1 stop before Leppington Station'
 
@@ -372,6 +388,7 @@ def test_loop_note_counts_from_boarded_visit() -> None:
         position=vehicle(timestamp=0, trip_id='t5', point=(150.0, 0.0)),
         board=LEPPINGTON,
         pattern=loop,
+        zone=SYDNEY_ZONE,
     )
     assert note == 'T5 3 stops before Leppington Station'
 
@@ -384,15 +401,18 @@ def test_no_note_after_boarding() -> None:
         position=vehicle(timestamp=0, trip_id='t5', point=(350.0, 0.0)),
         board=past,
         pattern=T5,
+        zone=SYDNEY_ZONE,
     ) is None
     assert approach_note(
         leg=T5_LEG, position=None, board=LEPPINGTON, pattern=T5,
+        zone=SYDNEY_ZONE,
     ) is None
     assert approach_note(
         leg=T5_LEG,
         position=vehicle(timestamp=0, trip_id='t5', point=(150.0, 0.0)),
         board=LEPPINGTON,
         pattern=None,
+        zone=SYDNEY_ZONE,
     ) is None
 
 
@@ -415,6 +435,7 @@ def test_strip_section_carries_vehicle_note() -> None:
         positions={'f': feed},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert view.sections[0].vehicle == (
         'T5 3 stops before Leppington Station'
@@ -428,6 +449,7 @@ def test_strip_section_carries_vehicle_note() -> None:
         positions={'f': feed},
         now=at(7, 45),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert quiet.sections[0].vehicle is None
 
@@ -455,6 +477,7 @@ def test_stay_pair_one_section() -> None:
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     (section,) = view.sections
     assert section.route == '609'
@@ -471,6 +494,7 @@ def test_missing_pattern_loading() -> None:
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     second = view.sections[1]
     assert second.stops == ()
@@ -484,6 +508,7 @@ def test_selected_clamped() -> None:
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert len(view.pairs) == 5
     assert view.selected == 4
@@ -498,6 +523,7 @@ def test_no_pairs_no_sections() -> None:
         positions={},
         now=at(7, 30),
         stale_after=STALE_LIMIT,
+        zone=SYDNEY_ZONE,
     )
     assert view.sections == ()
     assert view.selected == 0

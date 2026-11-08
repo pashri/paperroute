@@ -9,10 +9,10 @@ from google.transit import gtfs_realtime_pb2
 
 from paperroute.adapters.gtfs_alerts import english, parse_alerts
 from paperroute.adapters.tfnsw import FeedError
+from paperroute.city import SYDNEY_ZONE
 from paperroute_transit.core.alert_model import Alert, AlertsSnapshot, Period
-from paperroute_transit.core.model import SYDNEY
 
-NOW = datetime(2026, 10, 24, 9, 0, tzinfo=SYDNEY)
+NOW = datetime(2026, 10, 24, 9, 0, tzinfo=SYDNEY_ZONE)
 FIXTURE = (
     Path(__file__).parent.parent
     / 'fixtures'
@@ -90,7 +90,7 @@ def sydney(
         An aware datetime.
     """
     return datetime(
-        2026, month, day, hour, minute, second, tzinfo=SYDNEY
+        2026, month, day, hour, minute, second, tzinfo=SYDNEY_ZONE
     )
 
 

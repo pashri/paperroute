@@ -2,7 +2,7 @@
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import Final
 
 from paperroute.core.alert_match import (
@@ -97,7 +97,7 @@ class AlertsView:
     page: int
 
 
-def also_line(*, window: Period, now: datetime) -> str:
+def also_line(*, window: Period, now: datetime, zone: tzinfo) -> str:
     """
     The line for a later window.
 
@@ -107,6 +107,8 @@ def also_line(*, window: Period, now: datetime) -> str:
         The window, which may lack a start or an end.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -115,17 +117,19 @@ def also_line(*, window: Period, now: datetime) -> str:
         a start, 'Also until <end>' or 'Also ongoing'.
     """
     end = None if window.end is None else when_text(
-        moment=window.end, now=now,
+        moment=window.end, now=now, zone=zone,
     )
     if window.start is None:
         return 'Also ongoing' if end is None else f'Also until {end}'
-    start = when_text(moment=window.start, now=now)
+    start = when_text(moment=window.start, now=now, zone=zone)
     if end is None:
         return f'Also from {start}, ongoing'
     return f'Also {start} to {end}'
 
 
-def alert_text(*, listed: Listed, now: datetime) -> AlertText:
+def alert_text(
+    *, listed: Listed, now: datetime, zone: tzinfo,
+) -> AlertText:
     """
     The full text of a listed alert.
 
@@ -135,6 +139,8 @@ def alert_text(*, listed: Listed, now: datetime) -> AlertText:
         The alert.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -146,9 +152,11 @@ def alert_text(*, listed: Listed, now: datetime) -> AlertText:
     later = windows[len(windows) - listed.timing.more:]
     return AlertText(
         title=headline_of(alert=alert),
-        when=time_line(timing=listed.timing, now=now),
+        when=time_line(timing=listed.timing, now=now, zone=zone),
         body=alert.description,
-        also=tuple(also_line(window=item, now=now) for item in later),
+        also=tuple(
+            also_line(window=item, now=now, zone=zone) for item in later
+        ),
     )
 
 
@@ -176,7 +184,7 @@ def headline_of(*, alert: Alert) -> str:
     return f'{"/".join(routes[:LINE_NAMES])}{DOT}{alert.header}'
 
 
-def alert_row(*, listed: Listed, now: datetime) -> AlertRow:
+def alert_row(*, listed: Listed, now: datetime, zone: tzinfo) -> AlertRow:
     """
     The list row of an alert.
 
@@ -186,6 +194,8 @@ def alert_row(*, listed: Listed, now: datetime) -> AlertRow:
         The alert.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -194,7 +204,7 @@ def alert_row(*, listed: Listed, now: datetime) -> AlertRow:
     """
     return AlertRow(
         headline=headline_of(alert=listed.matched.alert),
-        when=time_line(timing=listed.timing, now=now),
+        when=time_line(timing=listed.timing, now=now, zone=zone),
         active=listed.timing.active,
     )
 
@@ -226,6 +236,7 @@ def build_alerts_view(
     page: int,
     stop_view: StopView,
     now: datetime,
+    zone: tzinfo,
 ) -> AlertsView:
     """
     Build the Alerts view.
@@ -242,6 +253,8 @@ def build_alerts_view(
         The Stop view, for the header's texts.
     now : datetime
         Current time.
+    zone : tzinfo
+        Local time zone the times show in.
 
     Returns
     -------
@@ -256,8 +269,10 @@ def build_alerts_view(
         destination=stop_view.destination,
         clock=stop_view.clock,
         tag=stop_view.tag,
-        rows=tuple(alert_row(listed=item, now=now) for item in shown),
+        rows=tuple(
+            alert_row(listed=item, now=now, zone=zone) for item in shown
+        ),
         selected=index - first,
-        text=alert_text(listed=listed[index], now=now),
+        text=alert_text(listed=listed[index], now=now, zone=zone),
         page=page,
     )

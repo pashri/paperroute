@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from paperroute.city import SYDNEY_ZONE
 from paperroute.core.cycle import cycle_effects
 from paperroute.core.feeds import ALL_POSITION_MODES, FeedKind, position_feeds
 from paperroute.core.map_fit import BANNER_ROOM, CREDIT_ROOM
@@ -41,13 +42,7 @@ from paperroute_testkit.core.strip_factories import (
     turn,
 )
 from paperroute_transit.core.geo import Point
-from paperroute_transit.core.model import (
-    SYDNEY,
-    Departure,
-    Mode,
-    Pin,
-    RouteKind,
-)
+from paperroute_transit.core.model import Departure, Mode, Pin, RouteKind
 from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_connection_screens import legs_loaded, started
 
@@ -181,7 +176,7 @@ def test_strip_feeds_unchanged() -> None:
 
 def test_positions_follow_rate() -> None:
     """Off-peak, the Map's positions are due on two-minute boundaries."""
-    noon = datetime(2026, 10, 16, 12, 0, tzinfo=SYDNEY)
+    noon = datetime(2026, 10, 16, 12, 0, tzinfo=SYDNEY_ZONE)
     state = on_map()
     cycle = Cycle(started=noon, asked=frozenset(map_feeds(state=state)))
     for later, due in ((60, False), (119, False), (120, True)):

@@ -1,7 +1,7 @@
 """Polling the shown pin's alert feeds and tying their alerts to it."""
 
 from dataclasses import replace
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, tzinfo
 from typing import Final
 
 from paperroute.core.alert_match import Listed, listed_alerts, matched_alerts
@@ -24,7 +24,7 @@ from paperroute_transit.core.alert_model import (
     BetweenLoaded,
     LoadBetween,
 )
-from paperroute_transit.core.model import SYDNEY, Mode, Pin, same_place
+from paperroute_transit.core.model import Mode, Pin, same_place
 
 ALERT_EVERY: Final[timedelta] = timedelta(minutes=5)
 
@@ -142,7 +142,7 @@ def between_requests(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     )
     known = bool(departures) or not (wants or unsure)
     day = departures[0].service_day if departures else service_date(
-        moment=state.now,
+        moment=state.now, zone=state.city.zone,
     )
     if was_asked(state=state, pin=pin, known=known, day=day):
         return state, ()
@@ -156,21 +156,23 @@ def between_requests(*, state: State) -> tuple[State, tuple[Effect, ...]]:
     return replace(state, alerts=replace(state.alerts, asked=asked)), (load,)
 
 
-def service_date(*, moment: datetime) -> date:
+def service_date(*, moment: datetime, zone: tzinfo) -> date:
     """
-    The Sydney calendar date of a moment.
+    The local calendar date of a moment.
 
     Parameters
     ----------
     moment : datetime
         The moment.
+    zone : tzinfo
+        Local time zone.
 
     Returns
     -------
     date
-        Its date in Sydney.
+        Its local date.
     """
-    return moment.astimezone(SYDNEY).date()
+    return moment.astimezone(zone).date()
 
 
 def was_asked(*, state: State, pin: Pin, known: bool, day: date) -> bool:

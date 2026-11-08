@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Final
 
+from paperroute.city import SYDNEY, SYDNEY_ZONE
 from paperroute.core.live import LiveDeparture
 from paperroute.core.saved import Saved
 from paperroute.core.state import initial_state
@@ -19,7 +20,6 @@ from paperroute.core.stop_view import (
 from paperroute.core.strip_model import StripInputs
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.model import (
-    SYDNEY,
     CarryOn,
     Departure,
     Mode,
@@ -42,7 +42,7 @@ from paperroute_transit.core.reach import (
 )
 from paperroute_transit.core.reach_layout import LineExit
 
-START = datetime(2026, 10, 16, 8, 0, tzinfo=SYDNEY)
+START = datetime(2026, 10, 16, 8, 0, tzinfo=SYDNEY_ZONE)
 STALE_LIMIT: Final[timedelta] = timedelta(minutes=2)
 EIGHT: int = 8 * 3600  # seconds into the service day
 TEN_MINUTES: int = 600  # seconds
@@ -86,7 +86,7 @@ def begun(*, saved: Saved, now: datetime = START) -> State:
     State
         The state.
     """
-    state = initial_state(saved=saved, now=now, stored=True)
+    state = initial_state(saved=saved, now=now, stored=True, city=SYDNEY)
     refresh = replace(state.refresh, started_at=now - LOADING_WAIT)
     return replace(state, refresh=refresh)
 
@@ -517,6 +517,7 @@ def stop_view_of(
         destination=destination,
         departures=tuple(departures),
         now=now,
+        zone=SYDNEY_ZONE,
         stale_after=STALE_LIMIT,
         scroll=0,
         live_since=now,
@@ -563,6 +564,7 @@ def inputs_of(
         patterns=patterns or {},
         positions=positions or {},
         now=now,
+        zone=SYDNEY_ZONE,
         stale_after=STALE_LIMIT,
         scroll=0,
         cursor=None,

@@ -63,7 +63,7 @@ def city_under_test() -> City:
     Returns
     -------
     City
-        The city the root ``conftest.py`` set.
+        The city a ``conftest.py`` set.
 
     Raises
     ------
@@ -72,7 +72,72 @@ def city_under_test() -> City:
     """
     if UNDER_TEST.city is None:
         raise RuntimeError(
-            'no city under test: the root conftest.py must call '
+            'no city under test: a conftest.py must call '
             'use_city_under_test first',
         )
     return UNDER_TEST.city
+
+
+def line_mode() -> str:
+    """
+    Give the first mode of the city under test chosen by line.
+
+    Returns
+    -------
+    str
+        Its mode id, such as Sydney's 'train'.
+
+    Raises
+    ------
+    ValueError
+        When the city has no such mode.
+    """
+    for spec in city_under_test().modes:
+        if spec.by_line:
+            return spec.id
+    raise ValueError('the city under test has no mode chosen by line')
+
+
+def street_mode() -> str:
+    """
+    Give the first mode of the city under test with place tags.
+
+    Returns
+    -------
+    str
+        Its mode id, such as Sydney's 'bus'.
+
+    Raises
+    ------
+    ValueError
+        When the city has no such mode.
+    """
+    for spec in city_under_test().modes:
+        if spec.tagged:
+            return spec.id
+    raise ValueError('the city under test has no mode with place tags')
+
+
+def source_of(*, mode: str) -> str:
+    """
+    Give the first feed source of one mode of the city under test.
+
+    Parameters
+    ----------
+    mode : str
+        Mode id.
+
+    Returns
+    -------
+    str
+        Its alphabetically first feed source.
+
+    Raises
+    ------
+    ValueError
+        When the mode has no feed source.
+    """
+    sources = city_under_test().feeds.sources_of(mode=mode)
+    if not sources:
+        raise ValueError(f'mode {mode!r} has no feed source')
+    return min(sources)

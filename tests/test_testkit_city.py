@@ -34,13 +34,13 @@ def test_city_under_test_needs_setting() -> None:
         check=True,
     )
     assert result.stdout == (
-        'no city under test: the root conftest.py must call '
+        'no city under test: a conftest.py must call '
         'use_city_under_test first\n'
     )
 
 
 def test_city_under_test_is_sydney() -> None:
-    """The root conftest fills the setting with Sydney."""
+    """The root tests' conftest fills the setting with Sydney."""
     assert city_under_test() is SYDNEY
 
 

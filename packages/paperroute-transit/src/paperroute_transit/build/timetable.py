@@ -21,6 +21,7 @@ from paperroute_transit.build.gtfs_files import (
     Source,
     active_dates,
     insert_many,
+    last_service_day,
     parse_time,
     read_rows,
 )
@@ -29,7 +30,11 @@ from paperroute_transit.build.holidays import holiday_dates
 from paperroute_transit.build.shapes import load_shapes
 from paperroute_transit.core.city import City, MergeReport
 from paperroute_transit.core.geo import DegreeBox
-from paperroute_transit.core.model import HIDDEN_HEADSIGNS, TIMETABLE_SCHEMA
+from paperroute_transit.core.model import (
+    HIDDEN_HEADSIGNS,
+    SOURCE_END,
+    TIMETABLE_SCHEMA,
+)
 from paperroute_transit.core.modes import Classifier
 
 logger = logging.getLogger(__name__)
@@ -635,9 +640,13 @@ def write_meta(
     conn: sqlite3.Connection,
     window: Window,
     origin: str,
+    ends: dict[str, date],
 ) -> None:
     """
     Record the window, schema version, projection origin and build time.
+
+    Each source's last service date goes under its own key, the
+    SOURCE_END prefix then the source name.
 
     Parameters
     ----------
@@ -647,13 +656,41 @@ def write_meta(
         Dates covered.
     origin : str
         The projection origin text the timetable's metres are from.
+    ends : dict[str, date]
+        Source name to the last date its calendar has service.
     """
     conn.executemany('INSERT INTO meta VALUES (?, ?)', [
         ('window_start', window.start.isoformat()),
         ('window_days', str(window.days)),
         ('schema_version', SCHEMA_VERSION),
         ('origin', origin),
-        ('built_at', datetime.now(timezone.utc).isoformat())])
+        ('built_at', datetime.now(timezone.utc).isoformat()),
+        *(
+            (f'{SOURCE_END}{name}', end.isoformat())
+            for name, end in ends.items()
+        ),
+    ])
+
+
+def source_ends(*, sources: list[Source]) -> dict[str, date]:
+    """
+    Name the last date each source's calendar has service.
+
+    Parameters
+    ----------
+    sources : list[Source]
+        Feeds being built.
+
+    Returns
+    -------
+    dict[str, date]
+        Source name to its last date; a source with no calendar is absent.
+    """
+    ends = {
+        source.name: last_service_day(archive=source.archive)
+        for source in sources
+    }
+    return {name: end for name, end in ends.items() if end is not None}
 
 
 def load_holidays(*, conn: sqlite3.Connection, archive: Path,
@@ -711,11 +748,20 @@ def load_all(*, sources: list[Source], window: Window,
             if source.name == city.timetable.holiday_source:
                 load_holidays(conn=conn, archive=source.archive,
                               window=window)
-        return merged(conn=conn, window=window, city=city)
+        return merged(
+            conn=conn,
+            window=window,
+            city=city,
+            ends=source_ends(sources=sources),
+        )
 
 
 def merged(
-    *, conn: sqlite3.Connection, window: Window, city: City,
+    *,
+    conn: sqlite3.Connection,
+    window: Window,
+    city: City,
+    ends: dict[str, date],
 ) -> MergeReport:
     """
     Run the city's merge and finish the file.
@@ -728,6 +774,8 @@ def merged(
         Dates loaded.
     city : City
         The city: its merge hook and projection origin.
+    ends : dict[str, date]
+        Source name to the last date its calendar has service.
 
     Returns
     -------
@@ -742,6 +790,7 @@ def merged(
         conn=conn,
         window=window,
         origin=city.projection.origin_text,
+        ends=ends,
     )
     conn.commit()
     return report

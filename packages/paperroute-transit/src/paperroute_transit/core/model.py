@@ -11,6 +11,7 @@ from typing import Final
 from paperroute_transit.core.geo import Point
 
 TIMETABLE_SCHEMA: Final[str] = '8'
+SOURCE_END: Final[str] = 'source_end:'  # meta key prefix, then the source
 DAY_NAMES: Final[tuple[str, ...]] = (
     'mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun',
 )

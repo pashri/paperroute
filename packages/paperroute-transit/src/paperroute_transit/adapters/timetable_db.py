@@ -57,6 +57,7 @@ from paperroute_transit.core.geo import (
 )
 from paperroute_transit.core.model import (
     HIDDEN_HEADSIGNS,
+    SOURCE_END,
     Departure,
     Pin,
     ServiceSpan,
@@ -401,13 +402,17 @@ class SqliteTimetableRepository:
 
     def last_day(self) -> date | None:
         """
-        Say the last day the file's window covers.
+        Say the last day the file has service for every source.
+
+        That is the earliest of the window's last day and each source's
+        last calendar date, so a source whose stored feed runs out sooner
+        brings the day forward. A file without the source dates gives the
+        window's last day; a malformed source date is skipped.
 
         Returns
         -------
         date | None
-            The window's start plus its days, less one; None when the
-            file records no window.
+            The last day; None when the file records no readable window.
         """
         rows = {
             str(key): str(value)
@@ -415,15 +420,15 @@ class SqliteTimetableRepository:
                 sql=(
                     'SELECT key, value FROM meta'
                     " WHERE key IN ('window_start', 'window_days')"
+                    ' OR key LIKE ?'
                 ),
-                params=(),
+                params=(f'{SOURCE_END}%',),
             )
         }
-        if 'window_start' not in rows or 'window_days' not in rows:
+        window = window_end(rows=rows)
+        if window is None:
             return None
-        start = date.fromisoformat(rows['window_start'])
-        days = timedelta(days=int(rows['window_days']) - 1)
-        return start + days
+        return min([window, *source_end_days(rows=rows)])
 
     def holidays(self) -> frozenset[date]:
         """
@@ -1105,3 +1110,51 @@ def to_point(
         lat=float(str(lat)),
         projection=projection,
     )
+
+
+def window_end(*, rows: dict[str, str]) -> date | None:
+    """
+    Work out the last day of a timetable's window from its meta.
+
+    Parameters
+    ----------
+    rows : dict[str, str]
+        Meta keys and values.
+
+    Returns
+    -------
+    date | None
+        The window's start plus its days, less one; None when either is
+        missing or malformed.
+    """
+    try:
+        start = date.fromisoformat(rows['window_start'])
+        days = timedelta(days=int(rows['window_days']) - 1)
+        return start + days
+    except (KeyError, ValueError, OverflowError):
+        return None
+
+
+def source_end_days(*, rows: dict[str, str]) -> list[date]:
+    """
+    Read each source's last service date from a timetable's meta.
+
+    Parameters
+    ----------
+    rows : dict[str, str]
+        Meta keys and values.
+
+    Returns
+    -------
+    list[date]
+        The dates that parse; malformed ones are skipped.
+    """
+    days = []
+    for key, value in rows.items():
+        if not key.startswith(SOURCE_END):
+            continue
+        try:
+            days.append(date.fromisoformat(value))
+        except ValueError:
+            continue
+    return days

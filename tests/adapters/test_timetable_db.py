@@ -31,6 +31,7 @@ from paperroute_transit.adapters.timetable_db import (
     LABEL_LIMIT,
     SqliteTimetableRepository,
 )
+from paperroute_transit.app_effects import VersionWatch
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.geo import to_metres
@@ -218,19 +219,27 @@ def test_reads_timetable_without_origin(tmp_path: Path) -> None:
         assert all(stop.point is not None for stop in pattern.stops)
 
 
-@pytest.mark.parametrize(
-    ('rows', 'last_day'),
-    [
-        ({'window_start': '2026-10-15', 'window_days': '14'}, date(2026, 10, 28)),
-        ({'window_start': '2026-10-15'}, None),
-        ({'window_days': '14'}, None),
-        ({}, None),
-    ],
-)
-def test_last_day_from_the_window(
-    tmp_path: Path, rows: dict[str, str], last_day: date | None,
-) -> None:
-    """The last day is the window's start plus its days, less one."""
+WINDOW: Final[dict[str, str]] = {
+    'window_start': '2026-10-15', 'window_days': '14',
+}
+
+
+def meta_db(*, tmp_path: Path, rows: dict[str, str]) -> Path:
+    """
+    Build a small timetable whose meta holds only the given rows.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Directory for the file.
+    rows : dict[str, str]
+        Meta keys and values.
+
+    Returns
+    -------
+    Path
+        The timetable file.
+    """
     db = build_db(
         tmp_path=tmp_path,
         start=date(2026, 10, 15),
@@ -240,13 +249,68 @@ def test_last_day_from_the_window(
         ],
     )
     with closing(sqlite3.connect(db)) as conn:
-        conn.execute(
-            "DELETE FROM meta WHERE key IN ('window_start', 'window_days')",
-        )
+        conn.execute('DELETE FROM meta')
         conn.executemany('INSERT INTO meta VALUES (?, ?)', rows.items())
         conn.commit()
+    return db
+
+
+@pytest.mark.parametrize(
+    ('rows', 'last_day'),
+    [
+        (WINDOW, date(2026, 10, 28)),
+        ({'window_start': '2026-10-15'}, None),
+        ({'window_days': '14'}, None),
+        ({}, None),
+        (
+            {
+                **WINDOW,
+                'source_end:bundle': '2027-01-12',
+                'source_end:metro': '2026-10-20',
+                'source_end:sydneytrains': '2026-11-14',
+            },
+            date(2026, 10, 20),
+        ),
+        ({**WINDOW, 'source_end:bundle': '2027-01-12'}, date(2026, 10, 28)),
+        ({**WINDOW, 'window_days': 'fourteen'}, None),
+        ({**WINDOW, 'window_start': 'soon'}, None),
+        ({**WINDOW, 'window_days': '999999999'}, None),
+        (
+            {
+                **WINDOW,
+                'source_end:metro': 'never',
+                'source_end:bundle': '2026-10-25',
+            },
+            date(2026, 10, 25),
+        ),
+    ],
+    ids=[
+        'window', 'no-days', 'no-start', 'no-meta', 'earliest-source',
+        'window-first', 'bad-days', 'bad-start', 'huge-days',
+        'bad-source-end',
+    ],
+)
+def test_last_day_from_the_window_and_sources(
+    tmp_path: Path, rows: dict[str, str], last_day: date | None,
+) -> None:
+    """The last day is the earliest of the window's end and source ends."""
+    db = meta_db(tmp_path=tmp_path, rows=rows)
     with closing(SqliteTimetableRepository(path=db, city=SYDNEY)) as repo:
         assert repo.last_day() == last_day
+
+
+async def test_version_watch_survives_malformed_window(
+    tmp_path: Path,
+) -> None:
+    """A malformed window reads as no window, not an error."""
+    db = meta_db(
+        tmp_path=tmp_path,
+        rows={**WINDOW, 'window_days': 'x', 'built_at': 'v1'},
+    )
+    with closing(SqliteTimetableRepository(path=db, city=SYDNEY)) as repo:
+        seen = await VersionWatch(timetable=repo).check()
+    assert seen is not None
+    assert seen.last_day is None
 
 
 def test_old_timetable_still_places_vehicles(tmp_path: Path) -> None:

@@ -109,12 +109,13 @@ class TimetableRepository(Protocol):
 
     def last_day(self) -> date | None:
         """
-        Say the last day the timetable covers.
+        Say the last day the timetable has service for every source.
 
         Returns
         -------
         date | None
-            The last day of its window, or None when it records none.
+            The earlier of its window's last day and its sources' last
+            calendar dates, or None when it records no window.
         """
 
     def holidays(self) -> frozenset[date]:

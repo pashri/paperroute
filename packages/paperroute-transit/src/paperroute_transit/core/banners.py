@@ -63,7 +63,7 @@ def timetable_ends(*, last_day: date) -> str:
 
 def timetable_banner(*, state: State) -> str | None:
     """
-    Warn when the timetable's window is ending or has ended.
+    Warn when the timetable is running out or has run out.
 
     Today is the frame's date in the city's zone, so the text changes
     only at the city's midnight.

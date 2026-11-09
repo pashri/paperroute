@@ -404,8 +404,8 @@ class TimetableSeen:
     origin : str | None
         The file's projection origin text, or None when it records none.
     last_day : date | None
-        The last day the file's window covers, or None when it records
-        no window.
+        The last day the file has service for every source, or None
+        when it records no window.
     """
 
     version: str | None

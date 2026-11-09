@@ -271,6 +271,28 @@ def test_meta_records_origin(tmp_path: Path) -> None:
     assert rows == [('origin', '151.2093,-33.8688'), ('schema_version', '8')]
 
 
+def test_meta_records_each_source_end(tmp_path: Path) -> None:
+    """The build records the last date each source's calendar runs."""
+    files = sydneytrains_files()
+    trains = write_feed(path=tmp_path / 's.zip', files={
+        **files,
+        'calendar.txt': [{'service_id': 's-daily', **DAILY,
+                          'end_date': '20261020'}]})
+    db = built(tmp_path=tmp_path, sources=[
+        Source(name='sydneytrains', archive=trains),
+        *bundle_bus(tmp_path=tmp_path),
+    ])
+    rows = query(
+        db=db,
+        sql="SELECT key, value FROM meta WHERE key LIKE 'source_end:%'"
+            ' ORDER BY key',
+    )
+    assert rows == [
+        ('source_end:bundle', '2026-10-31'),
+        ('source_end:sydneytrains', '2026-10-20'),
+    ]
+
+
 def test_partly_merged_trip_keeps_its_shape(tmp_path: Path) -> None:
     """A bundle trip skipped on only some dates keeps its shape."""
     files = sydneytrains_files()

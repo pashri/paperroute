@@ -8,10 +8,14 @@ import pytest
 from paperroute_testkit.build.feed_zip import write_feed
 from paperroute_transit.build.gtfs_files import (
     active_dates,
+    last_service_day,
     parse_time,
     read_rows,
 )
 
+NEVER = {name: '0' for name in (
+    'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday',
+    'sunday')}
 WEEKDAYS = {'monday': '1', 'tuesday': '1', 'wednesday': '1', 'thursday': '1',
             'friday': '1', 'saturday': '0', 'sunday': '0'}
 
@@ -71,3 +75,38 @@ def test_active_dates_without_calendar_dates(tmp_path: Path) -> None:
                           'start_date': '20261001', 'end_date': '20261031'}]})
     dates = active_dates(archive=feed, start=date(2026, 10, 17), days=2)
     assert dates.get('wk', frozenset()) == frozenset()
+
+
+def test_last_service_day_takes_the_latest_end_or_added_date(
+    tmp_path: Path,
+) -> None:
+    """The latest running calendar end or added date wins."""
+    feed = write_feed(path=tmp_path / 'f.zip', files={
+        'calendar.txt': [
+            {'service_id': 'wk', **WEEKDAYS,
+             'start_date': '20261001', 'end_date': '20261031'},
+            {'service_id': 'off', **NEVER,
+             'start_date': '20261001', 'end_date': '20261231'},
+        ],
+        'calendar_dates.txt': [
+            {'service_id': 'wk', 'date': '20261105', 'exception_type': '1'},
+            {'service_id': 'wk', 'date': '20261201', 'exception_type': '2'},
+        ],
+    })
+    assert last_service_day(archive=feed) == date(2026, 11, 5)
+
+
+def test_last_service_day_from_calendar_alone(tmp_path: Path) -> None:
+    """A feed with only calendar.txt ends on its latest end date."""
+    feed = write_feed(path=tmp_path / 'f.zip', files={
+        'calendar.txt': [{'service_id': 'wk', **WEEKDAYS,
+                          'start_date': '20261001', 'end_date': '20261031'}]})
+    assert last_service_day(archive=feed) == date(2026, 10, 31)
+
+
+def test_last_service_day_without_a_calendar(tmp_path: Path) -> None:
+    """A feed with no calendar at all has no last day."""
+    feed = write_feed(
+        path=tmp_path / 'f.zip', files={'stops.txt': [{'stop_id': '1'}]},
+    )
+    assert last_service_day(archive=feed) is None

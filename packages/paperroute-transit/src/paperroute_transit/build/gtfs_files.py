@@ -134,6 +134,37 @@ def active_dates(*, archive: Path, start: date,
     return {key: frozenset(value) for key, value in result.items() if value}
 
 
+def last_service_day(*, archive: Path) -> date | None:
+    """
+    Name the last date a feed's calendar has any service on.
+
+    This is the latest calendar.txt end date of a row that runs on some
+    weekday, or the latest date calendar_dates.txt adds, whichever is
+    later. Removed dates are ignored.
+
+    Parameters
+    ----------
+    archive : Path
+        GTFS zip file.
+
+    Returns
+    -------
+    date | None
+        The last date, or None when the feed has no calendar at all.
+    """
+    ends = [
+        date.fromisoformat(row['end_date'])
+        for row in read_rows(archive=archive, member='calendar.txt')
+        if '1' in (row[name] for name in DAY_NAMES)
+    ]
+    added = [
+        date.fromisoformat(row['date'])
+        for row in read_rows(archive=archive, member='calendar_dates.txt')
+        if row['exception_type'] == '1'
+    ]
+    return max(ends + added, default=None)
+
+
 def insert_many(*, conn: sqlite3.Connection, sql: str,
                 rows: Iterable[tuple[object, ...]]) -> None:
     """

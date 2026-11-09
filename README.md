@@ -100,6 +100,10 @@ the Pi. In Raspberry Pi Imager choose:
 Insert the card in the Pi and power it through PWR IN. The Zero 2 W has no
 power LED, and the green ACT LED stays dark until the OS boots.
 
+After a power-off, press knob A (the top knob unless the knobs are
+swapped) to switch the board back on. Its press is wired to GPIO 3
+(pin 5), the one line a halted Pi watches, so I2C must stay off.
+
 A VPN on your Mac can hide `paperroute.local`. If it does, use the Pi's IP
 address in its place. If the Pi's USB data cable is plugged into the Mac,
 `paperroute.local` may point at the USB link: use the Pi's IP address or

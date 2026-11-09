@@ -20,7 +20,7 @@ from paperroute_hardware.core.knob_hold import HOLD_S
 from paperroute_hardware.ports import LineEdge
 from paperroute_testkit.hardware_fakes import FakeKnobLines
 
-A_CLK, A_DT, A_SW = 20, 21, 26
+A_CLK, A_DT, A_SW = 20, 21, 3
 B_CLK, B_DT, B_SW = 5, 6, 16
 
 

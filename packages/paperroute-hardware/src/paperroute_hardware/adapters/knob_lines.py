@@ -19,7 +19,7 @@ class Role(StrEnum):
 LINES: Final[dict[int, tuple[Encoder, Role]]] = {
     20: (Encoder.A, Role.CLK),
     21: (Encoder.A, Role.DT),
-    26: (Encoder.A, Role.SW),
+    3: (Encoder.A, Role.SW),  # pin 5, which also wakes a halted Pi
     5: (Encoder.B, Role.CLK),
     6: (Encoder.B, Role.DT),
     16: (Encoder.B, Role.SW),

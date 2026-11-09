@@ -85,6 +85,24 @@ build() {
     fi
 }
 
+# Prints the first link under the tree that resolves outside it and the
+# shared Python, and fails; a dangling link fails too.
+check_links() {
+    local tree=$1 top python link target
+    top=$(readlink -f -- "$tree") || return 1
+    python=$(readlink -f -- "$2") || return 1
+    while IFS= read -r -d '' link; do
+        target=$(readlink -f -- "$link") || target=
+        case $target in
+            "$top" | "$top"/* | "$python"/*) ;;
+            *)
+                printf '%s\n' "${link#"$tree"/}"
+                return 1
+                ;;
+        esac
+    done < <(find "$tree" -type l -print0)
+}
+
 # Moves the tree out of the owner's reach before making it root's.
 take_over() {
     local bad
@@ -103,6 +121,11 @@ take_over() {
     if [[ -n $bad ]]; then
         printf 'install-release: %s %s\n' 'the release tree holds entries' \
             'not owned by root after the take-over; aborting' >&2
+        exit 1
+    fi
+    if ! bad=$(check_links "$INCOMING/tree" "$OPT/python"); then
+        printf 'install-release: the release links outside itself: %s\n' \
+            "${bad:-unreadable}" >&2
         exit 1
     fi
     rm -rf -- "${R:?}/$SHA"

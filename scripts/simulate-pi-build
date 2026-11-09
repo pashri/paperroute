@@ -31,6 +31,9 @@ case $(realpath "$py") in
     "$python_dir"/*) ;;
     *) fail "$py is not a uv-managed python" ;;
 esac
+eval "$(sed -n '/^check_links() {$/,/^}$/p' deploy/bin/install-release)"
+declare -F check_links >/dev/null || fail 'install-release has no check_links'
+bad=$(check_links "$moved" "$python_dir") || fail "${bad:-the tree} links outside the tree"
 for script in paperroute-board paperroute-build; do
     [[ $(head -n 1 "$bin/$script") == '#!/bin/sh' ]] \
         || fail "$script does not start #!/bin/sh"

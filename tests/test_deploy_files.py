@@ -173,6 +173,10 @@ UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
         },
         'Service': {
             'Type': 'oneshot',
+            'User': 'paperroute',
+            'Group': 'paperroute',
+            'SupplementaryGroups': 'spi gpio',
+            'NoNewPrivileges': 'yes',
             'TimeoutStartSec': '30',
             'ExecStart': (
                 '/opt/paperroute/current/.venv/bin/python'
@@ -2601,6 +2605,11 @@ def test_off_hook_draws_on_poweroff_only(
     if drawn:
         assert record.read_text(encoding='utf-8').split() == [
             '20',
+            '/usr/bin/setpriv',
+            '--reuid=paperroute',
+            '--regid=paperroute',
+            '--groups=spi,gpio',
+            '--',
             '/py',
             '-m',
             'paperroute_device.screen',
@@ -2623,3 +2632,110 @@ def test_install_files_installs_hook_and_enables_on_screen() -> None:
         'systemctl enable paperroute-led-boot paperroute'
         ' paperroute-timetable.timer paperroute-on-screen',
     ]
+
+
+def test_screens_run_as_the_app_user_with_its_groups() -> None:
+    """The boot unit and the shutdown hook drop root as the app does."""
+    app = read_unit(name='paperroute.service')['Service']
+    screen = read_unit(name='paperroute-on-screen.service')['Service']
+    keys = ('User', 'Group', 'SupplementaryGroups')
+    assert {key: screen[key] for key in keys} == {key: app[key] for key in keys}
+    hook = script_text(path=OFF_HOOK).replace('\\\n', ' ')
+    groups = ','.join(app['SupplementaryGroups'].split())
+    drop = (
+        f'/usr/bin/setpriv --reuid={app["User"]} --regid={app["Group"]}'
+        f' --groups={groups} --'
+    )
+    assert ' '.join(hook.split()).count(drop) == 1
+
+
+def link_tree(*, root: Path) -> tuple[Path, Path]:
+    """
+    Make a release tree and a shared Python, with links that may stay.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+
+    Returns
+    -------
+    tuple[Path, Path]
+        The tree and the shared Python directory.
+    """
+    python = root / 'python'
+    (python / 'cpython' / 'bin').mkdir(parents=True)
+    (python / 'cpython' / 'bin' / 'python3').write_text('', encoding='utf-8')
+    tree = root / 'releases' / 'tree'
+    bin_dir = tree / '.venv' / 'bin'
+    bin_dir.mkdir(parents=True)
+    (bin_dir / 'python').symlink_to(python / 'cpython' / 'bin' / 'python3')
+    (bin_dir / 'python3').symlink_to('python')
+    (tree / '.venv' / 'lib64').symlink_to('bin')
+    (tree / 'top').symlink_to('.')
+    return tree, python
+
+
+def run_check_links(
+    *,
+    tree: Path,
+    python: Path,
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run install-release's ``check_links`` over a tree.
+
+    Parameters
+    ----------
+    tree : Path
+        The release tree.
+    python : Path
+        The shared Python directory.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The exit status and output.
+    """
+    return run_functions(
+        names=('check_links',),
+        program=f'check_links {tree} {python}\n',
+        env=user_env(),
+    )
+
+
+def test_check_links_passes_links_inside(tmp_path: Path) -> None:
+    """Links into the tree or the shared Python pass."""
+    tree, python = link_tree(root=tmp_path)
+    result = run_check_links(tree=tree, python=python)
+    assert (result.returncode, result.stdout, result.stderr) == (0, '', '')
+
+
+@pytest.mark.parametrize(
+    'target',
+    ('../../../../evil', '/etc/passwd', '/nonexistent/dir/x', '../../..'),
+)
+def test_check_links_names_a_link_outside(
+    tmp_path: Path,
+    target: str,
+) -> None:
+    """A link out of the tree, or a dangling one, fails and is named."""
+    tree, python = link_tree(root=tmp_path)
+    (tmp_path / 'evil').write_text('', encoding='utf-8')
+    (tree / '.venv' / 'bin' / 'payload').symlink_to(target)
+    result = run_check_links(tree=tree, python=python)
+    assert (result.returncode, result.stdout) == (1, '.venv/bin/payload\n')
+
+
+def test_install_release_checks_links_after_take_over() -> None:
+    """Links are checked once root owns the tree, before it is released."""
+    body = script_function(path=BIN / 'install-release', name='take_over')
+    check = body.index('check_links "$INCOMING/tree" "$OPT/python"')
+    assert body.index('chown -hR') < body.index('chmod -R') < check
+    assert check < body.index('mv -T -- "$INCOMING/tree" "$R/$SHA"')
+    assert 'the release links outside itself' in body[check:]
+
+
+def test_simulate_pi_build_checks_links() -> None:
+    """The simulated build passes the same link check the Pi runs."""
+    text = script_text(path=ROOT / 'scripts' / 'simulate-pi-build')
+    assert text.count('check_links "$moved" "$python_dir"') == 1

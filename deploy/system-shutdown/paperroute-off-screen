@@ -1,10 +1,13 @@
 #!/bin/sh
 # Installed as /usr/lib/systemd/system-shutdown/paperroute-off-screen.
 # systemd runs it with the action as $1 once everything else has stopped.
-# Draws the off screen on poweroff and halt; always exits 0.
+# Draws the off screen on poweroff and halt, as the app's user and groups
+# rather than root; always exits 0.
 case ${1:-} in
 poweroff | halt)
     "${PAPERROUTE_TIMEOUT:-/usr/bin/timeout}" 20 \
+        /usr/bin/setpriv --reuid=paperroute --regid=paperroute \
+        --groups=spi,gpio -- \
         "${PAPERROUTE_PYTHON:-/opt/paperroute/current/.venv/bin/python}" \
         -m paperroute_device.screen \
         --image /usr/local/share/paperroute/deploy/screens/off.raw \

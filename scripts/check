@@ -1,19 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-files=$(git ls-files --cached --others --exclude-standard 'packages/*/src/*.py' 'apps/*/src/*.py' 'scripts/*.py' conftest.py ':!packages/paperroute-testkit')
-uv run isort --check-only --diff apps packages tests scripts conftest.py
+files=$(git ls-files --cached --others --exclude-standard 'packages/*/src/*.py' 'apps/*/src/*.py' 'scripts/*.py' '*/conftest.py' ':!packages/paperroute-testkit')
+uv run isort --check-only --diff apps packages tests scripts
 # shellcheck disable=SC2086
 uv run pylint $files
 uv run mypy
-for tests in packages/*/tests; do
+for tests in packages/*/tests apps/*/tests; do
     uv run mypy --cache-dir ".mypy_cache/${tests%/tests}" "$tests"
 done
 # shellcheck disable=SC2086
 uv run numpydoc lint $files
 uv run python scripts/check_layers.py
 uv run pytest --cov --cov-report=
-for tests in packages/*/tests; do
+for tests in packages/*/tests apps/*/tests; do
     uv run pytest "$tests" --cov --cov-append --cov-report=
 done
 uv run coverage report --show-missing

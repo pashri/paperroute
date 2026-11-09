@@ -5,7 +5,7 @@ from datetime import UTC, date, datetime, time
 from typing import Final
 from zoneinfo import ZoneInfo
 
-from paperroute_testkit.core.factories import START, pin_of
+from paperroute_testkit.core.factories import pin_of
 from paperroute_transit.core.auto_model import (
     AutoState,
     Occurrence,
@@ -67,7 +67,7 @@ def test_weekday_window_runs() -> None:
     pin = windowed(
         pin=PIN_A, window=AutoWindow(WEEKDAYS, time(7, 30), time(9)),
     )
-    assert running(pins=(pin,), now=START, zone=ZONE) == Occurrence(
+    assert running(pins=(pin,), now=at(day=16, hour=8), zone=ZONE) == Occurrence(
         ref=pin_ref(pin=pin),
         start=at(day=16, hour=7, minute=30),
         end=at(day=16, hour=9),
@@ -135,7 +135,7 @@ def test_tie_goes_to_earlier_pin() -> None:
         windowed(pin=PIN_A, window=window),
         windowed(pin=PIN_B, window=window),
     )
-    found = running(pins=pins, now=START, zone=ZONE)
+    found = running(pins=pins, now=at(day=16, hour=8), zone=ZONE)
     assert found is not None
     assert found.ref == pin_ref(pin=PIN_A)
 

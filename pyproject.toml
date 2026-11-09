@@ -40,7 +40,6 @@ norecursedirs = [".*", "dist", "*.egg", "venv", "node_modules"]
 strict = true
 python_version = "3.14"
 files = [
-    "conftest.py",
     "tests",
     "apps/paperroute-sydney/src",
     "packages/paperroute-hardware/src",
@@ -93,6 +92,7 @@ known-first-party = [
     "paperroute_hardware",
     "paperroute_device",
     "paperroute_transit",
+    "paperroute_testkit",
 ]
 
 [tool.pylint.format]

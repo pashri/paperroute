@@ -4,6 +4,7 @@ from datetime import timedelta
 from typing import Final
 from zoneinfo import ZoneInfo
 
+from paperroute_testkit.city_setting import city_under_test
 from paperroute_testkit.core.factories import (
     EIGHT,
     START,
@@ -17,7 +18,7 @@ from paperroute_transit.core.ridden import (
     route_stops,
 )
 
-ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
+ZONE: Final[ZoneInfo] = city_under_test().zone
 POINTS = {name: (index * 500.0, 0.0) for index, name in enumerate('ABCDEFG')}
 
 

@@ -6,6 +6,7 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
+from paperroute_testkit.city_setting import city_under_test
 from paperroute_testkit.core.factories import (
     EIGHT,
     START,
@@ -22,7 +23,7 @@ from paperroute_transit.core.patterns import (
     timetable_point,
 )
 
-ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
+ZONE: Final[ZoneInfo] = city_under_test().zone
 CORNER = make_shape(
     shape_id='L',
     points=[(0.0, 0.0), (1000.0, 0.0), (1000.0, 1000.0)],

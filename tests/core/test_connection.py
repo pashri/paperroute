@@ -6,7 +6,6 @@ from typing import Final
 from paperroute_device.core.text import clock_text
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed
 from paperroute_sydney.sydney_feeds import ALERT_FEEDS
-from paperroute_testkit.core.alert_factories import alert
 from paperroute_testkit.core.connection_factories import (
     CAMPBELLTOWN_WAY,
     LEG1,
@@ -39,6 +38,7 @@ from paperroute_transit.core.model import Change, Departure, Pin, Way
 from paperroute_transit.core.saved import seeded
 from paperroute_transit.core.state import initial_state, step
 from paperroute_transit.core.state_model import Board, State
+from tests.core.alert_factories import alert
 
 FERRY_CHANGE: Final[Change] = replace(
     WORK_CHANGE, board=place('10102027', name='Parramatta Wharf'),

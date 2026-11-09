@@ -44,16 +44,6 @@ from paperroute_sydney.city import (
     TOWN_HALL,
     SydneyFeed,
 )
-from paperroute_testkit.app_factories import (
-    AT,
-    MAP_MPP,
-    MAP_PIN,
-    PIN,
-    REAL,
-    map_view,
-    ports_of,
-    strip_map_view,
-)
 from paperroute_testkit.core.factories import pin_of, place
 from paperroute_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_testkit.fakes import (
@@ -167,6 +157,16 @@ from paperroute_transit.render.map_corners import (
     scale_box,
 )
 from paperroute_transit.render.tile_codec import pack_bits, pack_grey
+from tests.app_factories import (
+    AT,
+    MAP_MPP,
+    MAP_PIN,
+    PIN,
+    REAL,
+    map_view,
+    ports_of,
+    strip_map_view,
+)
 
 
 @dataclass

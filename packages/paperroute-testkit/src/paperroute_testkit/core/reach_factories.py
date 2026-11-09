@@ -1,31 +1,20 @@
-"""Reaches built from short station IDs, and the real timetable."""
+"""Reaches built from short station IDs."""
 
-import sqlite3
 from collections.abc import Mapping, Sequence
-from contextlib import closing
-from pathlib import Path
 from typing import Final
 
 from hypothesis import strategies as st
 
-from paperroute_testkit.city_setting import city_under_test
-from paperroute_testkit.paths import ROOT
-from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.reach import (
     Reach,
     ReachInput,
     RunTail,
-    StripKey,
     build_reach,
 )
 from paperroute_transit.core.reach_layout import LineExit
 
-REAL_DB: Final[Path] = ROOT / 'data' / 'timetable.db'
-TOWN_HALL: Final[str] = '200070'
-STRATHFIELD: Final[str] = '213510'
-BLACKTOWN: Final[str] = '214810'
 STATIONS: Final[tuple[str, ...]] = tuple(f'S{k}' for k in range(12))
 
 
@@ -142,53 +131,3 @@ def random_tails(draw: st.DrawFn) -> list[RunTail]:
         ),
         max_size=8,
     ))
-
-
-def has_runs(*, path: Path) -> bool:
-    """
-    Say whether a timetable file exists and holds the run tables.
-
-    Parameters
-    ----------
-    path : Path
-        Timetable file.
-
-    Returns
-    -------
-    bool
-        True when the runs table is there.
-    """
-    if not path.exists():
-        return False
-    with closing(sqlite3.connect(f'file:{path}?mode=ro', uri=True)) as conn:
-        found = conn.execute(
-            "SELECT 1 FROM sqlite_master WHERE name = 'runs'",
-        ).fetchall()
-    return bool(found)
-
-
-def train_reach(*, station: str) -> tuple[Reach, set[str]]:
-    """
-    Build a station's Train strip reach from the real timetable.
-
-    Parameters
-    ----------
-    station : str
-        Station ID.
-
-    Returns
-    -------
-    tuple[Reach, set[str]]
-        The reach, and every station after the From in its tails.
-    """
-    with closing(SqliteNetworkRepository(
-        path=REAL_DB,
-        city=city_under_test(),
-    )) as repo:
-        found = repo.reach_input(
-            key=StripKey(station=station, kind='train', routes=()),
-            origin=StopPlace(stop_id=station, name=station, point=None),
-        )
-    assert found is not None
-    after = {key for each in found.tails for key in each.after}
-    return build_reach(data=found), after

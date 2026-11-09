@@ -6,7 +6,6 @@ from typing import Final
 
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_sydney.city import SYDNEY, SydneyMode
-from paperroute_testkit.core.alert_factories import alert
 from paperroute_testkit.core.connection_factories import (
     HOLLIS,
     LEG1,
@@ -47,6 +46,7 @@ from paperroute_transit.core.saved import (
 from paperroute_transit.core.state import initial_state, step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import current_view, live_stop_view
+from tests.core.alert_factories import alert
 
 PLAIN: Final[Pin] = Pin(
     origin=place('200060', name='Central Station'), kind=SydneyMode.TRAIN,

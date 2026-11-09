@@ -8,6 +8,8 @@ from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.city_setting import city_under_test
 from paperroute_testkit.core.factories import (
     EAST,
+    LINE_MODE,
+    LINE_SOURCE,
     START,
     departure,
     example_reach,
@@ -36,10 +38,10 @@ CENTRE: Final[Point] = (-17_000.0, 1_000.0)
 PIN: Final[Pin] = Pin(
     origin=place('C', name='Central', point=CENTRE),
     destination=place('S5', name='S5'),
-    kind='train',
+    kind=LINE_MODE,
 )
 KEY: Final[StripKey] = StripKey(
-    station='C', kind='train', routes=(),
+    station='C', kind=LINE_MODE, routes=(),
 )
 
 
@@ -145,10 +147,10 @@ def trains(*, count: int = 3) -> tuple[Departure, ...]:
     return tuple(
         departure(
             departs=START + timedelta(minutes=5 * (i + 1)),
-            mode='train',
+            mode=LINE_SOURCE,
             route='T1',
             trip_id=f'train-{i}',
-            kind='train',
+            kind=LINE_MODE,
         )
         for i in range(count)
     )

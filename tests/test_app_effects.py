@@ -19,15 +19,6 @@ from paperroute_sydney.city import (
     SydneyMode,
 )
 from paperroute_sydney.sydney_feeds import SydneyFeeds
-from paperroute_testkit.app_factories import (
-    AT,
-    MAP_PIN,
-    REAL,
-    map_view,
-    ports_of,
-    posted_by,
-    strip_map_view,
-)
 from paperroute_testkit.core.factories import pin_of, place
 from paperroute_testkit.fakes import (
     STOP_POINT,
@@ -96,6 +87,15 @@ from paperroute_transit.core.saved import Saved, seeded
 from paperroute_transit.render.chooser import draw_chooser_view
 from paperroute_transit.render.stop_view import draw_stop_view
 from paperroute_transit.render.strip_view import draw_strip_view
+from tests.app_factories import (
+    AT,
+    MAP_PIN,
+    REAL,
+    map_view,
+    ports_of,
+    posted_by,
+    strip_map_view,
+)
 
 
 async def test_save_effect_writes_through_store() -> None:

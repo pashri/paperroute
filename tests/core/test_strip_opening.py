@@ -17,14 +17,6 @@ from paperroute_testkit.core.factories import (
     place,
     train,
 )
-from paperroute_testkit.core.reach_factories import (
-    BLACKTOWN,
-    REAL_DB,
-    STRATHFIELD,
-    TOWN_HALL,
-    has_runs,
-    train_reach,
-)
 from paperroute_testkit.core.strip_factories import (
     KEY,
     PIN,
@@ -59,6 +51,14 @@ from paperroute_transit.core.strip_view import (
     window_of,
 )
 from tests.core.chooser_walks import CHOSEN_KEY, DOWN, TO_STAGE, at_to
+from tests.core.real_reach import (
+    BLACKTOWN,
+    REAL_DB,
+    STRATHFIELD,
+    TOWN_HALL,
+    has_runs,
+    train_reach,
+)
 
 PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.BOTTOM)
 TOP_PRESS: Final[KnobPressed] = KnobPressed(knob=Knob.TOP)

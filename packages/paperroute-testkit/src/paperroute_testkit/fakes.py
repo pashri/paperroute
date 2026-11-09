@@ -6,6 +6,7 @@ from collections.abc import Collection
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
+from typing import Final
 
 import numpy as np
 from numpy.typing import NDArray
@@ -21,7 +22,7 @@ from paperroute_testkit.hardware_fakes import FrameRecorder
 from paperroute_transit.core.alert_model import AlertPlaces
 from paperroute_transit.core.chooser import ChooserPath, Column
 from paperroute_transit.core.city import City
-from paperroute_transit.core.geo import MetreBox, Point, Shape, to_metres
+from paperroute_transit.core.geo import MetreBox, Point, Shape
 from paperroute_transit.core.model import (
     Departure,
     Pin,
@@ -34,11 +35,10 @@ from paperroute_transit.core.saved import Saved, default_saved
 from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
 from paperroute_transit.ports import Loaded, TileRepository
 
-STOP_POINT: Point = to_metres(
-    lon=151.0036,
-    lat=-33.8170,
-    projection=city_under_test().projection,
-)
+STOP_POINT: Final[Point] = (
+    -19013.00806139199,
+    5727.733200000008,
+)  # metres from the projection origin
 
 
 @dataclass

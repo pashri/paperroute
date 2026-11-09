@@ -10,7 +10,6 @@ from typing import Final
 import pytest
 
 from paperroute_sydney.city import SydneyFeed, SydneyMode
-from paperroute_testkit.app_factories import ports_of, posted_by
 from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import EmptyPlacedTimetable
 from paperroute_transit.core.alert_model import (
@@ -19,6 +18,7 @@ from paperroute_transit.core.alert_model import (
     LoadBetween,
 )
 from paperroute_transit.core.patterns import PatternStop, TripPattern
+from tests.app_factories import ports_of, posted_by
 
 STRATHFIELD_PLATFORM: Final[str] = '2135171'
 

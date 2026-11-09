@@ -12,7 +12,6 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
-from paperroute_testkit.core.alert_factories import alert
 from paperroute_testkit.core.factories import START, departure, pin_at
 from paperroute_testkit.core.steps import wakeful
 from paperroute_testkit.fakes import device_facts
@@ -37,6 +36,7 @@ from paperroute_transit.core.saved import (
 )
 from paperroute_transit.core.state import initial_state, step
 from paperroute_transit.core.state_model import Places, State
+from tests.core.alert_factories import alert
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, NEXT, REACH, TO_STAGE
 from tests.core.test_chooser_steps import picked, run_events
 

@@ -11,17 +11,11 @@ from hypothesis import given
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.factories import STALE_LIMIT
 from paperroute_testkit.core.reach_factories import (
-    BLACKTOWN,
-    REAL_DB,
     STATIONS,
-    STRATHFIELD,
-    TOWN_HALL,
-    has_runs,
     ids,
     random_tails,
     reach_of,
     tail,
-    train_reach,
 )
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.model import StopPlace
@@ -39,6 +33,14 @@ from paperroute_transit.core.reach import (
 from paperroute_transit.core.stop_view import NOT_PINNED
 from paperroute_transit.core.strip_model import StripInputs
 from paperroute_transit.core.strip_view import build_strip_view
+from tests.core.real_reach import (
+    BLACKTOWN,
+    REAL_DB,
+    STRATHFIELD,
+    TOWN_HALL,
+    has_runs,
+    train_reach,
+)
 
 STANMORE: Final[str] = '204810'
 PARRAMATTA: Final[str] = '215020'

@@ -17,7 +17,6 @@ from paperroute_sydney.city import (
     SYDNEY_ZONE,
     SydneyMode,
 )
-from paperroute_testkit.app_factories import ports_of, posted_by
 from paperroute_testkit.core.factories import live
 from paperroute_testkit.fakes import FixedClock
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
@@ -42,6 +41,7 @@ from paperroute_transit.core.saved import LiveView, Saved, default_settings
 from paperroute_transit.core.state import initial_state, step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.ports import TimetableRepository
+from tests.app_factories import ports_of, posted_by
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
 DAY: Final[date] = date(2026, 10, 16)

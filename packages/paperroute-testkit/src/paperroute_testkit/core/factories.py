@@ -5,7 +5,12 @@ from dataclasses import replace
 from datetime import date, datetime, timedelta
 from typing import Final
 
-from paperroute_testkit.city_setting import city_under_test
+from paperroute_testkit.city_setting import (
+    city_under_test,
+    line_mode,
+    source_of,
+    street_mode,
+)
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import (
@@ -42,11 +47,15 @@ from paperroute_transit.core.stop_view import (
 from paperroute_transit.core.strip_model import StripInputs
 
 START = datetime(2026, 10, 16, 8, 0, tzinfo=city_under_test().zone)
+LINE_MODE: Final[str] = line_mode()
+STREET_MODE: Final[str] = street_mode()
+LINE_SOURCE: Final[str] = source_of(mode=LINE_MODE)
+STREET_SOURCE: Final[str] = source_of(mode=STREET_MODE)
 STALE_LIMIT: Final[timedelta] = timedelta(minutes=2)
 EIGHT: int = 8 * 3600  # seconds into the service day
 TEN_MINUTES: int = 600  # seconds
 TRAIN: Final[StripKey] = StripKey(
-    station='C', kind='train', routes=(),
+    station='C', kind=LINE_MODE, routes=(),
 )
 POINTS: Final[dict[str, Point]] = {
     'C': (0.0, 0.0),
@@ -161,7 +170,7 @@ def departure(
     departs: datetime,
     ride: int = 30,
     route: str = '606',
-    mode: str = 'bus',
+    mode: str = STREET_SOURCE,
     trip_id: str | None = None,
     headsign: str = 'Parramatta Station',
     platform: str = '',
@@ -287,7 +296,7 @@ def pattern(
     return TripPattern(
         trip_id=trip_id,
         route=route,
-        source='bus',
+        source=STREET_SOURCE,
         shape_id=shape_id,
         stops=(
             stops
@@ -402,7 +411,7 @@ def example_reach() -> Reach:
 
 
 def train(
-    *, minutes: int, trip_id: str, kind: str = 'train',
+    *, minutes: int, trip_id: str, kind: str = LINE_MODE,
 ) -> Departure:
     """
     Make a departure from C some minutes after 8:00.
@@ -687,8 +696,8 @@ def carry_on_inputs(
         stops=calls(stations='CD', start=EIGHT + 720, points=LINE),
     )
     item = departure(
-        departs=START, trip_id='a', route='T8', mode='train',
-        kind='train', then=T2_ON,
+        departs=START, trip_id='a', route='T8', mode=LINE_SOURCE,
+        kind=LINE_MODE, then=T2_ON,
     )
     return inputs_of(
         reach=line_reach(off=off),

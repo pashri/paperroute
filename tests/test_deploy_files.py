@@ -1097,14 +1097,17 @@ def test_install_release_checks_the_zone(
 
 
 def test_install_release_skips_unchanged_zone(tmp_path: Path) -> None:
-    """set_timer_zone reloads systemd only when the drop-in changes."""
+    """With no reload due, set_timer_zone reloads only on a change."""
     body = script_function(path=BIN / 'install-release', name='set_timer_zone')
     assert body.index('cmp -s') < body.index('systemctl daemon-reload')
     conf = tmp_path / 'timer.d' / 'city-zone.conf'
     log = tmp_path / 'systemctl.log'
     program = (
         f'ZONE_CONF={conf}\n'
-        f'systemctl() {{ printf "%s\\n" "$*" >>{log}; }}\n'
+        'systemctl() {\n'
+        '    if [[ $1 == show ]]; then printf "no\\n"; return 0; fi\n'
+        f'    printf "%s\\n" "$*" >>{log}\n'
+        '}\n'
         'set_timer_zone Australia/Sydney\n'
         'set_timer_zone Australia/Sydney\n'
         'set_timer_zone Australia/Perth\n'
@@ -1739,23 +1742,34 @@ def test_set_timer_zone_fails_at_first_step(tmp_path: Path) -> None:
 
 
 def test_set_timer_zone_retries_failed_reload(tmp_path: Path) -> None:
-    """A failed reload removes the drop-in, so the next deploy reloads."""
+    """A failed reload keeps the drop-in; systemd's flag retries it."""
+    body = script_function(path=BIN / 'install-release', name='set_timer_zone')
+    assert (
+        'systemctl show -p NeedDaemonReload --value \\\n'
+        '            paperroute-timetable.timer) == no ]]'
+    ) in body
+    assert 'rm -f -- "$ZONE_CONF"' not in body
     conf = tmp_path / 'timer.d' / 'city-zone.conf'
     log = tmp_path / 'systemctl.log'
-    failed = tmp_path / 'failed'
+    need = tmp_path / 'need'
     program = (
         f'ZONE_CONF={conf}\n'
         'systemctl() {\n'
         f'    printf "%s\\n" "$*" >>{log}\n'
-        f'    [[ -e {failed} ]] && return 0\n'
-        f'    : >{failed}\n'
-        '    printf "Failed to reload daemon\\n" >&2\n'
-        '    return 1\n'
+        '    if [[ $1 == show ]]; then\n'
+        f'        cat {need}\n'
+        f'    elif [[ -e {need} ]]; then\n'
+        f'        printf "no\\n" >{need}\n'
+        '    else\n'
+        f'        printf "yes\\n" >{need}\n'
+        '        printf "Failed to reload daemon\\n" >&2\n'
+        '        return 1\n'
+        '    fi\n'
         '}\n'
         'if ! reason=$(set_timer_zone Australia/Perth 2>&1); then\n'
         '    printf "failed: %s\\n" "$reason"\n'
         'fi\n'
-        f'[[ -e {conf} ]] || printf "removed\\n"\n'
+        'set_timer_zone Australia/Perth\n'
         'set_timer_zone Australia/Perth\n'
     )
     result = run_functions(
@@ -1764,12 +1778,13 @@ def test_set_timer_zone_retries_failed_reload(tmp_path: Path) -> None:
         env=user_env(),
     )
     assert (result.returncode, result.stderr) == (0, '')
-    assert result.stdout == 'failed: Failed to reload daemon\nremoved\n'
+    assert result.stdout == 'failed: Failed to reload daemon\n'
     assert conf.read_text(encoding='utf-8') == (
         '[Timer]\nOnCalendar=\nOnCalendar=*-*-* 03:30:00 Australia/Perth\n'
     )
+    show = 'show -p NeedDaemonReload --value paperroute-timetable.timer\n'
     assert log.read_text(encoding='utf-8') == (
-        'daemon-reload\ndaemon-reload\n'
+        f'daemon-reload\n{show}daemon-reload\n{show}'
     )
 
 

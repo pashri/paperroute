@@ -153,9 +153,9 @@ roll_back() {
     exit 1
 }
 
-# Points the nightly timer at the zone; reloads only when it changed.
+# Points the nightly timer at the zone; reloads when it changed or when
+# systemd says a reload is still due, so a failed reload is retried.
 # Returns non-zero at the first failed step (set -e is off under `if`).
-# A failed reload removes the drop-in, so the next deploy reloads again.
 set_timer_zone() {
     local tmp
     mkdir -p -- "${ZONE_CONF%/*}" || return
@@ -166,15 +166,17 @@ set_timer_zone() {
         printf 'OnCalendar=*-*-* 03:30:00 %s\n' "$1"
     } >"$tmp" || return
     chmod 644 "$tmp" || return
-    if cmp -s "$tmp" "$ZONE_CONF"; then
+    if ! cmp -s "$tmp" "$ZONE_CONF"; then
+        mv -f -- "$tmp" "$ZONE_CONF" || return
+    else
         rm -f -- "$tmp"
-        return 0
+        if [[ $(systemctl show -p NeedDaemonReload --value \
+            paperroute-timetable.timer) == no ]]
+        then
+            return 0
+        fi
     fi
-    mv -f -- "$tmp" "$ZONE_CONF" || return
-    if ! systemctl daemon-reload; then
-        rm -f -- "$ZONE_CONF"
-        return 1
-    fi
+    systemctl daemon-reload
 }
 
 # Keeps current, prev and the newest releases, up to KEEP in all.

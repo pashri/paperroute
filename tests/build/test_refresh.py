@@ -90,7 +90,7 @@ def _server(tmp_path: Path) -> Iterator[FeedServer]:
 @pytest.fixture(name='waits', autouse=True)
 def _waits(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     """
-    Record the refresh's waits for a start slot instead of sleeping.
+    Record when the refresh's requests start instead of sleeping.
 
     Parameters
     ----------
@@ -100,11 +100,17 @@ def _waits(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     Returns
     -------
     list[float]
-        Seconds each request waited, on a clock that stands still.
+        When each request started, on a clock that moves only by sleeping.
     """
     waits: list[float] = []
+
+    def sleep(seconds: float) -> None:
+        waits.append((waits[-1] if waits else 0.0) + seconds)
+
     limiter = SyncStartLimiter(
-        per_second=1, clock=lambda: 0.0, sleep=waits.append,
+        per_second=1,
+        clock=lambda: waits[-1] if waits else 0.0,
+        sleep=sleep,
     )
     monkeypatch.setattr(refresh_module, 'LIMITER', limiter)
     return waits

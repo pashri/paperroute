@@ -14,6 +14,53 @@ PER_SECOND: Final[float] = 3.0  # starts
 STEP: Final[float] = 1 / PER_SECOND + 0.01  # seconds between starts
 
 
+class SteppedTime:
+    """A clock that moves only when told to, waking sleepers as it goes."""
+
+    def __init__(self) -> None:
+        self.now = 0.0
+        self.moved = asyncio.Condition()
+
+    def clock(self) -> float:
+        """
+        Read the fake time.
+
+        Returns
+        -------
+        float
+            Seconds.
+        """
+        return self.now
+
+    async def sleep(self, seconds: float) -> None:
+        """
+        Wait until the fake time reaches now plus the given seconds.
+
+        Parameters
+        ----------
+        seconds : float
+            How long to wait.
+        """
+        until = self.now + seconds
+        async with self.moved:
+            await self.moved.wait_for(lambda: self.now >= until)
+
+    async def move_to(self, *, now: float) -> None:
+        """
+        Set the fake time, wake the sleepers it reaches and let them run.
+
+        Parameters
+        ----------
+        now : float
+            The new time in seconds.
+        """
+        async with self.moved:
+            self.now = now
+            self.moved.notify_all()
+        for _ in range(20):
+            await asyncio.sleep(0)
+
+
 class FakeTime:
     """A clock whose sleep moves it forward and records the target."""
 
@@ -107,7 +154,47 @@ async def test_cancelled_waiter_leaves_later_slots_alone() -> None:
     assert isinstance(results[1], asyncio.CancelledError)
     assert results[0] is None
     assert results[2] is None
-    assert fake.slept_until == pytest.approx([0.0, 2 * STEP])
+    assert fake.slept_until == pytest.approx([0.0, STEP])
+
+
+async def test_stall_never_bunches_starts() -> None:
+    """A clock jump past several slots still leaves real starts spaced."""
+    fake = SteppedTime()
+    limiter = StartLimiter(
+        per_second=PER_SECOND, clock=fake.clock, sleep=fake.sleep,
+    )
+    starts: list[float] = []
+
+    async def caller() -> None:
+        await limiter.wait()
+        starts.append(fake.clock())
+
+    tasks = [asyncio.create_task(caller()) for _ in range(6)]
+    await fake.move_to(now=0.0)
+    await fake.move_to(now=2.0)
+    while len(starts) < len(tasks):
+        await fake.move_to(now=fake.now + 0.05)
+    await asyncio.gather(*tasks)
+    gaps = [later - earlier for earlier, later in zip(starts, starts[1:])]
+    assert min(gaps) >= STEP
+
+
+async def test_uncontended_call_waits_only_the_rest() -> None:
+    """A call part way through the interval waits only for what is left."""
+    fake = FakeTime()
+    seconds: list[float] = []
+
+    async def sleep(delay: float) -> None:
+        seconds.append(delay)
+        await fake.sleep(delay)
+
+    limiter = StartLimiter(
+        per_second=PER_SECOND, clock=fake.clock, sleep=sleep,
+    )
+    await limiter.wait()
+    fake.now += STEP / 4
+    await limiter.wait()
+    assert seconds == pytest.approx([0.0, 3 * STEP / 4])
 
 
 def test_sync_limiter_spaces_blocking_starts() -> None:

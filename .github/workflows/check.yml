@@ -7,5 +7,6 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v6
       - run: uv python install 3.14
+      - run: sudo apt-get update -qq && sudo apt-get install -y -qq libegl1 libgl1 fontconfig-config
       - run: uv sync --frozen
       - run: scripts/check

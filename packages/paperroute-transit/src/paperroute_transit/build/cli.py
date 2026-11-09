@@ -18,7 +18,7 @@ from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.handoff import Handoff
 from paperroute_transit.build.refresh import RefreshBusy, refresh
 from paperroute_transit.build.sources import BuildParts
-from paperroute_transit.build.swap import guarded
+from paperroute_transit.build.swap import guarded, printed
 from paperroute_transit.build.timetable import (
     Window,
     build_timetable,
@@ -247,7 +247,8 @@ def run_refresh(
     Returns
     -------
     int
-        Exit status: 0 on success, 1 if busy or failed.
+        Exit status: 0 on success, 1 if busy, failed or every source
+        failed.
     """
     configure_logging(error_file=args.error_log)
     try:
@@ -266,10 +267,7 @@ def run_refresh(
     except RefreshBusy:
         print('refresh already running')
         return 1
-    if report is None:
-        return 1
-    print(json.dumps(asdict(report)))
-    return 0
+    return printed(report=report)
 
 
 def run_tiles(*, args: argparse.Namespace, city: City) -> int:

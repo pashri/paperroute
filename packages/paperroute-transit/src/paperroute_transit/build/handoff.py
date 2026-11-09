@@ -28,6 +28,19 @@ class Fetched:
     states: dict[str, SourceState]
     downloaded: tuple[str, ...]
     changed: tuple[str, ...]
+    failed: tuple[str, ...] = ()
+
+    @property
+    def all_failed(self) -> bool:
+        """
+        Tell whether every source failed, so nothing was refreshed.
+
+        Returns
+        -------
+        bool
+            True when there are sources and all of them failed.
+        """
+        return bool(self.states) and len(self.failed) == len(self.states)
 
 
 @dataclass(frozen=True)
@@ -118,6 +131,7 @@ def tail_json(*, tail: RefreshTail) -> dict[str, object]:
         },
         'downloaded': list(tail.fetched.downloaded),
         'changed': list(tail.fetched.changed),
+        'failed': list(tail.fetched.failed),
         'started': tail.started,
         'error_log': None if tail.error_log is None else str(tail.error_log),
         'lock_fd': tail.lock_fd,
@@ -250,6 +264,7 @@ def tail_of(*, raw: dict[str, object]) -> RefreshTail:
             states=states_of(raw=raw),
             downloaded=names_of(raw=raw, key='downloaded'),
             changed=names_of(raw=raw, key='changed'),
+            failed=names_of(raw=raw, key='failed'),
         ),
         started=field_of(raw=raw, key='started', kind=float),
         error_log=(

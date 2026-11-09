@@ -1,11 +1,12 @@
 """Refresh the timetable from the city's sources and swap it in."""
 
 import fcntl
+import logging
 import sqlite3
 import time
 from collections.abc import Iterator
 from contextlib import closing, contextmanager
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import date, timedelta, tzinfo
 from pathlib import Path
 from typing import Final
@@ -21,6 +22,7 @@ from paperroute_transit.build.handoff import (
 )
 from paperroute_transit.build.layout import Layout
 from paperroute_transit.build.source_state import (
+    SourceError,
     SourceState,
     load_states,
     save_states,
@@ -46,6 +48,8 @@ from paperroute_transit.build.timetable import (
     yesterday,
 )
 from paperroute_transit.core.city import City
+
+logger = logging.getLogger(__name__)
 
 TIMEOUT_S: Final[float] = 60
 MIN_DAYS_LEFT: Final[int] = 7
@@ -87,7 +91,34 @@ def refresh_lock(*, path: Path) -> Iterator[int]:
         yield file.fileno()
 
 
-def head_all(*, parts: BuildParts) -> dict[str, SourceState]:
+def head_source(
+    *,
+    spec: SourceSpec,
+    downloader: Downloader,
+) -> SourceState | None:
+    """
+    Read one source's validators, logging a failure.
+
+    Parameters
+    ----------
+    spec : SourceSpec
+        Source.
+    downloader : Downloader
+        Asks for it.
+
+    Returns
+    -------
+    SourceState | None
+        Fresh validators, or None when the HEAD failed.
+    """
+    try:
+        return downloader.head(spec=spec, timeout_s=TIMEOUT_S, limiter=LIMITER)
+    except SourceError:
+        logger.exception('%s: HEAD failed, using the stored zip', spec.name)
+        return None
+
+
+def head_all(*, parts: BuildParts) -> dict[str, SourceState | None]:
     """
     Read every source's validators.
 
@@ -98,18 +129,57 @@ def head_all(*, parts: BuildParts) -> dict[str, SourceState]:
 
     Returns
     -------
-    dict[str, SourceState]
-        Fresh validators by source name, in the sources' order.
+    dict[str, SourceState | None]
+        Fresh validators by source name, in the sources' order; None for
+        a source whose HEAD failed.
     """
     progress(phase='head')
     return {
-        spec.name: parts.downloader.head(
-            spec=spec,
-            timeout_s=TIMEOUT_S,
-            limiter=LIMITER,
-        )
+        spec.name: head_source(spec=spec, downloader=parts.downloader)
         for spec in parts.sources
     }
+
+
+@dataclass(frozen=True)
+class SourceOutcome:
+    """A source's state after a refresh, and how it got there."""
+
+    state: SourceState
+    downloaded: bool
+    failed: bool = False
+
+
+def stored_copy(
+    *,
+    name: str,
+    stored: SourceState | None,
+    intact: str | None,
+) -> SourceOutcome:
+    """
+    Fall back on a source's stored zip after its HEAD or download failed.
+
+    Parameters
+    ----------
+    name : str
+        Source name.
+    stored : SourceState | None
+        State saved after the last download.
+    intact : str | None
+        Digest of the stored zip if it is intact, else None.
+
+    Returns
+    -------
+    SourceOutcome
+        The stored state, marked failed, so the next run asks again.
+
+    Raises
+    ------
+    SourceError
+        When there is no intact stored zip to fall back on.
+    """
+    if stored is None or intact is None:
+        raise SourceError(f'{name}: failed, with no stored zip to use')
+    return SourceOutcome(state=stored, downloaded=False, failed=True)
 
 
 def intact_sha(*, layout: Layout, name: str,
@@ -144,12 +214,14 @@ def fetch_source(
     layout: Layout,
     spec: SourceSpec,
     downloader: Downloader,
-    fresh: SourceState,
+    fresh: SourceState | None,
     stored: SourceState | None,
     intact: str | None,
-) -> tuple[SourceState, bool]:
+) -> SourceOutcome:
     """
     Download one source into the scratch directory if its headers changed.
+
+    A failed HEAD or download falls back on the stored zip.
 
     Parameters
     ----------
@@ -159,8 +231,8 @@ def fetch_source(
         Source.
     downloader : Downloader
         Fetches the zip.
-    fresh : SourceState
-        Validators from a new HEAD.
+    fresh : SourceState | None
+        Validators from a new HEAD; None when it failed.
     stored : SourceState | None
         State saved after the last download.
     intact : str | None
@@ -168,37 +240,50 @@ def fetch_source(
 
     Returns
     -------
-    tuple[SourceState, bool]
+    SourceOutcome
         The fresh validators with the new digest if downloaded, else the
-        stored one; and whether it was downloaded.
+        stored one; or the stored state when the source failed.
     """
+    if fresh is None:
+        return stored_copy(name=spec.name, stored=stored, intact=intact)
     if not needs_download(
         stored=stored,
         fresh=fresh,
         zip_exists=intact is not None,
     ):
-        return replace(fresh, sha256=intact), False
+        return SourceOutcome(
+            state=replace(fresh, sha256=intact),
+            downloaded=False,
+        )
     progress(phase=f'download {spec.name}')
-    digest = downloader.download(
-        spec=spec,
-        out=layout.work / f'{spec.name}.zip',
-        timeout_s=TIMEOUT_S,
-        limiter=LIMITER,
-    )
-    return replace(fresh, sha256=digest), True
+    try:
+        digest = downloader.download(
+            spec=spec,
+            out=layout.work / f'{spec.name}.zip',
+            timeout_s=TIMEOUT_S,
+            limiter=LIMITER,
+        )
+    except SourceError:
+        logger.exception(
+            '%s: download failed, using the stored zip',
+            spec.name,
+        )
+        return stored_copy(name=spec.name, stored=stored, intact=intact)
+    return SourceOutcome(state=replace(fresh, sha256=digest), downloaded=True)
 
 
 def download_changed(
     *,
     layout: Layout,
     parts: BuildParts,
-    fresh: dict[str, SourceState],
+    fresh: dict[str, SourceState | None],
 ) -> Fetched:
     """
     Download the sources whose headers changed into the scratch directory.
 
     A source counts as changed when its new digest differs from the
-    stored one, or its stored zip is missing or no longer matches.
+    stored one, or its stored zip is missing or no longer matches. A
+    source whose HEAD or download failed keeps its stored zip and state.
 
     Parameters
     ----------
@@ -206,13 +291,13 @@ def download_changed(
         Data paths.
     parts : BuildParts
         The city's sources and their downloader.
-    fresh : dict[str, SourceState]
+    fresh : dict[str, SourceState | None]
         Validators from head_all.
 
     Returns
     -------
     Fetched
-        New states, and which sources were downloaded and which changed.
+        New states, and which sources were downloaded, changed and failed.
     """
     stored = load_states(path=layout.states)
     intact = {
@@ -230,14 +315,23 @@ def download_changed(
         )
         for spec in parts.sources
     }
-    downloaded = tuple(name for name, (_, got) in results.items() if got)
+    downloaded = tuple(
+        name
+        for name, outcome in results.items()
+        if outcome.downloaded
+    )
     return Fetched(
-        states={name: state for name, (state, _) in results.items()},
+        states={name: outcome.state for name, outcome in results.items()},
         downloaded=downloaded,
         changed=tuple(
             name
             for name in downloaded
-            if results[name][0].sha256 != intact[name]
+            if results[name].state.sha256 != intact[name]
+        ),
+        failed=tuple(
+            name
+            for name, outcome in results.items()
+            if outcome.failed
         ),
     )
 
@@ -430,8 +524,10 @@ def refresh(
     """
     Fetch changed sources and rebuild the timetable if their bytes changed.
 
-    Any failure before the swap leaves timetable.db, sources/ and the
-    stored states as they were.
+    A source whose HEAD or download fails is logged and built from its
+    stored zip. Any other failure before the swap, or a failed source
+    with no stored zip, leaves timetable.db, sources/ and the stored
+    states as they were.
 
     Parameters
     ----------
@@ -486,6 +582,8 @@ def refresh(
     return RefreshReport(
         downloaded=fetched.downloaded,
         changed=fetched.changed,
+        failed=fetched.failed,
+        all_failed=fetched.all_failed,
         rebuilt=rebuilt,
         seconds=round(time.monotonic() - started, 3),
         max_rss_mb=max_rss_mb(),

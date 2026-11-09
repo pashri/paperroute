@@ -48,10 +48,17 @@ def test_refresh_logs_a_missing_key_file_to_the_error_log(
         main()
     assert info.value.code == 1
     lines = error_log.read_text(encoding='utf-8').splitlines()
-    assert len(lines) == 1
-    record = json.loads(lines[0])
-    assert record['level'] == 'ERROR'
-    assert f'No TfNSW API key in {key_file}' in record['exc_info']
+    records = [json.loads(line) for line in lines]
+    # one line per source's HEAD, then the refresh with nothing to fall back on
+    assert [record['msg'] for record in records] == [
+        'sydneytrains: HEAD failed, using the stored zip',
+        'metro: HEAD failed, using the stored zip',
+        'bundle: HEAD failed, using the stored zip',
+        'refresh failed',
+    ]
+    assert all(record['level'] == 'ERROR' for record in records)
+    assert f'No TfNSW API key in {key_file}' in records[0]['exc_info']
+    assert 'no stored zip' in records[-1]['exc_info']
     assert not (tmp_path / 'timetable.db').exists()
     assert not any((tmp_path / 'sources').glob('*'))
 

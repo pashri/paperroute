@@ -30,6 +30,7 @@ class FeedState:
     files: dict[str, Served] = field(default_factory=dict)
     hits: Counter[str] = field(default_factory=Counter)
     fail_midway: set[str] = field(default_factory=set)
+    gone: set[str] = field(default_factory=set)
     status: HTTPStatus | None = None
     auth_seen: dict[str, str | None] = field(default_factory=dict)
 
@@ -112,6 +113,8 @@ class FeedHandler(BaseHTTPRequestHandler):
         state.auth_seen[self.path] = self.headers.get('Authorization')
         if state.status is not None:
             self.send_error(state.status)
+        elif self.path in state.gone:
+            self.send_error(HTTPStatus.NOT_FOUND)
         elif self.path == REDIRECT:
             self.redirect()
         else:

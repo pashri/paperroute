@@ -11,6 +11,7 @@ from typing import Final
 import pytest
 
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
+from paperroute_sydney.adapters.tfnsw import NoApiKey
 from paperroute_sydney.build.__main__ import SYDNEY_BUILD
 from paperroute_sydney.build.tfnsw_sources import (
     SYDNEY_SOURCES,
@@ -192,6 +193,18 @@ def test_head_error_hides_key(server: FeedServer) -> None:
     with pytest.raises(SourceError, match='metro: HTTP 403') as caught:
         downloader(server=server).head(spec=SPEC, timeout_s=5, limiter=None)
     assert KEY not in ''.join(traceback.format_exception(caught.value))
+
+
+def test_missing_key_is_a_source_error(server: FeedServer) -> None:
+    """A key file that can't be read fails the source, not the refresh."""
+
+    def no_key() -> str:
+        raise NoApiKey('No TfNSW API key in /tmp/secrets')
+
+    got = TfnswDownloader(key=no_key, base_url=server.base_url)
+    with pytest.raises(SourceError, match='metro: No TfNSW API key'):
+        got.head(spec=SPEC, timeout_s=5, limiter=None)
+    assert not server.state.hits
 
 
 def test_download_short_body_raises(

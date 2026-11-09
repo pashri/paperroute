@@ -7,7 +7,11 @@ from typing import Final
 from urllib.request import Request
 
 from paperroute_device.adapters.rate_limit import SyncStartLimiter
-from paperroute_sydney.adapters.tfnsw import BASE_URL, api_key_from_env
+from paperroute_sydney.adapters.tfnsw import (
+    BASE_URL,
+    NoApiKey,
+    api_key_from_env,
+)
 from paperroute_transit.build.source_state import SourceError, SourceState
 from paperroute_transit.build.sources import SourceSpec, open_source, stream_to
 
@@ -61,9 +65,19 @@ class TfnswDownloader:
         -------
         Request
             The request.
+
+        Raises
+        ------
+        SourceError
+            When the key can't be read; the message names the key file,
+            never the key.
         """
+        try:
+            key = self.key()
+        except NoApiKey as error:
+            raise SourceError(f'{spec.name}: {error}') from error
         built = Request(self.base_url + spec.path, method=method)
-        built.add_unredirected_header('Authorization', f'apikey {self.key()}')
+        built.add_unredirected_header('Authorization', f'apikey {key}')
         return built
 
     def head(

@@ -60,6 +60,8 @@ class RefreshReport:
 
     downloaded: tuple[str, ...]
     changed: tuple[str, ...]
+    failed: tuple[str, ...]
+    all_failed: bool
     rebuilt: bool
     seconds: float
     max_rss_mb: float
@@ -263,6 +265,8 @@ def finish_refresh(
     return RefreshReport(
         downloaded=tail.fetched.downloaded,
         changed=tail.fetched.changed,
+        failed=tail.fetched.failed,
+        all_failed=tail.fetched.all_failed,
         rebuilt=True,
         seconds=round(time.monotonic() - tail.started, 3),
         max_rss_mb=max(record.peak_mb, max_rss_mb()),
@@ -281,12 +285,13 @@ def printed(*, report: RefreshReport | None) -> int:
     Returns
     -------
     int
-        The exit code: 0 once printed, 1 with no report.
+        The exit code: 0 once printed, 1 with no report or when every
+        source failed.
     """
     if report is None:
         return 1
     print(json.dumps(asdict(report)), flush=True)
-    return 0
+    return 1 if report.all_failed else 0
 
 
 def complete_refresh(

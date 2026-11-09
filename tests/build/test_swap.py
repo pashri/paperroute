@@ -169,7 +169,7 @@ def refresh_record(*, data_dir: Path, lock_fd: int) -> HandoffRecord:
                 states={'metro': SourceState(
                     etag='"2"', last_modified=None, sha256='ab' * 32,
                 )},
-                downloaded=('metro',), changed=(),
+                downloaded=('metro',), changed=(), failed=(),
             ),
             started=time.monotonic(),
             error_log=data_dir / 'log' / 'errors.jsonl',
@@ -190,8 +190,8 @@ def test_handoff_round_trip(data_dir: Path) -> None:
         'tail',
     }
     assert set(raw['tail']) == {
-        'data_dir', 'states', 'downloaded', 'changed', 'started',
-        'error_log', 'lock_fd',
+        'data_dir', 'states', 'downloaded', 'changed', 'failed',
+        'started', 'error_log', 'lock_fd',
     }
     plain = replace(record, tail=None)
     write_handoff(path=path, record=plain)
@@ -278,6 +278,7 @@ def test_extras_program_runs_the_tail_and_swaps(
     assert states['metro']['etag'] == '"2"'
     report = json.loads(capsys.readouterr().out.splitlines()[-1])
     assert report['rebuilt'] and report['downloaded'] == ['metro']
+    assert report['failed'] == [] and not report['all_failed']
     assert report['max_rss_mb'] >= 99.5
 
 
@@ -432,3 +433,39 @@ def test_handoff_refuses_bools_and_bad_state_values(data_dir: Path) -> None:
         path.write_text(json.dumps(broken), encoding='utf-8')
         with pytest.raises(HandoffError):
             read_handoff(path=path)
+
+
+@pytest.mark.parametrize(
+    ('failed', 'all_failed', 'code'),
+    [((), False, 0), (('metro',), False, 0), (('metro',), True, 1)],
+)
+def test_printed_fails_only_when_every_source_failed(
+    failed: tuple[str, ...], all_failed: bool, code: int,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """The report is printed; the exit is 1 when no source refreshed."""
+    report = swap.RefreshReport(
+        downloaded=(), changed=(), failed=failed, all_failed=all_failed,
+        rebuilt=True, seconds=1.0, max_rss_mb=1.0,
+    )
+    assert swap.printed(report=report) == code
+    assert json.loads(capsys.readouterr().out)['failed'] == list(failed)
+
+
+def test_printed_without_a_report_fails() -> None:
+    """A refresh that raised has no report and exits 1."""
+    assert swap.printed(report=None) == 1
+
+
+def test_fetched_all_failed_needs_every_source() -> None:
+    """Some failed sources are not all of them."""
+    state = SourceState(etag=None, last_modified=None, sha256='ab' * 32)
+    states = {'metro': state, 'bundle': state}
+    some = Fetched(
+        states=states, downloaded=(), changed=(), failed=('metro',),
+    )
+    every = replace(some, failed=('metro', 'bundle'))
+    none = replace(some, states={}, failed=())
+    assert not some.all_failed
+    assert every.all_failed
+    assert not none.all_failed

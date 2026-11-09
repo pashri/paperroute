@@ -9,6 +9,7 @@ import zipfile
 from collections.abc import Iterator
 from contextlib import closing
 from datetime import date, timedelta
+from http import HTTPStatus
 from pathlib import Path
 from typing import Final
 
@@ -218,6 +219,27 @@ def snapshot(*, data_dir: Path) -> dict[str, bytes]:
     }
 
 
+def window_start(*, data_dir: Path) -> str:
+    """
+    The window start recorded in the live timetable.
+
+    Parameters
+    ----------
+    data_dir : Path
+        Data directory.
+
+    Returns
+    -------
+    str
+        The ISO date.
+    """
+    with closing(sqlite3.connect(data_dir / 'timetable.db')) as conn:
+        (start,) = conn.execute(
+            "SELECT value FROM meta WHERE key = 'window_start'",
+        ).fetchone()
+    return str(start)
+
+
 def test_refresh_refuses_concurrent_run(
     server: FeedServer,
     data_dir: Path,
@@ -334,17 +356,102 @@ def test_force_rebuilds_without_changes(
 def test_refresh_keeps_old_timetable_when_download_fails(
     server: FeedServer,
     data_dir: Path,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """A download cut short leaves the timetable and states alone."""
+    """A download cut short keeps that source's stored zip and state."""
     run(server=server, data_dir=data_dir)
     before_ino = (data_dir / 'timetable.db').stat().st_ino
     before = snapshot(data_dir=data_dir)
     server.state.files[METRO].etag = '"2"'
     server.state.fail_midway.add(METRO)
-    with pytest.raises(SourceError, match='metro'):
-        run(server=server, data_dir=data_dir)
+    report = run(server=server, data_dir=data_dir)
+    assert report.failed == ('metro',)
+    assert not report.all_failed
+    assert not report.rebuilt
     assert (data_dir / 'timetable.db').stat().st_ino == before_ino
     assert snapshot(data_dir=data_dir) == before
+    assert 'metro: download failed' in caplog.text
+
+
+def test_failed_head_keeps_the_stored_zip(
+    server: FeedServer,
+    data_dir: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """One source's failed HEAD is logged and the others still refresh."""
+    run(server=server, data_dir=data_dir)
+    before = snapshot(data_dir=data_dir)
+    server.state.gone.add(METRO)
+    report = run(server=server, data_dir=data_dir)
+    assert report.failed == ('metro',)
+    assert not report.all_failed
+    assert not report.rebuilt
+    assert snapshot(data_dir=data_dir) == before
+    assert 'metro: HEAD failed' in caplog.text
+    assert 'HTTP 404' in caplog.text
+
+
+def test_failed_head_rebuilds_from_stored_zip_when_window_short(
+    server: FeedServer,
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A failed source's stored zip goes into a rebuild with fresh ones."""
+    run(server=server, data_dir=data_dir)
+    stored_metro = (data_dir / 'sources' / 'metro.zip').read_bytes()
+    server.state.gone.add(METRO)
+    bundle = '/' + SYDNEY_SOURCES[2].path
+    server.state.files[bundle].etag = '"2"'
+    later = START + timedelta(days=DAYS - 4)
+    monkeypatch.setattr(refresh_module, 'yesterday', lambda *, zone: later)
+    report = run(server=server, data_dir=data_dir)
+    assert report.rebuilt
+    assert report.failed == ('metro',)
+    assert report.downloaded == ('bundle',)
+    assert (data_dir / 'sources' / 'metro.zip').read_bytes() == stored_metro
+    assert window_start(data_dir=data_dir) == later.isoformat()
+
+
+def test_every_source_failing_still_rebuilds_when_window_short(
+    server: FeedServer,
+    data_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With every source down, the stored zips still renew the window."""
+    run(server=server, data_dir=data_dir)
+    server.state.status = HTTPStatus.FORBIDDEN
+    later = START + timedelta(days=DAYS - 4)
+    monkeypatch.setattr(refresh_module, 'yesterday', lambda *, zone: later)
+    report = run(server=server, data_dir=data_dir)
+    assert report.rebuilt
+    assert report.failed == ('sydneytrains', 'metro', 'bundle')
+    assert report.all_failed
+    assert window_start(data_dir=data_dir) == later.isoformat()
+
+
+def test_failed_source_with_no_stored_zip_fails_the_refresh(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """A source with neither a fresh nor a stored copy stops the build."""
+    server.state.gone.add(METRO)
+    with pytest.raises(SourceError, match='metro'):
+        run(server=server, data_dir=data_dir)
+    assert not (data_dir / 'timetable.db').exists()
+    assert not (data_dir / 'sources' / 'sources.json').exists()
+
+
+def test_failed_source_with_a_damaged_zip_fails_the_refresh(
+    server: FeedServer,
+    data_dir: Path,
+) -> None:
+    """A stored zip that no longer matches its digest is no fallback."""
+    run(server=server, data_dir=data_dir)
+    stored = data_dir / 'sources' / 'metro.zip'
+    stored.write_bytes(stored.read_bytes()[:100])
+    server.state.gone.add(METRO)
+    with pytest.raises(SourceError, match='metro'):
+        run(server=server, data_dir=data_dir)
 
 
 def test_refresh_clears_stale_scratch(
@@ -411,11 +518,7 @@ def test_window_running_out_rebuilds_from_stored_zips(
     report = run(server=server, data_dir=data_dir)
     assert server.state.hits == {'HEAD': 3}
     assert report.rebuilt
-    with closing(sqlite3.connect(data_dir / 'timetable.db')) as conn:
-        (start,) = conn.execute(
-            "SELECT value FROM meta WHERE key = 'window_start'",
-        ).fetchone()
-    assert start == later.isoformat()
+    assert window_start(data_dir=data_dir) == later.isoformat()
 
 
 def test_crash_before_states_saved_rebuilds_next_run(
@@ -528,6 +631,7 @@ class RecordingDownloader:
 
     def __init__(self) -> None:
         self.heads: list[str] = []
+        self.failing: set[str] = set()
 
     def head(
         self,
@@ -552,10 +656,17 @@ class RecordingDownloader:
         -------
         SourceState
             Validators naming the source.
+
+        Raises
+        ------
+        SourceError
+            For a source in failing.
         """
         assert timeout_s > 0
         assert limiter is refresh_module.LIMITER
         self.heads.append(spec.name)
+        if spec.name in self.failing:
+            raise SourceError(f'{spec.name}: HTTP 404')
         return SourceState(etag=spec.name, last_modified=None, sha256=None)
 
     def download(
@@ -605,7 +716,26 @@ def test_head_all_asks_the_downloader_per_source() -> None:
     )
     assert recording.heads == ['c', 'a', 'b']
     assert list(fresh) == ['c', 'a', 'b']
-    assert fresh['a'].etag == 'a'
+    assert fresh['a'] is not None and fresh['a'].etag == 'a'
+
+
+def test_head_all_gives_none_for_a_failed_source() -> None:
+    """A failed HEAD is None and the next source is still asked."""
+    recording = RecordingDownloader()
+    recording.failing.add('a')
+    fresh = refresh_module.head_all(
+        parts=BuildParts(
+            city_ref=SYDNEY_REF,
+            sources=(
+                SourceSpec(name='a', path='x'),
+                SourceSpec(name='b', path='y'),
+            ),
+            downloader=recording,
+        ),
+    )
+    assert recording.heads == ['a', 'b']
+    assert fresh['a'] is None
+    assert fresh['b'] is not None
 
 
 def test_read_meta_of_missing_file_is_empty(tmp_path: Path) -> None:

@@ -1,5 +1,6 @@
 """Ask the TfNSW Trip Planner for journeys."""
 
+import logging
 from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime
 from http import HTTPStatus
@@ -12,6 +13,7 @@ from paperroute_device.adapters.secrets_file import SecretsFile
 from paperroute_sydney.adapters.tfnsw import (
     BASE_URL,
     key_path_from_env,
+    refusal_detail,
     tfnsw_limiter,
 )
 from paperroute_sydney.core.trip_search import (
@@ -35,6 +37,8 @@ FIXED_PARAMS: Final[dict[str, str]] = {
     'version': '10.2.1.42',
 }
 FetchJson = Callable[[str, Mapping[str, str]], Awaitable[object]]
+
+logger = logging.getLogger(__name__)
 
 
 def trip_params(
@@ -287,6 +291,11 @@ class TfnswTripPlanner:
         PlannerUnavailable
             On a connection error, a timeout, a bad body or any status
             other than 200.
+
+        Notes
+        -----
+        On a 429 or 403 it logs TfNSW's reason from the response alone;
+        the request headers hold the API key and are never logged.
         """
         self.session = self.session or self.session_factory()
         if self.limiter:
@@ -298,6 +307,13 @@ class TfnswTripPlanner:
                 headers={'Authorization': f'apikey {self.key}'},
                 timeout=self.timeout,
             ) as response:
+                detail = await refusal_detail(response=response)
+                if detail:
+                    logger.warning(
+                        'trip planner refused: HTTP %s',
+                        response.status,
+                        extra={'refusal': detail},
+                    )
                 check_status(status=response.status)
                 return await response.json(content_type=None)
         except (aiohttp.ClientError, TimeoutError, ValueError) as error:

@@ -268,6 +268,55 @@ async def test_429_is_busy() -> None:
         assert not isinstance(caught.value, PlannerBusy)
 
 
+@pytest.mark.parametrize('status', [
+    HTTPStatus.TOO_MANY_REQUESTS, HTTPStatus.FORBIDDEN,
+])
+async def test_refusal_logs_the_reason(
+    status: HTTPStatus, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A 429 or 403 logs X-Error-Detail and the body, never the key."""
+
+    async def answer(_: web.Request) -> web.Response:
+        return web.Response(
+            status=status,
+            headers={'X-Error-Detail': 'Account Over Rate Limit'},
+            text='Too\nmany',
+        )
+
+    app = web.Application()
+    app.router.add_get('/v1/tp/trip', answer)
+    server = TestServer(app)
+    await server.start_server()
+    try:
+        with pytest.raises(PlannerUnavailable):
+            await ask(server=server)
+    finally:
+        await server.close()
+    refused = [
+        record
+        for record in caplog.records
+        if record.getMessage() == f'trip planner refused: HTTP {status}'
+    ]
+    assert len(refused) == 1
+    assert getattr(refused[0], 'refusal') == (
+        'X-Error-Detail: Account Over Rate Limit; body: Too many'
+    )
+    assert 'not-a-key' not in caplog.text
+    assert all(
+        'not-a-key' not in str(vars(record)) for record in caplog.records
+    )
+
+
+async def test_other_failures_log_no_refusal(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A 500 is not a refusal, so nothing is logged for it."""
+    async for server in serve(status=HTTPStatus.INTERNAL_SERVER_ERROR):
+        with pytest.raises(PlannerUnavailable):
+            await ask(server=server)
+    assert 'refused' not in caplog.text
+
+
 async def test_ok_reply_parses() -> None:
     """A 200 reply goes through the real HTTP path."""
     async for server in serve(status=HTTPStatus.OK):

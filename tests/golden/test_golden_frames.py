@@ -38,7 +38,7 @@ from tests.golden.scenes import (
 FRAMES: Final[Path] = GOLDEN / 'frames' / sys.platform
 PLANES: Final[Path] = FRAMES / 'planes.json'
 PLANE_SCENES: Final[tuple[str, ...]] = ('stop', 'map')
-# CI and the Pi run Linux, so its baselines must exist.
+# CI runs Linux, so its baselines must exist.
 PLATFORMS: Final[frozenset[str]] = frozenset({'darwin', 'linux'})
 
 

@@ -134,6 +134,8 @@ done
 DEPLOY_USER=$SUDO_USER
 [[ $DEPLOY_USER =~ ^[a-z_][a-z0-9_-]*$ ]] \
     || fail 'the deploy user must be a plain lowercase name'
+[[ $DEPLOY_USER != paperroute ]] \
+    || fail 'the deploy user cannot be the service user'
 uid=$(id -u -- "$DEPLOY_USER" 2>/dev/null) || fail 'unknown user'
 [[ $uid -ne 0 ]] || fail 'the deploy user cannot be root'
 bad=$(find "$DIR" ! -user "$uid" -print -quit) || fail 'cannot read DIR'

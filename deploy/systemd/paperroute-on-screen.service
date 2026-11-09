@@ -1,4 +1,6 @@
 [Unit]
+StartLimitIntervalSec=60
+StartLimitBurst=4
 ConditionPathExists=/dev/spidev0.0
 
 [Service]
@@ -8,6 +10,8 @@ Group=paperroute
 SupplementaryGroups=spi gpio
 NoNewPrivileges=yes
 TimeoutStartSec=30
+Restart=on-failure
+RestartSec=3
 ExecStart=/opt/paperroute/current/.venv/bin/python -m paperroute_device.screen --image /usr/local/share/paperroute/deploy/screens/on.raw --state /var/lib/paperroute/state.json
 
 [Install]

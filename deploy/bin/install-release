@@ -86,21 +86,31 @@ build() {
 }
 
 # Prints the first link under the tree that resolves outside it and the
-# shared Python, and fails; a dangling link fails too.
+# shared Python, and fails; a dangling link fails too, and so does a find
+# that cannot read the whole tree.
 check_links() {
-    local tree=$1 top python link target
+    local tree=$1 top python link target list
     top=$(readlink -f -- "$tree") || return 1
     python=$(readlink -f -- "$2") || return 1
+    list=$(mktemp) || return 1
+    if ! find "$tree" -type l -print0 >"$list"; then
+        rm -f -- "$list"
+        printf '%s\n' 'find failed'
+        return 1
+    fi
     while IFS= read -r -d '' link; do
         target=$(readlink -f -- "$link") || target=
+        [[ -e $link ]] || target=
         case $target in
             "$top" | "$top"/* | "$python"/*) ;;
             *)
+                rm -f -- "$list"
                 printf '%s\n' "${link#"$tree"/}"
                 return 1
                 ;;
         esac
-    done < <(find "$tree" -type l -print0)
+    done <"$list"
+    rm -f -- "$list"
 }
 
 # Moves the tree out of the owner's reach before making it root's.

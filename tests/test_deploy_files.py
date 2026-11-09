@@ -171,6 +171,8 @@ UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
     'paperroute-on-screen.service': {
         'Unit': {
             'ConditionPathExists': '/dev/spidev0.0',
+            'StartLimitIntervalSec': '60',
+            'StartLimitBurst': '4',
         },
         'Service': {
             'Type': 'oneshot',
@@ -179,6 +181,8 @@ UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
             'SupplementaryGroups': 'spi gpio',
             'NoNewPrivileges': 'yes',
             'TimeoutStartSec': '30',
+            'Restart': 'on-failure',
+            'RestartSec': '3',
             'ExecStart': (
                 '/opt/paperroute/current/.venv/bin/python'
                 ' -m paperroute_device.screen --image'
@@ -1567,6 +1571,7 @@ def run_provision(
         ('no-such-user-paperroute', 'unknown user'),
         ('Pat.L', 'the deploy user must be a plain lowercase name'),
         ('root', 'the deploy user cannot be root'),
+        ('paperroute', 'the deploy user cannot be the service user'),
         (getpass.getuser(), 'checks passed; provisioning needs root'),
     ),
 )
@@ -2727,6 +2732,27 @@ def test_check_links_names_a_link_outside(
     (tree / '.venv' / 'bin' / 'payload').symlink_to(target)
     result = run_check_links(tree=tree, python=python)
     assert (result.returncode, result.stdout) == (1, '.venv/bin/payload\n')
+
+
+def test_check_links_fails_when_find_cannot_read(tmp_path: Path) -> None:
+    """A tree find cannot read fails the check instead of passing."""
+    tree, python = link_tree(root=tmp_path)
+    locked = tree / 'locked'
+    locked.mkdir()
+    locked.chmod(0)
+    try:
+        result = run_check_links(tree=tree, python=python)
+    finally:
+        locked.chmod(0o700)
+    assert (result.returncode, result.stdout) == (1, 'find failed\n')
+
+
+def test_check_links_names_a_dangling_link_inside(tmp_path: Path) -> None:
+    """A link that stays in the tree but points at nothing fails."""
+    tree, python = link_tree(root=tmp_path)
+    (tree / '.venv' / 'bin' / 'gone').symlink_to('missing')
+    result = run_check_links(tree=tree, python=python)
+    assert (result.returncode, result.stdout) == (1, '.venv/bin/gone\n')
 
 
 def test_install_release_checks_links_after_take_over() -> None:

@@ -218,6 +218,37 @@ def test_reads_timetable_without_origin(tmp_path: Path) -> None:
         assert all(stop.point is not None for stop in pattern.stops)
 
 
+@pytest.mark.parametrize(
+    ('rows', 'last_day'),
+    [
+        ({'window_start': '2026-10-15', 'window_days': '14'}, date(2026, 10, 28)),
+        ({'window_start': '2026-10-15'}, None),
+        ({'window_days': '14'}, None),
+        ({}, None),
+    ],
+)
+def test_last_day_from_the_window(
+    tmp_path: Path, rows: dict[str, str], last_day: date | None,
+) -> None:
+    """The last day is the window's start plus its days, less one."""
+    db = build_db(
+        tmp_path=tmp_path,
+        start=date(2026, 10, 15),
+        days=3,
+        sources=[
+            Source(name='bundle', archive=bus_feed(path=tmp_path / 'b.zip')),
+        ],
+    )
+    with closing(sqlite3.connect(db)) as conn:
+        conn.execute(
+            "DELETE FROM meta WHERE key IN ('window_start', 'window_days')",
+        )
+        conn.executemany('INSERT INTO meta VALUES (?, ?)', rows.items())
+        conn.commit()
+    with closing(SqliteTimetableRepository(path=db, city=SYDNEY)) as repo:
+        assert repo.last_day() == last_day
+
+
 def test_old_timetable_still_places_vehicles(tmp_path: Path) -> None:
     """
     A schema-7 slice with no origin still gives shapes and stop points.

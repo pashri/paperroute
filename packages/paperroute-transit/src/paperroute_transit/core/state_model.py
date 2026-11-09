@@ -197,6 +197,9 @@ class Rebuild:
         True while the rebuild running was asked for by hand.
     failed : bool
         True when the last rebuild failed.
+    last_day : date | None
+        The last day the timetable seen last covers, or None when it
+        records no window.
     """
 
     outdated: bool = False
@@ -208,6 +211,7 @@ class Rebuild:
     missing: bool = False
     forced: bool = False
     failed: bool = False
+    last_day: date | None = None
 
 
 type FoldContext = tuple[str, StripKey | None, str | None]

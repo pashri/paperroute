@@ -203,8 +203,8 @@ def seen_schema(*, state: State, seen: TimetableSeen) -> State:
     Returns
     -------
     State
-        State with the schema and origin noted and `rebuild.outdated` and
-        `rebuild.missing` set from it.
+        State with the schema, origin and last day noted and
+        `rebuild.outdated` and `rebuild.missing` set from it.
     """
     rebuild = replace(
         state.rebuild,
@@ -216,6 +216,7 @@ def seen_schema(*, state: State, seen: TimetableSeen) -> State:
         schema=seen.schema,
         origin=seen.origin,
         missing=seen.version is None,
+        last_day=seen.last_day,
     )
     return replace(state, rebuild=rebuild)
 

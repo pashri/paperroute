@@ -1,13 +1,23 @@
 """Device warnings shown in the banner, and when feeds are not polled."""
 
+from datetime import date
 from typing import Final
 
 from paperroute_device.core.text import DOT
+from paperroute_transit.core.rhythm import frame_time
 from paperroute_transit.core.state_model import State
 
 NO_KEY: Final[str] = f'No API key{DOT}set it on your phone'
 NO_WIFI: Final[str] = (
     f'No Wi-Fi{DOT}timetable times{DOT}hold both knobs, then Wi-Fi'
+)
+TIMETABLE_OUT_OF_DATE: Final[str] = (
+    'Timetable out of date. Check the internet and key.'
+)
+WARN_DAYS_LEFT: Final[int] = 3  # days, today counted
+DAY_NAMES: Final[tuple[str, ...]] = (
+    'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
+    'Sunday',
 )
 
 
@@ -24,12 +34,60 @@ def device_banner(*, state: State) -> str | None:
     -------
     str | None
         `NO_WIFI` while offline, else `NO_KEY` when no API key is set,
-        else None.
+        else the timetable's end when it is near or past, else None.
     """
     if offline(state=state):
         return NO_WIFI
     if state.panel.key_set is False:
         return NO_KEY
+    return timetable_banner(state=state)
+
+
+def timetable_ends(*, last_day: date) -> str:
+    """
+    Say which day the timetable ends.
+
+    Parameters
+    ----------
+    last_day : date
+        The last day it covers.
+
+    Returns
+    -------
+    str
+        The warning, naming the weekday.
+    """
+    day = DAY_NAMES[last_day.weekday()]
+    return f'Timetable ends {day}. Check the internet and key.'
+
+
+def timetable_banner(*, state: State) -> str | None:
+    """
+    Warn when the timetable's window is ending or has ended.
+
+    Today is the frame's date in the city's zone, so the text changes
+    only at the city's midnight.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    str | None
+        `TIMETABLE_OUT_OF_DATE` after the last day, the end's weekday
+        with `WARN_DAYS_LEFT` days or fewer left, else None.
+    """
+    last_day = state.rebuild.last_day
+    if last_day is None:
+        return None
+    today = frame_time(state=state).astimezone(state.city.zone).date()
+    left = (last_day - today).days + 1
+    if left <= 0:
+        return TIMETABLE_OUT_OF_DATE
+    if left <= WARN_DAYS_LEFT:
+        return timetable_ends(last_day=last_day)
     return None
 
 

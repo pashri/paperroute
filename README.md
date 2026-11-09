@@ -157,7 +157,9 @@ to pin. On the web page, double-click a Press button, or hold it for about
 0.8 s. The pins live in
 `/var/lib/paperroute/state.json`. A new device starts on Town Hall's map.
 
-The timetable refreshes nightly at 03:30 Sydney time.
+The timetable refreshes nightly at 03:30 Sydney time. If refreshes keep
+failing, the board's banner says "Timetable ends <weekday>" from three days
+before it runs out.
 
 ## Data
 

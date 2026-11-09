@@ -327,6 +327,17 @@ class BrokenTimetable:
         """
         return None
 
+    def last_day(self) -> date | None:
+        """
+        Name no window.
+
+        Returns
+        -------
+        date | None
+            Always None.
+        """
+        return None
+
     def holidays(self) -> frozenset[date]:
         """
         Record no holidays.

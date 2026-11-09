@@ -403,11 +403,15 @@ class TimetableSeen:
         The file's schema version, or None when it records none.
     origin : str | None
         The file's projection origin text, or None when it records none.
+    last_day : date | None
+        The last day the file's window covers, or None when it records
+        no window.
     """
 
     version: str | None
     schema: str | None = None
     origin: str | None = None
+    last_day: date | None = None
 
 
 @dataclass(frozen=True)

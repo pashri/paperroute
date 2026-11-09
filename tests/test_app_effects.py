@@ -560,6 +560,38 @@ async def test_version_watch_reports_schema() -> None:
 
 
 @dataclass
+class EndingTimetable(VersionedTimetable):
+    """A timetable whose window can change under the same build."""
+
+    ends: date | None = date(2026, 10, 29)
+
+    def last_day(self) -> date | None:
+        """
+        Name the last day covered.
+
+        Returns
+        -------
+        date | None
+            The day.
+        """
+        return self.ends
+
+
+async def test_version_watch_reports_the_last_day() -> None:
+    """The last day rides on the event, and a change alone is seen."""
+    timetable = EndingTimetable()
+    watch = VersionWatch(timetable=timetable)
+    first = await watch.check()
+    timetable.ends = date(2026, 10, 30)
+    second = await watch.check()
+    assert (first, second, await watch.check()) == (
+        TimetableSeen(version='v1', last_day=date(2026, 10, 29)),
+        TimetableSeen(version='v1', last_day=date(2026, 10, 30)),
+        None,
+    )
+
+
+@dataclass
 class HolidaysFailingTimetable(EmptyPlacedTimetable):
     """A timetable whose holidays can't be read."""
 

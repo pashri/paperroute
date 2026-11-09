@@ -44,9 +44,14 @@ LAGS: Final[tuple[int, ...]] = (30, 50, 70, 90)  # seconds
 EAST: Final[Point] = (CENTRE[0] + 2000.0, CENTRE[1])
 
 
-def board() -> State:
+def board(*, start: State | None = None) -> State:
     """
     Load buses leaving 20 s past every third minute, off-peak.
+
+    Parameters
+    ----------
+    start : State | None
+        State to load into; a fresh one centred on `CENTRE` when None.
 
     Returns
     -------
@@ -54,7 +59,7 @@ def board() -> State:
         State at `START` on the Stop view, centred on `CENTRE`, with
         five departures, no peak windows and no quiet hours.
     """
-    state = off_peak(state=fresh(centre=CENTRE))
+    state = off_peak(state=start or fresh(centre=CENTRE))
     event = DeparturesLoaded(
         pin=shown(state=state),
         departures=tuple(

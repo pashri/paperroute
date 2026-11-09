@@ -150,45 +150,46 @@ class VersionWatch:
 
     def __init__(self, *, timetable: TimetableRepository) -> None:
         self.timetable = timetable
-        self.seen: tuple[str | None, str | None, str | None] | None = None
+        self.seen: TimetableSeen | None = None
         self.failing = False
 
     async def check(self) -> TimetableSeen | None:
         """
-        Read the version, schema and origin, giving an event on a change.
+        Read what the timetable records, giving an event on a change.
 
         Returns
         -------
         TimetableSeen | None
-            The version, schema and origin the first time and on a
-            change; None when unchanged or unreadable.
+            The version, schema, origin and last day the first time and
+            on a change; None when unchanged or unreadable.
         """
         try:
-            version, schema, origin = await asyncio.to_thread(self.read)
+            seen = await asyncio.to_thread(self.read)
         except sqlite3.Error:
             if not self.failing:
                 logger.exception('reading the timetable version failed')
             self.failing = True
             return None
         self.failing = False
-        if self.seen == (version, schema, origin):
+        if self.seen == seen:
             return None
-        self.seen = (version, schema, origin)
-        return TimetableSeen(version=version, schema=schema, origin=origin)
+        self.seen = seen
+        return seen
 
-    def read(self) -> tuple[str | None, str | None, str | None]:
+    def read(self) -> TimetableSeen:
         """
-        Read the build time, schema version and projection origin.
+        Read the build time, schema version, projection origin and window.
 
         Returns
         -------
-        tuple[str | None, str | None, str | None]
-            The build time, the schema version and the origin text.
+        TimetableSeen
+            What the file records.
         """
-        return (
-            self.timetable.version(),
-            self.timetable.schema_version(),
-            self.timetable.origin(),
+        return TimetableSeen(
+            version=self.timetable.version(),
+            schema=self.timetable.schema_version(),
+            origin=self.timetable.origin(),
+            last_day=self.timetable.last_day(),
         )
 
 

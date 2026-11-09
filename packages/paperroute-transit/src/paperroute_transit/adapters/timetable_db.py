@@ -399,6 +399,32 @@ class SqliteTimetableRepository:
         )
         return str(rows[0][0]) if rows else None
 
+    def last_day(self) -> date | None:
+        """
+        Say the last day the file's window covers.
+
+        Returns
+        -------
+        date | None
+            The window's start plus its days, less one; None when the
+            file records no window.
+        """
+        rows = {
+            str(key): str(value)
+            for key, value in self.fetch(
+                sql=(
+                    'SELECT key, value FROM meta'
+                    " WHERE key IN ('window_start', 'window_days')"
+                ),
+                params=(),
+            )
+        }
+        if 'window_start' not in rows or 'window_days' not in rows:
+            return None
+        start = date.fromisoformat(rows['window_start'])
+        days = timedelta(days=int(rows['window_days']) - 1)
+        return start + days
+
     def holidays(self) -> frozenset[date]:
         """
         The public holidays the file records.

@@ -107,6 +107,16 @@ class TimetableRepository(Protocol):
             The origin text, or None when the file records none.
         """
 
+    def last_day(self) -> date | None:
+        """
+        Say the last day the timetable covers.
+
+        Returns
+        -------
+        date | None
+            The last day of its window, or None when it records none.
+        """
+
     def holidays(self) -> frozenset[date]:
         """
         The public holidays the timetable records.

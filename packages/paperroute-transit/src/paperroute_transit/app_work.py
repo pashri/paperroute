@@ -84,6 +84,24 @@ async def load(
     await queue.put(event)
 
 
+def refusal_extra(*, error: Exception) -> dict[str, str]:
+    """
+    Give the log fields that say why the server refused a feed.
+
+    Parameters
+    ----------
+    error : Exception
+        The failure.
+
+    Returns
+    -------
+    dict[str, str]
+        ``refusal`` when the server gave a reason; empty otherwise.
+    """
+    detail = error.detail if isinstance(error, FeedError) else ''
+    return {'refusal': detail} if detail else {}
+
+
 async def fetch(
     *, ports: Ports, effect: FetchFeed, queue: asyncio.Queue[Event]
 ) -> None:
@@ -119,7 +137,9 @@ async def fetch(
             )
         )
     except (FeedError, sqlite3.Error) as error:
-        logger.warning('feed failed: %s', error)
+        logger.warning(
+            'feed failed: %s', error, extra=refusal_extra(error=error),
+        )
         failed = FeedFailed(
             feed=effect.feed,
             at=ports.clock.now(),

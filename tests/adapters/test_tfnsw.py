@@ -406,6 +406,52 @@ async def test_server_errors_are_unavailable(
     assert isinstance(caught.value, FeedUnavailable) is unavailable
 
 
+@pytest.mark.parametrize(
+    ('status', 'headers', 'body', 'detail'),
+    [
+        (
+            HTTPStatus.TOO_MANY_REQUESTS,
+            {'X-Error-Detail': 'Account Over Rate Limit'},
+            'Too\nmany',
+            'X-Error-Detail: Account Over Rate Limit; body: Too many',
+        ),
+        (
+            HTTPStatus.FORBIDDEN,
+            {'X-Error-Detail': 'Account Over Rate Limit'},
+            '',
+            'X-Error-Detail: Account Over Rate Limit',
+        ),
+        (HTTPStatus.TOO_MANY_REQUESTS, {}, 'x' * 500, f'body: {"x" * 200}'),
+        (HTTPStatus.TOO_MANY_REQUESTS, {}, '', ''),
+        (HTTPStatus.NOT_FOUND, {'X-Error-Detail': 'No such feed'}, 'no', ''),
+    ],
+)
+async def test_refusal_carries_the_reason(
+    status: HTTPStatus, headers: dict[str, str], body: str, detail: str,
+) -> None:
+    """A 429 or 403 keeps X-Error-Detail and the start of the body."""
+
+    async def handler(_: web.Request) -> web.Response:
+        return web.Response(status=status, headers=headers, text=body)
+
+    app = web.Application()
+    app.router.add_get('/v1/gtfs/realtime/buses', handler)
+    server = TestServer(app)
+    await server.start_server()
+    client = AiohttpFeedsClient(
+        key=lambda: 'secret', base_url=str(server.make_url('/')),
+    )
+    try:
+        with pytest.raises(FeedError) as caught:
+            await client.fetch(feed='v1/gtfs/realtime/buses')
+    finally:
+        await client.close()
+        await server.close()
+    assert caught.value.detail == detail
+    assert 'secret' not in caught.value.detail
+    assert str(caught.value) == f'v1/gtfs/realtime/buses: HTTP {status}'
+
+
 def test_one_limiter_for_every_tfnsw_call() -> None:
     """Each ask for the TfNSW limiter gets the same one."""
     assert tfnsw_limiter() is tfnsw_limiter()

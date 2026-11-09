@@ -23,6 +23,10 @@ from paperroute_transit.adapters.feed_errors import (
 
 BASE_URL: Final[str] = 'https://api.transport.nsw.gov.au/'
 TFNSW_STARTS_PER_S: Final[float] = 3.0  # TfNSW allows 5 a second per key
+REFUSALS: Final[frozenset[int]] = frozenset(
+    {HTTPStatus.TOO_MANY_REQUESTS, HTTPStatus.FORBIDDEN},
+)
+BODY_EXCERPT: Final[int] = 200  # characters
 TFNSW_KEY: Final[Credential] = Credential(
     label='TfNSW API key',
     refusal="That doesn't look like a TfNSW API key.",
@@ -108,7 +112,39 @@ def api_key_from_env() -> str:
     return key
 
 
-def check_status(*, feed: str, response: aiohttp.ClientResponse) -> None:
+async def refusal_detail(*, response: aiohttp.ClientResponse) -> str:
+    """
+    Say why TfNSW refused a request, from the response alone.
+
+    Only the response's X-Error-Detail header and body are read; the
+    request headers hold the API key and are never touched.
+
+    Parameters
+    ----------
+    response : aiohttp.ClientResponse
+        The response.
+
+    Returns
+    -------
+    str
+        The header and the start of the body for a 429 or 403, on one
+        line; empty for any other status or when neither is there.
+    """
+    if response.status not in REFUSALS:
+        return ''
+    body = (await response.read()).decode('utf-8', errors='replace')
+    excerpt = ' '.join(body[:BODY_EXCERPT].split())
+    header = response.headers.get('X-Error-Detail')
+    parts = [
+        f'X-Error-Detail: {header}' if header else '',
+        f'body: {excerpt}' if excerpt else '',
+    ]
+    return '; '.join(part for part in parts if part)
+
+
+def check_status(
+    *, feed: str, response: aiohttp.ClientResponse, detail: str,
+) -> None:
     """
     Raise for a feed response that isn't 200.
 
@@ -118,6 +154,8 @@ def check_status(*, feed: str, response: aiohttp.ClientResponse) -> None:
         Feed path.
     response : aiohttp.ClientResponse
         The response.
+    detail : str
+        Why the server refused the request, kept on the error.
 
     Raises
     ------
@@ -135,11 +173,12 @@ def check_status(*, feed: str, response: aiohttp.ClientResponse) -> None:
                 value=response.headers.get('Retry-After'),
                 now=datetime.now(tz=UTC),
             ),
+            detail=detail,
         )
     if response.status >= HTTPStatus.INTERNAL_SERVER_ERROR:
         raise FeedUnavailable(f'{feed}: HTTP {response.status}')
     if response.status != HTTPStatus.OK:
-        raise FeedError(f'{feed}: HTTP {response.status}')
+        raise FeedError(f'{feed}: HTTP {response.status}', detail=detail)
 
 
 class AiohttpFeedsClient:
@@ -242,7 +281,8 @@ class AiohttpFeedsClient:
                 },
                 timeout=self.timeout,
             ) as response:
-                check_status(feed=feed, response=response)
+                detail = await refusal_detail(response=response)
+                check_status(feed=feed, response=response, detail=detail)
                 return await response.read()
         except TimeoutError as error:
             raise FeedTimedOut(f'{feed}: TimeoutError') from error

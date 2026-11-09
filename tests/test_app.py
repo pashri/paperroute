@@ -72,6 +72,7 @@ from paperroute_testkit.fakes import (
     SyncingClock,
 )
 from paperroute_testkit.hardware_fakes import FrameRecorder
+from paperroute_transit.adapters.feed_errors import FeedThrottled
 from paperroute_transit.adapters.feed_files import FileFeedsClient
 from paperroute_transit.adapters.feed_guard import FeedBackingOff, JoinedBody
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
@@ -856,6 +857,61 @@ async def test_fetch_failure_does_not_report_a_parsed_feed(
     assert isinstance(posted, FeedFailed)
     assert posted.sent
     assert observer.feeds == 0
+
+
+class RefusingFeeds:
+    """A feeds client that TfNSW turns away with a reason."""
+
+    async def fetch(self, *, feed: str) -> bytes:
+        """
+        Refuse with the reason the server gave.
+
+        Parameters
+        ----------
+        feed : str
+            Feed path.
+
+        Raises
+        ------
+        FeedThrottled
+            Always.
+        """
+        raise FeedThrottled(
+            feed=feed,
+            retry_after_s=None,
+            detail='X-Error-Detail: Account Over Rate Limit',
+        )
+
+    async def close(self) -> None:
+        """Nothing to close."""
+
+
+async def test_fetch_logs_why_the_feed_was_refused(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The feed failed line carries the server's reason for refusing."""
+    ports = Ports(
+        timetable=BrokenTimetable(),
+        feeds=RefusingFeeds(),
+        display=FrameRecorder(),
+        clock=FixedClock(at=AT),
+        network=FakeNetwork(),
+        states=MemoryStates(),
+    )
+    queue: asyncio.Queue[Event] = asyncio.Queue()
+    with caplog.at_level(logging.WARNING):
+        await fetch(
+            ports=ports,
+            effect=FetchFeed(feed='v1/gtfs/realtime/buses'),
+            queue=queue,
+        )
+    [record] = [r for r in caplog.records if 'feed failed' in r.message]
+    assert getattr(record, 'refusal') == (
+        'X-Error-Detail: Account Over Rate Limit'
+    )
+    posted = queue.get_nowait()
+    assert isinstance(posted, FeedFailed)
+    assert posted.reason == 'v1/gtfs/realtime/buses: HTTP 429'
 
 
 class BackingOffFeeds:

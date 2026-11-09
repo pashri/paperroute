@@ -260,9 +260,14 @@ def test_idle_io_prefixes_ionice_when_installed(
 
 
 async def test_rebuild_fails_when_the_child_cannot_start(
-    caplog: pytest.LogCaptureFixture,
+    caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A missing executable fails the rebuild, is logged, leaves no child."""
+    """A missing executable fails the rebuild, is logged, leaves no child.
+
+    Without ionice the missing executable itself fails to spawn; behind
+    ionice it is ionice that fails, with a non-zero exit instead.
+    """
+    monkeypatch.setattr(shutil, 'which', lambda name: None)
     rebuilder = ChildRebuilder(
         command=('/nonexistent/paperroute-nothing',),
         env=dict(os.environ),

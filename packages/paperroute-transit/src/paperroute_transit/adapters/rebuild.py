@@ -1,6 +1,7 @@
 """Run the timetable refresh as a low-priority child process."""
 
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -198,6 +199,7 @@ class ChildRebuilder:
         self.env = dict(env)
         self.available = available
         self.process: asyncio.subprocess.Process | None = None
+        self.swapped = False
 
     async def rebuild(self, *, force: bool = False) -> bool:
         """
@@ -211,7 +213,9 @@ class ChildRebuilder:
         Returns
         -------
         bool
-            True when the command exited 0; False when it failed or
+            True when the command exited 0 or reported a timetable
+            swapped in, as a refresh does when it rebuilt from stored
+            zips with every source failing; False when it failed or
             didn't start for lack of memory.
         """
         available = self.available()
@@ -220,13 +224,17 @@ class ChildRebuilder:
             return False
         logger.info('timetable rebuild started', extra={'force': force})
         command = (*self.command, '--force') if force else self.command
+        self.swapped = False
         self.process = await self.started(command=command)
         if self.process is None:
             return False
         code = await self.finished(process=self.process)
         self.process = None
-        logger.info('timetable rebuild finished', extra={'code': code})
-        return code == 0
+        logger.info(
+            'timetable rebuild finished',
+            extra={'code': code, 'swapped': self.swapped},
+        )
+        return code == 0 or self.swapped
 
     async def started(
         self, *, command: Sequence[str],
@@ -278,10 +286,12 @@ class ChildRebuilder:
             await self.stop()
             return -1
 
-    @staticmethod
-    async def relayed(*, process: asyncio.subprocess.Process) -> int:
+    async def relayed(self, *, process: asyncio.subprocess.Process) -> int:
         """
         Log a child's output lines until it exits.
+
+        A refresh report line saying the timetable was rebuilt sets
+        `swapped`.
 
         Parameters
         ----------
@@ -297,6 +307,7 @@ class ChildRebuilder:
             async for line in process.stdout:
                 text = line.decode(errors='replace').rstrip()
                 logger.info('rebuild: %s', text)
+                self.swapped = self.swapped or reports_rebuilt(line=text)
         return await process.wait()
 
     async def stop(self) -> None:
@@ -310,3 +321,26 @@ class ChildRebuilder:
         except TimeoutError:
             process.kill()
             await process.wait()
+
+
+def reports_rebuilt(*, line: str) -> bool:
+    """
+    Say whether a line of refresh output is a report of a rebuild.
+
+    Parameters
+    ----------
+    line : str
+        One line the refresh printed.
+
+    Returns
+    -------
+    bool
+        True for a JSON object whose ``rebuilt`` is true.
+    """
+    if not line.startswith('{'):
+        return False
+    try:
+        report = json.loads(line)
+    except ValueError:
+        return False
+    return isinstance(report, dict) and report.get('rebuilt') is True

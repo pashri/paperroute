@@ -1,6 +1,7 @@
 """Tests for the child process that rebuilds the timetable."""
 
 import asyncio
+import json
 import logging
 import os
 import shutil
@@ -51,6 +52,28 @@ def child(*, code: str) -> ChildRebuilder:
 async def test_child_rebuilder_reports_exit(code: int, ok: bool) -> None:
     """Exit 0 is a success; any other exit is a failure."""
     rebuilder = child(code=f'raise SystemExit({code})')
+    assert await rebuilder.rebuild() is ok
+
+
+@pytest.mark.parametrize(
+    ('report', 'ok'),
+    [
+        ({'rebuilt': True, 'all_failed': True}, True),
+        ({'rebuilt': False, 'all_failed': True}, False),
+    ],
+)
+async def test_child_rebuilder_counts_a_reported_rebuild(
+    report: dict[str, bool], ok: bool,
+) -> None:
+    """Exit 1 after a timetable was swapped in still counts as built."""
+    rebuilder = child(
+        code=(
+            "print('progress merge')\n"
+            "print('{not json')\n"
+            f'print({json.dumps(json.dumps(report))})\n'
+            'raise SystemExit(1)'
+        ),
+    )
     assert await rebuilder.rebuild() is ok
 
 

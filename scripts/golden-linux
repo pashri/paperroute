@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+# Usage: scripts/golden-linux
+# Redraws the Linux golden frames and planes in an Ubuntu container like
+# CI's, then copies them to tests/golden/frames/linux. Needs Docker.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+UV_VERSION=0.12.1
+IMAGE=ubuntu:24.04
+
+inside=$(cat <<'EOF'
+set -euo pipefail
+export DEBIAN_FRONTEND=noninteractive
+apt-get update -qq >/dev/null
+apt-get install -y -qq curl ca-certificates libegl1 libgl1 \
+    fontconfig-config rsync tzdata >/dev/null
+curl -LsSf "https://astral.sh/uv/$UV_VERSION/install.sh" \
+    | env UV_UNMANAGED_INSTALL=/usr/local/bin sh >/dev/null
+rsync -a --exclude .venv --exclude .git --exclude .mypy_cache \
+    --exclude .pytest_cache /src/ /work/
+cd /work
+uv python install 3.14 >/dev/null 2>&1
+uv sync --frozen --quiet
+rm -rf tests/golden/frames/linux
+GOLDEN_UPDATE=1 uv run pytest -q -p no:cacheprovider -k match \
+    tests/golden/test_golden_frames.py
+rm -rf /out/linux
+cp -R tests/golden/frames/linux /out/linux
+EOF
+)
+docker run --rm --platform linux/amd64 -e UV_VERSION="$UV_VERSION" \
+    -v "$PWD:/src:ro" -v "$PWD/tests/golden/frames:/out" \
+    "$IMAGE" bash -c "$inside"

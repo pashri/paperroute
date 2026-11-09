@@ -34,6 +34,7 @@ SHELL_SCRIPTS: Final[tuple[Path, ...]] = (
     ROOT / 'scripts' / 'provision',
     ROOT / 'scripts' / 'deploy',
     ROOT / 'scripts' / 'simulate-pi-build',
+    ROOT / 'scripts' / 'golden-linux',
     *(BIN / name for name in BIN_SCRIPTS),
 )
 SUDOERS_RULE: Final[str] = (

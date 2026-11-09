@@ -1,4 +1,10 @@
-"""Every kind of screen draws today's pixels."""
+"""
+Every kind of screen draws today's pixels.
+
+Skia draws different pixels on each platform, so each keeps its own
+baselines. ``GOLDEN_UPDATE=1`` redraws this platform's; on a Mac,
+``scripts/golden-linux`` redraws the Linux ones in a container.
+"""
 
 import hashlib
 import json
@@ -30,8 +36,10 @@ from tests.golden.scenes import (
 )
 
 FRAMES: Final[Path] = GOLDEN / 'frames' / sys.platform
-PLANES: Final[Path] = GOLDEN / 'planes.json'
+PLANES: Final[Path] = FRAMES / 'planes.json'
 PLANE_SCENES: Final[tuple[str, ...]] = ('stop', 'map')
+# CI and the Pi run Linux, so its baselines must exist.
+PLATFORMS: Final[frozenset[str]] = frozenset({'darwin', 'linux'})
 
 
 def decoded(*, data: bytes) -> NDArray[np.uint8]:
@@ -138,6 +146,15 @@ def test_map_panes_scene_has_panes() -> None:
     """The two-change connection Map draws side panes."""
     view = view_of(state=SCENES['map_panes']())
     assert isinstance(view, MapView) and view.panes
+
+
+def test_every_platform_has_every_baseline() -> None:
+    """Each platform's baselines hold every scene's frame and the planes."""
+    folders = {path.name: path for path in (GOLDEN / 'frames').iterdir()}
+    assert set(folders) == PLATFORMS
+    wanted = {f'{name}.png' for name in SCENES} | {'planes.json'}
+    for folder in folders.values():
+        assert {path.name for path in folder.iterdir()} == wanted, folder
 
 
 def test_png_round_trip_is_exact() -> None:

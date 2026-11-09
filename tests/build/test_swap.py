@@ -198,6 +198,20 @@ def test_handoff_round_trip(data_dir: Path) -> None:
     assert read_handoff(path=path) == plain
 
 
+def test_handoff_without_failed_reads_as_none_failed(
+    data_dir: Path,
+) -> None:
+    """A handoff written before failed existed still loads."""
+    record = refresh_record(data_dir=data_dir, lock_fd=7)
+    path = data_dir / 'work' / 'handoff.json'
+    raw = handoff_module.record_json(record=record)
+    tail = raw['tail']
+    assert isinstance(tail, dict)
+    del tail['failed']
+    path.write_text(json.dumps(raw), encoding='utf-8')
+    assert read_handoff(path=path) == record
+
+
 def test_handoff_refuses_paths_outside_work(
     data_dir: Path, tmp_path: Path,
 ) -> None:

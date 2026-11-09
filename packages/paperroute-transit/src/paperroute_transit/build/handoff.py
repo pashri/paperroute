@@ -247,6 +247,9 @@ def tail_of(*, raw: dict[str, object]) -> RefreshTail:
     """
     Read a refresh tail back from JSON values.
 
+    A file without ``failed``, written before that field existed, reads as
+    no source failing.
+
     Parameters
     ----------
     raw : dict[str, object]
@@ -264,7 +267,7 @@ def tail_of(*, raw: dict[str, object]) -> RefreshTail:
             states=states_of(raw=raw),
             downloaded=names_of(raw=raw, key='downloaded'),
             changed=names_of(raw=raw, key='changed'),
-            failed=names_of(raw=raw, key='failed'),
+            failed=names_of(raw={'failed': [], **raw}, key='failed'),
         ),
         started=field_of(raw=raw, key='started', kind=float),
         error_log=(

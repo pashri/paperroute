@@ -71,9 +71,9 @@ anyway.
 
 `scripts/deploy` copies `data/tiles.db` to the Pi only when it has changed.
 The first upload takes about 12.5 minutes, and later deploys print "tiles
-unchanged". The Pi needs about 3 times the tiles file's size free while
-deploy installs it (about 1.4 GB), and deploy says so before copying when
-it doesn't.
+unchanged". The Pi needs about twice the tiles file's size free, plus
+64 MB, while deploy installs it (about 1 GB), and deploy says so before
+copying when it doesn't.
 
 Press the bottom knob to switch views; on the Map, turn it to zoom. Hollow badges are timetable positions. A small "4m" tab means
 the bus was last heard 4 minutes ago.

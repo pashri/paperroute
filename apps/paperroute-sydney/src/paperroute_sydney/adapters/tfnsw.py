@@ -27,6 +27,7 @@ REFUSALS: Final[frozenset[int]] = frozenset(
     {HTTPStatus.TOO_MANY_REQUESTS, HTTPStatus.FORBIDDEN},
 )
 BODY_EXCERPT: Final[int] = 200  # characters
+BODY_READ: Final[int] = 1024  # bytes
 TFNSW_KEY: Final[Credential] = Credential(
     label='TfNSW API key',
     refusal="That doesn't look like a TfNSW API key.",
@@ -112,6 +113,28 @@ def api_key_from_env() -> str:
     return key
 
 
+async def body_excerpt(*, response: aiohttp.ClientResponse) -> str:
+    """
+    Read the start of a response body, on one line.
+
+    Parameters
+    ----------
+    response : aiohttp.ClientResponse
+        The response.
+
+    Returns
+    -------
+    str
+        Up to ``BODY_EXCERPT`` characters; empty when the read fails.
+    """
+    try:
+        body = await response.content.read(BODY_READ)
+    except (aiohttp.ClientError, TimeoutError):
+        return ''
+    text = body.decode('utf-8', errors='replace')
+    return ' '.join(text[:BODY_EXCERPT].split())
+
+
 async def refusal_detail(*, response: aiohttp.ClientResponse) -> str:
     """
     Say why TfNSW refused a request, from the response alone.
@@ -128,12 +151,12 @@ async def refusal_detail(*, response: aiohttp.ClientResponse) -> str:
     -------
     str
         The header and the start of the body for a 429 or 403, on one
-        line; empty for any other status or when neither is there.
+        line; empty for any other status or when neither is there. A
+        body that can't be read is left out.
     """
     if response.status not in REFUSALS:
         return ''
-    body = (await response.read()).decode('utf-8', errors='replace')
-    excerpt = ' '.join(body[:BODY_EXCERPT].split())
+    excerpt = await body_excerpt(response=response)
     header = response.headers.get('X-Error-Detail')
     parts = [
         f'X-Error-Detail: {header}' if header else '',

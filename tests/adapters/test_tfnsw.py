@@ -452,6 +452,48 @@ async def test_refusal_carries_the_reason(
     assert str(caught.value) == f'v1/gtfs/realtime/buses: HTTP {status}'
 
 
+async def cut_off_429(
+    _: asyncio.StreamReader, writer: asyncio.StreamWriter,
+) -> None:
+    """
+    Answer 429 with headers that promise a body, then hang up.
+
+    Parameters
+    ----------
+    _ : asyncio.StreamReader
+        The request, unread.
+    writer : asyncio.StreamWriter
+        The connection.
+    """
+    writer.write(
+        b'HTTP/1.1 429 Too Many Requests\r\n'
+        b'Content-Length: 100\r\n'
+        b'Retry-After: 30\r\n'
+        b'X-Error-Detail: Account Over Rate Limit\r\n'
+        b'\r\n'
+    )
+    await writer.drain()
+    writer.close()
+
+
+async def test_429_with_unreadable_body_stays_throttled() -> None:
+    """A 429 whose body breaks off still raises FeedThrottled."""
+    server = await asyncio.start_server(cut_off_429, host='127.0.0.1', port=0)
+    port = server.sockets[0].getsockname()[1]
+    client = AiohttpFeedsClient(
+        key=lambda: 'secret', base_url=f'http://127.0.0.1:{port}/',
+    )
+    try:
+        with pytest.raises(FeedThrottled) as caught:
+            await client.fetch(feed='v1/gtfs/realtime/buses')
+    finally:
+        await client.close()
+        server.close()
+        await server.wait_closed()
+    assert caught.value.retry_after_s == 30
+    assert caught.value.detail == 'X-Error-Detail: Account Over Rate Limit'
+
+
 def test_one_limiter_for_every_tfnsw_call() -> None:
     """Each ask for the TfNSW limiter gets the same one."""
     assert tfnsw_limiter() is tfnsw_limiter()

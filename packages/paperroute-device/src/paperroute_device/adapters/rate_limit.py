@@ -53,7 +53,9 @@ class StartLimiter:
     Makes async callers wait their turn to start, one at a time.
 
     Callers are never dropped. The clock is read again after each wait,
-    so a stalled event loop delays starts but never bunches them.
+    so a stalled event loop delays release from the limiter rather than
+    letting overdue callers out together. The time recorded is when a
+    caller leaves the limiter, not when its request is sent.
 
     Parameters
     ----------

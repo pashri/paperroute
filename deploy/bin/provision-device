@@ -53,7 +53,7 @@ edit_config() {
 make_dir() {
     local owner=$1 mode=$2 dir=$3
     [[ ! -L $dir ]] || fail "$dir is a symlink"
-    install -d -o "$owner" -g "$owner" -m "$mode" "$dir"
+    install -d -o "$owner" -g "$(id -gn -- "$owner")" -m "$mode" "$dir"
 }
 
 # Inside a service-owned directory, so made as the service user, not root.
@@ -108,10 +108,13 @@ copy_deploy() {
     mv -T -- "$SHARE/deploy.new" "$SHARE/deploy"
 }
 
+# Puts the deploy user in place of the shipped rule's default user.
 install_sudoers() {
-    install -m 0440 -o root -g root \
-        "$SHARE/deploy/sudoers/paperroute-deploy" "$SUDOERS_NEW"
-    if ! visudo -cf "$SUDOERS_NEW"; then
+    rm -f -- "$SUDOERS_NEW"
+    (umask 0337 && sed "s/^pashri /$DEPLOY_USER /" \
+        "$SHARE/deploy/sudoers/paperroute-deploy" >"$SUDOERS_NEW")
+    if ! grep -q "^$DEPLOY_USER ALL=" "$SUDOERS_NEW" \
+        || ! visudo -cf "$SUDOERS_NEW"; then
         rm -f -- "$SUDOERS_NEW"
         printf 'provision-device: sudoers check failed\n' >&2
         exit 1
@@ -128,7 +131,11 @@ for need in bin/install-files bin/install-release bin/install-tiles \
     [[ -f $DIR/$need ]] || fail "DIR has no $need"
 done
 [[ -n ${SUDO_USER:-} ]] || fail 'run it through sudo'
-uid=$(id -u -- "$SUDO_USER" 2>/dev/null) || fail 'unknown user'
+DEPLOY_USER=$SUDO_USER
+[[ $DEPLOY_USER =~ ^[a-z_][a-z0-9_-]*$ ]] \
+    || fail 'the deploy user must be a plain lowercase name'
+uid=$(id -u -- "$DEPLOY_USER" 2>/dev/null) || fail 'unknown user'
+[[ $uid -ne 0 ]] || fail 'the deploy user cannot be root'
 bad=$(find "$DIR" ! -user "$uid" -print -quit) || fail 'cannot read DIR'
 [[ -z $bad ]] || fail "DIR is not owned by $SUDO_USER"
 bad=$(find "$DIR" ! -type f ! -type d -print -quit) || fail 'cannot read DIR'
@@ -163,7 +170,7 @@ make_service_dir /var/lib/paperroute/sources
 make_service_dir /var/lib/paperroute/work
 make_service_dir /var/lib/paperroute/log
 make_secrets
-make_dir pashri 0700 /var/cache/paperroute-stage
+make_dir "$DEPLOY_USER" 0700 /var/cache/paperroute-stage
 
 install_uv
 

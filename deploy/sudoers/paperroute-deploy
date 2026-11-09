@@ -1,2 +1,3 @@
-# Lets pashri run the three paperroute install scripts without a password.
+# Lets the deploy user run the three paperroute install scripts without a
+# password. provision-device swaps pashri for the user who ran it.
 pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-install-release, /usr/local/sbin/paperroute-install-files "", /usr/local/sbin/paperroute-install-tiles ""

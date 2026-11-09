@@ -1564,6 +1564,8 @@ def run_provision(
         (None, 'run it through sudo'),
         ('nobody', 'DIR is not owned by nobody'),
         ('no-such-user-paperroute', 'unknown user'),
+        ('Pat.L', 'the deploy user must be a plain lowercase name'),
+        ('root', 'the deploy user cannot be root'),
         (getpass.getuser(), 'checks passed; provisioning needs root'),
     ),
 )
@@ -2739,3 +2741,70 @@ def test_simulate_pi_build_checks_links() -> None:
     """The simulated build passes the same link check the Pi runs."""
     text = script_text(path=ROOT / 'scripts' / 'simulate-pi-build')
     assert text.count('check_links "$moved" "$python_dir"') == 1
+
+
+def install_sudoers(*, root: Path, user: str) -> Path:
+    """
+    Run provision's ``install_sudoers`` for a deploy user.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory; the share and sudoers.d go here.
+    user : str
+        The deploy user.
+
+    Returns
+    -------
+    Path
+        The installed sudoers file.
+    """
+    share = root / 'share'
+    (share / 'deploy').mkdir(parents=True)
+    shutil.copytree(src=DEPLOY / 'sudoers', dst=share / 'deploy' / 'sudoers')
+    sudoers = root / 'sudoers.d' / 'paperroute-deploy'
+    sudoers.parent.mkdir()
+    body = script_function(
+        path=BIN / 'provision-device',
+        name='install_sudoers',
+    )
+    program = (
+        'set -euo pipefail\n'
+        'visudo() { return 0; }\n'
+        # BSD mv has no -T.
+        'mv() { [[ $1 == -T ]] && shift; command mv "$@"; }\n'
+        f'SHARE={share}\nSUDOERS={sudoers}\n'
+        f'SUDOERS_NEW={sudoers.parent}/.paperroute-deploy.new\n'
+        f'DEPLOY_USER={user}\n{body}\ninstall_sudoers\n'
+    )
+    subprocess.run(args=['bash', '-c', program], check=True, timeout=30)
+    return sudoers
+
+
+@pytest.mark.parametrize('user', ('pashri', 'alice'))
+def test_provision_grants_sudo_to_the_deploy_user(
+    tmp_path: Path,
+    user: str,
+) -> None:
+    """The installed rule names the user who ran provision, read-only."""
+    sudoers = install_sudoers(root=tmp_path, user=user)
+    rules = [
+        line
+        for line in sudoers.read_text(encoding='utf-8').splitlines()
+        if line.strip() and not line.lstrip().startswith('#')
+    ]
+    assert rules == [SUDOERS_RULE.replace('pashri ', f'{user} ', 1)]
+    assert sudoers.stat().st_mode & 0o777 == 0o440
+    assert sorted(path.name for path in sudoers.parent.iterdir()) == [
+        'paperroute-deploy',
+    ]
+
+
+def test_provision_names_no_deploy_user() -> None:
+    """Only the shipped sudoers default names pashri; provision does not."""
+    text = script_text(path=BIN / 'provision-device')
+    assert 'pashri' not in text.replace("s/^pashri /", '')
+    assert commands(path=BIN / 'provision-device', word='paperroute-stage') == [
+        'make_dir "$DEPLOY_USER" 0700 /var/cache/paperroute-stage',
+    ]
+    assert 'DEPLOY_USER=$SUDO_USER' in text.splitlines()

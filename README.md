@@ -4,6 +4,22 @@ A two-knob e-paper tracker for Sydney public transport (TfNSW open data),
 built on Paul Lagier's shiptracker hardware: Raspberry Pi Zero 2 W,
 Waveshare 7.5" V2 (800×480) and two push encoders.
 
+## Layout
+
+A uv workspace of four packages and one app per city:
+
+- `packages/paperroute-hardware`: drivers for the panel, knobs and LED.
+- `packages/paperroute-device`: settings, power, drawing and the device's
+  web pages.
+- `packages/paperroute-transit`: the transit model, geometry, map tiles and
+  the board itself.
+- `packages/paperroute-testkit`: fakes and factories shared by the tests.
+- `apps/paperroute-sydney`: the Sydney app, with the TfNSW feeds and Trip
+  Planner and the `paperroute-board` and `paperroute-build` commands.
+
+Hardware, device and transit each import only from the ones above them,
+the apps import from all three, and only the tests use the testkit.
+
 ## Run on the Mac
 
     uv python install 3.14
@@ -33,6 +49,9 @@ go route, then direction, then stop. Replacement buses are under Bus, as
 Trackwork.
 
 Replay recorded feeds with `--feeds tests/fixtures/real --at 2026-10-16T06:25`.
+
+Run the linters, type checks, layer check and tests with `scripts/check`.
+`scripts/deploy` runs it first.
 
 ## Map tiles
 
@@ -108,15 +127,22 @@ unplug the data cable.
 
 5. Open `http://paperroute.local`, or the Pi's IP address.
 
-### Upgrade from the previous install
+The app logs to the journal (`journalctl -u paperroute`), and warnings and
+errors also go to `/var/lib/paperroute/log/errors.jsonl`.
 
-When the release changes the systemd units, as the move to city apps does:
+### Upgrade
+
+When the release changes the systemd units:
 
 1. Run `scripts/provision <user>@paperroute.local`, without `--reboot`.
 2. Straight away, run `scripts/deploy <user>@paperroute.local sydney`.
 
 Do not reboot between the two: the old release cannot run under the new
 units. When the units do not change, step 2 alone is enough.
+
+When a release changes the timetable format, the route chooser shows
+"Routes need a timetable update" for about 40 minutes while the board
+rebuilds the timetable itself.
 
 ### Green LED
 

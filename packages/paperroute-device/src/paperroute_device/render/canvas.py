@@ -44,7 +44,12 @@ class Face:
 @cache
 def font(face: Face, smooth: bool = False) -> skia.Font:
     """
-    Load a fully hinted Overpass font.
+    Load a fully hinted Overpass font with unhinted advances.
+
+    FreeType rounds hinted advances to whole pixels and CoreText ignores
+    hinting, so hinted advances would make text wider on Linux than on
+    macOS. Linear metrics keep the advances, and so the layout, the same
+    on both, while the glyph outlines stay hinted.
 
     Parameters
     ----------
@@ -67,6 +72,7 @@ def font(face: Face, smooth: bool = False) -> skia.Font:
     )
     loaded.setHinting(skia.FontHinting.kFull)
     loaded.setSubpixel(False)
+    loaded.setLinearMetrics(True)
     return loaded
 
 

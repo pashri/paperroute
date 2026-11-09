@@ -761,6 +761,7 @@ def test_main_logs_a_startup_crash_to_the_error_log(
     error_log = tmp_path / 'log' / 'errors.jsonl'
     monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(key_file))
     monkeypatch.setattr(cli, 'SqliteTimetableRepository', unopenable)
+    monkeypatch.setattr(tk_monitor, 'TkMonitor', FakeMonitor)
     monkeypatch.setattr(
         sys,
         'argv',

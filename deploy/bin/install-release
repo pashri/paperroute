@@ -155,6 +155,7 @@ roll_back() {
 
 # Points the nightly timer at the zone; reloads only when it changed.
 # Returns non-zero at the first failed step (set -e is off under `if`).
+# A failed reload removes the drop-in, so the next deploy reloads again.
 set_timer_zone() {
     local tmp
     mkdir -p -- "${ZONE_CONF%/*}" || return
@@ -170,7 +171,10 @@ set_timer_zone() {
         return 0
     fi
     mv -f -- "$tmp" "$ZONE_CONF" || return
-    systemctl daemon-reload
+    if ! systemctl daemon-reload; then
+        rm -f -- "$ZONE_CONF"
+        return 1
+    fi
 }
 
 # Keeps current, prev and the newest releases, up to KEEP in all.
@@ -228,6 +232,9 @@ if ! reason=$(set_timer_zone "$ZONE" 2>&1); then
     printf 'install-release: %s is live, but the timer zone was not set: %s\n' \
         "$SHA" "${reason:-no reason given}" >&2
     exit 1
+fi
+if [[ -n $reason ]]; then
+    printf '%s\n' "$reason" >&2
 fi
 prune
 printf 'install-release: %s is live\n' "$SHA"

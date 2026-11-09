@@ -1711,7 +1711,7 @@ def test_install_release_reports_unset_timer_zone() -> None:
     said = text.index(
         "'install-release: %s is live, but the timer zone was not set: %s\\n'",
     )
-    failed = text.index('    exit 1\nfi\nprune\n')
+    failed = text.index('    exit 1\nfi\nif [[ -n $reason ]]')
     assert call < said < failed
     assert text.index('"$SHA" "${reason:-no reason given}" >&2') < failed
 
@@ -1736,6 +1736,53 @@ def test_set_timer_zone_fails_at_first_step(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     assert result.stdout.startswith('failed: mkdir')
     assert not log.exists()
+
+
+def test_set_timer_zone_retries_failed_reload(tmp_path: Path) -> None:
+    """A failed reload removes the drop-in, so the next deploy reloads."""
+    conf = tmp_path / 'timer.d' / 'city-zone.conf'
+    log = tmp_path / 'systemctl.log'
+    failed = tmp_path / 'failed'
+    program = (
+        f'ZONE_CONF={conf}\n'
+        'systemctl() {\n'
+        f'    printf "%s\\n" "$*" >>{log}\n'
+        f'    [[ -e {failed} ]] && return 0\n'
+        f'    : >{failed}\n'
+        '    printf "Failed to reload daemon\\n" >&2\n'
+        '    return 1\n'
+        '}\n'
+        'if ! reason=$(set_timer_zone Australia/Perth 2>&1); then\n'
+        '    printf "failed: %s\\n" "$reason"\n'
+        'fi\n'
+        f'[[ -e {conf} ]] || printf "removed\\n"\n'
+        'set_timer_zone Australia/Perth\n'
+    )
+    result = run_functions(
+        names=('set_timer_zone',),
+        program=program,
+        env=user_env(),
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    assert result.stdout == 'failed: Failed to reload daemon\nremoved\n'
+    assert conf.read_text(encoding='utf-8') == (
+        '[Timer]\nOnCalendar=\nOnCalendar=*-*-* 03:30:00 Australia/Perth\n'
+    )
+    assert log.read_text(encoding='utf-8') == (
+        'daemon-reload\ndaemon-reload\n'
+    )
+
+
+def test_install_release_shows_reload_warnings() -> None:
+    """Output from a zone change that worked still reaches the terminal."""
+    text = script_text(path=BIN / 'install-release')
+    shown = (
+        '\nif [[ -n $reason ]]; then\n'
+        "    printf '%s\\n' \"$reason\" >&2\n"
+        'fi\nprune\n'
+    )
+    assert text.count(shown) == 1
+    assert text.index('"${reason:-no reason given}"') < text.index(shown)
 
 
 def test_install_release_starts_without_timetable() -> None:

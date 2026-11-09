@@ -13,10 +13,10 @@ from paperroute_device.rss import current_rss_mb, max_rss_mb, peak_rss_mb
 CHILD_PEAK: Final[str] = (
     'import subprocess, sys\n'
     'from paperroute_device.rss import max_rss_mb\n'
-    'assert max_rss_mb() < 100, max_rss_mb()\n'
-    "subprocess.run([sys.executable, '-c', \"b'x' * (100 << 20)\"],"
+    'size = int(max_rss_mb()) + 50\n'
+    "subprocess.run([sys.executable, '-c', f\"b'x' * ({size} << 20)\"],"
     ' check=True)\n'
-    'assert max_rss_mb() >= 100, max_rss_mb()\n'
+    'assert max_rss_mb() >= size, (size, max_rss_mb())\n'
 )
 
 
@@ -26,7 +26,13 @@ def test_max_rss_mb_is_positive() -> None:
 
 
 def test_max_rss_covers_children() -> None:
-    """A finished child that touched 100 MB lifts the parent's peak."""
+    """
+    A finished child that outgrew the parent lifts the parent's peak.
+
+    Linux carries ``ru_maxrss`` across an exec, so a fresh interpreter
+    can already report the forking test runner's peak. The child
+    allocates past that starting figure.
+    """
     result = subprocess.run(
         [sys.executable, '-c', CHILD_PEAK],
         check=False,

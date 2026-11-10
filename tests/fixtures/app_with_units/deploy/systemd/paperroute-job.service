@@ -1,0 +1,8 @@
+[Unit]
+Description=paperroute demo job
+
+[Service]
+Type=oneshot
+User=paperroute
+Group=paperroute
+ExecStart=/bin/true

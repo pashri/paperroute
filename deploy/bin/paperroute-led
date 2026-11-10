@@ -1,5 +1,5 @@
 #!/bin/bash
-# Usage: paperroute-led boot|rebuild|restore|on
+# Usage: paperroute-led boot|busy|restore|on
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 
@@ -10,7 +10,7 @@ if [[ $EUID -ne 0 ]]; then
 fi
 
 usage() {
-    printf 'usage: paperroute-led boot|rebuild|restore|on\n' >&2
+    printf 'usage: paperroute-led boot|busy|restore|on\n' >&2
     exit 2
 }
 
@@ -26,7 +26,7 @@ set_led() {
 [[ $# -eq 1 ]] || usage
 mode=$1
 case $mode in
-    boot | rebuild | restore | on) ;;
+    boot | busy | restore | on) ;;
     *) usage ;;
 esac
 [[ -d $LED ]] || exit 0
@@ -41,6 +41,6 @@ fi
 
 case $mode in
     boot) set_led timer 100 100 ;;
-    rebuild) set_led timer 1000 1000 ;;
+    busy) set_led timer 1000 1000 ;;
     on) set_led default-on ;;
 esac

@@ -6,17 +6,17 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-city=sydney
-app=paperroute-$city
+app=sydney
+package=paperroute-$app
 stage=$(mktemp -d)
 release=$(mktemp -d)
 trap 'rm -rf -- "$stage" "$release"' EXIT
 tree=$stage/tree
 moved=$release/tree
-git ls-files -z packages "apps/$app" pyproject.toml uv.lock \
+git ls-files -z packages "apps/$package" pyproject.toml uv.lock deploy/CONTRACT \
     | rsync -a --from0 --files-from=- ./ "$tree/"
 UV_PYTHON_DOWNLOADS=never uv venv --quiet --relocatable --project "$tree" "$tree/.venv"
-UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy uv sync --quiet --frozen --package "$app" --no-default-groups --no-editable --compile-bytecode --project "$tree"
+UV_PYTHON_DOWNLOADS=never UV_LINK_MODE=copy uv sync --quiet --frozen --package "$package" --no-default-groups --no-editable --compile-bytecode --project "$tree"
 mv -- "$tree" "$moved"
 
 fail() {
@@ -41,8 +41,9 @@ for script in paperroute-board paperroute-build; do
 done
 zone=$("$bin/paperroute-board" zone)
 [[ $zone == Australia/Sydney ]] || fail "paperroute-board zone printed $zone"
-for unit in paperroute.service paperroute-timetable.service; do
-    conf=$(sed -n 's#.*FONTCONFIG_FILE=/opt/paperroute/current/\([^ ]*\).*#\1#p' "deploy/systemd/$unit")
+for unit in deploy/systemd/paperroute.service \
+    "apps/$package/deploy/systemd/paperroute-timetable.service"; do
+    conf=$(sed -n 's#.*FONTCONFIG_FILE=/opt/paperroute/current/\([^ ]*\).*#\1#p' "$unit")
     [[ -n $conf && -f $moved/$conf ]] || fail "$unit names no fonts.conf in the tree"
 done
 

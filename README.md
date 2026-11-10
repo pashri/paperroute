@@ -114,7 +114,7 @@ unplug the data cable.
 1. Provision, in your own terminal. Type the Pi password once at the sudo
    prompt.
 
-       scripts/provision <user>@paperroute.local --reboot
+       scripts/provision <user>@paperroute.local sydney --reboot
 
 2. Set the TfNSW API key at `http://paperroute.local/device` under
    "TfNSW API key" (or on the phone during Wi-Fi setup).
@@ -138,11 +138,26 @@ errors also go to `/var/lib/paperroute/log/errors.jsonl`.
 
 When the release changes the systemd units:
 
-1. Run `scripts/provision <user>@paperroute.local`, without `--reboot`.
+1. Run `scripts/provision <user>@paperroute.local sydney`, without
+   `--reboot`.
 2. Straight away, run `scripts/deploy <user>@paperroute.local sydney`.
 
 Do not reboot between the two: the old release cannot run under the new
 units. When the units do not change, step 2 alone is enough.
+
+This release changes the units: run the provision and the deploy together.
+
+A release whose units contract differs from the installed one is not
+switched back to; fix forward and redeploy.
+
+After any rollback across this upgrade, restore the state.json backup: an
+older release sets a newer file aside and starts with defaults.
+
+A provision that changes an app timer's calendar drops that timer's zone
+drop-in; the next deploy writes it again.
+
+Provisioning a different app from the one installed renames
+`/var/lib/paperroute/state.json` to `state.json.<old app>-<time>` and keeps it.
 
 When a release changes the timetable format, the route chooser shows
 "Routes need a timetable update" for about 40 minutes while the board
@@ -152,7 +167,7 @@ rebuilds the timetable itself.
 
 - Fast blink: booting, until the first frame.
 - Steady: running.
-- Slow blink: rebuilding the timetable.
+- Slow blink: the app is busy (rebuilding the timetable).
 
 ### Pins and refresh
 

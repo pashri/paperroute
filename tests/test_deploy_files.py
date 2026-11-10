@@ -4,6 +4,7 @@ import configparser
 import getpass
 import os
 import re
+import shlex
 import shutil
 import subprocess
 from dataclasses import dataclass
@@ -20,7 +21,13 @@ ROOT: Final[Path] = Path(__file__).parents[1]
 DEPLOY: Final[Path] = ROOT / 'deploy'
 BIN: Final[Path] = DEPLOY / 'bin'
 SYSTEMD: Final[Path] = DEPLOY / 'systemd'
-CONFIG_TXT: Final[Path] = Path(__file__).parent / 'fixtures' / 'config.txt'
+SYDNEY_DEPLOY: Final[Path] = ROOT / 'apps' / 'paperroute-sydney' / 'deploy'
+SYDNEY_SYSTEMD: Final[Path] = SYDNEY_DEPLOY / 'systemd'
+APP_CONF: Final[Path] = SYDNEY_SYSTEMD / 'paperroute.service.d' / 'app.conf'
+FIXTURES: Final[Path] = Path(__file__).parent / 'fixtures'
+WITH_UNITS: Final[Path] = FIXTURES / 'app_with_units'
+WITHOUT_UNITS: Final[Path] = FIXTURES / 'app_without_units'
+CONFIG_TXT: Final[Path] = FIXTURES / 'config.txt'
 BIN_SCRIPTS: Final[tuple[str, ...]] = (
     'install-files',
     'install-release',
@@ -57,17 +64,23 @@ BAD_SHAS: Final[tuple[str, ...]] = (
     '../abc1234',
 )
 SHA: Final[str] = 'abc1234'
-CITY: Final[str] = 'sydney'
-BAD_CITIES: Final[tuple[str, ...]] = ('', 'Sydney', '../x', 'syd ney')
-USAGE: Final[str] = 'install-release: usage: install-release SHA CITY\n'
+APP_NAME: Final[str] = 'sydney'
+BAD_APPS: Final[tuple[str, ...]] = ('', 'Sydney', '../x', 'syd ney')
+USAGE: Final[str] = 'install-release: usage: install-release SHA APP\n'
 ZONE_RE: Final[str] = "ZONE_RE='^[A-Za-z]+(/[A-Za-z0-9_+-]+)*$'"
 SWITCH_STUB: Final[str] = 'switch_to() { ln -sfn -- "$1" "$CURRENT"; }'
+# BSD mv has no -T.
+MV_STUB: Final[str] = 'mv() { [[ $1 == -T ]] && shift; command mv "$@"; }'
 CITY_NAMES: Final[re.Pattern[str]] = re.compile(
     pattern=r'(?i)sydney|tfnsw|\bnsw',
+)
+APP_WORDS: Final[re.Pattern[str]] = re.compile(
+    pattern=r'(?i)\b(timetable|tfnsw|sydney)\b',
 )
 KMS_OFF: Final[str] = 's/^dtoverlay=vc4-kms-v3d/#&/'
 ROOT_SAFE_ENVIRONMENT: Final[frozenset[str]] = frozenset(
     {
+        'PAPERROUTE_APP_ARGS',
         'PAPERROUTE_KEY_FILE_TFNSW',
         'PAPERROUTE_API_KEY_FILE',
         'FONTCONFIG_FILE',
@@ -75,27 +88,39 @@ ROOT_SAFE_ENVIRONMENT: Final[frozenset[str]] = frozenset(
 )
 LED_PATTERNS: Final[dict[str, dict[str, str]]] = {
     'boot': {'trigger': 'timer', 'delay_on': '100', 'delay_off': '100'},
-    'rebuild': {
+    'busy': {
         'trigger': 'timer',
         'delay_on': '1000',
         'delay_off': '1000',
     },
     'on': {'trigger': 'default-on'},
 }
+LED_USAGE: Final[str] = 'usage: paperroute-led boot|busy|restore|on\n'
 VENV_BIN: Final[str] = '/opt/paperroute/current/.venv/bin'
 FONTS_CONF: Final[str] = (
     'packages/paperroute-device/src/paperroute_device/fontconfig/fonts.conf'
 )
-UNIT_ENVIRONMENT: Final[str] = (
-    'PAPERROUTE_KEY_FILE_TFNSW=/var/lib/paperroute/secrets'
-    ' PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets'
-    f' FONTCONFIG_FILE=/opt/paperroute/current/{FONTS_CONF}'
+FONTS_ENVIRONMENT: Final[str] = (
+    f'FONTCONFIG_FILE=/opt/paperroute/current/{FONTS_CONF}'
 )
-# Task 12 removes this exemption when the key variable moves to app.conf.
-KEY_FILE_LINE: Final[str] = f'Environment={UNIT_ENVIRONMENT}'
-KEY_FILE_EXEMPT: Final[frozenset[str]] = frozenset(
-    {'systemd/paperroute.service', 'systemd/paperroute-timetable.service'}
+SECRETS: Final[str] = '/var/lib/paperroute/secrets'
+TIMETABLE_ENVIRONMENT: Final[str] = (
+    f'PAPERROUTE_KEY_FILE_TFNSW={SECRETS}'
+    f' PAPERROUTE_API_KEY_FILE={SECRETS}'
+    f' {FONTS_ENVIRONMENT}'
 )
+APP_ARGS: Final[tuple[str, ...]] = (
+    '--timetable',
+    '/var/lib/paperroute/timetable.db',
+    '--tiles',
+    '/var/lib/paperroute/tiles.db',
+    '--rebuild',
+)
+APP_CONF_ENVIRONMENT: Final[dict[str, str]] = {
+    'PAPERROUTE_APP_ARGS': ' '.join(APP_ARGS),
+    'PAPERROUTE_KEY_FILE_TFNSW': SECRETS,
+    'PAPERROUTE_API_KEY_FILE': SECRETS,
+}
 JOURNALD: Final[dict[str, dict[str, str]]] = {
     'Journal': {'Storage': 'volatile', 'RuntimeMaxUse': '24M'},
 }
@@ -105,15 +130,14 @@ APP_SERVICE: Final[dict[str, str]] = {
     'User': 'paperroute',
     'Group': 'paperroute',
     'SupplementaryGroups': 'spi gpio',
-    'Environment': UNIT_ENVIRONMENT,
+    'Environment': FONTS_ENVIRONMENT,
     'ExecStart': (
         f'{VENV_BIN}/paperroute-board run --display web --panel --knobs'
-        ' --timetable /var/lib/paperroute/timetable.db'
-        ' --tiles /var/lib/paperroute/tiles.db'
         ' --state /var/lib/paperroute/state.json'
         ' --error-log /var/lib/paperroute/log/errors.jsonl'
-        ' --rebuild --power --wifi'
+        ' --power --wifi'
         ' --version-file /opt/paperroute/current/VERSION'
+        ' $PAPERROUTE_APP_ARGS'
     ),
     'ExecStopPost': '+/usr/local/bin/paperroute-led boot',
     'Restart': 'always',
@@ -133,8 +157,8 @@ TIMETABLE_SERVICE: Final[dict[str, str]] = {
     'Type': 'oneshot',
     'User': 'paperroute',
     'Group': 'paperroute',
-    'Environment': UNIT_ENVIRONMENT,
-    'ExecStartPre': '+/usr/local/bin/paperroute-led rebuild',
+    'Environment': TIMETABLE_ENVIRONMENT,
+    'ExecStartPre': '+/usr/local/bin/paperroute-led busy',
     'ExecStart': (
         '/usr/bin/env TMPDIR=/var/lib/paperroute/work'
         f' {VENV_BIN}/paperroute-build refresh'
@@ -154,29 +178,13 @@ TIMETABLE_SERVICE: Final[dict[str, str]] = {
     'PrivateTmp': 'yes',
     'SystemCallFilter': '~@debug',
 }
-UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
+KIT_UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
     'paperroute.service': {
         'Unit': {
             'Description': 'paperroute',
         },
         'Service': APP_SERVICE,
         'Install': {'WantedBy': 'multi-user.target'},
-    },
-    'paperroute-timetable.service': {
-        'Unit': {
-            'Description': 'paperroute timetable refresh',
-            'After': 'network-online.target time-sync.target',
-            'Wants': 'network-online.target',
-        },
-        'Service': TIMETABLE_SERVICE,
-    },
-    'paperroute-timetable.timer': {
-        'Timer': {
-            'OnCalendar': '*-*-* 03:30:00',
-            'Persistent': 'true',
-            'RandomizedDelaySec': '0',
-        },
-        'Install': {'WantedBy': 'timers.target'},
     },
     'paperroute-on-screen.service': {
         'Unit': {
@@ -214,6 +222,27 @@ UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
         'Install': {'WantedBy': 'sysinit.target'},
     },
 }
+SYDNEY_UNITS: Final[dict[str, dict[str, dict[str, str]]]] = {
+    'paperroute-timetable.service': {
+        'Unit': {
+            'Description': 'paperroute timetable refresh',
+            'After': 'network-online.target time-sync.target',
+            'Wants': 'network-online.target',
+        },
+        'Service': TIMETABLE_SERVICE,
+    },
+    'paperroute-timetable.timer': {
+        'Timer': {
+            'OnCalendar': '*-*-* 03:30:00',
+            'Persistent': 'true',
+            'RandomizedDelaySec': '0',
+        },
+        'Install': {'WantedBy': 'timers.target'},
+    },
+}
+UNITS: Final[dict[str, dict[str, dict[str, str]]]] = (
+    KIT_UNITS | SYDNEY_UNITS
+)
 ROOT_EXEC_KEYS: Final[tuple[str, ...]] = (
     'ExecStartPre',
     'ExecStartPost',
@@ -258,19 +287,21 @@ def read_unit(name: str) -> dict[str, dict[str, str]]:
     Parameters
     ----------
     name : str
-        The unit's file name under ``deploy/systemd``.
+        The unit's file name under ``deploy/systemd``, or under Sydney's
+        ``deploy/systemd`` for one of its units.
 
     Returns
     -------
     dict[str, dict[str, str]]
         Each section's keys and values.
     """
+    folder = SYSTEMD if name in KIT_UNITS else SYDNEY_SYSTEMD
     parser = UnitParser(
         strict=False,
         interpolation=None,
         delimiters=('=',),
     )
-    parser.read(filenames=SYSTEMD / name, encoding='utf-8')
+    parser.read(filenames=folder / name, encoding='utf-8')
     return {
         section: dict(parser[section])
         for section in parser.sections()
@@ -455,8 +486,37 @@ def environment_names(unit: dict[str, dict[str, str]]) -> set[str]:
     set[str]
         The variable names.
     """
-    assignments = unit['Service'].get('Environment', '').split()
+    assignments = shlex.split(unit['Service'].get('Environment', ''))
     return {assignment.split('=')[0] for assignment in assignments}
+
+
+def drop_in_environment(*, path: Path) -> dict[str, str]:
+    """
+    Read every ``Environment=`` line of a drop-in as systemd does.
+
+    systemd splits each value on unquoted whitespace, and double quotes
+    keep an assignment whole.
+
+    Parameters
+    ----------
+    path : Path
+        The drop-in.
+
+    Returns
+    -------
+    dict[str, str]
+        Each variable and its value.
+    """
+    values = [
+        line.removeprefix('Environment=')
+        for line in path.read_text(encoding='utf-8').splitlines()
+        if line.startswith('Environment=')
+    ]
+    return dict(
+        assignment.split('=', 1)
+        for value in values
+        for assignment in shlex.split(value)
+    )
 
 
 def led_dir(tmp_path: Path) -> Path:
@@ -623,7 +683,7 @@ def stage_tree(stage: Path) -> Path:
         '[project]\n',
         encoding='utf-8',
     )
-    app = stage / SHA / 'apps' / f'paperroute-{CITY}'
+    app = stage / SHA / 'apps' / f'paperroute-{APP_NAME}'
     app.mkdir(parents=True)
     (app / 'pyproject.toml').write_text('[project]\n', encoding='utf-8')
     return stage / SHA
@@ -636,8 +696,64 @@ def test_unit_has_exact_values(name: str) -> None:
 
 
 def test_units_are_the_planned_set() -> None:
-    """deploy/systemd holds the planned units and nothing else."""
-    assert sorted(path.name for path in SYSTEMD.iterdir()) == sorted(UNITS)
+    """deploy/systemd holds the kit's units and nothing else."""
+    assert sorted(path.name for path in SYSTEMD.iterdir()) == sorted(
+        KIT_UNITS,
+    )
+
+
+def test_app_units_are_the_planned_set() -> None:
+    """Sydney's deploy/systemd holds its two units and the board drop-in."""
+    assert sorted(
+        str(path.relative_to(SYDNEY_SYSTEMD))
+        for path in SYDNEY_SYSTEMD.rglob('*')
+        if path.is_file()
+    ) == sorted([*SYDNEY_UNITS, 'paperroute.service.d/app.conf'])
+
+
+def test_kit_deploy_names_no_app() -> None:
+    """The kit's units and root scripts name no timetable, city or agency."""
+    paths = [
+        *sorted(SYSTEMD.iterdir()),
+        *(BIN / name for name in ('install-files', 'install-release')),
+        BIN / 'paperroute-led',
+        ROOT / 'scripts' / 'provision',
+    ]
+    named = [
+        str(path.relative_to(ROOT))
+        for path in paths
+        if APP_WORDS.search(script_text(path=path))
+    ]
+    assert len(paths) == 7
+    assert not named
+
+
+def test_app_conf_environment_parses_as_systemd_does() -> None:
+    """The quoted assignment stays whole, then splits into five words."""
+    assert drop_in_environment(path=APP_CONF) == APP_CONF_ENVIRONMENT
+    words = APP_CONF_ENVIRONMENT['PAPERROUTE_APP_ARGS'].split()
+    assert tuple(words) == APP_ARGS
+    assert [
+        line
+        for line in APP_CONF.read_text(encoding='utf-8').splitlines()
+        if line and not line.startswith('#')
+    ] == [
+        '[Service]',
+        'Environment="PAPERROUTE_APP_ARGS='
+        f'{APP_CONF_ENVIRONMENT["PAPERROUTE_APP_ARGS"]}"',
+        f'Environment=PAPERROUTE_KEY_FILE_TFNSW={SECRETS}',
+        f'Environment=PAPERROUTE_API_KEY_FILE={SECRETS}',
+    ]
+
+
+def test_app_conf_keeps_the_old_key_variable_for_contract_one() -> None:
+    """Under contract 1 an old release still finds its key file."""
+    assert (DEPLOY / 'CONTRACT').read_text(encoding='utf-8') == '1\n'
+    assert drop_in_environment(path=APP_CONF)['PAPERROUTE_API_KEY_FILE'] == (
+        SECRETS
+    )
+    service = read_unit(name='paperroute.service')['Service']
+    assert 'PAPERROUTE' not in service['Environment']
 
 
 def test_app_unit_is_notify_with_watchdog() -> None:
@@ -648,14 +764,16 @@ def test_app_unit_is_notify_with_watchdog() -> None:
     assert service['CapabilityBoundingSet'] == 'CAP_NET_BIND_SERVICE'
 
 
-def test_service_unit_passes_rebuild() -> None:
-    """The app rebuilds an outdated timetable; the nightly timer stays."""
+def test_service_unit_ends_with_the_app_arguments() -> None:
+    """The board takes the app's flags last; the nightly timer stays."""
     service = read_unit(name='paperroute.service')['Service']
     timer = read_unit(name='paperroute-timetable.timer')['Timer']
     assert service['ExecStart'].endswith(
-        ' --rebuild --power --wifi'
+        ' --power --wifi'
         ' --version-file /opt/paperroute/current/VERSION'
+        ' $PAPERROUTE_APP_ARGS'
     )
+    assert '--rebuild' not in service['ExecStart']
     assert timer['OnCalendar'] == '*-*-* 03:30:00'
 
 
@@ -729,7 +847,7 @@ def test_install_release_rejects_bad_sha(
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(value, CITY),
+        args=(value, APP_NAME),
         env=sandbox.env,
     )
     assert (result.returncode, result.stderr) == (
@@ -764,7 +882,7 @@ def test_install_release_rejects_extra_arguments(sandbox: Sandbox) -> None:
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA, CITY, CITY),
+        args=(SHA, APP_NAME, APP_NAME),
         env=sandbox.env,
     )
     assert result.returncode == 2
@@ -779,7 +897,7 @@ def test_install_release_rejects_symlinked_stage(sandbox: Sandbox) -> None:
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA, CITY),
+        args=(SHA, APP_NAME),
         env=sandbox.env,
     )
     assert result.returncode == 2
@@ -794,7 +912,7 @@ def test_install_release_rejects_missing_stage(sandbox: Sandbox) -> None:
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA, CITY),
+        args=(SHA, APP_NAME),
         env=sandbox.env,
     )
     assert result.returncode == 2
@@ -818,7 +936,7 @@ def test_install_release_rejects_odd_entries(
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA, CITY),
+        args=(SHA, APP_NAME),
         env=sandbox.env,
     )
     assert result.returncode == 2
@@ -836,7 +954,7 @@ def test_install_release_rejects_wrong_owner(sandbox: Sandbox) -> None:
     env = sandbox.env | {'SUDO_USER': 'nobody'}
     result = run_script(
         name='install-release',
-        args=(SHA, CITY),
+        args=(SHA, APP_NAME),
         env=env,
     )
     assert result.returncode == 2
@@ -853,7 +971,7 @@ def test_install_release_rejects_unknown_owner(sandbox: Sandbox) -> None:
     env = sandbox.env | {'SUDO_USER': 'no-such-user-paperroute'}
     result = run_script(
         name='install-release',
-        args=(SHA, CITY),
+        args=(SHA, APP_NAME),
         env=env,
     )
     assert result.returncode == 2
@@ -867,7 +985,7 @@ def test_install_release_valid_stage_needs_root(sandbox: Sandbox) -> None:
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA, CITY),
+        args=(SHA, APP_NAME),
         env=sandbox.env,
     )
     assert result.returncode == 2
@@ -877,12 +995,12 @@ def test_install_release_valid_stage_needs_root(sandbox: Sandbox) -> None:
     assert snapshot(root=sandbox.root) == before
 
 
-@pytest.mark.parametrize('value', BAD_CITIES)
-def test_install_release_rejects_bad_city(
+@pytest.mark.parametrize('value', BAD_APPS)
+def test_install_release_rejects_bad_app(
     sandbox: Sandbox,
     value: str,
 ) -> None:
-    """A city that is not lowercase letters and digits exits 2."""
+    """An app name that is not lowercase letters and digits exits 2."""
     stage_tree(stage=sandbox.stage)
     before = snapshot(root=sandbox.root)
     result = run_script(
@@ -892,12 +1010,12 @@ def test_install_release_rejects_bad_city(
     )
     assert (result.returncode, result.stderr) == (
         2,
-        'install-release: the city must be lowercase letters and digits\n',
+        'install-release: the app must be lowercase letters and digits\n',
     )
     assert snapshot(root=sandbox.root) == before
 
 
-def test_install_release_needs_the_city(sandbox: Sandbox) -> None:
+def test_install_release_needs_the_app(sandbox: Sandbox) -> None:
     """A call with the sha alone gives the usage error."""
     stage_tree(stage=sandbox.stage)
     before = snapshot(root=sandbox.root)
@@ -917,7 +1035,7 @@ def test_install_release_rejects_missing_app(
 ) -> None:
     """A tree whose app has no regular pyproject.toml exits 2."""
     tree = stage_tree(stage=sandbox.stage)
-    project = tree / 'apps' / f'paperroute-{CITY}' / 'pyproject.toml'
+    project = tree / 'apps' / f'paperroute-{APP_NAME}' / 'pyproject.toml'
     project.unlink()
     if kind == 'directory':
         project.mkdir()
@@ -926,7 +1044,7 @@ def test_install_release_rejects_missing_app(
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA, CITY),
+        args=(SHA, APP_NAME),
         env=sandbox.env,
     )
     assert (result.returncode, result.stderr) == (
@@ -947,7 +1065,7 @@ def test_install_release_rejects_other_apps(
     before = snapshot(root=sandbox.root)
     result = run_script(
         name='install-release',
-        args=(SHA, CITY),
+        args=(SHA, APP_NAME),
         env=sandbox.env,
     )
     assert (result.returncode, result.stderr) == (
@@ -987,18 +1105,21 @@ def run_functions(
     names: tuple[str, ...],
     program: str,
     env: dict[str, str],
+    script: Path = BIN / 'install-release',
 ) -> subprocess.CompletedProcess[str]:
     """
-    Run install-release's named functions under a program of stubs.
+    Run a script's named functions under a program of stubs.
 
     Parameters
     ----------
     names : tuple[str, ...]
-        The functions to take from install-release.
+        The functions to take from the script.
     program : str
         Variables, stubs and calls, run after the definitions.
     env : dict[str, str]
         The environment to run it in.
+    script : Path
+        The script, install-release unless given.
 
     Returns
     -------
@@ -1006,7 +1127,7 @@ def run_functions(
         The exit status and output.
     """
     definitions = '\n'.join(
-        script_function(path=BIN / 'install-release', name=name)
+        script_function(path=script, name=name)
         for name in names
     )
     return subprocess.run(
@@ -1089,7 +1210,8 @@ def test_install_release_checks_the_zone(
         pytest.skip('this machine has no zoneinfo for Australia/Sydney')
     tree = zone_stage(root=tmp_path, output=output)
     program = (
-        f'OWNER=me TREE={tree} OPT=/opt APP=paperroute-{CITY}\n'
+        f'OWNER=me TREE={tree} OPT=/opt APP=paperroute-{APP_NAME}\n'
+        'TIMERS=paperroute-timetable.timer\n'
         f'{ZONE_RE}\n'
         f'CURRENT={tmp_path / "current"} R={tmp_path / "releases"}\n'
         'runuser() { shift 3; "$@"; }\n'
@@ -1115,24 +1237,60 @@ def test_install_release_checks_the_zone(
         assert (tmp_path / 'current').is_symlink()
 
 
+def timer_etc(*, root: Path, timers: dict[str, str]) -> Path:
+    """
+    Make a stand-in for /etc/systemd/system holding installed timers.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+    timers : dict[str, str]
+        Each timer's file name and its ``OnCalendar=`` value.
+
+    Returns
+    -------
+    Path
+        The directory.
+    """
+    etc = root / 'etc'
+    etc.mkdir()
+    for name, calendar in timers.items():
+        (etc / name).write_text(
+            f'[Timer]\nOnCalendar={calendar}\nPersistent=true\n'
+            '\n[Install]\nWantedBy=timers.target\n',
+            encoding='utf-8',
+        )
+    return etc
+
+
+ZONE_FUNCTIONS: Final[tuple[str, ...]] = (
+    'calendar_of',
+    'set_timer_zone',
+    'set_timer_zones',
+)
+
+
 def test_install_release_skips_unchanged_zone(tmp_path: Path) -> None:
     """With no reload due, set_timer_zone reloads only on a change."""
     body = script_function(path=BIN / 'install-release', name='set_timer_zone')
     assert body.index('cmp -s') < body.index('systemctl daemon-reload')
-    conf = tmp_path / 'timer.d' / 'city-zone.conf'
+    timer = 'paperroute-timetable.timer'
+    etc = timer_etc(root=tmp_path, timers={timer: '*-*-* 03:30:00'})
+    conf = etc / f'{timer}.d' / 'app-zone.conf'
     log = tmp_path / 'systemctl.log'
     program = (
-        f'ZONE_CONF={conf}\n'
+        f'ETC={etc}\n'
         'systemctl() {\n'
         '    if [[ $1 == show ]]; then printf "no\\n"; return 0; fi\n'
         f'    printf "%s\\n" "$*" >>{log}\n'
         '}\n'
-        'set_timer_zone Australia/Sydney\n'
-        'set_timer_zone Australia/Sydney\n'
-        'set_timer_zone Australia/Perth\n'
+        f'set_timer_zone {timer} Australia/Sydney\n'
+        f'set_timer_zone {timer} Australia/Sydney\n'
+        f'set_timer_zone {timer} Australia/Perth\n'
     )
     result = run_functions(
-        names=('set_timer_zone',),
+        names=ZONE_FUNCTIONS,
         program=program,
         env=user_env(),
     )
@@ -1142,7 +1300,7 @@ def test_install_release_skips_unchanged_zone(tmp_path: Path) -> None:
     )
     assert conf.stat().st_mode & 0o777 == 0o644
     assert sorted(path.name for path in conf.parent.iterdir()) == [
-        'city-zone.conf',
+        'app-zone.conf',
     ]
     assert log.read_text(encoding='utf-8') == (
         'daemon-reload\ndaemon-reload\n'
@@ -1169,18 +1327,20 @@ def test_roll_back_stops_when_previous_predates_scripts(
         script = prev / '.venv' / 'bin' / 'paperroute-board'
         script.write_text('#!/bin/sh\n', encoding='utf-8')
         script.chmod(0o755)
+        (prev / 'deploy').mkdir()
+        (prev / 'deploy' / 'CONTRACT').write_text('1\n', encoding='utf-8')
     current = tmp_path / 'current'
     current.symlink_to(new)
     log = tmp_path / 'systemctl.log'
     program = (
-        f'SHA={SHA} prev={prev} CURRENT={current}\n'
+        f'SHA={SHA} prev={prev} CURRENT={current} CONTRACT=1\n'
         f'systemctl() {{ printf "%s\\n" "$*" >>{log}; }}\n'
         'journalctl() { :; }\n'
         f'{SWITCH_STUB}\n'
         'roll_back\n'
     )
     result = run_functions(
-        names=('roll_back',),
+        names=('contract_in', 'roll_back'),
         program=program,
         env=user_env(),
     )
@@ -1230,20 +1390,20 @@ def copy_deploy_script(*, root: Path) -> Path:
 @pytest.mark.parametrize(
     ('args', 'message'),
     (
-        ((), 'usage: scripts/deploy HOST CITY\n'),
-        (('host',), 'usage: scripts/deploy HOST CITY\n'),
-        (('host', 'Sydney'), 'usage: scripts/deploy HOST CITY\n'),
-        (('host', '../x'), 'usage: scripts/deploy HOST CITY\n'),
-        (('host', 'sydney', 'x'), 'usage: scripts/deploy HOST CITY\n'),
+        ((), 'usage: scripts/deploy HOST APP\n'),
+        (('host',), 'usage: scripts/deploy HOST APP\n'),
+        (('host', 'Sydney'), 'usage: scripts/deploy HOST APP\n'),
+        (('host', '../x'), 'usage: scripts/deploy HOST APP\n'),
+        (('host', 'sydney', 'x'), 'usage: scripts/deploy HOST APP\n'),
         (('host', 'nosuch'), 'deploy: no app apps/paperroute-nosuch\n'),
     ),
 )
-def test_deploy_requires_a_city(
+def test_deploy_requires_an_app(
     tmp_path: Path,
     args: tuple[str, ...],
     message: str,
 ) -> None:
-    """Deploy refuses a missing, malformed or unknown city before checking."""
+    """Deploy refuses a missing, malformed or unknown app before checking."""
     deploy = copy_deploy_script(root=tmp_path)
     result = subprocess.run(
         args=['bash', str(deploy), *args],
@@ -1257,14 +1417,14 @@ def test_deploy_requires_a_city(
     assert not (tmp_path / 'checked').exists()
 
 
-def test_deploy_checks_a_known_city(tmp_path: Path) -> None:
-    """A city whose app exists gets as far as scripts/check."""
+def test_deploy_checks_a_known_app(tmp_path: Path) -> None:
+    """An app that exists gets as far as scripts/check."""
     deploy = copy_deploy_script(root=tmp_path)
-    app = tmp_path / 'apps' / f'paperroute-{CITY}'
+    app = tmp_path / 'apps' / f'paperroute-{APP_NAME}'
     app.mkdir(parents=True)
     (app / 'pyproject.toml').write_text('[project]\n', encoding='utf-8')
     result = subprocess.run(
-        args=['bash', str(deploy), 'host', CITY],
+        args=['bash', str(deploy), 'host', APP_NAME],
         env=user_env(),
         capture_output=True,
         text=True,
@@ -1273,29 +1433,6 @@ def test_deploy_checks_a_known_city(tmp_path: Path) -> None:
     )
     assert result.returncode == 1
     assert (tmp_path / 'checked').exists()
-
-
-def unexempt(*, path: Path, text: str) -> str:
-    """
-    Drop the one city-named line a file is allowed to hold.
-
-    Parameters
-    ----------
-    path : Path
-        The file under deploy/.
-    text : str
-        Its text.
-
-    Returns
-    -------
-    str
-        The text without the exempt line, matched as a whole line.
-    """
-    if str(path.relative_to(DEPLOY)) not in KEY_FILE_EXEMPT:
-        return text
-    return '\n'.join(
-        line for line in text.splitlines() if line != KEY_FILE_LINE
-    )
 
 
 def test_deploy_files_name_no_city() -> None:
@@ -1309,7 +1446,7 @@ def test_deploy_files_name_no_city() -> None:
         str(path.relative_to(DEPLOY))
         for path, text in texts.items()
         if isinstance(text, str)
-        and CITY_NAMES.search(unexempt(path=path, text=text))
+        and CITY_NAMES.search(text)
     ]
     assert sum(isinstance(text, str) for text in texts.values()) > 10
     assert not named
@@ -1414,13 +1551,18 @@ def test_shell_script_never_names_the_key(path: Path) -> None:
 
 def test_root_exec_lines_get_no_service_writable_environment() -> None:
     """Units with root + lines read env only from /etc, and set no TMPDIR."""
+    checked = 0
     for name in UNITS:
         unit = read_unit(name=name)
         service = unit.get('Service', {})
         if not any(key in service for key in ROOT_EXEC_KEYS):
             continue
+        checked += 1
         assert environment_names(unit=unit) <= ROOT_SAFE_ENVIRONMENT
         assert service.get('EnvironmentFile', '/etc/').startswith('/etc/')
+    assert checked == 2
+    assert set(drop_in_environment(path=APP_CONF)) <= ROOT_SAFE_ENVIRONMENT
+    assert 'EnvironmentFile' not in APP_CONF.read_text(encoding='utf-8')
 
 
 def test_install_release_constants() -> None:
@@ -1459,8 +1601,15 @@ def test_provision_retires_the_pin_file() -> None:
 
 
 def test_no_unit_reads_m2a_env() -> None:
-    """No systemd unit loads the retired pin file."""
-    for unit in sorted(SYSTEMD.iterdir()):
+    """No systemd unit or drop-in loads the retired pin file."""
+    units = [
+        path
+        for folder in (SYSTEMD, SYDNEY_SYSTEMD)
+        for path in sorted(folder.rglob('*'))
+        if path.is_file()
+    ]
+    assert len(units) == 6
+    for unit in units:
         text = unit.read_text(encoding='utf-8')
         assert 'EnvironmentFile' not in text, unit.name
         assert 'm2a.env' not in text, unit.name
@@ -1524,11 +1673,23 @@ def test_led_rejects_bad_arguments(
         args=args,
         env=user_env(PAPERROUTE_LED_DIR=str(led)),
     )
-    assert (result.returncode, result.stderr) == (
-        2,
-        'usage: paperroute-led boot|rebuild|restore|on\n',
-    )
+    assert (result.returncode, result.stderr) == (2, LED_USAGE)
     assert led_state(led=led) == {}
+
+
+def test_led_busy_replaces_rebuild(tmp_path: Path) -> None:
+    """busy is the slow blink; the old rebuild mode is refused."""
+    led = led_dir(tmp_path=tmp_path)
+    result = run_script(
+        name='paperroute-led',
+        args=('rebuild',),
+        env=user_env(PAPERROUTE_LED_DIR=str(led)),
+    )
+    assert (result.returncode, result.stderr) == (2, LED_USAGE)
+    assert led_state(led=led) == {}
+    assert read_unit(name='paperroute-timetable.service')['Service'][
+        'ExecStartPre'
+    ] == '+/usr/local/bin/paperroute-led busy'
 
 
 def test_led_without_led_exits_quietly(tmp_path: Path) -> None:
@@ -1548,22 +1709,28 @@ def test_led_ignores_override_as_root() -> None:
     assert 'if [[ $EUID -ne 0 ]]; then\n    LED=${PAPERROUTE_LED_DIR' in text
 
 
-def copy_deploy(tmp_path: Path) -> Path:
+def copy_deploy(tmp_path: Path, app: Path = WITH_UNITS) -> Path:
     """
-    Copy deploy/ the way scripts/provision stages it.
+    Stage deploy/ and an app's deploy/ the way scripts/provision does.
 
     Parameters
     ----------
     tmp_path : Path
         Pytest's temporary directory.
+    app : Path
+        The app's folder; with no ``deploy/`` its part is empty.
 
     Returns
     -------
     Path
-        The copy.
+        The staging directory, holding ``kit/`` and ``app/``.
     """
     copy = tmp_path / 'paperroute-provision'
-    shutil.copytree(src=DEPLOY, dst=copy)
+    shutil.copytree(src=DEPLOY, dst=copy / 'kit')
+    if (app / 'deploy').is_dir():
+        shutil.copytree(src=app / 'deploy', dst=copy / 'app')
+    else:
+        (copy / 'app').mkdir()
     return copy
 
 
@@ -1577,7 +1744,7 @@ def run_provision(
     Parameters
     ----------
     copy : Path
-        The staged deploy/ copy.
+        The staging directory.
     sudo_user : str | None
         The ``SUDO_USER`` to claim, or None to leave it unset.
 
@@ -1587,8 +1754,9 @@ def run_provision(
         The exit status and output.
     """
     extra = {} if sudo_user is None else {'SUDO_USER': sudo_user}
+    script = copy / 'kit' / 'bin' / 'provision-device'
     return subprocess.run(
-        args=['bash', str(copy / 'bin' / 'provision-device'), str(copy)],
+        args=['bash', str(script), str(copy), 'demo'],
         env=user_env(**extra),
         capture_output=True,
         text=True,
@@ -1628,7 +1796,7 @@ def test_provision_checks_the_staged_owner(
 def test_provision_rejects_odd_entries(tmp_path: Path) -> None:
     """A staged copy holding a symlink exits 2 before anything runs."""
     copy = copy_deploy(tmp_path=tmp_path)
-    (copy / 'conf' / 'link').symlink_to('/etc/passwd')
+    (copy / 'kit' / 'conf' / 'link').symlink_to('/etc/passwd')
     result = run_provision(copy=copy, sudo_user=getpass.getuser())
     assert (result.returncode, result.stderr) == (
         2,
@@ -1710,7 +1878,9 @@ def test_install_release_syncs_only_the_app() -> None:
         '--no-editable',
     } <= set(words)
     assert words[words.index('--package') + 1] == '"$APP"'
-    assert 'APP=paperroute-$CITY' in script_text(path=BIN / 'install-release')
+    assert 'APP=paperroute-$APP_NAME' in script_text(
+        path=BIN / 'install-release',
+    )
     assert '--no-dev' not in words
 
 
@@ -1719,12 +1889,28 @@ def test_deploy_stages_only_the_named_app() -> None:
     found = commands(path=DEPLOY_SCRIPT, word='git ls-files')
     assert len(found) == 1
     words = found[0].split()
-    assert {'packages', '"apps/paperroute-$city"'} <= set(words)
+    assert {'packages', '"apps/paperroute-$app"'} <= set(words)
     assert 'src' not in words
     assert 'apps' not in words
     assert commands(path=DEPLOY_SCRIPT, word='INSTALL')[-1] == (
-        'ssh -- "$host" sudo -n "$INSTALL" "$sha" "$city" || status=$?'
+        'ssh -- "$host" sudo -n "$INSTALL" "$sha" "$app" || status=$?'
     )
+
+
+def test_deploy_stages_the_contract() -> None:
+    """The release carries the kit's units contract, and no other kit file."""
+    found = commands(path=DEPLOY_SCRIPT, word='git ls-files')
+    assert found == [
+        'git ls-files -z packages "apps/paperroute-$app" pyproject.toml'
+        ' uv.lock deploy/CONTRACT'
+        ' | rsync -a --from0 --files-from=- ./ "$host:$STAGE/$sha/"',
+    ]
+    simulated = commands(
+        path=ROOT / 'scripts' / 'simulate-pi-build',
+        word='git ls-files',
+    )
+    assert len(simulated) == 1
+    assert ' uv.lock deploy/CONTRACT ' in simulated[0]
 
 
 def test_install_release_records_the_app() -> None:
@@ -1738,25 +1924,24 @@ def test_install_release_records_the_app() -> None:
 
 
 def test_install_release_sets_timer_zone_after_health() -> None:
-    """The timer's zone changes only once the new release is healthy."""
+    """The timers' zone changes only once the new release is healthy."""
     text = script_text(path=BIN / 'install-release')
     body = script_function(path=BIN / 'install-release', name='set_timer_zone')
-    call = text.index('\nif ! reason=$(set_timer_zone "$ZONE" 2>&1); then\n')
-    assert text.count('set_timer_zone "$ZONE"') == 1
+    call = text.index('\nif ! reason=$(set_timer_zones 2>&1); then\n')
+    assert text.count('set_timer_zones 2>&1') == 1
     assert text.rindex('healthy') < call
-    assert "printf 'OnCalendar=\\n'" in body
-    assert "printf 'OnCalendar=*-*-* 03:30:00 %s\\n'" in body
+    assert "printf '[Timer]\\nOnCalendar=\\n'" in body
     assert 'systemctl daemon-reload' in body
-    assert 'restart paperroute-timetable' not in text
-    assert script_value(path=BIN / 'install-release', name='ZONE_CONF') == (
-        '/etc/systemd/system/paperroute-timetable.timer.d/city-zone.conf'
+    assert 'restart paperroute-' not in text
+    assert script_value(path=BIN / 'install-release', name='ETC') == (
+        '/etc/systemd/system'
     )
 
 
 def test_install_release_reports_unset_timer_zone() -> None:
     """A failed zone write says the release is live, why, and exits 1."""
     text = script_text(path=BIN / 'install-release')
-    call = text.index('\nif ! reason=$(set_timer_zone "$ZONE" 2>&1); then\n')
+    call = text.index('\nif ! reason=$(set_timer_zones 2>&1); then\n')
     said = text.index(
         "'install-release: %s is live, but the timer zone was not set: %s\\n'",
     )
@@ -1767,18 +1952,19 @@ def test_install_release_reports_unset_timer_zone() -> None:
 
 def test_set_timer_zone_fails_at_first_step(tmp_path: Path) -> None:
     """Under `if`, a failed step still ends set_timer_zone, with a reason."""
-    blocker = tmp_path / 'blocker'
-    blocker.write_text('', encoding='utf-8')
+    timer = 'paperroute-job.timer'
+    etc = timer_etc(root=tmp_path, timers={timer: '*-*-* 03:30:00'})
+    (etc / f'{timer}.d').write_text('', encoding='utf-8')
     log = tmp_path / 'systemctl.log'
     program = (
-        f'ZONE_CONF={blocker}/timer.d/city-zone.conf\n'
+        f'ETC={etc}\n'
         f'systemctl() {{ printf "%s\\n" "$*" >>{log}; }}\n'
-        'if ! reason=$(set_timer_zone Australia/Perth 2>&1); then\n'
+        f'if ! reason=$(set_timer_zone {timer} Australia/Perth 2>&1); then\n'
         '    printf "failed: %s\\n" "$reason"\n'
         'fi\n'
     )
     result = run_functions(
-        names=('set_timer_zone',),
+        names=ZONE_FUNCTIONS,
         program=program,
         env=user_env(),
     )
@@ -1791,15 +1977,16 @@ def test_set_timer_zone_retries_failed_reload(tmp_path: Path) -> None:
     """A failed reload keeps the drop-in; systemd's flag retries it."""
     body = script_function(path=BIN / 'install-release', name='set_timer_zone')
     assert (
-        'systemctl show -p NeedDaemonReload --value \\\n'
-        '            paperroute-timetable.timer) == no ]]'
+        'systemctl show -p NeedDaemonReload --value "$timer") == no ]]'
     ) in body
-    assert 'rm -f -- "$ZONE_CONF"' not in body
-    conf = tmp_path / 'timer.d' / 'city-zone.conf'
+    assert 'rm -f -- "$conf"' not in body
+    timer = 'paperroute-timetable.timer'
+    etc = timer_etc(root=tmp_path, timers={timer: '*-*-* 03:30:00'})
+    conf = etc / f'{timer}.d' / 'app-zone.conf'
     log = tmp_path / 'systemctl.log'
     need = tmp_path / 'need'
     program = (
-        f'ZONE_CONF={conf}\n'
+        f'ETC={etc}\n'
         'systemctl() {\n'
         f'    printf "%s\\n" "$*" >>{log}\n'
         '    if [[ $1 == show ]]; then\n'
@@ -1812,14 +1999,14 @@ def test_set_timer_zone_retries_failed_reload(tmp_path: Path) -> None:
         '        return 1\n'
         '    fi\n'
         '}\n'
-        'if ! reason=$(set_timer_zone Australia/Perth 2>&1); then\n'
+        f'if ! reason=$(set_timer_zone {timer} Australia/Perth 2>&1); then\n'
         '    printf "failed: %s\\n" "$reason"\n'
         'fi\n'
-        'set_timer_zone Australia/Perth\n'
-        'set_timer_zone Australia/Perth\n'
+        f'set_timer_zone {timer} Australia/Perth\n'
+        f'set_timer_zone {timer} Australia/Perth\n'
     )
     result = run_functions(
-        names=('set_timer_zone',),
+        names=ZONE_FUNCTIONS,
         program=program,
         env=user_env(),
     )
@@ -1828,7 +2015,7 @@ def test_set_timer_zone_retries_failed_reload(tmp_path: Path) -> None:
     assert conf.read_text(encoding='utf-8') == (
         '[Timer]\nOnCalendar=\nOnCalendar=*-*-* 03:30:00 Australia/Perth\n'
     )
-    show = 'show -p NeedDaemonReload --value paperroute-timetable.timer\n'
+    show = f'show -p NeedDaemonReload --value {timer}\n'
     assert log.read_text(encoding='utf-8') == (
         f'daemon-reload\n{show}daemon-reload\n{show}'
     )
@@ -2221,7 +2408,7 @@ def test_deploy_only_warns_on_tiles() -> None:
     )
     assert check < first_ssh
     assert lines[check].strip() == (
-        'uv run python -m "paperroute_$city.build" check-tiles data/tiles.db '
+        'uv run python -m "paperroute_$app.build" check-tiles data/tiles.db '
         "|| printf 'deploy: warning: tiles do not match this release; "
         "deploying anyway\\n' >&2"
     )
@@ -2672,7 +2859,7 @@ def test_install_files_installs_hook_and_enables_on_screen() -> None:
     ]
     assert commands(path=path, word='enable') == [
         'systemctl enable paperroute-led-boot paperroute'
-        ' paperroute-timetable.timer paperroute-on-screen',
+        ' paperroute-on-screen $timers',
     ]
 
 
@@ -2869,3 +3056,1045 @@ def test_provision_names_no_deploy_user() -> None:
         'make_dir "$DEPLOY_USER" 0700 /var/cache/paperroute-stage',
     ]
     assert 'DEPLOY_USER=$SUDO_USER' in text.splitlines()
+
+
+FAKE_INSTALL: Final[str] = '''#!/bin/bash
+set -eu
+dirs=no
+parents=no
+while (($#)); do
+    case $1 in
+        -m | -o | -g) shift 2 ;;
+        -d) dirs=yes; shift ;;
+        -D) parents=yes; shift ;;
+        *) break ;;
+    esac
+done
+if [[ $dirs == yes ]]; then
+    mkdir -p "$@"
+    exit 0
+fi
+args=("$@")
+dest=${args[$# - 1]}
+unset "args[$# - 1]"
+if [[ $parents == yes ]]; then
+    mkdir -p "$(dirname "$dest")"
+fi
+cp "${args[@]}" "$dest"
+'''
+INSTALL_FILES_FUNCTIONS: Final[tuple[str, ...]] = (
+    'in_list',
+    'wanted_units',
+    'shipped_drop_ins',
+    'app_timers',
+    'install_units',
+    'remove_strays',
+    'enable_units',
+)
+SYDNEY_APP: Final[Path] = ROOT / 'apps' / 'paperroute-sydney'
+KIT_ENABLED: Final[str] = (
+    'enable paperroute-led-boot paperroute paperroute-on-screen'
+)
+
+
+@dataclass(frozen=True)
+class Device:
+    """A provisioned share, a systemd folder and stubbed commands."""
+
+    share: Path
+    etc: Path
+    log: Path
+    env: dict[str, str]
+
+
+def stub_commands(*, root: Path, scripts: dict[str, str]) -> Path:
+    """
+    Write executable stand-ins for commands into a folder.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+    scripts : dict[str, str]
+        Each command's name and its script.
+
+    Returns
+    -------
+    Path
+        The folder, to put first on ``PATH``.
+    """
+    stubs = root / 'stubs'
+    stubs.mkdir(exist_ok=True)
+    for name, text in scripts.items():
+        (stubs / name).write_text(text, encoding='utf-8')
+        (stubs / name).chmod(0o755)
+    return stubs
+
+
+def make_device(*, root: Path, app: Path) -> Device:
+    """
+    Make a share as provision leaves it and an empty systemd folder.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+    app : Path
+        The app's folder; with no ``deploy/`` its part is empty.
+
+    Returns
+    -------
+    Device
+        The folders, the command log and the environment.
+    """
+    share = root / 'share'
+    shutil.copytree(src=DEPLOY, dst=share / 'deploy')
+    if (app / 'deploy').is_dir():
+        shutil.copytree(src=app / 'deploy', dst=share / 'app')
+    else:
+        (share / 'app').mkdir()
+    etc = root / 'etc'
+    etc.mkdir()
+    log = root / 'systemctl.log'
+    stubs = stub_commands(
+        root=root,
+        scripts={
+            'systemctl': f'#!/bin/sh\nprintf "%s\\n" "$*" >>{log}\n',
+            'install': FAKE_INSTALL,
+        },
+    )
+    env = user_env(PATH=f'{stubs}:{os.environ["PATH"]}')
+    return Device(share=share, etc=etc, log=log, env=env)
+
+
+def install_units(*, device: Device) -> subprocess.CompletedProcess[str]:
+    """
+    Run install-files' unit steps over a device.
+
+    Parameters
+    ----------
+    device : Device
+        The share, systemd folder and stubs.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The exit status and output.
+    """
+    program = (
+        f'SHARE={device.share}\nSRC=$SHARE/deploy\nAPP_SRC=$SHARE/app\n'
+        f'ETC={device.etc}\n'
+        'install_units\nremove_strays\nenable_units\n'
+    )
+    return run_functions(
+        names=INSTALL_FILES_FUNCTIONS,
+        program=program,
+        env=device.env,
+        script=BIN / 'install-files',
+    )
+
+
+def tree_files(root: Path) -> dict[str, str]:
+    """
+    Read every file under a folder as text.
+
+    Parameters
+    ----------
+    root : Path
+        The folder.
+
+    Returns
+    -------
+    dict[str, str]
+        Each file's relative path and text.
+    """
+    return {
+        str(path.relative_to(root)): path.read_text(encoding='utf-8')
+        for path in sorted(root.rglob('*'))
+        if path.is_file()
+    }
+
+
+def logged(device: Device) -> str:
+    """
+    Read what the stub systemctl was asked to do.
+
+    Parameters
+    ----------
+    device : Device
+        The device whose log to read.
+
+    Returns
+    -------
+    str
+        The calls, one per line, or empty when there were none.
+    """
+    if not device.log.exists():
+        return ''
+    return device.log.read_text(encoding='utf-8')
+
+
+@pytest.mark.parametrize(
+    'app',
+    (WITH_UNITS, SYDNEY_APP),
+    ids=('demo', 'sydney'),
+)
+def test_install_files_installs_the_drop_in(tmp_path: Path, app: Path) -> None:
+    """The kit's units, the app's units and its drop-in land in place."""
+    device = make_device(root=tmp_path, app=app)
+    result = install_units(device=device)
+    assert (result.returncode, result.stderr) == (0, '')
+    expected = tree_files(root=DEPLOY / 'systemd') | tree_files(
+        root=app / 'deploy' / 'systemd',
+    )
+    assert tree_files(root=device.etc) == expected
+    assert 'paperroute.service.d/app.conf' in expected
+
+
+@pytest.mark.parametrize(
+    ('app', 'calls'),
+    (
+        (
+            WITH_UNITS,
+            f'daemon-reload\n{KIT_ENABLED} paperroute-job.timer\n'
+            'start paperroute-job.timer\n',
+        ),
+        (WITHOUT_UNITS, f'daemon-reload\n{KIT_ENABLED}\n'),
+    ),
+    ids=('with', 'without'),
+)
+def test_install_files_enables_only_shipped_timers(
+    tmp_path: Path,
+    app: Path,
+    calls: str,
+) -> None:
+    """Only the app's own timers are enabled and started."""
+    device = make_device(root=tmp_path, app=app)
+    result = install_units(device=device)
+    assert (result.returncode, result.stderr) == (0, '')
+    assert logged(device=device) == calls
+    assert not list(device.etc.glob('paperroute-timetable*'))
+    lines = script_text(path=BIN / 'install-files').splitlines()
+    steps = [lines.index(step) for step in INSTALL_FILES_FUNCTIONS[-3:]]
+    assert steps == sorted(steps)
+
+
+def test_install_files_removes_units_outside_the_set(tmp_path: Path) -> None:
+    """An older provision's timetable units go when the app ships none."""
+    device = make_device(root=tmp_path, app=WITHOUT_UNITS)
+    for name in ('paperroute-timetable.service', 'paperroute-timetable.timer'):
+        shutil.copyfile(src=SYDNEY_SYSTEMD / name, dst=device.etc / name)
+    zone = device.etc / 'paperroute-timetable.timer.d' / 'app-zone.conf'
+    zone.parent.mkdir()
+    zone.write_text('[Timer]\n', encoding='utf-8')
+    (device.etc / 'ssh.service').write_text('', encoding='utf-8')
+    result = install_units(device=device)
+    assert (result.returncode, result.stderr) == (0, '')
+    assert sorted(tree_files(root=device.etc)) == sorted(
+        [*KIT_UNITS, 'ssh.service'],
+    )
+    assert not zone.parent.exists()
+    assert logged(device=device).splitlines()[:2] == [
+        'disable --now paperroute-timetable.service',
+        'disable --now paperroute-timetable.timer',
+    ]
+
+
+def test_install_files_keeps_the_zone_drop_in(tmp_path: Path) -> None:
+    """The live zone drop-in of an unchanged timer survives a provision."""
+    device = make_device(root=tmp_path, app=SYDNEY_APP)
+    timer = 'paperroute-timetable.timer'
+    shutil.copyfile(src=SYDNEY_SYSTEMD / timer, dst=device.etc / timer)
+    drop_ins = device.etc / f'{timer}.d'
+    drop_ins.mkdir()
+    (drop_ins / 'app-zone.conf').write_text('zone\n', encoding='utf-8')
+    (drop_ins / 'other.conf').write_text('', encoding='utf-8')
+    result = install_units(device=device)
+    assert (result.returncode, result.stderr) == (0, '')
+    assert tree_files(root=drop_ins) == {'app-zone.conf': 'zone\n'}
+
+
+def test_install_files_drops_the_zone_drop_in_when_the_timer_changes(
+    tmp_path: Path,
+) -> None:
+    """A changed calendar is never overridden by a stale zone drop-in."""
+    device = make_device(root=tmp_path, app=SYDNEY_APP)
+    timer = 'paperroute-timetable.timer'
+    (device.etc / timer).write_text(
+        '[Timer]\nOnCalendar=*-*-* 02:00:00\n',
+        encoding='utf-8',
+    )
+    zone = device.etc / f'{timer}.d' / 'app-zone.conf'
+    zone.parent.mkdir()
+    zone.write_text('zone\n', encoding='utf-8')
+    result = install_units(device=device)
+    assert (result.returncode, result.stderr) == (0, '')
+    assert not zone.exists()
+    assert (device.etc / timer).read_text(encoding='utf-8') == (
+        (SYDNEY_SYSTEMD / timer).read_text(encoding='utf-8')
+    )
+
+
+def test_install_files_removes_a_stale_app_conf(tmp_path: Path) -> None:
+    """The board's app drop-in goes when the new app ships none."""
+    device = make_device(root=tmp_path, app=WITHOUT_UNITS)
+    conf = device.etc / 'paperroute.service.d' / 'app.conf'
+    conf.parent.mkdir()
+    conf.write_text('[Service]\n', encoding='utf-8')
+    result = install_units(device=device)
+    assert (result.returncode, result.stderr) == (0, '')
+    assert not conf.parent.exists()
+    assert sorted(tree_files(root=device.etc)) == sorted(KIT_UNITS)
+
+
+def test_install_files_removes_city_zone_conf(tmp_path: Path) -> None:
+    """The old city-zone.conf is always removed."""
+    device = make_device(root=tmp_path, app=SYDNEY_APP)
+    drop_ins = device.etc / 'paperroute-timetable.timer.d'
+    drop_ins.mkdir()
+    (drop_ins / 'city-zone.conf').write_text('[Timer]\n', encoding='utf-8')
+    result = install_units(device=device)
+    assert (result.returncode, result.stderr) == (0, '')
+    assert not (drop_ins / 'city-zone.conf').exists()
+
+
+def provision_repo(*, root: Path, app: Path) -> Path:
+    """
+    Make a repo holding scripts/provision, deploy/ and one app, demo.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+    app : Path
+        The fixture whose ``deploy/``, if any, becomes demo's.
+
+    Returns
+    -------
+    Path
+        The copied scripts/provision.
+    """
+    repo = root / 'repo'
+    (repo / 'scripts').mkdir(parents=True)
+    script = repo / 'scripts' / 'provision'
+    shutil.copy2(src=ROOT / 'scripts' / 'provision', dst=script)
+    shutil.copytree(src=DEPLOY, dst=repo / 'deploy')
+    demo = repo / 'apps' / 'paperroute-demo'
+    demo.mkdir(parents=True)
+    (demo / 'pyproject.toml').write_text('[project]\n', encoding='utf-8')
+    if (app / 'deploy').is_dir():
+        shutil.copytree(src=app / 'deploy', dst=demo / 'deploy')
+    return script
+
+
+def run_provision_script(
+    *,
+    root: Path,
+    script: Path,
+    args: tuple[str, ...],
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run scripts/provision with rsync and ssh stubbed.
+
+    The stub rsync copies what it is given into ``root/staged``, and
+    both stubs log their arguments.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+    script : Path
+        The copied scripts/provision.
+    args : tuple[str, ...]
+        Its arguments.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The exit status and output.
+    """
+    staged = root / 'staged'
+    stubs = stub_commands(
+        root=root,
+        scripts={
+            'rsync': (
+                f'#!/bin/sh\nprintf "%s\\n" "$*" >>{root / "rsync.log"}\n'
+                f'mkdir -p {staged}\ncp -R "$3". {staged}/\n'
+            ),
+            'ssh': f'#!/bin/sh\nprintf "%s\\n" "$*" >>{root / "ssh.log"}\n',
+        },
+    )
+    return subprocess.run(
+        args=['bash', str(script), *args],
+        env=user_env(PATH=f'{stubs}:{os.environ["PATH"]}'),
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=30,
+    )
+
+
+@pytest.mark.parametrize(
+    'app',
+    (WITH_UNITS, WITHOUT_UNITS),
+    ids=('with', 'without'),
+)
+def test_provision_stages_kit_and_app(tmp_path: Path, app: Path) -> None:
+    """The kit goes as kit/, the app's deploy/ (or nothing) as app/."""
+    script = provision_repo(root=tmp_path, app=app)
+    result = run_provision_script(
+        root=tmp_path,
+        script=script,
+        args=('me@host', 'demo'),
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    staged = tmp_path / 'staged'
+    assert sorted(path.name for path in staged.iterdir()) == ['app', 'kit']
+    assert snapshot(root=staged / 'kit') == snapshot(root=DEPLOY)
+    expected = (
+        snapshot(root=app / 'deploy') if (app / 'deploy').is_dir() else {}
+    )
+    assert snapshot(root=staged / 'app') == expected
+    rsync = (tmp_path / 'rsync.log').read_text(encoding='utf-8')
+    assert rsync.startswith('-a --delete ')
+    assert rsync.endswith('/ me@host:.paperroute-provision/\n')
+    assert (tmp_path / 'ssh.log').read_text(encoding='utf-8') == (
+        '-t -- me@host sudo bash'
+        ' "$HOME/.paperroute-provision/kit/bin/provision-device"'
+        ' "$HOME/.paperroute-provision" demo\n'
+    )
+
+
+def test_provision_reboots_when_asked(tmp_path: Path) -> None:
+    """--reboot after the app reboots the Pi once provisioning is done."""
+    script = provision_repo(root=tmp_path, app=WITHOUT_UNITS)
+    result = run_provision_script(
+        root=tmp_path,
+        script=script,
+        args=('me@host', 'demo', '--reboot'),
+    )
+    assert result.returncode == 0, result.stderr
+    calls = (tmp_path / 'ssh.log').read_text(encoding='utf-8').splitlines()
+    assert calls[1:] == ['-t -- me@host sudo systemctl reboot']
+
+
+@pytest.mark.parametrize(
+    'args',
+    (
+        (),
+        ('me@host',),
+        ('me@host', '--reboot'),
+        ('me@host', 'Demo'),
+        ('me@host', '../x'),
+        ('me@host', 'nosuch'),
+        ('me@host', 'demo', '--now'),
+        ('me@host', 'demo', '--reboot', 'x'),
+        ('-oProxy=x', 'demo'),
+    ),
+)
+def test_provision_requires_an_app(
+    tmp_path: Path,
+    args: tuple[str, ...],
+) -> None:
+    """A missing, malformed or unknown app exits 2 before copying."""
+    script = provision_repo(root=tmp_path, app=WITH_UNITS)
+    result = run_provision_script(root=tmp_path, script=script, args=args)
+    assert (result.returncode, result.stderr) == (
+        2,
+        'usage: scripts/provision HOST APP [--reboot]\n',
+    )
+    assert not (tmp_path / 'rsync.log').exists()
+    assert not (tmp_path / 'ssh.log').exists()
+
+
+def provision_functions(
+    *,
+    names: tuple[str, ...],
+    program: str,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run provision-device's named functions, with ``fail`` and its regexes.
+
+    Parameters
+    ----------
+    names : tuple[str, ...]
+        The functions to take from provision-device.
+    program : str
+        Variables, stubs and calls, run after the definitions.
+    env : dict[str, str] | None
+        The environment, this process's without ``SUDO_USER`` unless given.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The exit status and output.
+    """
+    script = BIN / 'provision-device'
+    regexes = ''.join(
+        f'{name}={script_value(path=script, name=name)}\n'
+        for name in ('APP_RE', 'CONTRACT_RE', 'TIMER_RE')
+    )
+    return run_functions(
+        names=('fail', *names),
+        program=f'{regexes}{program}',
+        env=user_env() if env is None else env,
+        script=script,
+    )
+
+
+def file_modes(root: Path) -> set[tuple[str, int]]:
+    """
+    List the permission bits of every entry under a folder.
+
+    Parameters
+    ----------
+    root : Path
+        The folder.
+
+    Returns
+    -------
+    set[tuple[str, int]]
+        Each relative path and its mode bits.
+    """
+    return {
+        (str(path.relative_to(root)), path.stat().st_mode & 0o777)
+        for path in root.rglob('*')
+    }
+
+
+def test_provision_keeps_the_kit_copy_in_place(tmp_path: Path) -> None:
+    """The kit lands at share/deploy, where the screen units look."""
+    staging = copy_deploy(tmp_path=tmp_path, app=WITH_UNITS)
+    share = tmp_path / 'share'
+    share.mkdir()
+    result = provision_functions(
+        names=('copy_tree', 'copy_deploy'),
+        program=(
+            f'chown() {{ :; }}\n{MV_STUB}\nSHARE={share}\nDIR={staging}\n'
+            'copy_deploy\ncopy_deploy\n'
+        ),
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    assert sorted(path.name for path in share.iterdir()) == ['app', 'deploy']
+    assert snapshot(root=share / 'deploy') == snapshot(root=DEPLOY)
+    assert snapshot(root=share / 'app') == snapshot(
+        root=WITH_UNITS / 'deploy',
+    )
+    assert {
+        mode
+        for name, mode in file_modes(root=share / 'deploy')
+        if not name.startswith('bin/')
+    } == {0o755, 0o644}
+    assert {
+        mode
+        for name, mode in file_modes(root=share / 'deploy')
+        if name.startswith('bin/')
+    } == {0o755}
+    screen = '/usr/local/share/paperroute/deploy/screens/on.raw'
+    assert screen in read_unit(name='paperroute-on-screen.service')[
+        'Service'
+    ]['ExecStart']
+    assert screen.replace('on.raw', 'off.raw') in script_text(path=OFF_HOOK)
+    assert script_value(path=BIN / 'provision-device', name='SHARE') == (
+        '/usr/local/share/paperroute'
+    )
+    assert (share / 'deploy' / 'screens' / 'on.raw').read_bytes() == (
+        (DEPLOY / 'screens' / 'on.raw').read_bytes()
+    )
+
+
+@pytest.mark.parametrize(
+    ('app', 'timers'),
+    (
+        (WITH_UNITS, 'paperroute-job.timer\n'),
+        (WITHOUT_UNITS, ''),
+        (SYDNEY_APP, 'paperroute-timetable.timer\n'),
+    ),
+    ids=('with', 'without', 'sydney'),
+)
+def test_provision_writes_contract_and_manifest(
+    tmp_path: Path,
+    app: Path,
+    timers: str,
+) -> None:
+    """The share records the kit's contract and the app's timers."""
+    device = make_device(root=tmp_path, app=app)
+    result = provision_functions(
+        names=('write_contract', 'write_manifest'),
+        program=f'SHARE={device.share}\nwrite_contract\nwrite_manifest\n',
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    assert (device.share / 'units-contract').read_text(encoding='utf-8') == (
+        '1\n'
+    )
+    assert (device.share / 'app-timers').read_text(encoding='utf-8') == (
+        timers
+    )
+    lines = script_text(path=BIN / 'provision-device').splitlines()
+    steps = [
+        lines.index(step)
+        for step in (
+            'copy_deploy',
+            'write_contract',
+            'write_manifest',
+            'set_state_aside',
+            '/usr/local/sbin/paperroute-install-files',
+        )
+    ]
+    assert steps == sorted(steps)
+
+
+@pytest.mark.parametrize(
+    ('entry', 'reason'),
+    (
+        ('ssh.service', 'the app may not ship systemd/ssh.service'),
+        (
+            'paperroute-on-screen.service',
+            'the app may not replace systemd/paperroute-on-screen.service',
+        ),
+        (
+            'paperroute_job.timer',
+            'the app may not ship systemd/paperroute_job.timer',
+        ),
+        (
+            'paperroute-x.timer.d/zone.conf',
+            'systemd/paperroute-x.timer.d is for a unit nobody ships',
+        ),
+        (
+            'paperroute.service.d/app-zone.conf',
+            'the app may not ship systemd/paperroute.service.d/app-zone.conf',
+        ),
+        (
+            'paperroute.service.d/notes.txt',
+            'the app may not ship systemd/paperroute.service.d/notes.txt',
+        ),
+        ('ssh.service.d/x.conf', 'the app may not ship systemd/ssh.service.d'),
+    ),
+)
+def test_provision_checks_the_app_units(
+    tmp_path: Path,
+    entry: str,
+    reason: str,
+) -> None:
+    """The app may ship only paperroute units and drop-ins for them."""
+    copy = copy_deploy(tmp_path=tmp_path)
+    path = copy / 'app' / 'systemd' / entry
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text('', encoding='utf-8')
+    result = run_provision(copy=copy, sudo_user=getpass.getuser())
+    assert (result.returncode, result.stderr) == (
+        2,
+        f'provision-device: {reason}\n',
+    )
+
+
+@pytest.mark.parametrize('text', ('', '0\n', 'one\n', '1 2\n'))
+def test_provision_checks_the_contract(tmp_path: Path, text: str) -> None:
+    """The kit's CONTRACT must hold a positive number."""
+    copy = copy_deploy(tmp_path=tmp_path)
+    (copy / 'kit' / 'CONTRACT').write_text(text, encoding='utf-8')
+    result = run_provision(copy=copy, sudo_user=getpass.getuser())
+    assert (result.returncode, result.stderr) == (
+        2,
+        'provision-device: kit/CONTRACT must hold a units contract number\n',
+    )
+
+
+def test_provision_needs_the_app_part(tmp_path: Path) -> None:
+    """A staging directory without app/ is refused."""
+    copy = copy_deploy(tmp_path=tmp_path)
+    shutil.rmtree(copy / 'app')
+    result = run_provision(copy=copy, sudo_user=getpass.getuser())
+    assert (result.returncode, result.stderr) == (
+        2,
+        'provision-device: DIR has no app/\n',
+    )
+
+
+def test_manifest_timer_names_are_validated(tmp_path: Path) -> None:
+    """provision refuses a badly named timer and writes no manifest."""
+    device = make_device(root=tmp_path, app=WITHOUT_UNITS)
+    (device.share / 'app' / 'systemd').mkdir()
+    (device.share / 'app' / 'systemd' / 'paperroute_Job.timer').write_text(
+        '',
+        encoding='utf-8',
+    )
+    result = provision_functions(
+        names=('write_manifest',),
+        program=f'SHARE={device.share}\nwrite_manifest\n',
+    )
+    assert (result.returncode, result.stderr) == (
+        2,
+        "provision-device: the app's timer paperroute_Job.timer has a bad"
+        ' name\n',
+    )
+    assert not (device.share / 'app-timers').exists()
+
+
+RELEASE_REGEXES: Final[tuple[str, ...]] = ('TIMER_RE', 'NAMED_ZONE_RE')
+
+
+def release_functions(
+    *,
+    names: tuple[str, ...],
+    program: str,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run install-release's named functions, with ``fail`` and its regexes.
+
+    Parameters
+    ----------
+    names : tuple[str, ...]
+        The functions to take from install-release.
+    program : str
+        Variables, stubs and calls, run after the definitions.
+    env : dict[str, str] | None
+        The environment, this process's without ``SUDO_USER`` unless given.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The exit status and output.
+    """
+    script = BIN / 'install-release'
+    regexes = ''.join(
+        f'{name}={script_value(path=script, name=name)}\n'
+        for name in RELEASE_REGEXES
+    )
+    return run_functions(
+        names=('fail', *names),
+        program=f'{regexes}{program}',
+        env=user_env() if env is None else env,
+    )
+
+
+@pytest.mark.parametrize(
+    'line',
+    (
+        '../evil.timer',
+        'paperroute-job.service',
+        'paperroute-job.timer x',
+        'paperroute-Job.timer',
+        '',
+    ),
+)
+def test_install_release_validates_manifest_names(
+    tmp_path: Path,
+    line: str,
+) -> None:
+    """install-release refuses a manifest line that is not a timer name."""
+    manifest = tmp_path / 'app-timers'
+    manifest.write_text(f'paperroute-job.timer\n{line}\n', encoding='utf-8')
+    result = release_functions(
+        names=('manifest_timers',),
+        program=f'SHARE={tmp_path}\nTIMERS=$(manifest_timers) || exit\n',
+    )
+    assert (result.returncode, result.stderr) == (
+        2,
+        'install-release: the timer manifest names a bad timer\n',
+    )
+
+
+def contract_tree(*, root: Path, contract: str | None) -> Path:
+    """
+    Stage a tree that carries a units contract, or none.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+    contract : str | None
+        The text of ``deploy/CONTRACT``, or None for no file.
+
+    Returns
+    -------
+    Path
+        The tree.
+    """
+    tree = stage_tree(stage=root / 'stage')
+    if contract is not None:
+        (tree / 'deploy').mkdir()
+        (tree / 'deploy' / 'CONTRACT').write_text(contract, encoding='utf-8')
+    return tree
+
+
+@pytest.mark.parametrize(
+    ('release', 'device', 'message'),
+    (
+        ('1\n', '0\n', 'needs units contract 1; the device has 0'),
+        ('1\n', None, 'needs units contract 1; the device has 0'),
+        (None, '1\n', 'needs units contract 0; the device has 1'),
+        ('2\n', '1\n', 'needs units contract 2; the device has 1'),
+    ),
+)
+def test_install_release_refuses_other_contract(
+    *,
+    tmp_path: Path,
+    release: str | None,
+    device: str | None,
+    message: str,
+) -> None:
+    """A release built for other units is refused and its stage removed."""
+    tree = contract_tree(root=tmp_path, contract=release)
+    if device is not None:
+        (tmp_path / 'units-contract').write_text(device, encoding='utf-8')
+    result = release_functions(
+        names=('contract_in', 'remove_stage', 'contract_ok'),
+        program=(
+            f'OWNER=me TREE={tree} SHARE={tmp_path}\n'
+            'runuser() { shift 3; "$@"; }\ncontract_ok\n'
+        ),
+    )
+    assert (result.returncode, result.stderr) == (
+        1,
+        f'install-release: this release {message}. Run scripts/provision'
+        ' HOST APP first.\n',
+    )
+    assert not tree.exists()
+    lines = script_text(path=BIN / 'install-release').splitlines()
+    steps = [
+        lines.index(step)
+        for step in ('validate', 'contract_ok', 'build', 'check_calendars')
+    ]
+    assert steps == sorted(steps)
+    assert steps[-1] < lines.index('    take_over')
+
+
+def test_install_release_accepts_the_same_contract(tmp_path: Path) -> None:
+    """A release of the installed contract keeps its stage and goes on."""
+    tree = contract_tree(root=tmp_path, contract='1\n')
+    (tmp_path / 'units-contract').write_text('1\n', encoding='utf-8')
+    result = release_functions(
+        names=('contract_in', 'remove_stage', 'contract_ok'),
+        program=(
+            f'OWNER=me TREE={tree} SHARE={tmp_path}\n'
+            'runuser() { exit 9; }\ncontract_ok\nprintf "%s\\n" "$CONTRACT"\n'
+        ),
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (0, '1\n', '')
+    assert tree.is_dir()
+
+
+@pytest.mark.parametrize('manifest', ('paperroute-job.timer\n', ''))
+def test_install_release_sets_zone_only_for_manifest_timers(
+    tmp_path: Path,
+    manifest: str,
+) -> None:
+    """Only timers the manifest names get a zone drop-in."""
+    etc = timer_etc(
+        root=tmp_path,
+        timers={
+            'paperroute-job.timer': '*-*-* 03:30:00',
+            'paperroute-other.timer': '*-*-* 04:00:00',
+        },
+    )
+    (tmp_path / 'app-timers').write_text(manifest, encoding='utf-8')
+    log = tmp_path / 'systemctl.log'
+    result = release_functions(
+        names=('manifest_timers', *ZONE_FUNCTIONS),
+        program=(
+            f'SHARE={tmp_path} ETC={etc} ZONE=Australia/Sydney\n'
+            f'systemctl() {{ printf "%s\\n" "$*" >>{log}; }}\n'
+            'TIMERS=$(manifest_timers) || exit\nset_timer_zones\n'
+        ),
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    zoned = sorted(str(path.relative_to(etc)) for path in etc.glob('*.d/*'))
+    if manifest:
+        assert zoned == ['paperroute-job.timer.d/app-zone.conf']
+    else:
+        assert not zoned
+        assert not log.exists()
+
+
+def test_install_release_asks_no_zone_without_timers(tmp_path: Path) -> None:
+    """With an empty manifest build never asks the release for a zone."""
+    tree = zone_stage(root=tmp_path, output='not a zone')
+    program = (
+        f'OWNER=me TREE={tree} OPT=/opt APP=paperroute-{APP_NAME}\n'
+        f'TIMERS= ZONE=\n{ZONE_RE}\n'
+        'runuser() { shift 3; "$@"; }\n'
+        'build\nprintf "[%s]\\n" "$ZONE"\n'
+    )
+    result = run_functions(
+        names=('build',),
+        program=program,
+        env=user_env(PATH=f'{tmp_path / "stubs"}:{os.environ["PATH"]}'),
+    )
+    assert (result.returncode, result.stdout, result.stderr) == (
+        0,
+        '[]\n',
+        '',
+    )
+
+
+@pytest.mark.parametrize(
+    ('calendars', 'restated'),
+    (
+        (None, ('Mon *-*-* 06:00:00 Australia/Sydney',)),
+        (
+            ('Mon *-*-* 06:00:00', 'Sat *-*-* 09:00 '),
+            (
+                'Mon *-*-* 06:00:00 Australia/Sydney',
+                'Sat *-*-* 09:00 Australia/Sydney',
+            ),
+        ),
+    ),
+    ids=('fixture', 'two'),
+)
+def test_zone_drop_in_restates_the_timers_calendar(
+    tmp_path: Path,
+    calendars: tuple[str, ...] | None,
+    restated: tuple[str, ...],
+) -> None:
+    """The drop-in clears the calendar, then restates each line zoned."""
+    etc = tmp_path / 'etc'
+    etc.mkdir()
+    timer = etc / 'paperroute-job.timer'
+    if calendars is None:
+        shutil.copyfile(
+            src=WITH_UNITS / 'deploy' / 'systemd' / timer.name,
+            dst=timer,
+        )
+    else:
+        timer.write_text(
+            '[Timer]\n'
+            + ''.join(f'OnCalendar={value}\n' for value in calendars)
+            + '\n[Install]\nWantedBy=timers.target\n',
+            encoding='utf-8',
+        )
+    result = release_functions(
+        names=ZONE_FUNCTIONS,
+        program=(
+            f'ETC={etc}\nsystemctl() {{ :; }}\n'
+            'set_timer_zone paperroute-job.timer Australia/Sydney\n'
+        ),
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    conf = etc / 'paperroute-job.timer.d' / 'app-zone.conf'
+    assert conf.read_text(encoding='utf-8') == (
+        '[Timer]\nOnCalendar=\n'
+        + ''.join(f'OnCalendar={value}\n' for value in restated)
+    )
+
+
+@pytest.mark.parametrize(
+    ('calendar', 'status'),
+    (
+        ('Mon *-*-* 06:00:00 Australia/Perth', 1),
+        ('*-*-* 03:30:00 UTC', 1),
+        ('*-*-* 03:30 America/Argentina/Buenos_Aires', 1),
+        ('*-*-* 03:30:00', 0),
+    ),
+)
+def test_zone_drop_in_refuses_a_timer_that_names_a_zone(
+    tmp_path: Path,
+    calendar: str,
+    status: int,
+) -> None:
+    """A timer naming its own zone stops the deploy before take-over."""
+    etc = timer_etc(root=tmp_path, timers={'paperroute-job.timer': calendar})
+    result = release_functions(
+        names=('calendar_of', 'check_calendars'),
+        program=f'ETC={etc} TIMERS=paperroute-job.timer\ncheck_calendars\n',
+    )
+    assert result.returncode == status
+    assert result.stderr == (
+        'install-release: paperroute-job.timer already names a time zone;'
+        " the app's timer must leave it to the device.\n"
+        if status
+        else ''
+    )
+
+
+@pytest.mark.parametrize('contract', (None, '2\n'))
+def test_roll_back_stops_across_contracts(
+    tmp_path: Path,
+    contract: str | None,
+) -> None:
+    """A previous release of another units contract is never switched to."""
+    prev = tmp_path / 'releases' / 'abc1233'
+    new = tmp_path / 'releases' / SHA
+    (prev / '.venv' / 'bin').mkdir(parents=True)
+    script = prev / '.venv' / 'bin' / 'paperroute-board'
+    script.write_text('#!/bin/sh\n', encoding='utf-8')
+    script.chmod(0o755)
+    if contract is not None:
+        (prev / 'deploy').mkdir()
+        (prev / 'deploy' / 'CONTRACT').write_text(contract, encoding='utf-8')
+    new.mkdir()
+    current = tmp_path / 'current'
+    current.symlink_to(new)
+    log = tmp_path / 'systemctl.log'
+    result = run_functions(
+        names=('contract_in', 'roll_back'),
+        program=(
+            f'SHA={SHA} prev={prev} CURRENT={current} CONTRACT=1\n'
+            f'systemctl() {{ printf "%s\\n" "$*" >>{log}; }}\n'
+            f'journalctl() {{ :; }}\n{SWITCH_STUB}\nroll_back\n'
+        ),
+        env=user_env(),
+    )
+    was = '0' if contract is None else '2'
+    assert (result.returncode, result.stderr) == (
+        1,
+        f'install-release: {SHA} did not come up; rolling back\n'
+        f'install-release: abc1233 is units contract {was}, not 1; stopped'
+        ' paperroute. Do not reboot. Fix forward and redeploy.\n',
+    )
+    assert os.readlink(current) == str(new)
+    assert log.read_text(encoding='utf-8') == 'stop paperroute\n'
+
+
+@pytest.mark.parametrize(
+    ('record', 'release', 'moved'),
+    (
+        ('sydney\n', None, 'sydney'),
+        ('demo\n', 'paperroute-sydney\n', None),
+        (None, 'paperroute-sydney\n', 'sydney'),
+        (None, 'paperroute-demo\n', None),
+        (None, None, None),
+        ('../x\n', None, None),
+    ),
+)
+def test_provision_sets_state_aside_for_another_app(
+    *,
+    tmp_path: Path,
+    record: str | None,
+    release: str | None,
+    moved: str | None,
+) -> None:
+    """Another app's state file is renamed and kept before the new app."""
+    share = tmp_path / 'share'
+    current = tmp_path / 'current'
+    data = tmp_path / 'data'
+    for folder in (share, current, data):
+        folder.mkdir()
+    if record is not None:
+        (share / 'installed-app').write_text(record, encoding='utf-8')
+    if release is not None:
+        (current / 'APP').write_text(release, encoding='utf-8')
+    state = data / 'state.json'
+    state.write_text('{}', encoding='utf-8')
+    log = tmp_path / 'systemctl.log'
+    result = provision_functions(
+        names=('installed_app', 'set_state_aside'),
+        program=(
+            f'SHARE={share} CURRENT={current} STATE={state} APP_NAME=demo\n'
+            f'systemctl() {{ printf "%s\\n" "$*" >>{log}; }}\n'
+            f'date() {{ printf "1700000000\\n"; }}\n{MV_STUB}\n'
+            'set_state_aside\n'
+        ),
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    assert (share / 'installed-app').read_text(encoding='utf-8') == 'demo\n'
+    if moved is None:
+        assert sorted(path.name for path in data.iterdir()) == ['state.json']
+        assert not log.exists()
+    else:
+        assert sorted(path.name for path in data.iterdir()) == [
+            f'state.json.{moved}-1700000000',
+        ]
+        assert log.read_text(encoding='utf-8') == 'stop paperroute\n'

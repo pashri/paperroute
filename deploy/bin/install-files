@@ -1,13 +1,21 @@
 #!/bin/bash
 # Installed as /usr/local/sbin/paperroute-install-files (root, no arguments).
-# Installs the device files from provision's root-owned copy, never from a
-# release. Idempotent.
+# Installs the device files, the kit's units and the app's units from
+# provision's root-owned copy, never from a release. Idempotent.
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C
 umask 022
 
-SRC=/usr/local/share/paperroute/deploy
+SHARE=/usr/local/share/paperroute
+ETC=/etc/systemd/system
+# Tests point these at temp directories; root always uses the real ones.
+if [[ $EUID -ne 0 ]]; then
+    SHARE=${PAPERROUTE_SHARE:-$SHARE}
+    ETC=${PAPERROUTE_ETC:-$ETC}
+fi
+SRC=$SHARE/deploy
+APP_SRC=$SHARE/app
 SSHD_DROP_IN=/etc/ssh/sshd_config.d/10-paperroute.conf
 
 fail() {
@@ -15,16 +23,119 @@ fail() {
     exit 2
 }
 
+# Succeeds when the first argument is one of the lines of the second.
+in_list() {
+    grep -qxF -- "$1" <<<"$2"
+}
+
+# Prints the unit names the kit and the app ship, one per line.
+wanted_units() {
+    local src
+    for src in "$SRC"/systemd/* "$APP_SRC"/systemd/*.service \
+        "$APP_SRC"/systemd/*.timer; do
+        if [[ -f $src ]]; then
+            printf '%s\n' "${src##*/}"
+        fi
+    done
+}
+
+# Prints the app's drop-ins as UNIT.d/FILE, one per line.
+shipped_drop_ins() {
+    local src dir
+    for src in "$APP_SRC"/systemd/*.d/*; do
+        if [[ -f $src ]]; then
+            dir=${src%/*}
+            printf '%s/%s\n' "${dir##*/}" "${src##*/}"
+        fi
+    done
+}
+
+# Prints the app's timer names, one per line.
+app_timers() {
+    local src
+    for src in "$APP_SRC"/systemd/*.timer; do
+        if [[ -f $src ]]; then
+            printf '%s\n' "${src##*/}"
+        fi
+    done
+}
+
+# Installs every shipped unit and drop-in. A timer whose file changes
+# loses its zone drop-in, which the next deploy writes again.
+install_units() {
+    local src name
+    for src in "$SRC"/systemd/* "$APP_SRC"/systemd/*.service \
+        "$APP_SRC"/systemd/*.timer; do
+        [[ -f $src ]] || continue
+        name=${src##*/}
+        if [[ $name == *.timer ]] && ! cmp -s "$src" "$ETC/$name"; then
+            rm -f -- "$ETC/$name.d/app-zone.conf"
+        fi
+        install -m 0644 -o root -g root "$src" "$ETC/$name"
+    done
+    while IFS= read -r name; do
+        install -D -m 0644 -o root -g root "$APP_SRC/systemd/$name" \
+            "$ETC/$name"
+    done < <(shipped_drop_ins)
+}
+
+# Disables and removes every paperroute unit and drop-in not shipped;
+# a shipped unit keeps the zone drop-in install-release writes.
+remove_strays() {
+    local wanted shipped path name dir
+    wanted=$(wanted_units)
+    shipped=$(shipped_drop_ins)
+    for path in "$ETC"/paperroute*.service "$ETC"/paperroute*.timer; do
+        [[ -e $path || -L $path ]] || continue
+        name=${path##*/}
+        in_list "$name" "$wanted" && continue
+        systemctl disable --now "$name" || true
+        rm -f -- "$path"
+    done
+    for dir in "$ETC"/paperroute*.d; do
+        [[ -e $dir || -L $dir ]] || continue
+        name=${dir##*/}
+        if [[ -L $dir || ! -d $dir ]] || ! in_list "${name%.d}" "$wanted"; then
+            rm -rf -- "$dir"
+            continue
+        fi
+        for path in "$dir"/* "$dir"/.[!.]*; do
+            [[ -e $path || -L $path ]] || continue
+            [[ ${path##*/} != app-zone.conf ]] || continue
+            in_list "$name/${path##*/}" "$shipped" && continue
+            rm -rf -- "$path"
+        done
+        rmdir -- "$dir" 2>/dev/null || true
+    done
+}
+
+# Enables the kit's units and the app's timers, and starts the timers.
+enable_units() {
+    local timers
+    timers=$(app_timers)
+    systemctl daemon-reload
+    # The names are checked at provision, so they split safely.
+    # shellcheck disable=SC2086
+    systemctl enable paperroute-led-boot paperroute paperroute-on-screen $timers
+    if [[ -n $timers ]]; then
+        # shellcheck disable=SC2086
+        systemctl start $timers
+    fi
+}
+
 [[ $# -eq 0 ]] || fail 'takes no arguments'
 [[ $EUID -eq 0 ]] || fail 'must run as root'
-[[ -d $SRC && ! -L $SRC ]] || fail "$SRC is missing; run scripts/provision"
-bad=$(
-    find "$SRC" \( ! -user root -o -perm /022 -o \( ! -type f ! -type d \) \) \
-        -print -quit
-) || fail "cannot check $SRC"
-[[ -z $bad ]] || fail "$SRC must hold only root-owned files and directories"
+for dir in "$SRC" "$APP_SRC"; do
+    [[ -d $dir && ! -L $dir ]] || fail "$dir is missing; run scripts/provision"
+    bad=$(
+        find "$dir" \( ! -user root -o -perm /022 -o \( ! -type f ! -type d \) \) \
+            -print -quit
+    ) || fail "cannot check $dir"
+    [[ -z $bad ]] || fail "$dir must hold only root-owned files and directories"
+done
 
-install -m 0644 -o root -g root "$SRC"/systemd/* /etc/systemd/system/
+install_units
+remove_strays
 install -m 0755 -o root -g root "$SRC/bin/paperroute-led" \
     /usr/local/bin/paperroute-led
 install -D -m 0755 -o root -g root \
@@ -55,7 +166,4 @@ if ! sshd -t; then
 fi
 systemctl reload ssh
 
-systemctl daemon-reload
-systemctl enable paperroute-led-boot paperroute paperroute-timetable.timer \
-    paperroute-on-screen
-systemctl start paperroute-timetable.timer
+enable_units

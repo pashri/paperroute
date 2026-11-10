@@ -1,7 +1,8 @@
 #!/bin/bash
-# Usage: provision-device DIR   (root, on the Pi; DIR is the copied deploy/)
-# One-time device setup. Idempotent: run it again after changing any file
-# under deploy/.
+# Usage: provision-device DIR APP   (root, on the Pi)
+# DIR holds kit/, the copied deploy/, and app/, the copied deploy/ of the
+# app named APP (empty when it has none). One-time device setup.
+# Idempotent: run it again after changing any file under either.
 set -euo pipefail
 export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
 export LC_ALL=C
@@ -18,6 +19,18 @@ SUDOERS=/etc/sudoers.d/paperroute-deploy
 PIN_DIR=/etc/paperroute
 PIN_FILE=$PIN_DIR/m2a.env
 SUDOERS_NEW=/etc/sudoers.d/.paperroute-deploy.new
+STATE=/var/lib/paperroute/state.json
+CURRENT=/opt/paperroute/current
+APP_RE='^[a-z][a-z0-9]*$'
+CONTRACT_RE='^[1-9][0-9]*$'
+TIMER_RE='^paperroute-[a-z0-9-]+\.timer$'
+UNIT_RE='^paperroute-[a-z0-9-]+\.(service|timer)$'
+DROP_IN_DIR_RE='^paperroute(-[a-z0-9-]+)?\.(service|timer)\.d$'
+DROP_IN_RE='^[a-z0-9-]+\.conf$'
+# Tests point it at a temp directory; root always uses the real one.
+if [[ $EUID -ne 0 ]]; then
+    SHARE=${PAPERROUTE_SHARE:-$SHARE}
+fi
 
 fail() {
     printf 'provision-device: %s\n' "$1" >&2
@@ -97,15 +110,102 @@ retire_pin() {
     rmdir -- "$PIN_DIR" 2>/dev/null || true
 }
 
+# Replaces $SHARE/NAME with a root-owned copy of a staged directory.
+copy_tree() {
+    local src=$1 dest=$SHARE/$2
+    rm -rf -- "$dest.new"
+    cp -R -- "$src" "$dest.new"
+    chown -R root:root "$dest.new"
+    find "$dest.new" -type d -exec chmod 0755 {} +
+    find "$dest.new" -type f -exec chmod 0644 {} +
+    if [[ -d $dest.new/bin ]]; then
+        find "$dest.new/bin" -type f -exec chmod 0755 {} +
+    fi
+    rm -rf -- "$dest"
+    mv -T -- "$dest.new" "$dest"
+}
+
+# The kit's copy stays at $SHARE/deploy, where the screen units look.
 copy_deploy() {
-    rm -rf -- "$SHARE/deploy.new"
-    cp -R -- "$DIR" "$SHARE/deploy.new"
-    chown -R root:root "$SHARE/deploy.new"
-    find "$SHARE/deploy.new" -type d -exec chmod 0755 {} +
-    find "$SHARE/deploy.new" -type f -exec chmod 0644 {} +
-    chmod 0755 "$SHARE/deploy.new"/bin/*
-    rm -rf -- "$SHARE/deploy"
-    mv -T -- "$SHARE/deploy.new" "$SHARE/deploy"
+    copy_tree "$DIR/kit" deploy
+    copy_tree "$DIR/app" app
+}
+
+# Records the kit's units contract for install-release.
+write_contract() {
+    local value=
+    IFS= read -r value <"$SHARE/deploy/CONTRACT" || true
+    [[ $value =~ $CONTRACT_RE ]] \
+        || fail 'kit/CONTRACT must hold a units contract number'
+    printf '%s\n' "$value" >"$SHARE/units-contract"
+}
+
+# Lists the app's timers, the only ones install-release gives a zone.
+write_manifest() {
+    local path name names=
+    for path in "$SHARE"/app/systemd/*.timer; do
+        [[ -f $path ]] || continue
+        name=${path##*/}
+        [[ $name =~ $TIMER_RE ]] || fail "the app's timer $name has a bad name"
+        names+=$name$'\n'
+    done
+    printf '%s' "$names" >"$SHARE/app-timers"
+}
+
+# Fails on anything under app/systemd that is not a paperroute unit the
+# kit lacks, or a drop-in for a unit the kit or the app ships.
+check_app_units() {
+    local dir=$DIR/app/systemd path name file
+    [[ -e $dir ]] || return 0
+    [[ -d $dir ]] || fail 'app/systemd is not a directory'
+    for path in "$dir"/* "$dir"/.[!.]*; do
+        [[ -e $path ]] || continue
+        name=${path##*/}
+        if [[ -f $path && $name =~ $UNIT_RE ]]; then
+            [[ ! -e $DIR/kit/systemd/$name ]] \
+                || fail "the app may not replace systemd/$name"
+            continue
+        fi
+        [[ -d $path && $name =~ $DROP_IN_DIR_RE ]] \
+            || fail "the app may not ship systemd/$name"
+        if [[ ! -f $dir/${name%.d} && ! -f $DIR/kit/systemd/${name%.d} ]]; then
+            fail "systemd/$name is for a unit nobody ships"
+        fi
+        for file in "$path"/* "$path"/.[!.]*; do
+            [[ -e $file ]] || continue
+            if [[ ! -f $file || ! ${file##*/} =~ $DROP_IN_RE \
+                || ${file##*/} == app-zone.conf ]]; then
+                fail "the app may not ship systemd/$name/${file##*/}"
+            fi
+        done
+    done
+}
+
+# Prints the app recorded as installed: provision's record, else the live
+# release's; empty when neither names one.
+installed_app() {
+    local name=
+    if [[ -f $SHARE/installed-app ]]; then
+        IFS= read -r name <"$SHARE/installed-app" || true
+    elif [[ -f $CURRENT/APP ]]; then
+        IFS= read -r name <"$CURRENT/APP" || true
+        name=${name#paperroute-}
+    fi
+    [[ $name =~ $APP_RE ]] || name=
+    printf '%s\n' "$name"
+}
+
+# Another app's settings are not this app's: stops the board, renames its
+# state file aside (kept), and records the app now installed.
+set_state_aside() {
+    local old
+    old=$(installed_app)
+    if [[ -n $old && $old != "$APP_NAME" ]] && [[ -e $STATE || -L $STATE ]]
+    then
+        systemctl stop paperroute
+        mv -T -- "$STATE" "$STATE.$old-$(date -u +%s)"
+    fi
+    printf '%s\n' "$APP_NAME" >"$SHARE/installed-app"
 }
 
 # Puts the deploy user in place of the shipped rule's default user.
@@ -122,13 +222,16 @@ install_sudoers() {
     mv -T -- "$SUDOERS_NEW" "$SUDOERS"
 }
 
-[[ $# -eq 1 ]] || fail 'usage: provision-device DIR'
+[[ $# -eq 2 ]] || fail 'usage: provision-device DIR APP'
 DIR=$1
+APP_NAME=$2
+[[ $APP_NAME =~ $APP_RE ]] \
+    || fail 'the app must be lowercase letters and digits'
 [[ -d $DIR && ! -L $DIR ]] || fail 'DIR is not a directory'
 for need in bin/install-files bin/install-release bin/install-tiles \
     bin/paperroute-led sudoers/paperroute-deploy \
     polkit/50-paperroute-power.rules polkit/51-paperroute-network.rules; do
-    [[ -f $DIR/$need ]] || fail "DIR has no $need"
+    [[ -f $DIR/kit/$need ]] || fail "DIR has no kit/$need"
 done
 [[ -n ${SUDO_USER:-} ]] || fail 'run it through sudo'
 DEPLOY_USER=$SUDO_USER
@@ -142,6 +245,14 @@ bad=$(find "$DIR" ! -user "$uid" -print -quit) || fail 'cannot read DIR'
 [[ -z $bad ]] || fail "DIR is not owned by $SUDO_USER"
 bad=$(find "$DIR" ! -type f ! -type d -print -quit) || fail 'cannot read DIR'
 [[ -z $bad ]] || fail 'DIR may hold only regular files and directories'
+[[ -d $DIR/app ]] || fail 'DIR has no app/'
+contract=
+if [[ -f $DIR/kit/CONTRACT ]]; then
+    IFS= read -r contract <"$DIR/kit/CONTRACT" || true
+fi
+[[ $contract =~ $CONTRACT_RE ]] \
+    || fail 'kit/CONTRACT must hold a units contract number'
+check_app_units
 [[ $EUID -eq 0 ]] || fail 'checks passed; provisioning needs root'
 [[ ! -e $PIN_FILE || -e /var/lib/paperroute/state.json ]] || fail 'deploy M4 first so state.json holds the pin'
 
@@ -186,6 +297,9 @@ rpi-usb-gadget on
 
 make_dir root 0755 "$SHARE"
 copy_deploy
+write_contract
+write_manifest
+set_state_aside
 
 make_dir root 0755 /usr/local/sbin
 install -m 0755 -o root -g root "$SHARE/deploy/bin/install-release" \

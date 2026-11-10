@@ -1,31 +1,44 @@
 #!/usr/bin/env bash
-# Usage: scripts/provision HOST [--reboot]
-# Copies deploy/ to the login user's home on the Pi and runs
-# provision-device there as root. sudo asks for the password once, and
-# its SUDO_USER makes the login user the deploy user.
+# Usage: scripts/provision HOST APP [--reboot]
+# Copies deploy/ (as kit/) and the app's deploy/ (as app/, empty when it
+# has none) to the login user's home on the Pi and runs provision-device
+# there as root. sudo asks for the password once, and its SUDO_USER makes
+# the login user the deploy user.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 STAGING=.paperroute-provision
 
 usage() {
-    printf 'usage: scripts/provision HOST [--reboot]\n' >&2
+    printf 'usage: scripts/provision HOST APP [--reboot]\n' >&2
     exit 2
 }
 
-[[ $# -eq 1 || $# -eq 2 ]] || usage
+[[ $# -eq 2 || $# -eq 3 ]] || usage
 host=$1
+app=$2
 reboot=no
-if [[ $# -eq 2 ]]; then
-    [[ $2 == --reboot ]] || usage
+if [[ $# -eq 3 ]]; then
+    [[ $3 == --reboot ]] || usage
     reboot=yes
 fi
 [[ $host =~ ^[A-Za-z0-9][A-Za-z0-9._@-]*$ ]] || usage
+[[ $app =~ ^[a-z][a-z0-9]*$ ]] || usage
+[[ -f apps/paperroute-$app/pyproject.toml ]] || usage
+
+stage=$(mktemp -d)
+trap 'rm -rf -- "$stage"' EXIT
+cp -R deploy "$stage/kit"
+if [[ -d apps/paperroute-$app/deploy ]]; then
+    cp -R "apps/paperroute-$app/deploy" "$stage/app"
+else
+    mkdir "$stage/app"
+fi
 
 # STAGING is relative to the remote home; $HOME expands on the Pi.
-rsync -a --delete deploy/ "$host:$STAGING/"
+rsync -a --delete "$stage/" "$host:$STAGING/"
 ssh -t -- "$host" \
-    "sudo bash \"\$HOME/$STAGING/bin/provision-device\" \"\$HOME/$STAGING\""
+    "sudo bash \"\$HOME/$STAGING/kit/bin/provision-device\" \"\$HOME/$STAGING\" $app"
 if [[ $reboot == yes ]]; then
     ssh -t -- "$host" sudo systemctl reboot
 fi

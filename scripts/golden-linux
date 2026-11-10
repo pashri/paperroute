@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Usage: scripts/golden-linux
 # Redraws the Linux golden frames and planes in an Ubuntu container like
-# CI's, then copies them to tests/golden/frames/linux. Needs Docker.
+# CI's, then copies them to tests/golden/frames/linux, and the clock app's
+# frame to packages/paperroute-device/tests/clock/frames/linux. Needs Docker.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -26,8 +27,16 @@ GOLDEN_UPDATE=1 uv run pytest -q -p no:cacheprovider -k match \
     tests/golden/test_golden_frames.py
 rm -rf /out/linux
 cp -R tests/golden/frames/linux /out/linux
+rm -rf "$CLOCK_FRAMES/linux"
+GOLDEN_UPDATE=1 uv run pytest -q -p no:cacheprovider \
+    packages/paperroute-device/tests/clock -k reference_frame
+rm -rf /clock/linux
+cp -R "$CLOCK_FRAMES/linux" /clock/linux
 EOF
 )
+CLOCK_FRAMES=packages/paperroute-device/tests/clock/frames
 docker run --rm --platform linux/amd64 -e UV_VERSION="$UV_VERSION" \
+    -e CLOCK_FRAMES="$CLOCK_FRAMES" \
     -v "$PWD:/src:ro" -v "$PWD/tests/golden/frames:/out" \
+    -v "$PWD/$CLOCK_FRAMES:/clock" \
     "$IMAGE" bash -c "$inside"

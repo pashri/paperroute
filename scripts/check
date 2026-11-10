@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
-files=$(git ls-files --cached --others --exclude-standard 'packages/*/src/*.py' 'apps/*/src/*.py' 'scripts/*.py' '*/conftest.py' ':!packages/paperroute-testkit')
+files=$(git ls-files --cached --others --exclude-standard 'packages/*/src/*.py' 'apps/*/src/*.py' 'scripts/*.py' '*/conftest.py' ':!packages/paperroute-testkit' ':!packages/paperroute-device-testkit')
 uv run isort --check-only --diff apps packages tests scripts
 # shellcheck disable=SC2086
 uv run pylint $files

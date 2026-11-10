@@ -61,7 +61,8 @@ class TransitRun:
         The city's runtime wiring; the reducer hooks never read it.
     observer : BoardObserver | None
         Told of settings and pin changes; None tells no one until
-        `timings` makes the board's observers.
+        `timings` makes the board's observers. The Tk window path never
+        calls `timings`, so there it stays None.
     watch : VersionWatch | None
         Reads the timetable's version before each tick; None reads
         nothing until `attach` watches the timetable given.

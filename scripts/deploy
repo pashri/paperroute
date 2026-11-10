@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Usage: scripts/deploy HOST APP
-# Checks the tree, stages the tracked files of HEAD for the app on the Pi and installs them with the passwordless install scripts, after
-# the app's scripts/before-release HOST when it has one. Never prompts.
+# Checks the tree, stages the tracked files of HEAD for the app on the
+# Pi and installs them with the passwordless install scripts, after the
+# app's scripts/before-release HOST when it has one. Never prompts.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

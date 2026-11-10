@@ -6,7 +6,7 @@ Waveshare 7.5" V2 (800×480) and two push encoders.
 
 ## Layout
 
-A uv workspace of four packages and one app per city:
+A uv workspace of five packages and one app per city:
 
 - `packages/paperroute-hardware`: drivers for the panel, knobs and LED.
 - `packages/paperroute-device`: settings, power, drawing and the device's
@@ -14,11 +14,12 @@ A uv workspace of four packages and one app per city:
 - `packages/paperroute-transit`: the transit model, geometry, map tiles and
   the board itself.
 - `packages/paperroute-testkit`: fakes and factories shared by the tests.
+- `packages/paperroute-device-testkit`: fakes for the device's tests.
 - `apps/paperroute-sydney`: the Sydney app, with the TfNSW feeds and Trip
   Planner and the `paperroute-board` and `paperroute-build` commands.
 
 Hardware, device and transit each import only from the ones above them,
-the apps import from all three, and only the tests use the testkit.
+the apps import from all three, and only the tests use the two test kits.
 
 ## Run on the Mac
 

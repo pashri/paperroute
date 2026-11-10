@@ -5,7 +5,6 @@ import sqlite3
 from collections.abc import Collection
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime
-from pathlib import Path
 from typing import Final, cast
 
 import numpy as np
@@ -585,28 +584,6 @@ class FakeBuilder:
     async def stop(self) -> None:
         """Count the stop."""
         self.stops += 1
-
-
-@dataclass
-class WatchingBuilder(FakeBuilder):
-    """
-    A builder that notes, when stopped, whether a file still exists.
-
-    Attributes
-    ----------
-    watched : Path | None
-        The file looked at.
-    existed : list[bool]
-        Whether it existed at each stop.
-    """
-
-    watched: Path | None = None
-    existed: list[bool] = field(default_factory=list)
-
-    async def stop(self) -> None:
-        """Note whether the file exists, and count the stop."""
-        self.existed.append(self.watched is not None and self.watched.exists())
-        await super().stop()
 
 
 @dataclass

@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import time
 from typing import Final
 
+from paperroute_device.core.kit_events import Tick
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_sydney.city import SYDNEY, SydneyMode
@@ -31,10 +32,10 @@ from paperroute_transit.core.messages import (
     Event,
     LoadDepartures,
     ScreenView,
-    Tick,
 )
 from paperroute_transit.core.model import AutoWindow, Departure, Pin
 from paperroute_transit.core.places import shown
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import (
     BoardSettings,
     ConnectionMap,
@@ -43,7 +44,7 @@ from paperroute_transit.core.saved import (
     Settings,
     seeded,
 )
-from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import current_view, live_stop_view
 from tests.core.alert_factories import alert

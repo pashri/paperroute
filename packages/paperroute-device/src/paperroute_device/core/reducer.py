@@ -25,6 +25,7 @@ from paperroute_device.core.device_events import (
     JoinAsked,
     PowerRequested,
 )
+from paperroute_device.core.device_state import DeviceState
 from paperroute_device.core.kit_effects import (
     Render,
     SaveState,
@@ -232,7 +233,8 @@ def on_ticked[S](
     """
     Advance time: close what timed out, probe, tick the app and save.
 
-    Quiet hours then sleep or wake the screen, before the save.
+    The app may then end a Sleep now sleep, and quiet hours sleep or
+    wake the screen, before the save.
 
     Parameters
     ----------
@@ -258,10 +260,38 @@ def on_ticked[S](
     device = menu_idle(device=confirm_expired(device=device))
     device, probes = probe_effects(device=device)
     state, effects = app.on_tick(state=kit.app, device=device, tick=tick)
+    device = app_woken(device=device, app=app, state=state)
     kit = with_app(kit=with_device(kit=kit, device=device), app=state)
     kit, quiet = quiet_effects(kit=kit, app=app)
     kit, saves = saved_effects(kit=kit, app=app)
     return kit, (*stops, *probes, *effects, *quiet, *saves)
+
+
+def app_woken[S](
+    *, device: DeviceState, app: App[S], state: S,
+) -> DeviceState:
+    """
+    End a Sleep now sleep when the app asks.
+
+    Parameters
+    ----------
+    device : DeviceState
+        Device state at the tick's time.
+    app : App[S]
+        The app.
+    state : S
+        The app's state after the tick.
+
+    Returns
+    -------
+    DeviceState
+        Device state awake when it slept by hand and `App.wakes` says
+        so; unchanged otherwise.
+    """
+    panel = device.panel
+    if panel.asleep and not panel.by_quiet and app.wakes(state=state):
+        return awake(device=device)
+    return device
 
 
 def on_touch[S](

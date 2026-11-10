@@ -5,6 +5,8 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute_device.core.kit_effects import Render
+from paperroute_device.core.kit_events import Tick
 from paperroute_hardware.core.knob_events import Knob, KnobPressed, KnobTurned
 from paperroute_sydney.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute_testkit.core.factories import (
@@ -36,16 +38,15 @@ from paperroute_transit.core.messages import (
     LoadShapes,
     LoadStrip,
     PositionsFetched,
-    Render,
     StripFailed,
     StripLoaded,
-    Tick,
     TimetableSeen,
 )
 from paperroute_transit.core.model import CarryOn, Departure
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
-from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import RETRY_AFTER, State
 from paperroute_transit.core.stop_view import HORIZON
 from paperroute_transit.core.strip_model import (

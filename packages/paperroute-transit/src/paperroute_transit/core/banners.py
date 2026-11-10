@@ -1,15 +1,13 @@
-"""Device warnings shown in the banner, and when feeds are not polled."""
+"""The timetable's banner line, and when feeds are not polled."""
 
 from datetime import date
 from typing import Final
 
-from paperroute_device.core.text import DOT
+from paperroute_device.core.banners import offline
 from paperroute_transit.core.rhythm import frame_time
 from paperroute_transit.core.state_model import State
 
-NO_WIFI: Final[str] = (
-    f'No Wi-Fi{DOT}timetable times{DOT}hold both knobs, then Wi-Fi'
-)
+OFFLINE_PHRASE: Final[str] = 'timetable times'
 TIMETABLE_OUT_OF_DATE: Final[str] = (
     'Timetable out of date. Check the internet and key.'
 )
@@ -18,46 +16,6 @@ DAY_NAMES: Final[tuple[str, ...]] = (
     'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
     'Sunday',
 )
-
-
-def no_key_banner(*, name: str) -> str:
-    """
-    Say that a key is missing.
-
-    Parameters
-    ----------
-    name : str
-        The key's display name.
-
-    Returns
-    -------
-    str
-        The banner naming the key.
-    """
-    return f'No {name} key{DOT}set it on your phone'
-
-
-def device_banner(*, state: State) -> str | None:
-    """
-    Choose the device warning the banner shows, if any.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    str | None
-        `NO_WIFI` while offline, else the no-key banner naming the
-        first missing key, else the timetable's end when it is near or
-        past, else None.
-    """
-    if offline(state=state):
-        return NO_WIFI
-    if state.panel.missing_keys:
-        return no_key_banner(name=state.panel.missing_keys[0])
-    return timetable_banner(state=state)
 
 
 def timetable_ends(*, last_day: date) -> str:
@@ -124,30 +82,6 @@ def feeds_held(*, state: State) -> bool:
         no API key is set or there is no timetable. An unknown key polls.
     """
     no_key = state.panel.key_set is False
-    asleep = state.panel.asleep or offline(state=state)
+    asleep = state.panel.asleep or offline(panel=state.panel)
     setup = state.panel.wifi is not None
     return asleep or setup or no_key or state.rebuild.missing
-
-
-def offline(*, state: State) -> bool:
-    """
-    Say whether the device knows it has joined no Wi-Fi network.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    bool
-        True when the latest facts say NetworkManager manages Wi-Fi and
-        no network is joined; False without facts or NetworkManager,
-        and while Wi-Fi setup is open.
-    """
-    facts = state.panel.facts
-    if facts is None or not facts.wifi.managed:
-        return False
-    if state.panel.wifi is not None:
-        return False
-    return facts.wifi.ssid is None

@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import date, datetime, time, timedelta
 from typing import Final
 
+from paperroute_device.core.kit_events import Tick
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -24,17 +25,17 @@ from paperroute_transit.core.messages import (
     LoadDepartures,
     PinDeleted,
     StripLoaded,
-    Tick,
 )
 from paperroute_transit.core.model import AutoWindow, Pin, pin_ref
 from paperroute_transit.core.places import shown
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import (
     LiveView,
     Saved,
     default_settings,
     seeded,
 )
-from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import Places, State
 from tests.core.alert_factories import alert
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, NEXT, REACH, TO_STAGE

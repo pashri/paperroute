@@ -3,7 +3,10 @@
 from dataclasses import replace
 from datetime import time, timedelta
 
+from paperroute_device.core.kit_effects import SaveState
+from paperroute_device.core.kit_events import Tick
 from paperroute_testkit.core.factories import START, departure
+from paperroute_testkit.core.steps import written
 from paperroute_transit.core.messages import (
     Effect,
     LoadDepartures,
@@ -11,8 +14,6 @@ from paperroute_transit.core.messages import (
     PinMoved,
     PinSaved,
     PinsOrdered,
-    SaveState,
-    Tick,
 )
 from paperroute_transit.core.model import AutoWindow, Pin, pin_ref
 from paperroute_transit.core.pin_edits import on_pin_edit
@@ -211,7 +212,7 @@ def test_edit_is_saved() -> None:
     _, effects = step(state, late)
     found = saves(effects=effects)
     assert found
-    assert found[0].saved.pins == (A, C, B)
+    assert written(save=found[0]).pins == (A, C, B)
 
 
 def test_edit_while_asleep_stays_asleep() -> None:

@@ -25,8 +25,9 @@ from paperroute_transit.core.map_view import DEFAULT_ZOOM
 from paperroute_transit.core.messages import DeparturesLoaded, Effect, Event
 from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
-from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import HORIZON
 from paperroute_transit.core.strip_model import StripInputs, StripRow

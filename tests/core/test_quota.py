@@ -3,18 +3,14 @@
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 
-from paperroute_device.core.kit_events import QuitRequested
+from paperroute_device.core.kit_effects import SaveState, Stop
+from paperroute_device.core.kit_events import QuitRequested, Tick
+from paperroute_device.core.kit_state import SAVE_WAIT
 from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_sydney.sydney_feeds import DAILY_LIMIT
-from paperroute_testkit.core.steps import wakeful
-from paperroute_transit.core.messages import (
-    FeedFailed,
-    FeedJoined,
-    FetchFeed,
-    SaveState,
-    Stop,
-    Tick,
-)
+from paperroute_testkit.core.steps import save_of, wakeful
+from paperroute_testkit.core.steps import written as written_out
+from paperroute_transit.core.messages import FeedFailed, FeedJoined, FetchFeed
 from paperroute_transit.core.quota import (
     QUOTA_SAVE_EVERY,
     calls_today,
@@ -25,7 +21,6 @@ from paperroute_transit.core.quota import (
 from paperroute_transit.core.saved import Quota
 from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import Cycle, State
-from paperroute_transit.core.state_saves import SAVE_AFTER
 from paperroute_transit.core.state_views import saved_of
 from tests.core.test_state import BUSES, HOLD, at, fresh, loaded, pinned, saves
 
@@ -135,9 +130,9 @@ def test_quota_only_change_saves_every_ten_minutes() -> None:
     state, effects = step(state, at(seconds=600))
     written = saves(effects=effects)
     assert len(written) == 1
-    assert written[0].saved.quota.calls > 0
-    assert state.saving.saved == written[0].saved
-    assert state.saving.quota_at == state.now
+    assert written_out(save=written[0]).quota.calls > 0
+    assert state.kit.saved == written[0].saved
+    assert state.kit.written_at == state.now
 
 
 def test_quota_change_does_not_delay_pin_save() -> None:
@@ -149,10 +144,10 @@ def test_quota_change_does_not_delay_pin_save() -> None:
         assert not saves(effects=effects)
     state, effects = step(
         fetching(state=state),
-        at(seconds=10 + SAVE_AFTER.seconds),
+        at(seconds=10 + SAVE_WAIT.seconds),
     )
     assert len(saves(effects=effects)) == 1
-    assert saves(effects=effects)[0].saved.quota.calls > 0
+    assert written_out(save=saves(effects=effects)[0]).quota.calls > 0
 
 
 def test_quit_saves_quota_at_once() -> None:
@@ -160,8 +155,8 @@ def test_quit_saves_quota_at_once() -> None:
     state, _ = step(loaded(state=fresh()), at(seconds=30))
     assert state.quota.calls > 0
     state, effects = step(state, QuitRequested())
-    assert effects == (SaveState(saved=saved_of(state=state)), Stop())
-    assert saves(effects=effects)[0].saved.quota == state.quota
+    assert effects == (save_of(state=state), Stop())
+    assert written_out(save=saves(effects=effects)[0]).quota == state.quota
 
 
 

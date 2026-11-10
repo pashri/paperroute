@@ -4,12 +4,14 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
-from paperroute_device.core.panel_views import NoticeView, PanelView
+from paperroute_device.core.banners import device_banners
+from paperroute_device.core.device_state import Banner
+from paperroute_device.core.panel_views import NoticeView
 from paperroute_transit.core.alert_match import alert_banner
 from paperroute_transit.core.alert_state import alerts_left, shown_alerts
 from paperroute_transit.core.alerts_view import build_alerts_view
 from paperroute_transit.core.auto_pins import rule_holds
-from paperroute_transit.core.banners import device_banner
+from paperroute_transit.core.banners import OFFLINE_PHRASE, timetable_banner
 from paperroute_transit.core.chooser_steps import chooser_view
 from paperroute_transit.core.connection_screens import connection_screen
 from paperroute_transit.core.cycle import cycle_effects, cycle_held
@@ -21,12 +23,10 @@ from paperroute_transit.core.map_requests import (
     polled_positions,
 )
 from paperroute_transit.core.map_view import STRIP_MAP_WIDTH, build_map_view
-from paperroute_transit.core.messages import Effect, Render, ScreenView
-from paperroute_transit.core.panel_screens import panel_view
+from paperroute_transit.core.messages import Effect, ScreenView
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.places import shown, shown_index
 from paperroute_transit.core.rebuild import building_view
-from paperroute_transit.core.refresh import needs_greys
 from paperroute_transit.core.rhythm import frame_time, stale_after
 from paperroute_transit.core.saved import LiveView, Saved
 from paperroute_transit.core.sleep import sleep_view
@@ -34,6 +34,7 @@ from paperroute_transit.core.state_model import State, clock_waiting, elapsed
 from paperroute_transit.core.stop_view import (
     StopInputs,
     StopView,
+    banner_text,
     build_stop_view,
     pin_tag,
 )
@@ -108,6 +109,102 @@ def live_departures(*, state: State) -> tuple[LiveDeparture, ...]:
     )
 
 
+def stop_inputs(*, state: State, notice: Banner | None) -> StopInputs:
+    """
+    Gather what the Stop view is built from.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    notice : Banner | None
+        The banner line chosen for the view, or None.
+
+    Returns
+    -------
+    StopInputs
+        The inputs, at the frame time.
+    """
+    pin = shown(state=state)
+    destination = pin.destination
+    frame = frame_time(state=state)
+    return StopInputs(
+        origin=pin.origin.name,
+        destination=None if destination is None else destination.name,
+        departures=live_departures(state=state),
+        now=frame,
+        zone=state.city.zone,
+        scroll=state.scroll,
+        live_since=live_since(
+            snapshots=state.snapshots, feeds=state.feeds, now=frame,
+        ),
+        has_feed=bool(state.feeds) or not state.board.departures,
+        stale_after=stale_after(state=state),
+        city=state.city,
+        loaded=state.board.loaded_until is not None,
+        missing=pin.missing,
+        notice=notice,
+        alert=alert_banner(
+            listed=shown_alerts(state=state),
+            now=frame,
+            zone=state.city.zone,
+        ),
+        large=state.settings.device.larger_text,
+        inverted=state.settings.device.inverted_lists,
+        tag=pin_tag(
+            index=shown_index(state=state),
+            total=len(state.places.pins),
+            nickname=pin.nickname,
+            auto=rule_holds(state=state),
+        ),
+    )
+
+
+def app_banners(*, state: State) -> tuple[Banner, ...]:
+    """
+    List transit's banner lines, first first.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    tuple[Banner, ...]
+        The timetable's end when it is near or past, then the live data
+        line, the pin's alert and the no-feed line.
+    """
+    timetable = timetable_banner(state=state)
+    head = () if timetable is None else (Banner(text=timetable),)
+    inputs = stop_inputs(state=state, notice=None)
+    return (*head, *banner_text(inputs=inputs))
+
+
+def device_notice(*, state: State) -> Banner | None:
+    """
+    Choose the line that takes the banner ahead of the live data one.
+
+    Parameters
+    ----------
+    state : State
+        State, its device fields a mirror of the kit's.
+
+    Returns
+    -------
+    Banner | None
+        The first device warning, else the timetable's end when it is
+        near or past, else None; the Stop view falls back to its own
+        lines, so the line shown is the one the kit chooses.
+    """
+    timetable = timetable_banner(state=state)
+    lines = (
+        *device_banners(panel=state.panel, phrase=OFFLINE_PHRASE),
+        *(() if timetable is None else (Banner(text=timetable),)),
+    )
+    return next(iter(lines), None)
+
+
 def stop_view_of(*, state: State) -> StopView:
     """
     Build the Stop view for the current state.
@@ -120,43 +217,28 @@ def stop_view_of(*, state: State) -> StopView:
     Returns
     -------
     StopView
+        View, at the frame time, under the banner line the kit chooses.
+    """
+    return banner_stop_view(state=state, banner=device_notice(state=state))
+
+
+def banner_stop_view(*, state: State, banner: Banner | None) -> StopView:
+    """
+    Build the Stop view for the current state under a banner line.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    banner : Banner | None
+        The banner line, or None for none.
+
+    Returns
+    -------
+    StopView
         View, at the frame time.
     """
-    pin = shown(state=state)
-    destination = pin.destination
-    frame = frame_time(state=state)
-    return build_stop_view(
-        inputs=StopInputs(
-            origin=pin.origin.name,
-            destination=None if destination is None else destination.name,
-            departures=live_departures(state=state),
-            now=frame,
-            zone=state.city.zone,
-            scroll=state.scroll,
-            live_since=live_since(
-                snapshots=state.snapshots, feeds=state.feeds, now=frame,
-            ),
-            has_feed=bool(state.feeds) or not state.board.departures,
-            stale_after=stale_after(state=state),
-            city=state.city,
-            loaded=state.board.loaded_until is not None,
-            missing=pin.missing,
-            notice=device_banner(state=state),
-            alert=alert_banner(
-                listed=shown_alerts(state=state),
-                now=frame,
-                zone=state.city.zone,
-            ),
-            large=state.settings.device.larger_text,
-            inverted=state.settings.device.inverted_lists,
-            tag=pin_tag(
-                index=shown_index(state=state),
-                total=len(state.places.pins),
-                nickname=pin.nickname,
-                auto=rule_holds(state=state),
-            ),
-        ),
-    )
+    return build_stop_view(inputs=stop_inputs(state=state, notice=banner))
 
 
 def live_stop_view(*, state: State) -> StopView:
@@ -171,12 +253,31 @@ def live_stop_view(*, state: State) -> StopView:
     Returns
     -------
     StopView
+        As `banner_live_view`, under the banner line the kit chooses.
+    """
+    return banner_live_view(state=state, banner=device_notice(state=state))
+
+
+def banner_live_view(*, state: State, banner: Banner | None) -> StopView:
+    """
+    Build the Stop view the current Live view shows, under a banner line.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    banner : Banner | None
+        The banner line, or None for none.
+
+    Returns
+    -------
+    StopView
         The scrolled Stop view on the Stop view; unscrolled on the other
         views, whose sidebar always starts at the next departure.
     """
     if state.view is not LiveView.STOP:
         state = replace(state, scroll=0)
-    return stop_view_of(state=state)
+    return banner_stop_view(state=state, banner=banner)
 
 
 def shown_strip(*, state: State, stop_view: StopView) -> StripInputs:
@@ -207,7 +308,7 @@ def current_view(
     *, state: State, stop_view: StopView
 ) -> ScreenView:
     """
-    Build the view for the current state.
+    Build transit's live view for the current state.
 
     Parameters
     ----------
@@ -219,19 +320,11 @@ def current_view(
     Returns
     -------
     ScreenView
-        The confirm or open menu's screen, else the sleep screen, else
-        the Building screen with no timetable, else the open chooser's
+        The Building screen with no timetable, else the open chooser's
         screen, else the Live view shown.
     """
-    overlay: PanelView | SleepView | NoticeView | None = panel_view(
-        state=state,
-    )
-    if overlay is None and state.panel.asleep:
-        overlay = sleep_view(state=state, stop_view=stop_view)
-    if overlay is None and state.rebuild.missing:
-        overlay = building_view(state=state)
-    if overlay is not None:
-        return overlay
+    if state.rebuild.missing:
+        return building_view(state=state)
     if state.chooser is not None:
         return chooser_view(state=state, chooser=state.chooser)
     return live_view(state=state, stop_view=stop_view)
@@ -357,77 +450,72 @@ def clock_held(*, state: State, view: ScreenView, menu: bool) -> bool:
     return clock_waiting(state=state)
 
 
-def in_menu(*, state: State) -> bool:
+def rendered(*, state: State, stop_view: StopView) -> ScreenView | None:
     """
-    Say whether the state shows a menu.
-
-    The route chooser counts as a menu whatever view it builds, since
-    some of its stages show a `StripView`.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    bool
-        True with a panel screen (a menu, confirm or Wi-Fi setup) or
-        the route chooser open.
-    """
-    return panel_view(state=state) is not None or state.chooser is not None
-
-
-def render_of(*, state: State, view: ScreenView, menu: bool) -> Render:
-    """
-    Choose how the panel draws a changed view.
-
-    Parameters
-    ----------
-    state : State
-        State after the event, with the last view still recorded.
-    view : ScreenView
-        The view to draw.
-    menu : bool
-        Whether the view is a menu, from `in_menu`.
-
-    Returns
-    -------
-    Render
-        Full for the first frame, into or out of the sleep screen,
-        leaving a menu, and between views with and without grey tiles
-        outside menus. Clear for entering a menu. Otherwise neither.
-    """
-    last, was_menu = state.last_view, state.refresh.in_menu
-    if (
-        last is None
-        or isinstance(view, SleepView)
-        or isinstance(last, SleepView)
-    ):
-        return Render(view=view, full=True)
-    if menu != was_menu:
-        return Render(view=view, full=was_menu, clear=menu)
-    greys = needs_greys(view=view) != needs_greys(view=last)
-    return Render(view=view, full=greys and not menu)
-
-
-def rendered(
-    *,
-    state: State,
-    stop_view: StopView,
-    effects: tuple[Effect, ...] = (),
-    draw: bool = True,
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Add a Render effect when the view changed.
+    Build transit's live view, or None to keep the frame on screen.
 
     The first frame waits up to `LOADING_WAIT` for departures to load,
-    so a quick start draws once. A changed view is not drawn while
-    `cycle_held`, unless it is a menu, the sleep screen or a notice, nor
-    while `clock_held`.
-    See `render_of` for which renders are full or clear. While the sleep
-    screen is shown nothing redraws; it is drawn once, and once more
-    when it was drawn before departures loaded.
+    so a quick start draws once. A view is not drawn while `cycle_held`,
+    unless it is the chooser or a notice, nor while `clock_held`, nor
+    when the event left it for the next frame.
+
+    Parameters
+    ----------
+    state : State
+        State after the event.
+    stop_view : StopView
+        The state's Stop view, from `banner_live_view`.
+
+    Returns
+    -------
+    ScreenView | None
+        The view, or None while it is held.
+    """
+    if state.held or loading_held(state=state):
+        return None
+    view = current_view(state=state, stop_view=stop_view)
+    menu = state.chooser is not None
+    if frame_held(state=state, view=view, menu=menu) or clock_held(
+        state=state, view=view, menu=menu,
+    ):
+        return None
+    return view
+
+
+def slept_view(*, state: State, stop_view: StopView) -> SleepView | None:
+    """
+    Build the sleep screen, or None to keep the frame on screen.
+
+    It is drawn once, and once more when it was drawn before departures
+    loaded; like any view it waits for the first frame's load and the
+    clock.
+
+    Parameters
+    ----------
+    state : State
+        State, asleep.
+    stop_view : StopView
+        The state's Stop view, from `banner_live_view`.
+
+    Returns
+    -------
+    SleepView | None
+        The sleep screen, or None while it is held.
+    """
+    last = state.last_view
+    if isinstance(last, SleepView) and not last.loading:
+        return None
+    if state.held or loading_held(state=state):
+        return None
+    view = sleep_view(state=state, stop_view=stop_view)
+    if clock_held(state=state, view=view, menu=False):
+        return None
+    return view
+
+
+def scrolled(*, state: State, stop_view: StopView, draw: bool) -> State:
+    """
+    Keep the Stop view's scroll to the rows it shows.
 
     Parameters
     ----------
@@ -435,48 +523,42 @@ def rendered(
         State after the event.
     stop_view : StopView
         The state's Stop view, from `live_stop_view`.
-    effects : tuple[Effect, ...]
-        Effects so far.
     draw : bool
-        False to leave the view for the next frame to draw.
+        False when the event leaves the view for the next frame.
 
     Returns
     -------
-    tuple[State, tuple[Effect, ...]]
-        State with the view and whether it is a menu recorded, the
-        scroll too on the Stop view, and effects.
+    State
+        State with the scroll of the Stop view it would draw, when the
+        Stop view is shown; unchanged otherwise.
     """
-    last = state.last_view
-    if state.panel.asleep and isinstance(last, SleepView) and not last.loading:
-        return state, effects
-    if not draw or loading_held(state=state):
-        return state, effects
-    view = current_view(state=state, stop_view=stop_view)
-    if isinstance(view, StopView) and state.view is LiveView.STOP:
-        state = replace(state, scroll=view.scroll)
-    menu = in_menu(state=state)
+    panel = state.panel
+    overlay = (panel.confirm, panel.wifi, panel.menu) != (None, None, None)
     if (
-        view == last
-        or frame_held(state=state, view=view, menu=menu)
-        or clock_held(state=state, view=view, menu=menu)
+        not draw
+        or overlay
+        or panel.asleep
+        or state.view is not LiveView.STOP
+        or loading_held(state=state)
     ):
-        return state, effects
-    render = render_of(state=state, view=view, menu=menu)
-    refresh = replace(state.refresh, in_menu=menu)
-    state = replace(state, last_view=view, refresh=refresh)
-    return state, (*effects, render)
+        return state
+    view = current_view(state=state, stop_view=stop_view)
+    if isinstance(view, StopView) and view.scroll != state.scroll:
+        return replace(state, scroll=view.scroll)
+    return state
 
 
 def settled(
     *, state: State, effects: tuple[Effect, ...] = (), draw: bool = True
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Ask for the reaches, map data and feeds needed, and redraw.
+    Ask for the reaches, map data and feeds needed.
 
     The Stop view is built once, the folds the strip on screen shows are
     opened, the Strip's scroll is clamped to its reach and a picked train
     no longer in its panel is dropped first; before that the Alerts
-    view falls back to Stop when its list empties.
+    view falls back to Stop when its list empties. The kit draws the
+    view afterwards.
 
     Parameters
     ----------
@@ -490,7 +572,7 @@ def settled(
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        New state and effects.
+        New state, marked held when `draw` is False, and effects.
     """
     state = alerts_left(state=state)
     stop_view = live_stop_view(state=state)
@@ -504,9 +586,7 @@ def settled(
     state, requests, ask = map_effects(state=state, stop_view=stop_view)
     state, fetches = cycle_effects(state=state)
     state, loads = pattern_effects(state=state, ask=ask)
-    return rendered(
-        state=state,
-        stop_view=stop_view,
-        effects=(*effects, *strips, *requests, *fetches, *loads),
-        draw=draw,
-    )
+    state = scrolled(state=state, stop_view=stop_view, draw=draw)
+    if not draw:
+        state = replace(state, held=True)
+    return state, (*effects, *strips, *requests, *fetches, *loads)

@@ -6,11 +6,12 @@ from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 from types import MappingProxyType
-from typing import Final
+from typing import Final, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute_device.core.banners import banner_line
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import (
     Confirm,
@@ -22,8 +23,9 @@ from paperroute_device.core.device_model import (
     WifiPhase,
     WifiSetup,
 )
+from paperroute_device.core.panel_screens import panel_view
 from paperroute_device_testkit.device_pages import FACTS
-from paperroute_sydney.city import SydneyFeed, SydneyMode
+from paperroute_sydney.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute_testkit.core.connection_factories import (
     LEG1,
     LEG2,
@@ -66,15 +68,17 @@ from paperroute_transit.core.model import Pin
 from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.saved import LiveView
-from paperroute_transit.core.state import step
+from paperroute_transit.core.sleep import sleep_view
+from paperroute_transit.core.state import REDUCER_PARTS, device_of, step
 from paperroute_transit.core.state_model import State
-from paperroute_transit.core.state_views import current_view, live_stop_view
+from paperroute_transit.core.state_views import banner_live_view, current_view
 from paperroute_transit.core.tiles import (
     TILE,
     LabelKind,
     StreetLabel,
     TileVariant,
 )
+from paperroute_transit.transit_app import TransitApp
 from tests.core.chooser_walks import at_towards
 from tests.core.test_alerts_view import on_alerts
 from tests.core.test_chains import TRAINS
@@ -201,6 +205,9 @@ class GoldenTiles:
         return 'golden'
 
 
+APP: Final = TransitApp(city=SYDNEY, parts=REDUCER_PARTS)
+
+
 def view_of(*, state: State) -> ScreenView:
     """
     Build the view a state shows.
@@ -214,11 +221,24 @@ def view_of(*, state: State) -> ScreenView:
     -------
     ScreenView
         The power notice while a power action is under way, as the app
-        leaves it on screen; otherwise the current view.
+        leaves it on screen; else the kit's panel screen, the sleep
+        screen or the live view under the banner line, held or not.
     """
     if state.power is not None and state.last_view is not None:
         return state.last_view
-    return current_view(state=state, stop_view=live_stop_view(state=state))
+    app, device = APP, device_of(state=state)
+    overlay = panel_view(
+        device=device, app=app, state=state, zone=state.city.zone,
+    )
+    if overlay is not None:
+        return cast(ScreenView, overlay)
+    banner = banner_line(
+        panel=state.panel, app=app, state=state, device=device,
+    )
+    stop_view = banner_live_view(state=state, banner=banner)
+    if state.panel.asleep:
+        return sleep_view(state=state, stop_view=stop_view)
+    return current_view(state=state, stop_view=stop_view)
 
 
 def frame_of(*, state: State) -> NDArray[np.uint8]:

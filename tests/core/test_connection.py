@@ -35,8 +35,9 @@ from paperroute_transit.core.connection import (
 )
 from paperroute_transit.core.messages import DeparturesLoaded
 from paperroute_transit.core.model import Change, Departure, Pin, Way
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import seeded
-from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import Board, State
 from tests.core.alert_factories import alert
 

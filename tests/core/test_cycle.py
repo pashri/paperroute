@@ -8,10 +8,13 @@ import pytest
 
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction, WifiStatus
+from paperroute_device.core.kit_effects import Render
+from paperroute_device.core.kit_events import DeviceProbed, Tick
 from paperroute_device.core.panel_views import NoticeView
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, departure, snapshot
+from paperroute_testkit.core.steps import slept
 from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute_transit.core.alert_state import ALERT_EVERY
 from paperroute_transit.core.cycle import (
@@ -23,17 +26,14 @@ from paperroute_transit.core.cycle import (
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.messages import (
     DeparturesLoaded,
-    DeviceProbed,
     Effect,
     Event,
     FeedFailed,
     FeedFetched,
     FetchFeed,
     PositionsFetched,
-    Render,
     ScreenView,
     SettingsChanged,
-    Tick,
 )
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.places import shown
@@ -42,7 +42,6 @@ from paperroute_transit.core.realtime import (
     StopUpdate,
     TripRealtime,
 )
-from paperroute_transit.core.sleep import slept
 from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import RELOAD_BEFORE, Cycle, State
 from paperroute_transit.core.state_views import current_view, live_stop_view

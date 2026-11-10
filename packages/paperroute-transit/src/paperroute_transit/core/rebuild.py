@@ -4,10 +4,10 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute_device.core.banners import offline
 from paperroute_device.core.device_model import AppRow, menu_rows
 from paperroute_device.core.panel_views import NoticeView
 from paperroute_device.core.text import DOT, clock_text
-from paperroute_transit.core.banners import offline
 from paperroute_transit.core.city import City
 from paperroute_transit.core.messages import (
     Effect,
@@ -146,7 +146,7 @@ def held(*, state: State) -> bool:
     """
     no_key = state.panel.key_set is False
     switched_off = not state.settings.board.auto_rebuild
-    return switched_off or no_key or offline(state=state)
+    return switched_off or no_key or offline(panel=state.panel)
 
 
 def rebuild_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
@@ -243,7 +243,7 @@ def building_detail(*, state: State) -> str:
     rebuild = state.rebuild
     if rebuild.running:
         return SETTINGS_HINT
-    if offline(state=state):
+    if offline(panel=state.panel):
         return WAITING_WIFI
     if state.panel.key_set is False:
         return WAITING_KEY

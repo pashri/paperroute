@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
+from paperroute_device.core.kit_events import Tick
 from paperroute_testkit.core.factories import (
     EAST,
     START,
@@ -22,7 +23,6 @@ from paperroute_testkit.core.strip_factories import (
     turn,
 )
 from paperroute_transit.core.live import LiveDeparture
-from paperroute_transit.core.messages import Tick
 from paperroute_transit.core.model import CarryOn, StopPlace
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.reach import (

@@ -1,24 +1,18 @@
-"""Quiet hours: when the screen sleeps by itself, and when it wakes."""
+"""Following the timetable: when the shown pin's service is over."""
 
 from dataclasses import replace
 from datetime import date, timedelta
 from typing import Final
 
 from paperroute_device.core.device_settings import QuietMode
-from paperroute_transit.core.auto_model import holds_awake
 from paperroute_transit.core.messages import (
     Effect,
-    FetchFeed,
     LoadServiceSpan,
-    Render,
     ServiceSpanLoaded,
 )
 from paperroute_transit.core.model import same_place
 from paperroute_transit.core.places import shown
-from paperroute_transit.core.rhythm import in_window
-from paperroute_transit.core.sleep import awake, slept
-from paperroute_transit.core.state_model import Calendar, State, elapsed
-from paperroute_transit.core.state_views import settled
+from paperroute_transit.core.state_model import Calendar, State
 
 MARGIN: Final[timedelta] = timedelta(minutes=30)
 ONE_DAY: Final[timedelta] = timedelta(days=1)
@@ -49,141 +43,6 @@ def between_spans(*, state: State) -> bool:
         if last.last_end + MARGIN <= state.now < first.first_start - MARGIN:
             return True
     return False
-
-
-def quiet_due(*, state: State) -> bool:
-    """
-    Say whether it is quiet hours now.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    bool
-        By My hours, whether now is inside them; by the timetable,
-        whether the pin's service is over for the night.
-    """
-    if state.settings.device.quiet_mode is QuietMode.MY_HOURS:
-        return in_window(
-            moment=state.now.time(), window=state.settings.device.my_hours,
-        )
-    return between_spans(state=state)
-
-
-def may_sleep(*, state: State) -> bool:
-    """
-    Say whether quiet hours may put the screen to sleep now.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    bool
-        True when awake with no wake running, no confirm, menu, route
-        chooser or Wi-Fi setup open, and no power action or reset under
-        way.
-    """
-    panel = state.panel
-    if panel.asleep or state.power is not None:
-        return False
-    if state.chooser is not None:
-        return False
-    if panel.awake_until is not None and panel.awake_until > state.now:
-        return False
-    return (panel.confirm, panel.menu, panel.wifi, panel.resetting) == (
-        None, None, None, None,
-    )
-
-
-def fall_asleep(
-    *, state: State, by_quiet: bool
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Put the screen to sleep and draw the sleep screen.
-
-    Parameters
-    ----------
-    state : State
-        State, awake.
-    by_quiet : bool
-        Whether quiet hours sleep it, so a tick can end the sleep.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State asleep with no wake running, and a full Render of the
-        sleep screen.
-    """
-    return settled(state=slept(state=state, by_quiet=by_quiet))
-
-
-def quiet_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Sleep at the start of quiet hours and wake at their end.
-
-    Parameters
-    ----------
-    state : State
-        State at the tick's time.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        A quiet sleep that is no longer due wakes, starting a cycle at
-        once; quiet hours sleep a screen that `may_sleep`; a wake run out
-        outside quiet hours is forgotten. A Sleep now sleep is left alone.
-        Quiet hours are not due while an auto window holds the panel
-        awake.
-    """
-    panel = state.panel
-    due = quiet_due(state=state) and not holds_awake(auto=state.auto)
-    if panel.asleep:
-        if panel.by_quiet and not due:
-            return settled(state=awake(state=state))
-        return state, ()
-    if due and may_sleep(state=state):
-        return fall_asleep(state=state, by_quiet=True)
-    if panel.awake_until is not None and not due and elapsed(
-        since=panel.awake_until, now=state.now, span=timedelta(),
-    ):
-        return replace(state, panel=replace(panel, awake_until=None)), ()
-    return state, ()
-
-
-def with_quiet(
-    *, result: tuple[State, tuple[Effect, ...]]
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Add quiet hours' sleep or wake to a tick's result.
-
-    Parameters
-    ----------
-    result : tuple[State, tuple[Effect, ...]]
-        The tick's state and effects.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        The result; a sleep or wake drops the tick's Renders and
-        FetchFeeds for its own, so the screen is drawn once and the
-        feeds asked for once.
-    """
-    state, effects = result
-    state, quiet = quiet_effects(state=state)
-    if not quiet:
-        return state, effects
-    kept = tuple(
-        effect
-        for effect in effects
-        if not isinstance(effect, Render | FetchFeed)
-    )
-    return state, (*kept, *quiet)
 
 
 def service_days(*, state: State) -> tuple[date, ...]:

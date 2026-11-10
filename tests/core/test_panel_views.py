@@ -12,28 +12,30 @@ from paperroute_device.core.device_model import (
     Origin,
     WifiStatus,
 )
+from paperroute_device.core.panel_screens import panel_view, phone_view
 from paperroute_device.core.panel_views import (
     ConfirmView,
     InfoRow,
     PhoneView,
     confirm_view,
 )
+from paperroute_device.core.wifi import wifi_escaped, wifi_qr
 from paperroute_device.render.canvas import WIDTH, text_width
 from paperroute_device.render.panel import BODY_FACE, MARGIN
 from paperroute_device_testkit.device_fakes import device_facts
+from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.factories import START
+from paperroute_testkit.core.steps import device_rows
 from paperroute_transit.core.map_view import MapView, Marker
 from paperroute_transit.core.panel_screens import (
     TRANSIT_CONFIRM_COPY,
     TilesFacts,
-    device_rows,
-    panel_view,
-    phone_view,
 )
 from paperroute_transit.core.panel_views import sleep_map
 from paperroute_transit.core.saved import Quota
+from paperroute_transit.core.state import REDUCER_PARTS, device_of
 from paperroute_transit.core.state_model import State
-from paperroute_transit.core.wifi import wifi_escaped, wifi_qr
+from paperroute_transit.transit_app import TransitApp
 from tests.core.test_rebuild import pinned
 
 
@@ -167,7 +169,8 @@ def test_device_rows_unknown() -> None:
 
 def test_phone_view_without_ip() -> None:
     """With no IP the code opens paperroute.local."""
-    assert phone_view(state=pinned()) == PhoneView(
+    device = device_of(state=pinned())
+    assert phone_view(device=device, zone=SYDNEY_ZONE) == PhoneView(
         clock='8:00',
         url='http://paperroute.local/',
         addresses=('paperroute.local',),
@@ -177,10 +180,16 @@ def test_phone_view_without_ip() -> None:
 
 def test_panel_view_only_with_menu_or_confirm() -> None:
     """Nothing panel-made shows with the menu closed."""
+    app = TransitApp(city=SYDNEY, parts=REDUCER_PARTS)
+
+    def shown(*, state: State) -> object | None:
+        device = device_of(state=state)
+        return panel_view(device=device, app=app, state=state, zone=SYDNEY_ZONE)
+
     state = pinned()
-    assert panel_view(state=state) is None
+    assert shown(state=state) is None
     menu = replace(state, panel=replace(state.panel, menu=Menu()))
-    assert panel_view(state=menu) is not None
+    assert shown(state=menu) is not None
 
 
 @pytest.mark.parametrize(

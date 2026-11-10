@@ -1,63 +1,19 @@
-"""Handlers for the device's own settings and power."""
+"""Transit's settings, status and the guards over its effects."""
 
 from dataclasses import fields, replace
-from datetime import datetime, timedelta
-from typing import Final
 
-from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
-from paperroute_device.core.device_model import (
-    ConfirmAction,
-    DeviceStatus,
-    Origin,
-    PanelScreen,
-    PowerAction,
-    ResetKind,
-)
-from paperroute_device.core.panel_views import NoticeView
 from paperroute_transit.core.alert_state import alert_clocks_cleared
 from paperroute_transit.core.banners import feeds_held
 from paperroute_transit.core.messages import (
-    ControlPower,
-    DeviceProbed,
-    DeviceProbeFailed,
     Effect,
     FetchFeed,
-    PowerFailed,
-    ProbeDevice,
     RebuildTimetable,
-    Render,
-    ResetDevice,
-    ResetDone,
-    SaveState,
     SettingsChanged,
-    Stop,
-    WifiEvent,
 )
-from paperroute_transit.core.model import shifted
 from paperroute_transit.core.quota import calls_today
 from paperroute_transit.core.saved import Settings, with_changes
-from paperroute_transit.core.state_model import (
-    CLOCK_WAIT,
-    Board,
-    Cycle,
-    State,
-    clock_waiting,
-    restarted,
-)
-from paperroute_transit.core.state_views import saved_of, settled
-from paperroute_transit.core.wifi import on_wifi_event, setup_closed
-
-NOTICE: Final[dict[PowerAction, str]] = {
-    PowerAction.OFF: 'Shutting down',
-    PowerAction.RESTART: 'Restarting',
-}
-RESET_NOTICE: Final[dict[ResetKind, str]] = {
-    ResetKind.SETTINGS: 'Resetting settings',
-    ResetKind.ERASE: 'Erasing everything',
-}
-RESET_DETAIL: Final[str] = 'paperroute starts again by itself'
-PROBE_EVERY: Final[timedelta] = timedelta(seconds=30)
-WATCH_EVERY: Final[timedelta] = timedelta(seconds=5)
+from paperroute_transit.core.state_model import Cycle, State
+from paperroute_transit.core.state_views import settled
 
 
 def school_changed(*, before: Settings, after: Settings) -> bool:
@@ -87,25 +43,22 @@ def on_settings(
     *, state: State, event: SettingsChanged
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Store the settings given and redraw; the next tick saves them.
+    Store the board settings given; the next tick saves them.
 
-    A change to rotate redraws the last view with a full refresh; a
-    change to the school switch clears the board, so the next tick reads
-    the departures again.
+    A change to the school switch clears the board, so the next tick
+    reads the departures again.
 
     Parameters
     ----------
     state : State
         State.
     event : SettingsChanged
-        The new settings; a None field is left as it is.
+        The new board settings; a None field is left as it is.
 
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the settings stored, and a full Render of the last
-        view when rotate changed and a view has been drawn, else a Render
-        when the view changed.
+        State with the settings stored, settled.
     """
     given = {
         item.name: getattr(event, item.name)
@@ -113,7 +66,6 @@ def on_settings(
         if getattr(event, item.name) is not None
     }
     settings = with_changes(settings=state.settings, changes=given)
-    turned = settings.device.rotate != state.settings.device.rotate
     after = replace(state, settings=settings)
     if school_changed(before=state.settings, after=settings):
         after = replace(
@@ -125,237 +77,39 @@ def on_settings(
                 loading=False,
             ),
         )
-    if turned and state.last_view is not None:
-        return after, (Render(view=state.last_view, full=True),)
     return settled(state=after)
-
-
-def on_power(
-    *, state: State, event: PowerRequested
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Save, draw the notice, then shut down or restart.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    event : PowerRequested
-        The action asked for.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State with the action under way, and a SaveState, a Render of the
-        notice and a ControlPower, in that order, after any Wi-Fi setup
-        is stopped; nothing when an action or a reset is already under
-        way.
-    """
-    if state.power is not None or state.panel.resetting is not None:
-        return state, ()
-    state, stops = setup_closed(state=state)
-    saved = saved_of(state=state)
-    view = NoticeView(title=NOTICE[event.action])
-    state = replace(
-        state,
-        power=event.action,
-        last_view=view,
-        saving=replace(state.saving, saved=saved),
-    )
-    return state, (
-        *stops,
-        SaveState(saved=saved),
-        Render(view=view, full=True),
-        ControlPower(action=event.action),
-    )
-
-
-def on_power_failed(
-    *, state: State, event: PowerFailed
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Give up on a power action and draw the Live view again.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    event : PowerFailed
-        The action that failed.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State with no action under way, and the redraw; nothing when the
-        failed action is not the one under way.
-    """
-    if state.power is not event.action:
-        return state, ()
-    return settled(state=replace(state, power=None))
-
-
-def on_reset(
-    *, state: State, kind: ResetKind
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Draw the reset notice, then reset; nothing is saved from here on.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    kind : ResetKind
-        The reset asked for.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State with the reset under way, and a Render of the notice and a
-        ResetDevice, in that order, after any Wi-Fi setup is stopped;
-        nothing while a power action or a reset is under way.
-    """
-    if state.power is not None or state.panel.resetting is not None:
-        return state, ()
-    state, stops = setup_closed(state=state)
-    view = NoticeView(title=RESET_NOTICE[kind], detail=RESET_DETAIL)
-    panel = replace(state.panel, resetting=kind)
-    state = replace(state, panel=panel, last_view=view)
-    notice = Render(view=view, full=True)
-    return state, (*stops, notice, ResetDevice(kind=kind))
-
-
-def on_reset_done(*, state: State) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Stop once a reset has finished, so the app starts again fresh.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        Stopped state, and a Stop.
-    """
-    return replace(state, running=False), (Stop(),)
-
-
-type DeviceEvent = (
-    SettingsChanged
-    | PowerRequested
-    | PowerFailed
-    | ApiKeyChanged
-    | DeviceProbed
-    | DeviceProbeFailed
-    | ResetDone
-    | WifiEvent
-)
-
-
-def on_device_event(
-    *, state: State, event: DeviceEvent
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Store a setting, key state or facts; handle power or Wi-Fi setup.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    event : DeviceEvent
-        What happened.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        New state and effects; a key change or probe is held by
-        `power_guard` and `quiet_guard` like any redraw.
-    """
-    match event:
-        case SettingsChanged():
-            return on_settings(state=state, event=event)
-        case PowerFailed():
-            return on_power_failed(state=state, event=event)
-        case PowerRequested():
-            return on_power(state=state, event=event)
-        case ApiKeyChanged():
-            result = on_key(state=state, event=event)
-        case ResetDone():
-            result = on_reset_done(state=state)
-        case DeviceProbed() | DeviceProbeFailed():
-            result = on_probed(state=state, event=event)
-        case _:
-            after, effects = on_wifi_event(state=state, event=event)
-            result = settled(state=after, effects=effects)
-    return quiet_guard(result=power_guard(state=state, result=result))
 
 
 def power_guard(
     *, state: State, result: tuple[State, tuple[Effect, ...]]
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Drop Renders while a power action or reset is under way.
+    Drop every RebuildTimetable while a reset is under way.
 
-    While a reset is under way every SaveState and RebuildTimetable is
-    dropped too, so the files it deletes are never written again.
+    The kit drops its own redraws and saves; this keeps a rebuild from
+    writing the files the reset deletes.
 
     Parameters
     ----------
     state : State
-        State before the event.
+        State before the event, its device fields a mirror of the kit's.
     result : tuple[State, tuple[Effect, ...]]
-        The handler's state and effects.
+        Transit's state and effects.
 
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        The result, without the dropped effects when an action or reset
-        is under way, and with the notice kept as the view last drawn.
+        The result, without RebuildTimetables while a reset is under way.
     """
     after, effects = result
-    resetting = state.panel.resetting is not None
-    if state.power is None and not resetting:
+    if state.panel.resetting is None:
         return result
-    dropped: tuple[type[Effect], ...] = (Render,)
-    if resetting:
-        dropped = (Render, SaveState, RebuildTimetable)
     kept = tuple(
-        effect for effect in effects if not isinstance(effect, dropped)
+        effect
+        for effect in effects
+        if not isinstance(effect, RebuildTimetable)
     )
-    return replace(after, last_view=state.last_view), kept
-
-
-def on_key(
-    *, state: State, event: ApiKeyChanged
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Store which API keys are missing, and redraw.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    event : ApiKeyChanged
-        Which keys are missing.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State with the missing keys noted, and the redraw if the view
-        changed. Once the last missing key is set a cycle starts at
-        once.
-    """
-    if not event.missing and state.panel.key_set is False:
-        state = restarted(
-            state=replace(
-                state,
-                last_fetch=None,
-                map=replace(state.map, fetched_at={}),
-            ),
-        )
-    panel = replace(state.panel, missing_keys=event.missing)
-    return settled(state=replace(state, panel=panel))
+    return after, kept
 
 
 def quiet_guard(
@@ -394,180 +148,6 @@ def quiet_guard(
     return cleared, kept
 
 
-def clock_checked(*, state: State, now: datetime, synced: bool) -> State:
-    """
-    Start, give up or end the wait for the clock to be synchronised.
-
-    Only the first frame waits: an unsynced tick after a frame is drawn
-    starts no wait.
-
-    Parameters
-    ----------
-    state : State
-        State before the tick.
-    now : datetime
-        The tick's time.
-    synced : bool
-        Whether the tick found the clock synchronised.
-
-    Returns
-    -------
-    State
-        State at the tick's time: waiting until `CLOCK_WAIT` from now
-        after the first unsynced tick; given up, with a probe due, on
-        the tick the wait runs out; `clock_set` on the first synced
-        tick after unsynced ones; otherwise only the time moves on.
-    """
-    after = replace(state, now=now, clock_known=True)
-    waiting = state.clock_wait_until is not None
-    if synced:
-        return clock_set(state=after) if waiting else after
-    if (
-        waiting
-        and clock_waiting(state=state)
-        and not clock_waiting(state=after)
-    ):
-        panel = replace(after.panel, probed_at=None)
-        return replace(after, clock_gave_up=True, panel=panel)
-    if waiting or state.last_view is not None:
-        return after
-    until = shifted(
-        moment=now,
-        seconds=int(CLOCK_WAIT.total_seconds()),
-        zone=state.city.zone,
-    )
-    return replace(after, clock_wait_until=until)
-
-
-def clock_set(*, state: State) -> State:
-    """
-    Start afresh once the clock is synchronised, as it may have jumped.
-
-    Parameters
-    ----------
-    state : State
-        State at the first synced tick's time.
-
-    Returns
-    -------
-    State
-        State with no clock wait, no departures and a load due, the
-        app counted as started now, a fresh poll cycle and a probe due.
-    """
-    return replace(
-        state,
-        clock_wait_until=None,
-        clock_gave_up=False,
-        board=Board(),
-        refresh=replace(state.refresh, started_at=state.now),
-        cycle=Cycle(),
-        panel=replace(state.panel, probed_at=None),
-    )
-
-
-def probe_due(*, state: State) -> bool:
-    """
-    Say whether the device's facts should be asked for now.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    bool
-        True on the first tick, once `PROBE_EVERY` has passed, or once
-        `WATCH_EVERY` has passed while the Device screen shows; never
-        while a probe younger than `PROBE_EVERY` has not answered, nor
-        while Wi-Fi setup is open.
-    """
-    panel = state.panel
-    if panel.wifi is not None:
-        return False
-    if panel.probed_at is None:
-        return True
-    since = state.now - panel.probed_at
-    if panel.probing and since < PROBE_EVERY:
-        return False
-    menu = panel.menu
-    watched = menu is not None and menu.screen is PanelScreen.DEVICE
-    return since >= (WATCH_EVERY if watched else PROBE_EVERY)
-
-
-def probe_effects(*, state: State) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Ask for the device's facts when a probe is due.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State with the probe time noted and marked running, and a
-        ProbeDevice, when `probe_due`; unchanged otherwise.
-    """
-    if not probe_due(state=state):
-        return state, ()
-    panel = replace(state.panel, probed_at=state.now, probing=True)
-    return replace(state, panel=panel), (ProbeDevice(),)
-
-
-def on_probed(
-    *, state: State, event: DeviceProbed | DeviceProbeFailed
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Store the device's facts and whether a key is set.
-
-    Parameters
-    ----------
-    state : State
-        State.
-    event : DeviceProbed | DeviceProbeFailed
-        What the probe found, or that it failed.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        State with the facts and key state, settled as a key change is;
-        only marked answered when the probe failed.
-    """
-    state = replace(state, panel=replace(state.panel, probing=False))
-    if isinstance(event, DeviceProbeFailed):
-        return state, ()
-    panel = replace(state.panel, facts=event.facts)
-    return on_key(
-        state=replace(state, panel=panel),
-        event=ApiKeyChanged(missing=event.facts.missing_keys),
-    )
-
-
-def device_status(*, state: State) -> DeviceStatus:
-    """
-    Gather what the device reports about itself.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    DeviceStatus
-        The keys not set, latest facts, what a phone asked for that
-        waits on the panel and Wi-Fi setup.
-    """
-    return DeviceStatus(
-        missing_keys=state.panel.missing_keys,
-        facts=state.panel.facts,
-        asked=phone_asked(state=state),
-        setup=state.panel.wifi,
-    )
-
-
 def app_status(*, state: State) -> dict[str, object]:
     """
     Gather what the app reports about itself.
@@ -590,23 +170,3 @@ def app_status(*, state: State) -> dict[str, object]:
         'rebuild_failed': state.rebuild.failed,
         'calls_today': calls_today(quota=state.quota, day=state.now.date()),
     }
-
-
-def phone_asked(*, state: State) -> ConfirmAction | None:
-    """
-    Say what a phone asked for that waits on the panel.
-
-    Parameters
-    ----------
-    state : State
-        State.
-
-    Returns
-    -------
-    ConfirmAction | None
-        The action of a confirm a phone asked for, or None.
-    """
-    confirm = state.panel.confirm
-    if confirm is None or confirm.origin is not Origin.PHONE:
-        return None
-    return confirm.action

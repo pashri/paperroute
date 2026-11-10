@@ -21,7 +21,6 @@ from paperroute_transit.core.places import (
     shown,
     with_place,
 )
-from paperroute_transit.core.sleep import awake
 from paperroute_transit.core.state_model import State
 
 
@@ -154,7 +153,7 @@ def started(*, state: State, occurrence: Occurrence) -> State:
     -------
     State
         State showing the occurrence's pin, with it recorded and a Sleep
-        now sleep ended.
+        now sleep marked to end.
     """
     before = before_of(state=state)
     index = next(
@@ -168,7 +167,7 @@ def started(*, state: State, occurrence: Occurrence) -> State:
     if index is not None:
         state = selected(state=state, index=index)
     if state.panel.asleep and not state.panel.by_quiet:
-        state = awake(state=state)
+        state = replace(state, wake=True)
     auto = replace(state.auto, occurrence=occurrence, before=before)
     return replace(state, auto=auto)
 

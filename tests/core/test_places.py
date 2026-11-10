@@ -26,13 +26,13 @@ from paperroute_transit.core.places import (
     with_place,
 )
 from paperroute_transit.core.realtime import RealtimeSnapshot
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import (
     LiveView,
     Saved,
     default_saved,
     default_settings,
 )
-from paperroute_transit.core.state import initial_state
 from paperroute_transit.core.state_model import Board, State
 from paperroute_transit.core.tiles import ZOOMS
 from tests.core.test_map_requests import fitted_on

@@ -8,6 +8,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from paperroute_device.core.kit_events import Tick
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.factories import START, begun, pin_at, place
@@ -38,7 +39,6 @@ from paperroute_transit.core.messages import (
     Event,
     LoadChooserDepartures,
     LoadColumn,
-    Tick,
     TimetableSeen,
 )
 from paperroute_transit.core.model import Pin, shifted

@@ -1,7 +1,7 @@
 """The events the reducer takes and the effects it asks for."""
 
 from collections.abc import Mapping
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date, datetime
 from enum import StrEnum
 
@@ -11,16 +11,31 @@ from paperroute_device.core.device_events import (
     JoinAsked,
     PowerRequested,
 )
-from paperroute_device.core.device_model import (
-    DeviceFacts,
-    JoinOutcome,
-    JoinRequest,
-    PowerAction,
-    ResetKind,
-    WifiNetwork,
-)
 from paperroute_device.core.device_settings import QuietMode, Window
-from paperroute_device.core.kit_events import QuitRequested
+from paperroute_device.core.kit_effects import (
+    ControlPower,
+    JoinWifi,
+    ProbeDevice,
+    Render,
+    ResetDevice,
+    SaveState,
+    StartWifiSetup,
+    Stop,
+    StopWifiSetup,
+)
+from paperroute_device.core.kit_events import (
+    DeviceProbed,
+    DeviceProbeFailed,
+    HotspotFailed,
+    HotspotStarted,
+    PowerFailed,
+    QuitRequested,
+    ResetDone,
+    Tick,
+    WifiJoined,
+    WifiJoinFailed,
+    WifiSetupStopped,
+)
 from paperroute_device.core.panel_views import NoticeView, PanelView
 from paperroute_hardware.core.knob_events import (
     KnobHeld,
@@ -57,7 +72,7 @@ from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.reach import Reach, StripKey
 from paperroute_transit.core.realtime import RealtimeSnapshot
-from paperroute_transit.core.saved import ConnectionMap, Lookahead, Rate, Saved
+from paperroute_transit.core.saved import ConnectionMap, Lookahead, Rate
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_model import StripMapView, StripView
 
@@ -186,40 +201,6 @@ ScreenView = (
 
 
 @dataclass(frozen=True)
-class Render:
-    """
-    Draw a view.
-
-    Attributes
-    ----------
-    view : ScreenView
-        The view.
-    full : bool
-        Whether the panel should do a full refresh rather than a partial
-        one.
-    clear : bool
-        Whether the panel should do a clear refresh: the whole screen in
-        black and white, with no wipe.
-    """
-
-    view: ScreenView
-    full: bool = False
-    clear: bool = False
-
-
-@dataclass(frozen=True)
-class Stop:
-    """Stop the app."""
-
-
-@dataclass(frozen=True)
-class SaveState:
-    """Write what the device keeps between restarts."""
-
-    saved: Saved
-
-
-@dataclass(frozen=True)
 class RebuildTimetable:
     """
     Rebuild the timetable in the background.
@@ -231,53 +212,6 @@ class RebuildTimetable:
     """
 
     force: bool = False
-
-
-@dataclass(frozen=True)
-class ControlPower:
-    """Shut the device down or restart it."""
-
-    action: PowerAction
-
-
-@dataclass(frozen=True)
-class ProbeDevice:
-    """Gather the device's facts in the background."""
-
-
-@dataclass(frozen=True)
-class ResetDevice:
-    """Reset the settings or erase everything, in the background."""
-
-    kind: ResetKind
-
-
-@dataclass(frozen=True)
-class StartWifiSetup:
-    """Scan for networks, then start the setup hotspot, in the background."""
-
-
-@dataclass(frozen=True)
-class JoinWifi:
-    """
-    Leave the hotspot and join a network, in the background.
-
-    Attributes
-    ----------
-    request : JoinRequest
-        The network to join.
-    hotspot : str
-        The hotspot password, to start it again if the join fails. Kept
-        out of the repr.
-    """
-
-    request: JoinRequest
-    hotspot: str = field(repr=False)
-
-
-@dataclass(frozen=True)
-class StopWifiSetup:
-    """Take the setup hotspot down, in the background."""
 
 
 @dataclass(frozen=True)
@@ -313,14 +247,6 @@ Effect = (
     | LoadServiceSpan
     | LoadBetween
 )
-
-
-@dataclass(frozen=True)
-class Tick:
-    """Time passed; `synced` says the clock was set since boot."""
-
-    now: datetime
-    synced: bool = True
 
 
 @dataclass(frozen=True)
@@ -511,93 +437,6 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
     skip_school_on_route_pins: bool | None = None
     clean_after: int | None = None
     swap_knobs: bool | None = None
-
-
-@dataclass(frozen=True)
-class DeviceProbed:
-    """
-    The device's facts were gathered.
-
-    Attributes
-    ----------
-    facts : DeviceFacts
-        What was found.
-    """
-
-    facts: DeviceFacts
-
-
-@dataclass(frozen=True)
-class DeviceProbeFailed:
-    """Gathering the device's facts failed."""
-
-
-@dataclass(frozen=True)
-class PowerFailed:
-    """Shutting down or restarting didn't happen."""
-
-    action: PowerAction
-
-
-@dataclass(frozen=True)
-class ResetDone:
-    """A reset has finished, whether or not every part of it worked."""
-
-    kind: ResetKind
-
-
-@dataclass(frozen=True)
-class HotspotStarted:
-    """
-    The setup hotspot is up.
-
-    Attributes
-    ----------
-    networks : tuple[WifiNetwork, ...]
-        The networks the scan before it found.
-    password : str
-        The hotspot password. Kept out of the repr.
-    """
-
-    networks: tuple[WifiNetwork, ...]
-    password: str = field(repr=False)
-
-
-@dataclass(frozen=True)
-class HotspotFailed:
-    """The setup hotspot did not start."""
-
-
-@dataclass(frozen=True)
-class WifiJoined:
-    """The device joined a network from Wi-Fi setup."""
-
-    ssid: str
-
-
-@dataclass(frozen=True)
-class WifiJoinFailed:
-    """
-    Joining a network from Wi-Fi setup failed.
-
-    Attributes
-    ----------
-    ssid : str
-        The network asked for.
-    outcome : JoinOutcome
-        How the join ended.
-    hotspot : bool
-        Whether the setup hotspot is back up.
-    """
-
-    ssid: str
-    outcome: JoinOutcome
-    hotspot: bool
-
-
-@dataclass(frozen=True)
-class WifiSetupStopped:
-    """The setup hotspot was taken down."""
 
 
 @dataclass(frozen=True)

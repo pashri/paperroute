@@ -4,6 +4,7 @@ from dataclasses import replace
 from datetime import timedelta
 from typing import Final
 
+from paperroute_device.core.banners import no_wifi_banner
 from paperroute_device.core.device_events import (
     ConfirmAsked,
     JoinAsked,
@@ -20,30 +21,32 @@ from paperroute_device.core.device_model import (
     WifiSetup,
     WifiStatus,
 )
-from paperroute_device.core.panel_views import WifiSetupView
-from paperroute_device_testkit.device_fakes import device_facts
-from paperroute_testkit.core.factories import START
-from paperroute_transit.core.banners import NO_WIFI
-from paperroute_transit.core.messages import (
-    DeviceProbed,
-    FetchFeed,
-    HotspotFailed,
-    HotspotStarted,
+from paperroute_device.core.kit_effects import (
     JoinWifi,
     ProbeDevice,
-    RebuildTimetable,
     StartWifiSetup,
     StopWifiSetup,
+)
+from paperroute_device.core.kit_events import (
+    DeviceProbed,
+    HotspotFailed,
+    HotspotStarted,
     Tick,
     WifiJoined,
     WifiJoinFailed,
     WifiSetupStopped,
 )
+from paperroute_device.core.panel_views import WifiSetupView
+from paperroute_device.core.wifi import SETUP_FOR, wifi_setup_view
+from paperroute_device_testkit.device_fakes import device_facts
+from paperroute_sydney.city import SYDNEY_ZONE
+from paperroute_testkit.core.factories import START
+from paperroute_transit.core.banners import OFFLINE_PHRASE
+from paperroute_transit.core.messages import FetchFeed, RebuildTimetable
 from paperroute_transit.core.saved import LiveView
-from paperroute_transit.core.state import step
+from paperroute_transit.core.state import device_of, step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import stop_view_of
-from paperroute_transit.core.wifi import SETUP_FOR, wifi_setup_view
 from tests.core.test_menu import BOTH, DOWN, UP, opened_at, renders, run
 from tests.core.test_rebuild import pinned
 from tests.core.test_state import fresh, loaded
@@ -56,6 +59,8 @@ STARTED: Final[HotspotStarted] = HotspotStarted(
     networks=(HOME,), password=PASSWORD,
 )
 REQUEST: Final[JoinRequest] = JoinRequest(ssid='Home', password='hunter22')
+
+NO_WIFI: Final[str] = no_wifi_banner(phrase=OFFLINE_PHRASE)
 
 
 def hotspot() -> State:
@@ -123,7 +128,7 @@ def test_join_success_closes_setup_and_probes() -> None:
     """A join from the phone stops the hotspot and joins; then it closes."""
     state, effects = step(hotspot(), JoinAsked(request=REQUEST))
     assert JoinWifi(request=REQUEST, hotspot=PASSWORD) in effects
-    view = wifi_setup_view(state=state)
+    view = wifi_setup_view(device=device_of(state=state), zone=SYDNEY_ZONE)
     assert view.phase is WifiPhase.JOINING
     assert view.ssid == 'Home'
     state, effects = step(state, WifiJoined(ssid='Home'))
@@ -238,7 +243,7 @@ def test_wifi_reprs_hide_passwords() -> None:
         JoinWifi(request=REQUEST, hotspot=PASSWORD),
         STARTED,
         state.panel.wifi,
-        wifi_setup_view(state=hotspot()),
+        wifi_setup_view(device=device_of(state=hotspot()), zone=SYDNEY_ZONE),
     )
     for thing in things:
         assert 'hunter22' not in repr(thing)

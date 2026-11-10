@@ -3,6 +3,8 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from paperroute_device.core.kit_effects import Render
+from paperroute_device.core.kit_events import Tick
 from paperroute_device.core.text import DOT
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -26,7 +28,7 @@ from paperroute_transit.core.alerts_view import (
     build_alerts_view,
 )
 from paperroute_transit.core.feed_plan import FeedKind
-from paperroute_transit.core.messages import FetchFeed, Render, Tick
+from paperroute_transit.core.messages import FetchFeed
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.places import shown
 from paperroute_transit.core.saved import LiveView, Lookahead

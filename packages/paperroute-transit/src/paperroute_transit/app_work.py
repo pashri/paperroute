@@ -5,9 +5,21 @@ import functools
 import logging
 import sqlite3
 from collections.abc import Coroutine
-from typing import Any
+from typing import Any, cast
 
 from paperroute_device.core.device_model import PowerAction
+from paperroute_device.core.kit_effects import (
+    ControlPower,
+    JoinWifi,
+    ProbeDevice,
+    Render,
+    ResetDevice,
+    SaveState,
+    StartWifiSetup,
+    Stop,
+    StopWifiSetup,
+)
+from paperroute_device.core.kit_events import PowerFailed
 from paperroute_transit.adapters.feed_errors import FeedError
 from paperroute_transit.adapters.feed_guard import FeedBackingOff, JoinedBody
 from paperroute_transit.app_connections import departures_read
@@ -24,29 +36,20 @@ from paperroute_transit.app_effects import (
 from paperroute_transit.app_ports import Ports
 from paperroute_transit.app_render import MapRenderer, render
 from paperroute_transit.core.messages import (
-    ControlPower,
     DeparturesFailed,
     Effect,
     Event,
     FeedFailed,
     FeedJoined,
     FetchFeed,
-    JoinWifi,
     LoadDepartures,
     LoadModes,
     LoadPatterns,
     LoadShapes,
     MapDataFailed,
     MapRequest,
-    PowerFailed,
-    ProbeDevice,
     RebuildTimetable,
-    Render,
-    ResetDevice,
-    SaveState,
-    StartWifiSetup,
-    Stop,
-    StopWifiSetup,
+    ScreenView,
     TimetableRebuilt,
 )
 
@@ -365,7 +368,9 @@ async def perform(
     """
     match effect:
         case Render(view=view):
-            await render(ports=ports, view=view, maps=maps)
+            await render(
+                ports=ports, view=cast(ScreenView, view), maps=maps,
+            )
             return
         case SaveState():
             await saver.save(effect=effect)

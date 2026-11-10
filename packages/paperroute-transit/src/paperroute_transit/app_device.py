@@ -8,6 +8,7 @@ from typing import Any, Final
 
 from paperroute_device.adapters.resets import NullResets
 from paperroute_device.adapters.wifi import NullWifi, hotspot_password
+from paperroute_device.core.device import device_status
 from paperroute_device.core.device_events import ApiKeyChanged
 from paperroute_device.core.device_model import (
     DeviceFacts,
@@ -16,25 +17,28 @@ from paperroute_device.core.device_model import (
     JoinOutcome,
     missing_keys,
 )
-from paperroute_device.ports import DeviceProbe, Resets, WifiControl
-from paperroute_transit.adapters.tiles_db import tiles_facts
-from paperroute_transit.core.device import app_status, device_status
-from paperroute_transit.core.messages import (
-    DeviceProbed,
-    DeviceProbeFailed,
-    Event,
-    HotspotFailed,
-    HotspotStarted,
+from paperroute_device.core.kit_effects import (
     JoinWifi,
     ProbeDevice,
     ResetDevice,
-    ResetDone,
     StartWifiSetup,
     StopWifiSetup,
+)
+from paperroute_device.core.kit_events import (
+    DeviceProbed,
+    DeviceProbeFailed,
+    HotspotFailed,
+    HotspotStarted,
+    ResetDone,
     WifiJoined,
     WifiJoinFailed,
     WifiSetupStopped,
 )
+from paperroute_device.ports import DeviceProbe, Resets, WifiControl
+from paperroute_transit.adapters.tiles_db import tiles_facts
+from paperroute_transit.core.device import app_status
+from paperroute_transit.core.messages import Event
+from paperroute_transit.core.state import device_of
 from paperroute_transit.core.state_model import State
 from paperroute_transit.ports import Observer, TileRepository, TimetableBuilder
 
@@ -451,7 +455,7 @@ def report_status(
     reported : Reported
         The status reported last; updated when a new one is reported.
     """
-    status = device_status(state=state)
+    status = device_status(device=device_of(state=state))
     kept = steady(status=status)
     if kept != reported.status:
         observer.status_seen(status=status)

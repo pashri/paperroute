@@ -21,6 +21,7 @@ from paperroute_sydney.adapters.web_board import (
 from paperroute_sydney.asset_root import APP_ASSETS
 from paperroute_sydney.city import SYDNEY
 from paperroute_transit import board
+from paperroute_transit.city_parts import CityParts
 from paperroute_transit.ports import FeedsClient
 
 
@@ -63,7 +64,7 @@ def tfnsw_keys() -> tuple[DeviceKey, ...]:
     )
 
 
-SYDNEY_PARTS: Final[board.CityParts] = board.CityParts(
+SYDNEY_PARTS: Final[CityParts] = CityParts(
     assets=APP_ASSETS,
     live_feeds=tfnsw_feeds,
     keys=tfnsw_keys,

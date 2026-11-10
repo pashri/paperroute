@@ -6,24 +6,66 @@ from typing import Final
 
 import pytest
 
+from paperroute_device.core.banners import banner_line
 from paperroute_device.core.device_events import ApiKeyChanged
+from paperroute_device.core.device_model import WifiStatus
+from paperroute_device.core.device_state import Banner
+from paperroute_device.core.kit_events import DeviceProbed
+from paperroute_device_testkit.device_fakes import device_facts
+from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import START
 from paperroute_transit.core.banners import (
     TIMETABLE_OUT_OF_DATE,
-    device_banner,
-    no_key_banner,
     timetable_banner,
     timetable_ends,
 )
 from paperroute_transit.core.messages import TimetableSeen
-from paperroute_transit.core.state import step
+from paperroute_transit.core.state import REDUCER_PARTS, device_of, step
 from paperroute_transit.core.state_model import State
-from paperroute_transit.core.state_views import stop_view_of
+from paperroute_transit.core.state_views import device_notice, stop_view_of
+from paperroute_transit.transit_app import TransitApp
 from tests.core.test_idle_frames import board, idle
 from tests.core.test_state import CENTRE, fresh, loaded
 
 FRIDAY: Final[date] = date(2026, 10, 16)  # START's day in Sydney
 ENDS_FRIDAY: Final[str] = 'Timetable ends Friday. Check the internet and key.'
+APP: Final[TransitApp] = TransitApp(city=SYDNEY, parts=REDUCER_PARTS)
+
+
+def line(*, state: State) -> Banner | None:
+    """
+    Choose the banner line the kit shows for a state.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    Banner | None
+        The line.
+    """
+    device = device_of(state=state)
+    return banner_line(panel=device.panel, app=APP, state=state, device=device)
+
+
+def line_text(*, state: State) -> str | None:
+    """
+    Give the text of the line that takes the banner ahead of live data.
+
+    Parameters
+    ----------
+    state : State
+        State.
+
+    Returns
+    -------
+    str | None
+        The line's text, or None for none.
+    """
+    shown = device_notice(state=state)
+    return None if shown is None else shown.text
 
 
 def ending(*, state: State, last_day: date | None) -> State:
@@ -93,7 +135,7 @@ def test_banner_from_three_days_left(
     last_day = FRIDAY + timedelta(days=days_after)
     state = ending(state=fresh(), last_day=last_day)
     assert timetable_banner(state=state) == banner
-    assert device_banner(state=state) == banner
+    assert line_text(state=state) == banner
 
 
 def test_no_window_no_banner() -> None:
@@ -153,10 +195,35 @@ def test_banner_changes_at_most_once_a_day() -> None:
 
 
 def test_wifi_and_key_warnings_come_first() -> None:
-    """A missing key is said before the timetable's end."""
+    """No Wi-Fi, then a missing key, come before the timetable's end."""
     state = ending(state=loaded(state=fresh()), last_day=FRIDAY)
+    facts = replace(
+        device_facts(missing_keys=('TfNSW',)),
+        wifi=WifiStatus(managed=True),
+    )
+    state, _ = step(state, DeviceProbed(facts=facts))
+    assert line(state=state) == Banner(
+        text='No Wi-Fi · timetable times · hold both knobs, then Wi-Fi',
+    )
+    joined = replace(facts, wifi=WifiStatus(managed=True, ssid='home'))
+    state, _ = step(state, DeviceProbed(facts=joined))
+    assert line(state=state) == Banner(
+        text='No TfNSW key · set it on your phone',
+    )
+
+
+def test_app_banners_follow_the_device_ones() -> None:
+    """Transit's lines come after the device's, the timetable's first."""
+    state = ending(state=loaded(state=fresh()), last_day=FRIDAY)
+    device = device_of(state=state)
+    lines = APP.banners(state=state, device=device)
+    assert lines[0] == Banner(text=ENDS_FRIDAY)
+    assert line(state=state) == lines[0]
     state, _ = step(state, ApiKeyChanged(missing=('TfNSW',)))
-    assert device_banner(state=state) == no_key_banner(name='TfNSW')
+    assert line(state=state) == Banner(
+        text='No TfNSW key · set it on your phone',
+    )
+    assert APP.banners(state=state, device=device_of(state=state)) == lines
 
 
 def test_banner_names_the_first_missing_key() -> None:
@@ -165,7 +232,7 @@ def test_banner_names_the_first_missing_key() -> None:
 
     def banner(*, missing: tuple[str, ...]) -> str | None:
         panel = replace(state.panel, missing_keys=missing)
-        return device_banner(state=replace(state, panel=panel))
+        return line_text(state=replace(state, panel=panel))
 
     assert banner(missing=('TfNSW', 'Other')) == (
         'No TfNSW key · set it on your phone'

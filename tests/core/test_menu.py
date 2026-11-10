@@ -8,6 +8,7 @@ import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
+from paperroute_device.core.device import device_status
 from paperroute_device.core.device_events import ConfirmAsked
 from paperroute_device.core.device_model import (
     AppRow,
@@ -19,6 +20,15 @@ from paperroute_device.core.device_model import (
     PowerAction,
     ResetKind,
 )
+from paperroute_device.core.kit_effects import (
+    ControlPower,
+    ProbeDevice,
+    Render,
+    ResetDevice,
+    SaveState,
+)
+from paperroute_device.core.kit_events import DeviceProbed, Tick
+from paperroute_device.core.menu import CONFIRM_WAIT, MENU_IDLE
 from paperroute_device.core.panel_views import (
     ConfirmView,
     MenuView,
@@ -36,21 +46,9 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_testkit.core.factories import START
 from paperroute_transit.core.chooser_view import ChooserView
-from paperroute_transit.core.device import device_status
-from paperroute_transit.core.menu import CONFIRM_WAIT, MENU_IDLE
-from paperroute_transit.core.messages import (
-    ControlPower,
-    DeviceProbed,
-    Effect,
-    Event,
-    ProbeDevice,
-    Render,
-    ResetDevice,
-    SaveState,
-    Tick,
-)
+from paperroute_transit.core.messages import Effect, Event
 from paperroute_transit.core.rebuild import TRANSIT_ROWS
-from paperroute_transit.core.state import step
+from paperroute_transit.core.state import device_of, step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import StopView
 from tests.core.test_rebuild import pinned
@@ -347,7 +345,7 @@ def test_phone_reset_asks_on_panel() -> None:
     view = renders(effects=effects)[0]
     assert isinstance(view, ConfirmView)
     assert 'Asked for from a phone on your Wi-Fi.' in view.lines
-    assert device_status(state=state).asked is ConfirmAction.RESET_SETTINGS
+    assert device_status(device=device_of(state=state)).asked is ConfirmAction.RESET_SETTINGS
     _, effects = step(state, DOWN)
     assert ResetDevice(kind=ResetKind.SETTINGS) in effects
 

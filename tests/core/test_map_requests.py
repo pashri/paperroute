@@ -5,6 +5,7 @@ from dataclasses import replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute_device.core.kit_events import Tick
 from paperroute_hardware.core.knob_events import Knob, KnobPressed
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute_testkit.core.connection_factories import LEG1, LEG2
@@ -38,7 +39,6 @@ from paperroute_transit.core.messages import (
     MapDataFailed,
     ModesLoaded,
     PatternsLoaded,
-    Tick,
 )
 from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.saved import LiveView

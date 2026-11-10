@@ -5,16 +5,24 @@ from collections.abc import Iterable
 from dataclasses import dataclass, replace
 from datetime import UTC, date, datetime, time, timedelta
 from enum import StrEnum
-from typing import Final
+from typing import Final, cast
 
 import pytest
 from hypothesis import given
 from hypothesis import strategies as st
 
 from paperroute_device.core.device_events import PowerRequested
-from paperroute_device.core.device_model import PowerAction
+from paperroute_device.core.device_model import MenuRow, PowerAction
 from paperroute_device.core.device_settings import Window
-from paperroute_device.core.kit_events import QuitRequested
+from paperroute_device.core.device_state import KitSaved
+from paperroute_device.core.kit_effects import (
+    ProbeDevice,
+    Render,
+    SaveState,
+    Stop,
+)
+from paperroute_device.core.kit_events import QuitRequested, Tick
+from paperroute_device.core.kit_state import SAVE_WAIT
 from paperroute_device.core.panel_views import NoticeView
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -45,9 +53,12 @@ from paperroute_testkit.core.factories import (
 )
 from paperroute_testkit.core.steps import (
     answer_fetches,
+    last_saved,
+    save_of,
     step_answered,
     step_untouched,
     wakeful,
+    written,
 )
 from paperroute_transit.core.alert_state import ALERT_EVERY, alert_feeds
 from paperroute_transit.core.auto_model import AutoState
@@ -106,16 +117,11 @@ from paperroute_transit.core.messages import (
     PlacesFailed,
     PlacesMatched,
     PositionsFetched,
-    ProbeDevice,
-    Render,
-    SaveState,
     ScreenView,
     SettingsChanged,
     ShapesLoaded,
-    Stop,
     StripFailed,
     StripLoaded,
-    Tick,
     TimetableSeen,
 )
 from paperroute_transit.core.model import (
@@ -142,6 +148,7 @@ from paperroute_transit.core.realtime import (
     TripRealtime,
 )
 from paperroute_transit.core.rebuild import building_view
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.rhythm import poll_every
 from paperroute_transit.core.saved import (
     LIVE_VIEWS,
@@ -154,7 +161,7 @@ from paperroute_transit.core.saved import (
     default_settings,
     seeded,
 )
-from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state import REDUCER_PARTS, device_of, step
 from paperroute_transit.core.state_model import (
     CLOCK_WAIT,
     FEED_IDLE,
@@ -166,7 +173,6 @@ from paperroute_transit.core.state_model import (
 )
 from paperroute_transit.core.state_model import clock_waiting as clock_held
 from paperroute_transit.core.state_model import load_window
-from paperroute_transit.core.state_saves import SAVE_AFTER
 from paperroute_transit.core.state_views import live_stop_view, saved_of
 from paperroute_transit.core.stop_view import (
     HORIZON,
@@ -192,6 +198,7 @@ from paperroute_transit.core.strip_state import (
     strip_key,
 )
 from paperroute_transit.core.tiles import CITY, ZOOMS
+from paperroute_transit.transit_app import TransitApp
 from tests.core.chooser_walks import (
     BUS_606,
     CHOSEN,
@@ -211,6 +218,7 @@ from tests.core.chooser_walks import (
     UNTIL,
     chooser_departures,
 )
+from tests.helpers import kit_step
 
 ALL_SOURCES: Final[frozenset[str]] = SYDNEY.feeds.position_sources()
 PIN = Pin(
@@ -1654,7 +1662,7 @@ def check_effects(
     check_selection(before=before, after=after, event=event)
     for effect in effects:
         if isinstance(effect, Render):
-            check_render(state=after, view=effect.view)
+            check_render(state=after, view=cast(ScreenView, effect.view))
             assert effect.view != before.last_view or (
                 effect.full and isinstance(event, Tick)
             )
@@ -2050,7 +2058,7 @@ def check_saves(
     """
     Assert every save carries the state (its quota may lag a tick), differs
     from the last one and, unless quitting or nothing was stored, waits
-    SAVE_AFTER, or QUOTA_SAVE_EVERY when only the quota changed.
+    SAVE_WAIT, or QUOTA_SAVE_EVERY when only the quota changed.
 
     Parameters
     ----------
@@ -2068,23 +2076,24 @@ def check_saves(
     Saved | None
         What is now last saved.
     """
-    changed_at = before.saving.changed_at
+    changed_at = before.kit.changed_at
     for save in effects_of(effects=effects, kind=SaveState):
-        counted = replace(save.saved, quota=after.quota)
+        saved = written(save=save)
+        counted = replace(saved, quota=after.quota)
         assert counted == saved_of(state=after)
-        assert save.saved != last
-        last = save.saved
-        written = before.saving.saved
-        if Stop() in effects or written is None:
+        assert saved != last
+        last = saved
+        before_saved = last_saved(state=before)
+        if Stop() in effects or before_saved is None:
             continue
-        if quota_only(before=written, after=save.saved):
-            quota_at = before.saving.quota_at
+        if quota_only(before=before_saved, after=saved):
+            quota_at = before.kit.written_at
             assert quota_at is not None
             assert after.now - quota_at >= QUOTA_SAVE_EVERY
             continue
         if changed_at is not None:
             waited = after.now.timestamp() - changed_at.timestamp()
-            assert waited >= SAVE_AFTER.total_seconds()
+            assert waited >= SAVE_WAIT.total_seconds()
     return last
 
 
@@ -2165,7 +2174,7 @@ def test_step_invariants(
     """No event sequence breaks the reducer's invariants."""
     start, events = case
     state = initial_state(saved=saved, now=start, stored=stored, city=SYDNEY)
-    last = state.saving.saved
+    last = last_saved(state=state)
     for item in events:
         event = (
             answered(state=state, answer=item)
@@ -2750,7 +2759,7 @@ def test_bottom_press_cycles_four_views() -> None:
         state, effects = step(state, PRESS)
         views.append(state.view)
         drawn.extend(
-            type(effect.view) for effect in effects_of(
+            type(cast(ScreenView, effect.view)) for effect in effects_of(
                 effects=effects, kind=Render
             )
         )
@@ -2880,20 +2889,20 @@ def test_save_waits_three_seconds_after_last_change() -> None:
     state, effects = step(state, at(seconds=13))
     assert not saves(effects=effects)
     state, effects = step(state, at(seconds=11 + 3))
-    assert saves(effects=effects) == [SaveState(saved=saved_of(state=state))]
-    assert state.saving.saved == saved_of(state=state)
+    assert saves(effects=effects) == [save_of(state=state)]
+    assert last_saved(state=state) == saved_of(state=state)
     _, effects = step(state, at(seconds=20))
     assert not saves(effects=effects)
-    assert SAVE_AFTER == timedelta(seconds=3)
+    assert SAVE_WAIT == timedelta(seconds=3)
 
 
 def test_first_tick_saves_when_never_stored() -> None:
     """With no file yet, the first tick writes one."""
     saved = seeded(pin=PIN, city=SYDNEY)
     state = initial_state(saved=saved, now=START, stored=False, city=SYDNEY)
-    assert state.saving.saved is None
+    assert state.kit.saved is None
     state, effects = step(state, Tick(now=START))
-    assert saves(effects=effects) == [SaveState(saved=saved)]
+    assert [written(save=save) for save in saves(effects=effects)] == [saved]
     _, effects = step(state, at(seconds=60))
     assert not saves(effects=effects)
 
@@ -2911,14 +2920,14 @@ def test_no_save_without_change() -> None:
     assert writes
     assert len(writes) <= 6
     for save in writes:
-        assert replace(save.saved, quota=base.quota) == base
+        assert replace(written(save=save), quota=base.quota) == base
 
 
 def test_quit_saves_unsaved_changes_first() -> None:
     """Quitting with an unsaved change saves before stopping."""
     state, _ = step(pinned(), HOLD)
     state, effects = step(state, QuitRequested())
-    assert effects == (SaveState(saved=saved_of(state=state)), Stop())
+    assert effects == (save_of(state=state), Stop())
     assert not state.running
 
 
@@ -3406,3 +3415,55 @@ def test_sleep_screen_held_during_clock_wait() -> None:
     _, more = step(state, Tick(now=START + CLOCK_WAIT, synced=False))
     renders = [e for e in more if isinstance(e, Render)]
     assert [type(render.view) for render in renders] == [SleepView]
+
+
+def test_kit_step_keeps_a_pending_save_across_calls() -> None:
+    """A settings change made in one call is saved by a later call's tick."""
+    state, _ = kit_step(state=fresh(), event=Tick(now=START))
+    state, _ = kit_step(state=state, event=SettingsChanged(larger_text=True))
+    assert state.kit.changed_at == START
+    state, effects = kit_step(
+        state=state, event=Tick(now=START + timedelta(seconds=1)),
+    )
+    assert not [e for e in effects if isinstance(e, SaveState)]
+    _, effects = kit_step(state=state, event=Tick(now=START + SAVE_WAIT))
+    [save] = [e for e in effects if isinstance(e, SaveState)]
+    assert isinstance(save.saved, KitSaved)
+    assert save.saved.device.larger_text
+
+
+def test_kit_step_keeps_the_sleep_frame_flag() -> None:
+    """A wake after a drawn sleep frame redraws in full."""
+    state, _ = kit_step(state=loaded(state=fresh()), event=Tick(now=START))
+    index = tuple(MenuRow).index(MenuRow.SLEEP)
+    events: tuple[Event, ...] = (
+        KnobsHeld(),
+        KnobTurned(knob=Knob.BOTTOM, steps=index),
+    )
+    for event in events:
+        state, _ = kit_step(state=state, event=event)
+    state, _ = kit_step(state=state, event=PRESS)
+    assert state.panel.asleep
+    assert state.kit.last_was_sleep
+    state, effects = kit_step(state=state, event=PRESS)
+    [render] = [e for e in effects if isinstance(e, Render)]
+    assert isinstance(render.view, StopView)
+    assert render.full
+    assert not state.kit.last_was_sleep
+
+
+def test_knob_turn_draws_during_a_cycle_wait() -> None:
+    """A turn while a cycle waits for its feeds is drawn at once."""
+    state, _ = kit_step(state=loaded(state=fresh()), event=PRESS)
+    held_at = START + timedelta(seconds=5 * 60 + 2)
+    state, effects = kit_step(state=state, event=Tick(now=held_at))
+    assert not [e for e in effects if isinstance(e, Render)]
+    turn = KnobTurned(knob=Knob.BOTTOM, steps=1)
+    app = TransitApp(city=SYDNEY, parts=REDUCER_PARTS)
+    begun_state = app.begin(
+        state=state, device=device_of(state=state), event=turn,
+    )
+    assert begun_state.cycle.free
+    state, effects = kit_step(state=state, event=turn)
+    assert len([e for e in effects if isinstance(e, Render)]) == 1
+    assert not state.cycle.free

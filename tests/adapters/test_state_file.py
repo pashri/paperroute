@@ -36,6 +36,7 @@ from paperroute_transit.adapters.state_migrations import (
 from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
 from paperroute_transit.core.model import AutoWindow, Pin, StopPlace, Way
 from paperroute_transit.core.pin_choices import clean_nickname
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import (
     DEVICE_FIELDS,
     BoardSettings,
@@ -49,7 +50,6 @@ from paperroute_transit.core.saved import (
     default_saved,
     default_settings,
 )
-from paperroute_transit.core.state import initial_state
 from paperroute_transit.core.state_views import saved_of
 from tests.adapters.state_layout import (
     STATE_V11,

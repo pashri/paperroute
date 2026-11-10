@@ -79,7 +79,6 @@ from paperroute_transit.adapters.web_display import WebDisplay
 from paperroute_transit.app import Ports
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.board import (
-    CityParts,
     board_display,
     board_observer,
     builder_for,
@@ -99,6 +98,7 @@ from paperroute_transit.board import (
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
 from paperroute_transit.build.timetable import Window, build_timetable
+from paperroute_transit.city_parts import CityParts
 from paperroute_transit.core.city import City
 from paperroute_transit.core.geo import to_metres
 from paperroute_transit.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase

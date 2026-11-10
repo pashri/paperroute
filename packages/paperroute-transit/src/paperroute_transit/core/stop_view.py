@@ -6,6 +6,7 @@ from datetime import datetime, timedelta, tzinfo
 from enum import StrEnum
 from typing import Final
 
+from paperroute_device.core.device_state import Banner
 from paperroute_device.core.text import DOT, clock_text
 from paperroute_transit.core.alert_model import AlertBanner
 from paperroute_transit.core.city import City, Nouns
@@ -230,9 +231,9 @@ class StopInputs:
         The header's pin tag.
     missing : bool
         Whether the timetable no longer knows the place.
-    notice : str | None
-        A device warning that takes the banner ahead of any about live
-        data, or None.
+    notice : Banner | None
+        The banner line chosen for the view, or None to show the first
+        of `banner_text`.
     large : bool
         Whether the departure rows use larger text.
     inverted : bool
@@ -255,7 +256,7 @@ class StopInputs:
     loaded: bool = True
     tag: PinTag = NOT_PINNED
     missing: bool = False
-    notice: str | None = None
+    notice: Banner | None = None
     large: bool = False
     inverted: bool = False
     alert: AlertBanner | None = None
@@ -579,9 +580,9 @@ def row_count(*, large: bool, under_banner: bool) -> int:
     return ROWS_UNDER_BANNER if under_banner else VISIBLE_ROWS
 
 
-def alert_shown(*, inputs: StopInputs) -> AlertBanner | None:
+def banner_text(*, inputs: StopInputs) -> tuple[Banner, ...]:
     """
-    Pick the alert line when nothing outranks it.
+    List the lines about live data, alerts and feeds, first first.
 
     Parameters
     ----------
@@ -590,54 +591,33 @@ def alert_shown(*, inputs: StopInputs) -> AlertBanner | None:
 
     Returns
     -------
-    AlertBanner | None
-        The alert, or None when there is none or a device warning or a
-        live data line takes the banner. An empty notice counts as none.
+    tuple[Banner, ...]
+        The live data line when there is a feed, the pin's alert, then
+        the no-feed line; each one only when it has something to say.
     """
-    if inputs.notice or inputs.alert is None:
-        return None
-    if inputs.has_feed and live_line(
+    lines: list[Banner] = []
+    live = live_line(
         live_since=inputs.live_since,
         now=inputs.now,
         limit=inputs.stale_after,
         zone=inputs.zone,
-    ):
-        return None
-    return inputs.alert
-
-
-def banner_text(*, inputs: StopInputs) -> str | None:
-    """
-    Choose the banner text.
-
-    The order is a device warning, the live data line, an alert, then
-    the no-feed line.
-
-    Parameters
-    ----------
-    inputs : StopInputs
-        The view's inputs.
-
-    Returns
-    -------
-    str | None
-        Banner text, or None.
-    """
-    if inputs.notice:
-        return inputs.notice
-    if inputs.has_feed:
-        line = live_line(
-            live_since=inputs.live_since,
-            now=inputs.now,
-            limit=inputs.stale_after,
-            zone=inputs.zone,
-        )
-        if line:
-            return line
-    alert = alert_shown(inputs=inputs)
+    )
+    if inputs.has_feed and live:
+        lines.append(Banner(text=live, warning=False))
+    alert = inputs.alert
     if alert is not None:
-        return alert.text
-    return no_feed_line(has_feed=inputs.has_feed)
+        lines.append(
+            Banner(
+                text=alert.text,
+                warning=alert.active,
+                planned=not alert.active,
+                more=alert.more,
+            ),
+        )
+    no_feed = no_feed_line(has_feed=inputs.has_feed)
+    if no_feed:
+        lines.append(Banner(text=no_feed, warning=False))
+    return tuple(lines)
 
 
 def lead_index(*, rows: Sequence[Row], hero: bool) -> int | None:
@@ -699,7 +679,7 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     -------
     StopView
         View-model, with scroll clamped to the rows that fit under any
-        banner. A notice takes the banner ahead of the live data one.
+        banner. A notice takes the banner ahead of every other line.
         With no destination there is no hero: every departure is a row.
     """
     upcoming = in_view(departures=inputs.departures, now=inputs.now)
@@ -720,9 +700,8 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
     lead = lead_index(rows=rows, hero=inputs.destination is not None)
     rest = [row for i, row in enumerate(rows) if i != lead]
     head = head_indexes(count=len(rows), lead=lead)
-    text = banner_text(inputs=inputs)
-    alert = alert_shown(inputs=inputs)
-    shown = row_count(large=inputs.large, under_banner=text is not None)
+    banner = inputs.notice or next(iter(banner_text(inputs=inputs)), None)
+    shown = row_count(large=inputs.large, under_banner=banner is not None)
     offset = max(0, min(inputs.scroll, len(rest) - shown))
     return StopView(
         origin=inputs.origin,
@@ -730,7 +709,7 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         clock=clock_text(moment=inputs.now, zone=inputs.zone),
         hero=None if lead is None else rows[lead],
         rows=tuple(rest[offset : offset + shown]),
-        banner=text,
+        banner=None if banner is None else banner.text,
         empty=None if rows else empty_text(
             destination=inputs.destination,
             loaded=inputs.loaded,
@@ -740,10 +719,9 @@ def build_stop_view(*, inputs: StopInputs) -> StopView:
         tag=inputs.tag,
         head_rows=tuple(rows[i] for i in head),
         head_departures=tuple(upcoming[i].departure for i in head),
-        warning=inputs.notice is not None
-        or (alert is not None and alert.active),
+        warning=banner is not None and banner.warning,
         large=inputs.large,
         inverted=inputs.inverted,
-        more=0 if alert is None else alert.more,
-        planned=alert is not None and not alert.active,
+        more=0 if banner is None else banner.more,
+        planned=banner is not None and banner.planned,
     )

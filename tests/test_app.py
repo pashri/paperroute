@@ -15,15 +15,31 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute_device.adapters.resets import FileResets
+from paperroute_device.core.device import NOTICE
 from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
     DeviceKey,
     DeviceStatus,
     PowerAction,
     ResetKind,
+    menu_rows,
 )
 from paperroute_device.core.device_settings import DeviceSettings
-from paperroute_device.core.kit_events import QuitRequested
+from paperroute_device.core.device_state import KitSaved
+from paperroute_device.core.kit_effects import (
+    ControlPower,
+    Render,
+    ResetDevice,
+    SaveState,
+)
+from paperroute_device.core.kit_events import (
+    PowerFailed,
+    QuitRequested,
+    ResetDone,
+    Tick,
+)
+from paperroute_device.core.kit_state import SAVE_WAIT
+from paperroute_device.core.panel_screens import menu_view
 from paperroute_device.core.panel_views import MenuView, NoticeView
 from paperroute_device.render.frame import HEADER
 from paperroute_device.render.notice import draw_notice_view
@@ -57,6 +73,7 @@ from paperroute_sydney.city import (
     SydneyFeed,
 )
 from paperroute_testkit.core.factories import pin_of, place
+from paperroute_testkit.core.steps import reset_asked
 from paperroute_testkit.fakes import (
     STOP_POINT,
     BrokenTimetable,
@@ -101,12 +118,10 @@ from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.core.alert_model import AlertsFetched
 from paperroute_transit.core.alerts_view import AlertRow, AlertsView, AlertText
 from paperroute_transit.core.cycle import CYCLE_WAIT
-from paperroute_transit.core.device import NOTICE, on_reset
 from paperroute_transit.core.feed_plan import FeedKind
 from paperroute_transit.core.geo import Point, Shape, make_shape
 from paperroute_transit.core.map_view import STRIP_MAP_WIDTH, MapBase, Marker
 from paperroute_transit.core.messages import (
-    ControlPower,
     Event,
     FeedFailed,
     FeedFetched,
@@ -117,21 +132,16 @@ from paperroute_transit.core.messages import (
     MapDataFailed,
     PinDeleted,
     PositionsFetched,
-    PowerFailed,
     RebuildTimetable,
-    Render,
-    ResetDevice,
-    ResetDone,
     SettingsChanged,
-    Tick,
     TimetableRebuilt,
     TimetableSeen,
 )
 from paperroute_transit.core.model import Departure, Pin, StopPlace
-from paperroute_transit.core.panel_screens import menu_view
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.places import shown
+from paperroute_transit.core.rebuild import REBUILD_ROW
 from paperroute_transit.core.saved import (
     BoardSettings,
     LiveView,
@@ -139,7 +149,7 @@ from paperroute_transit.core.saved import (
     default_saved,
     seeded,
 )
-from paperroute_transit.core.state_saves import SAVE_AFTER
+from paperroute_transit.core.state import device_of
 from paperroute_transit.core.state_views import LOADING_WAIT
 from paperroute_transit.core.stop_view import NOT_PINNED
 from paperroute_transit.core.tiles import (
@@ -172,6 +182,7 @@ from tests.app_factories import (
     ports_of,
     strip_map_view,
 )
+from tests.golden.scenes import GOLDEN
 
 
 @dataclass
@@ -2706,14 +2717,14 @@ async def test_app_reset_leaves_no_state_file(tmp_path: Path) -> None:
             tasks=tasks, outputs=outputs,
         )
     assert path.exists()
-    state, effects = on_reset(state=state, kind=ResetKind.SETTINGS)
+    state, effects = reset_asked(state=state, kind=ResetKind.SETTINGS)
     await carry_out(
         effects=effects, ports=ports, queue=queue, tasks=tasks,
         outputs=outputs,
     )
     await asyncio.gather(*tasks)
     after: tuple[Event, ...] = (
-        Tick(now=AT + SAVE_AFTER * 2),
+        Tick(now=AT + SAVE_WAIT * 2),
         next_of(queue=queue, kind=ResetDone),
     )
     for later in after:
@@ -2927,7 +2938,9 @@ async def test_app_runs_with_no_timetable(tmp_path: Path) -> None:
     finally:
         timetable.close()
         network.close()
-    menu = draw_panel_view(view=menu_view(state=state))
+    rows = menu_rows(app_rows=(REBUILD_ROW,))
+    shown = menu_view(device=device_of(state=state), rows=rows, zone=SYDNEY_ZONE)
+    menu = draw_panel_view(view=shown)
     first = frame_index(frames=display.frames, frame=building)
     assert 0 <= first < frame_index(frames=display.frames, frame=menu)
     assert state.rebuild.missing
@@ -3086,3 +3099,19 @@ async def test_app_draws_alerts_view() -> None:
     [frame] = display.frames
     assert frame.shape == (480, 800)
     assert np.array_equal(frame, draw_alerts_view(view=view))
+
+
+async def test_interim_loop_saves_the_board_section(tmp_path: Path) -> None:
+    """The saver writes the kit's save through today's state file."""
+    path = tmp_path / 'state.json'
+    path.write_bytes((GOLDEN / 'state.json').read_bytes())
+    repository = JsonStateRepository(path=path, city=SYDNEY)
+    saved = repository.load().saved
+    path.unlink()
+    saver = StateSaver(states=repository)
+    kept = KitSaved(device=saved.settings.device, app=saved)
+    await saver.save(effect=SaveState(saved=kept))
+    assert path.read_bytes() == (GOLDEN / 'state.json').read_bytes()
+    turned = replace(saved.settings.device, rotate=not kept.device.rotate)
+    await saver.save(effect=SaveState(saved=replace(kept, device=turned)))
+    assert repository.load().saved.settings.device == turned

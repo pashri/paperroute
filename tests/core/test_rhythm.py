@@ -8,6 +8,7 @@ import pytest
 from paperroute_device.core.device_settings import Window
 from paperroute_sydney.city import PEAK_WINDOWS, SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.factories import pin_of
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.rhythm import (
     frame_time,
     in_window,
@@ -23,7 +24,6 @@ from paperroute_transit.core.saved import (
     default_settings,
     seeded,
 )
-from paperroute_transit.core.state import initial_state
 from paperroute_transit.core.state_model import Calendar, Cycle, State
 
 MONDAY = date(2026, 10, 19)

@@ -7,7 +7,7 @@ from collections.abc import Callable
 from dataclasses import replace
 from typing import Final
 
-from paperroute_device.core.kit_events import QuitRequested
+from paperroute_device.core.kit_events import QuitRequested, Tick
 from paperroute_transit.app_device import (
     key_known,
     leftover_stopped,
@@ -19,11 +19,12 @@ from paperroute_transit.app_ports import Ports
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.app_work import perform
 from paperroute_transit.core.city import City
-from paperroute_transit.core.messages import Event, PinEdit, Tick
+from paperroute_transit.core.messages import Event, PinEdit
 from paperroute_transit.core.model import Pin
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.refresh import quick_now
 from paperroute_transit.core.saved import seeded
-from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import Places, State
 from paperroute_transit.core.tiles import TileVariant
 from paperroute_transit.observers import ObserverGroup

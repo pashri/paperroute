@@ -67,6 +67,8 @@ class FakeState:
         The device state `settle` was last handed.
     blank : bool
         Whether `render` keeps the last frame.
+    wake : bool
+        What `wakes` says.
     """
 
     view: str = 'live'
@@ -81,6 +83,7 @@ class FakeState:
     marked: bool = False
     device: DeviceState | None = None
     blank: bool = False
+    wake: bool = False
 
 
 class FakeApp(App[FakeState]):
@@ -484,6 +487,22 @@ class FakeApp(App[FakeState]):
         """
         del now
         return state.quiet
+
+    def wakes(self, *, state: FakeState) -> bool:
+        """
+        Say whether the app ends a Sleep now sleep.
+
+        Parameters
+        ----------
+        state : FakeState
+            State.
+
+        Returns
+        -------
+        bool
+            The state's flag.
+        """
+        return state.wake
 
     def saved(self, *, state: FakeState) -> object | None:
         """

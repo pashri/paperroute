@@ -8,6 +8,8 @@ import pytest
 
 from paperroute_device.core.device_events import ApiKeyChanged
 from paperroute_device.core.device_model import Menu, PanelScreen, WifiStatus
+from paperroute_device.core.kit_effects import Render
+from paperroute_device.core.kit_events import DeviceProbed, Tick
 from paperroute_device.core.panel_views import MenuView, NoticeView
 from paperroute_device.render.canvas import WIDTH, text_width
 from paperroute_device.render.notice import DETAIL_FACE
@@ -20,23 +22,23 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import START, begun, pin_at
-from paperroute_testkit.core.steps import answer_fetches, step_untouched
+from paperroute_testkit.core.steps import (
+    answer_fetches,
+    device_rows,
+    step_untouched,
+)
 from paperroute_transit.core.map_view import DEFAULT_ZOOM
 from paperroute_transit.core.messages import (
     ColumnLoaded,
-    DeviceProbed,
     Effect,
     Event,
     FetchFeed,
     LoadColumn,
     RebuildTimetable,
-    Render,
     SettingsChanged,
-    Tick,
     TimetableRebuilt,
     TimetableSeen,
 )
-from paperroute_transit.core.panel_screens import device_rows
 from paperroute_transit.core.rebuild import (
     BACKOFF_MAX,
     REBUILD_ROW,

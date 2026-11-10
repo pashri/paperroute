@@ -34,8 +34,8 @@ from paperroute_transit.core.reach import (
     build_reach,
 )
 from paperroute_transit.core.reach_layout import LineExit
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import Saved
-from paperroute_transit.core.state import initial_state
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import LOADING_WAIT
 from paperroute_transit.core.stop_view import (
@@ -97,8 +97,10 @@ def begun(*, saved: Saved, now: datetime = START) -> State:
     state = initial_state(
         saved=saved, now=now, stored=True, city=city_under_test(),
     )
-    refresh = replace(state.refresh, started_at=now - LOADING_WAIT)
-    return replace(state, refresh=refresh)
+    started = now - LOADING_WAIT
+    refresh = replace(state.refresh, started_at=started)
+    kit = replace(state.kit, started_at=started)
+    return replace(state, refresh=refresh, kit=kit)
 
 
 def place(

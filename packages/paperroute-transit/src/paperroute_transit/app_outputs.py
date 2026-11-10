@@ -4,21 +4,20 @@ import asyncio
 import logging
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import Final
+from typing import Final, cast
 
+from paperroute_device.core.kit_effects import (
+    ControlPower,
+    Render,
+    ResetDevice,
+)
 from paperroute_hardware.ports import CLEAN_AFTER
 from paperroute_transit.app_device import Reported
 from paperroute_transit.app_effects import StateSaver
 from paperroute_transit.app_ports import Ports
 from paperroute_transit.app_render import MapRenderer, View, render
 from paperroute_transit.app_work import perform
-from paperroute_transit.core.messages import (
-    ControlPower,
-    Effect,
-    Event,
-    Render,
-    ResetDevice,
-)
+from paperroute_transit.core.messages import Effect, Event, ScreenView
 
 logger = logging.getLogger(__name__)
 
@@ -157,7 +156,7 @@ async def carry_out(
     """
     for effect in effects:
         if isinstance(effect, Render):
-            outputs.pending.view = effect.view
+            outputs.pending.view = cast(ScreenView, effect.view)
             outputs.pending.full = outputs.pending.full or effect.full
             outputs.pending.clear = outputs.pending.clear or effect.clear
             continue

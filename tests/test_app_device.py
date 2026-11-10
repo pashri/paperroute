@@ -16,6 +16,23 @@ from paperroute_device.core.device_model import (
     ResetKind,
     WifiNetwork,
 )
+from paperroute_device.core.kit_effects import (
+    JoinWifi,
+    ProbeDevice,
+    ResetDevice,
+    StartWifiSetup,
+    StopWifiSetup,
+)
+from paperroute_device.core.kit_events import (
+    DeviceProbed,
+    DeviceProbeFailed,
+    HotspotFailed,
+    HotspotStarted,
+    ResetDone,
+    WifiJoined,
+    WifiJoinFailed,
+    WifiSetupStopped,
+)
 from paperroute_device_testkit.device_fakes import (
     FakeKeys,
     FakeProbe,
@@ -33,22 +50,7 @@ from paperroute_transit.app_device import (
     device_work,
     report_status,
 )
-from paperroute_transit.core.messages import (
-    DeviceProbed,
-    DeviceProbeFailed,
-    Event,
-    HotspotFailed,
-    HotspotStarted,
-    JoinWifi,
-    ProbeDevice,
-    ResetDevice,
-    ResetDone,
-    StartWifiSetup,
-    StopWifiSetup,
-    WifiJoined,
-    WifiJoinFailed,
-    WifiSetupStopped,
-)
+from paperroute_transit.core.messages import Event
 from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.state import step
 from paperroute_transit.observers import Timings

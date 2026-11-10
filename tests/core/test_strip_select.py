@@ -7,6 +7,7 @@ from typing import Final
 from hypothesis import given
 from hypothesis import strategies as st
 
+from paperroute_device.core.kit_events import Tick
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -16,7 +17,7 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_testkit.core.factories import START, line_pattern, live, train
 from paperroute_transit.core.cycle import cycle_held
-from paperroute_transit.core.messages import Event, Tick
+from paperroute_transit.core.messages import Event
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State

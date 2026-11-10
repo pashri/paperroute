@@ -6,10 +6,12 @@ from contextlib import closing
 from dataclasses import replace
 from datetime import date, datetime
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 import pytest
 
+from paperroute_device.core.kit_effects import Render
+from paperroute_device.core.kit_events import Tick
 from paperroute_device_testkit.device_fakes import FixedClock
 from paperroute_sydney.city import (
     SYDNEY,
@@ -32,13 +34,12 @@ from paperroute_transit.core.messages import (
     Effect,
     Event,
     LoadDepartures,
-    Render,
     ScreenView,
-    Tick,
 )
 from paperroute_transit.core.model import Change, Pin, Way
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
-from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.ports import TimetableRepository
 from tests.app_factories import ports_of, posted_by
@@ -182,7 +183,7 @@ async def settled_view(*, ports: Ports, state: State) -> ScreenView | None:
                 if not isinstance(effect, Render)
             ],
         )
-    return view
+    return cast(ScreenView | None, view)
 
 
 def connection_strip(

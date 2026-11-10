@@ -239,3 +239,19 @@ def test_app_menu_left_open_keeps_the_wake() -> None:
     assert not kit.device.panel.asleep
     kit, _ = kit_step(kit=kit, event=Tick(now=idle + WAKE_FOR))
     assert kit.device.panel.asleep
+
+
+def test_app_ends_a_sleep_now_sleep() -> None:
+    """A tick the app asks to wake on ends a Sleep now sleep only."""
+    kit, _ = kit_step(kit=opened_at(row=MenuRow.SLEEP), event=DOWN)
+    kit = replace(kit, app=replace(kit.app, wake=True))
+    woken, effects = kit_step(kit=kit, event=LATER)
+    assert not woken.device.panel.asleep
+    assert renders(effects=effects) == ['view:live']
+    quiet = with_settings(kit=drawn(), settings=QUIET_NOW)
+    kit, _ = kit_step(kit=quiet, event=LATER)
+    assert kit.device.panel.by_quiet
+    kit = replace(kit, app=replace(kit.app, wake=True))
+    later = Tick(now=LATER.now + timedelta(seconds=30))
+    kit, _ = kit_step(kit=kit, event=later)
+    assert kit.device.panel.asleep

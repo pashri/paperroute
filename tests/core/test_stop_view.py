@@ -7,11 +7,13 @@ from typing import Final
 from hypothesis import given
 from hypothesis import strategies as st
 
+from paperroute_device.core.banners import no_wifi_banner
+from paperroute_device.core.device_state import Banner
 from paperroute_device.core.text import DOT, clock_text
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyFeed, SydneyMode
 from paperroute_testkit.core.factories import START, departure
 from paperroute_transit.core.alert_model import AlertBanner
-from paperroute_transit.core.banners import NO_WIFI
+from paperroute_transit.core.banners import OFFLINE_PHRASE
 from paperroute_transit.core.city import Nouns
 from paperroute_transit.core.live import LiveDeparture
 from paperroute_transit.core.model import CarryOn, TripFacts
@@ -123,7 +125,7 @@ def view(
     alert : AlertBanner | None
         The pin's alert line, if any.
     notice : str | None
-        A device warning, if any.
+        A device warning, if any; an empty one counts as none.
     stale_after : timedelta
         How old live data may be before it is stale.
 
@@ -144,7 +146,7 @@ def view(
             stale_after=stale_after,
             large=large,
             alert=alert,
-            notice=notice,
+            notice=Banner(text=notice) if notice else None,
             zone=SYDNEY_ZONE,
             city=SYDNEY,
         ),
@@ -770,6 +772,7 @@ COMING: Final[AlertBanner] = AlertBanner(
     text=f'From Sat 6:00{DOT}{XPLORER.header}', active=False, more=0,
 )
 NO_FEED: Final[str] = f'Timetable times{DOT}no live feed for this service'
+NO_WIFI: Final[str] = no_wifi_banner(phrase=OFFLINE_PHRASE)
 
 
 def test_device_warning_beats_alert() -> None:

@@ -11,10 +11,10 @@ import sys
 import time
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import replace
 from datetime import datetime, tzinfo
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, Protocol
+from typing import TYPE_CHECKING, Final
 
 from paperroute_device.adapters.act_led import ActLed
 from paperroute_device.adapters.clocks import ReplayClock, SystemClock
@@ -23,11 +23,9 @@ from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.systemd import SystemdNotifier
 from paperroute_device.adapters.web_device import DevicePages
-from paperroute_device.adapters.web_frame import NavItem
 from paperroute_device.adapters.web_server import BindError, serving
 from paperroute_device.adapters.wifi import NmcliWifi, NullWifi
-from paperroute_device.assets import AssetRoot, use_assets
-from paperroute_device.core.device_model import DeviceKey
+from paperroute_device.assets import use_assets
 from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.logs import LastError, configure_logging
 from paperroute_device.ports import (
@@ -45,7 +43,7 @@ from paperroute_hardware.knobs_open import knobs_for, knobs_state_for
 from paperroute_hardware.panel_open import panel_for, panel_times_for
 from paperroute_hardware.selftest import selftest_main
 from paperroute_transit.adapters.board_head import BoardHead
-from paperroute_transit.adapters.board_pages import PinPages, WaysPlug
+from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.checked_tiles import CheckedTiles, warn_unfit
 from paperroute_transit.adapters.device_data import data_section
 from paperroute_transit.adapters.feed_files import FileFeedsClient
@@ -66,13 +64,10 @@ from paperroute_transit.adapters.tiles_db import (
     SqliteTileRepository,
 )
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
-from paperroute_transit.adapters.web_display import (
-    RESET_HINT,
-    StatusLine,
-    WebDisplay,
-)
+from paperroute_transit.adapters.web_display import RESET_HINT, WebDisplay
 from paperroute_transit.app import Ports, run
 from paperroute_transit.app_device import DevicePorts
+from paperroute_transit.city_parts import CityParts, LiveFeeds
 from paperroute_transit.core.city import City
 from paperroute_transit.core.messages import Event
 from paperroute_transit.core.model import Pin, StopPlace
@@ -95,90 +90,6 @@ STOP_SIGNALS: Final[tuple[signal.Signals, ...]] = (
     signal.SIGINT,
 )
 DATA_DIR: Final[Path] = Path('/var/lib/paperroute')
-
-
-class LiveFeeds(Protocol):
-    """Makes the client of the city's live feeds."""
-
-    def __call__(self) -> FeedsClient:
-        """
-        Make the client.
-
-        Returns
-        -------
-        FeedsClient
-            The live client.
-        """
-
-
-class DeviceKeys(Protocol):
-    """Gives the API keys the device keeps for the city."""
-
-    def __call__(self) -> Sequence[DeviceKey]:
-        """
-        Give the keys.
-
-        Returns
-        -------
-        Sequence[DeviceKey]
-            The keys, in declaration order; the probe and the resets
-            cover every one.
-        """
-
-
-class SuggestFor(Protocol):
-    """Makes the city's suggestion plug for the ways page."""
-
-    def __call__(self, *, live: bool) -> WaysPlug | None:
-        """
-        Make the plug.
-
-        Parameters
-        ----------
-        live : bool
-            Whether the feeds are live.
-
-        Returns
-        -------
-        WaysPlug | None
-            The plug, or None for no suggestions.
-        """
-
-
-@dataclass(frozen=True)
-class CityParts:
-    """
-    The runtime wiring a city gives the board.
-
-    Attributes
-    ----------
-    assets : AssetRoot
-        The city's web files.
-    live_feeds : LiveFeeds
-        Makes the live feeds client; never called for replayed feeds.
-    keys : DeviceKeys
-        Gives the device's API keys; never called for replayed feeds.
-    nav : tuple[NavItem, ...]
-        The web pages' nav.
-    hint : str
-        The live page's knob hint.
-    suggest : SuggestFor
-        Makes the ways page's suggestion plug.
-    status_line : StatusLine
-        Writes the live page's status line.
-    sheets : tuple[str, ...]
-        The city's stylesheets in its web directory, linked by every
-        page straight after `/live.css`.
-    """
-
-    assets: AssetRoot
-    live_feeds: LiveFeeds
-    keys: DeviceKeys
-    nav: tuple[NavItem, ...]
-    hint: str
-    suggest: SuggestFor
-    status_line: StatusLine
-    sheets: tuple[str, ...]
 
 
 def add_pin_arguments(parser: argparse.ArgumentParser) -> None:

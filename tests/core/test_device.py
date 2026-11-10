@@ -4,6 +4,8 @@ from datetime import time, timedelta
 
 import pytest
 
+from paperroute_device.core.banners import no_key_banner
+from paperroute_device.core.device import NOTICE, PROBE_EVERY, device_status
 from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
     DeviceStatus,
@@ -15,7 +17,23 @@ from paperroute_device.core.device_settings import (
     QuietMode,
     Window,
 )
-from paperroute_device.core.kit_events import QuitRequested
+from paperroute_device.core.kit_effects import (
+    ControlPower,
+    ProbeDevice,
+    Render,
+    ResetDevice,
+    SaveState,
+    Stop,
+)
+from paperroute_device.core.kit_events import (
+    DeviceProbed,
+    DeviceProbeFailed,
+    PowerFailed,
+    QuitRequested,
+    ResetDone,
+    Tick,
+)
+from paperroute_device.core.kit_state import SAVE_WAIT
 from paperroute_device.core.panel_views import NoticeView
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import (
@@ -26,31 +44,12 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_sydney.city import PEAK_WINDOWS, SYDNEY
 from paperroute_testkit.core.factories import START
-from paperroute_testkit.core.steps import step_untouched
-from paperroute_transit.core.banners import no_key_banner
-from paperroute_transit.core.device import (
-    NOTICE,
-    PROBE_EVERY,
-    app_status,
-    device_status,
-    on_reset,
-    on_settings,
-)
+from paperroute_testkit.core.steps import reset_asked, step_untouched, written
+from paperroute_transit.core.device import app_status, on_settings
 from paperroute_transit.core.messages import (
-    ControlPower,
-    DeviceProbed,
-    DeviceProbeFailed,
     FetchFeed,
-    PowerFailed,
-    ProbeDevice,
     RebuildTimetable,
-    Render,
-    ResetDevice,
-    ResetDone,
-    SaveState,
     SettingsChanged,
-    Stop,
-    Tick,
 )
 from paperroute_transit.core.saved import (
     BoardSettings,
@@ -60,9 +59,8 @@ from paperroute_transit.core.saved import (
     Settings,
     default_settings,
 )
-from paperroute_transit.core.state import step
+from paperroute_transit.core.state import device_of, step
 from paperroute_transit.core.state_model import State
-from paperroute_transit.core.state_saves import SAVE_AFTER
 from paperroute_transit.core.state_views import stop_view_of
 from paperroute_transit.core.stop_view import StopView
 from tests.core.test_rebuild import failed_at, pinned
@@ -76,11 +74,11 @@ def test_settings_change_is_saved() -> None:
     assert before.last_view is not None
     state, effects = step(before, event)
     assert effects == (Render(view=before.last_view, full=True),)
-    _, effects = step(state, Tick(now=START + SAVE_AFTER * 2))
+    _, effects = step(state, Tick(now=START + SAVE_WAIT * 2))
     saves = [effect for effect in effects if isinstance(effect, SaveState)]
     assert len(saves) == 1
-    assert saves[0].saved.settings.board.auto_rebuild is False
-    assert saves[0].saved.settings.device.rotate is True
+    assert written(save=saves[0]).settings.board.auto_rebuild is False
+    assert written(save=saves[0]).settings.device.rotate is True
 
 
 def test_settings_change_merges() -> None:
@@ -378,7 +376,7 @@ def test_device_status() -> None:
     """The status gathers the keys and facts, and nothing of the app's."""
     state, _ = step(loaded(state=fresh()), at(seconds=30))
     state, _ = step(state, DeviceProbed(facts=device_facts()))
-    status = device_status(state=state)
+    status = device_status(device=device_of(state=state))
     assert status == DeviceStatus(missing_keys=(), facts=device_facts())
 
 
@@ -413,13 +411,13 @@ def resetting(*, kind: ResetKind) -> State:
     State
         The state after the reset was asked for.
     """
-    state, _ = on_reset(state=pinned(), kind=kind)
+    state, _ = reset_asked(state=pinned(), kind=kind)
     return state
 
 
 def test_reset_draws_notice_then_resets() -> None:
     """A reset draws its notice, then resets, and saves nothing."""
-    state, effects = on_reset(state=pinned(), kind=ResetKind.SETTINGS)
+    state, effects = reset_asked(state=pinned(), kind=ResetKind.SETTINGS)
     notice = NoticeView(
         title='Resetting settings',
         detail='paperroute starts again by itself',
@@ -435,9 +433,9 @@ def test_reset_draws_notice_then_resets() -> None:
 def test_no_save_after_reset_asked() -> None:
     """After a reset is asked for, nothing saves; a quit still stops."""
     state, _ = step(pinned(), SettingsChanged(auto_rebuild=False))
-    state, _ = on_reset(state=state, kind=ResetKind.ERASE)
+    state, _ = reset_asked(state=state, kind=ResetKind.ERASE)
     for seconds in (1, 10, 60):
-        tick = Tick(now=START + SAVE_AFTER + timedelta(seconds=seconds))
+        tick = Tick(now=START + SAVE_WAIT + timedelta(seconds=seconds))
         state, effects = step(state, tick)
         assert not [e for e in effects if isinstance(e, SaveState | Render)]
     _, effects = step(state, QuitRequested())
@@ -455,7 +453,7 @@ def test_reset_done_stops() -> None:
 def test_second_reset_ignored() -> None:
     """A second reset while one is under way does nothing."""
     state = resetting(kind=ResetKind.SETTINGS)
-    after, effects = on_reset(state=state, kind=ResetKind.ERASE)
+    after, effects = reset_asked(state=state, kind=ResetKind.ERASE)
     assert after is state
     assert not effects
 
@@ -463,7 +461,7 @@ def test_second_reset_ignored() -> None:
 def test_reset_ignored_while_powering() -> None:
     """A reset while a power action is under way does nothing."""
     state = powering(action=PowerAction.OFF)
-    after, effects = on_reset(state=state, kind=ResetKind.ERASE)
+    after, effects = reset_asked(state=state, kind=ResetKind.ERASE)
     assert after is state
     assert not effects
 
@@ -472,7 +470,7 @@ def test_no_rebuild_while_resetting() -> None:
     """A tick during a reset starts no timetable rebuild."""
     tick = Tick(now=START + timedelta(minutes=61))
     _, due = step(failed_at(minutes=0), tick)
-    state, _ = on_reset(state=failed_at(minutes=0), kind=ResetKind.ERASE)
+    state, _ = reset_asked(state=failed_at(minutes=0), kind=ResetKind.ERASE)
     _, effects = step(state, tick)
     assert [type(e) for e in due].count(RebuildTimetable) == 1
     assert not [e for e in effects if isinstance(e, RebuildTimetable)]

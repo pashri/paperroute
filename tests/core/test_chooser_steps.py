@@ -7,6 +7,8 @@ from typing import Final
 
 import pytest
 
+from paperroute_device.core.kit_effects import Render
+from paperroute_device.core.kit_events import Tick
 from paperroute_hardware.core.knob_events import Knob, KnobHeld, KnobTurned
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.factories import (
@@ -42,9 +44,7 @@ from paperroute_transit.core.messages import (
     LoadPatterns,
     LoadStrip,
     PatternsLoaded,
-    Render,
     StripLoaded,
-    Tick,
     TimetableSeen,
 )
 from paperroute_transit.core.model import Departure, Pin, shifted

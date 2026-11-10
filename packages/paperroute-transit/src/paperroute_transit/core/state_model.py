@@ -3,9 +3,10 @@
 from collections.abc import Mapping
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, timedelta, tzinfo
-from typing import Final
+from typing import Final, cast
 
 from paperroute_device.core.device_model import Panel, PowerAction
+from paperroute_device.core.device_state import DeviceState, KitSaved
 from paperroute_transit.core.alert_model import AlertsState
 from paperroute_transit.core.auto_model import AutoState
 from paperroute_transit.core.chains import Legs
@@ -16,7 +17,7 @@ from paperroute_transit.core.messages import ScreenView
 from paperroute_transit.core.model import Departure, Pin, ServiceSpan, shifted
 from paperroute_transit.core.reach import Reach, StripKey
 from paperroute_transit.core.realtime import RealtimeSnapshot
-from paperroute_transit.core.saved import LiveView, Quota, Saved, Settings
+from paperroute_transit.core.saved import LiveView, Quota, Settings
 from paperroute_transit.core.stop_view import HORIZON
 from paperroute_transit.core.strip_model import TripDay
 
@@ -147,28 +148,19 @@ class Places:
 @dataclass(frozen=True)
 class Saving:
     """
-    What was last saved, and when the saved state last changed.
+    The timetable the places were last matched against.
 
     Attributes
     ----------
-    saved : Saved | None
-        What was last written, or None when nothing has been.
-    changed_at : datetime | None
-        When the saved state last changed, or None since start.
     timetable : str | None
         The timetable version the places were last matched against.
     match_failed_at : datetime | None
         When matching the places last failed, or None when no retry is
         due.
-    quota_at : datetime | None
-        When a quota was last written, or None since start.
     """
 
-    saved: Saved | None = None
-    changed_at: datetime | None = None
     timetable: str | None = None
     match_failed_at: datetime | None = None
-    quota_at: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -331,6 +323,45 @@ class Cycle:
 
 
 @dataclass(frozen=True)
+class KitMirror:
+    """
+    The device kit's own fields, carried between steps.
+
+    Transit's reducers never read them.
+
+    Attributes
+    ----------
+    changed_at : datetime | None
+        When what is saved last changed, or None.
+    saved : KitSaved | None
+        What was last written, or None before anything was.
+    stored : bool
+        Whether the state at start-up came from the file.
+    last_was_sleep : bool
+        Whether the view last drawn was the sleep screen.
+    started_at : datetime | None
+        The kit's time of the first event, or None before it.
+    in_menu : bool
+        Whether the view last drawn was a menu.
+    set_at : datetime | None
+        When the clock was last found synchronised after a wait, or
+        None.
+    written_at : datetime | None
+        When what is kept was last written, or None before anything
+        was.
+    """
+
+    changed_at: datetime | None = None
+    saved: KitSaved | None = None
+    stored: bool = False
+    last_was_sleep: bool = False
+    started_at: datetime | None = None
+    in_menu: bool = False
+    set_at: datetime | None = None
+    written_at: datetime | None = None
+
+
+@dataclass(frozen=True)
 # pylint: disable-next=too-many-instance-attributes
 class State:
     """
@@ -397,6 +428,12 @@ class State:
     clock_known : bool
         False from start-up until the first tick says whether the clock
         is synchronised; the app waits for the clock meanwhile.
+    held : bool
+        True when the event leaves the frame for the next one to draw.
+    wake : bool
+        True when the tick ends a Sleep now sleep.
+    kit : KitMirror
+        The device kit's own fields, which only the kit reads.
     """
 
     now: datetime
@@ -427,6 +464,9 @@ class State:
     clock_wait_until: datetime | None = None
     clock_gave_up: bool = False
     clock_known: bool = True
+    held: bool = False
+    wake: bool = False
+    kit: KitMirror = KitMirror()
 
 
 def clock_waiting(*, state: State) -> bool:
@@ -469,3 +509,59 @@ def restarted(*, state: State) -> State:
     """
     cycle = Cycle(alerts_at=state.cycle.alerts_at, free=state.cycle.free)
     return replace(state, cycle=cycle)
+
+
+def with_device(*, state: State, device: DeviceState) -> State:
+    """
+    Refresh the state's mirror of the device kit's state.
+
+    Parameters
+    ----------
+    state : State
+        State.
+    device : DeviceState
+        The kit's device state.
+
+    Returns
+    -------
+    State
+        State with the time, panel, device settings, power action, clock
+        wait, touch, menu flag and view last drawn taken from `device`;
+        `state` itself when they already match.
+    """
+    clock = device.clock
+    mirror = (
+        state.now,
+        state.panel,
+        state.settings.device,
+        state.power,
+        (state.clock_wait_until, state.clock_gave_up, state.clock_known),
+        (state.refresh.touched_at, state.refresh.in_menu),
+        state.last_view,
+    )
+    given = (
+        device.now,
+        device.panel,
+        device.settings,
+        device.power,
+        (clock.wait_until, clock.gave_up, clock.known),
+        (device.touched_at, device.in_menu),
+        device.last_view,
+    )
+    if mirror == given:
+        return state
+    refresh = replace(
+        state.refresh, touched_at=device.touched_at, in_menu=device.in_menu,
+    )
+    return replace(
+        state,
+        now=device.now,
+        panel=device.panel,
+        settings=replace(state.settings, device=device.settings),
+        power=device.power,
+        clock_wait_until=clock.wait_until,
+        clock_gave_up=clock.gave_up,
+        clock_known=clock.known,
+        refresh=refresh,
+        last_view=cast(ScreenView | None, device.last_view),
+    )

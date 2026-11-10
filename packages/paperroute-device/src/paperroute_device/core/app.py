@@ -167,6 +167,9 @@ class App[S](ABC):
         """
         Find an event to post just before each tick.
 
+        It must not raise: an app logs and swallows its own read errors,
+        so a failing read leaves the loop running.
+
         Returns
         -------
         object | None
@@ -622,6 +625,26 @@ class App[S](ABC):
         del state, now
         return False
 
+    def wakes(self, *, state: S) -> bool:
+        """
+        Say whether the app ends a Sleep now sleep.
+
+        Asked after each tick while the screen sleeps by hand; quiet
+        hours alone end a quiet sleep.
+
+        Parameters
+        ----------
+        state : S
+            The app's state after the tick.
+
+        Returns
+        -------
+        bool
+            By default False.
+        """
+        del state
+        return False
+
     def sleep_view(
         self, *, state: S, device: DeviceState,
     ) -> object | None:
@@ -668,6 +691,8 @@ class App[S](ABC):
     def status(self, *, state: S) -> Mapping[str, object]:
         """
         Gather what the app reports about itself.
+
+        It must not raise.
 
         Parameters
         ----------
@@ -752,6 +777,8 @@ class App[S](ABC):
     def observe(self, *, before: S, after: S, event: object) -> None:
         """
         Report a step to the app's own observers.
+
+        It must not raise.
 
         Parameters
         ----------

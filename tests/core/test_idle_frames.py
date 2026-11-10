@@ -4,6 +4,8 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timedelta
 from typing import Final
 
+from paperroute_device.core.kit_effects import Render
+from paperroute_device.core.kit_events import Tick
 from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.factories import (
     START,
@@ -26,8 +28,6 @@ from paperroute_transit.core.messages import (
     LoadPatterns,
     PatternsLoaded,
     PositionsFetched,
-    Render,
-    Tick,
 )
 from paperroute_transit.core.model import service_seconds
 from paperroute_transit.core.patterns import TripPattern

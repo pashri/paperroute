@@ -3,6 +3,8 @@
 from dataclasses import replace
 from datetime import datetime, timedelta
 
+from paperroute_device.core.kit_effects import Render
+from paperroute_device.core.kit_events import Tick
 from paperroute_device.core.panel_views import MenuView
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -15,11 +17,12 @@ from paperroute_testkit.core.factories import START
 from paperroute_testkit.core.steps import step_answered
 from paperroute_transit.core.chooser import ChooserState
 from paperroute_transit.core.map_view import MapView
-from paperroute_transit.core.messages import Effect, Render, Tick
+from paperroute_transit.core.messages import Effect
 from paperroute_transit.core.panel_views import SleepView
+from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.refresh import quick_now
 from paperroute_transit.core.saved import LiveView, seeded
-from paperroute_transit.core.state import initial_state, step
+from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import StopView
 from tests.core.test_state import PIN, PRESS, effects_of, fresh, loaded

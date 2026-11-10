@@ -8,8 +8,9 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from datetime import datetime
-from typing import Final
+from typing import Final, cast
 
+from paperroute_device.core.kit_effects import SaveState
 from paperroute_transit.app_connections import between_read
 from paperroute_transit.core.alert_model import (
     AlertPlaces,
@@ -47,7 +48,6 @@ from paperroute_transit.core.messages import (
     PlacesFailed,
     PlacesMatched,
     PositionsFetched,
-    SaveState,
     ServiceSpanLoaded,
     ShapesLoaded,
     StripFailed,
@@ -57,6 +57,7 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.positions import PositionsSnapshot, with_labels
 from paperroute_transit.core.reach import build_reach
+from paperroute_transit.core.saved import Saved
 from paperroute_transit.measures import StopMeasures
 from paperroute_transit.ports import (
     NetworkRepository,
@@ -122,13 +123,21 @@ class StateSaver:
         """
         Write the state in a worker thread; a write error is never raised.
 
+        The kit's save holds the device settings beside transit's part;
+        the file is written from transit's part with those settings.
+
         Parameters
         ----------
         effect : SaveState
             What to write.
         """
+        kept = effect.saved
+        saved = cast(Saved, kept.app)
+        settings = replace(saved.settings, device=kept.device)
         try:
-            await asyncio.to_thread(self.states.save, saved=effect.saved)
+            await asyncio.to_thread(
+                self.states.save, saved=replace(saved, settings=settings),
+            )
         except OSError as error:
             kind = (type(error), error.errno, error.strerror)
             if kind not in self.logged:

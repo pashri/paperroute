@@ -12,6 +12,8 @@ import numpy as np
 import pytest
 from google.transit import gtfs_realtime_pb2
 
+from paperroute_device.core.device_state import KitSaved
+from paperroute_device.core.kit_effects import Render, SaveState
 from paperroute_device_testkit.hardware_fakes import FrameRecorder
 from paperroute_sydney.city import (
     SYDNEY,
@@ -67,8 +69,6 @@ from paperroute_transit.core.messages import (
     ModesLoaded,
     PlacesFailed,
     PlacesMatched,
-    Render,
-    SaveState,
     ServiceSpanLoaded,
     StripFailed,
     StripLoaded,
@@ -102,9 +102,10 @@ async def test_save_effect_writes_through_store() -> None:
     """SaveState writes the saved state to the store and posts nothing."""
     states = MemoryStates()
     saved = seeded(pin=MAP_PIN, city=SYDNEY)
-    posted = await posted_by(
-        ports=ports_of(states=states), effects=[SaveState(saved=saved)]
+    save = SaveState(
+        saved=KitSaved(device=saved.settings.device, app=saved),
     )
+    posted = await posted_by(ports=ports_of(states=states), effects=[save])
     assert states.saves == [saved]
     assert not posted
 
@@ -114,7 +115,10 @@ async def test_save_failure_is_logged_not_raised(
 ) -> None:
     """A failing write is logged once for the same message, never raised."""
     states = MemoryStates(error=OSError(30, 'Read-only file system'))
-    save = SaveState(saved=seeded(pin=MAP_PIN, city=SYDNEY))
+    saved = seeded(pin=MAP_PIN, city=SYDNEY)
+    save = SaveState(
+        saved=KitSaved(device=saved.settings.device, app=saved),
+    )
     with caplog.at_level(logging.ERROR):
         await posted_by(ports=ports_of(states=states), effects=[save, save])
     failures = [
@@ -478,7 +482,10 @@ async def test_save_failure_naming_new_temp_files_logs_once(
 ) -> None:
     """The same write error is logged once whatever temp file it names."""
     states = TempNamingStates()
-    save = SaveState(saved=seeded(pin=MAP_PIN, city=SYDNEY))
+    saved = seeded(pin=MAP_PIN, city=SYDNEY)
+    save = SaveState(
+        saved=KitSaved(device=saved.settings.device, app=saved),
+    )
     with caplog.at_level(logging.ERROR):
         await posted_by(
             ports=ports_of(states=states), effects=[save, save, save]

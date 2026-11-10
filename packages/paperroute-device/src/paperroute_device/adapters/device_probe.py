@@ -12,10 +12,8 @@ from paperroute_device.core.device_model import (
     WifiStatus,
     missing_keys,
 )
+from paperroute_device.logs import LastError
 from paperroute_device.ports import WifiControl
-from paperroute_transit.core.panel_screens import TilesFacts
-from paperroute_transit.logs import LastError
-from paperroute_transit.ports import TileRepository
 
 UPTIME: Final[str] = 'proc/uptime'
 TEMPERATURE: Final[str] = 'sys/class/thermal/thermal_zone0/temp'
@@ -128,23 +126,6 @@ def disk_free(*, path: Path) -> int | None:
         return shutil.disk_usage(path).free
     except OSError:
         return None
-
-
-async def tiles_facts(*, tiles: TileRepository) -> TilesFacts:
-    """
-    Find out when the map tiles were built, off the event loop.
-
-    Parameters
-    ----------
-    tiles : TileRepository
-        The map tiles.
-
-    Returns
-    -------
-    TilesFacts
-        The build time, or None with no tiles.
-    """
-    return TilesFacts(built=await asyncio.to_thread(tiles.version))
 
 
 class SystemProbe:

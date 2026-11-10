@@ -21,13 +21,15 @@ import numpy as np
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
-import paperroute_transit.adapters.tk_monitor as tk_monitor
+import paperroute_device.adapters.tk_monitor as tk_monitor
 import paperroute_transit.board as cli
+from paperroute_device.adapters.clocks import ReplayClock
 from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.adapters.wifi import NmcliWifi, NullWifi
 from paperroute_device.core.device_model import DeviceKey
+from paperroute_device.logs import LastError
 from paperroute_device.render.canvas import INK
 from paperroute_device_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_device_testkit.hardware_fakes import (
@@ -64,7 +66,6 @@ from paperroute_testkit.core.factories import pin_of
 from paperroute_testkit.fakes import FakeNetwork, MemoryStates
 from paperroute_testkit.page_markup import parse_page
 from paperroute_transit.adapters.checked_tiles import CheckedTiles
-from paperroute_transit.adapters.clocks import ReplayClock
 from paperroute_transit.adapters.feed_files import FileFeedsClient
 from paperroute_transit.adapters.feed_guard import GuardedFeeds
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
@@ -107,7 +108,6 @@ from paperroute_transit.core.tiles import (
     TileVariant,
     levels_text,
 )
-from paperroute_transit.logs import LastError
 from paperroute_transit.observers import Timings
 from paperroute_transit.ports import FeedsClient
 from paperroute_transit.render.map_base import draw_map_base
@@ -115,7 +115,7 @@ from paperroute_transit.summary import Summary
 from paperroute_transit.web_observer import web_observer
 
 if TYPE_CHECKING:
-    from paperroute_transit.adapters.tk_monitor import TkMonitor
+    from paperroute_device.adapters.tk_monitor import TkMonitor
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY_ZONE)

@@ -23,6 +23,7 @@ from paperroute_device.core.device_model import (
     ResetKind,
 )
 from paperroute_device.core.device_settings import DeviceSettings
+from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.core.panel_views import MenuView, NoticeView
 from paperroute_device.render.frame import HEADER
 from paperroute_device.render.notice import draw_notice_view
@@ -117,7 +118,6 @@ from paperroute_transit.core.messages import (
     PinDeleted,
     PositionsFetched,
     PowerFailed,
-    QuitRequested,
     RebuildTimetable,
     Render,
     ResetDevice,

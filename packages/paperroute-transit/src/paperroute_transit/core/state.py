@@ -10,6 +10,7 @@ from paperroute_device.core.device_events import (
     JoinAsked,
     PowerRequested,
 )
+from paperroute_device.core.kit_events import QuitRequested
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobEvent,
@@ -85,7 +86,6 @@ from paperroute_transit.core.messages import (
     PlacesMatched,
     PositionsFetched,
     PowerFailed,
-    QuitRequested,
     ResetDone,
     ServiceSpanLoaded,
     SettingsChanged,

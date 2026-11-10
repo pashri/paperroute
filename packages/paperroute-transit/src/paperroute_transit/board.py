@@ -17,6 +17,8 @@ from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
 
+from paperroute_device.adapters.clocks import ReplayClock, SystemClock
+from paperroute_device.adapters.device_probe import SystemProbe
 from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.web_device import DevicePages
@@ -25,6 +27,8 @@ from paperroute_device.adapters.web_server import BindError, serving
 from paperroute_device.adapters.wifi import NmcliWifi, NullWifi
 from paperroute_device.assets import AssetRoot, use_assets
 from paperroute_device.core.device_model import DeviceKey
+from paperroute_device.core.kit_events import QuitRequested
+from paperroute_device.logs import LastError, configure_logging
 from paperroute_device.ports import (
     Clock,
     KeyStore,
@@ -42,9 +46,7 @@ from paperroute_hardware.selftest import selftest_main
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages, WaysPlug
 from paperroute_transit.adapters.checked_tiles import CheckedTiles, warn_unfit
-from paperroute_transit.adapters.clocks import ReplayClock, SystemClock
 from paperroute_transit.adapters.device_data import data_section
-from paperroute_transit.adapters.device_probe import SystemProbe, tiles_facts
 from paperroute_transit.adapters.feed_files import FileFeedsClient
 from paperroute_transit.adapters.feed_guard import GuardedFeeds
 from paperroute_transit.adapters.leg_cache import LegCache
@@ -61,6 +63,7 @@ from paperroute_transit.adapters.state_file import JsonStateRepository
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
     SqliteTileRepository,
+    tiles_facts,
 )
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.adapters.web_display import (
@@ -71,10 +74,9 @@ from paperroute_transit.adapters.web_display import (
 from paperroute_transit.app import Ports, run
 from paperroute_transit.app_device import DevicePorts
 from paperroute_transit.core.city import City
-from paperroute_transit.core.messages import Event, QuitRequested
+from paperroute_transit.core.messages import Event
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.tiles import TileVariant
-from paperroute_transit.logs import LastError, configure_logging
 from paperroute_transit.observers import Timings
 from paperroute_transit.ports import (
     FeedsClient,
@@ -85,7 +87,7 @@ from paperroute_transit.summary import Summary
 from paperroute_transit.web_observer import web_observer
 
 if TYPE_CHECKING:
-    from paperroute_transit.adapters.tk_monitor import TkMonitor
+    from paperroute_device.adapters.tk_monitor import TkMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -915,7 +917,7 @@ def tk_main(
     last_error : LastError | None
         Holds the latest error logged; a new one by default.
     """
-    from paperroute_transit.adapters.tk_monitor import (  # pylint: disable=C0415
+    from paperroute_device.adapters.tk_monitor import (  # pylint: disable=C0415
         TkMonitor,
     )
 

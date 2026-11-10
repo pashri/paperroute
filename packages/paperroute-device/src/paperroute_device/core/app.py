@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from collections.abc import Callable, Mapping
-from datetime import datetime
+from datetime import datetime, tzinfo
 from typing import Final, Protocol
 
 from paperroute_device.core.device_model import AppRow
@@ -97,6 +97,41 @@ class App[S](ABC):
     menu_rows: tuple[AppRow, ...] = ()
     reset_hint: str = KIT_RESET_HINT
     confirm_copy: ConfirmCopy = KIT_CONFIRM_COPY
+
+    # pylint: disable-next=useless-return
+    def section(self) -> SectionCodec | None:
+        """
+        Give the codec of the app's section of the state file.
+
+        Returns
+        -------
+        SectionCodec | None
+            By default None: the app keeps no section.
+        """
+        return None
+
+    def migrations(self) -> Mapping[int, MigrationStep]:
+        """
+        Give the app's steps in the state file's one migration chain.
+
+        Returns
+        -------
+        Mapping[int, MigrationStep]
+            The step that brings each version up one; by default none.
+        """
+        return {}
+
+    # pylint: disable-next=useless-return
+    def zone(self) -> tzinfo | None:
+        """
+        Give the app's local time zone.
+
+        Returns
+        -------
+        tzinfo | None
+            By default None: the app has no time zone.
+        """
+        return None
 
     @abstractmethod
     def start(

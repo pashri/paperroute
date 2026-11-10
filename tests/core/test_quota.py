@@ -3,6 +3,7 @@
 from dataclasses import replace
 from datetime import date, datetime, timedelta
 
+from paperroute_device.core.kit_events import QuitRequested
 from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_sydney.sydney_feeds import DAILY_LIMIT
 from paperroute_testkit.core.steps import wakeful
@@ -10,7 +11,6 @@ from paperroute_transit.core.messages import (
     FeedFailed,
     FeedJoined,
     FetchFeed,
-    QuitRequested,
     SaveState,
     Stop,
     Tick,

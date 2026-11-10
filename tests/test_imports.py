@@ -102,9 +102,7 @@ MOVED: Final[tuple[str, ...]] = (
     'adapters.board_head',
     'adapters.board_pages',
     'adapters.change_rows',
-    'adapters.clocks',
     'adapters.connection_editor',
-    'adapters.device_probe',
     'adapters.feed_files',
     'adapters.feed_guard',
     'adapters.gtfs_alerts',
@@ -124,7 +122,6 @@ MOVED: Final[tuple[str, ...]] = (
     'adapters.state_migrations',
     'adapters.state_settings',
     'adapters.timetable_db',
-    'adapters.tk_monitor',
     'adapters.ways_editor',
     'adapters.web_connection',
     'adapters.web_display',
@@ -213,7 +210,6 @@ MOVED: Final[tuple[str, ...]] = (
     'core.strip_vehicles',
     'core.strip_view',
     'core.wifi',
-    'logs',
     'measures',
     'observers',
     'ports',
@@ -452,7 +448,7 @@ def test_core_imports_only_core() -> None:
 
 
 def test_pydantic_only_in_state_file() -> None:
-    """Only the state file and its helpers import pydantic."""
+    """Only the state files and their helpers import pydantic."""
     allowed = {
         TRANSIT / 'adapters' / name
         for name in (
@@ -461,6 +457,14 @@ def test_pydantic_only_in_state_file() -> None:
             'state_auto.py',
             'state_settings.py',
         )
+    } | {
+        ROOT
+        / 'packages'
+        / 'paperroute-device'
+        / 'src'
+        / 'paperroute_device'
+        / 'adapters'
+        / 'state_file.py',
     }
     paths = sources()
     offenders = [

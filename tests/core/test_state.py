@@ -14,6 +14,7 @@ from hypothesis import strategies as st
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
 from paperroute_device.core.device_settings import Window
+from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.core.panel_views import NoticeView
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -106,7 +107,6 @@ from paperroute_transit.core.messages import (
     PlacesMatched,
     PositionsFetched,
     ProbeDevice,
-    QuitRequested,
     Render,
     SaveState,
     ScreenView,

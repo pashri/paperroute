@@ -1,21 +1,23 @@
 """Tests for reading the device's facts from the system."""
 
-from functools import partial
 from pathlib import Path
+from typing import Final
+from zoneinfo import ZoneInfo
 
-from paperroute_device.core.device_model import DeviceKey, WifiStatus
-from paperroute_device_testkit.device_fakes import FakeKeys, FakeWifi
-from paperroute_sydney.adapters.tfnsw import TFNSW_KEY
-from paperroute_sydney.city import SYDNEY_ZONE
-from paperroute_transit.adapters.device_probe import (
-    SystemProbe,
-    mem_available,
-    tiles_facts,
+from paperroute_device.adapters.device_probe import SystemProbe, mem_available
+from paperroute_device.core.device_model import (
+    Credential,
+    DeviceKey,
+    WifiStatus,
 )
-from paperroute_transit.adapters.tiles_db import NullTiles
-from paperroute_transit.core.panel_screens import TilesFacts
-from paperroute_transit.logs import LastError
+from paperroute_device.logs import LastError
+from paperroute_device_testkit.device_fakes import FakeKeys, FakeWifi
 
+ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
+CREDENTIAL: Final[Credential] = Credential(
+    label='Demo key', refusal='Bad demo key.', not_saved='Demo key not saved.',
+)
+APP_FACTS: Final[str] = 'app facts'
 LINK: WifiStatus = WifiStatus(managed=True, ssid='Home', dbm=-60)
 
 
@@ -44,14 +46,14 @@ def probe_of(*, root: Path, version_file: Path | None) -> SystemProbe:
         wifi=FakeWifi(link=LINK),
         keys=(
             DeviceKey(
-                name='tfnsw',
-                credential=TFNSW_KEY,
+                name='demo',
+                credential=CREDENTIAL,
                 store=FakeKeys(key='secret'),
-                display_name='TfNSW',
+                display_name='Demo',
             ),
         ),
         app_probe=no_app,
-        last_error=LastError(zone=SYDNEY_ZONE),
+        last_error=LastError(zone=ZONE),
         data_dir=root,
         version_file=version_file,
         root=root,
@@ -103,20 +105,31 @@ async def test_probe_reads_system_files(tmp_path: Path) -> None:
     assert facts.last_error is None
 
 
+async def app_facts() -> object:
+    """
+    Find what the app reports.
+
+    Returns
+    -------
+    object
+        A marker.
+    """
+    return APP_FACTS
+
+
 async def test_probe_carries_the_apps_facts(tmp_path: Path) -> None:
     """What the app's probe finds is the facts' app part."""
-    tiles = NullTiles()
     probe = SystemProbe(
         wifi=FakeWifi(link=LINK),
         keys=(),
-        app_probe=partial(tiles_facts, tiles=tiles),
-        last_error=LastError(zone=SYDNEY_ZONE),
+        app_probe=app_facts,
+        last_error=LastError(zone=ZONE),
         data_dir=tmp_path,
         version_file=None,
         root=tmp_path,
     )
     facts = await probe.probe()
-    assert facts.app == TilesFacts(built=None)
+    assert facts.app == APP_FACTS
 
 
 async def test_probe_without_files_gives_none(tmp_path: Path) -> None:
@@ -145,21 +158,21 @@ async def test_probe_without_data_dir(tmp_path: Path) -> None:
         wifi=FakeWifi(),
         keys=(
             DeviceKey(
-                name='tfnsw',
-                credential=TFNSW_KEY,
+                name='demo',
+                credential=CREDENTIAL,
                 store=FakeKeys(),
-                display_name='TfNSW',
+                display_name='Demo',
             ),
         ),
         app_probe=no_app,
-        last_error=LastError(zone=SYDNEY_ZONE),
+        last_error=LastError(zone=ZONE),
         data_dir=tmp_path / 'gone',
         version_file=None,
         root=tmp_path,
     )
     facts = await probe.probe()
     assert facts.disk_free is None
-    assert facts.missing_keys == ('TfNSW',)
+    assert facts.missing_keys == ('Demo',)
 
 
 async def test_probe_reports_each_missing_key(tmp_path: Path) -> None:
@@ -167,19 +180,22 @@ async def test_probe_reports_each_missing_key(tmp_path: Path) -> None:
     keys = (
         DeviceKey(
             name='a',
-            credential=TFNSW_KEY,
+            credential=CREDENTIAL,
             store=FakeKeys(key='secret'),
             display_name='A',
         ),
         DeviceKey(
-            name='b', credential=TFNSW_KEY, store=FakeKeys(), display_name='B',
+            name='b',
+            credential=CREDENTIAL,
+            store=FakeKeys(),
+            display_name='B',
         ),
     )
     probe = SystemProbe(
         wifi=FakeWifi(),
         keys=keys,
         app_probe=no_app,
-        last_error=LastError(zone=SYDNEY_ZONE),
+        last_error=LastError(zone=ZONE),
         data_dir=tmp_path,
         version_file=None,
         root=tmp_path,

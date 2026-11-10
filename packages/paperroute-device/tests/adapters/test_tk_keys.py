@@ -2,6 +2,8 @@
 
 import pytest
 
+from paperroute_device.adapters.tk_monitor import MonitorEvent, key_event
+from paperroute_device.core.kit_events import QuitRequested
 from paperroute_hardware.core.knob_events import (
     Knob,
     KnobHeld,
@@ -11,8 +13,6 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_hardware.core.knob_hold import HOLD_S, Chord, HoldKey
-from paperroute_transit.adapters.tk_monitor import key_event
-from paperroute_transit.core.messages import Event, QuitRequested
 
 
 @pytest.mark.parametrize(('keysym', 'expected'), [
@@ -23,7 +23,7 @@ from paperroute_transit.core.messages import Event, QuitRequested
     ('q', QuitRequested()),
     ('Escape', QuitRequested()),
 ])
-def test_key_event_mapping(keysym: str, expected: Event) -> None:
+def test_key_event_mapping(keysym: str, expected: MonitorEvent) -> None:
     """Left-hand keys play the top knob, right-hand keys the bottom."""
     assert key_event(keysym=keysym) == expected
 
@@ -139,7 +139,7 @@ def _keys() -> tuple[HoldKey, HoldKey, Chord]:
 
 def _poll(
     *, keys: tuple[HoldKey, HoldKey, Chord], now: float
-) -> list[Event]:
+) -> list[MonitorEvent]:
     """What the monitor posts on a pump: the chord, then each key."""
     top, bottom, chord = keys
     events = [chord.poll(now=now), top.poll(now), bottom.poll(now)]

@@ -113,6 +113,9 @@ def test_defaults_are_the_kit_ones() -> None:
     assert app.menu_rows == ()
     assert app.reset_hint == KIT_RESET_HINT
     assert app.confirm_copy == KIT_CONFIRM_COPY
+    assert app.section() is None
+    assert app.migrations() == {}
+    assert app.zone() is None
     assert app.on_tick(state=1, device=device, tick=Tick(now=START)) == (1, ())
     assert app.on_event(state=1, device=device, event='x') == (1, ())
     assert app.on_device(state=1, before=device, after=device) == (1, ())

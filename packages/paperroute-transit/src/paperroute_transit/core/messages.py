@@ -20,6 +20,7 @@ from paperroute_device.core.device_model import (
     WifiNetwork,
 )
 from paperroute_device.core.device_settings import QuietMode, Window
+from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.core.panel_views import NoticeView, PanelView
 from paperroute_hardware.core.knob_events import (
     KnobHeld,
@@ -383,11 +384,6 @@ class FeedFailed:
     at: datetime
     reason: str
     sent: bool = True
-
-
-@dataclass(frozen=True)
-class QuitRequested:
-    """The user asked to quit (development monitor only)."""
 
 
 @dataclass(frozen=True)

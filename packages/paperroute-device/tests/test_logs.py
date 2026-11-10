@@ -5,11 +5,14 @@ import json
 import logging
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Final
+from zoneinfo import ZoneInfo
 
 import pytest
 
-from paperroute_sydney.city import SYDNEY_ZONE
-from paperroute_transit.logs import LastError, configure_logging
+from paperroute_device.logs import LastError, configure_logging
+
+ZONE: Final[ZoneInfo] = ZoneInfo('Australia/Sydney')
 
 
 @pytest.fixture(autouse=True)
@@ -104,7 +107,7 @@ def test_error_file_rotates(
 
 def test_last_error_keeps_latest_error() -> None:
     """Only ERROR records count, and the latest is kept with its time."""
-    last = LastError(zone=SYDNEY_ZONE)
+    last = LastError(zone=ZONE)
     assert last.text() is None
     log = logging.getLogger('paperroute.last')
     log.addHandler(last)
@@ -127,7 +130,7 @@ def test_configure_logging_attaches_last_error(
 ) -> None:
     """The handler given sees errors logged anywhere."""
     monkeypatch.setattr('sys.stderr', io.StringIO())
-    last = LastError(zone=SYDNEY_ZONE)
+    last = LastError(zone=ZONE)
     configure_logging(last_error=last)
     logging.getLogger('paperroute.t').error('boom')
     text = last.text()

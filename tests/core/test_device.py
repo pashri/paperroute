@@ -15,6 +15,7 @@ from paperroute_device.core.device_settings import (
     QuietMode,
     Window,
 )
+from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.core.panel_views import NoticeView
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import (
@@ -42,7 +43,6 @@ from paperroute_transit.core.messages import (
     FetchFeed,
     PowerFailed,
     ProbeDevice,
-    QuitRequested,
     RebuildTimetable,
     Render,
     ResetDevice,

@@ -9,13 +9,15 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.render.canvas import HEIGHT, WIDTH, encode_png
-from paperroute_hardware.core.knob_events import Knob, KnobTurned
+from paperroute_hardware.core.knob_events import Knob, KnobInput, KnobTurned
 from paperroute_hardware.core.knob_hold import Chord, HoldKey
 from paperroute_hardware.ports import CLEAN_AFTER
-from paperroute_transit.core.messages import Event, QuitRequested
 
-KEYS: Final[dict[str, Event]] = {
+type MonitorEvent = KnobInput | QuitRequested
+
+KEYS: Final[dict[str, MonitorEvent]] = {
     'a': KnobTurned(knob=Knob.TOP, steps=-1),
     'd': KnobTurned(knob=Knob.TOP, steps=1),
     'j': KnobTurned(knob=Knob.BOTTOM, steps=-1),
@@ -26,7 +28,7 @@ KEYS: Final[dict[str, Event]] = {
 HOLD_KEYS: Final[dict[str, Knob]] = {'s': Knob.TOP, 'k': Knob.BOTTOM}
 
 
-def key_event(*, keysym: str) -> Event | None:
+def key_event(*, keysym: str) -> MonitorEvent | None:
     """
     The knob event for a key.
 
@@ -37,8 +39,8 @@ def key_event(*, keysym: str) -> Event | None:
 
     Returns
     -------
-    Event | None
-        Event, or None for unmapped keys.
+    MonitorEvent | None
+        The knob or quit event, or None for unmapped keys.
     """
     return KEYS.get(keysym)
 
@@ -68,7 +70,7 @@ class TkMonitor:
     """An 800x480 window showing frames; keys post knob events."""
 
     def __init__(self) -> None:
-        self.post: Callable[[Event], None] | None = None
+        self.post: Callable[[MonitorEvent], None] | None = None
         self.holds = {
             key: HoldKey(knob=knob) for key, knob in HOLD_KEYS.items()
         }
@@ -138,13 +140,13 @@ class TkMonitor:
         del timeout
         return True
 
-    def bind(self, *, post: Callable[[Event], None]) -> None:
+    def bind(self, *, post: Callable[[MonitorEvent], None]) -> None:
         """
         Send knob events from key presses.
 
         Parameters
         ----------
-        post : Callable[[Event], None]
+        post : Callable[[MonitorEvent], None]
             Receives each event.
         """
         self.post = post
@@ -163,7 +165,7 @@ class TkMonitor:
         """
         now = time.monotonic()
         hold = self.holds.get(key.keysym.lower())
-        event: Event | None
+        event: MonitorEvent | None
         if hold is not None:
             event = hold.down(now)
             self.chord.down(now=now)

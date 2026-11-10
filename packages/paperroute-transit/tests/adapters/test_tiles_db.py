@@ -11,8 +11,10 @@ import pytest
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
     SqliteTileRepository,
+    tiles_facts,
 )
 from paperroute_transit.build.tile_store import PlacedLabel, TileWriter
+from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.tiles import (
     TILE,
     TILE_STYLE,
@@ -399,3 +401,8 @@ def test_unreadable_meta_does_not_fit(tmp_path: Path) -> None:
         conn.execute('CREATE TABLE meta (k TEXT)')
         repo = SqliteTileRepository(connection=conn)
         assert not repo.fits(origin=ORIGIN)
+
+
+async def test_tiles_facts_without_tiles() -> None:
+    """No tiles report no build time."""
+    assert await tiles_facts(tiles=NullTiles()) == TilesFacts(built=None)

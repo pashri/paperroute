@@ -128,7 +128,7 @@ source = [
 ]
 disable_warnings = ["module-not-imported", "no-data-collected"]
 omit = [
-    "packages/paperroute-transit/src/paperroute_transit/adapters/tk_monitor.py",
+    "packages/paperroute-device/src/paperroute_device/adapters/tk_monitor.py",
     "apps/paperroute-sydney/src/paperroute_sydney/__main__.py",
     "packages/paperroute-transit/src/paperroute_transit/board.py",
     "apps/paperroute-sydney/src/paperroute_sydney/build/__main__.py",

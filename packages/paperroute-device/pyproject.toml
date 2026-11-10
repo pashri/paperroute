@@ -8,6 +8,7 @@ dependencies = [
     "numpy>=2.3",
     "paperroute-hardware",
     "pydantic>=2",
+    "python-json-logger>=3.2",
     "segno>=1.6.6",
     "skia-python>=138.0",
 ]

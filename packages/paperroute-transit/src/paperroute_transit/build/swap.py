@@ -14,6 +14,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Final
 
+from paperroute_device.logs import configure_logging
 from paperroute_device.rss import max_rss_mb
 from paperroute_transit.build.handoff import (
     Fetched,
@@ -28,7 +29,6 @@ from paperroute_transit.build.source_state import (
     fsync_dir,
     save_states,
 )
-from paperroute_transit.logs import configure_logging
 
 logger = logging.getLogger(__name__)
 

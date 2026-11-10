@@ -1,5 +1,6 @@
 """Tile repository over the built tiles file."""
 
+import asyncio
 import sqlite3
 import zlib
 from pathlib import Path
@@ -9,6 +10,7 @@ import numpy as np
 from numpy.typing import NDArray
 
 from paperroute_device.adapters.sqlite_ro import ReadOnlyDatabase
+from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.tiles import (
     TILE_STYLE,
     ZOOMS,
@@ -17,6 +19,7 @@ from paperroute_transit.core.tiles import (
     TileVariant,
     zooms_of,
 )
+from paperroute_transit.ports import TileRepository
 from paperroute_transit.render.tile_codec import unpack_bits, unpack_grey
 
 Built = tuple[tuple[int, ...] | None, str | None, str | None]
@@ -329,3 +332,20 @@ class NullTiles:
             Always None.
         """
         return None
+
+
+async def tiles_facts(*, tiles: TileRepository) -> TilesFacts:
+    """
+    Find out when the map tiles were built, off the event loop.
+
+    Parameters
+    ----------
+    tiles : TileRepository
+        The map tiles.
+
+    Returns
+    -------
+    TilesFacts
+        The build time, or None with no tiles.
+    """
+    return TilesFacts(built=await asyncio.to_thread(tiles.version))

@@ -3084,6 +3084,7 @@ cp "${args[@]}" "$dest"
 '''
 INSTALL_FILES_FUNCTIONS: Final[tuple[str, ...]] = (
     'in_list',
+    'adopt_city_zones',
     'wanted_units',
     'shipped_drop_ins',
     'app_timers',
@@ -3347,15 +3348,63 @@ def test_install_files_removes_a_stale_app_conf(tmp_path: Path) -> None:
     assert sorted(tree_files(root=device.etc)) == sorted(KIT_UNITS)
 
 
-def test_install_files_removes_city_zone_conf(tmp_path: Path) -> None:
-    """The old city-zone.conf is always removed."""
-    device = make_device(root=tmp_path, app=SYDNEY_APP)
+# The timer 688b82b installed, which an upgrading Pi still holds.
+OLD_TIMETABLE_TIMER: Final[str] = (
+    '[Timer]\n'
+    "# UTC here; install-release adds the city's zone in a drop-in\n"
+    'OnCalendar=*-*-* 03:30:00\n'
+    'Persistent=true\n'
+    'RandomizedDelaySec=0\n'
+    '\n'
+    '[Install]\n'
+    'WantedBy=timers.target\n'
+)
+CITY_ZONE: Final[str] = (
+    '[Timer]\nOnCalendar=\nOnCalendar=*-*-* 03:30:00 Australia/Sydney\n'
+)
+
+
+def upgrading_device(*, root: Path) -> tuple[Device, Path]:
+    """
+    Make a Sydney device as a provision from 688b82b left it.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+
+    Returns
+    -------
+    tuple[Device, Path]
+        The device and its timetable timer's drop-in folder.
+    """
+    device = make_device(root=root, app=SYDNEY_APP)
+    timer = device.etc / 'paperroute-timetable.timer'
+    timer.write_text(OLD_TIMETABLE_TIMER, encoding='utf-8')
     drop_ins = device.etc / 'paperroute-timetable.timer.d'
     drop_ins.mkdir()
-    (drop_ins / 'city-zone.conf').write_text('[Timer]\n', encoding='utf-8')
+    (drop_ins / 'city-zone.conf').write_text(CITY_ZONE, encoding='utf-8')
+    return device, drop_ins
+
+
+def test_install_files_keeps_the_city_zone_as_app_zone(tmp_path: Path) -> None:
+    """An upgrade keeps the timer in its zone until the deploy rewrites it."""
+    device, drop_ins = upgrading_device(root=tmp_path)
     result = install_units(device=device)
     assert (result.returncode, result.stderr) == (0, '')
-    assert not (drop_ins / 'city-zone.conf').exists()
+    assert tree_files(root=drop_ins) == {'app-zone.conf': CITY_ZONE}
+    assert (SYDNEY_SYSTEMD / 'paperroute-timetable.timer').read_text(
+        encoding='utf-8',
+    ) == OLD_TIMETABLE_TIMER
+
+
+def test_install_files_removes_city_zone_conf(tmp_path: Path) -> None:
+    """With an app-zone.conf in place, the old city-zone.conf just goes."""
+    device, drop_ins = upgrading_device(root=tmp_path)
+    (drop_ins / 'app-zone.conf').write_text('zone\n', encoding='utf-8')
+    result = install_units(device=device)
+    assert (result.returncode, result.stderr) == (0, '')
+    assert tree_files(root=drop_ins) == {'app-zone.conf': 'zone\n'}
 
 
 def provision_repo(*, root: Path, app: Path) -> Path:

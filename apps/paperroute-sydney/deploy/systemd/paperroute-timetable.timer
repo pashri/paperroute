@@ -1,5 +1,5 @@
 [Timer]
-# UTC here; install-release adds the app's zone in a drop-in
+# UTC here; install-release adds the city's zone in a drop-in
 OnCalendar=*-*-* 03:30:00
 Persistent=true
 RandomizedDelaySec=0

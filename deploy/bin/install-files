@@ -60,10 +60,27 @@ app_timers() {
     done
 }
 
+# Renames an older provision's city-zone.conf to app-zone.conf, so the
+# timer keeps its zone until the next deploy rewrites it; with an
+# app-zone.conf already there, the old file just goes.
+adopt_city_zones() {
+    local old new
+    for old in "$ETC"/paperroute*.timer.d/city-zone.conf; do
+        [[ -e $old || -L $old ]] || continue
+        new=${old%/*}/app-zone.conf
+        if [[ -e $new || -L $new || -L $old || ! -f $old ]]; then
+            rm -f -- "$old"
+        else
+            mv -f -- "$old" "$new"
+        fi
+    done
+}
+
 # Installs every shipped unit and drop-in. A timer whose file changes
 # loses its zone drop-in, which the next deploy writes again.
 install_units() {
     local src name
+    adopt_city_zones
     for src in "$SRC"/systemd/* "$APP_SRC"/systemd/*.service \
         "$APP_SRC"/systemd/*.timer; do
         [[ -f $src ]] || continue

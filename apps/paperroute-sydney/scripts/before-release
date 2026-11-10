@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+# Usage: apps/paperroute-sydney/scripts/before-release HOST
+# Run by scripts/deploy once the release is staged. Without data/tiles.db it
+# does nothing. Otherwise it warns when the tiles do not match this release,
+# copies them to the Pi only when they have changed, and installs them with
+# the passwordless install-tiles. Never prompts.
+set -euo pipefail
+cd "$(dirname "$0")/../../.."
+
+STAGE=/var/cache/paperroute-stage
+TILES=/usr/local/sbin/paperroute-install-tiles
+
+if [[ $# -ne 1 || ! $1 =~ ^[A-Za-z0-9][A-Za-z0-9._@-]*$ ]]; then
+    printf 'usage: before-release HOST\n' >&2
+    exit 2
+fi
+host=$1
+
+[[ -f data/tiles.db ]] || exit 0
+uv run python -m paperroute_sydney.build check-tiles data/tiles.db || printf 'deploy: warning: tiles do not match this release; deploying anyway\n' >&2
+if ! ssh -- "$host" sudo -n -l "$TILES" >/dev/null 2>&1; then
+    printf 'deploy: run scripts/provision first (tiles)\n' >&2
+    exit 1
+fi
+NUMBER='^(0|[1-9][0-9]*)$'
+free=$(ssh -- "$host" df -Pk "$STAGE" | awk 'NR == 2 { print $4 }') \
+    || free=
+remote=$(ssh -- "$host" \
+    "stat -c '%s %Y' $STAGE/tiles/tiles.db 2>/dev/null || echo '0 0'") \
+    || remote=
+staged_size=${remote%% *}
+staged_mtime=${remote##* }
+read -r size mtime < <(stat -f '%z %m' data/tiles.db)
+for value in "$free" "$staged_size" "$staged_mtime" "$size" "$mtime"; do
+    [[ $value =~ $NUMBER ]] || {
+        printf 'deploy: cannot read the tile sizes\n' >&2
+        exit 1
+    }
+done
+free=$((free * 1024))
+margin=$((64 * 1024 * 1024))
+if [[ $staged_size -ne $size || $staged_mtime -ne $mtime ]]; then
+    if (( free < size || free + staged_size < 2 * size + margin )); then
+        need=$((2 * size + margin - staged_size))
+        (( need >= size )) || need=$size
+        printf 'deploy: not enough free disk on the Pi for the tiles (need %d MB, have %d MB)\n' \
+            $((need >> 20)) $((free >> 20)) >&2
+        exit 1
+    fi
+fi
+ssh -- "$host" mkdir -p "$STAGE/tiles"
+rsync -a --partial data/tiles.db "$host:$STAGE/tiles/tiles.db"
+ssh -- "$host" sudo -n "$TILES" || exit

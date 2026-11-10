@@ -21,8 +21,12 @@ ROOT: Final[Path] = Path(__file__).parents[1]
 DEPLOY: Final[Path] = ROOT / 'deploy'
 BIN: Final[Path] = DEPLOY / 'bin'
 SYSTEMD: Final[Path] = DEPLOY / 'systemd'
-SYDNEY_DEPLOY: Final[Path] = ROOT / 'apps' / 'paperroute-sydney' / 'deploy'
+SYDNEY_APP: Final[Path] = ROOT / 'apps' / 'paperroute-sydney'
+SYDNEY_DEPLOY: Final[Path] = SYDNEY_APP / 'deploy'
 SYDNEY_SYSTEMD: Final[Path] = SYDNEY_DEPLOY / 'systemd'
+SYDNEY_BIN: Final[Path] = SYDNEY_DEPLOY / 'bin'
+SYDNEY_SUDOERS: Final[Path] = SYDNEY_DEPLOY / 'sudoers'
+BEFORE_RELEASE: Final[Path] = SYDNEY_APP / 'scripts' / 'before-release'
 APP_CONF: Final[Path] = SYDNEY_SYSTEMD / 'paperroute.service.d' / 'app.conf'
 FIXTURES: Final[Path] = Path(__file__).parent / 'fixtures'
 WITH_UNITS: Final[Path] = FIXTURES / 'app_with_units'
@@ -31,7 +35,6 @@ CONFIG_TXT: Final[Path] = FIXTURES / 'config.txt'
 BIN_SCRIPTS: Final[tuple[str, ...]] = (
     'install-files',
     'install-release',
-    'install-tiles',
     'paperroute-led',
     'provision-device',
 )
@@ -43,12 +46,22 @@ SHELL_SCRIPTS: Final[tuple[Path, ...]] = (
     ROOT / 'scripts' / 'simulate-pi-build',
     ROOT / 'scripts' / 'golden-linux',
     *(BIN / name for name in BIN_SCRIPTS),
+    SYDNEY_BIN / 'install-tiles',
+    BEFORE_RELEASE,
 )
 SUDOERS_RULE: Final[str] = (
     'pashri ALL=(root) NOPASSWD: '
     '/usr/local/sbin/paperroute-install-release, '
-    '/usr/local/sbin/paperroute-install-files "", '
-    '/usr/local/sbin/paperroute-install-tiles ""'
+    '/usr/local/sbin/paperroute-install-files ""'
+)
+TILES_RULE: Final[str] = (
+    'pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-install-tiles ""'
+)
+APP_RULE: Final[re.Pattern[str]] = re.compile(
+    pattern=(
+        r'^\S+ ALL=\(root\) NOPASSWD: '
+        r'/usr/local/sbin/paperroute-[a-z][a-z0-9-]* ""$'
+    ),
 )
 SECRETS_LINE: Final[str] = (
     "setsid -w runuser -u paperroute -- sh -c 'umask 077 && "
@@ -312,6 +325,7 @@ def run_script(
     name: str,
     args: tuple[str, ...],
     env: dict[str, str],
+    folder: Path = BIN,
 ) -> subprocess.CompletedProcess[str]:
     """
     Run a script from ``deploy/bin`` with bash as the current user.
@@ -324,6 +338,8 @@ def run_script(
         Its arguments.
     env : dict[str, str]
         The environment to run it in.
+    folder : Path
+        The script's folder, ``deploy/bin`` unless given.
 
     Returns
     -------
@@ -331,7 +347,7 @@ def run_script(
         The exit status and output.
     """
     return subprocess.run(
-        args=['bash', str(BIN / name), *args],
+        args=['bash', str(folder / name), *args],
         env=env,
         capture_output=True,
         text=True,
@@ -814,15 +830,31 @@ def test_timetable_unit_logs_errors_and_uses_work_tmp() -> None:
     assert (service['Nice'], service['OOMScoreAdjust']) == ('19', '500')
 
 
-def test_sudoers_allows_exactly_the_three_scripts(tmp_path: Path) -> None:
-    """The sudoers file holds one rule for the three root scripts."""
-    path = DEPLOY / 'sudoers' / 'paperroute-deploy'
-    rules = [
+def sudoers_rules(*, path: Path) -> list[str]:
+    """
+    Read a sudoers file's lines that are neither blank nor comments.
+
+    Parameters
+    ----------
+    path : Path
+        The file.
+
+    Returns
+    -------
+    list[str]
+        Its rules, in order.
+    """
+    return [
         line
         for line in path.read_text(encoding='utf-8').splitlines()
         if line.strip() and not line.lstrip().startswith('#')
     ]
-    assert rules == [SUDOERS_RULE]
+
+
+def test_sudoers_allows_exactly_the_two_kit_scripts(tmp_path: Path) -> None:
+    """The kit's sudoers file holds one rule for its two root scripts."""
+    path = DEPLOY / 'sudoers' / 'paperroute-deploy'
+    assert sudoers_rules(path=path) == [SUDOERS_RULE]
     if shutil.which('visudo'):
         copy = tmp_path / 'paperroute-deploy'
         shutil.copyfile(src=path, dst=copy)
@@ -2050,7 +2082,7 @@ def test_install_release_starts_without_timetable() -> None:
     assert 'exit 0' not in lines[:last]
 
 
-TILES_SCRIPT: Final[Path] = BIN / 'install-tiles'
+TILES_SCRIPT: Final[Path] = SYDNEY_BIN / 'install-tiles'
 DEPLOY_SCRIPT: Final[Path] = ROOT / 'scripts' / 'deploy'
 TILES_ROOT_MESSAGE: Final[str] = (
     'install-tiles: checks passed; installing needs root\n'
@@ -2208,6 +2240,7 @@ def run_tiles(
         name='install-tiles',
         args=args,
         env=tiles.env | extra,
+        folder=SYDNEY_BIN,
     )
 
 
@@ -2245,7 +2278,12 @@ def test_install_tiles_rejects_a_symlinked_stage_directory(
     linked.symlink_to(tiles.staged.parent)
     env = tiles.env | {'PAPERROUTE_TILES_STAGE': str(linked / 'tiles.db')}
     before = snapshot(root=tiles.root)
-    result = run_script(name='install-tiles', args=(), env=env)
+    result = run_script(
+        name='install-tiles',
+        args=(),
+        env=env,
+        folder=SYDNEY_BIN,
+    )
     assert (result.returncode, result.stderr) == (2, TILES_DIR_NOT_REAL)
     assert snapshot(root=tiles.root) == before
 
@@ -2378,24 +2416,23 @@ def test_install_tiles_rejects_a_non_numeric_free_override(
     assert 'cannot read the free disk space' in result.stderr
 
 
-def test_deploy_checks_free_disk_before_tile_upload() -> None:
-    """scripts/deploy reads the Pi's free space before the tile rsync."""
-    text = DEPLOY_SCRIPT.read_text(encoding='utf-8')
+def test_before_release_checks_free_disk_before_tile_upload() -> None:
+    """Sydney's hook reads the Pi's free space before the tile rsync."""
+    text = BEFORE_RELEASE.read_text(encoding='utf-8')
     rsync = text.index('rsync -a --partial data/tiles.db')
     assert 0 < text.index('df -Pk') < rsync
     assert text.count('^(0|[1-9][0-9]*)$') >= 1
     assert (
         'for value in "$free" "$staged_size" "$staged_mtime" "$size" '
-        '"$mtime"; do\n        [[ $value =~ $NUMBER ]]'
+        '"$mtime"; do\n    [[ $value =~ $NUMBER ]]'
     ) in text
     assert text.index('=~ $NUMBER') < rsync
     assert 'not enough free disk on the Pi for the tiles' in text
 
 
-def test_deploy_only_warns_on_tiles() -> None:
-    """scripts/deploy checks the tiles before any ssh and never stops."""
-    text = DEPLOY_SCRIPT.read_text(encoding='utf-8')
-    lines = text.splitlines()
+def test_before_release_only_warns_on_tiles() -> None:
+    """Sydney's hook checks the tiles before any ssh and never stops."""
+    lines = BEFORE_RELEASE.read_text(encoding='utf-8').splitlines()
     check = next(
         index
         for index, line in enumerate(lines)
@@ -2407,21 +2444,20 @@ def test_deploy_only_warns_on_tiles() -> None:
         if re.search(r'\bssh\b', line) and not line.lstrip().startswith('#')
     )
     assert check < first_ssh
-    assert lines[check].strip() == (
-        'uv run python -m "paperroute_$app.build" check-tiles data/tiles.db '
+    assert lines[check] == (
+        'uv run python -m paperroute_sydney.build check-tiles data/tiles.db '
         "|| printf 'deploy: warning: tiles do not match this release; "
         "deploying anyway\\n' >&2"
     )
     assert 'exit' not in lines[check]
-    assert lines[check - 1].strip() == 'if [[ -f data/tiles.db ]]; then'
-    assert lines[check + 1].strip() == 'fi'
+    assert lines[check - 1] == '[[ -f data/tiles.db ]] || exit 0'
 
 
-def test_deploy_reports_a_failed_tile_size_read() -> None:
+def test_before_release_reports_a_failed_tile_size_read() -> None:
     """An ssh failure reading sizes reaches the number check's message."""
-    text = DEPLOY_SCRIPT.read_text(encoding='utf-8')
-    assert "{ print $4 }') \\\n        || free=\n" in text
-    assert "|| echo '0 0'\") \\\n        || remote=\n" in text
+    text = BEFORE_RELEASE.read_text(encoding='utf-8')
+    assert "{ print $4 }') \\\n    || free=\n" in text
+    assert "|| echo '0 0'\") \\\n    || remote=\n" in text
     assert text.index('|| remote=') < text.index('=~ $NUMBER')
 
 
@@ -2558,22 +2594,52 @@ def test_install_tiles_stamps_portably() -> None:
     ]
 
 
-def test_provision_installs_install_tiles() -> None:
-    """provision needs the script and installs it next to the other two."""
-    assert commands(path=BIN / 'provision-device', word='install-tiles') == [
-        'for need in bin/install-files bin/install-release'
-        ' bin/install-tiles bin/paperroute-led sudoers/paperroute-deploy'
-        ' polkit/50-paperroute-power.rules'
-        ' polkit/51-paperroute-network.rules; do',
-        'install -m 0755 -o root -g root "$SHARE/deploy/bin/install-tiles"'
-        ' /usr/local/sbin/paperroute-install-tiles',
+def test_provision_installs_only_the_kit_tools() -> None:
+    """provision installs the kit's two tools; the tiles are Sydney's."""
+    script = BIN / 'provision-device'
+    assert script_value(path=script, name='KIT_TOOLS') == (
+        "'install-release install-files'"
+    )
+    assert 'tiles' not in script_text(path=script)
+    assert commands(path=script, word='install -m 0755') == [
+        'install -m 0755 -o root -g root "$path" "$SBIN/paperroute-$name"'
+        ' || exit 1',
+        'install -m 0755 -o root -g root "$SHARE/deploy/bin/$name"'
+        ' "$SBIN/paperroute-$name"',
     ]
 
 
-def test_deploy_installs_tiles_before_the_release() -> None:
-    """A failed tiles install stops the deploy before install-release."""
-    text = script_text(path=DEPLOY_SCRIPT)
-    assert commands(path=DEPLOY_SCRIPT, word='TILES') == [
+def test_sydney_ships_install_tiles_and_its_rule() -> None:
+    """Sydney's deploy/ holds the tiles tool and the one rule for it."""
+    assert sorted(path.name for path in SYDNEY_BIN.iterdir()) == [
+        'install-tiles',
+    ]
+    assert sorted(path.name for path in SYDNEY_SUDOERS.iterdir()) == [
+        'paperroute-sydney',
+    ]
+
+
+def test_kit_deploy_has_no_tile_tooling() -> None:
+    """No kit file, and neither kit script, names the tiles."""
+    paths = [
+        *(path for path in sorted(DEPLOY.rglob('*')) if path.is_file()),
+        DEPLOY_SCRIPT,
+        ROOT / 'scripts' / 'provision',
+    ]
+    named = [
+        str(path.relative_to(ROOT))
+        for path in paths
+        if isinstance(file_content(path=path), str)
+        and re.search(pattern=r'(?i)tiles', string=script_text(path=path))
+    ]
+    assert len(paths) > 10
+    assert not named
+
+
+def test_before_release_installs_tiles_after_staging_them() -> None:
+    """A failed tiles install fails the hook; it stages before installing."""
+    text = script_text(path=BEFORE_RELEASE)
+    assert commands(path=BEFORE_RELEASE, word='TILES') == [
         'TILES=/usr/local/sbin/paperroute-install-tiles',
         'if ! ssh -- "$host" sudo -n -l "$TILES" >/dev/null 2>&1; then',
         'ssh -- "$host" sudo -n "$TILES" || exit',
@@ -2581,16 +2647,201 @@ def test_deploy_installs_tiles_before_the_release() -> None:
     order = [
         text.index(part)
         for part in (
-            '| rsync -a --from0',
-            'if [[ -f data/tiles.db ]]; then\n    if ! ssh',
+            "check-tiles data/tiles.db",
+            'if ! ssh -- "$host" sudo -n -l "$TILES"',
             "printf 'deploy: run scripts/provision first (tiles)\\n' >&2",
             'ssh -- "$host" mkdir -p "$STAGE/tiles"',
             'rsync -a --partial data/tiles.db "$host:$STAGE/tiles/tiles.db"',
             'sudo -n "$TILES" || exit',
-            'sudo -n "$INSTALL" "$sha"',
         )
     ]
     assert order == sorted(order)
+    assert script_value(path=BEFORE_RELEASE, name='STAGE') == (
+        script_value(path=DEPLOY_SCRIPT, name='STAGE')
+    )
+
+
+@dataclass(frozen=True)
+class DeployRepo:
+    """A committed tree for scripts/deploy, with ssh and rsync stubbed."""
+
+    root: Path
+    hook: Path
+    log: Path
+    env: dict[str, str]
+
+
+@pytest.fixture(name='deploy_repo')
+def fixture_deploy_repo(tmp_path: Path) -> DeployRepo:
+    """
+    Make a tree holding scripts/deploy, a passing check and one app.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Pytest's temporary directory.
+
+    Returns
+    -------
+    DeployRepo
+        The tree, where the app's hook goes, the stub log and the
+        environment that puts the stubs first.
+    """
+    repo = tmp_path / 'repo'
+    scripts = repo / 'scripts'
+    scripts.mkdir(parents=True)
+    shutil.copy2(src=DEPLOY_SCRIPT, dst=scripts / 'deploy')
+    (scripts / 'check').write_text('#!/bin/sh\nexit 0\n', encoding='utf-8')
+    (scripts / 'check').chmod(0o755)
+    app = repo / 'apps' / 'paperroute-demo'
+    app.mkdir(parents=True)
+    (app / 'pyproject.toml').write_text('[project]\n', encoding='utf-8')
+    (repo / '.gitignore').write_text('data/\n', encoding='utf-8')
+    (repo / 'data').mkdir()
+    (repo / 'data' / 'tiles.db').write_text('tiles\n', encoding='utf-8')
+    log = tmp_path / 'calls.log'
+    stubs = stub_commands(
+        root=tmp_path,
+        scripts={
+            'ssh': f'#!/bin/sh\nprintf "ssh %s\\n" "$*" >>{log}\n',
+            'rsync': (
+                f'#!/bin/sh\ncat >/dev/null\nprintf "rsync %s\\n" "$*"'
+                f' >>{log}\n'
+            ),
+        },
+    )
+    return DeployRepo(
+        root=repo,
+        hook=app / 'scripts' / 'before-release',
+        log=log,
+        env=user_env(PATH=f'{stubs}:{os.environ["PATH"]}'),
+    )
+
+
+def write_hook(*, repo: DeployRepo, status: int, mode: int) -> None:
+    """
+    Give the app a before-release hook that logs its arguments.
+
+    Parameters
+    ----------
+    repo : DeployRepo
+        The tree.
+    status : int
+        The hook's exit status.
+    mode : int
+        The hook's permission bits.
+    """
+    repo.hook.parent.mkdir()
+    repo.hook.write_text(
+        f'printf "hook %s\\n" "$*" >>{repo.log}\nexit {status}\n',
+        encoding='utf-8',
+    )
+    repo.hook.chmod(mode)
+
+
+def run_deploy(*, repo: DeployRepo) -> tuple[int, list[str], str]:
+    """
+    Commit the tree and run scripts/deploy for its app.
+
+    Parameters
+    ----------
+    repo : DeployRepo
+        The tree.
+
+    Returns
+    -------
+    tuple[int, list[str], str]
+        Deploy's exit status, the stub calls in order, and the short sha.
+    """
+    git = [
+        'git',
+        '-c', 'user.email=test@example.com',
+        '-c', 'user.name=Test',
+        '-c', 'commit.gpgsign=false',
+        '-c', 'core.hooksPath=/dev/null',
+    ]
+    for args in (['init', '-q'], ['add', '-A'], ['commit', '-qm', 'x']):
+        subprocess.run(
+            args=[*git, *args],
+            cwd=repo.root,
+            check=True,
+            timeout=30,
+        )
+    sha = subprocess.run(
+        args=['git', 'rev-parse', '--short', 'HEAD'],
+        cwd=repo.root,
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=30,
+    ).stdout.strip()
+    result = subprocess.run(
+        args=['bash', str(repo.root / 'scripts' / 'deploy'), 'host', 'demo'],
+        env=repo.env,
+        capture_output=True,
+        text=True,
+        check=False,
+        timeout=60,
+    )
+    calls = (
+        repo.log.read_text(encoding='utf-8').splitlines()
+        if repo.log.exists()
+        else []
+    )
+    return result.returncode, calls, sha
+
+
+def test_deploy_runs_the_apps_before_release(
+    deploy_repo: DeployRepo,
+) -> None:
+    """The hook runs with the host after staging, before install-release."""
+    write_hook(repo=deploy_repo, status=0, mode=0o755)
+    status, calls, sha = run_deploy(repo=deploy_repo)
+    assert status == 0
+    assert calls[-3].startswith('rsync -a --from0 --files-from=- ./ host:')
+    assert calls[-2:] == [
+        'hook host',
+        f'ssh -- host sudo -n /usr/local/sbin/paperroute-install-release'
+        f' {sha} demo',
+    ]
+
+
+def test_deploy_runs_before_release_without_its_executable_bit(
+    deploy_repo: DeployRepo,
+) -> None:
+    """A hook that lost its executable bit still runs, through bash."""
+    write_hook(repo=deploy_repo, status=0, mode=0o644)
+    _, calls, _ = run_deploy(repo=deploy_repo)
+    assert 'hook host' in calls
+    assert commands(path=DEPLOY_SCRIPT, word='HOOK') == [
+        'HOOK=scripts/before-release',
+        'if [[ -f apps/paperroute-$app/$HOOK ]]; then',
+        'bash "apps/paperroute-$app/$HOOK" "$host" || exit',
+    ]
+
+
+def test_deploy_stops_when_before_release_fails(
+    deploy_repo: DeployRepo,
+) -> None:
+    """A failing hook ends the deploy with its status, before the install."""
+    write_hook(repo=deploy_repo, status=3, mode=0o755)
+    status, calls, _ = run_deploy(repo=deploy_repo)
+    assert status == 3
+    assert calls[-1] == 'hook host'
+    assert not any('install-release' in call for call in calls[1:])
+
+
+def test_deploy_without_before_release_skips_tiles(
+    deploy_repo: DeployRepo,
+) -> None:
+    """An app with no hook deploys without touching data/tiles.db."""
+    status, calls, sha = run_deploy(repo=deploy_repo)
+    assert status == 0
+    assert not any('tiles' in call for call in calls)
+    assert calls[-1] == (
+        f'ssh -- host sudo -n /usr/local/sbin/paperroute-install-release'
+        f' {sha} demo'
+    )
 
 
 POLKIT_RULE: Final[Path] = DEPLOY / 'polkit' / '50-paperroute-power.rules'
@@ -2991,7 +3242,15 @@ def test_simulate_pi_build_checks_links() -> None:
     assert text.count('check_links "$moved" "$python_dir"') == 1
 
 
-def install_sudoers(*, root: Path, user: str) -> Path:
+def install_sudoers(
+    *,
+    root: Path,
+    user: str,
+    app_lines: str | None = None,
+    kit_lines: str | None = None,
+    tools: str = 'install-tiles\n',
+    visudo: str = 'visudo() { return 0; }',
+) -> subprocess.CompletedProcess[str]:
     """
     Run provision's ``install_sudoers`` for a deploy user.
 
@@ -3001,32 +3260,69 @@ def install_sudoers(*, root: Path, user: str) -> Path:
         Pytest's temporary directory; the share and sudoers.d go here.
     user : str
         The deploy user.
+    app_lines : str | None
+        The app's one sudoers file, or None for Sydney's.
+    kit_lines : str | None
+        The kit's sudoers file, or None for the shipped one.
+    tools : str
+        The app tools just installed, one per line.
+    visudo : str
+        The stand-in for visudo, as a shell function.
 
     Returns
     -------
-    Path
-        The installed sudoers file.
+    subprocess.CompletedProcess[str]
+        The exit status and output; the file lands in ``root/sudoers.d``.
     """
     share = root / 'share'
-    (share / 'deploy').mkdir(parents=True)
-    shutil.copytree(src=DEPLOY / 'sudoers', dst=share / 'deploy' / 'sudoers')
+    (share / 'deploy' / 'sudoers').mkdir(parents=True)
+    (share / 'deploy' / 'sudoers' / 'paperroute-deploy').write_text(
+        (
+            (DEPLOY / 'sudoers' / 'paperroute-deploy').read_text(
+                encoding='utf-8',
+            )
+            if kit_lines is None
+            else kit_lines
+        ),
+        encoding='utf-8',
+    )
+    if app_lines is None:
+        shutil.copytree(src=SYDNEY_SUDOERS, dst=share / 'app' / 'sudoers')
+    else:
+        (share / 'app' / 'sudoers').mkdir(parents=True)
+        (share / 'app' / 'sudoers' / 'paperroute-test').write_text(
+            app_lines,
+            encoding='utf-8',
+        )
     sudoers = root / 'sudoers.d' / 'paperroute-deploy'
     sudoers.parent.mkdir()
-    body = script_function(
-        path=BIN / 'provision-device',
-        name='install_sudoers',
-    )
     program = (
-        'set -euo pipefail\n'
-        'visudo() { return 0; }\n'
-        # BSD mv has no -T.
-        'mv() { [[ $1 == -T ]] && shift; command mv "$@"; }\n'
+        f'{visudo}\n{MV_STUB}\n'
         f'SHARE={share}\nSUDOERS={sudoers}\n'
         f'SUDOERS_NEW={sudoers.parent}/.paperroute-deploy.new\n'
-        f'DEPLOY_USER={user}\n{body}\ninstall_sudoers\n'
+        f'DEPLOY_USER={user}\ninstall_sudoers {shlex.quote(tools)}\n'
     )
-    subprocess.run(args=['bash', '-c', program], check=True, timeout=30)
-    return sudoers
+    return provision_functions(
+        names=('allowed_sudoers_line', 'install_sudoers'),
+        program=program,
+    )
+
+
+def sudoers_files(*, root: Path) -> list[str]:
+    """
+    List what install_sudoers left in the sandbox's sudoers.d.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+
+    Returns
+    -------
+    list[str]
+        The file names, sorted.
+    """
+    return sorted(path.name for path in (root / 'sudoers.d').iterdir())
 
 
 @pytest.mark.parametrize('user', ('pashri', 'alice'))
@@ -3034,24 +3330,331 @@ def test_provision_grants_sudo_to_the_deploy_user(
     tmp_path: Path,
     user: str,
 ) -> None:
-    """The installed rule names the user who ran provision, read-only."""
-    sudoers = install_sudoers(root=tmp_path, user=user)
-    rules = [
-        line
-        for line in sudoers.read_text(encoding='utf-8').splitlines()
-        if line.strip() and not line.lstrip().startswith('#')
+    """The installed rules name the user who ran provision, read-only."""
+    result = install_sudoers(root=tmp_path, user=user)
+    assert (result.returncode, result.stderr) == (0, '')
+    sudoers = tmp_path / 'sudoers.d' / 'paperroute-deploy'
+    assert sudoers_rules(path=sudoers) == [
+        SUDOERS_RULE.replace('pashri ', f'{user} ', 1),
+        TILES_RULE.replace('pashri ', f'{user} ', 1),
     ]
-    assert rules == [SUDOERS_RULE.replace('pashri ', f'{user} ', 1)]
     assert sudoers.stat().st_mode & 0o777 == 0o440
-    assert sorted(path.name for path in sudoers.parent.iterdir()) == [
-        'paperroute-deploy',
+    assert sudoers_files(root=tmp_path) == ['paperroute-deploy']
+
+
+def test_app_sudoers_names_only_provisioned_tools() -> None:
+    """Sydney's one rule names a tool its own deploy/bin ships."""
+    rules = sudoers_rules(path=SYDNEY_SUDOERS / 'paperroute-sydney')
+    assert rules == [TILES_RULE]
+    shipped = {path.name for path in SYDNEY_BIN.iterdir()}
+    named = {
+        found.group(1)
+        for rule in rules
+        for found in re.finditer(
+            pattern=r'/usr/local/sbin/paperroute-([a-z0-9-]+)',
+            string=rule,
+        )
+    }
+    assert named == {'install-tiles'} <= shipped
+
+
+@pytest.mark.parametrize(
+    ('app_lines', 'tools'),
+    (
+        (None, 'install-tiles\n'),
+        (
+            '# The job.\n\n'
+            'pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-job ""\n',
+            'job\n',
+        ),
+    ),
+    ids=('sydney', 'fixture'),
+)
+def test_no_sudoers_rule_points_into_releases(
+    tmp_path: Path,
+    app_lines: str | None,
+    tools: str,
+) -> None:
+    """Every rendered rule is the kit's or one installed tool's."""
+    result = install_sudoers(
+        root=tmp_path,
+        user='alice',
+        app_lines=app_lines,
+        tools=tools,
+    )
+    assert (result.returncode, result.stderr) == (0, '')
+    rules = sudoers_rules(path=tmp_path / 'sudoers.d' / 'paperroute-deploy')
+    kit = SUDOERS_RULE.replace('pashri ', 'alice ', 1)
+    assert rules[0] == kit
+    assert len(rules) == 2
+    assert all(rule == kit or APP_RULE.match(rule) for rule in rules)
+    assert not any('/opt/paperroute/releases' in rule for rule in rules)
+    shipped = [
+        *sudoers_rules(path=DEPLOY / 'sudoers' / 'paperroute-deploy'),
+        *sudoers_rules(path=SYDNEY_SUDOERS / 'paperroute-sydney'),
     ]
+    assert not any('/opt/paperroute/releases' in rule for rule in shipped)
+
+
+def assert_line_refused(*, root: Path, line: str, tools: str) -> None:
+    """
+    Check install_sudoers refuses an app line and writes no file.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+    line : str
+        The app's one sudoers line.
+    tools : str
+        The app tools just installed, one per line.
+    """
+    result = install_sudoers(
+        root=root,
+        user='alice',
+        app_lines=f'# A comment.\n{line}\n',
+        tools=tools,
+    )
+    rendered = line.replace('pashri ', 'alice ', 1) if line.startswith(
+        'pashri ',
+    ) else line
+    assert (result.returncode, result.stderr) == (
+        1,
+        f'provision-device: sudoers line not allowed: {rendered}\n',
+    )
+    assert sudoers_files(root=root) == []
+
+
+def test_install_sudoers_refuses_a_release_path(tmp_path: Path) -> None:
+    """A rule naming a release's own script is refused."""
+    assert_line_refused(
+        root=tmp_path,
+        line='pashri ALL=(root) NOPASSWD: /opt/paperroute/releases/x/bin/y ""',
+        tools='install-tiles\n',
+    )
+
+
+@pytest.mark.parametrize(
+    'line',
+    (
+        'Defaults !env_reset',
+        '@includedir /home/x',
+        '@include /home/x/rules',
+        '#include /home/x/rules',
+        '#includedir /home/x',
+        'Cmnd_Alias X = /bin/sh',
+        'pashri ALL=(ALL) NOPASSWD: ALL',
+        'pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-install-tiles'
+        ' "", /usr/local/sbin/paperroute-job ""',
+        'pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-install-release'
+        ' ""',
+        'root ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-install-tiles ""',
+        '#1000 ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-install-tiles ""',
+        '# a comment that continues \\',
+    ),
+)
+def test_install_sudoers_refuses_defaults_include_and_all(
+    tmp_path: Path,
+    line: str,
+) -> None:
+    """Only a comment, a blank or a one-tool rule passes; all else stops."""
+    assert_line_refused(
+        root=tmp_path,
+        line=line,
+        tools='install-tiles\njob\n',
+    )
+
+
+def test_app_tool_needs_no_args_rule(tmp_path: Path) -> None:
+    """A rule without the empty-argument marker lets any argument through."""
+    assert_line_refused(
+        root=tmp_path,
+        line='pashri ALL=(root) NOPASSWD: /usr/local/sbin/paperroute-install-tiles',
+        tools='install-tiles\n',
+    )
+
+
+def test_app_sudoers_must_name_an_installed_tool(tmp_path: Path) -> None:
+    """A rule for a tool provision did not just install is refused."""
+    assert_line_refused(
+        root=tmp_path,
+        line=TILES_RULE,
+        tools='job\n',
+    )
+
+
+def test_install_sudoers_refuses_a_widened_kit_rule(tmp_path: Path) -> None:
+    """The kit's own file may hold only the kit rule and comments."""
+    result = install_sudoers(
+        root=tmp_path,
+        user='alice',
+        kit_lines=f'{SUDOERS_RULE}\npashri ALL=(ALL) NOPASSWD: ALL\n',
+    )
+    assert (result.returncode, result.stderr) == (
+        1,
+        'provision-device: sudoers line not allowed:'
+        ' alice ALL=(ALL) NOPASSWD: ALL\n',
+    )
+    assert sudoers_files(root=tmp_path) == []
+
+
+@pytest.mark.parametrize('status', (0, 1))
+def test_install_sudoers_runs_visudo(tmp_path: Path, status: int) -> None:
+    """visudo checks the new file; its failure leaves no file behind."""
+    log = tmp_path / 'visudo.log'
+    result = install_sudoers(
+        root=tmp_path,
+        user='alice',
+        visudo=f'visudo() {{ printf "%s\\n" "$*" >>{log}; return {status}; }}',
+    )
+    new = tmp_path / 'sudoers.d' / '.paperroute-deploy.new'
+    assert log.read_text(encoding='utf-8') == f'-cf {new}\n'
+    if status:
+        assert (result.returncode, result.stderr) == (
+            1,
+            'provision-device: sudoers check failed\n',
+        )
+        assert sudoers_files(root=tmp_path) == []
+    else:
+        assert result.returncode == 0
+        assert sudoers_files(root=tmp_path) == ['paperroute-deploy']
+
+
+INSTALL_STUB: Final[str] = (
+    'install() { while [[ $1 == -* ]]; do shift 2; done; cp -- "$1" "$2"; }'
+)
+
+
+def run_app_tools(
+    *,
+    root: Path,
+    shipped: dict[str, str],
+    installed: dict[str, str],
+) -> subprocess.CompletedProcess[str]:
+    """
+    Run provision's ``install_app_tools`` over a share and an sbin folder.
+
+    Parameters
+    ----------
+    root : Path
+        Pytest's temporary directory.
+    shipped : dict[str, str]
+        Each file in the share's ``app/bin`` and its text.
+    installed : dict[str, str]
+        Each file already in sbin and its text.
+
+    Returns
+    -------
+    subprocess.CompletedProcess[str]
+        The exit status and output; sbin is ``root/sbin``.
+    """
+    app_bin = root / 'share' / 'app' / 'bin'
+    app_bin.mkdir(parents=True)
+    for name, text in shipped.items():
+        (app_bin / name).write_text(text, encoding='utf-8')
+    sbin = root / 'sbin'
+    sbin.mkdir()
+    for name, text in installed.items():
+        (sbin / name).write_text(text, encoding='utf-8')
+    tree = root / 'tree' / 'app' / 'bin'
+    tree.mkdir(parents=True)
+    for name in shipped:
+        (tree / name).write_text('tree copy\n', encoding='utf-8')
+    program = (
+        f'{INSTALL_STUB}\nSHARE={root / "share"}\nDIR={root / "tree"}\n'
+        f'SBIN={sbin}\ninstall_app_tools\n'
+    )
+    return provision_functions(names=('install_app_tools',), program=program)
+
+
+KIT_INSTALLED: Final[dict[str, str]] = {
+    'paperroute-install-release': 'kit release\n',
+    'paperroute-install-files': 'kit files\n',
+}
+
+
+def test_app_tools_come_from_the_provisioned_copy(tmp_path: Path) -> None:
+    """Tools install from the root-owned share, never the staged tree."""
+    result = run_app_tools(
+        root=tmp_path,
+        shipped={'install-tiles': 'share copy\n'},
+        installed=KIT_INSTALLED,
+    )
+    assert (result.returncode, result.stdout) == (0, 'install-tiles\n')
+    assert tree_files(root=tmp_path / 'sbin') == KIT_INSTALLED | {
+        'paperroute-install-tiles': 'share copy\n',
+    }
+    body = script_function(
+        path=BIN / 'provision-device',
+        name='install_app_tools',
+    )
+    assert '$DIR' not in body
+    assert '"$SHARE"/app/bin/' in body
+
+
+@pytest.mark.parametrize('kit', ('install-release', 'install-files'))
+def test_app_tool_cannot_replace_a_kit_tool(tmp_path: Path, kit: str) -> None:
+    """An app tool named like a kit tool stops provision, installing nothing."""
+    result = run_app_tools(
+        root=tmp_path,
+        shipped={'install-tiles': 'tiles\n', kit: 'app copy\n'},
+        installed=KIT_INSTALLED,
+    )
+    assert (result.returncode, result.stderr) == (
+        1,
+        f'provision-device: app tool {kit} is not allowed\n',
+    )
+    assert tree_files(root=tmp_path / 'sbin') == KIT_INSTALLED
+
+
+@pytest.mark.parametrize('name', ('Bad Name', '..x', '.x', 'x_y', '9x', '-x'))
+def test_app_tool_name_is_validated(tmp_path: Path, name: str) -> None:
+    """A tool name outside lowercase words and hyphens stops provision."""
+    result = run_app_tools(
+        root=tmp_path,
+        shipped={'install-tiles': 'tiles\n', name: 'odd\n'},
+        installed=KIT_INSTALLED,
+    )
+    assert (result.returncode, result.stderr) == (
+        1,
+        f'provision-device: app tool {name} is not allowed\n',
+    )
+    assert tree_files(root=tmp_path / 'sbin') == KIT_INSTALLED
+
+
+def test_stale_app_tools_are_removed(tmp_path: Path) -> None:
+    """A paperroute tool nobody ships goes; kit tools and others stay."""
+    result = run_app_tools(
+        root=tmp_path,
+        shipped={'job': 'new job\n'},
+        installed=KIT_INSTALLED | {
+            'paperroute-install-tiles': 'old tiles\n',
+            'paperroute-job': 'old job\n',
+            'other-tool': 'other\n',
+        },
+    )
+    assert (result.returncode, result.stdout) == (0, 'job\n')
+    assert tree_files(root=tmp_path / 'sbin') == KIT_INSTALLED | {
+        'paperroute-job': 'new job\n',
+        'other-tool': 'other\n',
+    }
+
+
+def test_provision_installs_app_tools_before_their_sudoers() -> None:
+    """The kit's tools, then the app's, then install-files, then sudoers."""
+    lines = script_text(path=BIN / 'provision-device').splitlines()
+    assert lines.index('tools=$(install_app_tools) || exit') < lines.index(
+        '/usr/local/sbin/paperroute-install-files',
+    ) < lines.index('install_sudoers "$tools"')
+    assert script_value(path=BIN / 'provision-device', name='SBIN') == (
+        '/usr/local/sbin'
+    )
 
 
 def test_provision_names_no_deploy_user() -> None:
     """Only the shipped sudoers default names pashri; provision does not."""
     text = script_text(path=BIN / 'provision-device')
-    assert 'pashri' not in text.replace("s/^pashri /", '')
+    assert 'pashri' not in text.replace('${line/#pashri /', '')
     assert commands(path=BIN / 'provision-device', word='paperroute-stage') == [
         'make_dir "$DEPLOY_USER" 0700 /var/cache/paperroute-stage',
     ]
@@ -3092,7 +3695,6 @@ INSTALL_FILES_FUNCTIONS: Final[tuple[str, ...]] = (
     'remove_strays',
     'enable_units',
 )
-SYDNEY_APP: Final[Path] = ROOT / 'apps' / 'paperroute-sydney'
 KIT_ENABLED: Final[str] = (
     'enable paperroute-led-boot paperroute paperroute-on-screen'
 )
@@ -3582,7 +4184,14 @@ def provision_functions(
     script = BIN / 'provision-device'
     regexes = ''.join(
         f'{name}={script_value(path=script, name=name)}\n'
-        for name in ('APP_RE', 'CONTRACT_RE', 'TIMER_RE')
+        for name in (
+            'APP_RE',
+            'CONTRACT_RE',
+            'TIMER_RE',
+            'TOOL_RE',
+            'KIT_TOOLS',
+            'APP_RULE_RE',
+        )
     )
     return run_functions(
         names=('fail', *names),

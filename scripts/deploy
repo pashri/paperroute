@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 # Usage: scripts/deploy HOST APP
-# Checks the tree, stages the tracked files of HEAD for the app on the Pi and installs them with the passwordless install scripts, the map
-# tiles first when data/tiles.db exists. Never prompts.
+# Checks the tree, stages the tracked files of HEAD for the app on the Pi and installs them with the passwordless install scripts, after
+# the app's scripts/before-release HOST when it has one. Never prompts.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
 STAGE=/var/cache/paperroute-stage
 INSTALL=/usr/local/sbin/paperroute-install-release
-TILES=/usr/local/sbin/paperroute-install-tiles
+HOOK=scripts/before-release
 
 usage() {
     printf 'usage: scripts/deploy HOST APP\n' >&2
@@ -34,10 +34,6 @@ sha=$(git rev-parse --short HEAD)
     printf 'deploy: unexpected sha\n' >&2
     exit 1
 }
-if [[ -f data/tiles.db ]]; then
-    uv run python -m "paperroute_$app.build" check-tiles data/tiles.db || printf 'deploy: warning: tiles do not match this release; deploying anyway\n' >&2
-fi
-
 if ! ssh -- "$host" sudo -n -l "$INSTALL" >/dev/null 2>&1; then
     printf 'deploy: run scripts/provision first\n' >&2
     exit 1
@@ -45,40 +41,8 @@ fi
 ssh -- "$host" rm -rf "$STAGE/$sha"
 git ls-files -z packages "apps/paperroute-$app" pyproject.toml uv.lock deploy/CONTRACT \
     | rsync -a --from0 --files-from=- ./ "$host:$STAGE/$sha/"
-if [[ -f data/tiles.db ]]; then
-    if ! ssh -- "$host" sudo -n -l "$TILES" >/dev/null 2>&1; then
-        printf 'deploy: run scripts/provision first (tiles)\n' >&2
-        exit 1
-    fi
-    NUMBER='^(0|[1-9][0-9]*)$'
-    free=$(ssh -- "$host" df -Pk "$STAGE" | awk 'NR == 2 { print $4 }') \
-        || free=
-    remote=$(ssh -- "$host" \
-        "stat -c '%s %Y' $STAGE/tiles/tiles.db 2>/dev/null || echo '0 0'") \
-        || remote=
-    staged_size=${remote%% *}
-    staged_mtime=${remote##* }
-    read -r size mtime < <(stat -f '%z %m' data/tiles.db)
-    for value in "$free" "$staged_size" "$staged_mtime" "$size" "$mtime"; do
-        [[ $value =~ $NUMBER ]] || {
-            printf 'deploy: cannot read the tile sizes\n' >&2
-            exit 1
-        }
-    done
-    free=$((free * 1024))
-    margin=$((64 * 1024 * 1024))
-    if [[ $staged_size -ne $size || $staged_mtime -ne $mtime ]]; then
-        if (( free < size || free + staged_size < 2 * size + margin )); then
-            need=$((2 * size + margin - staged_size))
-            (( need >= size )) || need=$size
-            printf 'deploy: not enough free disk on the Pi for the tiles (need %d MB, have %d MB)\n' \
-                $((need >> 20)) $((free >> 20)) >&2
-            exit 1
-        fi
-    fi
-    ssh -- "$host" mkdir -p "$STAGE/tiles"
-    rsync -a --partial data/tiles.db "$host:$STAGE/tiles/tiles.db"
-    ssh -- "$host" sudo -n "$TILES" || exit
+if [[ -f apps/paperroute-$app/$HOOK ]]; then
+    bash "apps/paperroute-$app/$HOOK" "$host" || exit
 fi
 status=0
 ssh -- "$host" sudo -n "$INSTALL" "$sha" "$app" || status=$?

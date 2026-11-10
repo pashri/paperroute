@@ -21,6 +21,10 @@ PIN_FILE=$PIN_DIR/m2a.env
 SUDOERS_NEW=/etc/sudoers.d/.paperroute-deploy.new
 STATE=/var/lib/paperroute/state.json
 CURRENT=/opt/paperroute/current
+SBIN=/usr/local/sbin
+KIT_TOOLS='install-release install-files'
+TOOL_RE='^[a-z][a-z0-9-]*$'
+APP_RULE_RE='^ALL=\(root\) NOPASSWD: /usr/local/sbin/paperroute-([a-z][a-z0-9-]*) ""$'
 APP_RE='^[a-z][a-z0-9]*$'
 CONTRACT_RE='^[1-9][0-9]*$'
 TIMER_RE='^paperroute-[a-z0-9-]+\.timer$'
@@ -208,13 +212,94 @@ set_state_aside() {
     printf '%s\n' "$APP_NAME" >"$SHARE/installed-app"
 }
 
-# Puts the deploy user in place of the shipped rule's default user.
+# Installs each tool in the app's root-owned copy as paperroute-NAME,
+# removes any paperroute tool neither the kit nor the app ships, and prints
+# the names it installed. A bad name or a kit tool's name installs nothing.
+install_app_tools() {
+    local path name keep names=
+    for path in "$SHARE"/app/bin/* "$SHARE"/app/bin/.[!.]* \
+        "$SHARE"/app/bin/..?*; do
+        [[ -e $path || -L $path ]] || continue
+        name=${path##*/}
+        if [[ ! -f $path || -L $path || ! $name =~ $TOOL_RE \
+            || " $KIT_TOOLS " == *" $name "* ]]; then
+            printf 'provision-device: app tool %s is not allowed\n' \
+                "$name" >&2
+            exit 1
+        fi
+        names+=$name$'\n'
+    done
+    for name in $names; do
+        path=$SHARE/app/bin/$name
+        install -m 0755 -o root -g root "$path" "$SBIN/paperroute-$name" \
+            || exit 1
+    done
+    keep=$'\n'${KIT_TOOLS// /$'\n'}$'\n'$names
+    for path in "$SBIN"/paperroute-*; do
+        [[ -e $path || -L $path ]] || continue
+        name=${path##*/paperroute-}
+        if [[ $keep != *$'\n'"$name"$'\n'* ]]; then
+            rm -f -- "$path" || exit 1
+        fi
+    done
+    printf '%s' "$names"
+}
+
+# Succeeds when a rendered line from the KIND (kit or app) sudoers file is
+# blank, a "# " comment, or a rule that file may hold: the kit rule in the
+# kit's, one no-argument rule for a just-installed TOOLS entry in the app's.
+allowed_sudoers_line() {
+    local kind=$1 line=$2 tools=$3 kit_rule=$4 rest
+    [[ $line != *\\ ]] || return 1
+    if [[ $line =~ ^[[:space:]]*$ || $line == '#' || $line == '# '* ]]; then
+        return 0
+    fi
+    if [[ $kind == kit ]]; then
+        [[ $line == "$kit_rule" ]]
+        return
+    fi
+    [[ $line == "$DEPLOY_USER "* ]] || return 1
+    rest=${line#"$DEPLOY_USER "}
+    [[ $rest =~ $APP_RULE_RE ]] || return 1
+    [[ " $KIT_TOOLS " != *" ${BASH_REMATCH[1]} "* \
+        && $'\n'$tools$'\n' == *$'\n'"${BASH_REMATCH[1]}"$'\n'* ]]
+}
+
+# Writes the kit's sudoers file, then the app's, with the deploy user in
+# place of the shipped default; refuses the lot if any line is not allowed.
+# TOOLS are the app tools install_app_tools installed, one per line.
 install_sudoers() {
+    local tools=$1 kit=$SHARE/deploy/sudoers/paperroute-deploy file kind
+    local line text= kit_rule
+    kit_rule="$DEPLOY_USER ALL=(root) NOPASSWD:"
+    kit_rule+=' /usr/local/sbin/paperroute-install-release,'
+    kit_rule+=' /usr/local/sbin/paperroute-install-files ""'
     rm -f -- "$SUDOERS_NEW"
-    (umask 0337 && sed "s/^pashri /$DEPLOY_USER /" \
-        "$SHARE/deploy/sudoers/paperroute-deploy" >"$SUDOERS_NEW")
-    if ! grep -q "^$DEPLOY_USER ALL=" "$SUDOERS_NEW" \
-        || ! visudo -cf "$SUDOERS_NEW"; then
+    for file in "$kit" "$SHARE"/app/sudoers/*; do
+        [[ -e $file || -L $file ]] || continue
+        kind=app
+        [[ $file != "$kit" ]] || kind=kit
+        if [[ ! -f $file || -L $file ]]; then
+            printf 'provision-device: %s is not a file\n' "$file" >&2
+            exit 1
+        fi
+        while IFS= read -r line || [[ -n $line ]]; do
+            line=${line/#pashri /$DEPLOY_USER }
+            if ! allowed_sudoers_line "$kind" "$line" "$tools" "$kit_rule"
+            then
+                printf 'provision-device: sudoers line not allowed: %s\n' \
+                    "$line" >&2
+                exit 1
+            fi
+            text+=$line$'\n'
+        done <"$file"
+    done
+    if [[ $'\n'$text != *$'\n'"$kit_rule"$'\n'* ]]; then
+        printf 'provision-device: sudoers check failed\n' >&2
+        exit 1
+    fi
+    (umask 0337 && printf '%s' "$text" >"$SUDOERS_NEW")
+    if ! visudo -cf "$SUDOERS_NEW"; then
         rm -f -- "$SUDOERS_NEW"
         printf 'provision-device: sudoers check failed\n' >&2
         exit 1
@@ -228,7 +313,7 @@ APP_NAME=$2
 [[ $APP_NAME =~ $APP_RE ]] \
     || fail 'the app must be lowercase letters and digits'
 [[ -d $DIR && ! -L $DIR ]] || fail 'DIR is not a directory'
-for need in bin/install-files bin/install-release bin/install-tiles \
+for need in bin/install-files bin/install-release \
     bin/paperroute-led sudoers/paperroute-deploy \
     polkit/50-paperroute-power.rules polkit/51-paperroute-network.rules; do
     [[ -f $DIR/kit/$need ]] || fail "DIR has no kit/$need"
@@ -301,15 +386,14 @@ write_contract
 write_manifest
 set_state_aside
 
-make_dir root 0755 /usr/local/sbin
-install -m 0755 -o root -g root "$SHARE/deploy/bin/install-release" \
-    /usr/local/sbin/paperroute-install-release
-install -m 0755 -o root -g root "$SHARE/deploy/bin/install-files" \
-    /usr/local/sbin/paperroute-install-files
-install -m 0755 -o root -g root "$SHARE/deploy/bin/install-tiles" \
-    /usr/local/sbin/paperroute-install-tiles
+make_dir root 0755 "$SBIN"
+for name in $KIT_TOOLS; do
+    install -m 0755 -o root -g root "$SHARE/deploy/bin/$name" \
+        "$SBIN/paperroute-$name"
+done
+tools=$(install_app_tools) || exit
 /usr/local/sbin/paperroute-install-files
 retire_pin
 
-install_sudoers
+install_sudoers "$tools"
 printf 'Provisioned: reboot to apply config.txt\n'

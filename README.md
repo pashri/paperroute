@@ -66,10 +66,11 @@ needs about 1.2 GB of RAM and makes about 490 MB. Add `--bbox` to build a
 smaller area for trying things out. Without `data/tiles.db` the Map shows
 "Map not installed". The app shows "Map not installed" when the tiles file
 was built for other zoom levels or another map style; rebuild the tiles when
-a release changes them. scripts/deploy warns about such a file but deploys
-anyway.
+a release changes them. `scripts/deploy` runs
+`apps/paperroute-sydney/scripts/before-release`, which warns about such a
+file but deploys anyway.
 
-`scripts/deploy` copies `data/tiles.db` to the Pi only when it has changed.
+`before-release` copies `data/tiles.db` to the Pi only when it has changed.
 The first upload takes about 12.5 minutes, and later deploys print "tiles
 unchanged". The Pi needs about twice the tiles file's size free, plus
 64 MB, while deploy installs it (about 1 GB), and deploy says so before

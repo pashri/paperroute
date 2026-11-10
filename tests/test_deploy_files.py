@@ -3428,6 +3428,46 @@ def assert_line_refused(*, root: Path, line: str, tools: str) -> None:
     assert sudoers_files(root=root) == []
 
 
+@pytest.mark.parametrize(
+    ('line', 'shown'),
+    (
+        (
+            f'{TILES_RULE}\r',
+            "$'alice ALL=(root) NOPASSWD:"
+            " /usr/local/sbin/paperroute-install-tiles \"\"\\r'",
+        ),
+        ('Defaults\tenv_keep += X', "$'Defaults\\tenv_keep += X'"),
+    ),
+    ids=('carriage-return', 'tab'),
+)
+def test_install_sudoers_shows_control_characters(
+    tmp_path: Path,
+    line: str,
+    shown: str,
+) -> None:
+    """A refused line with a control character is printed quoted."""
+    result = install_sudoers(
+        root=tmp_path,
+        user='alice',
+        app_lines=f'{line}\n',
+    )
+    assert (result.returncode, result.stderr) == (
+        1,
+        f'provision-device: sudoers line not allowed: {shown}\n',
+    )
+    assert sudoers_files(root=tmp_path) == []
+
+
+def test_rendered_sudoers_explains_the_user_once(tmp_path: Path) -> None:
+    """Only the kit's comment says provision swaps in the deploy user."""
+    result = install_sudoers(root=tmp_path, user='alice')
+    assert (result.returncode, result.stderr) == (0, '')
+    text = (tmp_path / 'sudoers.d' / 'paperroute-deploy').read_text(
+        encoding='utf-8',
+    )
+    assert text.count('swaps pashri') == 1
+
+
 def test_install_sudoers_refuses_a_release_path(tmp_path: Path) -> None:
     """A rule naming a release's own script is refused."""
     assert_line_refused(

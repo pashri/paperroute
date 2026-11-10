@@ -291,6 +291,9 @@ sudoers_text() {
             line=${line/#pashri /$DEPLOY_USER }
             if ! allowed_sudoers_line "$kind" "$line" "$tools" "$kit_rule"
             then
+                if [[ $line == *[[:cntrl:]]* ]]; then
+                    line=$(printf '%q' "$line")
+                fi
                 printf 'provision-device: sudoers line not allowed: %s\n' \
                     "$line" >&2
                 exit 1

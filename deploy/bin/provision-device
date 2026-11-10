@@ -114,25 +114,36 @@ retire_pin() {
     rmdir -- "$PIN_DIR" 2>/dev/null || true
 }
 
-# Replaces $SHARE/NAME with a root-owned copy of a staged directory.
-copy_tree() {
-    local src=$1 dest=$SHARE/$2
-    rm -rf -- "$dest.new"
-    cp -R -- "$src" "$dest.new"
-    chown -R root:root "$dest.new"
-    find "$dest.new" -type d -exec chmod 0755 {} +
-    find "$dest.new" -type f -exec chmod 0644 {} +
-    if [[ -d $dest.new/bin ]]; then
-        find "$dest.new/bin" -type f -exec chmod 0755 {} +
-    fi
+# Makes $SHARE/NAME.new a root-owned copy of a staged directory.
+stage_copy() {
+    local src=$1 dest=$SHARE/$2.new
     rm -rf -- "$dest"
-    mv -T -- "$dest.new" "$dest"
+    cp -R -- "$src" "$dest"
+    chown -R root:root "$dest"
+    find "$dest" -type d -exec chmod 0755 {} +
+    find "$dest" -type f -exec chmod 0644 {} +
+    if [[ -d $dest/bin ]]; then
+        find "$dest/bin" -type f -exec chmod 0755 {} +
+    fi
 }
 
-# The kit's copy stays at $SHARE/deploy, where the screen units look.
+# Replaces $SHARE/NAME with its copy from stage_copy.
+move_in() {
+    rm -rf -- "${SHARE:?}/$1"
+    mv -T -- "$SHARE/$1.new" "$SHARE/$1"
+}
+
+# Replaces $SHARE/NAME with a root-owned copy of a staged directory.
+copy_tree() {
+    stage_copy "$1" "$2"
+    move_in "$2"
+}
+
+# The kit's copy stays at $SHARE/deploy, where the screen units look. The
+# app's waits at $SHARE/app.new until take_app_copy has checked it.
 copy_deploy() {
     copy_tree "$DIR/kit" deploy
-    copy_tree "$DIR/app" app
+    stage_copy "$DIR/app" app
 }
 
 # Records the kit's units contract for install-release.
@@ -157,7 +168,8 @@ write_manifest() {
 }
 
 # Fails on anything under app/systemd that is not a paperroute unit the
-# kit lacks, or a drop-in for a unit the kit or the app ships.
+# kit lacks, or a drop-in for paperroute.service or for one of the app's
+# own units.
 check_app_units() {
     local dir=$DIR/app/systemd path name file
     [[ -e $dir ]] || return 0
@@ -172,7 +184,9 @@ check_app_units() {
         fi
         [[ -d $path && $name =~ $DROP_IN_DIR_RE ]] \
             || fail "the app may not ship systemd/$name"
-        if [[ ! -f $dir/${name%.d} && ! -f $DIR/kit/systemd/${name%.d} ]]; then
+        if [[ $name != paperroute.service.d && ! -f $dir/${name%.d} ]]; then
+            [[ ! -f $DIR/kit/systemd/${name%.d} ]] \
+                || fail "the app may not change systemd/${name%.d}"
             fail "systemd/$name is for a unit nobody ships"
         fi
         for file in "$path"/* "$path"/.[!.]*; do
@@ -212,12 +226,12 @@ set_state_aside() {
     printf '%s\n' "$APP_NAME" >"$SHARE/installed-app"
 }
 
-# Prints the names of the tools in the app's root-owned copy, one per
-# line; refuses a non-file, a bad name or a kit tool's name.
+# Prints the names of the tools in the app's root-owned copy (APP_COPY,
+# else $SHARE/app), one per line; refuses a non-file, a bad name or a kit
+# tool's name.
 app_tool_names() {
-    local path name
-    for path in "$SHARE"/app/bin/* "$SHARE"/app/bin/.[!.]* \
-        "$SHARE"/app/bin/..?*; do
+    local path name app=${APP_COPY:-$SHARE/app}
+    for path in "$app"/bin/* "$app"/bin/.[!.]* "$app"/bin/..?*; do
         [[ -e $path || -L $path ]] || continue
         name=${path##*/}
         if [[ ! -f $path || -L $path || ! $name =~ $TOOL_RE \
@@ -272,14 +286,15 @@ allowed_sudoers_line() {
 
 # Prints the kit's sudoers file, then the app's, with the deploy user in
 # place of the shipped default; refuses the lot if any line is not allowed.
-# TOOLS are the app's checked tools, one per line.
+# TOOLS are the app's checked tools, one per line; the app's file comes
+# from APP_COPY, else $SHARE/app.
 sudoers_text() {
     local tools=$1 kit=$SHARE/deploy/sudoers/paperroute-deploy file kind
-    local line text= kit_rule
+    local line text= kit_rule app=${APP_COPY:-$SHARE/app}
     kit_rule="$DEPLOY_USER ALL=(root) NOPASSWD:"
     kit_rule+=' /usr/local/sbin/paperroute-install-release,'
     kit_rule+=' /usr/local/sbin/paperroute-install-files ""'
-    for file in "$kit" "$SHARE"/app/sudoers/*; do
+    for file in "$kit" "$app"/sudoers/*; do
         [[ -e $file || -L $file ]] || continue
         kind=app
         [[ $file != "$kit" ]] || kind=kit
@@ -314,6 +329,18 @@ check_app_part() {
     local tools
     tools=$(app_tool_names) || exit 1
     sudoers_text "$tools" >/dev/null || exit 1
+    printf '%s\n' "$tools"
+}
+
+# Checks the app's staged copy and moves it to $SHARE/app, then prints
+# its tool names; a refused copy is removed and the old one kept.
+take_app_copy() {
+    local tools
+    if ! tools=$(APP_COPY=$SHARE/app.new check_app_part); then
+        rm -rf -- "${SHARE:?}/app.new"
+        exit 1
+    fi
+    move_in app
     printf '%s\n' "$tools"
 }
 
@@ -421,7 +448,7 @@ rpi-usb-gadget on
 
 make_dir root 0755 "$SHARE"
 copy_deploy
-tools=$(check_app_part) || exit
+tools=$(take_app_copy) || exit
 write_contract
 write_manifest
 set_state_aside

@@ -40,11 +40,23 @@ cleanup() {
     fi
 }
 
+# Refuses an app other than the one provision recorded as installed; with
+# no record yet, any app passes.
+installed_app_ok() {
+    local name=
+    [[ -f $SHARE/installed-app ]] || return 0
+    IFS= read -r name <"$SHARE/installed-app" || true
+    [[ $name != "$APP_NAME" ]] || return 0
+    fail "the device runs $name, not $APP_NAME. Run scripts/provision HOST\
+ $APP_NAME first."
+}
+
 # Checks the app and the staged tree; sets APP, TREE and OWNER.
 validate() {
     local uid bad project
     [[ $APP_NAME =~ $APP_RE ]] \
         || fail 'the app must be lowercase letters and digits'
+    installed_app_ok
     APP=paperroute-$APP_NAME
     TREE=$STAGE/$SHA
     if [[ ! -d $TREE || -L $TREE ]]; then

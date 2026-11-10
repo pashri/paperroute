@@ -3636,7 +3636,12 @@ def test_app_tools_come_from_the_provisioned_copy(tmp_path: Path) -> None:
         for name in ('app_tool_names', 'install_app_tools')
     )
     assert '$DIR' not in names + install
-    assert '"$SHARE"/app/bin/' in names
+    assert 'app=${APP_COPY:-$SHARE/app}' in names
+    assert '"$app"/bin/' in names
+    assert 'APP_COPY=$SHARE/app.new check_app_part' in script_function(
+        path=BIN / 'provision-device',
+        name='take_app_copy',
+    )
     assert 'path=$SHARE/app/bin/$name' in install
 
 
@@ -3850,6 +3855,56 @@ def test_an_allowed_app_part_installs_tools_then_sudoers(
     )
 
 
+@pytest.mark.parametrize(
+    ('tool', 'status', 'stderr'),
+    (
+        ('Bad Name', 1, 'provision-device: app tool Bad Name is not allowed\n'),
+        ('install-job', 0, ''),
+    ),
+    ids=('refused', 'allowed'),
+)
+def test_provision_moves_the_app_in_only_once_checked(
+    *,
+    tmp_path: Path,
+    tool: str,
+    status: int,
+    stderr: str,
+) -> None:
+    """A refused app part leaves the old copy and no staged one behind."""
+    staging = copy_deploy(tmp_path=tmp_path, app=WITH_UNITS)
+    (staging / 'app' / 'bin').mkdir(exist_ok=True)
+    (staging / 'app' / 'bin' / tool).write_text('new\n', encoding='utf-8')
+    share = tmp_path / 'share'
+    (share / 'app').mkdir(parents=True)
+    (share / 'app' / 'old').write_text('old\n', encoding='utf-8')
+    result = provision_functions(
+        names=(
+            'stage_copy',
+            'move_in',
+            'copy_tree',
+            'copy_deploy',
+            'app_tool_names',
+            'allowed_sudoers_line',
+            'sudoers_text',
+            'check_app_part',
+            'take_app_copy',
+        ),
+        program=(
+            f'chown() {{ :; }}\n{MV_STUB}\nSHARE={share}\nDIR={staging}\n'
+            'DEPLOY_USER=alice\ncopy_deploy\n'
+            'tools=$(take_app_copy) || exit\n'
+        ),
+    )
+    assert (result.returncode, result.stderr) == (status, stderr)
+    assert sorted(path.name for path in share.iterdir()) == ['app', 'deploy']
+    if status:
+        assert tree_files(root=share / 'app') == {'old': 'old\n'}
+    else:
+        assert tree_files(root=share / 'app') == tree_files(
+            root=staging / 'app',
+        )
+
+
 def test_provision_checks_the_app_part_before_any_root_change() -> None:
     """The checks run right after the share copy, before state or tools."""
     lines = script_text(path=BIN / 'provision-device').splitlines()
@@ -3857,7 +3912,7 @@ def test_provision_checks_the_app_part_before_any_root_change() -> None:
         lines.index(line)
         for line in (
             'copy_deploy',
-            'tools=$(check_app_part) || exit',
+            'tools=$(take_app_copy) || exit',
             'set_state_aside',
             'install_tools "$tools"',
         )
@@ -4444,10 +4499,10 @@ def test_provision_keeps_the_kit_copy_in_place(tmp_path: Path) -> None:
     share = tmp_path / 'share'
     share.mkdir()
     result = provision_functions(
-        names=('copy_tree', 'copy_deploy'),
+        names=('stage_copy', 'move_in', 'copy_tree', 'copy_deploy'),
         program=(
             f'chown() {{ :; }}\n{MV_STUB}\nSHARE={share}\nDIR={staging}\n'
-            'copy_deploy\ncopy_deploy\n'
+            'copy_deploy\nmove_in app\ncopy_deploy\nmove_in app\n'
         ),
     )
     assert (result.returncode, result.stderr) == (0, '')
@@ -4545,6 +4600,14 @@ def test_provision_writes_contract_and_manifest(
             'the app may not ship systemd/paperroute.service.d/notes.txt',
         ),
         ('ssh.service.d/x.conf', 'the app may not ship systemd/ssh.service.d'),
+        (
+            'paperroute-on-screen.service.d/x.conf',
+            'the app may not change systemd/paperroute-on-screen.service',
+        ),
+        (
+            'paperroute-led-boot.service.d/x.conf',
+            'the app may not change systemd/paperroute-led-boot.service',
+        ),
     ),
 )
 def test_provision_checks_the_app_units(
@@ -4735,6 +4798,43 @@ def test_install_release_refuses_other_contract(
     ]
     assert steps == sorted(steps)
     assert steps[-1] < lines.index('    take_over')
+
+
+@pytest.mark.parametrize(
+    ('installed', 'status', 'stderr'),
+    (
+        (
+            'sydney\n',
+            2,
+            'install-release: the device runs sydney, not clock. Run'
+            ' scripts/provision HOST clock first.\n',
+        ),
+        ('clock\n', 0, ''),
+        (None, 0, ''),
+    ),
+    ids=('another', 'same', 'unrecorded'),
+)
+def test_install_release_refuses_another_app(
+    *,
+    tmp_path: Path,
+    installed: str | None,
+    status: int,
+    stderr: str,
+) -> None:
+    """A release of an app provision did not install is refused first."""
+    if installed is not None:
+        (tmp_path / 'installed-app').write_text(installed, encoding='utf-8')
+    result = release_functions(
+        names=('installed_app_ok',),
+        program=f'SHARE={tmp_path} APP_NAME=clock\ninstalled_app_ok\n',
+    )
+    assert (result.returncode, result.stderr) == (status, stderr)
+    body = script_function(path=BIN / 'install-release', name='validate')
+    calls = body.splitlines()
+    assert '    installed_app_ok' in calls
+    assert calls.index('    installed_app_ok') < calls.index(
+        '    APP=paperroute-$APP_NAME',
+    )
 
 
 def test_install_release_accepts_the_same_contract(tmp_path: Path) -> None:

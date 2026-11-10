@@ -39,6 +39,7 @@ from paperroute_device_testkit.device_fakes import (
     FakeKeys,
     FakePower,
     FakeProbe,
+    FakeWifi,
     FixedClock,
 )
 from paperroute_device_testkit.hardware_fakes import FrameRecorder
@@ -153,6 +154,41 @@ async def test_run_tells_the_app_it_stopped(tmp_path: Path) -> None:
     await run(app=app, ports=ports, zone=ZONE, max_events=1)
     assert app.hooks == ['stopped']
 
+
+
+class StopFailsApp(FakeApp):
+    """A fake app whose ``stopped`` hook raises."""
+
+    async def stopped(self) -> None:
+        """
+        Fail to close what the app holds.
+
+        Raises
+        ------
+        OSError
+            Always.
+        """
+        self.hooks.append('stopped')
+        raise OSError('stop failed')
+
+
+async def test_run_stops_the_hotspot_when_the_app_fails_to_stop(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failing ``stopped`` is logged and the hotspot still comes down."""
+    app = StopFailsApp()
+    wifi = FakeWifi()
+    ports = ports_of(
+        path=tmp_path / 'state.json',
+        app=app,
+        device=DevicePorts(wifi=wifi),
+    )
+    with caplog.at_level(logging.ERROR):
+        await run(app=app, ports=ports, zone=ZONE, max_events=1)
+    assert app.hooks == ['stopped']
+    assert wifi.calls.count('saved') == 2
+    errors = [r.exc_info[1] for r in caplog.records if r.exc_info]
+    assert any(str(error) == 'stop failed' for error in errors)
 
 async def test_run_quits_when_the_ticker_crashes(
     tmp_path: Path, caplog: pytest.LogCaptureFixture,

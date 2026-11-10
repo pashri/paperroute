@@ -344,7 +344,8 @@ async def run[S](
     Run an app until quit, or until max_events events have been handled.
 
     Background tasks are cancelled and awaited before this returns.
-    Observer errors are logged and never stop the loop. Worker threads
+    Observer errors, and an error from the app's ``stopped`` hook, are
+    logged and never stop the loop or its clean-up. Worker threads
     started by to_thread are not cancelled; asyncio.run waits for them
     when it exits.
 
@@ -400,7 +401,10 @@ async def run[S](
         )
     finally:
         await stop(tasks={clock, *tasks})
-        await app.stopped()
+        try:
+            await app.stopped()
+        except Exception:  # pylint: disable=broad-exception-caught
+            logger.exception('the app failed to stop')
         await leftover_stopped(ports=ports.device)
     return kit
 

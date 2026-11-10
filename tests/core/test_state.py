@@ -3442,6 +3442,24 @@ def test_kit_steps_keep_a_pending_save_across_calls() -> None:
     assert save.saved.device.larger_text
 
 
+def test_chained_steps_carry_a_pending_save() -> None:
+    """A change in one step is saved by a chained step's later tick."""
+    state, _ = step(fresh(), Tick(now=START))
+    state, _ = step(state, settings_posted(larger_text=True))
+    state, effects = step(state, Tick(now=START + timedelta(seconds=1)))
+    assert not saves(effects=effects)
+    _, effects = step(state, Tick(now=START + SAVE_WAIT))
+    assert len(saves(effects=effects)) == 1
+
+
+def test_a_replaced_state_starts_with_nothing_to_save() -> None:
+    """A state edited since its step starts as if just written."""
+    state, _ = step(fresh(), Tick(now=START))
+    state, _ = step(state, settings_posted(larger_text=True))
+    _, effects = step(replace(state), Tick(now=START + SAVE_WAIT))
+    assert not saves(effects=effects)
+
+
 def test_kit_steps_keep_the_sleep_frame_flag() -> None:
     """A wake after a drawn sleep frame redraws in full."""
     kit, _ = kit_step(

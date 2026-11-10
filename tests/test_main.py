@@ -358,21 +358,23 @@ def test_main_accepts_neither_or_both_seeds(
 def test_main_rejects_one_seed(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, given: list[str]
 ) -> None:
-    """Only one of --from and --to exits with a message on opening."""
+    """Only one of --from and --to exits at parsing, before anything opens."""
     monkeypatch.delenv('PAPERROUTE_FROM', raising=False)
     monkeypatch.delenv('PAPERROUTE_TO', raising=False)
+    opened: list[str] = []
+    for name in ('panel_for', 'knobs_for', 'tk_main', 'web_main'):
+        monkeypatch.setattr(
+            cli,
+            name,
+            lambda *_, name=name, **__: opened.append(name),
+        )
     timetable = tmp_path / 'x.db'
     app = sydney_app()
-    args = cli.parse_args(
-        app=app, argv=['run', '--timetable', str(timetable), *given],
-    )
-    with (
-        pytest.raises(
-            SystemExit, match='give both --from and --to, or neither',
-        ),
-        app.opened(args=args, last_error=LastError(zone=SYDNEY_ZONE)),
-    ):
-        pass
+    argv = ['run', '--timetable', str(timetable), '--panel', *given]
+    with pytest.raises(SystemExit) as raised:
+        cli.main(app=app, argv=argv)
+    assert raised.value.code == 'give both --from and --to, or neither'
+    assert not opened
     assert app.ports is None
     assert not timetable.exists()
 

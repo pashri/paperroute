@@ -170,6 +170,28 @@ async def test_full_survives_burst(tmp_path: Path) -> None:
     assert (display.fulls, display.clears) == ([True], [True])
 
 
+async def test_draw_ends_a_burst_full_and_clear(tmp_path: Path) -> None:
+    """The frame after a burst's draw is neither full nor clear."""
+    display = FrameRecorder()
+    ports = ports_of(path=tmp_path / 'state.json', display=display)
+    outputs = Outputs(saver=StateSaver(states=ports.states))
+    for effects in (
+        (Render(view='one', full=True), Render(view='two', clear=True)),
+        (Render(view='three'),),
+    ):
+        await carry_out(
+            effects=effects,
+            ports=ports,
+            app=FakeApp(),
+            queue=asyncio.Queue(),
+            tasks=set(),
+            outputs=outputs,
+        )
+        await draw_pending(ports=ports, app=FakeApp(), outputs=outputs)
+    assert (outputs.pending.full, outputs.pending.clear) == (False, False)
+    assert (display.fulls, display.clears) == ([True, False], [True, False])
+
+
 async def test_save_is_written_before_carry_out_returns(
     tmp_path: Path,
 ) -> None:

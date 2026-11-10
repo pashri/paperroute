@@ -122,7 +122,7 @@ def parse_args(
     Returns
     -------
     argparse.Namespace
-        Parsed arguments.
+        Parsed arguments, a run command's checked by the app.
     """
     parser = argparse.ArgumentParser(prog='paperroute-board')
     sub = parser.add_subparsers(dest='command', required=True)
@@ -132,7 +132,10 @@ def parse_args(
     app.add_arguments(parser=runner)
     sub.add_parser('selftest', help='test the e-paper panel')
     sub.add_parser('zone', help="print the app's IANA time zone")
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+    if args.command == 'run':
+        app.check_arguments(args=args)
+    return args
 
 
 def power_for(*, args: argparse.Namespace) -> PowerControl:

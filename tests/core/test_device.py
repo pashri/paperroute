@@ -5,7 +5,12 @@ from datetime import time, timedelta
 import pytest
 
 from paperroute_device.core.banners import no_key_banner
-from paperroute_device.core.device import NOTICE, PROBE_EVERY, device_status
+from paperroute_device.core.device import (
+    NOTICE,
+    PROBE_EVERY,
+    device_status,
+    on_reset,
+)
 from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
     DeviceStatus,
@@ -33,7 +38,7 @@ from paperroute_device.core.kit_events import (
     ResetDone,
     Tick,
 )
-from paperroute_device.core.kit_state import SAVE_WAIT
+from paperroute_device.core.kit_state import SAVE_WAIT, KitState, with_device
 from paperroute_device.core.panel_views import NoticeView
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import (
@@ -422,21 +427,56 @@ def test_reset_draws_notice_then_resets() -> None:
 
 def test_no_save_after_reset_asked() -> None:
     """After a reset is asked for, nothing saves; a quit still stops."""
-    state, _ = step(pinned(), SettingsChanged(auto_rebuild=False))
-    state, _ = reset_asked(state=state, kind=ResetKind.ERASE)
+    kit, _ = kit_step(
+        kit=kit_of(state=pinned()), event=SettingsChanged(auto_rebuild=False),
+    )
+    kit = reset_kit(kit=kit, kind=ResetKind.ERASE)
     for seconds in (1, 10, 60):
         tick = Tick(now=START + SAVE_WAIT + timedelta(seconds=seconds))
-        state, effects = step(state, tick)
+        kit, effects = kit_step(kit=kit, event=tick)
         assert not [e for e in effects if isinstance(e, SaveState | Render)]
-    _, effects = step(state, QuitRequested())
+    _, effects = kit_step(kit=kit, event=QuitRequested())
     assert effects == (Stop(),)
+
+
+def test_change_saves_without_a_reset() -> None:
+    """The change the reset tests start from saves when nothing resets."""
+    kit, _ = kit_step(
+        kit=kit_of(state=pinned()), event=SettingsChanged(auto_rebuild=False),
+    )
+    tick = Tick(now=START + SAVE_WAIT + timedelta(seconds=1))
+    _, effects = kit_step(kit=kit, event=tick)
+    assert [e for e in effects if isinstance(e, SaveState)]
+
+
+def reset_kit(*, kit: KitState[State], kind: ResetKind) -> KitState[State]:
+    """
+    Start a reset in the kit's state, as the kit does once confirmed.
+
+    Parameters
+    ----------
+    kit : KitState[State]
+        Kit state.
+    kind : ResetKind
+        The reset.
+
+    Returns
+    -------
+    KitState[State]
+        Kit state with the reset under way.
+    """
+    device, _ = on_reset(device=kit.device, kind=kind)
+    return with_device(kit=kit, device=device)
 
 
 def test_reset_done_stops() -> None:
     """A finished reset stops the app without saving."""
-    state = resetting(kind=ResetKind.ERASE)
-    state, effects = step(state, ResetDone(kind=ResetKind.ERASE))
-    assert not state.running
+    kit, _ = kit_step(
+        kit=kit_of(state=pinned()), event=SettingsChanged(auto_rebuild=False),
+    )
+    kit = reset_kit(kit=kit, kind=ResetKind.ERASE)
+    kit, effects = kit_step(kit=kit, event=ResetDone(kind=ResetKind.ERASE))
+    assert not kit.running
     assert effects == (Stop(),)
 
 

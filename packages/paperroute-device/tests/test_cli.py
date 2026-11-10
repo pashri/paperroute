@@ -219,6 +219,51 @@ def test_app_arguments_parse() -> None:
         cli.parse_args(app=FakeApp(), argv=['run', '--colour', 'blue'])
 
 
+class CheckingApp(FakeApp):
+    """An app that refuses its arguments and records what was opened."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.checked: list[str] = []
+
+    def check_arguments(self, *, args: argparse.Namespace) -> None:
+        """
+        Refuse every run command.
+
+        Parameters
+        ----------
+        args : argparse.Namespace
+            Parsed arguments.
+
+        Raises
+        ------
+        SystemExit
+            Always.
+        """
+        self.checked.append(args.command)
+        raise SystemExit('bad arguments')
+
+
+def test_check_arguments_runs_before_anything_opens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The app's check exits before a panel, knobs or window opens."""
+    opened: list[str] = []
+    for name in ('panel_for', 'knobs_for', 'tk_main', 'web_main'):
+        monkeypatch.setattr(
+            cli,
+            name,
+            lambda *_, name=name, **__: opened.append(name),
+        )
+    app = CheckingApp()
+    with pytest.raises(SystemExit, match='bad arguments'):
+        cli.main(app=app, argv=['run', '--display', 'web', '--panel', '--knobs'])
+    assert app.checked == ['run']
+    assert not opened
+    assert cli.parse_args(app=app, argv=['zone']).command == 'zone'
+    assert app.checked == ['run']
+
+
 def test_defaults_are_tk_on_port_80() -> None:
     """The defaults are the Tk window, all interfaces and port 80."""
     args = cli.parse_args(app=FakeApp(), argv=['run'])

@@ -254,6 +254,17 @@ class App[S](ABC):
         """
         del parser
 
+    def check_arguments(self, *, args: argparse.Namespace) -> None:
+        """
+        Refuse run arguments that cannot work, before anything opens.
+
+        Parameters
+        ----------
+        args : argparse.Namespace
+            The run command's parsed arguments.
+        """
+        del args
+
     @contextmanager
     def opened(
         self, *, args: argparse.Namespace, last_error: LastError,

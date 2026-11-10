@@ -215,6 +215,20 @@ class TransitRun:
 
         add_run_arguments(parser)
 
+    def check_arguments(self, *, args: argparse.Namespace) -> None:
+        """
+        Refuse a lone --from or --to before anything opens.
+
+        Parameters
+        ----------
+        args : argparse.Namespace
+            The run command's parsed arguments.
+        """
+        # pylint: disable-next=import-outside-toplevel,cyclic-import
+        from paperroute_transit.board import require_both_or_neither
+
+        require_both_or_neither(args=args)
+
     @contextmanager
     def opened(
         self, *, args: argparse.Namespace, last_error: LastError,
@@ -239,7 +253,6 @@ class TransitRun:
         from paperroute_transit import board
 
         del last_error
-        board.require_both_or_neither(args=args)
         self.replay = args.feeds != 'live'
         feeds = board.feeds_client(
             choice=args.feeds,

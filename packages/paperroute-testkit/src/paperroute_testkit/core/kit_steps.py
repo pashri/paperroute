@@ -13,7 +13,7 @@ from paperroute_device.core.device_state import (
     KitSaved,
 )
 from paperroute_device.core.kit_events import DeviceChange, SettingsPosted
-from paperroute_device.core.kit_state import KitState
+from paperroute_device.core.kit_state import KitState, with_app
 from paperroute_device.core.reducer import step as kit_reducer
 from paperroute_transit.city_parts import CityParts
 from paperroute_transit.core.messages import Effect, Event, SettingsChanged
@@ -47,6 +47,10 @@ class NoFeeds:
 
     async def close(self) -> None:
         """Close nothing."""
+
+
+CARRIED_KEPT: Final[int] = 64
+CARRIED: Final[dict[int, KitState[State]]] = {}
 
 
 def no_feeds() -> FeedsClient:
@@ -282,7 +286,13 @@ def app_of(*, kit: KitState[State]) -> State:
 
 def step(state: State, event: object) -> tuple[State, tuple[Effect, ...]]:
     """
-    Apply one event to a state that was just written.
+    Apply one event, carrying the kit's state between chained calls.
+
+    A state returned by an earlier `step` keeps that step's kit state:
+    what was last written, when, and any change still waiting to be
+    saved. Any other state, including one changed with `replace` since,
+    starts as if it was just written, with nothing waiting to be saved.
+    Thread `kit_of` and `kit_step` to keep the kit state through edits.
 
     Parameters
     ----------
@@ -294,8 +304,17 @@ def step(state: State, event: object) -> tuple[State, tuple[Effect, ...]]:
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        Next state and the effects. A change saves on the same step's
-        tick only; thread `kit_step` to carry a save across steps.
+        Next state and the effects.
     """
-    after, effects = kit_step(kit=kit_of(state=state), event=event)
-    return app_of(kit=after), effects
+    carried = CARRIED.get(id(state))
+    kit = (
+        carried
+        if carried is not None and carried.app is state
+        else kit_of(state=state)
+    )
+    after, effects = kit_step(kit=kit, event=event)
+    result = app_of(kit=after)
+    CARRIED[id(result)] = with_app(kit=after, app=result)
+    while len(CARRIED) > CARRIED_KEPT:
+        del CARRIED[next(iter(CARRIED))]
+    return result, effects

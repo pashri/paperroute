@@ -37,11 +37,6 @@ VENDORED: Final[dict[str, str]] = {
     'tom-select.complete.min.js': 'text/javascript',
     'tom-select.css': 'text/css',
 }
-RESET_HINT: Final[str] = (
-    'Reset settings clears pins, settings, Wi-Fi and the key. Erase '
-    'everything also deletes the timetable. The map is kept. Both are '
-    'confirmed on the device.'
-)
 
 
 class StatusLine(Protocol):

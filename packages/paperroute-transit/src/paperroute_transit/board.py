@@ -64,13 +64,14 @@ from paperroute_transit.adapters.tiles_db import (
     SqliteTileRepository,
 )
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
-from paperroute_transit.adapters.web_display import RESET_HINT, WebDisplay
+from paperroute_transit.adapters.web_display import WebDisplay
 from paperroute_transit.app import Ports, run
 from paperroute_transit.app_device import DevicePorts
 from paperroute_transit.city_parts import CityParts, LiveFeeds
 from paperroute_transit.core.city import City
 from paperroute_transit.core.messages import Event
 from paperroute_transit.core.model import Pin, StopPlace
+from paperroute_transit.core.panel_screens import RESET_HINT
 from paperroute_transit.core.tiles import TileVariant
 from paperroute_transit.observers import ObserverGroup, Timings
 from paperroute_transit.ports import (

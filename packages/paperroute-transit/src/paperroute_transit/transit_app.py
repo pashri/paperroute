@@ -13,13 +13,14 @@ from paperroute_device.core.kit_state import Step
 from paperroute_device.core.panel_views import InfoRow
 from paperroute_device.ports import Frame
 from paperroute_hardware.core.knob_events import KnobEvent
-from paperroute_transit.adapters.web_display import RESET_HINT
+from paperroute_transit.app_pins import BoardObserver, report_pins
 from paperroute_transit.core.auto_model import holds_awake
 from paperroute_transit.core.banners import OFFLINE_PHRASE
 from paperroute_transit.core.city import City
 from paperroute_transit.core.device import app_status, power_guard, quiet_guard
 from paperroute_transit.core.messages import Effect, Event, ScreenView
 from paperroute_transit.core.panel_screens import (
+    RESET_HINT,
     TRANSIT_CONFIRM_COPY,
     transit_rows,
 )
@@ -60,6 +61,7 @@ from paperroute_transit.core.state_views import (
 )
 
 if TYPE_CHECKING:
+    from paperroute_transit.app_effects import VersionWatch
     from paperroute_transit.city_parts import CityParts
 
 QUIET_LABEL: Final[str] = 'Follow the timetable'
@@ -187,6 +189,11 @@ class TransitApp(App[State]):
         The city the board runs for.
     parts : CityParts
         The city's runtime wiring; the reducer hooks never read it.
+    observer : BoardObserver | None
+        Told of settings and pin changes; None tells no one.
+    watch : VersionWatch | None
+        Reads the timetable's version before each tick; None reads
+        nothing.
     """
 
     offline_phrase = OFFLINE_PHRASE
@@ -195,9 +202,62 @@ class TransitApp(App[State]):
     reset_hint = RESET_HINT
     confirm_copy = TRANSIT_CONFIRM_COPY
 
-    def __init__(self, *, city: City, parts: CityParts) -> None:
+    def __init__(
+        self,
+        *,
+        city: City,
+        parts: CityParts,
+        observer: BoardObserver | None = None,
+        watch: VersionWatch | None = None,
+    ) -> None:
         self.city = city
         self.parts = parts
+        self.observer = observer
+        self.watch = watch
+
+    async def before_tick(self) -> object | None:
+        """
+        Read the timetable's version just before each tick.
+
+        A read error is logged once, until a read works again, and never
+        raised, so a damaged timetable leaves the loop running.
+
+        Returns
+        -------
+        object | None
+            A TimetableSeen the first time and on a change; None when
+            unchanged, unreadable or nothing is watched.
+        """
+        if self.watch is None:
+            return None
+        return await self.watch.check()
+
+    def observe(self, *, before: State, after: State, event: object) -> None:
+        """
+        Report changed settings and pins to the board's observer.
+
+        It does not raise: the observer group swallows its members'
+        errors.
+
+        Parameters
+        ----------
+        before : State
+            State before the event.
+        after : State
+            State after it.
+        event : object
+            The event.
+        """
+        if self.observer is None:
+            return
+        if after.settings != before.settings:
+            self.observer.settings_seen(settings=after.settings)
+        report_pins(
+            observer=self.observer,
+            before=before.places,
+            state=after,
+            event=event,
+        )
 
     def start(
         self, *, section: object | None, stored: bool, device: DeviceState,

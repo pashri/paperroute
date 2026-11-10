@@ -25,7 +25,8 @@ from paperroute_testkit.page_markup import parse_page
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_web import BOARD_WEB
 from paperroute_transit.adapters.device_data import data_section
-from paperroute_transit.adapters.web_display import RESET_HINT, WebDisplay
+from paperroute_transit.adapters.web_display import WebDisplay
+from paperroute_transit.core.panel_screens import RESET_HINT
 from tests.adapters.test_device_data import BUSES, SYDNEY_STATUS, TRAINS
 from tests.test_observers import APP_STATUS
 

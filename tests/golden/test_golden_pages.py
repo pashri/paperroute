@@ -26,7 +26,8 @@ from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.device_data import data_section
 from paperroute_transit.adapters.settings_form import form_values
-from paperroute_transit.adapters.web_display import RESET_HINT, WebDisplay
+from paperroute_transit.adapters.web_display import WebDisplay
+from paperroute_transit.core.panel_screens import RESET_HINT
 from tests.adapters.test_device_data import BUSES
 from tests.adapters.test_device_data import SYDNEY_STATUS as STATUS
 from tests.adapters.test_device_data import TRAINS

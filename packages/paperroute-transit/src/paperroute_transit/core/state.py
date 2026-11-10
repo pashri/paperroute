@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from dataclasses import fields, replace
 from importlib.resources import files
-from typing import Final, cast
+from typing import TYPE_CHECKING, Final, cast
 
 from paperroute_device.assets import AssetRoot
 from paperroute_device.core.device_model import DeviceKey
@@ -14,8 +14,10 @@ from paperroute_device.core.reducer import step as kit_step
 from paperroute_transit.city_parts import CityParts
 from paperroute_transit.core.messages import Effect, Event, SettingsChanged
 from paperroute_transit.core.state_model import KitMirror, State, with_device
-from paperroute_transit.ports import FeedsClient
 from paperroute_transit.transit_app import TransitApp
+
+if TYPE_CHECKING:
+    from paperroute_transit.ports import FeedsClient
 
 DEVICE_FIELDS: Final[frozenset[str]] = frozenset(
     item.name for item in fields(DeviceChange)

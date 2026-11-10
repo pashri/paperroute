@@ -1,4 +1,4 @@
-"""Transit's lines on the panel's Device screen, and its confirm copy."""
+"""Transit's Device screen lines, and its confirm and reset copy."""
 
 from dataclasses import dataclass
 from typing import Final
@@ -9,6 +9,11 @@ from paperroute_device.core.text import DOT, clock_text, day_text, local_time
 from paperroute_transit.core.quota import calls_today
 from paperroute_transit.core.state_model import State
 
+RESET_HINT: Final[str] = (
+    'Reset settings clears pins, settings, Wi-Fi and the key. Erase '
+    'everything also deletes the timetable. The map is kept. Both are '
+    'confirmed on the device.'
+)
 TRANSIT_CONFIRM_COPY: Final[ConfirmCopy] = {
     ConfirmAction.RESTART: (
         'paperroute starts again. Your pins and settings stay.'

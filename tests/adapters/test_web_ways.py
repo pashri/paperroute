@@ -9,13 +9,13 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.connection_factories import CAMPBELLTOWN_WAY, WORK
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
 from paperroute_transit.adapters.pin_windows import NO_DAY
-from paperroute_transit.adapters.web_display import WebDisplay
 from paperroute_transit.adapters.web_pin_edit import MISFIT
 from paperroute_transit.adapters.web_pin_list import pin_label
 from paperroute_transit.core.messages import PinSaved
@@ -25,6 +25,7 @@ from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_connection import unlabelled
 from tests.adapters.test_web_device import sydney_site
 from tests.adapters.test_web_pins import Pins, check_danger_card
+from tests.adapters.transit_web import transit_display
 
 Client = TestClient[web.Request, web.Application]
 REF = pin_ref(pin=WORK)
@@ -54,7 +55,7 @@ async def _client(pins: Pins) -> AsyncIterator[Client]:
         plug=SuggestPlug(planner=None),
     )
     board.pins_sleep = pins.sleep
-    display = WebDisplay(
+    display = transit_display(
         device=sydney_site().pages(),
         board=board,
         city=SYDNEY,
@@ -159,7 +160,7 @@ async def test_refusals(pins: Pins, client: Client) -> None:
 
 async def test_before_timetable(pins: Pins) -> None:
     """Before the timetable is ready the page says so; saves go back."""
-    display = WebDisplay(
+    display = transit_display(
         device=sydney_site().pages(),
         board=PinPages(
             head=BoardHead(),

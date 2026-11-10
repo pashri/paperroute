@@ -44,6 +44,13 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_sydney.city import PEAK_WINDOWS, SYDNEY
 from paperroute_testkit.core.factories import START
+from paperroute_testkit.core.kit_steps import (
+    device_of,
+    kit_of,
+    kit_step,
+    settings_posted,
+    step,
+)
 from paperroute_testkit.core.steps import reset_asked, step_untouched, written
 from paperroute_transit.core.device import app_status, on_settings
 from paperroute_transit.core.messages import (
@@ -59,7 +66,6 @@ from paperroute_transit.core.saved import (
     Settings,
     default_settings,
 )
-from paperroute_transit.core.state import device_of, step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import stop_view_of
 from paperroute_transit.core.stop_view import StopView
@@ -69,12 +75,12 @@ from tests.core.test_state import at, fresh, loaded
 
 def test_settings_change_is_saved() -> None:
     """A changed setting is saved once the save delay has passed."""
-    event = SettingsChanged(auto_rebuild=False, rotate=True)
+    event = settings_posted(auto_rebuild=False, rotate=True)
     before = pinned()
     assert before.last_view is not None
-    state, effects = step(before, event)
+    kit, effects = kit_step(kit=kit_of(state=before), event=event)
     assert effects == (Render(view=before.last_view, full=True),)
-    _, effects = step(state, Tick(now=START + SAVE_WAIT * 2))
+    _, effects = kit_step(kit=kit, event=Tick(now=START + SAVE_WAIT * 2))
     saves = [effect for effect in effects if isinstance(effect, SaveState)]
     assert len(saves) == 1
     assert written(save=saves[0]).settings.board.auto_rebuild is False
@@ -94,37 +100,21 @@ def test_settings_change_merges() -> None:
 
 
 def test_on_settings_routes_every_field() -> None:
-    """Each changed field lands on its own part; an empty change none."""
-    quiet = Window(start=time(22), end=time(6))
+    """Each board field lands; an empty change changes nothing."""
     peaks = (Window(start=time(7), end=time(9)),)
     event = SettingsChanged(
         auto_rebuild=False,
         peak_rate=Rate.STEADY,
         offpeak_rate=Rate.FAST,
         peak_windows=peaks,
-        quiet_mode=QuietMode.APP,
-        my_hours=quiet,
-        rotate=True,
-        larger_text=True,
-        inverted_lists=True,
         alert_lookahead=Lookahead.DAY,
         connection_map=ConnectionMap.WHOLE,
         skip_school_buses=False,
         skip_school_on_route_pins=True,
-        clean_after=120,
-        swap_knobs=True,
     )
     state, _ = on_settings(state=fresh(), event=event)
     assert state.settings == Settings(
-        device=DeviceSettings(
-            quiet_mode=QuietMode.APP,
-            my_hours=quiet,
-            rotate=True,
-            larger_text=True,
-            inverted_lists=True,
-            clean_after=120,
-            swap_knobs=True,
-        ),
+        device=DeviceSettings(),
         board=BoardSettings(
             auto_rebuild=False,
             peak_rate=Rate.STEADY,
@@ -142,7 +132,7 @@ def test_on_settings_routes_every_field() -> None:
 
 def test_lookahead_change_merges() -> None:
     """A lookahead change sets it and keeps every other setting."""
-    before, _ = step(pinned(), SettingsChanged(rotate=True))
+    before, _ = step(pinned(), settings_posted(rotate=True))
     state, effects = step(
         before, SettingsChanged(alert_lookahead=Lookahead.DAY),
     )
@@ -182,11 +172,11 @@ def test_rotate_change_redraws_full() -> None:
     """Turning the frame redraws in full; an unchanged rotate does not."""
     before = pinned()
     assert before.last_view is not None
-    state, effects = step(before, SettingsChanged(rotate=True))
+    state, effects = step(before, settings_posted(rotate=True))
     assert effects == (Render(view=before.last_view, full=True),)
-    _, effects = step(before, SettingsChanged(rotate=False))
+    _, effects = step(before, settings_posted(rotate=False))
     assert not effects
-    _, effects = step(state, SettingsChanged(rotate=True))
+    _, effects = step(state, settings_posted(rotate=True))
     assert not effects
 
 

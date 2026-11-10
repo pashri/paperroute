@@ -553,7 +553,6 @@ async def test_device_pages_with_no_keys() -> None:
         status=lambda: site.status,
         panel=lambda: None,
         post=site.posted.append,
-        zone=ZONE,
         error_log=None,
         state_file=None,
     )

@@ -8,10 +8,11 @@ import pytest
 from aiohttp import ClientResponse, web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device_testkit.device_pages import HOTSPOT, DeviceSite
 from paperroute_sydney.adapters.tfnsw import TFNSW_KEY
-from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
-from paperroute_transit.adapters.web_display import WebDisplay
+from paperroute_sydney.city import SYDNEY
+from tests.adapters.transit_web import transit_display
 
 Client = TestClient[web.Request, web.Application]
 
@@ -23,7 +24,6 @@ def _setup() -> DeviceSite:
         status=HOTSPOT,
         credential=TFNSW_KEY,
         display_name='TfNSW',
-        zone=SYDNEY_ZONE,
     )
 
 
@@ -31,7 +31,7 @@ def _setup() -> DeviceSite:
 async def _client(setup: DeviceSite) -> AsyncIterator[Client]:
     """A client of a display serving the setup page."""
     client = TestClient(
-        TestServer(WebDisplay(device=setup.pages(), city=SYDNEY).app()),
+        TestServer(transit_display(device=setup.pages(), city=SYDNEY).app()),
     )
     await client.start_server()
     yield client
@@ -82,7 +82,7 @@ async def test_setup_post_bad_key_no_join(
 
 async def test_hotspot_address_is_allowed(setup: DeviceSite) -> None:
     """A phone on the hotspot reaches the page; other sites still can't."""
-    display = WebDisplay(
+    display = transit_display(
         device=setup.pages(), remote_of=lambda request: '10.42.0.23',
         city=SYDNEY,
     )
@@ -112,7 +112,7 @@ async def test_hotspot_address_is_allowed(setup: DeviceSite) -> None:
 
 async def test_no_setup_routes_without_device() -> None:
     """A display built without device pages has no setup page."""
-    client = TestClient(TestServer(WebDisplay(city=SYDNEY).app()))
+    client = TestClient(TestServer(transit_display(city=SYDNEY).app()))
     await client.start_server()
     try:
         response = await client.get('/setup')
@@ -130,7 +130,7 @@ async def test_setup_refuses_public_address(
     setup: DeviceSite, method: str, path: str
 ) -> None:
     """A peer outside the local network can't reach the setup page."""
-    display = WebDisplay(
+    display = transit_display(
         device=setup.pages(), remote_of=lambda request: '8.8.8.8',
         city=SYDNEY,
     )

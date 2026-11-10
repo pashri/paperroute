@@ -19,7 +19,7 @@ from paperroute_device.core.panel_views import (
     PlainSleepView,
 )
 from paperroute_device.core.sleep import SLEEP_BAND
-from paperroute_device.ports import DeviceObserver, Frame
+from paperroute_device.ports import Clock, DeviceObserver, Frame
 from paperroute_hardware.core.knob_events import KnobEvent
 
 if TYPE_CHECKING:
@@ -176,6 +176,46 @@ class App[S](ABC):
             The event, or None to post nothing; by default None.
         """
         return None
+
+    async def before_reset(self) -> None:
+        """
+        Stop whatever of the app's own work a reset must not race.
+
+        Awaited before a reset deletes any file; by default nothing.
+        """
+
+    async def stopped(self) -> None:
+        """
+        Close what the app holds once the loop has stopped.
+
+        Awaited after the loop's tasks are cancelled; by default nothing.
+        """
+
+    # pylint: disable-next=useless-return
+    def clock(self) -> Clock | None:
+        """
+        Give the clock the run keeps, once the app's adapters are open.
+
+        Returns
+        -------
+        Clock | None
+            By default None: the system clock in the app's zone.
+        """
+        return None
+
+    def replaying(self) -> bool:
+        """
+        Say whether the run replays recordings rather than running live.
+
+        Asked once the app's adapters are open. A replay keeps no keys,
+        probes nothing, resets nothing and serves no device pages.
+
+        Returns
+        -------
+        bool
+            By default False.
+        """
+        return False
 
     # pylint: disable-next=useless-return
     async def probe(self) -> object:

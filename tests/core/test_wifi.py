@@ -41,10 +41,10 @@ from paperroute_device.core.wifi import SETUP_FOR, wifi_setup_view
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.factories import START
+from paperroute_testkit.core.kit_steps import device_of, step
 from paperroute_transit.core.banners import OFFLINE_PHRASE
 from paperroute_transit.core.messages import FetchFeed, RebuildTimetable
 from paperroute_transit.core.saved import LiveView
-from paperroute_transit.core.state import device_of, step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import stop_view_of
 from tests.core.test_menu import BOTH, DOWN, UP, opened_at, renders, run

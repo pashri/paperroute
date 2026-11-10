@@ -1,6 +1,5 @@
 """Draw views into frames and show them."""
 
-import asyncio
 import functools
 import logging
 import sqlite3
@@ -10,21 +9,8 @@ from typing import Final
 import numpy as np
 from numpy.typing import NDArray
 
-from paperroute_device.core.panel_views import (
-    ConfirmView,
-    DeviceView,
-    MenuView,
-    NoticeView,
-    PhoneView,
-    WifiSetupView,
-)
-from paperroute_device.render.notice import draw_notice_view
-from paperroute_device.render.panel import draw_panel_view
 from paperroute_device.render.sleep import with_sleep_band
-from paperroute_hardware.ports import CLEAN_AFTER
 from paperroute_transit.adapters.tiles_db import NullTiles
-from paperroute_transit.app_effects import timed_async
-from paperroute_transit.app_ports import Ports
 from paperroute_transit.core.alerts_view import AlertsView
 from paperroute_transit.core.chooser_view import ChooserView
 from paperroute_transit.core.connection_strip import (
@@ -33,7 +19,6 @@ from paperroute_transit.core.connection_strip import (
 )
 from paperroute_transit.core.connection_view import ConnectionView
 from paperroute_transit.core.map_view import MapBase, MapView
-from paperroute_transit.core.messages import ScreenView
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.stop_view import StopView
 from paperroute_transit.core.strip_model import StripMapView, StripView
@@ -60,13 +45,7 @@ logger = logging.getLogger(__name__)
 
 KEPT_BOXES: Final[int] = 4  # maps whose keep-out boxes are remembered
 
-
-type View = ScreenView
-
-
 type Frame = NDArray[np.uint8]
-
-
 type PlainView = (
     StopView
     | ConnectionView
@@ -74,12 +53,13 @@ type PlainView = (
     | StripView
     | AlertsView
     | ChooserView
-    | NoticeView
-    | MenuView
-    | DeviceView
-    | PhoneView
-    | WifiSetupView
-    | ConfirmView
+)
+type View = (
+    PlainView
+    | MapView
+    | StripMapView
+    | ConnectionStripMapView
+    | SleepView
 )
 
 
@@ -436,67 +416,4 @@ def plain_drawing(*, view: PlainView) -> Callable[[], Frame]:
             return functools.partial(draw_strip_view, view=view)
         case AlertsView():
             return functools.partial(draw_alerts_view, view=view)
-        case NoticeView():
-            return functools.partial(draw_notice_view, view=view)
-        case (
-            MenuView()
-            | DeviceView()
-            | PhoneView()
-            | WifiSetupView()
-            | ConfirmView()
-        ):
-            return functools.partial(draw_panel_view, view=view)
     return functools.partial(draw_chooser_view, view=view)
-
-
-async def render(  # pylint: disable=too-many-arguments
-    *,
-    ports: Ports,
-    view: View,
-    maps: MapRenderer,
-    full: bool = False,
-    turned: bool = False,
-    quick: bool = False,
-    asleep: bool = False,
-    clear: bool = False,
-    clean_after: int = CLEAN_AFTER,
-) -> None:
-    """
-    Draw a view off the event loop, show it and report how long it took.
-
-    Parameters
-    ----------
-    ports : Ports
-        Adapters.
-    view : View
-        View to draw.
-    maps : MapRenderer
-        Draws the views with a map.
-    full : bool
-        Whether to ask for a full refresh.
-    turned : bool
-        Whether to ask for the frame upside down.
-    quick : bool
-        Whether a knob was turned just now.
-    asleep : bool
-        Whether the device is in Sleep mode.
-    clear : bool
-        Whether to ask for a clear refresh.
-    clean_after : int
-        Quick patches before the panel cleans the screen.
-    """
-    draw = drawing(view=view, maps=maps)
-    frame, render_ms = await timed_async(call=asyncio.to_thread(draw))
-    ports.display.show(
-        frame=frame,
-        full=full,
-        clear=clear,
-        turned=turned,
-        quick=quick,
-        asleep=asleep,
-        clean_after=clean_after,
-    )
-    logger.debug(
-        'frame drawn', extra={'render_ms': render_ms, 'full': full}
-    )
-    ports.observer.frame_drawn(render_ms=render_ms)

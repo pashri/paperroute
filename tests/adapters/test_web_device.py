@@ -8,6 +8,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device.adapters.web_frame import page_frame
 from paperroute_device.core.device_events import PowerRequested
 from paperroute_device.core.device_model import PowerAction
@@ -23,16 +24,16 @@ from paperroute_sydney.sydney_feeds import (
 )
 from paperroute_testkit.page_markup import parse_page
 from paperroute_transit.adapters.board_head import BoardHead
+from paperroute_transit.adapters.board_routes import RESET_HINT
 from paperroute_transit.adapters.board_web import BOARD_WEB
 from paperroute_transit.adapters.device_data import data_section
-from paperroute_transit.adapters.web_display import WebDisplay
-from paperroute_transit.core.panel_screens import RESET_HINT
 from tests.adapters.test_device_data import BUSES, SYDNEY_STATUS, TRAINS
+from tests.adapters.transit_web import transit_display
 from tests.test_observers import APP_STATUS
 
 Client = TestClient[web.Request, web.Application]
 SHELL_PAGES: Final[frozenset[str]] = frozenset(
-    {'device.html', 'power.html', 'setup.html', 'live.html'},
+    {'device.html', 'power.html', 'setup.html', 'live.html', 'settings.html'},
 )
 
 
@@ -43,15 +44,14 @@ def sydney_site() -> DeviceSite:
     Returns
     -------
     DeviceSite
-        Sydney's key, used with the latest feed, its Data section, nav
-        and zone over the fixed status.
+        Sydney's key, used with the latest feed, its Data section and nav
+        over the fixed status.
     """
     site = DeviceSite(
         status=SYDNEY_STATUS,
         credential=TFNSW_KEY,
         display_name='TfNSW',
         last_used=NOW - 12,
-        zone=SYDNEY_ZONE,
         nav=SYDNEY_NAV,
         reset_hint=RESET_HINT,
     )
@@ -76,7 +76,7 @@ def _device() -> DeviceSite:
 async def _start(*, device: DeviceSite) -> Client:
     """Start a client of a display serving the Device page."""
     client = TestClient(
-        TestServer(WebDisplay(device=device.pages(), city=SYDNEY).app()),
+        TestServer(transit_display(device=device.pages(), city=SYDNEY).app()),
     )
     await client.start_server()
     return client

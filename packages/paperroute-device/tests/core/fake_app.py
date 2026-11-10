@@ -108,6 +108,15 @@ class FakeApp(App[FakeState]):
         self.crash = crash
         self.performed: list[object] = []
         self.observed: list[object] = []
+        self.hooks: list[str] = []
+
+    async def before_reset(self) -> None:
+        """Note that a reset is about to run."""
+        self.hooks.append('before_reset')
+
+    async def stopped(self) -> None:
+        """Note that the loop has stopped."""
+        self.hooks.append('stopped')
 
     async def perform(
         self, *, effect: object, post: Callable[[object], None],

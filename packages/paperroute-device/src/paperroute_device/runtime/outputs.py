@@ -1,8 +1,5 @@
 """Where the kit's effects draw and write, and carrying them out."""
 
-# An app package keeps a twin of this module until it switches over.
-# pylint: disable=duplicate-code
-
 import asyncio
 import functools
 import logging

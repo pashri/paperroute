@@ -8,7 +8,7 @@ from dataclasses import replace
 from datetime import time as clock
 from html.parser import HTMLParser
 from http import HTTPStatus
-from typing import Final
+from typing import Final, cast
 
 import numpy as np
 import pytest
@@ -16,6 +16,8 @@ from aiohttp import ClientResponse, web
 from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters import web_live
+from paperroute_device.adapters.device_form import ERRORS
+from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device.adapters.web_frame import LIVE_NAV, SHELL_WEB
 from paperroute_device.adapters.web_live import knob_event, live_page
 from paperroute_device.core.device_events import PowerRequested
@@ -37,13 +39,13 @@ from paperroute_sydney.adapters.web_board import (
     SYDNEY_NAV,
 )
 from paperroute_sydney.city import SYDNEY
+from paperroute_testkit.core.kit_steps import settings_posted, step
 from paperroute_testkit.page_markup import parse_page
-from paperroute_transit.adapters.settings_form import ERRORS
-from paperroute_transit.adapters.web_display import WebDisplay
-from paperroute_transit.core.messages import Event, SettingsChanged
+from paperroute_transit.adapters.board_pages import PinPages
+from paperroute_transit.core.messages import Event
 from paperroute_transit.core.saved import LiveView, Lookahead, Rate
-from paperroute_transit.core.state import step
 from tests.adapters.test_web_device import sydney_site
+from tests.adapters.transit_web import transit_display
 from tests.core.test_quiet import asleep_at_one
 
 Client = TestClient[web.Request, web.Application]
@@ -84,7 +86,7 @@ def _site() -> DeviceSite:
 @pytest.fixture(name='display')
 def _display(site: DeviceSite) -> WebDisplay:
     """A display with device pages that has shown nothing yet."""
-    return WebDisplay(device=site.pages(), city=SYDNEY)
+    return transit_display(device=site.pages(), city=SYDNEY)
 
 
 @pytest.fixture(name='client')
@@ -191,7 +193,7 @@ async def test_knob_post_posts_event(
     display: WebDisplay, client: Client
 ) -> None:
     """A knob POST becomes an event on the bound queue."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         '/knob',
@@ -213,7 +215,7 @@ async def test_knob_both_hold_posts_knobs_held(
     display: WebDisplay, client: Client
 ) -> None:
     """Both-knob hold posts KnobsHeld; any other both action is a 400."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         '/knob', data={'knob': 'both', 'action': 'hold'},
@@ -256,7 +258,7 @@ async def test_public_address_is_refused_on_every_route(
     method: str, path: str, remote: str | None
 ) -> None:
     """Only private and loopback peers are served."""
-    display = WebDisplay(
+    display = transit_display(
         remote_of=lambda request: remote,
         device=sydney_site().pages(),
         city=SYDNEY,
@@ -278,7 +280,7 @@ async def test_public_address_is_refused_on_every_route(
 ])
 async def test_private_address_is_allowed(remote: str) -> None:
     """Private and loopback peers are served."""
-    display = WebDisplay(
+    display = transit_display(
         remote_of=lambda request: remote,
         device=sydney_site().pages(),
         city=SYDNEY,
@@ -315,7 +317,7 @@ async def test_knob_cross_site_origin_is_refused(
 
 async def test_status_reports_version_and_rss() -> None:
     """The status JSON has the version, memory and the status dict."""
-    display = WebDisplay(status=lambda: {'frames': 7}, city=SYDNEY)
+    display = transit_display(status=lambda: {'frames': 7}, city=SYDNEY)
     client = await _client(display=display)
     try:
         display.show(frame=FRAME)
@@ -402,13 +404,13 @@ async def test_knob_post_rejects_invalid_utf8_json(
 
 async def test_status_carries_line() -> None:
     """The status JSON carries the app's line, and none without one."""
-    lined = WebDisplay(
+    lined = transit_display(
         status=lambda: {'frames': 7},
         status_line=lambda *, status: f'{status["frames"]} frames',
         city=SYDNEY,
     )
     bodies = []
-    for display in (lined, WebDisplay(status=dict, city=SYDNEY)):
+    for display in (lined, transit_display(status=dict, city=SYDNEY)):
         client = await _client(display=display)
         try:
             bodies.append(await (await client.get('/status')).json())
@@ -421,7 +423,7 @@ async def test_status_carries_line() -> None:
 
 async def test_status_built_in_keys_win() -> None:
     """Extras cannot overwrite the built-in status keys."""
-    display = WebDisplay(
+    display = transit_display(
         status=lambda: {'version': 99, 'uptime_s': 'x'},
         city=SYDNEY,
     )
@@ -500,7 +502,7 @@ async def test_settings_post_posts_event(
     display: WebDisplay, client: Client
 ) -> None:
     """A switch change posts an event; bad values and other sites fail."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     good = await client.post('/settings', json={'auto_rebuild': 'off'})
     maybe = await client.post('/settings', json={'auto_rebuild': 'maybe'})
@@ -512,7 +514,7 @@ async def test_settings_post_posts_event(
     assert good.status == HTTPStatus.NO_CONTENT
     assert maybe.status == HTTPStatus.BAD_REQUEST
     assert cross.status == HTTPStatus.FORBIDDEN
-    assert posted == [SettingsChanged(auto_rebuild=False)]
+    assert posted == [settings_posted(auto_rebuild=False)]
 
 
 @pytest.mark.parametrize(('status', 'checked'), [
@@ -524,7 +526,7 @@ async def test_settings_page_served(
     status: dict[str, object], checked: bool
 ) -> None:
     """The page has the switch, drawn as reported, and a link to Live."""
-    display = WebDisplay(status=lambda: status, city=SYDNEY)
+    display = transit_display(status=lambda: status, city=SYDNEY)
     client = await _client(display=display)
     try:
         page = await client.get('/settings')
@@ -546,7 +548,7 @@ async def test_settings_page_served(
 
 async def test_settings_page_links_sheets_once() -> None:
     """The settings page links the city's sheet once, between the others."""
-    display = WebDisplay(status=dict, city=SYDNEY, sheets=('palette.css',))
+    display = transit_display(status=dict, city=SYDNEY, sheets=('palette.css',))
     client = await _client(display=display)
     try:
         text = await (await client.get('/settings')).text()
@@ -562,7 +564,7 @@ async def test_settings_page_links_sheets_once() -> None:
 
 async def test_settings_nav_comes_from_the_city() -> None:
     """The settings page lists the city's links, Settings current."""
-    display = WebDisplay(
+    display = transit_display(
         status=dict, city=SYDNEY, nav=(LIVE_NAV, SETTINGS_NAV),
     )
     client = await _client(display=display)
@@ -579,7 +581,7 @@ async def test_settings_nav_comes_from_the_city() -> None:
 
 async def test_settings_page_has_connection_map() -> None:
     """The Display form has the connection map radios, Changes checked."""
-    client = await _client(display=WebDisplay(status=dict, city=SYDNEY))
+    client = await _client(display=transit_display(status=dict, city=SYDNEY))
     try:
         text = await (await client.get('/settings')).text()
     finally:
@@ -623,14 +625,14 @@ async def test_display_form_posts_event(
     display: WebDisplay, client: Client
 ) -> None:
     """A form post of the Display section posts one event and redirects."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         '/settings', data=DISPLAY_FORM, allow_redirects=False,
     )
     assert response.status == HTTPStatus.SEE_OTHER
     assert response.headers['Location'] == '/settings'
-    assert posted == [SettingsChanged(
+    assert posted == [settings_posted(
         peak_rate=Rate.STEADY,
         offpeak_rate=Rate.SLOW,
         peak_windows=(Window(start=clock(7), end=clock(9)),),
@@ -642,14 +644,14 @@ async def test_device_form_posts_event(
     display: WebDisplay, client: Client
 ) -> None:
     """A form post of the Device section posts one event and redirects."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         '/settings', data=DEVICE_FORM, allow_redirects=False,
     )
     assert response.status == HTTPStatus.SEE_OTHER
     assert response.headers['Location'] == '/settings'
-    assert posted == [SettingsChanged(
+    assert posted == [settings_posted(
         rotate=True,
         larger_text=False,
         inverted_lists=False,
@@ -662,18 +664,18 @@ async def test_json_post_answers_no_content(
     display: WebDisplay, client: Client
 ) -> None:
     """A JSON post is answered 204."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post('/settings', json={'rotate': 'on'})
     assert response.status == HTTPStatus.NO_CONTENT
-    assert posted == [SettingsChanged(rotate=True)]
+    assert posted == [settings_posted(rotate=True)]
 
 
 async def test_bad_peak_redirects_with_error(
     display: WebDisplay, client: Client
 ) -> None:
     """A window ending before it starts posts nothing and shows an error."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         '/settings',
@@ -695,7 +697,7 @@ async def test_json_bad_time_is_422_with_the_error_text(
     display: WebDisplay, client: Client
 ) -> None:
     """A JSON post with an unusable time gets the error text to show."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         '/settings',
@@ -714,7 +716,7 @@ async def test_form_bad_time_still_redirects(
     display: WebDisplay, client: Client
 ) -> None:
     """A form post with an unusable time goes back to the error line."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         '/settings',
@@ -752,7 +754,7 @@ async def test_unknown_value_is_400(
     display: WebDisplay, client: Client
 ) -> None:
     """A rate the page never sends is refused."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post('/settings', data={'peak_rate': '1s'})
     assert response.status == HTTPStatus.BAD_REQUEST
@@ -763,7 +765,7 @@ async def test_stale_timetable_quiet_mode_is_400(
     display: WebDisplay, client: Client
 ) -> None:
     """A stale page's `timetable` quiet mode is refused."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         '/settings', data={'quiet_mode': 'timetable'},
@@ -805,7 +807,7 @@ async def test_unknown_lookahead_is_400(
     display: WebDisplay, client: Client
 ) -> None:
     """A lookahead the page never sends is refused."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         '/settings', data={'alert_lookahead': '2w'},
@@ -818,7 +820,7 @@ async def test_alerts_section_posts_event(
     display: WebDisplay, client: Client
 ) -> None:
     """A form post of the Alerts section posts one event and redirects."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         '/settings',
@@ -827,14 +829,14 @@ async def test_alerts_section_posts_event(
     )
     assert response.status == HTTPStatus.SEE_OTHER
     assert response.headers['Location'] == '/settings'
-    assert posted == [SettingsChanged(alert_lookahead=Lookahead.ALL)]
+    assert posted == [settings_posted(alert_lookahead=Lookahead.ALL)]
 
 
 async def test_settings_cross_site_403(
     display: WebDisplay, client: Client
 ) -> None:
     """A post from another site is refused."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         '/settings',
@@ -848,7 +850,7 @@ async def test_settings_cross_site_403(
 async def test_slot_two_save_overlay_clears() -> None:
     """Only Afternoon filled: the app reports it as the first slot."""
     status: dict[str, object] = {'settings': {'peak_1_start': '06:30'}}
-    display = WebDisplay(status=lambda: status, city=SYDNEY)
+    display = transit_display(status=lambda: status, city=SYDNEY)
     client = await _client(display=display)
     fields = {
         'peak_1_start': '', 'peak_1_end': '',
@@ -865,13 +867,14 @@ async def test_slot_two_save_overlay_clears() -> None:
         await client.get('/settings')
     finally:
         await client.close()
-    assert not display._posted  # pylint: disable=protected-access
+    assert display.settings is not None
+    assert not display.settings._posted  # pylint: disable=protected-access
 
 
 async def test_later_panel_change_shows_on_page() -> None:
     """A change at the panel after a save is not hidden by the overlay."""
     status: dict[str, object] = {'settings': {'rotate': 'off'}}
-    display = WebDisplay(status=lambda: status, city=SYDNEY)
+    display = transit_display(status=lambda: status, city=SYDNEY)
     client = await _client(display=display)
     try:
         await client.post('/settings', data={'rotate': 'on'})
@@ -886,20 +889,22 @@ async def test_later_panel_change_shows_on_page() -> None:
 async def test_page_shows_posted_before_status() -> None:
     """The posted value wins until the status reports it."""
     status: dict[str, object] = {'settings': {'rotate': 'off'}}
-    display = WebDisplay(status=lambda: status, city=SYDNEY)
+    display = transit_display(status=lambda: status, city=SYDNEY)
     client = await _client(display=display)
     rotate = re.compile(r'name="rotate"\s+value="on" checked>')
     try:
         await client.post('/settings', data={'rotate': 'on'})
         shown = await (await client.get('/settings')).text()
         assert rotate.search(shown)
-        assert display._posted == {'rotate': 'on'}  # pylint: disable=protected-access
+        assert display.settings is not None
+        assert display.settings._posted == {'rotate': 'on'}  # pylint: disable=protected-access
         status['settings'] = {'rotate': 'on'}
         later = await (await client.get('/settings')).text()
     finally:
         await client.close()
     assert rotate.search(later)
-    assert not display._posted  # pylint: disable=protected-access
+    assert display.settings is not None
+    assert not display.settings._posted  # pylint: disable=protected-access
 
 
 class _Controls(HTMLParser):
@@ -954,7 +959,7 @@ class _Controls(HTMLParser):
 
 async def test_page_works_without_script() -> None:
     """Every control is in a post form with Save; each has a label."""
-    display = WebDisplay(city=SYDNEY)
+    display = transit_display(city=SYDNEY)
     client = await _client(display=display)
     try:
         text = await (await client.get('/settings')).text()
@@ -1038,7 +1043,7 @@ async def test_post_with_null_origin_is_refused(
     display: WebDisplay, client: Client, path: str,
 ) -> None:
     """A sandboxed page sends Origin: null; it can't reach the power routes."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     response = await client.post(
         path,
@@ -1063,7 +1068,7 @@ def test_page_hint_names_settings_chord() -> None:
 @pytest.mark.parametrize(('method', 'path'), POWER_ROUTES)
 async def test_no_power_without_device_pages(method: str, path: str) -> None:
     """Without device pages, as in replay, power is not served."""
-    client = await _client(display=WebDisplay(city=SYDNEY))
+    client = await _client(display=transit_display(city=SYDNEY))
     try:
         response = await client.request(method, path)
         assert response.status == HTTPStatus.NOT_FOUND
@@ -1075,7 +1080,7 @@ async def test_web_wake_keeps_the_map_view(
     display: WebDisplay, client: Client
 ) -> None:
     """The live calls that woke the Pi wake it without leaving the Map."""
-    posted: list[Event] = []
+    posted: list[object] = []
     display.bind(post=posted.append)
     turn = {'knob': 'top', 'action': 'turn', 'steps': 0}
     press = {'knob': 'bottom', 'action': 'press'}
@@ -1138,31 +1143,21 @@ class Board:
         self.closes += 1
 
 
-async def test_display_without_board_serves_no_pin_pages(
-    client: Client,
-) -> None:
-    """Without board pages there are no pins; the rest is served."""
-    pins = await client.get('/pins')
-    settings = await client.get('/settings')
-    device = await client.get('/device')
-    assert pins.status == HTTPStatus.NOT_FOUND
-    assert settings.status == HTTPStatus.OK
-    assert device.status == HTTPStatus.OK
-
-
 async def test_board_pages_closed_on_shutdown() -> None:
     """The board pages are closed once when the app shuts down."""
     board = Board()
-    client = await _client(display=WebDisplay(board=board, city=SYDNEY))
+    client = await _client(
+        display=transit_display(board=cast(PinPages, board), city=SYDNEY),
+    )
     await client.close()
     assert board.closes == 1
 
 
 async def test_knobs_reach_app_bound_after_app() -> None:
     """A sink bound after the app is built still gets knob posts."""
-    display = WebDisplay(city=SYDNEY)
+    display = transit_display(city=SYDNEY)
     client = TestClient(TestServer(display.app()))
-    got: list[Event] = []
+    got: list[object] = []
     display.bind(post=got.append)
     await client.start_server()
     try:
@@ -1177,7 +1172,7 @@ async def test_knobs_reach_app_bound_after_app() -> None:
 
 async def test_display_without_device_serves_shell_files() -> None:
     """With no device pages the live page and shell files still serve."""
-    client = await _client(display=WebDisplay(city=SYDNEY))
+    client = await _client(display=transit_display(city=SYDNEY))
     try:
         statuses = {
             path: (await client.get(path)).status

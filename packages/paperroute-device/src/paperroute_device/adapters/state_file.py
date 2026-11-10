@@ -1,8 +1,5 @@
 """The device settings and the app's section, kept in one JSON file."""
 
-# Copies of the board app's models and repairs, until it uses these.
-# pylint: disable=duplicate-code
-
 import contextlib
 import json
 import logging

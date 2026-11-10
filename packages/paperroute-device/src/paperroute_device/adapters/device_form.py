@@ -1,8 +1,5 @@
 """Read and write the Settings page's device fields."""
 
-# A copy of the board app's form half, until it uses this one.
-# pylint: disable=duplicate-code
-
 import re
 from collections.abc import Collection, Mapping
 from datetime import time

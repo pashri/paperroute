@@ -4,7 +4,6 @@ import html
 import logging
 import time
 from collections.abc import Callable, Mapping, Sequence
-from datetime import tzinfo
 from http import HTTPStatus
 from pathlib import Path
 from typing import Final
@@ -309,8 +308,6 @@ class DevicePages:
         first one missing. With none, no page asks for a key.
     post : Callable[[DeviceRequest], None]
         Sends a request to the app; called at request time.
-    zone : tzinfo
-        Time zone whose wall clock the Device page shows.
     error_log : Path | None
         The error log, if any.
     state_file : Path | None
@@ -338,7 +335,6 @@ class DevicePages:
         panel: Callable[[], PanelTimes | None],
         keys: Sequence[DeviceKey] = (),
         post: Callable[[DeviceRequest], None],
-        zone: tzinfo,
         error_log: Path | None,
         state_file: Path | None,
         clock: Callable[[], float] = time.time,
@@ -352,7 +348,6 @@ class DevicePages:
         self._panel = panel
         self._keys = tuple(keys)
         self._post = post
-        self._zone = zone
         self._error_log = error_log
         self._state_file = state_file
         self._clock = clock

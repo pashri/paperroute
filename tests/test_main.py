@@ -1,36 +1,32 @@
-"""Tests for the command line and the web serving loop."""
+"""Tests for Sydney's board on the device kit's command line."""
 
 import argparse
 import asyncio
-import json
 import logging
-import signal
-import socket
-import sqlite3
 import sys
-from collections.abc import Callable, Iterator
-from contextlib import closing
-from dataclasses import dataclass, replace
-from datetime import date, datetime
-from http import HTTPStatus
+from collections.abc import Callable, Iterator, Sequence
+from dataclasses import replace
+from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, cast
+from typing import Final, cast
 
-import aiohttp
 import numpy as np
 import pytest
 from aiohttp.test_utils import TestClient, TestServer
 
 import paperroute_device.adapters.tk_monitor as tk_monitor
-import paperroute_transit.board as cli
+from paperroute_device import cli
 from paperroute_device.adapters.clocks import ReplayClock
 from paperroute_device.adapters.power import NullPower, SystemctlPower
 from paperroute_device.adapters.resets import FileResets, NullResets
+from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.adapters.wifi import NmcliWifi, NullWifi
 from paperroute_device.core.device_model import DeviceKey
 from paperroute_device.logs import LastError
 from paperroute_device.render.canvas import INK
+from paperroute_device.runtime.ports import KitPorts
+from paperroute_device.runtime.web_observer import web_observer
 from paperroute_device_testkit.device_fakes import FakeKeys, FakeWifi
 from paperroute_device_testkit.hardware_fakes import (
     FakeKnobLines,
@@ -56,53 +52,30 @@ from paperroute_sydney.adapters.web_board import (
     sydney_status_line,
 )
 from paperroute_sydney.asset_root import APP_ASSETS
-from paperroute_sydney.city import (
-    SYDNEY,
-    SYDNEY_PROJECTION,
-    SYDNEY_REF,
-    SYDNEY_ZONE,
-)
+from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION, SYDNEY_ZONE
 from paperroute_testkit.core.factories import pin_of
-from paperroute_testkit.fakes import FakeNetwork, MemoryStates
+from paperroute_testkit.fakes import MemoryStates
 from paperroute_testkit.page_markup import parse_page
+from paperroute_transit import board
 from paperroute_transit.adapters.checked_tiles import CheckedTiles
 from paperroute_transit.adapters.feed_files import FileFeedsClient
 from paperroute_transit.adapters.feed_guard import GuardedFeeds
-from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.rebuild import ChildRebuilder, NullBuilder
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
     SqliteTileRepository,
 )
-from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
-from paperroute_transit.adapters.web_display import WebDisplay
-from paperroute_transit.app import Ports
 from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.board import (
-    board_display,
-    board_observer,
     builder_for,
-    device_for,
-    device_pages_for,
     feeds_client,
-    parse_args,
-    power_for,
-    resets_for,
     seed_for,
-    serve_or_exit,
-    serve_web,
     tiles_for,
-    web_main,
-    wifi_for,
 )
-from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.tile_store import TileWriter
-from paperroute_transit.build.timetable import Window, build_timetable
 from paperroute_transit.city_parts import CityParts
-from paperroute_transit.core.city import City
 from paperroute_transit.core.geo import to_metres
 from paperroute_transit.core.map_view import MAP_HEIGHT, MAP_WIDTH, MapBase
-from paperroute_transit.core.messages import Event
 from paperroute_transit.core.tiles import (
     TILE_STYLE,
     ZOOMS,
@@ -113,9 +86,8 @@ from paperroute_transit.observers import Timings
 from paperroute_transit.ports import FeedsClient
 from paperroute_transit.render.map_base import draw_map_base
 from paperroute_transit.summary import Summary
-
-if TYPE_CHECKING:
-    from paperroute_device.adapters.tk_monitor import TkMonitor
+from paperroute_transit.transit_app import TransitApp
+from tests.adapters.transit_web import transit_display
 
 REAL = Path(__file__).parent / 'fixtures' / 'real'
 AT = datetime(2026, 10, 16, 6, 25, tzinfo=SYDNEY_ZONE)
@@ -124,14 +96,110 @@ DESTINATION: Final[str] = '200060'
 PIN = pin_of(ORIGIN, DESTINATION)
 
 
+def sydney_app() -> TransitApp:
+    """
+    Make Sydney's board as the kit runs it.
+
+    Returns
+    -------
+    TransitApp
+        The app, with Sydney's parts.
+    """
+    return TransitApp(city=SYDNEY, parts=SYDNEY_PARTS)
+
+
+def parsed(*, argv: Sequence[str]) -> argparse.Namespace:
+    """
+    Read a command line as Sydney's board does.
+
+    Parameters
+    ----------
+    argv : Sequence[str]
+        The arguments, without the program name.
+
+    Returns
+    -------
+    argparse.Namespace
+        The parsed arguments.
+    """
+    return cli.parse_args(app=sydney_app(), argv=argv)
+
+
+def run_argv(*, tmp_path: Path, feeds: str) -> list[str]:
+    """
+    Give a web run command over the feeds named.
+
+    Parameters
+    ----------
+    tmp_path : Path
+        Where the timetable and the state file go.
+    feeds : str
+        'live' or a recordings directory.
+
+    Returns
+    -------
+    list[str]
+        The arguments.
+    """
+    return [
+        'run', '--display', 'web', '--host', '127.0.0.1', '--port', '0',
+        '--timetable', str(tmp_path / 'timetable.db'),
+        '--state', str(tmp_path / 'state.json'),
+        '--feeds', feeds,
+    ]
+
+
+def served(
+    *,
+    monkeypatch: pytest.MonkeyPatch,
+    app: TransitApp,
+    argv: Sequence[str],
+) -> WebDisplay:
+    """
+    Run the kit's web path up to serving, and give the display it serves.
+
+    Parameters
+    ----------
+    monkeypatch : pytest.MonkeyPatch
+        Replaces the kit's serve_or_exit, so nothing is served.
+    app : TransitApp
+        The app run.
+    argv : Sequence[str]
+        The run command.
+
+    Returns
+    -------
+    WebDisplay
+        The display the kit would have served.
+    """
+    displays: list[WebDisplay] = []
+
+    def recorded(**kwargs: object) -> None:
+        """
+        Note the display instead of serving it.
+
+        Parameters
+        ----------
+        **kwargs : object
+            serve_or_exit's arguments.
+        """
+        displays.append(cast(WebDisplay, kwargs['display']))
+
+    monkeypatch.setattr(cli, 'serve_or_exit', recorded)
+    cli.web_main(
+        args=cli.parse_args(app=app, argv=argv),
+        app=app,
+        last_error=LastError(zone=SYDNEY_ZONE),
+    )
+    assert len(displays) == 1
+    return displays[0]
+
+
 def test_pin_from_environment(monkeypatch: pytest.MonkeyPatch) -> None:
     """Without --from and --to, the environment supplies the pin."""
     monkeypatch.setenv('PAPERROUTE_FROM', '215020')
     monkeypatch.setenv('PAPERROUTE_TO', '200060')
-    monkeypatch.setattr(
-        sys, 'argv', ['paperroute', 'run', '--timetable', 'x.db']
-    )
-    args = parse_args()
+    args = parsed(argv=['run', '--timetable', 'x.db'])
     assert (args.origin, args.destination) == ('215020', '200060')
 
 
@@ -140,32 +208,23 @@ def test_device_pages_only_for_live_feeds(
 ) -> None:
     """Live feeds get the setup and Device pages; replayed feeds none."""
     monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(tmp_path / 'key'))
-    timings = Timings()
-    display = WebDisplay(status=timings.snapshot, city=SYDNEY)
-    args = argparse.Namespace(
-        feeds='live', error_log=None, state=tmp_path / 'state.json',
+    live = served(
+        monkeypatch=monkeypatch,
+        app=sydney_app(),
+        argv=run_argv(tmp_path=tmp_path, feeds='live'),
     )
-    pages = device_pages_for(
-        args=args,
-        timings=timings,
-        display=display,
-        city=SYDNEY,
-        parts=SYDNEY_PARTS,
-    )
-    assert pages is not None
-    served = web_app(live=display.live, device=pages).router.routes()
-    bare = web_app(live=display.live, device=None).router.routes()
-    assert sum(route.method != 'HEAD' for route in served) - sum(
+    assert live.device is not None
+    pages = web_app(live=live.live, device=live.device).router.routes()
+    bare = web_app(live=live.live, device=None).router.routes()
+    assert sum(route.method != 'HEAD' for route in pages) - sum(
         route.method != 'HEAD' for route in bare
     ) == 13
-    args.feeds = str(tmp_path)
-    assert device_pages_for(
-        args=args,
-        timings=timings,
-        display=display,
-        city=SYDNEY,
-        parts=SYDNEY_PARTS,
-    ) is None
+    replayed = served(
+        monkeypatch=monkeypatch,
+        app=sydney_app(),
+        argv=run_argv(tmp_path=tmp_path, feeds=str(REAL)),
+    )
+    assert replayed.device is None
 
 
 async def test_device_pages_link_sydney_pages(
@@ -173,20 +232,13 @@ async def test_device_pages_link_sydney_pages(
 ) -> None:
     """The device pages' nav links all four of Sydney's pages."""
     monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(tmp_path / 'key'))
-    timings = Timings()
-    args = argparse.Namespace(
-        feeds='live', error_log=None, state=tmp_path / 'state.json',
+    display = served(
+        monkeypatch=monkeypatch,
+        app=sydney_app(),
+        argv=run_argv(tmp_path=tmp_path, feeds='live'),
     )
-    display = WebDisplay(status=timings.snapshot, city=SYDNEY)
-    pages = device_pages_for(
-        args=args,
-        timings=timings,
-        display=display,
-        city=SYDNEY,
-        parts=SYDNEY_PARTS,
-    )
-    assert pages is not None
-    app = web_app(live=display.live, device=pages)
+    assert display.device is not None
+    app = web_app(live=display.live, device=display.device)
     client = TestClient(TestServer(app))
     await client.start_server()
     try:
@@ -200,18 +252,13 @@ async def test_device_pages_link_sydney_pages(
 
 
 async def test_sydney_display_serves_sydney_nav_and_hint(
-    tmp_path: Path,
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The live page `/` links all four Sydney pages and shows the hint."""
-    display = board_display(
-        timings=Timings(),
-        network=SqliteNetworkRepository(
-            path=tmp_path / 'network.db',
-            city=SYDNEY,
-        ),
-        live=False,
-        city=SYDNEY,
-        parts=SYDNEY_PARTS,
+    display = served(
+        monkeypatch=monkeypatch,
+        app=sydney_app(),
+        argv=run_argv(tmp_path=tmp_path, feeds=str(REAL)),
     )
     client = TestClient(TestServer(display.app()))
     await client.start_server()
@@ -272,7 +319,7 @@ def test_panel_open_failure_keeps_web(
     assert [refresh.ok for refresh in reports] == [False]
     errors = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert [r.getMessage() for r in errors] == ['panel refresh failed']
-    display = WebDisplay(status=Timings().snapshot, city=SYDNEY)
+    display = transit_display(status=Timings().snapshot, city=SYDNEY)
     assert Displays(displays=[display]).settle(timeout=0)
 
 
@@ -301,98 +348,63 @@ def test_main_accepts_neither_or_both_seeds(
     """Neither or both of --from and --to parse; the state path defaults."""
     monkeypatch.delenv('PAPERROUTE_FROM', raising=False)
     monkeypatch.delenv('PAPERROUTE_TO', raising=False)
-    monkeypatch.setattr(
-        sys, 'argv', ['paperroute', 'run', '--timetable', 'x.db', *given]
-    )
-    args = parse_args()
+    args = parsed(argv=['run', '--timetable', 'x.db', *given])
+    board.require_both_or_neither(args=args)
     assert (seed_for(args=args) is not None) == seeded
     assert args.state == Path('/var/lib/paperroute/state.json')
 
 
 @pytest.mark.parametrize('given', [['--from', 'a'], ['--to', 'b']])
 def test_main_rejects_one_seed(
-    monkeypatch: pytest.MonkeyPatch, given: list[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, given: list[str]
 ) -> None:
-    """Only one of --from and --to exits with a message."""
+    """Only one of --from and --to exits with a message on opening."""
     monkeypatch.delenv('PAPERROUTE_FROM', raising=False)
     monkeypatch.delenv('PAPERROUTE_TO', raising=False)
-    monkeypatch.setattr(
-        sys, 'argv', ['paperroute', 'run', '--timetable', 'x.db', *given]
+    timetable = tmp_path / 'x.db'
+    app = sydney_app()
+    args = cli.parse_args(
+        app=app, argv=['run', '--timetable', str(timetable), *given],
     )
-    with pytest.raises(
-        SystemExit, match='give both --from and --to, or neither'
+    with (
+        pytest.raises(
+            SystemExit, match='give both --from and --to, or neither',
+        ),
+        app.opened(args=args, last_error=LastError(zone=SYDNEY_ZONE)),
     ):
-        parse_args()
+        pass
+    assert app.ports is None
+    assert not timetable.exists()
 
 
-def test_state_path_parses(monkeypatch: pytest.MonkeyPatch) -> None:
-    """--state sets where the saved state is kept."""
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        ['paperroute', 'run', '--timetable', 'x.db', '--state', 's.json'],
-    )
-    assert parse_args().state == Path('s.json')
-
-
-def test_web_choices_parse(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_web_choices_parse() -> None:
     """The web display, host, port and error log are read."""
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        [
-            'paperroute', 'run', '--timetable', 'x.db',
+    args = parsed(
+        argv=[
+            'run', '--timetable', 'x.db',
             '--from', 'a', '--to', 'b', '--display', 'web',
             '--host', '127.0.0.1', '--port', '8080',
             '--error-log', 'err.log',
         ],
     )
-    args = parse_args()
     assert args.display == 'web'
     assert (args.host, args.port) == ('127.0.0.1', 8080)
     assert args.error_log == Path('err.log')
 
 
-def test_defaults_are_tk_on_port_80(monkeypatch: pytest.MonkeyPatch) -> None:
-    """The defaults are the Tk window, all interfaces and port 80."""
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        [
-            'paperroute', 'run', '--timetable', 'x.db',
-            '--from', 'a', '--to', 'b',
-        ],
-    )
-    args = parse_args()
-    assert (args.display, args.host, args.port) == ('tk', '0.0.0.0', 80)
-    assert args.error_log is None
-
-
-def test_knobs_flag_parses(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_knobs_flag_parses() -> None:
     """--knobs is off unless given."""
-    base = [
-        'paperroute', 'run', '--timetable', 'x.db', '--from', 'a', '--to', 'b',
-    ]
-    monkeypatch.setattr(sys, 'argv', base)
-    assert parse_args().knobs is False
-    monkeypatch.setattr(sys, 'argv', [*base, '--display', 'web', '--knobs'])
-    assert parse_args().knobs is True
+    base = ['run', '--timetable', 'x.db', '--from', 'a', '--to', 'b']
+    assert parsed(argv=base).knobs is False
+    assert parsed(argv=[*base, '--display', 'web', '--knobs']).knobs is True
 
 
-def test_tiles_arguments_parse(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_tiles_arguments_parse() -> None:
     """--tiles is an optional path and --tiles-variant defaults to grey."""
-    base = [
-        'paperroute', 'run', '--timetable', 'x.db', '--from', 'a', '--to', 'b',
-    ]
-    monkeypatch.setattr(sys, 'argv', base)
-    args = parse_args()
+    base = ['run', '--timetable', 'x.db', '--from', 'a', '--to', 'b']
+    args = parsed(argv=base)
     assert (args.tiles, args.tiles_variant) == (None, TileVariant.GREY)
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        [*base, '--tiles', 't.db', '--tiles-variant', 'bits'],
-    )
-    args = parse_args()
+    args = parsed(argv=[*base, '--tiles', 't.db', '--tiles-variant', 'bits'])
     assert (args.tiles, args.tiles_variant) == (
         Path('t.db'),
         TileVariant.BITS,
@@ -535,8 +547,8 @@ def test_mismatched_tiles_draw_map_not_installed(tmp_path: Path) -> None:
 
 def test_power_for_acts_only_when_asked() -> None:
     """--power runs systemctl; without it the device never powers off."""
-    on = power_for(args=argparse.Namespace(power=True))
-    off = power_for(args=argparse.Namespace(power=False))
+    on = cli.power_for(args=argparse.Namespace(power=True))
+    off = cli.power_for(args=argparse.Namespace(power=False))
     assert isinstance(on, SystemctlPower)
     assert on.systemctl == '/usr/bin/systemctl'
     assert isinstance(off, NullPower)
@@ -550,18 +562,26 @@ def test_resets_for_without_power_is_null(tmp_path: Path) -> None:
         timetable=tmp_path / 'timetable.db',
         tiles=tmp_path / 'tiles.db',
     )
-    off = resets_for(args=args, keys=(FakeKeys(),), wifi=FakeWifi())
+    erased = sydney_app().erased(args=args)
+    off = cli.resets_for(
+        args=args, keys=(FakeKeys(),), wifi=FakeWifi(), erased=erased,
+    )
     args.power = True
-    on = resets_for(args=args, keys=(FakeKeys(),), wifi=FakeWifi())
+    on = cli.resets_for(
+        args=args, keys=(FakeKeys(),), wifi=FakeWifi(), erased=erased,
+    )
     assert isinstance(off, NullResets)
     assert isinstance(on, FileResets)
     assert on.data_dir == Path('/var/lib/paperroute')
+    assert on.erased == (args.timetable,)
 
 
 def test_wifi_for_uses_nmcli_only_when_asked() -> None:
     """--wifi drives NetworkManager; without it Wi-Fi is left alone."""
-    assert isinstance(wifi_for(args=argparse.Namespace(wifi=True)), NmcliWifi)
-    assert isinstance(wifi_for(args=argparse.Namespace(wifi=False)), NullWifi)
+    on = cli.wifi_for(args=argparse.Namespace(wifi=True))
+    off = cli.wifi_for(args=argparse.Namespace(wifi=False))
+    assert isinstance(on, NmcliWifi)
+    assert isinstance(off, NullWifi)
 
 
 def test_builder_for_rebuilds_only_when_asked(tmp_path: Path) -> None:
@@ -578,149 +598,6 @@ def test_builder_for_rebuilds_only_when_asked(tmp_path: Path) -> None:
     assert builder.env['TMPDIR'] == str(tmp_path / 'work')
 
 
-def free_port() -> int:
-    """
-    Find a port nothing is listening on.
-
-    Returns
-    -------
-    int
-        Port number.
-    """
-    with socket.socket() as sock:
-        sock.bind(('127.0.0.1', 0))
-        return int(sock.getsockname()[1])
-
-
-async def wait_for_frame(*, port: int, server: asyncio.Task[None]) -> None:
-    """
-    Poll /frame.png until it answers 200, or raise if the server ended.
-
-    Parameters
-    ----------
-    port : int
-        Port to poll on 127.0.0.1.
-    server : asyncio.Task[None]
-        The serving task; its error is raised if it finishes early.
-    """
-    async with aiohttp.ClientSession() as session:
-        while True:
-            if server.done():
-                server.result()
-                raise AssertionError('server stopped before serving')
-            try:
-                async with session.get(
-                    f'http://127.0.0.1:{port}/frame.png'
-                ) as response:
-                    if response.status == HTTPStatus.OK:
-                        return
-            except aiohttp.ClientConnectionError:
-                pass
-            await asyncio.sleep(0.05)
-
-
-def build_db(*, path: Path) -> None:
-    """
-    Build the real-slice timetable database.
-
-    Parameters
-    ----------
-    path : Path
-        Database file to create.
-    """
-    build_timetable(
-        sources=[
-            Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
-            Source(name='bundle', archive=REAL / 'bundle.zip'),
-        ],
-        window=Window(start=date(2026, 10, 16), days=1),
-        out=path,
-        city_ref=SYDNEY_REF,
-    )
-
-
-async def test_serve_web_runs_and_stops(tmp_path: Path) -> None:
-    """The app serves a frame over HTTP and returns cleanly."""
-    db = tmp_path / 'timetable.db'
-    build_db(path=db)
-    timings = Timings()
-    display = WebDisplay(status=timings.snapshot, city=SYDNEY)
-    timetable = SqliteTimetableRepository(
-        path=db,
-        city=SYDNEY,
-    )
-    ports = Ports(
-        timetable=timetable,
-        feeds=FileFeedsClient(directory=REAL),
-        display=display,
-        clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        observer=timings,
-    )
-    port = free_port()
-    server = asyncio.create_task(
-        serve_web(
-            ports=ports,
-            display=display,
-            seed=PIN,
-            host='127.0.0.1',
-            port=port,
-            city=SYDNEY,
-            tick_every=0.01,
-        )
-    )
-    try:
-        async with asyncio.timeout(30):
-            await wait_for_frame(port=port, server=server)
-            signal.raise_signal(signal.SIGTERM)
-            await server
-        assert signal.getsignal(signal.SIGTERM) is signal.SIG_DFL
-    finally:
-        server.cancel()
-        await asyncio.gather(server, return_exceptions=True)
-        timetable.close()
-
-
-def test_web_main_logs_a_bind_failure(
-    tmp_path: Path,
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """A port that is taken is logged with its address and exits 1."""
-    args = argparse.Namespace(
-        timetable=tmp_path / 'timetable.db',
-        origin=ORIGIN,
-        destination=DESTINATION,
-        at=AT,
-        host='127.0.0.1',
-        port=0,
-        tiles=None,
-        tiles_variant=TileVariant.GREY,
-        state=tmp_path / 'state.json',
-        rebuild=False,
-        power=False,
-        panel=False,
-        knobs=False,
-        wifi=False,
-        version_file=None,
-        feeds=str(REAL),
-    )
-    build_db(path=args.timetable)
-    with socket.socket() as held:
-        held.bind(('127.0.0.1', 0))
-        held.listen()
-        args.port = held.getsockname()[1]
-        with caplog.at_level(logging.ERROR), pytest.raises(SystemExit) as info:
-            web_main(
-                args=args,
-                feeds=FileFeedsClient(directory=REAL),
-                city=SYDNEY,
-                parts=SYDNEY_PARTS,
-            )
-    assert info.value.code == 1
-    assert f'cannot serve on 127.0.0.1:{args.port}' in caplog.text
-
-
 @pytest.fixture(name='restored_logging')
 def _restored_logging() -> Iterator[None]:
     """Put the root logger back after a test that configures it."""
@@ -734,53 +611,16 @@ def _restored_logging() -> Iterator[None]:
     root.setLevel(level)
 
 
-def unopenable(
-    *, path: Path, city: City,
-) -> SqliteTimetableRepository:
+def skipped_tk_main(**kwargs: object) -> None:
     """
-    Fail to open a timetable.
+    Stand in for the Tk window path, opening nothing.
 
     Parameters
     ----------
-    path : Path
+    **kwargs : object
         Ignored.
-    city : City
-        Ignored.
-
-    Raises
-    ------
-    sqlite3.OperationalError
-        Always.
     """
-    raise sqlite3.OperationalError(f'unable to open {path.name}')
-
-
-@pytest.mark.usefixtures('restored_logging')
-def test_main_logs_a_startup_crash_to_the_error_log(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A crash opening the timetable reaches errors.jsonl, then propagates."""
-    key_file = tmp_path / 'no-such-key'
-    error_log = tmp_path / 'log' / 'errors.jsonl'
-    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(key_file))
-    monkeypatch.setattr(cli, 'SqliteTimetableRepository', unopenable)
-    monkeypatch.setattr(tk_monitor, 'TkMonitor', FakeMonitor)
-    monkeypatch.setattr(
-        sys,
-        'argv',
-        [
-            'paperroute', 'run', '--timetable', str(tmp_path / 'x.db'),
-            '--from', 'a', '--to', 'b', '--feeds', 'live',
-            '--error-log', str(error_log),
-        ],
-    )
-    with pytest.raises(sqlite3.OperationalError):
-        main()
-    lines = error_log.read_text(encoding='utf-8').splitlines()
-    assert len(lines) == 1
-    record = json.loads(lines[0])
-    assert record['level'] == 'ERROR'
-    assert 'OperationalError' in record['exc_info']
+    del kwargs
 
 
 @pytest.mark.usefixtures('restored_logging')
@@ -790,7 +630,7 @@ def test_main_warns_that_panel_needs_web(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """--panel with --display tk is ignored with a warning."""
-    monkeypatch.setattr(cli, 'tk_main', lambda **kwargs: None)
+    monkeypatch.setattr(cli, 'tk_main', skipped_tk_main)
     monkeypatch.setattr(
         sys,
         'argv',
@@ -814,7 +654,7 @@ def test_main_warns_that_knobs_need_web(
     capsys: pytest.CaptureFixture[str],
 ) -> None:
     """--knobs with --display tk is ignored with a warning."""
-    monkeypatch.setattr(cli, 'tk_main', lambda **kwargs: None)
+    monkeypatch.setattr(cli, 'tk_main', skipped_tk_main)
     monkeypatch.setattr(
         sys,
         'argv',
@@ -834,136 +674,88 @@ def test_main_warns_that_knobs_need_web(
 async def test_serve_web_posts_knob_events_then_stops_the_knobs(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The knobs' thread reaches the app's queue; quitting stops it."""
-    seen: list[Event] = []
+    """The knobs' thread reaches the kit's queue; quitting stops it."""
+    seen: list[object] = []
     lines = FakeKnobLines(reads=[[LineEdge(line=20, rising=False, at=0.0)]])
     knobs = KnobReader(
         lines=lines, decoder=KnobDecoder(swapped=lambda: False), wait=0.01,
     )
 
     async def fake_run(**kwargs: object) -> None:
-        queue: asyncio.Queue[Event] = asyncio.Queue()
+        """
+        Bind a queue as the kit's run does, then wait for one event.
+
+        Parameters
+        ----------
+        **kwargs : object
+            run's arguments.
+        """
+        queue: asyncio.Queue[object] = asyncio.Queue()
         hook = cast(
-            Callable[[Callable[[Event], None]], None], kwargs['post_hook'],
+            Callable[[Callable[[object], None]], None], kwargs['post_hook'],
         )
         hook(queue.put_nowait)
         seen.append(await asyncio.wait_for(queue.get(), timeout=2))
 
     monkeypatch.setattr(cli, 'run', fake_run)
-    display = WebDisplay(status=Timings().snapshot, city=SYDNEY)
-    memory = SqliteTimetableRepository(
-        connection=sqlite3.connect(':memory:'),
-        city=SYDNEY,
+    display = transit_display(status=Timings().snapshot, city=SYDNEY)
+    ports = KitPorts(
+        display=display,
+        clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
+        states=MemoryStates(),
     )
-    with closing(memory) as timetable:
-        ports = Ports(
-            timetable=timetable,
-            feeds=FileFeedsClient(directory=REAL),
-            display=display,
-            clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
-            network=FakeNetwork(),
-            states=MemoryStates(),
-        )
-        await serve_web(
-            ports=ports,
-            display=display,
-            seed=PIN,
-            host='127.0.0.1',
-            port=free_port(),
-            city=SYDNEY,
-            knobs=knobs,
-        )
+    await cli.serve_web(
+        app=sydney_app(),
+        ports=ports,
+        display=display,
+        host='127.0.0.1',
+        port=0,
+        zone=SYDNEY_ZONE,
+        knobs=knobs,
+    )
     assert seen == [KnobTurned(knob=Knob.TOP, steps=1)]
     assert lines.closes == 1
 
 
-async def test_serve_web_passes_the_tiles_variant_to_run(
-    monkeypatch: pytest.MonkeyPatch,
+def test_web_main_passes_the_tiles_variant(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """serve_web runs the app with the tiles variant it was given."""
-    seen: list[TileVariant] = []
-
-    async def fake_run(**kwargs: object) -> None:
-        seen.append(kwargs['tiles_variant'])  # type: ignore[arg-type]
-
-    monkeypatch.setattr(cli, 'run', fake_run)
-    display = WebDisplay(status=Timings().snapshot, city=SYDNEY)
-    memory = SqliteTimetableRepository(
-        connection=sqlite3.connect(':memory:'),
-        city=SYDNEY,
+    """--tiles-variant reaches the map the web run draws."""
+    app = sydney_app()
+    served(
+        monkeypatch=monkeypatch,
+        app=app,
+        argv=[
+            *run_argv(tmp_path=tmp_path, feeds=str(REAL)),
+            '--tiles-variant', 'bits',
+        ],
     )
-    with closing(memory) as timetable:
-        ports = Ports(
-            timetable=timetable,
-            feeds=FileFeedsClient(directory=REAL),
-            display=display,
-            clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
-            network=FakeNetwork(),
-            states=MemoryStates(),
-        )
-        await serve_web(
-            ports=ports,
-            display=display,
-            seed=PIN,
-            host='127.0.0.1',
-            port=free_port(),
-            city=SYDNEY,
-            tiles_variant=TileVariant.BITS,
-        )
-    assert seen == [TileVariant.BITS]
+    assert app.maps.variant == TileVariant.BITS
 
 
-def test_serve_or_exit_passes_the_tiles_variant(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """--tiles-variant reaches serve_web."""
-    seen: list[TileVariant] = []
-
-    async def fake_serve_web(**kwargs: object) -> None:
-        seen.append(kwargs['tiles_variant'])  # type: ignore[arg-type]
-
-    monkeypatch.setattr(cli, 'serve_web', fake_serve_web)
-    display = WebDisplay(status=Timings().snapshot, city=SYDNEY)
-    args = argparse.Namespace(
-        origin=ORIGIN,
-        destination=DESTINATION,
-        host='127.0.0.1',
-        port=0,
-        tiles_variant=TileVariant.BITS,
-    )
-    memory = SqliteTimetableRepository(
-        connection=sqlite3.connect(':memory:'),
-        city=SYDNEY,
-    )
-    with closing(memory) as timetable:
-        ports = Ports(
-            timetable=timetable,
-            feeds=FileFeedsClient(directory=REAL),
-            display=display,
-            clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
-            network=FakeNetwork(),
-            states=MemoryStates(),
-        )
-        serve_or_exit(args=args, ports=ports, display=display, city=SYDNEY)
-    assert seen == [TileVariant.BITS]
-
-
-@dataclass
 class FakeMonitor:
-    """A stand-in for the Tk window that never opens one."""
+    """
+    A stand-in for the Tk window that never opens one.
 
-    closed: bool = False
+    Attributes
+    ----------
+    closed : bool
+        Whether the window was closed.
+    """
+
+    def __init__(self) -> None:
+        self.closed = False
 
     def pump(self) -> None:
         """Process no window events."""
 
-    def bind(self, *, post: Callable[[Event], None]) -> None:
+    def bind(self, *, post: Callable[[object], None]) -> None:
         """
         Ignore the event poster.
 
         Parameters
         ----------
-        post : Callable[[Event], None]
+        post : Callable[[object], None]
             Ignored.
         """
 
@@ -975,72 +767,40 @@ class FakeMonitor:
 def test_tk_main_passes_the_tiles_variant(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """--tiles-variant reaches show on the Tk path."""
+    """--tiles-variant reaches the map the Tk run draws."""
     seen: list[TileVariant] = []
     monitor = FakeMonitor()
 
     async def fake_show(**kwargs: object) -> None:
-        seen.append(kwargs['tiles_variant'])  # type: ignore[arg-type]
+        """
+        Note the variant of the app's map instead of running it.
+
+        Parameters
+        ----------
+        **kwargs : object
+            show's arguments.
+        """
+        seen.append(cast(TransitApp, kwargs['app']).maps.variant)
 
     monkeypatch.setattr(tk_monitor, 'TkMonitor', lambda: monitor)
     monkeypatch.setattr(cli, 'show', fake_show)
     timetable = tmp_path / 'timetable.db'
     timetable.touch()
-    args = argparse.Namespace(
-        timetable=timetable,
-        origin=ORIGIN,
-        destination=DESTINATION,
-        at=AT,
-        tiles=None,
-        tiles_variant=TileVariant.BITS,
-        state=tmp_path / 'state.json',
-        rebuild=False,
-        power=False,
-        wifi=False,
-        version_file=None,
-        feeds=str(REAL),
+    app = sydney_app()
+    args = cli.parse_args(
+        app=app,
+        argv=[
+            'run', '--timetable', str(timetable),
+            '--from', ORIGIN, '--to', DESTINATION,
+            '--at', '2026-10-16T06:25',
+            '--state', str(tmp_path / 'state.json'),
+            '--feeds', str(REAL),
+            '--tiles-variant', 'bits',
+        ],
     )
-    cli.tk_main(
-        args=args,
-        feeds=FileFeedsClient(directory=REAL),
-        city=SYDNEY,
-        parts=SYDNEY_PARTS,
-    )
+    cli.tk_main(args=args, app=app, last_error=LastError(zone=SYDNEY_ZONE))
     assert seen == [TileVariant.BITS]
     assert monitor.closed
-
-
-async def test_show_passes_the_tiles_variant_to_run(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """show runs the app with the tiles variant it was given."""
-    seen: list[TileVariant] = []
-
-    async def fake_run(**kwargs: object) -> None:
-        seen.append(kwargs['tiles_variant'])  # type: ignore[arg-type]
-
-    monkeypatch.setattr(cli, 'run', fake_run)
-    memory = SqliteTimetableRepository(
-        connection=sqlite3.connect(':memory:'),
-        city=SYDNEY,
-    )
-    with closing(memory) as timetable:
-        ports = Ports(
-            timetable=timetable,
-            feeds=FileFeedsClient(directory=REAL),
-            display=WebDisplay(status=Timings().snapshot, city=SYDNEY),
-            clock=ReplayClock(start=AT, zone=SYDNEY_ZONE),
-            network=FakeNetwork(),
-            states=MemoryStates(),
-        )
-        await cli.show(
-            ports=ports,
-            seed=PIN,
-            monitor=cast('TkMonitor', FakeMonitor()),
-            city=SYDNEY,
-            tiles_variant=TileVariant.BITS,
-        )
-    assert seen == [TileVariant.BITS]
 
 
 def test_live_feeds_are_guarded_and_share_the_tfnsw_limiter(
@@ -1067,12 +827,17 @@ def test_live_feeds_count_into_the_summary_given(
     assert client.summary is summary
 
 
-def test_web_observer_feeds_frames_and_ticks_to_the_summary() -> None:
+def test_web_observer_feeds_frames_and_ticks_to_the_summary(
+    tmp_path: Path,
+) -> None:
     """The web app's observers include the run summary and the timings."""
-    timings, summary = Timings(), Summary()
-    observer = board_observer(timings=timings, summary=summary)
+    app = sydney_app()
+    timings = app.timings()
+    observer = web_observer(
+        timings=timings, extra=app.observers(), led_root=tmp_path,
+    )
     observer.frame_drawn(render_ms=4.0)
-    assert summary.report()['frames'] == 1
+    assert app.summary.report()['frames'] == 1
     assert timings.frames == 1
 
 
@@ -1082,17 +847,14 @@ def test_replayed_feeds_are_read_as_they_are(tmp_path: Path) -> None:
     assert isinstance(client, FileFeedsClient)
 
 
-def test_parse_args_selftest_needs_nothing(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+def test_parse_args_selftest_needs_nothing() -> None:
     """The selftest command parses with no other arguments."""
-    monkeypatch.setattr(sys, 'argv', ['paperroute', 'selftest'])
-    assert parse_args().command == 'selftest'
+    assert parsed(argv=['selftest']).command == 'selftest'
 
 
 def test_zone_prints_city_zone(capsys: pytest.CaptureFixture[str]) -> None:
     """The zone command prints the city's IANA zone and a newline."""
-    cli.main(city=SYDNEY, parts=SYDNEY_PARTS, argv=['zone'])
+    board.main(city=SYDNEY, parts=SYDNEY_PARTS, argv=['zone'])
     assert capsys.readouterr() == ('Australia/Sydney\n', '')
 
 
@@ -1175,10 +937,10 @@ async def test_device_for_probes_and_resets_every_key(
         version_file=None,
     )
     last_error = LastError(zone=SYDNEY_ZONE)
-    device = device_for(
+    device = cli.device_for(
         args=args,
+        app=TransitApp(city=SYDNEY, parts=parts_with(keys=keys)),
         last_error=last_error,
-        parts=parts_with(keys=keys),
     )
     assert device.keys == keys
     assert device.probe is not None
@@ -1186,9 +948,9 @@ async def test_device_for_probes_and_resets_every_key(
     assert isinstance(device.resets, FileResets)
     assert device.resets.keys == (first, second)
     assert device.resets.erased == (args.timetable,)
-    keyless = device_for(
+    keyless = cli.device_for(
         args=args,
+        app=TransitApp(city=SYDNEY, parts=parts_with(keys=())),
         last_error=last_error,
-        parts=parts_with(keys=()),
     )
     assert keyless.keys == ()

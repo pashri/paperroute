@@ -30,7 +30,7 @@ HARDWARE: Final[Path] = (
     ROOT / 'packages' / 'paperroute-hardware' / 'src' / 'paperroute_hardware'
 )
 DEVICE_IMPORTS: Final[str] = (
-    'import paperroute_sydney.__main__, paperroute_transit.app, sys; '
+    'import paperroute_sydney.__main__, paperroute_transit.transit_app, sys; '
     "assert not {'osmium', 'shapely'} & set(sys.modules)"
 )
 REFRESH_RUN: Final[str] = (
@@ -124,17 +124,13 @@ MOVED: Final[tuple[str, ...]] = (
     'adapters.timetable_db',
     'adapters.ways_editor',
     'adapters.web_connection',
-    'adapters.web_display',
     'adapters.web_pin_edit',
     'adapters.web_pin_list',
     'adapters.web_pin_search',
     'adapters.web_pins',
     'adapters.web_ways',
-    'app',
     'app_connections',
-    'app_device',
     'app_effects',
-    'app_outputs',
     'app_ports',
     'app_render',
     'app_work',
@@ -191,7 +187,6 @@ MOVED: Final[tuple[str, ...]] = (
     'core.rides',
     'core.saved',
     'core.sleep',
-    'core.state',
     'core.state_data',
     'core.state_model',
     'core.state_views',
@@ -649,8 +644,8 @@ def test_device_pages_import_no_feed_config() -> None:
     assert not offenders
 
 
-def test_web_display_imports_no_board_pages() -> None:
-    """The web display takes Sydney's pages from the app."""
+def test_board_routes_import_no_board_pages() -> None:
+    """The board's routes take Sydney's pages from the app."""
     banned = {
         'paperroute_sydney.planner_port',
         'paperroute_transit.adapters.web_pins',
@@ -658,7 +653,7 @@ def test_web_display_imports_no_board_pages() -> None:
         'paperroute_transit.adapters.web_connection',
         'paperroute_sydney.adapters.web_suggest',
     }
-    path = TRANSIT / 'adapters' / 'web_display.py'
+    path = TRANSIT / 'adapters' / 'board_routes.py'
     names = imported_names(path=path)
     assert not names & banned
     assert 'SYDNEY' not in path.read_text(encoding='utf-8')

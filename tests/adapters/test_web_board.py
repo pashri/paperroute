@@ -51,7 +51,6 @@ def test_sydney_status_line_matches_old_js() -> None:
 
 
 @pytest.mark.parametrize(('name', 'current'), [
-    ('settings.html', '/settings'),
     ('pins.html', '/pins'),
     ('pin-edit.html', '/pins'),
 ])

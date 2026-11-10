@@ -14,13 +14,13 @@ from paperroute_device.core.kit_events import DeviceProbed
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import START
+from paperroute_testkit.core.kit_steps import QUIET_PARTS, device_of, step
 from paperroute_transit.core.banners import (
     TIMETABLE_OUT_OF_DATE,
     timetable_banner,
     timetable_ends,
 )
 from paperroute_transit.core.messages import TimetableSeen
-from paperroute_transit.core.state import REDUCER_PARTS, device_of, step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import device_notice, stop_view_of
 from paperroute_transit.transit_app import TransitApp
@@ -29,7 +29,7 @@ from tests.core.test_state import CENTRE, fresh, loaded
 
 FRIDAY: Final[date] = date(2026, 10, 16)  # START's day in Sydney
 ENDS_FRIDAY: Final[str] = 'Timetable ends Friday. Check the internet and key.'
-APP: Final[TransitApp] = TransitApp(city=SYDNEY, parts=REDUCER_PARTS)
+APP: Final[TransitApp] = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
 
 
 def line(*, state: State) -> Banner | None:

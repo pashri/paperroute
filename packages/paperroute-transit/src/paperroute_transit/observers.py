@@ -1,14 +1,15 @@
-"""Observers that collect timings from the running app."""
+"""Observers that collect timings from the running board."""
 
 import logging
 import time
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import asdict, dataclass, field
+from dataclasses import dataclass, field, replace
 
 from paperroute_device.core.device_model import DeviceStatus
 from paperroute_device.core.device_settings import DeviceSettings
-from paperroute_device.ports import DeviceObserver
-from paperroute_hardware.ports import PanelRefresh, PanelTimes
+from paperroute_device.runtime.timings import KitTimings
+from paperroute_device.runtime.timings import ObserverGroup as KitObserverGroup
+from paperroute_hardware.ports import PanelRefresh
 from paperroute_transit.adapters.settings_form import form_values
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.saved import Settings
@@ -37,23 +38,6 @@ class FeedTiming:
     trips: int
 
 
-def _age(*, since: float | None) -> float | None:
-    """
-    Measure the seconds since a monotonic moment.
-
-    Parameters
-    ----------
-    since : float | None
-        A `time.monotonic()` reading, or None.
-
-    Returns
-    -------
-    float | None
-        Seconds elapsed, or None if there was no reading.
-    """
-    return None if since is None else time.monotonic() - since
-
-
 @dataclass(frozen=True)
 class PinsSeen:
     """
@@ -75,64 +59,27 @@ class PinsSeen:
 
 
 @dataclass
-class Timings:
+class Timings(KitTimings):
     """
-    Keeps the latest timings for the status page.
+    Keeps the kit's timings with the feeds, pins and board settings.
 
     Attributes
     ----------
-    frames : int
-        Frames rendered so far.
-    last_render_ms : float | None
-        Render time of the latest frame.
-    max_render_ms : float | None
-        Slowest render so far.
-    last_frame_monotonic : float | None
-        `time.monotonic()` when the latest frame was drawn.
     feeds : dict[str, FeedTiming]
         Latest timing per feed.
-    last_tick_monotonic : float | None
-        `time.monotonic()` at the latest app loop tick.
-    settings : Settings | None
-        The settings in force, or None before the app reports them.
     last_ok : dict[str, float]
         Wall-clock time of each feed's latest parse.
-    device : DeviceStatus | None
-        The device status, or None before the app reports it.
-    app : dict[str, object]
-        The app's status readings; empty before the app reports them.
+    board : Settings | None
+        The settings the board last reported, or None before it does;
+        their device part is the kit's `settings`.
     pins : PinsSeen | None
-        The pins, or None before the app reports them.
-    panel : PanelTimes | None
-        The panel's refresh times, or None when there is no panel.
+        The pins, or None before the board reports them.
     """
 
-    frames: int = 0
-    last_render_ms: float | None = None
-    max_render_ms: float | None = None
-    last_frame_monotonic: float | None = None
     feeds: dict[str, FeedTiming] = field(default_factory=dict)
-    last_tick_monotonic: float | None = None
-    settings: Settings | None = None
     last_ok: dict[str, float] = field(default_factory=dict)
-    device: DeviceStatus | None = None
-    app: dict[str, object] = field(default_factory=dict)
+    board: Settings | None = None
     pins: PinsSeen | None = None
-    panel: PanelTimes | None = None
-
-    def frame_drawn(self, *, render_ms: float) -> None:
-        """
-        Record a rendered frame.
-
-        Parameters
-        ----------
-        render_ms : float
-            Render time in milliseconds.
-        """
-        self.frames += 1
-        self.last_render_ms = render_ms
-        self.max_render_ms = max(self.max_render_ms or 0.0, render_ms)
-        self.last_frame_monotonic = time.monotonic()
 
     def feed_parsed(
         self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
@@ -158,33 +105,6 @@ class Timings:
         )
         self.last_ok[feed] = time.time()
 
-    def work_done(self, *, name: str, ms: float) -> None:
-        """
-        Ignore a piece of background work; feeds are kept by `feed_parsed`.
-
-        Parameters
-        ----------
-        name : str
-            What was done.
-        ms : float
-            Time taken, in milliseconds.
-        """
-
-    def app_seen(self, *, status: Mapping[str, object]) -> None:
-        """
-        Record the app's status.
-
-        Parameters
-        ----------
-        status : Mapping[str, object]
-            The status.
-        """
-        self.app = dict(status)
-
-    def ticked(self) -> None:
-        """Record an app loop tick."""
-        self.last_tick_monotonic = time.monotonic()
-
     def settings_seen(self, *, settings: Settings) -> None:
         """
         Record the settings in force.
@@ -194,18 +114,7 @@ class Timings:
         settings : Settings
             The settings.
         """
-        self.settings = settings
-
-    def status_seen(self, *, status: DeviceStatus) -> None:
-        """
-        Record the device status.
-
-        Parameters
-        ----------
-        status : DeviceStatus
-            The status.
-        """
-        self.device = status
+        self.board = settings
 
     def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
         """
@@ -221,47 +130,16 @@ class Timings:
         revision = 1 if self.pins is None else self.pins.revision + 1
         self.pins = PinsSeen(pins=pins, shown=shown, revision=revision)
 
-    def knobs_swapped(self) -> bool:
+    def last_used(self) -> float | None:
         """
-        Say whether the settings in force swap the knobs.
+        Say when a feed last worked.
 
         Returns
         -------
-        bool
-            The swap switch; False before the app reports its settings.
+        float | None
+            The wall-clock time of the latest parse, or None before one.
         """
-        settings = self.settings
-        return settings is not None and settings.device.swap_knobs
-
-    def device_settings_seen(self, *, settings: DeviceSettings) -> None:
-        """
-        Ignore the device settings; `settings_seen` keeps them all.
-
-        Parameters
-        ----------
-        settings : DeviceSettings
-            The settings.
-        """
-
-    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
-        """
-        Record a panel refresh, starting the panel's times if needed.
-
-        Parameters
-        ----------
-        refresh : PanelRefresh
-            The refresh; a failed one only marks the panel not ok.
-        """
-        if self.panel is None:
-            self.panel = PanelTimes()
-        panel = self.panel
-        panel.ok = refresh.ok
-        if not refresh.ok:
-            return
-        if refresh.full:
-            panel.full_s = refresh.seconds
-        else:
-            panel.partial_s = refresh.seconds
+        return max(self.last_ok.values(), default=None)
 
     def snapshot(self) -> dict[str, object]:
         """
@@ -270,72 +148,30 @@ class Timings:
         Returns
         -------
         dict[str, object]
-            Frame counts and times, ages in seconds (None before the
-            first frame or tick), the latest timing per feed with when
-            it last worked, the panel's refresh times (None when there
-            is no panel), and the settings and device status once
-            reported. The device facts are left out.
+            The kit's snapshot with the latest timing per feed, with when
+            it last worked, straight after the tick's age, and every
+            setting once the board has reported its own.
         """
         now = time.time()
-        snapshot: dict[str, object] = {
-            'frames': self.frames,
-            'last_render_ms': self.last_render_ms,
-            'max_render_ms': self.max_render_ms,
-            'frame_age_s': _age(since=self.last_frame_monotonic),
-            'tick_age_s': _age(since=self.last_tick_monotonic),
-            'feeds': {
-                name: {
-                    'fetch_ms': timing.fetch_ms,
-                    'parse_ms': timing.parse_ms,
-                    'trips': timing.trips,
-                    'last_ok': self.last_ok[name],
-                    'age_s': now - self.last_ok[name],
-                }
-                for name, timing in self.feeds.items()
-            },
-            'panel': None if self.panel is None else asdict(self.panel),
+        feeds = {
+            name: {
+                'fetch_ms': timing.fetch_ms,
+                'parse_ms': timing.parse_ms,
+                'trips': timing.trips,
+                'last_ok': self.last_ok[name],
+                'age_s': now - self.last_ok[name],
+            }
+            for name, timing in self.feeds.items()
         }
-        if self.settings is not None:
-            snapshot['settings'] = form_values(settings=self.settings)
-        if self.device is not None:
-            snapshot['device'] = device_snapshot(
-                status=self.device, app=self.app,
-            )
+        snapshot: dict[str, object] = {}
+        for key, value in super().snapshot().items():
+            snapshot[key] = value
+            if key == 'tick_age_s':
+                snapshot['feeds'] = feeds
+        if self.settings is not None and self.board is not None:
+            settings = replace(self.board, device=self.settings)
+            snapshot['settings'] = form_values(settings=settings)
         return snapshot
-
-
-def device_snapshot(
-    *, status: DeviceStatus, app: Mapping[str, object],
-) -> dict[str, object]:
-    """
-    Give the device status in a JSON-ready form, without its facts.
-
-    Parameters
-    ----------
-    status : DeviceStatus
-        The status.
-    app : Mapping[str, object]
-        The app's status readings.
-
-    Returns
-    -------
-    dict[str, object]
-        The app's readings (timetable, schema, rebuild state and calls
-        today), then whether every key is set (None until known), what
-        a phone asked for that waits on the panel, and Wi-Fi setup's
-        phase; never its password and never a key's name or value.
-    """
-    setup = status.setup
-    return {
-        **app,
-        'key_set': (
-            None
-            if status.missing_keys is None
-            else not status.missing_keys
-        ),
-        'asked': None if status.asked is None else status.asked.value,
-        'setup_phase': None if setup is None else setup.phase.value,
-    }
 
 
 class NullObserver:
@@ -447,65 +283,35 @@ class NullObserver:
         """
 
 
-class ObserverGroup:
+class ObserverGroup(KitObserverGroup):
     """
     Pass each event on to every observer, even if one fails.
-
-    The device events go to the observers first, then the devices. The
-    parsed feeds, settings and pins go to the observers only.
 
     Parameters
     ----------
     observers : Sequence[Observer]
-        Observers to notify, in order.
-    devices : Sequence[DeviceObserver]
-        Device observers to notify after them, in order.
+        Observers to notify, in order; they also hear the parsed feeds,
+        the settings and the pins.
     """
 
-    def __init__(
-        self,
-        *,
-        observers: Sequence[Observer],
-        devices: Sequence[DeviceObserver] = (),
-    ) -> None:
-        self._observers = list(observers)
-        self._everyone: list[DeviceObserver] = [*observers, *devices]
+    def __init__(self, *, observers: Sequence[Observer]) -> None:
+        super().__init__(observers=observers)
+        self._board = list(observers)
 
-    @staticmethod
-    def _each[T: DeviceObserver](
-        *,
-        observers: Sequence[T],
-        call: Callable[[T], None],
-    ) -> None:
+    def _tell(self, *, call: Callable[[Observer], None]) -> None:
         """
         Run a call on each observer, logging any that raise.
 
         Parameters
         ----------
-        observers : Sequence[T]
-            Observers to call, in order.
-        call : Callable[[T], None]
+        call : Callable[[Observer], None]
             Call to make on each observer.
         """
-        for observer in observers:
+        for observer in self._board:
             try:
                 call(observer)
             except Exception:  # pylint: disable=broad-exception-caught
                 logger.exception('observer failed: %r', observer)
-
-    def frame_drawn(self, *, render_ms: float) -> None:
-        """
-        Pass on a rendered frame.
-
-        Parameters
-        ----------
-        render_ms : float
-            Render time in milliseconds.
-        """
-        self._each(
-            observers=self._everyone,
-            call=lambda o: o.frame_drawn(render_ms=render_ms),
-        )
 
     def feed_parsed(
         self, *, feed: str, fetch_ms: float, parse_ms: float, trips: int
@@ -524,51 +330,13 @@ class ObserverGroup:
         trips : int
             Number of trip updates found.
         """
-        self._each(
-            observers=self._observers,
+        self._tell(
             call=lambda o: o.feed_parsed(
                 feed=feed,
                 fetch_ms=fetch_ms,
                 parse_ms=parse_ms,
                 trips=trips,
             ),
-        )
-
-    def work_done(self, *, name: str, ms: float) -> None:
-        """
-        Pass on a piece of background work.
-
-        Parameters
-        ----------
-        name : str
-            What was done.
-        ms : float
-            Time taken, in milliseconds.
-        """
-        self._each(
-            observers=self._everyone,
-            call=lambda o: o.work_done(name=name, ms=ms),
-        )
-
-    def app_seen(self, *, status: Mapping[str, object]) -> None:
-        """
-        Pass on the app's status.
-
-        Parameters
-        ----------
-        status : Mapping[str, object]
-            The status.
-        """
-        self._each(
-            observers=self._everyone,
-            call=lambda o: o.app_seen(status=status),
-        )
-
-    def ticked(self) -> None:
-        """Pass on a tick."""
-        self._each(
-            observers=self._everyone,
-            call=lambda o: o.ticked(),
         )
 
     def settings_seen(self, *, settings: Settings) -> None:
@@ -580,24 +348,7 @@ class ObserverGroup:
         settings : Settings
             The settings.
         """
-        self._each(
-            observers=self._observers,
-            call=lambda o: o.settings_seen(settings=settings),
-        )
-
-    def status_seen(self, *, status: DeviceStatus) -> None:
-        """
-        Pass on the device status.
-
-        Parameters
-        ----------
-        status : DeviceStatus
-            The status.
-        """
-        self._each(
-            observers=self._everyone,
-            call=lambda o: o.status_seen(status=status),
-        )
+        self._tell(call=lambda o: o.settings_seen(settings=settings))
 
     def pins_seen(self, *, pins: tuple[Pin, ...], shown: int | None) -> None:
         """
@@ -610,35 +361,4 @@ class ObserverGroup:
         shown : int | None
             Index of the pin on screen, or None.
         """
-        self._each(
-            observers=self._observers,
-            call=lambda o: o.pins_seen(pins=pins, shown=shown),
-        )
-
-    def device_settings_seen(self, *, settings: DeviceSettings) -> None:
-        """
-        Pass on the device settings.
-
-        Parameters
-        ----------
-        settings : DeviceSettings
-            The settings.
-        """
-        self._each(
-            observers=self._everyone,
-            call=lambda o: o.device_settings_seen(settings=settings),
-        )
-
-    def panel_refreshed(self, *, refresh: PanelRefresh) -> None:
-        """
-        Pass on a panel refresh.
-
-        Parameters
-        ----------
-        refresh : PanelRefresh
-            The refresh.
-        """
-        self._each(
-            observers=self._everyone,
-            call=lambda o: o.panel_refreshed(refresh=refresh),
-        )
+        self._tell(call=lambda o: o.pins_seen(pins=pins, shown=shown))

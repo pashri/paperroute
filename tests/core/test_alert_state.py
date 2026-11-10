@@ -13,6 +13,7 @@ from paperroute_testkit.core.connection_factories import LEG1, LEG2, WORK
 from paperroute_testkit.core.connection_factories import at as at_connection
 from paperroute_testkit.core.connection_factories import work_legs
 from paperroute_testkit.core.factories import departure
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import wakeful
 from paperroute_transit.core.alert_model import (
     Alert,
@@ -43,7 +44,6 @@ from paperroute_transit.core.places import shown
 from paperroute_transit.core.realtime import RealtimeSnapshot
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, seeded
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import RELOAD_BEFORE, State
 from paperroute_transit.core.state_views import current_view, live_stop_view
 from paperroute_transit.core.stop_view import HORIZON
@@ -103,7 +103,7 @@ def started(*, pins: tuple[Pin, ...] = (PARRAMATTA_CENTRAL,)) -> State:
     """
     saved = replace(seeded(pin=pins[0], city=SYDNEY), pins=pins)
     return wakeful(
-        state=initial_state(saved=saved, now=NOW, stored=True, city=SYDNEY),
+        state=initial_state(saved=saved, now=NOW, city=SYDNEY),
     )
 
 
@@ -704,7 +704,7 @@ def connection_asks(*, second: tuple[Departure, ...]) -> list[LoadBetween]:
     """
     now = at_connection(7, 30)
     state = wakeful(state=initial_state(
-        saved=seeded(pin=WORK, city=SYDNEY), now=now, stored=True,
+        saved=seeded(pin=WORK, city=SYDNEY), now=now,
         city=SYDNEY,
     ))
     _, effects = step(state, DeparturesLoaded(

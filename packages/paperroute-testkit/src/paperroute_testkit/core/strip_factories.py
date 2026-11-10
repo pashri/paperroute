@@ -19,6 +19,7 @@ from paperroute_testkit.core.factories import (
     place,
     train,
 )
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import step_answered
 from paperroute_transit.core.geo import Point
 from paperroute_transit.core.map_view import DEFAULT_ZOOM
@@ -27,7 +28,6 @@ from paperroute_transit.core.model import Departure, Pin, StopPlace
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import HORIZON
 from paperroute_transit.core.strip_model import StripInputs, StripRow
@@ -185,7 +185,7 @@ def on_view(
         pins=(pin,), current=0, unpinned=None, view=view,
     )
     state = initial_state(
-        saved=saved, now=START, stored=True, city=city_under_test(),
+        saved=saved, now=START, city=city_under_test(),
     )
     return step_answered(
         state=state,

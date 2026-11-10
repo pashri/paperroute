@@ -9,7 +9,6 @@ from typing import Final
 from paperroute_sydney.build.dedupe import merge_rail
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.core.messages import Effect, Event
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 
 REAL: Final[Path] = Path(__file__).parent / 'fixtures' / 'real'
@@ -141,26 +140,3 @@ def slice_db(*, tmp_path: Path) -> Path:
     with closing(sqlite3.connect(db)) as conn:
         merge_rail(conn=conn)
     return db
-
-
-def kit_step(
-    *, state: State, event: Event,
-) -> tuple[State, tuple[Effect, ...]]:
-    """
-    Apply one event through the device kit's step with transit's app.
-
-    Successive calls carry the kit's own fields through `state.kit`.
-
-    Parameters
-    ----------
-    state : State
-        Transit's state, its device fields a mirror of the kit's.
-    event : Event
-        What happened.
-
-    Returns
-    -------
-    tuple[State, tuple[Effect, ...]]
-        The state after the event, and the effects.
-    """
-    return step(state, event)

@@ -7,15 +7,16 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY, SydneyMode
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
-from paperroute_transit.adapters.web_display import WebDisplay
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import StopMatch
 from tests.adapters.test_web_device import sydney_site
+from tests.adapters.transit_web import transit_display
 
 Client = TestClient[web.Request, web.Application]
 PARRAMATTA = StopPlace(
@@ -38,7 +39,7 @@ async def _client() -> AsyncIterator[Client]:
     Client
         The client, closed after the test.
     """
-    display = WebDisplay(
+    display = transit_display(
         device=sydney_site().pages(),
         board=PinPages(
             head=BoardHead(),
@@ -84,7 +85,7 @@ async def test_stops_json_short_query_is_empty(client: Client) -> None:
 
 async def test_stops_json_before_timetable() -> None:
     """Without a timetable the list is empty."""
-    display = WebDisplay(
+    display = transit_display(
         device=sydney_site().pages(),
         board=PinPages(
             head=BoardHead(),
@@ -115,7 +116,7 @@ async def test_search_follows_school_switch() -> None:
     """Both searches leave school routes out unless the setting is off."""
     options = FakePinOptions(found=(MATCH,))
     reported: dict[str, object] = {}
-    display = WebDisplay(
+    display = transit_display(
         status=lambda: reported,
         board=PinPages(
             head=BoardHead(),

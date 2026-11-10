@@ -1,16 +1,13 @@
 """Steps that bring an older state.json up to the current schema."""
 
+import functools
 import hashlib
 import json
 from collections.abc import Mapping
 from typing import Any, Final, Protocol
 
-from paperroute_device.core.sections import (
-    DEVICE_MIGRATIONS,
-    DEVICE_SCHEMA,
-    SectionStep,
-    migrate_section,
-)
+from paperroute_device.core.app import MigrationStep as KitStep
+from paperroute_device.core.sections import SectionStep
 from paperroute_transit.adapters.state_auto import add_auto
 from paperroute_transit.adapters.state_change import (
     add_connections,
@@ -19,7 +16,6 @@ from paperroute_transit.adapters.state_change import (
 from paperroute_transit.adapters.state_settings import default_settings
 from paperroute_transit.core.city import City
 
-SCHEMA_VERSION: Final[int] = 13
 BOARD_SCHEMA: Final[int] = 1
 BOARD_MIGRATIONS: Final[Mapping[int, SectionStep]] = {}
 BOARD_KEYS: Final[tuple[str, ...]] = (
@@ -787,99 +783,21 @@ MIGRATIONS: Final[dict[int, MigrationStep]] = {
 }
 
 
-def stored_version(*, data: dict[str, object]) -> int:
+def transit_migrations(*, city: City) -> dict[int, KitStep]:
     """
-    Read the stored schema version.
+    Give transit's steps in the state file's one migration chain.
 
     Parameters
     ----------
-    data : dict[str, object]
-        The decoded file.
-
-    Returns
-    -------
-    int
-        The version.
-
-    Raises
-    ------
-    ValueError
-        When it is missing, not a whole number or above `SCHEMA_VERSION`.
-    """
-    version = data.get('schema_version')
-    if not isinstance(version, int) or isinstance(version, bool):
-        raise ValueError(f'bad schema version {version!r}')
-    if version > SCHEMA_VERSION:
-        raise ValueError(f'schema version {version} is from the future')
-    return version
-
-
-def migrate(*, data: dict[str, object], city: City) -> dict[str, object]:
-    """
-    Bring stored data up to the current schema version.
-
-    Parameters
-    ----------
-    data : dict[str, object]
-        The decoded file.
     city : City
-        The city, whose defaults new settings take.
+        The city, whose defaults new settings take; bound into each step.
 
     Returns
     -------
-    dict[str, object]
-        The data at `SCHEMA_VERSION`.
-
-    Raises
-    ------
-    ValueError
-        When the version is missing, above `SCHEMA_VERSION`, or has no
-        migration step, or the same holds for a section.
+    dict[int, KitStep]
+        The step that brings each version up one, from 1 to 12.
     """
-    version = stored_version(data=data)
-    while version < SCHEMA_VERSION:
-        if version not in MIGRATIONS:
-            raise ValueError(f'no migration from version {version}')
-        data = MIGRATIONS[version](data, city=city)
-        version += 1
-        data['schema_version'] = version
-    return migrated_sections(data=data)
-
-
-def migrated_sections(*, data: dict[str, object]) -> dict[str, object]:
-    """
-    Bring the device and board sections up to their latest versions.
-
-    Parameters
-    ----------
-    data : dict[str, object]
-        Data at `SCHEMA_VERSION`.
-
-    Returns
-    -------
-    dict[str, object]
-        The data with each section migrated; a missing or non-object
-        section is left for repair to reset.
-
-    Raises
-    ------
-    ValueError
-        When a section's version is missing, too new or has no step.
-    """
-    device = data.get('device')
-    board = data.get('board')
-    if isinstance(device, dict):
-        data = {**data, 'device': migrate_section(
-            data=device,
-            steps=DEVICE_MIGRATIONS,
-            latest=DEVICE_SCHEMA,
-            name='device',
-        )}
-    if isinstance(board, dict):
-        data = {**data, 'board': migrate_section(
-            data=board,
-            steps=BOARD_MIGRATIONS,
-            latest=BOARD_SCHEMA,
-            name='board',
-        )}
-    return data
+    return {
+        version: functools.partial(step, city=city)
+        for version, step in MIGRATIONS.items()
+    }

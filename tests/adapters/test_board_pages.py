@@ -9,6 +9,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 from multidict import MultiMapping
 
+from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device.adapters.web_frame import LIVE_NAV
 from paperroute_sydney.adapters.web_board import PINS_NAV
 from paperroute_sydney.city import SYDNEY
@@ -16,13 +17,13 @@ from paperroute_testkit.core.connection_factories import WORK
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PagePlug, PinPages
-from paperroute_transit.adapters.web_display import WebDisplay
 from paperroute_transit.adapters.web_ways import WaysPages
 from paperroute_transit.core.messages import Event
 from paperroute_transit.core.model import pin_ref
 from tests.adapters.test_connection_editor import OPTIONS
 from tests.adapters.test_web_pin_search import MATCH
 from tests.adapters.test_web_pins import Pins
+from tests.adapters.transit_web import transit_display
 
 Client = TestClient[web.Request, web.Application]
 PLUGGED = '<p id="plugged">'
@@ -107,7 +108,7 @@ async def started(*, board: PinPages) -> Client:
         The started client.
     """
     client: Client = TestClient(
-        TestServer(WebDisplay(board=board, city=SYDNEY).app()),
+        TestServer(transit_display(board=board, city=SYDNEY).app()),
     )
     await client.start_server()
     return client

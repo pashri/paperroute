@@ -10,6 +10,7 @@ from aiohttp.test_utils import TestClient, TestServer
 
 from paperroute_device.adapters.secrets_file import SecretsFile
 from paperroute_device.adapters.web_device import DevicePages
+from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device.core.device_model import DeviceKey, DeviceStatus
 from paperroute_device.ports import KeyStore
 from paperroute_device_testkit.device_fakes import FakeKeys
@@ -24,16 +25,16 @@ from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_sydney.sydney_feeds import DAILY_LIMIT, feed_label
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
+from paperroute_transit.adapters.board_routes import RESET_HINT
 from paperroute_transit.adapters.device_data import data_section
 from paperroute_transit.adapters.settings_form import form_values
-from paperroute_transit.adapters.web_display import WebDisplay
-from paperroute_transit.core.panel_screens import RESET_HINT
 from tests.adapters.test_device_data import BUSES
 from tests.adapters.test_device_data import SYDNEY_STATUS as STATUS
 from tests.adapters.test_device_data import TRAINS
 from tests.adapters.test_web_pins import HOME, ODD, WORK, Pins
 from tests.adapters.test_web_suggest import NOW as SEARCH_NOW
 from tests.adapters.test_web_suggest import PLATFORMS
+from tests.adapters.transit_web import transit_display
 from tests.golden.scenes import GOLDEN, baseline_bytes
 from tests.golden.test_golden_state import RICH_SAVED
 from tests.planner_fakes import FakeTripPlanner
@@ -89,7 +90,6 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
             ),
         ),
         post=lambda event: None,
-        zone=SYDNEY_ZONE,
         error_log=None,
         state_file=None,
         clock=lambda: NOW,
@@ -106,7 +106,7 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
             zone=SYDNEY_ZONE,
         ),
     )
-    return WebDisplay(
+    return transit_display(
         status=lambda: {'settings': form_values(settings=RICH_SAVED.settings)},
         device=device,
         nav=SYDNEY_NAV,

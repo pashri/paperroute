@@ -18,21 +18,20 @@ from paperroute_testkit.core.connection_factories import (
     WESTMEAD,
     WORK,
 )
+from paperroute_transit.adapters.board_section import BoardCodec
 from paperroute_transit.adapters.state_file import (
-    JsonStateRepository,
+    BoardSectionModel,
     PinModel,
     from_model,
     pin_from_model,
-    state_model_of,
+    repaired_board,
 )
 from paperroute_transit.adapters.state_migrations import (
     BOARD_SCHEMA,
-    SCHEMA_VERSION,
     V1_TRAINLINK_LINES,
     add_ways,
     coach_pin,
     drop_zoom,
-    migrate,
     move_auto_rebuild,
     split_sections,
     v9_ref,
@@ -46,6 +45,7 @@ from paperroute_transit.core.model import (
     pin_ref,
 )
 from paperroute_transit.core.saved import ConnectionMap, Saved, default_saved
+from tests.adapters.board_states import BoardStates, migrated, schema_of
 from tests.adapters.state_layout import (
     STATE_V11,
     STATE_V11_KINDS,
@@ -60,6 +60,27 @@ WINDOW: Final[dict[str, object]] = {
     'days': ['mon', 'tue'], 'start': '07:00', 'end': '08:30',
 }
 START: Final[datetime] = datetime(2026, 10, 27, 7, tzinfo=SYDNEY_ZONE)
+SCHEMA: Final[int] = schema_of(city=SYDNEY)
+
+
+def board_model_of(*, data: dict[str, object]) -> BoardSectionModel:
+    """
+    Migrate a decoded file and repair its board section as the kit does.
+
+    Parameters
+    ----------
+    data : dict[str, object]
+        The decoded file.
+
+    Returns
+    -------
+    BoardSectionModel
+        The stored board section.
+    """
+    board = migrated(data=data, city=SYDNEY).get('board')
+    return BoardSectionModel.model_validate(
+        repaired_board(section=board, city=SYDNEY),
+    )
 
 
 def stop(stop_id: str, name: str) -> dict[str, object]:
@@ -166,7 +187,7 @@ def v9_file(*, path: Path, **fields: object) -> dict[str, Any]:
     dict[str, Any]
         The data written.
     """
-    JsonStateRepository(path=path, city=SYDNEY).save(
+    BoardStates(path=path, city=SYDNEY).save(
         saved=default_saved(city=SYDNEY),
     )
     data = flat_v11(data=json.loads(path.read_text()))
@@ -212,7 +233,7 @@ def test_v1_regional_pins_split_as_before() -> None:
 def test_migrates_v9_to_v10(path: Path) -> None:
     """Destination pins lose routes; pin 5's change becomes one way."""
     v9_file(path=path)
-    pins = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins
+    pins = BoardStates(path=path, city=SYDNEY).load().saved.pins
     assert [pin.routes for pin in pins] == [(), ('T1',), (), ('T1',), ()]
     campbelltown = StopPlace(
         stop_id='2560', name='Campbelltown Station', point=None,
@@ -240,7 +261,7 @@ def test_migration_keeps_auto_refs(path: Path) -> None:
         path=path,
         auto={'occurrence': occurrence, 'before': None, 'overridden_at': None},
     )
-    saved = JsonStateRepository(path=path, city=SYDNEY).load().saved
+    saved = BoardStates(path=path, city=SYDNEY).load().saved
     assert saved.auto.occurrence is not None
     assert saved.auto.occurrence.ref == pin_ref(pin=saved.pins[4])
     assert saved.auto.occurrence.ref != occurrence['ref']
@@ -251,7 +272,7 @@ def test_migration_keeps_auto_refs(path: Path) -> None:
         path=path,
         auto={'occurrence': occurrence, 'before': None, 'overridden_at': None},
     )
-    saved = JsonStateRepository(path=path, city=SYDNEY).load().saved
+    saved = BoardStates(path=path, city=SYDNEY).load().saved
     assert saved.auto.occurrence is not None
     assert saved.auto.occurrence.ref == pin_ref(pin=saved.pins[0])
 
@@ -279,7 +300,7 @@ def test_migrates_unpinned_and_before(path: Path) -> None:
         unpinned=PIN_5,
         auto={'occurrence': None, 'before': before, 'overridden_at': None},
     )
-    saved = JsonStateRepository(path=path, city=SYDNEY).load().saved
+    saved = BoardStates(path=path, city=SYDNEY).load().saved
     assert saved.unpinned is not None
     assert saved.auto.before is not None
     assert saved.unpinned == saved.pins[4]
@@ -290,10 +311,7 @@ def test_migrates_unpinned_and_before(path: Path) -> None:
 def test_connection_map_change_becomes_changes(path: Path) -> None:
     """The v9 'change' map setting becomes 'changes'."""
     v9_file(path=path)
-    settings = JsonStateRepository(
-        path=path,
-        city=SYDNEY,
-    ).load().saved.settings
+    settings = BoardStates(path=path, city=SYDNEY).load().saved.settings
     assert settings.board.connection_map is ConnectionMap.CHANGES
 
 
@@ -320,7 +338,7 @@ def saved_ways(*, path: Path, pin: Pin) -> dict[str, Any]:
         The stored data.
     """
     saved = replace(default_saved(city=SYDNEY), pins=(pin,), current=0)
-    JsonStateRepository(path=path, city=SYDNEY).save(saved=saved)
+    BoardStates(path=path, city=SYDNEY).save(saved=saved)
     data: dict[str, Any] = json.loads(path.read_text())
     return data
 
@@ -331,10 +349,7 @@ def test_bad_way_drops_way_alone(path: Path) -> None:
     data = saved_ways(path=path, pin=pin)
     data['board']['pins'][0]['ways'][1]['changes'][0]['alight'] = 3
     path.write_text(json.dumps(data))
-    assert JsonStateRepository(
-        path=path,
-        city=SYDNEY,
-    ).load().saved.pins == (WORK,)
+    assert BoardStates(path=path, city=SYDNEY).load().saved.pins == (WORK,)
 
 
 @pytest.mark.parametrize('changes', [[], 'x', [{}] * 3])
@@ -345,7 +360,7 @@ def test_way_with_bad_changes_dropped(
     data = saved_ways(path=path, pin=WORK)
     data['board']['pins'][0]['ways'][0]['changes'] = changes
     path.write_text(json.dumps(data))
-    pins = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins
+    pins = BoardStates(path=path, city=SYDNEY).load().saved.pins
     assert pins == (replace(WORK, ways=()),)
 
 
@@ -354,7 +369,7 @@ def test_ways_not_a_list_gives_plain_pin(path: Path) -> None:
     data = saved_ways(path=path, pin=WORK)
     data['board']['pins'][0]['ways'] = 'x'
     path.write_text(json.dumps(data))
-    pins = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins
+    pins = BoardStates(path=path, city=SYDNEY).load().saved.pins
     assert pins == (replace(WORK, ways=()),)
 
 
@@ -363,7 +378,7 @@ def test_allow_clamped_in_way(path: Path) -> None:
     data = saved_ways(path=path, pin=WORK)
     data['board']['pins'][0]['ways'][0]['changes'][0]['allow'] = 90
     path.write_text(json.dumps(data))
-    pin = JsonStateRepository(path=path, city=SYDNEY).load().saved.pins[0]
+    pin = BoardStates(path=path, city=SYDNEY).load().saved.pins[0]
     assert pin.ways[0].changes[0].allow == 60
 
 
@@ -373,10 +388,7 @@ def test_bad_never_resets_to_empty(path: Path, bad: object) -> None:
     data = saved_ways(path=path, pin=replace(WORK, never=('665',)))
     data['board']['pins'][0]['never'] = bad
     path.write_text(json.dumps(data))
-    assert JsonStateRepository(
-        path=path,
-        city=SYDNEY,
-    ).load().saved.pins == (WORK,)
+    assert BoardStates(path=path, city=SYDNEY).load().saved.pins == (WORK,)
 
 
 def test_round_trip_two_changes(path: Path) -> None:
@@ -390,10 +402,7 @@ def test_round_trip_two_changes(path: Path) -> None:
     data = saved_ways(path=path, pin=pin)
     assert 'change' not in data['board']['pins'][0]
     assert data['board']['pins'][0]['ways'][1]['ticked'] is False
-    assert JsonStateRepository(
-        path=path,
-        city=SYDNEY,
-    ).load().saved.pins == (pin,)
+    assert BoardStates(path=path, city=SYDNEY).load().saved.pins == (pin,)
     assert (HAMMERS, CONSTITUTION, WESTMEAD, HOLLIS) == (
         pin.ways[1].changes[0].alight,
         pin.ways[1].changes[0].board,
@@ -405,9 +414,9 @@ def test_round_trip_two_changes(path: Path) -> None:
 def test_saved_pin_holds_no_change_field(path: Path) -> None:
     """A saved plain pin stores no ways and an empty never list."""
     saved: Saved = replace(default_saved(city=SYDNEY))
-    JsonStateRepository(path=path, city=SYDNEY).save(saved=saved)
+    BoardStates(path=path, city=SYDNEY).save(saved=saved)
     data = json.loads(path.read_text())
-    assert data['schema_version'] == SCHEMA_VERSION
+    assert data['schema_version'] == SCHEMA
     assert data['board']['unpinned']['ways'] == []
     assert data['board']['unpinned']['never'] == []
 
@@ -536,11 +545,11 @@ def v10_data() -> dict[str, object]:
 
 def test_v10_zoom_is_dropped() -> None:
     """A schema 10 file with a zoom loads at 13 without it."""
-    model = state_model_of(
-        text=json.dumps(v10_data()), city=SYDNEY,
-    )
-    assert model.schema_version == SCHEMA_VERSION == 13
-    assert 'zoom' not in model.board.model_dump()
+    assert migrated(data=v10_data(), city=SYDNEY)['schema_version'] == (
+        SCHEMA
+    ) == 13
+    model = board_model_of(data=v10_data())
+    assert 'zoom' not in model.model_dump()
     saved = from_model(model=model, city=SYDNEY)
     assert len(saved.pins) == 6
     assert saved.current == 5
@@ -578,8 +587,8 @@ def v1_data() -> dict[str, object]:
 
 def test_old_file_gets_city_peak_windows() -> None:
     """Settings an old file lacks take the city's peak windows."""
-    sydney = migrate(data=v1_data(), city=SYDNEY)
-    plain = migrate(data=v1_data(), city=replace(SYDNEY, peak_windows=()))
+    sydney = migrated(data=v1_data(), city=SYDNEY)
+    plain = migrated(data=v1_data(), city=replace(SYDNEY, peak_windows=()))
     sydney_board = sydney['board']
     plain_board = plain['board']
     assert isinstance(sydney_board, dict)
@@ -620,10 +629,10 @@ def test_v11_kinds_split_keeping_refs() -> None:
     The running occurrence still names the bus pin's ref.
     """
     v11 = json.loads(STATE_V11_KINDS.read_text())
-    migrated = migrate(
+    data = migrated(
         data=json.loads(STATE_V11_KINDS.read_text()), city=SYDNEY,
     )
-    board = migrated['board']
+    board = data['board']
     assert isinstance(board, dict)
     assert [pin['kind'] for pin in board['pins']] == [
         pin['kind'] for pin in v11['pins']
@@ -633,7 +642,7 @@ def test_v11_kinds_split_keeping_refs() -> None:
         v11['unpinned'], v11['auto'],
     )
     saved = from_model(
-        model=state_model_of(text=STATE_V11_KINDS.read_text(), city=SYDNEY),
+        model=board_model_of(data=json.loads(STATE_V11_KINDS.read_text())),
         city=SYDNEY,
     )
     refs = v11_refs(data=v11)
@@ -653,11 +662,11 @@ def test_v11_kinds_split_keeping_refs() -> None:
 def test_v11_golden_migrates_to_the_golden() -> None:
     """The v11 fixture migrates to exactly today's golden."""
     v11 = json.loads(STATE_V11.read_text())
-    migrated = migrate(
+    data = migrated(
         data=json.loads(STATE_V11.read_text()), city=SYDNEY,
     )
-    assert migrated == json.loads(GOLDEN_STATE.read_text())
-    board = migrated['board']
+    assert data == json.loads(GOLDEN_STATE.read_text())
+    board = data['board']
     assert isinstance(board, dict)
     assert [pin['kind'] for pin in board['pins']] == [
         pin['kind'] for pin in v11['pins']
@@ -705,18 +714,17 @@ def test_split_sections_shares_unusable_settings() -> None:
 def test_migrate_leaves_missing_section_for_repair() -> None:
     """A v12 file without a device section migrates without one."""
     data: dict[str, object] = {'schema_version': 12, 'board': 3}
-    assert migrate(data=data, city=SYDNEY) == {
+    assert migrated(data=data, city=SYDNEY) == {
         'schema_version': 13, 'board': 3,
     }
 
 
-def test_migrate_refuses_newer_board() -> None:
+def test_codec_refuses_newer_board() -> None:
     """A board section newer than the code is refused by name."""
-    data: dict[str, object] = {
-        'schema_version': 13, 'board': {'schema_version': BOARD_SCHEMA + 1},
-    }
     with pytest.raises(ValueError, match='board'):
-        migrate(data=data, city=SYDNEY)
+        BoardCodec(city=SYDNEY).load(
+            data={'schema_version': BOARD_SCHEMA + 1},
+        )
 
 
 def test_v12_golden_becomes_v13_keeping_every_value() -> None:
@@ -730,10 +738,10 @@ def test_v12_golden_becomes_v13_keeping_every_value() -> None:
         **expected['board']['settings'],
     }
     device['quiet_mode'] = 'app'
-    migrated = migrate(data=v12, city=SYDNEY)
-    assert migrated == expected
-    assert migrated == json.loads(GOLDEN_STATE.read_text())
-    board: Any = migrated['board']
+    data = migrated(data=v12, city=SYDNEY)
+    assert data == expected
+    assert data == json.loads(GOLDEN_STATE.read_text())
+    board: Any = data['board']
     assert board['settings']['auto_rebuild'] is False
 
 

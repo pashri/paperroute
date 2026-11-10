@@ -86,8 +86,6 @@ class DeviceSite:
         When the first key last worked, or None.
     more_keys : tuple[DeviceKey, ...]
         The keys after the first.
-    zone : tzinfo
-        The wall clock the pages show.
     posted : list[DeviceRequest]
         Requests posted so far.
     error_log : Path | None
@@ -113,7 +111,6 @@ class DeviceSite:
     display_name: str = 'Test'
     last_used: float | None = None
     more_keys: tuple[DeviceKey, ...] = ()
-    zone: tzinfo = ZONE
     posted: list[DeviceRequest] = field(default_factory=list)
     error_log: Path | None = None
     state_file: Path | None = None
@@ -146,7 +143,6 @@ class DeviceSite:
                 *self.more_keys,
             ),
             post=self.posted.append,
-            zone=self.zone,
             error_log=self.error_log,
             state_file=self.state_file,
             clock=lambda: NOW,

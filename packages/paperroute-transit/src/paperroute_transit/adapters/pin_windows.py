@@ -8,7 +8,7 @@ from typing import Final
 
 from multidict import MultiMapping
 
-from paperroute_transit.adapters.settings_form import (
+from paperroute_device.adapters.device_form import (
     BadInput,
     clock_of,
     clock_text,

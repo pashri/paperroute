@@ -12,6 +12,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_sydney.adapters.web_board import (
     SYDNEY_HINT,
     SYDNEY_NAV,
@@ -24,7 +25,6 @@ from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_testkit.page_markup import inside, parse_page, parse_tree
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
-from paperroute_transit.adapters.web_display import WebDisplay
 from paperroute_transit.adapters.web_pins import (
     SEEN_POLL_S,
     SEEN_WAIT_S,
@@ -45,6 +45,7 @@ from paperroute_transit.core.pin_choices import StopMatch
 from paperroute_transit.core.route_colours import RouteColour
 from paperroute_transit.observers import PinsSeen
 from tests.adapters.test_web_device import sydney_site
+from tests.adapters.transit_web import transit_display
 
 Client = TestClient[web.Request, web.Application]
 
@@ -87,7 +88,7 @@ class Pins:
         self.seen: PinsSeen | None = PinsSeen(
             pins=pins, shown=shown, revision=3,
         )
-        self.posted: list[Event] = []
+        self.posted: list[object] = []
         self.slept: list[float] = []
         self.bump_after: float | None = None
 
@@ -118,7 +119,7 @@ async def _client(
         plug=SuggestPlug(planner=None),
     )
     board.pins_sleep = pins.sleep
-    display = WebDisplay(
+    display = transit_display(
         device=sydney_site().pages(),
         board=board,
         nav=SYDNEY_NAV,
@@ -436,7 +437,7 @@ async def test_nav_has_pins_on_every_page(client: Client) -> None:
 
 async def test_pins_routes_refuse_other_peers(pins: Pins) -> None:
     """A peer outside the local network is refused."""
-    display = WebDisplay(
+    display = transit_display(
         board=PinPages(
             head=BoardHead(),
             pins=pins.get,

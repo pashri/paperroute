@@ -1,8 +1,5 @@
 """Run an app on the kit: one event queue through the kit's reducer."""
 
-# An app package keeps a twin of this module until it switches over.
-# pylint: disable=duplicate-code
-
 import asyncio
 import functools
 import logging
@@ -403,6 +400,7 @@ async def run[S](
         )
     finally:
         await stop(tasks={clock, *tasks})
+        await app.stopped()
         await leftover_stopped(ports=ports.device)
     return kit
 

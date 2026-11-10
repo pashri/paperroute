@@ -5,11 +5,11 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from paperroute_device.adapters.web_display import StatusLine
     from paperroute_device.adapters.web_frame import NavItem
     from paperroute_device.assets import AssetRoot
     from paperroute_device.core.device_model import DeviceKey
     from paperroute_transit.adapters.board_pages import WaysPlug
-    from paperroute_transit.adapters.web_display import StatusLine
     from paperroute_transit.ports import FeedsClient
 
 

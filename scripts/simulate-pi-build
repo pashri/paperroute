@@ -146,14 +146,16 @@ assert frame.shape == (480, 800) and frame.min() == 0, frame.shape
 board_web = purelib / 'paperroute_transit' / 'web'
 assert Path(str(BOARD_WEB)) == board_web, BOARD_WEB
 for name in (
-    'pins.html', 'settings.html', 'pin-edit.html', 'board.css', 'pins.js',
-    'settings.js', 'stop-search.js', 'ways.js', 'windows.js', 'suggest.js',
+    'pins.html', 'settings_sections.html', 'pin-edit.html', 'board.css',
+    'pins.js', 'stop-search.js', 'ways.js', 'windows.js', 'suggest.js',
     'vendor/tom-select.css', 'vendor/tom-select.complete.min.js',
     'vendor/LICENSE-tom-select.txt',
 ):
     assert Path(str(board_path(name=name))) == board_web / name, name
     assert not (packaged / 'web' / name).exists(), name
-assert board_text(name='settings.html')
+assert board_text(name='settings_sections.html')
+for name in ('settings.html', 'settings.js'):
+    assert not (board_web / name).exists(), name
 assert board_bytes(name='vendor/tom-select.css')
 board = board_web / 'board.css'
 assert board_text(name='board.css') == board.read_text(encoding='utf-8')
@@ -183,7 +185,7 @@ purelib = Path(sysconfig.get_paths()['purelib'])
 assert Path(str(SHELL_WEB)) == purelib / 'paperroute_device' / 'web', SHELL_WEB
 for name in (
     'device.html', 'device.js', 'setup.html', 'setup.js', 'power.html',
-    'live.css', 'live.html', 'live.js',
+    'live.css', 'live.html', 'live.js', 'settings.html', 'settings.js',
 ):
     assert shell_text(name=name), name
 assert shell_bytes(name='fonts/public-sans.woff2')

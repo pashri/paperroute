@@ -17,6 +17,7 @@ from paperroute_testkit.core.factories import (
     pattern,
     place,
 )
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.strip_factories import (
     CENTRE,
     on_view,
@@ -42,7 +43,6 @@ from paperroute_transit.core.messages import (
 )
 from paperroute_transit.core.model import Departure, Pin
 from paperroute_transit.core.saved import LiveView
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import Cycle, State
 from paperroute_transit.core.state_views import current_view, live_stop_view
 from paperroute_transit.core.tiles import ZOOMS

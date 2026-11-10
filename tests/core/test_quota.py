@@ -5,9 +5,10 @@ from datetime import date, datetime, timedelta
 
 from paperroute_device.core.kit_effects import SaveState, Stop
 from paperroute_device.core.kit_events import QuitRequested, Tick
-from paperroute_device.core.kit_state import SAVE_WAIT
+from paperroute_device.core.kit_state import SAVE_WAIT, with_app
 from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_sydney.sydney_feeds import DAILY_LIMIT
+from paperroute_testkit.core.kit_steps import app_of, kit_of, kit_step, step
 from paperroute_testkit.core.steps import save_of, wakeful
 from paperroute_testkit.core.steps import written as written_out
 from paperroute_transit.core.messages import FeedFailed, FeedJoined, FetchFeed
@@ -19,7 +20,6 @@ from paperroute_transit.core.quota import (
     with_calls,
 )
 from paperroute_transit.core.saved import Quota
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import Cycle, State
 from paperroute_transit.core.state_views import saved_of
 from tests.core.test_state import BUSES, HOLD, at, fresh, loaded, pinned, saves
@@ -122,29 +122,31 @@ def test_quota_only() -> None:
 
 def test_quota_only_change_saves_every_ten_minutes() -> None:
     """Polling alone writes the quota once in ten minutes."""
-    state = loaded(state=fresh())
+    kit = kit_of(state=loaded(state=fresh()))
     for seconds in range(30, 600, 30):
-        state, effects = step(state, at(seconds=seconds))
+        kit, effects = kit_step(kit=kit, event=at(seconds=seconds))
         assert not saves(effects=effects), seconds
-    assert state.quota.calls > 0
-    state, effects = step(state, at(seconds=600))
+    assert kit.app.quota.calls > 0
+    kit, effects = kit_step(kit=kit, event=at(seconds=600))
     written = saves(effects=effects)
     assert len(written) == 1
     assert written_out(save=written[0]).quota.calls > 0
-    assert state.kit.saved == written[0].saved
-    assert state.kit.written_at == state.now
+    assert kit.saved == written[0].saved
+    assert kit.written_at == kit.device.now
 
 
 def test_quota_change_does_not_delay_pin_save() -> None:
     """A pin toggle is saved 3 s after it, however often feeds are polled."""
-    state, _ = step(loaded(state=pinned()), at(seconds=10))
-    state, _ = step(state, HOLD)
+    kit = kit_of(state=loaded(state=pinned()))
+    kit, _ = kit_step(kit=kit, event=at(seconds=10))
+    kit, _ = kit_step(kit=kit, event=HOLD)
     for seconds in (11, 12):
-        state, effects = step(fetching(state=state), at(seconds=seconds))
+        kit = with_app(kit=kit, app=fetching(state=kit.app))
+        kit, effects = kit_step(kit=kit, event=at(seconds=seconds))
         assert not saves(effects=effects)
-    state, effects = step(
-        fetching(state=state),
-        at(seconds=10 + SAVE_WAIT.seconds),
+    kit = with_app(kit=kit, app=fetching(state=kit.app))
+    kit, effects = kit_step(
+        kit=kit, event=at(seconds=10 + SAVE_WAIT.seconds),
     )
     assert len(saves(effects=effects)) == 1
     assert written_out(save=saves(effects=effects)[0]).quota.calls > 0
@@ -152,9 +154,11 @@ def test_quota_change_does_not_delay_pin_save() -> None:
 
 def test_quit_saves_quota_at_once() -> None:
     """Quitting writes a quota that is not yet ten minutes old."""
-    state, _ = step(loaded(state=fresh()), at(seconds=30))
-    assert state.quota.calls > 0
-    state, effects = step(state, QuitRequested())
+    kit = kit_of(state=loaded(state=fresh()))
+    kit, _ = kit_step(kit=kit, event=at(seconds=30))
+    assert kit.app.quota.calls > 0
+    kit, effects = kit_step(kit=kit, event=QuitRequested())
+    state = app_of(kit=kit)
     assert effects == (save_of(state=state), Stop())
     assert written_out(save=saves(effects=effects)[0]).quota == state.quota
 

@@ -75,7 +75,7 @@ def state_with(
         unpinned=unpinned,
         view=LiveView.STOP,
     )
-    return initial_state(saved=saved, now=START, stored=True, city=SYDNEY)
+    return initial_state(saved=saved, now=START, city=SYDNEY)
 
 
 def test_new_place_resets_step() -> None:
@@ -225,7 +225,7 @@ def test_matched_updates_the_unpinned_place() -> None:
 def test_initial_state_without_any_place_shows_the_default() -> None:
     """A saved file with no pins and no unpinned place shows Town Hall."""
     saved = replace(default_saved(city=SYDNEY), unpinned=None, current=3)
-    state = initial_state(saved=saved, now=START, stored=True, city=SYDNEY)
+    state = initial_state(saved=saved, now=START, city=SYDNEY)
     assert shown(state=state) == default_saved(city=SYDNEY).unpinned
     assert state.places.current == 0
 

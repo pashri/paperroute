@@ -1,12 +1,11 @@
 """Shared test values and helpers for running the app on fakes."""
 
-import asyncio
 from collections.abc import Sequence
 from dataclasses import replace
 from datetime import datetime
+from typing import cast
 
 from paperroute_device_testkit.device_fakes import FixedClock
-from paperroute_device_testkit.hardware_fakes import FrameRecorder
 from paperroute_device_testkit.paths import FIXTURES
 from paperroute_testkit.city_setting import city_under_test
 from paperroute_testkit.core.factories import pin_of
@@ -14,11 +13,10 @@ from paperroute_testkit.fakes import (
     STOP_POINT,
     EmptyPlacedTimetable,
     FakeNetwork,
-    MemoryStates,
 )
 from paperroute_transit.adapters.feed_files import FileFeedsClient
-from paperroute_transit.app import MapRenderer, Ports, perform
-from paperroute_transit.app_effects import StateSaver
+from paperroute_transit.app_ports import Ports
+from paperroute_transit.app_work import perform
 from paperroute_transit.core.map_view import (
     STRIP_MAP_WIDTH,
     MapBase,
@@ -93,11 +91,9 @@ def ports_of(
     *,
     timetable: TimetableRepository | None = None,
     network: FakeNetwork | None = None,
-    states: MemoryStates | None = None,
-    display: FrameRecorder | None = None,
 ) -> Ports:
     """
-    Make ports on fakes, replacing the ones given.
+    Make transit's ports on fakes, replacing the ones given.
 
     Parameters
     ----------
@@ -105,10 +101,6 @@ def ports_of(
         Timetable; a placed one with no departures by default.
     network : FakeNetwork | None
         Network; one that knows nothing by default.
-    states : MemoryStates | None
-        Saved state; empty by default.
-    display : FrameRecorder | None
-        Display; a new recorder by default.
 
     Returns
     -------
@@ -118,18 +110,16 @@ def ports_of(
     return Ports(
         timetable=timetable or EmptyPlacedTimetable(),
         feeds=FileFeedsClient(directory=REAL),
-        display=display or FrameRecorder(),
         clock=FixedClock(at=AT),
         network=network or FakeNetwork(),
-        states=states or MemoryStates(),
     )
 
 
 async def posted_by(
-    *, ports: Ports, effects: Sequence[Effect], saver: StateSaver | None = None
+    *, ports: Ports, effects: Sequence[Effect],
 ) -> list[Event]:
     """
-    Carry out effects and give every event they posted.
+    Carry out transit's effects and give every event they posted.
 
     Parameters
     ----------
@@ -137,26 +127,13 @@ async def posted_by(
         Adapters.
     effects : Sequence[Effect]
         Effects, in order.
-    saver : StateSaver | None
-        Writes saved state; a new one on the ports' store by default.
 
     Returns
     -------
     list[Event]
         The events posted, in order.
     """
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
-    maps = MapRenderer(tiles=ports.tiles)
-    saver = saver or StateSaver(states=ports.states)
+    posted: list[object] = []
     for effect in effects:
-        await perform(
-            ports=ports,
-            effect=effect,
-            queue=queue,
-            tasks=tasks,
-            maps=maps,
-            saver=saver,
-        )
-    await asyncio.gather(*tasks)
-    return [queue.get_nowait() for _ in range(queue.qsize())]
+        await perform(ports=ports, effect=effect, post=posted.append)
+    return cast(list[Event], posted)

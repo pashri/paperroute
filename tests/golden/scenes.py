@@ -24,6 +24,7 @@ from paperroute_device.core.device_model import (
     WifiSetup,
 )
 from paperroute_device.core.panel_screens import panel_view
+from paperroute_device.runtime.outputs import drawing
 from paperroute_device_testkit.device_pages import FACTS
 from paperroute_sydney.city import SYDNEY, SydneyFeed, SydneyMode
 from paperroute_testkit.core.connection_factories import (
@@ -43,6 +44,7 @@ from paperroute_testkit.core.factories import (
     train,
     vehicle,
 )
+from paperroute_testkit.core.kit_steps import QUIET_PARTS, device_of, step
 from paperroute_testkit.core.steps import answer_fetches
 from paperroute_testkit.core.strip_factories import (
     KEY,
@@ -51,7 +53,7 @@ from paperroute_testkit.core.strip_factories import (
     WEST,
     on_view,
 )
-from paperroute_transit.app_render import MapRenderer, drawing
+from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.core.chains import Legs, leg_key
 from paperroute_transit.core.connection_model import way_legs
 from paperroute_transit.core.geo import make_shape
@@ -69,7 +71,6 @@ from paperroute_transit.core.panel_screens import TilesFacts
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.saved import LiveView
 from paperroute_transit.core.sleep import sleep_view
-from paperroute_transit.core.state import REDUCER_PARTS, device_of, step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import banner_live_view, current_view
 from paperroute_transit.core.tiles import (
@@ -205,7 +206,7 @@ class GoldenTiles:
         return 'golden'
 
 
-APP: Final = TransitApp(city=SYDNEY, parts=REDUCER_PARTS)
+APP: Final = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
 
 
 def view_of(*, state: State) -> ScreenView:
@@ -255,8 +256,9 @@ def frame_of(*, state: State) -> NDArray[np.uint8]:
     NDArray[np.uint8]
         480 by 800 grey pixels.
     """
-    maps = MapRenderer(tiles=GoldenTiles())
-    return drawing(view=view_of(state=state), maps=maps)()
+    app = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
+    app.maps = MapRenderer(tiles=GoldenTiles())
+    return drawing(app=app, view=view_of(state=state))()
 
 
 def stop() -> State:

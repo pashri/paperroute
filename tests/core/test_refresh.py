@@ -14,6 +14,7 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import START
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import step_answered
 from paperroute_transit.core.chooser import ChooserState
 from paperroute_transit.core.map_view import MapView
@@ -22,7 +23,6 @@ from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.refresh import quick_now
 from paperroute_transit.core.saved import LiveView, seeded
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import StopView
 from tests.core.test_state import PIN, PRESS, effects_of, fresh, loaded
@@ -136,7 +136,6 @@ def test_loading_screen_waits_five_seconds() -> None:
     state = initial_state(
         saved=seeded(pin=PIN, city=SYDNEY),
         now=START,
-        stored=True,
         city=SYDNEY,
     )
     state, effects = step(state, Tick(now=START))
@@ -154,7 +153,6 @@ def test_loading_hold_ends_when_clock_steps_back() -> None:
     state = initial_state(
         saved=seeded(pin=PIN, city=SYDNEY),
         now=START,
-        stored=True,
         city=SYDNEY,
     )
     state, effects = step(state, Tick(now=START))

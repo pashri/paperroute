@@ -1,8 +1,5 @@
 """Handlers for the device's own settings, power, keys, clock and probe."""
 
-# An app package keeps a twin of this module until it switches over.
-# pylint: disable=duplicate-code
-
 from dataclasses import fields, replace
 from datetime import UTC, datetime, timedelta, tzinfo
 from typing import Final

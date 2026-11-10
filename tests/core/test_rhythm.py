@@ -79,7 +79,7 @@ def state_at(
         saved=seeded(
             pin=pin_of('A', None),
             city=SYDNEY,
-        ), now=now, stored=True, city=SYDNEY
+        ), now=now, city=SYDNEY
     )
     return replace(
         state,

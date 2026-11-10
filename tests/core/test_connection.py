@@ -18,6 +18,7 @@ from paperroute_testkit.core.connection_factories import (
     work_legs,
 )
 from paperroute_testkit.core.factories import departure, place
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import wakeful
 from paperroute_transit.core.alert_match import tie_of
 from paperroute_transit.core.alert_model import (
@@ -37,7 +38,6 @@ from paperroute_transit.core.messages import DeparturesLoaded
 from paperroute_transit.core.model import Change, Departure, Pin, Way
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import seeded
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import Board, State
 from tests.core.alert_factories import alert
 
@@ -76,7 +76,7 @@ def loaded(
         State after the load.
     """
     state = wakeful(state=initial_state(
-        saved=seeded(pin=pin, city=SYDNEY), now=at(7, 30), stored=True,
+        saved=seeded(pin=pin, city=SYDNEY), now=at(7, 30),
         city=SYDNEY,
     ))
     state, _ = step(state, DeparturesLoaded(
@@ -152,7 +152,7 @@ def test_direct_list_competes() -> None:
         departure(departs=at(7, 40), ride=10, route='609', trip_id='d1'),
     )
     state = wakeful(state=initial_state(
-        saved=seeded(pin=WORK, city=SYDNEY), now=at(7, 30), stored=True,
+        saved=seeded(pin=WORK, city=SYDNEY), now=at(7, 30),
         city=SYDNEY,
     ))
     state, _ = step(state, DeparturesLoaded(

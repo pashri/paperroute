@@ -3,6 +3,7 @@
 from typing import Final
 
 from paperroute_device.adapters.secrets_file import SecretsFile
+from paperroute_device.assets import use_assets
 from paperroute_device.core.device_model import DeviceKey
 from paperroute_sydney.adapters.tfnsw import (
     TFNSW_DISPLAY_NAME,
@@ -78,6 +79,7 @@ SYDNEY_PARTS: Final[CityParts] = CityParts(
 
 def main() -> None:
     """Run Sydney's board in a window or in browsers."""
+    use_assets(root=SYDNEY_PARTS.assets)
     board.main(city=SYDNEY, parts=SYDNEY_PARTS)
 
 

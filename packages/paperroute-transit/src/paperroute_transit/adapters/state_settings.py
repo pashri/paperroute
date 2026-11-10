@@ -1,25 +1,15 @@
 """Settings as stored in the state file, and their defaults."""
 
-import logging
-from datetime import datetime
 from typing import Final
 
-from pydantic import (
-    BaseModel,
-    ConfigDict,
-    Field,
-    ValidationError,
-    field_validator,
-)
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from paperroute_device.core.device_settings import (
-    CLEAN_CHOICES,
-    DeviceSettings,
-    QuietMode,
-    Window,
+from paperroute_device.adapters.state_file import (
+    WindowModel,
+    device_settings_to_model,
+    window_from_model,
+    window_to_model,
 )
-from paperroute_hardware.ports import CLEAN_AFTER
-from paperroute_transit.adapters.state_auto import CLOCK, CLOCK_FORMAT
 from paperroute_transit.core import saved
 from paperroute_transit.core.city import City
 from paperroute_transit.core.saved import (
@@ -29,67 +19,8 @@ from paperroute_transit.core.saved import (
     Rate,
 )
 
-logger = logging.getLogger(__name__)
-
 MAX_PEAK_WINDOWS: Final[int] = 2
 
-
-class WindowModel(BaseModel):
-    """A daily window as stored, each end as ``HH:MM``."""
-
-    model_config = ConfigDict(extra='forbid', frozen=True)
-
-    start: str = Field(pattern=CLOCK)
-    end: str = Field(pattern=CLOCK)
-
-
-class DeviceSettingsModel(BaseModel):
-    """
-    The device's own Settings page choices as stored.
-
-    The cleaning count and the knob swap have defaults, so files stored
-    before them load.
-    """
-
-    model_config = ConfigDict(extra='forbid', frozen=True)
-
-    quiet_mode: QuietMode
-    my_hours: WindowModel
-    rotate: bool
-    larger_text: bool
-    inverted_lists: bool
-    clean_after: int = CLEAN_AFTER
-    swap_knobs: bool = False
-
-    @field_validator('clean_after')
-    @classmethod
-    def check_clean_after(cls, count: int) -> int:
-        """
-        Refuse a cleaning count the Settings page never offers.
-
-        Parameters
-        ----------
-        count : int
-            The stored count.
-
-        Returns
-        -------
-        int
-            The count, unchanged.
-
-        Raises
-        ------
-        ValueError
-            When the count is not one of `CLEAN_CHOICES`.
-        """
-        if count not in CLEAN_CHOICES:
-            raise ValueError(f'clean_after must be one of {CLEAN_CHOICES}')
-        return count
-
-
-DEVICE_SETTING_NAMES: Final[frozenset[str]] = frozenset(
-    DeviceSettingsModel.model_fields,
-)
 
 class BoardSettingsModel(BaseModel):
     """
@@ -143,100 +74,6 @@ class BoardSettingsModel(BaseModel):
         ):
             raise ValueError('peak windows must not overlap')
         return windows
-
-
-def window_to_model(*, window: Window) -> WindowModel:
-    """
-    Convert a window to its stored form.
-
-    Parameters
-    ----------
-    window : Window
-        The window.
-
-    Returns
-    -------
-    WindowModel
-        The window with each end as ``HH:MM``.
-    """
-    return WindowModel(
-        start=window.start.strftime(CLOCK_FORMAT),
-        end=window.end.strftime(CLOCK_FORMAT),
-    )
-
-
-def window_from_model(*, model: WindowModel) -> Window:
-    """
-    Convert a stored window back.
-
-    Parameters
-    ----------
-    model : WindowModel
-        The stored window.
-
-    Returns
-    -------
-    Window
-        The window.
-    """
-    return Window(
-        start=datetime.strptime(model.start, CLOCK_FORMAT).time(),
-        end=datetime.strptime(model.end, CLOCK_FORMAT).time(),
-    )
-
-
-def device_settings_to_model(
-    *, settings: DeviceSettings,
-) -> DeviceSettingsModel:
-    """
-    Convert the device's settings to their stored form.
-
-    Parameters
-    ----------
-    settings : DeviceSettings
-        The device's settings.
-
-    Returns
-    -------
-    DeviceSettingsModel
-        The stored settings.
-    """
-    return DeviceSettingsModel(
-        quiet_mode=settings.quiet_mode,
-        my_hours=window_to_model(window=settings.my_hours),
-        rotate=settings.rotate,
-        larger_text=settings.larger_text,
-        inverted_lists=settings.inverted_lists,
-        clean_after=settings.clean_after,
-        swap_knobs=settings.swap_knobs,
-    )
-
-
-def device_settings_from_model(
-    *, model: DeviceSettingsModel,
-) -> DeviceSettings:
-    """
-    Convert the device's stored settings back.
-
-    Parameters
-    ----------
-    model : DeviceSettingsModel
-        The stored settings.
-
-    Returns
-    -------
-    DeviceSettings
-        The device's settings.
-    """
-    return DeviceSettings(
-        quiet_mode=model.quiet_mode,
-        my_hours=window_from_model(model=model.my_hours),
-        rotate=model.rotate,
-        larger_text=model.larger_text,
-        inverted_lists=model.inverted_lists,
-        clean_after=model.clean_after,
-        swap_knobs=model.swap_knobs,
-    )
 
 
 def board_settings_to_model(*, settings: BoardSettings) -> BoardSettingsModel:
@@ -353,77 +190,3 @@ def default_settings(*, city: City) -> dict[str, object]:
         **default_device_settings(city=city),
         **default_board_settings(city=city),
     }
-
-
-def repaired_settings(
-    *,
-    data: dict[str, object],
-    model: type[BaseModel],
-    defaults: dict[str, object],
-) -> dict[str, object]:
-    """
-    Reset each setting that cannot be read, so the rest are kept.
-
-    Parameters
-    ----------
-    data : dict[str, object]
-        A migrated section.
-    model : type[BaseModel]
-        The model its settings must match.
-    defaults : dict[str, object]
-        Its default settings as stored.
-
-    Returns
-    -------
-    dict[str, object]
-        The section with each bad setting at its default and unknown ones
-        dropped; all defaults when the settings are not an object. The
-        peak windows are reset as a whole when any of them is bad.
-    """
-    settings = data.get('settings')
-    if not isinstance(settings, dict):
-        logger.warning('state.json settings unusable, resetting them')
-        return {**data, 'settings': defaults}
-    try:
-        model.model_validate(settings)
-    except ValidationError as error:
-        bad = {item['loc'][0] for item in error.errors() if item['loc']}
-        logger.warning('state.json settings %s unusable, resetting', bad)
-        kept = {
-            name: value
-            for name, value in settings.items()
-            if name in defaults and name not in bad
-        }
-        return {**data, 'settings': {**defaults, **kept}}
-    return data
-
-
-def repaired_device_settings(
-    *, data: dict[str, object], defaults: dict[str, object],
-) -> dict[str, object]:
-    """
-    Repair a migrated device section's settings.
-
-    Parameters
-    ----------
-    data : dict[str, object]
-        The migrated device section.
-    defaults : dict[str, object]
-        The default device settings as stored.
-
-    Returns
-    -------
-    dict[str, object]
-        The section with unknown settings dropped quietly, before
-        validation, and each bad one reset as `repaired_settings` does.
-    """
-    settings = data.get('settings')
-    if isinstance(settings, dict):
-        data = {**data, 'settings': {
-            name: value
-            for name, value in settings.items()
-            if name in DEVICE_SETTING_NAMES
-        }}
-    return repaired_settings(
-        data=data, model=DeviceSettingsModel, defaults=defaults,
-    )

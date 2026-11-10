@@ -1,8 +1,5 @@
 """Observers that collect the running board's timings and status."""
 
-# An app package keeps a twin of these observers until it switches over.
-# pylint: disable=duplicate-code
-
 import logging
 import time
 from collections.abc import Callable, Mapping, Sequence

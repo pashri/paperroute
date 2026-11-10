@@ -1,4 +1,4 @@
-"""End-to-end test of the app loop with real data and a fake display."""
+"""End-to-end tests of Sydney's board on the kit's loop, on fakes."""
 
 import asyncio
 import logging
@@ -15,7 +15,8 @@ import pytest
 from numpy.typing import NDArray
 
 from paperroute_device.adapters.resets import FileResets
-from paperroute_device.core.device import NOTICE
+from paperroute_device.adapters.state_file import StateFile
+from paperroute_device.core.device import NOTICE, on_reset
 from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
     DeviceKey,
@@ -26,31 +27,31 @@ from paperroute_device.core.device_model import (
 )
 from paperroute_device.core.device_settings import DeviceSettings
 from paperroute_device.core.device_state import KitSaved
-from paperroute_device.core.kit_effects import (
-    ControlPower,
-    Render,
-    ResetDevice,
-    SaveState,
-)
+from paperroute_device.core.kit_effects import Render, SaveState
 from paperroute_device.core.kit_events import (
     PowerFailed,
     QuitRequested,
     ResetDone,
     Tick,
 )
-from paperroute_device.core.kit_state import SAVE_WAIT
+from paperroute_device.core.kit_state import SAVE_WAIT, KitState
 from paperroute_device.core.panel_screens import menu_view
 from paperroute_device.core.panel_views import MenuView, NoticeView
 from paperroute_device.render.frame import HEADER
 from paperroute_device.render.notice import draw_notice_view
 from paperroute_device.render.panel import draw_panel_view
 from paperroute_device.render.sleep import with_sleep_band
+from paperroute_device.runtime.device_work import DevicePorts
+from paperroute_device.runtime.loop import handle, run, starting, stop, ticker
+from paperroute_device.runtime.outputs import Outputs, carry_out, draw_pending
+from paperroute_device.runtime.outputs import drawing as kit_drawing
+from paperroute_device.runtime.ports import KitPorts
+from paperroute_device.runtime.saver import StateSaver
 from paperroute_device_testkit.device_fakes import (
     FakeKeys,
     FakePower,
     FakeWifi,
     FixedClock,
-    RecordingResets,
     SyncingClock,
 )
 from paperroute_device_testkit.hardware_fakes import FrameRecorder
@@ -73,7 +74,11 @@ from paperroute_sydney.city import (
     SydneyFeed,
 )
 from paperroute_testkit.core.factories import pin_of, place
-from paperroute_testkit.core.steps import reset_asked
+from paperroute_testkit.core.kit_steps import (
+    QUIET_PARTS,
+    app_of,
+    settings_posted,
+)
 from paperroute_testkit.fakes import (
     STOP_POINT,
     BrokenTimetable,
@@ -89,27 +94,14 @@ from paperroute_transit.adapters.feed_errors import FeedThrottled
 from paperroute_transit.adapters.feed_files import FileFeedsClient
 from paperroute_transit.adapters.feed_guard import FeedBackingOff, JoinedBody
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
-from paperroute_transit.adapters.state_file import JsonStateRepository
 from paperroute_transit.adapters.tiles_db import (
     NullTiles,
     SqliteTileRepository,
 )
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
-from paperroute_transit.app import (
-    MapRenderer,
-    Outputs,
-    Ports,
-    handle,
-    perform,
-    run,
-    starting_state,
-    stop,
-    ticker,
-)
-from paperroute_transit.app_device import DevicePorts
-from paperroute_transit.app_effects import StateSaver, loaded_patterns
-from paperroute_transit.app_outputs import carry_out, draw_pending
-from paperroute_transit.app_render import drawing
+from paperroute_transit.app_effects import loaded_patterns
+from paperroute_transit.app_ports import Ports
+from paperroute_transit.app_render import MapRenderer, drawing
 from paperroute_transit.app_work import fetch
 from paperroute_transit.build.gtfs_files import Source
 from paperroute_transit.build.map_style import LIGHT
@@ -133,7 +125,6 @@ from paperroute_transit.core.messages import (
     PinDeleted,
     PositionsFetched,
     RebuildTimetable,
-    SettingsChanged,
     TimetableRebuilt,
     TimetableSeen,
 )
@@ -149,7 +140,7 @@ from paperroute_transit.core.saved import (
     default_saved,
     seeded,
 )
-from paperroute_transit.core.state import device_of
+from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import LOADING_WAIT
 from paperroute_transit.core.stop_view import NOT_PINNED
 from paperroute_transit.core.tiles import (
@@ -162,8 +153,8 @@ from paperroute_transit.core.tiles import (
     to_pixels,
 )
 from paperroute_transit.measures import StopMeasures
-from paperroute_transit.observers import NullObserver, Timings
-from paperroute_transit.ports import Observer
+from paperroute_transit.observers import NullObserver, ObserverGroup, Timings
+from paperroute_transit.ports import Observer, TimetableRepository
 from paperroute_transit.render.alerts_view import draw_alerts_view
 from paperroute_transit.render.keep_out import KeepOut, keep_out
 from paperroute_transit.render.map_corners import (
@@ -172,6 +163,7 @@ from paperroute_transit.render.map_corners import (
     scale_box,
 )
 from paperroute_transit.render.tile_codec import pack_bits, pack_grey
+from paperroute_transit.transit_app import TransitApp
 from tests.app_factories import (
     AT,
     MAP_MPP,
@@ -180,9 +172,166 @@ from tests.app_factories import (
     REAL,
     map_view,
     ports_of,
+    posted_by,
     strip_map_view,
 )
 from tests.golden.scenes import GOLDEN
+from tests.test_app_effects import kit_ports, rendered, sydney_app
+
+type PostHook = Callable[[Callable[[object], None]], None]
+
+
+# pylint: disable-next=too-many-arguments
+async def run_sydney(
+    *,
+    ports: Ports,
+    kit: KitPorts | None = None,
+    seed: Pin | None = None,
+    observer: Observer | None = None,
+    variant: TileVariant = TileVariant.GREY,
+    tick_every: float = 0.01,
+    max_events: int | None = None,
+    post_hook: PostHook | None = None,
+) -> KitState[State]:
+    """
+    Run Sydney's board on the kit's loop.
+
+    Parameters
+    ----------
+    ports : Ports
+        Transit's adapters.
+    kit : KitPorts | None
+        The kit's adapters; fakes at the shared test time by default.
+    seed : Pin | None
+        Pin to start with when nothing is saved.
+    observer : Observer | None
+        Hears the kit, the feeds, the settings and the pins, through a
+        group that swallows its errors; None keeps each part's default.
+    variant : TileVariant
+        Which tile rendering the Map draws.
+    tick_every : float
+        Seconds between ticks.
+    max_events : int | None
+        Stop after this many events; None runs until quit.
+    post_hook : PostHook | None
+        Receives the function that posts events.
+
+    Returns
+    -------
+    KitState[State]
+        The final kit state.
+    """
+    kit = kit or kit_ports()
+    group = None if observer is None else ObserverGroup(observers=[observer])
+    if group is not None:
+        ports = replace(ports, observer=group)
+        kit = replace(kit, observer=group)
+    app = TransitApp(city=SYDNEY, parts=QUIET_PARTS, observer=group)
+    app.attach(ports=ports, seed=seed, variant=variant)
+    return await run(
+        app=app,
+        ports=kit,
+        zone=SYDNEY.zone,
+        tick_every=tick_every,
+        post_hook=post_hook,
+        max_events=max_events,
+    )
+
+
+@dataclass
+class Handler:
+    """
+    Hands events one at a time to the kit with Sydney's board on it.
+
+    Attributes
+    ----------
+    ports : KitPorts
+        The kit's adapters.
+    app : TransitApp
+        The attached board.
+    kit : KitState[State]
+        The kit state so far.
+    outputs : Outputs
+        What the kit's effects draw and write through.
+    queue : asyncio.Queue[object]
+        Events posted by the work started.
+    tasks : set[asyncio.Task[None]]
+        The work started.
+    """
+
+    ports: KitPorts
+    app: TransitApp
+    kit: KitState[State]
+    outputs: Outputs
+    queue: asyncio.Queue[object] = field(default_factory=asyncio.Queue)
+    tasks: set[asyncio.Task[None]] = field(default_factory=set)
+
+    async def handle(self, *, event: object) -> State:
+        """
+        Hand one event to the kit and carry out its effects.
+
+        Parameters
+        ----------
+        event : object
+            What happened.
+
+        Returns
+        -------
+        State
+            The board's state after the event.
+        """
+        self.kit = await handle(
+            kit=self.kit,
+            app=self.app,
+            zone=SYDNEY.zone,
+            event=event,
+            ports=self.ports,
+            queue=self.queue,
+            tasks=self.tasks,
+            outputs=self.outputs,
+        )
+        return app_of(kit=self.kit)
+
+    async def draw(self, *, view: object) -> None:
+        """
+        Draw a view as the waiting one, as the kit last set it up.
+
+        Parameters
+        ----------
+        view : object
+            The view.
+        """
+        self.outputs.pending.view = view
+        await draw_pending(
+            ports=self.ports, app=self.app, outputs=self.outputs,
+        )
+
+
+def handler_of(
+    *, ports: KitPorts, app: TransitApp | None = None,
+) -> Handler:
+    """
+    Start Sydney's board on the kit as its loop does, one event at a time.
+
+    Parameters
+    ----------
+    ports : KitPorts
+        The kit's adapters.
+    app : TransitApp | None
+        The attached board; one on fakes seeded with `PIN` by default.
+
+    Returns
+    -------
+    Handler
+        The handler, at the starting kit state.
+    """
+    app = app or sydney_app(ports=ports_of(), seed=PIN)
+    return Handler(
+        ports=ports,
+        app=app,
+        kit=starting(app=app, ports=ports),
+        outputs=Outputs(saver=StateSaver(states=ports.states)),
+    )
 
 
 @dataclass
@@ -251,112 +400,46 @@ async def test_fetch_crash_posts_feed_failed_and_logs(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """An unexpected fetch error is logged and posted as FeedFailed."""
-    ports = Ports(
-        timetable=BrokenTimetable(),
-        feeds=CrashingFeeds(),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
+    ports = replace(
+        ports_of(timetable=BrokenTimetable()), feeds=CrashingFeeds(),
     )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
     with caplog.at_level(logging.ERROR):
-        await perform(
+        posted = await posted_by(
             ports=ports,
-            effect=FetchFeed(feed='v1/gtfs/realtime/buses'),
-            queue=queue,
-            tasks=tasks,
-            maps=MapRenderer(tiles=ports.tiles),
-            saver=StateSaver(states=ports.states),
+            effects=[FetchFeed(feed='v1/gtfs/realtime/buses')],
         )
-        await asyncio.gather(*tasks, return_exceptions=True)
-        await asyncio.sleep(0)
-    posted = queue.get_nowait()
-    assert isinstance(posted, FeedFailed)
-    assert posted.reason == 'unexpected error'
+    assert isinstance(posted[0], FeedFailed)
+    assert posted[0].reason == 'unexpected error'
     assert any(r.exc_info for r in caplog.records)
-
-
-async def test_run_quits_when_the_ticker_crashes(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """A pump that raises ends the run and logs the error."""
-
-    def pump() -> None:
-        raise RuntimeError('window gone')
-
-    ports = Ports(
-        timetable=BrokenTimetable(),
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-    )
-    with caplog.at_level(logging.ERROR):
-        async with asyncio.timeout(5):
-            state = await run(
-                ports=ports, seed=PIN, tick_every=0.01, pump=pump, city=SYDNEY
-            )
-    assert not state.running
-    errors = [r.exc_info[1] for r in caplog.records if r.exc_info]
-    assert any(str(error) == 'window gone' for error in errors)
 
 
 async def test_run_retries_after_a_failed_load() -> None:
     """A failed departures read is retried on a later tick, not abandoned."""
     timetable = BrokenTimetable()
-    ports = Ports(
-        timetable=timetable,
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-    )
-    state = await run(
-        ports=ports,
-        seed=PIN,
-        tick_every=0.01,
-        max_events=20,
-        city=SYDNEY,
+    kit = await run_sydney(
+        ports=ports_of(timetable=timetable), seed=PIN, max_events=20,
     )
     assert timetable.calls >= 2
-    assert not state.board.departures
+    assert not app_of(kit=kit).board.departures
 
 
 async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
     """The loop loads departures, fetches the train feed and draws frames."""
-    db = tmp_path / 'timetable.db'
-    build_timetable(
-        sources=[
-            Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
-            Source(name='bundle', archive=REAL / 'bundle.zip'),
-        ],
-        window=Window(start=date(2026, 10, 16), days=1),
-        out=db,
-        city_ref=SYDNEY_REF,
-    )
     display = FrameRecorder()
     timetable = SqliteTimetableRepository(
-        path=db,
+        path=_build_db(tmp_path),
         city=SYDNEY,
     )
-    ports = Ports(
-        timetable=timetable,
-        feeds=FileFeedsClient(directory=REAL),
-        display=display,
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-    )
     try:
-        state = await run(
-            ports=ports, seed=PIN, tick_every=0.01, max_events=60, city=SYDNEY
+        kit = await run_sydney(
+            ports=ports_of(timetable=timetable),
+            kit=kit_ports(display=display),
+            seed=PIN,
+            max_events=60,
         )
     finally:
         timetable.close()
+    state = app_of(kit=kit)
     assert display.frames
     assert state.board.departures
     assert 'v2/gtfs/realtime/sydneytrains' in state.snapshots
@@ -364,38 +447,17 @@ async def test_run_renders_live_train_departures(tmp_path: Path) -> None:
 
 async def test_run_reports_frames_feeds_and_ticks(tmp_path: Path) -> None:
     """A Timings observer sees frames, the parsed train feed and ticks."""
-    db = tmp_path / 'timetable.db'
-    build_timetable(
-        sources=[
-            Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
-            Source(name='bundle', archive=REAL / 'bundle.zip'),
-        ],
-        window=Window(start=date(2026, 10, 16), days=1),
-        out=db,
-        city_ref=SYDNEY_REF,
-    )
     timings = Timings()
-    observer: Observer = timings
     timetable = SqliteTimetableRepository(
-        path=db,
+        path=_build_db(tmp_path),
         city=SYDNEY,
     )
-    ports = Ports(
-        timetable=timetable,
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        observer=observer,
-    )
     try:
-        await run(
-            ports=ports,
+        await run_sydney(
+            ports=ports_of(timetable=timetable),
             seed=PIN,
-            tick_every=0.01,
+            observer=timings,
             max_events=60,
-            city=SYDNEY,
         )
     finally:
         timetable.close()
@@ -410,10 +472,8 @@ def test_ports_default_observer_is_silent() -> None:
     ports = Ports(
         timetable=BrokenTimetable(),
         feeds=CrashingFeeds(),
-        display=FrameRecorder(),
         clock=FixedClock(at=AT),
         network=FakeNetwork(),
-        states=MemoryStates(),
     )
     assert isinstance(ports.observer, NullObserver)
 
@@ -720,26 +780,25 @@ class CallRecorder:
 async def test_app_reports_settings() -> None:
     """The observer sees the start settings, then each change."""
     recorder = CallRecorder()
-    ports = replace(ports_of(), observer=recorder)
 
-    def post_change(post: Callable[[Event], None]) -> None:
+    def post_change(post: Callable[[object], None]) -> None:
         """
         Post a switched-off rebuild before anything else.
 
         Parameters
         ----------
-        post : Callable[[Event], None]
+        post : Callable[[object], None]
             Posts an event.
         """
-        post(SettingsChanged(auto_rebuild=False))
+        post(settings_posted(auto_rebuild=False))
 
-    await run(
-        ports=ports,
+    await run_sydney(
+        ports=ports_of(),
         seed=PIN,
+        observer=recorder,
         tick_every=60,
         post_hook=post_change,
         max_events=2,
-        city=SYDNEY,
     )
     assert recorder.settings == [
         Settings(
@@ -754,26 +813,25 @@ async def test_app_reports_settings() -> None:
 async def test_app_reports_status() -> None:
     """The observer sees the start status, and again after a key change."""
     recorder = CallRecorder()
-    ports = replace(ports_of(), observer=recorder)
 
-    def post_change(post: Callable[[Event], None]) -> None:
+    def post_change(post: Callable[[object], None]) -> None:
         """
         Post a missing key before anything else.
 
         Parameters
         ----------
-        post : Callable[[Event], None]
+        post : Callable[[object], None]
             Posts an event.
         """
         post(ApiKeyChanged(missing=('TfNSW',)))
 
-    await run(
-        ports=ports,
+    await run_sydney(
+        ports=ports_of(),
         seed=PIN,
+        observer=recorder,
         tick_every=60,
         post_hook=post_change,
         max_events=1,
-        city=SYDNEY,
     )
     assert [status.missing_keys for status in recorder.statuses] == [
         None, ('TfNSW',),
@@ -785,28 +843,26 @@ async def test_app_reports_pins() -> None:
     recorder = CallRecorder()
     unpinned = replace(MAP_PIN, nickname=None)
     saved = replace(seeded(pin=PIN, city=SYDNEY), unpinned=unpinned)
-    ports = replace(
-        ports_of(states=MemoryStates(stored=saved)), observer=recorder
-    )
 
-    def post_events(post: Callable[[Event], None]) -> None:
+    def post_events(post: Callable[[object], None]) -> None:
         """
         Post a bottom hold, then a delete of a pin that is not there.
 
         Parameters
         ----------
-        post : Callable[[Event], None]
+        post : Callable[[object], None]
             Posts an event.
         """
         post(KnobHeld(knob=Knob.BOTTOM))
         post(PinDeleted(ref='000000000000'))
 
-    await run(
-        ports=ports,
+    await run_sydney(
+        ports=ports_of(),
+        kit=kit_ports(states=MemoryStates(stored=saved)),
+        observer=recorder,
         tick_every=60,
         post_hook=post_events,
         max_events=2,
-        city=SYDNEY,
     )
     pins = (PIN, unpinned)
     assert [shown for _, shown in recorder.pins] == [None, 1, 1]
@@ -820,28 +876,23 @@ async def test_app_reports_pins() -> None:
 async def test_run_reads_the_key_before_the_first_tick() -> None:
     """With a key store, the key is known before any feed is fetched."""
     recorder = CallRecorder()
-    ports = replace(
-        ports_of(),
-        observer=recorder,
-        device=DevicePorts(
-            keys=(
-                DeviceKey(
-                    name='k',
-                    credential=TFNSW_KEY,
-                    store=FakeKeys(key='k'),
-                    display_name='K',
-                ),
-            ),
+    keys = (
+        DeviceKey(
+            name='k',
+            credential=TFNSW_KEY,
+            store=FakeKeys(key='k'),
+            display_name='K',
         ),
     )
-    state = await run(
-        ports=ports,
+    kit = await run_sydney(
+        ports=ports_of(),
+        kit=replace(kit_ports(), device=DevicePorts(keys=keys)),
         seed=PIN,
+        observer=recorder,
         tick_every=60,
         max_events=1,
-        city=SYDNEY,
     )
-    assert state.panel.key_set is True
+    assert app_of(kit=kit).panel.key_set is True
     assert recorder.statuses[-1].missing_keys == ()
 
 
@@ -879,24 +930,19 @@ async def test_run_survives_a_raising_observer(tmp_path: Path) -> None:
         path=_build_db(tmp_path),
         city=SYDNEY,
     )
-    ports = Ports(
-        timetable=timetable,
-        feeds=FileFeedsClient(directory=REAL),
-        display=display,
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        observer=RaisingObserver(),
-    )
     try:
-        state = await run(
-            ports=ports, seed=PIN, tick_every=0.01, max_events=60, city=SYDNEY
+        kit = await run_sydney(
+            ports=ports_of(timetable=timetable),
+            kit=kit_ports(display=display),
+            seed=PIN,
+            observer=RaisingObserver(),
+            max_events=60,
         )
     finally:
         timetable.close()
-    assert state.running
+    assert kit.running
     assert display.frames
-    assert 'v2/gtfs/realtime/sydneytrains' in state.snapshots
+    assert 'v2/gtfs/realtime/sydneytrains' in app_of(kit=kit).snapshots
 
 
 async def test_run_logs_frame_and_feed_timings_at_debug(
@@ -907,22 +953,10 @@ async def test_run_logs_frame_and_feed_timings_at_debug(
         path=_build_db(tmp_path),
         city=SYDNEY,
     )
-    ports = Ports(
-        timetable=timetable,
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-    )
     with caplog.at_level(logging.DEBUG):
         try:
-            await run(
-                ports=ports,
-                seed=PIN,
-                tick_every=0.01,
-                max_events=60,
-                city=SYDNEY,
+            await run_sydney(
+                ports=ports_of(timetable=timetable), seed=PIN, max_events=60,
             )
         finally:
             timetable.close()
@@ -944,29 +978,17 @@ async def test_fetch_failure_does_not_report_a_parsed_feed(
 ) -> None:
     """A feed that fails to fetch never reaches feed_parsed."""
     observer = CallRecorder()
-    ports = Ports(
-        timetable=BrokenTimetable(),
+    ports = replace(
+        ports_of(timetable=BrokenTimetable()),
         feeds=FileFeedsClient(directory=tmp_path),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
         observer=observer,
     )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
-    await perform(
+    posted = await posted_by(
         ports=ports,
-        effect=FetchFeed(feed='v2/gtfs/realtime/sydneytrains'),
-        queue=queue,
-        tasks=tasks,
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
+        effects=[FetchFeed(feed='v2/gtfs/realtime/sydneytrains')],
     )
-    await asyncio.gather(*tasks)
-    posted = queue.get_nowait()
-    assert isinstance(posted, FeedFailed)
-    assert posted.sent
+    assert isinstance(posted[0], FeedFailed)
+    assert posted[0].sent
     assert observer.feeds == 0
 
 
@@ -978,19 +1000,12 @@ async def test_feed_parse_is_reported_as_work_done(
     timetable = SqliteTimetableRepository(
         path=_build_db(tmp_path), city=SYDNEY,
     )
-    ports = Ports(
-        timetable=timetable,
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        observer=recorder,
-    )
     try:
-        await run(
-            ports=ports, seed=PIN, tick_every=0.01, max_events=60,
-            city=SYDNEY,
+        await run_sydney(
+            ports=ports_of(timetable=timetable),
+            seed=PIN,
+            observer=recorder,
+            max_events=60,
         )
     finally:
         timetable.close()
@@ -1033,28 +1048,22 @@ async def test_fetch_logs_why_the_feed_was_refused(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """The feed failed line carries the server's reason for refusing."""
-    ports = Ports(
-        timetable=BrokenTimetable(),
-        feeds=RefusingFeeds(),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
+    ports = replace(
+        ports_of(timetable=BrokenTimetable()), feeds=RefusingFeeds(),
     )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
+    posted: list[Event] = []
     with caplog.at_level(logging.WARNING):
         await fetch(
             ports=ports,
             effect=FetchFeed(feed='v1/gtfs/realtime/buses'),
-            queue=queue,
+            post=posted.append,
         )
     [record] = [r for r in caplog.records if 'feed failed' in r.message]
     assert getattr(record, 'refusal') == (
         'X-Error-Detail: Account Over Rate Limit'
     )
-    posted = queue.get_nowait()
-    assert isinstance(posted, FeedFailed)
-    assert posted.reason == 'v1/gtfs/realtime/buses: HTTP 429'
+    assert isinstance(posted[0], FeedFailed)
+    assert posted[0].reason == 'v1/gtfs/realtime/buses: HTTP 429'
 
 
 class BackingOffFeeds:
@@ -1082,23 +1091,17 @@ class BackingOffFeeds:
 
 async def test_fetch_skipped_in_backoff_is_posted_as_not_sent() -> None:
     """A feed turned away by its backoff posts FeedFailed with sent False."""
-    ports = Ports(
-        timetable=BrokenTimetable(),
-        feeds=BackingOffFeeds(),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
+    ports = replace(
+        ports_of(timetable=BrokenTimetable()), feeds=BackingOffFeeds(),
     )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
+    posted: list[Event] = []
     await fetch(
         ports=ports,
         effect=FetchFeed(feed='v2/gtfs/realtime/sydneytrains'),
-        queue=queue,
+        post=posted.append,
     )
-    posted = queue.get_nowait()
-    assert isinstance(posted, FeedFailed)
-    assert not posted.sent
+    assert isinstance(posted[0], FeedFailed)
+    assert not posted[0].sent
 
 
 class JoiningFeeds(FileFeedsClient):
@@ -1123,18 +1126,13 @@ class JoiningFeeds(FileFeedsClient):
 
 async def test_fetch_joining_another_posts_feed_joined() -> None:
     """A fetch that shared a request posts its feed, then FeedJoined."""
-    ports = Ports(
-        timetable=BrokenTimetable(),
+    ports = replace(
+        ports_of(timetable=BrokenTimetable()),
         feeds=JoiningFeeds(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
     )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
+    posted: list[Event] = []
     feed = 'v2/gtfs/realtime/sydneytrains'
-    await fetch(ports=ports, effect=FetchFeed(feed=feed), queue=queue)
-    posted = [queue.get_nowait(), queue.get_nowait()]
+    await fetch(ports=ports, effect=FetchFeed(feed=feed), post=posted.append)
     assert isinstance(posted[0], FeedFetched)
     assert posted[1] == FeedJoined(feed=feed)
 
@@ -1144,19 +1142,11 @@ async def test_run_survives_unexpected_load_error(
 ) -> None:
     """A crashing load is logged and retried; the loop keeps running."""
     timetable = CrashingTimetable()
-    ports = Ports(
-        timetable=timetable,
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-    )
     with caplog.at_level(logging.ERROR):
-        state = await run(
-            ports=ports, seed=PIN, tick_every=0.01, max_events=20, city=SYDNEY
+        kit = await run_sydney(
+            ports=ports_of(timetable=timetable), seed=PIN, max_events=20,
         )
-    assert state.running
+    assert kit.running
     assert timetable.calls >= 2
     errors = [r.exc_info[1] for r in caplog.records if r.exc_info]
     assert any(str(error) == 'boom' for error in errors)
@@ -1166,16 +1156,7 @@ async def test_run_draws_when_every_feed_fails(
     tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Missing recordings are logged as failed feeds; frames still draw."""
-    db = tmp_path / 'timetable.db'
-    build_timetable(
-        sources=[
-            Source(name='sydneytrains', archive=REAL / 'sydneytrains.zip'),
-            Source(name='bundle', archive=REAL / 'bundle.zip'),
-        ],
-        window=Window(start=date(2026, 10, 16), days=1),
-        out=db,
-        city_ref=SYDNEY_REF,
-    )
+    db = _build_db(tmp_path)
     empty = tmp_path / 'empty'
     empty.mkdir()
     display = FrameRecorder()
@@ -1183,27 +1164,22 @@ async def test_run_draws_when_every_feed_fails(
         path=db,
         city=SYDNEY,
     )
-    ports = Ports(
-        timetable=timetable,
+    ports = replace(
+        ports_of(timetable=timetable),
         feeds=FileFeedsClient(directory=empty),
-        display=display,
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
     )
     try:
         with caplog.at_level(logging.WARNING):
-            state = await run(
+            kit = await run_sydney(
                 ports=ports,
+                kit=kit_ports(display=display),
                 seed=PIN,
-                tick_every=0.01,
                 max_events=60,
-                city=SYDNEY,
             )
     finally:
         timetable.close()
     assert display.frames
-    assert 'v2/gtfs/realtime/sydneytrains' not in state.snapshots
+    assert 'v2/gtfs/realtime/sydneytrains' not in app_of(kit=kit).snapshots
     assert any('feed failed' in r.getMessage() for r in caplog.records)
 
 
@@ -1211,18 +1187,11 @@ async def test_a_queued_tick_that_is_never_handled_sends_no_watchdog(
 ) -> None:
     """The watchdog follows handled ticks, not queued ones."""
     observer = CallRecorder()
-    ports = Ports(
-        timetable=BrokenTimetable(),
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        observer=observer,
-    )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
+    app = sydney_app(ports=ports_of(timetable=BrokenTimetable()))
+    ports = replace(kit_ports(), observer=observer)
+    queue: asyncio.Queue[object] = asyncio.Queue()
     task = asyncio.create_task(
-        ticker(ports=ports, queue=queue, every=60.0, pump=None)
+        ticker(app=app, ports=ports, queue=queue, every=60.0, pump=None)
     )
     await asyncio.sleep(0.1)
     task.cancel()
@@ -1234,17 +1203,11 @@ async def test_a_queued_tick_that_is_never_handled_sends_no_watchdog(
 
 async def test_ticker_passes_synced_flag() -> None:
     """Each Tick carries whether the clock was synchronised."""
-    ports = Ports(
-        timetable=BrokenTimetable(),
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=SyncingClock(at=AT, unsynced=2),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-    )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
+    app = sydney_app(ports=ports_of(timetable=BrokenTimetable()))
+    ports = replace(kit_ports(), clock=SyncingClock(at=AT, unsynced=2))
+    queue: asyncio.Queue[object] = asyncio.Queue()
     task = asyncio.create_task(
-        ticker(ports=ports, queue=queue, every=0.05, pump=None)
+        ticker(app=app, ports=ports, queue=queue, every=0.05, pump=None)
     )
     await asyncio.sleep(0.5)
     task.cancel()
@@ -1297,17 +1260,13 @@ class SteppingClock:
 
 async def test_ticker_reads_synced_before_now() -> None:
     """A synced Tick never carries the time from before the step."""
-    ports = Ports(
-        timetable=BrokenTimetable(),
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=SteppingClock(at=AT, step=timedelta(hours=3)),
-        network=FakeNetwork(),
-        states=MemoryStates(),
+    app = sydney_app(ports=ports_of(timetable=BrokenTimetable()))
+    ports = replace(
+        kit_ports(), clock=SteppingClock(at=AT, step=timedelta(hours=3)),
     )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
+    queue: asyncio.Queue[object] = asyncio.Queue()
     task = asyncio.create_task(
-        ticker(ports=ports, queue=queue, every=60.0, pump=None)
+        ticker(app=app, ports=ports, queue=queue, every=60.0, pump=None)
     )
     await asyncio.sleep(0.1)
     task.cancel()
@@ -1326,22 +1285,12 @@ async def test_run_sends_a_watchdog_for_each_handled_tick(
         path=_build_db(tmp_path),
         city=SYDNEY,
     )
-    ports = Ports(
-        timetable=timetable,
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        observer=observer,
-    )
     try:
-        await run(
-            ports=ports,
+        await run_sydney(
+            ports=ports_of(timetable=timetable),
             seed=PIN,
-            tick_every=0.01,
+            observer=observer,
             max_events=20,
-            city=SYDNEY,
         )
     finally:
         timetable.close()
@@ -1488,23 +1437,14 @@ async def test_run_draws_map_after_bottom_press(tmp_path: Path) -> None:
     tiles = light_tiles(out=tmp_path / 'tiles.db', point=place.point)
     display = PressingDisplay()
     feeds = RecordingFeeds(directory=REAL)
-    ports = Ports(
-        timetable=timetable,
-        feeds=feeds,
-        display=display,
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        tiles=tiles,
-    )
+    ports = replace(ports_of(timetable=timetable), feeds=feeds, tiles=tiles)
     try:
-        await run(
+        await run_sydney(
             ports=ports,
+            kit=kit_ports(display=display),
             seed=MAP_PIN,
-            tick_every=0.01,
             post_hook=display.hook,
             max_events=80,
-            city=SYDNEY,
         )
     finally:
         timetable.close()
@@ -1635,10 +1575,10 @@ def test_unreadable_tiles_give_corner_boxes_only(tmp_path: Path) -> None:
 
 
 def test_drawing_picks_panel_and_sleep() -> None:
-    """Panel views draw as panel screens; sleep bands a plain map."""
+    """The kit draws panel views; transit bands a plain map for sleep."""
     maps = MapRenderer(tiles=CountingTiles())
     menu = MenuView(clock='9:00', rows=('Wi-Fi',), cursor=0, first=0)
-    panel = drawing(view=menu, maps=maps)()
+    panel = kit_drawing(app=sydney_app(ports=ports_of()), view=menu)()
     assert (panel == draw_panel_view(view=menu)).all()
     asleep = drawing(
         view=SleepView(map=map_view(), band='Asleep'),
@@ -1713,33 +1653,18 @@ async def test_positions_are_labelled_from_the_timetable(
         path=_build_db(tmp_path),
         city=SYDNEY,
     )
-    ports = Ports(
-        timetable=timetable,
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-    )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
     try:
-        await perform(
-            ports=ports,
-            effect=FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS),
-            queue=queue,
-            tasks=tasks,
-            maps=MapRenderer(tiles=ports.tiles),
-            saver=StateSaver(states=ports.states),
+        posted = await posted_by(
+            ports=ports_of(timetable=timetable),
+            effects=[FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS)],
         )
-        await asyncio.gather(*tasks)
     finally:
         timetable.close()
-    posted = queue.get_nowait()
-    assert isinstance(posted, PositionsFetched)
+    first = posted[0]
+    assert isinstance(first, PositionsFetched)
     labels = {
         vehicle.trip_id: vehicle.label
-        for vehicle in posted.snapshot.vehicles
+        for vehicle in first.snapshot.vehicles
     }
     assert labels['2706990'] == '606X'
 
@@ -1776,43 +1701,40 @@ class PatternlessTimetable(BrokenTimetable):
 
 async def test_map_data_failure_posts_event() -> None:
     """A failed patterns read posts MapDataFailed for that request."""
-    ports = Ports(
-        timetable=PatternlessTimetable(),
-        feeds=CrashingFeeds(),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
+    ports = replace(
+        ports_of(timetable=PatternlessTimetable()), feeds=CrashingFeeds(),
     )
     request = LoadPatterns(trip_ids=frozenset({'t1'}), day=AT.date())
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
-    await perform(
-        ports=ports,
-        effect=request,
-        queue=queue,
-        tasks=tasks,
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
-    )
-    await asyncio.gather(*tasks)
-    posted = queue.get_nowait()
-    assert posted == MapDataFailed(request=request)
-    assert posted.kind == MapData.PATTERNS
+    posted = await posted_by(ports=ports, effects=[request])
+    first = posted[0]
+    assert first == MapDataFailed(request=request)
+    assert isinstance(first, MapDataFailed)
+    assert first.kind == MapData.PATTERNS
+
+
+def started(*, timetable: TimetableRepository, seed: Pin) -> State:
+    """
+    Start Sydney's board as the kit's loop does, with nothing saved.
+
+    Parameters
+    ----------
+    timetable : TimetableRepository
+        Timetable the seed's places are filled from.
+    seed : Pin
+        Pin to start with.
+
+    Returns
+    -------
+    State
+        The board's starting state.
+    """
+    app = sydney_app(ports=ports_of(timetable=timetable), seed=seed)
+    return app_of(kit=starting(app=app, ports=kit_ports()))
 
 
 def test_starting_state_fills_the_pins_places() -> None:
     """The pin's places get their names and points from the timetable."""
-    ports = Ports(
-        timetable=PlacedTimetable(),
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        tiles=NullTiles(),
-    )
-    state = starting_state(ports=ports, seed=MAP_PIN, city=SYDNEY)
+    state = started(timetable=PlacedTimetable(), seed=MAP_PIN)
     assert shown(state=state).origin == place(
         '2145615', name='2145615', point=STOP_POINT,
     )
@@ -1825,38 +1747,12 @@ def test_starting_state_fills_the_pins_places() -> None:
 
 def test_starting_state_awaits_the_first_tick() -> None:
     """The app starts not yet knowing whether the clock is set."""
-    ports = Ports(
-        timetable=PlacedTimetable(),
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        tiles=NullTiles(),
-    )
-    assert not starting_state(
-        ports=ports,
-        seed=MAP_PIN,
-        city=SYDNEY,
-    ).clock_known
+    assert not started(timetable=PlacedTimetable(), seed=MAP_PIN).clock_known
 
 
 def test_starting_state_keeps_no_destination() -> None:
     """A pin without a Destination starts with its From filled in."""
-    ports = Ports(
-        timetable=PlacedTimetable(),
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        tiles=NullTiles(),
-    )
-    state = starting_state(
-        ports=ports,
-        seed=pin_of('2145615', None),
-        city=SYDNEY,
-    )
+    state = started(timetable=PlacedTimetable(), seed=pin_of('2145615', None))
     assert shown(state=state).origin == place(
         '2145615', name='2145615', point=STOP_POINT,
     )
@@ -1868,23 +1764,13 @@ async def test_run_draws_the_map_in_the_variant_asked_for() -> None:
     """The tiles variant given to run is the one the Map reads."""
     tiles = CountingTiles()
     display = PressingDisplay()
-    ports = Ports(
-        timetable=BuiltTimetable(),
-        feeds=FileFeedsClient(directory=REAL),
-        display=display,
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        tiles=tiles,
-    )
-    await run(
-        ports=ports,
+    await run_sydney(
+        ports=replace(ports_of(timetable=BuiltTimetable()), tiles=tiles),
+        kit=kit_ports(display=display),
         seed=MAP_PIN,
-        tick_every=0.01,
         post_hook=display.hook,
         max_events=10,
-        tiles_variant=TileVariant.BITS,
-        city=SYDNEY,
+        variant=TileVariant.BITS,
     )
     assert tiles.reads > 0
     assert tiles.variants == {TileVariant.BITS}
@@ -1920,31 +1806,15 @@ async def test_label_failure_posts_feed_failed_for_that_feed(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """A labels read error fails that positions feed without a crash."""
-    ports = Ports(
-        timetable=LabelFailingTimetable(),
-        feeds=FileFeedsClient(directory=REAL),
-        display=FrameRecorder(),
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-    )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
     with caplog.at_level(logging.WARNING):
-        await perform(
-            ports=ports,
-            effect=FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS),
-            queue=queue,
-            tasks=tasks,
-            maps=MapRenderer(tiles=ports.tiles),
-            saver=StateSaver(states=ports.states),
+        posted = await posted_by(
+            ports=ports_of(timetable=LabelFailingTimetable()),
+            effects=[FetchFeed(feed=BUS_POSITIONS, kind=FeedKind.POSITIONS)],
         )
-        await asyncio.gather(*tasks, return_exceptions=True)
-        await asyncio.sleep(0)
-    posted = queue.get_nowait()
-    assert isinstance(posted, FeedFailed)
-    assert posted.feed == BUS_POSITIONS
-    assert posted.reason != 'unexpected error'
+    first = posted[0]
+    assert isinstance(first, FeedFailed)
+    assert first.feed == BUS_POSITIONS
+    assert first.reason != 'unexpected error'
     assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
 
 
@@ -2125,26 +1995,17 @@ async def test_run_survives_a_tiles_read_error(
     """Map frames keep coming, with one warning, when tile reads fail."""
     display = ZoomingDisplay()
     tiles = tableless_tiles(out=tmp_path / 'tiles.db')
-    ports = Ports(
-        timetable=BuiltTimetable(),
-        feeds=FileFeedsClient(directory=REAL),
-        display=display,
-        clock=FixedClock(at=AT),
-        network=FakeNetwork(),
-        states=MemoryStates(),
-        tiles=tiles,
-    )
+    ports = replace(ports_of(timetable=BuiltTimetable()), tiles=tiles)
     with caplog.at_level(logging.WARNING), closing(tiles):
-        state = await run(
+        kit = await run_sydney(
             ports=ports,
+            kit=kit_ports(display=display),
             seed=MAP_PIN,
-            tick_every=0.01,
             post_hook=display.hook,
             max_events=30,
-            city=SYDNEY,
         )
-    assert state.running
-    assert state.map.step != 0
+    assert kit.running
+    assert app_of(kit=kit).map.step != 0
     assert len(display.frames) >= 4
     unusable = [r for r in caplog.records if r.message == 'tiles file unusable']
     assert len(unusable) == 1
@@ -2244,12 +2105,10 @@ def test_corrupt_tile_draws_map_not_installed_and_warns_once(
 async def test_run_starts_on_town_hall_map_without_state() -> None:
     """With no saved state and no seed, Town Hall shows on the Map."""
     states = MemoryStates()
-    state = await run(
-        ports=ports_of(states=states),
-        tick_every=0.01,
-        max_events=5,
-        city=SYDNEY,
+    kit = await run_sydney(
+        ports=ports_of(), kit=kit_ports(states=states), max_events=5,
     )
+    state = app_of(kit=kit)
     assert states.saves
     first = replace(states.saves[0], quota=default_saved(city=SYDNEY).quota)
     assert first == default_saved(city=SYDNEY)
@@ -2264,13 +2123,13 @@ async def test_run_seeds_pin_when_no_state(
     """A seed with no saved state becomes the one pin, and is saved."""
     states = MemoryStates()
     with caplog.at_level(logging.INFO):
-        state = await run(
-            ports=ports_of(states=states),
+        kit = await run_sydney(
+            ports=ports_of(),
+            kit=kit_ports(states=states),
             seed=MAP_PIN,
-            tick_every=0.01,
             max_events=5,
-            city=SYDNEY,
         )
+    state = app_of(kit=kit)
     origin = place('2145615', name='2145615', point=STOP_POINT)
     assert shown(state=state).origin == origin
     assert state.view is LiveView.STOP
@@ -2287,14 +2146,13 @@ async def test_run_ignores_seed_when_state_exists(
     """Saved state wins over a seed, and the seed is logged as ignored."""
     stored = seeded(pin=pin_of('2145615', None), city=SYDNEY)
     with caplog.at_level(logging.INFO):
-        state = await run(
-            ports=ports_of(states=MemoryStates(stored=stored)),
+        kit = await run_sydney(
+            ports=ports_of(),
+            kit=kit_ports(states=MemoryStates(stored=stored)),
             seed=PIN,
-            tick_every=0.01,
             max_events=5,
-            city=SYDNEY,
         )
-    assert state.places.pins == stored.pins
+    assert app_of(kit=kit).places.pins == stored.pins
     assert 'seed ignored' in caplog.text
 
 
@@ -2302,18 +2160,26 @@ async def test_quit_writes_unsaved_state() -> None:
     """A change followed at once by a quit is saved before the run ends."""
     states = MemoryStates(stored=seeded(pin=MAP_PIN, city=SYDNEY))
 
-    def hook(post: Callable[[Event], None]) -> None:
+    def hook(post: Callable[[object], None]) -> None:
+        """
+        Post a bottom press, then a quit.
+
+        Parameters
+        ----------
+        post : Callable[[object], None]
+            Posts an event.
+        """
         post(KnobPressed(knob=Knob.BOTTOM))
         post(QuitRequested())
 
     async with asyncio.timeout(5):
-        state = await run(
-            ports=ports_of(states=states),
+        kit = await run_sydney(
+            ports=ports_of(),
+            kit=kit_ports(states=states),
             post_hook=hook,
             tick_every=60.0,
-            city=SYDNEY,
         )
-    assert not state.running
+    assert not kit.running
     assert states.stored is not None
     assert states.stored.view is LiveView.MAP
 
@@ -2349,11 +2215,7 @@ def test_starting_state_keeps_unknown_seed_places_bare(
 ) -> None:
     """A seed stop the timetable lacks stays bare, with a warning."""
     with caplog.at_level(logging.WARNING):
-        state = starting_state(
-            ports=ports_of(timetable=StoplessTimetable()),
-            seed=MAP_PIN,
-            city=SYDNEY,
-        )
+        state = started(timetable=StoplessTimetable(), seed=MAP_PIN)
     assert shown(state=state) == MAP_PIN
     assert 'stop 2145615 not in the timetable' in caplog.text
 
@@ -2362,19 +2224,27 @@ async def test_queued_knob_turns_draw_one_frame() -> None:
     """Ticks and five turns queued at once draw a single frame."""
     display = FrameRecorder()
 
-    def hook(post: Callable[[Event], None]) -> None:
+    def hook(post: Callable[[object], None]) -> None:
+        """
+        Post two ticks, then five turns.
+
+        Parameters
+        ----------
+        post : Callable[[object], None]
+            Posts an event.
+        """
         post(Tick(now=AT))
         post(Tick(now=AT + LOADING_WAIT))
         for steps in (1, -1, 1, -1, 1):
             post(KnobTurned(knob=Knob.BOTTOM, steps=steps))
 
     async with asyncio.timeout(5):
-        await run(
-            ports=ports_of(display=display),
+        await run_sydney(
+            ports=ports_of(),
+            kit=kit_ports(display=display),
             post_hook=hook,
             tick_every=60.0,
             max_events=7,
-            city=SYDNEY,
         )
     assert len(display.frames) == 1
 
@@ -2387,14 +2257,27 @@ async def test_app_turns_panel_frames() -> None:
         device=DeviceSettings(rotate=True),
     )
     saved = replace(default_saved(city=SYDNEY), settings=settings)
-    ports = ports_of(display=display, states=MemoryStates(stored=saved))
 
-    def hook(post: Callable[[Event], None]) -> None:
+    def hook(post: Callable[[object], None]) -> None:
+        """
+        Post a tick, then one a poll cycle later.
+
+        Parameters
+        ----------
+        post : Callable[[object], None]
+            Posts an event.
+        """
         post(Tick(now=AT))
         post(Tick(now=AT + CYCLE_WAIT))
 
     async with asyncio.timeout(5):
-        await run(ports=ports, post_hook=hook, max_events=2, city=SYDNEY)
+        await run_sydney(
+            ports=ports_of(),
+            kit=kit_ports(display=display, states=MemoryStates(stored=saved)),
+            tick_every=5.0,
+            post_hook=hook,
+            max_events=2,
+        )
     assert display.turns[-1] is True
 
 
@@ -2406,226 +2289,45 @@ async def test_app_passes_clean_after_to_panel() -> None:
         device=DeviceSettings(clean_after=60),
     )
     saved = replace(default_saved(city=SYDNEY), settings=settings)
-    ports = ports_of(display=display, states=MemoryStates(stored=saved))
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
-    outputs = Outputs(
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
+    handler = handler_of(
+        ports=kit_ports(display=display, states=MemoryStates(stored=saved)),
     )
-    state = starting_state(ports=ports, seed=PIN, city=SYDNEY)
-    for event in (Tick(now=AT), SettingsChanged(clean_after=15)):
-        state = await handle(
-            state=state, event=event, ports=ports, queue=queue,
-            tasks=tasks, outputs=outputs,
-        )
-        outputs.pending.view = NoticeView(title='Frame')
-        await draw_pending(ports=ports, outputs=outputs)
+    for event in (Tick(now=AT), settings_posted(clean_after=15)):
+        await handler.handle(event=event)
+        await handler.draw(view=NoticeView(title='Frame'))
     assert display.cleans[-2:] == [60, 15]
-    await stop(tasks=tasks)
+    await stop(tasks=handler.tasks)
 
 
 async def test_app_marks_frames_quick_after_a_knob_turn() -> None:
     """A knob turn's frame is quick; a tick 5 s later is not."""
     display = FrameRecorder()
-    ports = ports_of(display=display)
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
-    outputs = Outputs(
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
-    )
-    state = starting_state(ports=ports, seed=PIN, city=SYDNEY)
+    handler = handler_of(ports=kit_ports(display=display))
     later = AT + timedelta(seconds=5)
     for event in (
         Tick(now=AT),
         KnobTurned(knob=Knob.BOTTOM, steps=1),
         Tick(now=later),
     ):
-        state = await handle(
-            state=state, event=event, ports=ports, queue=queue,
-            tasks=tasks, outputs=outputs,
-        )
-        outputs.pending.view = NoticeView(title='Frame')
-        await draw_pending(ports=ports, outputs=outputs)
+        await handler.handle(event=event)
+        await handler.draw(view=NoticeView(title='Frame'))
     assert display.quicks[-2:] == [True, False]
-    await stop(tasks=tasks)
+    await stop(tasks=handler.tasks)
 
 
 async def test_app_marks_frames_asleep_in_sleep_mode() -> None:
     """Frames drawn while the screen is asleep are marked asleep."""
     display = FrameRecorder()
-    ports = ports_of(display=display)
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
-    outputs = Outputs(
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
-    )
-    awake = starting_state(ports=ports, seed=PIN, city=SYDNEY)
-    asleep = replace(awake, panel=replace(awake.panel, asleep=True))
-    for state in (awake, asleep):
-        state = await handle(
-            state=state, event=Tick(now=AT), ports=ports, queue=queue,
-            tasks=tasks, outputs=outputs,
-        )
-        assert outputs.pending.asleep is state.panel.asleep
-        outputs.pending.view = NoticeView(title='Frame')
-        await draw_pending(ports=ports, outputs=outputs)
+    for asleep in (False, True):
+        handler = handler_of(ports=kit_ports(display=display))
+        device = handler.kit.device
+        panel = replace(device.panel, asleep=asleep)
+        handler.kit = replace(handler.kit, device=replace(device, panel=panel))
+        state = await handler.handle(event=Tick(now=AT))
+        assert handler.outputs.pending.asleep is state.panel.asleep
+        await handler.draw(view=NoticeView(title='Frame'))
+        await stop(tasks=handler.tasks)
     assert display.sleeps[-2:] == [False, True]
-    await stop(tasks=tasks)
-
-
-class Ordered(FrameRecorder):
-    """A display that logs its shows and settles."""
-
-    def __init__(self, *, log: list[str]) -> None:
-        super().__init__()
-        self.log = log
-
-    def show(
-        self,
-        *,
-        frame: NDArray[np.uint8],
-        full: bool = False,
-        turned: bool = False,
-        quick: bool = False,
-        asleep: bool = False,
-        clear: bool = False,
-        clean_after: int = CLEAN_AFTER,
-    ) -> None:
-        """Log the show and keep the frame."""
-        self.log.append('show')
-        super().show(
-            frame=frame,
-            full=full,
-            turned=turned,
-            quick=quick,
-            asleep=asleep,
-            clear=clear,
-            clean_after=clean_after,
-        )
-
-    def settle(self, *, timeout: float) -> bool:
-        """Log the settle."""
-        self.log.append('settle')
-        return super().settle(timeout=timeout)
-
-
-@dataclass
-class LoggedPower(FakePower):
-    """A power control that logs its call."""
-
-    log: list[str] = field(default_factory=list)
-
-    async def control(self, *, action: PowerAction) -> bool:
-        """Log the call."""
-        self.log.append('power')
-        return await super().control(action=action)
-
-
-async def test_power_waits_for_panel() -> None:
-    """The notice is shown and settled before the power action runs."""
-    log: list[str] = []
-    display = Ordered(log=log)
-    ports = replace(
-        ports_of(display=display), power=LoggedPower(log=log),
-    )
-    outputs = Outputs(
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
-    )
-    effects = (
-        Render(view=NoticeView(title='Off'), full=True),
-        ControlPower(action=PowerAction.OFF),
-    )
-    tasks: set[asyncio.Task[None]] = set()
-    await carry_out(
-        effects=effects, ports=ports, queue=asyncio.Queue(),
-        tasks=tasks, outputs=outputs,
-    )
-    await asyncio.gather(*tasks)
-    assert log == ['show', 'settle', 'power']
-
-
-@dataclass
-class LoggedResets(RecordingResets):
-    """Resets that log their call."""
-
-    log: list[str] = field(default_factory=list)
-
-    async def reset(self, *, kind: ResetKind) -> None:
-        """Log the call."""
-        self.log.append('reset')
-        await super().reset(kind=kind)
-
-
-async def test_reset_waits_for_panel() -> None:
-    """The notice is shown and settled before the reset runs."""
-    log: list[str] = []
-    ports = replace(
-        ports_of(display=Ordered(log=log)),
-        device=DevicePorts(resets=LoggedResets(log=log)),
-    )
-    outputs = Outputs(
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
-    )
-    effects = (
-        Render(view=NoticeView(title='Resetting'), full=True),
-        ResetDevice(kind=ResetKind.ERASE),
-    )
-    tasks: set[asyncio.Task[None]] = set()
-    await carry_out(
-        effects=effects, ports=ports, queue=asyncio.Queue(),
-        tasks=tasks, outputs=outputs,
-    )
-    await asyncio.gather(*tasks)
-    assert log == ['show', 'settle', 'reset']
-
-
-async def test_full_survives_burst() -> None:
-    """A full render replaced by a partial one is still drawn full."""
-    display = FrameRecorder()
-    ports = ports_of(display=display)
-    tasks: set[asyncio.Task[None]] = set()
-    outputs = Outputs(
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
-    )
-    effects = (
-        Render(view=NoticeView(title='One'), full=True),
-        Render(view=NoticeView(title='Two')),
-    )
-    await carry_out(
-        effects=effects, ports=ports, queue=asyncio.Queue(), tasks=tasks,
-        outputs=outputs,
-    )
-    await draw_pending(ports=ports, outputs=outputs)
-    assert display.fulls == [True]
-    assert outputs.pending.full is False
-
-
-async def test_clear_survives_burst() -> None:
-    """A clear render replaced by a plain one is still drawn clear."""
-    display = FrameRecorder()
-    ports = ports_of(display=display)
-    tasks: set[asyncio.Task[None]] = set()
-    outputs = Outputs(
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
-    )
-    effects = (
-        Render(view=NoticeView(title='One'), clear=True),
-        Render(view=NoticeView(title='Two')),
-    )
-    await carry_out(
-        effects=effects, ports=ports, queue=asyncio.Queue(), tasks=tasks,
-        outputs=outputs,
-    )
-    await draw_pending(ports=ports, outputs=outputs)
-    assert display.clears == [True]
-    assert outputs.pending.clear is False
 
 
 async def test_app_performs_rebuild() -> None:
@@ -2634,25 +2336,9 @@ async def test_app_performs_rebuild() -> None:
     ports = replace(
         ports_of(timetable=BuiltTimetable()), builder=builder,
     )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
-    await perform(
-        ports=ports,
-        effect=RebuildTimetable(),
-        queue=queue,
-        tasks=tasks,
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
-    )
-    await asyncio.gather(*tasks)
-    assert queue.get_nowait() == TimetableRebuilt(ok=True)
-    await run(
-        ports=ports,
-        seed=PIN,
-        tick_every=0.01,
-        max_events=1,
-        city=SYDNEY,
-    )
+    posted = await posted_by(ports=ports, effects=[RebuildTimetable()])
+    assert posted[0] == TimetableRebuilt(ok=True)
+    await run_sydney(ports=ports, seed=PIN, max_events=1)
     assert (builder.rebuilds, builder.stops) == (1, 1)
 
 
@@ -2660,33 +2346,21 @@ async def test_app_draws_notice_before_power() -> None:
     """The notice is on screen before the power action; a failure redraws."""
     display = FrameRecorder()
     power = FakePower(result=False, display=display)
-    ports = replace(ports_of(display=display), power=power)
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
-    outputs = Outputs(
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
-    )
-    state = starting_state(ports=ports, seed=PIN, city=SYDNEY)
+    ports = replace(kit_ports(display=display), power=power)
+    handler = handler_of(ports=ports)
     for event in (Tick(now=AT), PowerRequested(action=PowerAction.OFF)):
-        state = await handle(
-            state=state, event=event, ports=ports, queue=queue,
-            tasks=tasks, outputs=outputs,
-        )
-    await asyncio.gather(*tasks)
+        await handler.handle(event=event)
+    await asyncio.gather(*handler.tasks)
     title = NOTICE[PowerAction.OFF]
     notice = draw_notice_view(view=NoticeView(title=title))
-    [(action, shown)] = power.calls
+    [(action, shown_at)] = power.calls
     assert action is PowerAction.OFF
-    assert np.array_equal(display.frames[shown - 1], notice)
-    failed = next_of(queue=queue, kind=PowerFailed)
-    state = await handle(
-        state=state, event=failed, ports=ports, queue=queue,
-        tasks=tasks, outputs=outputs,
-    )
+    assert np.array_equal(display.frames[shown_at - 1], notice)
+    failed = next_of(queue=handler.queue, kind=PowerFailed)
+    state = await handler.handle(event=failed)
     assert state.power is None
     assert not np.array_equal(display.frames[-1], notice)
-    await stop(tasks=tasks)
+    await stop(tasks=handler.tasks)
 
 
 async def test_app_reset_leaves_no_state_file(tmp_path: Path) -> None:
@@ -2699,51 +2373,47 @@ async def test_app_reset_leaves_no_state_file(tmp_path: Path) -> None:
         wifi=FakeWifi(),
         erased=(tmp_path / 'timetable.db',),
     )
+    app = sydney_app(ports=ports_of(), seed=PIN)
     ports = replace(
-        ports_of(),
-        states=JsonStateRepository(path=path, city=SYDNEY),
+        kit_ports(),
+        states=StateFile(path=path, app=app),
         device=DevicePorts(resets=resets),
     )
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
-    outputs = Outputs(
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
-    )
-    state = starting_state(ports=ports, seed=PIN, city=SYDNEY)
-    for event in (Tick(now=AT), SettingsChanged(auto_rebuild=False)):
-        state = await handle(
-            state=state, event=event, ports=ports, queue=queue,
-            tasks=tasks, outputs=outputs,
-        )
+    handler = handler_of(ports=ports, app=app)
+    for event in (Tick(now=AT), settings_posted(auto_rebuild=False)):
+        await handler.handle(event=event)
     assert path.exists()
-    state, effects = reset_asked(state=state, kind=ResetKind.SETTINGS)
-    await carry_out(
-        effects=effects, ports=ports, queue=queue, tasks=tasks,
-        outputs=outputs,
+    device, effects = on_reset(
+        device=handler.kit.device, kind=ResetKind.SETTINGS,
     )
-    await asyncio.gather(*tasks)
-    after: tuple[Event, ...] = (
+    handler.kit = replace(handler.kit, device=device)
+    await carry_out(
+        effects=effects,
+        ports=ports,
+        app=app,
+        queue=handler.queue,
+        tasks=handler.tasks,
+        outputs=handler.outputs,
+    )
+    await asyncio.gather(*handler.tasks)
+    after: tuple[object, ...] = (
         Tick(now=AT + SAVE_WAIT * 2),
-        next_of(queue=queue, kind=ResetDone),
+        next_of(queue=handler.queue, kind=ResetDone),
     )
     for later in after:
-        state = await handle(
-            state=state, event=later, ports=ports, queue=queue,
-            tasks=tasks, outputs=outputs,
-        )
+        state = await handler.handle(event=later)
     assert not state.running
     assert not path.exists()
-    await stop(tasks=tasks)
+    await stop(tasks=handler.tasks)
 
 
-def next_of[T](*, queue: asyncio.Queue[Event], kind: type[T]) -> T:
+def next_of[T](*, queue: asyncio.Queue[object], kind: type[T]) -> T:
     """
     Take events off a queue until one of a kind turns up.
 
     Parameters
     ----------
-    queue : asyncio.Queue[Event]
+    queue : asyncio.Queue[object]
         Event queue.
     kind : type[T]
         The kind wanted.
@@ -2772,14 +2442,11 @@ async def test_app_starts_without_a_timetable(tmp_path: Path) -> None:
     )
     ports = replace(ports_of(), timetable=timetable, network=network)
     try:
-        state = await run(
-            ports=ports, seed=PIN, tick_every=0.01, max_events=5,
-            city=SYDNEY,
-        )
+        kit = await run_sydney(ports=ports, seed=PIN, max_events=5)
     finally:
         timetable.close()
         network.close()
-    assert state.running
+    assert kit.running
     assert not missing.exists()
 
 
@@ -2923,27 +2590,25 @@ async def test_app_runs_with_no_timetable(tmp_path: Path) -> None:
         ports_of(),
         timetable=timetable,
         network=network,
-        display=display,
         builder=FakeBuilder(result=True),
     )
     try:
-        state = await run(
+        kit = await run_sydney(
             ports=ports,
+            kit=kit_ports(display=display),
             seed=PIN,
-            tick_every=0.01,
             post_hook=display.hook,
             max_events=20,
-            city=SYDNEY,
         )
     finally:
         timetable.close()
         network.close()
     rows = menu_rows(app_rows=(REBUILD_ROW,))
-    shown = menu_view(device=device_of(state=state), rows=rows, zone=SYDNEY_ZONE)
-    menu = draw_panel_view(view=shown)
+    view = menu_view(device=kit.device, rows=rows, zone=SYDNEY_ZONE)
+    menu = draw_panel_view(view=view)
     first = frame_index(frames=display.frames, frame=building)
     assert 0 <= first < frame_index(frames=display.frames, frame=menu)
-    assert state.rebuild.missing
+    assert app_of(kit=kit).rebuild.missing
 
 
 @dataclass
@@ -3029,17 +2694,19 @@ async def test_app_goes_live_when_the_timetable_arrives(
         timetable=timetable,
         network=network,
         feeds=feeds,
-        display=display,
         builder=FakeBuilder(result=True),
     )
     try:
-        state = await run(
-            ports=ports, seed=PIN, tick_every=0.01, max_events=60,
-            city=SYDNEY,
+        kit = await run_sydney(
+            ports=ports,
+            kit=kit_ports(display=display),
+            seed=PIN,
+            max_events=60,
         )
     finally:
         timetable.close()
         network.close()
+    state = app_of(kit=kit)
     assert not state.rebuild.missing
     assert state.board.departures
     assert feeds.fetched
@@ -3049,30 +2716,25 @@ async def test_app_goes_live_when_the_timetable_arrives(
 async def test_alert_fetch_uses_feeds_port() -> None:
     """An alerts fetch goes through the feeds port once and posts alerts."""
     feeds = RecordingFeeds(directory=REAL)
-    ports = replace(ports_of(), feeds=feeds)
-    queue: asyncio.Queue[Event] = asyncio.Queue()
-    tasks: set[asyncio.Task[None]] = set()
-    await perform(
-        ports=ports,
-        effect=FetchFeed(
-            feed='v2/gtfs/alerts/sydneytrains', kind=FeedKind.ALERTS
-        ),
-        queue=queue,
-        tasks=tasks,
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
+    posted = await posted_by(
+        ports=replace(ports_of(), feeds=feeds),
+        effects=[
+            FetchFeed(
+                feed='v2/gtfs/alerts/sydneytrains', kind=FeedKind.ALERTS,
+            ),
+        ],
     )
-    await asyncio.gather(*tasks)
     assert feeds.fetched == ['v2/gtfs/alerts/sydneytrains']
-    posted = queue.get_nowait()
-    assert isinstance(posted, AlertsFetched)
-    assert len(posted.snapshot.alerts) == 5
+    first = posted[0]
+    assert isinstance(first, AlertsFetched)
+    assert len(first.snapshot.alerts) == 5
 
 
 async def test_app_draws_alerts_view() -> None:
     """A Render of an AlertsView reaches the display as a full frame."""
     display = FrameRecorder()
-    ports = replace(ports_of(timetable=BuiltTimetable()), display=display)
+    ports = kit_ports(display=display)
+    app = sydney_app(ports=ports_of(timetable=BuiltTimetable()))
     view = AlertsView(
         origin='Strathfield',
         destination=None,
@@ -3083,35 +2745,31 @@ async def test_app_draws_alerts_view() -> None:
         text=AlertText(title='One', when='Ongoing', body='Text', also=()),
         page=0,
     )
-    tasks: set[asyncio.Task[None]] = set()
-    outputs = Outputs(
-        maps=MapRenderer(tiles=ports.tiles),
-        saver=StateSaver(states=ports.states),
-    )
-    await carry_out(
-        effects=(Render(view=view, full=True),),
+    await rendered(
+        app=app,
         ports=ports,
-        queue=asyncio.Queue(),
-        tasks=tasks,
-        outputs=outputs,
+        outputs=Outputs(saver=StateSaver(states=ports.states)),
+        render=Render(view=view, full=True),
     )
-    await draw_pending(ports=ports, outputs=outputs)
     [frame] = display.frames
     assert frame.shape == (480, 800)
     assert np.array_equal(frame, draw_alerts_view(view=view))
 
 
-async def test_interim_loop_saves_the_board_section(tmp_path: Path) -> None:
-    """The saver writes the kit's save through today's state file."""
+async def test_saver_writes_the_board_section(tmp_path: Path) -> None:
+    """The kit's saver writes Sydney's state file as it was read."""
     path = tmp_path / 'state.json'
-    path.write_bytes((GOLDEN / 'state.json').read_bytes())
-    repository = JsonStateRepository(path=path, city=SYDNEY)
-    saved = repository.load().saved
+    golden = (GOLDEN / 'state.json').read_bytes()
+    path.write_bytes(golden)
+    states = StateFile(
+        path=path, app=TransitApp(city=SYDNEY, parts=QUIET_PARTS),
+    )
+    loaded = states.load()
     path.unlink()
-    saver = StateSaver(states=repository)
-    kept = KitSaved(device=saved.settings.device, app=saved)
+    saver = StateSaver(states=states)
+    kept = KitSaved(device=loaded.device, app=loaded.app)
     await saver.save(effect=SaveState(saved=kept))
-    assert path.read_bytes() == (GOLDEN / 'state.json').read_bytes()
-    turned = replace(saved.settings.device, rotate=not kept.device.rotate)
+    assert path.read_bytes() == golden
+    turned = replace(kept.device, rotate=not kept.device.rotate)
     await saver.save(effect=SaveState(saved=replace(kept, device=turned)))
-    assert repository.load().saved.settings.device == turned
+    assert states.load().device == turned

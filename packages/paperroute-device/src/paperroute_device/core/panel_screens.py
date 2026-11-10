@@ -1,8 +1,5 @@
 """Build the panel's settings screens from the device state."""
 
-# An app package keeps a twin of this module until it switches over.
-# pylint: disable=duplicate-code
-
 from collections.abc import Sequence
 from datetime import tzinfo
 

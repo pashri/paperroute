@@ -8,9 +8,8 @@ import time
 from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import replace
 from datetime import datetime
-from typing import Final, cast
+from typing import Final
 
-from paperroute_device.core.kit_effects import SaveState
 from paperroute_transit.app_connections import between_read
 from paperroute_transit.core.alert_model import (
     AlertPlaces,
@@ -57,13 +56,8 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import Pin, StopPlace
 from paperroute_transit.core.positions import PositionsSnapshot, with_labels
 from paperroute_transit.core.reach import build_reach
-from paperroute_transit.core.saved import Saved
 from paperroute_transit.measures import StopMeasures
-from paperroute_transit.ports import (
-    NetworkRepository,
-    StateRepository,
-    TimetableRepository,
-)
+from paperroute_transit.ports import NetworkRepository, TimetableRepository
 
 logger = logging.getLogger(__name__)
 
@@ -98,51 +92,6 @@ async def timed_async[T](*, call: Awaitable[T]) -> tuple[T, float]:
     started = time.perf_counter()
     result = await call
     return result, (time.perf_counter() - started) * MS_PER_SECOND
-
-
-class StateSaver:
-    """
-    Write the saved state, logging each kind of write error once.
-
-    Errors of the same type, number and text are one kind, whatever file
-    they name, since each save writes a new temporary file.
-
-    Parameters
-    ----------
-    states : StateRepository
-        Where the state is kept.
-    """
-
-    def __init__(self, *, states: StateRepository) -> None:
-        self.states = states
-        self.logged: set[tuple[type[OSError], int | None, str | None]] = (
-            set()
-        )
-
-    async def save(self, *, effect: SaveState) -> None:
-        """
-        Write the state in a worker thread; a write error is never raised.
-
-        The kit's save holds the device settings beside transit's part;
-        the file is written from transit's part with those settings.
-
-        Parameters
-        ----------
-        effect : SaveState
-            What to write.
-        """
-        kept = effect.saved
-        saved = cast(Saved, kept.app)
-        settings = replace(saved.settings, device=kept.device)
-        try:
-            await asyncio.to_thread(
-                self.states.save, saved=replace(saved, settings=settings),
-            )
-        except OSError as error:
-            kind = (type(error), error.errno, error.strerror)
-            if kind not in self.logged:
-                self.logged.add(kind)
-                logger.exception('saving state failed')
 
 
 class VersionWatch:
@@ -589,7 +538,7 @@ async def worked(
     *,
     call: Callable[[], Event],
     failed: Event,
-    queue: asyncio.Queue[Event],
+    post: Callable[[Event], None],
 ) -> None:
     """
     Run a read in a worker thread and post its result or its failure.
@@ -600,16 +549,16 @@ async def worked(
         The read.
     failed : Event
         Posted, after logging, when the read fails.
-    queue : asyncio.Queue[Event]
-        Event queue.
+    post : Callable[[Event], None]
+        Posts an event to the kit's queue.
     """
     try:
         event = await asyncio.to_thread(call)
     except sqlite3.Error:
         logger.exception('reading the timetable failed')
-        await queue.put(failed)
+        post(failed)
         return
-    await queue.put(event)
+    post(event)
 
 
 def labelled_positions(

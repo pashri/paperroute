@@ -2,7 +2,6 @@
 
 import json
 from collections.abc import Mapping
-from functools import partial
 from pathlib import Path
 from typing import Final
 
@@ -13,8 +12,8 @@ from paperroute_device.core.kit_state import Step
 from paperroute_device.ports import Frame
 from paperroute_hardware.core.knob_events import KnobEvent
 from paperroute_sydney.city import SYDNEY
-from paperroute_transit.adapters.state_file import JsonStateRepository
-from paperroute_transit.adapters.state_migrations import MIGRATIONS
+from paperroute_transit.adapters.state_migrations import transit_migrations
+from tests.adapters.board_states import BoardStates
 from tests.adapters.state_layout import STATE_V12
 from tests.golden.scenes import GOLDEN
 
@@ -81,10 +80,7 @@ class BoardSteps(App[object]):
         Mapping[int, MigrationStep]
             Each step with Sydney bound.
         """
-        return {
-            version: partial(step, city=SYDNEY)
-            for version, step in MIGRATIONS.items()
-        }
+        return transit_migrations(city=SYDNEY)
 
     def start(
         self, *, section: object | None, stored: bool, device: DeviceState,
@@ -185,7 +181,9 @@ def test_golden_file_round_trips_through_the_kit(tmp_path: Path) -> None:
     path.write_text(text, encoding='utf-8')
     states = StateFile(path=path, app=BoardSteps())
     loaded = states.load()
-    saved = JsonStateRepository(path=STATE, city=SYDNEY).load().saved
+    board_path = tmp_path / 'board.json'
+    board_path.write_text(text, encoding='utf-8')
+    saved = BoardStates(path=board_path, city=SYDNEY).load().saved
     assert loaded == Loaded(
         device=saved.settings.device,
         app=json.loads(text)['board'],
@@ -204,7 +202,7 @@ def test_v12_file_reaches_13_as_the_board_migrates_it(tmp_path: Path) -> None:
     states = StateFile(path=kit_path, app=BoardSteps())
     loaded = states.load()
     states.save(saved=KitSaved(device=loaded.device, app=loaded.app))
-    board = JsonStateRepository(path=board_path, city=SYDNEY)
+    board = BoardStates(path=board_path, city=SYDNEY)
     board.save(saved=board.load().saved)
     assert json.loads(kit_path.read_text()) == json.loads(
         board_path.read_text(),

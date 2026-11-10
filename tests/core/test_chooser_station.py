@@ -12,6 +12,7 @@ from paperroute_device.core.kit_events import Tick
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.factories import START, begun, pin_at, place
+from paperroute_testkit.core.kit_steps import step
 from paperroute_transit.core.chooser import (
     Choice,
     ChooserState,
@@ -44,7 +45,6 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import Pin, shifted
 from paperroute_transit.core.places import feeds_of
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import HORIZON
 from tests.core.chooser_walks import (

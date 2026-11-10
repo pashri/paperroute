@@ -8,33 +8,18 @@ from enum import StrEnum
 from paperroute_device.core.device_events import (
     ApiKeyChanged,
     ConfirmAsked,
-    JoinAsked,
     PowerRequested,
 )
-from paperroute_device.core.device_settings import QuietMode, Window
-from paperroute_device.core.kit_effects import (
-    ControlPower,
-    JoinWifi,
-    ProbeDevice,
-    Render,
-    ResetDevice,
-    SaveState,
-    StartWifiSetup,
-    Stop,
-    StopWifiSetup,
-)
+from paperroute_device.core.device_settings import Window
+from paperroute_device.core.kit_effects import KitEffect
 from paperroute_device.core.kit_events import (
     DeviceProbed,
     DeviceProbeFailed,
-    HotspotFailed,
-    HotspotStarted,
     PowerFailed,
     QuitRequested,
     ResetDone,
     Tick,
-    WifiJoined,
-    WifiJoinFailed,
-    WifiSetupStopped,
+    WifiEvent,
 )
 from paperroute_device.core.panel_views import NoticeView, PanelView
 from paperroute_hardware.core.knob_events import (
@@ -231,21 +216,13 @@ Effect = (
     | LoadPatterns
     | LoadModes
     | LoadStrip
-    | Render
-    | Stop
-    | SaveState
     | MatchPlaces
     | RebuildTimetable
-    | ControlPower
-    | ProbeDevice
-    | ResetDevice
-    | StartWifiSetup
-    | JoinWifi
-    | StopWifiSetup
     | ChooserLoad
     | LoadHolidays
     | LoadServiceSpan
     | LoadBetween
+    | KitEffect
 )
 
 
@@ -386,7 +363,7 @@ class TimetableRebuilt:
 @dataclass(frozen=True)
 class SettingsChanged:  # pylint: disable=too-many-instance-attributes
     """
-    Settings were changed on the Settings page; None leaves one as it is.
+    Board settings were changed on the Settings page; None leaves one.
 
     Attributes
     ----------
@@ -398,16 +375,6 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
         The rate outside peak hours.
     peak_windows : tuple[Window, ...] | None
         The weekday peak windows.
-    quiet_mode : QuietMode | None
-        How quiet hours are chosen.
-    my_hours : Window | None
-        The quiet hours chosen by hand.
-    rotate : bool | None
-        Whether the panel is turned 180 degrees.
-    larger_text : bool | None
-        Whether departure rows use larger text.
-    inverted_lists : bool | None
-        Whether departure rows are white on black.
     alert_lookahead : Lookahead | None
         How far ahead planned alerts are listed.
     connection_map : ConnectionMap | None
@@ -416,27 +383,16 @@ class SettingsChanged:  # pylint: disable=too-many-instance-attributes
         Whether school routes are left out.
     skip_school_on_route_pins : bool | None
         Whether school routes are also left out of pins without a To.
-    clean_after : int | None
-        Quick patches the panel draws before a cleaning full refresh.
-    swap_knobs : bool | None
-        Whether knob A plays the bottom knob and knob B the top.
     """
 
     auto_rebuild: bool | None = None
     peak_rate: Rate | None = None
     offpeak_rate: Rate | None = None
     peak_windows: tuple[Window, ...] | None = None
-    quiet_mode: QuietMode | None = None
-    my_hours: Window | None = None
-    rotate: bool | None = None
-    larger_text: bool | None = None
-    inverted_lists: bool | None = None
     alert_lookahead: Lookahead | None = None
     connection_map: ConnectionMap | None = None
     skip_school_buses: bool | None = None
     skip_school_on_route_pins: bool | None = None
-    clean_after: int | None = None
-    swap_knobs: bool | None = None
 
 
 @dataclass(frozen=True)
@@ -685,14 +641,6 @@ ChooserEvent = (
     | LineFailed
     | ChooserDeparturesLoaded
     | ChooserDeparturesFailed
-)
-WifiEvent = (
-    HotspotStarted
-    | HotspotFailed
-    | JoinAsked
-    | WifiJoined
-    | WifiJoinFailed
-    | WifiSetupStopped
 )
 MapEvent = (
     ShapesLoaded

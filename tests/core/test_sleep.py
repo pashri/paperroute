@@ -20,6 +20,7 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_sydney.city import SYDNEY, SYDNEY_PROJECTION
 from paperroute_testkit.core.factories import START, departure, pattern, place
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import slept
 from paperroute_transit.core.geo import make_shape
 from paperroute_transit.core.map_view import MAP_HEIGHT, MapView, screen_point
@@ -38,7 +39,6 @@ from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import seeded
 from paperroute_transit.core.sleep import sleep_view
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import live_stop_view
 from paperroute_transit.core.stop_view import StopView
@@ -46,7 +46,6 @@ from paperroute_transit.render.trip_marks import END_DISC, END_EDGE
 from tests.core.test_connection import loaded as connection_loaded
 from tests.core.test_menu import BOTH, DOWN, run, turn
 from tests.core.test_state import BUSES, CENTRE, PIN, fresh, loaded
-from tests.helpers import kit_step
 
 
 def asleep() -> State:
@@ -244,7 +243,6 @@ def test_sleep_map_keeps_both_ends_above_the_band() -> None:
         state=initial_state(
             saved=seeded(pin=pin, city=SYDNEY),
             now=START,
-            stored=True,
             city=SYDNEY,
         ),
     )
@@ -301,10 +299,10 @@ def test_sleep_screen_waits_for_its_route_line_and_stops() -> None:
 
 def test_wake_draws_at_once() -> None:
     """A wake on a poll cycle's boundary draws the Live view at once."""
-    state, _ = kit_step(
-        state=asleep(), event=Tick(now=START + timedelta(seconds=5 * 60 + 2)),
+    state, _ = step(
+        asleep(), Tick(now=START + timedelta(seconds=5 * 60 + 2)),
     )
-    state, effects = kit_step(state=state, event=DOWN)
+    state, effects = step(state, DOWN)
     assert not state.panel.asleep
     assert [e for e in effects if isinstance(e, FetchFeed)]
     [render] = [e for e in effects if isinstance(e, Render)]

@@ -16,6 +16,7 @@ from paperroute_testkit.core.factories import (
     snapshot,
     vehicle,
 )
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import answer_fetches
 from paperroute_testkit.core.strip_factories import (
     CENTRE,
@@ -46,7 +47,6 @@ from paperroute_transit.core.model import CarryOn, Departure
 from paperroute_transit.core.reach import Reach, ReachRow, RowKind, StripKey
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import RETRY_AFTER, State
 from paperroute_transit.core.stop_view import HORIZON
 from paperroute_transit.core.strip_model import (
@@ -356,7 +356,7 @@ def test_flip_resets_the_strip_scroll() -> None:
         unpinned=None,
         view=LiveView.STRIP,
     )
-    state = initial_state(saved=saved, now=START, stored=True, city=SYDNEY)
+    state = initial_state(saved=saved, now=START, city=SYDNEY)
     state, _ = step(state, StripLoaded(key=KEY, reach=long_reach()))
     state, _ = step(state, turn(steps=4))
     assert state.strip.scroll == 4

@@ -12,6 +12,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_sydney.adapters.web_board import SuggestPlug
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_sydney.core.trip_search import Journey, JourneyLeg
@@ -24,12 +25,12 @@ from paperroute_testkit.core.factories import place
 from paperroute_testkit.fake_pins import FakePinOptions
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_pages import PinPages
-from paperroute_transit.adapters.web_display import WebDisplay
 from paperroute_transit.core.messages import Event, PinSaved
 from paperroute_transit.core.model import StopPlace
 from paperroute_transit.core.pin_choices import ChangeStop, StopMatch
 from paperroute_transit.observers import PinsSeen
 from tests.adapters.test_web_device import sydney_site
+from tests.adapters.transit_web import transit_display
 from tests.planner_fakes import FakeTripPlanner
 
 Client = TestClient[web.Request, web.Application]
@@ -85,7 +86,7 @@ class App:
     seen: PinsSeen = field(
         default_factory=lambda: PinsSeen(pins=(), shown=None, revision=3),
     )
-    posted: list[Event] = field(default_factory=list)
+    posted: list[object] = field(default_factory=list)
 
     def get(self) -> PinsSeen:
         """
@@ -98,13 +99,13 @@ class App:
         """
         return self.seen
 
-    def post(self, event: Event) -> None:
+    def post(self, event: object) -> None:
         """
         Take an event, adding a saved pin.
 
         Parameters
         ----------
-        event : Event
+        event : object
             The event.
         """
         self.posted.append(event)
@@ -254,7 +255,7 @@ async def _client(app: App) -> AsyncIterator[Client]:
             planner=FakeTripPlanner(journeys=(JOURNEY,)), now=lambda: NOW,
         ),
     )
-    display = WebDisplay(
+    display = transit_display(
         device=sydney_site().pages(),
         board=board,
         city=SYDNEY,

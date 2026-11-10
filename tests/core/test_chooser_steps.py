@@ -21,6 +21,7 @@ from paperroute_testkit.core.factories import (
     pin_at,
     place,
 )
+from paperroute_testkit.core.kit_steps import step
 from paperroute_transit.core.chooser import ChooserState, Level, Stage
 from paperroute_transit.core.chooser_steps import (
     DEPARTURES_FAILED,
@@ -50,7 +51,6 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import Departure, Pin, shifted
 from paperroute_transit.core.places import shown
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import LOOKBACK, RELOAD_BEFORE, State
 from paperroute_transit.core.state_views import saved_of
 from paperroute_transit.core.stop_view import HORIZON, StopView

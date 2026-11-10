@@ -189,6 +189,40 @@ async def test_reset_work_posts_done() -> None:
     assert fallback == ResetDone(kind=ResetKind.ERASE)
 
 
+class AppLoggedResets(RecordingResets):
+    """Resets that note in the app's log when they run."""
+
+    def __init__(self, *, app: FakeApp) -> None:
+        super().__init__()
+        self.app = app
+
+    async def reset(self, *, kind: ResetKind) -> None:
+        """
+        Note the reset after whatever the app noted.
+
+        Parameters
+        ----------
+        kind : ResetKind
+            The reset asked for.
+        """
+        await super().reset(kind=kind)
+        self.app.hooks.append('reset')
+
+
+async def test_reset_asks_the_app_first() -> None:
+    """The app's before_reset runs before any file is reset."""
+    app = FakeApp()
+    queue: asyncio.Queue[object] = asyncio.Queue()
+    work, _ = device_work(
+        ports=DevicePorts(resets=AppLoggedResets(app=app)),
+        app=app,
+        effect=ResetDevice(kind=ResetKind.SETTINGS),
+        queue=queue,
+    )
+    await work
+    assert app.hooks == ['before_reset', 'reset']
+
+
 async def test_reset_erases_what_the_app_names(tmp_path: Path) -> None:
     """Erase everything deletes the files the app names."""
     data = tmp_path / 'saved.db'

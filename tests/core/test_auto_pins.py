@@ -15,6 +15,7 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure, pin_at
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import wakeful
 from paperroute_transit.core.alert_model import AlertTie, Matched, Period
 from paperroute_transit.core.auto_model import AutoState, Before, Occurrence
@@ -35,7 +36,6 @@ from paperroute_transit.core.saved import (
     default_settings,
     seeded,
 )
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import Places, State
 from tests.core.alert_factories import alert
 from tests.core.chooser_walks import CHOSEN, CHOSEN_KEY, NEXT, REACH, TO_STAGE
@@ -161,7 +161,7 @@ def started(
         current=current,
     )
     state = trusted(
-        state=initial_state(saved=saved, now=when, stored=True, city=SYDNEY),
+        state=initial_state(saved=saved, now=when, city=SYDNEY),
     )
     state = step(state, Tick(now=when))[0]
     return boarded(state=state)
@@ -413,7 +413,7 @@ def restarted(*, auto: AutoState, current: int) -> State:
         view=LiveView.STOP,
         auto=auto,
     )
-    state = initial_state(saved=saved, now=at(8), stored=True, city=SYDNEY)
+    state = initial_state(saved=saved, now=at(8), city=SYDNEY)
     return trusted(state=state)
 
 

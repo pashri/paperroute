@@ -45,10 +45,10 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_testkit.core.factories import START
+from paperroute_testkit.core.kit_steps import device_of, step
 from paperroute_transit.core.chooser_view import ChooserView
 from paperroute_transit.core.messages import Effect, Event
 from paperroute_transit.core.rebuild import TRANSIT_ROWS
-from paperroute_transit.core.state import device_of, step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.stop_view import StopView
 from tests.core.test_rebuild import pinned

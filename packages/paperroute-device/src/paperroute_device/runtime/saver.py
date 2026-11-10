@@ -1,13 +1,13 @@
 """Write what the kit keeps, logging each kind of failure once."""
 
-# An app package keeps a twin of this module until it switches over.
-# pylint: disable=duplicate-code
-
 import asyncio
 import logging
+from typing import TYPE_CHECKING
 
-from paperroute_device.adapters.state_file import StateFile
 from paperroute_device.core.kit_effects import SaveState
+
+if TYPE_CHECKING:
+    from paperroute_device.runtime.ports import StateStore
 
 logger = logging.getLogger(__name__)
 
@@ -23,11 +23,11 @@ class StateSaver:
 
     Parameters
     ----------
-    states : StateFile
+    states : StateStore
         Where the state is kept.
     """
 
-    def __init__(self, *, states: StateFile) -> None:
+    def __init__(self, *, states: StateStore) -> None:
         self.states = states
         self.logged: set[ErrorKind] = set()
 

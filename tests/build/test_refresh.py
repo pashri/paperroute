@@ -22,6 +22,7 @@ from paperroute_sydney.build.tfnsw_sources import (
 )
 from paperroute_sydney.city import SYDNEY, SYDNEY_REF
 from paperroute_testkit.build.feed_zip import write_feed
+from paperroute_testkit.core.kit_steps import step
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.build import handoff as handoff_module
 from paperroute_transit.build import refresh as refresh_module
@@ -32,7 +33,6 @@ from paperroute_transit.build.sources import BuildParts, SourceSpec
 from paperroute_transit.build.swap import RefreshReport, TimetableCheckError
 from paperroute_transit.core.banners import timetable_banner
 from paperroute_transit.core.messages import TimetableSeen
-from paperroute_transit.core.state import step
 from tests.build.feed_server import FeedServer, Served, feed_server
 from tests.build.feeds import bus_feed, bus_files
 from tests.core.test_state import fresh

@@ -14,6 +14,7 @@ from paperroute_device.core.panel_views import NoticeView
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_hardware.core.knob_events import Knob, KnobTurned
 from paperroute_testkit.core.factories import START, departure, snapshot
+from paperroute_testkit.core.kit_steps import settings_posted, step
 from paperroute_testkit.core.steps import slept
 from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute_transit.core.alert_state import ALERT_EVERY
@@ -42,7 +43,6 @@ from paperroute_transit.core.realtime import (
     StopUpdate,
     TripRealtime,
 )
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import RELOAD_BEFORE, Cycle, State
 from paperroute_transit.core.state_views import current_view, live_stop_view
 from paperroute_transit.core.stop_view import HORIZON
@@ -498,7 +498,7 @@ def test_knob_turn_not_held() -> None:
 def test_settings_change_not_held() -> None:
     """A Settings edit during a held cycle draws at once."""
     state, _ = _held(on_map=False)
-    state, effects = step(state, SettingsChanged(larger_text=True))
+    state, effects = step(state, settings_posted(larger_text=True))
     assert len(_renders(effects=effects)) == 1
     assert not state.cycle.free
 

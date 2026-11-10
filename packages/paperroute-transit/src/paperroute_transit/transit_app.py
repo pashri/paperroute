@@ -1,9 +1,10 @@
-"""Transit's reducers behind the device kit's App contract."""
+"""The transit board as an app on the device kit."""
 
+import logging
 from collections.abc import Mapping
 from dataclasses import replace
 from datetime import datetime
-from typing import TYPE_CHECKING, Final, cast
+from typing import Final, cast
 
 from paperroute_device.core.app import App
 from paperroute_device.core.device_model import AppRow
@@ -13,14 +14,15 @@ from paperroute_device.core.kit_state import Step
 from paperroute_device.core.panel_views import InfoRow
 from paperroute_device.ports import Frame
 from paperroute_hardware.core.knob_events import KnobEvent
-from paperroute_transit.app_pins import BoardObserver, report_pins
+from paperroute_transit.adapters.board_routes import RESET_HINT
+from paperroute_transit.app_effects import filled
+from paperroute_transit.app_pins import pins_shown, report_pins
+from paperroute_transit.app_render import View, drawing
 from paperroute_transit.core.auto_model import holds_awake
 from paperroute_transit.core.banners import OFFLINE_PHRASE
-from paperroute_transit.core.city import City
 from paperroute_transit.core.device import app_status, power_guard, quiet_guard
 from paperroute_transit.core.messages import Effect, Event, ScreenView
 from paperroute_transit.core.panel_screens import (
-    RESET_HINT,
     TRANSIT_CONFIRM_COPY,
     transit_rows,
 )
@@ -41,7 +43,7 @@ from paperroute_transit.core.reducers import (
     ticked,
 )
 from paperroute_transit.core.refresh import needs_greys, noted
-from paperroute_transit.core.saved import Saved, default_saved
+from paperroute_transit.core.saved import Saved, default_saved, seeded
 from paperroute_transit.core.state_model import (
     Board,
     Cycle,
@@ -59,10 +61,9 @@ from paperroute_transit.core.state_views import (
     settled,
     slept_view,
 )
+from paperroute_transit.transit_run import TransitRun
 
-if TYPE_CHECKING:
-    from paperroute_transit.app_effects import VersionWatch
-    from paperroute_transit.city_parts import CityParts
+logger = logging.getLogger(__name__)
 
 QUIET_LABEL: Final[str] = 'Follow the timetable'
 
@@ -176,24 +177,13 @@ def compared(*, device: DeviceState) -> tuple[object, ...]:
 
 
 # pylint: disable-next=too-many-public-methods
-class TransitApp(App[State]):
+class TransitApp(TransitRun, App[State]):
     """
     The transit board as an app the device kit runs.
 
-    Every hook first refreshes the state's mirror of the device state,
-    so transit's reducers keep reading it.
-
-    Parameters
-    ----------
-    city : City
-        The city the board runs for.
-    parts : CityParts
-        The city's runtime wiring; the reducer hooks never read it.
-    observer : BoardObserver | None
-        Told of settings and pin changes; None tells no one.
-    watch : VersionWatch | None
-        Reads the timetable's version before each tick; None reads
-        nothing.
+    Every reducer hook first refreshes the state's mirror of the device
+    state, so transit's reducers keep reading it. The run's hooks are
+    `TransitRun`'s.
     """
 
     offline_phrase = OFFLINE_PHRASE
@@ -201,19 +191,6 @@ class TransitApp(App[State]):
     menu_rows = (REBUILD_ROW,)
     reset_hint = RESET_HINT
     confirm_copy = TRANSIT_CONFIRM_COPY
-
-    def __init__(
-        self,
-        *,
-        city: City,
-        parts: CityParts,
-        observer: BoardObserver | None = None,
-        watch: VersionWatch | None = None,
-    ) -> None:
-        self.city = city
-        self.parts = parts
-        self.observer = observer
-        self.watch = watch
 
     async def before_tick(self) -> object | None:
         """
@@ -277,17 +254,29 @@ class TransitApp(App[State]):
         Returns
         -------
         State
-            State from the saved section, or the city's defaults.
+            State from the saved section; without one, the seed pin with
+            its places filled in from the timetable, or else the city's
+            defaults. The settings and pins are reported.
         """
         saved = (
             section
             if isinstance(section, Saved)
             else default_saved(city=self.city)
         )
-        state = initial_state(
-            saved=saved, now=device.now, stored=stored, city=self.city,
+        if self.seed is not None and stored:
+            logger.info('seed ignored: the saved state is used')
+        elif self.seed is not None:
+            pin = filled(timetable=self.attached().timetable, pin=self.seed)
+            saved = seeded(pin=pin, city=self.city)
+            logger.info('state seeded from the command line or environment')
+        state = with_device(
+            state=initial_state(saved=saved, now=device.now, city=self.city),
+            device=device,
         )
-        return with_device(state=state, device=device)
+        if self.observer is not None:
+            self.observer.settings_seen(settings=state.settings)
+            pins_shown(observer=self.observer, places=state.places)
+        return state
 
     def render(
         self, *, state: State, device: DeviceState, banner: Banner | None,
@@ -322,15 +311,14 @@ class TransitApp(App[State]):
         Parameters
         ----------
         view : object
-            A view.
+            One of transit's views.
 
-        Raises
-        ------
-        NotImplementedError
-            Always: transit still draws through its own loop.
+        Returns
+        -------
+        Frame
+            The frame; a view with a map reuses the last map base.
         """
-        name = type(view).__name__
-        raise NotImplementedError(f'transit draws {name} itself')
+        return drawing(view=cast(View, view), maps=self.maps)()
 
     def on_knob(
         self, *, state: State, device: DeviceState, event: KnobEvent,

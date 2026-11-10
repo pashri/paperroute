@@ -1,8 +1,5 @@
 """Carry out the device's own effects and report its status."""
 
-# An app package keeps a twin of this module until it switches over.
-# pylint: disable=duplicate-code
-
 import asyncio
 import logging
 from collections.abc import Coroutine
@@ -56,7 +53,10 @@ PROBE_TIMEOUT: Final[float] = 10  # seconds
 
 
 class AppProbe(Protocol):
-    """Finds out what the app wants reported with the device's facts."""
+    """The app's part of the device's own work."""
+
+    async def before_reset(self) -> None:
+        """Stop the app's work a reset must not race."""
 
     async def probe(self) -> object:
         """
@@ -197,11 +197,12 @@ async def probed(
 async def reset(
     *,
     ports: DevicePorts,
+    app: AppProbe,
     effect: ResetDevice,
     queue: asyncio.Queue[object],
 ) -> None:
     """
-    Carry out a reset and post that it is done.
+    Let the app stop its work, carry out a reset and post that it is done.
 
     The reset holds the radio lock, so it waits for a join or a hotspot
     stop to finish.
@@ -210,11 +211,14 @@ async def reset(
     ----------
     ports : DevicePorts
         Device adapters.
+    app : AppProbe
+        Stops its own work before any file is deleted.
     effect : ResetDevice
         The reset asked for.
     queue : asyncio.Queue[object]
         Event queue.
     """
+    await app.before_reset()
     async with ports.radio:
         await ports.resets.reset(kind=effect.kind)
     await queue.put(ResetDone(kind=effect.kind))
@@ -364,7 +368,8 @@ def device_work(
     ports : DevicePorts
         Device adapters.
     app : AppProbe
-        Gives the facts' `app` part when probing.
+        Gives the facts' `app` part when probing, and stops its own work
+        before a reset.
     effect : DeviceEffect
         Effect.
     queue : asyncio.Queue[object]
@@ -380,7 +385,7 @@ def device_work(
             work = probe(ports=ports, app=app, queue=queue)
             return work, DeviceProbeFailed()
         case ResetDevice(kind=kind):
-            work = reset(ports=ports, effect=effect, queue=queue)
+            work = reset(ports=ports, app=app, effect=effect, queue=queue)
             return work, ResetDone(kind=kind)
     return setup_work(ports=ports, effect=effect, queue=queue)
 

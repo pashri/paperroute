@@ -1,8 +1,5 @@
 """Command line: run an app on the panel, in browsers or a window."""
 
-# A copy of the board app's command line, until it uses this one.
-# pylint: disable=duplicate-code
-
 import argparse
 import asyncio
 import logging
@@ -26,7 +23,13 @@ from paperroute_device.adapters.wifi import NmcliWifi, NullWifi
 from paperroute_device.core.app import App
 from paperroute_device.core.kit_events import QuitRequested
 from paperroute_device.logs import LastError, configure_logging
-from paperroute_device.ports import KeyStore, PowerControl, Resets, WifiControl
+from paperroute_device.ports import (
+    Clock,
+    KeyStore,
+    PowerControl,
+    Resets,
+    WifiControl,
+)
 from paperroute_device.runtime.app_web import AppWeb
 from paperroute_device.runtime.device_work import DevicePorts
 from paperroute_device.runtime.loop import run
@@ -229,9 +232,12 @@ def device_for(
     Returns
     -------
     DevicePorts
-        Wi-Fi, the system probe, the keys and the resets.
+        Wi-Fi, the system probe, the keys and the resets; a replaying
+        app gets Wi-Fi alone, no facts and no resets.
     """
     wifi = wifi_for(args=args)
+    if app.replaying():
+        return DevicePorts(wifi=wifi)
     keys = app.keys()
     probe = SystemProbe(
         wifi=wifi,
@@ -247,6 +253,25 @@ def device_for(
         erased=app.erased(args=args),
     )
     return DevicePorts(wifi=wifi, probe=probe, keys=keys, resets=resets)
+
+
+def clock_for(*, app: App[Any], zone: tzinfo) -> Clock:
+    """
+    Choose the clock the run keeps.
+
+    Parameters
+    ----------
+    app : App[Any]
+        The app, its adapters open; it may keep a clock of its own.
+    zone : tzinfo
+        The app's zone, or UTC.
+
+    Returns
+    -------
+    Clock
+        The app's clock, or else the system clock in the zone.
+    """
+    return app.clock() or SystemClock(zone=zone)
 
 
 def install_stop_signals(
@@ -447,7 +472,7 @@ def tk_main(
         with app.opened(args=args, last_error=last_error):
             ports = KitPorts(
                 display=monitor,
-                clock=SystemClock(zone=zone),
+                clock=clock_for(app=app, zone=zone),
                 states=StateFile(path=args.state, app=app),
                 power=power_for(args=args),
                 device=device_for(
@@ -562,7 +587,7 @@ def device_pages_for(
     args : argparse.Namespace
         Parsed arguments.
     app : App[Any]
-        The app, whose zone and reset hint the pages show.
+        The app, whose reset hint the pages show.
     web : AppWeb
         The app's part of the web pages: the nav, sheets and Data
         section.
@@ -585,7 +610,6 @@ def device_pages_for(
         panel=lambda: timings.panel,
         keys=device.keys,
         post=display.send,
-        zone=app.zone() or UTC,
         error_log=args.error_log,
         state_file=args.state,
         knobs=knob_state,
@@ -631,20 +655,21 @@ def web_main(
             web = app.web(args=args, timings=timings)
             display = board_display(web=web, app=app, timings=timings)
             device = device_for(args=args, app=app, last_error=last_error)
-            display.device = device_pages_for(
-                args=args,
-                app=app,
-                web=web,
-                timings=timings,
-                display=display,
-                device=device,
-                knob_state=lambda: knobs_state_for(
-                    wanted=args.knobs, knobs=knobs,
-                ),
-            )
+            if not app.replaying():
+                display.device = device_pages_for(
+                    args=args,
+                    app=app,
+                    web=web,
+                    timings=timings,
+                    display=display,
+                    device=device,
+                    knob_state=lambda: knobs_state_for(
+                        wanted=args.knobs, knobs=knobs,
+                    ),
+                )
             ports = KitPorts(
                 display=Displays(displays=[display, *shown]),
-                clock=SystemClock(zone=zone),
+                clock=clock_for(app=app, zone=zone),
                 states=StateFile(path=args.state, app=app),
                 power=power_for(args=args),
                 device=device,

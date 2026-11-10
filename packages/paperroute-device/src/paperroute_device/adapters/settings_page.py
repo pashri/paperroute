@@ -1,8 +1,5 @@
 """Serve the Settings page: the device's section and the app's own."""
 
-# A copy of the board app's settings handler, until it uses this one.
-# pylint: disable=duplicate-code
-
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import fields as dataclass_fields
 from dataclasses import replace
@@ -204,15 +201,41 @@ def device_reported(*, status: Mapping[str, object]) -> dict[str, str]:
     dict[str, str]
         The device's form values, over its defaults.
     """
-    values = device_values(settings=DeviceSettings())
+    return reported_over(
+        values=device_values(settings=DeviceSettings()), status=status,
+    )
+
+
+def reported_over(
+    *, values: dict[str, str], status: Mapping[str, object],
+) -> dict[str, str]:
+    """
+    Lay the reported form values over defaults.
+
+    Parameters
+    ----------
+    values : dict[str, str]
+        The default form values; only these names are read.
+    status : Mapping[str, object]
+        The status page's fields; `settings` holds the reported form
+        values.
+
+    Returns
+    -------
+    dict[str, str]
+        The defaults with each reported text value in place.
+    """
     reported = status.get('settings')
-    if isinstance(reported, Mapping):
-        values.update({
+    if not isinstance(reported, Mapping):
+        return values
+    return {
+        **values,
+        **{
             key: value
             for key, value in reported.items()
             if key in values and isinstance(value, str)
-        })
-    return values
+        },
+    }
 
 
 def line_filled(*, page: str, mark: str, lines: str) -> str:

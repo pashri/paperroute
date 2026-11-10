@@ -6,6 +6,7 @@ from datetime import time, timedelta
 from paperroute_device.core.kit_effects import SaveState
 from paperroute_device.core.kit_events import Tick
 from paperroute_testkit.core.factories import START, departure
+from paperroute_testkit.core.kit_steps import kit_of, kit_step, step
 from paperroute_testkit.core.steps import written
 from paperroute_transit.core.messages import (
     Effect,
@@ -18,7 +19,6 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import AutoWindow, Pin, pin_ref
 from paperroute_transit.core.pin_edits import on_pin_edit
 from paperroute_transit.core.places import toggled
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import Places, State
 from tests.core.test_places import FIRST as A
 from tests.core.test_places import SECOND as B
@@ -207,9 +207,11 @@ def saves(*, effects: tuple[Effect, ...]) -> list[SaveState]:
 
 def test_edit_is_saved() -> None:
     """A Tick past the save delay saves the edited pins."""
-    state, _ = step(three(), PinMoved(ref=ref(C), steps=-1))
-    late = Tick(now=state.now + timedelta(seconds=4))
-    _, effects = step(state, late)
+    kit, _ = kit_step(
+        kit=kit_of(state=three()), event=PinMoved(ref=ref(C), steps=-1),
+    )
+    late = Tick(now=kit.device.now + timedelta(seconds=4))
+    _, effects = kit_step(kit=kit, event=late)
     found = saves(effects=effects)
     assert found
     assert written(save=found[0]).pins == (A, C, B)
@@ -219,10 +221,10 @@ def test_edit_while_asleep_stays_asleep() -> None:
     """An edit while asleep reorders and saves but does not wake."""
     state = replace(asleep(), places=Places(pins=(A, B, C)))
     event = PinMoved(ref=ref(A), steps=1)
-    state, _ = step(state, event)
-    assert state.places.pins == (B, A, C)
-    assert state.panel.asleep
-    late = Tick(now=state.now + timedelta(seconds=4))
-    state, effects = step(state, late)
+    kit, _ = kit_step(kit=kit_of(state=state), event=event)
+    assert kit.app.places.pins == (B, A, C)
+    assert kit.device.panel.asleep
+    late = Tick(now=kit.device.now + timedelta(seconds=4))
+    kit, effects = kit_step(kit=kit, event=late)
     assert saves(effects=effects)
-    assert state.panel.asleep
+    assert kit.device.panel.asleep

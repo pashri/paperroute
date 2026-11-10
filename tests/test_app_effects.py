@@ -14,6 +14,11 @@ from google.transit import gtfs_realtime_pb2
 
 from paperroute_device.core.device_state import KitSaved
 from paperroute_device.core.kit_effects import Render, SaveState
+from paperroute_device.runtime.loop import run, ticker
+from paperroute_device.runtime.outputs import Outputs, carry_out, draw_pending
+from paperroute_device.runtime.ports import KitPorts
+from paperroute_device.runtime.saver import StateSaver
+from paperroute_device_testkit.device_fakes import FixedClock
 from paperroute_device_testkit.hardware_fakes import FrameRecorder
 from paperroute_sydney.city import (
     SYDNEY,
@@ -23,6 +28,7 @@ from paperroute_sydney.city import (
 )
 from paperroute_sydney.sydney_feeds import SydneyFeeds
 from paperroute_testkit.core.factories import pin_of, place
+from paperroute_testkit.core.kit_steps import QUIET_PARTS
 from paperroute_testkit.fakes import (
     STOP_POINT,
     BrokenTimetable,
@@ -37,8 +43,9 @@ from paperroute_testkit.render.factories import (
     view_of,
 )
 from paperroute_transit.adapters.tiles_db import NullTiles
-from paperroute_transit.app import MapRenderer, run, ticker
 from paperroute_transit.app_effects import VersionWatch, parse_feed
+from paperroute_transit.app_ports import Ports
+from paperroute_transit.app_render import MapRenderer
 from paperroute_transit.core.alert_model import (
     AlertPlaces,
     AlertsFetched,
@@ -53,7 +60,6 @@ from paperroute_transit.core.messages import (
     ChooserDeparturesLoaded,
     ColumnFailed,
     ColumnLoaded,
-    Event,
     FetchFeed,
     HolidaysLoaded,
     LineFailed,
@@ -83,10 +89,11 @@ from paperroute_transit.core.reach import (
     build_reach,
 )
 from paperroute_transit.core.realtime import RealtimeSnapshot
-from paperroute_transit.core.saved import Saved, seeded
+from paperroute_transit.core.saved import seeded
 from paperroute_transit.render.chooser import draw_chooser_view
 from paperroute_transit.render.stop_view import draw_stop_view
 from paperroute_transit.render.strip_view import draw_strip_view
+from paperroute_transit.transit_app import TransitApp
 from tests.app_factories import (
     AT,
     MAP_PIN,
@@ -98,35 +105,80 @@ from tests.app_factories import (
 )
 
 
-async def test_save_effect_writes_through_store() -> None:
-    """SaveState writes the saved state to the store and posts nothing."""
-    states = MemoryStates()
-    saved = seeded(pin=MAP_PIN, city=SYDNEY)
-    save = SaveState(
-        saved=KitSaved(device=saved.settings.device, app=saved),
+def kit_ports(
+    *,
+    display: FrameRecorder | None = None,
+    states: MemoryStates | None = None,
+) -> KitPorts:
+    """
+    Make the kit's ports on fakes, at the shared test time.
+
+    Parameters
+    ----------
+    display : FrameRecorder | None
+        Display; a new recorder by default.
+    states : MemoryStates | None
+        Saved state store; an empty one by default.
+
+    Returns
+    -------
+    KitPorts
+        The ports.
+    """
+    return KitPorts(
+        display=display or FrameRecorder(),
+        clock=FixedClock(at=AT),
+        states=states or MemoryStates(),
     )
-    posted = await posted_by(ports=ports_of(states=states), effects=[save])
-    assert states.saves == [saved]
-    assert not posted
 
 
-async def test_save_failure_is_logged_not_raised(
-    caplog: pytest.LogCaptureFixture,
+async def rendered(
+    *, app: TransitApp, ports: KitPorts, outputs: Outputs, render: Render,
 ) -> None:
-    """A failing write is logged once for the same message, never raised."""
-    states = MemoryStates(error=OSError(30, 'Read-only file system'))
-    saved = seeded(pin=MAP_PIN, city=SYDNEY)
-    save = SaveState(
-        saved=KitSaved(device=saved.settings.device, app=saved),
+    """
+    Carry out a Render through the kit's outputs, then draw it.
+
+    Parameters
+    ----------
+    app : TransitApp
+        The board, which draws its own views.
+    ports : KitPorts
+        The kit's adapters.
+    outputs : Outputs
+        What the kit's effects draw and write through.
+    render : Render
+        The render.
+    """
+    await carry_out(
+        effects=(render,),
+        ports=ports,
+        app=app,
+        queue=asyncio.Queue(),
+        tasks=set(),
+        outputs=outputs,
     )
-    with caplog.at_level(logging.ERROR):
-        await posted_by(ports=ports_of(states=states), effects=[save, save])
-    failures = [
-        record
-        for record in caplog.records
-        if record.message == 'saving state failed'
-    ]
-    assert len(failures) == 1
+    await draw_pending(ports=ports, app=app, outputs=outputs)
+
+
+def sydney_app(*, ports: Ports, seed: Pin | None = None) -> TransitApp:
+    """
+    Make Sydney's board attached to transit's ports.
+
+    Parameters
+    ----------
+    ports : Ports
+        Transit's adapters.
+    seed : Pin | None
+        Pin to start with when nothing is saved.
+
+    Returns
+    -------
+    TransitApp
+        The attached app.
+    """
+    app = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
+    app.attach(ports=ports, seed=seed)
+    return app
 
 
 @dataclass
@@ -172,15 +224,18 @@ async def test_version_error_does_not_quit(
     caplog: pytest.LogCaptureFixture,
 ) -> None:
     """A failing version read is logged once and the app keeps running."""
+    app = sydney_app(
+        ports=ports_of(timetable=VersionFailingTimetable()), seed=MAP_PIN,
+    )
     with caplog.at_level(logging.ERROR):
-        state = await run(
-            ports=ports_of(timetable=VersionFailingTimetable()),
-            seed=MAP_PIN,
+        kit = await run(
+            app=app,
+            ports=kit_ports(),
+            zone=SYDNEY.zone,
             tick_every=0.01,
             max_events=15,
-            city=SYDNEY,
         )
-    assert state.running
+    assert kit.running
     failures = [
         record
         for record in caplog.records
@@ -192,10 +247,11 @@ async def test_version_error_does_not_quit(
 async def test_timetable_version_change_posts_seen() -> None:
     """The ticker posts the version at start and again when it changes."""
     timetable = VersionedTimetable()
-    queue: asyncio.Queue[Event] = asyncio.Queue()
+    queue: asyncio.Queue[object] = asyncio.Queue()
     task = asyncio.create_task(
         ticker(
-            ports=ports_of(timetable=timetable),
+            app=sydney_app(ports=ports_of(timetable=timetable)),
+            ports=kit_ports(),
             queue=queue,
             every=0.01,
             pump=None,
@@ -425,17 +481,15 @@ async def test_match_places_posts_found() -> None:
 async def test_renders_each_view_type() -> None:
     """Every kind of view is drawn by its own renderer and shown."""
     display = FrameRecorder()
+    ports = kit_ports(display=display)
+    app = sydney_app(ports=ports_of())
+    outputs = Outputs(saver=StateSaver(states=ports.states))
     chooser = view_of(groups(focused=True))
-    await posted_by(
-        ports=ports_of(display=display),
-        effects=[
-            Render(view=STOP_VIEW),
-            Render(view=map_view()),
-            Render(view=STRIP_VIEW),
-            Render(view=strip_map_view()),
-            Render(view=chooser),
-        ],
-    )
+    views = (STOP_VIEW, map_view(), STRIP_VIEW, strip_map_view(), chooser)
+    for view in views:
+        await rendered(
+            app=app, ports=ports, outputs=outputs, render=Render(view=view),
+        )
     maps = MapRenderer(tiles=NullTiles())
     expected = [
         draw_stop_view(view=STOP_VIEW),
@@ -455,13 +509,13 @@ class TempNamingStates(MemoryStates):
 
     tries: int = 0
 
-    def save(self, *, saved: Saved) -> None:
+    def save(self, *, saved: KitSaved) -> None:
         """
         Fail like a read-only directory, naming a fresh temporary file.
 
         Parameters
         ----------
-        saved : Saved
+        saved : KitSaved
             Ignored.
 
         Raises
@@ -486,10 +540,10 @@ async def test_save_failure_naming_new_temp_files_logs_once(
     save = SaveState(
         saved=KitSaved(device=saved.settings.device, app=saved),
     )
+    saver = StateSaver(states=states)
     with caplog.at_level(logging.ERROR):
-        await posted_by(
-            ports=ports_of(states=states), effects=[save, save, save]
-        )
+        for _ in range(3):
+            await saver.save(effect=save)
     failures = [
         record
         for record in caplog.records

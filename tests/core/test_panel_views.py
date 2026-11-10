@@ -25,6 +25,7 @@ from paperroute_device.render.panel import BODY_FACE, MARGIN
 from paperroute_device_testkit.device_fakes import device_facts
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE
 from paperroute_testkit.core.factories import START
+from paperroute_testkit.core.kit_steps import QUIET_PARTS, device_of
 from paperroute_testkit.core.steps import device_rows
 from paperroute_transit.core.map_view import MapView, Marker
 from paperroute_transit.core.panel_screens import (
@@ -33,7 +34,6 @@ from paperroute_transit.core.panel_screens import (
 )
 from paperroute_transit.core.panel_views import sleep_map
 from paperroute_transit.core.saved import Quota
-from paperroute_transit.core.state import REDUCER_PARTS, device_of
 from paperroute_transit.core.state_model import State
 from paperroute_transit.transit_app import TransitApp
 from tests.core.test_rebuild import pinned
@@ -180,7 +180,7 @@ def test_phone_view_without_ip() -> None:
 
 def test_panel_view_only_with_menu_or_confirm() -> None:
     """Nothing panel-made shows with the menu closed."""
-    app = TransitApp(city=SYDNEY, parts=REDUCER_PARTS)
+    app = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
 
     def shown(*, state: State) -> object | None:
         device = device_of(state=state)

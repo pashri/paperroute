@@ -17,6 +17,7 @@ from paperroute_testkit.core.connection_factories import (
     work_legs,
 )
 from paperroute_testkit.core.factories import place
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import wakeful
 from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute_transit.core.chooser import ChooserState
@@ -44,7 +45,6 @@ from paperroute_transit.core.saved import (
     Settings,
     seeded,
 )
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import current_view, live_stop_view
 from tests.core.alert_factories import alert
@@ -86,7 +86,7 @@ def started(
         settings=Settings(board=BoardSettings(connection_map=mode)),
     )
     return wakeful(state=initial_state(
-        saved=saved, now=at(7, 30), stored=True,
+        saved=saved, now=at(7, 30),
         city=SYDNEY,
     ))
 
@@ -316,7 +316,7 @@ def test_auto_window_shows_connection() -> None:
     saved = replace(
         seeded(pin=PLAIN, city=SYDNEY), pins=(PLAIN, work), view=LiveView.MAP,
     )
-    state = initial_state(saved=saved, now=at(7, 29), stored=True, city=SYDNEY)
+    state = initial_state(saved=saved, now=at(7, 29), city=SYDNEY)
     state = replace(state, panel=replace(state.panel, facts=device_facts()))
     state = stepped(state=wakeful(state=state), event=Tick(now=at(7, 29)))
     state = stepped(state=state, event=Tick(now=at(7, 30)))

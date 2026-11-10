@@ -5,15 +5,17 @@ from datetime import date, datetime, time
 from pathlib import Path
 from typing import Final
 
+from paperroute_device.adapters.state_file import StateFile
 from paperroute_device.core.device_settings import (
     DeviceSettings,
     QuietMode,
     Window,
 )
+from paperroute_device.core.device_state import KitSaved
 from paperroute_sydney.city import SYDNEY, SYDNEY_ZONE, SydneyMode
 from paperroute_testkit.core.connection_factories import TWO_WAY, WORK
 from paperroute_testkit.core.factories import pin_at
-from paperroute_transit.adapters.state_file import JsonStateRepository
+from paperroute_testkit.core.kit_steps import QUIET_PARTS
 from paperroute_transit.core.auto_model import AutoState, Before, running
 from paperroute_transit.core.model import AutoWindow, Pin
 from paperroute_transit.core.saved import (
@@ -26,6 +28,7 @@ from paperroute_transit.core.saved import (
     Saved,
     Settings,
 )
+from paperroute_transit.transit_app import TransitApp
 from tests.golden.scenes import GOLDEN, baseline_bytes
 
 STATE: Final[Path] = GOLDEN / 'state.json'
@@ -74,10 +77,44 @@ RICH_SAVED: Final[Saved] = Saved(
 )
 
 
+def states(*, path: Path) -> StateFile:
+    """
+    Open the kit's state file with Sydney's board.
+
+    Parameters
+    ----------
+    path : Path
+        The file.
+
+    Returns
+    -------
+    StateFile
+        The file.
+    """
+    return StateFile(path=path, app=TransitApp(city=SYDNEY, parts=QUIET_PARTS))
+
+
+def kept(*, saved: Saved) -> KitSaved:
+    """
+    Split a board's saved state as the kit keeps it.
+
+    Parameters
+    ----------
+    saved : Saved
+        What the board keeps, device settings included.
+
+    Returns
+    -------
+    KitSaved
+        The device settings beside the board's state.
+    """
+    return KitSaved(device=saved.settings.device, app=saved)
+
+
 def test_state_file_bytes_match_baseline(tmp_path: Path) -> None:
     """Saving the rich state writes the baseline's bytes."""
     path = tmp_path / 'state.json'
-    JsonStateRepository(path=path, city=SYDNEY).save(saved=RICH_SAVED)
+    states(path=path).save(saved=kept(saved=RICH_SAVED))
     data = path.read_bytes()
     assert data == baseline_bytes(path=STATE, data=data)
 
@@ -86,8 +123,13 @@ def test_baseline_state_round_trips(tmp_path: Path) -> None:
     """The baseline loads as the rich state and saves as the same bytes."""
     path = tmp_path / 'state.json'
     path.write_bytes(STATE.read_bytes())
-    repository = JsonStateRepository(path=path, city=SYDNEY)
+    repository = states(path=path)
     loaded = repository.load()
-    assert (loaded.saved, loaded.stored) == (RICH_SAVED, True)
-    repository.save(saved=loaded.saved)
+    assert isinstance(loaded.app, Saved)
+    saved = replace(
+        loaded.app,
+        settings=replace(loaded.app.settings, device=loaded.device),
+    )
+    assert (saved, loaded.stored) == (RICH_SAVED, True)
+    repository.save(saved=kept(saved=saved))
     assert path.read_bytes() == STATE.read_bytes()

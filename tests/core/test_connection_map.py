@@ -25,6 +25,7 @@ from paperroute_testkit.core.factories import (
     snapshot,
     vehicle,
 )
+from paperroute_testkit.core.kit_steps import step
 from paperroute_transit.core.chains import Chain, Legs, leg_key
 from paperroute_transit.core.connection_map import (
     build_connection_map,
@@ -61,7 +62,6 @@ from paperroute_transit.core.patterns import PatternStop, TripPattern
 from paperroute_transit.core.positions import PositionsSnapshot
 from paperroute_transit.core.rides import rides_of
 from paperroute_transit.core.saved import ConnectionMap, LiveView
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_views import current_view, live_stop_view
 from paperroute_transit.core.stop_view import empty_text
 from paperroute_transit.core.tiles import ZOOMS

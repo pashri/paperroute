@@ -22,7 +22,7 @@ from paperroute_device.core.kit_effects import (
     Stop,
 )
 from paperroute_device.core.kit_events import QuitRequested, Tick
-from paperroute_device.core.kit_state import SAVE_WAIT
+from paperroute_device.core.kit_state import SAVE_WAIT, KitState
 from paperroute_device.core.panel_views import NoticeView
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -50,6 +50,15 @@ from paperroute_testkit.core.factories import (
     place,
     snapshot,
     vehicle,
+)
+from paperroute_testkit.core.kit_steps import (
+    QUIET_PARTS,
+    app_of,
+    device_of,
+    kit_of,
+    kit_step,
+    settings_posted,
+    step,
 )
 from paperroute_testkit.core.steps import (
     answer_fetches,
@@ -161,7 +170,6 @@ from paperroute_transit.core.saved import (
     default_settings,
     seeded,
 )
-from paperroute_transit.core.state import REDUCER_PARTS, device_of, step
 from paperroute_transit.core.state_model import (
     CLOCK_WAIT,
     FEED_IDLE,
@@ -218,7 +226,6 @@ from tests.core.chooser_walks import (
     UNTIL,
     chooser_departures,
 )
-from tests.helpers import kit_step
 
 ALL_SOURCES: Final[frozenset[str]] = SYDNEY.feeds.position_sources()
 PIN = Pin(
@@ -354,7 +361,7 @@ def test_initial_state_carries_city() -> None:
         saved=seeded(
             pin=PIN,
             city=SYDNEY,
-        ), now=START, stored=True, city=SYDNEY,
+        ), now=START, city=SYDNEY,
     )
     assert state.city is SYDNEY
     assert 'city' not in repr(state)
@@ -2050,8 +2057,8 @@ def check_places(*, before: State, after: State, event: Event) -> None:
 
 def check_saves(
     *,
-    before: State,
-    after: State,
+    before: KitState[State],
+    after: KitState[State],
     effects: tuple[Effect, ...],
     last: Saved | None,
 ) -> Saved | None:
@@ -2062,10 +2069,10 @@ def check_saves(
 
     Parameters
     ----------
-    before : State
-        State before the event.
-    after : State
-        State after the event.
+    before : KitState[State]
+        Kit state before the event.
+    after : KitState[State]
+        Kit state after the event.
     effects : tuple[Effect, ...]
         Effects returned.
     last : Saved | None
@@ -2076,23 +2083,24 @@ def check_saves(
     Saved | None
         What is now last saved.
     """
-    changed_at = before.kit.changed_at
+    changed_at = before.changed_at
+    now = after.device.now
     for save in effects_of(effects=effects, kind=SaveState):
         saved = written(save=save)
-        counted = replace(saved, quota=after.quota)
-        assert counted == saved_of(state=after)
+        counted = replace(saved, quota=after.app.quota)
+        assert counted == saved_of(state=app_of(kit=after))
         assert saved != last
         last = saved
-        before_saved = last_saved(state=before)
+        before_saved = last_saved(kit=before)
         if Stop() in effects or before_saved is None:
             continue
         if quota_only(before=before_saved, after=saved):
-            quota_at = before.kit.written_at
+            quota_at = before.written_at
             assert quota_at is not None
-            assert after.now - quota_at >= QUOTA_SAVE_EVERY
+            assert now - quota_at >= QUOTA_SAVE_EVERY
             continue
         if changed_at is not None:
-            waited = after.now.timestamp() - changed_at.timestamp()
+            waited = now.timestamp() - changed_at.timestamp()
             assert waited >= SAVE_WAIT.total_seconds()
     return last
 
@@ -2141,7 +2149,7 @@ def test_step_invariants_asleep_on_a_view_without_a_map(
         saved=replace(
             default_saved(city=SYDNEY),
             view=view,
-        ), now=night, stored=True,
+        ), now=night,
         city=SYDNEY,
     )
     trip = replace(departure(departs=night), shape_id='b:1')
@@ -2173,23 +2181,26 @@ def test_step_invariants(
 ) -> None:
     """No event sequence breaks the reducer's invariants."""
     start, events = case
-    state = initial_state(saved=saved, now=start, stored=stored, city=SYDNEY)
-    last = last_saved(state=state)
+    state = initial_state(saved=saved, now=start, city=SYDNEY)
+    kit = kit_of(state=state, stored=stored)
+    last = last_saved(kit=kit)
     for item in events:
         event = (
             answered(state=state, answer=item)
             if isinstance(item, Answer)
             else item
         )
-        before = state
-        state, effects = step(before, event)
+        before = kit
+        kit, effects = kit_step(kit=before, event=event)
+        after = app_of(kit=kit)
         check_effects(
-            before=before, after=state, event=event, effects=effects
+            before=state, after=after, event=event, effects=effects
         )
-        check_places(before=before, after=state, event=event)
+        check_places(before=state, after=after, event=event)
         last = check_saves(
-            before=before, after=state, effects=effects, last=last
+            before=before, after=kit, effects=effects, last=last
         )
+        state = after
 
 
 @dataclass
@@ -2519,7 +2530,6 @@ def test_no_destination_map_caps_patterns() -> None:
     state = initial_state(
         saved=seeded(pin=pin, city=SYDNEY),
         now=START,
-        stored=True,
         city=SYDNEY,
     )
     state = loaded(state=state, count=500)
@@ -2551,7 +2561,6 @@ def no_destination_map(*, count: int) -> State:
     state = initial_state(
         saved=seeded(pin=pin, city=SYDNEY),
         now=START,
-        stored=True,
         city=SYDNEY,
     )
     return loaded(state=state, count=count, shaped=True)
@@ -2680,7 +2689,6 @@ def test_top_turn_without_pins_does_nothing() -> None:
         initial_state(
             saved=default_saved(city=SYDNEY),
             now=START,
-            stored=True,
             city=SYDNEY,
         ),
         Tick(now=START),
@@ -2882,16 +2890,16 @@ def at(*, seconds: int) -> Tick:
 
 def test_save_waits_three_seconds_after_last_change() -> None:
     """A change is saved once, on the first tick 3 s after it."""
-    state, _ = step(pinned(), at(seconds=10))
-    state, _ = step(state, HOLD)
-    state, _ = step(state, at(seconds=11))
-    state, _ = step(state, top(steps=1))
-    state, effects = step(state, at(seconds=13))
+    kit = kit_of(state=pinned())
+    for event in (at(seconds=10), HOLD, at(seconds=11), top(steps=1)):
+        kit, _ = kit_step(kit=kit, event=event)
+    kit, effects = kit_step(kit=kit, event=at(seconds=13))
     assert not saves(effects=effects)
-    state, effects = step(state, at(seconds=11 + 3))
+    kit, effects = kit_step(kit=kit, event=at(seconds=11 + 3))
+    state = app_of(kit=kit)
     assert saves(effects=effects) == [save_of(state=state)]
-    assert last_saved(state=state) == saved_of(state=state)
-    _, effects = step(state, at(seconds=20))
+    assert last_saved(kit=kit) == saved_of(state=state)
+    _, effects = kit_step(kit=kit, event=at(seconds=20))
     assert not saves(effects=effects)
     assert SAVE_WAIT == timedelta(seconds=3)
 
@@ -2899,11 +2907,12 @@ def test_save_waits_three_seconds_after_last_change() -> None:
 def test_first_tick_saves_when_never_stored() -> None:
     """With no file yet, the first tick writes one."""
     saved = seeded(pin=PIN, city=SYDNEY)
-    state = initial_state(saved=saved, now=START, stored=False, city=SYDNEY)
-    assert state.kit.saved is None
-    state, effects = step(state, Tick(now=START))
+    state = initial_state(saved=saved, now=START, city=SYDNEY)
+    kit = kit_of(state=state, stored=False)
+    assert kit.saved is None
+    kit, effects = kit_step(kit=kit, event=Tick(now=START))
     assert [written(save=save) for save in saves(effects=effects)] == [saved]
-    _, effects = step(state, at(seconds=60))
+    _, effects = kit_step(kit=kit, event=at(seconds=60))
     assert not saves(effects=effects)
 
 
@@ -2913,9 +2922,10 @@ def test_no_save_without_change() -> None:
     for _ in LIVE_VIEWS:
         state, _ = step(state, PRESS)
     base = saved_of(state=state)
+    kit = kit_of(state=state)
     writes: list[SaveState] = []
     for seconds in range(0, 3600, 5):
-        state, effects = step(state, at(seconds=seconds))
+        kit, effects = kit_step(kit=kit, event=at(seconds=seconds))
         writes.extend(saves(effects=effects))
     assert writes
     assert len(writes) <= 6
@@ -2925,8 +2935,9 @@ def test_no_save_without_change() -> None:
 
 def test_quit_saves_unsaved_changes_first() -> None:
     """Quitting with an unsaved change saves before stopping."""
-    state, _ = step(pinned(), HOLD)
-    state, effects = step(state, QuitRequested())
+    kit, _ = kit_step(kit=kit_of(state=pinned()), event=HOLD)
+    kit, effects = kit_step(kit=kit, event=QuitRequested())
+    state = app_of(kit=kit)
     assert effects == (save_of(state=state), Stop())
     assert not state.running
 
@@ -2942,7 +2953,7 @@ def test_new_timetable_version_matches_every_place() -> None:
         unpinned=ELSEWHERE,
         view=LiveView.STOP,
     )
-    state = initial_state(saved=saved, now=START, stored=True, city=SYDNEY)
+    state = initial_state(saved=saved, now=START, city=SYDNEY)
     state = loaded(state=state)
     state, effects = step(state, TimetableSeen(version='v2'))
     origins = tuple(pin.origin for pin in PINS)
@@ -3104,12 +3115,12 @@ def test_timetable_seen_loads_holidays() -> None:
 
 def test_settings_reach_stop_view() -> None:
     """Larger text and inverted lists show in the redrawn Stop view."""
-    state, _ = step(pinned(), SettingsChanged(larger_text=True))
+    state, _ = step(pinned(), settings_posted(larger_text=True))
     state, _ = step(state, Tick(now=START + timedelta(seconds=5)))
     assert isinstance(state.last_view, StopView)
     assert state.last_view.large
     assert not state.last_view.inverted
-    state, _ = step(state, SettingsChanged(inverted_lists=True))
+    state, _ = step(state, settings_posted(inverted_lists=True))
     state, _ = step(state, Tick(now=START + timedelta(seconds=10)))
     assert isinstance(state.last_view, StopView)
     assert state.last_view.inverted
@@ -3133,7 +3144,6 @@ def test_auto_saved_and_restored() -> None:
     assert initial_state(
         saved=saved,
         now=START,
-        stored=True,
         city=SYDNEY,
     ).auto == auto
 
@@ -3417,53 +3427,55 @@ def test_sleep_screen_held_during_clock_wait() -> None:
     assert [type(render.view) for render in renders] == [SleepView]
 
 
-def test_kit_step_keeps_a_pending_save_across_calls() -> None:
+def test_kit_steps_keep_a_pending_save_across_calls() -> None:
     """A settings change made in one call is saved by a later call's tick."""
-    state, _ = kit_step(state=fresh(), event=Tick(now=START))
-    state, _ = kit_step(state=state, event=SettingsChanged(larger_text=True))
-    assert state.kit.changed_at == START
-    state, effects = kit_step(
-        state=state, event=Tick(now=START + timedelta(seconds=1)),
+    kit, _ = kit_step(kit=kit_of(state=fresh()), event=Tick(now=START))
+    kit, _ = kit_step(kit=kit, event=settings_posted(larger_text=True))
+    assert kit.changed_at == START
+    kit, effects = kit_step(
+        kit=kit, event=Tick(now=START + timedelta(seconds=1)),
     )
     assert not [e for e in effects if isinstance(e, SaveState)]
-    _, effects = kit_step(state=state, event=Tick(now=START + SAVE_WAIT))
+    _, effects = kit_step(kit=kit, event=Tick(now=START + SAVE_WAIT))
     [save] = [e for e in effects if isinstance(e, SaveState)]
     assert isinstance(save.saved, KitSaved)
     assert save.saved.device.larger_text
 
 
-def test_kit_step_keeps_the_sleep_frame_flag() -> None:
+def test_kit_steps_keep_the_sleep_frame_flag() -> None:
     """A wake after a drawn sleep frame redraws in full."""
-    state, _ = kit_step(state=loaded(state=fresh()), event=Tick(now=START))
+    kit, _ = kit_step(
+        kit=kit_of(state=loaded(state=fresh())), event=Tick(now=START),
+    )
     index = tuple(MenuRow).index(MenuRow.SLEEP)
     events: tuple[Event, ...] = (
         KnobsHeld(),
         KnobTurned(knob=Knob.BOTTOM, steps=index),
     )
     for event in events:
-        state, _ = kit_step(state=state, event=event)
-    state, _ = kit_step(state=state, event=PRESS)
-    assert state.panel.asleep
-    assert state.kit.last_was_sleep
-    state, effects = kit_step(state=state, event=PRESS)
+        kit, _ = kit_step(kit=kit, event=event)
+    kit, _ = kit_step(kit=kit, event=PRESS)
+    assert kit.device.panel.asleep
+    assert kit.device.last_was_sleep
+    kit, effects = kit_step(kit=kit, event=PRESS)
     [render] = [e for e in effects if isinstance(e, Render)]
     assert isinstance(render.view, StopView)
     assert render.full
-    assert not state.kit.last_was_sleep
+    assert not kit.device.last_was_sleep
 
 
 def test_knob_turn_draws_during_a_cycle_wait() -> None:
     """A turn while a cycle waits for its feeds is drawn at once."""
-    state, _ = kit_step(state=loaded(state=fresh()), event=PRESS)
+    state, _ = step(loaded(state=fresh()), PRESS)
     held_at = START + timedelta(seconds=5 * 60 + 2)
-    state, effects = kit_step(state=state, event=Tick(now=held_at))
+    state, effects = step(state, Tick(now=held_at))
     assert not [e for e in effects if isinstance(e, Render)]
     turn = KnobTurned(knob=Knob.BOTTOM, steps=1)
-    app = TransitApp(city=SYDNEY, parts=REDUCER_PARTS)
+    app = TransitApp(city=SYDNEY, parts=QUIET_PARTS)
     begun_state = app.begin(
         state=state, device=device_of(state=state), event=turn,
     )
     assert begun_state.cycle.free
-    state, effects = kit_step(state=state, event=turn)
+    state, effects = step(state, turn)
     assert len([e for e in effects if isinstance(e, Render)]) == 1
     assert not state.cycle.free

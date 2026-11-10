@@ -13,6 +13,7 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_sydney.city import SYDNEY_ZONE
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import step_answered
 from paperroute_transit.core.alert_match import Listed, listed_alerts
 from paperroute_transit.core.alert_model import (
@@ -32,7 +33,6 @@ from paperroute_transit.core.messages import FetchFeed
 from paperroute_transit.core.model import Pin
 from paperroute_transit.core.places import shown
 from paperroute_transit.core.saved import LiveView, Lookahead
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import saved_of
 from paperroute_transit.core.stop_view import StopView

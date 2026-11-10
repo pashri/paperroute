@@ -95,12 +95,11 @@ def begun(*, saved: Saved, now: datetime = START) -> State:
         The state.
     """
     state = initial_state(
-        saved=saved, now=now, stored=True, city=city_under_test(),
+        saved=saved, now=now, city=city_under_test(),
     )
     started = now - LOADING_WAIT
     refresh = replace(state.refresh, started_at=started)
-    kit = replace(state.kit, started_at=started)
-    return replace(state, refresh=refresh, kit=kit)
+    return replace(state, refresh=refresh)
 
 
 def place(

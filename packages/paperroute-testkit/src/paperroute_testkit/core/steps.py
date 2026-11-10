@@ -9,9 +9,11 @@ from paperroute_device.core.device_model import ResetKind
 from paperroute_device.core.device_settings import Window
 from paperroute_device.core.device_state import KitSaved
 from paperroute_device.core.kit_effects import SaveState
+from paperroute_device.core.kit_state import KitState
 from paperroute_device.core.panel_screens import device_view
 from paperroute_device.core.panel_views import InfoRow
 from paperroute_device.core.sleep import slept as kit_slept
+from paperroute_testkit.core.kit_steps import device_of, step
 from paperroute_transit.core.messages import (
     Effect,
     Event,
@@ -20,7 +22,6 @@ from paperroute_transit.core.messages import (
 )
 from paperroute_transit.core.panel_screens import transit_rows
 from paperroute_transit.core.saved import Saved
-from paperroute_transit.core.state import device_of, step
 from paperroute_transit.core.state_model import State, with_device
 from paperroute_transit.core.state_views import saved_of
 
@@ -259,19 +260,19 @@ def written(*, save: SaveState) -> Saved:
     return unpacked(saved=save.saved)
 
 
-def last_saved(*, state: State) -> Saved | None:
+def last_saved(*, kit: KitState[State]) -> Saved | None:
     """
-    Read what the kit last saved for a state.
+    Read what the kit last saved.
 
     Parameters
     ----------
-    state : State
-        State.
+    kit : KitState[State]
+        Kit state.
 
     Returns
     -------
     Saved | None
         What was last saved, or None before the first save.
     """
-    saved = state.kit.saved
+    saved = kit.saved
     return None if saved is None else unpacked(saved=saved)

@@ -1,13 +1,8 @@
-"""The pins and view, kept in a schema-versioned JSON file."""
+"""The board's section of the state file: the pins, view and settings."""
 
-import contextlib
-import json
 import logging
-import time
 from collections.abc import Collection
 from datetime import date, tzinfo
-from pathlib import Path
-from typing import Final
 
 from pydantic import (
     AwareDatetime,
@@ -17,9 +12,7 @@ from pydantic import (
     ValidationError,
 )
 
-from paperroute_device.adapters.atomic_file import write_atomic
-from paperroute_device.core.device_settings import DeviceSettings
-from paperroute_device.core.sections import DEVICE_SCHEMA
+from paperroute_device.adapters.state_file import repaired_settings
 from paperroute_transit.adapters.state_auto import (
     EMPTY_AUTO,
     AutoWindowModel,
@@ -41,20 +34,11 @@ from paperroute_transit.adapters.state_change import (
     repaired_ways,
     route_names,
 )
-from paperroute_transit.adapters.state_migrations import (
-    BOARD_SCHEMA,
-    SCHEMA_VERSION,
-    migrate,
-)
+from paperroute_transit.adapters.state_migrations import BOARD_SCHEMA
 from paperroute_transit.adapters.state_settings import (
     BoardSettingsModel,
-    DeviceSettingsModel,
     board_settings_from_model,
     board_settings_to_model,
-    device_settings_from_model,
-    device_settings_to_model,
-    repaired_device_settings,
-    repaired_settings,
 )
 from paperroute_transit.core.auto_model import AutoState, Before
 from paperroute_transit.core.city import City
@@ -73,14 +57,9 @@ from paperroute_transit.core.saved import (
     Settings,
     default_saved,
 )
-from paperroute_transit.ports import Loaded
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_PATH: Final[Path] = Path('/var/lib/paperroute/state.json')
-TEMP_PREFIX: Final[str] = '.state.json.'
-BAD_PREFIX: Final[str] = 'state.json.bad-'
-BAD_KEPT: Final[int] = 2
 
 
 class StopModel(BaseModel):
@@ -159,15 +138,6 @@ class QuotaModel(BaseModel):
     calls: int = Field(ge=0)
 
 
-class DeviceSectionModel(BaseModel):
-    """What the device keeps for itself, as stored."""
-
-    model_config = ConfigDict(extra='forbid', frozen=True)
-
-    schema_version: int
-    settings: DeviceSettingsModel
-
-
 class BoardSectionModel(BaseModel):
     """What the transit board keeps, as stored."""
 
@@ -181,16 +151,6 @@ class BoardSectionModel(BaseModel):
     settings: BoardSettingsModel
     quota: QuotaModel
     auto: AutoModel
-
-
-class StateModel(BaseModel):
-    """The whole file."""
-
-    model_config = ConfigDict(extra='forbid', frozen=True)
-
-    schema_version: int
-    device: DeviceSectionModel
-    board: BoardSectionModel
 
 
 def stop_to_model(*, place: StopPlace) -> StopModel:
@@ -434,26 +394,6 @@ def auto_from_model(*, model: AutoModel, zone: tzinfo) -> AutoState:
     )
 
 
-def device_section(*, settings: DeviceSettings) -> DeviceSectionModel:
-    """
-    Convert the device's settings to its stored section.
-
-    Parameters
-    ----------
-    settings : DeviceSettings
-        The device's settings.
-
-    Returns
-    -------
-    DeviceSectionModel
-        The section at `DEVICE_SCHEMA`.
-    """
-    return DeviceSectionModel(
-        schema_version=DEVICE_SCHEMA,
-        settings=device_settings_to_model(settings=settings),
-    )
-
-
 def board_section(*, saved: Saved) -> BoardSectionModel:
     """
     Convert the board's part of the saved state to its stored section.
@@ -481,64 +421,44 @@ def board_section(*, saved: Saved) -> BoardSectionModel:
     )
 
 
-def to_model(*, saved: Saved) -> StateModel:
+def from_model(*, model: BoardSectionModel, city: City) -> Saved:
     """
-    Convert the saved state to its stored form.
+    Convert a stored board section back, repairing what can be repaired.
 
     Parameters
     ----------
-    saved : Saved
-        The pins and view.
-
-    Returns
-    -------
-    StateModel
-        The model to write.
-    """
-    return StateModel(
-        schema_version=SCHEMA_VERSION,
-        device=device_section(settings=saved.settings.device),
-        board=board_section(saved=saved),
-    )
-
-
-def from_model(*, model: StateModel, city: City) -> Saved:
-    """
-    Convert a stored state back, repairing what can be repaired.
-
-    Parameters
-    ----------
-    model : StateModel
-        The stored state.
+    model : BoardSectionModel
+        The stored section.
     city : City
         The city: its time zone and default pin.
 
     Returns
     -------
     Saved
-        The state. The current index is clamped into range, and no pins
-        with no unpinned place gives the city's default pin.
+        The board's state, with the city's default device settings. The
+        current index is clamped into range, and no pins with no
+        unpinned place gives the city's default pin.
     """
-    board = model.board
-    pins = tuple(pin_from_model(model=pin) for pin in board.pins)
+    pins = tuple(pin_from_model(model=pin) for pin in model.pins)
     unpinned = (
         None
-        if board.unpinned is None
-        else pin_from_model(model=board.unpinned)
+        if model.unpinned is None
+        else pin_from_model(model=model.unpinned)
     )
     if not pins and unpinned is None:
         unpinned = city.default_pin
+    defaults = default_saved(city=city).settings
     return Saved(
         pins=pins,
-        current=min(board.current, max(len(pins) - 1, 0)),
+        current=min(model.current, max(len(pins) - 1, 0)),
         unpinned=unpinned,
-        view=board.view,
+        view=model.view,
         settings=Settings(
-            device=device_settings_from_model(model=model.device.settings),
-            board=board_settings_from_model(model=board.settings),
+            device=defaults.device,
+            board=board_settings_from_model(model=model.settings),
         ),
-        quota=Quota(day=board.quota.day, calls=board.quota.calls),
-        auto=auto_from_model(model=board.auto, zone=city.zone),
+        quota=Quota(day=model.quota.day, calls=model.quota.calls),
+        auto=auto_from_model(model=model.auto, zone=city.zone),
     )
 
 
@@ -764,113 +684,6 @@ def known_before(*, auto: object, mode_ids: Collection[str]) -> object:
     return {**auto, 'before': None}
 
 
-def bad_stamp(path: Path) -> int:
-    """
-    Give the time a moved-aside file was moved.
-
-    Parameters
-    ----------
-    path : Path
-        A ``state.json.bad-<seconds>`` file.
-
-    Returns
-    -------
-    int
-        The seconds in its name; 0 when they aren't a number.
-    """
-    stamp = path.name.removeprefix(BAD_PREFIX)
-    return int(stamp) if stamp.isdecimal() else 0
-
-
-def state_text(*, path: Path) -> str:
-    """
-    Read the state file's text.
-
-    Parameters
-    ----------
-    path : Path
-        The file.
-
-    Returns
-    -------
-    str
-        Its contents.
-
-    Raises
-    ------
-    OSError
-        When it is not a regular file or can't be read.
-    UnicodeDecodeError
-        When it is not UTF-8.
-    """
-    if not path.is_file():
-        raise OSError('state.json is not a regular file')
-    return path.read_text(encoding='utf-8')
-
-
-def state_model_of(*, text: str, city: City) -> StateModel:
-    """
-    Parse the file's text, migrating and repairing it first.
-
-    Parameters
-    ----------
-    text : str
-        The file's contents.
-    city : City
-        The city: pins of a kind it does not declare are dropped, and
-        missing or reset settings take its defaults.
-
-    Returns
-    -------
-    StateModel
-        The stored state.
-
-    Raises
-    ------
-    ValueError
-        When it is not JSON, not an object, or not valid after repair.
-    RecursionError
-        When it is nested too deeply to parse.
-    """
-    data = json.loads(text)
-    if not isinstance(data, dict):
-        raise ValueError('state.json is not an object')
-    migrated = migrate(data=data, city=city)
-    return StateModel.model_validate({
-        **migrated,
-        'device': repaired_device(section=migrated.get('device'), city=city),
-        'board': repaired_board(section=migrated.get('board'), city=city),
-    })
-
-
-def repaired_device(*, section: object, city: City) -> dict[str, object]:
-    """
-    Repair the migrated device section.
-
-    Parameters
-    ----------
-    section : object
-        The migrated section, as stored.
-    city : City
-        The city, whose defaults reset settings take.
-
-    Returns
-    -------
-    dict[str, object]
-        The section with unknown settings dropped quietly and bad ones
-        reset; all defaults when it is missing or not an object.
-    """
-    defaults = device_section(
-        settings=default_saved(city=city).settings.device,
-    ).model_dump(mode='json')
-    if not isinstance(section, dict):
-        logger.warning('state.json device section unusable, resetting it')
-        return defaults
-    return repaired_device_settings(
-        data=section, defaults=defaults['settings'],
-    )
-
-
 def repaired_board(*, section: object, city: City) -> dict[str, object]:
     """
     Repair the migrated board section.
@@ -905,95 +718,3 @@ def repaired_board(*, section: object, city: City) -> dict[str, object]:
             mode_ids=city.mode_ids,
         ),
     )
-
-
-class JsonStateRepository:
-    """
-    The saved state in a JSON file.
-
-    Parameters
-    ----------
-    path : Path
-        The file.
-    city : City
-        The city the state is kept for.
-    """
-
-    def __init__(self, *, path: Path, city: City) -> None:
-        self.path = path
-        self.city = city
-
-    def load(self) -> Loaded:
-        """
-        Read the file, falling back to the defaults when it is unusable.
-
-        Returns
-        -------
-        Loaded
-            The saved state; `stored` is False without a usable file.
-        """
-        self.remove_stale_temps()
-        if not self.path.exists() and not self.path.is_symlink():
-            return Loaded(saved=default_saved(city=self.city), stored=False)
-        try:
-            model = state_model_of(
-                text=state_text(path=self.path), city=self.city,
-            )
-        except (OSError, UnicodeDecodeError, ValueError, RecursionError):
-            return self.defaults_after_error()
-        saved = from_model(model=model, city=self.city)
-        return Loaded(saved=saved, stored=True)
-
-    def save(self, *, saved: Saved) -> None:
-        """
-        Write the saved state.
-
-        Parameters
-        ----------
-        saved : Saved
-            The pins and view.
-
-        Raises
-        ------
-        OSError
-            When the file can't be written.
-        """
-        text = to_model(saved=saved).model_dump_json(indent=2)
-        write_atomic(path=self.path, text=text, prefix=TEMP_PREFIX)
-
-    def remove_stale_temps(self) -> None:
-        """Delete temp files a power cut left behind."""
-        for stale in self.path.parent.glob(f'{TEMP_PREFIX}*'):
-            with contextlib.suppress(OSError):
-                stale.unlink()
-
-    def defaults_after_error(self) -> Loaded:
-        """
-        Log the failure, move the file aside and give the defaults.
-
-        The file is renamed rather than left in place, so the first save
-        of the defaults doesn't destroy the pins it holds.
-
-        Returns
-        -------
-        Loaded
-            The defaults, not stored.
-        """
-        logger.error('state.json unusable, using defaults', exc_info=True)
-        with contextlib.suppress(OSError):
-            self.path.replace(
-                self.path.with_name(f'{BAD_PREFIX}{int(time.time())}'),
-            )
-            self.remove_old_bad_files()
-        return Loaded(saved=default_saved(city=self.city), stored=False)
-
-    def remove_old_bad_files(self) -> None:
-        """Delete all but the newest `BAD_KEPT` moved-aside files."""
-        bad = sorted(
-            self.path.parent.glob(f'{BAD_PREFIX}*'),
-            key=bad_stamp,
-            reverse=True,
-        )
-        for old in bad[BAD_KEPT:]:
-            with contextlib.suppress(OSError):
-                old.unlink()

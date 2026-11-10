@@ -20,6 +20,7 @@ import pytest
 
 import paperroute_device.adapters.tk_monitor as tk_monitor
 from paperroute_device import cli
+from paperroute_device.adapters.clocks import SystemClock
 from paperroute_device.adapters.resets import FileResets, NullResets
 from paperroute_device.adapters.state_file import DEFAULT_PATH, StateFile
 from paperroute_device.adapters.web_display import WebDisplay
@@ -263,6 +264,56 @@ async def test_device_for_probes_and_resets_every_key(
     )
     assert keyless.keys == ()
     assert isinstance(keyless.resets, NullResets)
+
+
+class ReplayApp(KeyedApp):
+    """A keyed app replaying recordings on a clock of its own."""
+
+    def replaying(self) -> bool:
+        """
+        Say the run replays recordings.
+
+        Returns
+        -------
+        bool
+            Always True.
+        """
+        return True
+
+    def clock(self) -> FixedClock:
+        """
+        Give the replay's clock.
+
+        Returns
+        -------
+        FixedClock
+            A clock stopped at the start.
+        """
+        return FixedClock(at=START)
+
+
+def test_a_replaying_app_gets_no_probe_keys_or_resets(
+    tmp_path: Path,
+) -> None:
+    """A replay keeps Wi-Fi alone, and runs on the app's own clock."""
+    key = DeviceKey(
+        name='a', credential=TEST_KEY, store=FakeKeys(), display_name='A',
+    )
+    app = ReplayApp(keys=(key,), data=tmp_path / 'app.db')
+    args = argparse.Namespace(
+        wifi=False,
+        power=True,
+        state=tmp_path / 'state.json',
+        version_file=None,
+    )
+    device = cli.device_for(
+        args=args, app=app, last_error=LastError(zone=HOBART),
+    )
+    assert device.probe is None
+    assert device.keys == ()
+    assert isinstance(device.resets, NullResets)
+    assert cli.clock_for(app=app, zone=HOBART).now() == START
+    assert isinstance(cli.clock_for(app=FakeApp(), zone=HOBART), SystemClock)
 
 
 @pytest.mark.usefixtures('restored_logging')

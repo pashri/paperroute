@@ -16,10 +16,10 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_testkit.core.factories import START, line_pattern, live, train
+from paperroute_testkit.core.kit_steps import step
 from paperroute_transit.core.cycle import cycle_held
 from paperroute_transit.core.messages import Event
 from paperroute_transit.core.saved import LiveView
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.state_views import live_stop_view
 from paperroute_transit.core.strip_follow import origin_of

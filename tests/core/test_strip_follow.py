@@ -14,6 +14,7 @@ from paperroute_testkit.core.factories import (
     live,
     train,
 )
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.strip_factories import (
     KEY,
     PIN,
@@ -34,7 +35,6 @@ from paperroute_transit.core.reach import (
 )
 from paperroute_transit.core.reach_layout import LineExit
 from paperroute_transit.core.saved import LiveView
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.core.strip_follow import (
     common_pairs,

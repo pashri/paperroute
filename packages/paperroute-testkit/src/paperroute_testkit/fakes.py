@@ -3,14 +3,17 @@
 import asyncio
 import sqlite3
 from collections.abc import Collection
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import date, datetime
 from pathlib import Path
-from typing import Final
+from typing import Final, cast
 
 import numpy as np
 from numpy.typing import NDArray
 
+from paperroute_device.adapters.state_file import Loaded
+from paperroute_device.core.device_settings import DeviceSettings
+from paperroute_device.core.device_state import KitSaved
 from paperroute_testkit.city_setting import city_under_test
 from paperroute_transit.core.alert_model import AlertPlaces
 from paperroute_transit.core.chooser import ChooserPath, Column
@@ -26,7 +29,7 @@ from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.reach import ReachInput, StripKey
 from paperroute_transit.core.saved import Saved, default_saved
 from paperroute_transit.core.tiles import LabelKind, StreetLabel, TileVariant
-from paperroute_transit.ports import Loaded, TileRepository
+from paperroute_transit.ports import TileRepository
 
 STOP_POINT: Final[Point] = (
     -19013.00806139199,
@@ -127,12 +130,13 @@ class FakeNetwork:
 @dataclass
 class MemoryStates:
     """
-    Saved state kept in memory.
+    The kit's saved state kept in memory.
 
     Attributes
     ----------
     stored : Saved | None
-        What was last saved; None when nothing ever was.
+        What was last saved, device settings included; None when nothing
+        ever was.
     error : OSError | None
         Raised by every save when set.
     saves : list[Saved]
@@ -145,28 +149,28 @@ class MemoryStates:
 
     def load(self) -> Loaded:
         """
-        Give what was stored, or the defaults.
+        Give what was stored, or nothing.
 
         Returns
         -------
         Loaded
-            The stored state, or the defaults not stored.
+            The stored device settings and board state, or the device
+            defaults and no board state, not stored.
         """
         if self.stored is None:
-            return Loaded(
-                saved=default_saved(city=city_under_test()),
-                stored=False,
-            )
-        return Loaded(saved=self.stored, stored=True)
+            return Loaded(device=DeviceSettings(), app=None, stored=False)
+        return Loaded(
+            device=self.stored.settings.device, app=self.stored, stored=True,
+        )
 
-    def save(self, *, saved: Saved) -> None:
+    def save(self, *, saved: KitSaved) -> None:
         """
         Keep a saved state.
 
         Parameters
         ----------
-        saved : Saved
-            The pins and view.
+        saved : KitSaved
+            The device settings and the board's state.
 
         Raises
         ------
@@ -175,8 +179,12 @@ class MemoryStates:
         """
         if self.error is not None:
             raise self.error
-        self.stored = saved
-        self.saves.append(saved)
+        board = cast(Saved, saved.app)
+        joined = replace(
+            board, settings=replace(board.settings, device=saved.device),
+        )
+        self.stored = joined
+        self.saves.append(joined)
 
 
 @dataclass

@@ -16,11 +16,10 @@ from paperroute_transit.adapters.board_web import (
 
 BOARD_FILES: Final[tuple[str, ...]] = (
     'pins.html',
-    'settings.html',
+    'settings_sections.html',
     'pin-edit.html',
     'board.css',
     'pins.js',
-    'settings.js',
     'stop-search.js',
     'ways.js',
     'windows.js',

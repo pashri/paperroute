@@ -1,8 +1,5 @@
 """Serve the frame, the knob buttons and the device's pages on the LAN."""
 
-# A copy of the board app's display, until it uses this one.
-# pylint: disable=duplicate-code
-
 from collections import Counter
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
@@ -77,10 +74,13 @@ class KitRoutes:
         One route per extra stylesheet, in link order.
     settings : list[web.RouteDef]
         The Settings page, its script and its post.
+    post : Callable[[object], None]
+        Sends an event from a page on to the kit.
     """
 
     sheets: list[web.RouteDef]
     settings: list[web.RouteDef]
+    post: Callable[[object], None]
 
 
 class AppRoutes(Protocol):
@@ -336,6 +336,7 @@ class WebDisplay:
         kit = KitRoutes(
             sheets=[web.get(f'/{name}', self._sheet) for name in self._sheets],
             settings=self.settings.routes() if self.settings else [],
+            post=self.send,
         )
         if self._routes is None:
             return [*kit.sheets, *kit.settings]

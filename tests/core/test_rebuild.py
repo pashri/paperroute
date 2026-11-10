@@ -22,6 +22,7 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_sydney.city import SYDNEY
 from paperroute_testkit.core.factories import START, begun, pin_at
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import (
     answer_fetches,
     device_rows,
@@ -49,7 +50,6 @@ from paperroute_transit.core.rebuild import (
     is_outdated,
 )
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import Rebuild, State
 from tests.core.chooser_walks import DOWN, KINDS, NEXT, OPEN
 

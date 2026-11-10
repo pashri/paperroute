@@ -15,6 +15,7 @@ from paperroute_testkit.core.factories import (
     snapshot,
     vehicle,
 )
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import wakeful
 from paperroute_transit.core.alert_model import AlertsFetched, AlertsSnapshot
 from paperroute_transit.core.feed_plan import FeedKind
@@ -33,7 +34,6 @@ from paperroute_transit.core.model import service_seconds
 from paperroute_transit.core.patterns import TripPattern
 from paperroute_transit.core.places import shown
 from paperroute_transit.core.realtime import RealtimeSnapshot
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import RELOAD_BEFORE, State
 from paperroute_transit.core.stop_view import HORIZON
 from tests.core.test_state import CENTRE, PRESS, fresh

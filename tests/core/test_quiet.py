@@ -28,6 +28,7 @@ from paperroute_hardware.core.knob_events import (
 )
 from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_testkit.core.factories import START, departure
+from paperroute_testkit.core.kit_steps import step
 from paperroute_testkit.core.steps import slept, step_answered, wakeful
 from paperroute_transit.core.auto_model import AutoState
 from paperroute_transit.core.messages import (
@@ -42,12 +43,10 @@ from paperroute_transit.core.model import AutoWindow, ServiceSpan, pin_ref
 from paperroute_transit.core.panel_views import SleepView
 from paperroute_transit.core.places import shown
 from paperroute_transit.core.saved import Rate
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import Places, State
 from paperroute_transit.core.stop_view import StopView
 from tests.core.test_menu import DOWN, run, turn
 from tests.core.test_state import BUSES, PINS, fresh
-from tests.helpers import kit_step
 
 DAY: Final[date] = START.date()
 HALF_MINUTE: Final[timedelta] = timedelta(seconds=30)
@@ -677,9 +676,9 @@ def test_quiet_sleep_tick_fetches_nothing() -> None:
     state = boarded(state=fresh(now=at(22, 59)))
     state, _ = step_answered(state=state, event=Tick(now=at(22, 59)))
     tick = Tick(now=at(23))
-    _, control = kit_step(state=wakeful(state=state), event=tick)
+    _, control = step(wakeful(state=state), tick)
     assert fetches(effects=control)
-    after, effects = kit_step(state=state, event=tick)
+    after, effects = step(state, tick)
     assert after.panel.asleep
     assert not fetches(effects=effects)
     assert after.quota == state.quota
@@ -691,6 +690,6 @@ def test_offline_clears_the_poll_clocks() -> None:
     state, _ = step_answered(state=state, event=Tick(now=START))
     assert state.last_fetch is not None
     facts = replace(device_facts(), wifi=WifiStatus(managed=True))
-    state, _ = kit_step(state=state, event=DeviceProbed(facts=facts))
+    state, _ = step(state, DeviceProbed(facts=facts))
     assert state.last_fetch is None
     assert not state.map.fetched_at

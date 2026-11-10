@@ -184,6 +184,7 @@ def test_timings_report_settings() -> None:
     timings = Timings()
     assert 'settings' not in timings.snapshot()
     timings.settings_seen(settings=MANUAL)
+    timings.device_settings_seen(settings=MANUAL.device)
     assert timings.snapshot()['settings'] == form_values(
         settings=MANUAL,
     )
@@ -219,6 +220,7 @@ def test_observer_group_isolates_a_failing_observer(
         group.feed_parsed(feed='f', fetch_ms=1.0, parse_ms=1.0, trips=1)
         group.ticked()
         group.settings_seen(settings=MANUAL)
+    timings.device_settings_seen(settings=MANUAL.device)
     snap = timings.snapshot()
     assert snap['frames'] == 1
     assert 'f' in snap['feeds']  # type: ignore[operator]
@@ -375,20 +377,16 @@ def test_timings_knobs_swapped_follows_the_settings() -> None:
     """The knobs are not swapped until the settings in force say so."""
     timings = Timings()
     assert not timings.knobs_swapped()
-    timings.settings_seen(
-        settings=Settings(device=DeviceSettings(swap_knobs=True)),
-    )
+    timings.device_settings_seen(settings=DeviceSettings(swap_knobs=True))
     assert timings.knobs_swapped()
-    timings.settings_seen(settings=default_settings(city=SYDNEY))
+    timings.device_settings_seen(settings=DeviceSettings())
     assert not timings.knobs_swapped()
 
 
 def test_swap_setting_swaps_decoded_knobs() -> None:
     """With the knobs swapped, a turn of knob A turns the bottom knob."""
     timings = Timings()
-    timings.settings_seen(
-        settings=Settings(device=DeviceSettings(swap_knobs=True)),
-    )
+    timings.device_settings_seen(settings=DeviceSettings(swap_knobs=True))
     reader = knobs_for(
         enabled=True, opener=FakeKnobLines, swapped=timings.knobs_swapped,
     )
@@ -398,11 +396,10 @@ def test_swap_setting_swaps_decoded_knobs() -> None:
     assert events == [KnobTurned(knob=Knob.BOTTOM, steps=1)]
 
 
-def test_group_sends_device_events_to_devices() -> None:
-    """Devices get the seven device events; observers get all nine."""
+def test_group_sends_every_event_to_observers() -> None:
+    """The board's observers get every event, the kit's and the board's."""
     full = _Recorder()
-    device = _DeviceRecorder()
-    group = ObserverGroup(observers=[full], devices=[device])
+    group = ObserverGroup(observers=[full])
     group.frame_drawn(render_ms=1.0)
     group.feed_parsed(feed='f', fetch_ms=1.0, parse_ms=1.0, trips=1)
     group.work_done(name='f', ms=1.0)
@@ -415,16 +412,6 @@ def test_group_sends_device_events_to_devices() -> None:
     group.panel_refreshed(
         refresh=PanelRefresh(full=False, seconds=0.5, ok=True),
     )
-    device_events = [
-        'frame_drawn',
-        'work_done',
-        'ticked',
-        'status_seen',
-        'app_seen',
-        'device_settings_seen',
-        'panel_refreshed',
-    ]
-    assert device.events == device_events
     assert full.events == [
         'frame_drawn',
         'feed_parsed',
@@ -439,17 +426,3 @@ def test_group_sends_device_events_to_devices() -> None:
     ]
 
 
-def test_group_tells_observers_before_devices() -> None:
-    """Each device event reaches the observers before the devices."""
-    events: list[str] = []
-    group = ObserverGroup(
-        observers=[_Recorder(events=events, prefix='observer:')],
-        devices=[_DeviceRecorder(events=events, prefix='device:')],
-    )
-    group.ticked()
-    group.settings_seen(settings=default_settings(city=SYDNEY))
-    assert events == [
-        'observer:ticked',
-        'device:ticked',
-        'observer:settings_seen',
-    ]

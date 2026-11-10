@@ -5,7 +5,6 @@ from datetime import datetime
 from typing import Final
 
 from paperroute_device.core.device_events import ConfirmAsked
-from paperroute_device.core.device_state import KitSaved
 from paperroute_device.core.kit_events import SettingsPosted
 from paperroute_hardware.core.knob_events import (
     Knob,
@@ -99,7 +98,6 @@ from paperroute_transit.core.state_data import (
 from paperroute_transit.core.state_model import (
     FEED_IDLE,
     Board,
-    KitMirror,
     State,
     elapsed,
     load_window,
@@ -121,9 +119,7 @@ PERSON_EVENTS: Final[tuple[type, ...]] = (
 )
 
 
-def initial_state(
-    *, saved: Saved, now: datetime, stored: bool, city: City,
-) -> State:
+def initial_state(*, saved: Saved, now: datetime, city: City) -> State:
     """
     Make the state at start-up, centring the map on the shown From.
 
@@ -134,17 +130,13 @@ def initial_state(
         names and points filled in.
     now : datetime
         Start time.
-    stored : bool
-        Whether `saved` came from the file; if not, the first tick writes
-        it.
     city : City
         The city the app runs for.
 
     Returns
     -------
     State
-        State, the map with no knob step, and what was written noted
-        for the kit when `stored`. A current pin out of range is
+        State, the map with no knob step. A current pin out of range is
         clamped, and with no place to show the city's default pin is
         unpinned.
     """
@@ -156,15 +148,6 @@ def initial_state(
         settings=saved.settings,
         quota=saved.quota,
         auto=saved.auto,
-        kit=KitMirror(
-            saved=(
-                KitSaved(device=saved.settings.device, app=saved)
-                if stored
-                else None
-            ),
-            stored=stored,
-            written_at=now,
-        ),
     )
     centre = shown(state=state).origin.point
     return replace(state, map=MapState(centre=centre))

@@ -146,6 +146,14 @@ async def test_run_reads_the_keys_before_the_first_tick(
     assert isinstance(app.observed[0], ApiKeyChanged)
 
 
+async def test_run_tells_the_app_it_stopped(tmp_path: Path) -> None:
+    """Once the loop ends, the app closes what it holds."""
+    app = FakeApp()
+    ports = ports_of(path=tmp_path / 'state.json', app=app)
+    await run(app=app, ports=ports, zone=ZONE, max_events=1)
+    assert app.hooks == ['stopped']
+
+
 async def test_run_quits_when_the_ticker_crashes(
     tmp_path: Path, caplog: pytest.LogCaptureFixture,
 ) -> None:

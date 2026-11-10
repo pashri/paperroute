@@ -11,6 +11,7 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute_device.adapters.web_display import WebDisplay
 from paperroute_device.adapters.web_frame import SHELL_WEB, page_frame
 from paperroute_device.adapters.web_live import live_page
 from paperroute_sydney.adapters.web_board import SYDNEY_HINT, SYDNEY_NAV
@@ -24,8 +25,8 @@ from paperroute_testkit.page_markup import (
 )
 from paperroute_transit.adapters.board_head import BoardHead
 from paperroute_transit.adapters.board_web import BOARD_WEB
-from paperroute_transit.adapters.web_display import WebDisplay
 from tests.adapters.test_web_device import SHELL_PAGES, sydney_site
+from tests.adapters.transit_web import transit_display
 
 Client = TestClient[web.Request, web.Application]
 FONT_SHA256: Final[str] = (
@@ -253,7 +254,7 @@ def declarations(*, body: str) -> list[str]:
 @pytest.fixture(name='client')
 async def _client() -> AsyncIterator[Client]:
     """A client of a display with no device pages."""
-    client = TestClient(TestServer(WebDisplay(city=SYDNEY).app()))
+    client = TestClient(TestServer(transit_display(city=SYDNEY).app()))
     await client.start_server()
     yield client
     await client.close()
@@ -504,7 +505,7 @@ def test_device_restart_tones() -> None:
 ])
 async def test_power_page_tone(action: str, danger: bool) -> None:
     """Shutting down asks with a danger button; restarting does not."""
-    display = WebDisplay(device=sydney_site().pages(), city=SYDNEY)
+    display = transit_display(device=sydney_site().pages(), city=SYDNEY)
     client = TestClient(TestServer(display.app()))
     await client.start_server()
     try:

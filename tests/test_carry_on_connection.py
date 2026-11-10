@@ -10,7 +10,7 @@ from typing import Final, cast
 
 import pytest
 
-from paperroute_device.core.kit_effects import Render
+from paperroute_device.core.kit_effects import Render, is_kit_effect
 from paperroute_device.core.kit_events import Tick
 from paperroute_device_testkit.device_fakes import FixedClock
 from paperroute_sydney.city import (
@@ -21,6 +21,7 @@ from paperroute_sydney.city import (
     SydneyMode,
 )
 from paperroute_testkit.core.factories import live
+from paperroute_testkit.core.kit_steps import step
 from paperroute_transit.adapters.network_db import SqliteNetworkRepository
 from paperroute_transit.adapters.timetable_db import SqliteTimetableRepository
 from paperroute_transit.app_connections import departures_read
@@ -39,7 +40,6 @@ from paperroute_transit.core.messages import (
 from paperroute_transit.core.model import Change, Pin, Way
 from paperroute_transit.core.reducers import initial_state
 from paperroute_transit.core.saved import LiveView, Saved, default_settings
-from paperroute_transit.core.state import step
 from paperroute_transit.core.state_model import State
 from paperroute_transit.ports import TimetableRepository
 from tests.app_factories import ports_of, posted_by
@@ -180,7 +180,7 @@ async def settled_view(*, ports: Ports, state: State) -> ScreenView | None:
             effects=[
                 effect
                 for effect in effects
-                if not isinstance(effect, Render)
+                if not is_kit_effect(effect)
             ],
         )
     return cast(ScreenView | None, view)
@@ -234,7 +234,6 @@ def connection_strip(
                 view=LiveView.STRIP,
             ),
             now=now,
-            stored=True,
             city=SYDNEY,
         )
         view = asyncio.run(settled_view(ports=ports, state=state))

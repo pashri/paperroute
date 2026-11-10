@@ -11,22 +11,22 @@ from enum import StrEnum
 from pathlib import Path
 from typing import Final
 
+from paperroute_device.adapters.state_file import BAD_PREFIX, Loaded, StateFile
+from paperroute_device.core.device_state import KitSaved
+from paperroute_sydney.__main__ import SYDNEY_PARTS
 from paperroute_sydney.city import SYDNEY
-from paperroute_transit.adapters.state_file import (
-    BAD_PREFIX,
-    JsonStateRepository,
-)
 from paperroute_transit.core.auto_model import AutoState
 from paperroute_transit.core.model import Pin, pin_ref
 from paperroute_transit.core.saved import Saved
+from paperroute_transit.transit_app import TransitApp
 
 BACKUPS: Final[Path] = Path('~/Code/pashri/paperroute-backups').expanduser()
 STATE_NAME: Final[str] = 'state.json'
 
 
-def repository(*, path: Path) -> JsonStateRepository:
+def repository(*, path: Path) -> StateFile:
     """
-    Build the repository that reads and writes one state file.
+    Open one state file as Sydney's board reads and writes it.
 
     Parameters
     ----------
@@ -35,10 +35,51 @@ def repository(*, path: Path) -> JsonStateRepository:
 
     Returns
     -------
-    JsonStateRepository
-        Its repository.
+    StateFile
+        The kit's state file with Sydney's board.
     """
-    return JsonStateRepository(path=path, city=SYDNEY)
+    return StateFile(
+        path=path, app=TransitApp(city=SYDNEY, parts=SYDNEY_PARTS),
+    )
+
+
+def joined(*, loaded: Loaded) -> Saved | None:
+    """
+    Put the device settings back into the board's state.
+
+    Parameters
+    ----------
+    loaded : Loaded
+        What the kit loaded.
+
+    Returns
+    -------
+    Saved | None
+        The board's state with the device settings in it, or None when
+        the file held no usable board section.
+    """
+    if not isinstance(loaded.app, Saved):
+        return None
+    board = loaded.app
+    settings = dataclasses.replace(board.settings, device=loaded.device)
+    return dataclasses.replace(board, settings=settings)
+
+
+def kept(*, saved: Saved) -> KitSaved:
+    """
+    Split a board's state as the kit keeps it.
+
+    Parameters
+    ----------
+    saved : Saved
+        The board's state, device settings included.
+
+    Returns
+    -------
+    KitSaved
+        The device settings beside the board's state.
+    """
+    return KitSaved(device=saved.settings.device, app=saved)
 
 
 def plain(value: object) -> object:
@@ -166,17 +207,20 @@ def check_file(
     shutil.copyfile(path, copy)
     files = repository(path=copy)
     loaded = files.load()
-    problems = [] if loaded.stored else ['not stored']
+    saved = joined(loaded=loaded)
+    problems = [] if loaded.stored and saved else ['not stored']
     if any(work.glob(f'{BAD_PREFIX}*')):
         problems.append('moved aside')
-    if problems:
+    if saved is None or problems:
         return None, problems
-    files.save(saved=loaded.saved)
+    files.save(saved=kept(saved=saved))
     first = copy.read_bytes()
-    files.save(saved=files.load().saved)
-    if copy.read_bytes() != first:
+    again = joined(loaded=files.load())
+    if again is not None:
+        files.save(saved=kept(saved=again))
+    if again is None or copy.read_bytes() != first:
         problems.append('unstable save')
-    return digest(saved=loaded.saved), problems
+    return digest(saved=saved), problems
 
 
 def main(argv: list[str] | None = None) -> int:

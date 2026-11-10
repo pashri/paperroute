@@ -4,7 +4,18 @@ from datetime import time
 from typing import Final
 
 import pytest
+from aiohttp import web
+from aiohttp.test_utils import TestClient, TestServer
 
+from paperroute_device.adapters import device_form
+from paperroute_device.adapters.device_form import (
+    DEVICE_RADIOS,
+    DEVICE_SWITCHES,
+    BadInput,
+    UnknownValue,
+    device_change_from,
+    page_text,
+)
 from paperroute_device.adapters.web_common import asset
 from paperroute_device.core.device_settings import (
     CLEAN_CHOICES,
@@ -12,14 +23,15 @@ from paperroute_device.core.device_settings import (
     QuietMode,
     Window,
 )
+from paperroute_device.core.kit_events import DeviceChange
 from paperroute_sydney.city import SYDNEY
 from paperroute_transit.adapters.board_web import board_text
 from paperroute_transit.adapters.settings_form import (
-    BadInput,
-    UnknownValue,
+    BOARD_RADIOS,
+    BOARD_SWITCHES,
+    ERRORS,
     changed_from,
     form_values,
-    page_text,
 )
 from paperroute_transit.core.messages import SettingsChanged
 from paperroute_transit.core.saved import (
@@ -31,6 +43,10 @@ from paperroute_transit.core.saved import (
     default_settings,
     with_changes,
 )
+from paperroute_transit.transit_app import QUIET_LABEL
+from tests.adapters.transit_web import transit_display
+
+Client = TestClient[web.Request, web.Application]
 
 ODD = Settings(
     device=DeviceSettings(
@@ -58,17 +74,144 @@ PEAK = {
 }
 
 
-def _applied(*, event: SettingsChanged) -> Settings:
-    """Apply an event's set fields to the defaults."""
-    given = {k: v for k, v in vars(event).items() if v is not None}
+SWITCHES: Final[frozenset[str]] = frozenset(
+    {*DEVICE_SWITCHES, *BOARD_SWITCHES},
+)
+RADIOS: Final[frozenset[str]] = frozenset({*DEVICE_RADIOS, *BOARD_RADIOS})
+PAGE_ERRORS: Final[dict[str, str]] = {**device_form.ERRORS, **ERRORS}
+
+
+def _board(*, fields: dict[str, str]) -> SettingsChanged:
+    """
+    Read the board's change from posted fields.
+
+    Parameters
+    ----------
+    fields : dict[str, str]
+        The posted fields, a board field among them.
+
+    Returns
+    -------
+    SettingsChanged
+        The board's change.
+    """
+    event = changed_from(fields=fields)
+    assert event is not None
+    return event
+
+
+def _device(*, fields: dict[str, str]) -> DeviceChange:
+    """
+    Read the device's change from posted fields as Sydney's page does.
+
+    Parameters
+    ----------
+    fields : dict[str, str]
+        The posted fields.
+
+    Returns
+    -------
+    DeviceChange
+        The device's change.
+    """
+    return device_change_from(fields=fields, quiet_label=QUIET_LABEL)
+
+
+def _applied(*, fields: dict[str, str]) -> Settings:
+    """
+    Apply both halves of a post to the defaults.
+
+    Parameters
+    ----------
+    fields : dict[str, str]
+        The posted fields.
+
+    Returns
+    -------
+    Settings
+        The defaults with each posted field set.
+    """
+    board = changed_from(fields=fields) or SettingsChanged()
+    given = {
+        name: value
+        for name, value in {
+            **vars(_device(fields=fields)),
+            **vars(board),
+        }.items()
+        if value is not None
+    }
     return with_changes(settings=default_settings(city=SYDNEY), changes=given)
+
+
+def _marked(*, template: str, settings: Settings, error: str | None) -> str:
+    """
+    Fill a template's marks as Sydney's Settings page does.
+
+    Parameters
+    ----------
+    template : str
+        Text with `{{field}}` marks.
+    settings : Settings
+        The settings shown.
+    error : str | None
+        The section in error, if any.
+
+    Returns
+    -------
+    str
+        The filled text.
+    """
+    return page_text(
+        template=template,
+        values=form_values(settings=settings),
+        error=error,
+        switches=SWITCHES,
+        radios=RADIOS,
+        errors=PAGE_ERRORS,
+    )
+
+
+async def _drawn(*, settings: Settings) -> str:
+    """
+    Serve Sydney's Settings page with settings reported.
+
+    Parameters
+    ----------
+    settings : Settings
+        The settings the status reports.
+
+    Returns
+    -------
+    str
+        The page as served.
+    """
+    status: dict[str, object] = {'settings': form_values(settings=settings)}
+    display = transit_display(status=lambda: status)
+    client: Client = TestClient(TestServer(display.app()))
+    await client.start_server()
+    try:
+        return await (await client.get('/settings')).text()
+    finally:
+        await client.close()
+
+
+def _sections() -> str:
+    """
+    Read the board's sections of the Settings page, whitespace folded.
+
+    Returns
+    -------
+    str
+        The sections' text.
+    """
+    return ' '.join(board_text(name='settings_sections.html').split())
 
 
 @pytest.mark.parametrize('settings', [default_settings(city=SYDNEY), ODD])
 def test_form_values_round_trip(settings: Settings) -> None:
     """Posting the page's own values gives the same settings back."""
     fields = form_values(settings=settings)
-    assert _applied(event=changed_from(fields=fields)) == settings
+    assert _applied(fields=fields) == settings
 
 
 def test_form_values_spell_out_each_field() -> None:
@@ -91,26 +234,31 @@ def test_lookahead_form_round_trip() -> None:
         ),
     )
     assert values['alert_lookahead'] == '3d'
-    event = changed_from(fields={'alert_lookahead': '3d'})
+    event = _board(fields={'alert_lookahead': '3d'})
     assert event == SettingsChanged(alert_lookahead=Lookahead.THREE_DAYS)
 
 
 def test_changed_from_reads_only_present_fields() -> None:
     """A one-field form changes one setting."""
-    event = changed_from(fields={'rotate': 'on'})
-    assert event == SettingsChanged(rotate=True)
+    event = _board(fields={'peak_rate': '60s'})
+    assert event == SettingsChanged(peak_rate=Rate.STEADY)
+
+
+def test_changed_from_without_board_fields_is_none() -> None:
+    """A post of device fields alone changes no board setting."""
+    assert changed_from(fields={'rotate': 'on'}) is None
 
 
 def test_empty_peak_slots_drop_windows() -> None:
     """Two empty slots save no windows."""
     fields = dict.fromkeys(PEAK, '')
-    assert changed_from(fields=fields).peak_windows == ()
+    assert _board(fields=fields).peak_windows == ()
 
 
 def test_one_filled_slot_keeps_one_window() -> None:
     """A slot left empty is dropped."""
     fields = {**PEAK, 'peak_1_start': '', 'peak_1_end': ''}
-    event = changed_from(fields=fields)
+    event = _board(fields=fields)
     assert event.peak_windows == (
         Window(start=time(15), end=time(19)),
     )
@@ -142,32 +290,13 @@ def test_bad_time_is_bad(bad: str) -> None:
     with pytest.raises(BadInput):
         changed_from(fields={**PEAK, 'peak_1_start': bad})
     with pytest.raises(BadInput) as raised:
-        changed_from(fields={'quiet_start': bad, 'quiet_end': '05:30'})
+        _device(fields={'quiet_start': bad, 'quiet_end': '05:30'})
     assert raised.value.section == 'quiet'
 
 
-def test_quiet_wrap_is_fine() -> None:
-    """Quiet hours may cross midnight."""
-    event = changed_from(
-        fields={'quiet_start': '23:00', 'quiet_end': '05:30'},
-    )
-    assert event.my_hours == Window(start=time(23), end=time(5, 30))
-
-
-def test_quiet_mode_app_round_trips() -> None:
-    """The quiet radio's `app` value is read and written back as `app`."""
-    event = changed_from(fields={'quiet_mode': 'app'})
-    assert event == SettingsChanged(quiet_mode=QuietMode.APP)
-    assert form_values(settings=_applied(event=event))['quiet_mode'] == 'app'
-
-
-def test_quiet_mode_timetable_is_unknown() -> None:
-    """A stale page's `timetable` quiet mode is refused."""
-    with pytest.raises(UnknownValue):
-        changed_from(fields={'quiet_mode': 'timetable'})
-
-
-@pytest.mark.parametrize('field', ['peak_rate', 'quiet_mode', 'rotate'])
+@pytest.mark.parametrize(
+    'field', ['peak_rate', 'connection_map', 'auto_rebuild'],
+)
 def test_unknown_values_are_unknown(field: str) -> None:
     """A value the page never sends is refused."""
     with pytest.raises(UnknownValue):
@@ -180,11 +309,7 @@ def test_page_text_fills_marks() -> None:
         '<option{{peak_rate:30s}}><option{{peak_rate:60s}}>'
         '<i{{rotate}}><b value="{{quiet_start}}">{{error_peak}}{{error_quiet}}'
     )
-    text = page_text(
-        template=template,
-        values=form_values(settings=ODD),
-        error='peak',
-    )
+    text = _marked(template=template, settings=ODD, error='peak')
     assert text.startswith('<option><option selected>')
     assert '<i checked>' in text
     assert 'value="22:45"' in text
@@ -205,15 +330,11 @@ def test_connection_map_four_choices() -> None:
     )
     for tag, value in zip('abcd', MAP_VALUES, strict=True):
         expected = ConnectionMap(value)
-        assert changed_from(fields={'connection_map': value}) == (
+        assert _board(fields={'connection_map': value}) == (
             SettingsChanged(connection_map=expected)
         )
         settings = Settings(board=BoardSettings(connection_map=expected))
-        text = page_text(
-            template=template,
-            values=form_values(settings=settings),
-            error=None,
-        )
+        text = _marked(template=template, settings=settings, error=None)
         assert text.count(' checked') == 1
         assert f'<{tag} checked>' in text
 
@@ -222,7 +343,7 @@ def test_unknown_value_keeps_setting() -> None:
     """An unknown choice is refused, so the stored setting stands."""
     with pytest.raises(UnknownValue):
         changed_from(fields={'connection_map': 'change'})
-    assert changed_from(fields={}).connection_map is None
+    assert changed_from(fields={}) is None
 
 
 MAP_HINTS: Final[tuple[tuple[str, str], ...]] = (
@@ -246,7 +367,7 @@ MAP_HINTS: Final[tuple[tuple[str, str], ...]] = (
 
 def test_settings_page_offers_four_map_choices() -> None:
     """The page lists the four radios in order, each with its hint."""
-    page = ' '.join(board_text(name='settings.html').split())
+    page = _sections()
     positions = []
     for (label, hint), value in zip(MAP_HINTS, MAP_VALUES, strict=True):
         radio = (
@@ -268,25 +389,25 @@ def test_route_pin_switch_dimmed_by_css() -> None:
 
 def test_route_pin_school_switch_read_and_shown() -> None:
     """The second school switch posts as on or off and is drawn unchecked."""
-    assert changed_from(fields={'skip_school_on_route_pins': 'on'}) == (
+    assert _board(fields={'skip_school_on_route_pins': 'on'}) == (
         SettingsChanged(skip_school_on_route_pins=True)
     )
     values = form_values(settings=default_settings(city=SYDNEY))
     assert values['skip_school_on_route_pins'] == 'off'
-    page = board_text(name='settings.html')
+    page = _sections()
     assert 'name="skip_school_on_route_pins"' in page
     assert 'Also on pins without a To' in page
 
 
 def test_school_switch_read_and_shown() -> None:
     """The school switch posts as on or off and is drawn checked."""
-    assert changed_from(fields={'skip_school_buses': 'off'}) == (
+    assert _board(fields={'skip_school_buses': 'off'}) == (
         SettingsChanged(skip_school_buses=False)
     )
     assert form_values(
         settings=default_settings(city=SYDNEY),
     )['skip_school_buses'] == 'on'
-    page = board_text(name='settings.html')
+    page = _sections()
     assert 'name="skip_school_buses"' in page
     assert 'Leave out school buses' in page
 
@@ -297,26 +418,21 @@ def test_clean_after_form_round_trip(count: int) -> None:
     settings = Settings(device=DeviceSettings(clean_after=count))
     values = form_values(settings=settings)
     assert values['clean_after'] == str(count)
-    event = changed_from(fields={'clean_after': str(count)})
-    assert event == SettingsChanged(clean_after=count)
+    event = _device(fields={'clean_after': str(count)})
+    assert event == DeviceChange(clean_after=count)
 
 
 @pytest.mark.parametrize('bad', ['45', '0', 'never', '', '030', ' 30'])
 def test_clean_after_refuses_other_values(bad: str) -> None:
     """A count the page never offers is refused."""
     with pytest.raises(UnknownValue):
-        changed_from(fields={'clean_after': bad})
+        _device(fields={'clean_after': bad})
 
 
-def test_clean_after_selects_its_option() -> None:
+async def test_clean_after_selects_its_option() -> None:
     """The page's cleaning choice is drawn with the saved count selected."""
-    page = board_text(name='settings.html')
-    text = page_text(
-        template=page,
-        values=form_values(
-            settings=Settings(device=DeviceSettings(clean_after=15)),
-        ),
-        error=None,
+    text = await _drawn(
+        settings=Settings(device=DeviceSettings(clean_after=15)),
     )
     plain = ' '.join(text.split())
     assert 'Clean screen after' in plain
@@ -327,25 +443,10 @@ def test_clean_after_selects_its_option() -> None:
     assert plain.count(' selected>') == 4
 
 
-@pytest.mark.parametrize(('swap', 'value'), [(True, 'on'), (False, 'off')])
-def test_swap_knobs_form_round_trip(swap: bool, value: str) -> None:
-    """The swap switch is written as on or off and read back."""
-    settings = Settings(device=DeviceSettings(swap_knobs=swap))
-    values = form_values(settings=settings)
-    assert values['swap_knobs'] == value
-    event = changed_from(fields={'swap_knobs': value})
-    assert event == SettingsChanged(swap_knobs=swap)
-
-
-def test_swap_knobs_switch_shown_checked() -> None:
+async def test_swap_knobs_switch_shown_checked() -> None:
     """The page draws the swap switch, checked when on."""
-    page = board_text(name='settings.html')
-    text = page_text(
-        template=page,
-        values=form_values(
-            settings=Settings(device=DeviceSettings(swap_knobs=True)),
-        ),
-        error=None,
+    text = await _drawn(
+        settings=Settings(device=DeviceSettings(swap_knobs=True)),
     )
     plain = ' '.join(text.split())
     assert '<input type="hidden" name="swap_knobs" value="off">' in plain

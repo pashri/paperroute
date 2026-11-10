@@ -139,7 +139,7 @@ def test_device_pages_only_for_live_feeds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Live feeds get the setup and Device pages; replayed feeds none."""
-    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(tmp_path / 'key'))
     timings = Timings()
     display = WebDisplay(status=timings.snapshot, city=SYDNEY)
     args = argparse.Namespace(
@@ -172,7 +172,7 @@ async def test_device_pages_link_sydney_pages(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The device pages' nav links all four of Sydney's pages."""
-    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(tmp_path / 'key'))
     timings = Timings()
     args = argparse.Namespace(
         feeds='live', error_log=None, state=tmp_path / 'state.json',
@@ -550,9 +550,9 @@ def test_resets_for_without_power_is_null(tmp_path: Path) -> None:
         timetable=tmp_path / 'timetable.db',
         tiles=tmp_path / 'tiles.db',
     )
-    off = resets_for(args=args, key=FakeKeys(), wifi=FakeWifi())
+    off = resets_for(args=args, keys=(FakeKeys(),), wifi=FakeWifi())
     args.power = True
-    on = resets_for(args=args, key=FakeKeys(), wifi=FakeWifi())
+    on = resets_for(args=args, keys=(FakeKeys(),), wifi=FakeWifi())
     assert isinstance(off, NullResets)
     assert isinstance(on, FileResets)
     assert on.data_dir == Path('/var/lib/paperroute')
@@ -762,7 +762,7 @@ def test_main_logs_a_startup_crash_to_the_error_log(
     """A crash opening the timetable reaches errors.jsonl, then propagates."""
     key_file = tmp_path / 'no-such-key'
     error_log = tmp_path / 'log' / 'errors.jsonl'
-    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(key_file))
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(key_file))
     monkeypatch.setattr(cli, 'SqliteTimetableRepository', unopenable)
     monkeypatch.setattr(tk_monitor, 'TkMonitor', FakeMonitor)
     monkeypatch.setattr(
@@ -1047,7 +1047,7 @@ def test_live_feeds_are_guarded_and_share_the_tfnsw_limiter(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Live feeds back off on 429 and wait on the process's one limiter."""
-    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(tmp_path / 'key'))
     client = feeds_client(choice='live', live=tfnsw_feeds)
     assert isinstance(client, GuardedFeeds)
     assert isinstance(client.inner, AiohttpFeedsClient)
@@ -1058,7 +1058,7 @@ def test_live_feeds_count_into_the_summary_given(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The live client reports its requests to the run summary."""
-    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(tmp_path / 'key'))
     summary = Summary()
     client = feeds_client(
         choice='live', live=tfnsw_feeds, summary=summary,
@@ -1124,7 +1124,7 @@ async def test_sydney_parts_wire_sydney(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Sydney's parts carry its nav, hint, line, assets, key and plug."""
-    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(tmp_path / 'key'))
     assert SYDNEY_PARTS.nav == SYDNEY_NAV
     assert SYDNEY_PARTS.hint == SYDNEY_HINT
     assert SYDNEY_PARTS.status_line is sydney_status_line
@@ -1153,14 +1153,23 @@ def parts_with(*, keys: tuple[DeviceKey, ...]) -> CityParts:
     return replace(SYDNEY_PARTS, keys=lambda: keys)
 
 
-def test_device_for_uses_first_city_key(tmp_path: Path) -> None:
-    """Live feeds keep the city's first key; a city with none is refused."""
-    store = FakeKeys(key='k' * 32)
-    key = DeviceKey(name='city', credential=TFNSW_KEY, store=store)
+async def test_device_for_probes_and_resets_every_key(
+    tmp_path: Path,
+) -> None:
+    """Live feeds probe and reset each of the city's keys; none is fine."""
+    first, second = FakeKeys(key='k' * 32), FakeKeys()
+    keys = (
+        DeviceKey(
+            name='a', credential=TFNSW_KEY, store=first, display_name='A',
+        ),
+        DeviceKey(
+            name='b', credential=TFNSW_KEY, store=second, display_name='B',
+        ),
+    )
     args = argparse.Namespace(
         feeds='live',
         wifi=False,
-        power=False,
+        power=True,
         state=tmp_path / 'state.json',
         timetable=tmp_path / 'timetable.db',
         version_file=None,
@@ -1170,13 +1179,18 @@ def test_device_for_uses_first_city_key(tmp_path: Path) -> None:
         args=args,
         tiles=NullTiles(),
         last_error=last_error,
-        parts=parts_with(keys=(key,)),
+        parts=parts_with(keys=keys),
     )
-    assert device.key is store
-    with pytest.raises(ValueError, match='the city gives no device key'):
-        device_for(
-            args=args,
-            tiles=NullTiles(),
-            last_error=last_error,
-            parts=parts_with(keys=()),
-        )
+    assert device.keys == keys
+    assert device.probe is not None
+    assert (await device.probe.probe()).missing_keys == ('B',)
+    assert isinstance(device.resets, FileResets)
+    assert device.resets.keys == (first, second)
+    assert device.resets.erased == (args.timetable,)
+    keyless = device_for(
+        args=args,
+        tiles=NullTiles(),
+        last_error=last_error,
+        parts=parts_with(keys=()),
+    )
+    assert keyless.keys == ()

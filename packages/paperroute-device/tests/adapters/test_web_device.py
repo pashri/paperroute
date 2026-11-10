@@ -37,6 +37,7 @@ from paperroute_device.core.panel_views import confirm_view
 from paperroute_device_testkit.device_fakes import FakeKeys
 from paperroute_device_testkit.device_pages import (
     FACTS,
+    HOTSPOT,
     KEY,
     NOW,
     STATUS,
@@ -185,22 +186,38 @@ def test_ago_text_units(seconds: float, shown: str) -> None:
     """Ages clamp at 0 and grow from seconds to minutes to hours."""
     assert ago_text(seconds=seconds) == shown
 
-@pytest.mark.parametrize(('key', 'feeds', 'shown'), [
-    (KEY, {}, 'Key set · not used yet'),
-    (None, {}, 'No key set'),
-    (KEY, {'trains': NOW - 300}, 'Key set · last used 5 min ago'),
+@pytest.mark.parametrize(('key', 'used', 'shown'), [
+    (KEY, None, 'Key set · not used yet'),
+    (None, None, 'No key set'),
+    (KEY, NOW - 300, 'Key set · last used 5 min ago'),
 ])
 async def test_device_page_key_states(
     device: DeviceSite,
     client: Client,
     key: str | None,
-    feeds: dict[str, float],
+    used: float | None,
     shown: str,
 ) -> None:
     """The key row says whether a key is set and when it was used."""
     device.keys.key = key
-    device.feeds = feeds
+    device.last_used = used
     assert shown in await (await client.get('/device')).text()
+
+
+async def test_key_line_reads_the_keys_last_used() -> None:
+    """Each key's line says when that key was used, not when feeds were."""
+    site, second = two_keys()
+    site.keys.key, second.key = KEY, KEY
+    site.feeds = {'trains': NOW - 5}
+    site.last_used = NOW - 600
+    client = await _start(device=site)
+    try:
+        text = await (await client.get('/device')).text()
+    finally:
+        await client.close()
+    assert 'Key set · last used 10 min ago' in text
+    assert 'Key set · last used 2 min ago' in text
+    assert 'last used 5 s ago' not in text
 
 
 async def test_device_page_never_shows_key(client: Client) -> None:
@@ -278,7 +295,7 @@ async def test_key_post_saves_and_posts(
     assert response.status == HTTPStatus.SEE_OTHER
     assert response.headers['Location'] == '/device?key=saved'
     assert device.keys.key == new
-    assert device.posted == [ApiKeyChanged(present=True)]
+    assert device.posted == [ApiKeyChanged(missing=())]
     text = await (await client.get('/device?key=saved')).text()
     assert 'Key saved.' in text
     assert new not in text
@@ -433,7 +450,15 @@ def two_keys() -> tuple[DeviceSite, FakeKeys]:
     site = DeviceSite(
         keys=FakeKeys(),
         key_name='a',
-        more_keys=(DeviceKey(name='b', credential=B_KEY, store=second),),
+        more_keys=(
+            DeviceKey(
+                name='b',
+                credential=B_KEY,
+                store=second,
+                display_name='B',
+                last_used=lambda: NOW - 120,
+            ),
+        ),
     )
     return site, second
 
@@ -468,8 +493,8 @@ async def test_second_key_saved_by_name(
     assert (site.keys.key, second.key) == (a, b)
 
 
-async def test_second_key_posts_no_key_change() -> None:
-    """Saving a further key leaves the app's key state alone."""
+async def test_second_key_saved_posts_missing_keys() -> None:
+    """Saving a further key posts which keys are still missing."""
     site, _ = two_keys()
     started = await _start(device=site)
     try:
@@ -478,9 +503,17 @@ async def test_second_key_posts_no_key_change() -> None:
             data={'key': 'b', 'api_key': GOOD_KEY},
             allow_redirects=False,
         )
+        await started.post(
+            '/device/key',
+            data={'key': 'a', 'api_key': GOOD_KEY},
+            allow_redirects=False,
+        )
     finally:
         await started.close()
-    assert not site.posted
+    assert site.posted == [
+        ApiKeyChanged(missing=('Test',)),
+        ApiKeyChanged(missing=()),
+    ]
 
 
 async def test_second_key_refused_in_its_own_words() -> None:
@@ -514,22 +547,36 @@ async def test_two_keys_render_two_sections() -> None:
     assert text.count('name="key"') == 1
 
 
-def test_device_pages_need_a_key() -> None:
-    """Device pages with no key are refused."""
-    site = DeviceSite()
-    with pytest.raises(ValueError, match='at least one key'):
-        DevicePages(
-            status=lambda: None,
-            feeds=dict,
-            panel=lambda: None,
-            keys=(),
-            feed_label=str,
-            daily_limit=1,
-            post=site.posted.append,
-            zone=ZONE,
-            error_log=None,
-            state_file=None,
+async def test_device_pages_with_no_keys() -> None:
+    """With no keys there is no key card, no setup key field, no key post."""
+    site = DeviceSite(status=replace(HOTSPOT, missing_keys=('Test',)))
+    pages = DevicePages(
+        status=lambda: site.status,
+        feeds=dict,
+        panel=lambda: None,
+        feed_label=str,
+        daily_limit=1,
+        post=site.posted.append,
+        zone=ZONE,
+        error_log=None,
+        state_file=None,
+    )
+    app = web_app(live=LiveView(knobs=lambda event: None), device=pages)
+    client: Client = TestClient(TestServer(app))
+    await client.start_server()
+    try:
+        device = await (await client.get('/device')).text()
+        setup = await (await client.get('/setup')).text()
+        response = await client.post(
+            '/device/key', data={'api_key': GOOD_KEY}, allow_redirects=False,
         )
+    finally:
+        await client.close()
+    assert 'action="/device/key"' not in device
+    assert '<form method="post" action="/setup">' in setup
+    assert 'name="api_key"' not in setup
+    assert response.status == HTTPStatus.NOT_FOUND
+    assert not site.posted
 
 
 async def test_reset_hint_is_a_parameter() -> None:

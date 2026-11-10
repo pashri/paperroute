@@ -277,7 +277,7 @@ def stop_no_key() -> State:
         State at `START`.
     """
     state = stop()
-    return replace(state, panel=replace(state.panel, key_set=False))
+    return replace(state, panel=replace(state.panel, missing_keys=('TfNSW',)))
 
 
 def stop_trainlink() -> State:

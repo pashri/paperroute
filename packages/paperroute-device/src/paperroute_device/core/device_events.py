@@ -19,15 +19,15 @@ class ConfirmAsked:
 @dataclass(frozen=True)
 class ApiKeyChanged:
     """
-    The API key was found set or not set.
+    Which API keys are set was found out.
 
     Attributes
     ----------
-    present : bool
-        Whether a key is set.
+    missing : tuple[str, ...]
+        The display names of the keys not set, in declaration order.
     """
 
-    present: bool
+    missing: tuple[str, ...]
 
 
 @dataclass(frozen=True)

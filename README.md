@@ -27,7 +27,7 @@ the apps import from all three, and only the tests use the testkit.
     uv run paperroute-build gtfs --bundle data/raw/complete.zip \
       --sydneytrains data/raw/st/sydneytrains.zip --metro data/raw/st/metro_v2.zip \
       --out data/timetable.db
-    PAPERROUTE_API_KEY_FILE=~/tfnsw_api_key \
+    PAPERROUTE_KEY_FILE_TFNSW=~/tfnsw_api_key \
       uv run paperroute-board run --timetable data/timetable.db \
       --tiles data/tiles.db --state data/state.json
 

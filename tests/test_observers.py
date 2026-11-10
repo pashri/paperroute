@@ -31,7 +31,7 @@ STATUS: DeviceStatus = DeviceStatus(
     rebuilding=False,
     rebuild_failed=True,
     calls_today=12,
-    key_set=True,
+    missing_keys=(),
     facts=device_facts(),
 )
 

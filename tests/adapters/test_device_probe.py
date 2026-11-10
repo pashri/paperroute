@@ -2,8 +2,9 @@
 
 from pathlib import Path
 
-from paperroute_device.core.device_model import WifiStatus
+from paperroute_device.core.device_model import DeviceKey, WifiStatus
 from paperroute_device_testkit.device_fakes import FakeKeys, FakeWifi
+from paperroute_sydney.adapters.tfnsw import TFNSW_KEY
 from paperroute_sydney.city import SYDNEY_ZONE
 from paperroute_transit.adapters.device_probe import SystemProbe, mem_available
 from paperroute_transit.adapters.tiles_db import NullTiles
@@ -30,7 +31,14 @@ def probe_of(*, root: Path, version_file: Path | None) -> SystemProbe:
     """
     return SystemProbe(
         wifi=FakeWifi(link=LINK),
-        key=FakeKeys(key='secret'),
+        keys=(
+            DeviceKey(
+                name='tfnsw',
+                credential=TFNSW_KEY,
+                store=FakeKeys(key='secret'),
+                display_name='TfNSW',
+            ),
+        ),
         tiles=NullTiles(),
         last_error=LastError(zone=SYDNEY_ZONE),
         data_dir=root,
@@ -76,9 +84,9 @@ async def test_probe_reads_system_files(tmp_path: Path) -> None:
     assert facts.clock_synced is True
     assert facts.version == 'a0e68ae'
     assert facts.disk_free is not None
-    assert (facts.wifi, facts.key_set, facts.tiles_built) == (
+    assert (facts.wifi, facts.missing_keys, facts.tiles_built) == (
         LINK,
-        True,
+        (),
         None,
     )
     assert facts.last_error is None
@@ -108,7 +116,14 @@ async def test_probe_without_data_dir(tmp_path: Path) -> None:
     """A data directory that is gone gives no disk space."""
     probe = SystemProbe(
         wifi=FakeWifi(),
-        key=FakeKeys(),
+        keys=(
+            DeviceKey(
+                name='tfnsw',
+                credential=TFNSW_KEY,
+                store=FakeKeys(),
+                display_name='TfNSW',
+            ),
+        ),
         tiles=NullTiles(),
         last_error=LastError(zone=SYDNEY_ZONE),
         data_dir=tmp_path / 'gone',
@@ -117,7 +132,33 @@ async def test_probe_without_data_dir(tmp_path: Path) -> None:
     )
     facts = await probe.probe()
     assert facts.disk_free is None
-    assert facts.key_set is False
+    assert facts.missing_keys == ('TfNSW',)
+
+
+async def test_probe_reports_each_missing_key(tmp_path: Path) -> None:
+    """The facts name every key that is not set, in declaration order."""
+    keys = (
+        DeviceKey(
+            name='a',
+            credential=TFNSW_KEY,
+            store=FakeKeys(key='secret'),
+            display_name='A',
+        ),
+        DeviceKey(
+            name='b', credential=TFNSW_KEY, store=FakeKeys(), display_name='B',
+        ),
+    )
+    probe = SystemProbe(
+        wifi=FakeWifi(),
+        keys=keys,
+        tiles=NullTiles(),
+        last_error=LastError(zone=SYDNEY_ZONE),
+        data_dir=tmp_path,
+        version_file=None,
+        root=tmp_path,
+    )
+    facts = await probe.probe()
+    assert facts.missing_keys == ('B',)
 
 
 def test_mem_available_without_the_line() -> None:

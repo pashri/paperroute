@@ -7,7 +7,6 @@ from paperroute_device.core.text import DOT
 from paperroute_transit.core.rhythm import frame_time
 from paperroute_transit.core.state_model import State
 
-NO_KEY: Final[str] = f'No API key{DOT}set it on your phone'
 NO_WIFI: Final[str] = (
     f'No Wi-Fi{DOT}timetable times{DOT}hold both knobs, then Wi-Fi'
 )
@@ -19,6 +18,23 @@ DAY_NAMES: Final[tuple[str, ...]] = (
     'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday',
     'Sunday',
 )
+
+
+def no_key_banner(*, name: str) -> str:
+    """
+    Say that a key is missing.
+
+    Parameters
+    ----------
+    name : str
+        The key's display name.
+
+    Returns
+    -------
+    str
+        The banner naming the key.
+    """
+    return f'No {name} key{DOT}set it on your phone'
 
 
 def device_banner(*, state: State) -> str | None:
@@ -33,13 +49,14 @@ def device_banner(*, state: State) -> str | None:
     Returns
     -------
     str | None
-        `NO_WIFI` while offline, else `NO_KEY` when no API key is set,
-        else the timetable's end when it is near or past, else None.
+        `NO_WIFI` while offline, else the no-key banner naming the
+        first missing key, else the timetable's end when it is near or
+        past, else None.
     """
     if offline(state=state):
         return NO_WIFI
-    if state.panel.key_set is False:
-        return NO_KEY
+    if state.panel.missing_keys:
+        return no_key_banner(name=state.panel.missing_keys[0])
     return timetable_banner(state=state)
 
 

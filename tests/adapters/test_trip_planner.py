@@ -379,7 +379,7 @@ def test_planner_only_for_live_feeds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Replayed feeds get no planner; live feeds one over the key file."""
-    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'key'))
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(tmp_path / 'key'))
     assert trip_planner_for(live=False) is None
     live = trip_planner_for(live=True)
     assert live is not None

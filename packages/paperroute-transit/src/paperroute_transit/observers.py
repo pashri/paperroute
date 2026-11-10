@@ -277,9 +277,10 @@ def device_snapshot(*, status: DeviceStatus) -> dict[str, object]:
     Returns
     -------
     dict[str, object]
-        Timetable, schema, rebuild state, calls today, the key state and
-        what a phone asked for that waits on the panel, and Wi-Fi
-        setup's phase; never its password.
+        Timetable, schema, rebuild state, calls today, whether every
+        key is set (None until known), what a phone asked for that
+        waits on the panel, and Wi-Fi setup's phase; never its
+        password and never a key's name or value.
     """
     setup = status.setup
     return {
@@ -288,7 +289,11 @@ def device_snapshot(*, status: DeviceStatus) -> dict[str, object]:
         'rebuilding': status.rebuilding,
         'rebuild_failed': status.rebuild_failed,
         'calls_today': status.calls_today,
-        'key_set': status.key_set,
+        'key_set': (
+            None
+            if status.missing_keys is None
+            else not status.missing_keys
+        ),
         'asked': None if status.asked is None else status.asked.value,
         'setup_phase': None if setup is None else setup.phase.value,
     }

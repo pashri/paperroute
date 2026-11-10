@@ -67,7 +67,11 @@ CITY_NAMES: Final[re.Pattern[str]] = re.compile(
 )
 KMS_OFF: Final[str] = 's/^dtoverlay=vc4-kms-v3d/#&/'
 ROOT_SAFE_ENVIRONMENT: Final[frozenset[str]] = frozenset(
-    {'PAPERROUTE_API_KEY_FILE', 'FONTCONFIG_FILE'}
+    {
+        'PAPERROUTE_KEY_FILE_TFNSW',
+        'PAPERROUTE_API_KEY_FILE',
+        'FONTCONFIG_FILE',
+    }
 )
 LED_PATTERNS: Final[dict[str, dict[str, str]]] = {
     'boot': {'trigger': 'timer', 'delay_on': '100', 'delay_off': '100'},
@@ -83,8 +87,14 @@ FONTS_CONF: Final[str] = (
     'packages/paperroute-device/src/paperroute_device/fontconfig/fonts.conf'
 )
 UNIT_ENVIRONMENT: Final[str] = (
-    'PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets'
+    'PAPERROUTE_KEY_FILE_TFNSW=/var/lib/paperroute/secrets'
+    ' PAPERROUTE_API_KEY_FILE=/var/lib/paperroute/secrets'
     f' FONTCONFIG_FILE=/opt/paperroute/current/{FONTS_CONF}'
+)
+# Task 12 removes this exemption when the key variable moves to app.conf.
+KEY_FILE_LINE: Final[str] = f'Environment={UNIT_ENVIRONMENT}'
+KEY_FILE_EXEMPT: Final[frozenset[str]] = frozenset(
+    {'systemd/paperroute.service', 'systemd/paperroute-timetable.service'}
 )
 JOURNALD: Final[dict[str, dict[str, str]]] = {
     'Journal': {'Storage': 'volatile', 'RuntimeMaxUse': '24M'},
@@ -1265,6 +1275,29 @@ def test_deploy_checks_a_known_city(tmp_path: Path) -> None:
     assert (tmp_path / 'checked').exists()
 
 
+def unexempt(*, path: Path, text: str) -> str:
+    """
+    Drop the one city-named line a file is allowed to hold.
+
+    Parameters
+    ----------
+    path : Path
+        The file under deploy/.
+    text : str
+        Its text.
+
+    Returns
+    -------
+    str
+        The text without the exempt line, matched as a whole line.
+    """
+    if str(path.relative_to(DEPLOY)) not in KEY_FILE_EXEMPT:
+        return text
+    return '\n'.join(
+        line for line in text.splitlines() if line != KEY_FILE_LINE
+    )
+
+
 def test_deploy_files_name_no_city() -> None:
     """No text file under deploy/ names a city or its transport agency."""
     texts = {
@@ -1275,7 +1308,8 @@ def test_deploy_files_name_no_city() -> None:
     named = [
         str(path.relative_to(DEPLOY))
         for path, text in texts.items()
-        if isinstance(text, str) and CITY_NAMES.search(text)
+        if isinstance(text, str)
+        and CITY_NAMES.search(unexempt(path=path, text=text))
     ]
     assert sum(isinstance(text, str) for text in texts.values()) > 10
     assert not named

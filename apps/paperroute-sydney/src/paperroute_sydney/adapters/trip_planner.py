@@ -427,7 +427,7 @@ def trip_planner_for(*, live: bool) -> KeyedTripPlanner | None:
     Returns
     -------
     KeyedTripPlanner | None
-        A planner reading the key file named by PAPERROUTE_API_KEY_FILE
+        A planner reading the key file named by PAPERROUTE_KEY_FILE_TFNSW
         at each request and sharing the feeds' limiter; None for replayed
         feeds.
     """

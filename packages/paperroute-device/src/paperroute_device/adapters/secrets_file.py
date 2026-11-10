@@ -1,7 +1,9 @@
 """The file holding an API key, read again whenever it changes."""
 
 import logging
+import os
 import re
+import sys
 from pathlib import Path
 from typing import Final
 
@@ -10,8 +12,33 @@ from paperroute_device.adapters.atomic_file import write_atomic
 KEY_PATTERN: Final[re.Pattern[str]] = re.compile(r'[\x21-\x7e]{16,4096}')
 SECRETS_MODE: Final[int] = 0o600
 SECRETS_PREFIX: Final[str] = '.secrets.'
+KEY_FILE_VARIABLE: Final[str] = 'PAPERROUTE_KEY_FILE_{name}'
 
 logger = logging.getLogger(__name__)
+
+
+def key_path_from_env(*, name: str) -> Path:
+    """
+    Name a key's file from its environment variable.
+
+    The variable is `PAPERROUTE_KEY_FILE_` and the key's name in upper
+    case. Exits with a message when it is unset.
+
+    Parameters
+    ----------
+    name : str
+        The key's name.
+
+    Returns
+    -------
+    Path
+        The key file, which may not exist yet.
+    """
+    variable = KEY_FILE_VARIABLE.format(name=name.upper())
+    key_file = os.getenv(variable)
+    if not key_file:
+        sys.exit(f'Set {variable} to the file holding the {name} key.')
+    return Path(key_file).expanduser()
 
 
 class SecretsFile:

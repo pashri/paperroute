@@ -7,7 +7,10 @@ from typing import Final
 
 import pytest
 
-from paperroute_device.adapters.secrets_file import SecretsFile
+from paperroute_device.adapters.secrets_file import (
+    SecretsFile,
+    key_path_from_env,
+)
 
 FAKE_KEY: Final[str] = 'fake-key-0123456789abcdef'
 OTHER_KEY: Final[str] = 'fake-key-fedcba9876543210'
@@ -82,3 +85,17 @@ def test_unreadable_key_reads_none(
     assert [r.levelname for r in caplog.records] == ['WARNING']
     assert 'secrets' in caplog.records[0].getMessage()
     assert 'fake-key' not in caplog.text
+
+
+def test_key_path_from_env_names_the_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each key has its own variable; unset, the app exits naming it."""
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_WEATHER', str(tmp_path / 'w'))
+    monkeypatch.delenv('PAPERROUTE_KEY_FILE_OTHER', raising=False)
+    assert key_path_from_env(name='weather') == tmp_path / 'w'
+    with pytest.raises(SystemExit) as caught:
+        key_path_from_env(name='other')
+    assert str(caught.value) == (
+        'Set PAPERROUTE_KEY_FILE_OTHER to the file holding the other key.'
+    )

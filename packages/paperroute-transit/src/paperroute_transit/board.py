@@ -10,7 +10,7 @@ import signal
 import sys
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, tzinfo
 from pathlib import Path
 from typing import TYPE_CHECKING, Final, Protocol
@@ -117,7 +117,8 @@ class DeviceKeys(Protocol):
         Returns
         -------
         Sequence[DeviceKey]
-            The keys; the first one feeds the device's probe and resets.
+            The keys, in declaration order; the probe and the resets
+            cover every one.
         """
 
 
@@ -446,7 +447,7 @@ def wifi_for(*, args: argparse.Namespace) -> WifiControl:
 def resets_for(
     *,
     args: argparse.Namespace,
-    key: KeyStore,
+    keys: Sequence[KeyStore],
     wifi: WifiControl,
     data_dir: Path = DATA_DIR,
 ) -> Resets:
@@ -457,8 +458,8 @@ def resets_for(
     ----------
     args : argparse.Namespace
         Parsed arguments.
-    key : KeyStore
-        Holds the API key.
+    keys : Sequence[KeyStore]
+        Hold the API keys.
     wifi : WifiControl
         Forgets the saved Wi-Fi networks.
     data_dir : Path
@@ -475,9 +476,9 @@ def resets_for(
     return FileResets(
         data_dir=data_dir,
         state=args.state,
-        key=key,
+        keys=keys,
         wifi=wifi,
-        timetable=args.timetable,
+        erased=(args.timetable,),
     )
 
 
@@ -500,37 +501,31 @@ def device_for(
     last_error : LastError
         Holds the latest error logged.
     parts : CityParts
-        The city's parts; its first device key is the one kept.
+        The city's parts, whose device keys are all kept.
 
     Returns
     -------
     DevicePorts
-        Wi-Fi, the system probe, the key store and the resets; replayed
+        Wi-Fi, the system probe, the keys and the resets; replayed
         feeds need no key, so they get Wi-Fi alone, no facts and no
         resets.
-
-    Raises
-    ------
-    ValueError
-        When the city gives no device key for live feeds.
     """
     wifi = wifi_for(args=args)
     if args.feeds != 'live':
         return DevicePorts(wifi=wifi)
     keys = tuple(parts.keys())
-    if not keys:
-        raise ValueError('the city gives no device key')
-    key = keys[0].store
     probe = SystemProbe(
         wifi=wifi,
-        key=key,
+        keys=keys,
         tiles=tiles,
         last_error=last_error,
         data_dir=args.state.parent,
         version_file=args.version_file,
     )
-    resets = resets_for(args=args, key=key, wifi=wifi)
-    return DevicePorts(wifi=wifi, probe=probe, key=key, resets=resets)
+    resets = resets_for(
+        args=args, keys=[key.store for key in keys], wifi=wifi,
+    )
+    return DevicePorts(wifi=wifi, probe=probe, keys=keys, resets=resets)
 
 
 def feeds_client(
@@ -1038,7 +1033,13 @@ def device_pages_for(
         status=lambda: timings.device,
         panel=lambda: timings.panel,
         feeds=lambda: timings.last_ok,
-        keys=tuple(parts.keys()),
+        keys=tuple(
+            replace(
+                key,
+                last_used=lambda: max(timings.last_ok.values(), default=None),
+            )
+            for key in parts.keys()
+        ),
         feed_label=lambda feed: city.feeds.label(feed=feed),
         daily_limit=city.feeds.daily_limit,
         post=display.send,

@@ -15,12 +15,18 @@ from paperroute_device.adapters.web_shell import web_app
 from paperroute_device.core.device_events import ApiKeyChanged, JoinAsked
 from paperroute_device.core.device_model import (
     Credential,
+    DeviceKey,
     JoinRequest,
     WifiNetwork,
     WifiPhase,
     WifiSetup,
 )
-from paperroute_device_testkit.device_pages import HOTSPOT, DeviceSite
+from paperroute_device_testkit.device_fakes import FakeKeys
+from paperroute_device_testkit.device_pages import (
+    HOTSPOT,
+    NO_KEY_HOTSPOT,
+    DeviceSite,
+)
 from paperroute_testkit.page_markup import parse_page
 
 Client = TestClient[web.Request, web.Application]
@@ -115,7 +121,7 @@ async def test_setup_form_uses_credential_label(setup: DeviceSite) -> None:
         not_saved='Test key not saved.',
     )
     assert setup.status is not None
-    setup.status = replace(setup.status, key_set=False)
+    setup.status = replace(setup.status, missing_keys=('Test',))
 
     def refuse(*, key: str) -> None:
         del key
@@ -236,7 +242,7 @@ async def test_setup_post_writes_key_first(
 ) -> None:
     """A given key is stored and announced before the join."""
     assert setup.status is not None
-    setup.status = replace(setup.status, key_set=False)
+    setup.status = replace(setup.status, missing_keys=('Test',))
     response = await _post(client=client, data={
         'network': 'Home', 'password': 'pw12345678', 'api_key': GOOD_KEY,
     })
@@ -245,7 +251,41 @@ async def test_setup_post_writes_key_first(
     assert [type(event) for event in setup.posted] == [
         ApiKeyChanged, JoinAsked,
     ]
-    assert setup.posted[0] == ApiKeyChanged(present=True)
+    assert setup.posted[0] == ApiKeyChanged(missing=())
+
+
+async def test_setup_asks_for_the_first_missing_key() -> None:
+    """With the first key set, the form asks for and writes the second."""
+    second = FakeKeys()
+    site = DeviceSite(
+        status=replace(NO_KEY_HOTSPOT, missing_keys=('Weather',)),
+        feeds={},
+        more_keys=(
+            DeviceKey(
+                name='weather',
+                credential=Credential(
+                    label='Weather key',
+                    refusal='Bad weather key.',
+                    not_saved='Weather key not saved.',
+                ),
+                store=second,
+                display_name='Weather',
+            ),
+        ),
+    )
+    client = await _start(setup=site)
+    try:
+        page = await (await client.get('/setup')).text()
+        response = await _post(client=client, data={
+            'network': 'Home', 'password': 'pw12345678', 'api_key': GOOD_KEY,
+        })
+    finally:
+        await client.close()
+    assert '<label for="api-key">Weather key</label>' in page
+    assert 'Test key' not in page
+    assert response.status == HTTPStatus.SEE_OTHER
+    assert (site.keys.key, second.key) == ('already-set-key-123', GOOD_KEY)
+    assert site.posted[0] == ApiKeyChanged(missing=())
 
 
 async def test_setup_never_echoes_password(
@@ -299,7 +339,7 @@ async def test_setup_post_key_save_fails(
         raise OSError('disk full')
 
     assert setup.status is not None
-    setup.status = replace(setup.status, key_set=False)
+    setup.status = replace(setup.status, missing_keys=('Test',))
     setup.keys.write = fail  # type: ignore[method-assign]
     response = await _post(client=client, data={
         'network': 'Home', 'password': 'pw12345678', 'api_key': GOOD_KEY,

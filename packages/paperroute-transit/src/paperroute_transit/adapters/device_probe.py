@@ -2,11 +2,17 @@
 
 import asyncio
 import shutil
+from collections.abc import Sequence
 from pathlib import Path
 from typing import Final
 
-from paperroute_device.core.device_model import DeviceFacts, WifiStatus
-from paperroute_device.ports import KeyStore, WifiControl
+from paperroute_device.core.device_model import (
+    DeviceFacts,
+    DeviceKey,
+    WifiStatus,
+    missing_keys,
+)
+from paperroute_device.ports import WifiControl
 from paperroute_transit.logs import LastError
 from paperroute_transit.ports import TileRepository
 
@@ -131,8 +137,8 @@ class SystemProbe:
     ----------
     wifi : WifiControl
         Reports the Wi-Fi link.
-    key : KeyStore
-        Says whether a key is set.
+    keys : Sequence[DeviceKey]
+        Each says whether it is set.
     tiles : TileRepository
         Says when the map tiles were built.
     last_error : LastError
@@ -149,7 +155,7 @@ class SystemProbe:
         self,
         *,
         wifi: WifiControl,
-        key: KeyStore,
+        keys: Sequence[DeviceKey],
         tiles: TileRepository,
         last_error: LastError,
         data_dir: Path,
@@ -157,7 +163,7 @@ class SystemProbe:
         root: Path = Path('/'),
     ) -> None:
         self._wifi = wifi
-        self._key = key
+        self._keys = tuple(keys)
         self._tiles = tiles
         self._last_error = last_error
         self._data_dir = data_dir
@@ -218,7 +224,7 @@ class SystemProbe:
             version=self.version(),
             last_error=self._last_error.text(),
             tiles_built=self._tiles.version(),
-            key_set=self._key.present(),
+            missing_keys=missing_keys(keys=self._keys),
         )
 
     async def probe(self) -> DeviceFacts:

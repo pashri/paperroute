@@ -11,10 +11,12 @@ from paperroute_device.adapters.wifi import NullWifi, hotspot_password
 from paperroute_device.core.device_events import ApiKeyChanged
 from paperroute_device.core.device_model import (
     DeviceFacts,
+    DeviceKey,
     DeviceStatus,
     JoinOutcome,
+    missing_keys,
 )
-from paperroute_device.ports import DeviceProbe, KeyStore, Resets, WifiControl
+from paperroute_device.ports import DeviceProbe, Resets, WifiControl
 from paperroute_transit.core.device import device_status
 from paperroute_transit.core.messages import (
     DeviceProbed,
@@ -69,8 +71,8 @@ class DevicePorts:
         Scans, joins and shares Wi-Fi.
     probe : DeviceProbe | None
         Gathers the device's facts; None where there is nothing to read.
-    key : KeyStore | None
-        Holds the API key; None when the app doesn't manage it.
+    keys : tuple[DeviceKey, ...]
+        The API keys the device keeps; none when the app manages none.
     resets : Resets
         Resets the settings or erases everything.
     radio : asyncio.Lock
@@ -82,7 +84,7 @@ class DevicePorts:
 
     wifi: WifiControl = field(default_factory=NullWifi)
     probe: DeviceProbe | None = None
-    key: KeyStore | None = None
+    keys: tuple[DeviceKey, ...] = ()
     resets: Resets = field(default_factory=NullResets)
     radio: asyncio.Lock = field(default_factory=asyncio.Lock)
     home: HomeWifi = field(default_factory=HomeWifi)
@@ -333,7 +335,7 @@ def device_work(
 
 def key_known(*, ports: DevicePorts) -> ApiKeyChanged | None:
     """
-    Say whether a key is set, for the app to know before it polls.
+    Say which keys are missing, for the app to know before it polls.
 
     Parameters
     ----------
@@ -343,11 +345,11 @@ def key_known(*, ports: DevicePorts) -> ApiKeyChanged | None:
     Returns
     -------
     ApiKeyChanged | None
-        Whether the key store holds a key; None without a key store.
+        The keys whose stores hold none; None with no keys.
     """
-    if ports.key is None:
+    if not ports.keys:
         return None
-    return ApiKeyChanged(present=ports.key.present())
+    return ApiKeyChanged(missing=missing_keys(keys=ports.keys))
 
 
 @dataclass

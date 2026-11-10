@@ -177,9 +177,13 @@ def test_sleep_screen_is_drawn_once() -> None:
                 departures=deps,
                 until=START + timedelta(hours=2),
             ),
-            DeviceProbed(facts=device_facts(key_set=count == 5)),
+            DeviceProbed(
+                facts=device_facts(
+                    missing_keys=() if count == 5 else ('TfNSW',),
+                ),
+            ),
             TimetableSeen(version=f'v{count}'),
-            ApiKeyChanged(present=count == 1),
+            ApiKeyChanged(missing=() if count == 1 else ('TfNSW',)),
             Tick(now=START + timedelta(minutes=count)),
             Tick(now=START + timedelta(minutes=count, seconds=40)),
         )

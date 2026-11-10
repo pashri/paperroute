@@ -50,7 +50,9 @@ REFUSALS: Final[dict[str, tuple[str, dict[str, str]]]] = {
     ),
     'device_key': ('/device/key', {'api_key': 'short'}),
 }
-NO_KEY_HOTSPOT: Final[DeviceStatus] = replace(HOTSPOT, key_set=False)
+NO_KEY_HOTSPOT: Final[DeviceStatus] = replace(
+    HOTSPOT, missing_keys=('TfNSW',),
+)
 
 
 def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
@@ -73,7 +75,15 @@ def display(*, status: DeviceStatus, keys: KeyStore) -> WebDisplay:
         status=lambda: status,
         feeds=lambda: {TRAINS: NOW - 12, BUSES: NOW - 40},
         panel=lambda: None,
-        keys=(DeviceKey(name='tfnsw', credential=TFNSW_KEY, store=keys),),
+        keys=(
+            DeviceKey(
+                name='tfnsw',
+                credential=TFNSW_KEY,
+                store=keys,
+                display_name='TfNSW',
+                last_used=lambda: NOW - 12,
+            ),
+        ),
         feed_label=feed_label,
         daily_limit=DAILY_LIMIT,
         post=lambda event: None,

@@ -1,7 +1,7 @@
 """The device's own pages over fixed facts, a fake key store and files."""
 
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from datetime import timedelta, timezone, tzinfo
 from pathlib import Path
 from typing import Final
@@ -40,7 +40,7 @@ FACTS: Final[DeviceFacts] = DeviceFacts(
     version='abc1234',
     last_error=None,
     tiles_built='2025-10-19T08:00:00+11:00',
-    key_set=True,
+    missing_keys=(),
 )
 STATUS: Final[DeviceStatus] = DeviceStatus(
     timetable='2025-10-21T21:45:00+11:00',
@@ -48,7 +48,7 @@ STATUS: Final[DeviceStatus] = DeviceStatus(
     rebuilding=False,
     rebuild_failed=False,
     calls_today=8412,
-    key_set=True,
+    missing_keys=(),
     facts=FACTS,
 )
 NETWORKS: Final[tuple[WifiNetwork, ...]] = (
@@ -64,12 +64,13 @@ HOTSPOT: Final[DeviceStatus] = DeviceStatus(
     rebuilding=False,
     rebuild_failed=False,
     calls_today=0,
-    key_set=True,
+    missing_keys=(),
     facts=None,
     setup=WifiSetup(
         phase=WifiPhase.HOTSPOT, password='7Q4K9W2M', networks=NETWORKS,
     ),
 )
+NO_KEY_HOTSPOT: Final[DeviceStatus] = replace(HOTSPOT, missing_keys=('Test',))
 
 
 @dataclass
@@ -94,6 +95,10 @@ class DeviceSite:
         How the pages name the first key.
     key_name : str
         The first key's name.
+    display_name : str
+        The first key's short name.
+    last_used : float | None
+        When the first key last worked, or None.
     more_keys : tuple[DeviceKey, ...]
         The keys after the first.
     feed_label : Callable[[str], str]
@@ -125,6 +130,8 @@ class DeviceSite:
     keys: FakeKeys = field(default_factory=lambda: FakeKeys(key=KEY))
     credential: Credential = TEST_KEY
     key_name: str = 'test'
+    display_name: str = 'Test'
+    last_used: float | None = None
     more_keys: tuple[DeviceKey, ...] = ()
     feed_label: Callable[[str], str] = str.title
     daily_limit: int = 60_000
@@ -155,6 +162,8 @@ class DeviceSite:
                     name=self.key_name,
                     credential=self.credential,
                     store=self.keys,
+                    display_name=self.display_name,
+                    last_used=lambda: self.last_used,
                 ),
                 *self.more_keys,
             ),

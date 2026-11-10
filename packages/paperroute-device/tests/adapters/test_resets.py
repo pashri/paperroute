@@ -54,9 +54,9 @@ def resets_in(
     return FileResets(
         data_dir=folder,
         state=folder / 'state.json',
-        key=keys,
+        keys=(keys,),
         wifi=wifi,
-        timetable=folder / 'timetable.db',
+        erased=(folder / 'timetable.db',),
     )
 
 
@@ -111,9 +111,9 @@ async def test_file_resets_refuse_paths_outside_data_dir(
     resets = FileResets(
         data_dir=data,
         state=data / 'state.json',
-        key=FakeKeys(),
+        keys=(FakeKeys(),),
         wifi=FakeWifi(),
-        timetable=outside,
+        erased=(outside,),
     )
     with caplog.at_level(logging.ERROR):
         await resets.reset(kind=ResetKind.ERASE)
@@ -121,6 +121,68 @@ async def test_file_resets_refuse_paths_outside_data_dir(
     assert target.exists()
     refused = [r for r in caplog.records if r.levelno == logging.ERROR]
     assert len(refused) == 2
+
+
+def two_key_resets(
+    *, folder: Path, erased: tuple[Path, ...] = (),
+) -> tuple[FileResets, FakeKeys, FakeKeys]:
+    """
+    Make resets over two set keys in a data directory.
+
+    Parameters
+    ----------
+    folder : Path
+        The data directory.
+    erased : tuple[Path, ...]
+        The extra files an erase deletes.
+
+    Returns
+    -------
+    tuple[FileResets, FakeKeys, FakeKeys]
+        The resets and each key's store.
+    """
+    first, second = FakeKeys(key='a' * 32), FakeKeys(key='b' * 32)
+    resets = FileResets(
+        data_dir=folder,
+        state=folder / 'state.json',
+        keys=(first, second),
+        wifi=FakeWifi(),
+        erased=erased,
+    )
+    return resets, first, second
+
+
+async def test_file_resets_erase_clears_every_key(tmp_path: Path) -> None:
+    """Erasing everything clears each key, not just the first."""
+    resets, first, second = two_key_resets(folder=tmp_path)
+    await resets.reset(kind=ResetKind.ERASE)
+    assert (first.key, second.key) == (None, None)
+
+
+async def test_settings_reset_clears_every_key(tmp_path: Path) -> None:
+    """Resetting settings clears each key too."""
+    resets, first, second = two_key_resets(folder=tmp_path)
+    await resets.reset(kind=ResetKind.SETTINGS)
+    assert (first.key, second.key) == (None, None)
+
+
+async def test_erase_deletes_the_extra_files_only_inside_data_dir(
+    tmp_path: Path,
+) -> None:
+    """Erase deletes each extra file in the data directory, none outside."""
+    data, elsewhere = tmp_path / 'data', tmp_path / 'elsewhere'
+    data.mkdir()
+    elsewhere.mkdir()
+    inner = (data / 'one.db', data / 'two.db')
+    outer = elsewhere / 'three.db'
+    for path in (*inner, outer):
+        path.write_text('x', encoding='utf-8')
+    resets, _, _ = two_key_resets(folder=data, erased=(*inner, outer))
+    await resets.reset(kind=ResetKind.SETTINGS)
+    assert all(path.exists() for path in (*inner, outer))
+    await resets.reset(kind=ResetKind.ERASE)
+    assert not any(path.exists() for path in inner)
+    assert outer.exists()
 
 
 async def test_null_resets_log_once(
@@ -149,9 +211,9 @@ async def test_file_resets_refuse_a_linked_directory(
     resets = FileResets(
         data_dir=data,
         state=data / 'state.json',
-        key=FakeKeys(),
+        keys=(FakeKeys(),),
         wifi=FakeWifi(),
-        timetable=data / 'sub' / 'timetable.db',
+        erased=(data / 'sub' / 'timetable.db',),
     )
     await resets.reset(kind=ResetKind.ERASE)
     assert outside.exists()

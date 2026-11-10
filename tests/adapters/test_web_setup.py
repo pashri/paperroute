@@ -24,6 +24,7 @@ def _setup() -> DeviceSite:
         status=HOTSPOT,
         feeds={},
         credential=TFNSW_KEY,
+        display_name='TfNSW',
         feed_label=feed_label,
         daily_limit=DAILY_LIMIT,
         zone=SYDNEY_ZONE,
@@ -55,7 +56,7 @@ async def test_setup_page_asks_for_key_only_without_key(
     page = await (await client.get('/setup')).text()
     assert 'name="api_key"' not in page
     assert setup.status is not None
-    setup.status = replace(setup.status, key_set=False)
+    setup.status = replace(setup.status, missing_keys=('TfNSW',))
     page = await (await client.get('/setup')).text()
     assert 'name="api_key"' in page
     assert 'TfNSW API key' in page
@@ -66,7 +67,7 @@ async def test_setup_post_bad_key_no_join(
 ) -> None:
     """A key the store refuses stops the join."""
     assert setup.status is not None
-    setup.status = replace(setup.status, key_set=False)
+    setup.status = replace(setup.status, missing_keys=('TfNSW',))
 
     def refuse(*, key: str) -> None:
         del key

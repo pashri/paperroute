@@ -5,7 +5,9 @@ from typing import Final
 from paperroute_device.adapters.secrets_file import SecretsFile
 from paperroute_device.core.device_model import DeviceKey
 from paperroute_sydney.adapters.tfnsw import (
+    TFNSW_DISPLAY_NAME,
     TFNSW_KEY,
+    TFNSW_KEY_NAME,
     AiohttpFeedsClient,
     key_path_from_env,
     tfnsw_limiter,
@@ -26,7 +28,7 @@ def tfnsw_feeds() -> FeedsClient:
     """
     Make the client of TfNSW's live feeds.
 
-    It reads the key from PAPERROUTE_API_KEY_FILE at each fetch, so a
+    It reads the key from PAPERROUTE_KEY_FILE_TFNSW at each fetch, so a
     changed key is used without a restart, and waits on the limiter the
     Trip Planner shares.
 
@@ -48,13 +50,15 @@ def tfnsw_keys() -> tuple[DeviceKey, ...]:
     Returns
     -------
     tuple[DeviceKey, ...]
-        The TfNSW key, in the file PAPERROUTE_API_KEY_FILE names.
+        The TfNSW key, in the file PAPERROUTE_KEY_FILE_TFNSW names. The
+        board says when it was last used.
     """
     return (
         DeviceKey(
-            name='tfnsw',
+            name=TFNSW_KEY_NAME,
             credential=TFNSW_KEY,
             store=SecretsFile(path=key_path_from_env()),
+            display_name=TFNSW_DISPLAY_NAME,
         ),
     )
 

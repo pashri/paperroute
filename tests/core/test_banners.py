@@ -9,9 +9,9 @@ import pytest
 from paperroute_device.core.device_events import ApiKeyChanged
 from paperroute_testkit.core.factories import START
 from paperroute_transit.core.banners import (
-    NO_KEY,
     TIMETABLE_OUT_OF_DATE,
     device_banner,
+    no_key_banner,
     timetable_banner,
     timetable_ends,
 )
@@ -155,8 +155,23 @@ def test_banner_changes_at_most_once_a_day() -> None:
 def test_wifi_and_key_warnings_come_first() -> None:
     """A missing key is said before the timetable's end."""
     state = ending(state=loaded(state=fresh()), last_day=FRIDAY)
-    state, _ = step(state, ApiKeyChanged(present=False))
-    assert device_banner(state=state) == NO_KEY
+    state, _ = step(state, ApiKeyChanged(missing=('TfNSW',)))
+    assert device_banner(state=state) == no_key_banner(name='TfNSW')
+
+
+def test_banner_names_the_first_missing_key() -> None:
+    """The key banner names the first missing key, else the timetable's."""
+    state = ending(state=loaded(state=fresh()), last_day=FRIDAY)
+
+    def banner(*, missing: tuple[str, ...]) -> str | None:
+        panel = replace(state.panel, missing_keys=missing)
+        return device_banner(state=replace(state, panel=panel))
+
+    assert banner(missing=('TfNSW', 'Other')) == (
+        'No TfNSW key · set it on your phone'
+    )
+    assert banner(missing=('Other',)) == 'No Other key · set it on your phone'
+    assert banner(missing=()) == ENDS_FRIDAY
 
 
 def test_stop_view_shows_the_warning() -> None:

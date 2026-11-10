@@ -26,7 +26,7 @@ from paperroute_hardware.core.knob_events import (
 from paperroute_sydney.city import PEAK_WINDOWS, SYDNEY
 from paperroute_testkit.core.factories import START
 from paperroute_testkit.core.steps import step_untouched
-from paperroute_transit.core.banners import NO_KEY
+from paperroute_transit.core.banners import no_key_banner
 from paperroute_transit.core.device import (
     NOTICE,
     PROBE_EVERY,
@@ -304,17 +304,17 @@ def fetches(*, effects: tuple[object, ...]) -> int:
 
 def test_no_key_banner_and_no_polls() -> None:
     """With no key the banner warns and no feed is fetched or counted."""
-    state, _ = step(loaded(state=fresh()), ApiKeyChanged(present=False))
+    state, _ = step(loaded(state=fresh()), ApiKeyChanged(missing=('TfNSW',)))
     assert state.panel.key_set is False
     view = stop_view_of(state=state)
-    assert view.banner == NO_KEY
+    assert view.banner == no_key_banner(name='TfNSW')
     assert view.warning
     calls = state.quota.calls
     for seconds in range(30, 150, 30):
         state, effects = step(state, at(seconds=seconds))
         assert not fetches(effects=effects), seconds
     assert state.quota.calls == calls
-    state, _ = step(state, ApiKeyChanged(present=True))
+    state, _ = step(state, ApiKeyChanged(missing=()))
     assert not stop_view_of(state=state).warning
     _, effects = step(state, at(seconds=180))
     assert fetches(effects=effects)
@@ -364,7 +364,7 @@ def test_probe_every_thirty_seconds() -> None:
 
 def test_probed_facts_are_kept_with_the_key() -> None:
     """Facts are stored and their key state copied to the panel."""
-    facts = device_facts(key_set=False)
+    facts = device_facts(missing_keys=('TfNSW',))
     state, _ = step(loaded(state=fresh()), DeviceProbed(facts=facts))
     assert state.panel.facts == facts
     assert state.panel.key_set is False
@@ -384,7 +384,7 @@ def test_device_status() -> None:
         rebuilding=False,
         rebuild_failed=False,
         calls_today=state.quota.calls,
-        key_set=True,
+        missing_keys=(),
         facts=device_facts(),
     )
     assert status.calls_today > 0

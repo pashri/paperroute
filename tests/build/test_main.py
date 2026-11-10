@@ -35,7 +35,7 @@ def test_refresh_logs_a_missing_key_file_to_the_error_log(
     """A missing key file reaches errors.jsonl, exits 1 and builds nothing."""
     key_file = tmp_path / 'no-such-key'
     error_log = tmp_path / 'log' / 'errors.jsonl'
-    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(key_file))
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(key_file))
     monkeypatch.setattr(
         sys,
         'argv',

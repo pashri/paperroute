@@ -1,5 +1,6 @@
 """What the device knows about itself."""
 
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import StrEnum
@@ -42,11 +43,34 @@ class DeviceKey:
         How the pages name the key and refuse a bad one.
     store : KeyStore
         Where the key is kept.
+    display_name : str
+        The key's short name, as the banner says it.
+    last_used : Callable[[], float | None]
+        Wall-clock time the key last worked, or None when it hasn't.
     """
 
     name: str
     credential: Credential
     store: KeyStore
+    display_name: str
+    last_used: Callable[[], float | None] = lambda: None
+
+
+def missing_keys(*, keys: Sequence[DeviceKey]) -> tuple[str, ...]:
+    """
+    Name the keys that are not set.
+
+    Parameters
+    ----------
+    keys : Sequence[DeviceKey]
+        The keys, in declaration order.
+
+    Returns
+    -------
+    tuple[str, ...]
+        The display name of each key whose store holds none, in order.
+    """
+    return tuple(key.display_name for key in keys if not key.store.present())
 
 
 @dataclass(frozen=True)
@@ -141,8 +165,8 @@ class DeviceFacts:
         The latest error logged, with its time.
     tiles_built : str | None
         When the map tiles were built, or None with no tiles.
-    key_set : bool
-        Whether an API key is set.
+    missing_keys : tuple[str, ...]
+        The display names of the keys not set, in declaration order.
     """
 
     wifi: WifiStatus
@@ -154,7 +178,7 @@ class DeviceFacts:
     version: str
     last_error: str | None
     tiles_built: str | None
-    key_set: bool
+    missing_keys: tuple[str, ...]
 
 
 class MenuRow(StrEnum):
@@ -300,8 +324,8 @@ class DeviceStatus:
         Whether the last timetable rebuild failed.
     calls_today : int
         API calls made today.
-    key_set : bool | None
-        Whether an API key is set; None until known.
+    missing_keys : tuple[str, ...] | None
+        The display names of the keys not set; None until known.
     facts : DeviceFacts | None
         The latest probe, or None before the first.
     asked : ConfirmAction | None
@@ -315,7 +339,7 @@ class DeviceStatus:
     rebuilding: bool
     rebuild_failed: bool
     calls_today: int
-    key_set: bool | None
+    missing_keys: tuple[str, ...] | None
     facts: DeviceFacts | None
     asked: ConfirmAction | None = None
     setup: WifiSetup | None = None
@@ -347,8 +371,9 @@ class Panel:
 
     Attributes
     ----------
-    key_set : bool | None
-        Whether an API key is set; None until known.
+    missing_keys : tuple[str, ...] | None
+        The display names of the keys not set, in declaration order;
+        None until known.
     facts : DeviceFacts | None
         The latest probe, or None before the first.
     probed_at : datetime | None
@@ -373,7 +398,7 @@ class Panel:
         Whether the sleep is quiet hours', which a tick can end.
     """
 
-    key_set: bool | None = None
+    missing_keys: tuple[str, ...] | None = None
     facts: DeviceFacts | None = None
     probed_at: datetime | None = None
     resetting: ResetKind | None = None
@@ -385,3 +410,15 @@ class Panel:
     wifi: WifiSetup | None = None
     awake_until: datetime | None = None
     by_quiet: bool = False
+
+    @property
+    def key_set(self) -> bool | None:
+        """
+        Say whether every key is set.
+
+        Returns
+        -------
+        bool | None
+            None until known, else True when no key is missing.
+        """
+        return None if self.missing_keys is None else not self.missing_keys

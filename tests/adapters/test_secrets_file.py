@@ -47,9 +47,9 @@ async def test_key_never_logged(
 def test_key_path_from_env(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The path comes from PAPERROUTE_API_KEY_FILE; unset, the app exits."""
-    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(tmp_path / 'secrets'))
+    """The path comes from PAPERROUTE_KEY_FILE_TFNSW; unset, the app exits."""
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(tmp_path / 'secrets'))
     assert key_path_from_env() == tmp_path / 'secrets'
-    monkeypatch.delenv('PAPERROUTE_API_KEY_FILE')
-    with pytest.raises(SystemExit, match='PAPERROUTE_API_KEY_FILE'):
+    monkeypatch.delenv('PAPERROUTE_KEY_FILE_TFNSW')
+    with pytest.raises(SystemExit, match='PAPERROUTE_KEY_FILE_TFNSW'):
         key_path_from_env()

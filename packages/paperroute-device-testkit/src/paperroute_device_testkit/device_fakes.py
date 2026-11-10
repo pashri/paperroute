@@ -319,14 +319,14 @@ class FakePower:
         return self.result
 
 
-def device_facts(*, key_set: bool = True) -> DeviceFacts:
+def device_facts(*, missing_keys: tuple[str, ...] = ()) -> DeviceFacts:
     """
     Make facts for a device on no network.
 
     Parameters
     ----------
-    key_set : bool
-        Whether a key is set.
+    missing_keys : tuple[str, ...]
+        The display names of the keys not set.
 
     Returns
     -------
@@ -343,7 +343,7 @@ def device_facts(*, key_set: bool = True) -> DeviceFacts:
         version='dev',
         last_error=None,
         tiles_built=None,
-        key_set=key_set,
+        missing_keys=missing_keys,
     )
 
 

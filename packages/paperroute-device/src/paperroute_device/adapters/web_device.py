@@ -48,6 +48,7 @@ from paperroute_device.core.device_model import (
     PowerAction,
     WifiNetwork,
     WifiPhase,
+    missing_keys,
 )
 from paperroute_hardware.ports import PanelTimes
 
@@ -203,7 +204,7 @@ def network_radio(*, network: WifiNetwork) -> str:
     )
 
 
-def setup_form(*, status: DeviceStatus, key_label: str) -> str:
+def setup_form(*, status: DeviceStatus, key: DeviceKey | None) -> str:
     """
     Draw the setup form.
 
@@ -211,13 +212,14 @@ def setup_form(*, status: DeviceStatus, key_label: str) -> str:
     ----------
     status : DeviceStatus
         The device status, with setup in HOTSPOT.
-    key_label : str
-        The key field's label; escaped here.
+    key : DeviceKey | None
+        The key the form asks for, or None to ask for none.
 
     Returns
     -------
     str
-        The form; it asks for a key only when none is set.
+        The form; its key field, when there is one, is labelled with
+        the key's credential label, escaped.
     """
     networks = () if status.setup is None else status.setup.networks
     return FORM.format(
@@ -225,9 +227,11 @@ def setup_form(*, status: DeviceStatus, key_label: str) -> str:
             network_radio(network=network) for network in networks
         ),
         key=(
-            KEY_FIELD.replace(KEY_LABEL_MARK, html.escape(key_label))
-            if status.key_set is False
-            else ''
+            ''
+            if key is None
+            else KEY_FIELD.replace(
+                KEY_LABEL_MARK, html.escape(key.credential.label),
+            )
         ),
     )
 
@@ -308,7 +312,8 @@ class DevicePages:
     panel : Callable[[], PanelTimes | None]
         The panel's refresh times, or None when there is no panel.
     keys : Sequence[DeviceKey]
-        The API keys, at least one; the setup page asks for the first.
+        The API keys, in declaration order; the setup page asks for the
+        first one missing. With none, no page asks for a key.
     feed_label : Callable[[str], str]
         Names a feed for people.
     daily_limit : int
@@ -340,7 +345,7 @@ class DevicePages:
         status: Callable[[], DeviceStatus | None],
         feeds: Callable[[], Mapping[str, float]],
         panel: Callable[[], PanelTimes | None],
-        keys: Sequence[DeviceKey],
+        keys: Sequence[DeviceKey] = (),
         feed_label: Callable[[str], str],
         daily_limit: int,
         post: Callable[[DeviceRequest], None],
@@ -356,8 +361,6 @@ class DevicePages:
         self._status = status
         self._feeds = feeds
         self._panel = panel
-        if not keys:
-            raise ValueError('the device pages need at least one key')
         self._keys = tuple(keys)
         self._feed_label = feed_label
         self._daily_limit = daily_limit
@@ -454,7 +457,7 @@ class DevicePages:
             news, form = notice(text=NOT_RUNNING), ''
         else:
             form = setup_form(
-                status=device, key_label=self._keys[0].credential.label,
+                status=device, key=self._first_missing(status=device),
             )
         page = self._frame(name='setup.html', current=None).replace(
             NOTICE_MARK, news,
@@ -523,7 +526,7 @@ class DevicePages:
             409 when the hotspot is not up, 400 with the reason for a
             bad network, password or key, 500 when the key can't be
             saved, otherwise 303 to the joining page. A key is taken
-            only on a device without one.
+            only for the first key missing, and only when one is.
         """
         device = self._hotspot()
         if device is None or device.setup is None:
@@ -533,11 +536,8 @@ class DevicePages:
         if isinstance(asked, str):
             return self._refuse(reason=asked)
         refusal = self._store_key(
-            key=(
-                fields.get('api_key', '').strip()
-                if device.key_set is False
-                else ''
-            ),
+            key=self._first_missing(status=device),
+            value=fields.get('api_key', '').strip(),
         )
         if refusal is not None:
             return refusal
@@ -567,14 +567,43 @@ class DevicePages:
         """
         return self._page(news=notice(text=reason, alert=True), status=status)
 
-    def _store_key(self, *, key: str) -> web.Response | None:
+    def _first_missing(self, *, status: DeviceStatus) -> DeviceKey | None:
+        """
+        Find the first key the status says is missing.
+
+        Parameters
+        ----------
+        status : DeviceStatus
+            The device status.
+
+        Returns
+        -------
+        DeviceKey | None
+            The first key, in declaration order, whose display name is
+            missing; None when none is or it is not known yet.
+        """
+        missing = status.missing_keys or ()
+        return next(
+            (key for key in self._keys if key.display_name in missing),
+            None,
+        )
+
+    def _key_changed(self) -> None:
+        """Tell the app which keys are still missing."""
+        self._post(ApiKeyChanged(missing=missing_keys(keys=self._keys)))
+
+    def _store_key(
+        self, *, key: DeviceKey | None, value: str,
+    ) -> web.Response | None:
         """
         Store a posted key and tell the app.
 
         Parameters
         ----------
-        key : str
-            The key; empty when none was given.
+        key : DeviceKey | None
+            The key the form asked for, or None when it asked for none.
+        value : str
+            The key's value; empty when none was given.
 
         Returns
         -------
@@ -582,20 +611,19 @@ class DevicePages:
             A refusal page when the key is invalid or can't be saved,
             else None.
         """
-        if not key:
+        if key is None or not value:
             return None
-        first = self._keys[0]
         try:
-            first.store.write(key=key)
+            key.store.write(key=value)
         except ValueError:
-            return self._refuse(reason=first.credential.refusal)
+            return self._refuse(reason=key.credential.refusal)
         except OSError:
             logger.exception('could not save the API key file')
             return self._refuse(
                 reason=KEY_NOT_SAVED,
                 status=HTTPStatus.INTERNAL_SERVER_ERROR,
             )
-        self._post(ApiKeyChanged(present=True))
+        self._key_changed()
         return None
 
     def _device(
@@ -648,7 +676,7 @@ class DevicePages:
                     first=index == 0,
                     status=key_text(
                         present=key.store.present(),
-                        last_used=max(feeds.values(), default=None),
+                        last_used=key.last_used(),
                         now=now,
                     ),
                 )
@@ -758,9 +786,12 @@ class DevicePages:
         Returns
         -------
         web.Response
-            400 for an unknown key name or a bad key, 500 when it can't
-            be saved, otherwise 303 to the page saying it was saved.
+            404 when the device keeps no key, 400 for an unknown key
+            name or a bad key, 500 when it can't be saved, otherwise 303
+            to the page saying it was saved.
         """
+        if not self._keys:
+            return web.Response(status=HTTPStatus.NOT_FOUND)
         fields = await form_fields(request=request)
         name = fields.get('key')
         key = self._keys[0] if name is None else next(
@@ -773,8 +804,7 @@ class DevicePages:
         )
         if refusal is not None:
             return refusal
-        if key is self._keys[0]:
-            self._post(ApiKeyChanged(present=True))
+        self._key_changed()
         raise web.HTTPSeeOther(location='/device?key=saved')
 
     def _key_refusal(

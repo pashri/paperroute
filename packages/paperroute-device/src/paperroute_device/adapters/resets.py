@@ -1,6 +1,7 @@
 """Reset the settings or erase everything the device keeps."""
 
 import logging
+from collections.abc import Sequence
 from pathlib import Path
 
 from paperroute_device.core.device_model import ResetKind
@@ -50,12 +51,12 @@ def inside(*, path: Path, folder: Path) -> bool:
 
 class FileResets:
     """
-    Delete the device's files, clear its key and forget its Wi-Fi.
+    Delete the device's files, clear its keys and forget its Wi-Fi.
 
-    Resetting settings deletes the state file and the ones moved aside
-    beside it; erasing everything also deletes the timetable. The map
-    tiles are always kept. A path that resolves outside the data
-    directory is never deleted.
+    Both resets clear every key. Resetting settings deletes the state
+    file and the ones moved aside beside it; erasing everything also
+    deletes the extra files named. Any other file is kept. A path that
+    resolves outside the data directory is never deleted.
 
     Parameters
     ----------
@@ -63,12 +64,12 @@ class FileResets:
         The only directory files are deleted from.
     state : Path
         The state file.
-    key : KeyStore
-        Holds the API key.
+    keys : Sequence[KeyStore]
+        Hold the API keys.
     wifi : WifiControl
         Forgets the saved Wi-Fi networks.
-    timetable : Path
-        The timetable file.
+    erased : Sequence[Path]
+        The extra files erasing everything deletes.
     """
 
     def __init__(
@@ -76,15 +77,15 @@ class FileResets:
         *,
         data_dir: Path,
         state: Path,
-        key: KeyStore,
+        keys: Sequence[KeyStore],
         wifi: WifiControl,
-        timetable: Path,
+        erased: Sequence[Path] = (),
     ) -> None:
         self.data_dir = data_dir
         self.state = state
-        self.key = key
+        self.keys = tuple(keys)
         self.wifi = wifi
-        self.timetable = timetable
+        self.erased = tuple(erased)
 
     def doomed(self, *, kind: ResetKind) -> list[Path]:
         """
@@ -99,12 +100,12 @@ class FileResets:
         -------
         list[Path]
             The state file, the ones moved aside, and for ERASE the
-            timetable. The map tiles are never listed.
+            extra files.
         """
         aside = sorted(self.state.parent.glob(f'{self.state.name}.bad-*'))
         paths = [self.state, *aside]
         if kind is ResetKind.ERASE:
-            paths.append(self.timetable)
+            paths.extend(self.erased)
         return paths
 
     def delete(self, *, path: Path) -> None:
@@ -131,7 +132,7 @@ class FileResets:
 
     async def reset(self, *, kind: ResetKind) -> None:
         """
-        Delete the files, clear the key and forget the Wi-Fi networks.
+        Delete the files, clear the keys and forget the Wi-Fi networks.
 
         Each part that fails is logged and the rest still run.
 
@@ -143,11 +144,23 @@ class FileResets:
         logger.warning('resetting', extra={'kind': kind.value})
         for path in self.doomed(kind=kind):
             self.delete(path=path)
-        try:
-            self.key.clear()
-        except OSError:
-            logger.exception('reset could not clear the key')
+        for key in self.keys:
+            self.clear(key=key)
         await self.forget_networks()
+
+    def clear(self, *, key: KeyStore) -> None:
+        """
+        Clear one key, logging a failure.
+
+        Parameters
+        ----------
+        key : KeyStore
+            Holds the key.
+        """
+        try:
+            key.clear()
+        except OSError:
+            logger.exception('reset could not clear a key')
 
     async def forget_networks(self) -> None:
         """Forget every saved Wi-Fi network, logging a failure."""

@@ -17,6 +17,7 @@ from numpy.typing import NDArray
 from paperroute_device.adapters.resets import FileResets
 from paperroute_device.core.device_events import ApiKeyChanged, PowerRequested
 from paperroute_device.core.device_model import (
+    DeviceKey,
     DeviceStatus,
     PowerAction,
     ResetKind,
@@ -44,6 +45,7 @@ from paperroute_hardware.core.knob_events import (
     KnobTurned,
 )
 from paperroute_hardware.ports import CLEAN_AFTER, PanelRefresh
+from paperroute_sydney.adapters.tfnsw import TFNSW_KEY
 from paperroute_sydney.city import (
     PEAK_WINDOWS,
     SYDNEY,
@@ -668,7 +670,7 @@ async def test_app_reports_status() -> None:
         post : Callable[[Event], None]
             Posts an event.
         """
-        post(ApiKeyChanged(present=False))
+        post(ApiKeyChanged(missing=('TfNSW',)))
 
     await run(
         ports=ports,
@@ -678,7 +680,9 @@ async def test_app_reports_status() -> None:
         max_events=1,
         city=SYDNEY,
     )
-    assert [status.key_set for status in recorder.statuses] == [None, False]
+    assert [status.missing_keys for status in recorder.statuses] == [
+        None, ('TfNSW',),
+    ]
 
 
 async def test_app_reports_pins() -> None:
@@ -724,7 +728,16 @@ async def test_run_reads_the_key_before_the_first_tick() -> None:
     ports = replace(
         ports_of(),
         observer=recorder,
-        device=DevicePorts(key=FakeKeys(key='k')),
+        device=DevicePorts(
+            keys=(
+                DeviceKey(
+                    name='k',
+                    credential=TFNSW_KEY,
+                    store=FakeKeys(key='k'),
+                    display_name='K',
+                ),
+            ),
+        ),
     )
     state = await run(
         ports=ports,
@@ -734,7 +747,7 @@ async def test_run_reads_the_key_before_the_first_tick() -> None:
         city=SYDNEY,
     )
     assert state.panel.key_set is True
-    assert recorder.statuses[-1].key_set is True
+    assert recorder.statuses[-1].missing_keys == ()
 
 
 def _build_db(tmp_path: Path) -> Path:
@@ -2555,9 +2568,9 @@ async def test_app_reset_leaves_no_state_file(tmp_path: Path) -> None:
     resets = FileResets(
         data_dir=tmp_path,
         state=path,
-        key=FakeKeys(key='k' * 32),
+        keys=(FakeKeys(key='k' * 32),),
         wifi=FakeWifi(),
-        timetable=tmp_path / 'timetable.db',
+        erased=(tmp_path / 'timetable.db',),
     )
     ports = replace(
         ports_of(),

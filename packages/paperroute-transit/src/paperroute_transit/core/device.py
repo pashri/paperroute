@@ -330,22 +330,23 @@ def on_key(
     *, state: State, event: ApiKeyChanged
 ) -> tuple[State, tuple[Effect, ...]]:
     """
-    Store whether an API key is set, and redraw.
+    Store which API keys are missing, and redraw.
 
     Parameters
     ----------
     state : State
         State.
     event : ApiKeyChanged
-        Whether a key is set.
+        Which keys are missing.
 
     Returns
     -------
     tuple[State, tuple[Effect, ...]]
-        State with the key noted, and the redraw if the view changed. A
-        key that was missing and is now set starts a cycle at once.
+        State with the missing keys noted, and the redraw if the view
+        changed. Once the last missing key is set a cycle starts at
+        once.
     """
-    if event.present and state.panel.key_set is False:
+    if not event.missing and state.panel.key_set is False:
         state = restarted(
             state=replace(
                 state,
@@ -353,7 +354,7 @@ def on_key(
                 map=replace(state.map, fetched_at={}),
             ),
         )
-    panel = replace(state.panel, key_set=event.present)
+    panel = replace(state.panel, missing_keys=event.missing)
     return settled(state=replace(state, panel=panel))
 
 
@@ -540,7 +541,7 @@ def on_probed(
     panel = replace(state.panel, facts=event.facts)
     return on_key(
         state=replace(state, panel=panel),
-        event=ApiKeyChanged(present=event.facts.key_set),
+        event=ApiKeyChanged(missing=event.facts.missing_keys),
     )
 
 
@@ -565,7 +566,7 @@ def device_status(*, state: State) -> DeviceStatus:
         rebuilding=state.rebuild.running,
         rebuild_failed=state.rebuild.failed,
         calls_today=calls_today(quota=state.quota, day=state.now.date()),
-        key_set=state.panel.key_set,
+        missing_keys=state.panel.missing_keys,
         facts=state.panel.facts,
         asked=phone_asked(state=state),
         setup=state.panel.wifi,

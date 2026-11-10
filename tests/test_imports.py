@@ -290,7 +290,7 @@ def test_refresh_never_imports_build_libraries(tmp_path: Path) -> None:
         text=True,
         env={
             **os.environ,
-            'PAPERROUTE_API_KEY_FILE': str(tmp_path / 'no-such-key'),
+            'PAPERROUTE_KEY_FILE_TFNSW': str(tmp_path / 'no-such-key'),
         },
     )
     assert result.returncode == 0, result.stderr

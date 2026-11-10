@@ -174,9 +174,9 @@ async def test_reset_stops_rebuild_before_deleting(tmp_path: Path) -> None:
     resets = FileResets(
         data_dir=tmp_path,
         state=tmp_path / 'state.json',
-        key=FakeKeys(),
+        keys=(FakeKeys(),),
         wifi=FakeWifi(),
-        timetable=timetable,
+        erased=(timetable,),
     )
     queue: asyncio.Queue[Event] = asyncio.Queue()
     work, _ = device_work(
@@ -197,9 +197,9 @@ async def test_reset_waits_for_join_in_flight(tmp_path: Path) -> None:
     resets = FileResets(
         data_dir=tmp_path,
         state=tmp_path / 'state.json',
-        key=FakeKeys(),
+        keys=(FakeKeys(),),
         wifi=wifi,
-        timetable=tmp_path / 'timetable.db',
+        erased=(tmp_path / 'timetable.db',),
     )
     ports = DevicePorts(resets=resets, wifi=wifi)
     queue: asyncio.Queue[Event] = asyncio.Queue()

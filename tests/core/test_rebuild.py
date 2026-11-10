@@ -328,7 +328,7 @@ def test_rebuild_now_while_running_does_nothing() -> None:
 def test_missing_timetable_is_due() -> None:
     """With no timetable, online and a key set, a rebuild starts."""
     state, effects = run_events(
-        state=pinned(), events=[ApiKeyChanged(present=True), MISSING],
+        state=pinned(), events=[ApiKeyChanged(missing=()), MISSING],
     )
     assert RebuildTimetable(force=False) in effects
     assert state.rebuild.missing and state.rebuild.running
@@ -339,7 +339,7 @@ def test_missing_timetable_waits_for_key() -> None:
     state, effects = run_events(
         state=pinned(),
         events=[
-            ApiKeyChanged(present=False),
+            ApiKeyChanged(missing=('TfNSW',)),
             MISSING,
             Tick(now=START + timedelta(minutes=1)),
         ],
@@ -348,7 +348,7 @@ def test_missing_timetable_waits_for_key() -> None:
     _, effects = run_events(
         state=state,
         events=[
-            ApiKeyChanged(present=True),
+            ApiKeyChanged(missing=()),
             Tick(now=START + timedelta(minutes=2)),
         ],
     )
@@ -392,7 +392,7 @@ def test_building_screen_details() -> None:
         ),
     )
     running = replace(idle, rebuild=replace(idle.rebuild, running=True))
-    no_key = replace(idle, panel=replace(idle.panel, key_set=False))
+    no_key = replace(idle, panel=replace(idle.panel, missing_keys=('TfNSW',)))
     facts = replace(device_facts(), wifi=WifiStatus(managed=True))
     offline = replace(no_key, panel=replace(no_key.panel, facts=facts))
     failed = replace(

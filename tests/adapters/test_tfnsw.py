@@ -152,7 +152,7 @@ def test_api_key_from_env_reads_named_file(
     """The key is the named file's text without surrounding whitespace."""
     key_file = tmp_path / 'secrets'
     key_file.write_text('test-key\n', encoding='utf-8')
-    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(key_file))
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(key_file))
     assert api_key_from_env() == 'test-key'
 
 
@@ -160,8 +160,8 @@ def test_api_key_from_env_exits_when_unset(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """With no key file named, the process exits with a message."""
-    monkeypatch.delenv('PAPERROUTE_API_KEY_FILE', raising=False)
-    with pytest.raises(SystemExit, match='PAPERROUTE_API_KEY_FILE'):
+    monkeypatch.delenv('PAPERROUTE_KEY_FILE_TFNSW', raising=False)
+    with pytest.raises(SystemExit, match='PAPERROUTE_KEY_FILE_TFNSW'):
         api_key_from_env()
 
 
@@ -309,7 +309,7 @@ def test_api_key_from_env_refuses_no_key(
     key_file = tmp_path / 'secrets'
     if contents is not None:
         key_file.write_bytes(contents)
-    monkeypatch.setenv('PAPERROUTE_API_KEY_FILE', str(key_file))
+    monkeypatch.setenv('PAPERROUTE_KEY_FILE_TFNSW', str(key_file))
     with pytest.raises(NoApiKey) as caught:
         api_key_from_env()
     assert str(caught.value) == f'No TfNSW API key in {key_file}'

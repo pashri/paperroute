@@ -1,8 +1,6 @@
 """Fetch GTFS-realtime feeds from the TfNSW Open Data API."""
 
 import functools
-import os
-import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
@@ -12,6 +10,7 @@ from typing import Final
 
 import aiohttp
 
+from paperroute_device.adapters import secrets_file
 from paperroute_device.adapters.rate_limit import StartLimiter
 from paperroute_device.core.device_model import Credential
 from paperroute_transit.adapters.feed_errors import (
@@ -33,6 +32,8 @@ TFNSW_KEY: Final[Credential] = Credential(
     refusal="That doesn't look like a TfNSW API key.",
     not_saved="Not saved: that doesn't look like a TfNSW API key.",
 )
+TFNSW_KEY_NAME: Final[str] = 'tfnsw'
+TFNSW_DISPLAY_NAME: Final[str] = 'TfNSW'
 
 
 class NoApiKey(Exception):
@@ -68,7 +69,7 @@ def read_retry_after(*, value: str | None, now: datetime) -> float | None:
 
 def key_path_from_env() -> Path:
     """
-    Name the key file from PAPERROUTE_API_KEY_FILE.
+    Name the TfNSW key file from PAPERROUTE_KEY_FILE_TFNSW.
 
     Exits with a message when the variable is unset.
 
@@ -77,18 +78,12 @@ def key_path_from_env() -> Path:
     Path
         The key file, which may not exist yet.
     """
-    key_file = os.getenv('PAPERROUTE_API_KEY_FILE')
-    if not key_file:
-        sys.exit(
-            'Set PAPERROUTE_API_KEY_FILE to the file holding the '
-            'TfNSW API key.'
-        )
-    return Path(key_file).expanduser()
+    return secrets_file.key_path_from_env(name=TFNSW_KEY_NAME)
 
 
 def api_key_from_env() -> str:
     """
-    Read the TfNSW key from the file named by PAPERROUTE_API_KEY_FILE.
+    Read the TfNSW key from the file named by PAPERROUTE_KEY_FILE_TFNSW.
 
     Exits with a message when the variable is unset.
 

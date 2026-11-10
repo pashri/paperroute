@@ -41,11 +41,14 @@ def sydney_site() -> DeviceSite:
     Returns
     -------
     DeviceSite
-        Sydney's key, feeds, limit and zone over the fixed status.
+        Sydney's key, used with the latest feed, its feeds, limit and
+        zone over the fixed status.
     """
     return DeviceSite(
         feeds={TRAINS: NOW - 12, BUSES: NOW - 40},
         credential=TFNSW_KEY,
+        display_name='TfNSW',
+        last_used=NOW - 12,
         feed_label=feed_label,
         daily_limit=DAILY_LIMIT,
         zone=SYDNEY_ZONE,
